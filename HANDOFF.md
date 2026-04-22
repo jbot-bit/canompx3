@@ -4,6 +4,84 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-22 MNQ geometry transfer cleanup — stale draft closed, active PR regrounded)
+
+The active MNQ research surface is now the geometry-family transfer program on
+PR `#99`. The older current-meta draft `#98` has been closed as superseded and
+should not be reopened.
+
+### What is now actually proven on the current branch
+
+Canonical `orb_outcomes × daily_features` plus discovery + validator support:
+
+- `MNQ US_DATA_1000 O5 E2 long`
+  - `PD_DISPLACE_LONG`
+  - `PD_CLEAR_LONG`
+  - `PD_GO_LONG` on `RR1.0`
+  - `PD_GO_LONG` on `RR1.5`
+- `MNQ COMEX_SETTLE O5 E2 RR1.0 long`
+  - `PD_CLEAR_LONG`
+
+### Hard truth on the COMEX transfer
+
+- it survived the full bridge and promoted:
+  - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_PD_CLEAR_LONG`
+  - `10/11` positive walk-forward windows
+  - `WFE=1.9858`
+  - `oos_exp_r=+0.2212`
+- but it is **not** a universal regime:
+  - reverse years exist (`2020`, `2025`)
+  - OOS is still thin
+- `COMEX_SETTLE` does **not** want the broader `PD_GO_LONG` union in the same
+  way `US_DATA_1000` does
+
+### Process hardening that landed
+
+- `research/mnq_geometry_transfer_board_v1.py`
+  - now derives masks from canonical `ALL_FILTERS`
+  - no longer re-encodes geometry logic by hand
+  - no longer pre-filters away invalid feature rows before canonical filter
+    evaluation
+- `docs/plans/2026-04-22-mnq-geometry-transfer-workflow.md`
+  - documents the faster shortlist -> cheap gate -> bridge path
+
+### Do not lose this
+
+- treat `US_DATA_1000` geometry as locally solved enough for this family
+- treat `COMEX_SETTLE PD_CLEAR_LONG` as a session-specific transfer, not a
+  global rollout license
+- do **not** force the next geometry transfer just because `EUROPE_FLOW` and
+  `NYSE_OPEN` are next on the shortlist:
+  - `EUROPE_FLOW PD_GO_LONG`: weak breadth, `2/7` negative years, `Q4`
+    quartile negative
+  - `NYSE_OPEN PD_CLEAR_LONG`: weaker, `3/7` negative years, ATR quartiles
+    unstable
+- next honest move is to reopen the MNQ-first queue at the **mechanism-class**
+  level, not to blindly bridge a third geometry session
+
+### Next mechanism-class result (2026-04-22)
+
+The first post-geometry MNQ mechanism-class bridge also survived:
+
+- `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08`
+
+Truth-state:
+
+- cost-ratio is the next alive MNQ mechanism class after prior-day geometry
+- this exact row is an upgrade over the already-active `COST_LT12` on the same
+  lane, not a duplicate rediscovery
+- hard truth:
+  - one reverse year (`2023`)
+  - thin OOS off-side (`N=12`)
+  - DSR still below the stronger comfort threshold
+
+So keep the framing honest:
+
+- `TOKYO COST_LT08` is real
+- it does **not** mean “cost-ratio everywhere”
+- it does mean the next MNQ-first queue should stay open to non-geometry
+  mechanism classes
+
 ## Update (2026-04-21 hardened follow-through — rolling GARCH builder fixed, cross-instrument repair applied, shadow path unblocked)
 
 Follow-on to the earlier GARCH `R3` shadow scaffold block. The path is no

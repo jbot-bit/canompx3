@@ -158,14 +158,18 @@ class TestAllFilters:
         #     ATR_VEL_GE105 (Wave 4 Phase B, routed to MNQ TOKYO_OPEN + MES US_DATA_1000)
         #     ATR_VEL_GE110 (sensitivity variant, injection-only)
         #     ATR_VEL_GE115 (sensitivity variant, injection-only)
+        #     F3_NEAR_PIVOT_50 (Apr 2026 exact MNQ US_DATA_1000 avoid bridge)
         #     GARCH_VOL_PCT_LT20 (Wave 5 G5, injection-only — MNQ NYSE_OPEN LOW regime)
         #     VWAP_MID_ALIGNED (Apr 2026 exhaustive audit, MNQ US_DATA_1000 O15)
         #     VWAP_BP_ALIGNED (Apr 2026 exhaustive audit, MNQ CME_PRECLOSE O5)
         #     CROSS_NYSE_MOMENTUM (Apr 2026 cross-session state, MNQ US_DATA_1000)
         #     CROSS_COMEX_MOMENTUM (Apr 2026, MNQ CME_PRECLOSE)
         #     CROSS_SGP_MOMENTUM (Apr 2026, MNQ EUROPE_FLOW)
-        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 9 scoped = 91
-        assert len(ALL_FILTERS) == 91
+        #     PD_DISPLACE_LONG (Apr 2026 broader MNQ downside-displacement family)
+        #     PD_CLEAR_LONG (Apr 2026 broader MNQ non-congestion family)
+        #     PD_GO_LONG (Apr 2026 union of validated positive MNQ prior-day families)
+        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 13 scoped = 95
+        assert len(ALL_FILTERS) == 95
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -262,6 +266,154 @@ class TestVolumeFilter:
         assert f25.matches_row({"rel_vol_NYSE_CLOSE": 3.0}, "NYSE_CLOSE") is True
         assert f25.matches_row({"rel_vol_NYSE_CLOSE": 2.0}, "NYSE_CLOSE") is False
         assert f25.matches_row({"rel_vol_NYSE_CLOSE": 2.5}, "NYSE_CLOSE") is True
+
+
+class TestPrevDayGeometryFilter:
+    """Exact MNQ prior-day geometry predicates."""
+
+    def test_below_pdl_long_matches_only_long_breaks(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="F5_BELOW_PDL", description="test", mode="below_pdl_long")
+        row = {
+            "orb_US_DATA_1000_high": 99.0,
+            "orb_US_DATA_1000_low": 97.0,
+            "orb_US_DATA_1000_break_dir": "long",
+            "prev_day_low": 98.5,
+            "prev_day_high": 103.0,
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_break_dir"] = "short"
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+    def test_inside_pdr_long_requires_strict_inside(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="F6_INSIDE_PDR", description="test", mode="inside_pdr_long")
+        row = {
+            "orb_COMEX_SETTLE_high": 101.0,
+            "orb_COMEX_SETTLE_low": 99.0,
+            "orb_COMEX_SETTLE_break_dir": "long",
+            "prev_day_low": 95.0,
+            "prev_day_high": 105.0,
+        }
+        assert f.matches_row(row, "COMEX_SETTLE") is True
+
+        row["prev_day_low"] = 100.0
+        assert f.matches_row(row, "COMEX_SETTLE") is False
+
+    def test_near_pivot_long_50_uses_pivot_distance(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="F3_NEAR_PIVOT_50", description="test", mode="near_pivot_long_50")
+        row = {
+            "orb_US_DATA_1000_high": 100.5,
+            "orb_US_DATA_1000_low": 99.5,
+            "orb_US_DATA_1000_break_dir": "long",
+            "prev_day_low": 95.0,
+            "prev_day_high": 103.0,
+            "prev_day_close": 101.0,
+            "atr_20": 6.0,
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 105.0
+        row["orb_US_DATA_1000_low"] = 104.0
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+    def test_downside_displacement_long_accepts_below_or_near_pdl(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="PD_DISPLACE_LONG", description="test", mode="downside_displacement_long")
+        row = {
+            "orb_US_DATA_1000_high": 100.0,
+            "orb_US_DATA_1000_low": 98.0,
+            "orb_US_DATA_1000_break_dir": "long",
+            "prev_day_low": 99.2,
+            "prev_day_high": 104.0,
+            "atr_20": 8.0,
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 100.3
+        row["orb_US_DATA_1000_low"] = 99.7
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 103.5
+        row["orb_US_DATA_1000_low"] = 102.5
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+    def test_clear_of_congestion_long_rejects_inside_or_near_pivot(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="PD_CLEAR_LONG", description="test", mode="clear_of_congestion_long")
+        row = {
+            "orb_US_DATA_1000_high": 95.5,
+            "orb_US_DATA_1000_low": 94.5,
+            "orb_US_DATA_1000_break_dir": "long",
+            "prev_day_low": 96.0,
+            "prev_day_high": 104.0,
+            "prev_day_close": 100.0,
+            "atr_20": 8.0,
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 101.0
+        row["orb_US_DATA_1000_low"] = 99.0
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+        row["orb_US_DATA_1000_high"] = 100.3
+        row["orb_US_DATA_1000_low"] = 99.7
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+    def test_go_long_context_accepts_displacement_or_clear_context(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="PD_GO_LONG", description="test", mode="go_long_context")
+        row = {
+            "orb_US_DATA_1000_high": 100.0,
+            "orb_US_DATA_1000_low": 98.0,
+            "orb_US_DATA_1000_break_dir": "long",
+            "prev_day_low": 99.2,
+            "prev_day_high": 104.0,
+            "prev_day_close": 100.0,
+            "atr_20": 8.0,
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 95.5
+        row["orb_US_DATA_1000_low"] = 94.5
+        row["prev_day_low"] = 96.0
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 100.3
+        row["orb_US_DATA_1000_low"] = 99.7
+        row["prev_day_low"] = 96.0
+        row["prev_day_high"] = 104.0
+        row["prev_day_close"] = 100.0
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+    def test_describe_marks_orb_formation(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="F3_NEAR_PIVOT_50", description="test", mode="near_pivot_long_50")
+        atoms = f.describe(
+            {
+                "orb_US_DATA_1000_high": 100.5,
+                "orb_US_DATA_1000_low": 99.5,
+                "orb_US_DATA_1000_break_dir": "long",
+                "prev_day_low": 95.0,
+                "prev_day_high": 103.0,
+                "prev_day_close": 101.0,
+                "atr_20": 6.0,
+            },
+            "US_DATA_1000",
+            "E2",
+        )
+        assert len(atoms) == 1
+        assert atoms[0].resolves_at == "ORB_FORMATION"
+        assert atoms[0].passes is True
 
 
 class TestOrbVolumeFilter:
