@@ -29,6 +29,15 @@ import time
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+# When executed as ``python trading_app/strategy_validator.py`` from an
+# isolated worktree, Python may resolve ``trading_app.*`` imports against a
+# different checkout unless the repo root is on ``sys.path`` explicitly.
+# Anchor imports to this checkout so hypothesis SHA lookup and promotion
+# provenance always use the active branch's registry/docs.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 # duckdb lazy-loaded inside the 4 functions that use it (PEP 8 — delayed
 # imports for performance; duckdb's own import is modest but deferring keeps
 # this module's cold-import path free of the binary DLL load).

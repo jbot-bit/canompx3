@@ -109,6 +109,20 @@ overlay proves incremental value first.
 
 ---
 
+## Bridge status
+
+The exact P1 prereg / harness was run, written to `experimental_strategies`,
+and then passed through the formal validator bridge.
+
+Bridge result:
+
+- `H1` rejected at `Phase 4b` due insufficient valid walkforward windows
+- `H2` rejected at `criterion_9` era stability
+- no `validated_setups` promotions
+- no runtime/shadow endpoint authorized from this lock
+
 ## Immediate next move
 
-Write and run the exact P1 prereg / harness on the two locked MNQ binary states.
+P1 is now closed as an adjudicated research family. Do not widen or rescue it
+post hoc. Any future reopen requires a new dated prereg and a genuinely new
+mechanism question.

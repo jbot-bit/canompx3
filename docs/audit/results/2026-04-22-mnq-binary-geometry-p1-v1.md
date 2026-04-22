@@ -17,18 +17,40 @@
 - `H2_COMEX_SETTLE_F6_INSIDE_PDR` does not clear the strict `t>=3.79` bar on this pass.
 - The family as a whole is still a bounded research result, not a promotion event.
 
+## Canonical bridge outcome
+
+The formal bridge from `experimental_strategies` to `validated_setups` was run
+after this read-only pass. Result: **no promotions**.
+
+| hypothesis | validator outcome | blocking gate | deployable? |
+|---|---|---|---|
+| H1_US_DATA_1000_F5_BELOW_PDL | REJECTED | `Phase 4b: Insufficient valid windows: 1 < 3` | No |
+| H2_COMEX_SETTLE_F6_INSIDE_PDR | REJECTED | `criterion_9: era 2020-2022 ExpR=-0.1296 < -0.05 (N=195)` | No |
+
+`validated_setups` contains no rows for either exact strategy ID after the
+validator pass. That means there is no honest runtime promotion, shadow
+profile, or live-lane bridge to build from this family today.
+
 SURVIVED SCRUTINY:
 - canonical layers only
 - fixed holdout split
 - no threshold tuning
+- discovery write into `experimental_strategies`
+- exact validator bridge run on the two pending MNQ rows only
 
 DID NOT SURVIVE:
 - the two-cell family does not clear a full promotion bar from this pass alone
+- H1 does not clear walkforward sufficiency
+- H2 does not clear era stability
 
 CAVEATS:
 - OOS remains thin
 - this is a two-cell family, not a broad geometry claim
+- the read-only pass and the validator answer different questions; the latter
+  governs promotion
 
 NEXT STEPS:
-- keep P1 locked to these two cells
-- do not widen to clearance bins or side tracks until this pair is fully adjudicated
+- keep P1 locked as adjudicated and closed for promotion purposes
+- do not widen to clearance bins, MES, or ML as a rescue path
+- if reopened later, it must be a new prereg with a new mechanism question, not
+  a relabel of this failed promotion attempt
