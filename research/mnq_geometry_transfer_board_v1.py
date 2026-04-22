@@ -27,6 +27,7 @@ from statsmodels.stats.multitest import multipletests
 
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
+from trading_app.config import ALL_FILTERS
 
 STRUCTURAL_START = pd.Timestamp("2020-01-01")
 OOS_START = pd.Timestamp(HOLDOUT_SACRED_FROM)
@@ -54,11 +55,11 @@ PARENTS: tuple[ParentLane, ...] = (
     ParentLane("CME_PRECLOSE", 1.0, "long"),
 )
 
-FAMILY_DEFS: dict[str, str] = {
-    "PD_DISPLACE_LONG": "pd_displace",
-    "PD_CLEAR_LONG": "pd_clear",
-    "PD_GO_LONG": "pd_go",
-}
+FAMILY_FILTER_KEYS: tuple[str, ...] = (
+    "PD_DISPLACE_LONG",
+    "PD_CLEAR_LONG",
+    "PD_GO_LONG",
+)
 
 SOLVED_LANES: set[tuple[str, float, str]] = {
     ("US_DATA_1000", 1.0, "long"),
@@ -77,8 +78,9 @@ def load_parent_lane(parent: ParentLane) -> pd.DataFrame:
         d.prev_day_high,
         d.prev_day_low,
         d.prev_day_close,
-        (d.orb_{session}_high + d.orb_{session}_low) / 2.0 AS orb_mid,
-        d.orb_{session}_break_dir AS break_dir
+        d.orb_{session}_high,
+        d.orb_{session}_low,
+        d.orb_{session}_break_dir
     FROM orb_outcomes o
     JOIN daily_features d
       ON o.trading_day = d.trading_day
@@ -92,11 +94,6 @@ def load_parent_lane(parent: ParentLane) -> pd.DataFrame:
       AND o.orb_label = '{session}'
       AND o.trading_day >= '{STRUCTURAL_START.date()}'
       AND o.pnl_r IS NOT NULL
-      AND d.atr_20 IS NOT NULL
-      AND d.atr_20 > 0
-      AND d.prev_day_high IS NOT NULL
-      AND d.prev_day_low IS NOT NULL
-      AND d.prev_day_close IS NOT NULL
       AND d.orb_{session}_break_dir = '{parent.direction}'
     """
     df = con.execute(query).df()
@@ -105,23 +102,9 @@ def load_parent_lane(parent: ParentLane) -> pd.DataFrame:
     return df
 
 
-def add_features(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    pdh = out["prev_day_high"].astype(float)
-    pdl = out["prev_day_low"].astype(float)
-    pdc = out["prev_day_close"].astype(float)
-    atr = out["atr_20"].astype(float)
-    mid = out["orb_mid"].astype(float)
-    pivot = (pdh + pdl + pdc) / 3.0
-
-    out["pd_displace"] = (mid < pdl) | (((mid - pdl).abs() / atr) < 0.15)
-    out["pd_clear"] = ~(((mid > pdl) & (mid < pdh)) | (((mid - pivot).abs() / atr) < 0.50))
-    out["pd_go"] = out["pd_displace"] | out["pd_clear"]
-    return out
-
-
-def evaluate_family(df: pd.DataFrame, parent: ParentLane, family_name: str, column: str) -> dict[str, object] | None:
-    mask = df[column].astype(bool)
+def evaluate_family(df: pd.DataFrame, parent: ParentLane, family_name: str) -> dict[str, object] | None:
+    strategy_filter = ALL_FILTERS[family_name]
+    mask = strategy_filter.matches_df(df, parent.orb_label).astype(bool)
     on = df[mask]
     off = df[~mask]
     is_on = on[on["trading_day"] < OOS_START]
@@ -180,9 +163,9 @@ def evaluate_family(df: pd.DataFrame, parent: ParentLane, family_name: str, colu
 def build_board() -> pd.DataFrame:
     rows: list[dict[str, object]] = []
     for parent in PARENTS:
-        df = add_features(load_parent_lane(parent))
-        for family_name, column in FAMILY_DEFS.items():
-            row = evaluate_family(df, parent, family_name, column)
+        df = load_parent_lane(parent)
+        for family_name in FAMILY_FILTER_KEYS:
+            row = evaluate_family(df, parent, family_name)
             if row is not None:
                 rows.append(row)
 
