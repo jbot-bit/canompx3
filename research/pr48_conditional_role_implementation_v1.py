@@ -243,9 +243,7 @@ def main() -> int:
                 parts.append("")
                 parts.append(
                     "- Quintiles: "
-                    + ", ".join(
-                        f"Q{q}: N={qmeans[q][0]}, avg={qmeans[q][1]:+.4f}" for q in sorted(qmeans)
-                    )
+                    + ", ".join(f"Q{q}: N={qmeans[q][0]}, avg={qmeans[q][1]:+.4f}" for q in sorted(qmeans))
                 )
                 parts.append(f"- Q5 minus Q1 mean spread: {q5_minus_q1:+.4f}R")
                 parts.append("")
@@ -255,8 +253,12 @@ def main() -> int:
     parts.append("## Interpretation guardrails")
     parts.append("")
     parts.append("- `selected_avg_r` is not enough. Conditional roles are judged on `policy_ev_per_opp` first.")
-    parts.append("- `capital_normalized_ev` is reported for the continuous sizer so a weight map is not mistaken for a binary filter.")
-    parts.append("- OOS from 2026-01-01 to latest canonical day is monitoring only; use it for direction and implementation sanity, not retuning.")
+    parts.append(
+        "- `capital_normalized_ev` is reported for the continuous sizer so a weight map is not mistaken for a binary filter."
+    )
+    parts.append(
+        "- OOS from 2026-01-01 to latest canonical day is monitoring only; use it for direction and implementation sanity, not retuning."
+    )
     parts.append("")
 
     RESULT_DOC.parent.mkdir(parents=True, exist_ok=True)
