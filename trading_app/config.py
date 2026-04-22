@@ -1563,6 +1563,128 @@ class PrevDayRangeNormFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class PrevDayGeometryFilter(StrategyFilter):
+    """Filter by ORB-mid geometry relative to prior-day levels.
+
+    This class encodes the exact P1 MNQ binary-geometry research cells as
+    canonical, hypothesis-scoped filters:
+
+    - ``below_pdl_long``: ORB midpoint is below prior-day low AND session
+      break direction is long.
+    - ``inside_pdr_long``: ORB midpoint lies strictly inside the prior-day
+      range AND session break direction is long.
+
+    These are ORB-end / pre-break safe predicates. Prior-day levels are fixed
+    before the session starts; ORB high/low and break direction are known by
+    ORB formation / first break detection. The filter itself owns the
+    direction restriction so Phase-4 discovery does not silently widen the
+    research cell to short breaks.
+
+    Fail-closed: missing prior-day levels, ORB high/low, or break_dir =
+    ineligible day.
+
+    @research-source research/prior_day_features_orb.py
+    @research-source research/t0_t8_audit_hot_warm_batch.py
+    @entry-models E2
+    @revalidated-for P1 MNQ binary geometry bridge (2026-04-22)
+    """
+
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 22)
+    CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
+
+    mode: str
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("below_pdl_long", "inside_pdr_long"):
+            raise ValueError(f"PrevDayGeometryFilter mode must be a supported exact geometry mode, got {self.mode!r}")
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        hi = row.get(f"orb_{orb_label}_high")
+        lo = row.get(f"orb_{orb_label}_low")
+        break_dir = row.get(f"orb_{orb_label}_break_dir")
+        pdh = row.get("prev_day_high")
+        pdl = row.get("prev_day_low")
+        if hi is None or lo is None or pdh is None or pdl is None or break_dir != "long":
+            return False
+        orb_mid = (hi + lo) / 2.0
+        if self.mode == "below_pdl_long":
+            return orb_mid < pdl
+        return pdl < orb_mid < pdh
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        hi = df.get(f"orb_{orb_label}_high")
+        lo = df.get(f"orb_{orb_label}_low")
+        bd = df.get(f"orb_{orb_label}_break_dir")
+        pdh = df.get("prev_day_high")
+        pdl = df.get("prev_day_low")
+        if hi is None or lo is None or bd is None or pdh is None or pdl is None:
+            return pd.Series(False, index=df.index)
+
+        valid = hi.notna() & lo.notna() & pdh.notna() & pdl.notna() & bd.eq("long")
+        orb_mid = (hi + lo) / 2.0
+        if self.mode == "below_pdl_long":
+            return valid & (orb_mid < pdl)
+        return valid & (orb_mid > pdl) & (orb_mid < pdh)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        _ = entry_model
+        hi = _atom_numeric(row.get(f"orb_{orb_label}_high"))
+        lo = _atom_numeric(row.get(f"orb_{orb_label}_low"))
+        pdh = _atom_numeric(row.get("prev_day_high"))
+        pdl = _atom_numeric(row.get("prev_day_low"))
+        break_dir = row.get(f"orb_{orb_label}_break_dir")
+
+        missing = hi is None or lo is None or pdh is None or pdl is None or break_dir is None
+        orb_mid = None if hi is None or lo is None else (hi + lo) / 2.0
+        passes: bool | None
+        threshold: Any
+        comparator: str
+        explanation: str
+
+        if missing or break_dir != "long":
+            passes = None if missing else False
+        elif self.mode == "below_pdl_long":
+            passes = orb_mid is not None and pdl is not None and orb_mid < pdl
+        else:
+            passes = orb_mid is not None and pdl is not None and pdh is not None and pdl < orb_mid < pdh
+
+        if self.mode == "below_pdl_long":
+            threshold = pdl
+            comparator = "<"
+            explanation = "Require long break with ORB midpoint below prior-day low."
+            name = "ORB midpoint below prior-day low (long only)"
+        else:
+            threshold = None if pdl is None or pdh is None else f"({pdl:.4f}, {pdh:.4f})"
+            comparator = "inside"
+            explanation = "Require long break with ORB midpoint strictly inside prior-day range."
+            name = "ORB midpoint inside prior-day range (long only)"
+
+        return [
+            AtomDescription(
+                name=name,
+                category="INTRA_SESSION",
+                resolves_at="ORB_FORMATION",
+                passes=passes,
+                feature_column="prev_day_low" if self.mode == "below_pdl_long" else "prev_day_high",
+                observed_value=orb_mid,
+                threshold=threshold,
+                comparator=comparator,
+                is_data_missing=missing,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
+                explanation=explanation,
+            )
+        ]
+
+
+@dataclass(frozen=True)
 class GapNormFilter(StrategyFilter):
     """Filter by absolute gap size normalized by ATR-20.
 
@@ -2968,6 +3090,23 @@ _HYPOTHESIS_SCOPED_FILTERS: dict[str, StrategyFilter] = {
         filter_type="CROSS_SGP_MOMENTUM",
         description="SINGAPORE_OPEN winning + same direction = take; losing + same = veto",
         prior_session="SINGAPORE_OPEN",
+    ),
+    # P1 exact MNQ binary geometry bridge (Apr 2026).
+    # Canonical registration is required so Phase-4 hypothesis-file injection
+    # can enumerate the exact audited cells into experimental_strategies
+    # without a research-only side path. Long-only behavior is encoded inside
+    # the filter object to match the locked H1/H2 claims exactly.
+    # @research-source research/run_mnq_binary_geometry_p1_v1.py
+    # @entry-models E2
+    "F5_BELOW_PDL": PrevDayGeometryFilter(
+        filter_type="F5_BELOW_PDL",
+        description="Long ORB midpoint below prior-day low",
+        mode="below_pdl_long",
+    ),
+    "F6_INSIDE_PDR": PrevDayGeometryFilter(
+        filter_type="F6_INSIDE_PDR",
+        description="Long ORB midpoint inside prior-day range",
+        mode="inside_pdr_long",
     ),
 }
 

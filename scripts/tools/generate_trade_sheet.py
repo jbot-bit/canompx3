@@ -481,11 +481,59 @@ def _sort_key(h: int, m: int) -> int:
 # ── Data collection ───────────────────────────────────────────────────
 
 
+def _fetch_exact_lane_variant(con: duckdb.DuckDBPyConnection, strategy_id: str) -> dict | None:
+    """Load one exact strategy row from validated first, experimental second.
+
+    This keeps exact profile lanes honest during the research -> runtime
+    bridge: validated rows remain authoritative, but experimental exact IDs can
+    still surface explicitly as non-validated shadow candidates instead of
+    being silently skipped.
+    """
+    row = con.execute(
+        """
+        SELECT strategy_id, orb_label, orb_minutes, filter_type, rr_target,
+               win_rate, expectancy_r, sample_size, median_risk_points, source
+        FROM (
+            SELECT vs.strategy_id, vs.orb_label, vs.orb_minutes,
+                   vs.filter_type, vs.rr_target, vs.win_rate,
+                   vs.expectancy_r, vs.sample_size,
+                   es.median_risk_points,
+                   'validated' AS source,
+                   0 AS source_rank
+            FROM validated_setups vs
+            LEFT JOIN experimental_strategies es
+              ON vs.strategy_id = es.strategy_id
+            WHERE vs.strategy_id = ?
+
+            UNION ALL
+
+            SELECT es.strategy_id, es.orb_label, es.orb_minutes,
+                   es.filter_type, es.rr_target, es.win_rate,
+                   es.expectancy_r, es.sample_size,
+                   es.median_risk_points,
+                   'experimental' AS source,
+                   1 AS source_rank
+            FROM experimental_strategies es
+            WHERE es.strategy_id = ?
+        )
+        ORDER BY source_rank
+        LIMIT 1
+        """,
+        [strategy_id, strategy_id],
+    ).fetchone()
+
+    if row is None:
+        return None
+    cols = [d[0] for d in con.description]
+    return dict(zip(cols, row, strict=False))
+
+
 def collect_trades(trading_day: date, db_path: Path, profile_filter: str | None = None) -> list[dict]:
     """Collect trades from prop_profiles deployed lanes.
 
     For each active profile's daily_lanes, looks up the exact strategy_id
-    in validated_setups. Applies dollar gate. Only returns cost-positive trades.
+    in validated_setups or experimental_strategies. Applies dollar gate.
+    Only returns cost-positive trades.
 
     Args:
         profile_filter: if set, only show this profile (e.g. "apex_50k_manual").
@@ -501,34 +549,17 @@ def collect_trades(trading_day: date, db_path: Path, profile_filter: str | None 
             if profile_filter and pid != profile_filter:
                 continue
             lanes = effective_daily_lanes(profile)
-            if not profile.active or not lanes:
+            if ((profile_filter is None) and not profile.active) or not lanes:
                 continue
 
             for lane in lanes:
                 sid = lane.strategy_id
                 instrument = lane.instrument
 
-                # Direct lookup — lane specifies exact strategy_id
-                row = con.execute(
-                    """
-                    SELECT vs.strategy_id, vs.orb_label, vs.orb_minutes,
-                           vs.filter_type, vs.rr_target, vs.win_rate,
-                           vs.expectancy_r, vs.sample_size,
-                           es.median_risk_points
-                    FROM validated_setups vs
-                    LEFT JOIN experimental_strategies es
-                      ON vs.strategy_id = es.strategy_id
-                    WHERE vs.strategy_id = ?
-                """,
-                    [sid],
-                ).fetchone()
-
-                if row is None:
-                    print(f"  WARNING: {sid} not in validated_setups — skipping", flush=True)
+                variant = _fetch_exact_lane_variant(con, sid)
+                if variant is None:
+                    print(f"  WARNING: {sid} not in validated_setups/experimental_strategies — skipping", flush=True)
                     continue
-
-                cols = [d[0] for d in con.description]
-                variant = dict(zip(cols, row, strict=False))
 
                 # Dollar gate
                 passes, exp_d = _passes_dollar_gate(variant, instrument)
@@ -567,7 +598,11 @@ def collect_trades(trading_day: date, db_path: Path, profile_filter: str | None 
                         "profiles": [pid],
                         "stop_mult": sm,
                         "orb_cap": lane.max_orb_size_pts,
-                        "notes": lane.execution_notes,
+                        "notes": (
+                            (f"EXPERIMENTAL exact lane — not validated. {lane.execution_notes}".strip())
+                            if variant.get("source") == "experimental"
+                            else lane.execution_notes
+                        ),
                     }
                 )
     finally:

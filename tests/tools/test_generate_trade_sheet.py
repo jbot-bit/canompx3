@@ -2,7 +2,9 @@
 
 from datetime import date
 from pathlib import Path
+import tempfile
 
+import duckdb
 import pytest
 
 from scripts.tools.generate_trade_sheet import (
@@ -10,6 +12,7 @@ from scripts.tools.generate_trade_sheet import (
     _build_filter_universe_rows,
     _check_fitness,
     _enrich_trades_with_eligibility,
+    _fetch_exact_lane_variant,
     _fitness_badge,
     _prefetch_feature_rows,
     _render_filter_universe_section,
@@ -48,6 +51,55 @@ def test_check_fitness_returns_unknown_with_error(monkeypatch):
 
     assert result.status == "UNKNOWN"
     assert result.error == "RuntimeError: boom"
+
+
+def test_fetch_exact_lane_variant_falls_back_to_experimental():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "gold.db"
+        with duckdb.connect(str(db_path)) as con:
+            con.execute(
+                """
+                CREATE TABLE validated_setups (
+                    strategy_id VARCHAR,
+                    orb_label VARCHAR,
+                    orb_minutes INTEGER,
+                    filter_type VARCHAR,
+                    rr_target DOUBLE,
+                    win_rate DOUBLE,
+                    expectancy_r DOUBLE,
+                    sample_size INTEGER
+                )
+                """
+            )
+            con.execute(
+                """
+                CREATE TABLE experimental_strategies (
+                    strategy_id VARCHAR,
+                    orb_label VARCHAR,
+                    orb_minutes INTEGER,
+                    filter_type VARCHAR,
+                    rr_target DOUBLE,
+                    win_rate DOUBLE,
+                    expectancy_r DOUBLE,
+                    sample_size INTEGER,
+                    median_risk_points DOUBLE
+                )
+                """
+            )
+            con.execute(
+                """
+                INSERT INTO experimental_strategies VALUES
+                ('MNQ_US_DATA_1000_E2_RR1.0_CB1_F5_BELOW_PDL', 'US_DATA_1000', 5,
+                 'F5_BELOW_PDL', 1.0, 0.69, 0.12, 144, 22.5)
+                """
+            )
+
+            variant = _fetch_exact_lane_variant(con, "MNQ_US_DATA_1000_E2_RR1.0_CB1_F5_BELOW_PDL")
+
+        assert variant is not None
+        assert variant["source"] == "experimental"
+        assert variant["filter_type"] == "F5_BELOW_PDL"
+        assert variant["median_risk_points"] == pytest.approx(22.5)
 
 
 def test_fitness_badge_unknown_is_not_decay():

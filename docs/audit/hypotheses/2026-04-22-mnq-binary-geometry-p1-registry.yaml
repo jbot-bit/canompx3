@@ -1,0 +1,66 @@
+metadata:
+  name: "mnq-binary-geometry-p1-registry"
+  purpose: "Phase-4 registry bridge for the locked P1 MNQ binary geometry family"
+  date_locked: "2026-04-22T17:30:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 2
+  testing_mode: "family"
+
+hypotheses:
+  - id: 1
+    name: "MNQ US_DATA_1000 long BELOW_PDL exact cell"
+    theory_citation: |
+      Crabel, Toby. Day Trading with Short Term Price Patterns and Opening Range Breakout.
+      Repo-local mechanism grounding: docs/institutional/mechanism_priors.md
+      and docs/audit/results/2026-04-15-prior-day-features-orb-mega-exploration.md.
+    economic_basis: |
+      On MNQ US_DATA_1000, an ORB that forms with its midpoint below the
+      prior-day low and then breaks long represents a specific reversal /
+      trapped-short geometry rather than a generic ORB-size effect. The
+      research claim is exact-cell and long-only; the filter object must own
+      the long-direction constraint so discovery does not widen the family.
+    filter:
+      type: F5_BELOW_PDL
+      column: "orb_mid vs prev_day_low"
+      thresholds: [binary_true]
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw accepted trials exceed declared family budget of 2"
+      - "Experimental row does not match the exact audited strategy surface"
+      - "IS expectancy is non-positive after canonical discovery write"
+
+  - id: 2
+    name: "MNQ COMEX_SETTLE long INSIDE_PDR exact cell"
+    theory_citation: |
+      Crabel, Toby. Day Trading with Short Term Price Patterns and Opening Range Breakout.
+      Repo-local mechanism grounding: docs/institutional/mechanism_priors.md
+      and docs/audit/results/2026-04-15-prior-day-features-orb-mega-exploration.md.
+    economic_basis: |
+      On MNQ COMEX_SETTLE, a long break whose ORB midpoint remains inside the
+      prior-day range is a constrained / low-clearance geometry. This is
+      expected to behave as a negative avoid state, but it still needs a
+      canonical discovery row so the bridge from research audit to
+      experimental/runtime surface is complete and reproducible.
+    filter:
+      type: F6_INSIDE_PDR
+      column: "orb_mid inside prior-day range"
+      thresholds: [binary_true]
+    scope:
+      instruments: [MNQ]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw accepted trials exceed declared family budget of 2"
+      - "Experimental row does not match the exact audited strategy surface"
+      - "Discovery write fails to persist the exact negative-state row"

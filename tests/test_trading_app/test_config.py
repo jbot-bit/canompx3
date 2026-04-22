@@ -17,6 +17,7 @@ from trading_app.config import (
     NoFilter,
     OrbSizeFilter,
     PitRangeFilter,
+    PrevDayGeometryFilter,
     StrategyFilter,
     VolumeFilter,
     VWAPBreakDirectionFilter,
@@ -164,8 +165,10 @@ class TestAllFilters:
         #     CROSS_NYSE_MOMENTUM (Apr 2026 cross-session state, MNQ US_DATA_1000)
         #     CROSS_COMEX_MOMENTUM (Apr 2026, MNQ CME_PRECLOSE)
         #     CROSS_SGP_MOMENTUM (Apr 2026, MNQ EUROPE_FLOW)
-        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 9 scoped = 91
-        assert len(ALL_FILTERS) == 91
+        #     F5_BELOW_PDL (Apr 2026 P1 MNQ binary geometry bridge, long-only)
+        #     F6_INSIDE_PDR (Apr 2026 P1 MNQ binary geometry bridge, long-only)
+        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 11 scoped = 93
+        assert len(ALL_FILTERS) == 93
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -240,6 +243,55 @@ class TestVolumeFilter:
         assert isinstance(f, VolumeFilter)
         assert f.min_rel_vol == 1.2
         assert f.lookback_days == 20
+
+
+class TestPrevDayGeometryFilter:
+    """Exact geometry predicates promoted from the P1 MNQ bridge."""
+
+    def test_below_pdl_long_matches_only_long_breaks(self):
+        f = PrevDayGeometryFilter(filter_type="F5_BELOW_PDL", description="test", mode="below_pdl_long")
+        row = {
+            "orb_US_DATA_1000_high": 99.0,
+            "orb_US_DATA_1000_low": 97.0,
+            "orb_US_DATA_1000_break_dir": "long",
+            "prev_day_low": 98.5,
+            "prev_day_high": 103.0,
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_break_dir"] = "short"
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+    def test_inside_pdr_long_requires_strict_inside(self):
+        f = PrevDayGeometryFilter(filter_type="F6_INSIDE_PDR", description="test", mode="inside_pdr_long")
+        row = {
+            "orb_COMEX_SETTLE_high": 101.0,
+            "orb_COMEX_SETTLE_low": 99.0,
+            "orb_COMEX_SETTLE_break_dir": "long",
+            "prev_day_low": 95.0,
+            "prev_day_high": 105.0,
+        }
+        assert f.matches_row(row, "COMEX_SETTLE") is True
+
+        row["prev_day_low"] = 100.0
+        assert f.matches_row(row, "COMEX_SETTLE") is False
+
+    def test_describe_marks_orb_formation(self):
+        f = PrevDayGeometryFilter(filter_type="F5_BELOW_PDL", description="test", mode="below_pdl_long")
+        atoms = f.describe(
+            {
+                "orb_US_DATA_1000_high": 99.0,
+                "orb_US_DATA_1000_low": 97.0,
+                "orb_US_DATA_1000_break_dir": "long",
+                "prev_day_low": 98.5,
+                "prev_day_high": 103.0,
+            },
+            "US_DATA_1000",
+            "E2",
+        )
+        assert len(atoms) == 1
+        assert atoms[0].resolves_at == "ORB_FORMATION"
+        assert atoms[0].passes is True
 
     def test_higher_threshold_filters_registered(self):
         """Confluence program rel_vol filters (Mar 2026) are all registered."""
