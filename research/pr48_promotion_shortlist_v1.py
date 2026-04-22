@@ -30,6 +30,7 @@ from research.lib.conditional_role import (
     load_prereg_meta,
     load_symbol_frame,
     max_drawdown,
+    resolve_research_db_path,
     role_metrics,
 )
 
@@ -66,7 +67,8 @@ def _combo_metrics(series: pd.Series) -> dict[str, float]:
 def main() -> int:
     prereg_meta, prereg_sha = load_prereg_meta(PREREG_PATH)
     holdout = pd.Timestamp(prereg_meta["holdout_date"])
-    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+    db_path = resolve_research_db_path(GOLD_DB_PATH)
+    con = duckdb.connect(str(db_path), read_only=True)
     latest_day = con.execute("SELECT MAX(trading_day) FROM orb_outcomes WHERE pnl_r IS NOT NULL").fetchone()[0]
 
     try:

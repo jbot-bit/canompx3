@@ -39,6 +39,20 @@ class DailyDeltaResult:
     direction_positive: bool
 
 
+def resolve_research_db_path(default_path: Path) -> Path:
+    """Resolve the canonical gold.db path for managed worktree research.
+
+    Managed worktrees may not carry their own hardlinked `gold.db`. In that
+    case, fall back to the canonical repo db in `/mnt/c/Users/joshd/canompx3`.
+    """
+    if default_path.exists():
+        return default_path
+    fallback = Path("/mnt/c/Users/joshd/canompx3/gold.db")
+    if fallback.exists():
+        return fallback
+    return default_path
+
+
 def load_prereg_meta(prereg_path: Path) -> tuple[dict[str, Any], str]:
     meta = load_hypothesis_metadata(prereg_path)
     check_mode_a_consistency(meta)
