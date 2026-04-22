@@ -59,6 +59,29 @@ Canonical `orb_outcomes × daily_features` plus discovery + validator support:
 - next honest move is to reopen the MNQ-first queue at the **mechanism-class**
   level, not to blindly bridge a third geometry session
 
+### Next mechanism-class result (2026-04-22)
+
+The first post-geometry MNQ mechanism-class bridge also survived:
+
+- `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08`
+
+Truth-state:
+
+- cost-ratio is the next alive MNQ mechanism class after prior-day geometry
+- this exact row is an upgrade over the already-active `COST_LT12` on the same
+  lane, not a duplicate rediscovery
+- hard truth:
+  - one reverse year (`2023`)
+  - thin OOS off-side (`N=12`)
+  - DSR still below the stronger comfort threshold
+
+So keep the framing honest:
+
+- `TOKYO COST_LT08` is real
+- it does **not** mean “cost-ratio everywhere”
+- it does mean the next MNQ-first queue should stay open to non-geometry
+  mechanism classes
+
 ## Update (2026-04-21 hardened follow-through — rolling GARCH builder fixed, cross-instrument repair applied, shadow path unblocked)
 
 Follow-on to the earlier GARCH `R3` shadow scaffold block. The path is no
