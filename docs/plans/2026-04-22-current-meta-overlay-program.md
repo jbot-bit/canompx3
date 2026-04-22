@@ -143,6 +143,15 @@ It is **not** an overlay on `bars_1m -> daily_features -> orb_outcomes`.
 1. The feature family is still being specified. The repo’s prereg gate forbids pretending a future `daily_features` column already exists.
 2. Several exact MNQ anchor cells have already been inspected in committed research and in fresh read-only review this session. The honest next step is the **feature contract**, then a fresh prereg on untouched exact scope — not retroactive registration after another look.
 
+**Important correction from the read-only shortcut:** the first direct clearance-bin shortcut on `MNQ US_DATA_1000 O5 RR1.0 long` did **not** validate a clean "co-located + open-air good, choked bad" story. It showed:
+
+- `co_located_break` positive in IS
+- `choked` negative in IS
+- `open_air` only mildly positive in IS and negative in thin OOS
+- Welch separation too weak to treat the four-bin framing as validated
+
+So the immediate MNQ path should **not** jump straight to a universal four-bin clearance rule. The next MNQ prereg should start from the already-strong binary geometry states (`below_pdl`, `inside_prevday_range`) and treat clearance bins as a secondary refinement layer.
+
 **Target roles, in order:**
 
 1. `R1` binary avoid/take
@@ -281,6 +290,11 @@ It should define:
 - co-location state
 - inside-range / outside-range geometry
 - session-safety matrix for overnight fields
+
+And it should now be read with the shortcut result in mind:
+
+- **binary prior-day states first**
+- **continuous clearance second**
 
 ### 3. Run the `MES E1 rel_vol` family exactly as pre-registered
 

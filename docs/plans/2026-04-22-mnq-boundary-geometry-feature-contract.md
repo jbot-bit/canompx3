@@ -185,6 +185,36 @@ Those are not yet being pre-registered here, because this doc only locks the fea
 
 ---
 
+## Shortcut result that changes the priority
+
+The read-only shortcut run on:
+
+- `MNQ / US_DATA_1000 / O5 / E2 / RR1.0 / long`
+
+using on-the-fly `clearance_r` bins produced:
+
+- `co_located_break`: `N_IS=273`, `ExpR=+0.0813`
+- `choked`: `N_IS=86`, `ExpR=-0.0691`
+- `mid_clearance`: `N_IS=95`, `ExpR=-0.0326`
+- `open_air`: `N_IS=427`, `ExpR=+0.0535`
+
+But the bucket-vs-rest Welch checks were weak, and OOS was thin/noisy:
+
+- `co_located_break`: `t=+0.856`, `p=0.392`
+- `choked`: `t=-1.121`, `p=0.265`
+- `open_air`: `t=+0.386`, `p=0.700`
+
+Implication:
+
+- the **geometry class is still alive**
+- the **four-bin clearance framing is not yet the right first deployable encoding**
+- immediate research priority should stay with the already-stronger binary states
+  - `below_pdl`
+  - `inside_prevday_range`
+- clearance bins should be treated as a **secondary refinement** after the binary states are locked
+
+---
+
 ## Explicit non-goals
 
 - No universal clearance rule

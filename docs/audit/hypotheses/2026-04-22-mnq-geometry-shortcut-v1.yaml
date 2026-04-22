@@ -1,0 +1,215 @@
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: 2026-04-22
+slug: mnq-geometry-shortcut-v1
+title: "MNQ US_DATA_1000 O5 RR1.0 long — read-only boundary geometry shortcut"
+owner: codex
+parent_spec: "docs/plans/2026-04-22-mnq-boundary-geometry-feature-contract.md"
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+  notes:
+    - "This is a read-only on-the-fly geometry test using existing canonical fields. No production schema build is part of this pre-reg."
+    - "The strategy class is literature-grounded as ORB trend-follow. The geometry feature family is a within-class refinement, not a separately literature-grounded filter mechanism. Therefore the stricter t>=3.79 bar remains binding."
+
+reproducibility:
+  repo_root: "/mnt/c/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+scope:
+  instrument: "MNQ"
+  orb_label: "US_DATA_1000"
+  orb_minutes:
+    - 5
+  entry_model:
+    - "E2"
+  rr_target:
+    - 1.0
+  confirm_bars:
+    - 1
+  direction:
+    - "long"
+  canonical_direction_predicate: "daily_features.orb_US_DATA_1000_break_dir = 'long'"
+  family_buckets:
+    - "co_located_break"
+    - "choked"
+    - "mid_clearance"
+    - "open_air"
+
+data_policy:
+  canonical_truth_layers:
+    - "daily_features"
+    - "orb_outcomes"
+  is_window: "trading_day < 2026-01-01"
+  oos_window: "trading_day >= 2026-01-01"
+  holdout_rule:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+feature_definition:
+  feature_name: "clearance_r_to_prev_day_high"
+  column_source: "computed on the fly from existing canonical columns"
+  canonical_source_of_truth:
+    - "daily_features.prev_day_high"
+    - "daily_features.orb_US_DATA_1000_high"
+    - "daily_features.orb_US_DATA_1000_low"
+  trade_time_knowable: true
+  first_complete_time: "close of the O5 ORB window"
+  temporal_alignment_note: "prev_day_high is fixed before the session; ORB high/low are fixed at ORB completion; E2 entry occurs after ORB completion."
+  lookahead_check:
+    - "Reject any use of post-entry fields."
+    - "Reject any rows with orb_risk <= 0."
+    - "No schema mutation; compute the feature inside the read-only harness only."
+
+calibration:
+  threshold_source: "fixed hard-coded geometry bins"
+  lock_policy: "No data-driven thresholds. Bins are locked ex ante."
+
+hypothesis_definition:
+  family_unit: "geometry bucket"
+  objective: "Test whether the parent lane's expectancy is concentrated in co-located and open-air regimes while the choked regime is materially worse."
+  formulas:
+    orb_risk: "orb_US_DATA_1000_high - orb_US_DATA_1000_low"
+    clearance_r: "(prev_day_high - orb_US_DATA_1000_high) / orb_risk"
+  bins:
+    co_located_break: "clearance_r <= 0.0"
+    choked: "0.0 < clearance_r <= 1.0"
+    mid_clearance: "1.0 < clearance_r <= 2.0"
+    open_air: "clearance_r > 2.0"
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - "docs/audit/results/2026-04-15-prior-day-features-orb-mega-exploration.md"
+    - "docs/plans/2026-04-22-mnq-boundary-geometry-feature-contract.md"
+  note: "These sources motivate the geometry class only. They are not proof for this pre-reg."
+
+hypotheses:
+  - id: "H1"
+    type: "primary"
+    theory_citation: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md; within-class refinement per docs/institutional/mechanism_priors.md"
+    statement: "The choked bucket underperforms the rest of the lane in-sample."
+    pass_metric:
+      metric: "Welch delta against rest"
+      formula: "ExpR_choked_IS - ExpR_rest_IS"
+      threshold_lt: -0.05
+    counted_against_trial_budget: true
+  - id: "H2"
+    type: "primary"
+    theory_citation: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md; within-class refinement per docs/institutional/mechanism_priors.md"
+    statement: "The co-located bucket is profitable in-sample and directionally survives into OOS."
+    pass_metric:
+      metric: "co-located expectancy"
+      formula: "ExpR_co_located_IS"
+      threshold_gte: 0.05
+    counted_against_trial_budget: true
+  - id: "H3"
+    type: "primary"
+    theory_citation: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md; within-class refinement per docs/institutional/mechanism_priors.md"
+    statement: "The open-air bucket is profitable in-sample and directionally survives into OOS."
+    pass_metric:
+      metric: "open-air expectancy"
+      formula: "ExpR_open_air_IS"
+      threshold_gte: 0.03
+    counted_against_trial_budget: true
+  - id: "H4"
+    type: "secondary_descriptive_only"
+    theory_citation: "docs/institutional/mechanism_priors.md"
+    statement: "Mid-clearance is intermediate rather than the primary driver."
+    pass_metric:
+      metric: "descriptive ordering only"
+      formula: "report ExpR_mid_IS"
+      threshold_gte: 0.0
+    counted_against_trial_budget: false
+
+testing_discipline:
+  family_k: 3
+  significance_threshold:
+    bh_fdr_q: 0.05
+    t_stat_abs_gte: 3.79
+  positive_mean_floor: true
+  mandatory_downstream_gates:
+    - "Criterion 8 directional check on OOS bucket means"
+
+baseline:
+  definition: "same lane, all eligible long trades, no geometry filter"
+  metrics_required:
+    - "N"
+    - "WinRate"
+    - "ExpR"
+    - "Total_R"
+
+trial_budget:
+  primary_selection_trials: 3
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "2 * ln(N_trials) / E[max_N]^2"
+    n_trials: 3
+    e_max_n: 1.2
+    implied_years_required: 1.53
+    available_clean_years_reference: "MNQ ~= 6.65 clean pre-holdout years per docs/institutional/pre_registered_criteria.md"
+    within_cap: true
+    cap_reference: "Criterion 2"
+
+kill_criteria:
+  - id: "K1"
+    metric: "directional structure"
+    threshold: "H1 fails and both H2 and H3 fail"
+    action: "KILL"
+  - id: "K2"
+    metric: "integrity"
+    threshold: "Any row uses post-entry fields, or any row with orb_risk <= 0 is retained"
+    action: "KILL"
+  - id: "K3"
+    metric: "OOS direction"
+    threshold: "Both co_located and open_air reverse sign in OOS while choked does not remain the weakest bucket"
+    action: "KILL"
+  - id: "K4"
+    metric: "power"
+    threshold: "Any primary bucket has N_IS < 30"
+    action: "PARK"
+
+decision_rule:
+  continue_if: "H1 passes and at least one of H2/H3 passes without K2/K3."
+  park_if: "IS structure is supportive but K4 or thin OOS depth prevents a hard judgment."
+  kill_if: "K1 or K2 or K3 fires."
+
+methodology_rules_applied:
+  - rule: "RESEARCH_RULES.md — Discovery Layer Discipline"
+    application: "Uses only orb_outcomes and daily_features."
+  - rule: ".claude/rules/backtesting-methodology.md RULE 6"
+    application: "Feature is fixed at ORB completion and is pre-entry safe for the target E2 lane."
+  - rule: "docs/institutional/pre_registered_criteria.md Criterion 3"
+    application: "BH-FDR applied across the 3 counted hypotheses."
+  - rule: "docs/institutional/pre_registered_criteria.md Criterion 4"
+    application: "t>=3.79 remains binding because the geometry mechanism is still a within-class refinement, not directly literature-grounded enough for the relaxed bar."
+
+outputs_required_after_run:
+  - "IS table by bucket: N, WinRate, ExpR, Total_R"
+  - "OOS table by bucket: N, WinRate, ExpR, Total_R"
+  - "Welch comparison of each primary bucket vs rest on IS"
+  - "Overall lane baseline for IS and OOS"
+  - "Row-level CSV with clearance_r and assigned bucket"
+
+execution_gate:
+  allowed_now: true
+  forbidden_now:
+    - "No production feature build"
+    - "No validated_setups write"
+    - "No live deployment from this shortcut alone"
+
+not_done_by_this_pre_reg:
+  - "Does not test overnight geometry."
+  - "Does not test RR1.5 or RR2.0."
+  - "Does not prove a universal clearance rule."
+  - "Does not reopen rolling ML."
