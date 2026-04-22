@@ -10,6 +10,7 @@ metadata:
   name: "pr48_promotion_shortlist_v1"
   purpose: "Bounded shortlist study to decide which PR48 candidate arms continue toward shadow/deployable follow-through."
   date_locked: "2026-04-22T17:00:00+10:00"
+  commit_sha: "5c39f142"
   holdout_date: "2026-01-01"
   total_expected_trials: 4
   testing_mode: "family"
