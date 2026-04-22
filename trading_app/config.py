@@ -1570,6 +1570,8 @@ class PrevDayGeometryFilter(StrategyFilter):
 
     - ``below_pdl_long``: ORB midpoint is below prior-day low AND session
       break direction is long.
+    - ``downside_displacement_long``: ORB midpoint is below prior-day low OR
+      within 0.15 ATR-20 of prior-day low, with long break direction.
     - ``inside_pdr_long``: ORB midpoint lies strictly inside the prior-day
       range AND session break direction is long.
     - ``near_pivot_long_50``: ORB midpoint is within 0.50 ATR-20 of the
@@ -1588,7 +1590,12 @@ class PrevDayGeometryFilter(StrategyFilter):
     mode: str
 
     def __post_init__(self) -> None:
-        if self.mode not in ("below_pdl_long", "inside_pdr_long", "near_pivot_long_50"):
+        if self.mode not in (
+            "below_pdl_long",
+            "downside_displacement_long",
+            "inside_pdr_long",
+            "near_pivot_long_50",
+        ):
             raise ValueError(f"PrevDayGeometryFilter mode must be a supported exact geometry mode, got {self.mode!r}")
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
@@ -1604,6 +1611,10 @@ class PrevDayGeometryFilter(StrategyFilter):
         orb_mid = (hi + lo) / 2.0
         if self.mode == "below_pdl_long":
             return orb_mid < pdl
+        if self.mode == "downside_displacement_long":
+            if atr is None or atr <= 0:
+                return False
+            return orb_mid < pdl or abs(orb_mid - pdl) / atr < 0.15
         if self.mode == "inside_pdr_long":
             return pdl < orb_mid < pdh
         if pdc is None or atr is None or atr <= 0:
@@ -1628,6 +1639,11 @@ class PrevDayGeometryFilter(StrategyFilter):
         orb_mid = (hi + lo) / 2.0
         if self.mode == "below_pdl_long":
             return valid & (orb_mid < pdl)
+        if self.mode == "downside_displacement_long":
+            if atr is None:
+                return pd.Series(False, index=df.index)
+            valid = valid & atr.notna() & (atr > 0)
+            return valid & ((orb_mid < pdl) | (((orb_mid - pdl).abs() / atr) < 0.15))
         if self.mode == "inside_pdr_long":
             return valid & (orb_mid > pdl) & (orb_mid < pdh)
         if pdc is None or atr is None:
@@ -1652,14 +1668,24 @@ class PrevDayGeometryFilter(StrategyFilter):
         break_dir = row.get(f"orb_{orb_label}_break_dir")
 
         missing = hi is None or lo is None or pdh is None or pdl is None or break_dir is None
+        if self.mode in ("downside_displacement_long", "near_pivot_long_50"):
+            missing = missing or atr is None
         if self.mode == "near_pivot_long_50":
-            missing = missing or pdc is None or atr is None
+            missing = missing or pdc is None
         orb_mid = None if hi is None or lo is None else (hi + lo) / 2.0
 
         if missing or break_dir != "long":
             passes = None if missing else False
         elif self.mode == "below_pdl_long":
             passes = orb_mid is not None and pdl is not None and orb_mid < pdl
+        elif self.mode == "downside_displacement_long":
+            passes = (
+                orb_mid is not None
+                and pdl is not None
+                and atr is not None
+                and atr > 0
+                and (orb_mid < pdl or abs(orb_mid - pdl) / atr < 0.15)
+            )
         elif self.mode == "inside_pdr_long":
             passes = orb_mid is not None and pdl is not None and pdh is not None and pdl < orb_mid < pdh
         else:
@@ -1677,6 +1703,12 @@ class PrevDayGeometryFilter(StrategyFilter):
             comparator = "<"
             explanation = "Require long break with ORB midpoint below prior-day low."
             name = "ORB midpoint below prior-day low (long only)"
+            feature_column = "prev_day_low"
+        elif self.mode == "downside_displacement_long":
+            threshold = None if pdl is None or atr is None else f"below prev_day_low OR |orb_mid-prev_day_low|/atr_20 < 0.15 (pdl={pdl:.4f})"
+            comparator = "< / near"
+            explanation = "Require long break with ORB midpoint below or near prior-day low (0.15 ATR)."
+            name = "ORB midpoint downside-displaced vs prior-day low (long only)"
             feature_column = "prev_day_low"
         elif self.mode == "inside_pdr_long":
             threshold = None if pdl is None or pdh is None else f"({pdl:.4f}, {pdh:.4f})"
@@ -3024,6 +3056,18 @@ _HYPOTHESIS_SCOPED_FILTERS: dict[str, StrategyFilter] = {
         filter_type="F3_NEAR_PIVOT_50",
         description="Long ORB midpoint near prior-day pivot (0.50 ATR)",
         mode="near_pivot_long_50",
+    ),
+    # Exact broader-family follow-up (Apr 2026): downside displacement on the
+    # live-adjacent MNQ US_DATA_1000 RR1.0 long parent lane.
+    # Read-only family board found the OR-union of BELOW_PDL and NEAR_PDL_15
+    # as the strongest broader take-state among the bounded MNQ prior-day
+    # families. Registered here for Phase 4 hypothesis-file injection only.
+    # @research-source research/mnq_prior_day_family_board_v1.py
+    # @entry-models E2
+    "PD_DISPLACE_LONG": PrevDayGeometryFilter(
+        filter_type="PD_DISPLACE_LONG",
+        description="Long ORB midpoint below or near prior-day low (0.15 ATR)",
+        mode="downside_displacement_long",
     ),
     # Wave 4 Phase B T2-T8 survivor: ATR velocity ratio (expansion gate)
     # Tested at 2026-04-11 on post-Phase-3c data. 2/11 shortlist combos survived

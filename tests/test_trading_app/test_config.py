@@ -165,8 +165,9 @@ class TestAllFilters:
         #     CROSS_NYSE_MOMENTUM (Apr 2026 cross-session state, MNQ US_DATA_1000)
         #     CROSS_COMEX_MOMENTUM (Apr 2026, MNQ CME_PRECLOSE)
         #     CROSS_SGP_MOMENTUM (Apr 2026, MNQ EUROPE_FLOW)
-        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 10 scoped = 92
-        assert len(ALL_FILTERS) == 92
+        #     PD_DISPLACE_LONG (Apr 2026 broader MNQ downside-displacement family)
+        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 11 scoped = 93
+        assert len(ALL_FILTERS) == 93
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -317,6 +318,28 @@ class TestPrevDayGeometryFilter:
 
         row["orb_US_DATA_1000_high"] = 105.0
         row["orb_US_DATA_1000_low"] = 104.0
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+    def test_downside_displacement_long_accepts_below_or_near_pdl(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="PD_DISPLACE_LONG", description="test", mode="downside_displacement_long")
+        row = {
+            "orb_US_DATA_1000_high": 100.0,
+            "orb_US_DATA_1000_low": 98.0,
+            "orb_US_DATA_1000_break_dir": "long",
+            "prev_day_low": 99.2,
+            "prev_day_high": 104.0,
+            "atr_20": 8.0,
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 100.3
+        row["orb_US_DATA_1000_low"] = 99.7
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 103.5
+        row["orb_US_DATA_1000_low"] = 102.5
         assert f.matches_row(row, "US_DATA_1000") is False
 
     def test_describe_marks_orb_formation(self):
