@@ -4,10 +4,158 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-22 recent PR follow-through queue — actioned vs still-open backlog reconciled)
+
+Follow-on to the recent PR review burst. The repo now has an explicit split
+between:
+
+- findings that were already actioned and should not be re-opened as fake
+  backlog
+- findings that remain open and now have repo-native task / PR scaffolds
+
+### What was reconciled
+
+Cross-read against:
+
+- `docs/audit/results/2026-04-21-recent-claims-skeptical-reaudit-v1.md`
+- `docs/audit/results/2026-04-21-pr48-participation-shape-oos-replication-v1.md`
+- `docs/audit/results/2026-04-19-gc-mgc-translation-audit.md`
+- `docs/audit/results/2026-04-19-mnq-nyse-close-failure-mode-audit.md`
+- `docs/audit/results/2026-04-19-mode-a-revalidation-of-active-setups.md`
+- `docs/plans/2026-04-21-post-stale-lock-action-queue.md`
+- recent merged PRs in the `#56/#67/#69/#71/#73/#75` window
+
+### Already actioned, not open backlog
+
+- PR #50 / #51 "candidate-ready" framing
+  - reclassified by PR #56 DSR audit; do not resurrect as deploy candidates
+- PR #48 "missing OOS replication"
+  - already actioned by `docs/audit/results/2026-04-21-pr48-participation-shape-oos-replication-v1.md`
+  - current truth: `MES` and `MGC` OOS-confirmed, `MNQ` still unverified
+- L1 `EUROPE_FLOW` break-bar methodological hole
+  - doctrine correction + prereg already landed in PR #67
+- ORB_G5 generic replacement framing
+  - already killed; surviving story is lane-specific only
+- GARCH R3 raw-blocker path
+  - actioned and now `READY_FOR_FORWARD_MONITORING`
+- 2026-04-22 checker-on-checker review findings
+  - actioned in code and covered by full-suite verification
+
+### Open queue now made explicit
+
+Ranked in:
+
+- `docs/plans/2026-04-22-recent-pr-followthrough-queue.md`
+
+Top-to-bottom ROI order:
+
+1. PR #48 `MES/MGC` deployable sizer-rule derivation / backtest
+2. `MGC` 5m payoff-compression audit
+3. L1 `EUROPE_FLOW` pre-break-context scan
+4. `MNQ NYSE_CLOSE` RR1.0 follow-up
+5. Prior-day Pathway-B hot-cell prereg
+6. Cross-asset session chronology spec
+7. `GC -> MGC` 15m/30m translation question
+
+### Stage files created
+
+All open items now have a stage/task scaffold:
+
+- `docs/runtime/stages/pr48-mes-mgc-sizer-rule-backtest.md`
+- `docs/runtime/stages/mgc-5m-payoff-compression-audit.md`
+- `docs/runtime/stages/l1-europe-flow-pre-break-context-scan.md`
+- `docs/runtime/stages/mnq-nyse-close-rr10-followup.md`
+- `docs/runtime/stages/prior-day-pathway-b-hot-cell-prereg.md`
+- `docs/runtime/stages/cross-asset-session-chronology-spec.md`
+- `docs/runtime/stages/gc-mgc-15m-30m-translation-question.md`
+
+Each stage includes:
+
+- a narrow question
+- scope lock / non-goals
+- suggested branch name
+- suggested PR title
+- acceptance criteria
+
+### Verification
+
+- Docs-only follow-through packaging
+- Manual convention check against existing `docs/runtime/stages/*.md` frontmatter
+  and stage structure
+- No code/runtime verification needed for this queueing step
+
 ## Update (2026-04-21 hardened follow-through — rolling GARCH builder fixed, cross-instrument repair applied, shadow path unblocked)
 
 Follow-on to the earlier GARCH `R3` shadow scaffold block. The path is no
 longer blocked on data integrity.
+
+## Update (2026-04-22 checker hardening — checker-on-checker fixes for GARCH warmup + lane correlation monitor)
+
+Follow-on to the commit-range review. Two newly-added verification surfaces were
+proven to be overclaiming their own correctness and were hardened against their
+producer semantics instead of their previous happy-path tests.
+
+### What was wrong
+
+- `pipeline/check_drift.py::check_recent_garch_feature_coverage()`
+  - treated `n_total >= 300` as fully warmed
+  - this was false: `garch_forecast_vol` needs 252 prior closes and
+    `garch_forecast_vol_pct` needs 60 prior non-null GARCH values, so the
+    "recent 20 rows must all be populated" gate only becomes safe at
+    `252 + 60 + 20 = 332` total rows
+  - a canonically valid 320-row shape could false-fail
+- `scripts/reports/monitor_lane_correlation_rolling.py`
+  - claimed "no-trade day = 0 subsystem return" but only pivoted dates present
+    in `paper_trades`, so whole-book flat days silently disappeared from the
+    rolling window
+  - returned `monitor_status = CLEAR` on zero data
+  - wrote `history_days_loaded = 180` even when `--days-back` was overridden
+
+### What landed
+
+- `pipeline/build_daily_features.py`
+  - added shared GARCH warmup constants:
+    - `GARCH_MIN_PRIOR_CLOSES = 252`
+    - `GARCH_PCT_MIN_PRIOR_VALUES = 60`
+- `pipeline/check_drift.py`
+  - recent GARCH coverage threshold now derives from producer semantics instead
+    of a loose literal
+- `scripts/reports/monitor_lane_correlation_rolling.py`
+  - added canonical monitor-calendar loading from `daily_features`
+  - `load_daily_pnl_series(...)` now preserves explicit zero-return gaps instead
+    of shrinking the window to trade-present days only
+  - status now distinguishes:
+    - `NO_DATA`
+    - `INSUFFICIENT_DATA`
+    - `CLEAR`
+    - `ALARM`
+  - `history_days_loaded` now reflects the requested history window
+- Regression coverage added:
+  - `tests/test_pipeline/test_check_drift_db.py`
+    - valid GARCH warmup shape no longer false-fails
+  - `tests/test_scripts/test_monitor_lane_correlation_rolling.py`
+    - whole-book flat day preserved
+    - no-data report is not green
+    - requested history window preserved in output
+
+### Verification
+
+- Targeted tests:
+  - `./.venv-wsl/bin/pytest tests/test_pipeline/test_build_daily_features_incremental_seed.py tests/test_pipeline/test_check_drift_db.py tests/test_scripts/test_monitor_lane_correlation_rolling.py -q`
+  - `53 passed`
+- Drift:
+  - `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `106 checks passed`, `6 advisory`, no blocking drift
+- Behavioral audit:
+  - `./.venv-wsl/bin/python scripts/tools/audit_behavioral.py`
+  - passed
+- Integrity audit:
+  - `./.venv-wsl/bin/python scripts/tools/audit_integrity.py`
+  - passed
+- Static checks:
+  - `ruff check` on touched files passed
+  - `ruff format --check` on touched files passed
+  - `py_compile` on touched files passed
 
 ### What was actually wrong
 
@@ -8211,3 +8359,74 @@ Decide per branch whether to push.
 3. Decide whether to push the 6 local-only commits above.
 4. Decide whether to remove `canompx3-6lane-baseline` worktree (post-merge).
 5. 18 older PRs need merge/close decisions (none time-critical per memory).
+
+---
+
+## 2026-04-22 Codex research update — MNQ-first family bridge
+
+Active isolated worktree: `/tmp/canompx3-mnq-hiroi-scan`  
+Branch: `wt-codex-mnq-hiroi-scan`  
+PR: `#99`
+
+What changed:
+- Added `research/phase4_candidate_precheck.py` so exact Phase-4 bridge cost can
+  be screened before discovery writes.
+- Fixed `trading_app/strategy_discovery.py` isolated-worktree import routing so
+  direct-file and module execution use the active checkout instead of leaking
+  into another clone.
+- Built bounded MNQ family board:
+  - `docs/audit/results/2026-04-22-mnq-prior-day-family-board-v1.md`
+- Promoted two broader MNQ prior-day geometry families on the same
+  `MNQ US_DATA_1000 O5 E2 RR1.0 long` parent lane:
+  - `PD_DISPLACE_LONG`
+  - `PD_CLEAR_LONG`
+
+Canonical outcomes:
+- `PD_DISPLACE_LONG`
+  - validated row exists
+  - `strategy_id=MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_DISPLACE_LONG`
+  - `wfe=0.7552`
+  - `oos_exp_r=+0.1922`
+- `PD_CLEAR_LONG`
+  - validated row exists
+  - `strategy_id=MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_CLEAR_LONG`
+  - `wfe=1.4639`
+  - `oos_exp_r=+0.2926`
+
+Important closure:
+- Narrow exact-cell MNQ avoid bridges were overfit-prone and failed:
+  - `F5_BELOW_PDL` failed valid-window sufficiency
+  - `F3_NEAR_PIVOT_50` failed era stability
+- The broader-family route is the first one in this sequence that actually
+  survives the full bridge cleanly.
+
+Recommended next move:
+- Stay MNQ-first.
+- Do not reopen MES / ML / broad stacking.
+- Before bridging another candidate, explicitly test whether it is additive to
+  `PD_DISPLACE_LONG` and `PD_CLEAR_LONG` rather than just a relabel of the same
+  state.
+
+Update (same branch, later 2026-04-22):
+- Added and promoted `PD_GO_LONG` on the same lane:
+  - `strategy_id=MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_GO_LONG`
+  - `wfe=1.2609`
+  - `oos_exp_r=+0.2176`
+- Canonical partition on `MNQ US_DATA_1000 O5 E2 RR1.0 long` now looks closed:
+  - `PD_DISPLACE_LONG` survives
+  - `PD_CLEAR_LONG` survives
+  - their bounded union `PD_GO_LONG` also survives
+  - the excluded residual state is negative in both IS and OOS
+- Practical implication: stop cutting this exact lane more narrowly. The next
+  high-EV move should be another MNQ parent lane, not more local slicing on
+  `US_DATA_1000 RR1.0 long`.
+
+Later same session:
+- Transferred the exact same `PD_GO_LONG` family to the adjacent
+  `MNQ US_DATA_1000 O5 E2 RR1.5 long` parent lane.
+- New promoted row:
+  - `strategy_id=MNQ_US_DATA_1000_E2_RR1.5_CB1_PD_GO_LONG`
+  - `wfe=1.3983`
+  - `oos_exp_r=+0.2553`
+- Practical implication: this is now a broader session-level mechanism family
+  on `MNQ US_DATA_1000` long, not just a one-off RR1.0 artifact.
