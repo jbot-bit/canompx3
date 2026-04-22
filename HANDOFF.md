@@ -8289,3 +8289,17 @@ Decide per branch whether to push.
 3. Decide whether to push the 6 local-only commits above.
 4. Decide whether to remove `canompx3-6lane-baseline` worktree (post-merge).
 5. 18 older PRs need merge/close decisions (none time-critical per memory).
+
+---
+
+## Update (2026-04-22 — MNQ autonomous discovery hardening)
+
+- Restored discovery worktree: `/tmp/canompx3-mnq-hiroi-scan`
+- Canonical automation design moved to:
+  `docs/plans/2026-04-22-mnq-autonomous-discovery-automation.md`
+- New loop surface:
+  `scripts/tools/mnq_autonomous_discovery_loop.sh`
+- New deterministic prep:
+  `scripts/tools/run_mnq_discovery_board_stack.sh`
+- Smoke checks passed; next judgment call is whether to commit refreshed result
+  artifacts with the automation layer or keep the first commit automation-only.

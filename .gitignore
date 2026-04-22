@@ -52,7 +52,9 @@ __pycache__/
 *.pyo
 *.egg-info/
 .venv/
+.venv
 .venv-wsl/
+.venv-wsl
 env/
 
 # Logs & checkpoints

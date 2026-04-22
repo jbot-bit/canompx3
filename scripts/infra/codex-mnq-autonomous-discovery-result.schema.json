@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex MNQ Autonomous Discovery Result",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "candidate_advanced",
+        "prereg_written",
+        "runner_updated",
+        "parked",
+        "killed",
+        "verification_failed",
+        "no_honest_move"
+      ]
+    },
+    "should_commit": {
+      "type": "boolean"
+    },
+    "commit_message": {
+      "type": "string"
+    },
+    "should_open_pr": {
+      "type": "boolean"
+    },
+    "pr_title": {
+      "type": "string"
+    },
+    "pr_body": {
+      "type": "string"
+    },
+    "verification_summary": {
+      "type": "string"
+    },
+    "evidence_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_focus": {
+      "type": "string"
+    },
+    "continue_running": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "summary",
+    "status",
+    "should_commit",
+    "commit_message",
+    "should_open_pr",
+    "pr_title",
+    "pr_body",
+    "verification_summary",
+    "evidence_paths",
+    "next_focus",
+    "continue_running"
+  ]
+}
