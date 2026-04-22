@@ -1572,6 +1572,9 @@ class PrevDayGeometryFilter(StrategyFilter):
       break direction is long.
     - ``downside_displacement_long``: ORB midpoint is below prior-day low OR
       within 0.15 ATR-20 of prior-day low, with long break direction.
+    - ``clear_of_congestion_long``: ORB midpoint is neither strictly inside
+      the prior-day range nor within 0.50 ATR-20 of the prior-day pivot, with
+      long break direction.
     - ``inside_pdr_long``: ORB midpoint lies strictly inside the prior-day
       range AND session break direction is long.
     - ``near_pivot_long_50``: ORB midpoint is within 0.50 ATR-20 of the
@@ -1593,6 +1596,7 @@ class PrevDayGeometryFilter(StrategyFilter):
         if self.mode not in (
             "below_pdl_long",
             "downside_displacement_long",
+            "clear_of_congestion_long",
             "inside_pdr_long",
             "near_pivot_long_50",
         ):
@@ -1615,6 +1619,13 @@ class PrevDayGeometryFilter(StrategyFilter):
             if atr is None or atr <= 0:
                 return False
             return orb_mid < pdl or abs(orb_mid - pdl) / atr < 0.15
+        if self.mode == "clear_of_congestion_long":
+            if pdc is None or atr is None or atr <= 0:
+                return False
+            pivot = (pdh + pdl + pdc) / 3.0
+            inside_pdr = pdl < orb_mid < pdh
+            near_pivot = abs(orb_mid - pivot) / atr < 0.50
+            return not (inside_pdr or near_pivot)
         if self.mode == "inside_pdr_long":
             return pdl < orb_mid < pdh
         if pdc is None or atr is None or atr <= 0:
@@ -1644,6 +1655,14 @@ class PrevDayGeometryFilter(StrategyFilter):
                 return pd.Series(False, index=df.index)
             valid = valid & atr.notna() & (atr > 0)
             return valid & ((orb_mid < pdl) | (((orb_mid - pdl).abs() / atr) < 0.15))
+        if self.mode == "clear_of_congestion_long":
+            if pdc is None or atr is None:
+                return pd.Series(False, index=df.index)
+            valid = valid & pdc.notna() & atr.notna() & (atr > 0)
+            pivot = (pdh + pdl + pdc) / 3.0
+            inside_pdr = (orb_mid > pdl) & (orb_mid < pdh)
+            near_pivot = ((orb_mid - pivot).abs() / atr) < 0.50
+            return valid & ~(inside_pdr | near_pivot)
         if self.mode == "inside_pdr_long":
             return valid & (orb_mid > pdl) & (orb_mid < pdh)
         if pdc is None or atr is None:
@@ -3068,6 +3087,18 @@ _HYPOTHESIS_SCOPED_FILTERS: dict[str, StrategyFilter] = {
         filter_type="PD_DISPLACE_LONG",
         description="Long ORB midpoint below or near prior-day low (0.15 ATR)",
         mode="downside_displacement_long",
+    ),
+    # Exact broader-family follow-up (Apr 2026): take the complement of the
+    # prior-day congestion family on the same live-adjacent MNQ parent lane.
+    # Read-only family board found the congestion-on state to be toxic and the
+    # non-congested complement to be the economically positive side.
+    # Registered here for Phase 4 hypothesis-file injection only.
+    # @research-source research/mnq_prior_day_family_board_v1.py
+    # @entry-models E2
+    "PD_CLEAR_LONG": PrevDayGeometryFilter(
+        filter_type="PD_CLEAR_LONG",
+        description="Long ORB midpoint outside prior-day congestion regime",
+        mode="clear_of_congestion_long",
     ),
     # Wave 4 Phase B T2-T8 survivor: ATR velocity ratio (expansion gate)
     # Tested at 2026-04-11 on post-Phase-3c data. 2/11 shortlist combos survived
