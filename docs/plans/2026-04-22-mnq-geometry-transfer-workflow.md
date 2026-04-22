@@ -61,10 +61,28 @@ falling back into exact-cell sniping.
 
 ## Current queue
 
-1. `MNQ EUROPE_FLOW O5 E2 RR1.0 long PD_GO_LONG`
-2. `MNQ NYSE_OPEN O5 E2 RR1.5 long PD_CLEAR_LONG`
-3. Re-check whether a broader non-geometry transfer family is warranted before
-   touching a third MNQ session
+No geometry-family transfer candidate is currently approved for the next bridge.
+
+After the adversarial long-only parent review:
+
+- `MNQ EUROPE_FLOW O5 E2 RR1.0 long PD_GO_LONG`
+  - same-sign OOS but weak breadth
+  - `delta_IS=+0.0948`
+  - `2/7` negative years
+  - `Q4` ATR quartile turns negative
+- `MNQ NYSE_OPEN O5 E2 RR1.5 long PD_CLEAR_LONG`
+  - same-sign OOS but weaker and less stable than it first looked
+  - `delta_IS=+0.0877`
+  - `3/7` negative years
+  - ATR quartiles flip sign across the surface
+
+That means the honest next move is:
+
+1. pause further MNQ geometry-family transfer bridging
+2. treat `EUROPE_FLOW` and `NYSE_OPEN` as watchlist rows, not active bridge
+   rows
+3. re-rank the next MNQ-first mechanism class instead of forcing a third
+   geometry transfer
 
 `CME_PRECLOSE` is not in the active queue for this family because the board is
 negative or inconsistent there.

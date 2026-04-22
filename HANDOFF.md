@@ -50,9 +50,14 @@ Canonical `orb_outcomes × daily_features` plus discovery + validator support:
 - treat `US_DATA_1000` geometry as locally solved enough for this family
 - treat `COMEX_SETTLE PD_CLEAR_LONG` as a session-specific transfer, not a
   global rollout license
-- next honest queue, if continuing MNQ-first:
-  1. `MNQ EUROPE_FLOW O5 E2 RR1.0 long PD_GO_LONG`
-  2. `MNQ NYSE_OPEN O5 E2 RR1.5 long PD_CLEAR_LONG`
+- do **not** force the next geometry transfer just because `EUROPE_FLOW` and
+  `NYSE_OPEN` are next on the shortlist:
+  - `EUROPE_FLOW PD_GO_LONG`: weak breadth, `2/7` negative years, `Q4`
+    quartile negative
+  - `NYSE_OPEN PD_CLEAR_LONG`: weaker, `3/7` negative years, ATR quartiles
+    unstable
+- next honest move is to reopen the MNQ-first queue at the **mechanism-class**
+  level, not to blindly bridge a third geometry session
 
 ## Update (2026-04-21 hardened follow-through — rolling GARCH builder fixed, cross-instrument repair applied, shadow path unblocked)
 
