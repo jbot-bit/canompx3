@@ -23,14 +23,14 @@ class TestPaths:
         assert (PROJECT_ROOT / "pipeline").is_dir()
 
     def test_gold_db_path_is_absolute_and_named_correctly(self):
-        # DB may be in project root, local_db/ junction, or DUCKDB_PATH override
+        # DB may be in the shared repo root (worktree-safe), project root, or
+        # a DUCKDB_PATH override.
         import os
 
         assert GOLD_DB_PATH.is_absolute()
         assert GOLD_DB_PATH.name == "gold.db"
-        # If DUCKDB_PATH is set (e.g. C:/db/gold.db), it may be outside project root — allowed
         if "DUCKDB_PATH" not in os.environ:
-            assert str(GOLD_DB_PATH).startswith(str(PROJECT_ROOT))
+            assert GOLD_DB_PATH.exists()
 
     def test_dbn_dir_is_in_project_root(self):
         assert DBN_DIR.parent == PROJECT_ROOT

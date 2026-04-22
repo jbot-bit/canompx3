@@ -5,6 +5,7 @@ All path constants are defined here to ensure consistency across the codebase.
 """
 
 from pathlib import Path
+import subprocess
 
 # Project root
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -29,8 +30,35 @@ import os as _os
 import sys as _sys
 
 
+def _canonical_repo_root() -> Path:
+    """Resolve the shared repo root when running from a git worktree.
+
+    In the main checkout, this is just PROJECT_ROOT. In detached worktrees,
+    ``PROJECT_ROOT / "gold.db"`` often does not exist even though the canonical
+    database lives at the shared repository root. We resolve the git common dir
+    and step back to the shared root when possible.
+    """
+    try:
+        common_dir = subprocess.check_output(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=PROJECT_ROOT,
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return PROJECT_ROOT
+
+    common_path = Path(common_dir)
+    if not common_path.is_absolute():
+        common_path = (PROJECT_ROOT / common_path).resolve()
+    if common_path.name == ".git":
+        return common_path.parent
+    if common_path.parent.name == "worktrees":
+        return common_path.parent.parent.parent
+    return PROJECT_ROOT
+
+
 def _resolve_db_path() -> Path:
-    """Resolve the canonical DB path. ALWAYS returns project root gold.db.
+    """Resolve the canonical DB path.
 
     The scratch DB at C:/db/gold.db is DEPRECATED — it caused stale-data bugs
     across multiple sessions (Mar 24 2026: decisions made on 88-min-stale data,
@@ -54,6 +82,9 @@ def _resolve_db_path() -> Path:
                 f"[DB] WARNING: DUCKDB_PATH={candidate} does not exist — falling back to project gold.db",
                 file=_sys.stderr,
             )
+    canonical = _canonical_repo_root() / "gold.db"
+    if canonical.exists():
+        return canonical
     return PROJECT_ROOT / "gold.db"
 
 
