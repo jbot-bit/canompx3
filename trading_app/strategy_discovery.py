@@ -16,6 +16,16 @@ from collections import defaultdict
 from datetime import UTC, date
 from pathlib import Path
 
+# When executed as ``python trading_app/strategy_discovery.py`` from an
+# isolated worktree, Python may resolve ``trading_app.*`` / ``pipeline.*``
+# imports against a different checkout unless this repo root is on
+# ``sys.path`` explicitly. Anchor imports to the active checkout so
+# hypothesis-scoped discovery always uses the branch-local filter registry and
+# docs rather than whichever clone happens to appear first on ``sys.path``.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from pipeline.log import get_logger
 
 logger = get_logger(__name__)
