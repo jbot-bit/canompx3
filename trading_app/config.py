@@ -1563,6 +1563,154 @@ class PrevDayRangeNormFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class PrevDayGeometryFilter(StrategyFilter):
+    """Filter by ORB-mid geometry relative to prior-day levels.
+
+    Canonical, hypothesis-scoped exact cells:
+
+    - ``below_pdl_long``: ORB midpoint is below prior-day low AND session
+      break direction is long.
+    - ``inside_pdr_long``: ORB midpoint lies strictly inside the prior-day
+      range AND session break direction is long.
+    - ``near_pivot_long_50``: ORB midpoint is within 0.50 ATR-20 of the
+      prior-day pivot AND session break direction is long.
+
+    These are ORB-end / pre-break safe predicates. Prior-day levels are fixed
+    before the session starts; ORB high/low and break direction are known by
+    ORB formation / first break detection. The filter itself owns the
+    direction restriction so Phase-4 discovery does not silently widen the
+    research cell to short breaks.
+    """
+
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 22)
+    CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
+
+    mode: str
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("below_pdl_long", "inside_pdr_long", "near_pivot_long_50"):
+            raise ValueError(f"PrevDayGeometryFilter mode must be a supported exact geometry mode, got {self.mode!r}")
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        hi = row.get(f"orb_{orb_label}_high")
+        lo = row.get(f"orb_{orb_label}_low")
+        break_dir = row.get(f"orb_{orb_label}_break_dir")
+        pdh = row.get("prev_day_high")
+        pdl = row.get("prev_day_low")
+        pdc = row.get("prev_day_close")
+        atr = row.get("atr_20")
+        if hi is None or lo is None or pdh is None or pdl is None or break_dir != "long":
+            return False
+        orb_mid = (hi + lo) / 2.0
+        if self.mode == "below_pdl_long":
+            return orb_mid < pdl
+        if self.mode == "inside_pdr_long":
+            return pdl < orb_mid < pdh
+        if pdc is None or atr is None or atr <= 0:
+            return False
+        pivot = (pdh + pdl + pdc) / 3.0
+        return abs(orb_mid - pivot) / atr < 0.50
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        hi = df.get(f"orb_{orb_label}_high")
+        lo = df.get(f"orb_{orb_label}_low")
+        bd = df.get(f"orb_{orb_label}_break_dir")
+        pdh = df.get("prev_day_high")
+        pdl = df.get("prev_day_low")
+        pdc = df.get("prev_day_close")
+        atr = df.get("atr_20")
+        if hi is None or lo is None or bd is None or pdh is None or pdl is None:
+            return pd.Series(False, index=df.index)
+
+        valid = hi.notna() & lo.notna() & pdh.notna() & pdl.notna() & bd.eq("long")
+        orb_mid = (hi + lo) / 2.0
+        if self.mode == "below_pdl_long":
+            return valid & (orb_mid < pdl)
+        if self.mode == "inside_pdr_long":
+            return valid & (orb_mid > pdl) & (orb_mid < pdh)
+        if pdc is None or atr is None:
+            return pd.Series(False, index=df.index)
+        valid = valid & pdc.notna() & atr.notna() & (atr > 0)
+        pivot = (pdh + pdl + pdc) / 3.0
+        return valid & ((orb_mid - pivot).abs() / atr < 0.50)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        _ = entry_model
+        hi = _atom_numeric(row.get(f"orb_{orb_label}_high"))
+        lo = _atom_numeric(row.get(f"orb_{orb_label}_low"))
+        pdh = _atom_numeric(row.get("prev_day_high"))
+        pdl = _atom_numeric(row.get("prev_day_low"))
+        pdc = _atom_numeric(row.get("prev_day_close"))
+        atr = _atom_numeric(row.get("atr_20"))
+        break_dir = row.get(f"orb_{orb_label}_break_dir")
+
+        missing = hi is None or lo is None or pdh is None or pdl is None or break_dir is None
+        if self.mode == "near_pivot_long_50":
+            missing = missing or pdc is None or atr is None
+        orb_mid = None if hi is None or lo is None else (hi + lo) / 2.0
+
+        if missing or break_dir != "long":
+            passes = None if missing else False
+        elif self.mode == "below_pdl_long":
+            passes = orb_mid is not None and pdl is not None and orb_mid < pdl
+        elif self.mode == "inside_pdr_long":
+            passes = orb_mid is not None and pdl is not None and pdh is not None and pdl < orb_mid < pdh
+        else:
+            pivot = None if pdh is None or pdl is None or pdc is None else (pdh + pdl + pdc) / 3.0
+            passes = (
+                orb_mid is not None
+                and pivot is not None
+                and atr is not None
+                and atr > 0
+                and abs(orb_mid - pivot) / atr < 0.50
+            )
+
+        if self.mode == "below_pdl_long":
+            threshold = pdl
+            comparator = "<"
+            explanation = "Require long break with ORB midpoint below prior-day low."
+            name = "ORB midpoint below prior-day low (long only)"
+            feature_column = "prev_day_low"
+        elif self.mode == "inside_pdr_long":
+            threshold = None if pdl is None or pdh is None else f"({pdl:.4f}, {pdh:.4f})"
+            comparator = "inside"
+            explanation = "Require long break with ORB midpoint strictly inside prior-day range."
+            name = "ORB midpoint inside prior-day range (long only)"
+            feature_column = "prev_day_high"
+        else:
+            pivot = None if pdh is None or pdl is None or pdc is None else (pdh + pdl + pdc) / 3.0
+            threshold = None if pivot is None or atr is None else f"|orb_mid-pivot|/atr_20 < 0.50 (pivot={pivot:.4f})"
+            comparator = "<"
+            explanation = "Require long break with ORB midpoint within 0.50 ATR-20 of prior-day pivot."
+            name = "ORB midpoint near prior-day pivot (0.50 ATR, long only)"
+            feature_column = "prev_day_close"
+
+        return [
+            AtomDescription(
+                name=name,
+                category="INTRA_SESSION",
+                resolves_at="ORB_FORMATION",
+                passes=passes,
+                feature_column=feature_column,
+                observed_value=orb_mid,
+                threshold=threshold,
+                comparator=comparator,
+                is_data_missing=missing,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
+                explanation=explanation,
+            )
+        ]
+
+
+@dataclass(frozen=True)
 class GapNormFilter(StrategyFilter):
     """Filter by absolute gap size normalized by ATR-20.
 
@@ -2865,6 +3013,18 @@ MGC_VOLUME_FILTERS = {
 # BASE_GRID_FILTERS (always included)" invariant.
 # =========================================================================
 _HYPOTHESIS_SCOPED_FILTERS: dict[str, StrategyFilter] = {
+    # Exact MNQ prior-day geometry bridge candidate (Apr 2026).
+    # Read-only candidate-board rerun found this as the strongest new
+    # avoid-state on the live-adjacent US_DATA_1000 RR1.0 long parent lane.
+    # Registered here for Phase 4 hypothesis-file injection only; not part of
+    # the legacy base grid.
+    # @research-source research/mnq_layered_candidate_board_v1.py
+    # @entry-models E2
+    "F3_NEAR_PIVOT_50": PrevDayGeometryFilter(
+        filter_type="F3_NEAR_PIVOT_50",
+        description="Long ORB midpoint near prior-day pivot (0.50 ATR)",
+        mode="near_pivot_long_50",
+    ),
     # Wave 4 Phase B T2-T8 survivor: ATR velocity ratio (expansion gate)
     # Tested at 2026-04-11 on post-Phase-3c data. 2/11 shortlist combos survived
     # full T3+T4+T6+T7 battery with in_ExpR > 0.05 (MNQ TOKYO_OPEN RR1.0,
