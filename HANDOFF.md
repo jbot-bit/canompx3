@@ -4,6 +4,56 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-22 MNQ geometry transfer cleanup — stale draft closed, active PR regrounded)
+
+The active MNQ research surface is now the geometry-family transfer program on
+PR `#99`. The older current-meta draft `#98` has been closed as superseded and
+should not be reopened.
+
+### What is now actually proven on the current branch
+
+Canonical `orb_outcomes × daily_features` plus discovery + validator support:
+
+- `MNQ US_DATA_1000 O5 E2 long`
+  - `PD_DISPLACE_LONG`
+  - `PD_CLEAR_LONG`
+  - `PD_GO_LONG` on `RR1.0`
+  - `PD_GO_LONG` on `RR1.5`
+- `MNQ COMEX_SETTLE O5 E2 RR1.0 long`
+  - `PD_CLEAR_LONG`
+
+### Hard truth on the COMEX transfer
+
+- it survived the full bridge and promoted:
+  - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_PD_CLEAR_LONG`
+  - `10/11` positive walk-forward windows
+  - `WFE=1.9858`
+  - `oos_exp_r=+0.2212`
+- but it is **not** a universal regime:
+  - reverse years exist (`2020`, `2025`)
+  - OOS is still thin
+- `COMEX_SETTLE` does **not** want the broader `PD_GO_LONG` union in the same
+  way `US_DATA_1000` does
+
+### Process hardening that landed
+
+- `research/mnq_geometry_transfer_board_v1.py`
+  - now derives masks from canonical `ALL_FILTERS`
+  - no longer re-encodes geometry logic by hand
+  - no longer pre-filters away invalid feature rows before canonical filter
+    evaluation
+- `docs/plans/2026-04-22-mnq-geometry-transfer-workflow.md`
+  - documents the faster shortlist -> cheap gate -> bridge path
+
+### Do not lose this
+
+- treat `US_DATA_1000` geometry as locally solved enough for this family
+- treat `COMEX_SETTLE PD_CLEAR_LONG` as a session-specific transfer, not a
+  global rollout license
+- next honest queue, if continuing MNQ-first:
+  1. `MNQ EUROPE_FLOW O5 E2 RR1.0 long PD_GO_LONG`
+  2. `MNQ NYSE_OPEN O5 E2 RR1.5 long PD_CLEAR_LONG`
+
 ## Update (2026-04-21 hardened follow-through — rolling GARCH builder fixed, cross-instrument repair applied, shadow path unblocked)
 
 Follow-on to the earlier GARCH `R3` shadow scaffold block. The path is no
