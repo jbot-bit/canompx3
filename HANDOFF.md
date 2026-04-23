@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** `pending publish` — `docs(research): narrow pr48 translation to mgc`
+- **Commit:** `b267bb07` — `docs(research): narrow pr48 translation to mgc`
 - **Summary:** Closed the bounded PR48 translation audit as durable repo truth. The recovered conditional-role branch is still alive, but only one arm is close enough for the next stage: `MGC:cont_exec` is `READY_FOR_BOUNDED_TRANSLATION`; `MES:q45_exec` still `NEEDS_BRIDGE`; `DUO` and `MNQ:shadow_addon` stay `SHADOW_ONLY`.
 - **Audit Addendum:** The repo still cannot consume conditional-role outputs natively. Do not rerun broad PR48 confluence discovery and do not try to push these objects through `validated_setups` / `lane_allocator` as if they were standalone lanes. The exact next stage is `docs/runtime/stages/pr48-mgc-cont-exec-bounded-translation.md`.
 
