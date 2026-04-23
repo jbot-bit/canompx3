@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** `PENDING`
+- **Commit:** `094adda9` — `research: close mnq shadow buckets and design track d`
 - **Summary:** Closed the exact `mnq_parent_structure_shadow_buckets_v1` family to a durable `KILL`, restamped the prereg provenance field, tightened the runner hygiene, and wrote the first formal Track D design doc as a future new-data program rather than a false “all OHLCV is exhausted” pivot.
 - **Audit Addendum:** Exact-parent MNQ structure shadow buckets are now closed: `0/6` survived, and the important failure mode was role mismatch (`selected_trade_mean` up, `policy EV` down). This does not kill the separate O5 prior-day geometry shelf survivors or the separately recovered PR48 conditional-role branch. Track D is now documented as a design-only new-data program; current-stack highest-EV remains PR48 translation.
 

@@ -46,8 +46,18 @@ from trading_app.risk_manager import RiskLimits, RiskManager
 
 logging.getLogger("trading_app.risk_manager").setLevel(logging.ERROR)
 
+
+def _normalize_writable_path(path: Path) -> Path:
+    text = str(path)
+    if text.startswith("/mnt/c/Users/"):
+        return Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
+    return path
+
+
 PROFILE_ID = "topstep_50k_mnq_auto"
-RESULT_PATH = Path("docs/audit/results/2026-04-23-prior-day-geometry-execution-translation-audit.md")
+RESULT_PATH = _normalize_writable_path(
+    Path("docs/audit/results/2026-04-23-prior-day-geometry-execution-translation-audit.md")
+)
 US_DATA_1000_CANDIDATE_IDS = [
     "MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_DISPLACE_LONG",
     "MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_CLEAR_LONG",
@@ -303,9 +313,20 @@ def simulate_runtime(specs, trades_map: dict[str, list[TimedTrade]]) -> dict[str
 
             if suggested_factor < 1.0:
                 halfsize_suggested += 1
-                effective_contracts = max(1, int(1 * suggested_factor))
-                if effective_contracts == 1:
+                effective_contracts = int(1 * suggested_factor)
+                if effective_contracts < 1:
                     halfsize_noop += 1
+                    rejected.append(
+                        {
+                            "strategy_id": trade.strategy_id,
+                            "trading_day": trade.trading_day,
+                            "reason": (
+                                "unexpressible_contract_reduction: "
+                                f"factor={suggested_factor:.2f} base_contracts=1"
+                            ),
+                        }
+                    )
+                    continue
             active.append(ActiveTrade(trade, contracts=1))
             accepted[trade.strategy_id].append(
                 {
@@ -481,7 +502,7 @@ def render_doc(
         "",
         "- Current live profile rows resolve with `max_contracts=1` from `build_portfolio_from_profile(...)` in `trading_app/portfolio.py`.",
         "- Same-session different-aperture overlap triggers `suggested_contract_factor=0.5` in `RiskManager.can_enter(...)`.",
-        "- `ExecutionEngine` applies that factor with `max(1, int(...))`, so for 1-contract rows the half-size translation is a no-op.",
+        "- `ExecutionEngine` now fails closed when that reduction cannot be expressed on a 1-contract row, so same-session derisking is still unavailable under the current lane sizing.",
         "- The current live book has no same-session duplicate session rows; this branch is a special runtime path, not the normal portfolio-builder path.",
         "",
         "## Live Book Replayed Under Current Runtime Rules",
@@ -509,7 +530,7 @@ def render_doc(
             "",
             "## Candidate Outcome Summary",
             "",
-            "| Candidate | Shared Days w/ O15 | Time Overlap Days | Same-Dir Overlap | Opp-Dir Overlap | Candidate Blocked | Incumbent Block Δ | Other Live Block Δ | Half-Size Suggested | Half-Size No-Op | Δ Annual R IS | Δ Sharpe IS | Verdict |",
+            "| Candidate | Shared Days w/ O15 | Time Overlap Days | Same-Dir Overlap | Opp-Dir Overlap | Candidate Blocked | Incumbent Block Δ | Other Live Block Δ | Half-Size Suggested | Half-Size Unexpressible | Δ Annual R IS | Δ Sharpe IS | Verdict |",
             "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
         ]
     )
@@ -535,7 +556,7 @@ def render_doc(
                 f"- Candidate active when O15 tried to enter: `{row.pair_overlap.candidate_active_at_incumbent_entry_days}` days.",
                 f"- Median O15 minus O5 entry gap: `{fmt_num(row.pair_overlap.median_entry_gap_min, 1, signed=True)}` minutes.",
                 f"- Median overlapping hold time on overlap days: `{fmt_num(row.pair_overlap.median_overlap_min, 1)}` minutes.",
-                f"- Runtime half-size suggestions: `{row.same_session_halfsize_suggested}`; effective no-op due to 1-contract floor: `{row.same_session_halfsize_effective_noop}`.",
+                f"- Runtime half-size suggestions: `{row.same_session_halfsize_suggested}`; unexpressible on 1-contract lanes and therefore rejected: `{row.same_session_halfsize_effective_noop}`.",
                 f"- Candidate blocked by runtime: `{row.candidate_blocked}`.",
                 f"- Incremental incumbent blocks vs current live book: `{row.incumbent_block_delta}`.",
                 f"- Incremental other-live blocks vs current live book: `{row.other_live_block_delta}`.",
@@ -574,9 +595,34 @@ def render_doc(
             "## Bottom Line",
             "",
             "- `US_DATA_1000 O5` prior-day geometry is not blocked by same-session runtime rules in the same way as `COMEX_SETTLE O5`.",
-            "- But the current runtime does **not** implement a real same-session size-down for these rows: the half-size suggestion collapses to `1` contract because every live/candidate row is clamped to `max_contracts=1`.",
-            "- So any promotion here would be an explicit policy decision to allow full-size same-session duplicate exposure, not a quiet reuse of an already-safe translation path.",
+            "- But the current runtime still cannot express a real same-session size-down for these rows: the overlap path requests `0.5x` and 1-contract lanes cannot honor it.",
+            "- The live engine now fails closed instead of silently entering full-size, so any promotion here still needs architecture / policy work rather than a direct route claim.",
             "- `COMEX_SETTLE PD_CLEAR_LONG` remains outside this branch; same-aperture coexistence is still blocked and replacement remains negative.",
+            "",
+            "## Limitations",
+            "",
+            "- This is a runtime replay on canonical `orb_outcomes` timing plus current repo runtime rules; it is not a live shadow test.",
+            "- The translated replay measures current control-surface behavior, not a hypothetical improved architecture with fractional same-session sizing.",
+            "- Positive common-window IS/OOS deltas do not rescue a path that still requires architecture or policy change to express honest reduced-size coexistence.",
+            "- The audit is intentionally narrow to `US_DATA_1000` cross-aperture coexistence. It does not reopen broader prior-day geometry discovery or same-aperture `COMEX_SETTLE` replacement questions.",
+            "",
+            "## Reproduction",
+            "",
+            "Runner:",
+            "",
+            "- `research/prior_day_geometry_execution_translation_audit.py`",
+            "",
+            "Command:",
+            "",
+            "```bash",
+            "./.venv-wsl/bin/python research/prior_day_geometry_execution_translation_audit.py --output docs/audit/results/2026-04-23-prior-day-geometry-execution-translation-audit.md",
+            "```",
+            "",
+            "Outputs:",
+            "",
+            "- result doc: `docs/audit/results/2026-04-23-prior-day-geometry-execution-translation-audit.md`",
+            "- stage lock: `docs/runtime/stages/prior-day-geometry-execution-translation-audit.md`",
+            "- upstream narrowing note: `docs/audit/results/2026-04-23-prior-day-geometry-execution-translation-preaudit.md`",
         ]
     )
     return "\n".join(parts) + "\n"

@@ -290,6 +290,48 @@ class ExecutionEngine:
                             unrealized += (t.entry_price - current_price) / risk
         return self.daily_pnl_r + unrealized
 
+    def _apply_risk_contract_factor_or_reject(
+        self,
+        trade: ActiveTrade,
+        suggested_contract_factor: float,
+        *,
+        timestamp: datetime,
+        price: float,
+        events: list[TradeEvent],
+    ) -> bool:
+        """Apply risk-manager derisking or fail closed if it cannot be expressed.
+
+        A suggested factor below 1.0 is a real control-surface request, not a
+        hint. If the current contract count is already 1, silently flooring
+        back to 1 would convert "reduced risk" into full-size exposure.
+        """
+        if suggested_contract_factor >= 1.0:
+            return True
+
+        base_contracts = trade.contracts
+        reduced_contracts = int(base_contracts * suggested_contract_factor)
+        if reduced_contracts < 1:
+            trade.state = TradeState.EXITED
+            self.completed_trades.append(trade)
+            events.append(
+                TradeEvent(
+                    event_type="REJECT",
+                    strategy_id=trade.strategy_id,
+                    timestamp=timestamp,
+                    price=price,
+                    direction=trade.direction,
+                    contracts=base_contracts,
+                    reason=(
+                        "risk_rejected: unexpressible_contract_reduction "
+                        f"factor={suggested_contract_factor:.2f} base_contracts={base_contracts}"
+                    ),
+                )
+            )
+            return False
+
+        trade.contracts = reduced_contracts
+        return True
+
     def mark_strategy_traded(self, strategy_id: str) -> None:
         """Mark a strategy as already traded today (crash recovery).
 
@@ -882,7 +924,14 @@ class ExecutionEngine:
                     )
                     return events
 
-            trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
+            if not self._apply_risk_contract_factor_or_reject(
+                trade,
+                suggested_contract_factor,
+                timestamp=confirm_bar["ts_utc"],
+                price=entry_price,
+                events=events,
+            ):
+                return events
             # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0).
             # NOTE: For single-contract strategies, max(1, ...) floor means
             # HALF_SIZE is a no-op — effective only for multi-contract sizing.
@@ -1093,7 +1142,14 @@ class ExecutionEngine:
                             continue
 
                     # Apply suggested contract factor
-                    trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
+                    if not self._apply_risk_contract_factor_or_reject(
+                        trade,
+                        suggested_contract_factor,
+                        timestamp=entry_ts,
+                        price=entry_price,
+                        events=events,
+                    ):
+                        continue
                     # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0)
                     if trade.size_multiplier != 1.0:
                         trade.contracts = max(1, int(trade.contracts * trade.size_multiplier))
@@ -1258,7 +1314,14 @@ class ExecutionEngine:
                                 continue
 
                         # Apply suggested contract factor
-                        trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
+                        if not self._apply_risk_contract_factor_or_reject(
+                            trade,
+                            suggested_contract_factor,
+                            timestamp=bar["ts_utc"],
+                            price=entry_price,
+                            events=events,
+                        ):
+                            continue
                         # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0)
                         if trade.size_multiplier != 1.0:
                             trade.contracts = max(1, int(trade.contracts * trade.size_multiplier))
