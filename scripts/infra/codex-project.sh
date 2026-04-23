@@ -3,10 +3,24 @@ set -euo pipefail
 
 DEFAULT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROOT="${CANOMPX3_ROOT:-$DEFAULT_ROOT}"
+PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3}"
+TASK_TEXT="${CANOMPX3_STARTUP_TASK:-}"
+ROUTER="$ROOT/scripts/tools/session_router.py"
+
+if [[ "${CANOMPX3_SESSION_AUTO_ROUTE:-1}" != "0" && -f "$ROUTER" ]]; then
+  ROUTE_ARGS=(--root "$ROOT" --tool codex --mode mutating)
+  if [[ -n "$TASK_TEXT" ]]; then
+    ROUTE_ARGS+=(--task "$TASK_TEXT")
+  fi
+  ROUTED_ROOT="$(python3 "$ROUTER" "${ROUTE_ARGS[@]}" 2> >(cat >&2))"
+  if [[ -n "$ROUTED_ROOT" ]]; then
+    ROOT="$ROUTED_ROOT"
+  fi
+fi
+
 VENV="$ROOT/.venv-wsl"
 PREFLIGHT="$ROOT/scripts/tools/session_preflight.py"
 TASK_ROUTE_PACKET="$ROOT/scripts/tools/task_route_packet.py"
-PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3}"
 
 if [[ ! -f "$VENV/bin/python" ]]; then
   echo "ERROR: .venv-wsl/bin/python not found." >&2
@@ -34,11 +48,11 @@ if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
 fi
 
 if [[ -f "$TASK_ROUTE_PACKET" ]]; then
-  if [[ -n "${CANOMPX3_STARTUP_TASK:-}" ]]; then
+  if [[ -n "$TASK_TEXT" ]]; then
     "$VENV/bin/python" "$TASK_ROUTE_PACKET" \
       --root "$ROOT" \
       --tool codex \
-      --task "$CANOMPX3_STARTUP_TASK" \
+      --task "$TASK_TEXT" \
       --briefing-level mutating >/dev/null || true
   else
     "$VENV/bin/python" "$TASK_ROUTE_PACKET" --root "$ROOT" --clear >/dev/null || true
