@@ -9,6 +9,7 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
+- **Commit:** `35581652` — `research(meta): close rel-vol and translation follow-through`
 - **Summary:** Closed stale control-state and MES/MGC pipeline debt, recovered the PR48 conditional-edge framework onto published `main`, restored and closed the missing L1 EUROPE_FLOW prereg to an honest `KILL`, advanced MNQ NYSE_CLOSE through `ORB_G8` filter kill plus surviving allocator-role framing, archived the exact `MES E1 rel_vol` family as a durable `KILL`, and closed prior-day geometry execution translation at `ARCHITECTURE_CHANGE_REQUIRED` under the current runtime.
 
 ## Next Steps — Active
