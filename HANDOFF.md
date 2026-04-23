@@ -25,6 +25,7 @@
 9. Prior-day bridge work is no longer missing locks. The next honest move on that branch is execution / triage among already-locked hypotheses, not another broad prior-day prereg-writing pass.
 10. Do not describe `lane_allocation.json` as unconditional live truth. For audit claims, pair it with allocator replay / SR-liveness context.
 11. Do not cite `docs/audit/results/2026-04-21-ovnrng-allocator-routing.md` without the rolling-CV retraction. Current truth is the router `KILL`, not the earlier single-fold positive.
+12. The current bounded follow-through after the discovery/front-door wiring is `docs/audit/hypotheses/2026-04-23-mnq-parent-structure-shadow-buckets-v1.yaml`. This is a shadow-only conditional-role family on exact MNQ deployed-parent lane-side populations. It does NOT reopen H01/H04, rel_vol, calendar, `prev_week_*` / `prev_month_*`, or the architecture-gated same-session coexistence branch.
 
 ## Blockers / Warnings
 - Worktree remains intentionally dirty with unrelated in-flight threads; do not revert them blindly.
