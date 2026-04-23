@@ -2,7 +2,7 @@
 #
 # Locked: 2026-04-23T16:45:00+10:00
 # Author: Codex session
-# Committing commit hash: TO_BE_STAMPED
+# Committing commit hash: 50fabff3777a54e39e0f4006890907c644c01c12
 # Data horizon: 6.65yr clean MNQ
 # Intended discovery holdout: 2026-01-01
 
@@ -10,7 +10,7 @@ metadata:
   name: "mnq_parent_structure_shadow_buckets_v1"
   purpose: "Bounded conditional-role study for exact MNQ deployed-parent structure/context shadow buckets. Score buckets only; no live sizing or routing claims."
   date_locked: "2026-04-23T16:45:00+10:00"
-  commit_sha: "UNSTAMPED"
+  commit_sha: "50fabff3777a54e39e0f4006890907c644c01c12"
   holdout_date: "2026-01-01"
   total_expected_trials: 6
   testing_mode: "family"

@@ -9,12 +9,12 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** `35581652` — `research(meta): close rel-vol and translation follow-through`
-- **Summary:** Closed stale control-state and MES/MGC pipeline debt, recovered the PR48 conditional-edge framework onto published `main`, restored and closed the missing L1 EUROPE_FLOW prereg to an honest `KILL`, advanced MNQ NYSE_CLOSE through `ORB_G8` filter kill plus surviving allocator-role framing, archived the exact `MES E1 rel_vol` family as a durable `KILL`, and closed prior-day geometry execution translation at `ARCHITECTURE_CHANGE_REQUIRED` under the current runtime.
-- **Audit Addendum:** The HTF / prior-structure / confluence repo audit is now closed to a grounded `Partial`: feature and allocator substrate are real, but no reviewed HTF/confluence branch is currently connected end-to-end into the active live auto-book. Prior-day geometry survivors remain shelf-only pending `US_DATA_1000` same-session cross-aperture execution translation. The earlier OVNRNG router positive is superseded by its same-day rolling-CV `KILL`.
+- **Commit:** `PENDING`
+- **Summary:** Closed the exact `mnq_parent_structure_shadow_buckets_v1` family to a durable `KILL`, restamped the prereg provenance field, tightened the runner hygiene, and wrote the first formal Track D design doc as a future new-data program rather than a false “all OHLCV is exhausted” pivot.
+- **Audit Addendum:** Exact-parent MNQ structure shadow buckets are now closed: `0/6` survived, and the important failure mode was role mismatch (`selected_trade_mean` up, `policy EV` down). This does not kill the separate O5 prior-day geometry shelf survivors or the separately recovered PR48 conditional-role branch. Track D is now documented as a design-only new-data program; current-stack highest-EV remains PR48 translation.
 
 ## Next Steps — Active
-1. For prior-day geometry, do not reopen discovery. If the branch continues, the next honest move is a dedicated shadow / policy translation stage for `US_DATA_1000` cross-aperture coexistence because current runtime size-down is a no-op.
+1. Do not reopen `mnq_parent_structure_shadow_buckets_v1`. Exact-parent structure shadow buckets for these MNQ lanes are now closed `KILL` and should not be rescued under renamed score language.
 2. Keep pulse/ralph/handoff surfaces aligned as each thread closes so finished work does not linger as fake backlog.
 3. Do not treat PR48 as a pooled `MES/MGC` promotion story anymore; use the 2026-04-23 result doc as the current truth.
 4. Do not reopen broad GC proxy exploration from the MGC payoff-compression result; if revisited, keep it to a narrow MGC exit-shape prereg.
@@ -25,7 +25,7 @@
 9. Prior-day bridge work is no longer missing locks. The next honest move on that branch is execution / triage among already-locked hypotheses, not another broad prior-day prereg-writing pass.
 10. Do not describe `lane_allocation.json` as unconditional live truth. For audit claims, pair it with allocator replay / SR-liveness context.
 11. Do not cite `docs/audit/results/2026-04-21-ovnrng-allocator-routing.md` without the rolling-CV retraction. Current truth is the router `KILL`, not the earlier single-fold positive.
-12. The current bounded follow-through after the discovery/front-door wiring is `docs/audit/hypotheses/2026-04-23-mnq-parent-structure-shadow-buckets-v1.yaml`. This is a shadow-only conditional-role family on exact MNQ deployed-parent lane-side populations. It does NOT reopen H01/H04, rel_vol, calendar, `prev_week_*` / `prev_month_*`, or the architecture-gated same-session coexistence branch.
+12. Track D is now a documented future system-upgrade branch, not an immediate excuse to abandon current-stack open work. Use `docs/plans/2026-04-23-microstructure-gate0-design.md` for the design truth: start with a cheapest top-of-book Gate 0 on one exact lane, escalate to MBO only if L1/TBBO features prove signal, and do not describe it as “OHLCV exhausted” or as an HFT build.
 
 ## Blockers / Warnings
 - Worktree remains intentionally dirty with unrelated in-flight threads; do not revert them blindly.
@@ -56,3 +56,7 @@
 - `docs/handoffs/archived/2026-04-23-root-handoff-archive-4.md`
 - `docs/audit/results/2026-04-23-htf-prior-structure-confluence-repo-audit.md`
 - `docs/audit/results/2026-04-21-ovnrng-router-rolling-cv.md`
+- `docs/audit/hypotheses/2026-04-23-mnq-parent-structure-shadow-buckets-v1.yaml`
+- `docs/audit/results/2026-04-23-mnq-parent-structure-shadow-buckets-v1.md`
+- `research/mnq_parent_structure_shadow_buckets_v1.py`
+- `docs/plans/2026-04-23-microstructure-gate0-design.md`
