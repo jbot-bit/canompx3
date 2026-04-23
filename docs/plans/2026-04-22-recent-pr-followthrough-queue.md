@@ -53,14 +53,14 @@ Scoring:
 | ROI rank | Task | Why still open | EV | Effort | Why now |
 |---:|---|---|---:|---:|---|
 | 1 | MNQ NYSE_CLOSE RR1.0 role audit | The exact native filter path is now closed `KILL`, but the broad RR1.0 family remains positive on canonical baselines; the unresolved question is role, not filter | 4 | 2 | Highest-EV way to avoid missing a real broad-session edge while also preventing more wrong-layer NYSE_CLOSE work |
-| 2 | Prior-day Pathway-B on one strongest hot cell | Action queue still says `PREREG NEXT`; no single-cell confirmation path has been frozen | 3 | 2 | Honest narrow next move from the prior-day branch without reopening the broad family |
+| 2 | Prior-day Pathway-B bridge execution triage | The branch no longer lacks locks: exact MNQ prior-day bridge hypotheses are now saved, but the repo still does not say which already-locked path should be executed next | 3 | 2 | Highest-signal way to turn the saved prior-day bridge package into one honest confirm-or-kill execution instead of leaving it as dormant scaffolding |
 | 3 | Cross-asset earlier-session → later-ORB quality chronology spec | Still blocked on chronology discipline; no narrow spec written yet | 3 | 3 | Plausible, but easier to get wrong than the items above |
 | 4 | GC→MGC 15m/30m translation question | Audit explicitly said no honest statement exists yet for wider apertures | 3 | 4 | Real question, but not until the 5m payoff-compression path is resolved |
 
 ## Recommended Execution Order
 
 1. `MNQ NYSE_CLOSE RR1.0 role audit`
-2. `Prior-day Pathway-B hot-cell prereg`
+2. `Prior-day Pathway-B bridge execution triage`
 3. `Cross-asset chronology spec`
 4. `GC→MGC 15m/30m translation question`
 
@@ -70,6 +70,7 @@ Reasoning:
 - `GC -> MGC` 5-minute payoff-compression has now been actioned honestly. The diagnostic says the rescue, if any, is a narrow MGC exit-shape question rather than a broad proxy revival.
 - `L1` has now been run exactly as frozen and closed `KILL`; it should not remain in the open queue.
 - `NYSE_CLOSE` filter follow-through has now been run to closure. The exact native `ORB_G8` prereg is killed, so the remaining honest question is role: standalone/allocator versus no remaining opportunity.
+- The prior-day branch is no longer missing locked next-step artifacts. Multiple exact bridge hypotheses are now saved, so the open problem has shifted from "write a prereg" to "triage and execute one already-locked path."
 
 ## PR-Ready Tasks Created Now
 
@@ -98,5 +99,5 @@ This session converts the open ranked items into explicit stage files:
 The recent PR burst did produce real follow-through, but it also left a smaller set of clean next moves. After the 2026-04-23 PR48 replay split, the explicit MGC payoff-compression closure, the L1 pre-break scan `KILL`, and the NYSE_CLOSE follow-up closure to `CONTINUE`, the highest-ROI open path is no longer “do more audits in general”; it is:
 
 1. resolve the `MNQ NYSE_CLOSE RR1.0` branch at the correct role layer after the `ORB_G8` kill,
-2. freeze one honest prior-day hot-cell prereg instead of reopening that branch broadly,
+2. triage and execute one already-locked prior-day bridge path instead of reopening that branch broadly,
 3. write the chronology spec before any cross-asset timing scan.
