@@ -64,7 +64,9 @@ def test_standalone_edge_routes_to_grid_discovery(tmp_path: Path) -> None:
     assert route.instrument == "MNQ"
     assert route.orb_minutes == 15
     assert route.writes_to == ["experimental_strategies"]
-    assert "strategy_validator" in route.next_surface
+    assert route.next_surface.startswith("experimental_strategies -> strategy_validator -> validated_setups")
+    assert "optional deployment" in route.next_surface
+    assert "optional paper_trades" in route.next_surface
 
 
 def test_conditional_role_routes_to_bounded_runner(tmp_path: Path) -> None:
@@ -75,6 +77,9 @@ def test_conditional_role_routes_to_bounded_runner(tmp_path: Path) -> None:
 
     assert route.execution_mode == "bounded_runner"
     assert "experimental_strategies" not in route.writes_to
+    assert route.next_surface.startswith("bounded result doc -> explicit role decision")
+    assert "validated_setups" not in route.next_surface
+    assert "paper_trades" not in route.next_surface
     assert any("do not auto-write" in note for note in route.notes)
 
 
@@ -102,3 +107,4 @@ def test_cli_json_inspection_reports_pipeline_destination(tmp_path: Path) -> Non
     payload = json.loads(result.stdout)
     assert payload["execution_mode"] == "grid_discovery"
     assert payload["writes_to"] == ["experimental_strategies"]
+    assert payload["next_surface"].startswith("experimental_strategies -> strategy_validator -> validated_setups")

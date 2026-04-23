@@ -232,8 +232,8 @@ Use it before:
 
 ## Operator Loop
 
-After the discovery framing is complete, use the prereg front door instead of
-hand-assembling commands:
+After the discovery framing is complete, the agent/operator uses the prereg
+front door internally instead of hand-assembling commands:
 
 ```bash
 scripts/infra/prereg-loop.sh \
@@ -249,7 +249,7 @@ The front door reports the pipeline branch before execution:
 - Nothing promotes directly to `validated_setups`, profile routing, or
   `paper_trades`.
 
-Execute only after the route is correct:
+Execute internally only after the route is correct:
 
 ```bash
 scripts/infra/prereg-loop.sh \
@@ -266,7 +266,7 @@ The institutional pattern is:
 
 1. Build several small prereg families from distinct theories.
 2. Keep each family K declared and under MinBTL.
-3. Run them independently through `scripts/infra/prereg-loop.sh`.
+3. Run them independently through the prereg front door.
 4. Promote only survivors to the role/translation layer.
 
 Good expansion axes:

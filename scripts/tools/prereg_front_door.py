@@ -16,7 +16,7 @@ This tool is intentionally conservative:
 It does NOT turn bounded research into generic discovery and it does NOT
 promote anything automatically. Promotion remains:
 ``experimental_strategies`` -> ``strategy_validator`` -> ``validated_setups``
--> profile / lane routing -> ``paper_trades``.
+with deployment and ``paper_trades`` as optional later gates.
 """
 
 from __future__ import annotations
@@ -159,7 +159,10 @@ def build_route_decision(
         if not execution_mode:
             execution_mode = "grid_discovery"
         writes_to = ["experimental_strategies"]
-        next_surface = "strategy_validator -> validated_setups -> profile/lane routing -> paper_trades"
+        next_surface = (
+            "experimental_strategies -> strategy_validator -> validated_setups "
+            "(optional deployment/profile routing -> optional paper_trades)"
+        )
         if instrument is None:
             notes.append("Instrument is ambiguous; pass --instrument to execute.")
         if orb_minutes is None:
