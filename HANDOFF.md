@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Summary:** Closed stale control-state and MES/MGC pipeline debt, recovered the PR48 conditional-edge framework onto published `main`, restored and closed the missing L1 EUROPE_FLOW prereg to an honest `KILL`, advanced MNQ NYSE_CLOSE through `ORB_G8` filter kill plus surviving allocator-role framing, and closed prior-day geometry discovery/routing into a bounded same-session execution-translation next step.
+- **Summary:** Closed stale control-state and MES/MGC pipeline debt, recovered the PR48 conditional-edge framework onto published `main`, restored and closed the missing L1 EUROPE_FLOW prereg to an honest `KILL`, advanced MNQ NYSE_CLOSE through `ORB_G8` filter kill plus surviving allocator-role framing, and narrowed prior-day geometry down to one honest runtime question: `US_DATA_1000` same-session cross-aperture execution translation.
 
 ## Next Steps — Active
-1. Use `docs/runtime/stages/prior-day-geometry-execution-translation-audit.md` as the exact next stage for prior-day geometry; do not reopen Track A discovery or rerun consumed hypothesis files.
+1. Use `docs/runtime/stages/prior-day-geometry-execution-translation-audit.md` and focus it on `US_DATA_1000` cross-aperture translation only; do not reopen Track A discovery or rerun consumed hypothesis files.
 2. Keep pulse/ralph/handoff surfaces aligned as each thread closes so finished work does not linger as fake backlog.
 3. Do not treat PR48 as a pooled `MES/MGC` promotion story anymore; use the 2026-04-23 result doc as the current truth.
 4. Do not reopen broad GC proxy exploration from the MGC payoff-compression result; if revisited, keep it to a narrow MGC exit-shape prereg.
