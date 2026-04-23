@@ -9,14 +9,14 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** `aed4bf00` — `docs(research): close pr48 mgc bounded translation`
-- **Summary:** Closed the next PR48 stage as `REDESIGN`, not `IMPLEMENT`. `MGC:cont_exec` is still alive as a frozen allocator/sizer result, but the current runtime has no honest carrier for it: the only MGC profile surface is the wrong parent, and the existing late-applied `size_multiplier` path is not a safe bridge.
-- **Audit Addendum:** Do not implement `MGC:cont_exec` through the current execution-engine multiplier hook and do not attach it to the old `topstep_50k` MGC lane. The next honest move is one bounded redesign for a `shadow_only` profile-local conditional overlay contract.
+- **Commit:** `pending publish` — `docs(research): design pr48 mgc shadow overlay contract`
+- **Summary:** Froze the next exact PR48 move after the redesign verdict. `MGC:cont_exec` should enter the repo first as a `shadow_only` profile-local conditional overlay, not as a lane and not as live sizing. The chosen contract is a checked-in static overlay spec plus a daily derived-state envelope with pre-session/dashboard visibility only.
+- **Audit Addendum:** Do not route this through `validated_setups`, `lane_allocator`, `paper_trades`, or the current execution-time `size_multiplier` hook in Phase 1. The active stage is now `docs/runtime/stages/pr48-mgc-shadow-only-overlay-contract.md`.
 
 ## Next Steps — Active
 1. Do not reopen `mnq_parent_structure_shadow_buckets_v1`. Exact-parent structure shadow buckets for these MNQ lanes are now closed `KILL` and should not be rescued under renamed score language.
-2. PR48 is no longer a pooled promotion story. Current truth is narrower: `MGC:cont_exec` is still the strongest live branch, but its bounded translation stage closed `REDESIGN`; `MES:q45_exec` still needs a bridge; `DUO` and `MNQ:shadow_addon` remain shadow-only.
-3. Do not reopen generic PR48 confluence discovery. The exact next PR48 move is one bounded redesign for a `shadow_only` profile-local conditional overlay contract; do not jump straight to runtime sizing.
+2. PR48 is no longer a pooled promotion story. Current truth is narrower: `MGC:cont_exec` is still the strongest live branch, but it now has one exact next move only: `shadow_only` overlay contract first; `MES:q45_exec` still needs a bridge; `DUO` and `MNQ:shadow_addon` remain shadow-only.
+3. Do not reopen generic PR48 confluence discovery. The exact next PR48 move is `docs/runtime/stages/pr48-mgc-shadow-only-overlay-contract.md`; do not jump straight to runtime sizing or schema-wide conditional rebuild.
 4. Keep pulse/ralph/handoff surfaces aligned as each thread closes so finished work does not linger as fake backlog.
 5. Do not reopen broad GC proxy exploration from the MGC payoff-compression result; if revisited, keep it to a narrow MGC exit-shape prereg.
 6. Do not reopen the L1 EUROPE_FLOW pre-break path with banned `break_*` or ATR-normalized replacement variants; the restored frozen `K=2` family is now a documented `KILL`.
