@@ -230,6 +230,68 @@ Use it before:
 
 ---
 
+## Operator Loop
+
+After the discovery framing is complete, use the prereg front door instead of
+hand-assembling commands:
+
+```bash
+scripts/infra/prereg-loop.sh \
+  --hypothesis-file docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml
+```
+
+The front door reports the pipeline branch before execution:
+
+- `standalone_edge` routes to `trading_app.strategy_discovery` and writes only
+  to `experimental_strategies`.
+- `conditional_role` routes to a bounded runner / result-doc flow and does not
+  auto-write to `experimental_strategies`.
+- Nothing promotes directly to `validated_setups`, profile routing, or
+  `paper_trades`.
+
+Execute only after the route is correct:
+
+```bash
+scripts/infra/prereg-loop.sh \
+  --hypothesis-file docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml \
+  --execute
+```
+
+---
+
+## Bigger-Finding Design
+
+To increase discovery yield, widen mechanism coverage, not hidden trial count.
+The institutional pattern is:
+
+1. Build several small prereg families from distinct theories.
+2. Keep each family K declared and under MinBTL.
+3. Run them independently through `scripts/infra/prereg-loop.sh`.
+4. Promote only survivors to the role/translation layer.
+
+Good expansion axes:
+
+- different mechanism classes with separate theory citations
+- different instruments when the mechanism genuinely ports
+- different apertures only when the mechanism depends on ORB horizon
+- different roles only after the signal layer has evidence
+
+Bad expansion axes:
+
+- threshold grids that exist only because they are easy to enumerate
+- multiple role framings inside one prereg without declaring K
+- using 2026 OOS to pick sessions, thresholds, or variants
+- sending every weak idea directly into a translation audit
+
+This follows the local literature posture:
+
+- Lopez de Prado: theory first; backtests falsify more than they prove.
+- Bailey et al.: hidden trials create false maxima; MinBTL caps search size.
+- Harvey-Liu / BHY: larger tested families require stricter hurdles.
+- Benjamini-Hochberg: FDR gives power only when the family is honestly named.
+
+---
+
 ## Do Not Use It For
 
 Do not use this prompt as a substitute for:

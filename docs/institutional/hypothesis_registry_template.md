@@ -59,6 +59,17 @@ metadata:
   #   data_source_disclosure: "NQ parent futures 2009-2024-02-05 as proxy for MNQ micro"
   #   total_expected_trials: 1500
 
+# Optional operator routing block.
+# Use this when the prereg is a bounded study with a dedicated runner rather
+# than a broad grid-discovery write into experimental_strategies.
+#
+# execution:
+#   mode: "bounded_runner"            # optional; inferred for conditional_role
+#   entrypoint: "research/my_study.py"
+#   default_args:
+#     - "--output"
+#     - "docs/audit/results/YYYY-MM-DD-my-study.md"
+
 hypotheses:
   - id: 1
     name: "Overnight range predicts EUROPE_FLOW follow-through"
@@ -79,6 +90,7 @@ hypotheses:
       entry_models: [E2]
       confirm_bars: [1]
       stop_multipliers: [1.0]
+      orb_minutes: [5]
     expected_trial_count: 20
     kill_criteria:
       - "BH FDR q=0.05 fails across all 20 trials"
@@ -104,6 +116,7 @@ hypotheses:
       entry_models: [E2]
       confirm_bars: [1]
       stop_multipliers: [1.0]
+      orb_minutes: [5]
     expected_trial_count: 16
     kill_criteria:
       - "BH FDR q=0.05 fails across all 16 trials"
@@ -115,7 +128,7 @@ hypotheses:
   # Each must have:
   #  - id, name, theory_citation (REQUIRED), economic_basis (REQUIRED)
   #  - filter (type, column, thresholds)
-  #  - scope (instruments, sessions, rr_targets, entry_models, confirm_bars, stop_multipliers)
+  #  - scope (instruments, sessions, rr_targets, entry_models, confirm_bars, stop_multipliers, orb_minutes)
   #  - expected_trial_count (sum across all hypotheses ≤ budget)
   #  - kill_criteria (must be pre-registered, not post-hoc)
   #
@@ -185,13 +198,30 @@ git commit -m "hypotheses: pre-register <slug> for YYYY-MM-DD discovery run"
 ### Step 4 — Run discovery with the file
 
 ```bash
-python -m trading_app.strategy_discovery \
-  --hypotheses docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml \
-  --holdout-date 2026-01-01 \
-  --instrument MNQ
+scripts/infra/prereg-loop.sh \
+  --hypothesis-file docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml \
+  --execute
 ```
 
-(Note: `--hypotheses` flag does not yet exist in `strategy_discovery.py`. Adding it is part of Phase 4+ implementation.)
+For `standalone_edge` preregs this routes to `trading_app.strategy_discovery`
+with the prereg's `holdout_date` and `--hypothesis-file` wired correctly.
+
+For `conditional_role` preregs, the same front door will inspect and report the
+route, but execution requires either:
+
+```yaml
+execution:
+  entrypoint: "research/my_bounded_runner.py"
+```
+
+or a manual override:
+
+```bash
+scripts/infra/prereg-loop.sh \
+  --hypothesis-file docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml \
+  --runner research/my_bounded_runner.py \
+  --execute
+```
 
 ### Step 5 — Apply criteria from `pre_registered_criteria.md`
 

@@ -304,6 +304,8 @@ TASKS: dict[str, TaskManifest] = {
             "pipeline/asset_configs.py",
             "pipeline/cost_model.py",
             "pipeline/dst.py",
+            "scripts/tools/prereg_front_door.py",
+            "scripts/infra/prereg-loop.sh",
             "trading_app/strategy_discovery.py",
             "pipeline/db_contracts.py",
         ),

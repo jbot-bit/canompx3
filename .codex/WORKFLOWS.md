@@ -74,6 +74,11 @@ Route to the correct source:
 - For new-edge discovery, noisy ideas, chart reads, or hypothesis triage, use
   `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md` as the front door before
   any scan, prereg, or implementation talk.
+- Once a prereg exists, use `scripts/infra/prereg-loop.sh --hypothesis-file <yaml>`
+  to inspect the route before execution. Execute with `--execute` only after
+  confirming the branch is correct:
+  - `standalone_edge` -> `experimental_strategies` -> validator -> `validated_setups`
+  - `conditional_role` -> bounded runner/result doc -> explicit role decision
 - For institutional research review prompts, prefer the compact runtime rubric in `docs/prompts/INSTITUTIONAL_RESEARCH_REVIEW_MINI.md` instead of re-pasting long prompt blocks.
 
 ## Verification Defaults

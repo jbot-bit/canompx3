@@ -9,14 +9,14 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** `1a3a4f8b` — `docs(research): design pr48 mgc shadow overlay contract`
-- **Summary:** Froze the next exact PR48 move after the redesign verdict. `MGC:cont_exec` should enter the repo first as a `shadow_only` profile-local conditional overlay, not as a lane and not as live sizing. The chosen contract is a checked-in static overlay spec plus a daily derived-state envelope with pre-session/dashboard visibility only.
-- **Audit Addendum:** Do not route this through `validated_setups`, `lane_allocator`, `paper_trades`, or the current execution-time `size_multiplier` hook in Phase 1. The active stage is now `docs/runtime/stages/pr48-mgc-shadow-only-overlay-contract.md`.
+- **Commit:** pending — PR48 shadow overlay Phase 1 + prereg front door
+- **Summary:** Implemented the Phase 1 `MGC:cont_exec` shadow-only overlay carrier and finished the prereg front-door routing surface. The overlay is a static spec plus derived-state envelope exposed through lifecycle, pre-session, and dashboard surfaces only. The prereg front door makes `standalone_edge` vs `conditional_role` execution branches explicit before any run.
+- **Audit Addendum:** This does not add live sizing, allocator weighting, `validated_setups` promotion, or `paper_trades` shadow rows. `scripts/infra/prereg-loop.sh` is workflow hygiene; it is not evidence that any prereg survives.
 
 ## Next Steps — Active
 1. Do not reopen `mnq_parent_structure_shadow_buckets_v1`. Exact-parent structure shadow buckets for these MNQ lanes are now closed `KILL` and should not be rescued under renamed score language.
 2. PR48 is no longer a pooled promotion story. Current truth is narrower: `MGC:cont_exec` is still the strongest live branch, but it now has one exact next move only: `shadow_only` overlay contract first; `MES:q45_exec` still needs a bridge; `DUO` and `MNQ:shadow_addon` remain shadow-only.
-3. Do not reopen generic PR48 confluence discovery. The exact next PR48 move is `docs/runtime/stages/pr48-mgc-shadow-only-overlay-contract.md`; do not jump straight to runtime sizing or schema-wide conditional rebuild.
+3. Do not reopen generic PR48 confluence discovery. The exact next PR48 move after Phase 1 is operator observation / Phase 2 design for a native conditional-role surface if shadow visibility proves useful; do not jump straight to runtime sizing or schema-wide conditional rebuild.
 4. Keep pulse/ralph/handoff surfaces aligned as each thread closes so finished work does not linger as fake backlog.
 5. Do not reopen broad GC proxy exploration from the MGC payoff-compression result; if revisited, keep it to a narrow MGC exit-shape prereg.
 6. Do not reopen the L1 EUROPE_FLOW pre-break path with banned `break_*` or ATR-normalized replacement variants; the restored frozen `K=2` family is now a documented `KILL`.
