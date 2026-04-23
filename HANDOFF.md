@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Summary:** Closed stale control-state and MES/MGC pipeline debt, compacted the baton, recovered the PR48 conditional-edge framework onto published `main`, restored and closed the missing L1 EUROPE_FLOW prereg to an honest `KILL`, and advanced the MNQ NYSE_CLOSE RR1.0 branch from governance follow-up into executed `ORB_G8` filter kill plus surviving allocator-role framing.
+- **Summary:** Closed stale control-state and MES/MGC pipeline debt, recovered the PR48 conditional-edge framework onto published `main`, restored and closed the missing L1 EUROPE_FLOW prereg to an honest `KILL`, advanced MNQ NYSE_CLOSE through `ORB_G8` filter kill plus surviving allocator-role framing, and closed prior-day geometry discovery/routing into a bounded same-session execution-translation next step.
 
 ## Next Steps — Active
-1. Use `docs/runtime/decision-ledger.md` as the durable source of truth for branch closure and next-stage routing; do not infer active work from old queue snapshots.
+1. Use `docs/runtime/stages/prior-day-geometry-execution-translation-audit.md` as the exact next stage for prior-day geometry; do not reopen Track A discovery or rerun consumed hypothesis files.
 2. Keep pulse/ralph/handoff surfaces aligned as each thread closes so finished work does not linger as fake backlog.
 3. Do not treat PR48 as a pooled `MES/MGC` promotion story anymore; use the 2026-04-23 result doc as the current truth.
 4. Do not reopen broad GC proxy exploration from the MGC payoff-compression result; if revisited, keep it to a narrow MGC exit-shape prereg.
