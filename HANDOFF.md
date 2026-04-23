@@ -9,9 +9,9 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** pending — PR48 shadow overlay Phase 1 + prereg front door
-- **Summary:** Implemented the Phase 1 `MGC:cont_exec` shadow-only overlay carrier and finished the prereg front-door routing surface. The overlay is a static spec plus derived-state envelope exposed through lifecycle, pre-session, and dashboard surfaces only. The prereg front door makes `standalone_edge` vs `conditional_role` execution branches explicit before any run.
-- **Audit Addendum:** This does not add live sizing, allocator weighting, `validated_setups` promotion, or `paper_trades` shadow rows. `scripts/infra/prereg-loop.sh` is workflow hygiene; it is not evidence that any prereg survives.
+- **Commit:** `b2943429` — research pipeline state model sync (`2811a622` contains the preceding PR48 shadow overlay + prereg routing work)
+- **Summary:** Clarified the research pipeline contract and front-door wording so `experimental_strategies` is standalone-candidate inventory, `validated_setups` is the validated research shelf, deployment is optional and separate, and `paper_trades` are execution evidence only. Added a durable plan note at `docs/plans/2026-04-23-research-pipeline-sync.md`.
+- **Audit Addendum:** No DB schema migration, no new tables, no forced live-routing gate, and no forced conditional-role promotion into `experimental_strategies`. Conditional roles stay bounded-runner/result-doc/role-contract first unless a prereg defines a complete standalone lane.
 
 ## Next Steps — Active
 1. Do not reopen `mnq_parent_structure_shadow_buckets_v1`. Exact-parent structure shadow buckets for these MNQ lanes are now closed `KILL` and should not be rescued under renamed score language.
@@ -62,3 +62,4 @@
 - `docs/audit/results/2026-04-23-mnq-parent-structure-shadow-buckets-v1.md`
 - `research/mnq_parent_structure_shadow_buckets_v1.py`
 - `docs/plans/2026-04-23-microstructure-gate0-design.md`
+- `docs/plans/2026-04-23-research-pipeline-sync.md`
