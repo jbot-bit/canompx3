@@ -18,6 +18,7 @@ Usage:
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from enum import Enum
+from typing import Any
 
 from pipeline.cost_model import CostSpec, get_session_cost_spec, to_r_multiple
 from pipeline.dst import DYNAMIC_ORB_RESOLVERS, orb_utc_window
@@ -169,6 +170,9 @@ class ActiveTrade:
     # Calendar overlay sizing (1.0 = full, 0.5 = half)
     size_multiplier: float = 1.0
 
+    # Phase 2: Conditional-role context (shadow/live overlays)
+    overlay_context: dict[str, dict[str, Any]] = field(default_factory=dict)
+
     # Outcome tracking
     exit_ts: datetime | None = None
     exit_price: float | None = None
@@ -196,11 +200,13 @@ class ExecutionEngine:
         live_session_costs: bool = True,
         atr_velocity_overlay=None,
         e2_order_timeout: dict[tuple[str, str], float] | None = None,
+        role_resolver=None,
     ):
         self.portfolio = portfolio
         self.cost_spec = cost_spec
         self.risk_manager = risk_manager  # Optional RiskManager for position limits
         self.market_state = market_state  # Optional MarketState for scoring
+        self.role_resolver = role_resolver  # Optional RoleResolver for conditional overlays
         self._live_session_costs = live_session_costs  # Use session-adjusted slippage
         self.atr_velocity_overlay = atr_velocity_overlay  # Contracting ATR skip overlay
         # E2 order timeout: {(instrument, session) -> minutes}. After ORB completes,
@@ -224,6 +230,22 @@ class ExecutionEngine:
         # Paper trader / session orchestrator load one row per unique aperture
         # in the portfolio, so _arm_strategies can pick the correct ORB columns.
         self._daily_features_rows: dict[int, dict] = {}
+
+    def _apply_conditional_roles(self, trade: ActiveTrade, session: str) -> None:
+        """Query RoleResolver and apply multiplier / record context."""
+        if self.role_resolver is None:
+            return
+
+        context = self.role_resolver.get_overlay_context(trade.strategy_id, session, trade.direction)
+        trade.overlay_context = context
+
+        # Apply LIVE multipliers
+        live_multiplier = 1.0
+        for details in context.values():
+            if details["mode"] == "live" and details["role"] == "allocator":
+                live_multiplier *= details["size_multiplier"]
+
+        trade.size_multiplier *= live_multiplier
 
     def _compute_contracts(self, risk_points: float, cost: CostSpec, max_contracts: int = 1) -> int:
         """Compute position size using vol-adjusted sizing from portfolio params.
@@ -932,7 +954,11 @@ class ExecutionEngine:
                 events=events,
             ):
                 return events
-            # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0).
+
+            # Apply Phase 2 conditional roles (MGC shadow overlay etc.)
+            self._apply_conditional_roles(trade, trade.orb_label)
+
+            # Apply sizing multiplier (calendar + conditional roles).
             # NOTE: For single-contract strategies, max(1, ...) floor means
             # HALF_SIZE is a no-op — effective only for multi-contract sizing.
             if trade.size_multiplier != 1.0:
@@ -1150,7 +1176,11 @@ class ExecutionEngine:
                         events=events,
                     ):
                         continue
-                    # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0)
+
+                    # Apply Phase 2 conditional roles (MGC shadow overlay etc.)
+                    self._apply_conditional_roles(trade, trade.orb_label)
+
+                    # Apply sizing multiplier (calendar + conditional roles)
                     if trade.size_multiplier != 1.0:
                         trade.contracts = max(1, int(trade.contracts * trade.size_multiplier))
 
@@ -1322,7 +1352,11 @@ class ExecutionEngine:
                             events=events,
                         ):
                             continue
-                        # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0)
+
+                        # Apply Phase 2 conditional roles (MGC shadow overlay etc.)
+                        self._apply_conditional_roles(trade, trade.orb_label)
+
+                        # Apply sizing multiplier (calendar + conditional roles)
                         if trade.size_multiplier != 1.0:
                             trade.contracts = max(1, int(trade.contracts * trade.size_multiplier))
 

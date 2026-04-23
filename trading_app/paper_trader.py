@@ -72,6 +72,7 @@ class JournalEntry:
     pnl_r: float | None = None
     exit_mode: str | None = None
     ib_alignment: str | None = None
+    overlay_context: dict[str, dict] = field(default_factory=dict)
     risk_rejected: bool = False
     risk_reason: str = ""
 
@@ -354,6 +355,7 @@ def replay_historical(
                 for event in events:
                     if event.event_type == "ENTRY":
                         # Engine already checked risk_manager — just record
+                        trade = _find_active_trade(engine, event.strategy_id)
                         entry = JournalEntry(
                             mode="replay",
                             trading_day=td,
@@ -363,11 +365,13 @@ def replay_historical(
                             entry_ts=event.timestamp,
                             entry_price=event.price,
                             contracts=event.contracts,
+                            overlay_context=trade.overlay_context if trade else {},
                         )
                         day_summary.trades_entered += 1
                         result.journal.append(entry)
 
                     elif event.event_type == "REJECT":
+                        trade = _find_completed_trade(engine, event.strategy_id)
                         entry = JournalEntry(
                             mode="replay",
                             trading_day=td,
@@ -379,6 +383,7 @@ def replay_historical(
                             contracts=event.contracts,
                             risk_rejected=True,
                             risk_reason=event.reason,
+                            overlay_context=trade.overlay_context if trade else {},
                         )
                         day_summary.risk_rejections += 1
                         result.total_risk_rejections += 1
@@ -524,6 +529,14 @@ def _entry_model_from_strategy(strategy_id: str) -> str:
             return p
     # Fallback: assume position 2 (legacy format)
     return parts[2] if len(parts) > 2 else ""
+
+
+def _find_active_trade(engine: ExecutionEngine, strategy_id: str):
+    """Find the most recent active trade for a strategy."""
+    for trade in reversed(engine.active_trades):
+        if trade.strategy_id == strategy_id:
+            return trade
+    return None
 
 
 def _find_completed_trade(engine: ExecutionEngine, strategy_id: str):
