@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** `pending publish` — `docs(research): design pr48 mgc shadow overlay contract`
+- **Commit:** `1a3a4f8b` — `docs(research): design pr48 mgc shadow overlay contract`
 - **Summary:** Froze the next exact PR48 move after the redesign verdict. `MGC:cont_exec` should enter the repo first as a `shadow_only` profile-local conditional overlay, not as a lane and not as live sizing. The chosen contract is a checked-in static overlay spec plus a daily derived-state envelope with pre-session/dashboard visibility only.
 - **Audit Addendum:** Do not route this through `validated_setups`, `lane_allocator`, `paper_trades`, or the current execution-time `size_multiplier` hook in Phase 1. The active stage is now `docs/runtime/stages/pr48-mgc-shadow-only-overlay-contract.md`.
 
