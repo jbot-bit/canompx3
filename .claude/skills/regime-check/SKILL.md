@@ -112,6 +112,33 @@ con.close()
 "
 ```
 
+## Step 1b: DSR diagnostic (Shape E, A2b-2)
+
+If `docs/runtime/lane_allocation.json` was generated post-2026-04-18 it now records DSR diagnostic per lane + per-rebalance globals. Surface it:
+
+```bash
+python -c "
+import json
+from pathlib import Path
+data = json.loads(Path('docs/runtime/lane_allocation.json').read_text())
+diag = data.get('dsr_diagnostics')
+if diag:
+    print('=== DSR DIAGNOSTICS (informational, not consumed by selection) ===')
+    print(f\"  N_eff_raw (validator): {diag['n_eff_raw']}\")
+    print(f\"  N_hat_eq9 (Bailey-LdP): {diag['n_hat_eq9']}  (avg_rho_hat = {diag['avg_rho_hat']})\")
+    print(f\"  var_sr_em: {diag['var_sr_em']}\")
+    print('  --- per-lane DSR ---')
+    print(f\"  {'lane':38} {'DSR_raw':>8} {'DSR_eq9':>8} {'sr0':>6}\")
+    for L in data['lanes']:
+        if 'dsr_score' in L:
+            print(f\"  {L['strategy_id'][:38]:38} {L['dsr_at_n_eff_raw']:>8.4f} {L['dsr_at_n_hat_eq9']:>8.4f} {L['sr0_at_rebalance']:>6.3f}\")
+else:
+    print('(no DSR diagnostics in lane_allocation.json — pre-Shape-E rebalance)')
+"
+```
+
+Read DSR **alongside** trailing_expr. Per `trading_app/dsr.py:35` DSR is INFORMATIONAL — it does NOT pause/deploy on its own. Use it to spot deployed lanes whose ranker selection is on thin Bailey-LdP ground (DSR < 0.10 means observed Sharpe is consistent with "best of N noise" outcome) AND cross-check whether they're showing forward decay (combined signal stronger than either alone).
+
 ## Step 2: Flags
 
 - **0 CORE families** for any instrument → RED
@@ -120,6 +147,7 @@ con.close()
 - **ORB sizes trending down >20%** on 3+ sessions → edge weakening
 - **Mode-B contaminated count >0** → stored ExpR values for those lanes are NOT Mode A canonical; treat stored numbers as indicative only, cite the 2026-04-19 re-validation doc for Mode A baselines
 - **Fresh-OOS days < 90** → too short for WFE OOS validation under strict Mode A (Criterion 8 N_OOS>=30 requires ~3 months at typical trade frequency)
+- **Deployed lane has DSR_raw < 0.10 AND recent_3mo_expr < 0** → ESCALATE (combined Bailey-LdP + decay signal; A2b-2 Shape E diagnostic)
 
 ## Step 3: Present
 

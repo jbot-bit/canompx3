@@ -19,9 +19,11 @@ from trading_app.lane_allocator import (
     build_allocation,
     check_allocation_staleness,
     compute_lane_scores,
+    enrich_scores_with_dsr_diagnostics,
     enrich_scores_with_liveness,
     generate_report,
     load_sr_state,
+    save_allocation,
 )
 
 
@@ -905,3 +907,277 @@ class TestCorrelationAwareSelection:
         corr = {}  # empty matrix — all pairs default to 0
         result = build_allocation([a, b], max_slots=5, correlation_matrix=corr)
         assert len(result) == 2
+
+
+# =============================================================================
+# A2b-2 Shape E — DSR diagnostic tests (T1-T4 per scope §6)
+# =============================================================================
+
+
+@pytest.fixture()
+def dsr_test_db(tmp_path):
+    """Minimal DB with the schema enrich_scores_with_dsr_diagnostics needs.
+
+    validated_setups gets skewness/kurtosis_excess/sharpe_ratio columns
+    (the Mode-B-stale stored values; validator's DSR pipeline reads
+    these so the audit must too). experimental_strategies + edge_families
+    seeded with values that produce a deterministic, easily verified
+    var_sr_em + n_eff_raw.
+    """
+    db_path = tmp_path / "test_dsr.db"
+    con = duckdb.connect(str(db_path))
+
+    con.execute(
+        """
+        CREATE TABLE validated_setups (
+            strategy_id VARCHAR,
+            instrument VARCHAR,
+            orb_label VARCHAR,
+            entry_model VARCHAR,
+            rr_target DOUBLE,
+            confirm_bars INTEGER,
+            filter_type VARCHAR,
+            stop_multiplier DOUBLE,
+            sample_size INTEGER,
+            sharpe_ratio DOUBLE,
+            skewness DOUBLE,
+            kurtosis_excess DOUBLE,
+            status VARCHAR
+        )
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE experimental_strategies (
+            entry_model VARCHAR,
+            sample_size INTEGER,
+            sharpe_ratio DOUBLE,
+            is_canonical BOOLEAN
+        )
+        """
+    )
+    con.execute("CREATE TABLE edge_families (family_hash VARCHAR)")
+
+    # Seed: 2 active validated lanes (one strong DSR, one weak)
+    con.execute(
+        """INSERT INTO validated_setups VALUES
+           ('S_STRONG', 'MNQ', 'COMEX_SETTLE', 'E2', 1.0, 1,
+            'OVNRNG_100', 1.0, 200, 0.30, -0.5, -1.0, 'active'),
+           ('S_WEAK', 'MNQ', 'EUROPE_FLOW', 'E2', 1.5, 1,
+            'ORB_G5', 1.0, 200, 0.05, -0.5, -1.0, 'active')"""
+    )
+    # Seed experimental_strategies with E2 sharpes producing var ~ 0.04
+    for sr in (0.0, 0.1, 0.2, 0.3, 0.4):
+        con.execute(
+            "INSERT INTO experimental_strategies VALUES ('E2', 100, ?, TRUE)",
+            [sr],
+        )
+    # Seed 21 edge families to match real-world n_eff_raw shape
+    for i in range(21):
+        con.execute("INSERT INTO edge_families VALUES (?)", [f"hash_{i}"])
+    con.close()
+    return db_path
+
+
+class TestDsrDiagnosticEnrichment:
+    """A2b-2 Shape E — diagnostic-only DSR exposure (no behavioral change)."""
+
+    def test_t1_dsr_fields_populated_in_lane_score(self, dsr_test_db):
+        """T1 — every active lane gets dsr_score, sr0, dsr_at_n_eff_raw, dsr_at_n_hat_eq9 in [0, 1]."""
+        scores = [
+            _make_score(strategy_id="S_STRONG", filter_type="OVNRNG_100"),
+            _make_score(strategy_id="S_WEAK", orb_label="EUROPE_FLOW",
+                        rr_target=1.5, filter_type="ORB_G5"),
+        ]
+        # Pre-patch: all DSR fields are None
+        assert all(s.dsr_score is None for s in scores)
+
+        globals_d = enrich_scores_with_dsr_diagnostics(
+            scores, pairs={}, db_path=dsr_test_db
+        )
+
+        for s in scores:
+            assert s.dsr_score is not None
+            assert s.sr0_at_rebalance is not None
+            assert s.dsr_at_n_eff_raw is not None
+            assert s.dsr_at_n_hat_eq9 is not None
+            assert 0.0 <= s.dsr_score <= 1.0
+            assert 0.0 <= s.dsr_at_n_eff_raw <= 1.0
+            assert 0.0 <= s.dsr_at_n_hat_eq9 <= 1.0
+            assert s.sr0_at_rebalance >= 0.0
+
+        # Globals shape
+        assert globals_d["n_eff_raw"] == 21
+        assert "E2" in globals_d["var_sr_em"]
+        assert globals_d["avg_rho_hat"] == 0.0  # empty pairs → ρ̂=0
+        assert globals_d["n_hat_eq9"] == 21.0  # ρ̂=0 → N̂=M
+
+    def test_t2_dsr_canonical_equivalence(self, dsr_test_db):
+        """T2 — LaneScore.dsr_score equals direct compute_dsr() with same inputs."""
+        from trading_app.dsr import compute_dsr, compute_sr0
+
+        scores = [_make_score(strategy_id="S_STRONG", filter_type="OVNRNG_100")]
+        enrich_scores_with_dsr_diagnostics(scores, pairs={}, db_path=dsr_test_db)
+        s = scores[0]
+
+        # Direct canonical recomputation with the seeded inputs
+        # S_STRONG: sharpe=0.30, sample_size=200, skew=-0.5, kurt=-1.0
+        # var_sr_e2 from seeded experimental_strategies = VAR_SAMP(0.0, 0.1, 0.2, 0.3, 0.4) = 0.025
+        # n_eff_raw = 21
+        sr0_expected = compute_sr0(21, 0.025)
+        dsr_expected = compute_dsr(0.30, sr0_expected, 200, -0.5, -1.0)
+
+        # Equivalence to 5 decimals (canonical fns + storage round to 6dp)
+        assert s.dsr_at_n_eff_raw == pytest.approx(round(dsr_expected, 6), abs=1e-5)
+        assert s.dsr_score == s.dsr_at_n_eff_raw  # canonical alias
+        assert s.sr0_at_rebalance == pytest.approx(round(sr0_expected, 6), abs=1e-5)
+
+    def test_t3_dsr_fields_default_none_for_backward_compat(self):
+        """T3 — pre-Shape-E LaneScore constructors still work; new fields default None."""
+        # Construct exactly as pre-Shape-E callers did (no DSR kwargs)
+        ls = _make_score()
+        assert ls.dsr_score is None
+        assert ls.sr0_at_rebalance is None
+        assert ls.dsr_at_n_eff_raw is None
+        assert ls.dsr_at_n_hat_eq9 is None
+        # Backward-compat: ranking unaffected
+        assert _effective_annual_r(ls) == ls.annual_r_estimate
+
+    def test_t4_save_allocation_writes_dsr_block(self, dsr_test_db, tmp_path):
+        """T4 — save_allocation writes per-lane DSR fields + per-rebalance globals when populated."""
+        scores = [
+            _make_score(strategy_id="S_STRONG", filter_type="OVNRNG_100"),
+            _make_score(strategy_id="S_WEAK", orb_label="EUROPE_FLOW",
+                        rr_target=1.5, filter_type="ORB_G5"),
+        ]
+        globals_d = enrich_scores_with_dsr_diagnostics(
+            scores, pairs={("S_STRONG", "S_WEAK"): 0.3}, db_path=dsr_test_db
+        )
+        out = tmp_path / "alloc.json"
+        save_allocation(
+            scores=scores,
+            allocation=scores,
+            rebalance_date=date(2026, 4, 18),
+            profile_id="topstep_50k_mnq_auto",
+            output_path=out,
+            dsr_globals=globals_d,
+        )
+        data = json.loads(out.read_text())
+
+        # Per-lane DSR fields present
+        for lane in data["lanes"]:
+            assert "dsr_score" in lane
+            assert "sr0_at_rebalance" in lane
+            assert "dsr_at_n_eff_raw" in lane
+            assert "dsr_at_n_hat_eq9" in lane
+            assert isinstance(lane["dsr_score"], (int, float))
+
+        # Per-rebalance globals block present
+        assert "dsr_diagnostics" in data
+        diag = data["dsr_diagnostics"]
+        assert diag["n_eff_raw"] == 21
+        assert diag["avg_rho_hat"] == 0.3  # single pair, value=0.3
+        # N̂ = ρ̂ + (1-ρ̂)·M = 0.3 + 0.7*21 = 15.0 (Bailey-LdP Eq 9)
+        assert diag["n_hat_eq9"] == pytest.approx(15.0, abs=0.01)
+        assert "var_sr_em" in diag
+        assert "doctrine" in diag and "INFORMATIONAL" in diag["doctrine"]
+        assert "lit_ref" in diag and "Bailey" in diag["lit_ref"]
+
+    def test_save_allocation_omits_dsr_block_when_globals_none(self, dsr_test_db, tmp_path):
+        """T4 boundary — when dsr_globals=None (pre-Shape-E callers), JSON has no dsr block."""
+        scores = [_make_score()]
+        out = tmp_path / "alloc_legacy.json"
+        save_allocation(
+            scores=scores,
+            allocation=scores,
+            rebalance_date=date(2026, 4, 18),
+            profile_id="topstep_50k_mnq_auto",
+            output_path=out,
+        )
+        data = json.loads(out.read_text())
+        assert "dsr_diagnostics" not in data
+        # Per-lane DSR fields also absent because LaneScore.dsr_score is None
+        for lane in data["lanes"]:
+            assert "dsr_score" not in lane
+
+    def test_save_allocation_omits_dsr_block_when_globals_provided_but_lanes_empty(
+        self, dsr_test_db, tmp_path
+    ):
+        """Post-ship fix: dsr_diagnostics requires BOTH globals AND populated per-lane.
+
+        Internally-inconsistent state where caller passes globals but no
+        lane has dsr_score populated should not produce a misleading JSON
+        with global diagnostics that suggest per-lane data exists.
+        """
+        scores = [_make_score()]  # No DSR fields populated
+        out = tmp_path / "alloc_inconsistent.json"
+        fake_globals = {
+            "n_eff_raw": 21, "n_hat_eq9": 21.0,
+            "avg_rho_hat": 0.0, "var_sr_em": {"E1": 0.047, "E2": 0.025},
+        }
+        save_allocation(
+            scores=scores,
+            allocation=scores,
+            rebalance_date=date(2026, 4, 18),
+            profile_id="topstep_50k_mnq_auto",
+            output_path=out,
+            dsr_globals=fake_globals,
+        )
+        data = json.loads(out.read_text())
+        assert "dsr_diagnostics" not in data, (
+            "globals-without-per-lane-data should NOT write diagnostics block"
+        )
+
+    def test_dsr_warns_when_var_sr_em_falls_back(self, tmp_path):
+        """Post-ship fix: silent var_sr_em fallback to 0.047 must emit warning.
+
+        Reproduces the real-world condition where E1 has no qualifying
+        experimental_strategies rows. Warning ensures operators see
+        which entry models are using default calibration instead of
+        measured V[SR].
+        """
+        import warnings as _warnings
+        db_path = tmp_path / "test_warn.db"
+        con = duckdb.connect(str(db_path))
+        # Schemas needed by enrich
+        con.execute(
+            """CREATE TABLE validated_setups (
+                strategy_id VARCHAR, instrument VARCHAR, orb_label VARCHAR,
+                entry_model VARCHAR, rr_target DOUBLE, confirm_bars INTEGER,
+                filter_type VARCHAR, stop_multiplier DOUBLE, sample_size INTEGER,
+                sharpe_ratio DOUBLE, skewness DOUBLE, kurtosis_excess DOUBLE,
+                status VARCHAR
+            )"""
+        )
+        con.execute(
+            """CREATE TABLE experimental_strategies (
+                entry_model VARCHAR, sample_size INTEGER,
+                sharpe_ratio DOUBLE, is_canonical BOOLEAN
+            )"""
+        )
+        con.execute("CREATE TABLE edge_families (family_hash VARCHAR)")
+        # Seed: only E2 has rows; E1 is empty (real-world condition)
+        for sr in (0.0, 0.1, 0.2, 0.3, 0.4):
+            con.execute(
+                "INSERT INTO experimental_strategies VALUES ('E2', 100, ?, TRUE)",
+                [sr],
+            )
+        for i in range(5):
+            con.execute("INSERT INTO edge_families VALUES (?)", [f"hash_{i}"])
+        con.execute(
+            """INSERT INTO validated_setups VALUES
+               ('S', 'MNQ', 'COMEX_SETTLE', 'E2', 1.0, 1, 'OVNRNG_100',
+                1.0, 200, 0.30, -0.5, -1.0, 'active')"""
+        )
+        con.close()
+
+        scores = [_make_score()]
+        with _warnings.catch_warnings(record=True) as caught:
+            _warnings.simplefilter("always")
+            enrich_scores_with_dsr_diagnostics(
+                scores, pairs={}, db_path=db_path
+            )
+        msgs = [str(w.message) for w in caught]
+        assert any("var_sr_em fallback" in m and "E1" in m for m in msgs), (
+            f"expected var_sr_em fallback warning for E1, got: {msgs}"
+        )
