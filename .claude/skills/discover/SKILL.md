@@ -94,8 +94,9 @@ When a prereg already exists, inspect its branch internally before execution:
   only
 
 If the request is "validate this", "is this deployable", or "did it execute",
-leave discovery mode and route to confirmation, deployment readiness, or
-operations instead.
+leave discovery mode and route to `confirmation`, `deployment_readiness`, or
+`operations` instead. The discovery-specific routes are
+`standalone_discovery` and `conditional_role`.
 
 Do not imply a strategy must reach live routing or `paper_trades` to be
 validated. Validation and deployment are separate gates.

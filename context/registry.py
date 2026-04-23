@@ -294,6 +294,7 @@ TASKS: dict[str, TaskManifest] = {
             "RESEARCH_RULES.md",
             "TRADING_RULES.md",
             "docs/STRATEGY_BLUEPRINT.md",
+            "docs/institutional/research_pipeline_contract.md",
             "docs/institutional/pre_registered_criteria.md",
             "docs/institutional/mechanism_priors.md",
             "docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md",

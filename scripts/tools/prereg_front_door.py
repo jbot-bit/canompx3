@@ -175,7 +175,7 @@ def build_route_decision(
         forbidden_claims = [
             "experimental_strategies is proof",
             "deployment is automatic",
-            "paper_trades are required for validation",
+            "paper_trades are a validation prerequisite",
         ]
         next_surface = (
             "experimental_strategies -> strategy_validator -> validated_setups "
@@ -210,7 +210,7 @@ def build_route_decision(
         forbidden_claims = [
             "conditional-role results auto-write to experimental_strategies",
             "conditional-role results auto-promote to validated_setups",
-            "paper_trades are required for validation",
+            "paper_trades are a validation prerequisite",
         ]
         next_surface = "bounded result doc -> explicit role decision -> optional translation stage (no auto-promotion)"
         notes.append("Conditional-role preregs do not auto-write to experimental_strategies.")

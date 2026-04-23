@@ -248,6 +248,8 @@ The front door reports the pipeline branch before execution:
   auto-write to `experimental_strategies`.
 - Nothing promotes directly to `validated_setups`, profile routing, or
   `paper_trades`.
+- `confirmation`, `deployment_readiness`, and `operations` are separate route
+  options after discovery; do not force them through the prereg front door.
 
 Execute internally only after the route is correct:
 
@@ -319,6 +321,9 @@ Use `docs/institutional/research_pipeline_contract.md` as the status ladder:
 - `validated` does not require live routing
 - `deployed` is not research proof
 - `paper_trades` are operational records, not discovery evidence
+
+Use one primary route name before acting: `standalone_discovery`,
+`conditional_role`, `confirmation`, `deployment_readiness`, or `operations`.
 
 The prereg front door is an internal routing guard. Use it to prevent branch
 confusion, but do not present command execution as the required user workflow.

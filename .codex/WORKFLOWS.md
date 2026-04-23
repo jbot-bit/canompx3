@@ -87,9 +87,10 @@ Route to the correct source:
   route before execution. Execute only after confirming the branch is correct:
   - `standalone_edge` -> `experimental_strategies` -> validator -> `validated_setups`
   - `conditional_role` -> bounded runner/result doc -> explicit role decision
-- For confirmation, deployment-readiness, and operations questions, do not use
-  the prereg front door as the authority. Use the validator / validated shelf,
-  deployment profile checks, or runtime / `paper_trades` evidence respectively.
+- For `confirmation`, `deployment_readiness`, and `operations` questions, do
+  not use the prereg front door as the authority. Use the validator / validated
+  shelf, deployment profile checks, or runtime / `paper_trades` evidence
+  respectively.
 - For institutional research review prompts, prefer the compact runtime rubric in `docs/prompts/INSTITUTIONAL_RESEARCH_REVIEW_MINI.md` instead of re-pasting long prompt blocks.
 
 ## Verification Defaults

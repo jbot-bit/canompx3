@@ -7,16 +7,16 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
-- **Tool:** Gemini
+- **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** PENDING
-- **Summary:** Implemented the "Gemini Capability and Orchestration Plan" (docs/plans/2026-04-23-gemini-capability-plan.md). Locked the MNQ COMEX_SETTLE Gate 0 microstructure prereg. Implemented PR48 Phase 2 native conditional-role surface (RoleResolver) in execution_engine.py and paper_trader.py for durable shadow logging.
-- **Audit Addendum:** No regressions in execution engine or paper trader tests. Drift check passed.
+- **Commit:** pending — research pipeline route-option coherence pass on top of `34d9e732`
+- **Summary:** Tightened front-to-back research pipeline routing so the supported route options are explicit everywhere: `standalone_discovery`, `conditional_role`, `confirmation`, `deployment_readiness`, and `operations`. Added tests that guard route coverage and stale validation/deployment wording.
+- **Audit Addendum:** No schema migration, no new tables, no validator behavior change, and no live-routing / `paper_trades` prerequisite for validation. PR48 Phase 2 is shadow observation only: `RoleResolver` records overlay context, but execution size remains unchanged.
 
 ## Next Steps — Active
 1. Do not reopen `mnq_parent_structure_shadow_buckets_v1`. Exact-parent structure shadow buckets for these MNQ lanes are now closed `KILL` and should not be rescued under renamed score language.
 2. PR48 is no longer a pooled promotion story. Current truth is narrower: `MGC:cont_exec` is still the strongest live branch, but it now has one exact next move only: `shadow_only` overlay contract first; `MES:q45_exec` still needs a bridge; `DUO` and `MNQ:shadow_addon` remain shadow-only.
-3. PR48 Phase 2 implemented (RoleResolver). The next move is operator observation of the MGC shadow context in live logs/dashboard.
+3. PR48 Phase 2 implemented (RoleResolver). The next move is operator observation of the MGC shadow context in live logs/dashboard; do not promote to live sizing without a separate architecture design.
 4. Keep pulse/ralph/handoff surfaces aligned as each thread closes so finished work does not linger as fake backlog.
 5. Do not reopen broad GC proxy exploration from the MGC payoff-compression result; if revisited, keep it to a narrow MGC exit-shape prereg.
 6. Do not reopen the L1 EUROPE_FLOW pre-break path with banned `break_*` or ATR-normalized replacement variants; the restored frozen `K=2` family is now a documented `KILL`.
@@ -26,7 +26,7 @@
 10. Prior-day bridge work is no longer missing locks. The next honest move on that branch is execution / triage among already-locked hypotheses, not another broad prior-day prereg-writing pass.
 11. Do not describe `lane_allocation.json` as unconditional live truth. For audit claims, pair it with allocator replay / SR-liveness context.
 12. Do not cite `docs/audit/results/2026-04-21-ovnrng-allocator-routing.md` without the rolling-CV retraction. Current truth is the router `KILL`, not the earlier single-fold positive.
-13. Track D MNQ COMEX_SETTLE Gate 0 prereg is locked. The next move is execution of `research/research_mnq_e2_microstructure_pilot.py` (once written/adapted) against the locked hypothesis.
+13. Track D MNQ COMEX_SETTLE Gate 0 prereg is locked as `DESIGN_ONLY`. It is not executable yet; the next move is Databento top-of-book table/runner design before any scan.
 14. Shadow-bucket re-audit reproduced cleanly from canonical data. Keep the verdict narrow: exact-parent `MNQ COMEX_SETTLE RR1.5 long PD_CLEAR_LONG` and `MNQ US_DATA_1000 O15 RR1.5` prior-day structure score buckets are `KILL` for the tested `shadow_only` parent-value role, but that is not a global kill of the broader prior-day geometry family. The checked-in result doc was refreshed only to fix stale prereg provenance metadata after the later stamp commit.
 
 ## Blockers / Warnings

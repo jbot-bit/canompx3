@@ -62,13 +62,13 @@ then deployment, then execution.
 |---|---|---|---|---|
 | `standalone_discovery` | Finding better complete tradeable setups | canonical data + `standalone_edge` prereg | `experimental_strategies`, then validator / `validated_setups` if accepted | A candidate row is proof or deployable by itself |
 | `conditional_role` | Testing a filter, conditioner, allocator, confluence, execution modifier, or diagnostic | canonical data + `conditional_role` prereg with role block | bounded result doc and explicit role decision / contract | It must become a standalone strategy to be useful |
-| `confirmation` | Deciding whether a discovered standalone candidate becomes validated research inventory | candidate provenance + validation / OOS / FDR evidence | `validated_setups` for accepted standalone lanes | Live routing or `paper_trades` are required for validation |
+| `confirmation` | Deciding whether a discovered standalone candidate becomes validated research inventory | candidate provenance + validation / OOS / FDR evidence | `validated_setups` for accepted standalone lanes | Requiring live routing or execution before validation |
 | `deployment_readiness` | Asking whether validated research should enter the live or shadow book | `validated_setups`, role contracts, `deployment_scope`, profiles, lane caps, overlays, broker/account constraints | go/no-go deployment decision | Deployment creates research truth |
 | `operations` | Asking whether a deployed route actually fired or behaved correctly | runtime config, journals, monitoring, broker state, `paper_trades` | execution / monitoring evidence | Execution records validate the original edge |
 
 `scripts/tools/prereg_front_door.py` only inspects prereg-backed research
-branches today: `standalone_edge` and `conditional_role`. Confirmation,
-deployment-readiness, and operations questions are still first-class route
+branches today: `standalone_edge` and `conditional_role`. `confirmation`,
+`deployment_readiness`, and `operations` questions are still first-class route
 options for agents, but they use their existing repo surfaces rather than this
 prereg tool.
 

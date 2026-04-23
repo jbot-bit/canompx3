@@ -56,8 +56,8 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
   assembling `strategy_discovery.py` or bounded-runner commands. Do not expose
   script syntax as the required user workflow.
 - For "validate this", "is this deployable", or "did it execute" requests, use
-  the validator / validated shelf, deployment readiness, or operations routes;
-  do not collapse those into discovery.
+  the `confirmation`, `deployment_readiness`, or `operations` routes; do not
+  collapse those into discovery.
 - Use `blast-radius/SKILL.md` before edits that touch shared interfaces.
 - Use `quant-verify/SKILL.md` or `verify-done/SKILL.md` before closing any material implementation task.
 - Use `health-check/SKILL.md` when the right validation command is unclear.

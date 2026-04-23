@@ -9,6 +9,9 @@
 **Operator contract:** The human-facing workflow is natural language. Agents use
 this file and the prereg front door internally; users should not need to
 remember command syntax. See `docs/institutional/research_pipeline_contract.md`.
+Prereg files cover the `standalone_discovery` and `conditional_role` routes.
+The `confirmation`, `deployment_readiness`, and `operations` routes use their
+own repo surfaces after research evidence exists.
 
 ---
 
@@ -203,7 +206,9 @@ git commit -m "hypotheses: pre-register <slug> for YYYY-MM-DD discovery run"
 
 Agent/operator note: this is an internal routing step. If a human asks to run
 the discovery, the agent should execute the correct branch and report the
-result. Do not make the human memorize this command.
+result. Do not make the human memorize this command. If the human asks whether
+something is validated, deployable, or executed, route to `confirmation`,
+`deployment_readiness`, or `operations` instead of treating it as discovery.
 
 ```bash
 scripts/infra/prereg-loop.sh \
