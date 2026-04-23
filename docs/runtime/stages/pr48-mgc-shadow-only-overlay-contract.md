@@ -1,6 +1,6 @@
 # PR48 MGC shadow-only overlay contract
 
-**Status:** implemented Phase 1
+**Status:** implemented Phase 2 shadow observation
 **Date:** 2026-04-23  
 **Purpose:** implement the smallest honest carrier for frozen `MGC:cont_exec` as a `shadow_only` profile-local conditional overlay.
 
@@ -69,6 +69,14 @@ fail-closed conditional overlay object without:
 - `trading_app/live/bot_dashboard.py` exposes overlay state in the operator payload and dashboard checks.
 - Tests cover auto-refresh, invalid-artifact degradation, non-finite feature handling, lifecycle propagation, pre-session messaging, and dashboard visibility.
 
+## Phase 2 shadow observation surface
+
+- `trading_app/conditional_overlays.py` exposes `RoleResolver` as the native read interface for overlay rows.
+- `trading_app/execution_engine.py` records overlay context on `ActiveTrade` and logs `CONDITIONAL_OVERLAY_SHADOW` observations.
+- `trading_app/live/session_orchestrator.py` wires `RoleResolver` for profile portfolios so live/signal sessions can observe context.
+- `trading_app/paper_trader.py` carries `overlay_context` into replay journal entries.
+- Tests verify shadow overlay context does not mutate contracts or `size_multiplier`.
+
 ## Rules
 
 - Do not write to `validated_setups`
@@ -87,9 +95,8 @@ Allowed:
 - `pre_session_check.py`
 - `live/bot_dashboard.py`
 
-Not allowed in this stage:
+Not allowed in this stage without a new architecture design:
 
-- `execution_engine.py`
 - `risk_manager.py`
 - DuckDB schema changes
 - live routing / allocator changes

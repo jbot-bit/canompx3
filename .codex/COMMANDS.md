@@ -9,6 +9,9 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
   `docs/institutional/research_pipeline_contract.md` and `discover/SKILL.md`;
   Codex should run the internal prereg tooling itself instead of asking the
   user to remember scripts.
+- Pipeline status requests must be classified as one of:
+  `standalone_discovery`, `conditional_role`, `confirmation`,
+  `deployment_readiness`, or `operations`.
 - Internal prereg guard: `scripts/infra/prereg-loop.sh --hypothesis-file <yaml>`
   inspects a locked prereg's execution route.
 - Internal prereg execution: `scripts/infra/prereg-loop.sh --hypothesis-file <yaml> --execute`
@@ -54,6 +57,9 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 - Once a prereg exists, use the internal prereg front door instead of manually
   assembling `strategy_discovery.py` or bounded-runner commands. Do not expose
   script syntax as the required user workflow.
+- For "validate this", "is this deployable", or "did it execute" requests, use
+  the `confirmation`, `deployment_readiness`, or `operations` routes; do not
+  collapse those into discovery.
 - Use `blast-radius/SKILL.md` before edits that touch shared interfaces.
 - Use `quant-verify/SKILL.md` or `verify-done/SKILL.md` before closing any material implementation task.
 - Use `health-check/SKILL.md` when the right validation command is unclear.

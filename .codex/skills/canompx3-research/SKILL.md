@@ -32,7 +32,8 @@ Read these first:
 
 ## Default Flow
 
-1. Identify whether the task is discovery, validation, interpretation, or audit.
+1. Identify the primary route: `standalone_discovery`, `conditional_role`,
+   `confirmation`, `deployment_readiness`, `operations`, or audit.
 2. If it is discovery, route through
    `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md` before any scan or
    implementation talk.
@@ -61,6 +62,15 @@ pipeline branch before execution:
 
 Do not describe live routing or `paper_trades` as required for research
 validation. They are deployment / operations gates.
+
+For non-prereg status questions:
+
+- `confirmation` uses candidate provenance plus validator / OOS / FDR evidence.
+- `deployment_readiness` uses `validated_setups`, role contracts,
+  `deployment_scope`, deployable shelf checks, profiles, and runtime
+  constraints.
+- `operations` uses runtime config, journals, monitoring, broker state, and
+  `paper_trades`.
 
 ## Rules
 

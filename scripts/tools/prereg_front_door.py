@@ -16,7 +16,7 @@ This tool is intentionally conservative:
 It does NOT turn bounded research into generic discovery and it does NOT
 promote anything automatically. Promotion remains:
 ``experimental_strategies`` -> ``strategy_validator`` -> ``validated_setups``
--> profile / lane routing -> ``paper_trades``.
+with deployment and ``paper_trades`` as optional later gates.
 """
 
 from __future__ import annotations
@@ -82,6 +82,7 @@ from trading_app.hypothesis_loader import load_hypothesis_metadata  # noqa: E402
 class RouteDecision:
     hypothesis_file: str
     research_question_type: str
+    route_kind: str
     execution_mode: str
     holdout_date: str
     instruments_declared: list[str]
@@ -89,6 +90,12 @@ class RouteDecision:
     instrument: str | None
     orb_minutes: int | None
     writes_to: list[str]
+    status_path: list[str]
+    research_destination: str
+    validation_surface: str
+    deployment_required: bool
+    execution_required: bool
+    forbidden_claims: list[str]
     next_surface: str
     execution_entrypoint: str | None
     notes: list[str]
@@ -158,8 +165,22 @@ def build_route_decision(
     if research_question_type == "standalone_edge":
         if not execution_mode:
             execution_mode = "grid_discovery"
+        route_kind = "standalone_discovery"
         writes_to = ["experimental_strategies"]
-        next_surface = "strategy_validator -> validated_setups -> profile/lane routing -> paper_trades"
+        status_path = ["framed", "discovered", "confirmed", "validated", "deployed", "executed"]
+        research_destination = "experimental_strategies"
+        validation_surface = "validated_setups"
+        deployment_required = False
+        execution_required = False
+        forbidden_claims = [
+            "experimental_strategies is proof",
+            "deployment is automatic",
+            "paper_trades are a validation prerequisite",
+        ]
+        next_surface = (
+            "experimental_strategies -> strategy_validator -> validated_setups "
+            "(optional deployment/profile routing -> optional paper_trades)"
+        )
         if instrument is None:
             notes.append("Instrument is ambiguous; pass --instrument to execute.")
         if orb_minutes is None:
@@ -172,12 +193,37 @@ def build_route_decision(
     elif research_question_type == "conditional_role":
         if not execution_mode:
             execution_mode = "bounded_runner"
+        route_kind = "conditional_role"
         writes_to = ["docs/audit/results (or bounded research artifact only)"]
+        status_path = [
+            "framed",
+            "discovered",
+            "role_tested",
+            "validated_for_role",
+            "optional_deployed",
+            "optional_executed",
+        ]
+        research_destination = "docs/audit/results (or bounded research artifact only)"
+        validation_surface = "role-specific result doc / role contract"
+        deployment_required = False
+        execution_required = False
+        forbidden_claims = [
+            "conditional-role results auto-write to experimental_strategies",
+            "conditional-role results auto-promote to validated_setups",
+            "paper_trades are a validation prerequisite",
+        ]
         next_surface = "bounded result doc -> explicit role decision -> optional translation stage (no auto-promotion)"
         notes.append("Conditional-role preregs do not auto-write to experimental_strategies.")
     else:
         execution_mode = execution_mode or "unknown"
+        route_kind = "unsupported"
         writes_to = ["UNSUPPORTED"]
+        status_path = ["unsupported"]
+        research_destination = "UNSUPPORTED"
+        validation_surface = "UNSUPPORTED"
+        deployment_required = False
+        execution_required = False
+        forbidden_claims = ["unsupported research_question_type cannot execute"]
         next_surface = "UNSUPPORTED"
         notes.append(f"Unsupported research_question_type={research_question_type!r}.")
 
@@ -191,6 +237,7 @@ def build_route_decision(
     return RouteDecision(
         hypothesis_file=str(hypothesis_file),
         research_question_type=research_question_type,
+        route_kind=route_kind,
         execution_mode=execution_mode,
         holdout_date=meta["holdout_date"].isoformat(),
         instruments_declared=instruments,
@@ -198,6 +245,12 @@ def build_route_decision(
         instrument=instrument,
         orb_minutes=orb_minutes,
         writes_to=writes_to,
+        status_path=status_path,
+        research_destination=research_destination,
+        validation_surface=validation_surface,
+        deployment_required=deployment_required,
+        execution_required=execution_required,
+        forbidden_claims=forbidden_claims,
         next_surface=next_surface,
         execution_entrypoint=str(entrypoint) if entrypoint else None,
         notes=notes,
@@ -214,6 +267,7 @@ def _text_render(route: RouteDecision) -> str:
         "Pre-reg route",
         f"  file: {route.hypothesis_file}",
         f"  type: {route.research_question_type}",
+        f"  route: {route.route_kind}",
         f"  mode: {route.execution_mode}",
         f"  holdout: {route.holdout_date}",
         f"  declared instruments: {route.instruments_declared or ['UNSPECIFIED']}",
@@ -221,10 +275,18 @@ def _text_render(route: RouteDecision) -> str:
         f"  resolved instrument: {route.instrument or 'REQUIRED_AT_EXECUTION'}",
         f"  resolved orb_minutes: {route.orb_minutes if route.orb_minutes is not None else 'REQUIRED_AT_EXECUTION'}",
         f"  writes to: {', '.join(route.writes_to)}",
+        f"  status path: {' -> '.join(route.status_path)}",
+        f"  research destination: {route.research_destination}",
+        f"  validation surface: {route.validation_surface}",
+        f"  deployment required: {route.deployment_required}",
+        f"  execution required: {route.execution_required}",
         f"  next: {route.next_surface}",
     ]
     if route.execution_entrypoint:
         lines.append(f"  runner: {route.execution_entrypoint}")
+    if route.forbidden_claims:
+        lines.append("  forbidden claims:")
+        lines.extend(f"    - {claim}" for claim in route.forbidden_claims)
     if route.notes:
         lines.append("  notes:")
         lines.extend(f"    - {note}" for note in route.notes)

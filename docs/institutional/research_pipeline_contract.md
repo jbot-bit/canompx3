@@ -7,7 +7,8 @@
 
 This file defines how discovery, validation, role classification, deployment,
 and execution relate. It exists so agents do not confuse internal command
-plumbing with the user-facing research workflow.
+plumbing with the user-facing research workflow, or confuse research inventory
+with the live book.
 
 ---
 
@@ -51,7 +52,55 @@ These states are separate. Do not collapse them.
 
 ---
 
-## 3. Branches
+## 3. Supported route options
+
+Every research or runtime question should land on exactly one primary route.
+If a request spans routes, answer them in this order: research status first,
+then deployment, then execution.
+
+| Route | Use when | Allowed inputs | Output / destination | Forbidden claim |
+|---|---|---|---|---|
+| `standalone_discovery` | Finding better complete tradeable setups | canonical data + `standalone_edge` prereg | `experimental_strategies`, then validator / `validated_setups` if accepted | A candidate row is proof or deployable by itself |
+| `conditional_role` | Testing a filter, conditioner, allocator, confluence, execution modifier, or diagnostic | canonical data + `conditional_role` prereg with role block | bounded result doc and explicit role decision / contract | It must become a standalone strategy to be useful |
+| `confirmation` | Deciding whether a discovered standalone candidate becomes validated research inventory | candidate provenance + validation / OOS / FDR evidence | `validated_setups` for accepted standalone lanes | Requiring live routing or execution before validation |
+| `deployment_readiness` | Asking whether validated research should enter the live or shadow book | `validated_setups`, role contracts, `deployment_scope`, profiles, lane caps, overlays, broker/account constraints | go/no-go deployment decision | Deployment creates research truth |
+| `operations` | Asking whether a deployed route actually fired or behaved correctly | runtime config, journals, monitoring, broker state, `paper_trades` | execution / monitoring evidence | Execution records validate the original edge |
+
+`scripts/tools/prereg_front_door.py` only inspects prereg-backed research
+branches today: `standalone_edge` and `conditional_role`. `confirmation`,
+`deployment_readiness`, and `operations` questions are still first-class route
+options for agents, but they use their existing repo surfaces rather than this
+prereg tool.
+
+---
+
+## 4. Extra-Strategy Layer
+
+`experimental_strategies` is the extra standalone-candidate inventory.
+
+Use it for discovery outputs from complete tradeable lane candidates:
+
+- one instrument / session / aperture / entry / target / filter shape
+- pre-registered K accounting
+- canonical source data only
+- no deployment authority
+
+Do **not** treat `experimental_strategies` as proof. It can show where improved
+strategy candidates may live, but it is still a candidate shelf until the
+validator / confirmation path accepts or rejects the object.
+
+Do **not** use `experimental_strategies` as deployment truth. Runtime and
+deployment analytics must use the validated and deployable surfaces described in
+§ 6.
+
+Conditional-role findings do not belong in `experimental_strategies` unless the
+prereg explicitly defines a complete standalone lane. A conditioner, allocator,
+confluence, execution modifier, or diagnostic variable may be useful without
+being a standalone strategy.
+
+---
+
+## 5. Branches
 
 ### Standalone edge branch
 
@@ -59,7 +108,11 @@ Use when the object is a complete tradeable lane.
 
 Flow:
 
-`DISCOVERY prereg -> canonical run -> experimental_strategies -> CONFIRMATION / validator -> validated_setups -> optional live routing -> paper_trades`
+`framed -> discovered -> confirmed -> validated -> deployed -> executed`
+
+Operational path:
+
+`prereg -> canonical discovery -> experimental_strategies -> validator / confirmation -> validated_setups -> optional deployment -> optional paper_trades`
 
 Rules:
 
@@ -67,7 +120,10 @@ Rules:
   `orb_outcomes`.
 - Discovery may write candidates to `experimental_strategies`.
 - Confirmation and validation may promote to `validated_setups`.
+- `validated_setups` is the research validation shelf for standalone lanes.
 - Nothing reaches live routing automatically.
+- `paper_trades` are optional execution evidence after deployment, not a
+  prerequisite for validation.
 
 ### Conditional-role branch
 
@@ -76,7 +132,11 @@ modifier, or portfolio/routing input.
 
 Flow:
 
-`DISCOVERY / role prereg -> bounded canonical runner -> result doc -> role decision -> optional role-specific contract -> optional runtime design`
+`framed -> discovered -> confirmed / role-tested -> validated for role -> optional deployment design -> optional execution`
+
+Operational path:
+
+`role prereg -> bounded canonical runner -> result doc -> role decision -> optional role contract -> optional runtime design`
 
 Rules:
 
@@ -86,10 +146,12 @@ Rules:
 - Do not call a conditional signal dead because it failed as a standalone lane.
 - Do not call a conditional signal validated unless its parent, comparator,
   metric, and role-specific promotion target were tested.
+- Until native conditional-role tables exist, the durable evidence is the result
+  doc plus an explicit role contract, not a disguised standalone candidate row.
 
 ---
 
-## 4. Validation is not deployment
+## 6. Validation is not deployment
 
 A strategy does **not** need to pass live routing or create `paper_trades` to be
 research-validated.
@@ -116,9 +178,16 @@ Failure at deployment can block use without invalidating the research edge.
 Failure in research validation kills or parks the candidate before deployment is
 considered.
 
+`validated_setups` is not the live book. It is a validated research shelf. The
+runtime must still check deployability and current account/profile selection,
+including surfaces such as `deployment_scope`,
+`trading_app.validated_shelf.deployable_validated_relation()`, prop profile
+selection, lane caps, overlay contracts, broker constraints, and current
+operator controls.
+
 ---
 
-## 5. Widen versus narrow
+## 7. Widen versus narrow
 
 The correct research posture is:
 
@@ -143,7 +212,84 @@ Bad widening:
 
 ---
 
-## 6. Agent obligation
+## 8. Simulated use cases
+
+### "Find better setups in MGC 5m"
+
+Correct route:
+
+1. Frame the mechanism and K budget.
+2. Write or inspect a `standalone_edge` prereg.
+3. Run canonical discovery into `experimental_strategies`.
+4. Validate survivors through the validator / confirmation path.
+5. Promote only accepted standalone lanes to `validated_setups`.
+
+Allowed conclusion: "discovered candidate", "confirmed candidate", or
+"validated standalone setup" depending on what passed.
+
+Not allowed: "deploy it" merely because it appears in `experimental_strategies`.
+
+### "Test whether MES participation is an allocator"
+
+Correct route:
+
+1. Frame the object as a `conditional_role`.
+2. Define parent population, comparator, primary metric, and promotion target.
+3. Run a bounded role-specific runner.
+4. Write a result doc and role decision.
+5. Design deployment only if the role decision survives.
+
+Allowed conclusion: "allocator evidence passed / failed for the declared
+parent and metric."
+
+Not allowed: forcing the allocator result into `experimental_strategies` or
+calling it dead because it is not standalone.
+
+### "Is this live yet?"
+
+Correct route:
+
+1. Check research status first: discovered, confirmed, or validated.
+2. If validated, check deployability: `deployment_scope`,
+   `deployable_validated_relation()`, profile selection, and runtime route.
+3. Check execution only after deployment: `paper_trades`, journals, monitoring.
+
+Allowed conclusion: "validated but not deployed" or "deployed but not yet
+executed."
+
+Not allowed: requiring `paper_trades` before calling a standalone setup
+validated.
+
+### "Validate this discovered candidate"
+
+Correct route:
+
+1. Confirm the candidate came from an admissible discovery run.
+2. Apply the validator / confirmation criteria for the declared family and
+   holdout.
+3. Promote only passing standalone lanes to `validated_setups`.
+4. Stop before profile selection unless the user asked for deployment.
+
+Allowed conclusion: "validated research shelf row" or "failed confirmation."
+
+Not allowed: treating runtime deployment as a validation criterion.
+
+### "Did the live/shadow path work?"
+
+Correct route:
+
+1. Confirm the object was deployed or shadow-routed first.
+2. Inspect runtime config, journals, monitoring, broker state, and
+   `paper_trades`.
+3. Report execution behavior separately from research truth.
+
+Allowed conclusion: "executed as expected", "did not fire", or "runtime issue."
+
+Not allowed: using an execution record as proof that the edge is valid.
+
+---
+
+## 9. Agent obligation
 
 For a natural-language discovery or role request, the agent must:
 
@@ -163,7 +309,7 @@ is necessary. It should run the repo tooling itself, then summarize the result.
 
 ---
 
-## 7. Grounding
+## 10. Grounding
 
 This contract is grounded in local project doctrine:
 
@@ -180,4 +326,3 @@ This contract is grounded in local project doctrine:
 - `docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md` and
   `docs/institutional/literature/harvey_liu_2015_backtesting.md` for hidden
   trials and multiple-testing discipline
-

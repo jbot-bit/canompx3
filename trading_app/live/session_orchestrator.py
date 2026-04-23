@@ -219,12 +219,11 @@ class SessionOrchestrator:
         # Values are compared against event.risk_points (stop distance, NOT raw ORB size).
         self._orb_caps: dict[tuple[str, str], float] = {}
         _is_profile = portfolio is not None and portfolio.strategies and portfolio.strategies[0].source == "profile"
+        profile_id = None
+        if portfolio is not None and portfolio.name.startswith("profile_"):
+            profile_id = portfolio.name.removeprefix("profile_")
         try:
             from trading_app.prop_profiles import get_lane_registry
-
-            profile_id = None
-            if portfolio is not None and portfolio.name.startswith("profile_"):
-                profile_id = portfolio.name.removeprefix("profile_")
 
             for (label, instrument), info in get_lane_registry(profile_id=profile_id).items():
                 cap = info.get("max_orb_size_pts")
@@ -357,12 +356,23 @@ class SessionOrchestrator:
         # raw baseline (p<1e-9, +272R 2025) does not need ML assistance.
         from trading_app.config import E2_ORDER_TIMEOUT
 
+        role_resolver = None
+        if profile_id is not None:
+            try:
+                from trading_app.conditional_overlays import RoleResolver
+
+                role_resolver = RoleResolver(profile_id, today=self.trading_day)
+                log.info("Conditional overlay RoleResolver enabled for profile=%s", profile_id)
+            except Exception as exc:
+                log.warning("Conditional overlay RoleResolver unavailable: %s", exc)
+
         self.engine = ExecutionEngine(
             portfolio=self.portfolio,
             cost_spec=cost,
             risk_manager=self.risk_mgr,
             live_session_costs=True,
             e2_order_timeout=E2_ORDER_TIMEOUT,
+            role_resolver=role_resolver,
         )
 
         # NOTE: Crash recovery moved after _safety_state init (line ~387).

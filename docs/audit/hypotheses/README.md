@@ -9,6 +9,8 @@
 ## Workflow
 
 0. **Use the agent-facing contract** in [`docs/institutional/research_pipeline_contract.md`](../../institutional/research_pipeline_contract.md). The human-facing workflow is natural language; agents use repo tooling internally.
+   First classify the request as `standalone_discovery`, `conditional_role`,
+   `confirmation`, `deployment_readiness`, or `operations`.
 1. **Read** [`docs/institutional/pre_registered_criteria.md`](../../institutional/pre_registered_criteria.md) — the 12 locked criteria any strategy must meet. Note the v2 amendments (DSR as cross-check, Chordia banded, Criterion 8 contingent on holdout policy).
 2. **Read** [`docs/institutional/finite_data_framework.md`](../../institutional/finite_data_framework.md) — the short-sample methodology.
 3. **Declare holdout policy** — **Mode A (holdout-clean) is operative project-wide as of 2026-04-08 per Amendment 2.7.** Sacred window is 2026-01-01 onwards. Every hypothesis file must include `holdout_date: 2026-01-01` (or earlier) in its metadata. Mode B was briefly declared 2026-04-07 and rescinded the next day; see `../../plans/2026-04-07-holdout-policy-decision.md` for the audit trail.
@@ -32,6 +34,7 @@
 9. **Report results against the pre-registered kill criteria** — no retroactive broadening of the family.
 10. **Classify status correctly** — validation does not require live routing or
     `paper_trades`; deployment does not create research proof.
+    Execution records do not create research proof either.
 
 ---
 
@@ -88,6 +91,9 @@ See [`docs/institutional/hypothesis_registry_template.md`](../../institutional/h
   [`docs/institutional/research_pipeline_contract.md`](../../institutional/research_pipeline_contract.md):
   discovered, confirmed, validated, deployed, and executed are different
   claims.
+- **Pipeline route must be explicit.** Use one primary route:
+  `standalone_discovery`, `conditional_role`, `confirmation`,
+  `deployment_readiness`, or `operations`.
 
 ---
 

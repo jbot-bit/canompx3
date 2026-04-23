@@ -79,6 +79,9 @@ Route to the correct source:
 - For research pipeline status, use
   `docs/institutional/research_pipeline_contract.md`: discovered, confirmed,
   validated, deployed, and executed are separate claims.
+- Route research/runtime questions to one primary option before acting:
+  `standalone_discovery`, `conditional_role`, `confirmation`,
+  `deployment_readiness`, or `operations`.
 - For new-edge discovery, noisy ideas, chart reads, or hypothesis triage, use
   `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md` as the front door before
   any scan, prereg, or implementation talk.
@@ -89,6 +92,10 @@ Route to the correct source:
   route before execution. Execute only after confirming the branch is correct:
   - `standalone_edge` -> `experimental_strategies` -> validator -> `validated_setups`
   - `conditional_role` -> bounded runner/result doc -> explicit role decision
+- For `confirmation`, `deployment_readiness`, and `operations` questions, do
+  not use the prereg front door as the authority. Use the validator / validated
+  shelf, deployment profile checks, or runtime / `paper_trades` evidence
+  respectively.
 - For institutional research review prompts, prefer the compact runtime rubric in `docs/prompts/INSTITUTIONAL_RESEARCH_REVIEW_MINI.md` instead of re-pasting long prompt blocks.
 
 ## Verification Defaults

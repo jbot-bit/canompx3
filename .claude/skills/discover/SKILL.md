@@ -30,6 +30,8 @@ The front-door questions are:
 - what role is this best suited for?
 - is this a current-stack test, architecture problem, new-data problem, or dead
   path?
+- is the request really discovery, confirmation, deployment readiness, or
+  operations?
 
 ## Step 0.5: Human Interface Rule
 
@@ -90,6 +92,11 @@ When a prereg already exists, inspect its branch internally before execution:
   / confirmation -> possible `validated_setups`
 - `conditional_role` -> bounded runner / result doc -> explicit role decision
   only
+
+If the request is "validate this", "is this deployable", or "did it execute",
+leave discovery mode and route to `confirmation`, `deployment_readiness`, or
+`operations` instead. The discovery-specific routes are
+`standalone_discovery` and `conditional_role`.
 
 Do not imply a strategy must reach live routing or `paper_trades` to be
 validated. Validation and deployment are separate gates.

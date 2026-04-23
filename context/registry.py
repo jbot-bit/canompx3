@@ -28,6 +28,7 @@ from context.institutional import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONTEXT_DOCS_DIR = PROJECT_ROOT / "docs" / "context"
+CONTEXT_GENERATED_NOTICE = "Generated from `context/registry.py` and `context/institutional.py`. Do not edit by hand."
 
 FALLBACK_READ_SET: tuple[str, ...] = (
     "AGENTS.md",
@@ -294,6 +295,7 @@ TASKS: dict[str, TaskManifest] = {
             "RESEARCH_RULES.md",
             "TRADING_RULES.md",
             "docs/STRATEGY_BLUEPRINT.md",
+            "docs/institutional/research_pipeline_contract.md",
             "docs/institutional/pre_registered_criteria.md",
             "docs/institutional/mechanism_priors.md",
             "docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md",
@@ -677,6 +679,8 @@ def render_source_catalog_markdown() -> str:
     lines = [
         "# Context Source Catalog",
         "",
+        CONTEXT_GENERATED_NOTICE,
+        "",
         "Generated catalog of canonical routing sources and published read models.",
         "",
         "## Domains",
@@ -706,6 +710,8 @@ def render_task_routes_markdown() -> str:
     lines = [
         "# Task Routes",
         "",
+        CONTEXT_GENERATED_NOTICE,
+        "",
         "Generated canonical task routes for cold-start orientation.",
         "",
     ]
@@ -733,6 +739,8 @@ def render_task_routes_markdown() -> str:
 def render_institutional_markdown() -> str:
     lines = [
         "# Institutional Routing Contracts",
+        "",
+        CONTEXT_GENERATED_NOTICE,
         "",
         "Generated registry of concepts, protocols, answer contracts, and briefing rules.",
         "",
@@ -763,6 +771,8 @@ def render_readme_markdown() -> str:
     lines = [
         "# Context Routing",
         "",
+        CONTEXT_GENERATED_NOTICE,
+        "",
         "This directory contains generated docs for the canonical task routing registry.",
         "",
         "## Files",
@@ -770,7 +780,5 @@ def render_readme_markdown() -> str:
         "- `source-catalog.md` — published live views, packs, variables, and verification steps",
         "- `task-routes.md` — deterministic task routes",
         "- `institutional-contracts.md` — concepts, protocols, and briefing contracts",
-        "",
-        "These docs are generated from `context/registry.py` and `context/institutional.py`.",
     ]
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"

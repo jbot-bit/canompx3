@@ -9,14 +9,14 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-24
-- **Commit:** current HEAD — `research(cost): add mes tbbo slippage pilot`
-- **Summary:** Cleaned the remaining dirty overlay work and added/executed the grounded MES E2 TBBO slippage pilot at `research/mes_e2_tbbo_slippage_pilot.py`. The pilot is cost-realism validation only, scoped to current deployable MES sessions (`CME_PRECLOSE`, `COMEX_SETTLE`, `SINGAPORE_OPEN`, `US_DATA_830`) and delegates fill logic to `research.databento_microstructure.reprice_e2_entry`.
-- **Audit Addendum:** MES TBBO pilot v1 ran 40/40 valid reprices with PASS: median=0 ticks, p95=0, max=0, 100% <= 1 modeled tick. Result doc: `docs/audit/results/2026-04-24-mes-e2-slippage-pilot-v1.md`. Modeled MES friction unchanged; routine MES cost-realism debt is closed, while event-tail debt remains a known-unknown. No live order routing, sizing, validator behavior, or schema behavior changed.
+- **Commit:** pending merge — local `research(cost): add mes tbbo slippage pilot` on top of remote doc-hygiene / PR48 Phase 2 work.
+- **Summary:** Integrated the remote documentation truth-hygiene and PR48 Phase 2 state with the executed MES E2 TBBO slippage pilot. The MES pilot is cost-realism validation only, scoped to current deployable MES sessions (`CME_PRECLOSE`, `COMEX_SETTLE`, `SINGAPORE_OPEN`, `US_DATA_830`) and delegates fill logic to `research.databento_microstructure.reprice_e2_entry`.
+- **Audit Addendum:** MES TBBO pilot v1 ran 40/40 valid reprices with PASS: median=0 ticks, p95=0, max=0, 100% <= 1 modeled tick. Result doc: `docs/audit/results/2026-04-24-mes-e2-slippage-pilot-v1.md`. Modeled MES friction unchanged; routine MES cost-realism debt is closed, while event-tail debt remains a known-unknown. Remote doc hygiene remains enforced by `pipeline/check_drift.py`; no live order routing, sizing, validator behavior, or schema behavior changed by the MES pilot.
 
 ## Next Steps — Active
 1. Do not reopen `mnq_parent_structure_shadow_buckets_v1`. Exact-parent structure shadow buckets for these MNQ lanes are now closed `KILL` and should not be rescued under renamed score language.
 2. PR48 is no longer a pooled promotion story. Current truth is narrower: `MGC:cont_exec` is still the strongest live branch, but it now has one exact next move only: `shadow_only` overlay contract first; `MES:q45_exec` still needs a bridge; `DUO` and `MNQ:shadow_addon` remain shadow-only.
-3. Do not reopen generic PR48 confluence discovery. The exact next PR48 move after Phase 1 is operator observation / Phase 2 design for a native conditional-role surface if shadow visibility proves useful; do not jump straight to runtime sizing or schema-wide conditional rebuild.
+3. PR48 Phase 2 implemented (RoleResolver). The next move is operator observation of the MGC shadow context in live logs/dashboard; do not promote to live sizing without a separate architecture design.
 4. Keep pulse/ralph/handoff surfaces aligned as each thread closes so finished work does not linger as fake backlog.
 5. Do not reopen broad GC proxy exploration from the MGC payoff-compression result; if revisited, keep it to a narrow MGC exit-shape prereg.
 6. Do not reopen the L1 EUROPE_FLOW pre-break path with banned `break_*` or ATR-normalized replacement variants; the restored frozen `K=2` family is now a documented `KILL`.
@@ -26,9 +26,10 @@
 10. Prior-day bridge work is no longer missing locks. The next honest move on that branch is execution / triage among already-locked hypotheses, not another broad prior-day prereg-writing pass.
 11. Do not describe `lane_allocation.json` as unconditional live truth. For audit claims, pair it with allocator replay / SR-liveness context.
 12. Do not cite `docs/audit/results/2026-04-21-ovnrng-allocator-routing.md` without the rolling-CV retraction. Current truth is the router `KILL`, not the earlier single-fold positive.
-13. Track D is now a documented future system-upgrade branch, not an immediate excuse to abandon current-stack open work. Use `docs/plans/2026-04-23-microstructure-gate0-design.md` for the design truth: start with a cheapest top-of-book Gate 0 on one exact lane, escalate to MBO only if L1/TBBO features prove signal, and do not describe it as “OHLCV exhausted” or as an HFT build.
+13. Track D MNQ COMEX_SETTLE Gate 0 prereg is locked as `DESIGN_ONLY`. It is not executable yet; the next move is Databento top-of-book table/runner design before any scan.
 14. Shadow-bucket re-audit reproduced cleanly from canonical data. Keep the verdict narrow: exact-parent `MNQ COMEX_SETTLE RR1.5 long PD_CLEAR_LONG` and `MNQ US_DATA_1000 O15 RR1.5` prior-day structure score buckets are `KILL` for the tested `shadow_only` parent-value role, but that is not a global kill of the broader prior-day geometry family. The checked-in result doc was refreshed only to fix stale prereg provenance metadata after the later stamp commit.
 15. MES TBBO slippage pilot is executed and PASS. Do not rerun paid pulls unless a new scope is explicitly needed; use cached `research/data/tbbo_mes_pilot/slippage_results.csv` and `docs/audit/results/2026-04-24-mes-e2-slippage-pilot-v1.md` as the measured routine-slippage evidence.
+16. Doc hygiene is now enforced by `pipeline/check_drift.py`, not by another prompt surface. Generated dynamic facts must come from generators with source/do-not-edit banners; authored docs should carry decisions, contracts, snapshots, or results with explicit provenance.
 
 ## Blockers / Warnings
 - Worktree remains intentionally dirty with unrelated in-flight threads; do not revert them blindly.
@@ -63,3 +64,4 @@
 - `docs/audit/results/2026-04-23-mnq-parent-structure-shadow-buckets-v1.md`
 - `research/mnq_parent_structure_shadow_buckets_v1.py`
 - `docs/plans/2026-04-23-microstructure-gate0-design.md`
+- `docs/plans/2026-04-23-research-pipeline-sync.md`

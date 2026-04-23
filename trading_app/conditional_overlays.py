@@ -439,3 +439,59 @@ def read_overlay_states(
         "valid": all(overlay["valid"] for overlay in overlays),
         "overlays": overlays,
     }
+
+
+class RoleResolver:
+    """Native engine interface for resolving conditional-role decisions."""
+
+    def __init__(self, profile_id: str, today: date | None = None, db_path: Path = GOLD_DB_PATH):
+        self.profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
+        self.today = today or date.today()
+        self.db_path = db_path
+        # Pre-load all overlay states for this profile and day
+        self.state = read_overlay_states(self.profile_id, today=self.today, db_path=self.db_path)
+
+    def get_overlay_context(self, strategy_id: str, session: str, direction: str) -> dict[str, dict[str, Any]]:
+        """Return matching overlay decisions for a specific trade candidate."""
+        if not self.state.get("available") or not self.state.get("valid"):
+            return {}
+
+        context: dict[str, dict[str, Any]] = {}
+        for overlay in self.state.get("overlays", []):
+            if not overlay.get("valid") or overlay.get("status") != "ready":
+                continue
+
+            # Check if this strategy_id matches the overlay spec
+            spec = CONDITIONAL_OVERLAYS.get(overlay["overlay_id"])
+            if not spec:
+                continue
+
+            # strategy_id check: instrument + orb_minutes + entry_model + rr_target match
+            if spec.instrument not in strategy_id:
+                continue
+            if f"O{spec.orb_minutes}" not in strategy_id:
+                continue
+            if spec.entry_model not in strategy_id:
+                continue
+
+            # Match on session and direction within the overlay rows
+            matching_row = next(
+                (
+                    row
+                    for row in overlay.get("rows", [])
+                    if row["session"] == session and row["direction"] == direction and row["status"] == "ready"
+                ),
+                None,
+            )
+
+            if matching_row:
+                context[spec.overlay_id] = {
+                    "mode": overlay["mode"],
+                    "role": overlay["role"],
+                    "bucket": matching_row["bucket"],
+                    "size_multiplier": matching_row["size_multiplier"],
+                    "feature_key": matching_row["feature_key"],
+                    "feature_value": matching_row["feature_value"],
+                }
+
+        return context

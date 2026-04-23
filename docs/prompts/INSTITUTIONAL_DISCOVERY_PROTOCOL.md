@@ -232,8 +232,8 @@ Use it before:
 
 ## Operator Loop
 
-After the discovery framing is complete, use the prereg front door instead of
-hand-assembling commands:
+After the discovery framing is complete, the agent/operator uses the prereg
+front door internally instead of hand-assembling commands:
 
 ```bash
 scripts/infra/prereg-loop.sh \
@@ -248,8 +248,10 @@ The front door reports the pipeline branch before execution:
   auto-write to `experimental_strategies`.
 - Nothing promotes directly to `validated_setups`, profile routing, or
   `paper_trades`.
+- `confirmation`, `deployment_readiness`, and `operations` are separate route
+  options after discovery; do not force them through the prereg front door.
 
-Execute only after the route is correct:
+Execute internally only after the route is correct:
 
 ```bash
 scripts/infra/prereg-loop.sh \
@@ -266,7 +268,7 @@ The institutional pattern is:
 
 1. Build several small prereg families from distinct theories.
 2. Keep each family K declared and under MinBTL.
-3. Run them independently through `scripts/infra/prereg-loop.sh`.
+3. Run them independently through the prereg front door.
 4. Promote only survivors to the role/translation layer.
 
 Good expansion axes:
@@ -319,6 +321,9 @@ Use `docs/institutional/research_pipeline_contract.md` as the status ladder:
 - `validated` does not require live routing
 - `deployed` is not research proof
 - `paper_trades` are operational records, not discovery evidence
+
+Use one primary route name before acting: `standalone_discovery`,
+`conditional_role`, `confirmation`, `deployment_readiness`, or `operations`.
 
 The prereg front door is an internal routing guard. Use it to prevent branch
 confusion, but do not present command execution as the required user workflow.
