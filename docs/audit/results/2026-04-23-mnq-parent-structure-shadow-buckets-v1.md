@@ -2,7 +2,7 @@
 
 **Pre-reg:** `docs/audit/hypotheses/2026-04-23-mnq-parent-structure-shadow-buckets-v1.yaml`
 **Pre-reg commit SHA field:** `50fabff3777a54e39e0f4006890907c644c01c12`
-**Pre-reg git lock commit:** `50fabff3777a54e39e0f4006890907c644c01c12`
+**Pre-reg git lock commit:** `094adda9b00e79f64064da89a1c72a6445478f81`
 **Canonical DB path:** `/mnt/c/users/joshd/canompx3/gold.db`
 **Latest canonical trading day:** `2026-04-16`
 **Canonical layers:** `daily_features`, `orb_outcomes`
@@ -121,4 +121,3 @@ NEXT STEPS:
 
 - Runner: `research/mnq_parent_structure_shadow_buckets_v1.py`
 - Command: `./.venv-wsl/bin/python research/mnq_parent_structure_shadow_buckets_v1.py --output docs/audit/results/2026-04-23-mnq-parent-structure-shadow-buckets-v1.md`
-
