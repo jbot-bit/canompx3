@@ -1,0 +1,117 @@
+# Hypothesis Registry — 2026-04-22 pr48 role followthrough v1
+#
+# Locked: 2026-04-22T15:30:00+10:00
+# Author: Codex session
+# Committing commit hash: TO_BE_STAMPED
+# Data horizon: 6.65yr clean MNQ/MES + 2.70yr clean MGC
+# Intended discovery holdout: 2026-01-01
+
+metadata:
+  name: "pr48_role_followthrough_v1"
+  purpose: "Bounded follow-through study for PR48 role candidates using daily policy deltas, drawdown, and executable drag diagnostics."
+  date_locked: "2026-04-22T15:30:00+10:00"
+  commit_sha: "7e3500e0"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 6
+  testing_mode: "family"
+  research_question_type: "conditional_role"
+
+hypotheses:
+  - id: 1
+    name: "MNQ participation candidate follow-through"
+    theory_citation: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    economic_basis: |
+      If participation is useful on MNQ, the lift should appear as a role-level
+      daily policy delta rather than as a narrow top-bucket story. The correct
+      question is whether Q4+Q5 or a continuous weight map beats the parent on
+      daily policy value after freezing IS breakpoints.
+    role:
+      kind: "allocator"
+      parent: "All canonical MNQ O5 E2 CB1 RR1.5 trades across active sessions and both directions."
+      comparator: "Parent vs Q4+Q5 filter delta and parent vs continuous sizer delta, evaluated on daily policy R."
+      primary_metric: "daily_policy_delta_r"
+      promotion_target: "shadow_only"
+    filter:
+      type: "REL_VOL_STATE"
+      column: "rel_vol_{session}"
+      thresholds: ["q4_plus_q5", "continuous_0.5_0.75_1.0_1.25_1.5"]
+    scope:
+      instruments: [MNQ]
+      sessions: [ALL_CANONICAL_5M]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 2
+    kill_criteria:
+      - "Neither Q4+Q5 nor continuous beats parent on IS daily delta after BH at the family K."
+      - "IS winner fails OOS direction match on daily delta."
+      - "Continuous desired sizing shows material positive IS edge but loses most of it in executable single-account approximation."
+
+  - id: 2
+    name: "MES participation candidate follow-through"
+    theory_citation: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    economic_basis: |
+      MES participation should improve the trade population as a filter or
+      allocator. The follow-through question is whether the daily policy delta
+      versus parent is positive and stable enough to justify continued
+      promotion work.
+    role:
+      kind: "filter"
+      parent: "All canonical MES O5 E2 CB1 RR1.5 trades across active sessions and both directions."
+      comparator: "Parent vs Q4+Q5 filter delta and parent vs continuous sizer delta, evaluated on daily policy R."
+      primary_metric: "daily_policy_delta_r"
+      promotion_target: "deployable_filter_or_sizer"
+    filter:
+      type: "REL_VOL_STATE"
+      column: "rel_vol_{session}"
+      thresholds: ["q4_plus_q5", "continuous_0.5_0.75_1.0_1.25_1.5"]
+    scope:
+      instruments: [MES]
+      sessions: [ALL_CANONICAL_5M]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 2
+    kill_criteria:
+      - "Neither Q4+Q5 nor continuous beats parent on IS daily delta after BH at the family K."
+      - "IS winner fails OOS direction match on daily delta."
+      - "Best role remains operationally fragile after drawdown and executable-drag diagnostics."
+
+  - id: 3
+    name: "MGC participation candidate follow-through"
+    theory_citation: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    economic_basis: |
+      MGC participation likely expresses as a role-level selection or sizing
+      improvement. The follow-through question is whether that lift survives
+      daily aggregation, drawdown review, and a simple executable approximation.
+    role:
+      kind: "allocator"
+      parent: "All canonical MGC O5 E2 CB1 RR1.5 trades across active sessions and both directions."
+      comparator: "Parent vs Q4+Q5 filter delta and parent vs continuous sizer delta, evaluated on daily policy R."
+      primary_metric: "daily_policy_delta_r"
+      promotion_target: "deployable_filter_or_sizer"
+    filter:
+      type: "REL_VOL_STATE"
+      column: "rel_vol_{session}"
+      thresholds: ["q4_plus_q5", "continuous_0.5_0.75_1.0_1.25_1.5"]
+    scope:
+      instruments: [MGC]
+      sessions: [ALL_CANONICAL_5M]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 2
+    kill_criteria:
+      - "Neither Q4+Q5 nor continuous beats parent on IS daily delta after BH at the family K."
+      - "IS winner fails OOS direction match on daily delta."
+      - "Best role remains operationally fragile after drawdown and executable-drag diagnostics."
+
+total_hypothesis_count: 3
+total_expected_trials: 6
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"

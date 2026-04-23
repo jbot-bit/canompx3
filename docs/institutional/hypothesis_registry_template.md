@@ -29,6 +29,7 @@ metadata:
   data_horizon_years_proxy: 16.0
   holdout_date: "2026-01-01"
   total_expected_trials: 0   # sum across all hypotheses; must be ≤ 300 (clean) or 2000 (proxy)
+  research_question_type: "standalone_edge"   # or "conditional_role"
 
   # ---- Phase 4 Stage 4.1b: MinBTL proxy-mode opt-in (OPTIONAL) ----
   # By default, Criterion 2's clean-data bound of 300 trials applies.
@@ -117,6 +118,18 @@ hypotheses:
   #  - scope (instruments, sessions, rr_targets, entry_models, confirm_bars, stop_multipliers)
   #  - expected_trial_count (sum across all hypotheses ≤ budget)
   #  - kill_criteria (must be pre-registered, not post-hoc)
+  #
+  # If metadata.research_question_type == "conditional_role", each hypothesis
+  # must ALSO include:
+  #
+  #   role:
+  #     kind: "filter" | "conditioner" | "allocator" | "confluence" | "execution" | "standalone"
+  #     parent: "<exact parent population>"
+  #     comparator: "<exact comparison being judged>"
+  #     primary_metric: "<policy_ev_per_opportunity_r / selected_trade_mean_r / portfolio_ev_r / ...>"
+  #     promotion_target: "<shadow_only / deployable_filter / portfolio_only / ...>"
+  #
+  # This is enforced by trading_app.hypothesis_loader for role-aware studies.
 
 total_hypothesis_count: 2
 total_expected_trials: 36   # must equal sum of expected_trial_count above
@@ -143,6 +156,16 @@ budget_check:
 ### Step 1 — Write the hypothesis file
 
 Copy the template above, fill in hypotheses with real theory citations and specifications. Do not skip the theory citation step. A hypothesis without a theory citation is by definition a data-mined pattern and cannot be accepted under `pre_registered_criteria.md` § Criterion 1.
+
+If the study is about a conditional state variable rather than a new standalone lane, set:
+
+```yaml
+metadata:
+  research_question_type: "conditional_role"
+```
+
+Then add a `role:` block to every hypothesis. This prevents a filter or
+allocator question from being judged as if it were a standalone strategy.
 
 ### Step 2 — Compute MinBTL sanity check
 
@@ -228,6 +251,42 @@ See the main template section above for the good pattern. Key features of a good
 - Kill criteria are concrete and pre-registered
 - Holdout date is committed to
 
+### Example — conditional role study
+
+```yaml
+metadata:
+  name: "pr48_conditional_role_implementation_v1"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 9
+  research_question_type: "conditional_role"
+
+hypotheses:
+  - id: 1
+    name: "MES participation acts as a filter or allocator"
+    theory_citation: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    economic_basis: "Participation state should improve selection or sizing quality."
+    role:
+      kind: "filter"
+      parent: "All canonical MES O5 E2 CB1 RR1.5 trades"
+      comparator: "Parent vs Q4+Q5 vs Q5 vs continuous quintile sizer"
+      primary_metric: "policy_ev_per_opportunity_r"
+      promotion_target: "deployable_filter_or_sizer"
+    filter:
+      type: "REL_VOL_STATE"
+      column: "rel_vol_{session}"
+      thresholds: ["q4_plus_q5", "q5_only", "continuous"]
+    scope:
+      instruments: [MES]
+      sessions: [ALL_CANONICAL_5M]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 3
+    kill_criteria:
+      - "No role improves policy EV versus parent"
+```
+
 ---
 
 ## Related files
@@ -237,3 +296,4 @@ See the main template section above for the good pattern. Key features of a good
 - `pre_registered_criteria.md` — the 12 locked criteria hypotheses must meet
 - `literature/bailey_et_al_2013_pseudo_mathematics.md` — MinBTL justification
 - `literature/lopez_de_prado_2020_ml_for_asset_managers.md` — theory-first principle (pending)
+- `conditional-edge-framework.md` — when the right question is filter / allocator / confluence instead of standalone
