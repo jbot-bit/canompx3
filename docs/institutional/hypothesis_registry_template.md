@@ -6,6 +6,10 @@
 
 **Authority:** Discovery code reads this file and restricts itself to the pre-registered specifications. A drift check verifies validated_setups entries match a registered hypothesis.
 
+**Operator contract:** The human-facing workflow is natural language. Agents use
+this file and the prereg front door internally; users should not need to
+remember command syntax. See `docs/institutional/research_pipeline_contract.md`.
+
 ---
 
 ## Template format
@@ -197,6 +201,10 @@ git commit -m "hypotheses: pre-register <slug> for YYYY-MM-DD discovery run"
 
 ### Step 4 — Run discovery with the file
 
+Agent/operator note: this is an internal routing step. If a human asks to run
+the discovery, the agent should execute the correct branch and report the
+result. Do not make the human memorize this command.
+
 ```bash
 scripts/infra/prereg-loop.sh \
   --hypothesis-file docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml \
@@ -226,6 +234,10 @@ scripts/infra/prereg-loop.sh \
 ### Step 5 — Apply criteria from `pre_registered_criteria.md`
 
 After discovery completes, each candidate is evaluated against all 12 criteria. No candidate is "validated" until all 12 pass.
+
+Validation does not require live routing or `paper_trades`. Those are deployment
+and operations gates. A candidate can be validated research inventory and still
+not be selected for the live book.
 
 ### Step 6 — Write a post-mortem
 

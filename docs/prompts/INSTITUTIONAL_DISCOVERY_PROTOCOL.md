@@ -306,6 +306,25 @@ This prompt is for discovery framing and triage only.
 
 ---
 
+## Agent / Operator Contract
+
+The human-facing interface is natural language. If the user asks to discover,
+test, classify, validate, or audit a trading idea, the agent must route the work
+through the project pipeline itself. The user should not be expected to remember
+script names, Python modules, or command flags.
+
+Use `docs/institutional/research_pipeline_contract.md` as the status ladder:
+
+- `discovered` is not necessarily `validated`
+- `validated` does not require live routing
+- `deployed` is not research proof
+- `paper_trades` are operational records, not discovery evidence
+
+The prereg front door is an internal routing guard. Use it to prevent branch
+confusion, but do not present command execution as the required user workflow.
+
+---
+
 ## Decision Standard
 
 A good answer produced under this protocol must:

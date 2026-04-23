@@ -71,12 +71,17 @@ Route to the correct source:
   - Use `.claude/skills/pinecone-assistant/SKILL.md`
 - Academic methodology: use local PDFs in `resources/` (BH FDR, walk-forward, deflated Sharpe).
 - For claim-heavy work, downgrade conclusions unless they are explicitly tagged or supportable as `MEASURED`; `INFERRED` and `UNSUPPORTED` are valid end states, not failures.
+- For research pipeline status, use
+  `docs/institutional/research_pipeline_contract.md`: discovered, confirmed,
+  validated, deployed, and executed are separate claims.
 - For new-edge discovery, noisy ideas, chart reads, or hypothesis triage, use
   `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md` as the front door before
   any scan, prereg, or implementation talk.
-- Once a prereg exists, use `scripts/infra/prereg-loop.sh --hypothesis-file <yaml>`
-  to inspect the route before execution. Execute with `--execute` only after
-  confirming the branch is correct:
+- The human-facing interface is natural language. When the user asks to find,
+  test, classify, validate, or audit an idea, Codex should run the repo tooling
+  internally and report the result rather than asking the user to call scripts.
+- Once a prereg exists, use the prereg front door internally to inspect the
+  route before execution. Execute only after confirming the branch is correct:
   - `standalone_edge` -> `experimental_strategies` -> validator -> `validated_setups`
   - `conditional_role` -> bounded runner/result doc -> explicit role decision
 - For institutional research review prompts, prefer the compact runtime rubric in `docs/prompts/INSTITUTIONAL_RESEARCH_REVIEW_MINI.md` instead of re-pasting long prompt blocks.

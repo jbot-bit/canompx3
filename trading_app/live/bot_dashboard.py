@@ -589,6 +589,14 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
                 heartbeat_age_s = 9999
 
     operator_profile = _choose_operator_profile(profile, state)
+    overlay_summary = None
+    if operator_profile:
+        try:
+            from trading_app.lifecycle_state import read_lifecycle_state
+
+            overlay_summary = read_lifecycle_state(operator_profile).get("conditional_overlays")
+        except Exception as exc:
+            overlay_summary = {"available": False, "error": str(exc)}
     broker_summary = _collect_broker_status()
     data_summary = _collect_data_status()
     alert_summary = _collect_alert_summary(profile=operator_profile, mode=None if raw_mode == "STOPPED" else raw_mode)
@@ -675,6 +683,34 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
         }
     )
 
+    if overlay_summary and overlay_summary.get("available"):
+        overlays = overlay_summary.get("overlays", [])
+        invalid = [row for row in overlays if not row.get("valid")]
+        ready = [row for row in overlays if row.get("status") == "ready"]
+        if invalid:
+            detail = ", ".join(f"{row.get('overlay_id')}: {row.get('reason') or 'invalid'}" for row in invalid)
+            checks.append({"name": "Conditional overlays", "status": "warn", "detail": detail})
+        elif ready:
+            detail = ", ".join(
+                f"{row.get('overlay_id')} ready ({row.get('summary', {}).get('ready_count', 0)}/{row.get('summary', {}).get('row_count', 0)} rows)"
+                for row in ready
+            )
+            checks.append({"name": "Conditional overlays", "status": "info", "detail": detail})
+        else:
+            detail = (
+                ", ".join(f"{row.get('overlay_id')} {row.get('status')}" for row in overlays)
+                or "No overlay rows available"
+            )
+            checks.append({"name": "Conditional overlays", "status": "info", "detail": detail})
+    elif overlay_summary and overlay_summary.get("error"):
+        checks.append(
+            {
+                "name": "Conditional overlays",
+                "status": "warn",
+                "detail": f"Overlay state unavailable: {overlay_summary['error']}",
+            }
+        )
+
     if alert_summary.get("status") == "error":
         checks.append(
             {
@@ -712,6 +748,7 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
         "broker_summary": broker_summary,
         "data_summary": data_summary,
         "alert_summary": alert_summary,
+        "conditional_overlays": overlay_summary,
     }
 
 

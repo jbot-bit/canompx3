@@ -5,8 +5,15 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 ## High-Value Commands
 
 - `discover/SKILL.md`: discovery front door for new edge ideas and hypothesis triage
-- `scripts/infra/prereg-loop.sh --hypothesis-file <yaml>`: inspect a locked prereg's execution route
-- `scripts/infra/prereg-loop.sh --hypothesis-file <yaml> --execute`: run a locked prereg through the correct branch (`experimental_strategies` for `standalone_edge`, bounded runner for `conditional_role`)
+- Natural-language discovery requests route through
+  `docs/institutional/research_pipeline_contract.md` and `discover/SKILL.md`;
+  Codex should run the internal prereg tooling itself instead of asking the
+  user to remember scripts.
+- Internal prereg guard: `scripts/infra/prereg-loop.sh --hypothesis-file <yaml>`
+  inspects a locked prereg's execution route.
+- Internal prereg execution: `scripts/infra/prereg-loop.sh --hypothesis-file <yaml> --execute`
+  runs a locked prereg through the correct branch (`experimental_strategies` for
+  `standalone_edge`, bounded runner for `conditional_role`).
 - `health-check/SKILL.md`: repo health and validation sweep
 - `validate-instrument/SKILL.md`: instrument validation workflow
 - `rebuild-outcomes/SKILL.md`: outcome rebuild workflow
@@ -42,8 +49,9 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
   workflow is already clear.
 - Start with `discover/SKILL.md` when the user is exploring a new edge, noisy
   idea, chart read, or hypothesis direction.
-- Once a prereg exists, use `scripts/infra/prereg-loop.sh` instead of manually
-  assembling `strategy_discovery.py` or bounded-runner commands.
+- Once a prereg exists, use the internal prereg front door instead of manually
+  assembling `strategy_discovery.py` or bounded-runner commands. Do not expose
+  script syntax as the required user workflow.
 - Use `blast-radius/SKILL.md` before edits that touch shared interfaces.
 - Use `quant-verify/SKILL.md` or `verify-done/SKILL.md` before closing any material implementation task.
 - Use `health-check/SKILL.md` when the right validation command is unclear.

@@ -1,6 +1,6 @@
 # PR48 MGC shadow-only overlay contract
 
-**Status:** active bounded stage  
+**Status:** implemented Phase 1
 **Date:** 2026-04-23  
 **Purpose:** implement the smallest honest carrier for frozen `MGC:cont_exec` as a `shadow_only` profile-local conditional overlay.
 
@@ -61,6 +61,14 @@ fail-closed conditional overlay object without:
    - fail-closed behavior demonstrated
    - no execution-path behavior change
 
+## Implemented surface
+
+- `trading_app/conditional_overlays.py` owns the static `pr48_mgc_cont_exec_v1` shadow-only overlay spec and derived-state helpers.
+- `trading_app/lifecycle_state.py` exposes conditional overlay state through the shared lifecycle reader.
+- `trading_app/pre_session_check.py` reports overlay readiness / invalidity as a non-blocking operator check.
+- `trading_app/live/bot_dashboard.py` exposes overlay state in the operator payload and dashboard checks.
+- Tests cover auto-refresh, invalid-artifact degradation, non-finite feature handling, lifecycle propagation, pre-session messaging, and dashboard visibility.
+
 ## Rules
 
 - Do not write to `validated_setups`
@@ -88,7 +96,7 @@ Not allowed in this stage:
 
 ## Final verdict options
 
-- `IMPLEMENT`
+- `IMPLEMENT` — selected for Phase 1
 - `PARK`
 - `REDESIGN`
 

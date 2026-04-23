@@ -278,6 +278,69 @@ def test_build_operator_payload_includes_recent_alert_check(monkeypatch):
     assert "FEED STALE" in alerts_check["detail"]
 
 
+def test_build_operator_payload_includes_conditional_overlay_check(monkeypatch):
+    monkeypatch.setattr(
+        bot_dashboard,
+        "read_state",
+        lambda: {"mode": "STOPPED", "heartbeat_age_s": 9999, "account_name": "profile_topstep_50k"},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_broker_status",
+        lambda: {"enabled_count": 1, "connected_count": 1, "status": "ok"},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_data_status",
+        lambda: {"status": "ok", "any_stale": False, "instruments": {}},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_alert_summary",
+        lambda **_: {
+            "status": "ok",
+            "alerts": [],
+            "total": 0,
+            "counts": {"critical": 0, "warning": 0, "info": 0},
+            "recent_window_minutes": 30,
+            "recent_counts": {"critical": 0, "warning": 0, "info": 0},
+            "latest": None,
+        },
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_profile_session_ambiguity",
+        lambda profile_id: {"status": "pass", "detail": f"ok:{profile_id}"},
+    )
+    monkeypatch.setitem(
+        bot_dashboard._preflight_cache,
+        "topstep_50k",
+        {"status": "pass", "passed": 5, "total": 5},
+    )
+
+    overlay_state = {
+        "available": True,
+        "valid": True,
+        "overlays": [
+            {
+                "overlay_id": "pr48_mgc_cont_exec_v1",
+                "valid": True,
+                "status": "ready",
+                "summary": {"ready_count": 4, "row_count": 18},
+            }
+        ],
+    }
+    with patch(
+        "trading_app.lifecycle_state.read_lifecycle_state", return_value={"conditional_overlays": overlay_state}
+    ):
+        payload = _build_operator_payload("topstep_50k")
+
+    overlay_check = next(check for check in payload["checks"] if check["name"] == "Conditional overlays")
+    assert overlay_check["status"] == "info"
+    assert "pr48_mgc_cont_exec_v1 ready" in overlay_check["detail"]
+    assert payload["conditional_overlays"] == overlay_state
+
+
 def test_api_alerts_returns_recent_runtime_alerts(monkeypatch):
     monkeypatch.setattr(
         bot_dashboard,
