@@ -9,23 +9,24 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** `094adda9` — `research: close mnq shadow buckets and design track d`
-- **Summary:** Closed the exact `mnq_parent_structure_shadow_buckets_v1` family to a durable `KILL`, restamped the prereg provenance field, tightened the runner hygiene, and wrote the first formal Track D design doc as a future new-data program rather than a false “all OHLCV is exhausted” pivot.
-- **Audit Addendum:** Exact-parent MNQ structure shadow buckets are now closed: `0/6` survived, and the important failure mode was role mismatch (`selected_trade_mean` up, `policy EV` down). This does not kill the separate O5 prior-day geometry shelf survivors or the separately recovered PR48 conditional-role branch. Track D is now documented as a design-only new-data program; current-stack highest-EV remains PR48 translation.
+- **Commit:** `pending publish` — `docs(research): narrow pr48 translation to mgc`
+- **Summary:** Closed the bounded PR48 translation audit as durable repo truth. The recovered conditional-role branch is still alive, but only one arm is close enough for the next stage: `MGC:cont_exec` is `READY_FOR_BOUNDED_TRANSLATION`; `MES:q45_exec` still `NEEDS_BRIDGE`; `DUO` and `MNQ:shadow_addon` stay `SHADOW_ONLY`.
+- **Audit Addendum:** The repo still cannot consume conditional-role outputs natively. Do not rerun broad PR48 confluence discovery and do not try to push these objects through `validated_setups` / `lane_allocator` as if they were standalone lanes. The exact next stage is `docs/runtime/stages/pr48-mgc-cont-exec-bounded-translation.md`.
 
 ## Next Steps — Active
 1. Do not reopen `mnq_parent_structure_shadow_buckets_v1`. Exact-parent structure shadow buckets for these MNQ lanes are now closed `KILL` and should not be rescued under renamed score language.
-2. Keep pulse/ralph/handoff surfaces aligned as each thread closes so finished work does not linger as fake backlog.
-3. Do not treat PR48 as a pooled `MES/MGC` promotion story anymore; use the 2026-04-23 result doc as the current truth.
-4. Do not reopen broad GC proxy exploration from the MGC payoff-compression result; if revisited, keep it to a narrow MGC exit-shape prereg.
-5. Do not reopen the L1 EUROPE_FLOW pre-break path with banned `break_*` or ATR-normalized replacement variants; the restored frozen `K=2` family is now a documented `KILL`.
-6. Do not reopen NYSE_CLOSE filter shopping. Current truth is narrower and already actioned: `ORB_G8` is dead as a filter, while raw `NYSE_CLOSE RR1.0` is alive specifically as a free-slot additive allocator candidate.
-7. Treat the `.4R` MES participation note as descriptive only. The exact 20-cell family is killed; do not let sub-threshold OOS deltas sneak back in as pseudo-survivors.
-8. Discovery routing is now supposed to flow through `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md` via the shared `discover` skill, Codex research workflow notes, and the context resolver `research_discovery` route. If discovery starts drifting back into ad hoc scans or stale skill text, that wiring regressed.
-9. Prior-day bridge work is no longer missing locks. The next honest move on that branch is execution / triage among already-locked hypotheses, not another broad prior-day prereg-writing pass.
-10. Do not describe `lane_allocation.json` as unconditional live truth. For audit claims, pair it with allocator replay / SR-liveness context.
-11. Do not cite `docs/audit/results/2026-04-21-ovnrng-allocator-routing.md` without the rolling-CV retraction. Current truth is the router `KILL`, not the earlier single-fold positive.
-12. Track D is now a documented future system-upgrade branch, not an immediate excuse to abandon current-stack open work. Use `docs/plans/2026-04-23-microstructure-gate0-design.md` for the design truth: start with a cheapest top-of-book Gate 0 on one exact lane, escalate to MBO only if L1/TBBO features prove signal, and do not describe it as “OHLCV exhausted” or as an HFT build.
+2. PR48 is no longer a pooled promotion story. Current truth is narrower: `MGC:cont_exec` only is ready for bounded translation; `MES:q45_exec` still needs a bridge; `DUO` and `MNQ:shadow_addon` remain shadow-only.
+3. The exact next PR48 move is `docs/runtime/stages/pr48-mgc-cont-exec-bounded-translation.md`. Do not reopen generic confluence discovery or a broad conditional schema rebuild before that bounded stage.
+4. Keep pulse/ralph/handoff surfaces aligned as each thread closes so finished work does not linger as fake backlog.
+5. Do not reopen broad GC proxy exploration from the MGC payoff-compression result; if revisited, keep it to a narrow MGC exit-shape prereg.
+6. Do not reopen the L1 EUROPE_FLOW pre-break path with banned `break_*` or ATR-normalized replacement variants; the restored frozen `K=2` family is now a documented `KILL`.
+7. Do not reopen NYSE_CLOSE filter shopping. Current truth is narrower and already actioned: `ORB_G8` is dead as a filter, while raw `NYSE_CLOSE RR1.0` is alive specifically as a free-slot additive allocator candidate.
+8. Treat the `.4R` MES participation note as descriptive only. The exact 20-cell family is killed; do not let sub-threshold OOS deltas sneak back in as pseudo-survivors.
+9. Discovery routing is now supposed to flow through `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md` via the shared `discover` skill, Codex research workflow notes, and the context resolver `research_discovery` route. If discovery starts drifting back into ad hoc scans or stale skill text, that wiring regressed.
+10. Prior-day bridge work is no longer missing locks. The next honest move on that branch is execution / triage among already-locked hypotheses, not another broad prior-day prereg-writing pass.
+11. Do not describe `lane_allocation.json` as unconditional live truth. For audit claims, pair it with allocator replay / SR-liveness context.
+12. Do not cite `docs/audit/results/2026-04-21-ovnrng-allocator-routing.md` without the rolling-CV retraction. Current truth is the router `KILL`, not the earlier single-fold positive.
+13. Track D is now a documented future system-upgrade branch, not an immediate excuse to abandon current-stack open work. Use `docs/plans/2026-04-23-microstructure-gate0-design.md` for the design truth: start with a cheapest top-of-book Gate 0 on one exact lane, escalate to MBO only if L1/TBBO features prove signal, and do not describe it as “OHLCV exhausted” or as an HFT build.
 
 ## Blockers / Warnings
 - Worktree remains intentionally dirty with unrelated in-flight threads; do not revert them blindly.
