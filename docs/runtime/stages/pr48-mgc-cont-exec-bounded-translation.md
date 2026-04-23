@@ -1,6 +1,6 @@
 # PR48 MGC Continuous-Exec Bounded Translation
 
-**Status:** active bounded stage  
+**Status:** closed -> `REDESIGN`  
 **Date:** 2026-04-23  
 **Purpose:** translate the single strongest recovered PR48 arm, `MGC:cont_exec`, into an honest repo object without pretending it is a standalone validated lane.
 
@@ -13,6 +13,18 @@ The PR48 translation audit closed the role mapping:
 - `DUO` and `MNQ:shadow_addon` stay shadow-only
 
 This stage isolates the smallest safe next move.
+
+## Outcome
+
+Closed by:
+
+- `docs/audit/results/2026-04-23-pr48-mgc-cont-exec-bounded-translation.md`
+
+Final verdict:
+
+- the current runtime has no honest carrier for this frozen sizer map
+- the existing `size_multiplier` path is not a valid bridge
+- next honest move is one bounded redesign for a `shadow_only` conditional overlay contract
 
 ## Inputs
 

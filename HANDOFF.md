@@ -9,14 +9,14 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** `b267bb07` — `docs(research): narrow pr48 translation to mgc`
-- **Summary:** Closed the bounded PR48 translation audit as durable repo truth. The recovered conditional-role branch is still alive, but only one arm is close enough for the next stage: `MGC:cont_exec` is `READY_FOR_BOUNDED_TRANSLATION`; `MES:q45_exec` still `NEEDS_BRIDGE`; `DUO` and `MNQ:shadow_addon` stay `SHADOW_ONLY`.
-- **Audit Addendum:** The repo still cannot consume conditional-role outputs natively. Do not rerun broad PR48 confluence discovery and do not try to push these objects through `validated_setups` / `lane_allocator` as if they were standalone lanes. The exact next stage is `docs/runtime/stages/pr48-mgc-cont-exec-bounded-translation.md`.
+- **Commit:** `pending publish` — `docs(research): close pr48 mgc bounded translation`
+- **Summary:** Closed the next PR48 stage as `REDESIGN`, not `IMPLEMENT`. `MGC:cont_exec` is still alive as a frozen allocator/sizer result, but the current runtime has no honest carrier for it: the only MGC profile surface is the wrong parent, and the existing late-applied `size_multiplier` path is not a safe bridge.
+- **Audit Addendum:** Do not implement `MGC:cont_exec` through the current execution-engine multiplier hook and do not attach it to the old `topstep_50k` MGC lane. The next honest move is one bounded redesign for a `shadow_only` profile-local conditional overlay contract.
 
 ## Next Steps — Active
 1. Do not reopen `mnq_parent_structure_shadow_buckets_v1`. Exact-parent structure shadow buckets for these MNQ lanes are now closed `KILL` and should not be rescued under renamed score language.
-2. PR48 is no longer a pooled promotion story. Current truth is narrower: `MGC:cont_exec` only is ready for bounded translation; `MES:q45_exec` still needs a bridge; `DUO` and `MNQ:shadow_addon` remain shadow-only.
-3. The exact next PR48 move is `docs/runtime/stages/pr48-mgc-cont-exec-bounded-translation.md`. Do not reopen generic confluence discovery or a broad conditional schema rebuild before that bounded stage.
+2. PR48 is no longer a pooled promotion story. Current truth is narrower: `MGC:cont_exec` is still the strongest live branch, but its bounded translation stage closed `REDESIGN`; `MES:q45_exec` still needs a bridge; `DUO` and `MNQ:shadow_addon` remain shadow-only.
+3. Do not reopen generic PR48 confluence discovery. The exact next PR48 move is one bounded redesign for a `shadow_only` profile-local conditional overlay contract; do not jump straight to runtime sizing.
 4. Keep pulse/ralph/handoff surfaces aligned as each thread closes so finished work does not linger as fake backlog.
 5. Do not reopen broad GC proxy exploration from the MGC payoff-compression result; if revisited, keep it to a narrow MGC exit-shape prereg.
 6. Do not reopen the L1 EUROPE_FLOW pre-break path with banned `break_*` or ATR-normalized replacement variants; the restored frozen `K=2` family is now a documented `KILL`.
