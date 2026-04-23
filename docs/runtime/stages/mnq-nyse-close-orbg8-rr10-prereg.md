@@ -58,3 +58,16 @@ move:
 - Not a direct raw-baseline promotion
 - Not a broad RR1.0 rescan
 - Not a portfolio policy change
+
+## Execution Outcome
+
+- Executed on 2026-04-23 via `research/mnq_nyse_close_orbg8_rr10_prereg.py`
+- Result: `docs/audit/results/2026-04-23-mnq-nyse-close-orbg8-rr10-prereg.md`
+- Outcome: `KILL`
+
+Why:
+
+- The exact `ORB_G8` path is statistically strong in-sample (`ExpR_on=+0.1107`, `t=3.285`, `p=0.0005`) but fails the prereg's era-stability gate.
+- `2025` on-signal performance is negative at meaningful size (`N_on=132`, `ExpR=-0.0697`), triggering Criterion 9-style kill logic.
+- 2026 OOS does not offer a real selector test because `ORB_G8` fires on every observed row (`42/42`).
+- This closes the native `ORB_G8` filter path. It does not kill the broad RR1.0 NYSE_CLOSE family; the remaining honest branch is role audit, not filter rescue.
