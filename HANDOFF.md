@@ -9,9 +9,9 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** pending — research pipeline route-option coherence pass on top of `34d9e732`
-- **Summary:** Tightened front-to-back research pipeline routing so the supported route options are explicit everywhere: `standalone_discovery`, `conditional_role`, `confirmation`, `deployment_readiness`, and `operations`. Added tests that guard route coverage and stale validation/deployment wording.
-- **Audit Addendum:** No schema migration, no new tables, no validator behavior change, and no live-routing / `paper_trades` prerequisite for validation. PR48 Phase 2 is shadow observation only: `RoleResolver` records overlay context, but execution size remains unchanged.
+- **Commit:** pending — documentation truth hardening on top of `94a9c6fb`
+- **Summary:** Added a repo-wide doc hygiene drift gate to block placeholder prereg/result stamps, fake executable `design_only` preregs, missing execution runners, and generated docs without source/do-not-edit markers. Updated the document authority rules and generated context/system authority docs to make generated facts vs authored decisions explicit.
+- **Audit Addendum:** This is repo governance hardening, not strategy-family work. It does not reopen discovery, does not change runtime trading behavior, and does not add a new prompt/process surface. The renderer path normalization only fixes the WSL `/mnt/c/Users` read-only alias for generated-doc writers.
 
 ## Next Steps — Active
 1. Do not reopen `mnq_parent_structure_shadow_buckets_v1`. Exact-parent structure shadow buckets for these MNQ lanes are now closed `KILL` and should not be rescued under renamed score language.
@@ -28,6 +28,7 @@
 12. Do not cite `docs/audit/results/2026-04-21-ovnrng-allocator-routing.md` without the rolling-CV retraction. Current truth is the router `KILL`, not the earlier single-fold positive.
 13. Track D MNQ COMEX_SETTLE Gate 0 prereg is locked as `DESIGN_ONLY`. It is not executable yet; the next move is Databento top-of-book table/runner design before any scan.
 14. Shadow-bucket re-audit reproduced cleanly from canonical data. Keep the verdict narrow: exact-parent `MNQ COMEX_SETTLE RR1.5 long PD_CLEAR_LONG` and `MNQ US_DATA_1000 O15 RR1.5` prior-day structure score buckets are `KILL` for the tested `shadow_only` parent-value role, but that is not a global kill of the broader prior-day geometry family. The checked-in result doc was refreshed only to fix stale prereg provenance metadata after the later stamp commit.
+15. Doc hygiene is now enforced by `pipeline/check_drift.py`, not by another prompt surface. Generated dynamic facts must come from generators with source/do-not-edit banners; authored docs should carry decisions, contracts, snapshots, or results with explicit provenance.
 
 ## Blockers / Warnings
 - Worktree remains intentionally dirty with unrelated in-flight threads; do not revert them blindly.

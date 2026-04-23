@@ -1,5 +1,7 @@
 # Task Routes
 
+Generated from `context/registry.py` and `context/institutional.py`. Do not edit by hand.
+
 Generated canonical task routes for cold-start orientation.
 
 ## `completion_claim`

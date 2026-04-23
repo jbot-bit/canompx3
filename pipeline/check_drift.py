@@ -1608,6 +1608,123 @@ def check_doc_stats_consistency(con=None) -> list[str]:
     return violations
 
 
+def _doc_hygiene_rel(path: Path) -> str:
+    return str(path.relative_to(PROJECT_ROOT)).replace("\\", "/")
+
+
+def _read_yaml_doc(path: Path):
+    try:
+        import yaml
+    except ImportError as exc:
+        return None, f"PyYAML unavailable: {exc}"
+
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}, None
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def _looks_like_python_entrypoint(value: str) -> bool:
+    return value.endswith(".py") or ".py " in value
+
+
+def _entrypoint_path(value: str) -> Path | None:
+    entry = value.strip()
+    if not _looks_like_python_entrypoint(entry):
+        return None
+    first_token = entry.split()[0]
+    path = Path(first_token)
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+def check_doc_hygiene_contracts() -> list[str]:
+    """Enforce doc truth hygiene for preregs/results and generated docs.
+
+    This intentionally targets high-signal failure modes instead of linting all
+    prose. Broad historical-doc scanning belongs in scripts/tools/stale_doc_scanner.py.
+    """
+    violations: list[str] = []
+
+    # 1. Preregs/results must not carry placeholder provenance stamps.
+    stamp_dirs = [
+        PROJECT_ROOT / "docs" / "audit" / "hypotheses",
+        PROJECT_ROOT / "docs" / "audit" / "results",
+    ]
+    stamp_patterns = ("UNSTAMPED", "TO_BE_STAMPED")
+    for directory in stamp_dirs:
+        if not directory.exists():
+            continue
+        for path in sorted((*directory.glob("*.md"), *directory.glob("*.yaml"), *directory.glob("*.yml"))):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for line_num, line in enumerate(text.splitlines(), 1):
+                if any(marker in line for marker in stamp_patterns):
+                    violations.append(
+                        f"  {_doc_hygiene_rel(path)}:{line_num}: placeholder provenance marker "
+                        f"({', '.join(marker for marker in stamp_patterns if marker in line)})"
+                    )
+
+    # 2. Execution metadata must not imply an unavailable or fake runner.
+    hyp_dir = PROJECT_ROOT / "docs" / "audit" / "hypotheses"
+    if hyp_dir.exists():
+        for path in sorted((*hyp_dir.glob("*.yaml"), *hyp_dir.glob("*.yml"))):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if "execution:" not in text:
+                # Many older hypothesis files are prose-heavy YAML-ish archives.
+                # Only enforce executable/design-only contracts once a prereg
+                # declares the execution block this check owns.
+                continue
+            body, error = _read_yaml_doc(path)
+            if error:
+                violations.append(f"  {_doc_hygiene_rel(path)}: YAML parse failed in doc hygiene check: {error}")
+                continue
+            if not isinstance(body, dict):
+                continue
+            execution = body.get("execution")
+            if not isinstance(execution, dict):
+                continue
+            mode = str(execution.get("mode", "")).strip().lower()
+            entrypoint = execution.get("entrypoint")
+            rel = _doc_hygiene_rel(path)
+            if mode == "design_only":
+                if entrypoint not in (None, "", "null"):
+                    violations.append(
+                        f"  {rel}: execution.mode=design_only but execution.entrypoint is populated ({entrypoint!r})"
+                    )
+                continue
+            if entrypoint in (None, "", "null"):
+                violations.append(f"  {rel}: executable prereg missing execution.entrypoint")
+                continue
+            if not isinstance(entrypoint, str):
+                violations.append(f"  {rel}: execution.entrypoint must be a string or null")
+                continue
+            entry_path = _entrypoint_path(entrypoint)
+            if entry_path is not None and not entry_path.exists():
+                violations.append(
+                    f"  {rel}: execution.entrypoint references missing path "
+                    f"{_doc_hygiene_rel(entry_path) if entry_path.is_relative_to(PROJECT_ROOT) else entry_path}"
+                )
+
+    # 3. Generated docs must name their source and block hand edits.
+    generated_docs = [
+        PROJECT_ROOT / "docs" / "governance" / "system_authority_map.md",
+        PROJECT_ROOT / "docs" / "context" / "README.md",
+        PROJECT_ROOT / "docs" / "context" / "source-catalog.md",
+        PROJECT_ROOT / "docs" / "context" / "task-routes.md",
+        PROJECT_ROOT / "docs" / "context" / "institutional-contracts.md",
+    ]
+    for path in generated_docs:
+        if not path.exists():
+            violations.append(f"  {_doc_hygiene_rel(path)} missing")
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if "Generated from" not in text and "Auto-generated from" not in text:
+            violations.append(f"  {_doc_hygiene_rel(path)} missing generated-source marker")
+        if "Do not edit by hand" not in text and "do not edit by hand" not in text:
+            violations.append(f"  {_doc_hygiene_rel(path)} missing do-not-edit marker")
+
+    return violations
+
+
 def check_stale_scratch_db() -> list[str]:
     """Check #37: Canonical gold.db must exist where pipeline.paths points.
 
@@ -5675,6 +5792,7 @@ CHECKS = [
     ("sql_adapter VALID_* sets match outcome_builder grids", check_sql_adapter_validation_sync, False, False),
     ("No E0 rows in trading tables", check_no_e0_in_db, False, True),  # requires_db
     ("Doc stats match DB ground truth", check_doc_stats_consistency, False, True),  # requires_db
+    ("Doc hygiene contracts (stamps, design-only, generated markers)", check_doc_hygiene_contracts, False, False),
     ("No duplicate gold.db at project root", check_stale_scratch_db, False, False),
     ("No old session names in active code", check_old_session_names, False, False),
     ("No active E3 strategies (soft-retired Feb 2026)", check_no_active_e3, False, True),  # requires_db
