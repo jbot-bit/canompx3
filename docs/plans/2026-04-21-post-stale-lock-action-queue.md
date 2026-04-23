@@ -101,4 +101,4 @@
 
 1. Treat the GARCH `R3` shadow as an active forward-monitoring artifact, not a blocked hypothesis stub.
 2. Leave the frozen policy untouched; monitor ledger deltas instead of retuning.
-3. Start the L1 raw break-quality prereg as the next open research path.
+3. Start the Prior-day Pathway-B execution triage as the next open research path.

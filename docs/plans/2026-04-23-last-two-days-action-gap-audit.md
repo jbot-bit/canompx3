@@ -30,6 +30,7 @@ This is a closeout audit, not a fresh discovery memo.
 |---|---|---|
 | MNQ NYSE_CLOSE RR1.0 governance follow-up | `9630a38e`, `3df72841`, result docs, role-audit stage, decision ledger | `CLOSED_AND_ACTIONED` |
 | Exact `MNQ NYSE_CLOSE ORB_G8 RR1.0` prereg | `3df72841`, `docs/audit/results/2026-04-23-mnq-nyse-close-orbg8-rr10-prereg.md` | `CLOSED_AND_ACTIONED` |
+| MNQ NYSE_CLOSE RR1.0 role audit | `docs/audit/results/2026-04-23-mnq-nyse-close-rr10-role-audit.md`, decision ledger, baton, queue updates | `CLOSED_AND_ACTIONED` |
 | L1 EUROPE_FLOW pre-break-context scan | `1af9e25a`, restored prereg, result doc, stage outcome | `CLOSED_AND_ACTIONED` |
 | PR48 frozen MES/MGC sizer replay | `439ccfd5`, locked prereg, result doc, decision ledger split | `CLOSED_AND_ACTIONED` |
 | MGC 5m payoff-compression diagnostic | `505f65e6`, result doc, queue + ledger language | `CLOSED_AND_ACTIONED` |
@@ -44,7 +45,6 @@ These are not lost. They are now explicit bounded next-step surfaces.
 
 | Thread | Durable home | Why still open |
 |---|---|---|
-| MNQ NYSE_CLOSE RR1.0 role question | `docs/runtime/stages/mnq-nyse-close-rr10-role-audit.md` | `ORB_G8` was killed, but the broad family still requires role-layer resolution |
 | Prior-day Pathway-B / MNQ prior-day bridge execution | `f11cfacb` locked hypotheses + `docs/runtime/stages/prior-day-pathway-b-hot-cell-prereg.md` | locks are written, but the confirm-or-kill executions are not all run |
 | Cross-asset earlier-session chronology | `docs/runtime/stages/cross-asset-session-chronology-spec.md` | queue item now has a bounded docs-first stage, but the chronology contract itself is not written yet |
 | GC->MGC 15m/30m question | `docs/runtime/stages/gc-mgc-15m-30m-translation-question.md` | still dependent on the already-closed 5m path; wider-aperture claim not yet resolved |
