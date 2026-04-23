@@ -44,6 +44,7 @@ from pipeline.cost_model import CostSpec, get_cost_spec, pnl_points_to_r
 from pipeline.dst import (
     DST_AFFECTED_SESSIONS,
     DST_CLEAN_SESSIONS,
+    compute_trading_day_from_timestamp,
     compute_trading_day_utc_range,
     get_break_group,
     is_uk_dst,
@@ -139,11 +140,7 @@ def compute_trading_day(ts_utc: pd.Timestamp) -> date:
     Formula: DATE(ts_brisbane - 9 hours)
     Equivalent: subtract 9h from Brisbane time, take the date.
     """
-    # Convert to Brisbane
-    ts_bris = ts_utc.astimezone(BRISBANE_TZ)
-    # Subtract 9 hours and take date
-    shifted = ts_bris - timedelta(hours=TRADING_DAY_START_HOUR_LOCAL)
-    return shifted.date()
+    return compute_trading_day_from_timestamp(ts_utc)
 
 
 # compute_trading_day_utc_range is now imported from pipeline.dst (E2 canonical-window

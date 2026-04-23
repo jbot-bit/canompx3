@@ -396,7 +396,7 @@ def _conditional_overlay_from_lifecycle(lifecycle: dict) -> tuple[bool, str]:
     if not overlays:
         return True, "No shadow-only conditional overlays configured"
 
-    invalid = [row for row in overlays if not row.get("valid")]
+    invalid = [row for row in overlays if not row.get("valid") or row.get("status") == "invalid"]
     if invalid:
         reasons = ", ".join(f"{row.get('overlay_id')}: {row.get('reason') or 'invalid'}" for row in invalid)
         return True, f"WARN: conditional overlay state invalid ({reasons})"

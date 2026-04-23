@@ -440,6 +440,28 @@ def test_conditional_overlay_from_lifecycle_warns_on_invalid_state():
     assert "missing breakpoint row" in msg
 
 
+def test_conditional_overlay_from_lifecycle_warns_on_invalid_status_even_when_envelope_valid():
+    ok, msg = _conditional_overlay_from_lifecycle(
+        {
+            "conditional_overlays": {
+                "available": True,
+                "overlays": [
+                    {
+                        "overlay_id": "pr48_mgc_cont_exec_v1",
+                        "valid": True,
+                        "reason": "missing breakpoint row",
+                        "status": "invalid",
+                    }
+                ],
+            }
+        }
+    )
+
+    assert ok is True
+    assert "WARN" in msg
+    assert "missing breakpoint row" in msg
+
+
 # ─── F-6: TopStep 5-XFA aggregate cap ────────────────────────────────────
 # @canonical-source docs/research-input/topstep/topstep_xfa_parameters.txt
 # @verbatim "You can have up to 5 active Express Funded Accounts at the same time."

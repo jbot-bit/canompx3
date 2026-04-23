@@ -278,11 +278,11 @@ def test_build_operator_payload_includes_recent_alert_check(monkeypatch):
     assert "FEED STALE" in alerts_check["detail"]
 
 
-def test_build_operator_payload_includes_conditional_overlay_check(monkeypatch):
+def _patch_operator_payload_base(monkeypatch, profile_id: str) -> None:
     monkeypatch.setattr(
         bot_dashboard,
         "read_state",
-        lambda: {"mode": "STOPPED", "heartbeat_age_s": 9999, "account_name": "profile_topstep_50k"},
+        lambda: {"mode": "STOPPED", "heartbeat_age_s": 9999, "account_name": f"profile_{profile_id}"},
     )
     monkeypatch.setattr(
         bot_dashboard,
@@ -314,9 +314,13 @@ def test_build_operator_payload_includes_conditional_overlay_check(monkeypatch):
     )
     monkeypatch.setitem(
         bot_dashboard._preflight_cache,
-        "topstep_50k",
+        profile_id,
         {"status": "pass", "passed": 5, "total": 5},
     )
+
+
+def test_build_operator_payload_includes_conditional_overlay_check(monkeypatch):
+    _patch_operator_payload_base(monkeypatch, "topstep_50k")
 
     overlay_state = {
         "available": True,
@@ -339,6 +343,31 @@ def test_build_operator_payload_includes_conditional_overlay_check(monkeypatch):
     assert overlay_check["status"] == "info"
     assert "pr48_mgc_cont_exec_v1 ready" in overlay_check["detail"]
     assert payload["conditional_overlays"] == overlay_state
+
+
+def test_build_operator_payload_warns_on_invalid_overlay_status_even_when_envelope_valid(monkeypatch):
+    _patch_operator_payload_base(monkeypatch, "topstep_50k")
+
+    overlay_state = {
+        "available": True,
+        "valid": True,
+        "overlays": [
+            {
+                "overlay_id": "pr48_mgc_cont_exec_v1",
+                "valid": True,
+                "status": "invalid",
+                "reason": "missing breakpoint row",
+            }
+        ],
+    }
+    with patch(
+        "trading_app.lifecycle_state.read_lifecycle_state", return_value={"conditional_overlays": overlay_state}
+    ):
+        payload = _build_operator_payload("topstep_50k")
+
+    overlay_check = next(check for check in payload["checks"] if check["name"] == "Conditional overlays")
+    assert overlay_check["status"] == "warn"
+    assert "missing breakpoint row" in overlay_check["detail"]
 
 
 def test_api_alerts_returns_recent_runtime_alerts(monkeypatch):

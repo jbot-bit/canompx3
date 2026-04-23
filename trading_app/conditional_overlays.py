@@ -6,13 +6,14 @@ import csv
 import json
 import math
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 import duckdb
 
 from pipeline.db_config import configure_connection
+from pipeline.dst import BRISBANE_TZ, compute_trading_day_from_timestamp
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.derived_state import (
     build_code_fingerprint,
@@ -94,6 +95,11 @@ def get_overlay_specs_for_profile(profile_id: str) -> tuple[ConditionalOverlaySp
 
 def get_overlay_state_path(profile_id: str, overlay_id: str) -> Path:
     return STATE_DIR / f"conditional_overlay_{profile_id}_{overlay_id}.json"
+
+
+def _current_trading_day(now: datetime | None = None) -> date:
+    effective_now = now or datetime.now(BRISBANE_TZ)
+    return compute_trading_day_from_timestamp(effective_now)
 
 
 def _overlay_code_paths(spec: ConditionalOverlaySpec) -> list[Path]:
@@ -229,6 +235,17 @@ def _summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _semantic_invalid_reason(summary: dict[str, Any], rows: list[dict[str, Any]]) -> str | None:
+    if summary.get("status") != "invalid":
+        return None
+    invalid_reasons = sorted({str(row.get("reason") or "invalid") for row in rows if row.get("status") == "invalid"})
+    if not invalid_reasons:
+        return "invalid overlay status"
+    if len(invalid_reasons) == 1:
+        return invalid_reasons[0]
+    return ", ".join(invalid_reasons)
+
+
 def _current_overlay_canonical_inputs(
     profile_id: str,
     *,
@@ -259,7 +276,7 @@ def refresh_overlay_state(
 ) -> dict[str, Any]:
     spec = CONDITIONAL_OVERLAYS[overlay_id]
     resolved_profile_id = profile_id or spec.profile_id
-    trading_day = today or date.today()
+    trading_day = today or _current_trading_day()
 
     with duckdb.connect(str(db_path), read_only=True) as con:
         configure_connection(con, writing=False)
@@ -348,7 +365,7 @@ def read_overlay_states(
     db_path: Path = GOLD_DB_PATH,
     today: date | None = None,
 ) -> dict[str, Any]:
-    effective_today = today or date.today()
+    effective_today = today or _current_trading_day()
     resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
     specs = get_overlay_specs_for_profile(resolved_profile_id)
     if not specs:
@@ -384,18 +401,20 @@ def read_overlay_states(
             freshness = envelope["freshness"]
             payload = envelope["payload"]
             summary = dict(payload.get("summary") or {})
+            rows = list(payload.get("rows") or [])
+            invalid_reason = _semantic_invalid_reason(summary, rows)
             overlays.append(
                 {
                     "overlay_id": spec.overlay_id,
                     "available": True,
-                    "valid": True,
-                    "reason": None,
+                    "valid": invalid_reason is None,
+                    "reason": invalid_reason,
                     "state_date": freshness.get("as_of_date"),
                     "mode": payload.get("mode"),
                     "role": payload.get("role"),
                     "status": summary.get("status"),
                     "summary": summary,
-                    "rows": payload.get("rows", []),
+                    "rows": rows,
                 }
             )
         else:

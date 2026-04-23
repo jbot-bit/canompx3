@@ -9,9 +9,9 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** current HEAD — `tools(review): add capital review routing`
-- **Summary:** Added paired Codex and Claude capital-review routing so broad review requests compose code review, live audit, deploy-readiness, research/evidence, security, threat-model, and supply-chain checks instead of collapsing into a narrow diff scan. Added a Codex review-only launcher and reusable report template.
-- **Audit Addendum:** This does not change trading logic, live routing, research criteria, or validation behavior. It is review orchestration only; `CLEAR` still requires traced evidence and targeted verification.
+- **Commit:** current HEAD — `fix(runtime): harden shadow overlay state checks`
+- **Summary:** Cleaned the remaining dirty overlay work: removed line-ending-only churn, quarantined unsupported Gemini roadmap / MES slippage draft work from active repo paths, centralized timestamp-to-trading-day assignment in `pipeline.dst`, and kept the PR48 shadow overlay semantic-invalid warnings in lifecycle/dashboard/pre-session surfaces.
+- **Audit Addendum:** No live order routing, sizing, validator behavior, schema behavior, Databento pull, or MES cost/debt verdict changed. The overlay remains shadow/operator visibility only; invalid payload status now warns even when the envelope itself validates.
 
 ## Next Steps — Active
 1. Do not reopen `mnq_parent_structure_shadow_buckets_v1`. Exact-parent structure shadow buckets for these MNQ lanes are now closed `KILL` and should not be rescued under renamed score language.
@@ -28,6 +28,7 @@
 12. Do not cite `docs/audit/results/2026-04-21-ovnrng-allocator-routing.md` without the rolling-CV retraction. Current truth is the router `KILL`, not the earlier single-fold positive.
 13. Track D is now a documented future system-upgrade branch, not an immediate excuse to abandon current-stack open work. Use `docs/plans/2026-04-23-microstructure-gate0-design.md` for the design truth: start with a cheapest top-of-book Gate 0 on one exact lane, escalate to MBO only if L1/TBBO features prove signal, and do not describe it as “OHLCV exhausted” or as an HFT build.
 14. Shadow-bucket re-audit reproduced cleanly from canonical data. Keep the verdict narrow: exact-parent `MNQ COMEX_SETTLE RR1.5 long PD_CLEAR_LONG` and `MNQ US_DATA_1000 O15 RR1.5` prior-day structure score buckets are `KILL` for the tested `shadow_only` parent-value role, but that is not a global kill of the broader prior-day geometry family. The checked-in result doc was refreshed only to fix stale prereg provenance metadata after the later stamp commit.
+15. MES TBBO slippage pilot is implemented but not executed against paid data. Next honest action is `./.venv-wsl/bin/python -m research.research_mes_e2_slippage_pilot --estimate-cost`; only run `--pull` after explicit spend approval, then `--reprice --write-result-doc`.
 
 ## Blockers / Warnings
 - Worktree remains intentionally dirty with unrelated in-flight threads; do not revert them blindly.

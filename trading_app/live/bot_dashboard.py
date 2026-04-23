@@ -685,7 +685,7 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
 
     if overlay_summary and overlay_summary.get("available"):
         overlays = overlay_summary.get("overlays", [])
-        invalid = [row for row in overlays if not row.get("valid")]
+        invalid = [row for row in overlays if not row.get("valid") or row.get("status") == "invalid"]
         ready = [row for row in overlays if row.get("status") == "ready"]
         if invalid:
             detail = ", ".join(f"{row.get('overlay_id')}: {row.get('reason') or 'invalid'}" for row in invalid)
