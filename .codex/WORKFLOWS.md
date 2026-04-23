@@ -71,6 +71,9 @@ Route to the correct source:
   - Use `.claude/skills/pinecone-assistant/SKILL.md`
 - Academic methodology: use local PDFs in `resources/` (BH FDR, walk-forward, deflated Sharpe).
 - For claim-heavy work, downgrade conclusions unless they are explicitly tagged or supportable as `MEASURED`; `INFERRED` and `UNSUPPORTED` are valid end states, not failures.
+- For new-edge discovery, noisy ideas, chart reads, or hypothesis triage, use
+  `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md` as the front door before
+  any scan, prereg, or implementation talk.
 - For institutional research review prompts, prefer the compact runtime rubric in `docs/prompts/INSTITUTIONAL_RESEARCH_REVIEW_MINI.md` instead of re-pasting long prompt blocks.
 
 ## Verification Defaults

@@ -267,6 +267,55 @@ TASKS: dict[str, TaskManifest] = {
         expansion_triggers=("unmatched route", "startup noise", "launcher drift", "hook churn"),
         priority=3,
     ),
+    "research_discovery": TaskManifest(
+        id="research_discovery",
+        title="Research Discovery",
+        purpose="Triage new edge ideas, discovery questions, and hypothesis-shaping work using the institutional discovery front door.",
+        intent_terms=(
+            "discover",
+            "discovery",
+            "find edge",
+            "new edge",
+            "edge idea",
+            "hypothesis",
+            "triage",
+            "scan for edges",
+            "edge discovery",
+            "explore idea",
+        ),
+        domains=("research_methodology", "repo_governance"),
+        verification_profile="investigation",
+        concepts=("sacred_holdout_policy", "runtime_control_plane"),
+        decision_protocol="research_investigation_protocol",
+        answer_contract="research_investigation_answer",
+        understanding_packs=("coding_runtime_pack", "trading_runtime_pack", "research_methodology_pack"),
+        variables=("orb_utc_window", "holdout_policy_var"),
+        doctrine_files=(
+            "RESEARCH_RULES.md",
+            "TRADING_RULES.md",
+            "docs/STRATEGY_BLUEPRINT.md",
+            "docs/institutional/pre_registered_criteria.md",
+            "docs/institutional/mechanism_priors.md",
+            "docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md",
+        ),
+        canonical_files=(
+            "trading_app/holdout_policy.py",
+            "pipeline/build_daily_features.py",
+            "pipeline/asset_configs.py",
+            "pipeline/cost_model.py",
+            "pipeline/dst.py",
+            "trading_app/strategy_discovery.py",
+            "pipeline/db_contracts.py",
+        ),
+        live_views=("gold_db_mcp", "research_context", "system_brief"),
+        briefing_contract="investigation_briefing",
+        expansion_triggers=(
+            "current-stack vs architecture ambiguity appears",
+            "holdout ambiguity appears",
+            "runtime translation becomes the real question",
+        ),
+        priority=6,
+    ),
     "research_investigation": TaskManifest(
         id="research_investigation",
         title="Research Investigation",
@@ -579,7 +628,7 @@ def render_route_text(route: TaskRoute, candidates: tuple[TaskCandidate, ...] = 
     if candidates:
         lines.append("Candidates:")
         lines.extend(f"  - {candidate.task_id} ({candidate.score})" for candidate in candidates)
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def render_route_markdown(route: TaskRoute, candidates: tuple[TaskCandidate, ...] = ()) -> str:
@@ -619,7 +668,7 @@ def render_route_markdown(route: TaskRoute, candidates: tuple[TaskCandidate, ...
     if candidates:
         lines.extend(["", "## Candidates", ""])
         lines.extend(f"- `{candidate.task_id}` (score={candidate.score})" for candidate in candidates)
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def render_source_catalog_markdown() -> str:
@@ -648,7 +697,7 @@ def render_source_catalog_markdown() -> str:
     lines.extend(["", "## Variables", ""])
     for variable in VARIABLES.values():
         lines.append(f"- `{variable.id}` — `{variable.owner_path}`")
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def render_task_routes_markdown() -> str:
@@ -676,7 +725,7 @@ def render_task_routes_markdown() -> str:
         )
     lines.extend(["## Fallback Read Set", ""])
     lines.extend(f"- `{path}`" for path in FALLBACK_READ_SET)
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def render_institutional_markdown() -> str:
@@ -705,7 +754,7 @@ def render_institutional_markdown() -> str:
     lines.extend(["", "## Briefing Contracts", ""])
     for item in BRIEFING_CONTRACTS.values():
         lines.append(f"- `{item.id}` — {item.summary}")
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def render_readme_markdown() -> str:

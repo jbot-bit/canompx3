@@ -21,9 +21,10 @@
 5. Do not reopen the L1 EUROPE_FLOW pre-break path with banned `break_*` or ATR-normalized replacement variants; the restored frozen `K=2` family is now a documented `KILL`.
 6. Do not reopen NYSE_CLOSE filter shopping. Current truth is narrower and already actioned: `ORB_G8` is dead as a filter, while raw `NYSE_CLOSE RR1.0` is alive specifically as a free-slot additive allocator candidate.
 7. Treat the `.4R` MES participation note as descriptive only. The exact 20-cell family is killed; do not let sub-threshold OOS deltas sneak back in as pseudo-survivors.
-8. Prior-day bridge work is no longer missing locks. The next honest move on that branch is execution / triage among already-locked hypotheses, not another broad prior-day prereg-writing pass.
-9. Do not describe `lane_allocation.json` as unconditional live truth. For audit claims, pair it with allocator replay / SR-liveness context.
-10. Do not cite `docs/audit/results/2026-04-21-ovnrng-allocator-routing.md` without the rolling-CV retraction. Current truth is the router `KILL`, not the earlier single-fold positive.
+8. Discovery routing is now supposed to flow through `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md` via the shared `discover` skill, Codex research workflow notes, and the context resolver `research_discovery` route. If discovery starts drifting back into ad hoc scans or stale skill text, that wiring regressed.
+9. Prior-day bridge work is no longer missing locks. The next honest move on that branch is execution / triage among already-locked hypotheses, not another broad prior-day prereg-writing pass.
+10. Do not describe `lane_allocation.json` as unconditional live truth. For audit claims, pair it with allocator replay / SR-liveness context.
+11. Do not cite `docs/audit/results/2026-04-21-ovnrng-allocator-routing.md` without the rolling-CV retraction. Current truth is the router `KILL`, not the earlier single-fold positive.
 
 ## Blockers / Warnings
 - Worktree remains intentionally dirty with unrelated in-flight threads; do not revert them blindly.

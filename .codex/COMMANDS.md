@@ -4,7 +4,7 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 
 ## High-Value Commands
 
-- `discover/SKILL.md`: structured read-first exploration
+- `discover/SKILL.md`: discovery front door for new edge ideas and hypothesis triage
 - `health-check/SKILL.md`: repo health and validation sweep
 - `validate-instrument/SKILL.md`: instrument validation workflow
 - `rebuild-outcomes/SKILL.md`: outcome rebuild workflow
@@ -38,7 +38,8 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 
 - Do not wait for the user to name the exact command or skill if the intended
   workflow is already clear.
-- Start with `discover/SKILL.md` when the repo area is unclear.
+- Start with `discover/SKILL.md` when the user is exploring a new edge, noisy
+  idea, chart read, or hypothesis direction.
 - Use `blast-radius/SKILL.md` before edits that touch shared interfaces.
 - Use `quant-verify/SKILL.md` or `verify-done/SKILL.md` before closing any material implementation task.
 - Use `health-check/SKILL.md` when the right validation command is unclear.

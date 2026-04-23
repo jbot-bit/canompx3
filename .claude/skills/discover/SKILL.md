@@ -1,74 +1,88 @@
 ---
 name: discover
-description: Research edge discovery for instrument and session — follows Blueprint test sequence
+description: Research edge discovery and idea triage — routes through the institutional discovery protocol before any scan or build work
 allowed-tools: Read, Grep, Glob, Bash
 ---
-Research edge discovery for instrument and session: $ARGUMENTS
+Research edge discovery and hypothesis triage: $ARGUMENTS
 
-Use when: "discover", "scan for edges", "research [instrument]", "find strategies", "edge discovery"
+Use when: "discover", "scan for edges", "research [idea]", "find strategies",
+"edge discovery", "new idea", "chart read", "hypothesis triage"
 
-## Step 0: Blueprint Pre-Check (MANDATORY)
+## Step 0: Discovery Front Door (MANDATORY)
 
-Before ANY research, check `docs/STRATEGY_BLUEPRINT.md`:
-1. **NO-GO Registry (SS5):** Already dead? STOP.
-2. **Variable Space (SS4):** MNQ E2 = only positive unfiltered baseline. MGC/MES need size filters.
-3. **Assumptions (SS10):** Flag relevant risks.
+Before ANY scan, prereg, or implementation talk, route the task through the
+canonical discovery doctrine:
 
-Verify instrument is active:
-```bash
-python -c "
-from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
-inst = '$ARGUMENTS'.split()[0]
-print(f'{inst} active: {inst in ACTIVE_ORB_INSTRUMENTS}')
-print(f'Sessions: {ASSET_CONFIGS.get(inst, {}).get(\"enabled_sessions\", [])}')
-"
-```
+- `RESEARCH_RULES.md`
+- `TRADING_RULES.md`
+- `docs/STRATEGY_BLUEPRINT.md`
+- `docs/institutional/pre_registered_criteria.md`
+- `docs/institutional/mechanism_priors.md`
+- `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md`
 
-## Step 1: Parse Arguments
+The front-door question is NOT "what can I scan quickly?"
 
-Parse $ARGUMENTS for instrument (required) and session (optional).
-Default entry model: E2. E0 is PURGED. E3 is in SKIP_ENTRY_MODELS.
+The front-door questions are:
+- what is the correct object?
+- what is knowable at decision time?
+- what role is this best suited for?
+- is this a current-stack test, architecture problem, new-data problem, or dead
+  path?
 
-## Step 2: Baseline Viability (Gate 2)
+## Step 1: Lock the Object Before Any Scan
 
-Test >=3 RR values and >=3 apertures before declaring dead:
-```bash
-python -c "
-import duckdb
-from pipeline.paths import GOLD_DB_PATH
-con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-for rr in [1.0, 1.5, 2.0]:
-    for om in [5, 15, 30]:
-        r = con.execute('SELECT COUNT(*), ROUND(AVG(pnl_r),4) FROM orb_outcomes WHERE symbol=? AND entry_model=? AND rr_target=? AND orb_minutes=? AND confirm_bars=1', ['INST', 'E2', rr, om]).fetchone()
-        print(f'  {\"+ \" if r[1] and r[1]>0 else \"- \"}RR{rr} O{om}: N={r[0]:,} ExpR={r[1]}')
-con.close()
-"
-```
+Before proposing tests, explicitly classify:
+- unit of analysis
+- information horizon
+- role mapping
+- path type
 
-## Step 3: Previous Research + Current State
+If the idea is really a:
+- conditioner
+- allocator input
+- confluence candidate
+- execution translation problem
 
-Check memory files and Blueprint SS5 NO-GO table for prior findings. Use ONLY canonical layers (orb_outcomes, daily_features, bars_1m) for queries — derived layers are banned for discovery. Never mention banned layer names in output. Check prior research from memory files only.
+do NOT force it through a standalone framing first.
 
-## Step 4: Per-Session Scan
+## Step 2: Use Canonical Truth Only
 
-Query orb_outcomes grouped by orb_label for the instrument. If specific session requested, run detailed analysis.
+Discovery truth comes from:
+- `bars_1m`
+- `daily_features`
+- `orb_outcomes`
 
-## Step 5: Interpret (Gates 1+3)
+Derived layers and docs may orient but are NOT proof.
 
-For each finding:
-1. **Mechanism (Gate 1):** WHY should this work? If "numbers show it" — suspicious.
-2. **Statistics (Gate 3):** BH FDR at honest K. Labels: p<0.005 "validated", p<0.05 "promising", else "observation".
+Do not mix:
+- post-trigger information into pre-trade E2 logic
+- runtime limitations into signal invalidation
+- shelf presence into deployment proof
 
-## Step 6: Report
+## Step 3: Smallest Honest Next Move
 
-| Session | RR | O | ExpR | WR | N | p-value | BH-sig? | Mechanism | Label |
-|---------|-----|---|------|-----|---|---------|---------|-----------|-------|
+If the path survives triage, the next move is usually:
+- a narrow pre-registered hypothesis scope
+- not a broad exploratory scan
+- not implementation
+- not prompt improvisation
 
-Include: variable coverage (RR/apertures tested vs missing), key findings, NO-GO paths hit.
+## Step 4: Output Contract
+
+Report using the structure in
+`docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md`:
+- correct object
+- discovery map
+- honest next tests
+- park / kill list
+- final recommendation
 
 ## Rules
 
-- NEVER say "significant" without p-value or "edge" without BH FDR
-- Sample size: <30 INVALID, 30-99 REGIME, 100+ CORE
-- Before declaring dead: test >=3 RR, >=3 apertures, E1+E2
-- Check NO-GO registry FIRST
+- NEVER jump from idea to scan without locking the object first
+- NEVER use derived layers as discovery proof
+- NEVER collapse "not standalone" into "dead"
+- NEVER collapse "not yet proven" into "alive"
+- Preserve the sacred holdout from `2026-01-01`
+- No scan recommendation is valid until it can be expressed as a
+  pre-registered hypothesis scope

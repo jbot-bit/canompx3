@@ -42,6 +42,16 @@ Generated canonical task routes for cold-start orientation.
 - Canonical owners: `context/registry.py`, `pipeline/system_brief.py`, `scripts/tools/context_resolver.py`, `scripts/tools/session_preflight.py`, `scripts/tools/task_route_packet.py`, `scripts/infra/windows_agent_launch.py`, `scripts/infra/claude-worktree.sh`, `scripts/infra/codex-project.sh`, `scripts/infra/codex-worktree.sh`
 - Live views: `verification_context`, `system_brief`
 
+## `research_discovery`
+
+- Purpose: Triage new edge ideas, discovery questions, and hypothesis-shaping work using the institutional discovery front door.
+- Verification profile: `investigation`
+- Briefing contract: `investigation_briefing`
+- Packs: `coding_runtime_pack`, `trading_runtime_pack`, `research_methodology_pack`
+- Doctrine: `RESEARCH_RULES.md`, `TRADING_RULES.md`, `docs/STRATEGY_BLUEPRINT.md`, `docs/institutional/pre_registered_criteria.md`, `docs/institutional/mechanism_priors.md`, `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md`
+- Canonical owners: `trading_app/holdout_policy.py`, `pipeline/build_daily_features.py`, `pipeline/asset_configs.py`, `pipeline/cost_model.py`, `pipeline/dst.py`, `trading_app/strategy_discovery.py`, `pipeline/db_contracts.py`
+- Live views: `gold_db_mcp`, `research_context`, `system_brief`
+
 ## `research_investigation`
 
 - Purpose: Investigate performance changes, edge behavior, or discovery questions using canonical research truth.
