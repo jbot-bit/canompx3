@@ -17,6 +17,7 @@
 =======
 - **Summary:** Closed stale control-state and MES/MGC pipeline debt, implemented PP-167, compacted the baton, fixed trader-logic holdout recompute drift, brought health_check back to truthful green end-to-end, executed the ranked PR48 frozen rel-vol sizing replay (`MGC` candidate, `MES` not ready), explicitly closed the already-landed MGC 5-minute payoff-compression audit as actioned work with a narrow exit-shape-only follow-up scope, restored the missing L1 EUROPE_FLOW frozen prereg and ran it to an honest `KILL`, then executed the MNQ NYSE_CLOSE RR1.0 governance follow-up to an honest `CONTINUE with narrow prereg` and froze the exact next step as `MNQ NYSE_CLOSE ORB_G8 RR1.0`.
  - **Update:** The exact `MNQ NYSE_CLOSE ORB_G8 RR1.0` prereg has now also been executed and closed `KILL`. The strongest native filter path is dead on era stability, but the broad RR1.0 NYSE_CLOSE family is still not dead. The remaining honest branch is a role audit, not another filter rescue.
+ - **Update:** Removed the advisory M2.5 staged-file scan from `.githooks/pre-commit`; commit-time hooks now stop at the real local gates (lint/format/drift/tests/behavioral/syntax) instead of hanging on an extra token-heavy second-opinion step.
 
 ## Next Steps — Active
 1. Move to the next ranked open queue item: `docs/runtime/stages/mnq-nyse-close-rr10-role-audit.md`.
