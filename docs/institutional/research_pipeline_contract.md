@@ -50,6 +50,12 @@ These states are separate. Do not collapse them.
 
 `paper_trades` are operational records, not discovery proof.
 
+Failed validation is not automatically the same thing as a dead edge. If a
+standalone candidate fails because the OOS slice is absent, sparse, or
+underpowered, report it as unverified or inconclusive, not refuted. Reserve
+`dead` / `refuted` language for failures with enough OOS power to justify a
+binary claim.
+
 ---
 
 ## 3. Supported route options
@@ -177,6 +183,11 @@ Execution answers:
 Failure at deployment can block use without invalidating the research edge.
 Failure in research validation kills or parks the candidate before deployment is
 considered.
+
+When the blocking failure is Criterion 8 with sparse or underpowered OOS, the
+correct label is "not validated yet" or "unverified sparse OOS," not "live
+ready" and not "dead edge." Validation status stays authoritative; the extra
+label only prevents over-claiming in either direction.
 
 `validated_setups` is not the live book. It is a validated research shelf. The
 runtime must still check deployability and current account/profile selection,

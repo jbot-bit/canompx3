@@ -59,6 +59,7 @@ Every research-related activity in this project fits exactly one of four modes. 
 - **Holdout discipline:** the holdout_boundary recorded in the parent DISCOVERY hypothesis is **immutable**. CONFIRMATION uses dates strictly outside that boundary. The 2026 holdout rule from `RESEARCH_RULES.md:26` applies and is non-negotiable.
 - **K accounting:** CONFIRMATION runs do NOT reset K. The K from the originating DISCOVERY hypothesis carries forward. If a candidate is re-tested under a new variation, that's a new DISCOVERY hypothesis with a new K plan, not a free CONFIRMATION pass.
 - **Write destinations:** a `research_runs` row with `mode='CONFIRMATION'` and `parent_hypothesis_id` set; per-test rows in `research_run_tests`; on success, a row in `validated_setups` (with provenance fields populated — see § 8) and a row in `validation_run_log` linked to the originating `run_id`.
+- **Language discipline:** "failed confirmation" means "not validated under the current gate set." It does **not** automatically mean the edge is dead. If OOS is absent, sparse, or underpowered, report the candidate as unverified / inconclusive rather than refuted. Reserve "dead" or "refuted" for powered OOS failures.
 
 ### 2.3 DEPLOYMENT_ANALYTICS — "Within already-validated strategies, what does the live portfolio look like?"
 

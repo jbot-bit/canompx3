@@ -922,6 +922,11 @@ def _check_criterion_2_minbtl(meta: dict, on_proxy_data: bool = False) -> tuple[
 def _check_criterion_8_oos(
     row_dict: dict, db_path: Path | None, *, strict_oos_n: bool = False
 ) -> tuple[str | None, str | None]:
+    verdict = _evaluate_criterion_8_oos(row_dict, db_path, strict_oos_n=strict_oos_n)
+    return verdict["status"], verdict["reason"]
+
+
+def _evaluate_criterion_8_oos(row_dict: dict, db_path: Path | None, *, strict_oos_n: bool = False) -> dict[str, object]:
     """Criterion 8: 2026 out-of-sample positive (with N/A safety).
 
     Queries ``orb_outcomes`` joined with ``daily_features`` for trading days
@@ -957,15 +962,23 @@ def _check_criterion_8_oos(
 
     filter_type = row_dict.get("filter_type")
     if not filter_type:
-        return (
-            "REJECTED",
-            "criterion_8: experimental row missing filter_type (cannot apply OOS filter)",
-        )
+        return {
+            "status": "REJECTED",
+            "reason": "criterion_8: experimental row missing filter_type (cannot apply OOS filter)",
+            "c8_oos_status": None,
+            "n_oos": None,
+            "oos_expectancy_r": None,
+            "oos_is_ratio": None,
+        }
     if filter_type not in ALL_FILTERS:
-        return (
-            "REJECTED",
-            f"criterion_8: filter_type='{filter_type}' not in ALL_FILTERS registry",
-        )
+        return {
+            "status": "REJECTED",
+            "reason": f"criterion_8: filter_type='{filter_type}' not in ALL_FILTERS registry",
+            "c8_oos_status": None,
+            "n_oos": None,
+            "oos_expectancy_r": None,
+            "oos_is_ratio": None,
+        }
     filter_obj = ALL_FILTERS[filter_type]
     instrument = row_dict.get("instrument")
     orb_label = row_dict.get("orb_label")
@@ -975,10 +988,14 @@ def _check_criterion_8_oos(
     rr_target = row_dict.get("rr_target")
     is_expr = row_dict.get("expectancy_r")
     if any(v is None for v in (instrument, orb_label, orb_minutes, entry_model, confirm_bars, rr_target, is_expr)):
-        return (
-            "REJECTED",
-            "criterion_8: experimental row missing required dimensions for OOS query",
-        )
+        return {
+            "status": "REJECTED",
+            "reason": "criterion_8: experimental row missing required dimensions for OOS query",
+            "c8_oos_status": None,
+            "n_oos": None,
+            "oos_expectancy_r": None,
+            "oos_is_ratio": None,
+        }
     # Re-bind to local typed names so the static checker sees the narrowing
     # the runtime check above already enforced.
     orb_label_str: str = str(orb_label)
@@ -1038,7 +1055,14 @@ def _check_criterion_8_oos(
         # N/A pass-through: absence of OOS data is a measurement
         # unavailability, not a criterion violation. This protects
         # synthetic test DBs and null seed runs from false rejection.
-        return (None, None)
+        return {
+            "status": None,
+            "reason": None,
+            "c8_oos_status": "NO_OOS_DATA",
+            "n_oos": 0,
+            "oos_expectancy_r": None,
+            "oos_is_ratio": None,
+        }
 
     # Minimum OOS sample gate.  N=30 is a CLT heuristic — NOT a Bailey
     # or Harvey-Liu prescription.  The real institutional fix is a power-
@@ -1056,33 +1080,66 @@ def _check_criterion_8_oos(
     _OOS_MIN_TRADES_CLT_HEURISTIC = 30
     if n_oos < _OOS_MIN_TRADES_CLT_HEURISTIC:
         if strict_oos_n:
-            return (
-                "REJECTED",
-                f"criterion_8: N_oos={n_oos} < {_OOS_MIN_TRADES_CLT_HEURISTIC} "
-                f"(Amendment 3.0 condition 4: no insufficient-OOS-data exemptions "
-                f"for Pathway B individual testing mode)",
-            )
+            return {
+                "status": "REJECTED",
+                "reason": (
+                    f"criterion_8: N_oos={n_oos} < {_OOS_MIN_TRADES_CLT_HEURISTIC} "
+                    f"(Amendment 3.0 condition 4: no insufficient-OOS-data exemptions "
+                    f"for Pathway B individual testing mode)"
+                ),
+                "c8_oos_status": "INSUFFICIENT_N_PATHWAY_B_REJECT",
+                "n_oos": n_oos,
+                "oos_expectancy_r": None,
+                "oos_is_ratio": None,
+            }
         logger.warning(
             "  Criterion 8: N_oos=%d < %d — insufficient for judgment, pass-through (Pathway A permissive mode)",
             n_oos,
             _OOS_MIN_TRADES_CLT_HEURISTIC,
         )
-        return (None, None)
+        return {
+            "status": None,
+            "reason": None,
+            "c8_oos_status": "INSUFFICIENT_N_PATHWAY_A_PASS_THROUGH",
+            "n_oos": n_oos,
+            "oos_expectancy_r": None,
+            "oos_is_ratio": None,
+        }
 
     oos_expr = sum(oos_pnl_r) / n_oos
     if oos_expr < 0:
-        return (
-            "REJECTED",
-            f"criterion_8: OOS ExpR={oos_expr:+.4f} < 0 (N_oos={n_oos})",
-        )
+        return {
+            "status": "REJECTED",
+            "reason": f"criterion_8: OOS ExpR={oos_expr:+.4f} < 0 (N_oos={n_oos})",
+            "c8_oos_status": "NEGATIVE_OOS_EXPR",
+            "n_oos": n_oos,
+            "oos_expectancy_r": oos_expr,
+            "oos_is_ratio": None,
+        }
     if is_expr_f > 0:
         ratio = oos_expr / is_expr_f
         if ratio < 0.40:
-            return (
-                "REJECTED",
-                f"criterion_8: OOS/IS ratio={ratio:.3f} < 0.40 (OOS={oos_expr:+.4f} IS={is_expr_f:+.4f} N_oos={n_oos})",
-            )
-    return (None, None)
+            return {
+                "status": "REJECTED",
+                "reason": (
+                    f"criterion_8: OOS/IS ratio={ratio:.3f} < 0.40 "
+                    f"(OOS={oos_expr:+.4f} IS={is_expr_f:+.4f} N_oos={n_oos})"
+                ),
+                "c8_oos_status": "FAILED_RATIO",
+                "n_oos": n_oos,
+                "oos_expectancy_r": oos_expr,
+                "oos_is_ratio": ratio,
+            }
+    else:
+        ratio = None
+    return {
+        "status": None,
+        "reason": None,
+        "c8_oos_status": "PASSED",
+        "n_oos": n_oos,
+        "oos_expectancy_r": oos_expr,
+        "oos_is_ratio": ratio,
+    }
 
 
 def _check_criterion_9_era_stability(
@@ -1163,6 +1220,22 @@ def _check_phase_4_pre_flight_gates(
     *,
     testing_mode: str = "family",
 ) -> tuple[str | None, str | None]:
+    verdict = _evaluate_phase_4_pre_flight_gates(
+        row_dict,
+        db_path,
+        hypothesis_meta_cache,
+        testing_mode=testing_mode,
+    )
+    return verdict["status"], verdict["reason"]
+
+
+def _evaluate_phase_4_pre_flight_gates(
+    row_dict: dict,
+    db_path: Path | None,
+    hypothesis_meta_cache: dict[str, dict],
+    *,
+    testing_mode: str = "family",
+) -> dict[str, object]:
     """Apply all Phase 4 Stage 4.0 pre-flight gates to a single experimental row.
 
     Stage 4.0 enforces Criteria 1 (hypothesis file presence), 2 (MinBTL),
@@ -1184,12 +1257,12 @@ def _check_phase_4_pre_flight_gates(
         ``("REJECTED", "criterion_N: ...")`` on first gate failure.
     """
     if _is_phase_4_grandfathered(row_dict):
-        return (None, None)
+        return {"status": None, "reason": None, "c8_oos_status": None}
 
     # Criterion 1: hypothesis file presence (C2 depends on the loaded meta)
     rejection = _check_criterion_1_hypothesis_file(row_dict)
     if rejection != (None, None):
-        return rejection
+        return {"status": rejection[0], "reason": rejection[1], "c8_oos_status": None}
 
     # Load + cache the hypothesis metadata for downstream gates.
     sha = row_dict["hypothesis_file_sha"]
@@ -1198,17 +1271,18 @@ def _check_phase_4_pre_flight_gates(
         if meta_loaded is None:
             # Defensive: criterion_1 already verified this; reaching here
             # implies a race or test fixture inconsistency.
-            return (
-                "REJECTED",
-                f"criterion_1: hypothesis sha={sha[:12]} disappeared between checks",
-            )
+            return {
+                "status": "REJECTED",
+                "reason": f"criterion_1: hypothesis sha={sha[:12]} disappeared between checks",
+                "c8_oos_status": None,
+            }
         hypothesis_meta_cache[sha] = meta_loaded
     meta = hypothesis_meta_cache[sha]
 
     # Criterion 2: MinBTL trial count bound (per file, not per row)
     rejection = _check_criterion_2_minbtl(meta)
     if rejection != (None, None):
-        return rejection
+        return {"status": rejection[0], "reason": rejection[1], "c8_oos_status": None}
 
     # Criterion 9: era stability (cheap, pure JSON parse, no DB access).
     # Fires before C8 to short-circuit expensive DB work (reviewer HIGH #5 —
@@ -1220,17 +1294,28 @@ def _check_phase_4_pre_flight_gates(
     _wf_start_year = _wf_override.year if _wf_override is not None else None
     rejection = _check_criterion_9_era_stability(row_dict, wf_start_year=_wf_start_year)
     if rejection != (None, None):
-        return rejection
+        return {"status": rejection[0], "reason": rejection[1], "c8_oos_status": None}
 
     # Criterion 8: 2026 OOS positive (N/A safe when no OOS data).
     # Last in the sequence because it issues a DuckDB read-only query per row.
     # Pathway B (individual mode) uses strict_oos_n=True: hard reject at N<30
     # per Amendment 3.0 condition 4 ("no insufficient OOS data exemptions").
-    rejection = _check_criterion_8_oos(row_dict, db_path, strict_oos_n=(testing_mode == "individual"))
-    if rejection != (None, None):
-        return rejection
+    return _evaluate_criterion_8_oos(
+        row_dict,
+        db_path,
+        strict_oos_n=(testing_mode == "individual"),
+    )
 
-    return (None, None)
+
+def _validation_pathway_for_row(row_dict: dict, testing_mode: str) -> str | None:
+    """Structured pathway label for new validation results."""
+    if _is_phase_4_grandfathered(row_dict):
+        return None
+    if testing_mode == "individual":
+        return "individual"
+    if testing_mode == "family":
+        return "family"
+    return None
 
 
 def run_validation(
@@ -1355,6 +1440,8 @@ def run_validation(
                     "notes": "Alias (non-canonical)",
                     "regime_waivers": [],
                     "rejection_reason": None,
+                    "validation_pathway": None,
+                    "c8_oos_status": None,
                     "dst_split": {
                         "winter_n": None,
                         "winter_avg_r": None,
@@ -1374,12 +1461,16 @@ def run_validation(
         # <= HOLDOUT_GRANDFATHER_CUTOFF OR hypothesis_file_sha IS NULL)
         # skip these gates and fall through to the legacy validator path.
         # See _check_phase_4_pre_flight_gates docstring for details.
-        phase_4_status, phase_4_reason = _check_phase_4_pre_flight_gates(
+        phase_4_result = _evaluate_phase_4_pre_flight_gates(
             row_dict,
             db_path,
             phase_4_hypothesis_cache,
             testing_mode=testing_mode,
         )
+        phase_4_status = phase_4_result["status"]
+        phase_4_reason = phase_4_result["reason"]
+        validation_pathway = _validation_pathway_for_row(row_dict, testing_mode)
+        c8_oos_status = phase_4_result["c8_oos_status"]
         if phase_4_status is not None:
             serial_results.append(
                 {
@@ -1388,6 +1479,8 @@ def run_validation(
                     "notes": phase_4_reason,
                     "regime_waivers": [],
                     "rejection_reason": phase_4_reason,
+                    "validation_pathway": validation_pathway,
+                    "c8_oos_status": c8_oos_status,
                     "dst_split": {
                         "winter_n": None,
                         "winter_avg_r": None,
@@ -1430,6 +1523,8 @@ def run_validation(
                     "status": status,
                     "notes": notes,
                     "regime_waivers": regime_waivers,
+                    "validation_pathway": validation_pathway,
+                    "c8_oos_status": c8_oos_status,
                     "strat_dst_regime": strat_dst_regime,
                 }
             )
@@ -1448,6 +1543,8 @@ def run_validation(
                     "notes": notes,
                     "regime_waivers": regime_waivers,
                     "rejection_reason": notes if status == "REJECTED" else None,
+                    "validation_pathway": validation_pathway,
+                    "c8_oos_status": c8_oos_status,
                     "dst_split": dst_split,
                 }
             )
@@ -1602,6 +1699,8 @@ def run_validation(
                     "notes": notes,
                     "regime_waivers": cand["regime_waivers"],
                     "rejection_reason": notes if status == "REJECTED" else None,
+                    "validation_pathway": cand["validation_pathway"],
+                    "c8_oos_status": cand["c8_oos_status"],
                     "dst_split": dst_split,
                     "wf_result_dict": wr.get("wf_result"),
                 }
@@ -1661,6 +1760,8 @@ def run_validation(
                 status = sr["status"]
                 notes = sr["notes"]
                 dst_split = sr["dst_split"]
+                validation_pathway = sr.get("validation_pathway")
+                c8_oos_status = sr.get("c8_oos_status")
                 # Phase 4 Stage 4.0: capture the structured criterion-tagged
                 # rejection_reason for Phase 4 gate rejections. Legacy
                 # rejections leave this NULL — Stage 4.4 audit distinguishes
@@ -1672,7 +1773,9 @@ def run_validation(
                     con.execute(
                         """UPDATE experimental_strategies
                            SET validation_status = 'SKIPPED',
-                               validation_notes = 'Alias (non-canonical)'
+                               validation_notes = 'Alias (non-canonical)',
+                               validation_pathway = NULL,
+                               c8_oos_status = NULL
                            WHERE strategy_id = ?""",
                         [sid],
                     )
@@ -1685,7 +1788,9 @@ def run_validation(
                            dst_winter_n = ?, dst_winter_avg_r = ?,
                            dst_summer_n = ?, dst_summer_avg_r = ?,
                            dst_verdict = ?,
-                           rejection_reason = ?
+                           rejection_reason = ?,
+                           validation_pathway = ?,
+                           c8_oos_status = ?
                        WHERE strategy_id = ?""",
                     [
                         status,
@@ -1696,6 +1801,8 @@ def run_validation(
                         dst_split.get("summer_avg_r"),
                         dst_split.get("verdict"),
                         rejection_reason,
+                        validation_pathway,
+                        c8_oos_status,
                         sid,
                     ],
                 )
@@ -1846,6 +1953,13 @@ def run_validation(
                             rd.get("n_trials_at_discovery"),
                             rd.get("fst_hurdle"),
                         ],
+                    )
+                    con.execute(
+                        """UPDATE validated_setups
+                           SET validation_pathway = COALESCE(validation_pathway, ?),
+                               c8_oos_status = ?
+                           WHERE strategy_id = ?""",
+                        [validation_pathway, c8_oos_status, sid],
                     )
                     if shelf_lifecycle.retirement_reason is not None:
                         con.execute(
