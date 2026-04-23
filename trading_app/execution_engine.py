@@ -232,20 +232,25 @@ class ExecutionEngine:
         self._daily_features_rows: dict[int, dict] = {}
 
     def _apply_conditional_roles(self, trade: ActiveTrade, session: str) -> None:
-        """Query RoleResolver and apply multiplier / record context."""
+        """Query RoleResolver and record shadow conditional-role context.
+
+        Conditional overlays are not an approved live sizing surface. The
+        engine records context for operator/journal evidence only; execution
+        size remains controlled by the existing risk/calendar paths.
+        """
         if self.role_resolver is None:
             return
 
         context = self.role_resolver.get_overlay_context(trade.strategy_id, session, trade.direction)
         trade.overlay_context = context
-
-        # Apply LIVE multipliers
-        live_multiplier = 1.0
-        for details in context.values():
-            if details["mode"] == "live" and details["role"] == "allocator":
-                live_multiplier *= details["size_multiplier"]
-
-        trade.size_multiplier *= live_multiplier
+        if context:
+            logger.info(
+                "CONDITIONAL_OVERLAY_SHADOW: %s %s %s context=%s",
+                trade.strategy_id,
+                session,
+                trade.direction,
+                context,
+            )
 
     def _compute_contracts(self, risk_points: float, cost: CostSpec, max_contracts: int = 1) -> int:
         """Compute position size using vol-adjusted sizing from portfolio params.

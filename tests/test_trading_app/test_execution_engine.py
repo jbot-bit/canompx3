@@ -219,6 +219,43 @@ class TestEntry:
         assert e1_entries[0].risk_points is not None
         assert e1_entries[0].risk_points > 0
 
+    def test_shadow_overlay_context_does_not_change_contracts(self):
+        """Conditional-role overlays are shadow evidence, not live sizing."""
+
+        class ShadowResolver:
+            def get_overlay_context(self, strategy_id, session, direction):
+                return {
+                    "test_overlay": {
+                        "mode": "shadow_only",
+                        "role": "allocator",
+                        "bucket": 5,
+                        "size_multiplier": 2.0,
+                        "feature_key": "rel_vol_US_DATA_830",
+                        "feature_value": 1.8,
+                    }
+                }
+
+        strategy = _make_strategy(
+            entry_model="E1",
+            confirm_bars=1,
+            strategy_id="MGC_US_DATA_830_E1_RR2.0_CB1_NO_FILTER",
+            max_contracts=1,
+        )
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost(), role_resolver=ShadowResolver())
+        engine.on_trading_day_start(date(2024, 1, 5))
+
+        ts_base, _ = self._run_to_break(engine)
+        events = engine.on_bar(_bar(ts_base + timedelta(minutes=6), 2708, 2715, 2707, 2712))
+        entry_events = [e for e in events if e.event_type == "ENTRY"]
+
+        assert len(entry_events) == 1
+        assert entry_events[0].contracts == 1
+        assert len(engine.active_trades) == 1
+        trade = engine.active_trades[0]
+        assert trade.contracts == 1
+        assert trade.size_multiplier == 1.0
+        assert trade.overlay_context["test_overlay"]["bucket"] == 5
+
 
 # ============================================================================
 # Exit Tests

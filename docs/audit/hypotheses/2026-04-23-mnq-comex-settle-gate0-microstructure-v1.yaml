@@ -2,15 +2,16 @@
 #
 # Locked: 2026-04-23T12:00:00+10:00
 # Author: Gemini session
-# Committing commit hash: TO_BE_STAMPED
-# Data horizon: 6.65yr clean MNQ + Databento microstructure pilot (targeted windows)
+# Committing commit hash: 34d9e7321fee9f9022cc9945a53c664825411238
+# Data horizon: 6.65yr clean MNQ + future Databento top-of-book pilot windows
 # Intended discovery holdout: 2026-01-01
+# Execution status: DESIGN_ONLY — runner and Databento tables are not built yet.
 
 metadata:
   name: "mnq_comex_settle_gate0_microstructure_v1"
   purpose: "Microstructure Gate 0 falsification study for MNQ COMEX_SETTLE using top-of-book imbalance."
   date_locked: "2026-04-23T12:00:00+10:00"
-  commit_sha: "PENDING"
+  commit_sha: "34d9e7321fee9f9022cc9945a53c664825411238"
   holdout_date: "2026-01-01"
   total_expected_trials: 4
   testing_mode: "family"
@@ -55,19 +56,13 @@ hypotheses:
       - "Policy value fails to improve versus the exact parent despite selected-trade mean lift"
 
 execution:
-  mode: "bounded_runner"
-  entrypoint: "research/research_mnq_e2_microstructure_pilot.py"
-  default_args:
-    - "--instrument"
-    - "MNQ"
-    - "--session"
-    - "COMEX_SETTLE"
-    - "--orb-minutes"
-    - "5"
-    - "--rr-target"
-    - "1.5"
-    - "--gate"
-    - "0"
+  mode: "design_only"
+  entrypoint: null
+  default_args: []
+  required_before_execution:
+    - "Databento top-of-book event tables are implemented and populated for the frozen windows."
+    - "A bounded runner is written and reviewed before any scan."
+    - "No 2026 OOS threshold tuning; holdout remains 2026-01-01."
 
 total_hypothesis_count: 1
 total_expected_trials: 4
