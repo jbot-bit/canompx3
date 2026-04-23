@@ -4,6 +4,7 @@ import pandas as pd
 
 from research.research_mgc_payoff_compression_audit import (
     FamilySpec,
+    classify_verdicts,
     conservative_lower_target_pnl,
     passes_filter,
     target_net_r,
@@ -60,3 +61,24 @@ def test_target_net_r_declines_with_smaller_target() -> None:
     high = target_net_r(2500.0, 2499.0, 0.75)
     assert low is not None and high is not None
     assert low < high
+
+
+def test_classify_verdicts_marks_low_r_rescue_without_no_rescue_flag() -> None:
+    summary = pd.DataFrame(
+        [
+            {"family_kind": "warm", "avg_lr05_r": 0.09, "delta_lr05_r": 0.06},
+            {"family_kind": "warm", "avg_lr05_r": 0.13, "delta_lr05_r": 0.05},
+            {"family_kind": "warm", "avg_lr05_r": 0.07, "delta_lr05_r": 0.07},
+            {"family_kind": "broad", "avg_lr05_r": 0.04, "delta_lr05_r": 0.05},
+            {"family_kind": "broad", "avg_lr05_r": 0.05, "delta_lr05_r": 0.04},
+            {"family_kind": "broad", "avg_lr05_r": -0.01, "delta_lr05_r": 0.02},
+        ]
+    )
+    verdicts = classify_verdicts(
+        summary,
+        all_time_stop_zero=True,
+        no_threshold_sessions=True,
+    )
+    assert verdicts["PAYOFF_COMPRESSION_REAL"] is True
+    assert verdicts["LOW_RR_RESCUE_PLAUSIBLE"] is True
+    assert verdicts["NO_RESCUE_SIGNAL"] is False

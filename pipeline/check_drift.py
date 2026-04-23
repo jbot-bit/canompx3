@@ -3397,6 +3397,10 @@ def check_recent_garch_feature_coverage(con=None) -> list[str]:
     _own_con = False
     try:
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.build_daily_features import GARCH_MIN_PRIOR_CLOSES, GARCH_PCT_MIN_PRIOR_VALUES
+
+        recent_rows = 20
+        min_total_rows = GARCH_MIN_PRIOR_CLOSES + GARCH_PCT_MIN_PRIOR_VALUES + recent_rows
 
         if con is None:
             import duckdb
@@ -3432,8 +3436,8 @@ def check_recent_garch_feature_coverage(con=None) -> list[str]:
                    MAX(trading_day) AS last_bad_day,
                    COUNT(*) AS bad_rows
             FROM ranked
-            WHERE n_total >= 300
-              AND rn_recent <= 20
+            WHERE n_total >= {min_total_rows}
+              AND rn_recent <= {recent_rows}
               AND (garch_forecast_vol IS NULL OR garch_forecast_vol_pct IS NULL)
             GROUP BY symbol, orb_minutes
             ORDER BY symbol, orb_minutes
