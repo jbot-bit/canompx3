@@ -2599,7 +2599,7 @@ class TestOrbCapGate:
         orch.instrument = "MNQ"
         orch.portfolio = portfolio
         orch._strategy_map = {strat.strategy_id: strat}
-        orch._orb_caps = {"NYSE_OPEN": 150.0}
+        orch._orb_caps = {(strat.orb_label, strat.instrument): 150.0}
         return orch
 
     async def test_149pt_under_cap_submits(self):

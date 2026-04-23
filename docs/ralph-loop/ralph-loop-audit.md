@@ -45,19 +45,18 @@
 
 ---
 
-## Prior: Iteration 167 — self_funded_tradovate cap conflict in get_lane_registry (DEFERRED)
+## Prior: Iteration 167 — self_funded_tradovate cap conflict in get_lane_registry (FIXED LOCAL 2026-04-23)
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Contract drift | `prop_profiles.py:864-875` — `self_funded_tradovate` has EUROPE_FLOW (MNQ cap=150.0, MGC cap=30.0) and NYSE_OPEN (MNQ cap=150.0, MES cap=60.0). `get_lane_registry` raises `ValueError` on inconsistent per-session caps across instruments. Currently unreachable: profile is `active=False` AND `resolve_profile_id` default `exclude_self_funded=True` blocks all callers. Dormant but will fail at activation time without architectural fix. | MEDIUM | DEFERRED — dormant profile, blocked by exclude_self_funded guard (PP-167) |
+| Contract drift | `prop_profiles.py` previously keyed ORB-cap registry entries by session only, which falsely treated multi-instrument sessions as conflicting. `get_lane_registry()` now keys by `(orb_label, instrument)` and the session_orchestrator plus the remaining registry consumers were updated to match. `self_funded_tradovate` remains inactive for separate readiness reasons. | MEDIUM | FIXED LOCAL 2026-04-23 |
 
 ### Audit Notes
 
 - **Finding source:** Re-audit of `prop_profiles.py` (stale Priority 2 target, modified 2026-04-16 post iter-142 scan).
-- **TRACE:** `prop_profiles.py:864-875` (MGC_EUROPE_FLOW cap=30.0, MES_NYSE_OPEN cap=60.0) → `get_lane_registry:1089-1098` (cap mismatch logic) → would raise `ValueError`. Blocked by `resolve_profile_id:941` (`exclude_self_funded=True` default) in all 7 callers of `get_lane_registry`.
-- **EVIDENCE:** Simulation confirmed EUROPE_FLOW=[30.0, 150.0] and NYSE_OPEN=[60.0, 150.0] cap conflicts. Grep of all `get_lane_registry` callers (session_orchestrator, forward_monitor, slippage_scenario) confirmed none pass `exclude_self_funded=False`. Profile `active=False`. 61/61 existing tests pass.
-- **Deferred reason:** Dormant infrastructure. No caller can reach the cap-conflict logic today. Profile is both `active=False` and guarded by `exclude_self_funded=True`. Needs architectural fix to `get_lane_registry` to support per-(session, instrument) keying before `self_funded_tradovate` goes live.
-- **Action required at activation:** `get_lane_registry` must be updated to key by `(orb_label, instrument)` for multi-instrument profiles, or `self_funded_tradovate` must be split into per-instrument sub-profiles.
+- **TRACE:** `prop_profiles.py` multi-instrument profile lanes share session labels but carry distinct per-instrument caps → session-only registry key was the wrong invariant → tuple-keyed `(orb_label, instrument)` registry removes the false conflict while preserving fail-closed behavior for true same-pair mismatches.
+- **EVIDENCE:** Targeted verification passed on `2026-04-23`: `tests/test_trading_app/test_prop_profiles.py`, `tests/test_trading_app/test_session_orchestrator.py`, and `pipeline/check_drift.py`. `scripts/tools/slippage_scenario.py` and `scripts/tools/forward_monitor.py` were updated in the same local change so the caller set is closed.
+- **Activation note:** `self_funded_tradovate` remains inactive because profile readiness is still gated on account/API setup and dormant-profile audits still classify it as not ready for promotion.
 
 ### Full Seven Sins scan — prop_profiles.py
 
@@ -72,7 +71,7 @@
 | Volatile data | None — `_P90_ORB_PTS` annotated empirical, not a hard-coded claim |
 | Async safety | N/A — synchronous module |
 | State persistence gap | N/A — pure config module, no mutable state |
-| Contract drift | DEFERRED — `self_funded_tradovate` multi-instrument cap conflict in `get_lane_registry` (PP-167) |
+| Contract drift | FIXED LOCAL 2026-04-23 — `get_lane_registry` now keys by `(orb_label, instrument)` and callers were updated to match |
 
 ---
 
