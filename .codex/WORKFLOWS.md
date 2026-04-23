@@ -26,6 +26,7 @@ When the task matches, prefer these repo-local skills:
 - `canompx3-research` for research, analysis, and claim scrutiny
 - `canompx3-live-audit` for live-trading/runtime safety audits
 - `canompx3-deploy-readiness` for promotion/deployment go-no-go decisions
+- shared `.claude/agents/evidence-auditor.md` when the task is really claim scrutiny or anti-bias review
 
 ## Intent-To-Workflow Routing
 
@@ -40,6 +41,7 @@ Codex should route from intent, not from exact wording.
   - `canompx3-verify` for post-edit verification and done-definition checks
   - `canompx3-live-audit` for runtime, broker, session, or live-control safety
   - `canompx3-deploy-readiness` for go/no-go promotion decisions
+  - `evidence-auditor.md` for separate-context scrutiny of claims, results, and readiness narratives
   - shared `.claude/skills/` recipes when the task is really a shared command
     flow
 - If multiple routes fit, prefer the path with the strongest verification and
@@ -68,6 +70,8 @@ Route to the correct source:
 - Project memory, design history, prior findings:
   - Use `.claude/skills/pinecone-assistant/SKILL.md`
 - Academic methodology: use local PDFs in `resources/` (BH FDR, walk-forward, deflated Sharpe).
+- For claim-heavy work, downgrade conclusions unless they are explicitly tagged or supportable as `MEASURED`; `INFERRED` and `UNSUPPORTED` are valid end states, not failures.
+- For institutional research review prompts, prefer the compact runtime rubric in `docs/prompts/INSTITUTIONAL_RESEARCH_REVIEW_MINI.md` instead of re-pasting long prompt blocks.
 
 ## Verification Defaults
 
