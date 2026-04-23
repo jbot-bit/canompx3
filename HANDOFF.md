@@ -9,9 +9,9 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** pending — PR48 shadow overlay Phase 1 + prereg front door
-- **Summary:** Implemented the Phase 1 `MGC:cont_exec` shadow-only overlay carrier and finished the prereg front-door routing surface. The overlay is a static spec plus derived-state envelope exposed through lifecycle, pre-session, and dashboard surfaces only. The prereg front door makes `standalone_edge` vs `conditional_role` execution branches explicit before any run.
-- **Audit Addendum:** This does not add live sizing, allocator weighting, `validated_setups` promotion, or `paper_trades` shadow rows. `scripts/infra/prereg-loop.sh` is workflow hygiene; it is not evidence that any prereg survives.
+- **Commit:** current HEAD — `tools(review): add capital review routing`
+- **Summary:** Added paired Codex and Claude capital-review routing so broad review requests compose code review, live audit, deploy-readiness, research/evidence, security, threat-model, and supply-chain checks instead of collapsing into a narrow diff scan. Added a Codex review-only launcher and reusable report template.
+- **Audit Addendum:** This does not change trading logic, live routing, research criteria, or validation behavior. It is review orchestration only; `CLEAR` still requires traced evidence and targeted verification.
 
 ## Next Steps — Active
 1. Do not reopen `mnq_parent_structure_shadow_buckets_v1`. Exact-parent structure shadow buckets for these MNQ lanes are now closed `KILL` and should not be rescued under renamed score language.

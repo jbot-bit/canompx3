@@ -36,6 +36,8 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
   - `scripts/infra/codex-project-search-gold-db.sh`
 - Max-capability review profile:
   - `scripts/infra/codex-review.sh`
+- Capital-at-risk review profile:
+  - `scripts/infra/codex-capital-review.sh`
 - Review current changes:
   - `codex -p canompx3_max review --uncommitted`
 - Non-interactive task execution:
@@ -55,6 +57,9 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 - Use `blast-radius/SKILL.md` before edits that touch shared interfaces.
 - Use `quant-verify/SKILL.md` or `verify-done/SKILL.md` before closing any material implementation task.
 - Use `health-check/SKILL.md` when the right validation command is unclear.
+- Use `canompx3-capital-review` or `scripts/infra/codex-capital-review.sh`
+  when review scope can affect real capital, deployment, live execution,
+  research truth, credentials, external inputs, CI, or supply chain.
 
 ## Codex Note
 

@@ -26,6 +26,9 @@ When the task matches, prefer these repo-local skills:
 - `canompx3-research` for research, analysis, and claim scrutiny
 - `canompx3-live-audit` for live-trading/runtime safety audits
 - `canompx3-deploy-readiness` for promotion/deployment go-no-go decisions
+- `canompx3-capital-review` for thorough capital-at-risk review orchestration
+  across code, live, deploy, research, evidence, security, threat-model, and
+  supply-chain surfaces
 - shared `.claude/agents/evidence-auditor.md` when the task is really claim scrutiny or anti-bias review
 
 ## Intent-To-Workflow Routing
@@ -41,6 +44,8 @@ Codex should route from intent, not from exact wording.
   - `canompx3-verify` for post-edit verification and done-definition checks
   - `canompx3-live-audit` for runtime, broker, session, or live-control safety
   - `canompx3-deploy-readiness` for go/no-go promotion decisions
+  - `canompx3-capital-review` when the ask is broad, adversarial, anti-bias,
+    "real capital", "thorough AF", or spans multiple risk surfaces
   - `evidence-auditor.md` for separate-context scrutiny of claims, results, and readiness narratives
   - shared `.claude/skills/` recipes when the task is really a shared command
     flow
@@ -106,6 +111,8 @@ For large post-edit verification, use the shared logic indexed in:
 - Narrow scripted jobs: `codex exec`
 - Non-interactive review of current changes: `codex review` or
   `scripts/infra/codex-review.sh`
+- Capital-at-risk review of current changes:
+  `scripts/infra/codex-capital-review.sh`
 - Interactive work: `scripts/infra/codex-project.sh`
 - Interactive with live web search: `scripts/infra/codex-project-search.sh`
 - Heavier coding / review profile: `canompx3_max`
