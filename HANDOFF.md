@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-23
-- **Commit:** `pending publish` — `docs(research): close pr48 mgc bounded translation`
+- **Commit:** `aed4bf00` — `docs(research): close pr48 mgc bounded translation`
 - **Summary:** Closed the next PR48 stage as `REDESIGN`, not `IMPLEMENT`. `MGC:cont_exec` is still alive as a frozen allocator/sizer result, but the current runtime has no honest carrier for it: the only MGC profile surface is the wrong parent, and the existing late-applied `size_multiplier` path is not a safe bridge.
 - **Audit Addendum:** Do not implement `MGC:cont_exec` through the current execution-engine multiplier hook and do not attach it to the old `topstep_50k` MGC lane. The next honest move is one bounded redesign for a `shadow_only` profile-local conditional overlay contract.
 
