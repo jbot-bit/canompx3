@@ -3,44 +3,54 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 169
+## Last iteration: 170
 
-## RALPH AUDIT — Iteration 169
+## RALPH AUDIT — Iteration 170
 ## Date: 2026-04-25
-## Infrastructure Gates: drift 107/107 PASS (6 pre-existing advisories); behavioral audit 7/7 PASS; ruff PASS (all clean)
+## Infrastructure Gates: drift 107/107 PASS (6 pre-existing advisories); behavioral audit 7/7 PASS; ruff PASS; 223 tests PASS
 
 ---
 
-## Iteration 169 — db_manager.py verify_trading_app_schema silent verifier gap (FIXED 6811640a)
+## Iteration 170 — outcome_builder.py dead parameter break_ts in _compute_outcomes_all_rr (FIXED 9b16c4eb)
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Dead parameter (institutional-rigor.md § 5) | `_compute_outcomes_all_rr` accepted `break_ts=None` in its signature but never read it in the function body (219 lines, 0 reads). Two production callsites in `build_outcomes` and two test callsites in `test_stress_hardcore.py` passed `break_ts=break_ts,` unnecessarily — pure drift bait. | LOW | FIXED 9b16c4eb |
+
+### Audit Notes
+
+- **Auto-targeting:** Priority 2 (stale re-audit, critical) — `trading_app/outcome_builder.py` last scanned iter 115 (2026-03-16), E2 canonical window fix (0c56c7f7) and additional commits landed after. Critical tier (12 importers).
+- **Doctrine cited:** institutional-rigor.md § 5 (no dead parameters — drift bait).
+- **PREMISE:** `break_ts` is accepted by `_compute_outcomes_all_rr` but never used in the body, causing callers to pass a value that has no effect — silent contract mismatch.
+- **TRACE:** `outcome_builder.py:218` (signature `break_ts=None`) → body lines 219-420 (zero reads of `break_ts`) → callers `build_outcomes:877, 936` pass `break_ts=break_ts,` → `test_stress_hardcore.py:609, 641` pass `break_ts=break_ts,`.
+- **EVIDENCE:** `grep -n "break_ts" outcome_builder.py` returns 8 hits — all in signature, callers, or F-03 audit comment. Zero hits inside function body between sig and closing `return`.
+- **Fix:** Removed `break_ts=None,` from signature and `break_ts=break_ts,` from all 4 callsites (2 production, 2 test). 5 lines net changed.
+- **Canonical context:** `break_ts` was the pre-E2 fallback for ORB window end. After `0c56c7f7` (E2 canonical window fix), `orb_utc_window()` is the sole authority — `break_ts` fallback was explicitly removed as look-ahead bias. The dead parameter was a residue of that migration.
+- **Verification:** 223 tests pass, 107/107 drift checks PASS. All 8 pre-commit hooks PASS.
+- **Blast radius:** 2 files (outcome_builder.py + test_stress_hardcore.py). No callers outside these two files call `_compute_outcomes_all_rr` (private function, confirmed by grep).
+
+### Full Seven Sins scan — outcome_builder.py
+
+| Sin | Result |
+|-----|--------|
+| Silent failure | None — errors propagate via ValueError/RuntimeError. No bare except. |
+| Fail-open | None — `orb_utc_window()` raises ValueError if canonical inputs missing (no break_ts fallback). |
+| Look-ahead bias | None — E2 canonical window uses `orb_utc_window(trading_day, orb_label, orb_minutes)` (line 845, 499). No forward-look. |
+| Cost illusion | None — cost_spec injected from COST_SPECS per instrument; not hardcoded. |
+| Canonical violation | None — ENTRY_MODELS/SKIP_ENTRY_MODELS from trading_app.config; no hardcoded instruments/sessions/dates. |
+| Dead parameter | FIXED — break_ts removed from signature and all 4 callsites. |
+| Orphan risk | None — _compute_outcomes_all_rr and compute_single_outcome have verified callers. |
+| Async safety | N/A — synchronous module |
+| State persistence gap | N/A — stateless computation module |
+| Contract drift | FIXED — signature now matches all callsites. |
+
+---
+
+## Prior: Iteration 169 — db_manager.py verify_trading_app_schema silent verifier gap (FIXED 6811640a)
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
 | Fail-open / Silent failure | `verify_trading_app_schema` `expected_cols` for `validated_setups` missing 10 migration-added columns; `experimental_strategies` missing 2. Returned `(True, [])` silently even when those columns absent. | MEDIUM | FIXED 6811640a |
-
-### Audit Notes
-
-- **Auto-targeting:** Priority 2 (stale re-audit, critical) — `trading_app/db_manager.py` last scanned iter 120 (2026-03-16), modified 2026-04-16. Critical tier (13 importers).
-- **Doctrine cited:** integrity-guardian.md § 3 (fail-closed — never return success in audit/health paths when gaps exist), § 5 (evidence over assertion — verifier must actually verify all schema columns).
-- **TRACE:** `db_manager.py:957-963` — `missing = expected_cols - actual_cols` → columns not in `expected_cols` cannot appear in `missing` → `violations` stays empty → returns `(True, [])` even when 10 migration-added columns absent from DB.
-- **EVIDENCE:** Lines 613-692 add `discovery_k`, `discovery_date`, `era_dependent`, `max_year_pct`, `wfe_verdict`, `wfe_investigation_date`, `wfe_investigation_notes`, `slippage_validation_status`, `validation_pathway`, `c8_oos_status` to `validated_setups` via ALTER TABLE. None of these appeared in the `expected_cols` set at lines 883-961. For `experimental_strategies`, `validation_pathway` and `c8_oos_status` (lines 687-692) also missing from its expected_cols (lines 814-875). Fix: added all 12 missing column names to the two expected_cols sets.
-- **Verification:** 13 tests in test_db_manager.py passed. 107/107 drift checks PASS. 324 fast tests passed in pre-commit hook.
-- **Blast radius:** 2 files (db_manager.py, line-ending normalization only in pre-commit for test file). No API/signature change.
-- **History note:** Iter 120 had the same class of bug for `experimental_strategies` (9 columns added then). This iteration closes the same gap that accumulated since iter 120 across subsequent migrations.
-
-### Full Seven Sins scan — db_manager.py
-
-| Sin | Result |
-|-----|--------|
-| Silent failure | FIXED — `verify_trading_app_schema` now covers all 12 previously-missing columns |
-| Fail-open | None — `init_trading_app_schema` uses `with duckdb.connect()` (auto-close). Migrations use narrow `CatalogException` catch (column already exists). Force-drop is guarded by explicit `force=True` flag. |
-| Look-ahead bias | N/A — schema manager, no temporal query logic |
-| Cost illusion | N/A — no P&L computation |
-| Canonical violation | None — `ACTIVE_ORB_INSTRUMENTS` imported from `pipeline.asset_configs` (line 393). `GOLD_DB_PATH` from `pipeline.paths`. `FAMILY_RR_LOCKS_SCHEMA` from `pipeline.init_db`. All canonical. |
-| Orphan risk | None — `compute_trade_day_hash`, `get_family_head_ids`, `has_edge_families` all have identifiable callers. |
-| Volatile data | None — schema strings are literals, not research-derived values. `@research-source` annotation present on `n_trials_at_discovery` (line 537). |
-| Async safety | N/A — synchronous module |
-| State persistence gap | N/A — DB-backed state, not in-memory |
-| Contract drift | None — `verify_trading_app_schema` and `init_trading_app_schema` signatures unchanged |
 
 ---
 
@@ -80,7 +90,7 @@
 
 ## Files Fully Scanned
 
-> Cumulative list — 249 files fully scanned (db_manager.py re-audited iter 169).
+> Cumulative list — 250 files fully scanned (outcome_builder.py re-audited iter 170).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -88,7 +98,7 @@
 - trading_app/ml/meta_label.py — added iter 130
 - trading_app/ml/predict_live.py — added iter 131
 - trading_app/walkforward.py — added iter 132
-- trading_app/outcome_builder.py — added iter 115
+- trading_app/outcome_builder.py — added iter 115, re-audited iter 170
 - trading_app/strategy_discovery.py — added iter 116
 - trading_app/strategy_validator.py — added iter 117
 - trading_app/portfolio.py — added iter 118
@@ -170,9 +180,9 @@
 - trading_app/risk_manager.py — added iter 166
 - trading_app/strategy_fitness.py — re-audited iter 167 (WIP-save only, no substantive change)
 - trading_app/topstep_scaling_plan.py — added iter 168
-- **Total: 249 files fully scanned**
+- **Total: 250 files fully scanned**
 
 ## Next iteration targets
-- Priority 2 (stale re-audit, critical): trading_app/outcome_builder.py — last scanned iter 115 (2026-03-16), E2 canonical window fix (0c56c7f7) and additional commits landed after. Critical tier (12 importers).
 - Priority 3 (unscanned medium): trading_app/lane_correlation.py
+- Priority 3 (unscanned medium): trading_app/eligibility/ (if not yet scanned — check centrality)
 - Note: pre-existing drift advisories (checks 59/95) require operational resolution by user — run `python scripts/tools/select_family_rr.py` and re-run validator for Mode A strategies

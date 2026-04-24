@@ -9,11 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** af4897e3 — chore(stages): close orphan B2+B6 stages
+- **Commit:** 9b16c4eb — [mechanical] fix: Ralph Loop iter 170 — dead parameter break_ts in _compute_outcomes_all_rr (RI-05)
 - **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/live-b2-notifications-bool-return.md`
-  - `docs/runtime/stages/live-b6-f1-signal-only-seed.md`
+  - `tests/test_trading_app/test_stress_hardcore.py`
+  - `trading_app/outcome_builder.py`
 
 ## Next Steps — Active
 

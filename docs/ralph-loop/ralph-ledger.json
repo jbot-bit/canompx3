@@ -1,7 +1,7 @@
 {
-  "total_iterations": 162,
+  "total_iterations": 163,
   "last_updated": "2026-04-25",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 169,
   "findings_by_type": {
     "canonical_violation": {
@@ -23,8 +23,8 @@
       "fix_rate": 0.5
     },
     "dead_code": {
-      "found": 15,
-      "fixed": 15,
+      "found": 16,
+      "fixed": 16,
       "deferred": 0,
       "fix_rate": 1.0
     },
@@ -117,11 +117,11 @@
     "CRITICAL": 3,
     "HIGH": 12,
     "MEDIUM": 43,
-    "LOW": 104
+    "LOW": 105
   },
   "classifications": {
     "judgment": 74,
-    "mechanical": 59,
+    "mechanical": 60,
     "audit-only": 29
   },
   "files_audited": {
@@ -154,6 +154,11 @@
       "audit_count": 4,
       "last_iter": 119,
       "findings": 3
+    },
+    "trading_app/outcome_builder.py": {
+      "audit_count": 4,
+      "last_iter": 170,
+      "findings": 4
     },
     "webhook_server.py": {
       "audit_count": 3,
@@ -188,11 +193,6 @@
     "trading_app/rolling_portfolio.py": {
       "audit_count": 3,
       "last_iter": 43,
-      "findings": 3
-    },
-    "trading_app/outcome_builder.py": {
-      "audit_count": 3,
-      "last_iter": 115,
       "findings": 3
     },
     "trading_app/strategy_discovery.py": {
@@ -2873,6 +2873,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "6811640a"
+    },
+    {
+      "iter": 170,
+      "date": "2026-04-25",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/outcome_builder.py:_compute_outcomes_all_rr (line 217)",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "9b16c4eb"
     }
   ]
 }

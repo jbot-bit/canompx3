@@ -1776,6 +1776,19 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 
 ---
 
+## Iteration 170 — 2026-04-25
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/outcome_builder.py:_compute_outcomes_all_rr (line 217)
+- Finding: break_ts=None accepted in _compute_outcomes_all_rr signature but never read in the 219-line function body. Two production callsites in build_outcomes and two test callsites in test_stress_hardcore.py passed break_ts=break_ts, unnecessarily. Dead parameter is drift bait — residue of E2 canonical window fix (0c56c7f7) which removed the break_ts fallback as look-ahead bias.
+- Doctrine cited: institutional-rigor.md § 5 (no dead parameters — drift bait)
+- Action: Removed break_ts=None from signature and break_ts=break_ts, from all 4 callsites (2 production, 2 test). 5 lines net changed.
+- Blast radius: 2 files (outcome_builder.py + test_stress_hardcore.py)
+- Verification: PASS — 223/223 tests (test_outcome_builder + test_stress_hardcore); 107/107 drift checks; 8/8 pre-commit hooks
+- Commit: 9b16c4eb
+
+---
+
 ## Iteration 169 — 2026-04-25
 - Phase: fix
 - Classification: [mechanical]
