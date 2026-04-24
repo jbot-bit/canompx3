@@ -1669,21 +1669,32 @@ def check_doc_hygiene_contracts() -> list[str]:
     violations: list[str] = []
 
     # 1. Preregs/results must not carry placeholder provenance stamps.
+    # Bare-word markers (always violations).
     stamp_dirs = [
         PROJECT_ROOT / "docs" / "audit" / "hypotheses",
         PROJECT_ROOT / "docs" / "audit" / "results",
     ]
     stamp_patterns = ("UNSTAMPED", "TO_BE_STAMPED")
+    # commit_sha placeholder regex. Per .claude/rules/research-truth-protocol.md
+    # § 2a, `commit_sha: TO_FILL_AFTER_COMMIT` is legitimate (chicken-and-egg
+    # before first commit). Any OTHER placeholder value on commit_sha is rot.
+    commit_sha_placeholder = re.compile(
+        r"""commit_sha\s*:\s*["']?(PENDING|TO_FILL_(?!AFTER_COMMIT\b)[A-Z_]+|UNSTAMPED|TO_BE_STAMPED)["']?""",
+        re.IGNORECASE,
+    )
     for directory in stamp_dirs:
         if not directory.exists():
             continue
         for path in sorted((*directory.glob("*.md"), *directory.glob("*.yaml"), *directory.glob("*.yml"))):
             text = path.read_text(encoding="utf-8", errors="replace")
             for line_num, line in enumerate(text.splitlines(), 1):
-                if any(marker in line for marker in stamp_patterns):
+                hits = [marker for marker in stamp_patterns if marker in line]
+                sha_match = commit_sha_placeholder.search(line)
+                if sha_match:
+                    hits.append(f"commit_sha={sha_match.group(1)}")
+                if hits:
                     violations.append(
-                        f"  {_doc_hygiene_rel(path)}:{line_num}: placeholder provenance marker "
-                        f"({', '.join(marker for marker in stamp_patterns if marker in line)})"
+                        f"  {_doc_hygiene_rel(path)}:{line_num}: placeholder provenance marker ({', '.join(hits)})"
                     )
 
     # 2. Execution metadata must not imply an unavailable or fake runner.

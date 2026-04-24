@@ -461,17 +461,25 @@ class RoleResolver:
             if not overlay.get("valid") or overlay.get("status") != "ready":
                 continue
 
-            # Check if this strategy_id matches the overlay spec
+            # Check if this strategy_id matches the overlay spec.
+            # Use the canonical parser instead of substring matching:
+            # `spec.entry_model in strategy_id` would collide with hypothetical
+            # "E20", `f"O{spec.orb_minutes}"` collides with O50/O150 etc.
+            # See feedback_aperture_overlay_canonical_parser.md.
             spec = CONDITIONAL_OVERLAYS.get(overlay["overlay_id"])
             if not spec:
                 continue
+            try:
+                from trading_app.eligibility.builder import parse_strategy_id
 
-            # strategy_id check: instrument + orb_minutes + entry_model + rr_target match
-            if spec.instrument not in strategy_id:
+                parsed = parse_strategy_id(strategy_id)
+            except (ValueError, ImportError):
                 continue
-            if f"O{spec.orb_minutes}" not in strategy_id:
+            if parsed.get("instrument") != spec.instrument:
                 continue
-            if spec.entry_model not in strategy_id:
+            if parsed.get("orb_minutes", 5) != spec.orb_minutes:
+                continue
+            if parsed.get("entry_model") != spec.entry_model:
                 continue
 
             # Match on session and direction within the overlay rows

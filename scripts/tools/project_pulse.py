@@ -2177,8 +2177,8 @@ def format_text(report: PulseReport) -> str:
     if report.system_identity:
         identity = report.system_identity
         relations = identity.get("published_relations", {})
-        doctrine = ", ".join(identity.get("doctrine_docs", []))
-        backbone = ", ".join(identity.get("backbone_modules", []))
+        doctrine_count = len(identity.get("doctrine_docs", []))
+        backbone_count = len(identity.get("backbone_modules", []))
         lines.append("System identity:")
         lines.append(f"  Root: {identity.get('canonical_repo_root')}")
         lines.append(f"  Canonical DB: {identity.get('canonical_db_path')}")
@@ -2186,9 +2186,10 @@ def format_text(report: PulseReport) -> str:
             lines.append(f"  Active DB override: {identity.get('selected_db_path')}")
         lines.append(f"  Active ORB instruments: {', '.join(identity.get('active_orb_instruments', [])) or 'none'}")
         lines.append(f"  Shelf contracts: {relations.get('active', '?')}, {relations.get('deployable', '?')}")
-        lines.append(f"  Authority map: {identity.get('authority_map_doc')}")
-        lines.append(f"  Doctrine: {doctrine}")
-        lines.append(f"  Backbone: {backbone}")
+        lines.append(
+            f"  Authority: {identity.get('authority_map_doc')} "
+            f"({doctrine_count} doctrine, {backbone_count} backbone) — see --json for full list"
+        )
         lines.append("")
 
     if report.system_brief_summary:
@@ -2239,16 +2240,18 @@ def format_text(report: PulseReport) -> str:
             sr = report.sr_summary
             counts = sr.get("counts", {})
             streams = sr.get("stream_counts", {})
+            stream_suffix = ""
+            if streams:
+                stream_parts = [f"{k}:{v}" for k, v in sorted(streams.items())]
+                stream_suffix = f" | streams {', '.join(stream_parts)}"
             lines.append(
                 "  "
                 f"C12 SR continue={counts.get('CONTINUE', 0)} alarm={counts.get('ALARM', 0)} "
                 f"no_data={counts.get('NO_DATA', 0)} | age {sr.get('state_age_days') if sr.get('state_age_days') is not None else '?'}d"
+                f"{stream_suffix}"
             )
             if sr.get("reviewed_watch_count"):
                 lines.append(f"  C12 reviewed WATCH alarms: {sr.get('reviewed_watch_count')}")
-            if streams:
-                stream_parts = [f"{k}:{v}" for k, v in sorted(streams.items())]
-                lines.append(f"  SR streams: {', '.join(stream_parts)}")
         if report.pause_summary:
             ps = report.pause_summary
             lines.append(f"  Paused lanes: {ps.get('paused_count', 0)}")

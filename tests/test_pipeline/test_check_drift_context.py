@@ -165,3 +165,54 @@ execution:
         violations = check_drift.check_doc_hygiene_contracts()
 
         assert violations == []
+
+    def test_catches_commit_sha_pending(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/sha_pending.yaml",
+            'metadata:\n  name: foo\n  commit_sha: "PENDING"\n',
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        joined = "\n".join(violations)
+        assert "commit_sha=PENDING" in joined
+
+    def test_catches_commit_sha_to_fill_arbitrary(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/sha_tofill.yaml",
+            "metadata:\n  name: foo\n  commit_sha: TO_FILL_LATER\n",
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        assert any("commit_sha=TO_FILL_LATER" in v for v in violations)
+
+    def test_exempts_commit_sha_to_fill_after_commit(self, tmp_path: Path, monkeypatch) -> None:
+        """Per .claude/rules/research-truth-protocol.md § 2a: TO_FILL_AFTER_COMMIT
+        is the one legitimate placeholder (chicken-and-egg before first commit)."""
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/legit.yaml",
+            'metadata:\n  name: foo\n  commit_sha: "TO_FILL_AFTER_COMMIT"\n',
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        assert violations == []
+
+    def test_real_sha_passes(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/stamped.yaml",
+            'metadata:\n  name: foo\n  commit_sha: "abc123def456"\n',
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        assert violations == []
