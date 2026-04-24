@@ -252,6 +252,104 @@ class TestSessionClaims:
             )
         assert any("Concurrent mutating session blocked" in blocker for blocker in blockers)
 
+    def test_apply_startup_claims_claims_queue_before_branch(self, tmp_path: Path) -> None:
+        calls: list[str] = []
+
+        def _queue_claim(*args, **kwargs):
+            calls.append("queue")
+            return type("Lease", (), {"session_id": "codex:main:abc123", "claimed_item_ids": ["seed"]})()
+
+        def _write_claim(*args, **kwargs):
+            calls.append("claim")
+            return type("Claim", (), {"tool": "codex", "mode": "mutating", "branch": "main", "head_sha": "abc123"})()
+
+        with (
+            patch.object(session_preflight, "claim_queue_item", side_effect=_queue_claim),
+            patch.object(session_preflight, "write_active_claim", side_effect=_write_claim),
+            patch.object(session_preflight, "branch_name", return_value="main"),
+            patch.object(session_preflight, "head_sha", return_value="abc123"),
+        ):
+            claim, lease = session_preflight._apply_startup_claims(
+                tmp_path,
+                context="codex-wsl",
+                claim_tool="codex",
+                claim_mode="mutating",
+                queue_item="seed",
+                override_note=None,
+                claim_dir=tmp_path / ".claims",
+            )
+
+        assert calls == ["queue", "claim"]
+        assert claim is not None
+        assert lease is not None
+
+    def test_apply_startup_claims_does_not_write_branch_claim_when_queue_claim_fails(self, tmp_path: Path) -> None:
+        with (
+            patch.object(session_preflight, "claim_queue_item", side_effect=ValueError("queue blocked")),
+            patch.object(session_preflight, "write_active_claim") as claim_mock,
+            patch.object(session_preflight, "branch_name", return_value="main"),
+            patch.object(session_preflight, "head_sha", return_value="abc123"),
+        ):
+            with pytest.raises(ValueError, match="queue blocked"):
+                session_preflight._apply_startup_claims(
+                    tmp_path,
+                    context="codex-wsl",
+                    claim_tool="codex",
+                    claim_mode="mutating",
+                    queue_item="seed",
+                    override_note=None,
+                    claim_dir=tmp_path / ".claims",
+                )
+
+        claim_mock.assert_not_called()
+
+    def test_apply_startup_claims_releases_queue_when_branch_claim_write_fails(self, tmp_path: Path) -> None:
+        with (
+            patch.object(
+                session_preflight,
+                "claim_queue_item",
+                return_value=type("Lease", (), {"session_id": "codex:main:abc123", "claimed_item_ids": ["seed"]})(),
+            ),
+            patch.object(session_preflight, "write_active_claim", side_effect=RuntimeError("disk full")),
+            patch.object(session_preflight, "release_queue_session") as release_mock,
+            patch.object(session_preflight, "branch_name", return_value="main"),
+            patch.object(session_preflight, "head_sha", return_value="abc123"),
+        ):
+            with pytest.raises(RuntimeError, match="disk full"):
+                session_preflight._apply_startup_claims(
+                    tmp_path,
+                    context="codex-wsl",
+                    claim_tool="codex",
+                    claim_mode="mutating",
+                    queue_item="seed",
+                    override_note=None,
+                    claim_dir=tmp_path / ".claims",
+                )
+
+        release_mock.assert_called_once_with(tmp_path, session_id="codex:main:abc123")
+
+    def test_apply_startup_claims_without_queue_item_keeps_branch_claim_only(self, tmp_path: Path) -> None:
+        claim = type("Claim", (), {"tool": "codex", "mode": "mutating", "branch": "main", "head_sha": "abc123"})()
+
+        with (
+            patch.object(session_preflight, "claim_queue_item") as queue_mock,
+            patch.object(session_preflight, "write_active_claim", return_value=claim) as claim_mock,
+        ):
+            written_claim, lease = session_preflight._apply_startup_claims(
+                tmp_path,
+                context="codex-wsl",
+                claim_tool="codex",
+                claim_mode="mutating",
+                queue_item=None,
+                override_note=None,
+                claim_dir=tmp_path / ".claims",
+            )
+
+        queue_mock.assert_not_called()
+        claim_mock.assert_called_once()
+        assert written_claim is claim
+        assert lease is None
+
 
 class TestPrintReport:
     def test_returns_zero_when_clean(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -321,13 +419,10 @@ class TestPrintReport:
         assert exit_code == 2
         assert "wrong interpreter" in out.lower()
 
-    def test_quiet_mode_claims_queue_item_when_requested(self, tmp_path: Path) -> None:
+    def test_quiet_mode_uses_transactional_startup_claim_helper(self, tmp_path: Path) -> None:
         with (
             patch.object(session_preflight, "_evaluate_preflight_policy", return_value=([], [])),
-            patch.object(session_preflight, "write_active_claim"),
-            patch.object(session_preflight, "claim_queue_item") as queue_claim,
-            patch.object(session_preflight, "branch_name", return_value="main"),
-            patch.object(session_preflight, "head_sha", return_value="abc123"),
+            patch.object(session_preflight, "_apply_startup_claims", return_value=(None, None)) as startup_mock,
         ):
             exit_code = session_preflight.print_report(
                 tmp_path,
@@ -339,7 +434,29 @@ class TestPrintReport:
             )
 
         assert exit_code == 0
-        assert queue_claim.call_args.kwargs["item_id"] == "prior_day_bridge_execution_triage"
+        assert startup_mock.call_args.kwargs["queue_item"] == "prior_day_bridge_execution_triage"
+
+    def test_verbose_mode_uses_transactional_startup_claim_helper(self, tmp_path: Path) -> None:
+        claim = type("Claim", (), {"tool": "codex", "mode": "mutating", "branch": "main", "head_sha": "abc123"})()
+        with (
+            patch.object(session_preflight, "_evaluate_preflight_policy", return_value=([], [])),
+            patch.object(session_preflight, "_apply_startup_claims", return_value=(claim, None)) as startup_mock,
+            patch.object(session_preflight, "recent_commits", return_value=["abc123 test"]),
+            patch.object(session_preflight, "branch_name", return_value="main"),
+            patch.object(session_preflight, "head_sha", return_value="abc123"),
+            patch.object(session_preflight, "active_claim_path", return_value=tmp_path / ".claims" / "codex.json"),
+        ):
+            exit_code = session_preflight.print_report(
+                tmp_path,
+                context="codex-wsl",
+                claim_tool="codex",
+                claim_mode="mutating",
+                queue_item="prior_day_bridge_execution_triage",
+                quiet=False,
+            )
+
+        assert exit_code == 0
+        assert startup_mock.call_args.kwargs["queue_item"] == "prior_day_bridge_execution_triage"
 
 
 class TestCliBootstrap:

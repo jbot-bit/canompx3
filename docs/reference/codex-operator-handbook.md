@@ -62,6 +62,7 @@ same branch blocks the launch early.
 - Use a managed worktree for concurrent mutable Codex work.
 - Do not let Claude and Codex mutate the same checkout at the same time.
 - Read `HANDOFF.md` before edits, but treat `docs/runtime/action-queue.yaml` as the active-work source of truth.
+- Queue ownership is explicit and opt-in: only an explicit `--queue-item` input or startup-packet metadata should create a queue lease. Task text alone must not imply ownership.
 - If a decision matters to both tools, record it in the queue, ledgers, or
   `docs/plans/` instead of relying on ad hoc baton prose.
 

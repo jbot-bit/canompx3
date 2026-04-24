@@ -91,6 +91,7 @@ from pipeline.system_context import (
     write_claim as system_write_claim,
 )
 from pipeline.work_queue import claim_item as claim_queue_item
+from pipeline.work_queue import release_session as release_queue_session
 
 DEFAULT_ROOT = Path(os.environ.get("CANOMPX3_ROOT", Path.cwd()))
 GIT_TIMEOUT_SECONDS = 2.0
@@ -233,6 +234,48 @@ def _queue_session_id(root: Path, tool: str) -> str:
     return f"{tool}:{branch_name(root)}:{head_sha(root)[:12]}"
 
 
+def _queue_claim_context_tool(context: str, claim_tool: str | None) -> str:
+    return claim_tool or context
+
+
+def _apply_startup_claims(
+    root: Path,
+    *,
+    context: str,
+    claim_tool: str | None,
+    claim_mode: str,
+    queue_item: str | None,
+    override_note: str | None,
+    claim_dir: Path,
+) -> tuple[SessionClaim | None, object | None]:
+    claim: SessionClaim | None = None
+    lease = None
+    queue_tool = _queue_claim_context_tool(context, claim_tool)
+    session_id = _queue_session_id(root, queue_tool) if queue_item else None
+
+    if queue_item:
+        lease = claim_queue_item(
+            root,
+            item_id=queue_item,
+            session_id=session_id or "",
+            tool=queue_tool,
+            branch=branch_name(root),
+            worktree=str(root),
+            override_note=override_note,
+        )
+
+    if not claim_tool:
+        return None, lease
+
+    try:
+        claim = write_active_claim(root, tool=claim_tool, mode=claim_mode, claim_dir=claim_dir)
+    except Exception:
+        if session_id is not None:
+            release_queue_session(root, session_id=session_id)
+        raise
+    return claim, lease
+
+
 def _format_policy_messages(issues: list[object]) -> list[str]:
     messages: list[str] = []
     for issue in issues:
@@ -336,26 +379,23 @@ def print_report(
                 print(f"  !! {warning}")
         if blockers:
             return 2
-        if claim_tool and not verify_only:
-            write_active_claim(root, tool=claim_tool, mode=claim_mode, claim_dir=claim_dir)
-        if queue_item and not verify_only:
-            queue_tool = claim_tool or context
-            try:
-                claim_queue_item(
-                    root,
-                    item_id=queue_item,
-                    session_id=_queue_session_id(root, queue_tool),
-                    tool=queue_tool,
-                    branch=branch_name(root),
-                    worktree=str(root),
-                    override_note=override_note,
-                )
-            except ValueError as exc:
-                print(f"  XX {exc}")
-                return 2
         if verify_only and claim_tool:
             ok, _ = verify_claim(root, active_tool=claim_tool, claim_dir=claim_dir)
             return 0 if ok else 1
+        if claim_tool or queue_item:
+            try:
+                _apply_startup_claims(
+                    root,
+                    context=context,
+                    claim_tool=claim_tool,
+                    claim_mode=claim_mode,
+                    queue_item=queue_item,
+                    override_note=override_note,
+                    claim_dir=claim_dir,
+                )
+            except Exception as exc:
+                print(f"  XX {exc}")
+                return 2
         return 0
 
     print("=== SESSION PREFLIGHT ===")
@@ -438,34 +478,31 @@ def print_report(
                 print(f"  - {warning}")
             exit_code = 1
 
-    if claim_tool and not verify_only and not blockers:
-        claim = write_active_claim(root, tool=claim_tool, mode=claim_mode, claim_dir=claim_dir)
-        claim_path = active_claim_path(root, claim_tool, claim_dir=claim_dir)
-        print(
-            "Claim updated: "
-            f"tool={claim.tool} mode={claim.mode} branch={claim.branch} "
-            f"head={claim.head_sha} file={claim_path}"
-        )
-
-    if queue_item and not verify_only and not blockers:
-        queue_tool = claim_tool or context
+    if (claim_tool or queue_item) and not verify_only and not blockers:
         try:
-            lease = claim_queue_item(
+            claim, lease = _apply_startup_claims(
                 root,
-                item_id=queue_item,
-                session_id=_queue_session_id(root, queue_tool),
-                tool=queue_tool,
-                branch=branch_name(root),
-                worktree=str(root),
+                context=context,
+                claim_tool=claim_tool,
+                claim_mode=claim_mode,
+                queue_item=queue_item,
                 override_note=override_note,
+                claim_dir=claim_dir,
             )
-        except ValueError as exc:
-            print(f"Queue claim blocked: {exc}")
+        except Exception as exc:
+            print(f"Startup claim blocked: {exc}")
             return 2
-        print(
-            "Queue claim updated: "
-            f"session={lease.session_id} items={','.join(lease.claimed_item_ids) or '<none>'}"
-        )
+        if claim is not None:
+            claim_path = active_claim_path(root, claim_tool, claim_dir=claim_dir)
+            print(
+                "Claim updated: "
+                f"tool={claim.tool} mode={claim.mode} branch={claim.branch} "
+                f"head={claim.head_sha} file={claim_path}"
+            )
+        if lease is not None:
+            print(
+                f"Queue claim updated: session={lease.session_id} items={','.join(lease.claimed_item_ids) or '<none>'}"
+            )
 
     return exit_code
 

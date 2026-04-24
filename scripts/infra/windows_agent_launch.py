@@ -107,6 +107,8 @@ def prepare_task_route_packet(
     tool: str,
     task_text: str | None = None,
     briefing_level: str = "mutating",
+    queue_item: str | None = None,
+    override_note: str | None = None,
     clear: bool = False,
 ) -> None:
     packet_writer = root / "scripts" / "tools" / "task_route_packet.py"
@@ -117,6 +119,10 @@ def prepare_task_route_packet(
         command.append("--clear")
     else:
         command.extend(["--tool", tool, "--task", task_text, "--briefing-level", briefing_level])
+        if queue_item:
+            command.extend(["--queue-item", queue_item])
+        if override_note:
+            command.extend(["--override-note", override_note])
     subprocess.run(command, cwd=root, check=False)
 
 
@@ -162,6 +168,8 @@ def build_codex_wsl_command(
     workstream_name: str,
     purpose: str | None,
     search_mode: bool,
+    queue_item: str | None = None,
+    override_note: str | None = None,
 ) -> str:
     import shlex
 
@@ -184,9 +192,13 @@ def build_codex_wsl_command(
     ]
     if purpose:
         lines.append(f"export CANOMPX3_WORKSTREAM_PURPOSE={shlex.quote(purpose)}")
-    lines.append(
-        f"exec ./scripts/infra/codex-worktree.sh {script_mode} {shlex.quote(workstream_name)} -- --no-alt-screen"
-    )
+    command = [f"./scripts/infra/codex-worktree.sh {script_mode} {shlex.quote(workstream_name)}"]
+    if queue_item:
+        command.append(f"--queue-item {shlex.quote(queue_item)}")
+    if override_note:
+        command.append(f"--override-note {shlex.quote(override_note)}")
+    command.append("-- --no-alt-screen")
+    lines.append(f"exec {' '.join(command)}")
     return "\n".join(lines)
 
 
@@ -196,12 +208,30 @@ def build_codex_project_wsl_command(
     enable_gold_db: bool = False,
     use_linux_home: bool = False,
     profile: str | None = None,
+    startup_task: str | None = None,
+    queue_item: str | None = None,
+    override_note: str | None = None,
 ) -> str:
     import shlex
 
     script_name = "codex-project-search.sh" if search_mode else "codex-project.sh"
     if enable_gold_db:
         script_name = "codex-project-search-gold-db.sh" if search_mode else "codex-project-gold-db.sh"
+
+    def _launcher_command() -> str:
+        launcher = [f"./scripts/infra/{script_name}"]
+        has_launcher_args = False
+        if startup_task:
+            launcher.append(f"--startup-task {shlex.quote(startup_task)}")
+            has_launcher_args = True
+        if queue_item:
+            launcher.append(f"--queue-item {shlex.quote(queue_item)}")
+            has_launcher_args = True
+        if override_note:
+            launcher.append(f"--override-note {shlex.quote(override_note)}")
+            has_launcher_args = True
+        launcher.append("-- --no-alt-screen" if has_launcher_args else "--no-alt-screen")
+        return " ".join(launcher)
 
     lines = ["set -euo pipefail"]
     if profile:
@@ -218,7 +248,7 @@ def build_codex_project_wsl_command(
                 "fi",
                 f'bash {shlex.quote(root_wsl)}/scripts/infra/codex-wsl-sync.sh --source {shlex.quote(root_wsl)} --target "$ROOT"',
                 'cd "$ROOT"',
-                f"exec ./scripts/infra/{script_name} --no-alt-screen",
+                f"exec {_launcher_command()}",
             ]
         )
         return "\n".join(lines)
@@ -226,7 +256,7 @@ def build_codex_project_wsl_command(
     lines.extend(
         [
             f"cd {shlex.quote(root_wsl)}",
-            f"exec ./scripts/infra/{script_name} --no-alt-screen",
+            f"exec {_launcher_command()}",
         ]
     )
     return "\n".join(lines)

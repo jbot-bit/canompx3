@@ -7,6 +7,26 @@ VENV="$ROOT/.venv-wsl"
 PREFLIGHT="$ROOT/scripts/tools/session_preflight.py"
 TASK_ROUTE_PACKET="$ROOT/scripts/tools/task_route_packet.py"
 PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3_search}"
+TASK_TEXT="${CANOMPX3_STARTUP_TASK:-}"
+PASSTHROUGH_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --startup-task)
+      TASK_TEXT="${2:-}"
+      shift 2
+      ;;
+    --)
+      shift
+      PASSTHROUGH_ARGS+=("$@")
+      break
+      ;;
+    *)
+      PASSTHROUGH_ARGS+=("$@")
+      break
+      ;;
+  esac
+done
 
 if [[ ! -f "$VENV/bin/python" ]]; then
   echo "ERROR: .venv-wsl/bin/python not found." >&2
@@ -34,11 +54,14 @@ if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
 fi
 
 if [[ -f "$TASK_ROUTE_PACKET" ]]; then
-  if [[ -n "${CANOMPX3_STARTUP_TASK:-}" ]]; then
+  if [[ -z "$TASK_TEXT" ]]; then
+    TASK_TEXT="$(python3 "$TASK_ROUTE_PACKET" --root "$ROOT" --read --field task_text 2>/dev/null || true)"
+  fi
+  if [[ -n "$TASK_TEXT" ]]; then
     "$VENV/bin/python" "$TASK_ROUTE_PACKET" \
       --root "$ROOT" \
       --tool codex \
-      --task "$CANOMPX3_STARTUP_TASK" \
+      --task "$TASK_TEXT" \
       --briefing-level read_only >/dev/null || true
   else
     "$VENV/bin/python" "$TASK_ROUTE_PACKET" --root "$ROOT" --clear >/dev/null || true
@@ -62,4 +85,4 @@ fi
 
 exec codex \
   "${CODEX_ARGS[@]}" \
-  "$@"
+  "${PASSTHROUGH_ARGS[@]}"

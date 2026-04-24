@@ -120,6 +120,31 @@ class TestOpenClaudeWorkstream:
         call_mock.assert_called_once_with([r"C:\Users\joshd\.local\bin\claude.exe", "-C", str(tmp_path)])
 
 
+class TestPrepareTaskRoutePacket:
+    def test_passes_queue_metadata_when_present(self, tmp_path: Path) -> None:
+        packet_writer = tmp_path / "scripts" / "tools" / "task_route_packet.py"
+        packet_writer.parent.mkdir(parents=True)
+        packet_writer.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+
+        with (
+            patch.object(windows_agent_launch, "pick_python", return_value=["python"]),
+            patch.object(windows_agent_launch.subprocess, "run") as run_mock,
+        ):
+            windows_agent_launch.prepare_task_route_packet(
+                tmp_path,
+                tool="codex",
+                task_text="Build / edit: task-a",
+                queue_item="prior_day_bridge_execution_triage",
+                override_note="Urgent runtime coordination",
+            )
+
+        args = run_mock.call_args.args[0]
+        assert "--queue-item" in args
+        assert "prior_day_bridge_execution_triage" in args
+        assert "--override-note" in args
+        assert "Urgent runtime coordination" in args
+
+
 class TestCodexWslCommand:
     def test_builds_bootstrap_then_open_command(self) -> None:
         command = windows_agent_launch.build_codex_wsl_command(
@@ -152,6 +177,19 @@ class TestCodexWslCommand:
         assert "exec ./scripts/infra/codex-worktree.sh search task-a -- --no-alt-screen" in command
         assert "CANOMPX3_WORKSTREAM_PURPOSE" not in command
 
+    def test_builds_open_command_with_queue_metadata(self) -> None:
+        command = windows_agent_launch.build_codex_wsl_command(
+            "/mnt/c/repo",
+            "task-a",
+            "Build / edit",
+            False,
+            queue_item="prior_day_bridge_execution_triage",
+            override_note="Urgent runtime coordination",
+        )
+
+        assert "--queue-item prior_day_bridge_execution_triage" in command
+        assert "--override-note 'Urgent runtime coordination'" in command
+
     def test_builds_plain_project_command(self) -> None:
         command = windows_agent_launch.build_codex_project_wsl_command("/mnt/c/repo")
 
@@ -178,6 +216,18 @@ class TestCodexWslCommand:
         )
 
         assert "exec ./scripts/infra/codex-project-search-gold-db.sh --no-alt-screen" in command
+
+    def test_builds_project_command_with_startup_packet_context(self) -> None:
+        command = windows_agent_launch.build_codex_project_wsl_command(
+            "/mnt/c/repo",
+            startup_task="Build / edit: task-a",
+            queue_item="prior_day_bridge_execution_triage",
+            override_note="Urgent runtime coordination",
+        )
+
+        assert "--startup-task 'Build / edit: task-a'" in command
+        assert "--queue-item prior_day_bridge_execution_triage" in command
+        assert "--override-note 'Urgent runtime coordination'" in command
 
 
 class TestOpenCodexWorkstream:

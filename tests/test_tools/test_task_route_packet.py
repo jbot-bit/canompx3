@@ -3,7 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.tools.task_route_packet import clear_task_route_packet, read_task_route_packet, write_task_route_packet
+from scripts.tools.task_route_packet import (
+    clear_task_route_packet,
+    read_task_route_packet,
+    read_task_route_packet_metadata,
+    write_task_route_packet,
+)
 
 
 def test_write_task_route_packet_renders_compact_packet(tmp_path: Path) -> None:
@@ -25,6 +30,8 @@ def test_write_task_route_packet_renders_compact_packet(tmp_path: Path) -> None:
             tmp_path,
             task_text="Audit token waste and context routing",
             tool="claude",
+            queue_item="prior_day_bridge_execution_triage",
+            override_note="Urgent runtime coordination before the next session handoff.",
         )
 
     assert returned_payload == payload
@@ -32,7 +39,10 @@ def test_write_task_route_packet_renders_compact_packet(tmp_path: Path) -> None:
     assert "# Startup Task Route" in content
     assert "- Tool: `claude`" in content
     assert "- Route id: `repo_workflow_audit`" in content
+    assert "- Queue item: `prior_day_bridge_execution_triage`" in content
+    assert "- Override note: Urgent runtime coordination before the next session handoff." in content
     assert "scripts/tools/context_resolver.py" in content
+    assert read_task_route_packet_metadata(tmp_path)["queue_item"] == "prior_day_bridge_execution_triage"
 
 
 def test_read_and_clear_task_route_packet(tmp_path: Path) -> None:
@@ -46,3 +56,11 @@ def test_read_and_clear_task_route_packet(tmp_path: Path) -> None:
 
     assert cleared_path == packet
     assert not packet.exists()
+
+
+def test_read_task_route_packet_metadata_returns_empty_for_legacy_packet(tmp_path: Path) -> None:
+    packet = tmp_path / ".session" / "task-route.md"
+    packet.parent.mkdir(parents=True)
+    packet.write_text("# Startup Task Route\n- Tool: `codex`\n", encoding="utf-8")
+
+    assert read_task_route_packet_metadata(tmp_path) == {}
