@@ -9,13 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 80eb8997 — [mechanical] fix: Ralph Loop iter 171 — update audit docs and ledger
-- **Files changed:** 5 files
+- **Commit:** 8ca4e1c6 — feat(ralph): add Priority 0 — known-CRITICAL backlog check before auto-targeting
+- **Files changed:** 2 files
+  - `.claude/agents/ralph-loop.md`
   - `HANDOFF.md`
-  - `docs/ralph-loop/ralph-ledger.json`
-  - `docs/ralph-loop/ralph-loop-audit.md`
-  - `docs/ralph-loop/ralph-loop-history.md`
-  - `docs/ralph-loop/ralph-loop-plan.md`
 
 ## Next Steps — Active
 

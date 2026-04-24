@@ -1,8 +1,8 @@
 {
-  "total_iterations": 164,
+  "total_iterations": 165,
   "last_updated": "2026-04-25",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 171,
+  "last_high_finding_iter": 172,
   "findings_by_type": {
     "canonical_violation": {
       "found": 56,
@@ -111,16 +111,22 @@
       "fixed": 1,
       "deferred": 0,
       "fix_rate": 1.0
+    },
+    "fail_closed_fix": {
+      "found": 1,
+      "fixed": 0,
+      "deferred": 1,
+      "fix_rate": 0.0
     }
   },
   "findings_by_severity": {
-    "CRITICAL": 3,
+    "CRITICAL": 4,
     "HIGH": 12,
     "MEDIUM": 44,
     "LOW": 105
   },
   "classifications": {
-    "judgment": 74,
+    "judgment": 75,
     "mechanical": 61,
     "audit-only": 29
   },
@@ -254,6 +260,11 @@
       "audit_count": 2,
       "last_iter": 158,
       "findings": 2
+    },
+    "trading_app/risk_manager.py": {
+      "audit_count": 2,
+      "last_iter": 172,
+      "findings": 1
     },
     "trading_app/strategy_fitness.py": {
       "audit_count": 2,
@@ -443,11 +454,6 @@
     "trading_app/market_state.py": {
       "audit_count": 1,
       "last_iter": 38,
-      "findings": 1
-    },
-    "trading_app/risk_manager.py": {
-      "audit_count": 1,
-      "last_iter": 39,
       "findings": 1
     },
     "trading_app/entry_rules.py": {
@@ -1094,6 +1100,11 @@
       "audit_count": 1,
       "last_iter": 171,
       "findings": 1
+    },
+    "trading_app/live/session_orchestrator.py": {
+      "audit_count": 1,
+      "last_iter": 172,
+      "findings": 0
     }
   },
   "iterations": [
@@ -2900,6 +2911,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "9809f1b8"
+    },
+    {
+      "iter": 172,
+      "date": "2026-04-25",
+      "phase": "audit-only",
+      "classification": "judgment",
+      "target": "trading_app/live/session_orchestrator.py:386-387 + trading_app/risk_manager.py:220-229",
+      "finding_type": "fail_closed_fix",
+      "severity": "CRITICAL",
+      "verdict": "NOTED",
+      "commit": "ca363e1a (fix, pre-landed)"
     }
   ]
 }

@@ -3,49 +3,49 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 171
+## Last iteration: 172
 
-## RALPH AUDIT — Iteration 171
+## RALPH AUDIT — Iteration 172
 ## Date: 2026-04-25
-## Infrastructure Gates: drift 107/107 PASS (6 pre-existing advisories); behavioral audit 7/7 PASS; ruff PASS; 39 tests PASS
+## Infrastructure Gates: drift 107/107 PASS (6 pre-existing advisories); 204 tests PASS (orchestrator + risk_manager)
+## Scope: B6 verification — F-1 EOD balance never seeded in signal-only mode
 
 ---
 
-## Iteration 171 — lane_allocator.py duplicates RHO_REJECT_THRESHOLD from lane_correlation.py (FIXED 9809f1b8)
+## Iteration 172 — B6 F-1 EOD balance signal-only seed (VERIFIED CLOSED — ca363e1a)
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Canonical violation (integrity-guardian.md § 2) | `lane_allocator.py:506` defined `CORRELATION_REJECT_RHO = 0.70` — a duplicate of `RHO_REJECT_THRESHOLD = 0.70` from `lane_correlation.py`. Comment on line 506 explicitly acknowledged the duplication ("Same as lane_correlation.RHO_REJECT_THRESHOLD") but did not import from the canonical source. Silently diverges if threshold changes. | LOW | FIXED 9809f1b8 |
+| Fail-open / Silent failure (integrity-guardian.md § 3, § 6) | F-1 gate in `risk_manager.py:220-229` fail-closes every entry when `_topstep_xfa_eod_balance is None`. In signal-only, the HWM init block at line 586 is gated `if not signal_only`, so `_apply_broker_reality_check` (which calls `set_topstep_xfa_eod_balance`) never ran. Every entry since 2026-04-15 rejected with "EOD XFA balance unknown — refusing entry". | CRITICAL | VERIFIED CLOSED — fix landed ca363e1a (2026-04-25) |
 
-### Audit Notes
+### Audit Notes — B6 Verification
 
-- **Auto-targeting:** Priority 3 (unscanned medium) — `trading_app/lane_correlation.py`. Medium tier (2 importers, 10 imports). File itself was clean; finding was in its importer `lane_allocator.py` which duplicated lane_correlation's threshold constant.
-- **Doctrine cited:** integrity-guardian.md § 2 (import from single source of truth, never hardcode); institutional-rigor.md § 4 (delegate to canonical sources, never re-encode).
-- **PREMISE:** `CORRELATION_REJECT_RHO = 0.70` in `lane_allocator.py` duplicates `RHO_REJECT_THRESHOLD = 0.70` from `lane_correlation.py`.
-- **TRACE:** `lane_correlation.py:24` (`RHO_REJECT_THRESHOLD = 0.70`) → `lane_allocator.py:34` (imports `_load_lane_daily_pnl, _pearson` but NOT `RHO_REJECT_THRESHOLD`) → `lane_allocator.py:506` (`CORRELATION_REJECT_RHO = 0.70`, comment "Same as lane_correlation.RHO_REJECT_THRESHOLD") → `lane_allocator.py:628` (`rho > CORRELATION_REJECT_RHO`).
-- **EVIDENCE:** grep confirmed two separate literal `0.70` values in both files. The comment on line 506 proves the author recognized the duplication but hardcoded anyway.
-- **Fix:** Added `RHO_REJECT_THRESHOLD` to the existing `from trading_app.lane_correlation import ...` line; deleted the local `CORRELATION_REJECT_RHO = 0.70` definition; updated usage on line 628 to `RHO_REJECT_THRESHOLD`; updated `test_lane_allocator.py` to import from `lane_correlation` instead of `lane_allocator`.
-- **Verification:** 39/39 test_lane_allocator.py pass. 107/107 drift checks PASS. 8/8 pre-commit hooks PASS.
-- **Blast radius:** 2 files (lane_allocator.py + test_lane_allocator.py). No behavioral change — same threshold value, same comparison logic.
-
-### Full Seven Sins scan — lane_correlation.py
-
-| Sin | Result |
-|-----|--------|
-| Silent failure | None — try/finally (not try/except) ensures connection cleanup while propagating exceptions. Correct pattern. |
-| Fail-open | None — gate_pass=len(reject_reasons)==0; empty deployed_lanes → gate_pass=True is semantically correct (no conflicts possible). |
-| Look-ahead bias | N/A — correlation gate reads historical P&L data; no temporal alignment issues. |
-| Canonical violation | None in lane_correlation.py itself. GOLD_DB_PATH from pipeline.paths. instrument/entry_model/orb_minutes taken from passed-in lane dict. Finding was in importer lane_allocator.py. |
-| Dead code | None — all functions used. _pearson exported and used by lane_allocator. |
-| Orphan risk | None — check_candidate_correlation called from lane_allocator.py; _load_lane_daily_pnl and _pearson imported by lane_allocator and portfolio_correlation_audit.py. |
-| Async safety | N/A — synchronous module |
-| State persistence gap | N/A — stateless computation module |
-| Contract drift | None — signatures stable; no dead parameters. |
-| Hardcoded thresholds (§ 2) | RHO_REJECT_THRESHOLD=0.70 and SUBSET_REJECT_THRESHOLD=0.80 are module-level constants in lane_correlation.py — these ARE the canonical source; importers must reference these, not duplicate them. FIXED in lane_allocator.py. |
+- **Scope:** HANDOFF.md Next Steps #1 / B6 (F-1 EOD balance never seeded in signal-only — REAL BLOCKER). Ralph iter 172 is a verification audit of fix `ca363e1a` which landed before this iteration ran.
+- **Root cause confirmed:** `session_orchestrator.py` — `_apply_broker_reality_check` (contains the only call to `risk_mgr.set_topstep_xfa_eod_balance(initial_equity)`) is only reached inside `if not signal_only` at line 586. In signal-only, `order_router=None`, HWM block is skipped, seed never runs, F-1 fail-closes every entry.
+- **Fix verified:** `ca363e1a` adds:
+  1. `_apply_signal_only_f1_seed(*, risk_mgr, logger=None) -> bool` — module-level helper (lines 140-169) that seeds `$0.00` (canonical day-1 XFA balance per `topstep_scaling_plan.py:51-53`).
+  2. Call site at lines 386-387, gated `if signal_only:`, immediately after `self.risk_mgr` is constructed — before any entry attempt.
+- **Canonical grounding verified:** `$0.0` is correct per `topstep_scaling_plan.py:51-53` docstring: "Day-1 of any new XFA: balance = $0 (XFA starts at $0 per topstep_mll_article.md), so max position is the bottom-row tier (2 lots for 50K, 3 lots for 100K/150K)." Conservative bottom-tier cap — NOT a bypass of F-1.
+- **Guard confirmed:** `if risk_mgr.limits.topstep_xfa_account_size is None: return False` — non-XFA profiles are no-ops.
+- **Rejected options (per commit message):**
+  - Option (a): seed with `prof.account_size` ($50,000) → resolves to highest tier (5 lots for 50K) — OVER-PERMITS signal-only. Rejected.
+  - Option (b): `disable_f1()` in signal-only → mutes F-1 entirely, violates integrity-guardian § 3. Rejected.
+- **Regression check:** `e02c529d` (5 silent-failure fixes) touched `session_orchestrator.py` but only at lines for F8/F2/F5/F6 — does NOT overlap with B6 fix block (lines 381-387). Fix preserved.
+- **Doctrine cited:** institutional-rigor.md § 6 (no silent failures); integrity-guardian.md § 3 (fail-closed — chose seed over disable_f1); institutional-rigor.md § 4 (delegate to canonical sources — $0.0 from topstep_scaling_plan docstring).
+- **Tests:** `TestF1SignalOnlySeed` (3 tests in `test_session_orchestrator.py`): `signal_only_seed_when_f1_active`, `signal_only_no_seed_when_f1_inactive`, `signal_only_seed_unblocks_can_enter` (real RiskManager integration — same RM that was rejecting now accepts after seed). 22 F-1/signal_only tests pass. 204/204 orchestrator+risk_manager tests pass.
+- **Commit:** `ca363e1a` (fix), verified intact through `e02c529d` and `8ca4e1c6`.
 
 ---
 
-## Prior: Iteration 170 — outcome_builder.py dead parameter break_ts in _compute_outcomes_all_rr (FIXED 9b16c4eb)
+## Prior: Iteration 171 — lane_allocator.py duplicates RHO_REJECT_THRESHOLD from lane_correlation.py (FIXED 9809f1b8)
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Canonical violation (integrity-guardian.md § 2) | `lane_allocator.py:506` defined `CORRELATION_REJECT_RHO = 0.70` duplicating `RHO_REJECT_THRESHOLD = 0.70` from `lane_correlation.py`. | LOW | FIXED 9809f1b8 |
+
+---
+
+## Prior: Iteration 170 — outcome_builder.py dead parameter break_ts (FIXED 9b16c4eb)
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
@@ -57,22 +57,13 @@
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Fail-open / Silent failure | `verify_trading_app_schema` missing 12 migration-added columns from expected_cols sets. Returned (True, []) silently. | MEDIUM | FIXED 6811640a |
-
----
-
-## Prior: Iteration 168 — topstep_scaling_plan.py (audit-only — all findings ACCEPTABLE)
-
-| Sin | Finding | Severity | Status |
-|-----|---------|----------|--------|
-| Orphan risk | scripts/tmp/lane_analysis.py imports nonexistent SCALING_LADDER. | LOW | ACCEPTABLE — dormant, guarded |
-| Contract drift | lots_for_position() misclassifies dead instruments M2K and M6E. | LOW | ACCEPTABLE — dead instruments only |
+| Fail-open / Silent failure | `verify_trading_app_schema` missing 12 migration-added columns from expected_cols. | MEDIUM | FIXED 6811640a |
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 251 files fully scanned (lane_correlation.py added iter 171).
+> Cumulative list — 252 files fully scanned (session_orchestrator.py re-audited iter 172 for B6).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -91,7 +82,7 @@
 - trading_app/live/projectx/data_feed.py — added iter 123
 - trading_app/live/broker_base.py — added iter 123
 - trading_app/live/tradovate/data_feed.py — added iter 124
-- trading_app/live/session_orchestrator.py — added iter 124
+- trading_app/live/session_orchestrator.py — added iter 124, re-audited iter 172 (B6 verification)
 - trading_app/live/bar_aggregator.py — added iter 125
 - trading_app/live/tradovate/order_router.py — added iter 126
 - trading_app/live/tradovate/auth.py — added iter 126
@@ -123,7 +114,7 @@
 - docs/plans/ — 2 files (iter 103)
 - trading_app/live/rithmic/order_router.py — added iter 141
 - trading_app/prop_profiles.py — added iter 142, re-audited iter 167
-- trading_app/lane_allocator.py — added iter 143
+- trading_app/lane_allocator.py — added iter 143, re-audited iter 171
 - trading_app/live/multi_runner.py — added iter 144
 - trading_app/live/broker_dispatcher.py — added iter 145
 - trading_app/pre_session_check.py — added iter 146, re-audited iter 163
@@ -159,14 +150,14 @@
 - trading_app/sprt_monitor.py — added iter 165
 - trading_app/sr_monitor.py — added iter 165
 - trading_app/consistency_tracker.py — added iter 166
-- trading_app/risk_manager.py — added iter 166
-- trading_app/strategy_fitness.py — re-audited iter 167 (WIP-save only, no substantive change)
+- trading_app/risk_manager.py — added iter 166, re-audited iter 172 (B6 verification)
+- trading_app/strategy_fitness.py — re-audited iter 167
 - trading_app/topstep_scaling_plan.py — added iter 168
 - trading_app/lane_correlation.py — added iter 171
-- **Total: 251 files fully scanned**
+- **Total: 252 files fully scanned**
 
 ## Next iteration targets
-- Priority 2 (stale re-audit, critical): trading_app/lane_allocator.py — already scanned iter 143, but just modified in iter 171. Git log to confirm if meaningful changes since iter 143 audit date warrant re-audit beyond what iter 171 found.
-- Priority 3 (unscanned medium): trading_app/eligibility/ directory files (check centrality index for specific files)
-- Priority 3 (unscanned medium): scripts/reports/monitor_lane_correlation_rolling.py (companion to lane_correlation, 0 importers/low tier but scanned this iter by proximity)
-- Note: pre-existing drift advisories (checks 59/95) require operational resolution by user — run `python scripts/tools/select_family_rr.py` and re-run validator for Mode A strategies
+- Priority 0: check HANDOFF.md for remaining BLOCKER items after B6 closure
+- Priority 2 (stale re-audit): trading_app/live/session_orchestrator.py — significantly changed post-iter-124 scan; already covered in iter 172 for B6 only; broader re-audit warranted given e02c529d (5 silent-failure fixes) not fully audited
+- Priority 3 (unscanned medium): trading_app/eligibility/ directory files
+- Note: pre-existing drift advisories (checks 59/95) — check #59 resolved by ca363e1a MGC backfill; check #95 still requires `select_family_rr.py` run

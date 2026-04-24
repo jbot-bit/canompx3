@@ -1776,6 +1776,19 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 
 ---
 
+## Iteration 172 — 2026-04-25
+- Phase: audit-only (verification of pre-landed fix)
+- Classification: [judgment] (CRIT finding — behavioral safety)
+- Target: trading_app/live/session_orchestrator.py:386-387 + trading_app/risk_manager.py:220-229
+- Finding: CRITICAL — B6: F-1 gate fail-closes every entry in signal-only mode because _apply_broker_reality_check (the only caller of set_topstep_xfa_eod_balance) is gated `if not signal_only`. _topstep_xfa_eod_balance remains None, risk_manager.can_enter rejects with "EOD XFA balance unknown — refusing entry". Every entry since 2026-04-15 blocked.
+- Doctrine cited: integrity-guardian.md § 3 (fail-closed — chose seed over disable_f1); institutional-rigor.md § 6 (no silent failures); institutional-rigor.md § 4 (delegate to canonical $0.0 from topstep_scaling_plan.py:51-53)
+- Action: VERIFIED CLOSED. Fix landed ca363e1a before this iteration ran. _apply_signal_only_f1_seed() seeds $0.00 (canonical day-1 XFA bottom-tier cap) gated on signal_only=True. Non-XFA profiles no-op. Regression check: e02c529d does not overlap the B6 fix block.
+- Blast radius: 1 file modified (session_orchestrator.py), 3 tests added (TestF1SignalOnlySeed)
+- Verification: PASS — 22 F-1/signal_only tests; 204/204 orchestrator+risk_manager; 107/107 drift
+- Commit: ca363e1a (fix, pre-landed)
+
+---
+
 ## Iteration 171 — 2026-04-25
 - Phase: fix
 - Classification: [mechanical]
