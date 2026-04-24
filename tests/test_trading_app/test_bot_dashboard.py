@@ -400,3 +400,121 @@ def test_api_alerts_returns_recent_runtime_alerts(monkeypatch):
     payload = asyncio.run(bot_dashboard.api_alerts(limit=20, profile="topstep_50k_type_a", mode="SIGNAL"))
     assert payload["alerts"][0]["profile"] == "topstep_50k_type_a"
     assert payload["alerts"][0]["mode"] == "SIGNAL"
+
+
+def test_build_operator_payload_blocks_on_refresh_in_progress(monkeypatch):
+    _patch_operator_payload_base(monkeypatch, "topstep_50k_mnq_auto")
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_refresh_snapshot",
+        lambda: {"running": True},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "STOPPED",
+            "heartbeat_age_s": 9999.0,
+            "profile": "topstep_50k_mnq_auto",
+            "tracked_alive": False,
+        },
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_journal_lock_status",
+        lambda: {"locked": False, "detail": "journal available"},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_instance_lock_status",
+        lambda: {"locked": False, "locks": []},
+    )
+
+    payload = _build_operator_payload("topstep_50k_mnq_auto")
+
+    assert payload["top_state"] == "BLOCKED"
+    assert payload["recommended_action"]["id"] == "wait_refresh"
+    assert "start_signal" in payload["blocked_action_ids"]
+    assert payload["busy_reason"] == "Data refresh is in progress. Wait for it to finish."
+
+
+def test_action_preflight_blocks_while_session_running(monkeypatch):
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": True,
+            "raw_mode": "SIGNAL",
+            "heartbeat_age_s": 10.0,
+            "profile": "topstep_50k_mnq_auto",
+            "tracked_alive": True,
+        },
+    )
+    monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": False})
+
+    result = asyncio.run(bot_dashboard.action_preflight(profile="topstep_50k_mnq_auto"))
+
+    assert result["status"] == "blocked"
+    assert "stop it before preflight" in result["output"].lower()
+
+
+def test_action_refresh_blocks_while_session_running(monkeypatch):
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": True,
+            "raw_mode": "SIGNAL",
+            "heartbeat_age_s": 10.0,
+            "profile": "topstep_50k_mnq_auto",
+            "tracked_alive": True,
+        },
+    )
+
+    result = asyncio.run(bot_dashboard.action_refresh())
+
+    assert result["status"] == "blocked"
+    assert "stop it before refreshing" in result["message"].lower()
+
+
+def test_action_start_initiates_handoff_for_conflicting_running_session(monkeypatch):
+    bot_dashboard._clear_handoff()
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": True,
+            "raw_mode": "SIGNAL",
+            "heartbeat_age_s": 10.0,
+            "profile": "topstep_50k_mnq_auto",
+            "tracked_alive": True,
+        },
+    )
+    monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": False})
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_journal_lock_status",
+        lambda: {"locked": False, "detail": "journal available"},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_instance_lock_status",
+        lambda: {"locked": False, "locks": []},
+    )
+
+    calls: list[str] = []
+
+    async def _fake_kill():
+        calls.append("kill")
+        return {"status": "ok"}
+
+    monkeypatch.setattr(bot_dashboard, "action_kill", _fake_kill)
+
+    result = asyncio.run(bot_dashboard.action_start(profile="topstep_50k_mnq_auto", mode="demo"))
+
+    assert result["status"] == "handoff_started"
+    assert calls == ["kill"]
+    assert result["handoff"]["status"] == "stopping"
+    assert bot_dashboard._handoff_state["target_mode"] == "demo"
+    bot_dashboard._clear_handoff()

@@ -39,6 +39,70 @@ from trading_app.live.instance_lock import acquire_instance_lock, release_instan
 from trading_app.live.session_orchestrator import SessionOrchestrator
 
 
+def _run_lightweight_component_self_tests(
+    *,
+    instrument: str,
+    broker_name: str,
+    components,
+    demo: bool,
+    signal_only: bool = True,
+) -> dict[str, bool]:
+    """Run broker/component probes without opening runtime-owned DuckDB files."""
+
+    results: dict[str, bool] = {}
+
+    try:
+        from trading_app.live.notifications import notify
+
+        notify(instrument, "SELF-TEST: notifications working")
+        results["notifications"] = True
+    except Exception as e:
+        log.critical("NOTIFICATION SELF-TEST FAILED: %s", e)
+        print(f"!!! NOTIFICATIONS ARE BROKEN: {e} !!!")
+        results["notifications"] = False
+
+    # Preflight historically exercised the signal-only self-test path.
+    # Keep that contract: do not probe live/demo order-routing endpoints here.
+    if signal_only:
+        results["brackets"] = True
+        results["fill_poller"] = True
+        return results
+
+    try:
+        router = components["router_class"](account_id=0, auth=components["auth"], demo=demo)
+        if not router.supports_native_brackets():
+            results["brackets"] = True
+        else:
+            spec = router.build_bracket_spec(
+                direction="long",
+                symbol="TEST",
+                entry_price=100.0,
+                stop_price=99.0,
+                target_price=102.0,
+                qty=1,
+            )
+            results["brackets"] = spec is not None
+            if spec is None:
+                log.warning("build_bracket_spec returned None despite supports_native_brackets=True")
+    except Exception as e:
+        log.critical("BRACKET SELF-TEST FAILED (%s): %s", broker_name, e)
+        results["brackets"] = False
+
+    try:
+        if "router" not in locals():
+            router = components["router_class"](account_id=0, auth=components["auth"], demo=demo)
+        router.query_order_status(0)
+        results["fill_poller"] = True
+    except NotImplementedError:
+        log.warning("Broker does not support query_order_status — fill poller will be inactive")
+        results["fill_poller"] = False
+    except Exception as e:  # noqa: BLE001 -- endpoint exists even if the probe order is invalid
+        log.info("Fill poller endpoint exists (non-fatal error: %s)", e)
+        results["fill_poller"] = True
+
+    return results
+
+
 def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=None) -> bool:
     """Pre-flight validation. Returns True if all checks pass."""
 
@@ -147,16 +211,16 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
     # 5. Component self-tests (notifications, brackets, fill poller)
     all_pass = True  # default if check 5 fails entirely
     print(f"[5/{checks_total}] Component self-tests...", end=" ", flush=True)
-    orch = None
     try:
-        orch = SessionOrchestrator(
+        if components is None:
+            raise RuntimeError("auth failed")
+        test_results = _run_lightweight_component_self_tests(
             instrument=instrument,
-            broker=broker_name,
+            broker_name=broker_name,
+            components=components,
             demo=demo,
-            signal_only=True,  # safe: no orders, just test components
-            portfolio=portfolio,
+            signal_only=True,
         )
-        test_results = orch.run_self_tests()
         all_pass = all(test_results.values())
         if all_pass:
             print("OK (all components verified)")
@@ -168,15 +232,6 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
             checks_passed += 1
     except Exception as e:
         print(f"FAILED: {e}")
-    finally:
-        # CRITICAL: close journal DB connection to release Windows file lock.
-        # Without this, live_journal.db stays locked after preflight exits,
-        # blocking the actual trading session from opening it.
-        if orch is not None:
-            try:
-                orch.journal.close()
-            except Exception:
-                pass
 
     print(f"\nPreflight: {checks_passed}/{checks_total} passed")
     if checks_passed == checks_total:
