@@ -9,10 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 9809f1b8 — [mechanical] fix: Ralph Loop iter 171 — import RHO_REJECT_THRESHOLD from lane_correlation instead of duplicating (RI-06)
-- **Files changed:** 2 files
-  - `tests/test_trading_app/test_lane_allocator.py`
-  - `trading_app/lane_allocator.py`
+- **Commit:** 80eb8997 — [mechanical] fix: Ralph Loop iter 171 — update audit docs and ledger
+- **Files changed:** 5 files
+  - `HANDOFF.md`
+  - `docs/ralph-loop/ralph-ledger.json`
+  - `docs/ralph-loop/ralph-loop-audit.md`
+  - `docs/ralph-loop/ralph-loop-history.md`
+  - `docs/ralph-loop/ralph-loop-plan.md`
 
 ## Next Steps — Active
 
