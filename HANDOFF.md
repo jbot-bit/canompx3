@@ -9,9 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 56233e35 — docs(handoff): record B6 e2e empirical verification (6 lanes ALLOW post-fix)
-- **Files changed:** 1 files
+- **Commit:** af4897e3 — chore(stages): close orphan B2+B6 stages
+- **Files changed:** 3 files
   - `HANDOFF.md`
+  - `docs/runtime/stages/live-b2-notifications-bool-return.md`
+  - `docs/runtime/stages/live-b6-f1-signal-only-seed.md`
 
 ## Next Steps — Active
 
