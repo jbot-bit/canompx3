@@ -1720,6 +1720,138 @@ class TestF1SignalOnlySeed:
         assert allowed is True, f"Post-seed rejection: {reason}"
 
 
+class TestOvernightResilienceHardening:
+    """5 silent-failure fixes from docs/runtime/stages/live-overnight-resilience-hardening.md.
+
+    Each test is a mutation probe: revert the corresponding fix in
+    trading_app/live/session_orchestrator.py and the matching test must fail.
+    """
+
+    # F8 — orphan bracket cleanup failure should HALT, not warn (unless --force-orphans).
+    def test_f8_bracket_cleanup_failure_propagates_to_update_equity_tracker(self):
+        """Direct unit-level F8: confirm the helper-call shape so the orchestrator
+        path raises on cleanup failure unless --force-orphans is set.
+
+        Constructing a SessionOrchestrator with a broker that raises on
+        cancel_bracket_orders is heavy (full live infrastructure). Probe the
+        equivalent logic by importing the orchestrator class and asserting the
+        relevant code path matches the institutional pattern: log.critical +
+        notify + raise unless force_orphans.
+        """
+        from trading_app.live import session_orchestrator as so
+
+        src = open(so.__file__, encoding="utf-8").read()
+        # Mutation probe markers — these strings must be present in source after the F8 fix.
+        assert "BRACKET ORPHAN CLEANUP FAILED" in src, "F8 notify message missing"
+        assert "Bracket orphan cleanup failed" in src and "log.critical" in src, "F8 should log.critical"
+        assert "if not force_orphans:" in src, "F8 should respect --force-orphans bypass"
+        assert "Bracket orphan cleanup failed" in src and "RuntimeError" in src, "F8 should raise"
+
+    # F6 — journal unhealthy in demo should _notify, not just warn.
+    def test_f6_journal_unhealthy_notifies_in_non_live(self):
+        from trading_app.live import session_orchestrator as so
+
+        src = open(so.__file__, encoding="utf-8").read()
+        # Mutation probe: text after the F6 fix.
+        assert "TRADE JOURNAL UNHEALTHY" in src, "F6 notify message missing"
+        # The notify call must be inside the demo/signal-only branch, not the live branch.
+        # Live still raises RuntimeError; demo should warn AND notify.
+        idx = src.find("TradeJournal unhealthy — trades will NOT be persisted")
+        assert idx > 0, "F6 warning string not found"
+        # Within ~400 chars after the warning, the _notify call should appear.
+        window = src[idx : idx + 400]
+        assert "self._notify(" in window, "F6 _notify must immediately follow the warning"
+
+    # F2 — F-1 None equity at startup should _notify when XFA is active.
+    def test_f2_f1_none_equity_notifies_when_xfa_active(self):
+        from trading_app.live import session_orchestrator as so
+
+        src = open(so.__file__, encoding="utf-8").read()
+        assert "F-1 SILENT BLOCK" in src, "F2 notify message missing"
+        # Must be gated on topstep_xfa_account_size to avoid noise on non-XFA profiles.
+        idx = src.find("F-1 SILENT BLOCK")
+        # Look back 300 chars for the gate.
+        prefix = src[max(0, idx - 300) : idx]
+        assert "topstep_xfa_account_size is not None" in prefix, (
+            "F2 notify must be gated on F-1 active to avoid non-XFA noise"
+        )
+
+    # R2 — _notify must dispatch to a worker thread when an event loop is running.
+    async def test_r2_notify_uses_to_thread_when_event_loop_running(self):
+        """When _notify is called from inside an async context, the blocking
+        notify() call must be dispatched via asyncio.to_thread so the event
+        loop is not blocked. Probe: patch asyncio.to_thread and confirm it
+        gets called.
+        """
+        orch = build_orchestrator()  # demo orchestrator; signal_only=False
+        orch._notifications_broken = False
+        # Capture to_thread invocations
+        with patch("asyncio.to_thread") as mock_to_thread:
+            # Make the to_thread "task" return a real future so add_done_callback works
+            future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
+            future.set_result(True)
+            mock_to_thread.return_value = future
+
+            orch._notify("R2 probe message")
+
+            mock_to_thread.assert_called_once()
+            # First positional arg is the notify function; second is instrument; third is message.
+            args = mock_to_thread.call_args[0]
+            assert args[1] == orch.instrument
+            assert args[2] == "R2 probe message"
+
+    def test_r2_notify_falls_back_to_sync_when_no_event_loop(self):
+        """When _notify is called from sync setup/preflight context (no running
+        event loop), it must NOT raise and must call notify() directly.
+        """
+        orch = build_orchestrator()
+        orch._notifications_broken = False
+        with patch("trading_app.live.notifications.notify") as mock_notify:
+            mock_notify.return_value = True
+            # No running event loop here — sync test method.
+            orch._notify("R2 sync fallback probe")
+            mock_notify.assert_called_once_with(orch.instrument, "R2 sync fallback probe")
+            assert orch._stats.notifications_sent >= 1
+
+    # F5 — HWM equity poll exception must propagate as update_equity(None).
+    async def test_f5_hwm_poll_exception_propagates_as_none(self):
+        """When positions.query_equity raises during the intraday HWM poll,
+        the exception must be converted to update_equity(None) so the tracker's
+        3-consecutive-failure halt mechanism actually fires. Pre-fix the warning
+        was logged and update_equity was skipped entirely.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._handle_event = AsyncMock()
+        orch._hwm_tracker = MagicMock()
+        orch._hwm_tracker.check_halt.return_value = (False, "HWM_OK")
+        orch._bar_count = 9  # next bar at count==10 triggers the heartbeat block
+
+        # Make query_equity raise.
+        orch.positions = MagicMock()
+        orch.positions.query_equity.side_effect = RuntimeError("auth token expired")
+        orch.order_router = MagicMock()
+        orch.order_router.account_id = 20092334
+        orch.order_router.is_degraded = MagicMock(return_value=False)
+
+        # Patch async paths used by _on_bar so we don't run the full pipeline
+        with patch.object(SessionOrchestrator, "_check_trading_day_rollover", new_callable=AsyncMock):
+            from trading_app.live.bar_aggregator import Bar
+
+            await orch._on_bar(
+                Bar(
+                    ts_utc=datetime(2026, 4, 25, 14, 30, tzinfo=UTC),
+                    open=2350.0,
+                    high=2350.5,
+                    low=2349.5,
+                    close=2350.2,
+                    volume=10,
+                )
+            )
+
+        # F5 invariant: update_equity must be called with None (NOT skipped).
+        orch._hwm_tracker.update_equity.assert_called_once_with(None)
+
+
 class TestOrchestratorReconnect:
     async def test_clean_stop_no_reconnect(self):
         """Feed stopped by stop-file (was_stopped=True) -> no reconnect."""

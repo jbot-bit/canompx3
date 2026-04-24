@@ -505,7 +505,20 @@ class SessionOrchestrator:
                     )
                     self._notify(f"STARTUP: Cancelled {cancelled} orphaned bracket orders")
             except Exception as e:
-                log.warning("Bracket orphan cleanup failed on startup: %s", e)
+                # F8: a failed orphan-bracket cancel may leave prior-session AutoBracket
+                # orders alive at the broker. On a price gap they fire and create ghost
+                # positions with no PositionTracker entry, no HWM accounting, and no
+                # software exit path. Mirror the position-orphan halt pattern at
+                # L482-492: HALT unless --force-orphans is set.
+                log.critical("Bracket orphan cleanup failed on startup: %s", e)
+                self._notify(f"BRACKET ORPHAN CLEANUP FAILED: {e} — verify no live orders")
+                if not force_orphans:
+                    raise RuntimeError(
+                        f"Bracket orphan cleanup failed ({e}). Cannot verify no stale "
+                        f"AutoBracket orders are alive at the broker. Cancel manually or "
+                        f"pass --force-orphans to proceed at your own risk."
+                    ) from e
+                log.warning("--force-orphans: proceeding despite bracket cleanup failure")
 
         # Live infrastructure
         self.orb_builder = LiveORBBuilder(instrument, self.trading_day)
@@ -522,7 +535,14 @@ class SessionOrchestrator:
                     f"TradeJournal failed to open {journal_path} — refusing to start live session "
                     "without trade persistence. Fix the journal path or use --demo."
                 )
+            # F6: in demo/signal-only the warning was the only signal. Operator wakes up
+            # to zero trade records with no indication the journal was broken — invalidates
+            # the demo as a promotion gate. Surface to Telegram so the silent-skip is loud.
             log.warning("TradeJournal unhealthy — trades will NOT be persisted (mode=%s)", journal_mode)
+            self._notify(
+                f"TRADE JOURNAL UNHEALTHY (mode={journal_mode}) — trades will NOT be persisted. "
+                f"Fix journal_path or restart."
+            )
 
         # Position lifecycle tracker — replaces ad-hoc _entry_prices dict
         self._positions = PositionTracker()
@@ -633,9 +653,21 @@ class SessionOrchestrator:
                                             logger=log,
                                         )
                                 else:
+                                    # F2: until the next 10-bar HWM poll delivers a non-None
+                                    # equity, RiskManager._topstep_xfa_eod_balance stays None
+                                    # and F-1 fail-closes every entry with "EOD XFA balance
+                                    # unknown — refusing entry". TOKYO_OPEN at 10:00 Brisbane
+                                    # could fire entirely inside this silent-block window.
+                                    # Surface to Telegram so operator sees the silent block.
                                     log.warning(
                                         "HWM tracker: broker equity unavailable at startup — will init on first poll"
                                     )
+                                    if self.risk_mgr.limits.topstep_xfa_account_size is not None:
+                                        self._notify(
+                                            "F-1 SILENT BLOCK: broker equity None at startup — "
+                                            "all entries will REJECT until next HWM poll seeds the EOD balance "
+                                            "(~10 bars / ~10 min)"
+                                        )
                             break
                 except ImportError as e:
                     raise RuntimeError(
@@ -1079,6 +1111,14 @@ class SessionOrchestrator:
 
         If notifications were flagged broken by self-test, skips Telegram and logs
         to STDOUT so the session log still captures every event.
+
+        R2: Telegram's send path uses urllib.urlopen with a 10s timeout (sync).
+        Called from async _on_bar, that 10s blocks the event loop. With Telegram
+        down for hours, bursts (heartbeat warnings, kill switch, stale orders)
+        stack to 60-120s blockages, falsely tripping the bar-heartbeat watchdog
+        and engine circuit breaker. Dispatch the send onto a worker thread via
+        asyncio.to_thread so the event loop keeps pumping bars. If no event
+        loop is running (sync setup/preflight context), fall back to sync.
         """
         from trading_app.live.alert_engine import record_operator_alert
 
@@ -1096,16 +1136,58 @@ class SessionOrchestrator:
             log.warning("Notification (fallback): %s", message)
             self._stats.notifications_failed += 1
             return
-        try:
-            from trading_app.live.notifications import notify
 
-            notify(self.instrument, message)
-            self._stats.notifications_sent += 1
-        except Exception as e:
+        from trading_app.live.notifications import notify
+
+        def _record_failure(exc: Exception | None) -> None:
+            """Centralized failure handling: increment counter, log, print on first failure.
+
+            Either path (sync False/raise OR async task False/raise) routes here so
+            observability is identical regardless of dispatch mode.
+            """
             self._stats.notifications_failed += 1
-            log.error("Notification failed (will not retry): %s", e)
+            if exc is not None:
+                log.error("Notification failed (will not retry): %s", exc)
+            else:
+                log.warning("Notification returned False — Telegram pipe broken")
             if self._stats.notifications_failed == 1:
-                print(f"!!! NOTIFICATION FAILURE: {e} — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID !!!")
+                if exc is not None:
+                    print(f"!!! NOTIFICATION FAILURE: {exc} — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID !!!")
+                else:
+                    print("!!! NOTIFICATION FAILURE — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID !!!")
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No event loop — sync setup/preflight context. notify() returns bool
+            # and never raises (post-B2 contract), but we still defensively wrap
+            # to preserve historical observability for callers that pre-date B2.
+            try:
+                if notify(self.instrument, message):
+                    self._stats.notifications_sent += 1
+                else:
+                    _record_failure(None)
+            except Exception as exc:
+                _record_failure(exc)
+            return
+
+        # Async dispatch: run blocking notify() on a worker thread, do NOT await.
+        # Stats are corrected in the done-callback so the count reflects real outcomes.
+        self._stats.notifications_sent += 1  # optimistic; corrected on failure
+
+        def _on_notify_done(task: "asyncio.Task[bool]") -> None:
+            try:
+                ok = task.result()
+            except Exception as exc:
+                self._stats.notifications_sent -= 1
+                _record_failure(exc)
+                return
+            if not ok:
+                self._stats.notifications_sent -= 1
+                _record_failure(None)
+
+        task = loop.create_task(asyncio.to_thread(notify, self.instrument, message))
+        task.add_done_callback(_on_notify_done)
 
     def _verify_notifications(self) -> bool:
         """Send test notification via the same path as _notify(). Returns False if broken."""
@@ -1390,8 +1472,20 @@ class SessionOrchestrator:
 
             # HWM equity poll (every 10 bars ≈ 10 minutes)
             if self._hwm_tracker is not None and self.positions is not None and self.order_router is not None:
+                equity: float | None
                 try:
                     equity = self.positions.query_equity(self.order_router.account_id)
+                except Exception as e:
+                    # F5: pre-fix this swallowed the exception with `log.warning(...)` only,
+                    # never calling update_equity(None). The tracker's 3-consecutive-failure
+                    # halt at account_hwm_tracker.py:314 requires update_equity(None) calls
+                    # to increment _consecutive_poll_failures. A persistent broker fault
+                    # (e.g. auth-token expiry mid-session) would log warning spam forever
+                    # and never halt — silent DD-protection bypass. Pass None through so
+                    # the 3-strike halt mechanism actually fires.
+                    log.warning("HWM equity poll raised: %s — passing None to tracker", e)
+                    equity = None
+                try:
                     self._hwm_tracker.update_equity(equity)
                     halted, reason = self._hwm_tracker.check_halt()
                     if halted:
@@ -1401,8 +1495,11 @@ class SessionOrchestrator:
                         await self._emergency_flatten()
                     elif "WARN" in reason:
                         log.warning("HWM: %s", reason)
-                except Exception as e:
-                    log.warning("HWM equity poll failed: %s", e)
+                except Exception as inner:
+                    # update_equity / check_halt should never raise. If they do, log loud
+                    # but keep the bar loop alive — the tracker is degraded but the engine
+                    # continues with last-known DD state.
+                    log.error("HWM tracker update/check raised: %s", inner)
 
         # Kill switch fired = we already emergency-flattened at the broker.
         # Do NOT process further bars — engine doesn't know positions are closed,

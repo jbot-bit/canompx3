@@ -9,11 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 9b16c4eb — [mechanical] fix: Ralph Loop iter 170 — dead parameter break_ts in _compute_outcomes_all_rr (RI-05)
-- **Files changed:** 3 files
+- **Commit:** 2d3d762a — [mechanical] fix: Ralph Loop iter 170 — update audit docs and ledger
+- **Files changed:** 5 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_stress_hardcore.py`
-  - `trading_app/outcome_builder.py`
+  - `docs/ralph-loop/ralph-ledger.json`
+  - `docs/ralph-loop/ralph-loop-audit.md`
+  - `docs/ralph-loop/ralph-loop-history.md`
+  - `docs/ralph-loop/ralph-loop-plan.md`
 
 ## Next Steps — Active
 
