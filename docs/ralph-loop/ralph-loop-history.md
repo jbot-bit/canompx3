@@ -1773,3 +1773,16 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 0 files modified
 - Verification: PASS — 49/49 test_topstep_scaling_plan.py; drift 101/101 (5 pre-existing, 6 advisory); behavioral 7/7
 - Commit: NONE
+
+---
+
+## Iteration 169 — 2026-04-25
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/db_manager.py:verify_trading_app_schema (lines 883-965)
+- Finding: verify_trading_app_schema expected_cols for validated_setups missing 10 migration-added columns (discovery_k, discovery_date, era_dependent, max_year_pct, wfe_verdict, wfe_investigation_date, wfe_investigation_notes, slippage_validation_status, validation_pathway, c8_oos_status); experimental_strategies missing 2 (validation_pathway, c8_oos_status). Verifier silently returned (True, []) even when those 12 columns absent.
+- Doctrine cited: integrity-guardian.md § 3 (fail-closed — never return success in audit/health paths when gaps exist), § 5 (evidence over assertion — verifier must actually verify all schema columns)
+- Action: Added all 12 missing column names to the two expected_cols sets. No behavior change to init_trading_app_schema.
+- Blast radius: 2 files (db_manager.py production + line-ending normalization in pre-commit for test file)
+- Verification: PASS — 13/13 test_db_manager.py; 107/107 drift checks; 324 fast tests (pre-commit)
+- Commit: 6811640a

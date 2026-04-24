@@ -3,45 +3,53 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 168
+## Last iteration: 169
 
-## RALPH AUDIT — Iteration 168
-## Date: 2026-04-18
-## Infrastructure Gates: drift 101/101 PASS (5 pre-existing violations: anthropic module absent + 3 stale SGP windows; 6 pre-existing advisories); behavioral audit 7/7 PASS; ruff advisory-only (pre-existing)
+## RALPH AUDIT — Iteration 169
+## Date: 2026-04-25
+## Infrastructure Gates: drift 107/107 PASS (6 pre-existing advisories); behavioral audit 7/7 PASS; ruff PASS (all clean)
 
 ---
 
-## Iteration 168 — topstep_scaling_plan.py (audit-only — all findings ACCEPTABLE)
+## Iteration 169 — db_manager.py verify_trading_app_schema silent verifier gap (FIXED 6811640a)
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Fail-open / Silent failure | `verify_trading_app_schema` `expected_cols` for `validated_setups` missing 10 migration-added columns; `experimental_strategies` missing 2. Returned `(True, [])` silently even when those columns absent. | MEDIUM | FIXED 6811640a |
+
+### Audit Notes
+
+- **Auto-targeting:** Priority 2 (stale re-audit, critical) — `trading_app/db_manager.py` last scanned iter 120 (2026-03-16), modified 2026-04-16. Critical tier (13 importers).
+- **Doctrine cited:** integrity-guardian.md § 3 (fail-closed — never return success in audit/health paths when gaps exist), § 5 (evidence over assertion — verifier must actually verify all schema columns).
+- **TRACE:** `db_manager.py:957-963` — `missing = expected_cols - actual_cols` → columns not in `expected_cols` cannot appear in `missing` → `violations` stays empty → returns `(True, [])` even when 10 migration-added columns absent from DB.
+- **EVIDENCE:** Lines 613-692 add `discovery_k`, `discovery_date`, `era_dependent`, `max_year_pct`, `wfe_verdict`, `wfe_investigation_date`, `wfe_investigation_notes`, `slippage_validation_status`, `validation_pathway`, `c8_oos_status` to `validated_setups` via ALTER TABLE. None of these appeared in the `expected_cols` set at lines 883-961. For `experimental_strategies`, `validation_pathway` and `c8_oos_status` (lines 687-692) also missing from its expected_cols (lines 814-875). Fix: added all 12 missing column names to the two expected_cols sets.
+- **Verification:** 13 tests in test_db_manager.py passed. 107/107 drift checks PASS. 324 fast tests passed in pre-commit hook.
+- **Blast radius:** 2 files (db_manager.py, line-ending normalization only in pre-commit for test file). No API/signature change.
+- **History note:** Iter 120 had the same class of bug for `experimental_strategies` (9 columns added then). This iteration closes the same gap that accumulated since iter 120 across subsequent migrations.
+
+### Full Seven Sins scan — db_manager.py
+
+| Sin | Result |
+|-----|--------|
+| Silent failure | FIXED — `verify_trading_app_schema` now covers all 12 previously-missing columns |
+| Fail-open | None — `init_trading_app_schema` uses `with duckdb.connect()` (auto-close). Migrations use narrow `CatalogException` catch (column already exists). Force-drop is guarded by explicit `force=True` flag. |
+| Look-ahead bias | N/A — schema manager, no temporal query logic |
+| Cost illusion | N/A — no P&L computation |
+| Canonical violation | None — `ACTIVE_ORB_INSTRUMENTS` imported from `pipeline.asset_configs` (line 393). `GOLD_DB_PATH` from `pipeline.paths`. `FAMILY_RR_LOCKS_SCHEMA` from `pipeline.init_db`. All canonical. |
+| Orphan risk | None — `compute_trade_day_hash`, `get_family_head_ids`, `has_edge_families` all have identifiable callers. |
+| Volatile data | None — schema strings are literals, not research-derived values. `@research-source` annotation present on `n_trials_at_discovery` (line 537). |
+| Async safety | N/A — synchronous module |
+| State persistence gap | N/A — DB-backed state, not in-memory |
+| Contract drift | None — `verify_trading_app_schema` and `init_trading_app_schema` signatures unchanged |
+
+---
+
+## Prior: Iteration 168 — topstep_scaling_plan.py (audit-only — all findings ACCEPTABLE)
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
 | Orphan risk | `scripts/tmp/lane_analysis.py:20` imports `SCALING_LADDER` (nonexistent — correct name is `SCALING_PLAN_LADDER`). Caught by try/except; investigative script only. | LOW | ACCEPTABLE — dormant, guarded by try/except |
 | Contract drift | `lots_for_position()` misclassifies M2K and M6E as mini (1:1) instead of micro (10:1) because `instrument[1].isalpha()` excludes symbols with digit at position 1. Both instruments are dead for ORB per CLAUDE.md. All active instruments (MES, MGC, MNQ) classified correctly. | LOW | ACCEPTABLE — dormant, dead instruments only |
-
-### Audit Notes
-
-- **Auto-targeting:** Priority 1 = none (all critical/high files scanned). Priority 2 check: 2026-04-16 WIP-save commit was a line-ending normalization only (added=removed=1665 lines in build_daily_features.py), not substantive — scans remain valid. Priority 3 = topstep_scaling_plan.py (unscanned medium).
-- **Doctrine cited:** integrity-guardian.md § 2 (canonical sources), § 3 (fail-closed), § 5 (evidence over assertion); institutional-rigor.md § 4 (delegate to canonical sources), § 5 (no dead code), § 8 (verify before claiming).
-- **TRACE for Orphan risk:** `scripts/tmp/lane_analysis.py:20` → `from trading_app.topstep_scaling_plan import SCALING_LADDER` → `ImportError` (confirmed by execution) → `except Exception as e: print(...)` catches silently.
-- **TRACE for Contract drift:** `lots_for_position('M2K', 10)` → `instrument[1].isalpha()` = `'2'.isalpha()` = False → `return contracts` (returns 10 as 10 minis, should be `micros_to_mini_equivalent(10)` = 1 mini). Confirmed: M2K and M6E both dead for ORB (CLAUDE.md). Active instruments MES/MGC/MNQ all have alpha at position 1 → classified correctly.
-- **EVIDENCE:** All 49 test_topstep_scaling_plan.py pass. Python execution confirmed both bugs and that active instruments are unaffected.
-- **@future-followup noted:** NET vs GROSS position calculation (line 211). GROSS is conservative and documented.
-- **F-1 caller (risk_manager.py:231-268):** Properly wired — fail-closed when EOD balance unknown, narrow (KeyError, ValueError) exception handling, no swallowed errors.
-
-### Full Seven Sins scan — topstep_scaling_plan.py
-
-| Sin | Result |
-|-----|--------|
-| Silent failure | None — all error paths raise; no except-pass patterns |
-| Fail-open | None — max_lots_for_xfa raises KeyError/ValueError on bad input; risk_manager caller is fail-closed |
-| Look-ahead bias | N/A — no DB queries, no temporal logic |
-| Cost illusion | N/A — no P&L computation |
-| Canonical violation | None — SCALING_PLAN_LADDER values from @canonical-source annotated artifacts (TopStep policy, not pipeline canonical data). No hardcoded instrument/session/entry model lists. |
-| Orphan risk | ACCEPTABLE — scripts/tmp/lane_analysis.py:20 uses wrong constant name (SCALING_LADDER vs SCALING_PLAN_LADDER); investigative script, guarded by try/except |
-| Volatile data | None — @canonical-source annotations present with quarterly re-verify note |
-| Async safety | N/A — synchronous module |
-| State persistence gap | N/A — no mutable state |
-| Contract drift | ACCEPTABLE — lots_for_position misclassifies M2K and M6E (dead for ORB); all active instruments correct |
 
 ---
 
@@ -50,28 +58,6 @@
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
 | Contract drift | `prop_profiles.py` previously keyed ORB-cap registry entries by session only, which falsely treated multi-instrument sessions as conflicting. `get_lane_registry()` now keys by `(orb_label, instrument)` and the session_orchestrator plus the remaining registry consumers were updated to match. `self_funded_tradovate` remains inactive for separate readiness reasons. | MEDIUM | FIXED LOCAL 2026-04-23 |
-
-### Audit Notes
-
-- **Finding source:** Re-audit of `prop_profiles.py` (stale Priority 2 target, modified 2026-04-16 post iter-142 scan).
-- **TRACE:** `prop_profiles.py` multi-instrument profile lanes share session labels but carry distinct per-instrument caps → session-only registry key was the wrong invariant → tuple-keyed `(orb_label, instrument)` registry removes the false conflict while preserving fail-closed behavior for true same-pair mismatches.
-- **EVIDENCE:** Targeted verification passed on `2026-04-23`: `tests/test_trading_app/test_prop_profiles.py`, `tests/test_trading_app/test_session_orchestrator.py`, and `pipeline/check_drift.py`. `scripts/tools/slippage_scenario.py` and `scripts/tools/forward_monitor.py` were updated in the same local change so the caller set is closed.
-- **Activation note:** `self_funded_tradovate` remains inactive because profile readiness is still gated on account/API setup and dormant-profile audits still classify it as not ready for promotion.
-
-### Full Seven Sins scan — prop_profiles.py
-
-| Sin | Result |
-|-----|--------|
-| Silent failure | None — `load_allocation_lanes` fail-closed (returns empty tuple on any error). `validate_dd_budget` returns list, does not swallow. |
-| Fail-open | None — `resolve_profile_id` raises on ambiguity/inactive/self-funded. `get_lane_registry` raises on cap conflict. |
-| Look-ahead bias | N/A — configuration module |
-| Cost illusion | None — `validate_dd_budget` imports from `pipeline.cost_model.COST_SPECS` and cross-checks `_PV` |
-| Canonical violation | None — `ENTRY_MODELS` imported from `trading_app.config`. `_P90_ORB_PTS` annotated as empirical (ACCEPTABLE: intentional heuristic with update note). |
-| Orphan risk | None — all helpers wired to callers |
-| Volatile data | None — `_P90_ORB_PTS` annotated empirical, not a hard-coded claim |
-| Async safety | N/A — synchronous module |
-| State persistence gap | N/A — pure config module, no mutable state |
-| Contract drift | FIXED LOCAL 2026-04-23 — `get_lane_registry` now keys by `(orb_label, instrument)` and callers were updated to match |
 
 ---
 
@@ -92,25 +78,9 @@
 
 ---
 
-## Prior: Iteration 164 — Stale docstring in _arm_strategies (execution_engine.py)
-
-| Sin | Finding | Severity | Status |
-|-----|---------|----------|--------|
-| Orphan risk | `execution_engine.py:620` — stale docstring | LOW | FIXED cccd21a6 |
-
----
-
-## Prior: Iteration 163 — check_lane_lifecycle fail-open on exception
-
-| Sin | Finding | Severity | Status |
-|-----|---------|----------|--------|
-| Fail-open | `pre_session_check.py:314` — returned (True, "WARN") on exception | MEDIUM | FIXED 4dc4a35c |
-
----
-
 ## Files Fully Scanned
 
-> Cumulative list — 248 files fully scanned (prop_profiles.py re-audited iter 167; strategy_fitness.py re-audited iter 167 — WIP-save only, no substantive change).
+> Cumulative list — 249 files fully scanned (db_manager.py re-audited iter 169).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -123,7 +93,7 @@
 - trading_app/strategy_validator.py — added iter 117
 - trading_app/portfolio.py — added iter 118
 - trading_app/live_config.py — added iter 119
-- trading_app/db_manager.py — added iter 120
+- trading_app/db_manager.py — added iter 120, re-audited iter 169
 - trading_app/live/projectx/auth.py — added iter 121
 - trading_app/live/projectx/order_router.py — added iter 122
 - trading_app/live/projectx/data_feed.py — added iter 123
@@ -203,7 +173,6 @@
 - **Total: 249 files fully scanned**
 
 ## Next iteration targets
-- Priority 2 (stale re-audit, critical): trading_app/db_manager.py — last scanned iter 120 (2026-03-16), substantively modified since (shelf/lifecycle/validator hardening commits). Critical tier (13 importers).
-- Priority 2 (stale re-audit, critical): trading_app/outcome_builder.py — last scanned iter 115 (2026-03-16), E2 canonical window fix (0c56c7f7) landed after. Critical tier (12 importers).
+- Priority 2 (stale re-audit, critical): trading_app/outcome_builder.py — last scanned iter 115 (2026-03-16), E2 canonical window fix (0c56c7f7) and additional commits landed after. Critical tier (12 importers).
 - Priority 3 (unscanned medium): trading_app/lane_correlation.py
 - Note: pre-existing drift advisories (checks 59/95) require operational resolution by user — run `python scripts/tools/select_family_rr.py` and re-run validator for Mode A strategies

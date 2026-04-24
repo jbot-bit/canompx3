@@ -1,8 +1,8 @@
 {
-  "total_iterations": 161,
-  "last_updated": "2026-04-18",
-  "consecutive_low_only": 5,
-  "last_high_finding_iter": 163,
+  "total_iterations": 162,
+  "last_updated": "2026-04-25",
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 169,
   "findings_by_type": {
     "canonical_violation": {
       "found": 55,
@@ -11,10 +11,10 @@
       "fix_rate": 0.76
     },
     "silent_failure": {
-      "found": 36,
-      "fixed": 34,
+      "found": 37,
+      "fixed": 35,
       "deferred": 1,
-      "fix_rate": 0.94
+      "fix_rate": 0.95
     },
     "other": {
       "found": 24,
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 12,
-    "MEDIUM": 42,
+    "MEDIUM": 43,
     "LOW": 104
   },
   "classifications": {
     "judgment": 74,
-    "mechanical": 58,
+    "mechanical": 59,
     "audit-only": 29
   },
   "files_audited": {
@@ -200,6 +200,11 @@
       "last_iter": 116,
       "findings": 3
     },
+    "trading_app/db_manager.py": {
+      "audit_count": 3,
+      "last_iter": 169,
+      "findings": 2
+    },
     "scripts/tools/build_edge_families.py": {
       "audit_count": 3,
       "last_iter": 91,
@@ -259,11 +264,6 @@
       "audit_count": 2,
       "last_iter": 118,
       "findings": 2
-    },
-    "trading_app/db_manager.py": {
-      "audit_count": 2,
-      "last_iter": 120,
-      "findings": 1
     },
     "trading_app/prop_portfolio.py": {
       "audit_count": 2,
@@ -2862,6 +2862,17 @@
       "severity": "LOW",
       "verdict": "NOTED",
       "commit": "NONE"
+    },
+    {
+      "iter": 169,
+      "date": "2026-04-25",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/db_manager.py:verify_trading_app_schema (lines 883-965)",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "6811640a"
     }
   ]
 }

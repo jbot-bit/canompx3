@@ -9,9 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 6e7a7979 — docs(handoff): close O-CRLF; surface follow-up renormalization step
-- **Files changed:** 1 files
+- **Commit:** 6811640a — [mechanical] fix: Ralph Loop iter 169 — verify_trading_app_schema expected_cols missing 10+2 migration columns (silent verifier gap)
+- **Files changed:** 2 files
   - `HANDOFF.md`
+  - `trading_app/db_manager.py`
 
 ## Next Steps — Active
 
