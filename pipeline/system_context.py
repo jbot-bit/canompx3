@@ -111,6 +111,9 @@ class AuthorityContext(StrictModel):
     active_orb_instruments: list[str] = Field(default_factory=list)
     active_profiles: list[str] = Field(default_factory=list)
     published_relations: dict[str, str] = Field(default_factory=dict)
+    active_work_truth: str | None = None
+    local_ownership_truth: str | None = None
+    baton_surface: str | None = None
 
 
 class SystemContext(StrictModel):
@@ -467,9 +470,12 @@ def _build_authority_context(db_path: Path) -> AuthorityContext:
     from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
     from pipeline.db_contracts import ACTIVE_VALIDATED_VIEW, DEPLOYABLE_VALIDATED_VIEW
     from pipeline.system_authority import (
+        ACTION_QUEUE_RELATIVE_PATH,
         DOCTRINE_DOCS,
+        HANDOFF_RELATIVE_PATH,
         SYSTEM_AUTHORITY_BACKBONE_MODULES,
         SYSTEM_AUTHORITY_MAP_RELATIVE_PATH,
+        WORK_QUEUE_LEASE_RELATIVE_PATH,
     )
 
     # Resolve active profiles without violating pipeline → trading_app one-way
@@ -494,6 +500,9 @@ def _build_authority_context(db_path: Path) -> AuthorityContext:
             "active": ACTIVE_VALIDATED_VIEW,
             "deployable": DEPLOYABLE_VALIDATED_VIEW,
         },
+        active_work_truth=ACTION_QUEUE_RELATIVE_PATH.as_posix(),
+        local_ownership_truth=WORK_QUEUE_LEASE_RELATIVE_PATH.as_posix(),
+        baton_surface=HANDOFF_RELATIVE_PATH.as_posix(),
     )
 
 

@@ -44,7 +44,14 @@ if [[ -d "$HOME/.nvm/versions/node" ]]; then
 fi
 
 if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
-  "$VENV/bin/python" "$PREFLIGHT" --quiet --context codex-wsl --claim codex --mode mutating
+  PREFLIGHT_ARGS=(--quiet --context codex-wsl --claim codex --mode mutating)
+  if [[ -n "${CANOMPX3_QUEUE_ITEM:-}" ]]; then
+    PREFLIGHT_ARGS+=(--queue-item "$CANOMPX3_QUEUE_ITEM")
+  fi
+  if [[ -n "${CANOMPX3_QUEUE_OVERRIDE_NOTE:-}" ]]; then
+    PREFLIGHT_ARGS+=(--override-note "$CANOMPX3_QUEUE_OVERRIDE_NOTE")
+  fi
+  "$VENV/bin/python" "$PREFLIGHT" "${PREFLIGHT_ARGS[@]}"
 fi
 
 if [[ -f "$TASK_ROUTE_PACKET" ]]; then

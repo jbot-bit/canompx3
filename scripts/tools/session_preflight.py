@@ -90,6 +90,7 @@ from pipeline.system_context import (
 from pipeline.system_context import (
     write_claim as system_write_claim,
 )
+from pipeline.work_queue import claim_item as claim_queue_item
 
 DEFAULT_ROOT = Path(os.environ.get("CANOMPX3_ROOT", Path.cwd()))
 GIT_TIMEOUT_SECONDS = 2.0
@@ -228,6 +229,10 @@ def _policy_action_for_mode(active_mode: str) -> str:
     return "session_start_mutating" if active_mode == "mutating" else "session_start_read_only"
 
 
+def _queue_session_id(root: Path, tool: str) -> str:
+    return f"{tool}:{branch_name(root)}:{head_sha(root)[:12]}"
+
+
 def _format_policy_messages(issues: list[object]) -> list[str]:
     messages: list[str] = []
     for issue in issues:
@@ -305,6 +310,8 @@ def print_report(
     context: str,
     claim_tool: str | None = None,
     claim_mode: str = "read-only",
+    queue_item: str | None = None,
+    override_note: str | None = None,
     task_text: str | None = None,
     verify_only: bool = False,
     quiet: bool = False,
@@ -331,6 +338,21 @@ def print_report(
             return 2
         if claim_tool and not verify_only:
             write_active_claim(root, tool=claim_tool, mode=claim_mode, claim_dir=claim_dir)
+        if queue_item and not verify_only:
+            queue_tool = claim_tool or context
+            try:
+                claim_queue_item(
+                    root,
+                    item_id=queue_item,
+                    session_id=_queue_session_id(root, queue_tool),
+                    tool=queue_tool,
+                    branch=branch_name(root),
+                    worktree=str(root),
+                    override_note=override_note,
+                )
+            except ValueError as exc:
+                print(f"  XX {exc}")
+                return 2
         if verify_only and claim_tool:
             ok, _ = verify_claim(root, active_tool=claim_tool, claim_dir=claim_dir)
             return 0 if ok else 1
@@ -425,6 +447,26 @@ def print_report(
             f"head={claim.head_sha} file={claim_path}"
         )
 
+    if queue_item and not verify_only and not blockers:
+        queue_tool = claim_tool or context
+        try:
+            lease = claim_queue_item(
+                root,
+                item_id=queue_item,
+                session_id=_queue_session_id(root, queue_tool),
+                tool=queue_tool,
+                branch=branch_name(root),
+                worktree=str(root),
+                override_note=override_note,
+            )
+        except ValueError as exc:
+            print(f"Queue claim blocked: {exc}")
+            return 2
+        print(
+            "Queue claim updated: "
+            f"session={lease.session_id} items={','.join(lease.claimed_item_ids) or '<none>'}"
+        )
+
     return exit_code
 
 
@@ -433,6 +475,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--context", default="generic", help="Startup context label")
     parser.add_argument("--claim", default=None, help="Write or verify a session claim for this tool")
     parser.add_argument("--mode", choices=sorted(CLAIM_MODES), default=None, help="Claim mode: read-only or mutating")
+    parser.add_argument("--queue-item", default=None, help="Optional canonical queue item id to claim for this session")
+    parser.add_argument(
+        "--override-note",
+        default=None,
+        help="Override note required when starting new work while close-first carry-over items remain open",
+    )
     parser.add_argument("--task", default=None, help="Optional task text for system-brief routing")
     parser.add_argument("--verify-claim", action="store_true", help="Verify current HEAD against the stored claim")
     parser.add_argument("--quiet", action="store_true", help="Only print warnings, suppress verbose output")
@@ -458,6 +506,8 @@ def main(argv: list[str] | None = None) -> int:
         context=args.context,
         claim_tool=args.claim,
         claim_mode=claim_mode,
+        queue_item=args.queue_item,
+        override_note=args.override_note,
         task_text=args.task,
         verify_only=args.verify_claim,
         quiet=args.quiet,

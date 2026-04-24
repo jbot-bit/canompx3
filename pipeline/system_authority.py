@@ -16,6 +16,9 @@ SYSTEM_AUTHORITY_RENDER_SCRIPT_RELATIVE_PATH = Path("scripts/tools/render_system
 SYSTEM_AUTHORITY_GENERATED_MARKER = (
     "<!-- Auto-generated from pipeline/system_authority.py via scripts/tools/render_system_authority_map.py -->"
 )
+ACTION_QUEUE_RELATIVE_PATH = Path("docs/runtime/action-queue.yaml")
+WORK_QUEUE_LEASE_RELATIVE_PATH = Path(".session/work_queue_leases.json")
+HANDOFF_RELATIVE_PATH = Path("HANDOFF.md")
 
 DOCTRINE_DOCS: tuple[str, ...] = (
     "CLAUDE.md",
@@ -29,6 +32,7 @@ SYSTEM_AUTHORITY_BACKBONE_MODULES: tuple[str, ...] = (
     "pipeline/system_authority.py",
     "pipeline/system_context.py",
     "pipeline/system_brief.py",
+    "pipeline/work_queue.py",
     "pipeline/work_capsule.py",
     "context/institutional.py",
     "context/registry.py",
@@ -68,6 +72,7 @@ SURFACE_TAXONOMY: tuple[SurfaceCategory, ...] = (
             "pipeline/system_authority.py",
             "pipeline/system_context.py",
             "pipeline/system_brief.py",
+            "pipeline/work_queue.py",
             "pipeline/work_capsule.py",
             "context/institutional.py",
             "context/registry.py",
@@ -81,6 +86,20 @@ SURFACE_TAXONOMY: tuple[SurfaceCategory, ...] = (
         mutation_rule="One owned source per concept; no duplicate literals downstream",
     ),
     SurfaceCategory(
+        title="Active-work control plane",
+        purpose="Canonical active-work truth, local ownership, and rendered baton views",
+        examples=(
+            ACTION_QUEUE_RELATIVE_PATH.as_posix(),
+            WORK_QUEUE_LEASE_RELATIVE_PATH.as_posix(),
+            HANDOFF_RELATIVE_PATH.as_posix(),
+            "scripts/tools/work_queue.py",
+        ),
+        mutation_rule=(
+            "The action queue is canonical, the lease file is local runtime ownership only, "
+            "and HANDOFF.md is a rendered baton view."
+        ),
+    ),
+    SurfaceCategory(
         title="Command writers",
         purpose="The only places allowed to mutate durable state",
         examples=(
@@ -88,6 +107,8 @@ SURFACE_TAXONOMY: tuple[SurfaceCategory, ...] = (
             "trading_app/db_manager.py",
             "trading_app/strategy_validator.py",
             "trading_app/edge_families.py",
+            "pipeline/work_queue.py",
+            "scripts/tools/work_queue.py",
             "scripts/migrations/",
         ),
         mutation_rule="Mutations must go through owned command paths",
@@ -136,7 +157,6 @@ SURFACE_TAXONOMY: tuple[SurfaceCategory, ...] = (
             "docs/runtime/decision-ledger.md",
             "docs/runtime/debt-ledger.md",
             "docs/plans/",
-            "HANDOFF.md",
             "ROADMAP.md",
             "docs/postmortems/",
         ),
@@ -192,6 +212,18 @@ CANONICAL_TRUTH_MAP: tuple[CanonicalTruthEntry, ...] = (
         "context/registry.py + scripts/tools/context_resolver.py",
     ),
     CanonicalTruthEntry(
+        "What is the canonical active-work queue for meaningful open work?",
+        f"{ACTION_QUEUE_RELATIVE_PATH.as_posix()} + pipeline/work_queue.py",
+    ),
+    CanonicalTruthEntry(
+        "What local sessions currently own queue items?",
+        f"{WORK_QUEUE_LEASE_RELATIVE_PATH.as_posix()} + pipeline/work_queue.py",
+    ),
+    CanonicalTruthEntry(
+        "What baton should startup tooling render for humans and cross-tool orientation?",
+        f"{HANDOFF_RELATIVE_PATH.as_posix()} rendered from pipeline/work_queue.py",
+    ),
+    CanonicalTruthEntry(
         "What is the current task-scoped live context for research, trading, or verification work?",
         "scripts/tools/context_views.py",
     ),
@@ -207,6 +239,8 @@ ENFORCEMENT_RULES: tuple[str, ...] = (
     "If a consumer needs deployable shelf semantics, it should read deployable_validated_setups or deployable_validated_relation(...), not validated_setups WHERE status='active'.",
     "If a rule changes frequently with data, profiles, or runtime state, do not hardcode it in prose. Link the source or expose a published contract.",
     "Audits should fail when they read deprecated truth surfaces after a newer canonical surface exists.",
+    "When docs/runtime/action-queue.yaml exists, it is the canonical active-work truth and HANDOFF.md becomes a generated baton only.",
+    "Local queue leases are runtime ownership state, not durable project truth; they should stay ignored and never be cited as design history.",
     "Reference docs must say what they are not authoritative for.",
     "Generated docs must name their generator and say do not edit by hand.",
     "Snapshot docs must declare their date/commit and say they are not live truth.",

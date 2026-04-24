@@ -32,6 +32,9 @@ def _authority_stub() -> AuthorityContext:
         active_orb_instruments=["MGC", "MNQ"],
         active_profiles=["topstep_50k_mnq_auto"],
         published_relations={"active": "active_validated_setups", "deployable": "deployable_validated_setups"},
+        active_work_truth="docs/runtime/action-queue.yaml",
+        local_ownership_truth=".session/work_queue_leases.json",
+        baton_surface="HANDOFF.md",
     )
 
 

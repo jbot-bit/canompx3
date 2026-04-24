@@ -1,6 +1,6 @@
 # Document Authority Registry
 
-Date: 2026-04-11
+Date: 2026-04-24
 
 ## Purpose
 
@@ -20,8 +20,10 @@ to mean, and what it is not allowed to mean.
 | `RESEARCH_RULES.md` | research doctrine | methodology, statistical standards, discovery discipline, interpretation discipline | live deployment state, portfolio routing |
 | `docs/institutional/pre_registered_criteria.md` | locked promotion/validation policy | the criteria validated strategies must satisfy | implementation details of how code is written |
 | `docs/governance/system_authority_map.md` | whole-project authority/context map | where major truth surfaces live, how categories relate, what is linked vs derived | live runtime values by itself |
+| `docs/runtime/action-queue.yaml` | canonical active-work registry | meaningful open work, close-first carry-over, queue freshness, durable next actions | local terminal ownership, rendered baton prose, runtime values outside queue scope |
+| `.session/work_queue_leases.json` | local queue lease state | fresh local session ownership of queue items in this checkout/worktree | durable project decisions, shared backlog truth, cross-machine truth |
 | `ROADMAP.md` | planning inventory | planned or not-yet-built work only | current implementation truth, live behavior, policy |
-| `HANDOFF.md` | cross-tool baton | current session baton, recent changes, local warnings | durable truth when code or canonical docs disagree |
+| `HANDOFF.md` | rendered cross-tool baton | thin startup baton rendered from `docs/runtime/action-queue.yaml` plus current warnings | durable truth when queue, code, DB, or canonical docs disagree |
 | `docs/plans/` | design history and active decisions | durable design decisions and rationale while active and not archived | live runtime truth when code or DB disagree |
 | `docs/ARCHITECTURE.md` | operational reference guide | command reference and orientation when consistent with code | current runtime truth when code/DB disagree |
 | `docs/MONOREPO_ARCHITECTURE.md` | monorepo orientation reference | service inventory and repository navigation | current DB location, canonical runtime policy, live deployment semantics |
@@ -41,6 +43,7 @@ same prose.
 | `contract` | Active interface expectations between repo surfaces | Owning source and verification gate |
 | `result` | Research/audit output | Verdict, provenance, reproduction, caveats |
 | `handoff` | Current cross-tool baton | Compact current-state warning only |
+| `operational_registry` | Canonical file-backed workflow state | Explicit owner plus freshness/update semantics |
 
 Dynamic facts include counts, active lanes, strategy IDs, live profile contents,
 session lists, schemas, and current git/runtime state. Those belong in code,
@@ -56,13 +59,18 @@ canonical data, generated docs, or stamped snapshots — not unqualified prose.
    trading summaries and plans.
 4. `ROADMAP.md` is planning-only. It must not be cited as proof that something
    already exists or works.
-5. `HANDOFF.md` and `docs/plans/` are context and design surfaces, not
+5. `docs/runtime/action-queue.yaml` is the canonical active-work truth when it
+   exists. `HANDOFF.md` is then a rendered baton view, not an independent
+   backlog.
+6. `.session/work_queue_leases.json` is local runtime ownership only. It can
+   block unsafe parallel work, but it is not durable project truth.
+7. `HANDOFF.md` and `docs/plans/` are context and design surfaces, not
    canonical research truth. They can explain decisions; they do not override
    canonical layers or live code.
-6. `docs/ARCHITECTURE.md`, `docs/MONOREPO_ARCHITECTURE.md`, and `REPO_MAP.md`
+8. `docs/ARCHITECTURE.md`, `docs/MONOREPO_ARCHITECTURE.md`, and `REPO_MAP.md`
    are reference surfaces. They must point back to canonical code or generated
    sources and must not drift into pseudo-authority.
-7. Generated docs win over hand-edited copies of the same facts only when they
+9. Generated docs win over hand-edited copies of the same facts only when they
    are in sync with their generator. If generated output drifts from the
    generator, the generator wins and the doc must be re-rendered.
 
@@ -72,11 +80,17 @@ canonical data, generated docs, or stamped snapshots — not unqualified prose.
    introduces it.
 2. If a code change materially changes live behavior, update the relevant
    authority doc in the same workstream or record the gap explicitly in
-   `HANDOFF.md`.
-3. Archived plans are historical only. They do not carry current authority.
-4. Do not commit preregs/results with placeholder provenance markers such as
+   `docs/runtime/action-queue.yaml`, a ledger, `docs/plans/`, or the rendered
+   baton when that is the only appropriate surface.
+3. When `docs/runtime/action-queue.yaml` changes active work truth,
+   `HANDOFF.md` should be re-rendered instead of hand-edited as a parallel
+   source.
+4. Queue lease state belongs in `.session/work_queue_leases.json`; do not
+   commit it or cite it as durable truth.
+5. Archived plans are historical only. They do not carry current authority.
+6. Do not commit preregs/results with placeholder provenance markers such as
    `UNSTAMPED` or `TO_BE_STAMPED`.
-5. Do not describe a `design_only` prereg as executable. It must remain blocked
+7. Do not describe a `design_only` prereg as executable. It must remain blocked
    until its data tables and bounded runner exist.
-6. If a doc says "current", "live", or "deployed" about dynamic state, it must
+8. If a doc says "current", "live", or "deployed" about dynamic state, it must
    either link to the canonical source or declare itself as a dated snapshot.

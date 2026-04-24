@@ -1121,6 +1121,9 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
             "authority_map_doc": snapshot.authority.authority_map_doc,
             "doctrine_docs": snapshot.authority.doctrine_docs,
             "backbone_modules": backbone_modules,
+            "active_work_truth": snapshot.authority.active_work_truth,
+            "local_ownership_truth": snapshot.authority.local_ownership_truth,
+            "baton_surface": snapshot.authority.baton_surface,
             "published_relations": snapshot.authority.published_relations,
             "interpreter": {
                 "context": snapshot.interpreter.context,
@@ -1284,6 +1287,7 @@ def collect_system_brief(root: Path, db_path: Path, tool_name: str) -> tuple[dic
         "warning_count": len(payload["warning_issues"]),
         "required_live_view_count": len(payload["required_live_views"]),
         "canonical_owner_count": len(payload["canonical_owners"]),
+        "work_queue": payload.get("work_queue"),
     }
     if payload["blocking_issues"]:
         items.append(
@@ -2201,6 +2205,17 @@ def format_text(report: PulseReport) -> str:
             f"views {brief.get('required_live_view_count')} | "
             f"blockers {brief.get('blocker_count')} | warnings {brief.get('warning_count')}"
         )
+        queue = brief.get("work_queue") or {}
+        if queue:
+            top = ", ".join(queue.get("top_item_ids", [])[:3]) if queue.get("top_item_ids") else "none"
+            lines.append(
+                "  "
+                f"Queue open={queue.get('open_count', 0)} | "
+                f"close-first={queue.get('close_first_open_count', 0)} | "
+                f"stale={queue.get('stale_count', 0)} | "
+                f"top={top} | "
+                f"handoff-match={queue.get('handoff_matches_rendered')}"
+            )
         if report.work_capsule_summary:
             lines.append(f"  Capsule: {report.work_capsule_summary.get('path')}")
         if report.startup_latency_ms is not None and report.orientation_cost_budget:
@@ -2369,6 +2384,15 @@ def format_markdown(report: PulseReport) -> str:
             f"owners={brief.get('canonical_owner_count')} | views={brief.get('required_live_view_count')} | "
             f"blockers={brief.get('blocker_count')} | warnings={brief.get('warning_count')}"
         )
+        queue = brief.get("work_queue") or {}
+        if queue:
+            top = ", ".join(queue.get("top_item_ids", [])[:3]) if queue.get("top_item_ids") else "none"
+            lines.append(
+                f"- **Queue**: open={queue.get('open_count', 0)} | "
+                f"close-first={queue.get('close_first_open_count', 0)} | "
+                f"stale={queue.get('stale_count', 0)} | "
+                f"top={top} | handoff-match={queue.get('handoff_matches_rendered')}"
+            )
         if report.work_capsule_summary:
             lines.append(f"- **Work capsule**: `{report.work_capsule_summary.get('path')}`")
         if report.startup_latency_ms is not None and report.orientation_cost_budget:

@@ -42,6 +42,15 @@ def test_build_system_brief_returns_orientation_surface(tmp_path: Path) -> None:
         patch("pipeline.system_brief._load_capsule_summary", return_value=(None, [])),
     ):
         mock_snapshot.return_value.generated_at = "2026-04-13T00:00:00+00:00"
+        mock_snapshot.return_value.work_queue.exists = True
+        mock_snapshot.return_value.work_queue.open_count = 2
+        mock_snapshot.return_value.work_queue.close_first_open_count = 1
+        mock_snapshot.return_value.work_queue.stale_count = 0
+        mock_snapshot.return_value.work_queue.top_items = []
+        mock_snapshot.return_value.work_queue.handoff_matches_rendered = True
+        mock_snapshot.return_value.authority.active_work_truth = "docs/runtime/action-queue.yaml"
+        mock_snapshot.return_value.authority.local_ownership_truth = ".session/work_queue_leases.json"
+        mock_snapshot.return_value.authority.baton_surface = "HANDOFF.md"
         payload = build_system_brief(tmp_path)
 
     assert payload["task_id"] == "system_orientation"
@@ -50,6 +59,8 @@ def test_build_system_brief_returns_orientation_surface(tmp_path: Path) -> None:
     assert payload["decision_refs"]
     assert payload["debt_refs"]
     assert payload["blocking_issues"] == []
+    assert payload["work_queue"]["active_work_truth"] == "docs/runtime/action-queue.yaml"
+    assert payload["work_queue"]["baton_context"] == "HANDOFF.md"
 
 
 def test_build_system_brief_fails_closed_on_ambiguous_route(tmp_path: Path) -> None:
@@ -69,6 +80,15 @@ def test_build_system_brief_fails_closed_on_ambiguous_route(tmp_path: Path) -> N
         ),
     ):
         mock_snapshot.return_value.generated_at = "2026-04-13T00:00:00+00:00"
+        mock_snapshot.return_value.work_queue.exists = False
+        mock_snapshot.return_value.work_queue.open_count = 0
+        mock_snapshot.return_value.work_queue.close_first_open_count = 0
+        mock_snapshot.return_value.work_queue.stale_count = 0
+        mock_snapshot.return_value.work_queue.top_items = []
+        mock_snapshot.return_value.work_queue.handoff_matches_rendered = None
+        mock_snapshot.return_value.authority.active_work_truth = "docs/runtime/action-queue.yaml"
+        mock_snapshot.return_value.authority.local_ownership_truth = ".session/work_queue_leases.json"
+        mock_snapshot.return_value.authority.baton_surface = "HANDOFF.md"
         payload = build_system_brief(tmp_path, task_text="same phrase")
 
     assert payload["task_id"] == "system_orientation"

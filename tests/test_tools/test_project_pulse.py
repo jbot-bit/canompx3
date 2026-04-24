@@ -702,6 +702,9 @@ class TestCollectSystemIdentity:
         snapshot.authority.authority_map_doc = "docs/governance/system_authority_map.md"
         snapshot.authority.doctrine_docs = ["CLAUDE.md"]
         snapshot.authority.backbone_modules = ["pipeline/system_context.py"]
+        snapshot.authority.active_work_truth = "docs/runtime/action-queue.yaml"
+        snapshot.authority.local_ownership_truth = ".session/work_queue_leases.json"
+        snapshot.authority.baton_surface = "HANDOFF.md"
         snapshot.authority.published_relations = {"active": "active_validated_setups"}
         snapshot.interpreter.context = "codex-wsl"
         snapshot.interpreter.current_python = "/usr/bin/python3"
@@ -754,6 +757,7 @@ class TestCollectSystemIdentity:
         assert summary is not None
         assert summary["work_queue"]["open_count"] == 2
         assert summary["work_queue"]["top_items"][0]["id"] == "first"
+        assert summary["active_work_truth"] == "docs/runtime/action-queue.yaml"
         assert any("Close-first queue items remain open" in item.summary for item in items)
 
 
@@ -1001,6 +1005,9 @@ class TestCollectSystemIdentity:
         snapshot.authority.authority_map_doc = "docs/governance/system_authority_map.md"
         snapshot.authority.doctrine_docs = ["CLAUDE.md", "TRADING_RULES.md"]
         snapshot.authority.backbone_modules = ["pipeline/system_authority.py", "pipeline/system_context.py"]
+        snapshot.authority.active_work_truth = "docs/runtime/action-queue.yaml"
+        snapshot.authority.local_ownership_truth = ".session/work_queue_leases.json"
+        snapshot.authority.baton_surface = "HANDOFF.md"
         snapshot.authority.published_relations = {
             "active": "active_validated_setups",
             "deployable": "deployable_validated_setups",
@@ -1031,6 +1038,7 @@ class TestCollectSystemIdentity:
         assert summary["active_orb_instruments"] == ["MGC", "MNQ"]
         assert summary["published_relations"]["deployable"] == "deployable_validated_setups"
         assert summary["authority_map_doc"] == "docs/governance/system_authority_map.md"
+        assert summary["baton_surface"] == "HANDOFF.md"
         assert summary["interpreter"]["current_prefix"] == "/repo/.venv-wsl"
         assert summary["interpreter"]["expected_prefix"] == "/repo/.venv-wsl"
         assert summary["interpreter"]["matches_expected"] is True

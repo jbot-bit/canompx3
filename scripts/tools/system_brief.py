@@ -67,6 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _format_text(payload: dict[str, object]) -> str:
+    queue = payload.get("work_queue") if isinstance(payload.get("work_queue"), dict) else None
     lines = [
         f"System brief: {payload['task_id']} [{payload['briefing_level']}]",
         f"Verification profile: {payload['verification_profile']}",
@@ -78,6 +79,16 @@ def _format_text(payload: dict[str, object]) -> str:
     lines.extend(f"  - {item}" for item in payload["canonical_owners"])
     lines.append("Required live views:")
     lines.extend(f"  - {item}" for item in payload["required_live_views"])
+    if queue:
+        top = ", ".join(queue.get("top_item_ids", [])[:3]) if queue.get("top_item_ids") else "none"
+        lines.append(
+            "Queue: "
+            f"open={queue.get('open_count', 0)} | "
+            f"close-first={queue.get('close_first_open_count', 0)} | "
+            f"stale={queue.get('stale_count', 0)} | "
+            f"top={top} | "
+            f"handoff-match={queue.get('handoff_matches_rendered')}"
+        )
     if payload["blocking_issues"]:
         lines.append("Blockers:")
         lines.extend(f"  - {issue['message']}" for issue in payload["blocking_issues"])

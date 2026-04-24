@@ -321,6 +321,26 @@ class TestPrintReport:
         assert exit_code == 2
         assert "wrong interpreter" in out.lower()
 
+    def test_quiet_mode_claims_queue_item_when_requested(self, tmp_path: Path) -> None:
+        with (
+            patch.object(session_preflight, "_evaluate_preflight_policy", return_value=([], [])),
+            patch.object(session_preflight, "write_active_claim"),
+            patch.object(session_preflight, "claim_queue_item") as queue_claim,
+            patch.object(session_preflight, "branch_name", return_value="main"),
+            patch.object(session_preflight, "head_sha", return_value="abc123"),
+        ):
+            exit_code = session_preflight.print_report(
+                tmp_path,
+                context="codex-wsl",
+                claim_tool="codex",
+                claim_mode="mutating",
+                queue_item="prior_day_bridge_execution_triage",
+                quiet=True,
+            )
+
+        assert exit_code == 0
+        assert queue_claim.call_args.kwargs["item_id"] == "prior_day_bridge_execution_triage"
+
 
 class TestCliBootstrap:
     def test_parse_args_accepts_related_root(self) -> None:
@@ -330,6 +350,14 @@ class TestCliBootstrap:
 
         assert args.root == "C:/repo"
         assert args.related_root == ["C:/peer", "D:/other"]
+
+    def test_parse_args_accepts_queue_claim_inputs(self) -> None:
+        args = session_preflight.build_parser().parse_args(
+            ["--queue-item", "cross_asset_session_chronology_spec", "--override-note", "urgent live review"]
+        )
+
+        assert args.queue_item == "cross_asset_session_chronology_spec"
+        assert args.override_note == "urgent live review"
 
     def test_script_help_runs_via_direct_path(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]

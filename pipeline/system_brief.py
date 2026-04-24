@@ -20,6 +20,7 @@ DEFAULT_ORIENTATION_BUDGET_MS = {
     "non_trivial": 500,
     "mutating": 800,
 }
+QUEUE_TOP_ITEM_LIMIT = 3
 
 
 @dataclass(frozen=True)
@@ -146,6 +147,17 @@ def build_system_brief(
     )
 
     elapsed_ms = int((time.perf_counter() - started) * 1000)
+    queue_packet = {
+        "exists": snapshot.work_queue.exists,
+        "active_work_truth": snapshot.authority.active_work_truth,
+        "baton_context": snapshot.authority.baton_surface,
+        "local_ownership_truth": snapshot.authority.local_ownership_truth,
+        "open_count": snapshot.work_queue.open_count,
+        "close_first_open_count": snapshot.work_queue.close_first_open_count,
+        "stale_count": snapshot.work_queue.stale_count,
+        "top_item_ids": [item.id for item in snapshot.work_queue.top_items[:QUEUE_TOP_ITEM_LIMIT]],
+        "handoff_matches_rendered": snapshot.work_queue.handoff_matches_rendered,
+    }
     return {
         "task_id": route.manifest.id,
         "route_id": route.manifest.id,
@@ -165,6 +177,7 @@ def build_system_brief(
         "expansion_triggers": list(route.expansion_triggers or route.briefing_contract.expansion_triggers),
         "generated_at": snapshot.generated_at,
         "startup_latency_ms": elapsed_ms,
+        "work_queue": queue_packet,
         "orientation_cost_budget": {
             "budget_ms": DEFAULT_ORIENTATION_BUDGET_MS[briefing_level],
             "within_budget": elapsed_ms <= DEFAULT_ORIENTATION_BUDGET_MS[briefing_level],

@@ -83,6 +83,7 @@ def test_rendered_catalogs_include_expected_entries() -> None:
 
     assert "Context Source Catalog" in source_catalog
     assert "`research_methodology`" in source_catalog
+    assert "canonical active-work truth" in source_catalog
     assert "`project_pulse_fast`" in source_catalog
     assert "`research_context`" in source_catalog
     assert "`recent_performance_context`" in source_catalog
@@ -92,6 +93,7 @@ def test_rendered_catalogs_include_expected_entries() -> None:
     assert "Task Routes" in task_routes
     assert "`research_investigation`" in task_routes
     assert "`repo_workflow_audit`" in task_routes
+    assert "canonical active-work registry" in task_routes
     assert "`research_methodology_pack`" in task_routes
     assert all(path in task_routes for path in FALLBACK_READ_SET)
     assert "Institutional Routing Contracts" in institutional
