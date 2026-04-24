@@ -9,16 +9,24 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-24
-- **Commit:** 0be5d1a6 — docs(handoff): record F1-F8 landing and parked-branch triage
-- **Files changed:** 1 files
+- **Commit:** a9f92a89 — audit(codex): 3-day Codex commit sweep + hardening
+- **Files changed:** 7 files
   - `HANDOFF.md`
+  - `docs/audit/2026-04-24-codex-3day-audit.md`
+  - `docs/runtime/stages/2026-04-24-codex-3day-audit-hardening.md`
+  - `pipeline/check_drift.py`
+  - `scripts/tools/project_pulse.py`
+  - `tests/test_pipeline/test_check_drift_context.py`
+  - `trading_app/conditional_overlays.py`
 
 ## Next Steps — Active
-1. Resume work from `main` @ `bad97445`. No parked branches remain.
-2. Remove stale `.worktrees/action-parked-branches/` directory once Windows releases the file lock (git no longer tracks it).
+1. Drain Codex parallel-session WIP (8 dirty files: trading_app/phase_4_discovery_gates.py, trading_app/strategy_discovery.py, scripts/tools/context_views.py, related tests + HANDOFF). Codex left mid-flight — coordinate which terminal commits first.
+2. Apply remaining hardening backlog from docs/audit/2026-04-24-codex-3day-audit.md: T1.A (`_is_pid_alive` privacy), T1.C (DRY triple `_apply_conditional_roles`), T1.D + RA-1 (lazy STATE_DIR.mkdir × 6 files), RA-2 (centralize TRADING_DAYS_PER_YEAR=252).
+3. Continue ranked open queue: cross-asset chronology spec / prior-day Pathway-B bridge execution / GC→MGC translation question (per top of action-queue).
 
 ## Blockers / Warnings
-- None. All three parked codex branches actioned (one landed, two discarded as whitespace-only).
+- 8 uncommitted files from parallel Codex session — review before claiming any of them as fresh work.
+- Pulse output budget is now exactly 60 lines; future text-formatter additions must trim elsewhere or raise the budget intentionally with test update.
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
