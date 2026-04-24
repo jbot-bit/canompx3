@@ -542,12 +542,8 @@ def test_handoff_snapshot_walks_state_machine_to_ready(monkeypatch):
         },
     )
     monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": False})
-    monkeypatch.setattr(
-        bot_dashboard, "_journal_lock_status", lambda: {"locked": False, "detail": "ok"}
-    )
-    monkeypatch.setattr(
-        bot_dashboard, "_instance_lock_status", lambda: {"locked": False, "locks": []}
-    )
+    monkeypatch.setattr(bot_dashboard, "_journal_lock_status", lambda: {"locked": False, "detail": "ok"})
+    monkeypatch.setattr(bot_dashboard, "_instance_lock_status", lambda: {"locked": False, "locks": []})
     assert bot_dashboard._handoff_snapshot()["status"] == "stopping"
 
     # Stage 2: session stopped but journal still locked → "waiting_cleanup"
@@ -570,9 +566,7 @@ def test_handoff_snapshot_walks_state_machine_to_ready(monkeypatch):
     assert bot_dashboard._handoff_snapshot()["status"] == "waiting_cleanup"
 
     # Stage 3: locks clear, refresh running → "waiting_refresh"
-    monkeypatch.setattr(
-        bot_dashboard, "_journal_lock_status", lambda: {"locked": False, "detail": "ok"}
-    )
+    monkeypatch.setattr(bot_dashboard, "_journal_lock_status", lambda: {"locked": False, "detail": "ok"})
     monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": True})
     assert bot_dashboard._handoff_snapshot()["status"] == "waiting_refresh"
 
@@ -587,15 +581,11 @@ def test_handoff_snapshot_walks_state_machine_to_ready(monkeypatch):
     snap = bot_dashboard._handoff_snapshot(data_summary=fresh_data, preflight_summary=None)
     assert snap["status"] == "needs_preflight"
 
-    snap = bot_dashboard._handoff_snapshot(
-        data_summary=fresh_data, preflight_summary={"status": "fail"}
-    )
+    snap = bot_dashboard._handoff_snapshot(data_summary=fresh_data, preflight_summary={"status": "fail"})
     assert snap["status"] == "needs_preflight"
 
     # Stage 6: data fresh + preflight pass → "ready_to_start"
-    snap = bot_dashboard._handoff_snapshot(
-        data_summary=fresh_data, preflight_summary={"status": "pass"}
-    )
+    snap = bot_dashboard._handoff_snapshot(data_summary=fresh_data, preflight_summary={"status": "pass"})
     assert snap["status"] == "ready_to_start"
     assert snap["action"]["id"] == "continue_handoff"
     assert snap["target_mode"] == "demo"
@@ -603,39 +593,40 @@ def test_handoff_snapshot_walks_state_machine_to_ready(monkeypatch):
     bot_dashboard._clear_handoff()
 
 
-def test_preflight_helper_does_not_hold_journal_lock(tmp_path, monkeypatch):
-    """Preflight self-test must not leave live_journal.db held after it returns.
+def test_preflight_helper_opens_no_duckdb_connection(monkeypatch):
+    """Preflight self-test helper must not open any DuckDB connection.
 
-    Commit 45f50916 fixed a Windows lock leak where _run_preflight constructed a
-    SessionOrchestrator that owned the journal DB connection and never released
-    it. The lightweight helper bypasses orchestrator construction entirely.
+    Commit 45f50916 fixed a Windows lock leak where _run_preflight constructed
+    a SessionOrchestrator that owned the journal DB connection and never
+    released it. F1-F2 in commit bad97445 stripped orchestrator construction
+    entirely, leaving the helper as a notifications-only probe.
 
-    This test guards against re-introducing the leak: after running the helper,
-    the journal path must be openable for read-write with no duckdb.IOException.
-
-    Plan: ~/.claude/plans/inspoect-repoi-instpect-resource-imperative-clarke.md F8.
+    Regression guard: intercept duckdb.connect and fail immediately if the
+    helper attempts any connection. Catches the leak pattern regardless of
+    which path (LIVE_JOURNAL_DB_PATH, GOLD_DB_PATH, etc.) the regression hits.
     """
     import duckdb
 
     from scripts.run_live_session import _run_lightweight_component_self_tests
 
-    journal_path = tmp_path / "live_journal.db"
-    # Seed the DB so a writer lock is meaningful.
-    con = duckdb.connect(str(journal_path))
-    con.execute("CREATE TABLE t (x INT)")
-    con.close()
-
-    # Stub the notifications probe — real notifier would need Telegram config.
     import trading_app.live.notifications as notifications
 
     monkeypatch.setattr(notifications, "notify", lambda *a, **k: None)
 
+    connect_calls: list[tuple] = []
+
+    def spy_connect(*args, **kwargs):
+        connect_calls.append((args, kwargs))
+        raise AssertionError(
+            "Preflight helper attempted duckdb.connect — regression of the "
+            "45f50916 journal-lock fix. Helper must stay DB-free."
+        )
+
+    monkeypatch.setattr(duckdb, "connect", spy_connect)
+
     results = _run_lightweight_component_self_tests(instrument="MNQ")
+
+    assert connect_calls == []
     assert results["notifications"] is True
     assert results["brackets"] is True
     assert results["fill_poller"] is True
-
-    # If the helper held a journal connection, this would raise duckdb.IOException.
-    writer = duckdb.connect(str(journal_path), read_only=False)
-    writer.execute("INSERT INTO t VALUES (1)")
-    writer.close()

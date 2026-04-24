@@ -31,7 +31,7 @@ class PipelineLockError(RuntimeError):
     """Raised when the pipeline lock cannot be acquired."""
 
 
-def _is_pid_alive(pid: int) -> bool:
+def is_pid_alive(pid: int) -> bool:
     """Check if a process with the given PID is still running (Windows-compatible)."""
     if sys.platform == "win32":
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
@@ -116,7 +116,7 @@ class PipelineLock:
             if info is None:
                 # Corrupt lock file — reclaim
                 self._remove_stale_lock()
-            elif not _is_pid_alive(info.get("pid", -1)):
+            elif not is_pid_alive(info.get("pid", -1)):
                 # Stale lock — process is dead
                 print(
                     f"[LOCK] Reclaiming stale lock from dead process "
@@ -170,7 +170,7 @@ class PipelineLock:
             return False
         try:
             info = json.loads(lock_path.read_text())
-            return _is_pid_alive(info.get("pid", -1))
+            return is_pid_alive(info.get("pid", -1))
         except (json.JSONDecodeError, OSError):
             return False
 
@@ -182,7 +182,7 @@ class PipelineLock:
             return None
         try:
             info = json.loads(lock_path.read_text())
-            if _is_pid_alive(info.get("pid", -1)):
+            if is_pid_alive(info.get("pid", -1)):
                 return info
         except (json.JSONDecodeError, OSError):
             pass
