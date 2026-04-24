@@ -9,11 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-24
-- **Commit:** b8b0ad67 — @ chore(hooks): remove ceremonial bias_grounding_guard
-- **Files changed:** 3 files
-  - `.claude/settings.json`
+- **Commit:** 219f00d7 — @ docs(governance): re-render system_authority_map.md
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `scripts/tools/bias_grounding_guard.py`
+  - `docs/governance/system_authority_map.md`
 
 ## Next Steps — Active
 1. Cross-asset earlier-session to later-ORB chronology spec — Write the chronology discipline/spec before any cross-asset timing scan or execution.

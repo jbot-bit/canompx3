@@ -7,10 +7,12 @@ Underpowered OOS produces noise-consistent results that cannot distinguish
 "signal alive", "signal dead", or "signal reversed" — treating any of them
 as refutation is a methodological error.
 
-Literature grounding (extracts in `docs/institutional/literature/`):
-    - Harvey & Liu 2015 — OOS is a Sharpe-ratio *haircut*, not a binary veto
-    - LdP 2020 ML for Asset Managers — CPCV for short-OOS data; binary
-      IS/OOS split is misspecified when OOS < ~20% of total sample
+Literature grounding (canonical extracts, not training memory):
+    - `docs/institutional/literature/harvey_liu_2015_backtesting.md` —
+      OOS is a Sharpe-ratio *haircut*, not a binary veto
+    - `docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md` —
+      CPCV for short-OOS data; binary IS/OOS split is misspecified when
+      OOS < ~20% of total sample
 
 Origin: 2026-04-20 incident. `bull_short_avoidance_deployed_lane_verify.py`
 applied dir_match=FALSE as hard kill on N_OOS_per_group=19/20 with power 7.9%

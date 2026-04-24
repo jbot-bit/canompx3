@@ -1,4 +1,24 @@
-"""Read-only OOS evidence interpreter for standalone candidates."""
+"""Read-only OOS evidence interpreter for standalone candidates.
+
+Classifies validator Criterion-8 OOS outcomes as one of:
+    - ``REFUTED_WITH_POWER`` — negative / failed-ratio outcome with OOS
+      power >= 0.80 to detect the IS effect.
+    - ``UNVERIFIED_SPARSE_OOS`` — negative-looking outcome but OOS power
+      below 0.80; cannot refute.
+    - ``CONFIRMED`` — positive outcome that passes Criterion-8.
+    - ``INSUFFICIENT_DATA`` — OOS sample too small to evaluate.
+
+Power floor enforces `.claude/rules/backtesting-methodology.md` RULE 3.3.
+
+Literature grounding (canonical extracts, not training memory):
+    - `docs/institutional/literature/harvey_liu_2015_backtesting.md` —
+      OOS haircut framing, power-before-veto principle.
+    - `docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md` —
+      finite-data IS/OOS handling, misspecification of binary splits under
+      short OOS windows.
+    - `docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md` —
+      sample-size-adjusted promotion gate (Criterion 5 cross-check).
+"""
 
 from __future__ import annotations
 

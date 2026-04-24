@@ -97,6 +97,30 @@ See [`docs/institutional/hypothesis_registry_template.md`](../../institutional/h
 
 ---
 
+## Confirmatory-audit exemption (canonical rule: `.claude/rules/backtesting-methodology.md` RULE 10)
+
+A pre-reg is **not** required for confirmatory / verification / pilot scripts that:
+
+1. Re-verify a prior survivor or claim against canonical layers (no new discovery).
+2. Do NOT write to `experimental_strategies`, `validated_setups`, or any strategy-promotion table.
+3. Produce a dated result document in `docs/audit/results/` instead of a new hypothesis yaml.
+
+These scripts still must cite their input pre-reg (or prior result) and follow RULES 1–9 of `backtesting-methodology.md`.
+
+**Confirmed exempt as of 2026-04-24 (grep-verified read-only; no INSERT/UPDATE/DELETE/CREATE TABLE to strategy tables):**
+
+- `research/garch_r3_shadow_ledger.py`
+- `research/audit_comex_settle_orb_g5_failure_pocket.py`
+- `research/audit_l1_orb_g5_arithmetic_only_check.py`
+- `research/prior_day_geometry_execution_translation_audit.py`
+- `research/prior_day_geometry_routing_audit.py`
+- `research/verify_mes_e1_rel_vol.py`
+- `research/mes_e2_tbbo_slippage_pilot.py`
+
+If any of these scripts is later modified to write to `experimental_strategies` / `validated_setups`, the exemption is void and a pre-reg must be written before the next run.
+
+---
+
 ## Status (2026-04-07)
 
 **Directory created:** 2026-04-07.
