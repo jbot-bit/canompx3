@@ -9,15 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-24
-- **Commit:** a9f92a89 — audit(codex): 3-day Codex commit sweep + hardening
-- **Files changed:** 7 files
+- **Commit:** 4d9258d6 — docs(handoff): handover after Codex 3-day audit + hardening
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/audit/2026-04-24-codex-3day-audit.md`
-  - `docs/runtime/stages/2026-04-24-codex-3day-audit-hardening.md`
-  - `pipeline/check_drift.py`
-  - `scripts/tools/project_pulse.py`
-  - `tests/test_pipeline/test_check_drift_context.py`
-  - `trading_app/conditional_overlays.py`
 
 ## Next Steps — Active
 1. Drain Codex parallel-session WIP (8 dirty files: trading_app/phase_4_discovery_gates.py, trading_app/strategy_discovery.py, scripts/tools/context_views.py, related tests + HANDOFF). Codex left mid-flight — coordinate which terminal commits first.
