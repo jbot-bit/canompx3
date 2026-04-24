@@ -9,10 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** fd2880de — chore(stages): close harden-dashboard-action-coordination
-- **Files changed:** 2 files
+- **Commit:** 56233e35 — docs(handoff): record B6 e2e empirical verification (6 lanes ALLOW post-fix)
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/harden-dashboard-action-coordination.md`
 
 ## Next Steps — Active
 
