@@ -611,7 +611,7 @@ def test_preflight_helper_opens_no_duckdb_connection(monkeypatch):
 
     import trading_app.live.notifications as notifications
 
-    monkeypatch.setattr(notifications, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(notifications, "notify", lambda *a, **k: True)
 
     connect_calls: list[tuple] = []
 

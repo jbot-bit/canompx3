@@ -9,20 +9,25 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 2d3d762a — [mechanical] fix: Ralph Loop iter 170 — update audit docs and ledger
-- **Files changed:** 5 files
+- **Commit:** e02c529d — fix(live): close 5 silent-failure paths before unattended demo run
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/ralph-ledger.json`
-  - `docs/ralph-loop/ralph-loop-audit.md`
-  - `docs/ralph-loop/ralph-loop-history.md`
-  - `docs/ralph-loop/ralph-loop-plan.md`
+  - `docs/runtime/stages/live-overnight-resilience-hardening.md`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Next Steps — Active
 
-1. **Live-feed smoke (next market session)** — B6 itself is **empirically verified offline** this session: real `SessionOrchestrator(signal_only=True, profile=topstep_50k_mnq_auto, broker=projectx)` construction confirmed all 6 deployed MNQ lanes ALLOW through the F-1 gate (vs pre-fix REJECT-all). Logged in `Verified clean this session` below. The remaining live-feed value is integration-only: WebSocket bar feed health, ORB build + break detect on real bars, `live_signals.jsonl` SIGNAL_ENTRY write. Run during NYSE_OPEN window when markets are open; weekend = blocked.
-2. **O-SR debt** — `trading_app/live/cusum_monitor.py` implements CUSUM Eq 3, not Shiryaev-Roberts Eq 10 per `docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md`. Paper argues SR is strictly better for live drift detection. Upgrade requires new class + threshold `A` calibration (literature gap G2). Multi-stage; not autonomous.
-3. **Codex parallel-session WIP drain** — 6 Python files still dirty in working tree (`scripts/tools/context_views.py`, 4× test files, `trading_app/phase_4_discovery_gates.py`, `trading_app/strategy_discovery.py`). Now LF-pinned via `.gitattributes` so future writes won't re-introduce CRLF. The current dirty diff is the saved-as-CRLF state from another terminal. Coordinate with Codex before resetting/renormalizing — `git add --renormalize "*.py"` would conflict.
-4. **One-shot full renormalization (deferred)** — once Codex's WIP is committed/dropped, run `git add --renormalize "*.py" && git commit -m "chore(repo): one-shot LF normalization of *.py"` to flush all historical CRLF in one commit. Until then, individual files normalize on next save.
+1. **DEMO LAUNCH READY (next market session)** — `--demo` preflight 5/5 against `topstep_50k_mnq_auto`. AC sleep disabled. 5 silent-failure paths just hardened (commit `e02c529d`). Launch when markets reopen Mon 07:00 Brisbane (CME futures) → fires Tokyo/Singapore/Europe/NYSE_Open/COMEX/US_Data_1000 across the day. Command: `cd C:/Users/joshd/canompx3 && mkdir -p logs/live && PYTHONPATH=. python scripts/run_live_session.py --profile topstep_50k_mnq_auto --instrument MNQ --demo > logs/live/demo_$(date +%Y%m%d_%H%M).log 2>&1`. **Note:** demo account is a Trading Combine (50KTC-V2-451890-20372221), not XFA — F-1 auto-disables on broker-reality check, other gates active (max_daily_loss=-5R/~$285, max_concurrent=3, max_dd≈-35R/$2000).
+2. **Deferred resilience findings (not blocking demo)** — 6 issues found by parallel scout agents, deferred per stage `live-overnight-resilience-hardening.md`:
+   - **F4 (CRITICAL):** bracket submit failure post-fill leaves position naked. Touches execution path; multi-stage fix.
+   - **F7 (HIGH):** fill poller stuck PENDING consumes lane concurrency slot indefinitely. Needs poller-level retry-with-give-up.
+   - **R1 (CRITICAL):** trading-day rollover only fires from `_on_bar`. Feed-down at 09:00 Brisbane = rollover delayed; new wall-clock task needed.
+   - **R3 (HIGH):** `ORCHESTRATOR_MAX_RECONNECTS=5` too low for 24h demo. Easy bump but should also persist last-success.
+   - **R4 (HIGH):** `live_signals.jsonl` unbounded growth. Daily-suffix or RotatingFileHandler.
+   - **R5 (HIGH):** engine circuit-breaker silent until rollover. Needs periodic re-notify in heartbeat.
+3. **O-SR debt** — `trading_app/live/cusum_monitor.py` implements CUSUM Eq 3, not Shiryaev-Roberts Eq 10 per `docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md`. Multi-stage; not autonomous.
+4. **Codex parallel-session WIP drain** — 6 Python files still dirty in working tree. LF-pinned via `.gitattributes`; current CRLF state preserved until Codex commits/drops. Don't `git add --renormalize "*.py"` until Codex is clear.
 
 ## Blockers / Warnings
 
