@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pipeline.system_context import PolicyDecision, PolicyIssue
 from scripts.tools import project_pulse
 from scripts.tools.project_pulse import (
     PulseItem,
@@ -55,6 +56,40 @@ class TestCollectHandoff:
         assert any(i.category == "broken" and "missing" in i.summary.lower() for i in items)
         assert context == {}
 
+    def test_missing_handoff_falls_back_to_queue(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: queue-first",
+                    "    title: First queue item",
+                    "    class: research",
+                    "    status: ready",
+                    "    priority: P1",
+                    "    close_before_new_work: true",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 2",
+                    "    next_action: Do the queue thing",
+                    "    exit_criteria: Finish it",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref: docs/runtime/stages/first.md",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        context, items = collect_handoff(tmp_path)
+
+        assert context["tool"] == "Queue"
+        assert context["next_steps"] == ["First queue item — Do the queue thing"]
+        assert any("falling back to canonical action queue" in i.summary for i in items)
+
     def test_extracts_metadata_and_next_steps(self, tmp_path: Path) -> None:
         _mkfile(
             tmp_path / "HANDOFF.md",
@@ -84,6 +119,54 @@ class TestCollectHandoff:
         assert any(i.category == "broken" and "failure" in i.summary.lower() for i in items)
         # "All good here" has no blocker keywords → not surfaced
         assert not any("All good" in i.summary for i in items)
+
+    def test_queue_overrides_handoff_next_steps(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "HANDOFF.md",
+            "\n".join(
+                [
+                    "## Last Session",
+                    "- **Tool:** Claude",
+                    "- **Date:** 2026-03-17",
+                    "- **Summary:** Built pulse",
+                    "",
+                    "## Next Steps — Active",
+                    "1. stale step",
+                ]
+            ),
+        )
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: queue-first",
+                    "    title: First queue item",
+                    "    class: research",
+                    "    status: ready",
+                    "    priority: P1",
+                    "    close_before_new_work: true",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 2",
+                    "    next_action: Do the queue thing",
+                    "    exit_criteria: Finish it",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref: docs/runtime/stages/first.md",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        context, items = collect_handoff(tmp_path)
+
+        assert context["summary"] == "Built pulse"
+        assert context["next_steps"] == ["First queue item — Do the queue thing"]
+        assert any("drifted from canonical action queue" in i.summary for i in items)
 
     def test_no_blockers_section(self, tmp_path: Path) -> None:
         _mkfile(
@@ -604,6 +687,74 @@ class TestCollectActionQueue:
         items = collect_action_queue(tmp_path)
         assert len(items) == 1
         assert len(items[0].summary) <= 100
+
+
+class TestCollectSystemIdentity:
+    def test_includes_work_queue_summary_and_queue_policy_items(self, tmp_path: Path) -> None:
+        snapshot = MagicMock()
+        snapshot.git.canonical_root = str(tmp_path)
+        snapshot.git.selected_root = str(tmp_path)
+        snapshot.db.canonical_db_path = str(tmp_path / "gold.db")
+        snapshot.db.selected_db_path = str(tmp_path / "gold.db")
+        snapshot.db.db_override_active = False
+        snapshot.db.live_journal_db_path = str(tmp_path / "live.db")
+        snapshot.authority.active_orb_instruments = ["MES"]
+        snapshot.authority.authority_map_doc = "docs/governance/system_authority_map.md"
+        snapshot.authority.doctrine_docs = ["CLAUDE.md"]
+        snapshot.authority.backbone_modules = ["pipeline/system_context.py"]
+        snapshot.authority.published_relations = {"active": "active_validated_setups"}
+        snapshot.interpreter.context = "codex-wsl"
+        snapshot.interpreter.current_python = "/usr/bin/python3"
+        snapshot.interpreter.current_prefix = "/usr"
+        snapshot.interpreter.expected_python = "/repo/.venv-wsl/bin/python"
+        snapshot.interpreter.expected_prefix = "/repo/.venv-wsl"
+        snapshot.interpreter.matches_expected = True
+        snapshot.git.branch = "main"
+        snapshot.git.head_sha = "abc123"
+        snapshot.git.dirty_count = 0
+        snapshot.git.in_linked_worktree = False
+        snapshot.active_stages = []
+        snapshot.claims = []
+        snapshot.work_queue.exists = True
+        snapshot.work_queue.open_count = 2
+        snapshot.work_queue.close_first_open_count = 1
+        snapshot.work_queue.stale_count = 1
+        snapshot.work_queue.handoff_matches_rendered = False
+        snapshot.work_queue.top_items = [
+            MagicMock(model_dump=lambda mode="json": {"id": "first", "title": "First queue item"})
+        ]
+        snapshot.work_queue.close_first_items = [
+            MagicMock(model_dump=lambda mode="json": {"id": "first", "title": "First queue item"})
+        ]
+        decision = PolicyDecision(
+            decision_id="d1",
+            action="orientation",
+            allowed=True,
+            blockers=[],
+            warnings=[
+                PolicyIssue(
+                    level="warning",
+                    code="close_first_carryover",
+                    message="Close-first queue items remain open before starting new meaningful work.",
+                    detail="first",
+                )
+            ],
+            infos=[],
+            applicable_authorities=[],
+            applicable_controls=[],
+        )
+
+        with (
+            patch("pipeline.system_context.infer_context_name", return_value="codex-wsl"),
+            patch("pipeline.system_context.build_system_context", return_value=snapshot),
+            patch("pipeline.system_context.evaluate_system_policy", return_value=decision),
+        ):
+            summary, items = collect_system_identity(tmp_path, tmp_path, tmp_path / "gold.db")
+
+        assert summary is not None
+        assert summary["work_queue"]["open_count"] == 2
+        assert summary["work_queue"]["top_items"][0]["id"] == "first"
+        assert any("Close-first queue items remain open" in item.summary for item in items)
 
 
 # ---------------------------------------------------------------------------

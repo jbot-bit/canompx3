@@ -30,6 +30,14 @@ def _sample_report() -> PulseReport:
         handoff_date="2026-04-03",
         handoff_summary="Dashboard fix in progress",
         handoff_next_steps=["Verify the Claude hook integration"],
+        system_identity={
+            "work_queue": {
+                "open_count": 3,
+                "close_first_open_count": 2,
+                "stale_count": 1,
+                "top_items": [{"id": "cross_asset_session_chronology_spec"}],
+            }
+        },
         upcoming_sessions=[
             {"label": "LONDON_METALS", "brisbane_time": "17:00", "hours_away": 5.7},
             {"label": "CME_REOPEN", "brisbane_time": "08:00", "hours_away": 20.0},
@@ -61,6 +69,7 @@ class TestClaudeSuperpowerBrief:
         assert "Last: Codex (2026-04-03) — Dashboard fix in progress" in brief
         assert "Next: Finish the current integration before taking new work." in brief
         assert "Active step: Verify the Claude hook integration" in brief
+        assert "Queue: open=3 | close-first=2 | stale=1 | top=cross_asset_session_chronology_spec" in brief
         assert "Broken: 1 failing test" in brief
         assert "Decaying: daily features stale" in brief
         assert "Paused: 3 uncommitted files" in brief

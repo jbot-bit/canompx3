@@ -10,7 +10,23 @@ def test_build_research_context_uses_narrow_research_surfaces(monkeypatch, tmp_p
     monkeypatch.setattr(context_views, "_canonical_repo_root", lambda root: root)
     monkeypatch.setattr(context_views, "_git_branch", lambda root: "feature/context")
     monkeypatch.setattr(context_views, "_git_head", lambda root: "abc123")
-    monkeypatch.setattr(context_views, "collect_system_identity", lambda root, canonical, db_path: ({"ok": True}, []))
+    monkeypatch.setattr(
+        context_views,
+        "collect_system_identity",
+        lambda root, canonical, db_path: (
+            {
+                "ok": True,
+                "work_queue": {
+                    "open_count": 2,
+                    "close_first_open_count": 1,
+                    "stale_count": 0,
+                    "top_items": [{"id": "first"}],
+                    "handoff_matches_rendered": True,
+                },
+            },
+            [],
+        ),
+    )
     monkeypatch.setattr(
         context_views,
         "collect_fitness_fast",
@@ -27,6 +43,7 @@ def test_build_research_context_uses_narrow_research_surfaces(monkeypatch, tmp_p
     assert payload["view"] == "research"
     assert payload["sections"]["live_operational_state"]["fitness_summary"]["MES"]["active_strategies"] == 3
     assert payload["sections"]["live_operational_state"]["repo_runtime_context"]["available"] is True
+    assert payload["sections"]["live_operational_state"]["repo_runtime_context"]["work_queue"]["open_count"] == 2
     assert (
         payload["sections"]["canonical_state"]["holdout_policy"]["canonical_source"] == "trading_app/holdout_policy.py"
     )
@@ -151,7 +168,23 @@ def test_build_verification_context_uses_repo_state_collectors(monkeypatch, tmp_
     monkeypatch.setattr(context_views, "_canonical_repo_root", lambda root: root)
     monkeypatch.setattr(context_views, "_git_branch", lambda root: "feature/context")
     monkeypatch.setattr(context_views, "_git_head", lambda root: "abc123")
-    monkeypatch.setattr(context_views, "collect_system_identity", lambda root, canonical, db_path: ({"ok": True}, []))
+    monkeypatch.setattr(
+        context_views,
+        "collect_system_identity",
+        lambda root, canonical, db_path: (
+            {
+                "ok": True,
+                "work_queue": {
+                    "open_count": 1,
+                    "close_first_open_count": 1,
+                    "stale_count": 0,
+                    "top_items": [{"id": "first"}],
+                    "handoff_matches_rendered": True,
+                },
+            },
+            [],
+        ),
+    )
     monkeypatch.setattr(
         context_views,
         "collect_handoff",
@@ -167,6 +200,9 @@ def test_build_verification_context_uses_repo_state_collectors(monkeypatch, tmp_
 
     assert payload["view"] == "verification"
     assert payload["sections"]["non_authoritative_context"]["handoff"]["summary"] == "Verify slice"
+    assert payload["sections"]["live_operational_state"]["repo_runtime_context"]["work_queue"]["top_item_ids"] == [
+        "first"
+    ]
     commands = payload["sections"]["canonical_state"]["verification_profile"]["commands"]
     assert payload["sections"]["live_operational_state"]["session_claim_item_count"] == 0
     assert any("pipeline/check_drift.py" in command for command in commands)

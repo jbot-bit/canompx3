@@ -85,6 +85,7 @@ if _SCRIPTS_TOOLS_DIR not in sys.path:
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.work_queue import (
     load_queue,
+    top_baton_items,
 )
 from pipeline.work_queue import (
     stale_items as queue_stale_items,
@@ -494,7 +495,30 @@ def collect_handoff(root: Path) -> tuple[dict, list[PulseItem]]:
     context: dict = {}
     items: list[PulseItem] = []
     handoff_path = root / "HANDOFF.md"
+    queue_path = root / "docs" / "runtime" / "action-queue.yaml"
+    queue_steps: list[str] = []
+    if queue_path.exists():
+        try:
+            queue = load_queue(root)
+            queue_steps = [f"{item.title} — {item.next_action}" for item in top_baton_items(queue)]
+        except Exception:
+            queue_steps = []
     if not handoff_path.exists():
+        if queue_steps:
+            context = {
+                "tool": "Queue",
+                "summary": "Canonical action queue available; generated baton missing.",
+                "next_steps": queue_steps,
+            }
+            items.append(
+                PulseItem(
+                    category="decaying",
+                    severity="medium",
+                    source="handoff",
+                    summary="HANDOFF.md missing; falling back to canonical action queue",
+                )
+            )
+            return context, items
         items.append(
             PulseItem(
                 category="broken",
@@ -509,6 +533,17 @@ def collect_handoff(root: Path) -> tuple[dict, list[PulseItem]]:
     lines = text.splitlines()
     blocker_keywords = {"failure", "broken", "missing", "error", "cannot", "blocked"}
     context = _parse_rolling_handoff(lines) or _parse_legacy_handoff(lines)
+    if queue_steps:
+        if context.get("next_steps") != queue_steps:
+            items.append(
+                PulseItem(
+                    category="decaying",
+                    severity="medium",
+                    source="handoff",
+                    summary="HANDOFF next steps drifted from canonical action queue",
+                )
+            )
+        context["next_steps"] = queue_steps
 
     section: str | None = None
     for line in lines:
@@ -1119,6 +1154,15 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
                 }
                 for claim in snapshot.claims
             ],
+            "work_queue": {
+                "exists": snapshot.work_queue.exists,
+                "open_count": snapshot.work_queue.open_count,
+                "close_first_open_count": snapshot.work_queue.close_first_open_count,
+                "stale_count": snapshot.work_queue.stale_count,
+                "top_items": [item.model_dump(mode="json") for item in snapshot.work_queue.top_items],
+                "close_first_items": [item.model_dump(mode="json") for item in snapshot.work_queue.close_first_items],
+                "handoff_matches_rendered": snapshot.work_queue.handoff_matches_rendered,
+            },
             "policy": {
                 "allowed": decision.allowed,
                 "warnings": [issue.message for issue in decision.warnings],
@@ -1126,13 +1170,19 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
             },
         }
         for issue in decision.warnings:
-            if issue.code == "wrong_interpreter":
+            if issue.code in {
+                "wrong_interpreter",
+                "handoff_queue_mismatch",
+                "stale_queue_items",
+                "close_first_carryover",
+                "queue_item_conflict",
+            }:
                 items.append(
                     PulseItem(
                         category="decaying",
                         severity="medium",
                         source="system_identity",
-                        summary="Interpreter mismatch for repo-managed context",
+                        summary=issue.message,
                         detail=issue.detail,
                     )
                 )

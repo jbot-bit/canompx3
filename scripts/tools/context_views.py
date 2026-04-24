@@ -179,6 +179,17 @@ def _compact_runtime_context(system_identity: dict[str, Any] | None, items: list
             "head_sha": git.get("head_sha"),
             "in_linked_worktree": git.get("in_linked_worktree"),
         },
+        "work_queue": {
+            "open_count": system_identity.get("work_queue", {}).get("open_count"),
+            "close_first_open_count": system_identity.get("work_queue", {}).get("close_first_open_count"),
+            "stale_count": system_identity.get("work_queue", {}).get("stale_count"),
+            "top_item_ids": [
+                item.get("id")
+                for item in system_identity.get("work_queue", {}).get("top_items", [])
+                if isinstance(item, dict) and item.get("id")
+            ],
+            "handoff_matches_rendered": system_identity.get("work_queue", {}).get("handoff_matches_rendered"),
+        },
         "active_stage_count": len(system_identity.get("active_stages", [])),
         "fresh_claim_count": len(system_identity.get("fresh_claims", [])),
         "policy_warning_count": len(policy.get("warnings", [])),
