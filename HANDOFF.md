@@ -7,9 +7,13 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
-- **Tool:** Codex
+- **Tool:** Claude Code
 - **Date:** 2026-04-24
-- **Summary:** Unified queue control-plane authority, briefing, and preflight plumbing.
+- **Commit:** d643cb4a — @ fix(drift): harden SQL false-positive + add HANDOFF compact-baton check
+- **Files changed:** 3 files
+  - `pipeline/check_drift.py`
+  - `tests/test_pipeline/test_check_drift_context.py`
+  - `tests/test_pipeline/test_check_drift_ws2.py`
 
 ## Next Steps — Active
 1. Cross-asset earlier-session to later-ORB chronology spec — Write the chronology discipline/spec before any cross-asset timing scan or execution.
