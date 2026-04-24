@@ -9,19 +9,17 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** ca363e1a — fix(live): seed F-1 XFA EOD balance to $0 in signal-only (closes B6)
-- **Files changed:** 4 files
+- **Commit:** 26c17522 — chore(repo): pin .gitattributes *.py text eol=lf (closes O-CRLF)
+- **Files changed:** 2 files
+  - `.gitattributes`
   - `HANDOFF.md`
-  - `docs/runtime/stages/live-b6-f1-signal-only-seed.md`
-  - `tests/test_trading_app/test_session_orchestrator.py`
-  - `trading_app/live/session_orchestrator.py`
 
 ## Next Steps — Active
 
-1. **Push current branch** — was 1 commit ahead of `origin/main` (`5be52bdc`); now adds the B6 fix + this baton. No conflicts expected.
-2. **O-CRLF debt** — `autocrlf=true` (global) vs `autocrlf=false` (local) → 6 files recurring CRLF-only diff (`scripts/tools/context_views.py`, 4× test files, `trading_app/phase_4_discovery_gates.py`, `trading_app/strategy_discovery.py`). Pin with `.gitattributes text eol=lf` on `*.py`. Low priority cosmetic. **NOTE:** the 6 dirty CRLF-only files are Codex parallel-session WIP — do NOT reset them; coordinate with Codex first.
-3. **O-SR debt** — `trading_app/live/cusum_monitor.py` implements CUSUM Eq 3, not Shiryaev-Roberts Eq 10 per `docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md`. Paper argues SR is strictly better for live drift detection. Upgrade requires new class + threshold `A` calibration (literature gap G2).
-4. **Re-run the 6h signal-only smoke test** — with B6 fixed, expect `SIGNAL_ENTRY` events instead of `REJECT` events. Diff `live_signals.jsonl` against the prior run to confirm the fix unblocks entries.
+1. **Re-run the 6h signal-only smoke test** — with B6 fixed, expect `SIGNAL_ENTRY` events instead of `REJECT` events. Diff `live_signals.jsonl` against the prior run to confirm the fix unblocks entries. Operator-only (needs Telegram + broker connection).
+2. **O-SR debt** — `trading_app/live/cusum_monitor.py` implements CUSUM Eq 3, not Shiryaev-Roberts Eq 10 per `docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md`. Paper argues SR is strictly better for live drift detection. Upgrade requires new class + threshold `A` calibration (literature gap G2). Multi-stage; not autonomous.
+3. **Codex parallel-session WIP drain** — 6 Python files still dirty in working tree (`scripts/tools/context_views.py`, 4× test files, `trading_app/phase_4_discovery_gates.py`, `trading_app/strategy_discovery.py`). Now LF-pinned via `.gitattributes` so future writes won't re-introduce CRLF. The current dirty diff is the saved-as-CRLF state from another terminal. Coordinate with Codex before resetting/renormalizing — `git add --renormalize "*.py"` would conflict.
+4. **One-shot full renormalization (deferred)** — once Codex's WIP is committed/dropped, run `git add --renormalize "*.py" && git commit -m "chore(repo): one-shot LF normalization of *.py"` to flush all historical CRLF in one commit. Until then, individual files normalize on next save.
 
 ## Blockers / Warnings
 
