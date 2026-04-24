@@ -56,8 +56,12 @@ def _run_lightweight_component_self_tests(
     try:
         from trading_app.live.notifications import notify
 
-        notify(instrument, "SELF-TEST: notifications working")
-        results["notifications"] = True
+        if notify(instrument, "SELF-TEST: notifications working"):
+            results["notifications"] = True
+        else:
+            log.critical("NOTIFICATION SELF-TEST FAILED: notify() returned False")
+            print("!!! NOTIFICATIONS ARE BROKEN (send_telegram raised; see log) !!!")
+            results["notifications"] = False
     except Exception as e:
         log.critical("NOTIFICATION SELF-TEST FAILED: %s", e)
         print(f"!!! NOTIFICATIONS ARE BROKEN: {e} !!!")
