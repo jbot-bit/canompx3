@@ -1,14 +1,14 @@
 {
-  "total_iterations": 163,
+  "total_iterations": 164,
   "last_updated": "2026-04-25",
-  "consecutive_low_only": 1,
-  "last_high_finding_iter": 169,
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 171,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 55,
-      "fixed": 42,
+      "found": 56,
+      "fixed": 43,
       "deferred": 4,
-      "fix_rate": 0.76
+      "fix_rate": 0.77
     },
     "silent_failure": {
       "found": 37,
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 12,
-    "MEDIUM": 43,
+    "MEDIUM": 44,
     "LOW": 105
   },
   "classifications": {
     "judgment": 74,
-    "mechanical": 60,
+    "mechanical": 61,
     "audit-only": 29
   },
   "files_audited": {
@@ -333,6 +333,11 @@
     "research/research_1015_vs_1000.py": {
       "audit_count": 2,
       "last_iter": 109,
+      "findings": 2
+    },
+    "trading_app/lane_allocator.py": {
+      "audit_count": 2,
+      "last_iter": 171,
       "findings": 2
     },
     "trading_app/pre_session_check.py": {
@@ -990,11 +995,6 @@
       "last_iter": 141,
       "findings": 0
     },
-    "trading_app/lane_allocator.py": {
-      "audit_count": 1,
-      "last_iter": 143,
-      "findings": 1
-    },
     "trading_app/live/multi_runner.py": {
       "audit_count": 1,
       "last_iter": 144,
@@ -1089,6 +1089,11 @@
       "audit_count": 1,
       "last_iter": 168,
       "findings": 0
+    },
+    "lane_correlation.py": {
+      "audit_count": 1,
+      "last_iter": 171,
+      "findings": 1
     }
   },
   "iterations": [
@@ -2884,6 +2889,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "9b16c4eb"
+    },
+    {
+      "iter": 171,
+      "date": "2026-04-25",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/lane_allocator.py:506 (finding rooted in lane_correlation.py audit)",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "9809f1b8"
     }
   ]
 }

@@ -1776,6 +1776,19 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 
 ---
 
+## Iteration 171 — 2026-04-25
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/lane_allocator.py:506 (finding rooted in lane_correlation.py audit)
+- Finding: CORRELATION_REJECT_RHO = 0.70 in lane_allocator.py duplicates RHO_REJECT_THRESHOLD = 0.70 from lane_correlation.py. Comment on line 506 acknowledged the duplication but did not import from canonical source. Silent divergence risk if threshold changes.
+- Doctrine cited: integrity-guardian.md § 2 (import from single source of truth); institutional-rigor.md § 4 (delegate to canonical sources, never re-encode)
+- Action: Added RHO_REJECT_THRESHOLD to existing lane_correlation import in lane_allocator.py; deleted local CORRELATION_REJECT_RHO constant; updated usage at line 628; updated test_lane_allocator.py import.
+- Blast radius: 2 files (lane_allocator.py + test_lane_allocator.py)
+- Verification: PASS — 39/39 test_lane_allocator.py; 107/107 drift checks; 8/8 pre-commit hooks
+- Commit: 9809f1b8
+
+---
+
 ## Iteration 170 — 2026-04-25
 - Phase: fix
 - Classification: [mechanical]

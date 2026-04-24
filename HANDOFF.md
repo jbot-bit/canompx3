@@ -9,12 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** e02c529d — fix(live): close 5 silent-failure paths before unattended demo run
-- **Files changed:** 4 files
-  - `HANDOFF.md`
-  - `docs/runtime/stages/live-overnight-resilience-hardening.md`
-  - `tests/test_trading_app/test_session_orchestrator.py`
-  - `trading_app/live/session_orchestrator.py`
+- **Commit:** 9809f1b8 — [mechanical] fix: Ralph Loop iter 171 — import RHO_REJECT_THRESHOLD from lane_correlation instead of duplicating (RI-06)
+- **Files changed:** 2 files
+  - `tests/test_trading_app/test_lane_allocator.py`
+  - `trading_app/lane_allocator.py`
 
 ## Next Steps — Active
 
