@@ -872,6 +872,11 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 # See docs/plans/2026-04-08-phase-4-clean-rediscovery-design.md.
                 "hypothesis_file_sha",
                 "rejection_reason",
+                # Bloomey Pathway B audit trail (migration-added — 2026-04-09)
+                # validation_pathway: 'family' vs 'individual' vs NULL
+                # c8_oos_status: 'passed'/'pass_through_no_data'/etc vs NULL
+                "validation_pathway",
+                "c8_oos_status",
             }
             actual_cols = {row[0] for row in result}
 
@@ -953,6 +958,20 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "sr0_at_discovery",
                 "noise_risk",
                 "oos_exp_r",
+                # Migration-added columns (Mar 2026 — FDR K freeze, era/concentration)
+                "discovery_k",
+                "discovery_date",
+                "era_dependent",
+                "max_year_pct",
+                # Migration-added columns (2026-03-26 — WFE investigation audit trail)
+                "wfe_verdict",
+                "wfe_investigation_date",
+                "wfe_investigation_notes",
+                # Migration-added column (2026-03-26 — COMEX slippage fragility tracking)
+                "slippage_validation_status",
+                # Bloomey Pathway B audit trail (migration-added — 2026-04-09)
+                "validation_pathway",
+                "c8_oos_status",
             }
             actual_cols = {row[0] for row in result}
 

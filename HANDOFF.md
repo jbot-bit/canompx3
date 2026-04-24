@@ -9,9 +9,8 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 26c17522 — chore(repo): pin .gitattributes *.py text eol=lf (closes O-CRLF)
-- **Files changed:** 2 files
-  - `.gitattributes`
+- **Commit:** 6e7a7979 — docs(handoff): close O-CRLF; surface follow-up renormalization step
+- **Files changed:** 1 files
   - `HANDOFF.md`
 
 ## Next Steps — Active
