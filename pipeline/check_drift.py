@@ -112,6 +112,27 @@ def _missing_table_columns(con, table_name: str, required: list[str]) -> list[st
     return sorted(col for col in required if col not in present)
 
 
+def _looks_like_sql_block(text: str) -> bool:
+    """Return True only for real SQL statement blocks, not prose/docstrings."""
+    statement_patterns = (
+        re.compile(r"\bSELECT\b[\s\S]*\bFROM\s+\w+\b", re.IGNORECASE),
+        re.compile(r"\bINSERT\s+INTO\s+\w+\b", re.IGNORECASE),
+        re.compile(r"\bDELETE\s+FROM\s+\w+\b", re.IGNORECASE),
+        re.compile(r"^\s*UPDATE\s+\w+\s+SET\b", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^\s*CREATE\s+(TABLE|VIEW|INDEX|SCHEMA)\b", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^\s*WITH\s+\w+\s+AS\s*\(", re.IGNORECASE | re.MULTILINE),
+    )
+    return any(pattern.search(text) for pattern in statement_patterns)
+
+
+def _has_sql_literal_context(content: str, match_start: int) -> bool:
+    """Return True when a triple-quoted string is used as a SQL literal."""
+    prefix = content[max(0, match_start - 160) : match_start]
+    execute_call = re.search(r"(?:\.|^)\s*(execute|executemany|sql)\s*\(\s*$", prefix, re.IGNORECASE)
+    sql_assignment = re.search(r"[\w_]*(sql|query|schema)[\w_]*\s*=\s*$", prefix, re.IGNORECASE)
+    return bool(execute_call or sql_assignment)
+
+
 # =============================================================================
 # FILES TO CHECK
 # =============================================================================
@@ -333,7 +354,6 @@ def check_schema_query_consistency(pipeline_dir: Path) -> list[str]:
 
     # Extract triple-quoted strings that contain SQL
     sql_string_pattern = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.DOTALL)
-    sql_indicator = re.compile(r"\b(SELECT|INSERT|DELETE|UPDATE|CREATE)\b", re.IGNORECASE)
 
     for fpath in pipeline_dir.glob("*.py"):
         if fpath.name in ("init_db.py", "check_drift.py"):
@@ -344,8 +364,12 @@ def check_schema_query_consistency(pipeline_dir: Path) -> list[str]:
         for match in sql_string_pattern.finditer(content):
             sql_text = match.group(1) or match.group(2)
 
-            # Only check strings that look like SQL
-            if not sql_indicator.search(sql_text):
+            if not _has_sql_literal_context(content, match.start()):
+                continue
+            # Only check strings that actually start like SQL. This avoids
+            # prose false positives such as "update the baton", which would
+            # otherwise be parsed as UPDATE <table>.
+            if not _looks_like_sql_block(sql_text):
                 continue
 
             # Extract CTE names from this SQL block
@@ -798,6 +822,7 @@ def check_schema_query_consistency_trading_app(trading_app_dir: Path) -> list[st
     schema_files = [
         PIPELINE_DIR / "init_db.py",
         trading_app_dir / "db_manager.py",
+        trading_app_dir / "live" / "trade_journal.py",
         trading_app_dir / "nested" / "schema.py",
         trading_app_dir / "regime" / "schema.py",
     ]
@@ -908,7 +933,6 @@ def check_schema_query_consistency_trading_app(trading_app_dir: Path) -> list[st
     cte_pattern = re.compile(r"(?:WITH|,)\s+(\w+)\s+AS\s*\(", re.IGNORECASE)
     table_ref_pattern = re.compile(r"(?:FROM|INTO|UPDATE|JOIN)\s+(\w+)", re.IGNORECASE)
     sql_string_pattern = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.DOTALL)
-    sql_indicator = re.compile(r"\b(SELECT|INSERT|DELETE|UPDATE|CREATE)\b", re.IGNORECASE)
 
     if not trading_app_dir.exists():
         return violations
@@ -922,10 +946,9 @@ def check_schema_query_consistency_trading_app(trading_app_dir: Path) -> list[st
         for match in sql_string_pattern.finditer(content):
             sql_text = match.group(1) or match.group(2)
 
-            # Require at least 2 SQL keywords to distinguish real SQL from docstrings
-            # (docstrings can contain "Update", "Create" etc. as English words)
-            sql_hits = sql_indicator.findall(sql_text)
-            if len(sql_hits) < 2:
+            if not _has_sql_literal_context(content, match.start()):
+                continue
+            if not _looks_like_sql_block(sql_text):
                 continue
 
             cte_names = {m.group(1) for m in cte_pattern.finditer(sql_text)}
