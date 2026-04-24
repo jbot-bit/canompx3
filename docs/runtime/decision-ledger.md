@@ -4,6 +4,7 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
+- `work-queue-is-canonical` — `docs/runtime/action-queue.yaml` is now the canonical active-work source for meaningful open work. `HANDOFF.md` is a generated thin baton for session startup only, and local multi-terminal ownership lives in the ignored `.session/work_queue_leases.json` lease file.
 - `runtime-shell-unification` — Startup orientation should consume one derived `system_brief` instead of parallel ad hoc summaries.
 - `capsule-is-task-owner` — Active scoped work should carry a single work capsule with route, scope, and verification obligations.
 - `history-split` — `HANDOFF.md` is current baton only; durable decisions and debt belong in dedicated ledgers.

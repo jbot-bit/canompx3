@@ -30,6 +30,18 @@ def test_classify_closeout_state_allows_result_with_handoff() -> None:
     assert blockers == []
 
 
+def test_classify_closeout_state_allows_result_with_action_queue() -> None:
+    result_files, durable_files, blockers = checkpoint_guard.classify_closeout_state(
+        [
+            "docs/audit/results/2026-04-23-something.md",
+            "docs/runtime/action-queue.yaml",
+        ]
+    )
+    assert result_files == ["docs/audit/results/2026-04-23-something.md"]
+    assert durable_files == ["docs/runtime/action-queue.yaml"]
+    assert blockers == []
+
+
 def test_mutating_claim_conflicts_blocks_multiple_same_branch(monkeypatch) -> None:
     monkeypatch.setattr(
         checkpoint_guard,

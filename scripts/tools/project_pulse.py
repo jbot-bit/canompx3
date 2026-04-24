@@ -77,13 +77,19 @@ _ensure_repo_python()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from pipeline.paths import GOLD_DB_PATH
-from trading_app.validated_shelf import deployable_validated_relation
-
 # staleness_engine lives in scripts/tools/ (same dir as this file)
 _SCRIPTS_TOOLS_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPTS_TOOLS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_TOOLS_DIR)
+
+from pipeline.paths import GOLD_DB_PATH
+from pipeline.work_queue import (
+    load_queue,
+)
+from pipeline.work_queue import (
+    stale_items as queue_stale_items,
+)
+from trading_app.validated_shelf import deployable_validated_relation
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -1450,42 +1456,48 @@ def collect_session_claims(root: Path) -> list[PulseItem]:
 
 
 def collect_action_queue(canonical: Path) -> list[PulseItem]:
-    """Parse ACTION QUEUE from Claude auto-memory MEMORY.md."""
+    """Parse the canonical active-work queue."""
     items: list[PulseItem] = []
-    memory_path = _find_memory_md(canonical)
-    if memory_path is None:
+    queue_path = canonical / "docs" / "runtime" / "action-queue.yaml"
+    if not queue_path.exists():
         return items
 
-    try:
-        text = memory_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return items
-
-    in_queue = False
-    for line in text.splitlines():
-        if "## ACTION QUEUE" in line:
-            in_queue = True
+    queue = load_queue(canonical)
+    stale_ids = {item.id for item in queue_stale_items(queue)}
+    for item in queue.items:
+        if item.status in {"closed", "superseded"}:
             continue
-        if in_queue:
-            if line.startswith("## "):
-                break
-            m = re.match(r"^\d+\.\s+(.+)", line.strip())
-            if m:
-                content = m.group(1)
-                if "~~" in content:
-                    continue
-                clean = re.sub(r"\*\*(.+?)\*\*", r"\1", content).strip()
-                short = re.split(r"\s*—\s*|\.\s", clean, maxsplit=1)[0].strip()
-                if len(short) > 80:
-                    short = short[:77] + "..."
-                items.append(
-                    PulseItem(
-                        category="ready",
-                        severity="low",
-                        source="action_queue",
-                        summary=short,
-                    )
-                )
+
+        category = "ready"
+        severity = "low"
+        if item.status == "blocked":
+            category = "decaying"
+            severity = "medium"
+        elif item.status in {"waiting_observation", "parked"}:
+            category = "paused"
+            severity = "low"
+        elif item.priority == "P1":
+            severity = "medium"
+
+        if item.id in stale_ids:
+            category = "decaying"
+            severity = "medium" if item.priority != "P3" else "low"
+
+        summary = f"{item.id}: {item.title}"
+        if len(summary) > 100:
+            summary = summary[:97] + "..."
+        detail_parts = [f"status={item.status}", f"priority={item.priority}"]
+        if item.close_before_new_work:
+            detail_parts.append("close-first")
+        items.append(
+            PulseItem(
+                category=category,
+                severity=severity,
+                source="action_queue",
+                summary=summary,
+                detail=", ".join(detail_parts),
+            )
+        )
 
     return items
 

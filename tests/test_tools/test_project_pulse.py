@@ -505,40 +505,105 @@ class TestCollectFitnessFastDeployable:
 class TestCollectActionQueue:
     def test_parses_open_items(self, tmp_path: Path) -> None:
         _mkfile(
-            tmp_path / "memory" / "MEMORY.md",
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
             "\n".join(
                 [
-                    "# Memory",
-                    "## ACTION QUEUE",
-                    "1. ~~**Full rebuild**~~ — DONE.",
-                    "2. **CUSUM-based fitness** — Faster regime break detection.",
-                    "3. **ATR-normalized sizing** — Carver approach. Scale with certainty.",
-                    "## Other Section",
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: first",
+                    "    title: First thing",
+                    "    class: research",
+                    "    status: ready",
+                    "    priority: P1",
+                    "    close_before_new_work: true",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 2",
+                    "    next_action: Do first",
+                    "    exit_criteria: Finish first",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref: docs/runtime/stages/first.md",
+                    "    override_note:",
+                    "  - id: blocked",
+                    "    title: Blocked thing",
+                    "    class: runtime",
+                    "    status: blocked",
+                    "    priority: P2",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 2",
+                    "    next_action: Unblock it",
+                    "    exit_criteria: Finish blocked",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref: docs/runtime/stages/blocked.md",
+                    "    override_note:",
+                    "  - id: done",
+                    "    title: Closed thing",
+                    "    class: docs",
+                    "    status: closed",
+                    "    priority: P3",
+                    "    close_before_new_work: false",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 2",
+                    "    next_action: None",
+                    "    exit_criteria: Closed",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref: docs/runtime/stages/done.md",
+                    "    override_note:",
                 ]
             ),
         )
-        with patch.object(project_pulse, "_find_memory_md", return_value=tmp_path / "memory" / "MEMORY.md"):
-            items = collect_action_queue(tmp_path)
-        assert len(items) == 2  # item 1 is strikethrough (done)
-        assert items[0].summary == "CUSUM-based fitness"
-        assert items[1].summary == "ATR-normalized sizing"
-        assert all(i.category == "ready" for i in items)
+        items = collect_action_queue(tmp_path)
+        assert len(items) == 2
+        assert items[0].summary == "first: First thing"
+        assert items[0].category == "ready"
+        assert items[1].summary == "blocked: Blocked thing"
+        assert items[1].category == "decaying"
 
-    def test_no_memory_file(self, tmp_path: Path) -> None:
-        with patch.object(project_pulse, "_find_memory_md", return_value=None):
-            items = collect_action_queue(tmp_path)
+    def test_no_queue_file(self, tmp_path: Path) -> None:
+        items = collect_action_queue(tmp_path)
         assert items == []
 
     def test_truncates_long_items(self, tmp_path: Path) -> None:
         long_item = "A" * 100
         _mkfile(
-            tmp_path / "memory" / "MEMORY.md",
-            f"## ACTION QUEUE\n1. **{long_item}** — description\n## End",
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: long",
+                    f"    title: {long_item}",
+                    "    class: research",
+                    "    status: ready",
+                    "    priority: P1",
+                    "    close_before_new_work: true",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 2",
+                    "    next_action: Do long",
+                    "    exit_criteria: Finish long",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref: docs/runtime/stages/long.md",
+                    "    override_note:",
+                ]
+            ),
         )
-        with patch.object(project_pulse, "_find_memory_md", return_value=tmp_path / "memory" / "MEMORY.md"):
-            items = collect_action_queue(tmp_path)
+        items = collect_action_queue(tmp_path)
         assert len(items) == 1
-        assert len(items[0].summary) <= 80
+        assert len(items[0].summary) <= 100
 
 
 # ---------------------------------------------------------------------------

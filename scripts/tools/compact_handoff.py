@@ -9,11 +9,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from pipeline.work_queue import queue_path, write_rendered_handoff
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 HEADER = """# HANDOFF.md — Cross-Tool Session Baton
 
-**Rule:** If you made decisions, changed files, or left work half-done — update this file.
+**Rule:** If you made decisions, changed files, or left work half-done — update the baton.
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
@@ -253,6 +255,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     root = args.root.resolve()
+    if not any([args.tool, args.date, args.summary, args.next_step, args.warning, args.reference]):
+        if queue_path(root).exists():
+            write_rendered_handoff(root)
+            print("Rendered HANDOFF.md from docs/runtime/action-queue.yaml")
+            return 0
     handoff_path = root / "HANDOFF.md"
     archive_dir = root / "docs" / "handoffs" / "archived"
     archive_path, _ = compact_handoff(

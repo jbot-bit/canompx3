@@ -30,6 +30,7 @@ from pipeline.system_context import list_claims
 RESULT_ROOTS = ("docs/audit/results/",)
 DURABLE_ROOTS = (
     "HANDOFF.md",
+    "docs/runtime/action-queue.yaml",
     "docs/runtime/decision-ledger.md",
     "docs/runtime/debt-ledger.md",
     "docs/plans/",
@@ -93,6 +94,7 @@ def classify_closeout_state(files: list[str]) -> tuple[list[str], list[str], lis
         path
         for path in files
         if path == "HANDOFF.md"
+        or path == "docs/runtime/action-queue.yaml"
         or path == "docs/runtime/decision-ledger.md"
         or path == "docs/runtime/debt-ledger.md"
         or path.startswith("docs/plans/")
@@ -101,7 +103,7 @@ def classify_closeout_state(files: list[str]) -> tuple[list[str], list[str], lis
     if result_files and not durable_files:
         blockers.append(
             "Result artifacts are staged without any durable closeout surface. "
-            "Stage at least one of: HANDOFF.md, docs/runtime/decision-ledger.md, docs/runtime/debt-ledger.md, docs/plans/*."
+            "Stage at least one of: HANDOFF.md, docs/runtime/action-queue.yaml, docs/runtime/decision-ledger.md, docs/runtime/debt-ledger.md, docs/plans/*."
         )
     return result_files, durable_files, blockers
 
