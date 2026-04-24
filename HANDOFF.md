@@ -10,6 +10,7 @@
 - **Tool:** Codex
 - **Date:** 2026-04-24
 - **Summary:** Implemented canonical action queue, generated baton, and close-first startup warnings.
+- **Additional Summary:** Local uncommitted live-control hardening now blocks conflicting dashboard `start`/`preflight`/`refresh` actions, adds guided handoff state for session-mode switches, keeps preflight non-invasive (no real `SessionOrchestrator`), and skips signal-only crash-recovery dedup when the trade journal is unavailable.
 
 ## Next Steps — Active
 1. Cross-asset earlier-session to later-ORB chronology spec — Write the chronology discipline/spec before any cross-asset timing scan or execution.

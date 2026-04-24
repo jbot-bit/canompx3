@@ -683,12 +683,19 @@ class SessionOrchestrator:
         # Crash recovery: seed engine with strategies that already traded today.
         # Prevents duplicate entries after restart mid-session.
         # Fail-closed: if journal is broken in live/demo mode, refuse to start.
-        if not self.journal.is_healthy and not signal_only:
-            raise RuntimeError(
-                "FAIL-CLOSED: Trade journal is not healthy — cannot perform crash recovery. "
-                "Duplicate entries could occur. Fix journal or use --signal-only."
+        if not self.journal.is_healthy:
+            if not signal_only:
+                raise RuntimeError(
+                    "FAIL-CLOSED: Trade journal is not healthy — cannot perform crash recovery. "
+                    "Duplicate entries could occur. Fix journal or use --signal-only."
+                )
+            log.warning(
+                "TradeJournal unavailable in signal-only mode — skipping crash-recovery dedup for %s",
+                self.instrument,
             )
-        already_traded = self.journal.get_strategy_ids_for_day(self.trading_day)
+            already_traded: set[str] = set()
+        else:
+            already_traded = self.journal.get_strategy_ids_for_day(self.trading_day)
         for sid in already_traded:
             self.engine.mark_strategy_traded(sid)
         if already_traded:
