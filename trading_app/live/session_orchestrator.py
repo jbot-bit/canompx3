@@ -137,6 +137,38 @@ def _apply_broker_reality_check(
     return "xfa" if account_meta is not None else "xfa_missing_meta"
 
 
+def _apply_signal_only_f1_seed(*, risk_mgr, logger=None) -> bool:
+    """F-1 signal-only seed: seeds EOD balance with $0.00 (canonical day-1 XFA).
+
+    Live/demo paths seed via `_apply_broker_reality_check` from the HWM init
+    block which is gated `if not signal_only`. Signal-only has no broker
+    connection so that helper never runs. Without a seed,
+    `RiskManager.can_enter` fail-closes every entry with
+    "EOD XFA balance unknown — refusing entry" (B6, 2026-04-25).
+
+    Seeds with $0.0 — the canonical day-1 XFA balance per
+    `docs/research-input/topstep/topstep_mll_article.md` and
+    `trading_app/topstep_scaling_plan.py:51-53`. This gives the bottom-tier
+    cap (2 lots for 50K, 3 lots for 100K/150K), exactly what a fresh-XFA
+    day-1 trader would face. NOT a bypass: F-1 still enforces the cap; the
+    seed just lets `can_enter` evaluate the ladder against a known balance.
+
+    Returns True if the seed was applied, False if F-1 was inactive
+    (`topstep_xfa_account_size is None`). Caller should only invoke when
+    `signal_only` is True; the helper itself is signal-only-agnostic so the
+    caller's intent is explicit.
+    """
+    if risk_mgr.limits.topstep_xfa_account_size is None:
+        return False
+    risk_mgr.set_topstep_xfa_eod_balance(0.0)
+    if logger is not None:
+        logger.info(
+            "F-1 XFA EOD balance seeded $0.00 (signal-only canonical day-1 default; "
+            "max cap = bottom tier; live/demo seed via broker query)"
+        )
+    return True
+
+
 @dataclass
 class SessionStats:
     """Observability counters — tracks success/failure for every silent-failure component."""
@@ -346,6 +378,13 @@ class SessionOrchestrator:
                 "F-1 TopStep XFA Scaling Plan ACTIVE: account_size=$%d",
                 topstep_xfa_account_size,
             )
+        # B6 (2026-04-25): in signal-only the HWM init block at L527 is gated
+        # off, so _apply_broker_reality_check never runs and EOD balance is
+        # never seeded. RiskManager then fail-closes every entry with
+        # "EOD XFA balance unknown". Seed with the canonical day-1 XFA value
+        # ($0.0) so signal-only previews live behaviour at the bottom-tier cap.
+        if signal_only:
+            _apply_signal_only_f1_seed(risk_mgr=self.risk_mgr, logger=log)
         if max_equity_dd_r is not None:
             log.info("Risk limits: daily_loss=%.1fR, max_DD=%.1fR", risk_limits.max_daily_loss_r, max_equity_dd_r)
         else:

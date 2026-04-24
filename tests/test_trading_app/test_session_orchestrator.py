@@ -1628,6 +1628,98 @@ class TestF1OrchestratorRolloverWiring:
         orch.positions.query_equity.assert_not_called()
 
 
+class TestF1SignalOnlySeed:
+    """B6 (2026-04-25): in signal-only mode the HWM init block is gated off,
+    so `_apply_broker_reality_check` (the F-1 EOD balance seeder) never runs.
+    Without a seed, RiskManager.can_enter fail-closes every entry with
+    "EOD XFA balance unknown — refusing entry. (F-1 fail-closed)".
+
+    Fix: signal-only branch seeds with $0.0 — the canonical day-1 XFA balance
+    per docs/research-input/topstep/topstep_mll_article.md and
+    trading_app/topstep_scaling_plan.py:51-53. Bottom-tier cap (2 lots for
+    50K) — exactly what a fresh-XFA day-1 trader would face. NOT a bypass.
+
+    See docs/runtime/stages/live-b6-f1-signal-only-seed.md.
+    """
+
+    def test_signal_only_seed_when_f1_active(self):
+        """F-1 active → helper seeds $0.0 and returns True."""
+        from trading_app.live.session_orchestrator import _apply_signal_only_f1_seed
+
+        risk_mgr = MagicMock()
+        risk_mgr.limits.topstep_xfa_account_size = 50_000
+
+        applied = _apply_signal_only_f1_seed(risk_mgr=risk_mgr)
+
+        assert applied is True
+        risk_mgr.set_topstep_xfa_eod_balance.assert_called_once_with(0.0)
+
+    def test_signal_only_no_seed_when_f1_inactive(self):
+        """F-1 inactive (non-XFA profile) → helper short-circuits, returns False.
+
+        Important: do NOT call set_topstep_xfa_eod_balance when F-1 is off.
+        That field is meaningless for non-XFA profiles and a phantom seed
+        could mask a future regression where F-1 is wrongly enabled.
+        """
+        from trading_app.live.session_orchestrator import _apply_signal_only_f1_seed
+
+        risk_mgr = MagicMock()
+        risk_mgr.limits.topstep_xfa_account_size = None
+
+        applied = _apply_signal_only_f1_seed(risk_mgr=risk_mgr)
+
+        assert applied is False
+        risk_mgr.set_topstep_xfa_eod_balance.assert_not_called()
+
+    def test_signal_only_seed_unblocks_can_enter(self):
+        """Integration: real RiskManager + helper → can_enter passes the F-1
+        balance-known gate after the seed (would have rejected before).
+
+        This proves the fix actually closes B6: the same RiskManager that
+        was rejecting every entry pre-seed now passes the F-1 known-balance
+        check. The remaining cap-projection gate (max_lots_for_xfa) is
+        validated by the existing day-1 50K tests in test_risk_manager.py.
+        """
+        from trading_app.live.session_orchestrator import _apply_signal_only_f1_seed
+        from trading_app.risk_manager import RiskLimits, RiskManager
+
+        rm = RiskManager(
+            RiskLimits(
+                max_daily_loss_r=-3.0,
+                max_concurrent_positions=5,
+                topstep_xfa_account_size=50_000,
+            )
+        )
+        rm.daily_reset(date(2026, 4, 25))
+
+        # Pre-seed: balance unknown → fail-closed.
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_NYSE_OPEN_E2",
+            orb_label="NYSE_OPEN",
+            active_trades=[],
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is False
+        assert "EOD XFA balance unknown" in reason
+
+        # Apply the signal-only seed.
+        applied = _apply_signal_only_f1_seed(risk_mgr=rm)
+        assert applied is True
+
+        # Post-seed: balance is known ($0.0 = day-1 cap = 2 lots), entry passes.
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_NYSE_OPEN_E2",
+            orb_label="NYSE_OPEN",
+            active_trades=[],
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is True, f"Post-seed rejection: {reason}"
+
+
 class TestOrchestratorReconnect:
     async def test_clean_stop_no_reconnect(self):
         """Feed stopped by stop-file (was_stopped=True) -> no reconnect."""
