@@ -9,16 +9,22 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-04-24
-- **Summary:** Implemented canonical action queue, generated baton, and close-first startup warnings.
-- **Additional Summary:** Local uncommitted live-control hardening now blocks conflicting dashboard `start`/`preflight`/`refresh` actions, adds guided handoff state for session-mode switches, keeps preflight non-invasive (no real `SessionOrchestrator`), and skips signal-only crash-recovery dedup when the trade journal is unavailable.
+- **Commit:** 45f50916 — fix(live): harden dashboard action coordination
+- **Summary:** Landed the live-control hardening on `main`, preserved the unrelated follow-up threads on parked branches, and removed the extra parked worktree so there is one active working copy again.
+- **Additional Summary:** Runtime changes now block conflicting dashboard `start`/`preflight`/`refresh` actions, add guided handoff state for session-mode switches, keep preflight non-invasive (no real `SessionOrchestrator`), and skip signal-only crash-recovery dedup when the trade journal is unavailable.
 
 ## Next Steps — Active
-1. Cross-asset earlier-session to later-ORB chronology spec — Write the chronology discipline/spec before any cross-asset timing scan or execution.
-2. Prior-day Pathway-B bridge execution triage — Choose one already-locked prior-day bridge hypothesis and execute it instead of writing another broad prereg.
-3. GC to MGC 15m and 30m translation question — Define the exact bounded translation question for 15m and 30m apertures instead of reopening broad proxy work.
+1. Resume work from `main`; no secondary worktrees are open.
+2. Parked follow-up branches remain available:
+   `codex/phase4-discovery-gates-parked` @ `a1385028`
+   `codex/followup-system-brief-phase4-parked` @ `400e6c28`
+3. If full repo-green is required, clear the current repo-wide drift blockers before claiming global clean.
 
 ## Blockers / Warnings
-- Close-first carry-over items remain open: cross_asset_session_chronology_spec, prior_day_bridge_execution_triage, gc_mgc_15m_30m_translation_question
+- Repo-wide drift still fails outside this task:
+  - Check 4: `work_queue.py` schema parser false-positive (`table 'the'`)
+  - Check 59: `MNQ` has 1 trading day with `!= 3` `daily_features` rows
+- Parked branches exist intentionally, but no extra worktrees are open.
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
