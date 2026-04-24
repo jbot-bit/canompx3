@@ -9,12 +9,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** _pending_ — fix(live): seed F-1 XFA EOD balance to $0 in signal-only (closes B6) + post-codex-audit review
+- **Commit:** ca363e1a — fix(live): seed F-1 XFA EOD balance to $0 in signal-only (closes B6)
 - **Files changed:** 4 files
-  - `trading_app/live/session_orchestrator.py` — new `_apply_signal_only_f1_seed` helper + call site
-  - `tests/test_trading_app/test_session_orchestrator.py` — `TestF1SignalOnlySeed` (3 tests, includes real-RiskManager integration)
-  - `docs/runtime/stages/live-b6-f1-signal-only-seed.md` — stage doc + design rationale
   - `HANDOFF.md`
+  - `docs/runtime/stages/live-b6-f1-signal-only-seed.md`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Next Steps — Active
 
