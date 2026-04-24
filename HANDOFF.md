@@ -9,17 +9,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 6d1d241e — [mechanical] fix: Ralph Loop iter 169 — update audit docs and ledger
-- **Files changed:** 5 files
+- **Commit:** fd2880de — chore(stages): close harden-dashboard-action-coordination
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/ralph-ledger.json`
-  - `docs/ralph-loop/ralph-loop-audit.md`
-  - `docs/ralph-loop/ralph-loop-history.md`
-  - `docs/ralph-loop/ralph-loop-plan.md`
+  - `docs/runtime/stages/harden-dashboard-action-coordination.md`
 
 ## Next Steps — Active
 
-1. **Re-run the 6h signal-only smoke test** — with B6 fixed, expect `SIGNAL_ENTRY` events instead of `REJECT` events. Diff `live_signals.jsonl` against the prior run to confirm the fix unblocks entries. Operator-only (needs Telegram + broker connection).
+1. **Live-feed smoke (next market session)** — B6 itself is **empirically verified offline** this session: real `SessionOrchestrator(signal_only=True, profile=topstep_50k_mnq_auto, broker=projectx)` construction confirmed all 6 deployed MNQ lanes ALLOW through the F-1 gate (vs pre-fix REJECT-all). Logged in `Verified clean this session` below. The remaining live-feed value is integration-only: WebSocket bar feed health, ORB build + break detect on real bars, `live_signals.jsonl` SIGNAL_ENTRY write. Run during NYSE_OPEN window when markets are open; weekend = blocked.
 2. **O-SR debt** — `trading_app/live/cusum_monitor.py` implements CUSUM Eq 3, not Shiryaev-Roberts Eq 10 per `docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md`. Paper argues SR is strictly better for live drift detection. Upgrade requires new class + threshold `A` calibration (literature gap G2). Multi-stage; not autonomous.
 3. **Codex parallel-session WIP drain** — 6 Python files still dirty in working tree (`scripts/tools/context_views.py`, 4× test files, `trading_app/phase_4_discovery_gates.py`, `trading_app/strategy_discovery.py`). Now LF-pinned via `.gitattributes` so future writes won't re-introduce CRLF. The current dirty diff is the saved-as-CRLF state from another terminal. Coordinate with Codex before resetting/renormalizing — `git add --renormalize "*.py"` would conflict.
 4. **One-shot full renormalization (deferred)** — once Codex's WIP is committed/dropped, run `git add --renormalize "*.py" && git commit -m "chore(repo): one-shot LF normalization of *.py"` to flush all historical CRLF in one commit. Until then, individual files normalize on next save.
@@ -36,7 +33,7 @@
 - `is_pid_alive` public in both `trading_app/live/instance_lock.py` and `pipeline/db_lock.py` (via PR #100).
 - `PerformanceMonitor` + `CUSUMMonitor` wired at `session_orchestrator.py:474, 1481` (v3 audit false-positive corrected).
 - `CircuitBreaker` wired at `session_orchestrator.py:648` + 6 call sites (v3 audit false-positive corrected).
-- Signal path end-to-end: bar feed → ORB build → break detect → filter check → F-1 gate. **B6 closed:** signal-only branch now seeds F-1 EOD balance with $0.0 (canonical day-1 XFA per `topstep_scaling_plan.py:51-53`); F-1 still enforces against bottom-tier cap (2 lots for 50K).
+- Signal path end-to-end: bar feed → ORB build → break detect → filter check → F-1 gate. **B6 closed + empirically verified:** signal-only branch now seeds F-1 EOD balance with $0.0 (canonical day-1 XFA per `topstep_scaling_plan.py:51-53`). E2E probe this session — real `SessionOrchestrator(signal_only=True, profile=topstep_50k_mnq_auto, broker=projectx)` construction → `risk_mgr.limits.topstep_xfa_account_size = $50,000` (F-1 ON), `_topstep_xfa_eod_balance = $0.00` (seed applied), all 6 deployed MNQ lanes (`MNQ_EUROPE_FLOW`, `_SINGAPORE_OPEN`, `_COMEX_SETTLE`, `_NYSE_OPEN`, `_TOKYO_OPEN`, `_US_DATA_1000`) ALLOW through `risk_mgr.can_enter()`. Pre-fix: all 6 would REJECT with "EOD XFA balance unknown".
 - B2 notifications: now returns `bool`; preflight check 5 detects a broken Telegram loudly.
 - Post-codex-audit review (Claude /code-review): PR #100 + 5be52bdc + dirty WIP + stash@0 — A- grade, full sweep clean. Findings doc not written; B6 fix landed instead.
 
