@@ -9,10 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 6811640a — [mechanical] fix: Ralph Loop iter 169 — verify_trading_app_schema expected_cols missing 10+2 migration columns (silent verifier gap)
-- **Files changed:** 2 files
+- **Commit:** 6d1d241e — [mechanical] fix: Ralph Loop iter 169 — update audit docs and ledger
+- **Files changed:** 5 files
   - `HANDOFF.md`
-  - `trading_app/db_manager.py`
+  - `docs/ralph-loop/ralph-ledger.json`
+  - `docs/ralph-loop/ralph-loop-audit.md`
+  - `docs/ralph-loop/ralph-loop-history.md`
+  - `docs/ralph-loop/ralph-loop-plan.md`
 
 ## Next Steps — Active
 
