@@ -69,6 +69,28 @@ sql = """WITH recent AS (SELECT * FROM bars_1m) SELECT * FROM recent"""
         violations = check_drift.check_schema_query_consistency(tmp_path)
         assert len(violations) == 0
 
+    def test_skips_english_prose_with_sql_verb(self, tmp_path):
+        # Regression guard for 2026-04-24 false positive: a triple-quoted
+        # docstring containing English verbs like "update the baton" was
+        # parsed as SQL "UPDATE the baton", producing a fake "table 'the'
+        # not in schema" violation. The heuristic now requires both a SQL
+        # verb AND a scope keyword (FROM/INTO/WHERE/VALUES/SET/JOIN) before
+        # treating a string as SQL.
+        _mkfile(tmp_path / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts_utc TEXT)")
+        _mkfile(
+            tmp_path / "work_queue.py",
+            '''
+PROSE = """# HANDOFF baton
+
+**Rule:** If you made decisions, changed files, or left work half-done — update the baton.
+
+**CRITICAL:** select the most recent files and re-read them before writing code.
+"""
+''',
+        )
+        violations = check_drift.check_schema_query_consistency(tmp_path)
+        assert violations == []
+
 
 # ── Check 5: Import cycles ────────────────────────────────────────────
 

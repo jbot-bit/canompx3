@@ -333,7 +333,12 @@ def check_schema_query_consistency(pipeline_dir: Path) -> list[str]:
 
     # Extract triple-quoted strings that contain SQL
     sql_string_pattern = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.DOTALL)
-    sql_indicator = re.compile(r"\b(SELECT|INSERT|DELETE|UPDATE|CREATE)\b", re.IGNORECASE)
+    sql_verb = re.compile(r"\b(SELECT|INSERT|DELETE|UPDATE|CREATE)\b", re.IGNORECASE)
+    # Real SQL always pairs a verb with a scope keyword. English prose that
+    # happens to contain "update" (e.g. "update the baton") rarely does, so
+    # requiring both eliminates docstring false positives without missing
+    # actual SQL strings.
+    sql_scope = re.compile(r"\b(FROM|INTO|WHERE|VALUES|SET|JOIN)\b", re.IGNORECASE)
 
     for fpath in pipeline_dir.glob("*.py"):
         if fpath.name in ("init_db.py", "check_drift.py"):
@@ -344,8 +349,10 @@ def check_schema_query_consistency(pipeline_dir: Path) -> list[str]:
         for match in sql_string_pattern.finditer(content):
             sql_text = match.group(1) or match.group(2)
 
-            # Only check strings that look like SQL
-            if not sql_indicator.search(sql_text):
+            # Only check strings that look like SQL: require both a verb and
+            # a scope keyword. Prevents English prose in docstrings from
+            # being parsed as SQL (e.g. "update the baton" → table 'the').
+            if not (sql_verb.search(sql_text) and sql_scope.search(sql_text)):
                 continue
 
             # Extract CTE names from this SQL block
@@ -1721,6 +1728,118 @@ def check_doc_hygiene_contracts() -> list[str]:
             violations.append(f"  {_doc_hygiene_rel(path)} missing generated-source marker")
         if "Do not edit by hand" not in text and "do not edit by hand" not in text:
             violations.append(f"  {_doc_hygiene_rel(path)} missing do-not-edit marker")
+
+    return violations
+
+
+def check_handoff_compact_policy() -> list[str]:
+    """Enforce the "compact baton" policy declared in HANDOFF.md.
+
+    HANDOFF.md was truncated (Apr 2026) from ~8k lines to a 26-line
+    current-state summary; durable decisions moved to
+    ``docs/runtime/decision-ledger.md`` and active work to
+    ``docs/runtime/action-queue.yaml``. That policy had no enforcement:
+    a future session could silently revert to writing durable decisions
+    into HANDOFF.md, or let the ledger/queue fall out of sync, and
+    nothing would catch it. This check closes that gap.
+
+    Invariants:
+      1. HANDOFF.md <= 100 lines (compact-baton constraint).
+      2. docs/runtime/decision-ledger.md exists and is non-empty.
+      3. docs/runtime/action-queue.yaml exists, parses, has a non-empty
+         items list.
+      4. Every numbered "Next Steps" entry in HANDOFF has a matching
+         action-queue item (by title / next_action / id substring).
+    """
+    violations: list[str] = []
+
+    handoff = PROJECT_ROOT / "HANDOFF.md"
+    ledger = PROJECT_ROOT / "docs" / "runtime" / "decision-ledger.md"
+    queue_path = PROJECT_ROOT / "docs" / "runtime" / "action-queue.yaml"
+
+    if not handoff.exists():
+        violations.append("  HANDOFF.md missing at project root")
+        return violations
+
+    handoff_lines = handoff.read_text(encoding="utf-8", errors="replace").splitlines()
+    if len(handoff_lines) > 100:
+        violations.append(
+            f"  HANDOFF.md has {len(handoff_lines)} lines (>100). Compact-baton "
+            "policy requires current-state-only baton; archive detail to "
+            "docs/handoffs/archived/ and move durable decisions to "
+            "docs/runtime/decision-ledger.md."
+        )
+
+    if not ledger.exists() or not ledger.read_text(encoding="utf-8", errors="replace").strip():
+        violations.append(
+            "  docs/runtime/decision-ledger.md missing or empty — required by "
+            "HANDOFF's compact-baton policy as the durable-decision surface."
+        )
+
+    queue_items: list[dict] = []
+    if not queue_path.exists():
+        violations.append(
+            "  docs/runtime/action-queue.yaml missing — required by "
+            "HANDOFF's compact-baton policy as the active-work surface."
+        )
+    else:
+        body, error = _read_yaml_doc(queue_path)
+        if error:
+            violations.append(f"  docs/runtime/action-queue.yaml YAML parse failed: {error}")
+        elif not isinstance(body, dict) or not isinstance(body.get("items"), list):
+            violations.append("  docs/runtime/action-queue.yaml missing top-level items: list")
+        elif not body["items"]:
+            violations.append("  docs/runtime/action-queue.yaml items list is empty")
+        else:
+            queue_items = [item for item in body["items"] if isinstance(item, dict)]
+
+    # Invariant 4: HANDOFF "Next Steps" items must be in the action queue.
+    next_steps: list[str] = []
+    in_next_steps = False
+    next_steps_heading = re.compile(r"^##+\s*Next Steps", re.IGNORECASE)
+    numbered = re.compile(r"^\s*\d+\.\s+(.+?)\s*$")
+    for line in handoff_lines:
+        if line.startswith("#"):
+            if next_steps_heading.match(line):
+                in_next_steps = True
+                continue
+            if in_next_steps and line.startswith("##"):
+                in_next_steps = False
+                continue
+        if in_next_steps:
+            match = numbered.match(line)
+            if match:
+                next_steps.append(match.group(1).strip(" —-"))
+
+    def _significant_tokens(text: str) -> list[str]:
+        """Lowercase alphanumeric tokens longer than 2 chars.
+
+        Applied identically to both HANDOFF step text and queue haystacks so
+        single-letter artefacts ("B" in "Pathway-B") don't interrupt a
+        substring match on one side but not the other.
+        """
+        return [t for t in re.findall(r"[a-z0-9]+", text.lower()) if len(t) > 2]
+
+    haystack_parts: list[str] = []
+    for item in queue_items:
+        # `item.get(k) or ""` avoids `str(None) == "None"` polluting the haystack
+        # when a YAML field is explicitly null (e.g. `next_action: null`).
+        haystack_parts.append(str(item.get("title") or ""))
+        haystack_parts.append(str(item.get("next_action") or ""))
+        haystack_parts.append(str(item.get("id") or ""))
+    haystack_norm = " ".join(_significant_tokens(" ".join(haystack_parts)))
+
+    if next_steps and haystack_norm:
+        for step in next_steps:
+            head_text = step.split(" — ")[0].split(" - ")[0]
+            tokens = _significant_tokens(head_text)
+            head = " ".join(tokens[:4])
+            if head and head not in haystack_norm:
+                violations.append(
+                    f"  HANDOFF.md Next Steps entry {step!r} has no matching "
+                    "action-queue item (by title/next_action/id). Either add "
+                    "the queue item or drop the HANDOFF entry."
+                )
 
     return violations
 
@@ -5793,6 +5912,12 @@ CHECKS = [
     ("No E0 rows in trading tables", check_no_e0_in_db, False, True),  # requires_db
     ("Doc stats match DB ground truth", check_doc_stats_consistency, False, True),  # requires_db
     ("Doc hygiene contracts (stamps, design-only, generated markers)", check_doc_hygiene_contracts, False, False),
+    (
+        "HANDOFF compact-baton policy (<=100 lines, ledger+queue present, next-steps aligned)",
+        check_handoff_compact_policy,
+        False,
+        False,
+    ),
     ("No duplicate gold.db at project root", check_stale_scratch_db, False, False),
     ("No old session names in active code", check_old_session_names, False, False),
     ("No active E3 strategies (soft-retired Feb 2026)", check_no_active_e3, False, True),  # requires_db

@@ -165,3 +165,108 @@ execution:
         violations = check_drift.check_doc_hygiene_contracts()
 
         assert violations == []
+
+
+def _mk_handoff_compact_fixtures(
+    root: Path,
+    *,
+    handoff_lines: int,
+    next_steps: list[str] | None = None,
+    queue_items: list[dict] | None = None,
+    ledger: str = "# Decision Ledger\n- entry 1\n",
+    queue_present: bool = True,
+) -> None:
+    """Scaffold the three files check_handoff_compact_policy reads."""
+    body = ["# HANDOFF"]
+    if next_steps:
+        body.append("## Next Steps — Active")
+        for i, step in enumerate(next_steps, 1):
+            body.append(f"{i}. {step}")
+    while len(body) < handoff_lines:
+        body.append("")
+    _mkfile(root / "HANDOFF.md", "\n".join(body) + "\n")
+
+    _mkfile(root / "docs/runtime/decision-ledger.md", ledger)
+
+    if queue_present:
+        import yaml
+
+        queue_body = {
+            "schema_version": 1,
+            "items": queue_items or [{"id": "seed_item", "title": "Seed item", "next_action": "seed"}],
+        }
+        _mkfile(root / "docs/runtime/action-queue.yaml", yaml.safe_dump(queue_body))
+
+
+class TestHandoffCompactPolicy:
+    def test_passes_when_compact_and_ledger_and_queue_present(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_handoff_compact_fixtures(
+            tmp_path,
+            handoff_lines=10,
+            next_steps=["Seed item — do the seed"],
+            queue_items=[{"id": "seed_item", "title": "Seed item", "next_action": "do the seed"}],
+        )
+
+        assert check_drift.check_handoff_compact_policy() == []
+
+    def test_flags_bloated_handoff(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_handoff_compact_fixtures(
+            tmp_path,
+            handoff_lines=250,
+            queue_items=[{"id": "seed", "title": "Seed", "next_action": "."}],
+        )
+
+        violations = check_drift.check_handoff_compact_policy()
+        joined = "\n".join(violations)
+        assert "250 lines" in joined
+        assert ">100" in joined
+
+    def test_flags_missing_ledger(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_handoff_compact_fixtures(tmp_path, handoff_lines=10, ledger="")
+
+        violations = check_drift.check_handoff_compact_policy()
+
+        assert any("decision-ledger.md missing or empty" in v for v in violations)
+
+    def test_flags_missing_queue(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_handoff_compact_fixtures(tmp_path, handoff_lines=10, queue_present=False)
+
+        violations = check_drift.check_handoff_compact_policy()
+
+        assert any("action-queue.yaml missing" in v for v in violations)
+
+    def test_flags_orphan_next_step(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_handoff_compact_fixtures(
+            tmp_path,
+            handoff_lines=10,
+            next_steps=["Zebra quantum thruster refactor — invent something new"],
+            queue_items=[{"id": "seed", "title": "Seed", "next_action": "do nothing"}],
+        )
+
+        violations = check_drift.check_handoff_compact_policy()
+
+        assert any("zebra quantum thruster" in v.lower() for v in violations)
+
+    def test_handles_punctuation_variants(self, tmp_path: Path, monkeypatch) -> None:
+        # Queue title uses hyphens ("Cross-asset earlier-session"); HANDOFF tokenization
+        # drops them. Normalization must make the two match.
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_handoff_compact_fixtures(
+            tmp_path,
+            handoff_lines=10,
+            next_steps=["Cross-asset earlier-session chronology spec — write it"],
+            queue_items=[
+                {
+                    "id": "cross_asset",
+                    "title": "Cross-asset earlier-session chronology spec",
+                    "next_action": "write it",
+                }
+            ],
+        )
+
+        assert check_drift.check_handoff_compact_policy() == []
