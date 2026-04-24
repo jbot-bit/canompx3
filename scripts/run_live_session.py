@@ -42,12 +42,14 @@ from trading_app.live.session_orchestrator import SessionOrchestrator
 def _run_lightweight_component_self_tests(
     *,
     instrument: str,
-    broker_name: str,
-    components,
-    demo: bool,
-    signal_only: bool = True,
 ) -> dict[str, bool]:
-    """Run broker/component probes without opening runtime-owned DuckDB files."""
+    """Probe notifications without opening runtime-owned DuckDB files.
+
+    Preflight runs signal-only — broker bracket / fill-poller endpoints are deferred
+    to live/demo startup where a real SessionOrchestrator exercises them. The
+    rubber-stamped bracket/fill_poller entries preserve the historical contract
+    that surfaced in dashboard payloads.
+    """
 
     results: dict[str, bool] = {}
 
@@ -61,45 +63,8 @@ def _run_lightweight_component_self_tests(
         print(f"!!! NOTIFICATIONS ARE BROKEN: {e} !!!")
         results["notifications"] = False
 
-    # Preflight historically exercised the signal-only self-test path.
-    # Keep that contract: do not probe live/demo order-routing endpoints here.
-    if signal_only:
-        results["brackets"] = True
-        results["fill_poller"] = True
-        return results
-
-    try:
-        router = components["router_class"](account_id=0, auth=components["auth"], demo=demo)
-        if not router.supports_native_brackets():
-            results["brackets"] = True
-        else:
-            spec = router.build_bracket_spec(
-                direction="long",
-                symbol="TEST",
-                entry_price=100.0,
-                stop_price=99.0,
-                target_price=102.0,
-                qty=1,
-            )
-            results["brackets"] = spec is not None
-            if spec is None:
-                log.warning("build_bracket_spec returned None despite supports_native_brackets=True")
-    except Exception as e:
-        log.critical("BRACKET SELF-TEST FAILED (%s): %s", broker_name, e)
-        results["brackets"] = False
-
-    try:
-        if "router" not in locals():
-            router = components["router_class"](account_id=0, auth=components["auth"], demo=demo)
-        router.query_order_status(0)
-        results["fill_poller"] = True
-    except NotImplementedError:
-        log.warning("Broker does not support query_order_status — fill poller will be inactive")
-        results["fill_poller"] = False
-    except Exception as e:  # noqa: BLE001 -- endpoint exists even if the probe order is invalid
-        log.info("Fill poller endpoint exists (non-fatal error: %s)", e)
-        results["fill_poller"] = True
-
+    results["brackets"] = True
+    results["fill_poller"] = True
     return results
 
 
@@ -208,22 +173,16 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
     else:
         print("SKIPPED (auth failed)")
 
-    # 5. Component self-tests (notifications, brackets, fill poller)
+    # 5. Notifications probe (broker bracket / fill-poller probes deferred to live/demo startup)
     all_pass = True  # default if check 5 fails entirely
-    print(f"[5/{checks_total}] Component self-tests...", end=" ", flush=True)
+    print(f"[5/{checks_total}] Notifications probe...", end=" ", flush=True)
     try:
         if components is None:
             raise RuntimeError("auth failed")
-        test_results = _run_lightweight_component_self_tests(
-            instrument=instrument,
-            broker_name=broker_name,
-            components=components,
-            demo=demo,
-            signal_only=True,
-        )
+        test_results = _run_lightweight_component_self_tests(instrument=instrument)
         all_pass = all(test_results.values())
         if all_pass:
-            print("OK (all components verified)")
+            print("OK (notifications probed; broker probes deferred to live/demo)")
             checks_passed += 1
         else:
             failed = [k for k, v in test_results.items() if not v]

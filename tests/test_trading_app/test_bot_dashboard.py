@@ -518,3 +518,124 @@ def test_action_start_initiates_handoff_for_conflicting_running_session(monkeypa
     assert result["handoff"]["status"] == "stopping"
     assert bot_dashboard._handoff_state["target_mode"] == "demo"
     bot_dashboard._clear_handoff()
+
+
+def test_handoff_snapshot_walks_state_machine_to_ready(monkeypatch):
+    """Exercise _handoff_snapshot through every transition of the state machine.
+
+    Plan: ~/.claude/plans/inspoect-repoi-instpect-resource-imperative-clarke.md F8.
+    Guards against regressions in the handoff FSM introduced by commit 45f50916.
+    """
+    bot_dashboard._clear_handoff()
+    bot_dashboard._set_handoff("topstep_50k_mnq_auto", "demo", "initial")
+
+    # Stage 1: session still running → "stopping"
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": True,
+            "raw_mode": "SIGNAL",
+            "heartbeat_age_s": 5.0,
+            "profile": "topstep_50k_mnq_auto",
+            "tracked_alive": True,
+        },
+    )
+    monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": False})
+    monkeypatch.setattr(
+        bot_dashboard, "_journal_lock_status", lambda: {"locked": False, "detail": "ok"}
+    )
+    monkeypatch.setattr(
+        bot_dashboard, "_instance_lock_status", lambda: {"locked": False, "locks": []}
+    )
+    assert bot_dashboard._handoff_snapshot()["status"] == "stopping"
+
+    # Stage 2: session stopped but journal still locked → "waiting_cleanup"
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "STOPPED",
+            "heartbeat_age_s": 9999.0,
+            "profile": None,
+            "tracked_alive": False,
+        },
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_journal_lock_status",
+        lambda: {"locked": True, "detail": "held by pid 1234"},
+    )
+    assert bot_dashboard._handoff_snapshot()["status"] == "waiting_cleanup"
+
+    # Stage 3: locks clear, refresh running → "waiting_refresh"
+    monkeypatch.setattr(
+        bot_dashboard, "_journal_lock_status", lambda: {"locked": False, "detail": "ok"}
+    )
+    monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": True})
+    assert bot_dashboard._handoff_snapshot()["status"] == "waiting_refresh"
+
+    # Stage 4: refresh done, data stale → "needs_refresh"
+    monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": False})
+    stale_data = {"status": "ok", "any_stale": True, "instruments": {}}
+    snap = bot_dashboard._handoff_snapshot(data_summary=stale_data)
+    assert snap["status"] == "needs_refresh"
+
+    # Stage 5: data fresh, no/failed preflight → "needs_preflight"
+    fresh_data = {"status": "ok", "any_stale": False, "instruments": {}}
+    snap = bot_dashboard._handoff_snapshot(data_summary=fresh_data, preflight_summary=None)
+    assert snap["status"] == "needs_preflight"
+
+    snap = bot_dashboard._handoff_snapshot(
+        data_summary=fresh_data, preflight_summary={"status": "fail"}
+    )
+    assert snap["status"] == "needs_preflight"
+
+    # Stage 6: data fresh + preflight pass → "ready_to_start"
+    snap = bot_dashboard._handoff_snapshot(
+        data_summary=fresh_data, preflight_summary={"status": "pass"}
+    )
+    assert snap["status"] == "ready_to_start"
+    assert snap["action"]["id"] == "continue_handoff"
+    assert snap["target_mode"] == "demo"
+
+    bot_dashboard._clear_handoff()
+
+
+def test_preflight_helper_does_not_hold_journal_lock(tmp_path, monkeypatch):
+    """Preflight self-test must not leave live_journal.db held after it returns.
+
+    Commit 45f50916 fixed a Windows lock leak where _run_preflight constructed a
+    SessionOrchestrator that owned the journal DB connection and never released
+    it. The lightweight helper bypasses orchestrator construction entirely.
+
+    This test guards against re-introducing the leak: after running the helper,
+    the journal path must be openable for read-write with no duckdb.IOException.
+
+    Plan: ~/.claude/plans/inspoect-repoi-instpect-resource-imperative-clarke.md F8.
+    """
+    import duckdb
+
+    from scripts.run_live_session import _run_lightweight_component_self_tests
+
+    journal_path = tmp_path / "live_journal.db"
+    # Seed the DB so a writer lock is meaningful.
+    con = duckdb.connect(str(journal_path))
+    con.execute("CREATE TABLE t (x INT)")
+    con.close()
+
+    # Stub the notifications probe — real notifier would need Telegram config.
+    import trading_app.live.notifications as notifications
+
+    monkeypatch.setattr(notifications, "notify", lambda *a, **k: None)
+
+    results = _run_lightweight_component_self_tests(instrument="MNQ")
+    assert results["notifications"] is True
+    assert results["brackets"] is True
+    assert results["fill_poller"] is True
+
+    # If the helper held a journal connection, this would raise duckdb.IOException.
+    writer = duckdb.connect(str(journal_path), read_only=False)
+    writer.execute("INSERT INTO t VALUES (1)")
+    writer.close()
