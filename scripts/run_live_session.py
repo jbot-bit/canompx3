@@ -207,6 +207,57 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
     return checks_passed == checks_total
 
 
+def _select_primary_and_shadow_accounts(
+    *,
+    all_accounts: list[tuple[int, str]],
+    n_copies: int,
+    requested_account_id: int | None,
+) -> tuple[int, list[int] | None]:
+    """Pick the primary account and shadow set for copy trading.
+
+    Bug-fix 2026-04-25: previously this sliced all_accounts[:n_copies] FIRST
+    then checked `requested_account_id in account_ids`. If the user-specified
+    account was past the slice horizon (e.g. profile.copies=2 and the user
+    wants the 3rd-listed XFA), the check silently failed and the code routed
+    to all_accounts[0] — the WRONG account. Now: validate the account exists,
+    then move it to the front so the slice always includes it. Hard-fail if
+    the user's choice doesn't exist at the broker.
+
+    Args:
+        all_accounts: list of (account_id, account_name) tuples from the broker.
+        n_copies: total accounts to use (primary + shadows).
+        requested_account_id: if set, this MUST be one of all_accounts and will
+            be the primary; raises RuntimeError otherwise.
+
+    Returns:
+        (primary_id, shadow_account_ids) where shadow_account_ids is a list of
+        zero-or-more shadow account IDs (None if no shadows).
+    """
+    all_account_ids = [aid for aid, _name in all_accounts]
+    if requested_account_id is not None:
+        if requested_account_id not in all_account_ids:
+            raise RuntimeError(
+                f"--account-id {requested_account_id} is not in the broker's discovered "
+                f"accounts {all_account_ids}. Verify the account ID is correct and "
+                f"the account is active and visible at the broker."
+            )
+        # Move user's account to the front so it's always inside the n_copies slice.
+        all_account_ids.remove(requested_account_id)
+        all_account_ids.insert(0, requested_account_id)
+
+    account_ids = all_account_ids[:n_copies]
+    if requested_account_id is not None:
+        # Already at index 0 by construction above.
+        account_ids.remove(requested_account_id)
+        primary_id = requested_account_id
+    else:
+        primary_id = account_ids[0]
+        account_ids = account_ids[1:]
+
+    shadow_account_ids = account_ids if account_ids else None
+    return primary_id, shadow_account_ids
+
+
 def _print_mode_banner(mode: str, instrument: str) -> None:
     lines = {
         "signal": [
@@ -539,35 +590,11 @@ def main() -> None:
                 len(all_accounts),
             )
 
-        # Bug-fix 2026-04-25: previously this sliced all_accounts[:n_copies] FIRST
-        # then checked `args.account_id in account_ids`. If the user-specified
-        # account was past the slice horizon (e.g. profile.copies=2 and the user
-        # wants the 3rd-listed XFA), the check silently failed and the code
-        # routed to all_accounts[0] — the WRONG account. Now: validate the
-        # account exists, then move it to the front so the slice always
-        # includes it. Hard-fail if the user's choice doesn't exist at the broker.
-        all_account_ids = [aid for aid, _name in all_accounts]
-        if args.account_id is not None:
-            if args.account_id not in all_account_ids:
-                raise RuntimeError(
-                    f"--account-id {args.account_id} is not in the broker's discovered "
-                    f"accounts {all_account_ids}. Verify the account ID is correct and "
-                    f"the account is active and visible at the broker."
-                )
-            # Move user's account to the front so it's always inside the n_copies slice.
-            all_account_ids.remove(args.account_id)
-            all_account_ids.insert(0, args.account_id)
-
-        account_ids = all_account_ids[:n_copies]
-        if args.account_id is not None:
-            # Already at index 0 by construction above.
-            account_ids.remove(args.account_id)
-            primary_id = args.account_id
-        else:
-            primary_id = account_ids[0]
-            account_ids = account_ids[1:]
-
-        shadow_account_ids = account_ids if account_ids else None
+        primary_id, shadow_account_ids = _select_primary_and_shadow_accounts(
+            all_accounts=all_accounts,
+            n_copies=n_copies,
+            requested_account_id=args.account_id,
+        )
         args.account_id = primary_id
         log.info(
             "Copy trading: primary=%d, shadows=%s",

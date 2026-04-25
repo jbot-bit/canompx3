@@ -137,6 +137,103 @@ def _apply_broker_reality_check(
     return "xfa" if account_meta is not None else "xfa_missing_meta"
 
 
+def _cleanup_orphan_brackets(
+    *,
+    order_router,
+    contracts,
+    instrument: str,
+    force_orphans: bool,
+    notify_fn,
+    logger=None,
+) -> int:
+    """Cancel orphaned AutoBracket orders at startup. Returns count cancelled.
+
+    F8 (2026-04-25): a failed cleanup may leave prior-session brackets live at
+    the broker; on a price gap they create ghost positions with no
+    PositionTracker entry, no HWM accounting, no software exit path.
+
+    Mirrors the position-orphan halt pattern in __init__ at L482-491:
+      - log.critical + notify_fn on failure
+      - raise RuntimeError unless force_orphans=True
+      - if force_orphans, warn and proceed (operator accepts risk)
+
+    Returns the count of cancelled orders (0 if none, raises if failed and
+    not force_orphans).
+    """
+    try:
+        contract_sym = contracts.resolve_front_month(instrument)
+        cancelled = order_router.cancel_bracket_orders(contract_sym)
+        if cancelled > 0:
+            if logger is not None:
+                logger.warning(
+                    "STARTUP CLEANUP: cancelled %d orphaned bracket orders on %s",
+                    cancelled,
+                    contract_sym,
+                )
+            notify_fn(f"STARTUP: Cancelled {cancelled} orphaned bracket orders")
+        return cancelled
+    except Exception as e:
+        if logger is not None:
+            logger.critical("Bracket orphan cleanup failed on startup: %s", e)
+        notify_fn(f"BRACKET ORPHAN CLEANUP FAILED: {e} — verify no live orders")
+        if not force_orphans:
+            raise RuntimeError(
+                f"Bracket orphan cleanup failed ({e}). Cannot verify no stale "
+                f"AutoBracket orders are alive at the broker. Cancel manually or "
+                f"pass --force-orphans to proceed at your own risk."
+            ) from e
+        if logger is not None:
+            logger.warning("--force-orphans: proceeding despite bracket cleanup failure")
+        return 0
+
+
+def _notify_journal_unhealthy_demo(*, journal, journal_mode: str, notify_fn, logger=None) -> bool:
+    """Notify operator if the trade journal is unhealthy in non-live mode.
+
+    F6 (2026-04-25): pre-fix, demo/signal-only sessions silently log a
+    warning when the journal can't open and continue without persistence.
+    Operator wakes up to zero trade records — invalidates demo as a
+    promotion gate. This helper centralizes the silent→loud conversion.
+
+    Returns True if healthy, False if unhealthy. Caller has already
+    raised RuntimeError for live mode (this helper is only invoked for
+    demo/signal mode).
+    """
+    if journal.is_healthy:
+        return True
+    if logger is not None:
+        logger.warning(
+            "TradeJournal unhealthy — trades will NOT be persisted (mode=%s)",
+            journal_mode,
+        )
+    notify_fn(
+        f"TRADE JOURNAL UNHEALTHY (mode={journal_mode}) — trades will NOT be persisted. Fix journal_path or restart."
+    )
+    return False
+
+
+def _notify_f1_silent_block_if_active(*, risk_mgr, notify_fn) -> bool:
+    """Notify operator about F-1 silent-block when broker equity is None at startup.
+
+    F2 (2026-04-25): when the HWM init block's broker query returns None,
+    `_apply_broker_reality_check` is NOT called (it's gated on a non-None
+    equity). RiskManager._topstep_xfa_eod_balance stays None, F-1 fail-
+    closes every entry until the next 10-bar HWM poll seeds it. Without
+    this notification, the silent-block window is invisible to the
+    operator. Gated on F-1 being active to avoid noise on non-XFA profiles.
+
+    Returns True if a notification was sent (F-1 was active), False otherwise.
+    """
+    if risk_mgr.limits.topstep_xfa_account_size is None:
+        return False
+    notify_fn(
+        "F-1 SILENT BLOCK: broker equity None at startup — "
+        "all entries will REJECT until next HWM poll seeds the EOD balance "
+        "(~10 bars / ~10 min)"
+    )
+    return True
+
+
 def _apply_signal_only_f1_seed(*, risk_mgr, logger=None) -> bool:
     """F-1 signal-only seed: seeds EOD balance with $0.00 (canonical day-1 XFA).
 
@@ -494,31 +591,14 @@ class SessionOrchestrator:
             # Clean up orphaned bracket orders from previous crashes.
             # These are AutoBracket-tagged orders that survived a prior session.
             # If not cancelled, they will fire and open unwanted positions.
-            try:
-                contract_sym = contracts.resolve_front_month(instrument)
-                cancelled = self.order_router.cancel_bracket_orders(contract_sym)
-                if cancelled > 0:
-                    log.warning(
-                        "STARTUP CLEANUP: cancelled %d orphaned bracket orders on %s",
-                        cancelled,
-                        contract_sym,
-                    )
-                    self._notify(f"STARTUP: Cancelled {cancelled} orphaned bracket orders")
-            except Exception as e:
-                # F8: a failed orphan-bracket cancel may leave prior-session AutoBracket
-                # orders alive at the broker. On a price gap they fire and create ghost
-                # positions with no PositionTracker entry, no HWM accounting, and no
-                # software exit path. Mirror the position-orphan halt pattern at
-                # L482-492: HALT unless --force-orphans is set.
-                log.critical("Bracket orphan cleanup failed on startup: %s", e)
-                self._notify(f"BRACKET ORPHAN CLEANUP FAILED: {e} — verify no live orders")
-                if not force_orphans:
-                    raise RuntimeError(
-                        f"Bracket orphan cleanup failed ({e}). Cannot verify no stale "
-                        f"AutoBracket orders are alive at the broker. Cancel manually or "
-                        f"pass --force-orphans to proceed at your own risk."
-                    ) from e
-                log.warning("--force-orphans: proceeding despite bracket cleanup failure")
+            _cleanup_orphan_brackets(
+                order_router=self.order_router,
+                contracts=contracts,
+                instrument=instrument,
+                force_orphans=force_orphans,
+                notify_fn=self._notify,
+                logger=log,
+            )
 
         # Live infrastructure
         self.orb_builder = LiveORBBuilder(instrument, self.trading_day)
@@ -535,13 +615,12 @@ class SessionOrchestrator:
                     f"TradeJournal failed to open {journal_path} — refusing to start live session "
                     "without trade persistence. Fix the journal path or use --demo."
                 )
-            # F6: in demo/signal-only the warning was the only signal. Operator wakes up
-            # to zero trade records with no indication the journal was broken — invalidates
-            # the demo as a promotion gate. Surface to Telegram so the silent-skip is loud.
-            log.warning("TradeJournal unhealthy — trades will NOT be persisted (mode=%s)", journal_mode)
-            self._notify(
-                f"TRADE JOURNAL UNHEALTHY (mode={journal_mode}) — trades will NOT be persisted. "
-                f"Fix journal_path or restart."
+            # F6 (extracted): demo/signal-only journal-unhealthy must surface to operator.
+            _notify_journal_unhealthy_demo(
+                journal=self.journal,
+                journal_mode=journal_mode,
+                notify_fn=self._notify,
+                logger=log,
             )
 
         # Position lifecycle tracker — replaces ad-hoc _entry_prices dict
@@ -653,21 +732,11 @@ class SessionOrchestrator:
                                             logger=log,
                                         )
                                 else:
-                                    # F2: until the next 10-bar HWM poll delivers a non-None
-                                    # equity, RiskManager._topstep_xfa_eod_balance stays None
-                                    # and F-1 fail-closes every entry with "EOD XFA balance
-                                    # unknown — refusing entry". TOKYO_OPEN at 10:00 Brisbane
-                                    # could fire entirely inside this silent-block window.
-                                    # Surface to Telegram so operator sees the silent block.
+                                    # F2 (extracted): notify operator of F-1 silent-block window.
                                     log.warning(
                                         "HWM tracker: broker equity unavailable at startup — will init on first poll"
                                     )
-                                    if self.risk_mgr.limits.topstep_xfa_account_size is not None:
-                                        self._notify(
-                                            "F-1 SILENT BLOCK: broker equity None at startup — "
-                                            "all entries will REJECT until next HWM poll seeds the EOD balance "
-                                            "(~10 bars / ~10 min)"
-                                        )
+                                    _notify_f1_silent_block_if_active(risk_mgr=self.risk_mgr, notify_fn=self._notify)
                             break
                 except ImportError as e:
                     raise RuntimeError(
@@ -2856,8 +2925,7 @@ class SessionOrchestrator:
                         self._safety_state.save()
                     except Exception as _save_exc:
                         log.error(
-                            "R3: failed to persist last_connected_at — "
-                            "counter reset still applies in-memory: %s",
+                            "R3: failed to persist last_connected_at — counter reset still applies in-memory: %s",
                             _save_exc,
                         )
 

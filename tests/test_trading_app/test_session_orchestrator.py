@@ -1723,58 +1723,197 @@ class TestF1SignalOnlySeed:
 class TestOvernightResilienceHardening:
     """5 silent-failure fixes from docs/runtime/stages/live-overnight-resilience-hardening.md.
 
-    Each test is a mutation probe: revert the corresponding fix in
-    trading_app/live/session_orchestrator.py and the matching test must fail.
+    F2/F6/F8 inline branches in __init__ have been extracted as helpers
+    (_cleanup_orphan_brackets, _notify_journal_unhealthy_demo,
+    _notify_f1_silent_block_if_active). Each helper is unit-tested for
+    real BEHAVIOR (not source-marker regex) — flip the input condition,
+    verify the right side effect (raise / notify / silence).
     """
 
-    # F8 — orphan bracket cleanup failure should HALT, not warn (unless --force-orphans).
-    def test_f8_bracket_cleanup_failure_propagates_to_update_equity_tracker(self):
-        """Direct unit-level F8: confirm the helper-call shape so the orchestrator
-        path raises on cleanup failure unless --force-orphans is set.
+    # ── F8 — orphan bracket cleanup failure should HALT, not warn ──
+    def test_f8_cleanup_orphan_brackets_raises_when_cancel_fails(self):
+        """Cancel raises → helper raises RuntimeError + notifies. Mutation:
+        comment out the `raise RuntimeError` and this test fails."""
+        from trading_app.live.session_orchestrator import _cleanup_orphan_brackets
 
-        Constructing a SessionOrchestrator with a broker that raises on
-        cancel_bracket_orders is heavy (full live infrastructure). Probe the
-        equivalent logic by importing the orchestrator class and asserting the
-        relevant code path matches the institutional pattern: log.critical +
-        notify + raise unless force_orphans.
-        """
-        from trading_app.live import session_orchestrator as so
+        order_router = MagicMock()
+        order_router.cancel_bracket_orders.side_effect = RuntimeError("broker timeout")
+        contracts = MagicMock()
+        contracts.resolve_front_month.return_value = "MNQM6"
+        notify_calls: list[str] = []
 
-        src = open(so.__file__, encoding="utf-8").read()
-        # Mutation probe markers — these strings must be present in source after the F8 fix.
-        assert "BRACKET ORPHAN CLEANUP FAILED" in src, "F8 notify message missing"
-        assert "Bracket orphan cleanup failed" in src and "log.critical" in src, "F8 should log.critical"
-        assert "if not force_orphans:" in src, "F8 should respect --force-orphans bypass"
-        assert "Bracket orphan cleanup failed" in src and "RuntimeError" in src, "F8 should raise"
-
-    # F6 — journal unhealthy in demo should _notify, not just warn.
-    def test_f6_journal_unhealthy_notifies_in_non_live(self):
-        from trading_app.live import session_orchestrator as so
-
-        src = open(so.__file__, encoding="utf-8").read()
-        # Mutation probe: text after the F6 fix.
-        assert "TRADE JOURNAL UNHEALTHY" in src, "F6 notify message missing"
-        # The notify call must be inside the demo/signal-only branch, not the live branch.
-        # Live still raises RuntimeError; demo should warn AND notify.
-        idx = src.find("TradeJournal unhealthy — trades will NOT be persisted")
-        assert idx > 0, "F6 warning string not found"
-        # Within ~400 chars after the warning, the _notify call should appear.
-        window = src[idx : idx + 400]
-        assert "self._notify(" in window, "F6 _notify must immediately follow the warning"
-
-    # F2 — F-1 None equity at startup should _notify when XFA is active.
-    def test_f2_f1_none_equity_notifies_when_xfa_active(self):
-        from trading_app.live import session_orchestrator as so
-
-        src = open(so.__file__, encoding="utf-8").read()
-        assert "F-1 SILENT BLOCK" in src, "F2 notify message missing"
-        # Must be gated on topstep_xfa_account_size to avoid noise on non-XFA profiles.
-        idx = src.find("F-1 SILENT BLOCK")
-        # Look back 300 chars for the gate.
-        prefix = src[max(0, idx - 300) : idx]
-        assert "topstep_xfa_account_size is not None" in prefix, (
-            "F2 notify must be gated on F-1 active to avoid non-XFA noise"
+        with pytest.raises(RuntimeError, match="Bracket orphan cleanup failed"):
+            _cleanup_orphan_brackets(
+                order_router=order_router,
+                contracts=contracts,
+                instrument="MNQ",
+                force_orphans=False,
+                notify_fn=lambda msg: notify_calls.append(msg),
+            )
+        assert any("BRACKET ORPHAN CLEANUP FAILED" in m for m in notify_calls), (
+            f"Expected notify before raise, got {notify_calls}"
         )
+
+    def test_f8_cleanup_orphan_brackets_force_orphans_bypasses_raise(self):
+        """force_orphans=True → notify but no raise. Operator accepts risk via CLI."""
+        from trading_app.live.session_orchestrator import _cleanup_orphan_brackets
+
+        order_router = MagicMock()
+        order_router.cancel_bracket_orders.side_effect = RuntimeError("broker timeout")
+        contracts = MagicMock()
+        contracts.resolve_front_month.return_value = "MNQM6"
+        notify_calls: list[str] = []
+
+        result = _cleanup_orphan_brackets(
+            order_router=order_router,
+            contracts=contracts,
+            instrument="MNQ",
+            force_orphans=True,
+            notify_fn=lambda msg: notify_calls.append(msg),
+        )
+        assert result == 0
+        assert any("BRACKET ORPHAN CLEANUP FAILED" in m for m in notify_calls)
+
+    def test_f8_cleanup_orphan_brackets_happy_path(self):
+        """Cancel returns >0 → notify the count + return it. No raise."""
+        from trading_app.live.session_orchestrator import _cleanup_orphan_brackets
+
+        order_router = MagicMock()
+        order_router.cancel_bracket_orders.return_value = 3
+        contracts = MagicMock()
+        contracts.resolve_front_month.return_value = "MNQM6"
+        notify_calls: list[str] = []
+
+        result = _cleanup_orphan_brackets(
+            order_router=order_router,
+            contracts=contracts,
+            instrument="MNQ",
+            force_orphans=False,
+            notify_fn=lambda msg: notify_calls.append(msg),
+        )
+        assert result == 3
+        assert any("Cancelled 3 orphaned" in m for m in notify_calls)
+
+    # ── F6 — journal unhealthy in demo should _notify, not just warn ──
+    def test_f6_notify_journal_unhealthy_fires_when_unhealthy(self):
+        """is_healthy=False → notify + return False. Mutation: remove notify_fn()
+        call and this test fails."""
+        from trading_app.live.session_orchestrator import _notify_journal_unhealthy_demo
+
+        journal = MagicMock()
+        journal.is_healthy = False
+        notify_calls: list[str] = []
+
+        result = _notify_journal_unhealthy_demo(
+            journal=journal,
+            journal_mode="demo",
+            notify_fn=lambda msg: notify_calls.append(msg),
+        )
+        assert result is False
+        assert any("TRADE JOURNAL UNHEALTHY" in m for m in notify_calls)
+        assert any("demo" in m for m in notify_calls)
+
+    def test_f6_notify_journal_unhealthy_silent_when_healthy(self):
+        """is_healthy=True → no notify, return True. Avoid happy-path noise."""
+        from trading_app.live.session_orchestrator import _notify_journal_unhealthy_demo
+
+        journal = MagicMock()
+        journal.is_healthy = True
+        notify_calls: list[str] = []
+
+        result = _notify_journal_unhealthy_demo(
+            journal=journal,
+            journal_mode="demo",
+            notify_fn=lambda msg: notify_calls.append(msg),
+        )
+        assert result is True
+        assert notify_calls == []
+
+    # ── F2 — F-1 None equity at startup should _notify when XFA is active ──
+    def test_f2_notify_f1_silent_block_fires_when_xfa_active(self):
+        """topstep_xfa_account_size is set → notify with F-1 SILENT BLOCK.
+        Mutation: change gate to `is None` and this test fails."""
+        from trading_app.live.session_orchestrator import _notify_f1_silent_block_if_active
+
+        risk_mgr = MagicMock()
+        risk_mgr.limits.topstep_xfa_account_size = 50_000
+        notify_calls: list[str] = []
+
+        result = _notify_f1_silent_block_if_active(risk_mgr=risk_mgr, notify_fn=lambda msg: notify_calls.append(msg))
+        assert result is True
+        assert len(notify_calls) == 1
+        assert "F-1 SILENT BLOCK" in notify_calls[0]
+        assert "REJECT" in notify_calls[0]
+
+    def test_f2_notify_f1_silent_block_silent_on_non_xfa(self):
+        """topstep_xfa_account_size is None → no notify. Avoid TC/non-XFA noise."""
+        from trading_app.live.session_orchestrator import _notify_f1_silent_block_if_active
+
+        risk_mgr = MagicMock()
+        risk_mgr.limits.topstep_xfa_account_size = None
+        notify_calls: list[str] = []
+
+        result = _notify_f1_silent_block_if_active(risk_mgr=risk_mgr, notify_fn=lambda msg: notify_calls.append(msg))
+        assert result is False
+        assert notify_calls == []
+
+    # ── F5 — HWM poll exception → real-tracker 3-strikes integration ──
+    def test_f5_real_tracker_three_strikes_fires_halt(self, tmp_path):
+        """Audit gap closure: previous F5 test used MagicMock for the tracker.
+        This integration test uses the REAL AccountHWMTracker and verifies the
+        canonical halt mechanism actually fires after 3 update_equity(None)
+        calls per account_hwm_tracker.py:307-321.
+
+        Mutation probe: change _MAX_CONSECUTIVE_POLL_FAILURES from 3 in
+        account_hwm_tracker.py and this test will fail (off-by-one).
+        """
+        from trading_app.account_hwm_tracker import AccountHWMTracker
+
+        tracker = AccountHWMTracker(
+            account_id="TEST_99999999",
+            firm="topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=tmp_path,
+            dd_type="eod_trailing",
+        )
+
+        # Strike 1 — no halt yet
+        tracker.update_equity(None)
+        halted, _ = tracker.check_halt()
+        assert halted is False, "Strike 1 should not halt"
+
+        # Strike 2 — still no halt
+        tracker.update_equity(None)
+        halted, _ = tracker.check_halt()
+        assert halted is False, "Strike 2 should not halt"
+
+        # Strike 3 — HALT
+        tracker.update_equity(None)
+        halted, reason = tracker.check_halt()
+        assert halted is True, "Strike 3 should fire halt"
+        assert "POLL_FAILURE" in reason, f"Expected POLL_FAILURE reason, got {reason!r}"
+
+    def test_f5_real_tracker_strikes_reset_on_successful_poll(self, tmp_path):
+        """Counter resets on a successful equity update — 2 misses then a
+        success then 2 more misses must NOT halt. Verifies the reset path
+        at account_hwm_tracker.py:325."""
+        from trading_app.account_hwm_tracker import AccountHWMTracker
+
+        tracker = AccountHWMTracker(
+            account_id="TEST_RESET",
+            firm="topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=tmp_path,
+            dd_type="eod_trailing",
+        )
+        tracker.update_equity(None)
+        tracker.update_equity(None)
+        tracker.update_equity(50_000.0)  # success → reset counter
+        tracker.update_equity(None)
+        tracker.update_equity(None)
+
+        halted, _ = tracker.check_halt()
+        assert halted is False, "Counter must reset on successful poll"
 
     # R2 — _notify must dispatch to a worker thread when an event loop is running.
     async def test_r2_notify_uses_to_thread_when_event_loop_running(self):
@@ -1883,9 +2022,7 @@ class TestR1WallClockRollover:
         task_ref: list = []
 
         async def fake_rollover(bar_ts_utc, *, override_trading_day=None):
-            rollover_calls.append(
-                {"bar_ts_utc": bar_ts_utc, "override_trading_day": override_trading_day}
-            )
+            rollover_calls.append({"bar_ts_utc": bar_ts_utc, "override_trading_day": override_trading_day})
             orch.trading_day = override_trading_day or orch.trading_day
             # Raise CancelledError directly — it is a BaseException, not an Exception,
             # so it bypasses the inner `except Exception` handler and is caught by
@@ -1956,15 +2093,11 @@ class TestR1WallClockRollover:
         from trading_app.live import session_orchestrator as so
 
         src = open(so.__file__, encoding="utf-8").read()
-        assert "_wall_clock_rollover_loop" in src, (
-            "R1: _wall_clock_rollover_loop method missing from production code"
-        )
+        assert "_wall_clock_rollover_loop" in src, "R1: _wall_clock_rollover_loop method missing from production code"
         assert "rollover_task = asyncio.create_task(self._wall_clock_rollover_loop())" in src, (
             "R1: rollover_task create_task call missing from run()"
         )
-        assert "rollover_task.cancel()" in src, (
-            "R1: rollover_task.cancel() missing from finally block"
-        )
+        assert "rollover_task.cancel()" in src, "R1: rollover_task.cancel() missing from finally block"
         assert "compute_trading_day_utc_range" in src, (
             "R1: canonical pipeline.dst.compute_trading_day_utc_range must be used (not hardcoded 09:00)"
         )
@@ -2107,9 +2240,7 @@ class TestR3ReconnectCeiling:
         orch.ORCHESTRATOR_BACKOFF_INITIAL = 0.001
         orch.ORCHESTRATOR_BACKOFF_MAX = 0.001
         # Do NOT override ORCHESTRATOR_MAX_RECONNECTS — use the class default (50)
-        assert orch.ORCHESTRATOR_MAX_RECONNECTS >= 50, (
-            "R3: ceiling must be >= 50 for 24h operation"
-        )
+        assert orch.ORCHESTRATOR_MAX_RECONNECTS >= 50, "R3: ceiling must be >= 50 for 24h operation"
 
         crash_count = [0]
         MAX_CRASHES = 6  # more than the old ceiling of 5
@@ -2133,14 +2264,10 @@ class TestR3ReconnectCeiling:
         await orch.run()
 
         # Must have reconnected past the old ceiling of 5
-        assert crash_count[0] == MAX_CRASHES + 1, (
-            f"R3: expected {MAX_CRASHES + 1} feed attempts, got {crash_count[0]}"
-        )
+        assert crash_count[0] == MAX_CRASHES + 1, f"R3: expected {MAX_CRASHES + 1} feed attempts, got {crash_count[0]}"
         # Must NOT have sent an 'Exhausted' notification
         calls = [str(c) for c in orch._notify.call_args_list]
-        assert not any("Exhausted" in c for c in calls), (
-            "R3: Exhausted halt fired before ceiling — ceiling too low"
-        )
+        assert not any("Exhausted" in c for c in calls), "R3: Exhausted halt fired before ceiling — ceiling too low"
 
     # R3-2: stable-run reset clears the reconnect counter after 30 min uptime
     async def test_r3_stable_run_resets_counter(self):
@@ -2190,6 +2317,7 @@ class TestR3ReconnectCeiling:
 
         class PatchedDatetime:
             """Returns stable_start on first call (feed_started_at), stable_end on second."""
+
             @staticmethod
             def now(tz=None):
                 call_seq[0] += 1
@@ -2198,9 +2326,7 @@ class TestR3ReconnectCeiling:
                 return stable_end
 
         with patch("trading_app.live.session_orchestrator.datetime") as mock_dt:
-            mock_dt.now.side_effect = lambda tz=None: (
-                stable_start if call_seq[0] == 0 else stable_end
-            )
+            mock_dt.now.side_effect = lambda tz=None: stable_start if call_seq[0] == 0 else stable_end
             # Simpler: just patch ORCHESTRATOR_STABLE_RUN_SECS to 0 so any run time qualifies
             orch.ORCHESTRATOR_STABLE_RUN_SECS = 0
 
@@ -2210,9 +2336,7 @@ class TestR3ReconnectCeiling:
         # 4 total attempts must succeed without 'Exhausted'.
         assert call_count[0] >= 4, f"R3: expected >= 4 feed calls, got {call_count[0]}"
         calls = [str(c) for c in orch._notify.call_args_list]
-        assert not any("Exhausted" in c for c in calls), (
-            "R3: Exhausted fired — stable-run reset is not working"
-        )
+        assert not any("Exhausted" in c for c in calls), "R3: Exhausted fired — stable-run reset is not working"
 
     # R3-3: state file persists last_connected_at after stable run
     async def test_r3_state_file_persists_last_connected_at(self):
@@ -2256,18 +2380,10 @@ class TestR3ReconnectCeiling:
         from trading_app.live.session_orchestrator import SessionOrchestrator
 
         src = inspect.getsource(SessionOrchestrator)
-        assert "ORCHESTRATOR_MAX_RECONNECTS = 50" in src, (
-            "R3: ceiling must be 50 (not 5) for 24h operation"
-        )
-        assert "ORCHESTRATOR_STABLE_RUN_SECS" in src, (
-            "R3: stable-run reset constant missing"
-        )
-        assert "stable-run reset" in src, (
-            "R3: stable-run reset logic marker missing from production code"
-        )
-        assert "last_connected_at" in src, (
-            "R3: last_connected_at persistence marker missing"
-        )
+        assert "ORCHESTRATOR_MAX_RECONNECTS = 50" in src, "R3: ceiling must be 50 (not 5) for 24h operation"
+        assert "ORCHESTRATOR_STABLE_RUN_SECS" in src, "R3: stable-run reset constant missing"
+        assert "stable-run reset" in src, "R3: stable-run reset logic marker missing from production code"
+        assert "last_connected_at" in src, "R3: last_connected_at persistence marker missing"
 
 
 # ---------------------------------------------------------------------------
