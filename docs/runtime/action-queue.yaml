@@ -44,22 +44,25 @@ items:
   - id: gc_mgc_15m_30m_translation_question
     title: GC to MGC 15m and 30m translation question
     class: research
-    status: ready
+    status: done
     priority: P2
     close_before_new_work: true
     owner_hint: codex-or-claude
-    last_verified_at: 2026-04-24
+    last_verified_at: 2026-04-25
     freshness_sla_days: 5
-    next_action: Define the exact bounded translation question for 15m and 30m apertures instead of reopening broad proxy work.
+    next_action: "Closed — translation framing CLOSE_PATH (GC has 0 rows at 15m/30m, structurally unanswerable). MGC-native 30m RR1.0 sub-region PARK_NOT_KILLED — see triage doc for K=1 pre-reg re-open trigger."
     exit_criteria: Repo has one honest statement for 15m and 30m translation viability or an explicit no-go result.
     blocked_by: []
     decision_refs:
       - docs/runtime/decision-ledger.md
+      - docs/audit/results/2026-04-25-gc-mgc-15m-30m-translation-triage.md
     evidence_refs:
       - docs/plans/2026-04-22-recent-pr-followthrough-queue.md
-      - docs/runtime/stages/gc-mgc-15m-30m-translation-question.md
-    notes_ref: docs/runtime/stages/gc-mgc-15m-30m-translation-question.md
-    override_note:
+      - docs/audit/results/2026-04-19-gc-mgc-translation-audit.md
+      - docs/audit/results/2026-04-19-mgc-payoff-compression-audit.md
+      - docs/audit/results/2026-04-25-gc-mgc-15m-30m-translation-triage.md
+    notes_ref: docs/audit/results/2026-04-25-gc-mgc-15m-30m-translation-triage.md
+    override_note: "CLOSE_PATH on translation framing 2026-04-25; MGC-native 30m RR1.0 PARK_NOT_KILLED with two re-open triggers (K=1 theory-driven prereg authored, OR 5m exit-shape prereg returns NO_RESCUE)."
 
   - id: pr48_mgc_shadow_observation
     title: PR48 MGC shadow-only observation closeout
