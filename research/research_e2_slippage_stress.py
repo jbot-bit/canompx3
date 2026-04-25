@@ -68,7 +68,9 @@ def run_stress_test(instrument: str | None = None):
             print()
 
             # Header
-            header = f"  {'Multiplier':>10} | {'Friction':>10} | {'Avg ExpR':>10} | {'Avg WR':>8} | {'Pct Positive':>12}"
+            header = (
+                f"  {'Multiplier':>10} | {'Friction':>10} | {'Avg ExpR':>10} | {'Avg WR':>8} | {'Pct Positive':>12}"
+            )
             print(header)
             print("  " + "-" * (len(header) - 2))
 
@@ -88,7 +90,9 @@ def run_stress_test(instrument: str | None = None):
                     adjusted_exp_r_list.append(adj_exp_r)
 
                 if not adjusted_exp_r_list:
-                    print(f"  {mult:>10.1f}x | ${stressed.total_friction:>8.2f} | {'N/A':>10} | {'N/A':>8} | {'N/A':>12}")
+                    print(
+                        f"  {mult:>10.1f}x | ${stressed.total_friction:>8.2f} | {'N/A':>10} | {'N/A':>8} | {'N/A':>12}"
+                    )
                     continue
 
                 avg_exp_r = sum(adjusted_exp_r_list) / len(adjusted_exp_r_list)
@@ -135,6 +139,7 @@ def run_stress_test(instrument: str | None = None):
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="E2 slippage stress test")
     parser.add_argument("--instrument", type=str, default=None)
     args = parser.parse_args()

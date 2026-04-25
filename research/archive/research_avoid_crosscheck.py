@@ -65,6 +65,7 @@ CONFIGS = [
 
 # ── Statistical helpers ───────────────────────────────────────────────────────
 
+
 def ttest_1s(arr, mu=0.0):
     a = np.array(arr, dtype=float)
     a = a[~np.isnan(a)]
@@ -93,10 +94,11 @@ def bh(p_values: list, q: float = 0.10) -> set:
 
 # ── SQL builder ───────────────────────────────────────────────────────────────
 
+
 def build_sql(instrument: str, orb_label: str, rr: float, cb: int, model: str) -> str:
     """Build CTE query parameterized by instrument and session."""
     size_col = f"orb_{orb_label}_size"
-    dir_col  = f"orb_{orb_label}_break_dir"
+    dir_col = f"orb_{orb_label}_break_dir"
 
     return f"""
 WITH base AS (
@@ -214,30 +216,30 @@ def load(instrument, orb_label, rr, cb, model):
 
 # ── Per-session analysis ───────────────────────────────────────────────────────
 
+
 def analyse_session(df: pd.DataFrame, config_label: str) -> list[dict]:
     """Returns records for global BH pool. Prints detailed breakdown."""
     records = []
     n_base, avg_base, wr_base, t_base, p_base = ttest_1s(df["pnl_r"])
     print(f"  Baseline: N={n_base}, avgR={avg_base:+.3f}, WR={wr_base:.1%}, p={p_base:.4f}")
 
-    records.append(dict(config=config_label, layer="baseline", group="all",
-                        n=n_base, avg_r=avg_base, wr=wr_base, t=t_base, p=p_base))
+    records.append(
+        dict(
+            config=config_label, layer="baseline", group="all", n=n_base, avg_r=avg_base, wr=wr_base, t=t_base, p=p_base
+        )
+    )
 
     # All 9 vel×comp combinations
     for vel in ["Expanding", "Stable", "Contracting"]:
         for comp in ["Compressed", "Neutral", "Expanded"]:
-            sub = df[
-                (df["atr_vel_regime"] == vel) & (df["compression_tier"] == comp)
-            ]["pnl_r"]
+            sub = df[(df["atr_vel_regime"] == vel) & (df["compression_tier"] == comp)]["pnl_r"]
             n, avg, wr, t, p = ttest_1s(sub)
             group = f"{vel}×{comp}"
-            records.append(dict(config=config_label, layer="vel_x_comp", group=group,
-                                n=n, avg_r=avg, wr=wr, t=t, p=p))
+            records.append(dict(config=config_label, layer="vel_x_comp", group=group, n=n, avg_r=avg, wr=wr, t=t, p=p))
             star = "  <-- AVOID?" if (not np.isnan(avg) and avg < -0.20 and n >= 30) else ""
             star = "  <-- BOOST?" if (not np.isnan(avg) and avg > 0.20 and n >= 30) else star
             if not np.isnan(avg):
-                print(f"    {group:<25}  N={n:>4}  avgR={avg:>+7.3f}  WR={wr:>5.1%}  "
-                      f"t={t:>6.2f}  p={p:.4f}{star}")
+                print(f"    {group:<25}  N={n:>4}  avgR={avg:>+7.3f}  WR={wr:>5.1%}  t={t:>6.2f}  p={p:.4f}{star}")
             else:
                 print(f"    {group:<25}  N={n:>4}  (skip - too few)")
 
@@ -283,8 +285,7 @@ def run():
             print(f"  SKIP — insufficient data (N={len(df)})")
             continue
 
-        print(f"  N={len(df)} trades  |  "
-              f"{df['trading_day'].min().date()} → {df['trading_day'].max().date()}")
+        print(f"  N={len(df)} trades  |  {df['trading_day'].min().date()} → {df['trading_day'].max().date()}")
 
         records = analyse_session(df, label)
         all_records.extend(records)
@@ -323,31 +324,33 @@ def run():
     if avoid_survivors:
         print("  AVOID signals (BH-sig, avgR < -0.10):")
         for r in sorted(avoid_survivors, key=lambda x: x["avg_r"]):
-            print(f"    [{r['config']:<22}]  {r['group']:<25}  "
-                  f"N={r['n']:>4}  avgR={r['avg_r']:>+7.3f}  WR={r['wr']:.1%}  p={r['p']:.4f}")
+            print(
+                f"    [{r['config']:<22}]  {r['group']:<25}  "
+                f"N={r['n']:>4}  avgR={r['avg_r']:>+7.3f}  WR={r['wr']:.1%}  p={r['p']:.4f}"
+            )
 
     if boost_survivors:
         print()
         print("  BOOST signals (BH-sig, avgR > +0.10):")
         for r in sorted(boost_survivors, key=lambda x: -x["avg_r"]):
-            print(f"    [{r['config']:<22}]  {r['group']:<25}  "
-                  f"N={r['n']:>4}  avgR={r['avg_r']:>+7.3f}  WR={r['wr']:.1%}  p={r['p']:.4f}")
+            print(
+                f"    [{r['config']:<22}]  {r['group']:<25}  "
+                f"N={r['n']:>4}  avgR={r['avg_r']:>+7.3f}  WR={r['wr']:.1%}  p={r['p']:.4f}"
+            )
 
     if other_survivors:
         print()
         print("  Other BH-sig (comparison tests etc.):")
         for r in other_survivors:
             avg_s = f"{r['avg_r']:+.3f}" if not np.isnan(r["avg_r"]) else "  —"
-            print(f"    [{r['config']:<22}]  {r['group']:<25}  "
-                  f"N={r['n']:>4}  avgR={avg_s}  p={r['p']:.4f}")
+            print(f"    [{r['config']:<22}]  {r['group']:<25}  N={r['n']:>4}  avgR={avg_s}  p={r['p']:.4f}")
 
     # ── Pass 3: Year-by-year for Contracting×Neutral across all sessions ───────
     print(f"\n\n{'=' * 72}")
     print("YEAR-BY-YEAR — Contracting×Neutral AVOID signal per session")
     print("=" * 72)
-    print(f"  {'Config':<22}  {'Yrs -ve':>7}  {'Yrs tot':>7}  {'Hit%':>6}  "
-          f"{'Avg avoidR':>10}  {'Years detail'}")
-    print(f"  {'─'*22}  {'─'*7}  {'─'*7}  {'─'*6}  {'─'*10}")
+    print(f"  {'Config':<22}  {'Yrs -ve':>7}  {'Yrs tot':>7}  {'Hit%':>6}  {'Avg avoidR':>10}  {'Years detail'}")
+    print(f"  {'─' * 22}  {'─' * 7}  {'─' * 7}  {'─' * 6}  {'─' * 10}")
 
     summary_rows = []
     for label, df in session_dfs.items():
@@ -358,14 +361,11 @@ def run():
         n_tot = len(yby)
         hit_pct = n_neg / n_tot if n_tot else 0
         avg_r_all = np.mean([avg for _, _, avg, _ in yby])
-        yr_detail = "  ".join(
-            f"{yr}:{avg:+.2f}({'−' if avg < 0 else '+'})"
-            for yr, _, avg, _ in yby
+        yr_detail = "  ".join(f"{yr}:{avg:+.2f}({'−' if avg < 0 else '+'})" for yr, _, avg, _ in yby)
+        print(f"  {label:<22}  {n_neg:>7}  {n_tot:>7}  {hit_pct:>6.0%}  {avg_r_all:>+10.3f}  {yr_detail}")
+        summary_rows.append(
+            dict(config=label, neg_years=n_neg, total_years=n_tot, hit_pct=hit_pct, avg_avoid_r=avg_r_all)
         )
-        print(f"  {label:<22}  {n_neg:>7}  {n_tot:>7}  {hit_pct:>6.0%}  "
-              f"{avg_r_all:>+10.3f}  {yr_detail}")
-        summary_rows.append(dict(config=label, neg_years=n_neg, total_years=n_tot,
-                                 hit_pct=hit_pct, avg_avoid_r=avg_r_all))
 
     # ── Pass 4: Scan for other consistent anomalies across sessions ────────────
     print(f"\n\n{'=' * 72}")
@@ -383,9 +383,8 @@ def run():
         combo = r["group"]
         combo_results.setdefault(combo, []).append(r["avg_r"])
 
-    print(f"\n  {'Combo':<25}  {'N_sessions':>10}  {'Pct -ve':>8}  "
-          f"{'Pct +ve':>8}  {'Med avgR':>9}  {'Verdict'}")
-    print(f"  {'─'*25}  {'─'*10}  {'─'*8}  {'─'*8}  {'─'*9}")
+    print(f"\n  {'Combo':<25}  {'N_sessions':>10}  {'Pct -ve':>8}  {'Pct +ve':>8}  {'Med avgR':>9}  {'Verdict'}")
+    print(f"  {'─' * 25}  {'─' * 10}  {'─' * 8}  {'─' * 8}  {'─' * 9}")
 
     for combo, avg_rs in sorted(combo_results.items(), key=lambda x: np.median(x[1])):
         n_sess = len(avg_rs)
@@ -410,8 +409,7 @@ def run():
         elif pct_pos >= 0.60 and med_r > 0.15:
             verdict = "  (weak boost)"
 
-        print(f"  {combo:<25}  {n_sess:>10}  {pct_neg:>8.0%}  {pct_pos:>8.0%}  "
-              f"{med_r:>+9.3f}  {verdict}")
+        print(f"  {combo:<25}  {n_sess:>10}  {pct_neg:>8.0%}  {pct_pos:>8.0%}  {med_r:>+9.3f}  {verdict}")
 
     # ── Save output ───────────────────────────────────────────────────────────
     df_out = pd.DataFrame(all_records)
@@ -423,9 +421,7 @@ def run():
     df_out["bh_sig"] = [i in sig_set for i in range(len(all_records))]
     df_out.to_csv(OUTPUT_DIR / "avoid_crosscheck_all.csv", index=False)
 
-    pd.DataFrame(summary_rows).to_csv(
-        OUTPUT_DIR / "avoid_crosscheck_yearly.csv", index=False
-    )
+    pd.DataFrame(summary_rows).to_csv(OUTPUT_DIR / "avoid_crosscheck_yearly.csv", index=False)
 
     print(f"\nOutput: {OUTPUT_DIR}/avoid_crosscheck_*.csv")
     print()

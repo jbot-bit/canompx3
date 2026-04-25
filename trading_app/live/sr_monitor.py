@@ -11,10 +11,10 @@ standardized trade outcome stream.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from functools import lru_cache
 import math
 import random
+from dataclasses import dataclass, field
+from functools import lru_cache
 
 
 def _score_coefficients(delta: float, variance_ratio: float) -> tuple[float, float, float]:
@@ -86,14 +86,17 @@ def calibrate_sr_threshold(
 
     low = 1.0
     high = 10.0
-    while _estimate_arl(
-        high,
-        delta=delta,
-        variance_ratio=variance_ratio,
-        n_paths=n_paths,
-        max_steps=max_steps,
-        seed=seed,
-    ) < target_arl:
+    while (
+        _estimate_arl(
+            high,
+            delta=delta,
+            variance_ratio=variance_ratio,
+            n_paths=n_paths,
+            max_steps=max_steps,
+            seed=seed,
+        )
+        < target_arl
+    ):
         low = high
         high *= 2.0
         if high > 1_000_000:
@@ -162,4 +165,3 @@ class ShiryaevRobertsMonitor:
         if self.threshold <= 0:
             return 0.0
         return self.sr_stat / self.threshold
-

@@ -101,6 +101,7 @@ def get_outright_config(instrument: str, filename: str):
 # PHASE 1: LOAD BREAK EVENTS FROM DAILY_FEATURES
 # ---------------------------------------------------------------------------
 
+
 def load_break_events() -> pd.DataFrame:
     """Load all break events with outcomes from canonical layers."""
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -168,6 +169,7 @@ def load_break_events() -> pd.DataFrame:
 # PHASE 2: PROCESS 1S FILES — COMPUTE break_delay_sec
 # ---------------------------------------------------------------------------
 
+
 def vectorized_trading_day(ts_series: pd.Series) -> pd.Series:
     """Vectorized trading day computation. Same logic as pipeline."""
     ts_bris = ts_series.dt.tz_convert("Australia/Brisbane")
@@ -227,9 +229,7 @@ def process_1s_file(filepath: Path, instrument: str, break_events: pd.DataFrame)
     for td in trading_days:
         day_df = df[df["trading_day"] == td]
         volumes = day_df.groupby("symbol")["volume"].sum().to_dict()
-        front = choose_front_contract(
-            volumes, outright_pattern=outright_pattern, prefix_len=prefix_len
-        )
+        front = choose_front_contract(volumes, outright_pattern=outright_pattern, prefix_len=prefix_len)
         if front:
             front_contracts[td] = front
 
@@ -243,8 +243,7 @@ def process_1s_file(filepath: Path, instrument: str, break_events: pd.DataFrame)
     # Get break events for this file's date range
     file_dates = set(df["trading_day"].unique())
     inst_events = break_events[
-        (break_events["instrument"] == instrument)
-        & (break_events["trading_day"].isin(file_dates))
+        (break_events["instrument"] == instrument) & (break_events["trading_day"].isin(file_dates))
     ]
 
     if inst_events.empty:
@@ -308,23 +307,25 @@ def process_1s_file(filepath: Path, instrument: str, break_events: pd.DataFrame)
         delay_sec = (bar_ts - orb_end).total_seconds()
         break_dir_1s = "long" if first_bar["close"] > orb_high else "short"
 
-        results.append({
-            "trading_day": td,
-            "instrument": instrument,
-            "session": sess,
-            "break_delay_sec": delay_sec,
-            "break_delay_min_1s": delay_sec / 60.0,
-            "break_delay_min_1m": event["break_delay_min"],
-            "break_dir_1s": break_dir_1s,
-            "break_dir_1m": event["break_dir"],
-            "break_ts_1s": bar_ts,
-            "break_ts_1m": event["break_ts_1m"],
-            "orb_high": orb_high,
-            "orb_low": orb_low,
-            "atr_20": event["atr_20"],
-            "outcome": event["outcome"],
-            "pnl_r": event["pnl_r"],
-        })
+        results.append(
+            {
+                "trading_day": td,
+                "instrument": instrument,
+                "session": sess,
+                "break_delay_sec": delay_sec,
+                "break_delay_min_1s": delay_sec / 60.0,
+                "break_delay_min_1m": event["break_delay_min"],
+                "break_dir_1s": break_dir_1s,
+                "break_dir_1m": event["break_dir"],
+                "break_ts_1s": bar_ts,
+                "break_ts_1m": event["break_ts_1m"],
+                "orb_high": orb_high,
+                "orb_low": orb_low,
+                "atr_20": event["atr_20"],
+                "outcome": event["outcome"],
+                "pnl_r": event["pnl_r"],
+            }
+        )
 
     return results
 
@@ -343,8 +344,7 @@ def process_instrument(instrument: str, break_events: pd.DataFrame) -> pd.DataFr
     for f in files:
         # Skip duplicate daily files (keep the one with wider range)
         if f.name.startswith("daily_") and any(
-            f2.name.startswith("daily_") and f2 != f and f2.name < f.name
-            for f2 in files
+            f2.name.startswith("daily_") and f2 != f and f2.name < f.name for f2 in files
         ):
             # Keep the latest daily file only
             pass
@@ -354,7 +354,7 @@ def process_instrument(instrument: str, break_events: pd.DataFrame) -> pd.DataFr
 
     all_results = []
     for i, filepath in enumerate(unique_files):
-        print(f"    [{i+1}/{len(unique_files)}] {filepath.name}...", end=" ", flush=True)
+        print(f"    [{i + 1}/{len(unique_files)}] {filepath.name}...", end=" ", flush=True)
         results = process_1s_file(filepath, instrument, break_events)
         print(f"{len(results)} breaks matched")
         all_results.extend(results)
@@ -373,6 +373,7 @@ def process_instrument(instrument: str, break_events: pd.DataFrame) -> pd.DataFr
 # ---------------------------------------------------------------------------
 # PHASE 3: VALIDATION — CORRELATION & SPOT-CHECKS
 # ---------------------------------------------------------------------------
+
 
 def validate_results(results_df: pd.DataFrame):
     """Validate 1s measurements against 1m pipeline values."""
@@ -419,10 +420,12 @@ def validate_results(results_df: pd.DataFrame):
             sample = inst_df.sample(5, random_state=42)
             for _, row in sample.iterrows():
                 diff_min = row["break_delay_min_1m"] - row["break_delay_min_1s"]
-                print(f"  {inst} {row['session']} {row['trading_day']}: "
-                      f"1m={row['break_delay_min_1m']:.0f}min, "
-                      f"1s={row['break_delay_sec']:.0f}s ({row['break_delay_min_1s']:.2f}min), "
-                      f"diff={diff_min:.2f}min, dir_1s={row['break_dir_1s']}")
+                print(
+                    f"  {inst} {row['session']} {row['trading_day']}: "
+                    f"1m={row['break_delay_min_1m']:.0f}min, "
+                    f"1s={row['break_delay_sec']:.0f}s ({row['break_delay_min_1s']:.2f}min), "
+                    f"diff={diff_min:.2f}min, dir_1s={row['break_dir_1s']}"
+                )
 
     return r  # Return correlation for kill criterion
 
@@ -430,6 +433,7 @@ def validate_results(results_df: pd.DataFrame):
 # ---------------------------------------------------------------------------
 # PHASE 4: WR ANALYSIS — DOES 1s IMPROVE THRESHOLD SELECTION?
 # ---------------------------------------------------------------------------
+
 
 def wr_analysis(results_df: pd.DataFrame):
     """Compare WR spreads at 1m vs 1s thresholds."""
@@ -470,25 +474,27 @@ def wr_analysis(results_df: pd.DataFrame):
                 p_pool = (fast["is_win"].sum() + slow["is_win"].sum()) / (n1 + n2)
                 if p_pool == 0 or p_pool == 1:
                     continue
-                se = np.sqrt(p_pool * (1 - p_pool) * (1/n1 + 1/n2))
+                se = np.sqrt(p_pool * (1 - p_pool) * (1 / n1 + 1 / n2))
                 z = wr_spread / se
                 p_val = 2 * (1 - stats.norm.cdf(abs(z)))
 
-                all_tests.append({
-                    "instrument": inst,
-                    "session": sess,
-                    "threshold_sec": threshold_sec,
-                    "threshold_min": threshold_sec / 60,
-                    "n_fast": n1,
-                    "n_slow": n2,
-                    "wr_fast": wr_fast,
-                    "wr_slow": wr_slow,
-                    "wr_spread": wr_spread,
-                    "z": z,
-                    "p_value": p_val,
-                    "expr_fast": fast["pnl_r"].mean(),
-                    "expr_slow": slow["pnl_r"].mean(),
-                })
+                all_tests.append(
+                    {
+                        "instrument": inst,
+                        "session": sess,
+                        "threshold_sec": threshold_sec,
+                        "threshold_min": threshold_sec / 60,
+                        "n_fast": n1,
+                        "n_slow": n2,
+                        "wr_fast": wr_fast,
+                        "wr_slow": wr_slow,
+                        "wr_spread": wr_spread,
+                        "z": z,
+                        "p_value": p_val,
+                        "expr_fast": fast["pnl_r"].mean(),
+                        "expr_slow": slow["pnl_r"].mean(),
+                    }
+                )
 
     if not all_tests:
         print("  No tests met minimum N requirements!")
@@ -511,14 +517,18 @@ def wr_analysis(results_df: pd.DataFrame):
 
     # Print significant results
     if n_sig > 0:
-        print(f"\n{'Inst':<5} {'Session':<16} {'Thr_s':<6} {'N_fast':<7} {'N_slow':<7} "
-              f"{'WR_fast':>8} {'WR_slow':>8} {'Spread':>8} {'p-value':>10} {'BH'}")
+        print(
+            f"\n{'Inst':<5} {'Session':<16} {'Thr_s':<6} {'N_fast':<7} {'N_slow':<7} "
+            f"{'WR_fast':>8} {'WR_slow':>8} {'Spread':>8} {'p-value':>10} {'BH'}"
+        )
         print("-" * 95)
         for _, row in sig.iterrows():
-            print(f"{row['instrument']:<5} {row['session']:<16} {row['threshold_sec']:<6.0f} "
-                  f"{row['n_fast']:<7.0f} {row['n_slow']:<7.0f} "
-                  f"{row['wr_fast']:>7.1%} {row['wr_slow']:>7.1%} "
-                  f"{row['wr_spread']:>+7.1%} {row['p_value']:>10.4f} {'*'}")
+            print(
+                f"{row['instrument']:<5} {row['session']:<16} {row['threshold_sec']:<6.0f} "
+                f"{row['n_fast']:<7.0f} {row['n_slow']:<7.0f} "
+                f"{row['wr_fast']:>7.1%} {row['wr_slow']:>7.1%} "
+                f"{row['wr_spread']:>+7.1%} {row['p_value']:>10.4f} {'*'}"
+            )
 
     # Now compare: for the 3 validated sessions, is 1s better than 1m?
     validated_sessions = [
@@ -528,8 +538,7 @@ def wr_analysis(results_df: pd.DataFrame):
     ]
 
     print("\n--- COMPARISON: 1s vs 1m for 3 validated sessions ---")
-    print(f"{'Inst':<5} {'Session':<16} {'Thr':<6} "
-          f"{'WR_spread_1s':>13} {'WR_spread_1m':>13} {'Delta':>8} {'Verdict'}")
+    print(f"{'Inst':<5} {'Session':<16} {'Thr':<6} {'WR_spread_1s':>13} {'WR_spread_1m':>13} {'Delta':>8} {'Verdict'}")
     print("-" * 80)
 
     for inst, sess in validated_sessions:
@@ -543,9 +552,7 @@ def wr_analysis(results_df: pd.DataFrame):
         slow_1m = sess_df[sess_df["break_delay_min_1m"] > 5]
 
         # Best 1s threshold for this session (lowest p-value)
-        sess_tests = tests_df[
-            (tests_df["instrument"] == inst) & (tests_df["session"] == sess)
-        ].sort_values("p_value")
+        sess_tests = tests_df[(tests_df["instrument"] == inst) & (tests_df["session"] == sess)].sort_values("p_value")
 
         if sess_tests.empty:
             print(f"{inst:<5} {sess:<16} NO TESTS")
@@ -572,8 +579,9 @@ def wr_analysis(results_df: pd.DataFrame):
             else:
                 verdict = "EQUIVALENT"
 
-        print(f"{inst:<5} {sess:<16} {thr_sec:<6}s "
-              f"{wr_spread_1s:>+12.1%} {wr_spread_1m:>+12.1%} {delta:>+7.1%} {verdict}")
+        print(
+            f"{inst:<5} {sess:<16} {thr_sec:<6}s {wr_spread_1s:>+12.1%} {wr_spread_1m:>+12.1%} {delta:>+7.1%} {verdict}"
+        )
 
     # Check for novel sessions (BH significant, not in validated set)
     validated_set = {(i, s) for i, s in validated_sessions}
@@ -584,8 +592,10 @@ def wr_analysis(results_df: pd.DataFrame):
         print("  None found.")
     else:
         for _, row in novel.iterrows():
-            print(f"  {row['instrument']} {row['session']} @ {row['threshold_sec']:.0f}s: "
-                  f"WR spread {row['wr_spread']:+.1%}, p={row['p_value']:.4f}")
+            print(
+                f"  {row['instrument']} {row['session']} @ {row['threshold_sec']:.0f}s: "
+                f"WR spread {row['wr_spread']:+.1%}, p={row['p_value']:.4f}"
+            )
 
     return tests_df
 
@@ -593,6 +603,7 @@ def wr_analysis(results_df: pd.DataFrame):
 # ---------------------------------------------------------------------------
 # PHASE 5: ATR CONFOUND CONTROL
 # ---------------------------------------------------------------------------
+
 
 def atr_confound_check(results_df: pd.DataFrame, tests_df: pd.DataFrame):
     """Check if 1s break speed is confounded with ATR."""
@@ -625,9 +636,7 @@ def atr_confound_check(results_df: pd.DataFrame, tests_df: pd.DataFrame):
             continue
 
         # ATR tercile split
-        sess_df["atr_tercile"] = pd.qcut(
-            sess_df["atr_20"], q=3, labels=["low", "mid", "high"], duplicates="drop"
-        )
+        sess_df["atr_tercile"] = pd.qcut(sess_df["atr_20"], q=3, labels=["low", "mid", "high"], duplicates="drop")
 
         # Test break speed within each ATR tercile
         controlled_spreads = []
@@ -642,14 +651,17 @@ def atr_confound_check(results_df: pd.DataFrame, tests_df: pd.DataFrame):
         if controlled_spreads:
             avg_controlled = np.mean(controlled_spreads)
             raw_spread = test["wr_spread"]
-            print(f"  {inst} {sess} @ {thr:.0f}s: raw={raw_spread:+.1%}, "
-                  f"ATR-controlled={avg_controlled:+.1%} "
-                  f"({'SURVIVES' if avg_controlled > 0.02 else 'WEAKENS'})")
+            print(
+                f"  {inst} {sess} @ {thr:.0f}s: raw={raw_spread:+.1%}, "
+                f"ATR-controlled={avg_controlled:+.1%} "
+                f"({'SURVIVES' if avg_controlled > 0.02 else 'WEAKENS'})"
+            )
 
 
 # ---------------------------------------------------------------------------
 # PHASE 6: ERA CHECK — PRE-2019 vs POST-2019
 # ---------------------------------------------------------------------------
+
 
 def era_check(results_df: pd.DataFrame):
     """Check if signal differs between parent (pre-2019) and native (post-2019) eras."""
@@ -678,13 +690,13 @@ def era_check(results_df: pd.DataFrame):
             slow = era_df[era_df["break_delay_sec"] > 300]
             if len(fast) >= 20 and len(slow) >= 20:
                 spread = fast["is_win"].mean() - slow["is_win"].mean()
-                print(f"  {era}: WR spread (FAST300s) = {spread:+.1%} "
-                      f"(N_fast={len(fast)}, N_slow={len(slow)})")
+                print(f"  {era}: WR spread (FAST300s) = {spread:+.1%} (N_fast={len(fast)}, N_slow={len(slow)})")
 
 
 # ---------------------------------------------------------------------------
 # PHASE 7: KILL / PASS VERDICT
 # ---------------------------------------------------------------------------
+
 
 def verdict(correlation: float, tests_df: pd.DataFrame, results_df: pd.DataFrame):
     """Apply kill/pass criteria from plan."""
@@ -733,8 +745,7 @@ def verdict(correlation: float, tests_df: pd.DataFrame, results_df: pd.DataFrame
 
         if best_spread_1s > wr_1m + 0.02:
             any_improvement = True
-            print(f"  PASS: {inst} {sess} — 1s WR spread {best_spread_1s:+.1%} > "
-                  f"1m WR spread {wr_1m:+.1%} + 2%")
+            print(f"  PASS: {inst} {sess} — 1s WR spread {best_spread_1s:+.1%} > 1m WR spread {wr_1m:+.1%} + 2%")
 
     # Check 2: Novel sessions with BH significance?
     validated_set = {(i, s) for i, s in validated_sessions}
@@ -766,6 +777,7 @@ def verdict(correlation: float, tests_df: pd.DataFrame, results_df: pd.DataFrame
 # ---------------------------------------------------------------------------
 # MAIN
 # ---------------------------------------------------------------------------
+
 
 def main():
     print("=" * 70)

@@ -114,7 +114,9 @@ def _load_symbol_bars(
     return bars
 
 
-def _first_touch_entry(day_bars: pd.DataFrame, trading_day, session: str, break_dir: str, orb_high: float, orb_low: float):
+def _first_touch_entry(
+    day_bars: pd.DataFrame, trading_day, session: str, break_dir: str, orb_high: float, orb_low: float
+):
     """Return first touch entry tuple: (entry_ts, entry_price, stop_price) or None."""
     w_start, w_end = _break_detection_window(trading_day, session, 5)
     w = day_bars[(day_bars["ts_utc"] >= w_start) & (day_bars["ts_utc"] < w_end)]
@@ -265,14 +267,11 @@ def _summarize(df: pd.DataFrame) -> pd.DataFrame:
     if use.empty:
         return pd.DataFrame()
 
-    grp = (
-        use.groupby(["symbol", "session", "model"], as_index=False)
-        .agg(
-            n=("pnl_r", "count"),
-            avg_r=("pnl_r", "mean"),
-            total_r=("pnl_r", "sum"),
-            wr=("pnl_r", lambda s: (s > 0).mean()),
-        )
+    grp = use.groupby(["symbol", "session", "model"], as_index=False).agg(
+        n=("pnl_r", "count"),
+        avg_r=("pnl_r", "mean"),
+        total_r=("pnl_r", "sum"),
+        wr=("pnl_r", lambda s: (s > 0).mean()),
     )
     return grp.sort_values(["session", "symbol", "model"])
 
@@ -284,14 +283,11 @@ def _summarize_by_direction(df: pd.DataFrame) -> pd.DataFrame:
     if use.empty:
         return pd.DataFrame()
 
-    grp = (
-        use.groupby(["symbol", "session", "model", "break_dir"], as_index=False)
-        .agg(
-            n=("pnl_r", "count"),
-            avg_r=("pnl_r", "mean"),
-            total_r=("pnl_r", "sum"),
-            wr=("pnl_r", lambda s: (s > 0).mean()),
-        )
+    grp = use.groupby(["symbol", "session", "model", "break_dir"], as_index=False).agg(
+        n=("pnl_r", "count"),
+        avg_r=("pnl_r", "mean"),
+        total_r=("pnl_r", "sum"),
+        wr=("pnl_r", lambda s: (s > 0).mean()),
     )
     return grp.sort_values(["session", "symbol", "break_dir", "model"])
 
@@ -378,17 +374,14 @@ def main() -> None:
         finding_lines.append("## Delta vs E0_CB1")
         for r in pivot.itertuples(index=False):
             if hasattr(r, "delta_pre_minus_e0"):
-                finding_lines.append(
-                    f"- {r.symbol} {r.session}: Δ(pre - E0)={r.delta_pre_minus_e0:+.4f}"
-                )
+                finding_lines.append(f"- {r.symbol} {r.session}: Δ(pre - E0)={r.delta_pre_minus_e0:+.4f}")
 
     if not summary_dir.empty:
         finding_lines.append("")
         finding_lines.append("## Directional summary (avgR)")
         for r in summary_dir.itertuples(index=False):
             finding_lines.append(
-                f"- {r.symbol} {r.session} {r.break_dir} {r.model}: "
-                f"N={r.n}, avgR={r.avg_r:+.4f}, WR={r.wr:.1%}"
+                f"- {r.symbol} {r.session} {r.break_dir} {r.model}: N={r.n}, avgR={r.avg_r:+.4f}, WR={r.wr:.1%}"
             )
 
     findings_path = out_dir / "preconfirm_limit_touch_findings.md"

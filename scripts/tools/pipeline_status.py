@@ -166,10 +166,7 @@ def preflight_check(
     params = rule["params"](instrument, orb_minutes)
     query = rule["query"]
     if step == "edge_families":
-        query = (
-            f"SELECT COUNT(*) FROM {deployable_validated_relation(con)} "
-            "WHERE instrument = $1"
-        )
+        query = f"SELECT COUNT(*) FROM {deployable_validated_relation(con)} WHERE instrument = $1"
 
     row = con.execute(query, params).fetchone()
     count = row[0] if row else 0

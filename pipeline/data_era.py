@@ -52,10 +52,7 @@ def _lookup(instrument: str) -> dict:
     key = instrument.upper()
     cfg = ASSET_CONFIGS.get(key)
     if cfg is None:
-        raise ValueError(
-            f"Unknown instrument: {instrument!r}. "
-            f"Supported: {sorted(ASSET_CONFIGS.keys())}"
-        )
+        raise ValueError(f"Unknown instrument: {instrument!r}. Supported: {sorted(ASSET_CONFIGS.keys())}")
     return cfg
 
 
@@ -142,9 +139,7 @@ def micro_launch_day(instrument: str) -> date:
     cfg = _lookup(instrument)
     launch = cfg.get("minimum_start_date")
     if launch is None:
-        raise ValueError(
-            f"{instrument.upper()} has no minimum_start_date — config gap"
-        )
+        raise ValueError(f"{instrument.upper()} has no minimum_start_date — config gap")
     return launch
 
 
@@ -176,9 +171,7 @@ def era_for_source_symbol(instrument: str, source_symbol: str) -> DataEra:
             source_symbol matches neither canonical pattern
     """
     if source_symbol is None or source_symbol == "":
-        raise ValueError(
-            f"source_symbol is required for era classification (got {source_symbol!r})"
-        )
+        raise ValueError(f"source_symbol is required for era classification (got {source_symbol!r})")
 
     cfg = _lookup(instrument)
     own_pattern = cfg["outright_pattern"]

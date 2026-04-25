@@ -98,8 +98,7 @@ def compute_file_sha(path: Path) -> str:
     """
     if not path.is_file():
         raise HypothesisLoaderError(
-            f"Hypothesis file not found: {path}. "
-            f"See docs/audit/hypotheses/README.md for the registry workflow."
+            f"Hypothesis file not found: {path}. See docs/audit/hypotheses/README.md for the registry workflow."
         )
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -161,6 +160,20 @@ _REQUIRED_TOP_LEVEL_KEYS = {
     "hypotheses",
 }
 
+_ALLOWED_RESEARCH_QUESTION_TYPES = {
+    "standalone_edge",
+    "conditional_role",
+}
+
+_ALLOWED_ROLE_KINDS = {
+    "standalone",
+    "filter",
+    "conditioner",
+    "allocator",
+    "confluence",
+    "execution",
+}
+
 
 def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
     """Parse a hypothesis YAML file and validate its schema, returning metadata.
@@ -195,8 +208,7 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
     """
     if not path.is_file():
         raise HypothesisLoaderError(
-            f"Hypothesis file not found: {path}. "
-            f"See docs/audit/hypotheses/README.md for the registry workflow."
+            f"Hypothesis file not found: {path}. See docs/audit/hypotheses/README.md for the registry workflow."
         )
     try:
         raw_text = path.read_text(encoding="utf-8")
@@ -207,9 +219,7 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
         raise HypothesisLoaderError(f"Cannot read hypothesis file {path}: {exc}") from exc
 
     if not isinstance(data, dict):
-        raise HypothesisLoaderError(
-            f"Hypothesis file {path} top-level must be a mapping, got {type(data).__name__}."
-        )
+        raise HypothesisLoaderError(f"Hypothesis file {path} top-level must be a mapping, got {type(data).__name__}.")
 
     missing_top = _REQUIRED_TOP_LEVEL_KEYS - data.keys()
     if missing_top:
@@ -247,9 +257,7 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
 
     hypotheses = data["hypotheses"]
     if not isinstance(hypotheses, list) or len(hypotheses) == 0:
-        raise HypothesisLoaderError(
-            f"Hypothesis file {path} 'hypotheses' must be a non-empty list."
-        )
+        raise HypothesisLoaderError(f"Hypothesis file {path} 'hypotheses' must be a non-empty list.")
 
     # has_theory is True iff at least one hypothesis cites a theory_citation
     # field. Used by the Chordia gate to pick the 3.00 (with theory) vs 3.79
@@ -265,8 +273,14 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
     testing_mode = metadata.get("testing_mode", "family")
     if testing_mode not in ("family", "individual"):
         raise HypothesisLoaderError(
-            f"Hypothesis file {path} metadata.testing_mode must be 'family' or 'individual', "
-            f"got {testing_mode!r}."
+            f"Hypothesis file {path} metadata.testing_mode must be 'family' or 'individual', got {testing_mode!r}."
+        )
+
+    research_question_type = metadata.get("research_question_type", "standalone_edge")
+    if research_question_type not in _ALLOWED_RESEARCH_QUESTION_TYPES:
+        raise HypothesisLoaderError(
+            f"Hypothesis file {path} metadata.research_question_type must be one of "
+            f"{sorted(_ALLOWED_RESEARCH_QUESTION_TYPES)}, got {research_question_type!r}."
         )
 
     # Amendment 3.0 condition 1: individual mode requires theory_citation on
@@ -280,6 +294,31 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
                     f"Amendment 3.0 requires theory_citation on EVERY hypothesis for Pathway B."
                 )
 
+    if research_question_type == "conditional_role":
+        for i, h in enumerate(hypotheses):
+            if not isinstance(h, dict):
+                raise HypothesisLoaderError(
+                    f"Hypothesis file {path} conditional_role hypothesis {i + 1} must be a mapping."
+                )
+            role = h.get("role")
+            if not isinstance(role, dict):
+                raise HypothesisLoaderError(
+                    f"Hypothesis file {path} uses research_question_type='conditional_role' but "
+                    f"hypothesis {i + 1} is missing a role block."
+                )
+            kind = role.get("kind")
+            if kind not in _ALLOWED_ROLE_KINDS:
+                raise HypothesisLoaderError(
+                    f"Hypothesis file {path} hypothesis {i + 1} role.kind must be one of "
+                    f"{sorted(_ALLOWED_ROLE_KINDS)}, got {kind!r}."
+                )
+            for field in ("parent", "comparator", "primary_metric", "promotion_target"):
+                value = role.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    raise HypothesisLoaderError(
+                        f"Hypothesis file {path} hypothesis {i + 1} role.{field} must be a non-empty string."
+                    )
+
     return {
         "sha": compute_file_sha(path),
         "path": str(path),
@@ -288,6 +327,7 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
         "holdout_date": holdout_parsed,
         "total_expected_trials": declared_n,
         "testing_mode": testing_mode,
+        "research_question_type": research_question_type,
         "has_theory": has_theory,
         "hypotheses": hypotheses,
         "metadata": metadata,
@@ -490,9 +530,7 @@ def check_mode_a_consistency(meta: dict[str, Any]) -> None:
     elif isinstance(holdout, date):
         holdout_cmp = holdout
     else:
-        raise HypothesisLoaderError(
-            f"metadata.holdout_date must be a date or datetime, got {type(holdout).__name__}"
-        )
+        raise HypothesisLoaderError(f"metadata.holdout_date must be a date or datetime, got {type(holdout).__name__}")
     if holdout_cmp > HOLDOUT_SACRED_FROM:
         raise HypothesisLoaderError(
             f"Amendment 2.7 violation: hypothesis holdout_date "
@@ -670,18 +708,18 @@ def extract_scope_predicate(
     hypotheses_raw = meta.get("hypotheses")
     if not isinstance(hypotheses_raw, list) or not hypotheses_raw:
         raise HypothesisLoaderError(
-            "Hypothesis file has no hypotheses list or it is empty. "
-            "Cannot build scope predicate."
+            "Hypothesis file has no hypotheses list or it is empty. Cannot build scope predicate."
         )
+
+    source_meta = meta.get("metadata", {}) if isinstance(meta.get("metadata"), dict) else {}
+    proxy_mode = source_meta.get("data_source_mode") == "proxy"
 
     filtered: list[HypothesisScope] = []
     total_trials = 0
 
     for idx, h in enumerate(hypotheses_raw):
         if not isinstance(h, dict):
-            raise HypothesisLoaderError(
-                f"Hypothesis #{idx} must be a mapping, got {type(h).__name__}"
-            )
+            raise HypothesisLoaderError(f"Hypothesis #{idx} must be a mapping, got {type(h).__name__}")
 
         # Identity prefix for error messages — include the YAML id and name
         # fields (if present) so error messages correlate to the human-
@@ -693,74 +731,69 @@ def extract_scope_predicate(
 
         scope = h.get("scope")
         if not isinstance(scope, dict):
-            raise HypothesisLoaderError(
-                f"{h_tag} missing or malformed 'scope' block"
-            )
+            raise HypothesisLoaderError(f"{h_tag} missing or malformed 'scope' block")
 
         instruments_raw = scope.get("instruments")
         if not isinstance(instruments_raw, list) or not instruments_raw:
-            raise HypothesisLoaderError(
-                f"{h_tag} scope.instruments must be a non-empty list"
-            )
+            raise HypothesisLoaderError(f"{h_tag} scope.instruments must be a non-empty list")
 
         if instrument not in instruments_raw:
             continue  # not for this instrument — skip
 
         filter_block = h.get("filter")
         if not isinstance(filter_block, dict):
-            raise HypothesisLoaderError(
-                f"{h_tag} missing or malformed 'filter' block"
-            )
+            raise HypothesisLoaderError(f"{h_tag} missing or malformed 'filter' block")
         filter_type = filter_block.get("type")
         if not isinstance(filter_type, str) or not filter_type:
-            raise HypothesisLoaderError(
-                f"{h_tag} filter.type must be a non-empty string"
-            )
+            raise HypothesisLoaderError(f"{h_tag} filter.type must be a non-empty string")
+
+        if proxy_mode:
+            from trading_app.config import ALL_FILTERS
+
+            filter_obj = ALL_FILTERS.get(filter_type)
+            if filter_obj is None:
+                raise HypothesisLoaderError(
+                    f"{h_tag} uses filter.type {filter_type!r} in proxy mode, but the filter is not "
+                    "registered in ALL_FILTERS so proxy-safety cannot be classified. "
+                    "Proxy hypotheses must use known, classifiable filters."
+                )
+            if filter_obj.requires_micro_data:
+                raise HypothesisLoaderError(
+                    f"{h_tag} uses micro-only filter.type {filter_type!r} in proxy mode. "
+                    "Proxy hypotheses may only use price-safe filters; requires_micro_data "
+                    "filters are invalid on parent/proxy data."
+                )
 
         sessions_raw = scope.get("sessions")
         if not isinstance(sessions_raw, list) or not sessions_raw:
-            raise HypothesisLoaderError(
-                f"{h_tag} scope.sessions must be a non-empty list"
-            )
+            raise HypothesisLoaderError(f"{h_tag} scope.sessions must be a non-empty list")
 
         rr_raw = scope.get("rr_targets")
         if not isinstance(rr_raw, list) or not rr_raw:
-            raise HypothesisLoaderError(
-                f"{h_tag} scope.rr_targets must be a non-empty list"
-            )
+            raise HypothesisLoaderError(f"{h_tag} scope.rr_targets must be a non-empty list")
 
         em_raw = scope.get("entry_models")
         if not isinstance(em_raw, list) or not em_raw:
-            raise HypothesisLoaderError(
-                f"{h_tag} scope.entry_models must be a non-empty list"
-            )
+            raise HypothesisLoaderError(f"{h_tag} scope.entry_models must be a non-empty list")
 
         cb_raw = scope.get("confirm_bars")
         if not isinstance(cb_raw, list) or not cb_raw:
-            raise HypothesisLoaderError(
-                f"{h_tag} scope.confirm_bars must be a non-empty list"
-            )
+            raise HypothesisLoaderError(f"{h_tag} scope.confirm_bars must be a non-empty list")
 
         stop_raw = scope.get("stop_multipliers")
         if not isinstance(stop_raw, list) or not stop_raw:
-            raise HypothesisLoaderError(
-                f"{h_tag} scope.stop_multipliers must be a non-empty list"
-            )
+            raise HypothesisLoaderError(f"{h_tag} scope.stop_multipliers must be a non-empty list")
 
         expected = h.get("expected_trial_count")
         if not isinstance(expected, int) or isinstance(expected, bool) or expected < 1:
-            raise HypothesisLoaderError(
-                f"{h_tag} expected_trial_count must be a positive int"
-            )
+            raise HypothesisLoaderError(f"{h_tag} expected_trial_count must be a positive int")
 
         try:
             rr_targets = frozenset(float(x) for x in rr_raw)
             confirm_bars = frozenset(int(x) for x in cb_raw)
             stop_multipliers = frozenset(float(x) for x in stop_raw)
         except (TypeError, ValueError) as exc:
-            raise HypothesisLoaderError(
-                f"{h_tag} scope contains non-numeric values: {exc}"
-            ) from exc
+            raise HypothesisLoaderError(f"{h_tag} scope contains non-numeric values: {exc}") from exc
 
         filtered.append(
             HypothesisScope(

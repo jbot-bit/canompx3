@@ -5,8 +5,7 @@ from scripts.tools import wsl_mount_guard
 
 def test_parse_proc_mounts_splits_entries() -> None:
     entries = wsl_mount_guard.parse_proc_mounts(
-        "C:\\\\ /mnt/c 9p rw,nosuid,nodev,noatime 0 0\n"
-        "/dev/sdc / ext4 rw,relatime 0 0\n"
+        "C:\\\\ /mnt/c 9p rw,nosuid,nodev,noatime 0 0\n/dev/sdc / ext4 rw,relatime 0 0\n"
     )
 
     assert len(entries) == 2

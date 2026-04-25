@@ -119,9 +119,7 @@ def _check_live_config_coherence(audit: AuditPhase, con):
         shelf_tuple = tuple(r)
         if lane_tuple != shelf_tuple:
             valid_issues += 1
-            audit.check_failed(
-                f"{lane['strategy_id']}: profile lane metadata does not match deployable shelf row"
-            )
+            audit.check_failed(f"{lane['strategy_id']}: profile lane metadata does not match deployable shelf row")
             audit.add_finding(
                 Severity.HIGH,
                 "PARITY_VIOLATION",

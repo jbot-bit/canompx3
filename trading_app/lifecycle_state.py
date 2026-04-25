@@ -18,6 +18,7 @@ from typing import Any
 
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.account_survival import check_survival_report_gate, read_survival_report_state
+from trading_app.conditional_overlays import read_overlay_states
 from trading_app.derived_state import (
     build_code_fingerprint,
     build_db_identity,
@@ -78,7 +79,9 @@ def read_criterion11_state(
         "as_of_date": summary.get("as_of_date") if isinstance(summary, dict) else None,
         "generated_at_utc": generated_at,
         "report_age_days": _age_days_from_timestamp(generated_at),
-        "operational_pass_probability": summary.get("operational_pass_probability") if isinstance(summary, dict) else None,
+        "operational_pass_probability": summary.get("operational_pass_probability")
+        if isinstance(summary, dict)
+        else None,
         "n_paths": summary.get("n_paths") if isinstance(summary, dict) else None,
         "horizon_days": summary.get("horizon_days") if isinstance(summary, dict) else None,
         "gate_pass": summary.get("gate_pass") if isinstance(summary, dict) else None,
@@ -211,13 +214,12 @@ def read_lifecycle_state(
     resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
     criterion11 = read_criterion11_state(resolved_profile_id, db_path=db_path, today=today)
     criterion12 = read_criterion12_state(resolved_profile_id, db_path=db_path, today=today)
+    conditional_overlays = read_overlay_states(resolved_profile_id, db_path=db_path, today=today)
     pauses = read_pause_state(resolved_profile_id, as_of=today)
     lane_ids = [str(lane["strategy_id"]) for lane in get_profile_lane_definitions(resolved_profile_id)]
 
     strategy_ids = sorted(
-        set(lane_ids)
-        | set(pauses["paused_strategy_ids"])
-        | set(criterion12["status_by_strategy"].keys())
+        set(lane_ids) | set(pauses["paused_strategy_ids"]) | set(criterion12["status_by_strategy"].keys())
     )
 
     strategy_states: dict[str, dict[str, Any]] = {}
@@ -270,6 +272,7 @@ def read_lifecycle_state(
         "lane_ids": lane_ids,
         "criterion11": criterion11,
         "criterion12": criterion12,
+        "conditional_overlays": conditional_overlays,
         "pauses": pauses,
         "strategy_states": strategy_states,
         "blocked_strategy_ids": sorted(blocked_strategy_ids),

@@ -109,9 +109,7 @@ def _fallback_lines(root: Path, *, mode: str, error: Exception) -> list[str]:
                 sm = re.search(r"^mode:\s*(.+)$", sc, flags=re.MULTILINE)
                 st = re.search(r"^task:\s*(.+)$", sc, flags=re.MULTILINE)
                 if st or sm:
-                    lines.append(
-                        f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}"
-                    )
+                    lines.append(f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}")
             except OSError:
                 pass
     legacy_file = root / "docs" / "runtime" / "STAGE_STATE.md"
@@ -160,9 +158,7 @@ def _render_lines(report: PulseReport, *, mode: str, root: Path) -> list[str]:
                 sm = re.search(r"^mode:\s*(.+)$", sc, flags=re.MULTILINE)
                 st = re.search(r"^task:\s*(.+)$", sc, flags=re.MULTILINE)
                 if st or sm:
-                    lines.append(
-                        f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}"
-                    )
+                    lines.append(f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}")
             except OSError:
                 pass
     legacy_file = root / "docs" / "runtime" / "STAGE_STATE.md"
@@ -185,6 +181,21 @@ def _render_lines(report: PulseReport, *, mode: str, root: Path) -> list[str]:
 
     if report.handoff_next_steps:
         lines.append(f"  Active step: {report.handoff_next_steps[0]}")
+
+    work_queue = report.system_identity.get("work_queue", {}) if isinstance(report.system_identity, dict) else {}
+    if isinstance(work_queue, dict) and work_queue.get("open_count") is not None:
+        queue_bits = [f"open={work_queue.get('open_count')}"]
+        if work_queue.get("close_first_open_count"):
+            queue_bits.append(f"close-first={work_queue.get('close_first_open_count')}")
+        if work_queue.get("stale_count"):
+            queue_bits.append(f"stale={work_queue.get('stale_count')}")
+        top_ids = work_queue.get("top_items") or []
+        if top_ids and isinstance(top_ids, list) and isinstance(top_ids[0], dict):
+            first_id = top_ids[0].get("id")
+            if first_id:
+                queue_bits.append(f"top={first_id}")
+        if queue_bits:
+            lines.append(f"  Queue: {' | '.join(queue_bits)}")
 
     broken = _top_items(report, "broken")
     if broken:

@@ -48,11 +48,7 @@ _SAMPLE_DATES = (
 )
 
 _BASELINE_SNAPSHOT_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "docs"
-    / "runtime"
-    / "baselines"
-    / "2026-04-07-orb-window-snapshot.json"
+    Path(__file__).resolve().parents[2] / "docs" / "runtime" / "baselines" / "2026-04-07-orb-window-snapshot.json"
 )
 
 
@@ -72,16 +68,13 @@ class TestOrbUtcWindowDeterministic:
     @pytest.mark.parametrize("orb_label", sorted(DYNAMIC_ORB_RESOLVERS))
     @pytest.mark.parametrize("orb_minutes", _ORB_APERTURES)
     @pytest.mark.parametrize("trading_day", _SAMPLE_DATES)
-    def test_cartesian_corpus(
-        self, orb_label: str, orb_minutes: int, trading_day: date
-    ) -> None:
+    def test_cartesian_corpus(self, orb_label: str, orb_minutes: int, trading_day: date) -> None:
         start, end = orb_utc_window(trading_day, orb_label, orb_minutes)
 
         # Structural invariants
         assert start < end, f"start must be strictly before end: {start} / {end}"
         assert end - start == timedelta(minutes=orb_minutes), (
-            f"duration must equal orb_minutes: got {end - start}, "
-            f"expected {timedelta(minutes=orb_minutes)}"
+            f"duration must equal orb_minutes: got {end - start}, expected {timedelta(minutes=orb_minutes)}"
         )
         assert start.tzinfo is not None, "start must be timezone-aware"
         assert end.tzinfo is not None, "end must be timezone-aware"
@@ -91,8 +84,7 @@ class TestOrbUtcWindowDeterministic:
         # Window must fall within trading day's UTC range
         td_start, td_end = compute_trading_day_utc_range(trading_day)
         assert td_start <= start < td_end, (
-            f"ORB start {start} must be within trading day "
-            f"[{td_start}, {td_end}) for {trading_day} {orb_label}"
+            f"ORB start {start} must be within trading day [{td_start}, {td_end}) for {trading_day} {orb_label}"
         )
 
     def test_corpus_covers_all_sessions(self) -> None:
@@ -104,9 +96,7 @@ class TestOrbUtcWindowDeterministic:
     def test_corpus_size(self) -> None:
         """Sanity: the parametrize corpus size matches expected (>=180)."""
         expected = len(DYNAMIC_ORB_RESOLVERS) * len(_ORB_APERTURES) * len(_SAMPLE_DATES)
-        assert expected >= 180, (
-            f"Cartesian corpus should be >=180 cases; expected {expected}"
-        )
+        assert expected >= 180, f"Cartesian corpus should be >=180 cases; expected {expected}"
 
 
 # =========================================================================
@@ -171,12 +161,8 @@ class TestOrbUtcWindowDstTransitions:
         start_bst, _ = orb_utc_window(bst_date, "LONDON_METALS", 5)
         start_gmt, _ = orb_utc_window(gmt_date, "LONDON_METALS", 5)
 
-        assert start_bst.hour == 7 and start_bst.minute == 0, (
-            f"BST London 08:00 must be 07:00 UTC; got {start_bst}"
-        )
-        assert start_gmt.hour == 8 and start_gmt.minute == 0, (
-            f"GMT London 08:00 must be 08:00 UTC; got {start_gmt}"
-        )
+        assert start_bst.hour == 7 and start_bst.minute == 0, f"BST London 08:00 must be 07:00 UTC; got {start_bst}"
+        assert start_gmt.hour == 8 and start_gmt.minute == 0, f"GMT London 08:00 must be 08:00 UTC; got {start_gmt}"
 
     def test_cme_reopen_us_dst_hour_shift(self) -> None:
         """CME_REOPEN is anchored to CME Globex reopen at 17:00 CT.
@@ -202,13 +188,9 @@ class TestOrbUtcWindowDstTransitions:
         start_summer, _ = orb_utc_window(summer, "CME_REOPEN", 5)
 
         # Winter CT = UTC-6 → 17:00 CT = 23:00 UTC hour
-        assert start_winter.hour == 23, (
-            f"winter CME_REOPEN must be 23:00 UTC hour; got {start_winter}"
-        )
+        assert start_winter.hour == 23, f"winter CME_REOPEN must be 23:00 UTC hour; got {start_winter}"
         # Summer CT = UTC-5 → 17:00 CT = 22:00 UTC hour
-        assert start_summer.hour == 22, (
-            f"summer CME_REOPEN must be 22:00 UTC hour; got {start_summer}"
-        )
+        assert start_summer.hour == 22, f"summer CME_REOPEN must be 22:00 UTC hour; got {start_summer}"
         # Both start exactly on the hour (:00)
         assert start_winter.minute == 0
         assert start_summer.minute == 0
@@ -270,10 +252,7 @@ class TestOrbUtcWindowIdempotent:
             for aperture in _ORB_APERTURES:
                 r1 = orb_utc_window(td, label, aperture)
                 r2 = orb_utc_window(td, label, aperture)
-                assert r1 == r2, (
-                    f"orb_utc_window not idempotent for {td} {label} {aperture}: "
-                    f"{r1} vs {r2}"
-                )
+                assert r1 == r2, f"orb_utc_window not idempotent for {td} {label} {aperture}: {r1} vs {r2}"
 
 
 # =========================================================================
@@ -299,9 +278,7 @@ class TestComputeTradingDayUtcRange:
     def test_duration_is_24_hours(self) -> None:
         for td in _SAMPLE_DATES:
             start, end = compute_trading_day_utc_range(td)
-            assert end - start == timedelta(hours=24), (
-                f"Trading day {td} duration must be 24h; got {end - start}"
-            )
+            assert end - start == timedelta(hours=24), f"Trading day {td} duration must be 24h; got {end - start}"
 
     def test_start_is_09_brisbane_local(self) -> None:
         for td in _SAMPLE_DATES:
@@ -335,8 +312,7 @@ class TestOrbUtcWindowSnapshotEquivalence:
 
     def test_snapshot_file_exists(self) -> None:
         assert _BASELINE_SNAPSHOT_PATH.exists(), (
-            f"Baseline snapshot missing: {_BASELINE_SNAPSHOT_PATH}. "
-            f"Stage 0 should have captured it."
+            f"Baseline snapshot missing: {_BASELINE_SNAPSHOT_PATH}. Stage 0 should have captured it."
         )
 
     def test_snapshot_equivalence_full(self) -> None:
@@ -380,15 +356,9 @@ class TestOrbUtcWindowSnapshotEquivalence:
             for orb_minutes in _ORB_APERTURES:
                 for trading_day in _SAMPLE_DATES:
                     new_result = orb_utc_window(trading_day, orb_label, orb_minutes)
-                    old_result = predecessor_orb_utc_window(
-                        trading_day, orb_label, orb_minutes
-                    )
+                    old_result = predecessor_orb_utc_window(trading_day, orb_label, orb_minutes)
                     if new_result != old_result:
-                        mismatches.append(
-                            f"{trading_day} {orb_label} {orb_minutes}: "
-                            f"new={new_result} old={old_result}"
-                        )
-        assert not mismatches, (
-            f"{len(mismatches)} divergences between canonical and predecessor:\n"
-            + "\n".join(mismatches[:10])
+                        mismatches.append(f"{trading_day} {orb_label} {orb_minutes}: new={new_result} old={old_result}")
+        assert not mismatches, f"{len(mismatches)} divergences between canonical and predecessor:\n" + "\n".join(
+            mismatches[:10]
         )

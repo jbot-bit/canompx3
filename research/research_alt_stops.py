@@ -63,6 +63,7 @@ MAX_TRADE_BARS = 240  # 4 hours
 @dataclass
 class StrategyResult:
     """Result of a single strategy backtest."""
+
     mode: str
     instrument: str
     variant: str
@@ -129,14 +130,17 @@ def apply_friction_r(pnl_points: float, risk_points: float, spec: CostSpec) -> f
 
 
 def finalize_result(
-    mode: str, instrument: str, variant: str, params: dict,
-    trades: list[float], trade_dates: list,
+    mode: str,
+    instrument: str,
+    variant: str,
+    params: dict,
+    trades: list[float],
+    trade_dates: list,
 ) -> StrategyResult:
     """Compute stats from a list of R-multiple trades."""
     n = len(trades)
     if n < 1:
-        return StrategyResult(mode=mode, instrument=instrument,
-                              variant=variant, params=params)
+        return StrategyResult(mode=mode, instrument=instrument, variant=variant, params=params)
     arr = np.array(trades)
     wins = int(np.sum(arr > 0))
     avg_r = float(np.mean(arr))
@@ -151,13 +155,21 @@ def finalize_result(
         p_val = 1.0
 
     return StrategyResult(
-        mode=mode, instrument=instrument, variant=variant, params=params,
-        n_trades=n, n_wins=wins, win_rate=round(wins / n, 4),
-        avg_pnl_r=round(avg_r, 4), total_pnl_r=round(total_r, 2),
-        sharpe=round(sharpe, 4), max_dd_r=compute_max_dd(trades),
+        mode=mode,
+        instrument=instrument,
+        variant=variant,
+        params=params,
+        n_trades=n,
+        n_wins=wins,
+        win_rate=round(wins / n, 4),
+        avg_pnl_r=round(avg_r, 4),
+        total_pnl_r=round(total_r, 2),
+        sharpe=round(sharpe, 4),
+        max_dd_r=compute_max_dd(trades),
         p_value=round(p_val, 6),
         yearly_results=yearly_breakdown(trade_dates, trades),
-        pnl_series=trades, trade_dates=trade_dates,
+        pnl_series=trades,
+        trade_dates=trade_dates,
     )
 
 
@@ -229,33 +241,41 @@ def compute_td_end(trading_day) -> datetime:
 # Data Loading
 # ---------------------------------------------------------------------------
 def load_instrument_bars(
-    con: duckdb.DuckDBPyConnection, instrument: str,
+    con: duckdb.DuckDBPyConnection,
+    instrument: str,
 ) -> pd.DataFrame:
     """Load all 1m bars with trading_day column."""
     print(f"    Loading 1m bars for {instrument}...", end=" ", flush=True)
     t0 = time.time()
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT ts_utc, open, high, low, close, volume,
                CAST((ts_utc AT TIME ZONE 'Australia/Brisbane'
                      - INTERVAL '9 hours') AS DATE) AS trading_day
         FROM bars_1m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
     elapsed = time.time() - t0
     print(f"{len(df):,} bars in {elapsed:.1f}s")
     return df
 
 
 def load_daily_features(
-    con: duckdb.DuckDBPyConnection, instrument: str, sessions: list[str],
+    con: duckdb.DuckDBPyConnection,
+    instrument: str,
+    sessions: list[str],
 ) -> pd.DataFrame:
     """Load daily features (orb_minutes=5) with ORB columns for sessions."""
     # Get available columns
-    all_cols = {c[0] for c in con.execute(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_name='daily_features'"
-    ).fetchall()}
+    all_cols = {
+        c[0]
+        for c in con.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name='daily_features'"
+        ).fetchall()
+    }
 
     cols = ["trading_day", "atr_20"]
     for label in sessions:
@@ -265,18 +285,22 @@ def load_daily_features(
                 cols.append(col)
 
     col_str = ", ".join(cols)
-    df = con.execute(f"""
+    df = con.execute(
+        f"""
         SELECT {col_str}
         FROM daily_features
         WHERE symbol = ? AND orb_minutes = 5
         ORDER BY trading_day
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
     return df
 
 
 # =============================================================================
 # MODE A: Pullback with Tighter Stop
 # =============================================================================
+
 
 def run_pullback_tighter_stop(
     daily_df: pd.DataFrame,
@@ -293,8 +317,7 @@ def run_pullback_tighter_stop(
     stop_frac=1.00: stop at opposite ORB edge (standard E3 baseline)
     """
     variant = f"{orb_label}_E3_frac{stop_frac:.2f}_RR{rr_target}"
-    params = {"orb_label": orb_label, "stop_frac": stop_frac,
-              "rr_target": rr_target, "entry_model": "E3"}
+    params = {"orb_label": orb_label, "stop_frac": stop_frac, "rr_target": rr_target, "entry_model": "E3"}
     mode = "pullback"
 
     h_col = f"orb_{orb_label}_high"
@@ -305,8 +328,7 @@ def run_pullback_tighter_stop(
     # Check columns exist
     for c in [h_col, l_col, dir_col, ts_col]:
         if c not in daily_df.columns:
-            return StrategyResult(mode=mode, instrument=instrument,
-                                  variant=variant, params=params)
+            return StrategyResult(mode=mode, instrument=instrument, variant=variant, params=params)
 
     min_orb_pts = spec.friction_in_points * 2.5
 
@@ -372,7 +394,11 @@ def run_pullback_tighter_stop(
             continue
 
         pnl_pts, _ = simulate_trade(
-            post_entry, direction, entry_price, stop_price, target_price,
+            post_entry,
+            direction,
+            entry_price,
+            stop_price,
+            target_price,
             max_bars=MAX_TRADE_BARS,
         )
 
@@ -386,6 +412,7 @@ def run_pullback_tighter_stop(
 # =============================================================================
 # MODE B: Second-Chance Re-entry After Failed Breakout
 # =============================================================================
+
 
 def run_second_chance(
     daily_df: pd.DataFrame,
@@ -406,8 +433,7 @@ def run_second_chance(
     6. If swing stop > full ORB, cap at full ORB
     """
     variant = f"{orb_label}_reentry_N{n_fail_bars}_RR{rr_target}"
-    params = {"orb_label": orb_label, "n_fail_bars": n_fail_bars,
-              "rr_target": rr_target}
+    params = {"orb_label": orb_label, "n_fail_bars": n_fail_bars, "rr_target": rr_target}
     mode = "reentry"
 
     h_col = f"orb_{orb_label}_high"
@@ -417,8 +443,7 @@ def run_second_chance(
 
     for c in [h_col, l_col, dir_col, ts_col]:
         if c not in daily_df.columns:
-            return StrategyResult(mode=mode, instrument=instrument,
-                                  variant=variant, params=params)
+            return StrategyResult(mode=mode, instrument=instrument, variant=variant, params=params)
 
     min_orb_pts = spec.friction_in_points * 2.5
 
@@ -472,7 +497,7 @@ def run_second_chance(
             continue  # Break held — no failure
 
         # Step 3: Look for second break in same direction after failure
-        remaining = post_break.iloc[fail_idx + 1:]
+        remaining = post_break.iloc[fail_idx + 1 :]
         if len(remaining) < 3:
             continue
 
@@ -493,14 +518,14 @@ def run_second_chance(
             continue  # No second break
 
         # Step 4: Entry at next bar open after 2nd confirmation
-        entry_bars = remaining.iloc[rebreak_idx + 1:]
+        entry_bars = remaining.iloc[rebreak_idx + 1 :]
         if len(entry_bars) == 0:
             continue
 
         entry_price = float(entry_bars.iloc[0]["open"])
 
         # Step 5: Stop at swing extreme between failure and 2nd break
-        swing_bars = remaining.iloc[:rebreak_idx + 1]
+        swing_bars = remaining.iloc[: rebreak_idx + 1]
         if break_dir == "long":
             direction = 1
             swing_low = float(swing_bars["low"].min())
@@ -518,7 +543,11 @@ def run_second_chance(
 
         # Simulate from entry bar (entry at bar open, bar range is post-entry)
         pnl_pts, _ = simulate_trade(
-            entry_bars, direction, entry_price, stop_price, target_price,
+            entry_bars,
+            direction,
+            entry_price,
+            stop_price,
+            target_price,
             max_bars=MAX_TRADE_BARS,
         )
 
@@ -532,6 +561,7 @@ def run_second_chance(
 # =============================================================================
 # Main Runner
 # =============================================================================
+
 
 def run_all(
     db_path: str,
@@ -558,9 +588,9 @@ def run_all(
                 print(f"  No enabled sessions for {instrument}, skipping")
                 continue
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print(f"  INSTRUMENT: {instrument} ({len(sessions)} sessions)")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
 
             bars_df = load_instrument_bars(con, instrument)
             if len(bars_df) < 10000:
@@ -583,17 +613,24 @@ def run_all(
                     for stop_frac in STOP_FRACTIONS:
                         for rr in PULLBACK_RR_TARGETS:
                             r = run_pullback_tighter_stop(
-                                daily_df, bars_by_day, instrument, label,
-                                stop_frac=stop_frac, rr_target=rr, spec=spec,
+                                daily_df,
+                                bars_by_day,
+                                instrument,
+                                label,
+                                stop_frac=stop_frac,
+                                rr_target=rr,
+                                spec=spec,
                             )
                             results.append(r)
                             if r.n_trades >= MIN_TRADES:
                                 sig = "*" if r.p_value < 0.05 else " "
-                                print(f"    {sig} {label:18s} "
-                                      f"frac={stop_frac:.2f} RR={rr:.1f} "
-                                      f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
-                                      f"ExpR={r.avg_pnl_r:+.4f} "
-                                      f"p={r.p_value:.4f}")
+                                print(
+                                    f"    {sig} {label:18s} "
+                                    f"frac={stop_frac:.2f} RR={rr:.1f} "
+                                    f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
+                                    f"ExpR={r.avg_pnl_r:+.4f} "
+                                    f"p={r.p_value:.4f}"
+                                )
 
             # =============================================================
             # MODE B: Second-Chance Re-entry
@@ -604,17 +641,24 @@ def run_all(
                     for n_fail in FAIL_WINDOWS:
                         for rr in REENTRY_RR_TARGETS:
                             r = run_second_chance(
-                                daily_df, bars_by_day, instrument, label,
-                                n_fail_bars=n_fail, rr_target=rr, spec=spec,
+                                daily_df,
+                                bars_by_day,
+                                instrument,
+                                label,
+                                n_fail_bars=n_fail,
+                                rr_target=rr,
+                                spec=spec,
                             )
                             results.append(r)
                             if r.n_trades >= MIN_TRADES:
                                 sig = "*" if r.p_value < 0.05 else " "
-                                print(f"    {sig} {label:18s} "
-                                      f"N_fail={n_fail:2d} RR={rr:.1f} "
-                                      f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
-                                      f"ExpR={r.avg_pnl_r:+.4f} "
-                                      f"p={r.p_value:.4f}")
+                                print(
+                                    f"    {sig} {label:18s} "
+                                    f"N_fail={n_fail:2d} RR={rr:.1f} "
+                                    f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
+                                    f"ExpR={r.avg_pnl_r:+.4f} "
+                                    f"p={r.p_value:.4f}"
+                                )
 
             del bars_df, bars_by_day, daily_df
 
@@ -636,6 +680,7 @@ def run_all(
 # Reporting
 # =============================================================================
 
+
 def print_fdr_results(valid_results: list[StrategyResult]) -> None:
     print("\n" + "=" * 70)
     print("BH FDR CORRECTION")
@@ -654,18 +699,22 @@ def print_fdr_results(valid_results: list[StrategyResult]) -> None:
     print(f"FDR-significant at alpha={FDR_ALPHA}: {n_sig}")
 
     if n_sig > 0:
-        print(f"\n{'Mode':<12s} {'Inst':<6s} {'Variant':<42s} "
-              f"{'N':>5s} {'WR':>7s} {'ExpR':>8s} {'S':>6s} "
-              f"{'raw_p':>8s} {'adj_p':>8s}")
+        print(
+            f"\n{'Mode':<12s} {'Inst':<6s} {'Variant':<42s} "
+            f"{'N':>5s} {'WR':>7s} {'ExpR':>8s} {'S':>6s} "
+            f"{'raw_p':>8s} {'adj_p':>8s}"
+        )
         print("-" * 110)
         for idx, adj_p, sig in fdr_results:
             if sig:
                 r = valid_results[idx]
-                print(f"{r.mode:<12s} {r.instrument:<6s} "
-                      f"{r.variant:<42s} "
-                      f"{r.n_trades:5d} {r.win_rate:7.2%} "
-                      f"{r.avg_pnl_r:+8.4f} {r.sharpe:6.3f} "
-                      f"{r.p_value:8.4f} {adj_p:8.4f}")
+                print(
+                    f"{r.mode:<12s} {r.instrument:<6s} "
+                    f"{r.variant:<42s} "
+                    f"{r.n_trades:5d} {r.win_rate:7.2%} "
+                    f"{r.avg_pnl_r:+8.4f} {r.sharpe:6.3f} "
+                    f"{r.p_value:8.4f} {adj_p:8.4f}"
+                )
     else:
         print("\nNo strategies survived FDR correction.")
 
@@ -685,9 +734,11 @@ def print_baseline_comparison(valid_results: list[StrategyResult]) -> None:
         key = (r.instrument, r.params["orb_label"], r.params["rr_target"])
         groups[key].append(r)
 
-    print(f"\n{'Inst':<6s} {'Session':<18s} {'RR':>4s} | "
-          f"{'frac=0.25':>14s} {'frac=0.50':>14s} "
-          f"{'frac=0.75':>14s} {'frac=1.00':>14s}")
+    print(
+        f"\n{'Inst':<6s} {'Session':<18s} {'RR':>4s} | "
+        f"{'frac=0.25':>14s} {'frac=0.50':>14s} "
+        f"{'frac=0.75':>14s} {'frac=1.00':>14s}"
+    )
     print("-" * 90)
 
     for key in sorted(groups.keys()):
@@ -713,18 +764,15 @@ def print_honest_summary(valid_results: list[StrategyResult]) -> None:
     fdr_results = bh_fdr(p_values, alpha=FDR_ALPHA) if valid_results else []
     survived = []
     if fdr_results:
-        survived = [valid_results[i]
-                    for i, (_, _, sig) in enumerate(fdr_results) if sig]
+        survived = [valid_results[i] for i, (_, _, sig) in enumerate(fdr_results) if sig]
 
     print("\nSURVIVED SCRUTINY:")
     if survived:
         for r in survived:
             yy = r.yearly_results
-            yy_str = ", ".join(
-                f"{y}:{d['avg_r']:+.3f}" for y, d in sorted(yy.items()))
+            yy_str = ", ".join(f"{y}:{d['avg_r']:+.3f}" for y, d in sorted(yy.items()))
             print(f"  - {r.mode} | {r.instrument} | {r.variant}")
-            print(f"    N={r.n_trades}, ExpR={r.avg_pnl_r:+.4f}, "
-                  f"Sharpe={r.sharpe:.3f}, p={r.p_value:.4f}")
+            print(f"    N={r.n_trades}, ExpR={r.avg_pnl_r:+.4f}, Sharpe={r.sharpe:.3f}, p={r.p_value:.4f}")
             print(f"    Year-by-year: {yy_str}")
     else:
         print("  None.")
@@ -741,21 +789,23 @@ def print_honest_summary(valid_results: list[StrategyResult]) -> None:
         avg_exp = np.mean([r.avg_pnl_r for r in mode_results])
         print(f"\n  {mode_name} ({len(mode_results)} valid tests):")
         print(f"    Average ExpR across all: {avg_exp:+.4f}")
-        print(f"    Best: {best.instrument} {best.variant} "
-              f"N={best.n_trades} ExpR={best.avg_pnl_r:+.4f} "
-              f"Sharpe={best.sharpe:.3f} p={best.p_value:.4f}")
+        print(
+            f"    Best: {best.instrument} {best.variant} "
+            f"N={best.n_trades} ExpR={best.avg_pnl_r:+.4f} "
+            f"Sharpe={best.sharpe:.3f} p={best.p_value:.4f}"
+        )
 
         if mode_name == "pullback":
             frac_avgs = {}
             for f in STOP_FRACTIONS:
-                frac_r = [r for r in mode_results
-                          if r.params.get("stop_frac") == f]
+                frac_r = [r for r in mode_results if r.params.get("stop_frac") == f]
                 if frac_r:
                     frac_avgs[f] = np.mean([r.avg_pnl_r for r in frac_r])
             if frac_avgs:
-                print("    Avg ExpR by stop fraction: " +
-                      ", ".join(f"{f:.2f}={v:+.4f}"
-                                for f, v in sorted(frac_avgs.items())))
+                print(
+                    "    Avg ExpR by stop fraction: "
+                    + ", ".join(f"{f:.2f}={v:+.4f}" for f, v in sorted(frac_avgs.items()))
+                )
 
     print("\nCAVEATS:")
     print("  - Tighter stops increase stop-out rate. Check WR alongside ExpR.")
@@ -775,17 +825,14 @@ def print_honest_summary(valid_results: list[StrategyResult]) -> None:
 # Entry Point
 # =============================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Alternative Stop & Re-entry Research")
-    parser.add_argument("--db-path", type=Path,
-                        default=PROJECT_ROOT / "gold.db")
-    parser.add_argument("--mode", type=str, default=None,
-                        choices=["pullback", "reentry"],
-                        help="Run only one mode")
-    parser.add_argument("--instrument", type=str, default=None,
-                        choices=ACTIVE_INSTRUMENTS,
-                        help="Run only one instrument")
+    parser = argparse.ArgumentParser(description="Alternative Stop & Re-entry Research")
+    parser.add_argument("--db-path", type=Path, default=PROJECT_ROOT / "gold.db")
+    parser.add_argument("--mode", type=str, default=None, choices=["pullback", "reentry"], help="Run only one mode")
+    parser.add_argument(
+        "--instrument", type=str, default=None, choices=ACTIVE_INSTRUMENTS, help="Run only one instrument"
+    )
     args = parser.parse_args()
 
     print("Alternative Stop & Re-entry Research")
@@ -809,7 +856,7 @@ def main():
     total = len(results)
     valid = sum(1 for r in results if r.n_trades >= MIN_TRADES)
     print(f"\nTotal tests: {total}, Valid (N>={MIN_TRADES}): {valid}")
-    print(f"Runtime: {elapsed:.0f}s ({elapsed/60:.1f}min)")
+    print(f"Runtime: {elapsed:.0f}s ({elapsed / 60:.1f}min)")
 
 
 if __name__ == "__main__":

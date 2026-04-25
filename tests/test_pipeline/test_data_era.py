@@ -74,9 +74,7 @@ class TestIsMicro:
     def test_dead_micros_use_parent_data(self):
         """M2K/MBT/etc are micro contracts but use parent DATA → is_micro=False."""
         for inst in ("M2K", "MBT", "M6E", "MCL", "SIL"):
-            assert is_micro(inst) is False, (
-                f"{inst} is a dead micro — uses parent data, not real micro"
-            )
+            assert is_micro(inst) is False, f"{inst} is a dead micro — uses parent data, not real micro"
 
     def test_parents_are_not_micros(self):
         for inst in ("NQ", "ES", "GC"):
@@ -110,9 +108,7 @@ class TestParentFor:
 
     def test_resolves_all_configured(self):
         for inst, expected in EXPECTED_PARENT.items():
-            assert parent_for(inst) == expected, (
-                f"parent_for({inst}) should be {expected!r}"
-            )
+            assert parent_for(inst) == expected, f"parent_for({inst}) should be {expected!r}"
 
     def test_unknown_raises(self):
         with pytest.raises(ValueError, match="Unknown instrument"):

@@ -1,4 +1,15 @@
+---
+paths:
+  - ".github/**"
+  - "HANDOFF.md"
+  - "docs/plans/**"
+  - "docs/handoffs/**"
+  - ".claude/rules/branch-discipline.md"
+---
 # Branch Discipline — Base-Branch Integrity
+
+**Load-policy:** auto-injected when touching PR-adjacent files (HANDOFF, plans, .github). For pure `git`/`gh` CLI work without file edits, read this rule on demand before branching. A future enhancement could route injection via a UserPromptSubmit hook keyed on "PR"/"branch"/"push"/"commit" in the user prompt.
+
 
 **Authority:** applies to every branch created for a PR. Triggered by `2026-04-18-a88505cd-bleed-into-doctrine-PR` incident (HANDOFF § 2026-04-18 governance).
 

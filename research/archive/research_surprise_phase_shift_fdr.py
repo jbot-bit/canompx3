@@ -80,7 +80,9 @@ def bh_fdr(df: pd.DataFrame, p_col: str, q: float) -> pd.DataFrame:
     return out
 
 
-def perm_pvalue(mask: np.ndarray, years: np.ndarray, pnl: np.ndarray, obs: float, n_perm: int = 200, seed: int = 123) -> float:
+def perm_pvalue(
+    mask: np.ndarray, years: np.ndarray, pnl: np.ndarray, obs: float, n_perm: int = 200, seed: int = 123
+) -> float:
     rng = np.random.default_rng(seed)
     ge = 0
     valid = 0
@@ -175,16 +177,16 @@ def main() -> int:
                 df["l_ts"] = pd.to_datetime(df["l_ts"], utc=True)
 
                 valid = (
-                    df["f_dir"].isin(["long", "short"]) &
-                    df["l_dir"].isin(["long", "short"]) &
-                    df["l_ts"].notna() &
-                    (df["l_ts"] <= df["entry_ts"])
+                    df["f_dir"].isin(["long", "short"])
+                    & df["l_dir"].isin(["long", "short"])
+                    & df["l_ts"].notna()
+                    & (df["l_ts"] <= df["entry_ts"])
                 )
                 df = df[valid].copy()
                 if len(df) < (MIN_ON + MIN_OFF):
                     continue
 
-                same = (df["l_dir"] == df["f_dir"])
+                same = df["l_dir"] == df["f_dir"]
                 opp = ~same
                 l_size_atr = np.where((df["l_atr"].notna()) & (df["l_atr"] > 0), df["l_size"] / df["l_atr"], np.nan)
                 l_size_atr_s = pd.Series(l_size_atr, index=df.index)
@@ -196,7 +198,11 @@ def main() -> int:
                     "same_cont": same & (df["l_cont"] == True),
                     "opp": opp,
                     "opp_late_fail": opp & df["l_delay"].notna() & (df["l_delay"] >= 60) & (df["l_cont"] == False),
-                    "opp_stretch": opp & l_size_atr_s.notna() & (l_size_atr_s >= q70) & df["l_delay"].notna() & (df["l_delay"] <= 30),
+                    "opp_stretch": opp
+                    & l_size_atr_s.notna()
+                    & (l_size_atr_s >= q70)
+                    & df["l_delay"].notna()
+                    & (df["l_delay"] <= 30),
                 }
 
                 years = df["year"].values
@@ -269,12 +275,16 @@ def main() -> int:
     tst = bh_fdr(tst, "perm_p", FDR_Q)
 
     # strict gain-first shortlist after FDR
-    passed = tst[
-        (tst["fdr_pass"] == True)
-        & (tst["avg_on"] >= 0.20)
-        & (tst["uplift"] >= 0.20)
-        & (tst["test2025_uplift"].fillna(-999) > 0)
-    ].copy().sort_values(["avg_on", "uplift"], ascending=False)
+    passed = (
+        tst[
+            (tst["fdr_pass"] == True)
+            & (tst["avg_on"] >= 0.20)
+            & (tst["uplift"] >= 0.20)
+            & (tst["test2025_uplift"].fillna(-999) > 0)
+        ]
+        .copy()
+        .sort_values(["avg_on", "uplift"], ascending=False)
+    )
 
     all_df.to_csv(p_all, index=False)
     passed.to_csv(p_pass, index=False)

@@ -158,14 +158,18 @@ class TestAllFilters:
         #     ATR_VEL_GE105 (Wave 4 Phase B, routed to MNQ TOKYO_OPEN + MES US_DATA_1000)
         #     ATR_VEL_GE110 (sensitivity variant, injection-only)
         #     ATR_VEL_GE115 (sensitivity variant, injection-only)
+        #     F3_NEAR_PIVOT_50 (Apr 2026 exact MNQ US_DATA_1000 avoid bridge)
         #     GARCH_VOL_PCT_LT20 (Wave 5 G5, injection-only — MNQ NYSE_OPEN LOW regime)
         #     VWAP_MID_ALIGNED (Apr 2026 exhaustive audit, MNQ US_DATA_1000 O15)
         #     VWAP_BP_ALIGNED (Apr 2026 exhaustive audit, MNQ CME_PRECLOSE O5)
         #     CROSS_NYSE_MOMENTUM (Apr 2026 cross-session state, MNQ US_DATA_1000)
         #     CROSS_COMEX_MOMENTUM (Apr 2026, MNQ CME_PRECLOSE)
         #     CROSS_SGP_MOMENTUM (Apr 2026, MNQ EUROPE_FLOW)
-        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 9 scoped = 91
-        assert len(ALL_FILTERS) == 91
+        #     PD_DISPLACE_LONG (Apr 2026 broader MNQ downside-displacement family)
+        #     PD_CLEAR_LONG (Apr 2026 broader MNQ non-congestion family)
+        #     PD_GO_LONG (Apr 2026 union of validated positive MNQ prior-day families)
+        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 13 scoped = 95
+        assert len(ALL_FILTERS) == 95
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -262,6 +266,154 @@ class TestVolumeFilter:
         assert f25.matches_row({"rel_vol_NYSE_CLOSE": 3.0}, "NYSE_CLOSE") is True
         assert f25.matches_row({"rel_vol_NYSE_CLOSE": 2.0}, "NYSE_CLOSE") is False
         assert f25.matches_row({"rel_vol_NYSE_CLOSE": 2.5}, "NYSE_CLOSE") is True
+
+
+class TestPrevDayGeometryFilter:
+    """Exact MNQ prior-day geometry predicates."""
+
+    def test_below_pdl_long_matches_only_long_breaks(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="F5_BELOW_PDL", description="test", mode="below_pdl_long")
+        row = {
+            "orb_US_DATA_1000_high": 99.0,
+            "orb_US_DATA_1000_low": 97.0,
+            "orb_US_DATA_1000_break_dir": "long",
+            "prev_day_low": 98.5,
+            "prev_day_high": 103.0,
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_break_dir"] = "short"
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+    def test_inside_pdr_long_requires_strict_inside(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="F6_INSIDE_PDR", description="test", mode="inside_pdr_long")
+        row = {
+            "orb_COMEX_SETTLE_high": 101.0,
+            "orb_COMEX_SETTLE_low": 99.0,
+            "orb_COMEX_SETTLE_break_dir": "long",
+            "prev_day_low": 95.0,
+            "prev_day_high": 105.0,
+        }
+        assert f.matches_row(row, "COMEX_SETTLE") is True
+
+        row["prev_day_low"] = 100.0
+        assert f.matches_row(row, "COMEX_SETTLE") is False
+
+    def test_near_pivot_long_50_uses_pivot_distance(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="F3_NEAR_PIVOT_50", description="test", mode="near_pivot_long_50")
+        row = {
+            "orb_US_DATA_1000_high": 100.5,
+            "orb_US_DATA_1000_low": 99.5,
+            "orb_US_DATA_1000_break_dir": "long",
+            "prev_day_low": 95.0,
+            "prev_day_high": 103.0,
+            "prev_day_close": 101.0,
+            "atr_20": 6.0,
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 105.0
+        row["orb_US_DATA_1000_low"] = 104.0
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+    def test_downside_displacement_long_accepts_below_or_near_pdl(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="PD_DISPLACE_LONG", description="test", mode="downside_displacement_long")
+        row = {
+            "orb_US_DATA_1000_high": 100.0,
+            "orb_US_DATA_1000_low": 98.0,
+            "orb_US_DATA_1000_break_dir": "long",
+            "prev_day_low": 99.2,
+            "prev_day_high": 104.0,
+            "atr_20": 8.0,
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 100.3
+        row["orb_US_DATA_1000_low"] = 99.7
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 103.5
+        row["orb_US_DATA_1000_low"] = 102.5
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+    def test_clear_of_congestion_long_rejects_inside_or_near_pivot(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="PD_CLEAR_LONG", description="test", mode="clear_of_congestion_long")
+        row = {
+            "orb_US_DATA_1000_high": 95.5,
+            "orb_US_DATA_1000_low": 94.5,
+            "orb_US_DATA_1000_break_dir": "long",
+            "prev_day_low": 96.0,
+            "prev_day_high": 104.0,
+            "prev_day_close": 100.0,
+            "atr_20": 8.0,
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 101.0
+        row["orb_US_DATA_1000_low"] = 99.0
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+        row["orb_US_DATA_1000_high"] = 100.3
+        row["orb_US_DATA_1000_low"] = 99.7
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+    def test_go_long_context_accepts_displacement_or_clear_context(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="PD_GO_LONG", description="test", mode="go_long_context")
+        row = {
+            "orb_US_DATA_1000_high": 100.0,
+            "orb_US_DATA_1000_low": 98.0,
+            "orb_US_DATA_1000_break_dir": "long",
+            "prev_day_low": 99.2,
+            "prev_day_high": 104.0,
+            "prev_day_close": 100.0,
+            "atr_20": 8.0,
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 95.5
+        row["orb_US_DATA_1000_low"] = 94.5
+        row["prev_day_low"] = 96.0
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+        row["orb_US_DATA_1000_high"] = 100.3
+        row["orb_US_DATA_1000_low"] = 99.7
+        row["prev_day_low"] = 96.0
+        row["prev_day_high"] = 104.0
+        row["prev_day_close"] = 100.0
+        assert f.matches_row(row, "US_DATA_1000") is False
+
+    def test_describe_marks_orb_formation(self):
+        from trading_app.config import PrevDayGeometryFilter
+
+        f = PrevDayGeometryFilter(filter_type="F3_NEAR_PIVOT_50", description="test", mode="near_pivot_long_50")
+        atoms = f.describe(
+            {
+                "orb_US_DATA_1000_high": 100.5,
+                "orb_US_DATA_1000_low": 99.5,
+                "orb_US_DATA_1000_break_dir": "long",
+                "prev_day_low": 95.0,
+                "prev_day_high": 103.0,
+                "prev_day_close": 101.0,
+                "atr_20": 6.0,
+            },
+            "US_DATA_1000",
+            "E2",
+        )
+        assert len(atoms) == 1
+        assert atoms[0].resolves_at == "ORB_FORMATION"
+        assert atoms[0].passes is True
 
 
 class TestOrbVolumeFilter:
@@ -467,8 +619,10 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="TEST", description="test",
-            pct_threshold=20.0, direction="low",
+            filter_type="TEST",
+            description="test",
+            pct_threshold=20.0,
+            direction="low",
         )
         # 15th percentile <= 20th percentile → admit
         assert f.matches_row({"garch_forecast_vol_pct": 15.0}, "NYSE_OPEN") is True
@@ -477,8 +631,10 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="TEST", description="test",
-            pct_threshold=20.0, direction="low",
+            filter_type="TEST",
+            description="test",
+            pct_threshold=20.0,
+            direction="low",
         )
         # 50th percentile > 20th percentile → reject
         assert f.matches_row({"garch_forecast_vol_pct": 50.0}, "NYSE_OPEN") is False
@@ -488,8 +644,10 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="TEST", description="test",
-            pct_threshold=20.0, direction="low",
+            filter_type="TEST",
+            description="test",
+            pct_threshold=20.0,
+            direction="low",
         )
         assert f.matches_row({"garch_forecast_vol_pct": 20.0}, "NYSE_OPEN") is True
 
@@ -497,8 +655,10 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="TEST", description="test",
-            pct_threshold=80.0, direction="high",
+            filter_type="TEST",
+            description="test",
+            pct_threshold=80.0,
+            direction="high",
         )
         # 90th percentile >= 80th percentile → admit
         assert f.matches_row({"garch_forecast_vol_pct": 90.0}, "LONDON_METALS") is True
@@ -507,8 +667,10 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="TEST", description="test",
-            pct_threshold=80.0, direction="high",
+            filter_type="TEST",
+            description="test",
+            pct_threshold=80.0,
+            direction="high",
         )
         assert f.matches_row({"garch_forecast_vol_pct": 50.0}, "LONDON_METALS") is False
 
@@ -516,8 +678,10 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="TEST", description="test",
-            pct_threshold=80.0, direction="high",
+            filter_type="TEST",
+            description="test",
+            pct_threshold=80.0,
+            direction="high",
         )
         assert f.matches_row({"garch_forecast_vol_pct": 80.0}, "LONDON_METALS") is True
 
@@ -526,8 +690,10 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="TEST", description="test",
-            pct_threshold=20.0, direction="low",
+            filter_type="TEST",
+            description="test",
+            pct_threshold=20.0,
+            direction="low",
         )
         assert f.matches_row({}, "NYSE_OPEN") is False
 
@@ -536,8 +702,10 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="TEST", description="test",
-            pct_threshold=20.0, direction="low",
+            filter_type="TEST",
+            description="test",
+            pct_threshold=20.0,
+            direction="low",
         )
         assert f.matches_row({"garch_forecast_vol_pct": None}, "NYSE_OPEN") is False
 
@@ -548,20 +716,22 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="TEST", description="test",
-            pct_threshold=20.0, direction="low",
+            filter_type="TEST",
+            description="test",
+            pct_threshold=20.0,
+            direction="low",
         )
-        assert (
-            f.matches_row({"garch_forecast_vol_pct": math.nan}, "NYSE_OPEN") is False
-        )
+        assert f.matches_row({"garch_forecast_vol_pct": math.nan}, "NYSE_OPEN") is False
 
     def test_invalid_direction_raises(self):
         from trading_app.config import GARCHForecastVolPctFilter
 
         with pytest.raises(ValueError, match="direction must be 'low' or 'high'"):
             GARCHForecastVolPctFilter(
-                filter_type="TEST", description="test",
-                pct_threshold=20.0, direction="medium",
+                filter_type="TEST",
+                description="test",
+                pct_threshold=20.0,
+                direction="medium",
             )
 
     def test_matches_df_low_direction(self):
@@ -571,8 +741,10 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="TEST", description="test",
-            pct_threshold=20.0, direction="low",
+            filter_type="TEST",
+            description="test",
+            pct_threshold=20.0,
+            direction="low",
         )
         df = pd.DataFrame(
             {
@@ -592,8 +764,10 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="TEST", description="test",
-            pct_threshold=20.0, direction="low",
+            filter_type="TEST",
+            description="test",
+            pct_threshold=20.0,
+            direction="low",
         )
         df = pd.DataFrame({"symbol": ["MNQ", "MNQ", "MNQ"]})
         result = f.matches_df(df, "NYSE_OPEN")
@@ -623,8 +797,7 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import BASE_GRID_FILTERS
 
         assert "GARCH_VOL_PCT_LT20" not in BASE_GRID_FILTERS, (
-            "GARCH_VOL_PCT_LT20 must NOT be in BASE_GRID_FILTERS — "
-            "narrow-scope filter, hypothesis-injection only"
+            "GARCH_VOL_PCT_LT20 must NOT be in BASE_GRID_FILTERS — narrow-scope filter, hypothesis-injection only"
         )
 
     def test_not_in_legacy_grid_for_any_session(self):
@@ -638,9 +811,18 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import get_filters_for_grid
 
         mnq_sessions = [
-            "TOKYO_OPEN", "SINGAPORE_OPEN", "BRISBANE_1025", "CME_REOPEN",
-            "LONDON_METALS", "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN",
-            "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "BRISBANE_1025",
+            "CME_REOPEN",
+            "LONDON_METALS",
+            "EUROPE_FLOW",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
         ]
         for sess in mnq_sessions:
             grid = get_filters_for_grid("MNQ", sess)
@@ -654,8 +836,10 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="GARCH_VOL_PCT_LT20", description="test",
-            pct_threshold=20.0, direction="low",
+            filter_type="GARCH_VOL_PCT_LT20",
+            description="test",
+            pct_threshold=20.0,
+            direction="low",
         )
         atoms = f.describe({"garch_forecast_vol_pct": 15.0}, "NYSE_OPEN", "E2")
         assert len(atoms) == 1
@@ -671,8 +855,10 @@ class TestGARCHForecastVolPctFilter:
         from trading_app.config import GARCHForecastVolPctFilter
 
         f = GARCHForecastVolPctFilter(
-            filter_type="TEST", description="test",
-            pct_threshold=20.0, direction="low",
+            filter_type="TEST",
+            description="test",
+            pct_threshold=20.0,
+            direction="low",
         )
         atoms = f.describe({"garch_forecast_vol_pct": None}, "NYSE_OPEN", "E2")
         assert len(atoms) == 1
@@ -1160,8 +1346,14 @@ class TestPitRangeFilter:
         assert "PIT_MIN" in grid, "PIT_MIN missing from CME_REOPEN grid"
 
         for sess in [
-            "CME_PRECLOSE", "COMEX_SETTLE", "NYSE_OPEN", "NYSE_CLOSE",
-            "SINGAPORE_OPEN", "TOKYO_OPEN", "EUROPE_FLOW", "LONDON_METALS",
+            "CME_PRECLOSE",
+            "COMEX_SETTLE",
+            "NYSE_OPEN",
+            "NYSE_CLOSE",
+            "SINGAPORE_OPEN",
+            "TOKYO_OPEN",
+            "EUROPE_FLOW",
+            "LONDON_METALS",
         ]:
             grid = get_filters_for_grid("MNQ", sess)
             assert "PIT_MIN" not in grid, f"PIT_MIN should NOT be in {sess} grid"
@@ -1176,6 +1368,23 @@ class TestPitRangeFilter:
         data = json.loads(f.to_json())
         assert data["filter_type"] == "PIT_MIN"
         assert data["min_ratio"] == 0.10
+
+    def test_prior_day_geometry_routes_only_to_registered_mnq_lanes(self):
+        us_grid = get_filters_for_grid("MNQ", "US_DATA_1000")
+        assert "PD_DISPLACE_LONG" in us_grid
+        assert "PD_CLEAR_LONG" in us_grid
+        assert "PD_GO_LONG" in us_grid
+
+        comex_grid = get_filters_for_grid("MNQ", "COMEX_SETTLE")
+        assert "PD_CLEAR_LONG" in comex_grid
+        assert "PD_DISPLACE_LONG" not in comex_grid
+        assert "PD_GO_LONG" not in comex_grid
+
+        for sess in ["NYSE_OPEN", "NYSE_CLOSE", "EUROPE_FLOW", "CME_PRECLOSE"]:
+            grid = get_filters_for_grid("MNQ", sess)
+            assert "PD_DISPLACE_LONG" not in grid
+            assert "PD_CLEAR_LONG" not in grid
+            assert "PD_GO_LONG" not in grid
 
 
 class TestRequiresMicroData:
@@ -1314,9 +1523,16 @@ class TestRequiresMicroData:
     def test_known_volume_filters_in_all_filters_are_true(self):
         """Sanity check: the volume filters we expect to be True actually are."""
         known_volume_filter_types = {
-            "VOL_RV12_N20", "VOL_RV15_N20", "VOL_RV20_N20", "VOL_RV25_N20", "VOL_RV30_N20",
+            "VOL_RV12_N20",
+            "VOL_RV15_N20",
+            "VOL_RV20_N20",
+            "VOL_RV25_N20",
+            "VOL_RV30_N20",
             "ATR70_VOL",
-            "ORB_VOL_2K", "ORB_VOL_4K", "ORB_VOL_8K", "ORB_VOL_16K",
+            "ORB_VOL_2K",
+            "ORB_VOL_4K",
+            "ORB_VOL_8K",
+            "ORB_VOL_16K",
         }
         for ft in known_volume_filter_types:
             if ft not in ALL_FILTERS:
@@ -1329,9 +1545,20 @@ class TestRequiresMicroData:
         """Sanity check: pure price-based filters should all be False."""
         known_price_filter_types = {
             "NO_FILTER",
-            "ORB_G2", "ORB_G3", "ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8",
-            "ORB_L2", "ORB_L3", "ORB_L4", "ORB_L6", "ORB_L8",
-            "COST_LT08", "COST_LT10", "COST_LT12",
+            "ORB_G2",
+            "ORB_G3",
+            "ORB_G4",
+            "ORB_G5",
+            "ORB_G6",
+            "ORB_G8",
+            "ORB_L2",
+            "ORB_L3",
+            "ORB_L4",
+            "ORB_L6",
+            "ORB_L8",
+            "COST_LT08",
+            "COST_LT10",
+            "COST_LT12",
         }
         for ft in known_price_filter_types:
             if ft not in ALL_FILTERS:
@@ -1505,6 +1732,7 @@ class TestVWAPBreakDirectionFilter:
     def test_not_in_base_grid(self):
         """VWAP filters are hypothesis-scoped, not base grid."""
         from trading_app.config import BASE_GRID_FILTERS
+
         assert "VWAP_MID_ALIGNED" not in BASE_GRID_FILTERS
         assert "VWAP_BP_ALIGNED" not in BASE_GRID_FILTERS
 

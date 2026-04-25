@@ -172,10 +172,7 @@ def main() -> int:
         if args.symbols:
             symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
         else:
-            symbols = sorted(
-                r[0]
-                for r in con.execute("SELECT DISTINCT symbol FROM daily_features").fetchall()
-            )
+            symbols = sorted(r[0] for r in con.execute("SELECT DISTINCT symbol FROM daily_features").fetchall())
 
         total = 0
         for sym in symbols:

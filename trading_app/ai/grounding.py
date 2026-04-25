@@ -68,10 +68,7 @@ def build_grounding_prompt(corpus: dict[str, str], schema_summary: str) -> str:
     Returns:
         System prompt string for Claude.
     """
-    templates_list = "\n".join(
-        f"  - {t['template']}: {t['description']}"
-        for t in SQLAdapter.available_templates()
-    )
+    templates_list = "\n".join(f"  - {t['template']}: {t['description']}" for t in SQLAdapter.available_templates())
     instruments_str = ", ".join(ACTIVE_ORB_INSTRUMENTS)
     entry_models_str = ", ".join(ENTRY_MODELS)
     classification = _build_classification_rule()
@@ -134,9 +131,7 @@ If the question cannot be answered by any template, respond with:
 """
 
 
-def build_interpretation_prompt(
-    corpus: dict[str, str], question: str, data_summary: str
-) -> str:
+def build_interpretation_prompt(corpus: dict[str, str], question: str, data_summary: str) -> str:
     """Build prompt for interpreting query results.
 
     Args:

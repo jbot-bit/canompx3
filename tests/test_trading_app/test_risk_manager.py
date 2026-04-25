@@ -756,9 +756,7 @@ class TestF1ScalingPlanIntegration:
         """
         rm = self._make_rm(50_000)
         rm.set_topstep_xfa_eod_balance(0.0)
-        active = [
-            self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(4)
-        ]
+        active = [self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(4)]
         allowed, _, _ = rm.can_enter(
             strategy_id="MNQ_S5",
             orb_label="EUROPE_FLOW",
@@ -773,9 +771,7 @@ class TestF1ScalingPlanIntegration:
         """Day-1 50K XFA cap = 2 lots = exactly 20 MNQ micros. 19 + 1 = 20 = 2 lots OK."""
         rm = self._make_rm(50_000)
         rm.set_topstep_xfa_eod_balance(0.0)
-        active = [
-            self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(19)
-        ]
+        active = [self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(19)]
         allowed, _, _ = rm.can_enter(
             strategy_id="MNQ_S20",
             orb_label="EUROPE_FLOW",
@@ -795,9 +791,7 @@ class TestF1ScalingPlanIntegration:
         """
         rm = self._make_rm(50_000)
         rm.set_topstep_xfa_eod_balance(0.0)
-        active = [
-            self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(20)
-        ]
+        active = [self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(20)]
         allowed, reason, _ = rm.can_enter(
             strategy_id="MNQ_S21",
             orb_label="EUROPE_FLOW",
@@ -814,9 +808,7 @@ class TestF1ScalingPlanIntegration:
         """After $2K profit (top tier), 50K XFA cap=5 lots=50 MNQ micros. 4+1 = 5 ≤ 50 OK."""
         rm = self._make_rm(50_000)
         rm.set_topstep_xfa_eod_balance(2_000.0)
-        active = [
-            self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(4)
-        ]
+        active = [self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(4)]
         allowed, _, _ = rm.can_enter(
             strategy_id="MNQ_S5",
             orb_label="EUROPE_FLOW",
@@ -831,9 +823,7 @@ class TestF1ScalingPlanIntegration:
         """Top tier cap=5 lots=50 micros. 50 active + 1 new = 51 = 6 lots > 5 → BLOCKED."""
         rm = self._make_rm(50_000)
         rm.set_topstep_xfa_eod_balance(2_000.0)
-        active = [
-            self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(50)
-        ]
+        active = [self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(50)]
         allowed, _, _ = rm.can_enter(
             strategy_id="MNQ_S51",
             orb_label="EUROPE_FLOW",
@@ -880,16 +870,12 @@ class TestF1ScalingPlanIntegration:
 
         # 30 micros exactly at cap → allowed
         active29 = [self._trade(f"S{i}", "MNQ", "long", contracts=1) for i in range(29)]
-        allowed, _, _ = rm.can_enter(
-            "S30", "NYSE_OPEN", active29, 0.0, instrument="MNQ", direction="long"
-        )
+        allowed, _, _ = rm.can_enter("S30", "NYSE_OPEN", active29, 0.0, instrument="MNQ", direction="long")
         assert allowed is True  # 30 MNQ micros = ceil(30/10) = 3 lots = cap
 
         # 31 micros → ceil(31/10) = 4 lots > 3 → blocked
         active30 = [self._trade(f"S{i}", "MNQ", "long", contracts=1) for i in range(30)]
-        allowed, reason, _ = rm.can_enter(
-            "S31", "NYSE_OPEN", active30, 0.0, instrument="MNQ", direction="long"
-        )
+        allowed, reason, _ = rm.can_enter("S31", "NYSE_OPEN", active30, 0.0, instrument="MNQ", direction="long")
         assert allowed is False
         assert "100K XFA" in reason
 
@@ -968,7 +954,5 @@ class TestF1DisableRuntimeOverride:
 
         # Disable F-1 → same entry now allowed
         rm.disable_f1("broker-reality: Trading Combine")
-        allowed_after, _, _ = rm.can_enter(
-            "S21", "NYSE_OPEN", trades_20, 0.0, instrument="MNQ", direction="long"
-        )
+        allowed_after, _, _ = rm.can_enter("S21", "NYSE_OPEN", trades_20, 0.0, instrument="MNQ", direction="long")
         assert allowed_after is True

@@ -106,9 +106,7 @@ class RithmicContracts(BrokerContracts):
         # For order-only mode (no TICKER_PLANT), we construct the symbol manually.
         # Try the API first, fall back to manual construction.
         try:
-            symbol = self.auth.run_async(
-                self.auth.client.get_front_month_contract(root, EXCHANGE_CODE)
-            )
+            symbol = self.auth.run_async(self.auth.client.get_front_month_contract(root, EXCHANGE_CODE))
             if symbol:
                 self._contract_cache[instrument] = symbol
                 log.info("Rithmic contract: %s → %s", instrument, symbol)

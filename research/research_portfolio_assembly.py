@@ -32,16 +32,18 @@ TRADING_DAYS_PER_YEAR = 252
 
 def _get_strategy_params(con, strategy_id):
     """Look up strategy parameters from validated_setups."""
-    row = con.execute("""
+    row = con.execute(
+        """
         SELECT instrument, orb_label, orb_minutes, entry_model,
                rr_target, confirm_bars, filter_type
         FROM validated_setups
         WHERE strategy_id = ?
-    """, [strategy_id]).fetchone()
+    """,
+        [strategy_id],
+    ).fetchone()
     if not row:
         return None
-    cols = ["instrument", "orb_label", "orb_minutes", "entry_model",
-            "rr_target", "confirm_bars", "filter_type"]
+    cols = ["instrument", "orb_label", "orb_minutes", "entry_model", "rr_target", "confirm_bars", "filter_type"]
     return dict(zip(cols, row))
 
 
@@ -109,12 +111,11 @@ def load_slot_trades(con, slots):
                 continue
 
             # Get eligible days from filter
-            eligible = filter_days.get(
-                (params["filter_type"], params["orb_label"]), set()
-            )
+            eligible = filter_days.get((params["filter_type"], params["orb_label"]), set())
 
             # Query outcomes
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT trading_day, outcome, pnl_r
                 FROM orb_outcomes
                 WHERE symbol = ?
@@ -125,10 +126,16 @@ def load_slot_trades(con, slots):
                   AND confirm_bars = ?
                   AND outcome IN ('win', 'loss')
                 ORDER BY trading_day
-            """, [
-                params["instrument"], params["orb_label"], params["orb_minutes"],
-                params["entry_model"], params["rr_target"], params["confirm_bars"],
-            ]).fetchall()
+            """,
+                [
+                    params["instrument"],
+                    params["orb_label"],
+                    params["orb_minutes"],
+                    params["entry_model"],
+                    params["rr_target"],
+                    params["confirm_bars"],
+                ],
+            ).fetchall()
 
             # Filter to eligible days
             trades_by_slot[sid] = [
@@ -153,9 +160,7 @@ def print_slot_inventory(slots, trades_by_slot):
     print("=" * 110)
     print("SLOT INVENTORY")
     print("=" * 110)
-    print(
-        f"{'Instrument':<12} {'Session':<20} {'Strategy ID':<47} {'ExpR':>6} {'ShANN':>7} {'N':>6} {'Tier':<10}"
-    )
+    print(f"{'Instrument':<12} {'Session':<20} {'Strategy ID':<47} {'ExpR':>6} {'ShANN':>7} {'N':>6} {'Tier':<10}")
     print("-" * 110)
 
     total_n = 0
@@ -230,7 +235,7 @@ def compute_honest_sharpe(daily_returns, start_date, end_date):
     total_r = sum(full_series)
     mean_d = total_r / n
     variance = sum((v - mean_d) ** 2 for v in full_series) / (n - 1)
-    std_d = variance ** 0.5
+    std_d = variance**0.5
 
     sharpe_d = mean_d / std_d if std_d > 0 else None
     sharpe_ann = sharpe_d * sqrt(TRADING_DAYS_PER_YEAR) if sharpe_d is not None else None
@@ -290,11 +295,11 @@ def compute_drawdown(daily_returns, start_date, end_date):
                 break
         if trough_idx is not None:
             cum_scan = 0.0
-            for day in all_bdays[:trough_idx + 1]:
+            for day in all_bdays[: trough_idx + 1]:
                 cum_scan += return_map.get(day.date(), 0.0)
             trough_cum = cum_scan
             target = trough_cum + max_dd  # The peak level before drawdown
-            for day in all_bdays[trough_idx + 1:]:
+            for day in all_bdays[trough_idx + 1 :]:
                 cum_scan += return_map.get(day.date(), 0.0)
                 if cum_scan >= target:
                     recovery_days = (day.date() - max_dd_end).days
@@ -316,8 +321,7 @@ def compute_drawdown(daily_returns, start_date, end_date):
     }
 
 
-def print_portfolio_metrics(daily_returns, all_trades, daily_trade_count,
-                            start_date, end_date):
+def print_portfolio_metrics(daily_returns, all_trades, daily_trade_count, start_date, end_date):
     """Section 3: Portfolio metrics."""
     n_trades = len(all_trades)
     n_wins = sum(1 for t in all_trades if t["outcome"] == "win")
@@ -331,9 +335,7 @@ def print_portfolio_metrics(daily_returns, all_trades, daily_trade_count,
     avg_trades_per_day = n_trades / active_days if active_days > 0 else 0
     active_pct = active_days / total_bdays if total_bdays > 0 else 0
 
-    sharpe_d, sharpe_ann, n_full = compute_honest_sharpe(
-        daily_returns, start_date, end_date
-    )
+    sharpe_d, sharpe_ann, n_full = compute_honest_sharpe(daily_returns, start_date, end_date)
     dd = compute_drawdown(daily_returns, start_date, end_date)
 
     print("=" * 80)
@@ -355,14 +357,17 @@ def print_portfolio_metrics(daily_returns, all_trades, daily_trade_count,
     print()
     print(f"  Max drawdown:      {dd['max_dd_r']:.2f}R")
     if dd["max_dd_start"] and dd["max_dd_end"]:
-        print(f"    Period:          {dd['max_dd_start']} to {dd['max_dd_end']} "
-              f"({dd['max_dd_duration_days']} cal days)")
+        print(
+            f"    Period:          {dd['max_dd_start']} to {dd['max_dd_end']} ({dd['max_dd_duration_days']} cal days)"
+        )
         if dd["recovery_days"] is not None:
             print(f"    Recovery:        {dd['recovery_days']} cal days from trough")
         else:
             print(f"    Recovery:        not yet recovered")
-    print(f"  Worst single day:  {dd['worst_single_day']:+.2f}R"
-          + (f" ({dd['worst_single_day_date']})" if dd["worst_single_day_date"] else ""))
+    print(
+        f"  Worst single day:  {dd['worst_single_day']:+.2f}R"
+        + (f" ({dd['worst_single_day_date']})" if dd["worst_single_day_date"] else "")
+    )
     print(f"  Longest losing streak: {dd['longest_losing_streak']} consecutive negative days")
 
 
@@ -370,8 +375,7 @@ def print_yearly_breakdown(all_trades):
     """Section 4: Per-year breakdown with per-year honest Sharpe."""
     import datetime as dt
 
-    yearly = defaultdict(lambda: {"trades": 0, "wins": 0, "total_r": 0.0,
-                                  "days": set(), "daily_r": defaultdict(float)})
+    yearly = defaultdict(lambda: {"trades": 0, "wins": 0, "total_r": 0.0, "days": set(), "daily_r": defaultdict(float)})
 
     for t in all_trades:
         td = t["trading_day"]
@@ -387,10 +391,8 @@ def print_yearly_breakdown(all_trades):
     print("=" * 80)
     print("  PER-YEAR BREAKDOWN")
     print("=" * 80)
-    print(f"  {'Year':>6} {'Trades':>7} {'WR':>7} {'TotalR':>9} {'Days':>6} "
-          f"{'R/Day':>7} {'ShANN':>7}")
-    print(f"  {'----':>6} {'------':>7} {'---':>7} {'------':>9} {'----':>6} "
-          f"{'-----':>7} {'-----':>7}")
+    print(f"  {'Year':>6} {'Trades':>7} {'WR':>7} {'TotalR':>9} {'Days':>6} {'R/Day':>7} {'ShANN':>7}")
+    print(f"  {'----':>6} {'------':>7} {'---':>7} {'------':>9} {'----':>6} {'-----':>7} {'-----':>7}")
 
     for year in sorted(yearly.keys()):
         y = yearly[year]
@@ -406,8 +408,10 @@ def print_yearly_breakdown(all_trades):
         _, sharpe_ann, _ = compute_honest_sharpe(daily_list, year_start, year_end)
         sharpe_str = f"{sharpe_ann:>6.2f}" if sharpe_ann is not None else "   N/A"
 
-        print(f"  {year:>6} {y['trades']:>7} {wr:>6.1%} "
-              f"{y['total_r']:>+8.1f}R {n_days:>6} {r_per_day:>+6.3f} {sharpe_str}")
+        print(
+            f"  {year:>6} {y['trades']:>7} {wr:>6.1%} "
+            f"{y['total_r']:>+8.1f}R {n_days:>6} {r_per_day:>+6.3f} {sharpe_str}"
+        )
 
 
 def print_instrument_contribution(all_trades):
@@ -434,8 +438,7 @@ def print_instrument_contribution(all_trades):
         v = by_inst[inst]
         wr = v["wins"] / v["trades"] if v["trades"] > 0 else 0
         pct = v["total_r"] / total_r if total_r != 0 else 0
-        print(f"  {inst:>6} {v['trades']:>7} {wr:>6.1%} "
-              f"{v['total_r']:>+8.1f}R {pct:>7.1%}")
+        print(f"  {inst:>6} {v['trades']:>7} {wr:>6.1%} {v['total_r']:>+8.1f}R {pct:>7.1%}")
 
 
 def print_correlation_matrix(trades_by_slot, slots):
@@ -527,9 +530,7 @@ def print_concurrent_exposure(daily_trade_count, start_date, end_date):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Portfolio Assembly Research Report"
-    )
+    parser = argparse.ArgumentParser(description="Portfolio Assembly Research Report")
     parser.add_argument(
         "--db-path",
         type=str,
@@ -610,22 +611,19 @@ def main():
                 print()
                 print("#" * 80)
                 print("  VIEW 2: COMMON PERIOD (all instruments present)")
-                print(f"  (Latest instrument start: {common_start}, "
-                      f"earliest instrument end: {common_end})")
+                print(f"  (Latest instrument start: {common_start}, earliest instrument end: {common_end})")
                 print("#" * 80)
 
                 # Filter trades to common period
                 common_trades_by_slot = {}
                 for sid, trades in trades_by_slot.items():
-                    filtered = [t for t in trades
-                                if common_start <= t["trading_day"] <= common_end]
+                    filtered = [t for t in trades if common_start <= t["trading_day"] <= common_end]
                     if filtered:
                         common_trades_by_slot[sid] = filtered
 
                 c_daily, c_all, c_counts = build_daily_equity(common_trades_by_slot)
                 if c_all:
-                    print_portfolio_metrics(c_daily, c_all, c_counts,
-                                            common_start, common_end)
+                    print_portfolio_metrics(c_daily, c_all, c_counts, common_start, common_end)
                     print_yearly_breakdown(c_all)
                     print_instrument_contribution(c_all)
                     print_correlation_matrix(common_trades_by_slot, slots)

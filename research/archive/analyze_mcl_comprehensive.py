@@ -55,53 +55,66 @@ MCL_END = date(2026, 2, 10)
 # DATA LOADING HELPERS
 # ============================================================================
 
+
 def load_mcl_features(db_path: Path, orb_minutes: int = 5) -> pd.DataFrame:
     """Load daily_features for MCL."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT *
             FROM daily_features
             WHERE symbol = ?
               AND orb_minutes = ?
               AND trading_day BETWEEN ? AND ?
             ORDER BY trading_day
-        """, [INSTRUMENT, orb_minutes, MCL_START, MCL_END]).fetchdf()
+        """,
+            [INSTRUMENT, orb_minutes, MCL_START, MCL_END],
+        ).fetchdf()
     finally:
         con.close()
     return df
+
 
 def load_mcl_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1m bars for one MCL trading day."""
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = ?
               AND ts_utc >= ?::TIMESTAMPTZ AND ts_utc < ?::TIMESTAMPTZ
             ORDER BY ts_utc
-        """, [INSTRUMENT, start_utc.isoformat(), end_utc.isoformat()]).fetchdf()
+        """,
+            [INSTRUMENT, start_utc.isoformat(), end_utc.isoformat()],
+        ).fetchdf()
     finally:
         con.close()
     if not df.empty:
-        df['ts_utc'] = pd.to_datetime(df['ts_utc'], utc=True)
+        df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
     return df
+
 
 def load_mcl_outcomes(db_path: Path) -> pd.DataFrame:
     """Load orb_outcomes for MCL."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT *
             FROM orb_outcomes
             WHERE symbol = ?
             ORDER BY trading_day, orb_label
-        """, [INSTRUMENT]).fetchdf()
+        """,
+            [INSTRUMENT],
+        ).fetchdf()
     finally:
         con.close()
     return df
+
 
 def load_all_mcl_bars(db_path: Path) -> pd.DataFrame:
     """Load ALL MCL 1m bars (used for VWAP and time-of-day strategies)."""
@@ -109,26 +122,31 @@ def load_all_mcl_bars(db_path: Path) -> pd.DataFrame:
     _, end_utc = compute_trading_day_utc_range(MCL_END)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = ?
               AND ts_utc >= ?::TIMESTAMPTZ AND ts_utc < ?::TIMESTAMPTZ
             ORDER BY ts_utc
-        """, [INSTRUMENT, start_utc.isoformat(), end_utc.isoformat()]).fetchdf()
+        """,
+            [INSTRUMENT, start_utc.isoformat(), end_utc.isoformat()],
+        ).fetchdf()
     finally:
         con.close()
     if not df.empty:
-        df['ts_utc'] = pd.to_datetime(df['ts_utc'], utc=True)
+        df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
     return df
+
 
 # ============================================================================
 # SHARED HELPERS
 # ============================================================================
 
-def resolve_bar_outcome(bars: pd.DataFrame, entry_price: float,
-                        stop_price: float, target_price: float,
-                        direction: str, start_idx: int) -> dict | None:
+
+def resolve_bar_outcome(
+    bars: pd.DataFrame, entry_price: float, stop_price: float, target_price: float, direction: str, start_idx: int
+) -> dict | None:
     """Scan bars for stop/target hit. Ambiguous bar = LOSS (Gate C)."""
     is_long = direction == "long"
     for i in range(start_idx, len(bars)):
@@ -154,12 +172,14 @@ def resolve_bar_outcome(bars: pd.DataFrame, entry_price: float,
             return {"outcome": "win", "pnl_points": pnl, "exit_idx": i}
     return None
 
+
 def pnl_to_r_gross(entry: float, stop: float, pnl_points: float) -> float:
     """Convert pnl_points to R-multiple WITHOUT friction (gross)."""
     risk_pts = abs(entry - stop)
     if risk_pts <= 0:
         return 0.0
     return pnl_points / risk_pts
+
 
 def pnl_to_r_net(entry: float, stop: float, pnl_points: float) -> float:
     """Convert pnl_points to R-multiple WITH friction (net)."""
@@ -168,6 +188,7 @@ def pnl_to_r_net(entry: float, stop: float, pnl_points: float) -> float:
         return 0.0
     pnl_dollars = pnl_points * SPEC.point_value - SPEC.total_friction
     return pnl_dollars / risk_dollars
+
 
 def print_metrics(label: str, gross_pnls: np.ndarray, net_pnls: np.ndarray):
     """Print a formatted metrics line for one strategy variant."""
@@ -180,26 +201,35 @@ def print_metrics(label: str, gross_pnls: np.ndarray, net_pnls: np.ndarray):
     tpy = g["n"] / years if years > 0 else 0
     g_sha = g["sharpe"] * np.sqrt(tpy) if tpy > 0 else 0.0
     n_sha = n["sharpe"] * np.sqrt(tpy) if tpy > 0 else 0.0
-    print(f"  {label:40s}  N={g['n']:5d}  "
-          f"WR={g['wr']:.1%}  "
-          f"GrossExpR={g['expr']:+.3f}  GrossSh={g_sha:+.2f}  "
-          f"NetExpR={n['expr']:+.3f}  NetSh={n_sha:+.2f}  "
-          f"MaxDD={n['maxdd']:.1f}R  TotalR={n['total']:.1f}")
+    print(
+        f"  {label:40s}  N={g['n']:5d}  "
+        f"WR={g['wr']:.1%}  "
+        f"GrossExpR={g['expr']:+.3f}  GrossSh={g_sha:+.2f}  "
+        f"NetExpR={n['expr']:+.3f}  NetSh={n_sha:+.2f}  "
+        f"MaxDD={n['maxdd']:.1f}R  TotalR={n['total']:.1f}"
+    )
+
 
 def orb_utc_hour(orb_label: str) -> tuple[int, int]:
     """Return (hour, minute) in UTC for an ORB label."""
     # Brisbane = UTC+10
     local_times = {
-        "0900": (9, 0), "1000": (10, 0), "1100": (11, 0),
-        "1800": (18, 0), "2300": (23, 0), "0030": (0, 30),
+        "0900": (9, 0),
+        "1000": (10, 0),
+        "1100": (11, 0),
+        "1800": (18, 0),
+        "2300": (23, 0),
+        "0030": (0, 30),
     }
     lh, lm = local_times[orb_label]
     utc_h = (lh - 10) % 24
     return utc_h, lm
 
+
 # ============================================================================
 # STRATEGY 1: ORB FADE
 # ============================================================================
+
 
 def run_orb_fade(db_path: Path, features: pd.DataFrame):
     """
@@ -225,12 +255,12 @@ def run_orb_fade(db_path: Path, features: pd.DataFrame):
 
         # Filter days with valid breaks
         mask = (
-            features[d_col].notna() &
-            features[d_col].isin(["long", "short"]) &
-            features[h_col].notna() &
-            features[l_col].notna() &
-            features[s_col].notna() &
-            (features[s_col] > 0)
+            features[d_col].notna()
+            & features[d_col].isin(["long", "short"])
+            & features[h_col].notna()
+            & features[l_col].notna()
+            & features[s_col].notna()
+            & (features[s_col] > 0)
         )
         valid_days = features[mask].copy()
         if valid_days.empty:
@@ -247,7 +277,7 @@ def run_orb_fade(db_path: Path, features: pd.DataFrame):
                     td = row["trading_day"]
                     if isinstance(td, str):
                         td = date.fromisoformat(td)
-                    elif hasattr(td, 'date'):
+                    elif hasattr(td, "date"):
                         td = td.date() if callable(td.date) else td.date
 
                     orb_high = float(row[h_col])
@@ -279,13 +309,13 @@ def run_orb_fade(db_path: Path, features: pd.DataFrame):
                     # Convert break_ts for comparison
                     if isinstance(break_ts, str):
                         break_ts = pd.Timestamp(break_ts, tz="UTC")
-                    elif not hasattr(break_ts, 'tzinfo') or break_ts.tzinfo is None:
+                    elif not hasattr(break_ts, "tzinfo") or break_ts.tzinfo is None:
                         break_ts = pd.Timestamp(break_ts).tz_localize("UTC")
                     else:
                         break_ts = pd.Timestamp(break_ts).tz_convert("UTC")
 
                     # Find bar index after break + cb confirm bars
-                    post_break = bars[bars['ts_utc'] > break_ts]
+                    post_break = bars[bars["ts_utc"] > break_ts]
                     if len(post_break) < cb + 1:
                         continue
 
@@ -315,10 +345,7 @@ def run_orb_fade(db_path: Path, features: pd.DataFrame):
                     if scan_start >= len(bars):
                         continue
 
-                    result = resolve_bar_outcome(
-                        bars, entry_price, stop_price, target_price,
-                        direction, scan_start
-                    )
+                    result = resolve_bar_outcome(bars, entry_price, stop_price, target_price, direction, scan_start)
                     if result is None:
                         # EOD exit: mark-to-market at last bar close
                         last_close = float(bars.iloc[-1]["close"])
@@ -340,16 +367,15 @@ def run_orb_fade(db_path: Path, features: pd.DataFrame):
                 if net_pnls:
                     m = compute_strategy_metrics(np.array(net_pnls))
                     if m:
-                        results_summary.append({
-                            "strategy": f"ORB_FADE_{label}",
-                            **m
-                        })
+                        results_summary.append({"strategy": f"ORB_FADE_{label}", **m})
 
     return results_summary
+
 
 # ============================================================================
 # STRATEGY 2: DOUBLE-BREAK FADE
 # ============================================================================
+
 
 def run_double_break_fade(db_path: Path, features: pd.DataFrame):
     """
@@ -377,15 +403,9 @@ def run_double_break_fade(db_path: Path, features: pd.DataFrame):
             print(f"  ORB {orb_label} -- no double_break column, skipping")
             continue
 
-        mask = (
-            features[db_col] == True &
-            features[d_col].notna() &
-            features[d_col].isin(["long", "short"]) &
-            features[h_col].notna() &
-            features[l_col].notna() &
-            features[s_col].notna() &
-            (features[s_col] > 0)
-        )
+        mask = features[db_col] == True & features[d_col].notna() & features[d_col].isin(["long", "short"]) & features[
+            h_col
+        ].notna() & features[l_col].notna() & features[s_col].notna() & (features[s_col] > 0)
         valid_days = features[mask].copy()
         if valid_days.empty:
             print(f"  ORB {orb_label} -- 0 double-break days, skipping")
@@ -401,7 +421,7 @@ def run_double_break_fade(db_path: Path, features: pd.DataFrame):
                 td = row["trading_day"]
                 if isinstance(td, str):
                     td = date.fromisoformat(td)
-                elif hasattr(td, 'date'):
+                elif hasattr(td, "date"):
                     td = td.date() if callable(td.date) else td.date
 
                 orb_high = float(row[h_col])
@@ -445,13 +465,13 @@ def run_double_break_fade(db_path: Path, features: pd.DataFrame):
 
                 if isinstance(break_ts, str):
                     break_ts = pd.Timestamp(break_ts, tz="UTC")
-                elif not hasattr(break_ts, 'tzinfo') or break_ts.tzinfo is None:
+                elif not hasattr(break_ts, "tzinfo") or break_ts.tzinfo is None:
                     break_ts = pd.Timestamp(break_ts).tz_localize("UTC")
                 else:
                     break_ts = pd.Timestamp(break_ts).tz_convert("UTC")
 
                 # Scan for second break crossing
-                post_break = bars[bars['ts_utc'] > break_ts]
+                post_break = bars[bars["ts_utc"] > break_ts]
                 entry_bar_idx = None
                 fakeout_extreme = None
 
@@ -499,10 +519,7 @@ def run_double_break_fade(db_path: Path, features: pd.DataFrame):
                 if scan_start >= len(bars):
                     continue
 
-                result = resolve_bar_outcome(
-                    bars, entry_price, stop_price, target_price,
-                    direction, scan_start
-                )
+                result = resolve_bar_outcome(bars, entry_price, stop_price, target_price, direction, scan_start)
                 if result is None:
                     last_close = float(bars.iloc[-1]["close"])
                     pnl_pts = (last_close - entry_price) if direction == "long" else (entry_price - last_close)
@@ -520,16 +537,15 @@ def run_double_break_fade(db_path: Path, features: pd.DataFrame):
             if net_pnls:
                 m = compute_strategy_metrics(np.array(net_pnls))
                 if m:
-                    results_summary.append({
-                        "strategy": f"DB_FADE_{label}",
-                        **m
-                    })
+                    results_summary.append({"strategy": f"DB_FADE_{label}", **m})
 
     return results_summary
+
 
 # ============================================================================
 # STRATEGY 3: RANGE COMPRESSION (small ORB delayed breakout)
 # ============================================================================
+
 
 def run_range_compression(db_path: Path, features: pd.DataFrame):
     """
@@ -551,12 +567,7 @@ def run_range_compression(db_path: Path, features: pd.DataFrame):
         s_col = f"orb_{orb_label}_size"
 
         # Need valid ORBs
-        mask = (
-            features[h_col].notna() &
-            features[l_col].notna() &
-            features[s_col].notna() &
-            (features[s_col] > 0)
-        )
+        mask = features[h_col].notna() & features[l_col].notna() & features[s_col].notna() & (features[s_col] > 0)
         valid = features[mask].copy()
         if valid.empty:
             continue
@@ -568,8 +579,7 @@ def run_range_compression(db_path: Path, features: pd.DataFrame):
         if small_orb_days.empty:
             continue
 
-        print(f"\n  ORB {orb_label} -- median size={median_size:.4f}, "
-              f"{len(small_orb_days)} small-ORB days")
+        print(f"\n  ORB {orb_label} -- median size={median_size:.4f}, {len(small_orb_days)} small-ORB days")
 
         for wait_min in wait_minutes_list:
             for rr in rr_targets:
@@ -580,7 +590,7 @@ def run_range_compression(db_path: Path, features: pd.DataFrame):
                     td = row["trading_day"]
                     if isinstance(td, str):
                         td = date.fromisoformat(td)
-                    elif hasattr(td, 'date'):
+                    elif hasattr(td, "date"):
                         td = td.date() if callable(td.date) else td.date
 
                     orb_high = float(row[h_col])
@@ -599,35 +609,32 @@ def run_range_compression(db_path: Path, features: pd.DataFrame):
                     # ORB is first 5 minutes, so ORB end = orb_start + 5 min
                     # We want to wait wait_min minutes AFTER the ORB
                     # Compression window end = orb_start + 5 + wait_min
-                    orb_start_mask = bars['ts_utc'].apply(
-                        lambda t: t.hour == utc_h and t.minute == utc_m
-                    )
+                    orb_start_mask = bars["ts_utc"].apply(lambda t: t.hour == utc_h and t.minute == utc_m)
                     orb_start_bars = bars[orb_start_mask]
                     if orb_start_bars.empty:
                         continue
 
-                    orb_start_ts = orb_start_bars.iloc[0]['ts_utc']
+                    orb_start_ts = orb_start_bars.iloc[0]["ts_utc"]
                     compression_end = orb_start_ts + pd.Timedelta(minutes=5 + wait_min)
 
                     # Get bars in compression window (after ORB, before compression_end)
-                    comp_mask = (
-                        (bars['ts_utc'] > orb_start_ts + pd.Timedelta(minutes=5)) &
-                        (bars['ts_utc'] <= compression_end)
+                    comp_mask = (bars["ts_utc"] > orb_start_ts + pd.Timedelta(minutes=5)) & (
+                        bars["ts_utc"] <= compression_end
                     )
                     comp_bars = bars[comp_mask]
 
                     # Track compression range
                     if comp_bars.empty:
                         continue
-                    comp_high = comp_bars['high'].max()
-                    comp_low = comp_bars['low'].min()
+                    comp_high = comp_bars["high"].max()
+                    comp_low = comp_bars["low"].min()
 
                     # Extended range = union of ORB and compression period
                     range_high = max(orb_high, float(comp_high))
                     range_low = min(orb_low, float(comp_low))
 
                     # Now scan AFTER compression window for breakout
-                    post_comp = bars[bars['ts_utc'] > compression_end]
+                    post_comp = bars[bars["ts_utc"] > compression_end]
                     if post_comp.empty:
                         continue
 
@@ -672,10 +679,7 @@ def run_range_compression(db_path: Path, features: pd.DataFrame):
                     if scan_start >= len(bars):
                         continue
 
-                    result = resolve_bar_outcome(
-                        bars, entry_price, stop_price, target_price,
-                        direction, scan_start
-                    )
+                    result = resolve_bar_outcome(bars, entry_price, stop_price, target_price, direction, scan_start)
                     if result is None:
                         last_close = float(bars.iloc[-1]["close"])
                         pnl_pts = (last_close - entry_price) if direction == "long" else (entry_price - last_close)
@@ -693,16 +697,15 @@ def run_range_compression(db_path: Path, features: pd.DataFrame):
                 if net_pnls:
                     m = compute_strategy_metrics(np.array(net_pnls))
                     if m:
-                        results_summary.append({
-                            "strategy": f"COMPRESSION_{label}",
-                            **m
-                        })
+                        results_summary.append({"strategy": f"COMPRESSION_{label}", **m})
 
     return results_summary
+
 
 # ============================================================================
 # STRATEGY 4: SESSION FADE
 # ============================================================================
+
 
 def run_session_fade(db_path: Path, features: pd.DataFrame):
     """
@@ -756,7 +759,7 @@ def run_session_fade(db_path: Path, features: pd.DataFrame):
             td = row["trading_day"]
             if isinstance(td, str):
                 td = date.fromisoformat(td)
-            elif hasattr(td, 'date'):
+            elif hasattr(td, "date"):
                 td = td.date() if callable(td.date) else td.date
 
             asia_dir = row[d_0900]  # use 0900 break as proxy for Asian direction
@@ -780,7 +783,7 @@ def run_session_fade(db_path: Path, features: pd.DataFrame):
                 continue
 
             # Find 1800 Brisbane = 08:00 UTC bar
-            entry_mask = bars['ts_utc'].apply(lambda t: t.hour == 8 and t.minute == 0)
+            entry_mask = bars["ts_utc"].apply(lambda t: t.hour == 8 and t.minute == 0)
             entry_bars = bars[entry_mask]
             if entry_bars.empty:
                 continue
@@ -812,10 +815,7 @@ def run_session_fade(db_path: Path, features: pd.DataFrame):
             if scan_start >= len(bars):
                 continue
 
-            result = resolve_bar_outcome(
-                bars, entry_price, stop_price, target_price,
-                direction, scan_start
-            )
+            result = resolve_bar_outcome(bars, entry_price, stop_price, target_price, direction, scan_start)
             if result is None:
                 last_close = float(bars.iloc[-1]["close"])
                 pnl_pts = (last_close - entry_price) if direction == "long" else (entry_price - last_close)
@@ -833,16 +833,15 @@ def run_session_fade(db_path: Path, features: pd.DataFrame):
         if net_pnls:
             m = compute_strategy_metrics(np.array(net_pnls))
             if m:
-                results_summary.append({
-                    "strategy": f"SESSION_FADE_{label}",
-                    **m
-                })
+                results_summary.append({"strategy": f"SESSION_FADE_{label}", **m})
 
     return results_summary
+
 
 # ============================================================================
 # STRATEGY 5: VWAP REVERSION
 # ============================================================================
+
 
 def run_vwap_reversion(db_path: Path, features: pd.DataFrame):
     """
@@ -858,13 +857,13 @@ def run_vwap_reversion(db_path: Path, features: pd.DataFrame):
     results_summary = []
 
     # We need atr_20 from features
-    if 'atr_20' not in features.columns:
+    if "atr_20" not in features.columns:
         print("  No atr_20 column in features, skipping VWAP reversion")
         return results_summary
 
     # Get unique trading days with valid ATR
-    atr_data = features[features['atr_20'].notna()][['trading_day', 'atr_20']].drop_duplicates('trading_day')
-    atr_dict = dict(zip(atr_data['trading_day'], atr_data['atr_20']))
+    atr_data = features[features["atr_20"].notna()][["trading_day", "atr_20"]].drop_duplicates("trading_day")
+    atr_dict = dict(zip(atr_data["trading_day"], atr_data["atr_20"]))
 
     for atr_thresh in atr_thresholds:
         for stop_mult in stop_mult_list:
@@ -875,7 +874,7 @@ def run_vwap_reversion(db_path: Path, features: pd.DataFrame):
             for td_raw, atr_val in atr_dict.items():
                 if isinstance(td_raw, str):
                     td = date.fromisoformat(td_raw)
-                elif hasattr(td_raw, 'date'):
+                elif hasattr(td_raw, "date"):
                     td = td_raw.date() if callable(td_raw.date) else td_raw.date
                 else:
                     td = td_raw
@@ -891,16 +890,16 @@ def run_vwap_reversion(db_path: Path, features: pd.DataFrame):
                 days_processed += 1
 
                 # Compute running VWAP for the day
-                typical_price = (bars['high'] + bars['low'] + bars['close']) / 3.0
-                cum_tp_vol = (typical_price * bars['volume']).cumsum()
-                cum_vol = bars['volume'].cumsum()
+                typical_price = (bars["high"] + bars["low"] + bars["close"]) / 3.0
+                cum_tp_vol = (typical_price * bars["volume"]).cumsum()
+                cum_vol = bars["volume"].cumsum()
                 vwap = cum_tp_vol / cum_vol.replace(0, np.nan)
 
                 # Skip first 30 minutes to let VWAP stabilize
                 if len(bars) < 30:
                     continue
 
-                deviation = bars['close'] - vwap
+                deviation = bars["close"] - vwap
                 deviation_atr = deviation / atr
 
                 # Scan for entry signals
@@ -914,7 +913,7 @@ def run_vwap_reversion(db_path: Path, features: pd.DataFrame):
                         continue
 
                     # Signal: deviation exceeds threshold
-                    close_price = float(bars.iloc[i]['close'])
+                    close_price = float(bars.iloc[i]["close"])
                     vwap_price = float(vwap.iloc[i])
                     dev_points = abs(close_price - vwap_price)
 
@@ -936,10 +935,7 @@ def run_vwap_reversion(db_path: Path, features: pd.DataFrame):
                         continue
 
                     scan_start = i + 1
-                    result = resolve_bar_outcome(
-                        bars, entry_price, stop_price, target_price,
-                        direction, scan_start
-                    )
+                    result = resolve_bar_outcome(bars, entry_price, stop_price, target_price, direction, scan_start)
                     if result is None:
                         last_close = float(bars.iloc[-1]["close"])
                         pnl_pts = (last_close - entry_price) if direction == "long" else (entry_price - last_close)
@@ -958,16 +954,15 @@ def run_vwap_reversion(db_path: Path, features: pd.DataFrame):
             if net_pnls:
                 m = compute_strategy_metrics(np.array(net_pnls))
                 if m:
-                    results_summary.append({
-                        "strategy": f"VWAP_REV_{label}",
-                        **m
-                    })
+                    results_summary.append({"strategy": f"VWAP_REV_{label}", **m})
 
     return results_summary
+
 
 # ============================================================================
 # STRATEGY 6: TIME-OF-DAY DIRECTIONAL BIAS
 # ============================================================================
+
 
 def run_time_of_day(db_path: Path):
     """
@@ -991,34 +986,37 @@ def run_time_of_day(db_path: Path):
     print(f"  Loaded {len(all_bars):,} bars")
 
     # Compute per-bar returns
-    all_bars = all_bars.sort_values('ts_utc').reset_index(drop=True)
-    all_bars['return_pts'] = all_bars['close'] - all_bars['open']
-    all_bars['utc_hour'] = all_bars['ts_utc'].dt.hour
+    all_bars = all_bars.sort_values("ts_utc").reset_index(drop=True)
+    all_bars["return_pts"] = all_bars["close"] - all_bars["open"]
+    all_bars["utc_hour"] = all_bars["ts_utc"].dt.hour
 
     # Assign trading days
-    all_bars['trading_day'] = all_bars['ts_utc'].apply(
-        lambda t: (t - pd.Timedelta(hours=23)).date()
-        if t.hour >= 23 else t.date()
+    all_bars["trading_day"] = all_bars["ts_utc"].apply(
+        lambda t: (t - pd.Timedelta(hours=23)).date() if t.hour >= 23 else t.date()
     )
     # Simpler: use the Brisbane boundary
     # 23:00 UTC = 09:00 Brisbane = new trading day
-    all_bars['trading_day'] = all_bars['ts_utc'].apply(
+    all_bars["trading_day"] = all_bars["ts_utc"].apply(
         lambda t: t.date() if t.hour >= 23 else (t - pd.Timedelta(hours=0)).date()
     )
     # Actually just group by UTC hour for hourly returns
     # Compute 1-hour bar returns for each UTC hour
-    all_bars['date'] = all_bars['ts_utc'].dt.date
+    all_bars["date"] = all_bars["ts_utc"].dt.date
 
     # Group: per day per hour, compute open-to-close return
-    hourly = all_bars.groupby(['date', 'utc_hour']).agg(
-        open_price=('open', 'first'),
-        close_price=('close', 'last'),
-        high=('high', 'max'),
-        low=('low', 'min'),
-        n_bars=('close', 'count'),
-    ).reset_index()
+    hourly = (
+        all_bars.groupby(["date", "utc_hour"])
+        .agg(
+            open_price=("open", "first"),
+            close_price=("close", "last"),
+            high=("high", "max"),
+            low=("low", "min"),
+            n_bars=("close", "count"),
+        )
+        .reset_index()
+    )
 
-    hourly['hour_return_pts'] = hourly['close_price'] - hourly['open_price']
+    hourly["hour_return_pts"] = hourly["close_price"] - hourly["open_price"]
 
     # Phase 1: Scan for directional bias per UTC hour
     print("\n  UTC Hour | Mean Ret(pts) | Std(pts) | t-stat | N days | Direction")
@@ -1026,17 +1024,19 @@ def run_time_of_day(db_path: Path):
 
     bias_hours = []
     for hour in range(24):
-        h_data = hourly[hourly['utc_hour'] == hour]
+        h_data = hourly[hourly["utc_hour"] == hour]
         if len(h_data) < 50:
             continue
-        rets = h_data['hour_return_pts'].values
+        rets = h_data["hour_return_pts"].values
         mean_ret = np.mean(rets)
         std_ret = np.std(rets, ddof=1) if len(rets) > 1 else 1e-9
         t_stat = mean_ret / (std_ret / np.sqrt(len(rets)))
         direction = "LONG" if mean_ret > 0 else "SHORT"
         significant = "*" if abs(t_stat) > 2.0 else " "
-        print(f"  {hour:02d}:00 UTC | {mean_ret:+.5f}      | {std_ret:.5f}  | "
-              f"{t_stat:+.2f}   | {len(rets):5d}  | {direction} {significant}")
+        print(
+            f"  {hour:02d}:00 UTC | {mean_ret:+.5f}      | {std_ret:.5f}  | "
+            f"{t_stat:+.2f}   | {len(rets):5d}  | {direction} {significant}"
+        )
         if abs(t_stat) > 1.5:  # looser threshold for further testing
             bias_hours.append((hour, direction.lower(), mean_ret, t_stat))
 
@@ -1054,22 +1054,19 @@ def run_time_of_day(db_path: Path):
             gross_pnls = []
             net_pnls = []
 
-            h_data = hourly[hourly['utc_hour'] == hour]
+            h_data = hourly[hourly["utc_hour"] == hour]
 
             for _, h_row in h_data.iterrows():
-                d = h_row['date']
-                entry_price = float(h_row['open_price'])
+                d = h_row["date"]
+                entry_price = float(h_row["open_price"])
 
                 # Find exit: N hours later
                 exit_hour = (hour + hold_hours) % 24
-                exit_data = hourly[
-                    (hourly['date'] == d) &
-                    (hourly['utc_hour'] == exit_hour)
-                ]
+                exit_data = hourly[(hourly["date"] == d) & (hourly["utc_hour"] == exit_hour)]
                 if exit_data.empty:
                     continue
 
-                exit_price = float(exit_data.iloc[0]['close_price'])
+                exit_price = float(exit_data.iloc[0]["close_price"])
 
                 if direction == "long":
                     pnl_pts = exit_price - entry_price
@@ -1077,10 +1074,10 @@ def run_time_of_day(db_path: Path):
                     pnl_pts = entry_price - exit_price
 
                 # Use fixed stop = typical hourly range (from hourly stats)
-                day_hourly = hourly[hourly['date'] == d]
+                day_hourly = hourly[hourly["date"] == d]
                 if day_hourly.empty:
                     continue
-                avg_range = float((day_hourly['high'] - day_hourly['low']).median())
+                avg_range = float((day_hourly["high"] - day_hourly["low"]).median())
                 if avg_range <= 0:
                     avg_range = 0.10  # fallback
 
@@ -1105,16 +1102,15 @@ def run_time_of_day(db_path: Path):
             if net_pnls:
                 m = compute_strategy_metrics(np.array(net_pnls))
                 if m:
-                    results_summary.append({
-                        "strategy": f"TOD_{label}",
-                        **m
-                    })
+                    results_summary.append({"strategy": f"TOD_{label}", **m})
 
     return results_summary
+
 
 # ============================================================================
 # SUMMARY TABLE
 # ============================================================================
+
 
 def print_summary_table(all_results: list[dict]):
     """Print final comparison table of all strategies tested."""
@@ -1131,8 +1127,7 @@ def print_summary_table(all_results: list[dict]):
 
     years = (MCL_END - MCL_START).days / 365.25
 
-    print(f"\n  {'Strategy':<50s} {'N':>5s} {'WR':>6s} {'ExpR':>8s} "
-          f"{'ShANN':>7s} {'MaxDD':>7s} {'TotalR':>8s}")
+    print(f"\n  {'Strategy':<50s} {'N':>5s} {'WR':>6s} {'ExpR':>8s} {'ShANN':>7s} {'MaxDD':>7s} {'TotalR':>8s}")
     print("  " + "-" * 93)
 
     for r in all_results:
@@ -1143,9 +1138,11 @@ def print_summary_table(all_results: list[dict]):
             verdict = " <-- INVESTIGATE"
         elif r["expr"] > 0:
             verdict = " <-- marginal"
-        print(f"  {r['strategy']:<50s} {r['n']:5d} {r['wr']:5.1%} "
-              f"{r['expr']:+7.3f} {sha:+6.2f} {r['maxdd']:6.1f}R "
-              f"{r['total']:+7.1f}{verdict}")
+        print(
+            f"  {r['strategy']:<50s} {r['n']:5d} {r['wr']:5.1%} "
+            f"{r['expr']:+7.3f} {sha:+6.2f} {r['maxdd']:6.1f}R "
+            f"{r['total']:+7.1f}{verdict}"
+        )
 
     # Count positive ExpR
     positive = [r for r in all_results if r.get("expr", 0) > 0]
@@ -1159,21 +1156,21 @@ def print_summary_table(all_results: list[dict]):
         tpy = best["n"] / years if years > 0 else 0
         sha = best["sharpe"] * np.sqrt(tpy) if tpy > 0 else 0.0
         print(f"\n  Best strategy: {best['strategy']}")
-        print(f"  ExpR={best['expr']:+.3f}, ShANN={sha:+.2f}, N={best['n']}, "
-              f"MaxDD={best['maxdd']:.1f}R")
+        print(f"  ExpR={best['expr']:+.3f}, ShANN={sha:+.2f}, N={best['n']}, MaxDD={best['maxdd']:.1f}R")
         if sha < 0.5:
             print("  WARNING: Best Sharpe_ann < 0.5 -- likely not tradeable.")
+
 
 # ============================================================================
 # MAIN
 # ============================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Comprehensive MCL strategy scan -- all strategy types"
+    parser = argparse.ArgumentParser(description="Comprehensive MCL strategy scan -- all strategy types")
+    parser.add_argument(
+        "--db-path", type=str, default="C:/db/gold.db", help="Path to DuckDB database (default: C:/db/gold.db)"
     )
-    parser.add_argument("--db-path", type=str, default="C:/db/gold.db",
-                        help="Path to DuckDB database (default: C:/db/gold.db)")
     args = parser.parse_args()
 
     db_path = Path(args.db_path)
@@ -1184,30 +1181,24 @@ def main():
     print(f"MCL Comprehensive Strategy Scan")
     print(f"Database: {db_path}")
     print(f"Instrument: {INSTRUMENT}")
-    print(f"Cost model: ${SPEC.point_value}/point, ${SPEC.total_friction:.2f} RT friction, "
-          f"tick={SPEC.tick_size}")
+    print(f"Cost model: ${SPEC.point_value}/point, ${SPEC.total_friction:.2f} RT friction, tick={SPEC.tick_size}")
     print(f"Date range: {MCL_START} to {MCL_END}")
 
     # Quick data check
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        bar_count = con.execute(
-            "SELECT COUNT(*) FROM bars_1m WHERE symbol = ?", [INSTRUMENT]
-        ).fetchone()[0]
-        feat_count = con.execute(
-            "SELECT COUNT(*) FROM daily_features WHERE symbol = ?", [INSTRUMENT]
-        ).fetchone()[0]
+        bar_count = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = ?", [INSTRUMENT]).fetchone()[0]
+        feat_count = con.execute("SELECT COUNT(*) FROM daily_features WHERE symbol = ?", [INSTRUMENT]).fetchone()[0]
         try:
-            outcome_count = con.execute(
-                "SELECT COUNT(*) FROM orb_outcomes WHERE symbol = ?", [INSTRUMENT]
-            ).fetchone()[0]
+            outcome_count = con.execute("SELECT COUNT(*) FROM orb_outcomes WHERE symbol = ?", [INSTRUMENT]).fetchone()[
+                0
+            ]
         except Exception:
             outcome_count = 0
     finally:
         con.close()
 
-    print(f"\nData check: bars_1m={bar_count:,}, daily_features={feat_count:,}, "
-          f"orb_outcomes={outcome_count:,}")
+    print(f"\nData check: bars_1m={bar_count:,}, daily_features={feat_count:,}, orb_outcomes={outcome_count:,}")
 
     if bar_count == 0:
         print("FATAL: No MCL bars in database. Run pipeline first.")
@@ -1286,6 +1277,7 @@ def main():
 
     # Final summary
     print_summary_table(all_results)
+
 
 if __name__ == "__main__":
     main()

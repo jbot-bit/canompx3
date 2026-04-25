@@ -48,17 +48,20 @@ TRADING_DAYS_PER_YEAR = 252
 # TRADE LOADING (reuses portfolio assembly pattern)
 # =============================================================================
 
+
 def _get_strategy_params(con, strategy_id):
-    row = con.execute("""
+    row = con.execute(
+        """
         SELECT instrument, orb_label, orb_minutes, entry_model,
                rr_target, confirm_bars, filter_type
         FROM validated_setups
         WHERE strategy_id = ?
-    """, [strategy_id]).fetchone()
+    """,
+        [strategy_id],
+    ).fetchone()
     if not row:
         return None
-    cols = ["instrument", "orb_label", "orb_minutes", "entry_model",
-            "rr_target", "confirm_bars", "filter_type"]
+    cols = ["instrument", "orb_label", "orb_minutes", "entry_model", "rr_target", "confirm_bars", "filter_type"]
     return dict(zip(cols, row))
 
 
@@ -113,15 +116,14 @@ def load_trades_with_features(con, slots):
             if params is None:
                 continue
 
-            eligible = filter_days.get(
-                (params["filter_type"], params["orb_label"]), set()
-            )
+            eligible = filter_days.get((params["filter_type"], params["orb_label"]), set())
 
             # Check if ts_pnl_r column exists in orb_outcomes
             has_ts = _check_ts_columns(con)
 
             ts_cols = ", oo.ts_pnl_r, oo.ts_outcome" if has_ts else ""
-            rows = con.execute(f"""
+            rows = con.execute(
+                f"""
                 SELECT oo.trading_day, oo.outcome, oo.pnl_r{ts_cols}
                 FROM orb_outcomes oo
                 WHERE oo.symbol = ?
@@ -132,10 +134,16 @@ def load_trades_with_features(con, slots):
                   AND oo.confirm_bars = ?
                   AND oo.outcome IN ('win', 'loss')
                 ORDER BY oo.trading_day
-            """, [
-                params["instrument"], params["orb_label"], params["orb_minutes"],
-                params["entry_model"], params["rr_target"], params["confirm_bars"],
-            ]).fetchall()
+            """,
+                [
+                    params["instrument"],
+                    params["orb_label"],
+                    params["orb_minutes"],
+                    params["entry_model"],
+                    params["rr_target"],
+                    params["confirm_bars"],
+                ],
+            ).fetchall()
 
             for r in rows:
                 td = r[0]
@@ -157,10 +165,7 @@ def load_trades_with_features(con, slots):
                     # Features for signal checking
                     "atr_vel_ratio": feat["atr_vel_ratio"] if feat is not None else None,
                     "atr_vel_regime": feat["atr_vel_regime"] if feat is not None else None,
-                    "compression_tier": (
-                        feat.get(f"orb_{sess_label}_compression_tier")
-                        if feat is not None else None
-                    ),
+                    "compression_tier": (feat.get(f"orb_{sess_label}_compression_tier") if feat is not None else None),
                     "day_of_week": td.weekday() if hasattr(td, "weekday") else None,
                     "atr_20": feat["atr_20"] if feat is not None else None,
                     "is_friday": td.weekday() == 4 if hasattr(td, "weekday") else False,
@@ -171,6 +176,7 @@ def load_trades_with_features(con, slots):
 
 
 _ts_check_cache = {}
+
 
 def _check_ts_columns(con):
     """Check if orb_outcomes has ts_pnl_r column (may not exist in older DBs)."""
@@ -187,6 +193,7 @@ def _check_ts_columns(con):
 # =============================================================================
 # SIGNAL FILTERS
 # =============================================================================
+
 
 def compute_all_narrow_days(con):
     """Compute days where all instruments have below-median ORB size at 1000.
@@ -214,9 +221,7 @@ def compute_all_narrow_days(con):
     medians = {}
     for sym in ["MGC", "MES", "MNQ"]:
         sym_df = df[df["symbol"] == sym].sort_values("trading_day").copy()
-        sym_df["expanding_median"] = (
-            sym_df["orb_1000_size"].expanding(min_periods=20).median().shift(1)
-        )
+        sym_df["expanding_median"] = sym_df["orb_1000_size"].expanding(min_periods=20).median().shift(1)
         sym_df["below_median"] = sym_df["orb_1000_size"] < sym_df["expanding_median"]
         medians[sym] = dict(zip(sym_df["trading_day"], sym_df["below_median"]))
 
@@ -284,12 +289,12 @@ def is_friday_highvol_avoid(trade, atr_threshold):
 # METRICS
 # =============================================================================
 
+
 def compute_metrics(trades, start_date, end_date):
     """Compute portfolio-level metrics from a list of trades."""
     n = len(trades)
     if n == 0:
-        return {"n": 0, "total_r": 0, "exp_r": 0, "wr": 0,
-                "sharpe_ann": None, "max_dd": 0}
+        return {"n": 0, "total_r": 0, "exp_r": 0, "wr": 0, "sharpe_ann": None, "max_dd": 0}
 
     n_wins = sum(1 for t in trades if t["outcome"] == "win")
     total_r = sum(t.get("effective_pnl_r", t["pnl_r"]) for t in trades)
@@ -311,7 +316,7 @@ def compute_metrics(trades, start_date, end_date):
     if n_days > 1:
         mean_d = sum(full_series) / n_days
         var = sum((v - mean_d) ** 2 for v in full_series) / (n_days - 1)
-        std_d = var ** 0.5
+        std_d = var**0.5
         if std_d > 0:
             sharpe_ann = (mean_d / std_d) * sqrt(TRADING_DAYS_PER_YEAR)
 
@@ -341,6 +346,7 @@ def compute_metrics(trades, start_date, end_date):
 # =============================================================================
 # MAIN
 # =============================================================================
+
 
 def main():
     parser = argparse.ArgumentParser(description="Signal stacking research report")
@@ -391,7 +397,9 @@ def main():
 
         has_ts = _check_ts_columns(con)
         ts_available = sum(1 for t in all_trades if t.get("ts_pnl_r") is not None)
-        print(f"  T80 time-stop data: {'available' if has_ts else 'NOT available'} ({ts_available}/{len(all_trades)} trades)")
+        print(
+            f"  T80 time-stop data: {'available' if has_ts else 'NOT available'} ({ts_available}/{len(all_trades)} trades)"
+        )
 
         # =================================================================
         # LAYER 0: BASELINE (validated strategies with their filters)
@@ -412,30 +420,21 @@ def main():
         # =================================================================
         # LAYER 1: + all_narrow AVOID
         # =================================================================
-        layer1_trades = [
-            t for t in all_trades
-            if t["trading_day"] not in all_narrow_days
-        ]
+        layer1_trades = [t for t in all_trades if t["trading_day"] not in all_narrow_days]
         layer1 = compute_metrics(layer1_trades, start_date, end_date)
         _print_layer("1. + all_narrow AVOID", layer1, baseline)
 
         # =================================================================
         # LAYER 2: + ATR contraction AVOID
         # =================================================================
-        layer2_trades = [
-            t for t in layer1_trades
-            if not is_atr_contraction_avoid(t)
-        ]
+        layer2_trades = [t for t in layer1_trades if not is_atr_contraction_avoid(t)]
         layer2 = compute_metrics(layer2_trades, start_date, end_date)
         _print_layer("2. + ATR contraction AVOID", layer2, layer1)
 
         # =================================================================
         # LAYER 3: + Friday high-vol AVOID (MGC 1000 only)
         # =================================================================
-        layer3_trades = [
-            t for t in layer2_trades
-            if not is_friday_highvol_avoid(t, atr_threshold)
-        ]
+        layer3_trades = [t for t in layer2_trades if not is_friday_highvol_avoid(t, atr_threshold)]
         layer3 = compute_metrics(layer3_trades, start_date, end_date)
         _print_layer("3. + Friday high-vol AVOID (MGC 1000)", layer3, layer2)
 
@@ -504,7 +503,9 @@ def main():
         print("\n" + "=" * 90)
         print("PER-YEAR BREAKDOWN — BASELINE vs STACKED")
         print("=" * 90)
-        print(f"{'Year':>6}  {'Base N':>7} {'Base R':>9} {'Base ExpR':>10}  |  {'Stack N':>7} {'Stack R':>9} {'Stack ExpR':>10} {'Delta R':>9}")
+        print(
+            f"{'Year':>6}  {'Base N':>7} {'Base R':>9} {'Base ExpR':>10}  |  {'Stack N':>7} {'Stack R':>9} {'Stack ExpR':>10} {'Delta R':>9}"
+        )
         print("-" * 90)
 
         yearly_base = _by_year(all_trades)

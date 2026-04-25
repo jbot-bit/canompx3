@@ -109,3 +109,29 @@ def test_context_resolver_matches_completion_claim() -> None:
     assert payload["verification"]["id"] == "done"
     assert payload["decision_protocol"]["id"] == "completion_protocol"
     assert any(step["id"] == "pytest_full" for step in payload["verification_steps"])
+
+
+def test_context_resolver_matches_repo_workflow_audit() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/tools/context_resolver.py",
+            "--task",
+            "Does my project use context resolver properly and where are tokens being wasted in hooks and launchers?",
+            "--format",
+            "json",
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["task"]["id"] == "repo_workflow_audit"
+    assert payload["verification"]["id"] == "investigation"
+    assert payload["answer_contract"]["id"] == "orientation_answer"
+    assert any(view["id"] == "verification_context" for view in payload["live_views"])

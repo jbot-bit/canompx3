@@ -58,11 +58,9 @@ CANDIDATES = [
     ("MNQ", "LONDON_METALS", 1.0, "ATR70+VOL", {}),
     ("MNQ", "LONDON_METALS", 1.5, "ATR70+VOL", {}),
     ("MNQ", "NYSE_CLOSE", 1.0, "ATR70+VOL", {}),
-
     # ATR70|VOL union (new opportunities)
     ("MNQ", "US_DATA_830", 1.0, "ATR70|VOL", {}),
     ("M2K", "CME_PRECLOSE", 1.0, "ATR70|VOL", {}),
-
     # Cross-asset MES ATR -> MNQ
     ("MNQ", "CME_PRECLOSE", 1.0, "X_MES_P70", {"source": "MES", "pct": 70}),
     ("MNQ", "CME_PRECLOSE", 1.0, "X_MES_P60", {"source": "MES", "pct": 60}),
@@ -70,7 +68,6 @@ CANDIDATES = [
     ("MNQ", "COMEX_SETTLE", 1.0, "X_MES_P60", {"source": "MES", "pct": 60}),
     ("MNQ", "US_DATA_1000", 1.0, "X_MES_P70", {"source": "MES", "pct": 70}),
     ("MNQ", "NYSE_OPEN", 1.0, "X_MES_P60", {"source": "MES", "pct": 60}),
-
     # Cross-asset MGC ATR -> MNQ
     ("MNQ", "CME_PRECLOSE", 1.0, "X_MGC_P70", {"source": "MGC", "pct": 70}),
     ("MNQ", "COMEX_SETTLE", 1.0, "X_MGC_P70", {"source": "MGC", "pct": 70}),
@@ -80,6 +77,7 @@ CANDIDATES = [
 def _add_months(d: date, months: int) -> date:
     """Add calendar months to a date, clamping day to month end."""
     import calendar
+
     total_months = d.year * 12 + (d.month - 1) + months
     year = total_months // 12
     month = total_months % 12 + 1
@@ -90,16 +88,15 @@ def _add_months(d: date, months: int) -> date:
 
 def load_all_data(db_path):
     """Load daily_features and outcomes for all instruments we need."""
-    instruments = list(set(
-        c[0] for c in CANDIDATES
-    ) | set(
-        c[4].get("source", "") for c in CANDIDATES if c[4].get("source")
-    ))
+    instruments = list(
+        set(c[0] for c in CANDIDATES) | set(c[4].get("source", "") for c in CANDIDATES if c[4].get("source"))
+    )
     instruments = [i for i in instruments if i]
 
     con = duckdb.connect(str(db_path), read_only=True)
 
-    features = con.execute("""
+    features = con.execute(
+        """
         SELECT symbol, trading_day, atr_20, garch_forecast_vol,
                rel_vol_CME_PRECLOSE, rel_vol_SINGAPORE_OPEN, rel_vol_COMEX_SETTLE,
                rel_vol_LONDON_METALS, rel_vol_NYSE_CLOSE, rel_vol_NYSE_OPEN,
@@ -109,9 +106,12 @@ def load_all_data(db_path):
         WHERE orb_minutes = 5
           AND symbol IN (SELECT UNNEST(?::VARCHAR[]))
         ORDER BY symbol, trading_day
-    """, [instruments]).fetchdf()
+    """,
+        [instruments],
+    ).fetchdf()
 
-    outcomes = con.execute("""
+    outcomes = con.execute(
+        """
         SELECT trading_day, symbol, orb_label, rr_target, pnl_r
         FROM orb_outcomes
         WHERE orb_minutes = 5
@@ -120,7 +120,9 @@ def load_all_data(db_path):
           AND pnl_r IS NOT NULL
           AND symbol IN (SELECT UNNEST(?::VARCHAR[]))
         ORDER BY symbol, orb_label, trading_day
-    """, [instruments]).fetchdf()
+    """,
+        [instruments],
+    ).fetchdf()
 
     con.close()
     return features, outcomes
@@ -130,16 +132,14 @@ def compute_atr_percentiles(features, instruments):
     """Compute rolling ATR percentile for each instrument."""
     atr_pct = {}
     for inst in instruments:
-        inst_df = features[
-            (features["symbol"] == inst) & (features["atr_20"].notna())
-        ].sort_values("trading_day")
+        inst_df = features[(features["symbol"] == inst) & (features["atr_20"].notna())].sort_values("trading_day")
 
         atr_vals = inst_df["atr_20"].values
         # Convert to list of datetime.date for consistent key types
         days = [d.date() if hasattr(d, "date") else d for d in inst_df["trading_day"]]
 
         for i in range(min(ATR_TRAILING, len(atr_vals)), len(atr_vals)):
-            window = atr_vals[max(0, i - ATR_TRAILING):i]
+            window = atr_vals[max(0, i - ATR_TRAILING) : i]
             today_val = atr_vals[i]
             pct = np.searchsorted(np.sort(window), today_val) / len(window) * 100
             atr_pct[(inst, days[i])] = pct
@@ -164,8 +164,7 @@ def build_rel_vol_lookup(features):
     return rv
 
 
-def apply_filter(days_pnl, instrument, session, filter_type, filter_params,
-                 atr_pct, rel_vol_lookup):
+def apply_filter(days_pnl, instrument, session, filter_type, filter_params, atr_pct, rel_vol_lookup):
     """Apply filter and return list of (day, pnl_r) tuples that pass."""
     filtered = []
 
@@ -216,10 +215,7 @@ def run_wf(filtered_outcomes):
 
     filtered_outcomes.sort(key=lambda x: x[0])
     # Normalize to date objects (pandas may return Timestamps)
-    filtered_outcomes = [
-        (d.date() if hasattr(d, "date") else d, pnl)
-        for d, pnl in filtered_outcomes
-    ]
+    filtered_outcomes = [(d.date() if hasattr(d, "date") else d, pnl) for d, pnl in filtered_outcomes]
     earliest = filtered_outcomes[0][0]
     latest = filtered_outcomes[-1][0]
 
@@ -234,21 +230,22 @@ def run_wf(filtered_outcomes):
         # IS: everything before window_start
         is_trades = [pnl for d, pnl in filtered_outcomes if d < window_start]
         # OOS: window_start <= d < window_end
-        oos_trades = [pnl for d, pnl in filtered_outcomes
-                      if window_start <= d < window_end]
+        oos_trades = [pnl for d, pnl in filtered_outcomes if window_start <= d < window_end]
 
         if len(oos_trades) >= MIN_TRADES_PER_WINDOW:
             is_avg = np.mean(is_trades) if is_trades else 0
             oos_avg = np.mean(oos_trades)
-            windows.append({
-                "start": str(window_start),
-                "end": str(window_end),
-                "is_n": len(is_trades),
-                "oos_n": len(oos_trades),
-                "is_avg_r": round(is_avg, 4),
-                "oos_avg_r": round(oos_avg, 4),
-                "oos_positive": oos_avg > 0,
-            })
+            windows.append(
+                {
+                    "start": str(window_start),
+                    "end": str(window_end),
+                    "is_n": len(is_trades),
+                    "oos_n": len(oos_trades),
+                    "is_avg_r": round(is_avg, 4),
+                    "oos_avg_r": round(oos_avg, 4),
+                    "oos_positive": oos_avg > 0,
+                }
+            )
             all_oos_pnls.extend(oos_trades)
 
         window_start = window_end
@@ -331,11 +328,9 @@ def main():
     print(f"  Features: {len(features)} rows, Outcomes: {len(outcomes)} rows")
 
     # Compute ATR percentiles for all needed instruments
-    all_instruments = list(set(
-        c[0] for c in CANDIDATES
-    ) | set(
-        c[4].get("source", "") for c in CANDIDATES if c[4].get("source")
-    ))
+    all_instruments = list(
+        set(c[0] for c in CANDIDATES) | set(c[4].get("source", "") for c in CANDIDATES if c[4].get("source"))
+    )
     all_instruments = [i for i in all_instruments if i]
 
     print("Computing ATR percentiles...")
@@ -351,9 +346,11 @@ def main():
     print("=" * 90)
     print("RESULTS")
     print("=" * 90)
-    print(f"\n{'Inst':4s} {'Session':20s} {'RR':>4s} {'Filter':14s} {'Pass':>5s} "
-          f"{'Win':>5s} {'Pos':>5s} {'OOS_N':>6s} {'OOS_R':>8s} {'IS_Sh':>7s} "
-          f"{'OOS_Sh':>7s} {'Hcut':>7s} {'Reason'}")
+    print(
+        f"\n{'Inst':4s} {'Session':20s} {'RR':>4s} {'Filter':14s} {'Pass':>5s} "
+        f"{'Win':>5s} {'Pos':>5s} {'OOS_N':>6s} {'OOS_R':>8s} {'IS_Sh':>7s} "
+        f"{'OOS_Sh':>7s} {'Hcut':>7s} {'Reason'}"
+    )
     print("-" * 120)
 
     passed_list = []
@@ -362,22 +359,16 @@ def main():
     for inst, session, rr, filt, params in CANDIDATES:
         # Get outcomes for this combo
         combo_outcomes = outcomes[
-            (outcomes["symbol"] == inst) &
-            (outcomes["orb_label"] == session) &
-            (outcomes["rr_target"] == rr)
+            (outcomes["symbol"] == inst) & (outcomes["orb_label"] == session) & (outcomes["rr_target"] == rr)
         ]
 
         days_pnl = [
-            (row["trading_day"].date() if hasattr(row["trading_day"], "date") else row["trading_day"],
-             row["pnl_r"])
+            (row["trading_day"].date() if hasattr(row["trading_day"], "date") else row["trading_day"], row["pnl_r"])
             for _, row in combo_outcomes.iterrows()
         ]
 
         # Apply filter
-        filtered = apply_filter(
-            days_pnl, inst, session, filt, params,
-            atr_pct, rel_vol_lookup
-        )
+        filtered = apply_filter(days_pnl, inst, session, filt, params, atr_pct, rel_vol_lookup)
 
         # Run WF
         result = run_wf(filtered)

@@ -26,7 +26,6 @@ from pathlib import Path
 
 import duckdb
 import pandas as pd
-import numpy as np
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -43,24 +42,42 @@ WF_START = {
     "MNQ": "2020-01-01",
     "MES": "2020-01-01",
     "MGC": "2022-06-13",  # raw MGC data starts here
-    "GC": "2015-01-01",   # GC proxy for pre-2022 regime discipline
+    "GC": "2015-01-01",  # GC proxy for pre-2022 regime discipline
 }
 
 ALL_SESSIONS = [
-    "LONDON_METALS", "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN",
-    "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
-    "TOKYO_OPEN", "SINGAPORE_OPEN", "CME_REOPEN", "BRISBANE_1025",
+    "LONDON_METALS",
+    "EUROPE_FLOW",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "CME_REOPEN",
+    "BRISBANE_1025",
 ]
 
 # Sessions where overnight_range/took_pdh features are clean (session start >= 17:00 Brisbane)
 OVERNIGHT_CLEAN_SESSIONS = [
-    "LONDON_METALS", "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN",
-    "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+    "LONDON_METALS",
+    "EUROPE_FLOW",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
 ]
 
 # Sessions where took_pdh_before_1000 is clean (session start >= 10:00 local)
 PRE_1000_CLEAN_SESSIONS = [
-    "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
 ]
 
 # Feature inventory with population state and look-ahead rules.
@@ -118,8 +135,8 @@ def binary_test(df: pd.DataFrame, col: str) -> dict | None:
     valid = df.dropna(subset=[col, "pnl_r"])
     if len(valid) < MIN_TOTAL_N:
         return None
-    true_rows = valid[valid[col] == True]
-    false_rows = valid[valid[col] == False]
+    true_rows = valid[valid[col].astype(bool)]
+    false_rows = valid[~valid[col].astype(bool)]
     if len(true_rows) < MIN_BIN_N or len(false_rows) < MIN_BIN_N:
         return None
     wr_t = (true_rows["pnl_r"] > 0).mean()
@@ -162,7 +179,7 @@ def continuous_test(df: pd.DataFrame, col: str) -> dict | None:
     e1 = q1["pnl_r"].mean()
     e5 = q5["pnl_r"].mean()
     mono = all(
-        valid[valid["qbin"] == bins[i]]["pnl_r"].mean() <= valid[valid["qbin"] == bins[i+1]]["pnl_r"].mean()
+        valid[valid["qbin"] == bins[i]]["pnl_r"].mean() <= valid[valid["qbin"] == bins[i + 1]]["pnl_r"].mean()
         for i in range(4)
     )
     return {
@@ -195,17 +212,19 @@ def categorical_test(df: pd.DataFrame, col: str) -> list[dict] | None:
         wr_o = (out_cat["pnl_r"] > 0).mean()
         e_i = in_cat["pnl_r"].mean()
         e_o = out_cat["pnl_r"].mean()
-        results.append({
-            "category": str(cat),
-            "n_in": len(in_cat),
-            "n_out": len(out_cat),
-            "wr_in": float(wr_i),
-            "wr_out": float(wr_o),
-            "expr_in": float(e_i),
-            "expr_out": float(e_o),
-            "wr_spread_pp": float((wr_i - wr_o) * 100),
-            "expr_spread": float(e_i - e_o),
-        })
+        results.append(
+            {
+                "category": str(cat),
+                "n_in": len(in_cat),
+                "n_out": len(out_cat),
+                "wr_in": float(wr_i),
+                "wr_out": float(wr_o),
+                "expr_in": float(e_i),
+                "expr_out": float(e_o),
+                "wr_spread_pp": float((wr_i - wr_o) * 100),
+                "expr_spread": float(e_i - e_o),
+            }
+        )
     return results
 
 
@@ -261,7 +280,7 @@ def main():
             for sess in clean_sessions:
                 try:
                     df = load_all_presession_data(con, inst, sess)
-                except Exception as e:
+                except Exception:
                     continue
                 if len(df) < MIN_TOTAL_N:
                     continue
@@ -271,24 +290,30 @@ def main():
                     if res is None:
                         continue
                     row = {
-                        "feature": feature, "instrument": inst, "session": sess,
-                        "type": ftype, "n_total": len(df),
+                        "feature": feature,
+                        "instrument": inst,
+                        "session": sess,
+                        "type": ftype,
+                        "n_total": len(df),
                         "wr_spread_pp": res["wr_spread_pp"],
                         "expr_spread": res["expr_spread"],
                         "direction": "HIGH" if res["wr_spread_pp"] > 0 else "LOW",
-                        "detail": f"T N={res['n_true']} E={res['expr_true']:+.3f} W={res['wr_true']*100:.0f}% | F N={res['n_false']} E={res['expr_false']:+.3f} W={res['wr_false']*100:.0f}%",
+                        "detail": f"T N={res['n_true']} E={res['expr_true']:+.3f} W={res['wr_true'] * 100:.0f}% | F N={res['n_false']} E={res['expr_false']:+.3f} W={res['wr_false'] * 100:.0f}%",
                     }
                 elif ftype == "continuous":
                     res = continuous_test(df, feature)
                     if res is None:
                         continue
                     row = {
-                        "feature": feature, "instrument": inst, "session": sess,
-                        "type": ftype, "n_total": len(df),
+                        "feature": feature,
+                        "instrument": inst,
+                        "session": sess,
+                        "type": ftype,
+                        "n_total": len(df),
                         "wr_spread_pp": res["wr_spread_pp"],
                         "expr_spread": res["expr_spread"],
                         "direction": "HIGH" if res["wr_spread_pp"] > 0 else "LOW",
-                        "detail": f"Q1 E={res['expr_q1']:+.3f} W={res['wr_q1']*100:.0f}% | Q5 E={res['expr_q5']:+.3f} W={res['wr_q5']*100:.0f}% mono={res['monotonic']}",
+                        "detail": f"Q1 E={res['expr_q1']:+.3f} W={res['wr_q1'] * 100:.0f}% | Q5 E={res['expr_q5']:+.3f} W={res['wr_q5'] * 100:.0f}% mono={res['monotonic']}",
                     }
                 elif ftype == "categorical":
                     cats = categorical_test(df, feature)
@@ -297,12 +322,15 @@ def main():
                     # Take the most extreme category
                     best = max(cats, key=lambda c: abs(c["wr_spread_pp"]))
                     row = {
-                        "feature": feature, "instrument": inst, "session": sess,
-                        "type": ftype, "n_total": len(df),
+                        "feature": feature,
+                        "instrument": inst,
+                        "session": sess,
+                        "type": ftype,
+                        "n_total": len(df),
                         "wr_spread_pp": best["wr_spread_pp"],
                         "expr_spread": best["expr_spread"],
                         "direction": f"cat={best['category']}",
-                        "detail": f"in N={best['n_in']} E={best['expr_in']:+.3f} W={best['wr_in']*100:.0f}% | out N={best['n_out']} E={best['expr_out']:+.3f} W={best['wr_out']*100:.0f}%",
+                        "detail": f"in N={best['n_in']} E={best['expr_in']:+.3f} W={best['wr_in'] * 100:.0f}% | out N={best['n_out']} E={best['expr_out']:+.3f} W={best['wr_out'] * 100:.0f}%",
                     }
                 else:
                     continue
@@ -311,7 +339,10 @@ def main():
                 row["t1_pass"] = flag == "T1_PASS"
                 results_rows.append(row)
                 if flag:
-                    print(f"    {inst:4s} {sess:15s}: WR_spread={row['wr_spread_pp']:+5.1f}pp ExpR_spread={row['expr_spread']:+.3f} {row['direction']} {flag}", file=sys.stderr)
+                    print(
+                        f"    {inst:4s} {sess:15s}: WR_spread={row['wr_spread_pp']:+5.1f}pp ExpR_spread={row['expr_spread']:+.3f} {row['direction']} {flag}",
+                        file=sys.stderr,
+                    )
 
     # Summary
     print("\n" + "=" * 100, file=sys.stderr)
@@ -322,7 +353,10 @@ def main():
     print("=" * 100, file=sys.stderr)
 
     # Cross-instrument consistency check
-    print("\n[A.3] Cross-instrument consistency — (feature, session) pairs where >= 2/3 instruments agree on direction", file=sys.stderr)
+    print(
+        "\n[A.3] Cross-instrument consistency — (feature, session) pairs where >= 2/3 instruments agree on direction",
+        file=sys.stderr,
+    )
     by_feat_sess = {}
     for r in passers:
         key = (r["feature"], r["session"])

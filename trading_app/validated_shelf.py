@@ -21,9 +21,7 @@ from pipeline.db_contracts import (
 )
 
 DEPLOYMENT_SCOPE_NON_DEPLOYABLE = "non_deployable"
-NON_ACTIVE_INSTRUMENT_RETIREMENT_REASON = (
-    "research-only / non-tradeable instrument (not in ACTIVE_ORB_INSTRUMENTS)"
-)
+NON_ACTIVE_INSTRUMENT_RETIREMENT_REASON = "research-only / non-tradeable instrument (not in ACTIVE_ORB_INSTRUMENTS)"
 __all__ = [
     "ACTIVE_VALIDATED_VIEW",
     "DEPLOYABLE_VALIDATED_VIEW",

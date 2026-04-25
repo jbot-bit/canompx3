@@ -106,7 +106,9 @@ def load_data() -> pd.DataFrame:
 
     # Derived zero-lookahead proxies
     df["size_atr"] = np.where((df["atr_20"].notna()) & (df["atr_20"] > 0), df["orb_size"] / df["atr_20"], np.nan)
-    df["vol_imp"] = np.where((df["orb_volume"].notna()) & (df["orb_volume"] > 0), df["break_bar_volume"] / (df["orb_volume"] / 5.0), np.nan)
+    df["vol_imp"] = np.where(
+        (df["orb_volume"].notna()) & (df["orb_volume"] > 0), df["break_bar_volume"] / (df["orb_volume"] / 5.0), np.nan
+    )
 
     return df
 
@@ -121,7 +123,7 @@ def add_conditions(df: pd.DataFrame) -> pd.DataFrame:
     df["atr_q30"] = gs["atr_20"].transform(lambda s: s.quantile(0.30))
     df["atr_q70"] = gs["atr_20"].transform(lambda s: s.quantile(0.70))
 
-    c_cont = (df["break_cont"] == True)
+    c_cont = df["break_cont"] == True
     c_delay30 = df["break_delay"].notna() & (df["break_delay"] <= 30)
     c_delay15 = df["break_delay"].notna() & (df["break_delay"] <= 15)
     c_size = df["size_atr"].notna() & (df["size_atr"] >= df["size_q60"])
@@ -264,14 +266,18 @@ def main() -> int:
     all_rows = all_rows.sort_values(["avg_on", "uplift"], ascending=False)
     all_rows.to_csv(p_all, index=False)
 
-    short = all_rows[
-        (all_rows["signals_per_year"] >= MIN_SIGNALS_PER_YEAR)
-        & (all_rows["avg_on"] >= MIN_AVG_ON)
-        & (all_rows["uplift"] >= MIN_UPLIFT)
-        & (all_rows["years_total"] >= MIN_YEARS_TOTAL)
-        & (all_rows["years_pos_ratio"] >= MIN_YEARS_POS_RATIO)
-        & (all_rows["test_uplift"].fillna(-999) >= 0)
-    ].copy().sort_values(["avg_on", "uplift", "signals_per_year"], ascending=False)
+    short = (
+        all_rows[
+            (all_rows["signals_per_year"] >= MIN_SIGNALS_PER_YEAR)
+            & (all_rows["avg_on"] >= MIN_AVG_ON)
+            & (all_rows["uplift"] >= MIN_UPLIFT)
+            & (all_rows["years_total"] >= MIN_YEARS_TOTAL)
+            & (all_rows["years_pos_ratio"] >= MIN_YEARS_POS_RATIO)
+            & (all_rows["test_uplift"].fillna(-999) >= 0)
+        ]
+        .copy()
+        .sort_values(["avg_on", "uplift", "signals_per_year"], ascending=False)
+    )
     short.to_csv(p_short, index=False)
 
     lines = [

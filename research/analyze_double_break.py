@@ -57,6 +57,7 @@ ORB_LABELS = ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]
 RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0]
 SIZE_FILTERS = {"G2": 2.0, "G3": 3.0, "G4": 4.0, "G5": 5.0, "G6": 6.0}
 
+
 def find_double_break_entry(
     bars: pd.DataFrame,
     break_ts: pd.Timestamp,
@@ -164,6 +165,7 @@ def find_double_break_entry(
         "risk_points": risk_points,
     }
 
+
 def compute_double_break_outcomes(
     db_path: Path,
     features: pd.DataFrame,
@@ -208,9 +210,7 @@ def compute_double_break_outcomes(
             continue
 
         # Find entry point
-        entry_info = find_double_break_entry(
-            bars, break_ts, break_dir, orb_high, orb_low
-        )
+        entry_info = find_double_break_entry(bars, break_ts, break_dir, orb_high, orb_low)
         if entry_info is None:
             continue
 
@@ -240,33 +240,30 @@ def compute_double_break_outcomes(
                     pnl_points = last_close - entry_info["entry_price"]
                 else:
                     pnl_points = entry_info["entry_price"] - last_close
-                pnl_r = to_r_multiple(
-                    SPEC, entry_info["entry_price"],
-                    entry_info["stop_price"], pnl_points
-                )
+                pnl_r = to_r_multiple(SPEC, entry_info["entry_price"], entry_info["stop_price"], pnl_points)
                 outcome_type = "eod"
             else:
-                pnl_r = to_r_multiple(
-                    SPEC, entry_info["entry_price"],
-                    entry_info["stop_price"], result["pnl_points"]
-                )
+                pnl_r = to_r_multiple(SPEC, entry_info["entry_price"], entry_info["stop_price"], result["pnl_points"])
                 outcome_type = result["outcome"]
 
-            outcomes.append({
-                "trading_day": str(trading_day),
-                "orb_label": orb_label,
-                "orb_size": orb_size,
-                "rr_target": rr,
-                "direction": entry_info["direction"],
-                "entry_price": entry_info["entry_price"],
-                "stop_price": entry_info["stop_price"],
-                "target_price": target_price,
-                "risk_points": entry_info["risk_points"],
-                "pnl_r": pnl_r,
-                "outcome": outcome_type,
-            })
+            outcomes.append(
+                {
+                    "trading_day": str(trading_day),
+                    "orb_label": orb_label,
+                    "orb_size": orb_size,
+                    "rr_target": rr,
+                    "direction": entry_info["direction"],
+                    "entry_price": entry_info["entry_price"],
+                    "stop_price": entry_info["stop_price"],
+                    "target_price": target_price,
+                    "risk_points": entry_info["risk_points"],
+                    "pnl_r": pnl_r,
+                    "outcome": outcome_type,
+                }
+            )
 
     return outcomes
+
 
 def run_walk_forward(
     db_path: Path,
@@ -302,14 +299,8 @@ def run_walk_forward(
     oos_all_pnls = []
 
     for w in windows:
-        train_mask = (
-            (outcomes_df["trading_day"] >= w["train_start"])
-            & (outcomes_df["trading_day"] <= w["train_end"])
-        )
-        test_mask = (
-            (outcomes_df["trading_day"] >= w["test_start"])
-            & (outcomes_df["trading_day"] <= w["test_end"])
-        )
+        train_mask = (outcomes_df["trading_day"] >= w["train_start"]) & (outcomes_df["trading_day"] <= w["train_end"])
+        test_mask = (outcomes_df["trading_day"] >= w["test_start"]) & (outcomes_df["trading_day"] <= w["test_end"])
 
         train_data = outcomes_df[train_mask]
         test_data = outcomes_df[test_mask]
@@ -338,10 +329,7 @@ def run_walk_forward(
         filt_name, filt_thresh, rr = best_combo
 
         # Apply to OOS
-        oos = test_data[
-            (test_data["orb_size"] >= filt_thresh)
-            & (test_data["rr_target"] == rr)
-        ]
+        oos = test_data[(test_data["orb_size"] >= filt_thresh) & (test_data["rr_target"] == rr)]
         if oos.empty:
             continue
 
@@ -349,17 +337,16 @@ def run_walk_forward(
         oos_stats = compute_strategy_metrics(oos_pnls)
         oos_all_pnls.extend(oos_pnls)
 
-        window_results.append({
-            "test_start": str(w["test_start"]),
-            "test_end": str(w["test_end"]),
-            "train_n": len(train_data[
-                (train_data["orb_size"] >= filt_thresh)
-                & (train_data["rr_target"] == rr)
-            ]),
-            "selected": f"{filt_name}_RR{rr}",
-            "train_sharpe": best_sharpe,
-            "oos_stats": oos_stats,
-        })
+        window_results.append(
+            {
+                "test_start": str(w["test_start"]),
+                "test_end": str(w["test_end"]),
+                "train_n": len(train_data[(train_data["orb_size"] >= filt_thresh) & (train_data["rr_target"] == rr)]),
+                "selected": f"{filt_name}_RR{rr}",
+                "train_sharpe": best_sharpe,
+                "oos_stats": oos_stats,
+            }
+        )
 
     combined_oos = None
     if oos_all_pnls:
@@ -371,6 +358,7 @@ def run_walk_forward(
         "windows": window_results,
         "combined_oos": combined_oos,
     }
+
 
 def run_full_period_analysis(
     db_path: Path,
@@ -396,13 +384,16 @@ def run_full_period_analysis(
                 continue
             stats = compute_strategy_metrics(rr_data["pnl_r"].values)
             if stats:
-                grid_results.append({
-                    "filter": filt_name,
-                    "rr_target": rr,
-                    **stats,
-                })
+                grid_results.append(
+                    {
+                        "filter": filt_name,
+                        "rr_target": rr,
+                        **stats,
+                    }
+                )
 
     return {"orb_label": orb_label, "grid": grid_results}
+
 
 def main():
     parser = argparse.ArgumentParser(description="Double Break strategy analysis")
@@ -410,8 +401,9 @@ def main():
     parser.add_argument("--orb-labels", nargs="+", default=ORB_LABELS)
     parser.add_argument("--train-months", type=int, default=12)
     parser.add_argument("--output", type=Path, default=None)
-    parser.add_argument("--full-period-only", action="store_true",
-                        help="Skip walk-forward, just run full-period grid search")
+    parser.add_argument(
+        "--full-period-only", action="store_true", help="Skip walk-forward, just run full-period grid search"
+    )
     args = parser.parse_args()
 
     sep = "=" * 80
@@ -441,31 +433,35 @@ def main():
                 # Sort by Sharpe
                 sorted_grid = sorted(result["grid"], key=lambda x: x["sharpe"], reverse=True)
                 for g in sorted_grid[:10]:
-                    print(f"    {g['filter']} RR{g['rr_target']}: N={g['n']}, WR={g['wr']:.0%}, "
-                          f"ExpR={g['expr']:+.3f}, Sharpe={g['sharpe']:.3f}, MaxDD={g['maxdd']:+.1f}R")
+                    print(
+                        f"    {g['filter']} RR{g['rr_target']}: N={g['n']}, WR={g['wr']:.0%}, "
+                        f"ExpR={g['expr']:+.3f}, Sharpe={g['sharpe']:.3f}, MaxDD={g['maxdd']:+.1f}R"
+                    )
             else:
                 print("  No outcomes found")
             print()
         else:
-            result = run_walk_forward(
-                args.db_path, orb_label, args.train_months
-            )
+            result = run_walk_forward(args.db_path, orb_label, args.train_months)
             all_results[orb_label] = result
 
             if result["windows"]:
                 for w in result["windows"]:
                     oos = w["oos_stats"]
                     if oos:
-                        print(f"  {w['test_start']} to {w['test_end']}: "
-                              f"Selected {w['selected']}, "
-                              f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
-                              f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}")
+                        print(
+                            f"  {w['test_start']} to {w['test_end']}: "
+                            f"Selected {w['selected']}, "
+                            f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
+                            f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}"
+                        )
 
                 if result["combined_oos"]:
                     c = result["combined_oos"]
-                    print(f"  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
-                          f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}, "
-                          f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R")
+                    print(
+                        f"  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
+                        f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}, "
+                        f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R"
+                    )
             else:
                 print("  No qualifying windows")
             print()
@@ -476,6 +472,7 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

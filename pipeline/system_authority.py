@@ -14,8 +14,7 @@ from pathlib import Path
 SYSTEM_AUTHORITY_MAP_RELATIVE_PATH = Path("docs/governance/system_authority_map.md")
 SYSTEM_AUTHORITY_RENDER_SCRIPT_RELATIVE_PATH = Path("scripts/tools/render_system_authority_map.py")
 SYSTEM_AUTHORITY_GENERATED_MARKER = (
-    "<!-- Auto-generated from pipeline/system_authority.py via "
-    "scripts/tools/render_system_authority_map.py -->"
+    "<!-- Auto-generated from pipeline/system_authority.py via scripts/tools/render_system_authority_map.py -->"
 )
 
 DOCTRINE_DOCS: tuple[str, ...] = (
@@ -155,7 +154,7 @@ SURFACE_TAXONOMY: tuple[SurfaceCategory, ...] = (
             "docs/context/source-catalog.md",
             "docs/context/institutional-contracts.md",
         ),
-        mutation_rule="Must be marked non-authoritative and kept linked/generated",
+        mutation_rule="Generated docs must name their source and say do not edit by hand; snapshots must be stamped",
     ),
 )
 
@@ -209,6 +208,8 @@ ENFORCEMENT_RULES: tuple[str, ...] = (
     "If a rule changes frequently with data, profiles, or runtime state, do not hardcode it in prose. Link the source or expose a published contract.",
     "Audits should fail when they read deprecated truth surfaces after a newer canonical surface exists.",
     "Reference docs must say what they are not authoritative for.",
+    "Generated docs must name their generator and say do not edit by hand.",
+    "Snapshot docs must declare their date/commit and say they are not live truth.",
 )
 
 
@@ -263,6 +264,8 @@ def render_system_authority_map() -> str:
         "",
         f"Generated from `{SYSTEM_AUTHORITY_RENDER_SCRIPT_RELATIVE_PATH.as_posix()}` and",
         "`pipeline/system_authority.py`.",
+        "",
+        "**Do not edit by hand.** Re-render this file after changing the generator.",
         "",
         "## Design Rule",
         "",

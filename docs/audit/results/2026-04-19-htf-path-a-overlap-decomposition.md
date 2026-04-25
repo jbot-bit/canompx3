@@ -1,6 +1,6 @@
 # HTF Path A — prev-week × prev-month overlap decomposition
 
-**Generated:** 2026-04-18T14:44:23+00:00
+**Generated:** 2026-04-20T11:49:07+00:00
 **Script:** `research/htf_path_a_overlap_decomposition.py`
 **IS window:** `trading_day < 2026-01-01` (Mode A, from `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`)
 **Cell axes:** entry_model=E2, confirm_bars=1, orb_minutes=15, direction=long, rr=2.0

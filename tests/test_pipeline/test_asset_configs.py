@@ -2,14 +2,19 @@
 
 import pytest
 
+from pathlib import Path
+
 from pipeline.asset_configs import (
     ACTIVE_ORB_INSTRUMENTS,
     ASSET_CONFIGS,
     DEPLOYABLE_ORB_INSTRUMENTS,
     get_active_instruments,
+    get_asset_config,
     get_deployable_instruments,
     get_outright_root,
+    list_available_instruments,
     list_instruments,
+    require_dbn_available,
 )
 
 
@@ -145,8 +150,7 @@ class TestGetOutrightRoot:
         """Every instrument in ASSET_CONFIGS must resolve to its canonical root."""
         for instrument, expected_root in self.EXPECTED_ROOTS.items():
             assert get_outright_root(instrument) == expected_root, (
-                f"{instrument} should derive root {expected_root!r}, "
-                f"got {get_outright_root(instrument)!r}"
+                f"{instrument} should derive root {expected_root!r}, got {get_outright_root(instrument)!r}"
             )
 
     def test_coverage_matches_asset_configs(self):
@@ -159,9 +163,7 @@ class TestGetOutrightRoot:
             f"ASSET_CONFIGS has instruments not in EXPECTED_ROOTS: {missing_from_test}. "
             f"Add them to TestGetOutrightRoot.EXPECTED_ROOTS."
         )
-        assert not extra_in_test, (
-            f"EXPECTED_ROOTS has instruments not in ASSET_CONFIGS: {extra_in_test}."
-        )
+        assert not extra_in_test, f"EXPECTED_ROOTS has instruments not in ASSET_CONFIGS: {extra_in_test}."
 
     def test_mgc_post_phase_2_returns_mgc_not_gc(self):
         """Regression guard: post-Phase-2, MGC must derive 'MGC', NOT 'GC'.
@@ -196,6 +198,131 @@ class TestGetOutrightRoot:
         result = get_outright_root("MNQ")
         assert isinstance(result, str)
         assert len(result) > 0
+
+
+class TestGetAssetConfig:
+    """PR-A contract — metadata-only, never exits."""
+
+    def test_returns_metadata_dict(self):
+        cfg = get_asset_config("MNQ")
+        assert cfg["symbol"] == "MNQ"
+        assert "outright_pattern" in cfg
+        assert "minimum_start_date" in cfg
+
+    def test_unknown_instrument_raises_value_error(self):
+        """Must raise ValueError — never call sys.exit."""
+        with pytest.raises(ValueError, match="Unknown instrument"):
+            get_asset_config("DEFINITELY_NOT_AN_INSTRUMENT")
+
+    def test_case_insensitive(self):
+        assert get_asset_config("mnq")["symbol"] == "MNQ"
+        assert get_asset_config("MGC")["symbol"] == "MGC"
+
+    def test_does_not_touch_filesystem(self, monkeypatch, tmp_path):
+        """Regression — pre-PR-A get_asset_config called sys.exit when the DBN
+        directory was missing. After PR-A, the metadata path must succeed
+        even when the DBN directory does NOT exist on disk.
+        """
+        ghost = tmp_path / "definitely_missing_dbn_dir"
+        assert not ghost.exists()
+        # Pick any active instrument and swap its dbn_path to a missing dir.
+        original = ASSET_CONFIGS["MNQ"]["dbn_path"]
+        ASSET_CONFIGS["MNQ"]["dbn_path"] = ghost
+        try:
+            cfg = get_asset_config("MNQ")
+            assert cfg["dbn_path"] == ghost  # metadata returned unchanged
+        finally:
+            ASSET_CONFIGS["MNQ"]["dbn_path"] = original
+
+
+class TestRequireDbnAvailable:
+    """PR-A contract — explicit fail-closed DBN access."""
+
+    def test_unknown_instrument_raises_value_error(self):
+        with pytest.raises(ValueError, match="Unknown instrument"):
+            require_dbn_available("DEFINITELY_NOT_AN_INSTRUMENT")
+
+    def test_missing_dbn_path_raises_file_not_found(self, tmp_path):
+        ghost = tmp_path / "definitely_missing_dbn_dir"
+        assert not ghost.exists()
+        original = ASSET_CONFIGS["MNQ"]["dbn_path"]
+        ASSET_CONFIGS["MNQ"]["dbn_path"] = ghost
+        try:
+            with pytest.raises(FileNotFoundError, match="DBN file not found"):
+                require_dbn_available("MNQ")
+        finally:
+            ASSET_CONFIGS["MNQ"]["dbn_path"] = original
+
+    def test_none_dbn_path_raises_value_error(self):
+        original = ASSET_CONFIGS["MNQ"]["dbn_path"]
+        ASSET_CONFIGS["MNQ"]["dbn_path"] = None
+        try:
+            with pytest.raises(ValueError, match="No DBN file configured"):
+                require_dbn_available("MNQ")
+        finally:
+            ASSET_CONFIGS["MNQ"]["dbn_path"] = original
+
+    def test_missing_minimum_start_date_raises_value_error(self, tmp_path):
+        ghost_dir = tmp_path / "present_dbn"
+        ghost_dir.mkdir()
+        (ghost_dir / "backfill-MNQ-2026-01-01-to-2026-01-02.ohlcv-1m.dbn.zst").write_text("stub")
+        original_path = ASSET_CONFIGS["MNQ"]["dbn_path"]
+        original_min_date = ASSET_CONFIGS["MNQ"]["minimum_start_date"]
+        ASSET_CONFIGS["MNQ"]["dbn_path"] = ghost_dir
+        ASSET_CONFIGS["MNQ"]["minimum_start_date"] = None
+        try:
+            with pytest.raises(ValueError, match="No minimum_start_date"):
+                require_dbn_available("MNQ")
+        finally:
+            ASSET_CONFIGS["MNQ"]["dbn_path"] = original_path
+            ASSET_CONFIGS["MNQ"]["minimum_start_date"] = original_min_date
+
+    def test_returns_path_on_success(self, tmp_path):
+        ghost_dir = tmp_path / "present_dbn"
+        ghost_dir.mkdir()
+        (ghost_dir / "backfill-MNQ-2026-01-01-to-2026-01-02.ohlcv-1m.dbn.zst").write_text("stub")
+        original = ASSET_CONFIGS["MNQ"]["dbn_path"]
+        ASSET_CONFIGS["MNQ"]["dbn_path"] = ghost_dir
+        try:
+            result = require_dbn_available("MNQ")
+            assert isinstance(result, Path)
+            assert result == ghost_dir
+        finally:
+            ASSET_CONFIGS["MNQ"]["dbn_path"] = original
+
+    def test_existing_dir_with_wrong_symbol_files_raises(self, tmp_path):
+        ghost_dir = tmp_path / "wrong_symbol_dbn"
+        ghost_dir.mkdir()
+        (ghost_dir / "backfill-MES-2026-01-01-to-2026-01-02.ohlcv-1m.dbn.zst").write_text("stub")
+        original = ASSET_CONFIGS["MNQ"]["dbn_path"]
+        ASSET_CONFIGS["MNQ"]["dbn_path"] = ghost_dir
+        try:
+            with pytest.raises(FileNotFoundError, match="contains no matching raw DBN files"):
+                require_dbn_available("MNQ")
+        finally:
+            ASSET_CONFIGS["MNQ"]["dbn_path"] = original
+
+
+class TestListAvailableInstruments:
+    def test_filters_out_existing_dirs_with_wrong_symbol_files(self, tmp_path):
+        good_dir = tmp_path / "good"
+        bad_dir = tmp_path / "bad"
+        good_dir.mkdir()
+        bad_dir.mkdir()
+        (good_dir / "backfill-MNQ-2026-01-01-to-2026-01-02.ohlcv-1m.dbn.zst").write_text("stub")
+        (bad_dir / "backfill-MES-2026-01-01-to-2026-01-02.ohlcv-1m.dbn.zst").write_text("stub")
+
+        original_mnq = ASSET_CONFIGS["MNQ"]["dbn_path"]
+        original_mgc = ASSET_CONFIGS["MGC"]["dbn_path"]
+        ASSET_CONFIGS["MNQ"]["dbn_path"] = good_dir
+        ASSET_CONFIGS["MGC"]["dbn_path"] = bad_dir
+        try:
+            available = list_available_instruments()
+            assert "MNQ" in available
+            assert "MGC" not in available
+        finally:
+            ASSET_CONFIGS["MNQ"]["dbn_path"] = original_mnq
+            ASSET_CONFIGS["MGC"]["dbn_path"] = original_mgc
 
     def test_non_canonical_pattern_raises(self, monkeypatch):
         """Helper raises ValueError if outright_pattern is structurally non-canonical.
@@ -244,8 +371,7 @@ class TestParentSymbol:
         """Every ASSET_CONFIGS entry must have the parent_symbol key (even if None)."""
         for inst, cfg in ASSET_CONFIGS.items():
             assert "parent_symbol" in cfg, (
-                f"{inst} config missing 'parent_symbol' field — "
-                f"Phase 3a requires all configs to declare it"
+                f"{inst} config missing 'parent_symbol' field — Phase 3a requires all configs to declare it"
             )
 
     def test_expected_coverage_matches_configs(self):
@@ -281,6 +407,4 @@ class TestParentSymbol:
         """Full coverage matrix — catches any drift between config and expectations."""
         for inst, expected_parent in self.EXPECTED.items():
             actual = ASSET_CONFIGS[inst]["parent_symbol"]
-            assert actual == expected_parent, (
-                f"{inst}.parent_symbol should be {expected_parent!r}, got {actual!r}"
-            )
+            assert actual == expected_parent, f"{inst}.parent_symbol should be {expected_parent!r}, got {actual!r}"

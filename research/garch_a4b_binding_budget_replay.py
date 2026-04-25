@@ -269,7 +269,9 @@ def _adjusted_trade_records(
     return out
 
 
-def _build_histories(con: duckdb.DuckDBPyConnection, metas: list[StrategyMeta], as_of: date) -> dict[str, StrategyHistory]:
+def _build_histories(
+    con: duckdb.DuckDBPyConnection, metas: list[StrategyMeta], as_of: date
+) -> dict[str, StrategyHistory]:
     out: dict[str, StrategyHistory] = {}
     for meta in metas:
         trades = _adjusted_trade_records(
@@ -316,7 +318,9 @@ def _build_session_regime_cache(
     return out
 
 
-def _build_garch_pct_by_day(con: duckdb.DuckDBPyConnection, metas: list[StrategyMeta]) -> dict[tuple[str, date], float | None]:
+def _build_garch_pct_by_day(
+    con: duckdb.DuckDBPyConnection, metas: list[StrategyMeta]
+) -> dict[tuple[str, date], float | None]:
     instruments = sorted({m.instrument for m in metas})
     out: dict[tuple[str, date], float | None] = {}
     for inst in instruments:
@@ -432,7 +436,9 @@ def _compute_scores(
             else:
                 break
 
-        regime_trades = _window_trades(session_regime_cache[(meta.instrument, meta.orb_label)], regime_start, regime_end)
+        regime_trades = _window_trades(
+            session_regime_cache[(meta.instrument, meta.orb_label)], regime_start, regime_end
+        )
         session_regime_expr = None
         if regime_trades:
             session_regime_expr = round(sum(t.pnl_r for t in regime_trades) / len(regime_trades), 4)
@@ -505,8 +511,7 @@ def _pairwise_correlation_as_of(
 ) -> dict[tuple[str, str], float]:
     out: dict[tuple[str, str], float] = {}
     daily = {
-        sid: {d: pnl for d, pnl in histories[sid].daily_pnl_r.items() if d < rebalance_date}
-        for sid in strategy_ids
+        sid: {d: pnl for d, pnl in histories[sid].daily_pnl_r.items() if d < rebalance_date} for sid in strategy_ids
     }
     ordered = sorted(strategy_ids)
     for i, a in enumerate(ordered):
@@ -553,7 +558,11 @@ def _build_ranked_allocation(
 
         corr_reject = False
         for sel in selected:
-            key = (lane.strategy_id, sel.strategy_id) if lane.strategy_id < sel.strategy_id else (sel.strategy_id, lane.strategy_id)
+            key = (
+                (lane.strategy_id, sel.strategy_id)
+                if lane.strategy_id < sel.strategy_id
+                else (sel.strategy_id, lane.strategy_id)
+            )
             if correlation_matrix.get(key, 0.0) > CORRELATION_REJECT_RHO:
                 corr_reject = True
                 break
@@ -571,9 +580,7 @@ def _build_ranked_allocation(
         if prior_allocation and lane.strategy_id not in prior_allocation:
             session_key = (lane.instrument, lane.orb_label)
             prior_in_session = [
-                s
-                for s in scores
-                if s.strategy_id in prior_allocation and (s.instrument, s.orb_label) == session_key
+                s for s in scores if s.strategy_id in prior_allocation and (s.instrument, s.orb_label) == session_key
             ]
             if prior_in_session:
                 best_prior = max(prior_in_session, key=lambda s: s.annual_r_estimate)
@@ -717,7 +724,9 @@ def _run_policy(
         annualized_r=float(annualized_r),
         sharpe_is=_annualized_sharpe(all_daily),
         dd_is=_max_drawdown(all_daily),
-        slot_hit_rate_per_day=(sum(m["slot_hit_rate_per_day"] for m in monthly_outputs) / len(monthly_outputs)) if monthly_outputs else 0.0,
+        slot_hit_rate_per_day=(sum(m["slot_hit_rate_per_day"] for m in monthly_outputs) / len(monthly_outputs))
+        if monthly_outputs
+        else 0.0,
         trading_days_covered=len(all_daily),
         monthly_outputs=monthly_outputs,
         daily_pnl=all_daily,
@@ -770,7 +779,9 @@ def _effect_ratio(oos: float, ins: float) -> float | None:
     return float(oos / ins)
 
 
-def _pass_primary(candidate: PolicyAggregate, baseline: PolicyAggregate, binding_pass: bool, mean_jaccard: float) -> dict[str, object]:
+def _pass_primary(
+    candidate: PolicyAggregate, baseline: PolicyAggregate, binding_pass: bool, mean_jaccard: float
+) -> dict[str, object]:
     annualized_delta = candidate.annualized_r - baseline.annualized_r
     sharpe_delta = candidate.sharpe_is - baseline.sharpe_is
     dd_ratio = (candidate.dd_is / baseline.dd_is) if baseline.dd_is > 0 else math.inf
@@ -946,7 +957,9 @@ def _emit_markdown(
     if verdict == "PASS":
         lines.append("- Promote to the reserved sensitivity stage on `w1/w2` only, then queue forward shadow.")
     elif verdict == "NULL_BY_CONSTRUCTION":
-        lines.append("- Redesign the scarce-resource surface before interpreting utility; do not rescue this stage with narrative.")
+        lines.append(
+            "- Redesign the scarce-resource surface before interpreting utility; do not rescue this stage with narrative."
+        )
     else:
         lines.append("- Treat A4b as failed or parked on the current locked design and do not tune around the miss.")
 
@@ -997,7 +1010,11 @@ def main() -> None:
     finally:
         con.close()
 
-    is_months = [m for m in _month_starts(IS_START_MONTH, IS_END_MONTH) if m in month_to_rebalance and m in month_to_calendar_days]
+    is_months = [
+        m
+        for m in _month_starts(IS_START_MONTH, IS_END_MONTH)
+        if m in month_to_rebalance and m in month_to_calendar_days
+    ]
     oos_months = [
         m
         for m in _month_starts(HOLDOUT_BOUNDARY, date(as_of.year, as_of.month, 1))
@@ -1012,9 +1029,7 @@ def main() -> None:
         gp_by_day,
     )
     binding_ratio = (
-        sum(1 for row in binding_rows if row["binding_pass"]) / float(len(binding_rows))
-        if binding_rows
-        else 0.0
+        sum(1 for row in binding_rows if row["binding_pass"]) / float(len(binding_rows)) if binding_rows else 0.0
     )
     binding_pass = binding_ratio >= BINDING_PASS_RATIO
 
@@ -1101,7 +1116,9 @@ def main() -> None:
     )
     is_effect = candidate_is.annualized_r - baseline_is.annualized_r
     oos_effect = candidate_oos.annualized_r - baseline_oos.annualized_r
-    oos_direction_match = None if abs(is_effect) < 1e-9 else (math.copysign(1.0, oos_effect) == math.copysign(1.0, is_effect))
+    oos_direction_match = (
+        None if abs(is_effect) < 1e-9 else (math.copysign(1.0, oos_effect) == math.copysign(1.0, is_effect))
+    )
     oos_effect_ratio = _effect_ratio(oos_effect, is_effect)
     verdict = _verdict_text(
         primary=primary,

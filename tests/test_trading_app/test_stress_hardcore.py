@@ -606,7 +606,6 @@ class TestC3SlowBreakFilter:
             cost_spec=_mgc(),
             entry_model="E1",
             orb_label="TOKYO_OPEN",
-            break_ts=break_ts,
         )
         assert len(results) == 1
         assert results[0]["pnl_r"] is not None, (
@@ -638,7 +637,6 @@ class TestC3SlowBreakFilter:
             cost_spec=_mgc(),
             entry_model="E1",
             orb_label="CME_REOPEN",  # C3 does NOT apply
-            break_ts=break_ts,
         )
         assert results[0]["pnl_r"] is not None, "C3 must NOT filter at CME_REOPEN — only TOKYO_OPEN"
 

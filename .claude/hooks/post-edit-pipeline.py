@@ -12,7 +12,14 @@ _DEBOUNCE_FILE = Path(__file__).parent / ".last_drift_ok"
 _DEBOUNCE_SECONDS = 30
 # Resolve project root for subprocess cwd and PYTHONPATH
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_SUBPROCESS_ENV = {**os.environ, "PYTHONPATH": str(_PROJECT_ROOT)}
+# PYTHONIOENCODING=utf-8 prevents Windows cp1252 UnicodeEncodeError on check labels
+# containing non-ASCII chars (e.g. arrows, ellipsis). subprocess.run(capture_output=True)
+# pipes via the system locale by default, which on Windows is cp1252.
+_SUBPROCESS_ENV = {
+    **os.environ,
+    "PYTHONPATH": str(_PROJECT_ROOT),
+    "PYTHONIOENCODING": "utf-8",
+}
 
 
 def _resolve_python() -> str:
@@ -93,8 +100,10 @@ def main():
     if not (("pipeline" in file_path or "trading_app" in file_path) and file_path.endswith(".py")):
         sys.exit(0)
 
-    # --- Phase 1: Drift check (fast, ~2s) with 30s debounce ---
-    # Pre-commit hook still runs full drift check (last line of defense)
+    # --- Phase 1: Drift check (FAST tier, ~3-5s) with 30s debounce ---
+    # Pre-commit hook + CI run the FULL drift check (no `--fast`) for end-to-end coverage.
+    # Hook uses `--fast` to skip the 19 checks measured >0.3s by profile_check_drift.py
+    # (full check is 50-130s — far exceeds the 30s hook timeout).
     _skip_drift = False
     if _DEBOUNCE_FILE.exists():
         try:
@@ -105,20 +114,66 @@ def main():
             pass  # race condition — file deleted between exists() and stat()
 
     if not _skip_drift:
-        result = subprocess.run(
-            [_HOOK_PYTHON, str(_PROJECT_ROOT / "pipeline" / "check_drift.py")],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=str(_PROJECT_ROOT),
-            env=_SUBPROCESS_ENV,
-        )
+        try:
+            result = subprocess.run(
+                [_HOOK_PYTHON, str(_PROJECT_ROOT / "pipeline" / "check_drift.py"), "--fast"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=str(_PROJECT_ROOT),
+                env=_SUBPROCESS_ENV,
+            )
+        except subprocess.TimeoutExpired:
+            # Fast tier should never exceed 30s. If it does, surface it loudly —
+            # it means SLOW_CHECK_LABELS in pipeline/check_drift.py is out of date.
+            _DEBOUNCE_FILE.unlink(missing_ok=True)
+            print(
+                f"DRIFT CHECK FAST TIER TIMED OUT (>30s) for {file_path}.\n"
+                f"  Re-profile with: python -m scripts.tools.profile_check_drift\n"
+                f"  Add new slow checks to SLOW_CHECK_LABELS in pipeline/check_drift.py.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
         if result.returncode != 0:
             # Invalidate debounce on failure
             _DEBOUNCE_FILE.unlink(missing_ok=True)
             print(f"DRIFT DETECTED after editing {file_path}", file=sys.stderr)
-            print(result.stdout, file=sys.stderr)
-            print(result.stderr, file=sys.stderr)
+            # Emit ONLY the failed check blocks + the final summary line, not the
+            # full PASSED/ADVISORY listing (~100 lines = ~8k tokens per hook fire).
+            # Parses `check_drift.py --fast` output: each check is
+            #   "Check N: <label>..."
+            #   "  PASSED [OK]" | "  FAILED:" (with details lines following until blank)
+            stdout_lines = result.stdout.splitlines()
+            emit: list[str] = []
+            i = 0
+            while i < len(stdout_lines):
+                line = stdout_lines[i]
+                if line.startswith("Check ") and line.rstrip().endswith("..."):
+                    # Look ahead: is next non-empty line "  FAILED:"?
+                    j = i + 1
+                    while j < len(stdout_lines) and not stdout_lines[j].strip():
+                        j += 1
+                    if j < len(stdout_lines) and stdout_lines[j].strip().startswith("FAILED:"):
+                        # Emit from the header through the end of this block
+                        # (next blank line, or next "Check ", whichever comes first)
+                        emit.append(line)
+                        k = i + 1
+                        while k < len(stdout_lines):
+                            nxt = stdout_lines[k]
+                            if nxt.startswith("Check "):
+                                break
+                            emit.append(nxt)
+                            k += 1
+                        i = k
+                        continue
+                # Always keep the separator + final summary (last ~5 lines)
+                if line.startswith("====") or line.startswith("DRIFT ") or line.startswith("NO DRIFT"):
+                    emit.append(line)
+                i += 1
+            filtered = "\n".join(emit).strip()
+            print(filtered if filtered else result.stdout, file=sys.stderr)
+            if result.stderr:
+                print(result.stderr, file=sys.stderr)
             sys.exit(2)
         # Mark successful drift check
         _DEBOUNCE_FILE.touch()

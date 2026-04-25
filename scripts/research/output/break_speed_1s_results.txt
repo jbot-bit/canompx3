@@ -123,8 +123,8 @@ PHASE 3: VALIDATION
 ======================================================================
 
 Direction consistency (1s vs 1m): 91.3%
-  WARNING: Direction mismatch > 5% — investigate!
-  9218 mismatches (could be genuine — 1s may detect different first break)
+  WARNING: Direction mismatch > 5% â€” investigate!
+  9218 mismatches (could be genuine â€” 1s may detect different first break)
 
 Correlation (break_delay_min 1s vs 1m):
   Pearson r = 0.7850, p = 0.00e+00, N = 106198
@@ -159,7 +159,7 @@ Spot-check (5 random dates per instrument):
   MNQ BRISBANE_1025 2013-07-08: 1m=1min, 1s=78s (1.30min), diff=-0.30min, dir_1s=short
 
 ======================================================================
-PHASE 4: WIN RATE ANALYSIS — 1s vs 1m THRESHOLDS
+PHASE 4: WIN RATE ANALYSIS â€” 1s vs 1m THRESHOLDS
 ======================================================================
 
 --- Per-session WR spreads (1s thresholds) ---
@@ -184,7 +184,7 @@ Correlation (break_delay_sec vs ATR20): r=-0.0592, p=2.85e-75
 No BH-significant results to control.
 
 ======================================================================
-PHASE 6: ERA CHECK — PRE-2019 vs POST-2019
+PHASE 6: ERA CHECK â€” PRE-2019 vs POST-2019
 ======================================================================
 
 MES: pre-2019 N=20794, post-2019 N=17184

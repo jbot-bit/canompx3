@@ -375,6 +375,14 @@ def test_build_front_next_pair_fails_closed_without_liquidity_metric() -> None:
 
 
 def test_load_carry_input_slices_unlocks_annualized_carry_when_expiry_is_supported() -> None:
+    """Reads raw MGC statistics files to compute annualized carry.
+
+    Local-data integration test: requires raw statistics files for MGC at
+    the canonical data location. CI runners legitimately have no local
+    statistics files (CLAUDE.md "no cloud sync"). When data is absent the
+    function returns carry_available=False with reason=missing_raw_statistics
+    and we skip the assertion — the local case is the meaningful test.
+    """
     instrument = InstrumentConfig(
         "GC",
         "MGC",
@@ -392,6 +400,11 @@ def test_load_carry_input_slices_unlocks_annualized_carry_when_expiry_is_support
     )
 
     assert len(slices) == 1
+    if slices[0].unavailable_reason == "missing_raw_statistics":
+        pytest.skip(
+            "MGC raw statistics not present locally — by design absent on CI. "
+            "Test passes when local data is provisioned."
+        )
     assert slices[0].carry_available is True
     assert slices[0].annualized_carry is not None
     assert slices[0].unavailable_reason is None
@@ -484,8 +497,28 @@ def test_simulate_research_path_accounts_for_turnover_costs() -> None:
             build_front_next_pair(
                 "MGC",
                 [
-                    ContractObservation(date(2026, 1, day), "MGC", "MGCG6", 2026, 2, 100.0 + day - 1, 5000, 1000, expiry_date=date(2026, 2, 24)),
-                    ContractObservation(date(2026, 1, day), "MGC", "MGCJ6", 2026, 4, 99.0 + day - 1, 3000, 900, expiry_date=date(2026, 4, 28)),
+                    ContractObservation(
+                        date(2026, 1, day),
+                        "MGC",
+                        "MGCG6",
+                        2026,
+                        2,
+                        100.0 + day - 1,
+                        5000,
+                        1000,
+                        expiry_date=date(2026, 2, 24),
+                    ),
+                    ContractObservation(
+                        date(2026, 1, day),
+                        "MGC",
+                        "MGCJ6",
+                        2026,
+                        4,
+                        99.0 + day - 1,
+                        3000,
+                        900,
+                        expiry_date=date(2026, 4, 28),
+                    ),
                 ],
             )
         )
@@ -512,13 +545,17 @@ def test_simulate_research_path_accounts_for_turnover_costs() -> None:
 
 def test_summarize_walk_forward_builds_non_overlapping_windows() -> None:
     rows = [
-        type("Row", (), {
-            "trading_day": date(2026, 1, idx + 1),
-            "symbol": "GC",
-            "gross_pnl_usd": float(idx + 1),
-            "net_pnl_usd": float(idx if idx % 2 == 0 else -(idx + 1)),
-            "turnover_contracts": 1,
-        })()
+        type(
+            "Row",
+            (),
+            {
+                "trading_day": date(2026, 1, idx + 1),
+                "symbol": "GC",
+                "gross_pnl_usd": float(idx + 1),
+                "net_pnl_usd": float(idx if idx % 2 == 0 else -(idx + 1)),
+                "turnover_contracts": 1,
+            },
+        )()
         for idx in range(8)
     ]
 

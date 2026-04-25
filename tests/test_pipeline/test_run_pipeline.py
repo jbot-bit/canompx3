@@ -300,28 +300,32 @@ class TestDryRun:
         "--dry-run",
     ]
 
+    @patch("pipeline.asset_configs.require_dbn_available")
     @patch("pipeline.asset_configs.get_asset_config")
     @patch("pipeline.run_pipeline.subprocess.run")
-    def test_dry_run_exits_before_subprocess(self, mock_run, mock_config):
+    def test_dry_run_exits_before_subprocess(self, mock_run, mock_config, mock_require):
         mock_config.return_value = {
             "dbn_path": "/fake/path",
             "outright_pattern": MagicMock(pattern="GC.*"),
             "minimum_start_date": "2016-01-01",
         }
+        mock_require.return_value = "/fake/path"
         with patch.object(sys, "argv", self.DRY_ARGV):
             with pytest.raises(SystemExit) as exc_info:
                 main()
             assert exc_info.value.code == 0
         mock_run.assert_not_called()
 
+    @patch("pipeline.asset_configs.require_dbn_available")
     @patch("pipeline.asset_configs.get_asset_config")
     @patch("pipeline.run_pipeline.subprocess.run")
-    def test_dry_run_prints_all_step_names(self, mock_run, mock_config, capsys):
+    def test_dry_run_prints_all_step_names(self, mock_run, mock_config, mock_require, capsys):
         mock_config.return_value = {
             "dbn_path": "/fake/path",
             "outright_pattern": MagicMock(pattern="GC.*"),
             "minimum_start_date": "2016-01-01",
         }
+        mock_require.return_value = "/fake/path"
         with patch.object(sys, "argv", self.DRY_ARGV):
             with pytest.raises(SystemExit):
                 main()

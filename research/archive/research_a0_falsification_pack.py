@@ -175,7 +175,14 @@ def main() -> int:
     real_row = out[out["test"] == "real_A0_same_session"].iloc[0]
     pval = np.nan
     if pd.notna(real_row["uplift"]):
-        pval = perm_p(m_real.values.astype(bool), df["year"].values, df["pnl_r"].values, float(real_row["uplift"]), n_perm=N_PERM, seed=123)
+        pval = perm_p(
+            m_real.values.astype(bool),
+            df["year"].values,
+            df["pnl_r"].values,
+            float(real_row["uplift"]),
+            n_perm=N_PERM,
+            seed=123,
+        )
 
     out_dir = ROOT / "research" / "output"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -192,10 +199,16 @@ def main() -> int:
     ]
 
     for r in out.itertuples(index=False):
-        lines.append(f"- {r.test}: N_on={r.n_on}, avg_on={r.avg_on:+.4f}, avg_off={r.avg_off:+.4f}, uplift={r.uplift:+.4f}")
+        lines.append(
+            f"- {r.test}: N_on={r.n_on}, avg_on={r.avg_on:+.4f}, avg_off={r.avg_off:+.4f}, uplift={r.uplift:+.4f}"
+        )
 
     lines.append("")
-    lines.append(f"Permutation p-value for real_A0_same_session uplift: {pval:.6f}" if pd.notna(pval) else "Permutation p-value unavailable")
+    lines.append(
+        f"Permutation p-value for real_A0_same_session uplift: {pval:.6f}"
+        if pd.notna(pval)
+        else "Permutation p-value unavailable"
+    )
 
     p_md.write_text("\n".join(lines), encoding="utf-8")
 

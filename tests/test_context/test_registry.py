@@ -69,6 +69,13 @@ def test_candidate_tasks_matches_docs_drift_audit() -> None:
     assert candidates[0].task_id == "docs_drift_audit"
 
 
+def test_candidate_tasks_matches_repo_workflow_audit() -> None:
+    candidates = candidate_tasks("Audit token waste in startup hooks and context resolver routing.")
+
+    assert candidates
+    assert candidates[0].task_id == "repo_workflow_audit"
+
+
 def test_rendered_catalogs_include_expected_entries() -> None:
     source_catalog = render_source_catalog_markdown()
     task_routes = render_task_routes_markdown()
@@ -84,6 +91,7 @@ def test_rendered_catalogs_include_expected_entries() -> None:
     assert "`orb_utc_window`" in source_catalog
     assert "Task Routes" in task_routes
     assert "`research_investigation`" in task_routes
+    assert "`repo_workflow_audit`" in task_routes
     assert "`research_methodology_pack`" in task_routes
     assert all(path in task_routes for path in FALLBACK_READ_SET)
     assert "Institutional Routing Contracts" in institutional

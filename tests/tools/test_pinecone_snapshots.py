@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
+import duckdb
 import pytest
 
-# Import generators — these read from the live gold.db
 from scripts.tools.pinecone_snapshots import (
     generate_fitness_report_snapshot,
     generate_live_config_snapshot,
@@ -13,9 +13,66 @@ from scripts.tools.pinecone_snapshots import (
 )
 
 
-def test_portfolio_state_snapshot():
+@pytest.fixture
+def seeded_snapshot_db(tmp_path):
+    """Temp gold.db with one ROBUST MNQ candidate seeded against canonical schema.
+
+    Schema is built via canonical builders (pipeline.init_db.DAILY_FEATURES_SCHEMA
+    + trading_app.db_manager.init_trading_app_schema) so future schema migrations
+    automatically flow into this fixture without manual sync.
+
+    Covers both portfolio_state and fitness_report snapshot assertions:
+    they check for markdown table headers (always present) and at least one
+    active instrument name (mentioned only if there's a row).
+    """
+    from pipeline.init_db import DAILY_FEATURES_SCHEMA
+    from trading_app.db_manager import init_trading_app_schema
+
+    db_path = tmp_path / "gold.db"
+    # daily_features must exist first because orb_outcomes has an FK into it.
+    con = duckdb.connect(str(db_path))
+    try:
+        con.execute(DAILY_FEATURES_SCHEMA)
+    finally:
+        con.close()
+    init_trading_app_schema(db_path=db_path)
+
+    con = duckdb.connect(str(db_path))
+    try:
+        con.execute(
+            """
+            INSERT INTO validated_setups (
+                strategy_id, instrument, orb_label, entry_model, orb_minutes,
+                rr_target, confirm_bars, filter_type, status,
+                sample_size, win_rate, expectancy_r, sharpe_ann, max_drawdown_r,
+                years_tested, all_years_positive, stress_test_passed,
+                fdr_significant, wf_passed, stop_multiplier
+            ) VALUES ('MNQ_TOKYO_OPEN_E2_CB1_ORB_G5_RR1.5', 'MNQ', 'TOKYO_OPEN',
+                      'E2', 5, 1.5, 1, 'ORB_G5', 'active',
+                      150, 0.52, 0.18, 1.1, 3.0,
+                      6, TRUE, TRUE,
+                      TRUE, TRUE, 1.0)
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO edge_families (
+                family_hash, instrument, member_count, trade_day_count,
+                head_strategy_id, head_expectancy_r, head_sharpe_ann,
+                robustness_status, cv_expectancy, trade_tier, pbo
+            ) VALUES ('MNQ_TOKYO_OPEN_ORB_G5', 'MNQ', 3, 150,
+                      'MNQ_TOKYO_OPEN_E2_CB1_ORB_G5_RR1.5', 0.18, 1.1,
+                      'ROBUST', 0.15, 'CORE', 0.20)
+            """
+        )
+    finally:
+        con.close()
+    return db_path
+
+
+def test_portfolio_state_snapshot(seeded_snapshot_db):
     """Verify markdown has Portfolio State header and instrument table."""
-    md = generate_portfolio_state_snapshot()
+    md = generate_portfolio_state_snapshot(db_path=seeded_snapshot_db)
 
     assert "# Portfolio State Snapshot" in md
     assert "Generated:" in md
@@ -39,9 +96,9 @@ def test_portfolio_state_snapshot():
     assert any(inst in md for inst in ("MGC", "MNQ", "MES", "M2K"))
 
 
-def test_fitness_report_snapshot():
+def test_fitness_report_snapshot(seeded_snapshot_db):
     """Verify markdown has breakdown sections and top strategies."""
-    md = generate_fitness_report_snapshot()
+    md = generate_fitness_report_snapshot(db_path=seeded_snapshot_db)
 
     assert "# Fitness Report Snapshot" in md
     assert "Generated:" in md

@@ -1,5 +1,7 @@
 # Task Routes
 
+Generated from `context/registry.py` and `context/institutional.py`. Do not edit by hand.
+
 Generated canonical task routes for cold-start orientation.
 
 ## `completion_claim`
@@ -31,6 +33,26 @@ Generated canonical task routes for cold-start orientation.
 - Doctrine: `TRADING_RULES.md`, `CLAUDE.md`
 - Canonical owners: `trading_app/prop_profiles.py`, `trading_app/lifecycle_state.py`, `pipeline/db_contracts.py`
 - Live views: `trading_context`, `system_brief`
+
+## `repo_workflow_audit`
+
+- Purpose: Audit startup, routing, launcher, or hook workflow surfaces for rigor, token efficiency, and operator clarity.
+- Verification profile: `investigation`
+- Briefing contract: `orientation_briefing`
+- Packs: `coding_runtime_pack`, `project_orientation_pack`
+- Doctrine: `AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`
+- Canonical owners: `context/registry.py`, `pipeline/system_brief.py`, `scripts/tools/context_resolver.py`, `scripts/tools/session_preflight.py`, `scripts/tools/task_route_packet.py`, `scripts/infra/windows_agent_launch.py`, `scripts/infra/claude-worktree.sh`, `scripts/infra/codex-project.sh`, `scripts/infra/codex-worktree.sh`
+- Live views: `verification_context`, `system_brief`
+
+## `research_discovery`
+
+- Purpose: Triage new edge ideas, discovery questions, and hypothesis-shaping work using the institutional discovery front door.
+- Verification profile: `investigation`
+- Briefing contract: `investigation_briefing`
+- Packs: `coding_runtime_pack`, `trading_runtime_pack`, `research_methodology_pack`
+- Doctrine: `RESEARCH_RULES.md`, `TRADING_RULES.md`, `docs/STRATEGY_BLUEPRINT.md`, `docs/institutional/research_pipeline_contract.md`, `docs/institutional/pre_registered_criteria.md`, `docs/institutional/mechanism_priors.md`, `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md`
+- Canonical owners: `trading_app/holdout_policy.py`, `pipeline/build_daily_features.py`, `pipeline/asset_configs.py`, `pipeline/cost_model.py`, `pipeline/dst.py`, `scripts/tools/prereg_front_door.py`, `scripts/infra/prereg-loop.sh`, `trading_app/strategy_discovery.py`, `pipeline/db_contracts.py`
+- Live views: `gold_db_mcp`, `research_context`, `system_brief`
 
 ## `research_investigation`
 

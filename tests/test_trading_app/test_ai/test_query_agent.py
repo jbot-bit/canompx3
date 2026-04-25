@@ -5,6 +5,7 @@ Stage 3 of claude-api-modernization: migrated to canonical `claude_client`,
 interpretation, prompt caching on the grounding prompt.
 """
 
+import importlib.util
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -15,6 +16,8 @@ from trading_app.ai.query_agent import (
     QueryResult,
     _generate_warnings,
 )
+
+ANTHROPIC_AVAILABLE = importlib.util.find_spec("anthropic") is not None
 
 
 class TestGenerateWarnings:
@@ -140,9 +143,7 @@ class TestQueryAgentIntentExtraction:
         """Pass 1 pins to Sonnet 4.6 (CLAUDE_STRUCTURED_MODEL)."""
         from trading_app.ai.claude_client import CLAUDE_STRUCTURED_MODEL
 
-        mock_agent.client.messages.parse.return_value = self._mock_parse_response(
-            template="table_counts"
-        )
+        mock_agent.client.messages.parse.return_value = self._mock_parse_response(template="table_counts")
         mock_agent._extract_intent("how many rows?")
 
         call_kwargs = mock_agent.client.messages.parse.call_args.kwargs
@@ -155,9 +156,7 @@ class TestQueryAgentIntentExtraction:
         signature on anthropic 0.96.0). Caching must be expressed via a
         TextBlockParam on the `system` list.
         """
-        mock_agent.client.messages.parse.return_value = self._mock_parse_response(
-            template="table_counts"
-        )
+        mock_agent.client.messages.parse.return_value = self._mock_parse_response(template="table_counts")
         mock_agent._extract_intent("how many rows?")
 
         call_kwargs = mock_agent.client.messages.parse.call_args.kwargs
@@ -182,9 +181,7 @@ class TestQueryAgentIntentExtraction:
         We never pass temperature — structured outputs give us determinism via
         schema validation rather than sampling knobs.
         """
-        mock_agent.client.messages.parse.return_value = self._mock_parse_response(
-            template="table_counts"
-        )
+        mock_agent.client.messages.parse.return_value = self._mock_parse_response(template="table_counts")
         mock_agent._extract_intent("how many rows?")
 
         call_kwargs = mock_agent.client.messages.parse.call_args.kwargs
@@ -192,9 +189,7 @@ class TestQueryAgentIntentExtraction:
 
     def test_extract_intent_invalid_template_returns_none(self, mock_agent):
         """If Claude returns a template not in QueryTemplate enum, fail-soft None."""
-        mock_agent.client.messages.parse.return_value = self._mock_parse_response(
-            template="nonexistent_template_name"
-        )
+        mock_agent.client.messages.parse.return_value = self._mock_parse_response(template="nonexistent_template_name")
         assert mock_agent._extract_intent("garbled") is None
 
 
@@ -207,6 +202,7 @@ class TestSDKSurfaceGuards:
     network, no mock — to validate our call shape.
     """
 
+    @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="anthropic SDK not installed")
     def test_messages_parse_exists_with_required_params(self):
         """Every kwarg _extract_intent passes must exist on the real SDK."""
         import inspect
@@ -224,6 +220,7 @@ class TestSDKSurfaceGuards:
         missing = required_for_our_call - set(sig.parameters)
         assert not missing, f"SDK surface changed: parse() missing {missing}"
 
+    @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="anthropic SDK not installed")
     def test_messages_parse_rejects_cache_control_kwarg(self):
         """Regression guard: cache_control is NOT a top-level kwarg on parse().
 
@@ -237,10 +234,10 @@ class TestSDKSurfaceGuards:
 
         sig = inspect.signature(Messages.parse)
         assert "cache_control" not in sig.parameters, (
-            "SDK now accepts cache_control on parse() — can simplify "
-            "_extract_intent to pass it at top level."
+            "SDK now accepts cache_control on parse() — can simplify _extract_intent to pass it at top level."
         )
 
+    @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="anthropic SDK not installed")
     def test_extract_intent_call_shape_binds_to_real_sdk(self):
         """Validate the exact kwargs our code passes against the REAL SDK sig.
 
@@ -275,10 +272,9 @@ class TestSDKSurfaceGuards:
         try:
             sig.bind(None, **our_kwargs)  # None = self, ignored for kwarg validation
         except TypeError as exc:
-            pytest.fail(
-                f"_extract_intent call shape invalid against anthropic SDK: {exc}"
-            )
+            pytest.fail(f"_extract_intent call shape invalid against anthropic SDK: {exc}")
 
+    @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="anthropic SDK not installed")
     def test_messages_create_thinking_adaptive_shape(self):
         """Validate Pass-2 (_interpret_results) kwargs against real SDK sig.
 
@@ -312,9 +308,7 @@ class TestSDKSurfaceGuards:
         try:
             sig.bind(None, **our_kwargs)
         except TypeError as exc:
-            pytest.fail(
-                f"_interpret_results call shape invalid against anthropic SDK: {exc}"
-            )
+            pytest.fail(f"_interpret_results call shape invalid against anthropic SDK: {exc}")
 
         # Confirm the thinking shape satisfies the TypedDict contract —
         # the 'type' literal must be 'adaptive', which is a Required field.
@@ -342,9 +336,7 @@ class TestQueryAgentInterpretation:
         """Pass 2 pins to Opus 4.7 (CLAUDE_REASONING_MODEL)."""
         from trading_app.ai.claude_client import CLAUDE_REASONING_MODEL
 
-        mock_agent.client.messages.create.return_value = self._mock_create_response(
-            "The data shows 3 CORE strategies."
-        )
+        mock_agent.client.messages.create.return_value = self._mock_create_response("The data shows 3 CORE strategies.")
         df = pd.DataFrame({"x": [1, 2, 3]})
         mock_agent._interpret_results("what does it say?", df)
 
@@ -353,9 +345,7 @@ class TestQueryAgentInterpretation:
 
     def test_interpret_uses_adaptive_thinking(self, mock_agent):
         """Interpretation is reasoning-heavy; adaptive thinking is required."""
-        mock_agent.client.messages.create.return_value = self._mock_create_response(
-            "..."
-        )
+        mock_agent.client.messages.create.return_value = self._mock_create_response("...")
         df = pd.DataFrame({"x": [1, 2, 3]})
         mock_agent._interpret_results("q", df)
 
@@ -364,9 +354,7 @@ class TestQueryAgentInterpretation:
 
     def test_interpret_passes_no_temperature(self, mock_agent):
         """Opus 4.7 rejects `temperature`."""
-        mock_agent.client.messages.create.return_value = self._mock_create_response(
-            "..."
-        )
+        mock_agent.client.messages.create.return_value = self._mock_create_response("...")
         df = pd.DataFrame({"x": [1, 2, 3]})
         mock_agent._interpret_results("q", df)
 

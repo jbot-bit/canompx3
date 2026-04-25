@@ -60,9 +60,7 @@ def test_cancel_raises_rate_limit_exhausted_on_429(mock_req):
 
     mock_req.post.return_value = _mock_429()
     router = _router()
-    with patch("trading_app.live.projectx.order_router.time.sleep"), pytest.raises(
-        RateLimitExhausted, match="429"
-    ):
+    with patch("trading_app.live.projectx.order_router.time.sleep"), pytest.raises(RateLimitExhausted, match="429"):
         router.cancel(order_id=42)
     # 1 initial + 3 retries = 4 attempts
     assert mock_req.post.call_count == 4
@@ -92,9 +90,7 @@ def test_query_order_status_raises_on_429_exhaustion(mock_req):
 
     mock_req.get.return_value = _mock_429()
     router = _router()
-    with patch("trading_app.live.projectx.order_router.time.sleep"), pytest.raises(
-        RateLimitExhausted
-    ):
+    with patch("trading_app.live.projectx.order_router.time.sleep"), pytest.raises(RateLimitExhausted):
         router.query_order_status(order_id=99)
 
 
@@ -122,9 +118,7 @@ def test_query_open_orders_raises_on_429_exhaustion(mock_req):
 
     mock_req.post.return_value = _mock_429()
     router = _router()
-    with patch("trading_app.live.projectx.order_router.time.sleep"), pytest.raises(
-        RateLimitExhausted
-    ):
+    with patch("trading_app.live.projectx.order_router.time.sleep"), pytest.raises(RateLimitExhausted):
         router.query_open_orders()
 
 
@@ -138,9 +132,7 @@ def test_verify_bracket_legs_propagates_429(mock_req):
 
     mock_req.post.return_value = _mock_429()
     router = _router()
-    with patch("trading_app.live.projectx.order_router.time.sleep"), pytest.raises(
-        RateLimitExhausted
-    ):
+    with patch("trading_app.live.projectx.order_router.time.sleep"), pytest.raises(RateLimitExhausted):
         router.verify_bracket_legs(entry_order_id=100, contract_id="TEST")
 
 
@@ -151,9 +143,7 @@ def test_cancel_bracket_orders_propagates_429(mock_req):
 
     mock_req.post.return_value = _mock_429()
     router = _router()
-    with patch("trading_app.live.projectx.order_router.time.sleep"), pytest.raises(
-        RateLimitExhausted
-    ):
+    with patch("trading_app.live.projectx.order_router.time.sleep"), pytest.raises(RateLimitExhausted):
         router.cancel_bracket_orders(contract_id="TEST")
 
 

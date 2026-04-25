@@ -139,7 +139,7 @@ def check_git_cleanliness(path: Path) -> None:
             f"Hypothesis file {path} is not tracked by git. Pre-registration "
             f"requires a commit as the lock point — the SHA is only meaningful "
             f"against a committed version of the file. Run 'git add {path} && "
-            f"git commit -m \"pre-register <slug>\"' before running discovery. "
+            f'git commit -m "pre-register <slug>"\' before running discovery. '
             f"See docs/audit/hypotheses/README.md § 'Workflow' step 6."
         )
 
@@ -163,15 +163,21 @@ def check_git_cleanliness(path: Path) -> None:
         )
 
 
-def check_single_use(sha: str, con: Any, *, orb_minutes: int | None = None) -> None:
-    """Verify a hypothesis file's SHA has never been used for this aperture.
+def check_single_use(
+    sha: str,
+    con: Any,
+    *,
+    instrument: str | None = None,
+    orb_minutes: int | None = None,
+) -> None:
+    """Verify a hypothesis file's SHA has never been used for this run slice.
 
     Queries ``experimental_strategies`` for any row carrying the given SHA
-    in the ``hypothesis_file_sha`` column. When ``orb_minutes`` is provided,
-    the check is scoped to rows with matching ``orb_minutes`` — this allows
-    a single hypothesis file covering multiple apertures (e.g., 15m + 30m)
+    in the ``hypothesis_file_sha`` column. When ``instrument`` and/or
+    ``orb_minutes`` are provided, the check is scoped to matching rows. This
+    allows a single hypothesis file covering disjoint instruments/apertures
     to be run in separate CLI invocations without false-positive blocking.
-    Same-aperture re-runs are still caught.
+    Same-slice re-runs are still caught.
 
     Parameters
     ----------
@@ -183,13 +189,17 @@ def check_single_use(sha: str, con: Any, *, orb_minutes: int | None = None) -> N
         ``experimental_strategies``. The connection is NOT closed by
         this function — caller's responsibility. Read-only query; the
         connection does not need to be in write mode.
+    instrument
+        When provided, scope the check to rows with matching instrument. This
+        supports multi-instrument hypothesis files where the CLI runs one
+        instrument at a time.
     orb_minutes
         When provided, scope the check to rows with this ``orb_minutes``
-        value. This supports multi-aperture hypothesis files where the
-        CLI requires separate ``--orb-minutes`` runs. Rows from a prior
-        run at a DIFFERENT aperture are not treated as a re-run because
-        the scope predicate ensures each run covers a disjoint subset
-        of the hypothesis family — no doubling occurs.
+        value. This supports multi-aperture hypothesis files where the CLI
+        runs one aperture at a time. Rows from a prior run at a DIFFERENT
+        instrument/aperture are not treated as a re-run because the scope
+        predicate ensures each run covers a disjoint subset of the hypothesis
+        family — no doubling occurs.
         When None (legacy behavior), checks ALL rows regardless of
         aperture — stricter, appropriate for single-aperture files.
 
@@ -213,7 +223,21 @@ def check_single_use(sha: str, con: Any, *, orb_minutes: int | None = None) -> N
     prevent SQL injection from a malformed SHA string. DuckDB's
     ``execute(sql, [params])`` is the canonical safe pattern.
     """
-    if orb_minutes is not None:
+    if instrument is not None and orb_minutes is not None:
+        query = """
+            SELECT COUNT(*) AS n, MIN(created_at) AS first_used
+            FROM experimental_strategies
+            WHERE hypothesis_file_sha = ? AND instrument = ? AND orb_minutes = ?
+        """
+        row = con.execute(query, [sha, instrument, orb_minutes]).fetchone()
+    elif instrument is not None:
+        query = """
+            SELECT COUNT(*) AS n, MIN(created_at) AS first_used
+            FROM experimental_strategies
+            WHERE hypothesis_file_sha = ? AND instrument = ?
+        """
+        row = con.execute(query, [sha, instrument]).fetchone()
+    elif orb_minutes is not None:
         query = """
             SELECT COUNT(*) AS n, MIN(created_at) AS first_used
             FROM experimental_strategies
@@ -231,7 +255,12 @@ def check_single_use(sha: str, con: Any, *, orb_minutes: int | None = None) -> N
         return
     count, first_used = row[0], row[1]
     if count > 0:
-        scope_msg = f" at orb_minutes={orb_minutes}" if orb_minutes is not None else ""
+        scope_parts = []
+        if instrument is not None:
+            scope_parts.append(f"instrument={instrument}")
+        if orb_minutes is not None:
+            scope_parts.append(f"orb_minutes={orb_minutes}")
+        scope_msg = f" for {' '.join(scope_parts)}" if scope_parts else ""
         raise HypothesisLoaderError(
             f"Hypothesis file SHA {sha[:12]}... has already been used by "
             f"{count} experimental_strategies row(s){scope_msg} "

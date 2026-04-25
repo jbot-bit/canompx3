@@ -97,7 +97,9 @@ def load_trades_with_context(con, row: pd.Series, direction: str) -> pd.DataFram
     return df
 
 
-def lift(df: pd.DataFrame, side: str, *, column: str = "gp", threshold: float | None = None, mask: pd.Series | None = None) -> float | None:
+def lift(
+    df: pd.DataFrame, side: str, *, column: str = "gp", threshold: float | None = None, mask: pd.Series | None = None
+) -> float | None:
     if mask is not None:
         df = df.loc[mask].copy()
     if len(df) < 20:

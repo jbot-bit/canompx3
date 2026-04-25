@@ -54,7 +54,7 @@ SESSION_CONFIGS = {
 }
 
 MIN_N = 30  # minimum per bucket for t-test
-BH_Q  = 0.10
+BH_Q = 0.10
 
 # G-filter thresholds in absolute ORB points (NOT ATR multiples)
 # G4 = orb_size >= 4.0 pts,  G6 = orb_size >= 6.0 pts
@@ -66,8 +66,10 @@ G6_THRESHOLD = 6.0
 # Stats helpers
 # ---------------------------------------------------------------------------
 
+
 def mean(vals):
     return sum(vals) / len(vals) if vals else 0.0
+
 
 def se(vals):
     n = len(vals)
@@ -77,11 +79,13 @@ def se(vals):
     var = sum((v - m) ** 2 for v in vals) / (n - 1)
     return math.sqrt(var / n)
 
+
 def t_stat(vals):
     s = se(vals)
     if math.isnan(s) or s == 0:
         return float("nan")
     return mean(vals) / s
+
 
 def p_from_t(t, df):
     """Two-tailed p-value from t-statistic (numerical approximation)."""
@@ -93,6 +97,7 @@ def p_from_t(t, df):
     # Use scipy if available, otherwise approximate
     try:
         from scipy.stats import t as t_dist
+
         return float(2 * t_dist.sf(abs(t), df))
     except ImportError:
         # Simple normal approximation for large df
@@ -100,9 +105,11 @@ def p_from_t(t, df):
         p = 2 * (1 - _normal_cdf(z))
         return p
 
+
 def _normal_cdf(z):
     """Approximate CDF of standard normal."""
     return 0.5 * (1 + math.erf(z / math.sqrt(2)))
+
 
 def bh_correct(tests, q=BH_Q):
     """
@@ -127,6 +134,7 @@ def bh_correct(tests, q=BH_Q):
         prev_p_bh = p_bh
     return adjusted, survivors
 
+
 def stars(p):
     if math.isnan(p):
         return ""
@@ -145,8 +153,8 @@ def stars(p):
 # Data loading
 # ---------------------------------------------------------------------------
 
-def load_data(con, instrument, session, entry_model, rr_target, confirm_bars,
-              min_orb_pts):
+
+def load_data(con, instrument, session, entry_model, rr_target, confirm_bars, min_orb_pts):
     """
     Returns rows: (trading_day, year, prev_outcome, pnl_r)
     prev_outcome: yesterday's outcome for this session (None/NULL = no break).
@@ -195,15 +203,14 @@ def load_data(con, instrument, session, entry_model, rr_target, confirm_bars,
           AND l.orb_size_pts  >= ?
         ORDER BY l.trading_day
     """
-    rows = con.execute(sql, [
-        instrument, session, entry_model, rr_target, confirm_bars, min_orb_pts
-    ]).fetchall()
+    rows = con.execute(sql, [instrument, session, entry_model, rr_target, confirm_bars, min_orb_pts]).fetchall()
     return rows  # (trading_day, yr, prev_outcome, pnl_r)
 
 
 # ---------------------------------------------------------------------------
 # Analysis
 # ---------------------------------------------------------------------------
+
 
 def analyse_cell(rows):
     """
@@ -212,6 +219,7 @@ def analyse_cell(rows):
     Also returns baseline (all rows).
     """
     from collections import defaultdict
+
     buckets = defaultdict(list)
     all_r = []
     for _day, _yr, prev, pnl in rows:
@@ -231,7 +239,9 @@ def analyse_cell(rows):
     # Baseline
     n_all = len(all_r)
     results["_ALL"] = dict(
-        n=n_all, avgR=mean(all_r), se=se(all_r),
+        n=n_all,
+        avgR=mean(all_r),
+        se=se(all_r),
         t=t_stat(all_r),
         p=p_from_t(t_stat(all_r), n_all - 1),
         vals=all_r,
@@ -242,6 +252,7 @@ def analyse_cell(rows):
 def year_by_year(rows, bucket):
     """Year-by-year stats for a specific prev_outcome bucket."""
     from collections import defaultdict
+
     by_year = defaultdict(list)
     for _day, yr, prev, pnl in rows:
         b = prev if prev else "no_break"
@@ -264,15 +275,15 @@ def year_by_year(rows, bucket):
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--db-path", default=str(GOLD_DB_PATH))
-    parser.add_argument("--g6", action="store_true",
-                        help="Use G6+ filter instead of G4+")
+    parser.add_argument("--g6", action="store_true", help="Use G6+ filter instead of G4+")
     args = parser.parse_args()
 
     min_orb_pts = G6_THRESHOLD if args.g6 else G4_THRESHOLD
-    filter_name  = "G6+" if args.g6 else "G4+"
+    filter_name = "G6+" if args.g6 else "G4+"
 
     con = duckdb.connect(args.db_path, read_only=True)
 
@@ -284,8 +295,8 @@ def main():
     print("predicts today's pnl_r. Real-time observable — no look-ahead.")
     print()
 
-    all_tests = []      # (label, p_value) for BH
-    cell_data  = {}     # label -> (rows, bucket, stats) for year-by-year
+    all_tests = []  # (label, p_value) for BH
+    cell_data = {}  # label -> (rows, bucket, stats) for year-by-year
 
     # ------------------------------------------------------------------
     for (inst, sess), (em, rr, cb) in sorted(SESSION_CONFIGS.items()):
@@ -298,7 +309,7 @@ def main():
         n_total = baseline.get("n", 0)
 
         print(f"  {inst} {sess}  E{em[1]} RR{rr} CB{cb} {filter_name}")
-        print(f"    Baseline: N={n_total}  avgR={baseline.get('avgR',0):.3f}")
+        print(f"    Baseline: N={n_total}  avgR={baseline.get('avgR', 0):.3f}")
 
         for bucket in ["win", "loss", "scratch"]:
             bdata = cell_stats.get(bucket, {})
@@ -307,13 +318,15 @@ def main():
                 print(f"    prev={bucket:<8}  N={n:4d}  (skip, N<{MIN_N})")
                 continue
             avg = bdata["avgR"]
-            t   = bdata["t"]
-            p   = bdata["p"]
+            t = bdata["t"]
+            p = bdata["p"]
             lbl = f"{inst}_{sess}_prev={bucket}"
             all_tests.append((lbl, p))
             cell_data[lbl] = (rows, bucket, bdata)
-            print(f"    prev={bucket:<8}  N={n:4d}  avgR={avg:+.3f}  "
-                  f"SE={bdata['se']:.3f}  t={t:+.2f}  p={p:.3f}  {stars(p)}")
+            print(
+                f"    prev={bucket:<8}  N={n:4d}  avgR={avg:+.3f}  "
+                f"SE={bdata['se']:.3f}  t={t:+.2f}  p={p:.3f}  {stars(p)}"
+            )
         print()
 
     # ------------------------------------------------------------------
@@ -359,10 +372,9 @@ def main():
         sess = parts[1]
 
         print(f"\n  {lbl}")
-        print(f"  Aggregate: N={bdata['n']}  avgR={bdata['avgR']:+.3f}  "
-              f"t={bdata['t']:+.2f}  p={bdata['p']:.4f}")
+        print(f"  Aggregate: N={bdata['n']}  avgR={bdata['avgR']:+.3f}  t={bdata['t']:+.2f}  p={bdata['p']:.4f}")
         print(f"  {'Year':>4}  {'N':>5}  {'avgR':>7}  {'SE':>6}  {'t':>6}  {'p':>6}")
-        print(f"  {'-'*44}")
+        print(f"  {'-' * 44}")
 
         yy = year_by_year(rows, bucket)
         pos_years = 0
@@ -403,8 +415,7 @@ def main():
         if len(bdata) >= 3:
             _, bucket, stats = cell_data[lbl]
             print(f"  [SURVIVED] {lbl}")
-            print(f"             N={stats['n']}  avgR={stats['avgR']:+.3f}  "
-                  f"p_bh={p_bh_map.get(lbl, float('nan')):.4f}")
+            print(f"             N={stats['n']}  avgR={stats['avgR']:+.3f}  p_bh={p_bh_map.get(lbl, float('nan')):.4f}")
     if not survivors:
         print("  NO survivors.")
 

@@ -137,6 +137,135 @@ def _apply_broker_reality_check(
     return "xfa" if account_meta is not None else "xfa_missing_meta"
 
 
+def _cleanup_orphan_brackets(
+    *,
+    order_router,
+    contracts,
+    instrument: str,
+    force_orphans: bool,
+    notify_fn,
+    logger=None,
+) -> int:
+    """Cancel orphaned AutoBracket orders at startup. Returns count cancelled.
+
+    F8 (2026-04-25): a failed cleanup may leave prior-session brackets live at
+    the broker; on a price gap they create ghost positions with no
+    PositionTracker entry, no HWM accounting, no software exit path.
+
+    Mirrors the position-orphan halt pattern in __init__ at L482-491:
+      - log.critical + notify_fn on failure
+      - raise RuntimeError unless force_orphans=True
+      - if force_orphans, warn and proceed (operator accepts risk)
+
+    Returns the count of cancelled orders (0 if none, raises if failed and
+    not force_orphans).
+    """
+    try:
+        contract_sym = contracts.resolve_front_month(instrument)
+        cancelled = order_router.cancel_bracket_orders(contract_sym)
+        if cancelled > 0:
+            if logger is not None:
+                logger.warning(
+                    "STARTUP CLEANUP: cancelled %d orphaned bracket orders on %s",
+                    cancelled,
+                    contract_sym,
+                )
+            notify_fn(f"STARTUP: Cancelled {cancelled} orphaned bracket orders")
+        return cancelled
+    except Exception as e:
+        if logger is not None:
+            logger.critical("Bracket orphan cleanup failed on startup: %s", e)
+        notify_fn(f"BRACKET ORPHAN CLEANUP FAILED: {e} — verify no live orders")
+        if not force_orphans:
+            raise RuntimeError(
+                f"Bracket orphan cleanup failed ({e}). Cannot verify no stale "
+                f"AutoBracket orders are alive at the broker. Cancel manually or "
+                f"pass --force-orphans to proceed at your own risk."
+            ) from e
+        if logger is not None:
+            logger.warning("--force-orphans: proceeding despite bracket cleanup failure")
+        return 0
+
+
+def _notify_journal_unhealthy_demo(*, journal, journal_mode: str, notify_fn, logger=None) -> bool:
+    """Notify operator if the trade journal is unhealthy in non-live mode.
+
+    F6 (2026-04-25): pre-fix, demo/signal-only sessions silently log a
+    warning when the journal can't open and continue without persistence.
+    Operator wakes up to zero trade records — invalidates demo as a
+    promotion gate. This helper centralizes the silent→loud conversion.
+
+    Returns True if healthy, False if unhealthy. Caller has already
+    raised RuntimeError for live mode (this helper is only invoked for
+    demo/signal mode).
+    """
+    if journal.is_healthy:
+        return True
+    if logger is not None:
+        logger.warning(
+            "TradeJournal unhealthy — trades will NOT be persisted (mode=%s)",
+            journal_mode,
+        )
+    notify_fn(
+        f"TRADE JOURNAL UNHEALTHY (mode={journal_mode}) — trades will NOT be persisted. Fix journal_path or restart."
+    )
+    return False
+
+
+def _notify_f1_silent_block_if_active(*, risk_mgr, notify_fn) -> bool:
+    """Notify operator about F-1 silent-block when broker equity is None at startup.
+
+    F2 (2026-04-25): when the HWM init block's broker query returns None,
+    `_apply_broker_reality_check` is NOT called (it's gated on a non-None
+    equity). RiskManager._topstep_xfa_eod_balance stays None, F-1 fail-
+    closes every entry until the next 10-bar HWM poll seeds it. Without
+    this notification, the silent-block window is invisible to the
+    operator. Gated on F-1 being active to avoid noise on non-XFA profiles.
+
+    Returns True if a notification was sent (F-1 was active), False otherwise.
+    """
+    if risk_mgr.limits.topstep_xfa_account_size is None:
+        return False
+    notify_fn(
+        "F-1 SILENT BLOCK: broker equity None at startup — "
+        "all entries will REJECT until next HWM poll seeds the EOD balance "
+        "(~10 bars / ~10 min)"
+    )
+    return True
+
+
+def _apply_signal_only_f1_seed(*, risk_mgr, logger=None) -> bool:
+    """F-1 signal-only seed: seeds EOD balance with $0.00 (canonical day-1 XFA).
+
+    Live/demo paths seed via `_apply_broker_reality_check` from the HWM init
+    block which is gated `if not signal_only`. Signal-only has no broker
+    connection so that helper never runs. Without a seed,
+    `RiskManager.can_enter` fail-closes every entry with
+    "EOD XFA balance unknown — refusing entry" (B6, 2026-04-25).
+
+    Seeds with $0.0 — the canonical day-1 XFA balance per
+    `docs/research-input/topstep/topstep_mll_article.md` and
+    `trading_app/topstep_scaling_plan.py:51-53`. This gives the bottom-tier
+    cap (2 lots for 50K, 3 lots for 100K/150K), exactly what a fresh-XFA
+    day-1 trader would face. NOT a bypass: F-1 still enforces the cap; the
+    seed just lets `can_enter` evaluate the ladder against a known balance.
+
+    Returns True if the seed was applied, False if F-1 was inactive
+    (`topstep_xfa_account_size is None`). Caller should only invoke when
+    `signal_only` is True; the helper itself is signal-only-agnostic so the
+    caller's intent is explicit.
+    """
+    if risk_mgr.limits.topstep_xfa_account_size is None:
+        return False
+    risk_mgr.set_topstep_xfa_eod_balance(0.0)
+    if logger is not None:
+        logger.info(
+            "F-1 XFA EOD balance seeded $0.00 (signal-only canonical day-1 default; "
+            "max cap = bottom tier; live/demo seed via broker query)"
+        )
+    return True
+
+
 @dataclass
 class SessionStats:
     """Observability counters — tracks success/failure for every silent-failure component."""
@@ -158,8 +287,12 @@ class SessionStats:
 
 
 class SessionOrchestrator:
-    # JSONL file for UI signal display — written by this process, read by Streamlit
-    SIGNALS_FILE = Path(__file__).parent.parent.parent / "live_signals.jsonl"
+    # Directory for daily-partitioned signal log files.
+    # Files are named live_signals_YYYY-MM-DD.jsonl (trading day = 09:00 Brisbane boundary).
+    # R4 (Ralph iter 181): replaced single unbounded live_signals.jsonl with daily rotation
+    # via SignalLogRotator. The log directory is the project root (same location as the old
+    # monolithic file) so the Live Monitor UI path prefix is unchanged.
+    SIGNALS_DIR = Path(__file__).parent.parent.parent
 
     def __init__(
         self,
@@ -215,22 +348,21 @@ class SessionOrchestrator:
         # Strategy lookup map for resolving entry_model from strategy_id on TradeEvents
         self._strategy_map: dict[str, PortfolioStrategy] = {s.strategy_id: s for s in self.portfolio.strategies}
 
-        # ORB cap map: orb_label -> max risk in points (risk management gate).
+        # ORB cap map: (orb_label, instrument) -> max risk in points.
         # Values are compared against event.risk_points (stop distance, NOT raw ORB size).
-        self._orb_caps: dict[str, float] = {}
+        self._orb_caps: dict[tuple[str, str], float] = {}
         _is_profile = portfolio is not None and portfolio.strategies and portfolio.strategies[0].source == "profile"
+        profile_id = None
+        if portfolio is not None and portfolio.name.startswith("profile_"):
+            profile_id = portfolio.name.removeprefix("profile_")
         try:
             from trading_app.prop_profiles import get_lane_registry
 
-            profile_id = None
-            if portfolio is not None and portfolio.name.startswith("profile_"):
-                profile_id = portfolio.name.removeprefix("profile_")
-
-            for label, info in get_lane_registry(profile_id=profile_id).items():
+            for (label, instrument), info in get_lane_registry(profile_id=profile_id).items():
                 cap = info.get("max_orb_size_pts")
                 if cap is not None:
-                    self._orb_caps[label] = cap
-                    log.info("ORB cap loaded: %s max=%.1f pts risk", label, cap)
+                    self._orb_caps[(label, instrument)] = cap
+                    log.info("ORB cap loaded: %s/%s max=%.1f pts risk", label, instrument, cap)
         except Exception:
             if _is_profile:
                 raise  # Fail-closed: prop accounts MUST have working cap loading
@@ -304,9 +436,9 @@ class SessionOrchestrator:
                             # strats_with_risk was filtered on `s.median_risk_dollars and
                             # s.median_risk_dollars > 0` above — all values guaranteed non-None
                             # and > 0. `or 0.0` narrows the type for pyright.
-                            avg_risk = sum(
-                                s.median_risk_dollars or 0.0 for s in strats_with_risk
-                            ) / max(1, len(strats_with_risk))
+                            avg_risk = sum(s.median_risk_dollars or 0.0 for s in strats_with_risk) / max(
+                                1, len(strats_with_risk)
+                            )
                             if avg_risk > 0:
                                 max_equity_dd_r = -abs(tier.max_dd / avg_risk)
                                 log.info(
@@ -347,6 +479,13 @@ class SessionOrchestrator:
                 "F-1 TopStep XFA Scaling Plan ACTIVE: account_size=$%d",
                 topstep_xfa_account_size,
             )
+        # B6 (2026-04-25): in signal-only the HWM init block at L527 is gated
+        # off, so _apply_broker_reality_check never runs and EOD balance is
+        # never seeded. RiskManager then fail-closes every entry with
+        # "EOD XFA balance unknown". Seed with the canonical day-1 XFA value
+        # ($0.0) so signal-only previews live behaviour at the bottom-tier cap.
+        if signal_only:
+            _apply_signal_only_f1_seed(risk_mgr=self.risk_mgr, logger=log)
         if max_equity_dd_r is not None:
             log.info("Risk limits: daily_loss=%.1fR, max_DD=%.1fR", risk_limits.max_daily_loss_r, max_equity_dd_r)
         else:
@@ -357,12 +496,23 @@ class SessionOrchestrator:
         # raw baseline (p<1e-9, +272R 2025) does not need ML assistance.
         from trading_app.config import E2_ORDER_TIMEOUT
 
+        role_resolver = None
+        if profile_id is not None:
+            try:
+                from trading_app.conditional_overlays import RoleResolver
+
+                role_resolver = RoleResolver(profile_id, today=self.trading_day)
+                log.info("Conditional overlay RoleResolver enabled for profile=%s", profile_id)
+            except Exception as exc:
+                log.warning("Conditional overlay RoleResolver unavailable: %s", exc)
+
         self.engine = ExecutionEngine(
             portfolio=self.portfolio,
             cost_spec=cost,
             risk_manager=self.risk_mgr,
             live_session_costs=True,
             e2_order_timeout=E2_ORDER_TIMEOUT,
+            role_resolver=role_resolver,
         )
 
         # NOTE: Crash recovery moved after _safety_state init (line ~387).
@@ -445,18 +595,14 @@ class SessionOrchestrator:
             # Clean up orphaned bracket orders from previous crashes.
             # These are AutoBracket-tagged orders that survived a prior session.
             # If not cancelled, they will fire and open unwanted positions.
-            try:
-                contract_sym = contracts.resolve_front_month(instrument)
-                cancelled = self.order_router.cancel_bracket_orders(contract_sym)
-                if cancelled > 0:
-                    log.warning(
-                        "STARTUP CLEANUP: cancelled %d orphaned bracket orders on %s",
-                        cancelled,
-                        contract_sym,
-                    )
-                    self._notify(f"STARTUP: Cancelled {cancelled} orphaned bracket orders")
-            except Exception as e:
-                log.warning("Bracket orphan cleanup failed on startup: %s", e)
+            _cleanup_orphan_brackets(
+                order_router=self.order_router,
+                contracts=contracts,
+                instrument=instrument,
+                force_orphans=force_orphans,
+                notify_fn=self._notify,
+                logger=log,
+            )
 
         # Live infrastructure
         self.orb_builder = LiveORBBuilder(instrument, self.trading_day)
@@ -473,7 +619,13 @@ class SessionOrchestrator:
                     f"TradeJournal failed to open {journal_path} — refusing to start live session "
                     "without trade persistence. Fix the journal path or use --demo."
                 )
-            log.warning("TradeJournal unhealthy — trades will NOT be persisted (mode=%s)", journal_mode)
+            # F6 (extracted): demo/signal-only journal-unhealthy must surface to operator.
+            _notify_journal_unhealthy_demo(
+                journal=self.journal,
+                journal_mode=journal_mode,
+                notify_fn=self._notify,
+                logger=log,
+            )
 
         # Position lifecycle tracker — replaces ad-hoc _entry_prices dict
         self._positions = PositionTracker()
@@ -584,9 +736,11 @@ class SessionOrchestrator:
                                             logger=log,
                                         )
                                 else:
+                                    # F2 (extracted): notify operator of F-1 silent-block window.
                                     log.warning(
                                         "HWM tracker: broker equity unavailable at startup — will init on first poll"
                                     )
+                                    _notify_f1_silent_block_if_active(risk_mgr=self.risk_mgr, notify_fn=self._notify)
                             break
                 except ImportError as e:
                     raise RuntimeError(
@@ -627,7 +781,13 @@ class SessionOrchestrator:
                 log.warning("Failed to load firm close time: %s", e)
         self._stats = SessionStats()  # observability counters
         self._poller_active = False  # set True once fill poller runs a cycle
+        # F7/R3: generation counter incremented on each broker reconnect so the
+        # fill poller can detect reconnects and reset its per-order timeout anchors.
+        self._fill_reconnect_gen: int = 0
         self._consecutive_engine_errors = 0  # circuit breaker for engine crashes
+        # R5: UTC timestamp of last CB-tripped re-notify (None = not yet sent this trip).
+        # Reset to None on rollover / CB clear so each new trip starts a fresh cadence.
+        self._cb_renotify_last_at: datetime | None = None
         # Restore blocked strategies from crash-recovery state (if any)
         self._blocked_strategies: set[str] = set(self._safety_state.blocked_strategies.keys())
         self._blocked_strategy_reasons: dict[str, str] = dict(self._safety_state.blocked_strategies)
@@ -640,6 +800,20 @@ class SessionOrchestrator:
         # Resolve front-month contract symbol (needed even in signal-only for logging)
         self.contract_symbol = contracts.resolve_front_month(instrument)
         self._account_name = self.portfolio.name  # For dashboard display
+
+        # R4 (Ralph iter 181): daily-rotation signal log rotator.
+        # SignalLogRotator partitions writes into live_signals_YYYY-MM-DD.jsonl
+        # files (trading-day boundary = 09:00 Brisbane, canonical per pipeline.dst).
+        # The rotator's trading_day_fn lambda always reads self.trading_day so it
+        # picks up the new day after _check_trading_day_rollover updates it.
+        from trading_app.live.signal_log_rotator import SignalLogRotator
+
+        self._signal_rotator = SignalLogRotator(
+            log_dir=self.SIGNALS_DIR,
+            trading_day_fn=lambda: self.trading_day,
+            notify_fn=self._notify,
+        )
+
         log.info(
             "Session ready: %s → %s (%s)",
             instrument,
@@ -673,12 +847,19 @@ class SessionOrchestrator:
         # Crash recovery: seed engine with strategies that already traded today.
         # Prevents duplicate entries after restart mid-session.
         # Fail-closed: if journal is broken in live/demo mode, refuse to start.
-        if not self.journal.is_healthy and not signal_only:
-            raise RuntimeError(
-                "FAIL-CLOSED: Trade journal is not healthy — cannot perform crash recovery. "
-                "Duplicate entries could occur. Fix journal or use --signal-only."
+        if not self.journal.is_healthy:
+            if not signal_only:
+                raise RuntimeError(
+                    "FAIL-CLOSED: Trade journal is not healthy — cannot perform crash recovery. "
+                    "Duplicate entries could occur. Fix journal or use --signal-only."
+                )
+            log.warning(
+                "TradeJournal unavailable in signal-only mode — skipping crash-recovery dedup for %s",
+                self.instrument,
             )
-        already_traded = self.journal.get_strategy_ids_for_day(self.trading_day)
+            already_traded: set[str] = set()
+        else:
+            already_traded = self.journal.get_strategy_ids_for_day(self.trading_day)
         for sid in already_traded:
             self.engine.mark_strategy_traded(sid)
         if already_traded:
@@ -934,7 +1115,7 @@ class SessionOrchestrator:
         import math
 
         # Basic sanity: must be positive, finite number
-        if not isinstance(fill_price, (int, float)):
+        if not isinstance(fill_price, int | float):
             log.critical("BAD FILL (%s): not numeric: %r", context, fill_price)
             self._notify(f"BAD FILL ({context}): price is not numeric: {fill_price}")
             return None
@@ -952,7 +1133,7 @@ class SessionOrchestrator:
         # Range check: within 10% of last bar close (if available)
         if hasattr(self, "orb_builder") and self.orb_builder is not None:
             last_close = getattr(self.orb_builder, "last_close", None)
-            if isinstance(last_close, (int, float)) and last_close > 0:
+            if isinstance(last_close, int | float) and last_close > 0:
                 deviation = abs(fill_price - last_close) / last_close
                 if deviation > 0.10:
                     log.critical(
@@ -1023,6 +1204,14 @@ class SessionOrchestrator:
 
         If notifications were flagged broken by self-test, skips Telegram and logs
         to STDOUT so the session log still captures every event.
+
+        R2: Telegram's send path uses urllib.urlopen with a 10s timeout (sync).
+        Called from async _on_bar, that 10s blocks the event loop. With Telegram
+        down for hours, bursts (heartbeat warnings, kill switch, stale orders)
+        stack to 60-120s blockages, falsely tripping the bar-heartbeat watchdog
+        and engine circuit breaker. Dispatch the send onto a worker thread via
+        asyncio.to_thread so the event loop keeps pumping bars. If no event
+        loop is running (sync setup/preflight context), fall back to sync.
         """
         from trading_app.live.alert_engine import record_operator_alert
 
@@ -1035,21 +1224,84 @@ class SessionOrchestrator:
             source="session_orchestrator",
             trading_day=str(getattr(self, "trading_day", "")) or None,
         )
-        if self._notifications_broken:
+        if getattr(self, "_notifications_broken", False):
             print(f"[NOTIFY-FALLBACK] {self.instrument}: {message}")
             log.warning("Notification (fallback): %s", message)
-            self._stats.notifications_failed += 1
+            _stats_early = getattr(self, "_stats", None)
+            if _stats_early is not None:
+                _stats_early.notifications_failed += 1
             return
-        try:
-            from trading_app.live.notifications import notify
 
-            notify(self.instrument, message)
-            self._stats.notifications_sent += 1
-        except Exception as e:
-            self._stats.notifications_failed += 1
-            log.error("Notification failed (will not retry): %s", e)
-            if self._stats.notifications_failed == 1:
-                print(f"!!! NOTIFICATION FAILURE: {e} — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID !!!")
+        from trading_app.live.notifications import notify
+
+        # Defensive: _notify can be called during partial __init__ (e.g. F2's
+        # F-1 SILENT BLOCK notify fires before self._stats is set up at L709).
+        # The notify contract is "never raises" — that must hold even when
+        # called from a half-constructed orchestrator. _get_stats returns a
+        # null-stub when _stats isn't ready, so the failure path still logs+
+        # prints but doesn't crash with AttributeError.
+        stats = getattr(self, "_stats", None)
+
+        def _record_failure(exc: Exception | None) -> None:
+            """Centralized failure handling: increment counter, log, print on first failure.
+
+            Either path (sync False/raise OR async task False/raise) routes here so
+            observability is identical regardless of dispatch mode.
+            """
+            first_failure = False
+            if stats is not None:
+                stats.notifications_failed += 1
+                first_failure = stats.notifications_failed == 1
+            else:
+                # Pre-_stats init context — treat as first failure for print purposes.
+                first_failure = True
+            if exc is not None:
+                log.error("Notification failed (will not retry): %s", exc)
+            else:
+                log.warning("Notification returned False — Telegram pipe broken")
+            if first_failure:
+                if exc is not None:
+                    print(f"!!! NOTIFICATION FAILURE: {exc} — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID !!!")
+                else:
+                    print("!!! NOTIFICATION FAILURE — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID !!!")
+
+        def _bump_sent(delta: int = 1) -> None:
+            """Defensive stats increment — no-op when _stats isn't initialized."""
+            if stats is not None:
+                stats.notifications_sent += delta
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No event loop — sync setup/preflight context. notify() returns bool
+            # and never raises (post-B2 contract), but we still defensively wrap
+            # to preserve historical observability for callers that pre-date B2.
+            try:
+                if notify(self.instrument, message):
+                    _bump_sent(1)
+                else:
+                    _record_failure(None)
+            except Exception as exc:
+                _record_failure(exc)
+            return
+
+        # Async dispatch: run blocking notify() on a worker thread, do NOT await.
+        # Stats are corrected in the done-callback so the count reflects real outcomes.
+        _bump_sent(1)  # optimistic; corrected on failure
+
+        def _on_notify_done(task: "asyncio.Task[bool]") -> None:
+            try:
+                ok = task.result()
+            except Exception as exc:
+                _bump_sent(-1)
+                _record_failure(exc)
+                return
+            if not ok:
+                _bump_sent(-1)
+                _record_failure(None)
+
+        task = loop.create_task(asyncio.to_thread(notify, self.instrument, message))
+        task.add_done_callback(_on_notify_done)
 
     def _verify_notifications(self) -> bool:
         """Send test notification via the same path as _notify(). Returns False if broken."""
@@ -1125,23 +1377,43 @@ class SessionOrchestrator:
         return results
 
     def _write_signal_record(self, extra: dict) -> None:
-        """Append a signal record to the JSONL file read by the Live Monitor UI.
+        """Append a signal record to the daily JSONL file read by the Live Monitor UI.
+
+        Delegates to self._signal_rotator (SignalLogRotator) which:
+          - Partitions writes into live_signals_YYYY-MM-DD.jsonl files.
+          - Rotates at 09:00 Brisbane (canonical trading-day boundary).
+          - Notifies operator on first OSError per rate-limit window (institutional-rigor.md § 6).
+          - Prunes files older than LIVE_SIGNALS_RETENTION_DAYS (default 30).
 
         Thread safety: safe under single-threaded asyncio (all orchestrators share
-        one event loop). If this ever moves to multi-process, this append needs a lock.
+        one event loop). If this ever moves to multi-process, callers must hold an
+        external lock before calling write() — documented on SignalLogRotator.write().
         """
         record = {
             "ts": datetime.now(UTC).isoformat(),
             "instrument": self.instrument,
             **extra,
         }
-        try:
-            with open(self.SIGNALS_FILE, "a") as fh:
-                fh.write(json.dumps(record) + "\n")
-        except OSError as e:
-            log.warning("Could not write signal record: %s", e)
+        line = json.dumps(record) + "\n"
+        # _signal_rotator is initialized in __init__ before first _write_signal_record call.
+        # Defensive guard for unit tests that mock _write_signal_record directly on a
+        # partially-constructed orchestrator: use raw open() fallback when rotator absent.
+        rotator = getattr(self, "_signal_rotator", None)
+        if rotator is not None:
+            rotator.write(line)
+        else:
+            # Fallback path: partially-constructed orchestrator (test harness) or
+            # pre-init call. Write to stderr so the record is not silently dropped.
+            import sys
 
-    async def _check_trading_day_rollover(self, bar_ts_utc) -> None:
+            print(line, file=sys.stderr, end="")
+
+    async def _check_trading_day_rollover(
+        self,
+        bar_ts_utc,
+        *,
+        override_trading_day: "date | None" = None,
+    ) -> None:
         """Detect 9:00 AM Brisbane boundary crossing and roll to new trading day.
 
         Without this, a session running past 9 AM Brisbane would continue using
@@ -1149,13 +1421,23 @@ class SessionOrchestrator:
 
         Uses _handle_event() for each EOD close so broker orders are submitted
         (not just engine-side closes).
+
+        R1: override_trading_day lets the wall-clock rollover loop call this
+        without a real bar timestamp. When provided, the bar-timestamp day
+        derivation is skipped — the caller (always _wall_clock_rollover_loop)
+        has already determined the new trading day via compute_trading_day_utc_range.
+        The idempotency guard below (bar_trading_day == self.trading_day) still fires
+        if _on_bar raced us to the rollover first.
         """
-        _bris = ZoneInfo("Australia/Brisbane")
-        bris_time = bar_ts_utc.astimezone(_bris)
-        if bris_time.hour < 9:
-            bar_trading_day = (bris_time - timedelta(days=1)).date()
+        if override_trading_day is not None:
+            bar_trading_day = override_trading_day
         else:
-            bar_trading_day = bris_time.date()
+            _bris = ZoneInfo("Australia/Brisbane")
+            bris_time = bar_ts_utc.astimezone(_bris)
+            if bris_time.hour < 9:
+                bar_trading_day = (bris_time - timedelta(days=1)).date()
+            else:
+                bar_trading_day = bris_time.date()
 
         if bar_trading_day == self.trading_day:
             return
@@ -1221,6 +1503,7 @@ class SessionOrchestrator:
         self.monitor.reset_daily()
         self.risk_mgr.daily_reset(self.trading_day)
         self._consecutive_engine_errors = 0
+        self._cb_renotify_last_at = None  # R5: reset re-notify cadence — new trip starts fresh
         self._close_time_forced = False  # Reset so next day's close-time flatten can fire
 
         # F-1 TopStep XFA Scaling Plan: refresh EOD balance from broker equity
@@ -1249,9 +1532,7 @@ class SessionOrchestrator:
                 )
             else:
                 try:
-                    eod_equity = self.positions.query_equity(
-                        self.order_router.account_id if self.order_router else 0
-                    )
+                    eod_equity = self.positions.query_equity(self.order_router.account_id if self.order_router else 0)
                     if eod_equity is not None:
                         self.risk_mgr.set_topstep_xfa_eod_balance(eod_equity)
                         log.info("F-1 XFA EOD balance refreshed at rollover: $%.2f", eod_equity)
@@ -1336,8 +1617,20 @@ class SessionOrchestrator:
 
             # HWM equity poll (every 10 bars ≈ 10 minutes)
             if self._hwm_tracker is not None and self.positions is not None and self.order_router is not None:
+                equity: float | None
                 try:
                     equity = self.positions.query_equity(self.order_router.account_id)
+                except Exception as e:
+                    # F5: pre-fix this swallowed the exception with `log.warning(...)` only,
+                    # never calling update_equity(None). The tracker's 3-consecutive-failure
+                    # halt at account_hwm_tracker.py:314 requires update_equity(None) calls
+                    # to increment _consecutive_poll_failures. A persistent broker fault
+                    # (e.g. auth-token expiry mid-session) would log warning spam forever
+                    # and never halt — silent DD-protection bypass. Pass None through so
+                    # the 3-strike halt mechanism actually fires.
+                    log.warning("HWM equity poll raised: %s — passing None to tracker", e)
+                    equity = None
+                try:
                     self._hwm_tracker.update_equity(equity)
                     halted, reason = self._hwm_tracker.check_halt()
                     if halted:
@@ -1347,8 +1640,11 @@ class SessionOrchestrator:
                         await self._emergency_flatten()
                     elif "WARN" in reason:
                         log.warning("HWM: %s", reason)
-                except Exception as e:
-                    log.warning("HWM equity poll failed: %s", e)
+                except Exception as inner:
+                    # update_equity / check_halt should never raise. If they do, log loud
+                    # but keep the bar loop alive — the tracker is degraded but the engine
+                    # continues with last-known DD state.
+                    log.error("HWM tracker update/check raised: %s", inner)
 
         # Kill switch fired = we already emergency-flattened at the broker.
         # Do NOT process further bars — engine doesn't know positions are closed,
@@ -1492,16 +1788,38 @@ class SessionOrchestrator:
         self._safety_state.save()
 
     async def _submit_bracket(self, event, strategy, entry_price: float) -> None:
-        """Submit broker-side stop/target bracket after entry fill. Never raises."""
+        """Submit broker-side stop/target bracket after entry fill. Never raises.
+
+        F4: ALL failure sub-paths that leave a position without broker-side stop/target
+        now trigger _notify + _fire_kill_switch + _emergency_flatten. A naked position
+        (entry filled, no bracket at broker) is the highest unattended-overnight risk:
+        an adverse gap will run the full account without any automatic stop.
+
+        Three sub-paths that previously left a naked position:
+          1. No risk_points — bracket would be wrong; safer to flatten than guess.
+          2. build_bracket_spec returns None — broker cannot represent this bracket.
+          3. submit() raises — network/auth failure; bracket never reached broker.
+
+        In all three cases: log.critical + _notify (operator alert) + _fire_kill_switch
+        + await _emergency_flatten (market-close the position immediately).
+        Mirror pattern: lines 1491-1492 (DD halt), 1515-1516 (consecutive bar gap).
+        """
         if self.order_router is None or not self.order_router.supports_native_brackets():
             return
         try:
             risk_pts = event.risk_points or strategy.median_risk_points
             if not risk_pts:
-                log.error(
-                    "No risk_points for %s — skipping bracket (would place wrong stop/target)",
-                    event.strategy_id,
+                # F4-1: Cannot compute stop/target without risk_points.
+                # Bracket would be placed at wrong price; safer to flatten immediately.
+                msg = (
+                    f"F4: No risk_points for {event.strategy_id} — cannot place stop/target. "
+                    f"EMERGENCY FLATTEN to avoid naked position."
                 )
+                log.critical(msg)
+                self._notify(msg)
+                self._stats.brackets_failed += 1
+                self._fire_kill_switch()
+                await self._emergency_flatten()
                 return
             mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
             stop_dist = risk_pts * mult
@@ -1518,7 +1836,16 @@ class SessionOrchestrator:
                 qty=event.contracts,
             )
             if bracket is None:
-                log.warning("Bracket spec returned None for %s — NO CRASH PROTECTION", event.strategy_id)
+                # F4-2: Broker cannot represent this bracket spec.
+                msg = (
+                    f"F4: build_bracket_spec returned None for {event.strategy_id} — "
+                    f"broker cannot place stop/target. EMERGENCY FLATTEN to avoid naked position."
+                )
+                log.critical(msg)
+                self._notify(msg)
+                self._stats.brackets_failed += 1
+                self._fire_kill_switch()
+                await self._emergency_flatten()
                 return
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(None, self.order_router.submit, bracket)
@@ -1534,8 +1861,16 @@ class SessionOrchestrator:
             log.info("Bracket submitted for %s: stop=%.2f target=%.2f", event.strategy_id, stop_price, target_price)
             self._stats.brackets_submitted += 1
         except Exception as e:
+            # F4-3: submit() raised — network/auth failure; bracket never reached broker.
+            msg = (
+                f"F4: Bracket submit raised for {event.strategy_id}: {e} — "
+                f"stop/target NOT at broker. EMERGENCY FLATTEN to avoid naked position."
+            )
+            log.critical(msg)
+            self._notify(msg)
             self._stats.brackets_failed += 1
-            log.warning("Bracket submit failed for %s (position still managed by engine): %s", event.strategy_id, e)
+            self._fire_kill_switch()
+            await self._emergency_flatten()
 
     async def _cancel_brackets(self, strategy_id: str) -> None:
         """Cancel bracket orders before submitting exit. Never raises.
@@ -1684,6 +2019,16 @@ class SessionOrchestrator:
             return
 
         if event.event_type == "ENTRY":
+            # C1: kill-switch guard — block NEW entries while emergency-flatten is active.
+            # EXIT/SCRATCH events are NOT guarded here: they close existing exposure and must
+            # proceed even under a halt (mirrors circuit-breaker comment at L2366).
+            # Mirror of the canonical _on_bar guard at L1612.
+            if self._kill_switch_fired:
+                msg = f"C1: ENTRY BLOCKED for {event.strategy_id} — kill switch active (emergency flatten in progress)"
+                log.critical(msg)
+                self._notify(msg)
+                return
+
             # Orphan containment gate (applies to both signal-only and live)
             if event.strategy_id in self._blocked_strategies:
                 reason = self._blocked_strategy_reasons.get(event.strategy_id, "Blocked pending manual review.")
@@ -1705,12 +2050,13 @@ class SessionOrchestrator:
             # event.risk_points = stop distance in points (abs(entry - stop)), set
             # by ExecutionEngine. With 0.75x stops, risk_points ~ 0.75 * ORB range.
             # Cap at 150 pts risk = $300 max loss per trade on MNQ ($2/pt).
-            orb_cap = self._orb_caps.get(strategy.orb_label)
+            orb_cap = self._orb_caps.get((strategy.orb_label, strategy.instrument))
             if orb_cap is not None and event.risk_points is not None:
                 if event.risk_points >= orb_cap:
                     log.info(
-                        "ORB_CAP_SKIP: %s risk=%.1f pts >= cap=%.1f pts. Trade skipped.",
+                        "ORB_CAP_SKIP: %s/%s risk=%.1f pts >= cap=%.1f pts. Trade skipped.",
                         strategy.orb_label,
+                        strategy.instrument,
                         event.risk_points,
                         orb_cap,
                     )
@@ -1818,8 +2164,7 @@ class SessionOrchestrator:
             # Past the signal_only early return: live mode is active.
             # order_router is non-None whenever signal_only=False (see __init__ L266-297).
             assert self.order_router is not None, (
-                "_handle_event ENTRY: order_router is None but signal_only=False — "
-                "broken invariant from __init__."
+                "_handle_event ENTRY: order_router is None but signal_only=False — broken invariant from __init__."
             )
 
             if not self._circuit_breaker.should_allow_request():
@@ -2061,8 +2406,7 @@ class SessionOrchestrator:
 
             # Past the signal_only early return: live mode is active.
             assert self.order_router is not None, (
-                "_handle_event EXIT: order_router is None but signal_only=False — "
-                "broken invariant from __init__."
+                "_handle_event EXIT: order_router is None but signal_only=False — broken invariant from __init__."
             )
 
             # Cancel any broker-side bracket orders before submitting exit
@@ -2296,6 +2640,13 @@ class SessionOrchestrator:
 
     HEARTBEAT_INTERVAL = 1800.0  # 30 minutes between heartbeat notifications
 
+    # R5 (Ralph iter 183): periodic re-notify while engine circuit-breaker is tripped.
+    # Rationale: 30 min — matches HEARTBEAT_INTERVAL (one sleep cycle cannot be missed).
+    # Short enough that an operator who misses the initial trip notify at 03:00 will
+    # receive a follow-up by 03:30, 04:00, etc. Long enough to avoid Telegram spam.
+    # Same rate-limit pattern as DISK_FULL_NOTIFY_WINDOW_SECS in signal_log_rotator.py.
+    CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS: float = 1800.0  # 30 minutes
+
     async def _heartbeat_notifier(self) -> None:
         """Send periodic alive notification. Absence of heartbeat = notifications broken."""
         # Emit immediate heartbeat so user knows session is alive without waiting 30 min
@@ -2314,12 +2665,233 @@ class SessionOrchestrator:
                 self._notify(
                     f"Heartbeat: {self._bar_count} bars, {n_trades} trades, {active} active, poller={poller_status}"
                 )
+                # R5: periodic re-notify while engine circuit-breaker is tripped.
+                # The initial trip fires once at trip time (line ~1678). If the operator
+                # misses that single Telegram (sleeping, phone off), the engine may stay
+                # paused for hours until rollover. Re-notify every
+                # CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS while still tripped.
+                # Rate-limit: same pattern as DISK_FULL_NOTIFY_WINDOW_SECS in
+                # signal_log_rotator.py — track last-sent timestamp, skip if within window.
+                # Reset: _cb_renotify_last_at is cleared in _check_trading_day_rollover so
+                # a future re-trip starts a fresh cadence (no silent state inheritance).
+                if self._consecutive_engine_errors >= 5:
+                    now = datetime.now(UTC)
+                    elapsed = (
+                        (now - self._cb_renotify_last_at).total_seconds()
+                        if self._cb_renotify_last_at is not None
+                        else self.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS  # first re-notify
+                    )
+                    if elapsed >= self.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS:
+                        self._cb_renotify_last_at = now
+                        self._notify(
+                            f"ENGINE CIRCUIT BREAKER STILL TRIPPED — engine paused "
+                            f"({self._consecutive_engine_errors} consecutive errors). "
+                            "No new entries until rollover. MANUAL CHECK REQUIRED."
+                        )
             except asyncio.CancelledError:
                 return
             except Exception as e:
                 log.error("Heartbeat error (will retry): %s", e)
 
+    async def _wall_clock_rollover_loop(self) -> None:
+        """Wall-clock rollover: fire _check_trading_day_rollover at 09:00 Brisbane
+        regardless of bar-feed state.
+
+        R1: _check_trading_day_rollover previously only fired from _on_bar. If the
+        feed is down at 09:00 Brisbane (reconnecting, auth expiry, holiday gap),
+        the trading day is never rolled. The engine keeps yesterday's ORB windows,
+        calendar flags, daily P&L counters, and risk limits — every subsequent bar
+        is misclassified. In the worst case: an overnight session that crosses 09:00
+        with no bars silently operates on the wrong day for the entire new session.
+
+        Pattern: mirror _heartbeat_notifier lifecycle (create_task in run(), cancel
+        in finally).
+
+        Canonical source: pipeline.dst.compute_trading_day_utc_range — never
+        hardcode 09:00 or datetime.time(9, 0).
+
+        Idempotency: _check_trading_day_rollover's first guard is
+        `if bar_trading_day == self.trading_day: return`. If _on_bar fires rollover
+        before this task wakes up, the second call is a no-op.
+        """
+        from pipeline.dst import compute_trading_day_utc_range
+
+        while True:
+            try:
+                # Next rollover fires at the start of (self.trading_day + 1 day),
+                # which is 09:00 Brisbane on that calendar date = canonical UTC boundary.
+                next_day = self.trading_day + timedelta(days=1)
+                rollover_utc, _ = compute_trading_day_utc_range(next_day)
+                now_utc = datetime.now(UTC)
+                sleep_secs = (rollover_utc - now_utc).total_seconds()
+                if sleep_secs > 0:
+                    await asyncio.sleep(sleep_secs)
+                # Fire rollover for the new trading day.
+                # override_trading_day bypasses bar-timestamp derivation.
+                log.info(
+                    "R1 wall-clock rollover: firing for trading_day %s -> %s",
+                    self.trading_day,
+                    next_day,
+                )
+                await self._check_trading_day_rollover(None, override_trading_day=next_day)
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                # R1: rollover failure is not silent — notify operator.
+                # institutional-rigor.md § 6 (no silent failures).
+                msg = f"R1: wall-clock rollover failed for {self.trading_day}: {e} — retrying in 60s"
+                log.error(msg)
+                self._notify(msg)
+                try:
+                    await asyncio.sleep(60)
+                except asyncio.CancelledError:
+                    return
+
     FILL_POLL_INTERVAL = 5.0  # seconds between fill status checks
+    # F7: hard timeout for a PENDING_ENTRY order that never resolves.
+    # Rationale: 60s is long enough for normal E2 stop-market slippage in
+    # PENDING state (entry price not yet reached), short enough that a stuck
+    # broker does not cost the full trade window. At this point we cancel the
+    # order and release the lane slot — operator is notified with full context.
+    # institutional-rigor.md § 6 (no silent failures), integrity-guardian.md § 3.
+    FILL_POLL_TIMEOUT_SECS = 60.0
+    # F7: after issuing a cancel, we verify the cancel actually took by polling
+    # once more. This timeout governs that single verify poll.
+    # Rationale: 15s is generous for a broker round-trip; if still PENDING after
+    # 15s we treat the broker as stuck and halt the orchestrator (fail-closed per
+    # integrity-guardian.md § 3). Must be < FILL_POLL_TIMEOUT_SECS (60s).
+    FILL_CANCEL_VERIFY_TIMEOUT_SECS = 15.0
+
+    async def _handle_fill_timeout(
+        self,
+        order_id: int,
+        strategy_id: str,
+        last_state: str,
+    ) -> None:
+        """F7: Handle a fill-poll timeout — cancel order, verify, halt or release.
+
+        Called when a PENDING_ENTRY order has been unresolved for longer than
+        FILL_POLL_TIMEOUT_SECS. Protocol (institutional-rigor.md § 6,
+        integrity-guardian.md § 3 fail-closed):
+
+        1. Notify operator with full order context.
+        2. Cancel the broker order.
+        3. Verify cancellation: re-query after FILL_CANCEL_VERIFY_TIMEOUT_SECS.
+           - If Cancelled/Rejected: release lane slot (pop position), cancel
+             engine trade, log WARNING.
+           - If still PENDING (broker stuck): log.critical + _notify + halt
+             orchestrator via _fire_kill_switch. Lane slot released regardless
+             so the state machine stays consistent.
+        4. Mark strategy failed-entry in lifecycle (engine.cancel_trade) so it
+           is not double-charged.
+
+        Source-marker: F7-TIMEOUT-HANDLER
+        """
+        # Step 1 — operator alert with full context  [F7-NOTIFY-ALERT]
+        alert_msg = (
+            f"FILL TIMEOUT: order {order_id} for {strategy_id} has been "
+            f"PENDING_ENTRY for >{self.FILL_POLL_TIMEOUT_SECS:.0f}s "
+            f"(last_state={last_state}). Cancelling order now."
+        )
+        log.warning(alert_msg)
+        self._notify(alert_msg)  # institutional-rigor.md § 6
+
+        # Step 2 — cancel the broker order  [F7-CANCEL-CALL]
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, self.order_router.cancel, order_id)
+            log.info("F7: cancel issued for order %s (%s)", order_id, strategy_id)
+        except Exception as cancel_exc:
+            log.critical(
+                "F7: cancel call FAILED for order %s (%s): %s — proceeding to verify",
+                order_id,
+                strategy_id,
+                cancel_exc,
+            )
+            self._notify(f"F7: cancel FAILED for order {order_id} ({strategy_id}): {cancel_exc}")
+
+        # Step 3 — verify the cancel took  [F7-CANCEL-VERIFY]
+        await asyncio.sleep(self.FILL_CANCEL_VERIFY_TIMEOUT_SECS)
+        verified_cancelled = False
+        _filled_during_cancel = False
+        _late_fill_price: float | None = None
+        try:
+            post_cancel = await loop.run_in_executor(None, self.order_router.query_order_status, order_id)
+            post_status = post_cancel["status"]
+            if post_status in ("Cancelled", "Rejected"):
+                # Clean cancel — no broker position, proceed to normal lane release below.
+                verified_cancelled = True
+                log.info(
+                    "F7: post-cancel status=%s for order %s (%s)",
+                    post_status,
+                    order_id,
+                    strategy_id,
+                )
+            elif post_status == "Filled":
+                # Race: order filled between our timeout decision and cancel reaching broker.
+                # The broker holds a REAL position — DO NOT pop or cancel_trade.
+                # Record fill and route to emergency flatten (no bracket context available
+                # here; _submit_bracket needs event+strategy objects).  [F7-FILLED-RACE]
+                _filled_during_cancel = True
+                raw_late_fill = post_cancel.get("fill_price")
+                _late_fill_price = self._validate_fill_price(raw_late_fill, f"F7-RACE {strategy_id}")
+                race_msg = (
+                    f"F7 TIMEOUT CANCEL RACE: order {order_id} for {strategy_id} "
+                    f"filled DURING cancel attempt (fill_price={_late_fill_price}). "
+                    "Bracket context unavailable — emergency flatten to protect position. "
+                    "(integrity-guardian.md § 3)"
+                )
+                log.critical(race_msg)
+                self._notify(race_msg)  # institutional-rigor.md § 6; operator must know
+        except Exception as verify_exc:
+            log.critical(
+                "F7: post-cancel verify FAILED for order %s (%s): %s",
+                order_id,
+                strategy_id,
+                verify_exc,
+            )
+            self._notify(f"F7: post-cancel verify FAILED for {strategy_id} order {order_id}: {verify_exc}")
+
+        # Step 4 — release lane slot and handle position state  [F7-LANE-RELEASE]
+        if _filled_during_cancel:
+            # Real broker position: transition to ENTERED state so position tracker is
+            # accurate before emergency flatten runs.  Do NOT pop or cancel_trade.
+            if _late_fill_price is not None:
+                current_for_fill = self._positions.get(strategy_id)
+                if current_for_fill is not None and current_for_fill.state == PositionState.PENDING_ENTRY:
+                    self._positions.on_entry_filled(strategy_id, _late_fill_price)
+                    log.warning(
+                        "F7: late-fill race: position %s transitioned to ENTERED @ %.2f — "
+                        "emergency flatten will close it",
+                        strategy_id,
+                        _late_fill_price,
+                    )
+            # Emit kill-switch + emergency flatten: position is real but unbracketed.
+            self._fire_kill_switch()  # [F7-KILL-SWITCH-CALL]
+            await self._emergency_flatten()  # [F7-FILLED-RACE-FLATTEN]
+            return  # lane slot released implicitly by emergency_flatten position cleanup
+        else:
+            current = self._positions.get(strategy_id)
+            if current is not None and current.state == PositionState.PENDING_ENTRY:
+                self._positions.pop(strategy_id)
+                log.warning("F7: released lane slot for %s (position removed)", strategy_id)
+            try:
+                self.engine.cancel_trade(strategy_id)
+            except Exception as eng_exc:
+                log.error("F7: engine.cancel_trade(%s) failed: %s", strategy_id, eng_exc)
+
+        if not verified_cancelled:
+            # Broker is stuck — halt the orchestrator  [F7-HALT-ON-STUCK]
+            halt_msg = (
+                f"F7 HALT: order {order_id} for {strategy_id} is STILL PENDING "
+                f"after cancel + {self.FILL_CANCEL_VERIFY_TIMEOUT_SECS:.0f}s verify. "
+                "Broker appears stuck. Halting orchestrator. "
+                "Manual intervention required. (integrity-guardian.md § 3)"
+            )
+            log.critical(halt_msg)
+            self._notify(halt_msg)  # institutional-rigor.md § 6
+            self._fire_kill_switch()  # [F7-KILL-SWITCH-CALL]
+            await self._emergency_flatten()  # [F7-BROKER-STUCK-FLATTEN]
 
     async def _fill_poller(self) -> None:
         """Poll PENDING_ENTRY orders for fill confirmation every 5s.
@@ -2327,58 +2899,124 @@ class SessionOrchestrator:
         E2 stop-market orders rest until price reaches stop level. Without polling,
         PositionTracker stays PENDING_ENTRY indefinitely. This background task
         detects fills and cancellations.
+
+        F7: orders pending longer than FILL_POLL_TIMEOUT_SECS are escalated via
+        _handle_fill_timeout (cancel + verify + halt-or-release).
+
+        R3 cross-fix: _fill_reconnect_gen is incremented on each reconnect. When
+        the poller detects a generation change it flags all currently-PENDING_ENTRY
+        orders for immediate re-query, resetting their effective timeout start to
+        the reconnect time. This prevents double-charging the timer across a
+        disconnect gap where broker state was unavailable.
         """
         assert self.order_router is not None, (
             "_fill_poller started but order_router is None (signal_only=True). "
             "Live-only background task reached in signal mode."
         )
+        # R3: per-strategy timeout start anchors — reset on reconnect to avoid
+        # double-charging the 60s window across a disconnect gap.
+        _timeout_anchors: dict[str, float] = {}
+        _last_seen_gen: int = getattr(self, "_fill_reconnect_gen", 0)
+
         while True:
             try:
                 await asyncio.sleep(self.FILL_POLL_INTERVAL)
+
+                # M6 guard: if kill-switch is already fired, skip all timeout/cancel
+                # processing — the orchestrator is halted and emergency_flatten is either
+                # in progress or complete.  Continuing would race with ongoing flatten work
+                # and emit confusing duplicate alerts.  Mirror pattern from _handle_event.
+                if self._kill_switch_fired:
+                    continue
+
                 self._poller_active = True
+
+                # R3: reconnect detection — reset timeout anchors for all pending orders
+                # so a reconnect-during-pending does not prematurely expire the timer.
+                current_gen = getattr(self, "_fill_reconnect_gen", 0)
+                if current_gen != _last_seen_gen:
+                    log.info(
+                        "F7/R3: reconnect detected (gen %d→%d) — resetting fill-poll "
+                        "timeout anchors for all PENDING_ENTRY orders",
+                        _last_seen_gen,
+                        current_gen,
+                    )
+                    _timeout_anchors.clear()  # anchors reset; orders will re-query next cycle
+                    _last_seen_gen = current_gen
+
                 pending_count = 0
+                now = datetime.now(UTC)
                 for record in self._positions.active_positions():
                     if record.state != PositionState.PENDING_ENTRY:
                         continue
                     if record.entry_order_id is None:
                         continue
                     pending_count += 1
+                    sid = record.strategy_id
+
+                    # F7: seed per-order timeout anchor on first poll cycle
+                    if sid not in _timeout_anchors:
+                        _timeout_anchors[sid] = record.state_changed_at.timestamp()
+
+                    elapsed = now.timestamp() - _timeout_anchors[sid]
+
+                    # F7: timeout path — escalate before issuing the normal poll query
+                    if elapsed > self.FILL_POLL_TIMEOUT_SECS:
+                        # Remove anchor so if somehow the position survives (e.g.
+                        # cancel_trade left it in ENTERED) we do not re-trigger.
+                        _timeout_anchors.pop(sid, None)
+                        try:
+                            await self._handle_fill_timeout(record.entry_order_id, sid, record.state.value)
+                        except asyncio.CancelledError:
+                            raise  # propagate shutdown signal cleanly
+                        except Exception as timeout_exc:
+                            log.critical(
+                                "F7: _handle_fill_timeout raised for %s: %s",
+                                sid,
+                                timeout_exc,
+                            )
+                            self._notify(f"F7: fill-timeout handler error for {sid}: {timeout_exc}")
+                        continue
+
                     try:
                         loop = asyncio.get_running_loop()
                         status = await loop.run_in_executor(
                             None, self.order_router.query_order_status, record.entry_order_id
                         )
                         # Re-check state after await — another coroutine may have handled this
-                        current = self._positions.get(record.strategy_id)
+                        current = self._positions.get(sid)
                         if current is None or current.state != PositionState.PENDING_ENTRY:
+                            _timeout_anchors.pop(sid, None)
                             continue
                         self._stats.fill_polls_run += 1
                         if status["status"] == "Filled":
                             raw_poll_fill = status.get("fill_price")
-                            fill_price = self._validate_fill_price(raw_poll_fill, f"POLL {record.strategy_id}")
+                            fill_price = self._validate_fill_price(raw_poll_fill, f"POLL {sid}")
                             if fill_price is not None:
-                                self._positions.on_entry_filled(record.strategy_id, fill_price)
+                                self._positions.on_entry_filled(sid, fill_price)
                                 # Update journal with confirmed fill price
                                 if record.journal_trade_id:
                                     self.journal.update_entry_fill(
                                         trade_id=record.journal_trade_id,
                                         fill_entry=fill_price,
                                     )
-                            log.info("Fill confirmed for %s: %s", record.strategy_id, status)
+                            log.info("Fill confirmed for %s: %s", sid, status)
                             self._stats.fill_polls_confirmed += 1
+                            _timeout_anchors.pop(sid, None)
                         elif status["status"] in ("Cancelled", "Rejected"):
-                            self._positions.pop(record.strategy_id)
+                            self._positions.pop(sid)
                             # R2-C3: notify engine to remove ghost trade from active_trades.
                             # Without this, the engine keeps emitting EXIT events for a
                             # position that was never filled at the broker.
-                            self.engine.cancel_trade(record.strategy_id)
-                            log.warning("Order %s for %s: %s", status["status"], record.strategy_id, status)
-                            self._notify(f"Order {status['status']}: {record.strategy_id} — entry cancelled by broker")
+                            self.engine.cancel_trade(sid)
+                            log.warning("Order %s for %s: %s", status["status"], sid, status)
+                            self._notify(f"Order {status['status']}: {sid} — entry cancelled by broker")
+                            _timeout_anchors.pop(sid, None)
                     except NotImplementedError:
                         log.debug("Fill poller: %s broker does not support order polling", self._broker_name)
                     except Exception as e:
                         self._stats.fill_polls_failed += 1
-                        log.warning("Fill poll failed for %s: %s", record.strategy_id, e)
+                        log.warning("Fill poll failed for %s: %s", sid, e)
                 if pending_count > 0:
                     log.info("Fill poller: checked %d pending orders", pending_count)
             except asyncio.CancelledError:
@@ -2388,9 +3026,24 @@ class SessionOrchestrator:
 
     # Orchestrator-level reconnect: covers the case where the feed exhausts its
     # internal reconnects (20 attempts) and run() returns cleanly.
-    ORCHESTRATOR_MAX_RECONNECTS = 5
+    #
+    # R3: ceiling bumped from 5 to 50 for 24h operation.
+    # Rationale: AMP/CME WebSocket flap rate in project operations is ~0-2/hr.
+    # 50 reconnects = 2/hr * 24h + 2 startup buffer. At ORCHESTRATOR_BACKOFF_MAX
+    # (5 min), 50 reconnects = up to 4h of pure backoff before halt — far more
+    # than enough to survive any expected broker maintenance window.
+    # Without this bump, 5 reconnects exhaust in <30 min on a flaky network,
+    # halting a 24h demo run early. (institutional-rigor.md § 6: no silent halt.)
+    ORCHESTRATOR_MAX_RECONNECTS = 50
     ORCHESTRATOR_BACKOFF_INITIAL = 30.0
     ORCHESTRATOR_BACKOFF_MAX = 300.0
+    # R3: if a feed connection is UP for at least this many seconds, it counts as
+    # a "stable run" — the reconnect counter resets to 0. This converts the ceiling
+    # from a monotonic lifetime counter to a rate-limit ceiling: N reconnects per
+    # stable-session window. 1800s (30 min) is operationally meaningful: it covers
+    # startup flap (first few minutes) and ensures we're past the initial auth/WS
+    # negotiation phase before granting a reset.
+    ORCHESTRATOR_STABLE_RUN_SECS = 1800
 
     async def run(self) -> None:
         # Re-check trading day at run start — catches restart across day boundary
@@ -2486,11 +3139,17 @@ class SessionOrchestrator:
         backoff = self.ORCHESTRATOR_BACKOFF_INITIAL
         watchdog = asyncio.create_task(self._watchdog())
         heartbeat = asyncio.create_task(self._heartbeat_notifier())
+        # R1: wall-clock rollover fires at 09:00 Brisbane regardless of bar-feed state.
+        # Runs unconditionally (signal_only and live alike) — rollover is always needed.
+        rollover_task = asyncio.create_task(self._wall_clock_rollover_loop())
         poller = None
         if not self.signal_only:
             poller = asyncio.create_task(self._fill_poller())
         try:
-            for attempt in range(self.ORCHESTRATOR_MAX_RECONNECTS + 1):
+            # R3: use a mutable counter (not range()) so stable-run reset can lower it
+            # back to 0 without re-entering the loop from scratch.
+            reconnect_count = 0
+            while reconnect_count <= self.ORCHESTRATOR_MAX_RECONNECTS:
                 if self._kill_switch_fired:
                     msg = "Kill switch fired — not reconnecting"
                     log.critical(msg)
@@ -2512,12 +3171,14 @@ class SessionOrchestrator:
                     demo=self.demo,
                 )
                 log.info(
-                    "Starting feed (attempt %d/%d): %s (broker: %s)",
-                    attempt + 1,
-                    self.ORCHESTRATOR_MAX_RECONNECTS + 1,
+                    "Starting feed (attempt %d, reconnects_used=%d/%d): %s (broker: %s)",
+                    reconnect_count + 1,
+                    reconnect_count,
+                    self.ORCHESTRATOR_MAX_RECONNECTS,
                     self.contract_symbol,
                     self._broker_name,
                 )
+                feed_started_at = datetime.now(UTC)
                 try:
                     self._last_bar_at = None  # reset heartbeat to avoid false watchdog trigger
                     await feed.run(self.contract_symbol)
@@ -2532,11 +3193,35 @@ class SessionOrchestrator:
                     log.critical("Feed crashed: %s", e)
                     self._notify(f"Feed crashed: {e}")
 
-                if attempt < self.ORCHESTRATOR_MAX_RECONNECTS:
+                # R3: stable-run reset — if the connection was UP for >= ORCHESTRATOR_STABLE_RUN_SECS,
+                # treat this as a successful session window and reset the reconnect counter.
+                # This converts the ceiling from a monotonic lifetime counter to a rate-limit
+                # ceiling: up to ORCHESTRATOR_MAX_RECONNECTS reconnects per stable-session window.
+                # Fail-closed (integrity-guardian.md § 3): if state-file write fails, we log and
+                # continue — the counter is still reset in memory even if persistence failed.
+                feed_up_secs = (datetime.now(UTC) - feed_started_at).total_seconds()
+                if feed_up_secs >= self.ORCHESTRATOR_STABLE_RUN_SECS:
+                    log.info(
+                        "R3 stable-run reset: feed was UP %.0fs (>= %.0fs threshold) — "
+                        "resetting reconnect counter from %d to 0",
+                        feed_up_secs,
+                        self.ORCHESTRATOR_STABLE_RUN_SECS,
+                        reconnect_count,
+                    )
+                    reconnect_count = 0
+                    backoff = self.ORCHESTRATOR_BACKOFF_INITIAL  # also reset backoff after stable run
                     try:
-                        await asyncio.get_running_loop().run_in_executor(
-                            None, self.auth.refresh_if_needed
+                        self._safety_state.last_connected_at = datetime.now(UTC).isoformat()
+                        self._safety_state.save()
+                    except Exception as _save_exc:
+                        log.error(
+                            "R3: failed to persist last_connected_at — counter reset still applies in-memory: %s",
+                            _save_exc,
                         )
+
+                if reconnect_count < self.ORCHESTRATOR_MAX_RECONNECTS:
+                    try:
+                        await asyncio.get_running_loop().run_in_executor(None, self.auth.refresh_if_needed)
                     except Exception as exc:
                         log.warning("Auth refresh failed before reconnect: %s", exc)
 
@@ -2562,19 +3247,63 @@ class SessionOrchestrator:
                             "Contract re-resolution failed on reconnect: %s (keeping %s)", exc, self.contract_symbol
                         )
 
+                    reconnect_count += 1
                     self._stats.reconnect_attempts += 1
-                    self._notify(f"Reconnecting in {backoff:.0f}s (attempt {attempt + 2})")
+                    # F7/R3: signal fill poller to reset timeout anchors — broker state
+                    # may have changed during the disconnect; re-query before applying timeout.
+                    self._fill_reconnect_gen += 1
+                    self._notify(f"Reconnecting in {backoff:.0f}s (attempt {reconnect_count + 1})")
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, self.ORCHESTRATOR_BACKOFF_MAX)
+                else:
+                    # Last attempt exhausted — exit loop to hit the halt message below
+                    break
 
             msg = f"Exhausted {self.ORCHESTRATOR_MAX_RECONNECTS} orchestrator reconnects — session dead"
             log.critical(msg)
             self._notify(f"CRITICAL: {msg}")
         finally:
-            watchdog.cancel()
-            heartbeat.cancel()
+            await self._shutdown_task(watchdog, "watchdog")
+            await self._shutdown_task(heartbeat, "heartbeat_notifier")
+            await self._shutdown_task(rollover_task, "wall_clock_rollover")
             if poller:
-                poller.cancel()
+                await self._shutdown_task(poller, "fill_poller")
+
+    async def _shutdown_task(self, task, name: str, timeout: float = 5.0) -> None:
+        """Cancel and await a background task on orchestrator shutdown.
+
+        Mitigates audit finding S3 (iter 178): the prior pattern was bare
+        `task.cancel()` without await, which on SIGTERM emitted "Task was
+        destroyed but it is pending!" warnings and could abort in-progress
+        EOD-close submissions mid-flight.
+
+        Contract:
+        - No-op if the task is None or already done.
+        - Cancels the task, then awaits it with a bounded timeout.
+        - Swallows asyncio.CancelledError (the expected outcome of cancel).
+        - Logs critical + notifies if the task does NOT exit within `timeout`
+          seconds — institutional-rigor.md § 6 (no silent failures).
+        - Logs critical + notifies if the task raises a non-cancellation
+          exception during teardown.
+        """
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=timeout)
+        except asyncio.CancelledError:
+            return
+        except TimeoutError:
+            msg = (
+                f"SHUTDOWN: task '{name}' did not exit within {timeout:.1f}s of cancel — "
+                f"possible position-close abort or resource leak"
+            )
+            log.critical(msg)
+            self._notify(msg)
+        except Exception as exc:
+            msg = f"SHUTDOWN: task '{name}' raised on cancel: {exc}"
+            log.critical(msg)
+            self._notify(msg)
 
     def post_session(self) -> None:
         """EOD: close open positions, log summary, run incremental backfill.

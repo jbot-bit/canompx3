@@ -106,10 +106,7 @@ if not PRE_REG_PATH.exists():
 
 ALL_SESSIONS: list[str] = list(SESSION_CATALOG.keys())  # 12 enabled sessions
 # Filter to the 12 we tested in comprehensive scan (BRISBANE_0925/1955 not in production scope)
-SCAN_SESSIONS: list[str] = [
-    s for s in ALL_SESSIONS
-    if s not in {"BRISBANE_0925", "BRISBANE_1955"}
-]
+SCAN_SESSIONS: list[str] = [s for s in ALL_SESSIONS if s not in {"BRISBANE_0925", "BRISBANE_1955"}]
 # Sanity-check
 assert len(SCAN_SESSIONS) == 12, f"Expected 12 sessions, got {len(SCAN_SESSIONS)}: {SCAN_SESSIONS}"
 
@@ -125,14 +122,12 @@ OOS_START = HOLDOUT_SACRED_FROM
 OOS_END_EXCLUSIVE = pd.Timestamp("2026-04-18").date()
 
 # Per-instrument enabled session map (auto-skip disabled cells)
-ENABLED: dict[str, set[str]] = {
-    inst: set(ASSET_CONFIGS[inst]["enabled_sessions"]) for inst in ALL_INSTRUMENTS
-}
+ENABLED: dict[str, set[str]] = {inst: set(ASSET_CONFIGS[inst]["enabled_sessions"]) for inst in ALL_INSTRUMENTS}
 
 # L6 deployed positive-control identity (per docs/audit/results/2026-04-18-c12-alarmed-lanes-review.md)
 L6_KEY = ("MNQ", "US_DATA_1000", 15, 1.5, "long", "VWAP_MID_ALIGNED")
 L6_C12_BASELINE_EXPR = 0.2101  # per C12 review baseline mean R
-L6_C12_BASELINE_TOL = 0.02     # |delta| within tol = control PASS
+L6_C12_BASELINE_TOL = 0.02  # |delta| within tol = control PASS
 
 # Deployed filter map for T0 tautology pre-screen — per active_validated_setups
 # query 2026-04-18 + comprehensive scan deployed lanes. Only the canonical
@@ -322,15 +317,9 @@ def test_cell(
     expr_on_oos = float(np.mean(on_oos)) if len(on_oos) >= 5 else float("nan")
     expr_off_oos = float(np.mean(off_oos)) if len(off_oos) >= 5 else float("nan")
     delta_oos = (
-        (expr_on_oos - expr_off_oos)
-        if not np.isnan(expr_on_oos) and not np.isnan(expr_off_oos)
-        else float("nan")
+        (expr_on_oos - expr_off_oos) if not np.isnan(expr_on_oos) and not np.isnan(expr_off_oos) else float("nan")
     )
-    dir_match = (
-        (not np.isnan(delta_oos))
-        and (np.sign(delta_is) == np.sign(delta_oos))
-        and (np.sign(delta_is) != 0)
-    )
+    dir_match = (not np.isnan(delta_oos)) and (np.sign(delta_is) == np.sign(delta_oos)) and (np.sign(delta_is) != 0)
 
     fire_rate = float(np.sum(sig_dir)) / max(1, len(sig_dir))
     extreme_fire = (fire_rate < 0.05) or (fire_rate > 0.95)
@@ -464,8 +453,12 @@ def main():
 
     # Total cell count enumeration check
     total_combos = (
-        len(SCAN_SESSIONS) * len(ALL_INSTRUMENTS) * len(ALL_APERTURES)
-        * len(ALL_RRS) * len(ALL_DIRS) * len(VWAP_VARIANTS)
+        len(SCAN_SESSIONS)
+        * len(ALL_INSTRUMENTS)
+        * len(ALL_APERTURES)
+        * len(ALL_RRS)
+        * len(ALL_DIRS)
+        * len(VWAP_VARIANTS)
     )
     print(f"Total combos enumerated: {total_combos}")
     assert total_combos == 1296, f"Expected 1296 combos, got {total_combos}"
@@ -477,13 +470,13 @@ def main():
             con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
             break
         except Exception as e:
-            print(f"  DB busy (attempt {attempt+1}/8): {e}")
+            print(f"  DB busy (attempt {attempt + 1}/8): {e}")
             time.sleep(5)
     if con is None:
         print("FATAL: could not open DB after 8 attempts")
         sys.exit(1)
 
-    print(f"\nDB connected. Running scan...")
+    print("\nDB connected. Running scan...")
 
     rows = []
     skipped_disabled = []
@@ -531,8 +524,10 @@ def main():
     con.close()
 
     elapsed = time.time() - t_start
-    print(f"\nSCAN COMPLETE — {cell_count} cells attempted, {len(rows)} cells with results, "
-          f"{len(skipped_disabled)} disabled-skip, {len(skipped_low_n)} N<60 skip. Elapsed={elapsed:.0f}s.")
+    print(
+        f"\nSCAN COMPLETE — {cell_count} cells attempted, {len(rows)} cells with results, "
+        f"{len(skipped_disabled)} disabled-skip, {len(skipped_low_n)} N<60 skip. Elapsed={elapsed:.0f}s."
+    )
 
     if not rows:
         print("FATAL: no rows returned. Halting.")
@@ -545,10 +540,7 @@ def main():
 
     # Trustworthy gate
     trustworthy = res[
-        (~res["extreme_fire"])
-        & (~res["arithmetic_only"])
-        & (~res["tautology"])
-        & (res["n_on_is"] >= 50)
+        (~res["extreme_fire"]) & (~res["arithmetic_only"]) & (~res["tautology"]) & (res["n_on_is"] >= 50)
     ].copy()
 
     # H1 family-level survivors (binding gate per pre-reg)
@@ -602,7 +594,11 @@ def main():
         decision_action = "K2 FIRES — halt, do not consume OOS, debug harness"
     elif n_h1 == 0:
         verdict = "K1 FIRES — VWAP family DOCTRINE-CLOSED"
-        decision_action = "Mark VWAP family closed; queue HTF Phase A build per surface map"
+        decision_action = (
+            "Mark VWAP family closed; HTF Phase A simple build/filter family is now "
+            "also closed, so pivot only to a NEW mechanism class or a structurally "
+            "new HTF pre-reg"
+        )
     elif n_h1 in (1, 2):
         verdict = "PARK"
         decision_action = "Promising but family-level under-power; defer per-cell Pathway B"
@@ -680,7 +676,7 @@ def write_result_md(
     lines = [
         "# VWAP Comprehensive Family Scan — Result",
         "",
-        f"**Pre-reg:** `docs/audit/hypotheses/2026-04-18-vwap-comprehensive-family-scan.yaml`",
+        "**Pre-reg:** `docs/audit/hypotheses/2026-04-18-vwap-comprehensive-family-scan.yaml`",
         f"**Pre-reg sha:** `{PRE_REG_SHA}`",
         f"**Run UTC:** {pd.Timestamp.utcnow().isoformat()}",
         f"**Mode A holdout:** sacred from `{HOLDOUT_SACRED_FROM}` per `trading_app.holdout_policy`",
@@ -700,12 +696,12 @@ def write_result_md(
         "",
         "## Schema verification",
         "",
-        f"- `daily_features.orb_{{label}}_vwap` populated for all 12 sessions.",
-        f"- Triple-join on `(trading_day, symbol, orb_minutes)` per `.claude/rules/daily-features-joins.md`.",
+        "- `daily_features.orb_{label}_vwap` populated for all 12 sessions.",
+        "- Triple-join on `(trading_day, symbol, orb_minutes)` per `.claude/rules/daily-features-joins.md`.",
         "",
         "## Coverage",
         "",
-        f"- Total combos enumerated: 1296",
+        "- Total combos enumerated: 1296",
         f"- Cells attempted: {cell_count}",
         f"- Cells with usable results: {len(res)}",
         f"- Skipped — disabled (instrument, session) per `pipeline.asset_configs`: {skipped_disabled_count}",
@@ -726,23 +722,23 @@ def write_result_md(
         f"- Flagged extreme_fire (<5% or >95%): {len(flagged_extreme)}",
         f"- Flagged arithmetic_only (WR-flat + Δ_IS large): {len(flagged_arith)}",
         f"- Flagged tautology (T0 |corr| > 0.7 vs deployed filter): {len(flagged_taut)}",
-        f"- N_on_IS < 50: excluded from trustworthy",
+        "- N_on_IS < 50: excluded from trustworthy",
         f"- Trustworthy cells: {len(trustworthy)}",
         "",
         "## Hypothesis verdicts",
         "",
-        f"### H1 family-level (BINDING)",
-        f"Gates: BH-FDR K_family q<0.05 AND dir_match AND |t_IS|>=3.0 AND yrs_positive_IS>=4/7 AND boot_p<0.10",
+        "### H1 family-level (BINDING)",
+        "Gates: BH-FDR K_family q<0.05 AND dir_match AND |t_IS|>=3.0 AND yrs_positive_IS>=4/7 AND boot_p<0.10",
         f"**Survivors: {len(h1)}**",
-        f"Threshold: >=3 to CONTINUE, 1-2 to PARK, 0 to KILL (K1)",
+        "Threshold: >=3 to CONTINUE, 1-2 to PARK, 0 to KILL (K1)",
         "",
-        f"### H2 strict (descriptive ribbon)",
-        f"Gates: as H1 but |t_IS|>=3.79 (Chordia no-theory)",
+        "### H2 strict (descriptive ribbon)",
+        "Gates: as H1 but |t_IS|>=3.79 (Chordia no-theory)",
         f"**Survivors: {len(h2)}**",
         "",
-        f"### H3 positive control",
+        "### H3 positive control",
         f"{h3_note}",
-        f"Pass = harness reproduces L6 known-live IS ExpR within tolerance.",
+        "Pass = harness reproduces L6 known-live IS ExpR within tolerance.",
         "",
         "## Red flag audit (RULE 12)",
         "",
@@ -799,10 +795,11 @@ def write_result_md(
         lines.append("(none)")
 
     # Top promising (|t|>=2.5, dir_match, trustworthy)
-    promising = trustworthy[
-        (trustworthy["t_is"].abs() >= 2.5)
-        & (trustworthy["dir_match"])
-    ].sort_values("t_is", key=abs, ascending=False).head(40)
+    promising = (
+        trustworthy[(trustworthy["t_is"].abs() >= 2.5) & (trustworthy["dir_match"])]
+        .sort_values("t_is", key=abs, ascending=False)
+        .head(40)
+    )
 
     lines += [
         "",
@@ -856,10 +853,10 @@ def write_result_md(
         "",
         f"**{verdict}**",
         "",
-        f"Decision rule (per pre-reg):",
-        f"- continue_if: H1 survivors >= 3 → recommend rel_vol × VWAP cross-factor next",
-        f"- park_if: H1 survivors == 1 or 2 → defer per-cell Pathway B",
-        f"- kill_if: H1 survivors == 0 → K1 fires, VWAP family DOCTRINE-CLOSED",
+        "Decision rule (per pre-reg):",
+        "- continue_if: H1 survivors >= 3 → recommend rel_vol × VWAP cross-factor next",
+        "- park_if: H1 survivors == 1 or 2 → defer per-cell Pathway B",
+        "- kill_if: H1 survivors == 0 → K1 fires, VWAP family DOCTRINE-CLOSED",
         "",
         f"**Action:** {decision_action}",
         "",
@@ -871,19 +868,19 @@ def write_result_md(
             "1. Write Pathway B individual pre-regs for each H1 survivor cell that also passes T0 tautology and N_IS >= 100.",
             "2. Write a separate cross-factor pre-reg for `rel_vol × VWAP` 2-way scan (next session).",
             "3. Update HANDOFF.md with one-line CONTINUE verdict and survivor list.",
-            "4. Queue HTF Phase A build (canonical compute for prev_week_*/prev_month_*) as parallel infra workstream.",
+            "4. Do NOT queue the old HTF Phase A build note from the surface map without re-checking project state; simple HTF v1 is no longer an unopened branch.",
         ]
     elif verdict.startswith("PARK"):
         lines += [
             "1. Document the 1-2 promising cells in HANDOFF.md as 'family-level under-power, defer'.",
             "2. Do NOT deploy. Do NOT write Pathway B pre-reg this session.",
-            "3. Pivot next session to HTF Phase A build per surface map.",
+            "3. Pivot next session only to a still-open mechanism family, not the already-killed simple HTF v1 branch.",
         ]
     elif verdict.startswith("K1"):
         lines += [
             "1. Update STRATEGY_BLUEPRINT.md NO-GO with VWAP family DOCTRINE-CLOSED entry citing this scan.",
             "2. Update HANDOFF.md with one-line K1 verdict.",
-            "3. Pivot next session to HTF Phase A build per surface map. Re-route surface-map item F4 to closed.",
+            "3. Re-route the old surface-map HTF build item to closed. Next session should choose a new mechanism class or a structurally new HTF question instead.",
         ]
     elif verdict.startswith("HARNESS"):
         lines += [
@@ -915,11 +912,11 @@ def write_result_md(
         "",
         "## Reproducibility",
         "",
-        f"- Repo: `C:/Users/joshd/canompx3` (parent), branch `main`",
+        "- Repo: `C:/Users/joshd/canompx3` (parent), branch `main`",
         f"- Pre-reg sha: `{PRE_REG_SHA}`",
-        f"- Script: `research/vwap_comprehensive_family_scan.py`",
+        "- Script: `research/vwap_comprehensive_family_scan.py`",
         f"- DB: `{GOLD_DB_PATH}`",
-        f"- Canonical sources used: `pipeline.dst.SESSION_CATALOG`, `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS`, `pipeline.asset_configs.ASSET_CONFIGS`, `pipeline.paths.GOLD_DB_PATH`, `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`.",
+        "- Canonical sources used: `pipeline.dst.SESSION_CATALOG`, `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS`, `pipeline.asset_configs.ASSET_CONFIGS`, `pipeline.paths.GOLD_DB_PATH`, `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`.",
         "",
     ]
 

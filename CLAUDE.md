@@ -22,28 +22,22 @@ Canonical registry for document roles: `docs/governance/document_authority.md`.
 
 ## Task Routing
 
-For non-trivial repo tasks, do not rely on `CLAUDE.md` alone as the task
-router.
-
-Resolve the task first:
-
+Non-trivial repo tasks: resolve the task first via the deterministic front door —
 `python scripts/tools/context_resolver.py --task "<user request>" --format markdown`
+(returns doctrine to read, canonical code/data, live views, non-truth surfaces, verification profile).
 
-The resolver is the deterministic front door for:
+Fallback if unavailable or ambiguous: `AGENTS.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`, `scripts/tools/system_context.py`, `scripts/tools/project_pulse.py`.
 
-- which doctrine to read
-- which code/data files are canonical
-- which live views to query
-- which surfaces are explicitly not live truth
-- which verification profile applies
+## Default Thinking Mode
 
-If the resolver is unavailable or ambiguous, fall back to:
+All research, analysis, and decisions must:
+- pass institutional audit loop
+- avoid tunnel vision
+- verify against canonical layers
+- include alternate framing before conclusion
+- produce a final EV-based decision
 
-- `AGENTS.md`
-- `docs/governance/document_authority.md`
-- `docs/governance/system_authority_map.md`
-- `scripts/tools/system_context.py`
-- `scripts/tools/project_pulse.py`
+If not explicitly stated, assume this mode.
 
 ---
 
@@ -90,22 +84,13 @@ If the resolver is unavailable or ambiguous, fall back to:
 Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift detection (`pipeline/check_drift.py` — count self-reported at runtime), Claude Code hooks (auto-run drift/tests on file edits), GitHub Actions CI, and built-in pipeline validation gates. Setup: `git config core.hooksPath .githooks`
 
 ### Project Truth Protocol
-Discovery uses ONLY canonical layers (`bars_1m`, `daily_features`, `orb_outcomes`). Derived layers (`validated_setups`, `edge_families`, `live_config`, docs) are **banned for truth-finding**. Full rules → `RESEARCH_RULES.md` § Discovery Layer Discipline. Enforcement → `.claude/rules/research-truth-protocol.md`.
+Discovery uses ONLY canonical layers (`bars_1m`, `daily_features`, `orb_outcomes`). Derived layers (`validated_setups`, `edge_families`, `live_config`, docs) are **banned for truth-finding**. → `RESEARCH_RULES.md` § Discovery Layer Discipline; enforcement in `.claude/rules/research-truth-protocol.md`.
 
 ### Volatile Data Rule
 **NEVER cite changing stats from memory/docs.** Query live: strategy counts → `gold-db` MCP, sessions → `pipeline.dst.SESSION_CATALOG`, costs → `pipeline.cost_model.COST_SPECS`, instruments → `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS`, lanes → `trading_app.prop_profiles.ACCOUNT_PROFILES`, **ORB window timing → `pipeline.dst.orb_utc_window(trading_day, orb_label, orb_minutes)`** (never derive from `break_delay_min`; never fall back to `break_ts`; see `docs/postmortems/2026-04-07-e2-canonical-window-fix.md`).
 
 ### Backtesting Methodology (MANDATORY)
-Every backtest / discovery scan MUST follow `.claude/rules/backtesting-methodology.md`:
-- **Feature look-ahead gates** (RULE 1): `session_*` and `overnight_*` features are CONDITIONALLY VALID based on ORB session start time vs feature window close. Implementation: `research/comprehensive_deployed_lane_scan.py::_valid_session_features()` and `::_overnight_lookhead_clean()`.
-- **Comprehensive scope** (RULE 5): 12 sessions × 3 instruments × 3 apertures × 3 RRs = 324 combos. No hand-picking without pre-reg justification.
-- **Multi-framing BH-FDR** (RULE 4): K_global, K_family, K_lane, K_session, K_instrument, K_feature — all reported per cell.
-- **Two-pass testing** (RULE 2): overlay candidates tested both unfiltered AND filtered-within-deployed-filter subset.
-- **Tautology check** (RULE 7): |corr(new_feature, deployed_filter)| > 0.70 → flag.
-- **Extreme fire rate** (RULE 8.1): <5% or >95% → flag.
-- **ARITHMETIC_ONLY** (RULE 8.2): WR flat + ExpR moves → cost-screen not edge.
-- **Red flags** (RULE 12): |t| > 7, Δ_IS > 0.6, uniform same-feature survivors → STOP and investigate.
-Historical failure log: section at bottom of that rule. Append new failures.
+Every backtest / discovery scan MUST follow `.claude/rules/backtesting-methodology.md` (auto-loads on research/ / trading_app/strategy_* / docs/audit/ / docs/institutional/ edits). 14 rules + companion failure log.
 
 ### Research Provenance Rule
 Config values from research need `@research-source`, `@entry-models`, `@revalidated-for`. Drift check #45 enforces.
@@ -114,16 +99,15 @@ Config values from research need `@research-source`, `@entry-models`, `@revalida
 Identify canonical source → verify downstream derives from it → if source may be wrong, audit upstream first → never patch downstream to compensate for upstream corruption.
 
 ### Local Academic / Project-Source Grounding Rule
-Prefer local sources (`resources/` PDFs, project canon) over training memory. If no local source, say UNSUPPORTED.
-**PDF protocol:** EXTRACT text from the file — never cite from training memory as if you read it. If extraction fails, say so explicitly. Label training-memory claims as "From training memory — not verified against local PDF." **Before dismissing a PDF as "bibliography only" / "front matter only" / "nothing relevant" based on a keyword grep, extract the table of contents AND at least 3 sample pages from the middle of the PDF to confirm the actual structure.** A single-keyword grep can miss whole chapters when the terminology is different (e.g., "walk-forward" vs "random walk", "half" vs "half-life"). A 2026-04-07 self-review caught a case where `resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf` was incorrectly characterized as "bibliography only" when pp 6-28 are actually Chapter 1 "Introduction" with substantive backtest-overfitting content — see `docs/specs/research_modes_and_lineage.md` § 9.2 Revision history. Commit `aec7730` is the fix.
+Prefer `resources/` PDFs + project canon over training memory; say UNSUPPORTED if no local source. PDFs: extract text (never cite from memory as if read); before dismissing as irrelevant, extract TOC + 3 mid-doc pages (terminology differs). Label training-memory claims explicitly. Detail → `docs/specs/research_modes_and_lineage.md` § 9.2.
 
 ### Audit-First Default for Research Layers
 Research layers: **audit → adversarial audit → fix → rerun → freeze → move on**. Do not skip to implementation when truth-state is unverified.
 
 ### Institutional Rigor (MANDATORY — non-negotiable)
-**Always take the proper long-term institutional-grounded fix.** No band-aids, no skipping, no dead code, no silent failures, no re-encoding canonical logic. Review own work before claiming done. When review cycles keep finding new bugs, refactor — don't patch. Full rules → `.claude/rules/institutional-rigor.md`.
+Proper institutional-grounded fixes only. No band-aids, dead code, silent failures, or re-encoded canonical logic. Self-review before done; refactor (don't patch) when cycles keep finding bugs. → `.claude/rules/institutional-rigor.md` (auto-loads on production-code edits).
 
-**Research methodology grounding (Phase 0 established 2026-04-07):** All discovery, validation, and deployment decisions must be literature-grounded. `docs/institutional/literature/` contains verbatim extracts from Bailey-Lopez de Prado (DSR, MinBTL, False Strategy Theorem), Harvey-Liu, Chordia et al, Pepelyshev-Polunchenko, Fitschen (intraday trend-follow — CORE ORB premise), and Carver (volatility targeting + Kelly sizing — Stage 2+ framework). `docs/institutional/pre_registered_criteria.md` locks 12 criteria every validated strategy must meet. `docs/institutional/hypothesis_registry_template.md` is the pre-registration format. **`docs/institutional/mechanism_priors.md` (added 2026-04-15)** is the live trading-logic doc: what we think drives ORB edge, signal-to-role mapping (R1 FILTER → R8 PORTFOLIO allocator), staged deployment roadmap. Read before proposing any new filter to avoid pigeonholing. **No brute-force enumeration of >300 trials allowed** (MinBTL bound). Discovery must cite a committed hypothesis file in `docs/audit/hypotheses/`.
+**Phase 0 grounding (2026-04-07):** discovery/validation/deployment decisions must cite `docs/institutional/literature/` (Bailey-López de Prado, Harvey-Liu, Chordia, Pepelyshev-Polunchenko, Fitschen, Carver). Pre-registered criteria in `docs/institutional/pre_registered_criteria.md`; mechanism priors in `docs/institutional/mechanism_priors.md`; hypothesis files in `docs/audit/hypotheses/`. **No brute-force >300 trials** (MinBTL bound).
 
 ### 2-Pass Implementation Method (MANDATORY)
 1. **Discovery:** Read affected files, understand blast radius, articulate PURPOSE before writing code.

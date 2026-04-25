@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 import databento as db
 import pandas as pd
 
-from pipeline.asset_configs import get_asset_config
+from pipeline.asset_configs import get_asset_config, require_dbn_available
 from pipeline.calendar_filters import _FOMC_DATES_RAW
 
 NY_TZ = ZoneInfo("America/New_York")
@@ -154,10 +154,7 @@ def run_study(dbn_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, float | None]:
 
         pre = get_window_snapshot(df, event_date, PRE_WINDOW)
         shock = get_window_snapshot(df, event_date, SHOCK_WINDOW)
-        follow = {
-            key: get_window_snapshot(df, event_date, window)
-            for key, window in FOLLOW_WINDOWS.items()
-        }
+        follow = {key: get_window_snapshot(df, event_date, window) for key, window in FOLLOW_WINDOWS.items()}
         if pre is None or shock is None or any(snapshot is None for snapshot in follow.values()):
             row["exclusion_reason"] = "missing_window_data"
             rows.append(row)
@@ -348,7 +345,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    dbn_dir = args.dbn_dir or get_asset_config("ZT")["dbn_path"]
+    if args.dbn_dir is not None:
+        dbn_dir = args.dbn_dir
+    else:
+        require_dbn_available("ZT")
+        dbn_dir = get_asset_config("ZT")["dbn_path"]
     events, summary, tick_size = run_study(dbn_dir)
     write_outputs(args.output_prefix, events, summary, tick_size)
 

@@ -46,6 +46,7 @@ OUTPUT_MD.parent.mkdir(parents=True, exist_ok=True)
 # Pattern definitions (each is an exploratory finding from mega-exploration)
 # =============================================================================
 
+
 @dataclass
 class Pattern:
     name: str
@@ -70,7 +71,7 @@ PATTERNS = [
         rr=1.5,
         direction="long",
         feature_sql="CAST((ABS((d.orb_NYSE_CLOSE_high + d.orb_NYSE_CLOSE_low)/2.0 - "
-                    "(d.prev_day_high + d.prev_day_low + d.prev_day_close)/3.0) / d.atr_20 < 0.15) AS INTEGER)",
+        "(d.prev_day_high + d.prev_day_low + d.prev_day_close)/3.0) / d.atr_20 < 0.15) AS INTEGER)",
         theta=0.15,
         expected_sign="negative",
     ),
@@ -83,7 +84,7 @@ PATTERNS = [
         rr=1.5,
         direction="short",
         feature_sql="CAST((ABS((d.orb_NYSE_CLOSE_high + d.orb_NYSE_CLOSE_low)/2.0 - d.prev_day_high) "
-                    "/ d.atr_20 < 0.15) AS INTEGER)",
+        "/ d.atr_20 < 0.15) AS INTEGER)",
         theta=0.15,
         expected_sign="negative",
     ),
@@ -191,10 +192,13 @@ def t0_tautology(p: Pattern, df: pd.DataFrame) -> TestResult:
     max_filt = max(corrs, key=lambda k: abs(corrs[k])) if corrs else "none"
 
     if max_corr > 0.70:
-        return TestResult("T0_tautology", f"{max_corr:.3f} vs {max_filt}", "FAIL",
-                          f"DUPLICATE_FILTER with {max_filt}")
-    return TestResult("T0_tautology", f"max |corr|={max_corr:.3f} ({max_filt})", "PASS",
-                      f"no tautology with deployed filters; correlations={corrs}")
+        return TestResult("T0_tautology", f"{max_corr:.3f} vs {max_filt}", "FAIL", f"DUPLICATE_FILTER with {max_filt}")
+    return TestResult(
+        "T0_tautology",
+        f"max |corr|={max_corr:.3f} ({max_filt})",
+        "PASS",
+        f"no tautology with deployed filters; correlations={corrs}",
+    )
 
 
 def t1_wr_monotonicity(p: Pattern, df: pd.DataFrame) -> TestResult:
@@ -212,13 +216,25 @@ def t1_wr_monotonicity(p: Pattern, df: pd.DataFrame) -> TestResult:
     expr_spread = abs(expr_on - expr_off)
 
     if wr_spread < 0.03 and expr_spread > 0.05:
-        return TestResult("T1_wr_monotonicity", f"WR_spread={wr_spread:.3f} ExpR_spread={expr_spread:.3f}",
-                          "FAIL", "ARITHMETIC_ONLY — WR flat, only payoff moved")
+        return TestResult(
+            "T1_wr_monotonicity",
+            f"WR_spread={wr_spread:.3f} ExpR_spread={expr_spread:.3f}",
+            "FAIL",
+            "ARITHMETIC_ONLY — WR flat, only payoff moved",
+        )
     if wr_spread >= 0.05:
-        return TestResult("T1_wr_monotonicity", f"WR_spread={wr_spread:.3f} (on={wr_on:.3f} off={wr_off:.3f})",
-                          "PASS", "SIGNAL — WR differs meaningfully")
-    return TestResult("T1_wr_monotonicity", f"WR_spread={wr_spread:.3f} ExpR_spread={expr_spread:.3f}",
-                      "INFO", "WR spread 3-5% — modest signal")
+        return TestResult(
+            "T1_wr_monotonicity",
+            f"WR_spread={wr_spread:.3f} (on={wr_on:.3f} off={wr_off:.3f})",
+            "PASS",
+            "SIGNAL — WR differs meaningfully",
+        )
+    return TestResult(
+        "T1_wr_monotonicity",
+        f"WR_spread={wr_spread:.3f} ExpR_spread={expr_spread:.3f}",
+        "INFO",
+        "WR spread 3-5% — modest signal",
+    )
 
 
 def t2_is_baseline(p: Pattern, df: pd.DataFrame) -> TestResult:
@@ -230,9 +246,12 @@ def t2_is_baseline(p: Pattern, df: pd.DataFrame) -> TestResult:
     expr = float(on_df["pnl_r"].mean())
     std = float(on_df["pnl_r"].std(ddof=1))
     wr = float(on_df["is_win"].mean())
-    return TestResult("T2_is_baseline", f"N={n} ExpR={expr:+.3f} WR={wr:.3f} σ={std:.2f}",
-                      "PASS" if n >= 100 else "INFO",
-                      "deployable N ≥ 100" if n >= 100 else "exploratory-only (N < 100)")
+    return TestResult(
+        "T2_is_baseline",
+        f"N={n} ExpR={expr:+.3f} WR={wr:.3f} σ={std:.2f}",
+        "PASS" if n >= 100 else "INFO",
+        "deployable N ≥ 100" if n >= 100 else "exploratory-only (N < 100)",
+    )
 
 
 def t3_oos_wfe(p: Pattern, df: pd.DataFrame) -> TestResult:
@@ -241,8 +260,7 @@ def t3_oos_wfe(p: Pattern, df: pd.DataFrame) -> TestResult:
     on_is = is_df[is_df["feature"] == 1]
     on_oos = oos_df[oos_df["feature"] == 1]
     if len(on_oos) < 10:
-        return TestResult("T3_oos_wfe", f"N_OOS={len(on_oos)}", "FAIL",
-                          "insufficient OOS N for WFE (< 10)")
+        return TestResult("T3_oos_wfe", f"N_OOS={len(on_oos)}", "FAIL", "insufficient OOS N for WFE (< 10)")
     expr_is = float(on_is["pnl_r"].mean())
     expr_oos = float(on_oos["pnl_r"].mean())
 
@@ -251,7 +269,7 @@ def t3_oos_wfe(p: Pattern, df: pd.DataFrame) -> TestResult:
     wfe = sharpe_oos / sharpe_is if sharpe_is not in (0, float("nan")) and not np.isnan(sharpe_is) else float("nan")
 
     # Sign match
-    sign_match = (np.sign(expr_is - off_mean(is_df)) == np.sign(expr_oos - off_mean(oos_df)))
+    sign_match = np.sign(expr_is - off_mean(is_df)) == np.sign(expr_oos - off_mean(oos_df))
 
     # WFE interpretation
     if abs(wfe) > 0.95:
@@ -266,9 +284,12 @@ def t3_oos_wfe(p: Pattern, df: pd.DataFrame) -> TestResult:
     else:
         status = "PASS"
         detail = f"WFE={wfe:.2f} healthy, sign match"
-    return TestResult("T3_oos_wfe",
-                      f"WFE={wfe:.2f} IS_SR={sharpe_is:.2f} OOS_SR={sharpe_oos:.2f} N_OOS_on={len(on_oos)}",
-                      status, detail)
+    return TestResult(
+        "T3_oos_wfe",
+        f"WFE={wfe:.2f} IS_SR={sharpe_is:.2f} OOS_SR={sharpe_oos:.2f} N_OOS_on={len(on_oos)}",
+        status,
+        detail,
+    )
 
 
 def off_mean(sub: pd.DataFrame) -> float:
@@ -307,18 +328,26 @@ def t4_sensitivity(p: Pattern, df: pd.DataFrame) -> TestResult:
     signs = [np.sign(d) for d in deltas]
     same_sign = all(s == signs[0] for s in signs)
     if not same_sign:
-        return TestResult("T4_sensitivity", f"deltas={[round(d,3) for d in deltas]}",
-                          "FAIL", "sign flips across theta grid — PARAMETER_SENSITIVE")
+        return TestResult(
+            "T4_sensitivity",
+            f"deltas={[round(d, 3) for d in deltas]}",
+            "FAIL",
+            "sign flips across theta grid — PARAMETER_SENSITIVE",
+        )
     # Monotone check: primary (middle) ≤ max of adjacent
     mid_delta = abs(deltas[1])
     adj_max = max(abs(deltas[0]), abs(deltas[2]))
     adj_min = min(abs(deltas[0]), abs(deltas[2]))
     if adj_min < 0.25 * mid_delta:
-        return TestResult("T4_sensitivity",
-                          f"deltas={[round(d,3) for d in deltas]}",
-                          "FAIL", "adjacent-theta magnitude < 25% primary — knife-edge")
-    return TestResult("T4_sensitivity", f"deltas={[round(d,3) for d in deltas]}",
-                      "PASS", "signs match, magnitudes within 25% band")
+        return TestResult(
+            "T4_sensitivity",
+            f"deltas={[round(d, 3) for d in deltas]}",
+            "FAIL",
+            "adjacent-theta magnitude < 25% primary — knife-edge",
+        )
+    return TestResult(
+        "T4_sensitivity", f"deltas={[round(d, 3) for d in deltas]}", "PASS", "signs match, magnitudes within 25% band"
+    )
 
 
 def t5_family(p: Pattern, df_full: pd.DataFrame | None = None) -> TestResult:
@@ -329,9 +358,12 @@ def t5_family(p: Pattern, df_full: pd.DataFrame | None = None) -> TestResult:
     # Simplified: use pre-computed mega-exploration result counts
     # A proper implementation would query. For this audit we reference mega-exploration
     # findings directly in the report.
-    return TestResult("T5_family", "see mega-exploration table",
-                      "INFO", "family evaluated in mega-exploration §"
-                      " patterns P1/P2 show cross-session, P3 is session-specific")
+    return TestResult(
+        "T5_family",
+        "see mega-exploration table",
+        "INFO",
+        "family evaluated in mega-exploration § patterns P1/P2 show cross-session, P3 is session-specific",
+    )
 
 
 def t6_null_floor(p: Pattern, df: pd.DataFrame, B: int = 1000) -> TestResult:
@@ -361,8 +393,9 @@ def t6_null_floor(p: Pattern, df: pd.DataFrame, B: int = 1000) -> TestResult:
                 beats += 1
     p_val = (beats + 1) / (B + 1)
     status = "PASS" if p_val < 0.05 else "FAIL"
-    return TestResult("T6_null_floor", f"p={p_val:.4f} ExpR_obs={observed_expr:+.3f}", status,
-                      f"{B} shuffles, bootstrap {status}")
+    return TestResult(
+        "T6_null_floor", f"p={p_val:.4f} ExpR_obs={observed_expr:+.3f}", status, f"{B} shuffles, bootstrap {status}"
+    )
 
 
 def t7_per_year(p: Pattern, df: pd.DataFrame) -> TestResult:
@@ -406,8 +439,9 @@ def t8_cross_instrument(p: Pattern) -> TestResult:
         aperture=p.aperture,
         rr=p.rr,
         direction=p.direction,
-        feature_sql=p.feature_sql.replace("NYSE_CLOSE", p.session).replace("US_DATA_1000", p.session)
-                                .replace("EUROPE_FLOW", p.session),
+        feature_sql=p.feature_sql.replace("NYSE_CLOSE", p.session)
+        .replace("US_DATA_1000", p.session)
+        .replace("EUROPE_FLOW", p.session),
         theta=p.theta,
         expected_sign=p.expected_sign,
     )
@@ -420,19 +454,21 @@ def t8_cross_instrument(p: Pattern) -> TestResult:
     on = is_df[is_df["feature"] == 1]
     off = is_df[is_df["feature"] == 0]
     if len(on) < 30 or len(off) < 30:
-        return TestResult("T8_cross_instrument", f"N_on_twin={len(on)} N_off_twin={len(off)}",
-                          "INFO", f"twin {twin} N insufficient")
+        return TestResult(
+            "T8_cross_instrument", f"N_on_twin={len(on)} N_off_twin={len(off)}", "INFO", f"twin {twin} N insufficient"
+        )
     delta_twin = float(on["pnl_r"].mean() - off["pnl_r"].mean())
-    sign_ok = (np.sign(delta_twin) < 0 and p.expected_sign == "negative") or \
-              (np.sign(delta_twin) > 0 and p.expected_sign == "positive")
+    sign_ok = (np.sign(delta_twin) < 0 and p.expected_sign == "negative") or (
+        np.sign(delta_twin) > 0 and p.expected_sign == "positive"
+    )
     magnitude_ok = abs(delta_twin) >= 0.05
     if sign_ok and magnitude_ok:
-        return TestResult("T8_cross_instrument",
-                          f"twin={twin} Δ={delta_twin:+.3f} (sign match, mag≥0.05)",
-                          "PASS", "CONSISTENT")
-    return TestResult("T8_cross_instrument",
-                      f"twin={twin} Δ={delta_twin:+.3f}",
-                      "FAIL", f"sign_ok={sign_ok} mag_ok={magnitude_ok}")
+        return TestResult(
+            "T8_cross_instrument", f"twin={twin} Δ={delta_twin:+.3f} (sign match, mag≥0.05)", "PASS", "CONSISTENT"
+        )
+    return TestResult(
+        "T8_cross_instrument", f"twin={twin} Δ={delta_twin:+.3f}", "FAIL", f"sign_ok={sign_ok} mag_ok={magnitude_ok}"
+    )
 
 
 # =============================================================================

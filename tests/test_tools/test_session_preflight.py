@@ -16,7 +16,9 @@ def _mkfile(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def _decision(*, blockers: list[PolicyIssue] | None = None, warnings: list[PolicyIssue] | None = None) -> PolicyDecision:
+def _decision(
+    *, blockers: list[PolicyIssue] | None = None, warnings: list[PolicyIssue] | None = None
+) -> PolicyDecision:
     blockers = blockers or []
     warnings = warnings or []
     return PolicyDecision(
@@ -83,7 +85,9 @@ class TestBuildWarnings:
             patch.object(
                 session_preflight,
                 "evaluate_system_policy",
-                return_value=_decision(warnings=[PolicyIssue(level="warning", code="handoff_missing", message="HANDOFF.md missing.")]),
+                return_value=_decision(
+                    warnings=[PolicyIssue(level="warning", code="handoff_missing", message="HANDOFF.md missing.")]
+                ),
             ),
         ):
             warnings = session_preflight.build_warnings(tmp_path, context="generic")
@@ -202,19 +206,25 @@ class TestSessionClaims:
 
     def test_verify_claim_passes_when_head_matches(self, tmp_path: Path) -> None:
         with patch.object(session_preflight, "system_verify_claim", return_value=(True, [])):
-            ok, warnings = session_preflight.verify_claim(tmp_path, active_tool="codex", claim_path=tmp_path / "claim.json")
+            ok, warnings = session_preflight.verify_claim(
+                tmp_path, active_tool="codex", claim_path=tmp_path / "claim.json"
+            )
         assert ok is True
         assert warnings == []
 
     def test_verify_claim_fails_when_head_changes(self, tmp_path: Path) -> None:
         with patch.object(session_preflight, "system_verify_claim", return_value=(False, ["HEAD mismatch"])):
-            ok, warnings = session_preflight.verify_claim(tmp_path, active_tool="codex", claim_path=tmp_path / "claim.json")
+            ok, warnings = session_preflight.verify_claim(
+                tmp_path, active_tool="codex", claim_path=tmp_path / "claim.json"
+            )
         assert ok is False
         assert any("HEAD mismatch" in warning for warning in warnings)
 
     def test_verify_claim_fails_when_tool_changes(self, tmp_path: Path) -> None:
         with patch.object(session_preflight, "system_verify_claim", return_value=(False, ["tool mismatch"])):
-            ok, warnings = session_preflight.verify_claim(tmp_path, active_tool="codex", claim_path=tmp_path / "claim.json")
+            ok, warnings = session_preflight.verify_claim(
+                tmp_path, active_tool="codex", claim_path=tmp_path / "claim.json"
+            )
         assert ok is False
         assert any("tool mismatch" in warning for warning in warnings)
 

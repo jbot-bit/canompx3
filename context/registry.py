@@ -28,6 +28,7 @@ from context.institutional import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONTEXT_DOCS_DIR = PROJECT_ROOT / "docs" / "context"
+CONTEXT_GENERATED_NOTICE = "Generated from `context/registry.py` and `context/institutional.py`. Do not edit by hand."
 
 FALLBACK_READ_SET: tuple[str, ...] = (
     "AGENTS.md",
@@ -219,6 +220,106 @@ LIVE_VIEWS: dict[str, LiveView] = {
 
 
 TASKS: dict[str, TaskManifest] = {
+    "repo_workflow_audit": TaskManifest(
+        id="repo_workflow_audit",
+        title="Repo Workflow Audit",
+        purpose="Audit startup, routing, launcher, or hook workflow surfaces for rigor, token efficiency, and operator clarity.",
+        intent_terms=(
+            "context resolver",
+            "context_resolver",
+            "token waste",
+            "tokens being wasted",
+            "token burn",
+            "startup",
+            "hook",
+            "hooks",
+            "launcher",
+            "launchers",
+            "routing",
+            "workflow",
+            "operator surface",
+        ),
+        domains=("repo_governance",),
+        verification_profile="investigation",
+        concepts=("runtime_control_plane", "task_packet_contract"),
+        decision_protocol="system_orientation_protocol",
+        answer_contract="orientation_answer",
+        understanding_packs=("coding_runtime_pack", "project_orientation_pack"),
+        doctrine_files=(
+            "AGENTS.md",
+            "CLAUDE.md",
+            "CODEX.md",
+            "docs/governance/document_authority.md",
+            "docs/governance/system_authority_map.md",
+        ),
+        canonical_files=(
+            "context/registry.py",
+            "pipeline/system_brief.py",
+            "scripts/tools/context_resolver.py",
+            "scripts/tools/session_preflight.py",
+            "scripts/tools/task_route_packet.py",
+            "scripts/infra/windows_agent_launch.py",
+            "scripts/infra/claude-worktree.sh",
+            "scripts/infra/codex-project.sh",
+            "scripts/infra/codex-worktree.sh",
+        ),
+        live_views=("verification_context", "system_brief"),
+        briefing_contract="orientation_briefing",
+        expansion_triggers=("unmatched route", "startup noise", "launcher drift", "hook churn"),
+        priority=3,
+    ),
+    "research_discovery": TaskManifest(
+        id="research_discovery",
+        title="Research Discovery",
+        purpose="Triage new edge ideas, discovery questions, and hypothesis-shaping work using the institutional discovery front door.",
+        intent_terms=(
+            "discover",
+            "discovery",
+            "find edge",
+            "new edge",
+            "edge idea",
+            "hypothesis",
+            "triage",
+            "scan for edges",
+            "edge discovery",
+            "explore idea",
+        ),
+        domains=("research_methodology", "repo_governance"),
+        verification_profile="investigation",
+        concepts=("sacred_holdout_policy", "runtime_control_plane"),
+        decision_protocol="research_investigation_protocol",
+        answer_contract="research_investigation_answer",
+        understanding_packs=("coding_runtime_pack", "trading_runtime_pack", "research_methodology_pack"),
+        variables=("orb_utc_window", "holdout_policy_var"),
+        doctrine_files=(
+            "RESEARCH_RULES.md",
+            "TRADING_RULES.md",
+            "docs/STRATEGY_BLUEPRINT.md",
+            "docs/institutional/research_pipeline_contract.md",
+            "docs/institutional/pre_registered_criteria.md",
+            "docs/institutional/mechanism_priors.md",
+            "docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md",
+        ),
+        canonical_files=(
+            "trading_app/holdout_policy.py",
+            "pipeline/build_daily_features.py",
+            "pipeline/asset_configs.py",
+            "pipeline/cost_model.py",
+            "pipeline/dst.py",
+            "scripts/tools/prereg_front_door.py",
+            "scripts/infra/prereg-loop.sh",
+            "trading_app/strategy_discovery.py",
+            "pipeline/db_contracts.py",
+        ),
+        live_views=("gold_db_mcp", "research_context", "system_brief"),
+        briefing_contract="investigation_briefing",
+        expansion_triggers=(
+            "current-stack vs architecture ambiguity appears",
+            "holdout ambiguity appears",
+            "runtime translation becomes the real question",
+        ),
+        priority=6,
+    ),
     "research_investigation": TaskManifest(
         id="research_investigation",
         title="Research Investigation",
@@ -531,7 +632,7 @@ def render_route_text(route: TaskRoute, candidates: tuple[TaskCandidate, ...] = 
     if candidates:
         lines.append("Candidates:")
         lines.extend(f"  - {candidate.task_id} ({candidate.score})" for candidate in candidates)
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def render_route_markdown(route: TaskRoute, candidates: tuple[TaskCandidate, ...] = ()) -> str:
@@ -571,12 +672,14 @@ def render_route_markdown(route: TaskRoute, candidates: tuple[TaskCandidate, ...
     if candidates:
         lines.extend(["", "## Candidates", ""])
         lines.extend(f"- `{candidate.task_id}` (score={candidate.score})" for candidate in candidates)
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def render_source_catalog_markdown() -> str:
     lines = [
         "# Context Source Catalog",
+        "",
+        CONTEXT_GENERATED_NOTICE,
         "",
         "Generated catalog of canonical routing sources and published read models.",
         "",
@@ -600,12 +703,14 @@ def render_source_catalog_markdown() -> str:
     lines.extend(["", "## Variables", ""])
     for variable in VARIABLES.values():
         lines.append(f"- `{variable.id}` — `{variable.owner_path}`")
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def render_task_routes_markdown() -> str:
     lines = [
         "# Task Routes",
+        "",
+        CONTEXT_GENERATED_NOTICE,
         "",
         "Generated canonical task routes for cold-start orientation.",
         "",
@@ -628,12 +733,14 @@ def render_task_routes_markdown() -> str:
         )
     lines.extend(["## Fallback Read Set", ""])
     lines.extend(f"- `{path}`" for path in FALLBACK_READ_SET)
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def render_institutional_markdown() -> str:
     lines = [
         "# Institutional Routing Contracts",
+        "",
+        CONTEXT_GENERATED_NOTICE,
         "",
         "Generated registry of concepts, protocols, answer contracts, and briefing rules.",
         "",
@@ -657,12 +764,14 @@ def render_institutional_markdown() -> str:
     lines.extend(["", "## Briefing Contracts", ""])
     for item in BRIEFING_CONTRACTS.values():
         lines.append(f"- `{item.id}` — {item.summary}")
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def render_readme_markdown() -> str:
     lines = [
         "# Context Routing",
+        "",
+        CONTEXT_GENERATED_NOTICE,
         "",
         "This directory contains generated docs for the canonical task routing registry.",
         "",
@@ -671,7 +780,5 @@ def render_readme_markdown() -> str:
         "- `source-catalog.md` — published live views, packs, variables, and verification steps",
         "- `task-routes.md` — deterministic task routes",
         "- `institutional-contracts.md` — concepts, protocols, and briefing contracts",
-        "",
-        "These docs are generated from `context/registry.py` and `context/institutional.py`.",
     ]
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"

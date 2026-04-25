@@ -74,15 +74,11 @@ class EncodingResult:
     verdict: str = ""
 
 
-def load_target_population(
-    con: duckdb.DuckDBPyConnection, rows: pd.DataFrame
-) -> pd.DataFrame:
+def load_target_population(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> pd.DataFrame:
     """Pull all target trades from validated shelf with garch + target break_dir."""
     dfs: list[pd.DataFrame] = []
     for _, row in rows.iterrows():
-        filter_sql, join_sql = broad.exact_filter_sql(
-            row["filter_type"], row["orb_label"], row["instrument"]
-        )
+        filter_sql, join_sql = broad.exact_filter_sql(row["filter_type"], row["orb_label"], row["instrument"])
         if filter_sql is None:
             continue
         ts = row["orb_label"]
@@ -173,9 +169,7 @@ def get_prior_break_dir(prior_row: pd.Series) -> str | None:
     return str(val)
 
 
-def compute_encodings(
-    target: pd.DataFrame, priors: pd.DataFrame, lam: float = LAMBDA_DEFAULT
-) -> pd.DataFrame:
+def compute_encodings(target: pd.DataFrame, priors: pd.DataFrame, lam: float = LAMBDA_DEFAULT) -> pd.DataFrame:
     """For each target row, compute E1, E2, E3 from resolved priors."""
     results = []
     grouped_priors = priors.groupby(["trading_day", "symbol"])
@@ -197,8 +191,7 @@ def compute_encodings(
 
         day_priors = grouped_priors.get_group(key).copy()
         resolved = day_priors[
-            (day_priors["orb_label"] != row["target_session"])
-            & (day_priors["exit_ts"] < tstart)
+            (day_priors["orb_label"] != row["target_session"]) & (day_priors["exit_ts"] < tstart)
         ].copy()
 
         if len(resolved) == 0:
@@ -230,9 +223,7 @@ def compute_encodings(
     return enc_df
 
 
-def quintile_analysis(
-    pnl: np.ndarray, feature: np.ndarray, outcome: np.ndarray
-) -> dict[str, object]:
+def quintile_analysis(pnl: np.ndarray, feature: np.ndarray, outcome: np.ndarray) -> dict[str, object]:
     """Equal-count quintile split. Returns per-quintile ExpR, WR, N, and monotonicity."""
     valid = np.isfinite(feature) & np.isfinite(pnl)
     if valid.sum() < N_QUINTILES * 10:
@@ -283,9 +274,7 @@ def quintile_analysis(
     }
 
 
-def run_encoding(
-    target: pd.DataFrame, encoding_col: str, session_group: str, sessions: list[str]
-) -> EncodingResult:
+def run_encoding(target: pd.DataFrame, encoding_col: str, session_group: str, sessions: list[str]) -> EncodingResult:
     sub = target[target["target_session"].isin(sessions)].copy()
     res = EncodingResult(encoding=encoding_col, session_group=session_group)
     res.n_total = len(sub)
@@ -464,7 +453,7 @@ def emit(
         lines.append("| Quintile | N | ExpR | WR |")
         lines.append("|---:|---:|---:|---:|")
         for qi, (n, e, w) in enumerate(zip(r.quintile_n, r.quintile_exp, r.quintile_wr)):
-            lines.append(f"| Q{qi+1} | {n} | {e:+.3f} | {w:.3f} |")
+            lines.append(f"| Q{qi + 1} | {n} | {e:+.3f} | {w:.3f} |")
         lines.append("")
 
     # E2 sensitivity
@@ -498,17 +487,19 @@ def emit(
     lines.append("")
 
     # Guardrails
-    lines.extend([
-        "## Guardrails",
-        "",
-        "- **Chronology:** all prior trades must have `exit_ts < target_start_ts` (dynamic per `pipeline.dst.orb_utc_window`).",
-        "- **Canonical sources:** `orb_outcomes` + `daily_features` only. `validated_setups` used to enumerate targets, each verified by raw query.",
-        "- **IS/OOS split:** quintile gates use IS (pre-2026-01-01) only. OOS (2026+) is descriptive and not used for promotion.",
-        "- **Binary gates banned:** no threshold on any encoding. Quintile analysis only.",
-        "- **K budget:** 3 encodings × 3 session groups = 9 main cells. BH-FDR applied at encoding level K=3.",
-        "- **No deployment claims.**",
-        "",
-    ])
+    lines.extend(
+        [
+            "## Guardrails",
+            "",
+            "- **Chronology:** all prior trades must have `exit_ts < target_start_ts` (dynamic per `pipeline.dst.orb_utc_window`).",
+            "- **Canonical sources:** `orb_outcomes` + `daily_features` only. `validated_setups` used to enumerate targets, each verified by raw query.",
+            "- **IS/OOS split:** quintile gates use IS (pre-2026-01-01) only. OOS (2026+) is descriptive and not used for promotion.",
+            "- **Binary gates banned:** no threshold on any encoding. Quintile analysis only.",
+            "- **K budget:** 3 encodings × 3 session groups = 9 main cells. BH-FDR applied at encoding level K=3.",
+            "- **No deployment claims.**",
+            "",
+        ]
+    )
 
     OUTPUT_MD.write_text("\n".join(lines), encoding="utf-8")
 

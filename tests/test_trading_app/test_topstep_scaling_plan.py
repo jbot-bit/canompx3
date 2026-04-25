@@ -206,7 +206,7 @@ class TestTotalOpenLots:
         active = [
             _Trade(_Strategy("MNQ"), 10),  # 1 mini-equiv
             _Trade(_Strategy("MES"), 20),  # 2 mini-equiv
-            _Trade(_Strategy("ES"), 1),    # 1 mini
+            _Trade(_Strategy("ES"), 1),  # 1 mini
         ]
         assert total_open_lots(active) == 4
 
@@ -263,9 +263,7 @@ class TestDayOneScalingPlanAggregation:
         active = [_Trade(_Strategy("MNQ"), 1) for _ in range(5)]
         total = total_open_lots(active)
         day_max = max_lots_for_xfa(50_000, 0)
-        assert total == 1, (
-            f"canonical: 5 MNQ micros = ceil(5/10) = 1 mini-equivalent lot; got {total}"
-        )
+        assert total == 1, f"canonical: 5 MNQ micros = ceil(5/10) = 1 mini-equivalent lot; got {total}"
         assert day_max == 2
         assert total <= day_max, "5 MNQ micros must fit within Day-1 cap (2 lots = 20 micros)"
 

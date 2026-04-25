@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+
 import duckdb
 import numpy as np
 import pandas as pd
 
+from pipeline.paths import GOLD_DB_PATH
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = "gold.db"
+DB_PATH = GOLD_DB_PATH
 SYMBOLS = ["M2K", "MES", "M6E", "MGC"]
 
 MIN_BASE = 500
@@ -172,7 +175,7 @@ def scan_symbol_session(con: duckdb.DuckDBPyConnection, symbol: str, session: st
 
 
 def main() -> int:
-    con = duckdb.connect(DB_PATH, read_only=True)
+    con = duckdb.connect(str(DB_PATH), read_only=True)
     sess_df = con.execute(
         """
         SELECT symbol, orb_label, COUNT(*) AS n
@@ -207,14 +210,18 @@ def main() -> int:
     all_df = all_df.sort_values(["avg_on", "uplift"], ascending=False)
     all_df.to_csv(p_all, index=False)
 
-    short = all_df[
-        (all_df["signals_per_year"] >= MIN_SIGNALS_PER_YEAR)
-        & (all_df["avg_on"] >= MIN_AVG_ON)
-        & (all_df["uplift"] >= MIN_UPLIFT)
-        & (all_df["years_total"] >= MIN_YEARS_TOTAL)
-        & (all_df["years_pos_ratio"] >= MIN_YEARS_POS_RATIO)
-        & (all_df["test_uplift"].fillna(-999) >= 0)
-    ].copy().sort_values(["avg_on", "uplift"], ascending=False)
+    short = (
+        all_df[
+            (all_df["signals_per_year"] >= MIN_SIGNALS_PER_YEAR)
+            & (all_df["avg_on"] >= MIN_AVG_ON)
+            & (all_df["uplift"] >= MIN_UPLIFT)
+            & (all_df["years_total"] >= MIN_YEARS_TOTAL)
+            & (all_df["years_pos_ratio"] >= MIN_YEARS_POS_RATIO)
+            & (all_df["test_uplift"].fillna(-999) >= 0)
+        ]
+        .copy()
+        .sort_values(["avg_on", "uplift"], ascending=False)
+    )
     short.to_csv(p_short, index=False)
 
     lines = [

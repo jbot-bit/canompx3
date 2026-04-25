@@ -48,8 +48,13 @@
 
 ### Medium-value un-tested axes
 
-6. **Weekly and monthly HTF levels** — our `daily_features` only stores daily-level features. Weekly_high, monthly_high, 5-day-rolling-high would require new pipeline work.
-   - *Reopen:* add weekly/monthly features to `pipeline/build_daily_features.py`; separate from this study.
+6. **Weekly and monthly HTF levels beyond the killed v1 family** — correction as of 2026-04-20:
+   `daily_features` already stores `prev_week_*` / `prev_month_*`, and the simple
+   break-through family was scanned and FAMILY-KILLED on 2026-04-18. What remains
+   untested is the *next mechanism layer*: first-touch state, touched-to-date
+   accumulation, rolling 5-day / 20-day highs, and distance / inside-outside
+   conditioning relative to those levels.
+   - *Reopen:* add first-touch / touched-to-date or rolling-level features to the pipeline; do NOT reopen the already-killed simple break-through predicate.
    - *Literature needed:* ideally Dalton or Murphy on HTF levels.
 
 7. **Market profile features (VAH/VAL/POC)** — classical S/R framework. Not computed anywhere.

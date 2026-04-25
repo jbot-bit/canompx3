@@ -29,6 +29,7 @@ US_OPEN_UTC_START = 13  # 13:30 UTC (EDT) or 14:00+ UTC (EST) — grab window 13
 
 # ─── Data loading ────────────────────────────────────────────────────────────
 
+
 def load_features(sym: str) -> pd.DataFrame:
     con = duckdb.connect(str(DB_PATH), read_only=True)
     q = f"""
@@ -73,11 +74,11 @@ def find_entry_bar_idx(bars: pd.DataFrame, trading_day_date, us_dst: bool) -> in
     if us_dst:
         # EDT: 9:30am = 13:30 UTC
         window_start = day + pd.Timedelta(hours=13, minutes=28)
-        window_end   = day + pd.Timedelta(hours=13, minutes=45)
+        window_end = day + pd.Timedelta(hours=13, minutes=45)
     else:
         # EST: 9:30am = 14:30 UTC
         window_start = day + pd.Timedelta(hours=14, minutes=28)
-        window_end   = day + pd.Timedelta(hours=14, minutes=45)
+        window_end = day + pd.Timedelta(hours=14, minutes=45)
     mask = (bars["ts_utc"] >= window_start) & (bars["ts_utc"] <= window_end)
     idxs = bars.index[mask].tolist()
     if not idxs:
@@ -85,8 +86,9 @@ def find_entry_bar_idx(bars: pd.DataFrame, trading_day_date, us_dst: bool) -> in
     return idxs[0]
 
 
-def simulate_trade(bars: pd.DataFrame, entry_idx: int, direction: str,
-                   atr: float, rr: float = RR, max_bars: int = MAX_BARS):
+def simulate_trade(
+    bars: pd.DataFrame, entry_idx: int, direction: str, atr: float, rr: float = RR, max_bars: int = MAX_BARS
+):
     """
     Enter at open of bars[entry_idx], direction = 'long'|'short'.
     Stop  = 0.5 * ATR20
@@ -101,10 +103,10 @@ def simulate_trade(bars: pd.DataFrame, entry_idx: int, direction: str,
     stop_dist = 0.5 * atr
     entry_price = bars.iloc[entry_idx]["open"]
     if direction == "long":
-        stop   = entry_price - stop_dist
+        stop = entry_price - stop_dist
         target = entry_price + stop_dist * rr
     else:
-        stop   = entry_price + stop_dist
+        stop = entry_price + stop_dist
         target = entry_price - stop_dist * rr
 
     end_idx = min(entry_idx + max_bars, len(bars))
@@ -124,6 +126,7 @@ def simulate_trade(bars: pd.DataFrame, entry_idx: int, direction: str,
 
 
 # ─── Analysis helpers ─────────────────────────────────────────────────────────
+
 
 def yr_summary(df: pd.DataFrame, label: str) -> dict:
     df = df[df["pnl_r"].notna()].copy()
@@ -155,17 +158,18 @@ def print_result(r: dict):
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 
+
 def run(sym: str):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"SYMBOL: {sym}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     feats = load_features(sym)
-    bars  = load_bars(sym)
+    bars = load_bars(sym)
 
-    results_mon_long    = []
+    results_mon_long = []
     results_london_follow = []
-    results_london_long  = []
+    results_london_long = []
     results_london_short = []
 
     for _, row in feats.iterrows():
@@ -177,8 +181,7 @@ def run(sym: str):
         if row["is_monday"]:
             pnl = simulate_trade(bars, entry_idx, "long", atr)
             if pnl is not None:
-                results_mon_long.append({"year": row["year"], "pnl_r": pnl,
-                                         "trading_day": row["trading_day"]})
+                results_mon_long.append({"year": row["year"], "pnl_r": pnl, "trading_day": row["trading_day"]})
 
         # ── S2: London direction -> NY follow ──────────────────────────
         ld = row["london_dir"]
@@ -186,9 +189,9 @@ def run(sym: str):
             direction = "long" if ld == "long" else "short"
             pnl = simulate_trade(bars, entry_idx, direction, atr)
             if pnl is not None:
-                results_london_follow.append({"year": row["year"], "pnl_r": pnl,
-                                              "direction": direction,
-                                              "trading_day": row["trading_day"]})
+                results_london_follow.append(
+                    {"year": row["year"], "pnl_r": pnl, "direction": direction, "trading_day": row["trading_day"]}
+                )
                 if ld == "long":
                     results_london_long.append({"year": row["year"], "pnl_r": pnl})
                 else:
@@ -229,9 +232,9 @@ if __name__ == "__main__":
         all_res.append(r)
 
     # Summary table
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("SUMMARY")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"{'Symbol':<8} {'Strategy':<22} {'n':>5} {'WR%':>6} {'avg_r':>7} {'years':>8}")
     print("-" * 60)
     for r in all_res:

@@ -69,6 +69,39 @@ sql = """WITH recent AS (SELECT * FROM bars_1m) SELECT * FROM recent"""
         violations = check_drift.check_schema_query_consistency(tmp_path)
         assert len(violations) == 0
 
+    def test_skips_prose_triple_quoted_strings(self, tmp_path):
+        _mkfile(tmp_path / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts_utc TEXT)")
+        _mkfile(
+            tmp_path / "work_queue.py",
+            '''
+HANDOFF_HEADER = """# HANDOFF.md
+
+Please update the baton before you leave.
+"""
+''',
+        )
+        violations = check_drift.check_schema_query_consistency(tmp_path)
+        assert violations == []
+
+    def test_skips_prose_with_with_and_from_phrasing(self, tmp_path):
+        _mkfile(tmp_path / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts_utc TEXT)")
+        _mkfile(
+            tmp_path / "db_lock.py",
+            '''
+DOC = """Usage:
+    from pipeline.db_lock import PipelineLock
+
+    With dynamic sessions, adding a nearby session from silently shrinking
+    another window would be wrong.
+
+    with PipelineLock("builder"):
+        pass
+"""
+''',
+        )
+        violations = check_drift.check_schema_query_consistency(tmp_path)
+        assert violations == []
+
 
 # ── Check 5: Import cycles ────────────────────────────────────────────
 
@@ -345,6 +378,41 @@ sql = """SELECT COUNT(*) FROM validated_setups
         violations = check_drift.check_schema_query_consistency_trading_app(tmp_path / "trading_app")
         assert len(violations) == 0
 
+    def test_skips_prose_docstrings_in_trading_app(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        _mkfile(tmp_path / "pipeline" / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts TEXT)")
+        _mkfile(tmp_path / "trading_app" / "db_manager.py", "CREATE TABLE IF NOT EXISTS validated_setups (id TEXT)")
+        _mkfile(
+            tmp_path / "trading_app" / "lane_allocator.py",
+            '''
+def helper():
+    """Select top lanes for a profile.
+
+    With dynamic sessions, a nearby session from silently shrinking another
+    window would be wrong.
+    """
+''',
+        )
+        violations = check_drift.check_schema_query_consistency_trading_app(tmp_path / "trading_app")
+        assert violations == []
+
+    def test_includes_trade_journal_schema_sources(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        _mkfile(tmp_path / "pipeline" / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts TEXT)")
+        _mkfile(tmp_path / "trading_app" / "db_manager.py", "CREATE TABLE IF NOT EXISTS validated_setups (id TEXT)")
+        _mkfile(
+            tmp_path / "trading_app" / "live" / "trade_journal.py",
+            "LIVE_TRADES_SCHEMA = '''CREATE TABLE IF NOT EXISTS live_trades (trade_id TEXT)'''",
+        )
+        _mkfile(
+            tmp_path / "trading_app" / "live" / "dashboard.py",
+            '''
+sql = """SELECT trade_id FROM live_trades"""
+''',
+        )
+        violations = check_drift.check_schema_query_consistency_trading_app(tmp_path / "trading_app")
+        assert violations == []
+
 
 # ── Check 19: Timezone hygiene ────────────────────────────────────────
 
@@ -605,16 +673,52 @@ class TestStaleScratchDb:
     """Check 37: Canonical gold.db must exist at project root."""
 
     def test_catches_missing_canonical(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
-        # No gold.db at project root
+        # Point the canonical DB resolver at a path that doesn't exist
+        # AND ensure CI env not set (preserve local fail-closed behavior)
+        nonexistent_db = tmp_path / "nonexistent" / "gold.db"
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", str(nonexistent_db))
+        monkeypatch.delenv("CI", raising=False)
+        monkeypatch.delenv("SKIP_DB_CHECKS", raising=False)
         violations = check_drift.check_stale_scratch_db()
         assert len(violations) > 0
         assert "not found" in violations[0].lower() or "Canonical" in violations[0]
 
+    def test_skips_in_ci_when_db_missing(self, tmp_path, monkeypatch, capsys):
+        """CI=true env → check 37 returns [] (silent skip with CI banner)
+        instead of violation. Preserves local fail-closed; CI gets clean."""
+        nonexistent_db = tmp_path / "nonexistent" / "gold.db"
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", str(nonexistent_db))
+        monkeypatch.setenv("CI", "true")
+        violations = check_drift.check_stale_scratch_db()
+        assert violations == [], f"CI env should silence the missing-DB check; got {violations}"
+        captured = capsys.readouterr()
+        assert "SKIPPED" in captured.out, "CI banner should print so logs show what was skipped"
+
+    def test_skip_db_check_for_ci_helper_local_returns_violation(self, monkeypatch):
+        """Helper unit test: no CI env → returns the violation message."""
+        monkeypatch.delenv("CI", raising=False)
+        monkeypatch.delenv("SKIP_DB_CHECKS", raising=False)
+        result = check_drift._skip_db_check_for_ci("  test reason")
+        assert result == ["  test reason"]
+
+    def test_skip_db_check_for_ci_helper_ci_returns_empty(self, monkeypatch):
+        """Helper unit test: CI=true → returns [] (silent skip)."""
+        monkeypatch.setenv("CI", "true")
+        result = check_drift._skip_db_check_for_ci("  test reason")
+        assert result == []
+
+    def test_skip_db_check_for_ci_helper_skip_db_checks_env(self, monkeypatch):
+        """Helper unit test: SKIP_DB_CHECKS=1 (manual override outside CI) → skip."""
+        monkeypatch.delenv("CI", raising=False)
+        monkeypatch.setenv("SKIP_DB_CHECKS", "1")
+        result = check_drift._skip_db_check_for_ci("  test reason")
+        assert result == []
+
     def test_passes_with_db_no_scratch(self, tmp_path, monkeypatch):
         """If canonical DB exists and no scratch copy, no violation."""
-        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
-        (tmp_path / "gold.db").write_bytes(b"fake db")
+        canonical_db = tmp_path / "gold.db"
+        canonical_db.write_bytes(b"fake db")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", str(canonical_db))
         # Patch Path to make C:/db/gold.db appear nonexistent
         original_exists = Path.exists
 
@@ -626,6 +730,46 @@ class TestStaleScratchDb:
         monkeypatch.setattr(Path, "exists", mock_exists)
         violations = check_drift.check_stale_scratch_db()
         assert len(violations) == 0
+
+    def test_honors_duckdb_path_override_when_project_root_has_no_db(self, tmp_path, monkeypatch):
+        """Check 37 must honor canonical pipeline.paths.GOLD_DB_PATH delegation.
+
+        Worktree scenario: PROJECT_ROOT has no gold.db, but DUCKDB_PATH points
+        to a real DB elsewhere (e.g., the main repo's canonical gold.db).
+        Per integrity-guardian.md rule 2 (canonical-source delegation), check
+        37 must call pipeline.check_drift._get_db_path() — which honors the
+        GOLD_DB_PATH_FOR_CHECKS override hook (production reads
+        pipeline.paths.GOLD_DB_PATH, which honors DUCKDB_PATH).
+
+        Suppresses no-scratch verification by patching Path.exists like the
+        sibling test does.
+        """
+        # Worktree: project_root has NO gold.db
+        worktree_root = tmp_path / "worktree"
+        worktree_root.mkdir()
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", worktree_root)
+
+        # Canonical DB lives elsewhere — pointed to by the test override hook
+        canonical_db = tmp_path / "canonical_repo" / "gold.db"
+        canonical_db.parent.mkdir()
+        canonical_db.write_bytes(b"fake canonical db")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", str(canonical_db))
+
+        # Suppress C:/db/gold.db scratch copy false-positive
+        original_exists = Path.exists
+
+        def mock_exists(self):
+            if str(self) == r"C:\db\gold.db" or str(self) == "C:/db/gold.db":
+                return False
+            return original_exists(self)
+
+        monkeypatch.setattr(Path, "exists", mock_exists)
+
+        violations = check_drift.check_stale_scratch_db()
+        assert len(violations) == 0, (
+            f"Expected check 37 to honor GOLD_DB_PATH_FOR_CHECKS override "
+            f"and find canonical DB at {canonical_db}. Got: {violations}"
+        )
 
 
 # ── Check 44: Variant selection metric ────────────────────────────────
@@ -722,7 +866,10 @@ class TestValidatedSetupsWriterAllowlist:
 
     def test_catches_noncanonical_writer(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "rogue_writer.py", "con.execute(\"UPDATE validated_setups SET status = 'active'\")\n")
+        _mkfile(
+            tmp_path / "trading_app" / "rogue_writer.py",
+            "con.execute(\"UPDATE validated_setups SET status = 'active'\")\n",
+        )
         violations = check_drift.check_validated_setups_writer_allowlist()
         assert len(violations) == 1
         assert "rogue_writer.py" in violations[0]
@@ -731,7 +878,7 @@ class TestValidatedSetupsWriterAllowlist:
         _patch_dirs(monkeypatch, tmp_path)
         _mkfile(
             tmp_path / "trading_app" / "strategy_validator.py",
-            "con.execute(\"INSERT OR REPLACE INTO validated_setups VALUES (?)\")\n",
+            'con.execute("INSERT OR REPLACE INTO validated_setups VALUES (?)")\n',
         )
         _mkfile(
             tmp_path / "scripts" / "migrations" / "fixup.py",
@@ -959,3 +1106,65 @@ class TestDeployableSubsetOfActive:
         # MNQ dropped from DEPLOYABLE while still expected → violation
         assert any("MNQ" in v for v in violations)
         assert any("missing" in v.lower() for v in violations)
+
+
+# ── Check 96: Shared profile fingerprint canonical ───────────────────
+
+
+class TestSharedProfileFingerprintCanonical:
+    """Check 96: account_survival.py must import build_profile_fingerprint
+    from canonical derived_state module. Detection must be syntax-aware
+    (handles single-line and multi-line `from X import (...)` forms)."""
+
+    @staticmethod
+    def _setup(tmp_path, monkeypatch, derived_text, account_text):
+        derived_dir = tmp_path / "trading_app"
+        derived_dir.mkdir()
+        (derived_dir / "derived_state.py").write_text(derived_text, encoding="utf-8")
+        (derived_dir / "account_survival.py").write_text(account_text, encoding="utf-8")
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", derived_dir)
+
+    def test_passes_single_line_import(self, tmp_path, monkeypatch):
+        """Single-line `from X import build_profile_fingerprint` → pass."""
+        derived = "def build_profile_fingerprint(p): return 'x'\n"
+        account = "from trading_app.derived_state import build_profile_fingerprint\n"
+        self._setup(tmp_path, monkeypatch, derived, account)
+        violations = check_drift.check_shared_profile_fingerprint_canonical()
+        assert violations == []
+
+    def test_passes_multi_line_import(self, tmp_path, monkeypatch):
+        """Multi-line `from X import (Y, build_profile_fingerprint, Z)` → pass.
+
+        Reproduces the post-ruff-I001 form that breaks the literal-string
+        check. After fix, ast-based detection must handle this.
+        """
+        derived = "def build_profile_fingerprint(p): return 'x'\n"
+        account = (
+            "from trading_app.derived_state import (\n"
+            "    build_code_fingerprint,\n"
+            "    build_db_identity,\n"
+            "    build_profile_fingerprint,\n"
+            "    build_state_envelope,\n"
+            ")\n"
+        )
+        self._setup(tmp_path, monkeypatch, derived, account)
+        violations = check_drift.check_shared_profile_fingerprint_canonical()
+        assert violations == [], f"Multi-line import should pass; got: {violations}"
+
+    def test_catches_missing_import(self, tmp_path, monkeypatch):
+        """If account_survival doesn't import build_profile_fingerprint at
+        all, must violate."""
+        derived = "def build_profile_fingerprint(p): return 'x'\n"
+        account = "from trading_app.config import something_else\n"
+        self._setup(tmp_path, monkeypatch, derived, account)
+        violations = check_drift.check_shared_profile_fingerprint_canonical()
+        assert any("must import build_profile_fingerprint" in v for v in violations)
+
+    def test_catches_import_from_wrong_module(self, tmp_path, monkeypatch):
+        """If imported from non-canonical module, must violate (module match
+        is part of the canonical-source enforcement)."""
+        derived = "def build_profile_fingerprint(p): return 'x'\n"
+        account = "from somewhere_else import build_profile_fingerprint\n"
+        self._setup(tmp_path, monkeypatch, derived, account)
+        violations = check_drift.check_shared_profile_fingerprint_canonical()
+        assert any("must import build_profile_fingerprint" in v for v in violations)

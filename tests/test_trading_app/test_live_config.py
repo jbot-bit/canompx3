@@ -20,7 +20,11 @@ from trading_app.live_config import (
 
 @pytest.fixture
 def live_config_db(tmp_path):
-    """Create temp DB with validated_setups, experimental_strategies, family_rr_locks."""
+    """Create temp DB with validated_setups, experimental_strategies,
+    family_rr_locks, regime schema, and a minimal daily_features row for
+    every active instrument so the ATR regime gate in build_live_portfolio
+    can resolve without touching the live gold.db.
+    """
     db_path = tmp_path / "live_test.db"
     con = duckdb.connect(str(db_path))
     con.execute("""
@@ -64,9 +68,22 @@ def live_config_db(tmp_path):
             stop_multiplier DOUBLE DEFAULT 1.0
         )
     """)
-    from pipeline.init_db import FAMILY_RR_LOCKS_SCHEMA
+    from pipeline.init_db import DAILY_FEATURES_SCHEMA, FAMILY_RR_LOCKS_SCHEMA
 
     con.execute(FAMILY_RR_LOCKS_SCHEMA)
+    con.execute(DAILY_FEATURES_SCHEMA)
+
+    # Seed one daily_features row per active instrument with atr_20_pct
+    # above every INSTRUMENT_ATR_GATE threshold so the ATR gate in
+    # build_live_portfolio never skips the portfolio build in tests.
+    for inst in ("MNQ", "MGC", "MES"):
+        con.execute(
+            """
+            INSERT INTO daily_features (trading_day, symbol, orb_minutes, atr_20_pct)
+            VALUES (?, ?, 5, 80.0)
+            """,
+            [date(2026, 3, 31), inst],
+        )
     con.close()
     # Rolling portfolio queries regime_strategies + regime_validated — use real schema.
     from trading_app.regime.schema import init_regime_schema
@@ -812,7 +829,7 @@ def _mock_rolling_result(rolling_avg_expr: float) -> list[dict]:
 class TestWeightOverrideAndRecovery:
     """Weight override + auto-recovery using rolling_avg_expectancy_r (family avg)."""
 
-    def test_weight_override_applied(self):
+    def test_weight_override_applied(self, live_config_db):
         """Spec with weight_override=0.5 -> strategy weight is 0.5, DEMOTED in notes."""
         with (
             patch("trading_app.live_config.LIVE_PORTFOLIO", [_DEMOTED_SPEC]),
@@ -821,14 +838,14 @@ class TestWeightOverrideAndRecovery:
                 return_value=_mock_rolling_result(0.35),
             ),
         ):
-            portfolio, notes = build_live_portfolio(instrument="MGC")
+            portfolio, notes = build_live_portfolio(instrument="MGC", db_path=live_config_db)
 
         assert len(portfolio.strategies) == 1
         assert portfolio.strategies[0].weight == 0.5
         demoted_notes = [n for n in notes if "DEMOTED" in n]
         assert len(demoted_notes) == 1
 
-    def test_recovery_promotes_back_using_rolling_avg(self):
+    def test_recovery_promotes_back_using_rolling_avg(self, live_config_db):
         """Rolling avg ExpR=0.28 above threshold 0.25 -> weight=1.0, RECOVERED in notes."""
         with (
             patch("trading_app.live_config.LIVE_PORTFOLIO", [_DEMOTED_WITH_RECOVERY_SPEC]),
@@ -837,7 +854,7 @@ class TestWeightOverrideAndRecovery:
                 return_value=_mock_rolling_result(0.28),
             ),
         ):
-            portfolio, notes = build_live_portfolio(instrument="MGC")
+            portfolio, notes = build_live_portfolio(instrument="MGC", db_path=live_config_db)
 
         assert len(portfolio.strategies) == 1
         assert portfolio.strategies[0].weight == 1.0
@@ -845,7 +862,7 @@ class TestWeightOverrideAndRecovery:
         assert len(recovered_notes) == 1
         assert "rolling_avg_ExpR=+0.280" in recovered_notes[0]
 
-    def test_recovery_does_not_fire_below_threshold(self):
+    def test_recovery_does_not_fire_below_threshold(self, live_config_db):
         """Rolling avg ExpR=0.18 below threshold 0.25 -> weight stays 0.5, DEMOTED in notes."""
         with (
             patch("trading_app.live_config.LIVE_PORTFOLIO", [_DEMOTED_WITH_RECOVERY_SPEC]),
@@ -854,7 +871,7 @@ class TestWeightOverrideAndRecovery:
                 return_value=_mock_rolling_result(0.18),
             ),
         ):
-            portfolio, notes = build_live_portfolio(instrument="MGC")
+            portfolio, notes = build_live_portfolio(instrument="MGC", db_path=live_config_db)
 
         assert len(portfolio.strategies) == 1
         assert portfolio.strategies[0].weight == 0.5
@@ -863,7 +880,7 @@ class TestWeightOverrideAndRecovery:
         recovered_notes = [n for n in notes if "RECOVERED" in n]
         assert len(recovered_notes) == 0
 
-    def test_recovery_only_from_rolling_source(self):
+    def test_recovery_only_from_rolling_source(self, live_config_db):
         """Empty rolling results -> baseline fallback, weight stays 0.5 even if baseline ExpR > threshold."""
         # Mock baseline variant with high ExpR — recovery must NOT fire because source is "baseline"
         baseline_match = {
@@ -897,7 +914,7 @@ class TestWeightOverrideAndRecovery:
                 return_value=(baseline_match, None),
             ),
         ):
-            portfolio, notes = build_live_portfolio(instrument="MGC")
+            portfolio, notes = build_live_portfolio(instrument="MGC", db_path=live_config_db)
 
         # Baseline match loads, but recovery gate requires source=="rolling" — weight stays 0.5
         assert len(portfolio.strategies) == 1

@@ -40,6 +40,7 @@ from pipeline.build_daily_features import (
     detect_break,
     verify_daily_features,
 )
+from pipeline.dst import compute_trading_day_from_timestamp
 
 # =============================================================================
 # HELPERS
@@ -109,6 +110,11 @@ class TestTradingDay:
         """Range is exactly 24 hours."""
         start, end = compute_trading_day_utc_range(date(2024, 6, 15))
         assert (end - start) == timedelta(hours=24)
+
+    def test_canonical_timestamp_helper_requires_timezone(self):
+        """Naive timestamps are rejected instead of guessed."""
+        with pytest.raises(ValueError, match="timezone-aware"):
+            compute_trading_day_from_timestamp(datetime(2024, 1, 4, 23, 0, 0))
 
 
 # =============================================================================
@@ -1251,11 +1257,11 @@ class TestHTFLevelFields:
 
         # Week Mon-Fri; interior Tuesday has the highest high; Thursday has the lowest low
         rows = [
-            self._make_row(date(2024, 2, 5), 100.0, 102.0, 99.0, 101.0),   # Mon
+            self._make_row(date(2024, 2, 5), 100.0, 102.0, 99.0, 101.0),  # Mon
             self._make_row(date(2024, 2, 6), 101.0, 130.0, 100.0, 120.0),  # Tue — max high
             self._make_row(date(2024, 2, 7), 120.0, 125.0, 115.0, 118.0),  # Wed
-            self._make_row(date(2024, 2, 8), 118.0, 119.0, 80.0, 90.0),    # Thu — min low
-            self._make_row(date(2024, 2, 9), 90.0, 95.0, 88.0, 93.0),      # Fri — last close
+            self._make_row(date(2024, 2, 8), 118.0, 119.0, 80.0, 90.0),  # Thu — min low
+            self._make_row(date(2024, 2, 9), 90.0, 95.0, 88.0, 93.0),  # Fri — last close
             # Next Monday's row — inspects prev_week from Feb 5-9
             self._make_row(date(2024, 2, 12), 93.0, 98.0, 91.0, 96.0),
         ]

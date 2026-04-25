@@ -53,18 +53,33 @@ THRESHOLDS = [60, 70, 80]
 SEED = 20260415
 
 SESSIONS = [
-    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-    "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE", "BRISBANE_1025",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "EUROPE_FLOW",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
+    "BRISBANE_1025",
 ]
 
 DEPLOYED = {
-    "MNQ_EUROPE_FLOW_5_1.5_long", "MNQ_EUROPE_FLOW_5_1.5_short",
-    "MNQ_SINGAPORE_OPEN_30_1.5_long", "MNQ_SINGAPORE_OPEN_30_1.5_short",
-    "MNQ_COMEX_SETTLE_5_1.5_long", "MNQ_COMEX_SETTLE_5_1.5_short",
-    "MNQ_NYSE_OPEN_5_1.0_long", "MNQ_NYSE_OPEN_5_1.0_short",
-    "MNQ_TOKYO_OPEN_5_1.5_long", "MNQ_TOKYO_OPEN_5_1.5_short",
-    "MNQ_US_DATA_1000_15_1.5_long", "MNQ_US_DATA_1000_15_1.5_short",
+    "MNQ_EUROPE_FLOW_5_1.5_long",
+    "MNQ_EUROPE_FLOW_5_1.5_short",
+    "MNQ_SINGAPORE_OPEN_30_1.5_long",
+    "MNQ_SINGAPORE_OPEN_30_1.5_short",
+    "MNQ_COMEX_SETTLE_5_1.5_long",
+    "MNQ_COMEX_SETTLE_5_1.5_short",
+    "MNQ_NYSE_OPEN_5_1.0_long",
+    "MNQ_NYSE_OPEN_5_1.0_short",
+    "MNQ_TOKYO_OPEN_5_1.5_long",
+    "MNQ_TOKYO_OPEN_5_1.5_short",
+    "MNQ_US_DATA_1000_15_1.5_long",
+    "MNQ_US_DATA_1000_15_1.5_short",
 }
 
 
@@ -97,7 +112,7 @@ def test_cell(con, inst, sess, apt, rr, direction, threshold):
     sd_off = off["pnl_r"].std(ddof=1)
     sr_on = expr_on / sd_on if sd_on > 0 else 0.0
     sr_off = expr_off / sd_off if sd_off > 0 else 0.0
-    var_ratio = (sd_on ** 2) / (sd_off ** 2) if sd_off > 0 else 0.0
+    var_ratio = (sd_on**2) / (sd_off**2) if sd_off > 0 else 0.0
     wr_on = float((on["pnl_r"] > 0).mean())
     wr_off = float((off["pnl_r"] > 0).mean())
     mae_on = float(on["mae_r"].dropna().mean()) if not on["mae_r"].dropna().empty else 0.0
@@ -128,16 +143,32 @@ def test_cell(con, inst, sess, apt, rr, direction, threshold):
     p_sharpe = (beats + 1) / (B + 1)
 
     return {
-        "inst": inst, "sess": sess, "apt": apt, "rr": rr, "dir": direction, "thresh": threshold,
+        "inst": inst,
+        "sess": sess,
+        "apt": apt,
+        "rr": rr,
+        "dir": direction,
+        "thresh": threshold,
         "deployed": f"{inst}_{sess}_{apt}_{rr}_{direction}" in DEPLOYED,
-        "n_total": len(df), "n_on": len(on), "n_off": len(off),
-        "expr_on": float(expr_on), "expr_off": float(expr_off),
+        "n_total": len(df),
+        "n_on": len(on),
+        "n_off": len(off),
+        "expr_on": float(expr_on),
+        "expr_off": float(expr_off),
         "mean_lift": float(expr_on - expr_off),
-        "sr_on": float(sr_on), "sr_off": float(sr_off), "sr_lift": float(sr_on - sr_off),
+        "sr_on": float(sr_on),
+        "sr_off": float(sr_off),
+        "sr_lift": float(sr_on - sr_off),
         "var_ratio": float(var_ratio),
-        "wr_on": wr_on, "wr_off": wr_off, "wr_lift": float(wr_on - wr_off),
-        "mae_on": mae_on, "mae_off": mae_off, "mae_diff": float(mae_on - mae_off),
-        "t_stat": float(t_stat), "p_mean": float(p_mean), "p_sharpe": float(p_sharpe),
+        "wr_on": wr_on,
+        "wr_off": wr_off,
+        "wr_lift": float(wr_on - wr_off),
+        "mae_on": mae_on,
+        "mae_off": mae_off,
+        "mae_diff": float(mae_on - mae_off),
+        "t_stat": float(t_stat),
+        "p_mean": float(p_mean),
+        "p_sharpe": float(p_sharpe),
     }
 
 
@@ -208,29 +239,37 @@ def main():
     print("\n=== Per (instrument, session) sr_lift direction tally ===")
     print(f"  {'Inst':4} {'Session':16} {'Total':6} {'Pos':5} {'StrongPos':10} {'Neg':5} {'StrongNeg':10} {'BH-FDR':8}")
     for (inst, sess), a in sorted(sess_agg.items(), key=lambda x: (x[0][0], x[0][1])):
-        print(f"  {inst:4} {sess:16} {a['total']:6} {a['pos']:5} {a['strong_pos']:10} "
-              f"{a['neg']:5} {a['strong_neg']:10} {a['survivors']:8}")
+        print(
+            f"  {inst:4} {sess:16} {a['total']:6} {a['pos']:5} {a['strong_pos']:10} "
+            f"{a['neg']:5} {a['strong_neg']:10} {a['survivors']:8}"
+        )
 
     # Identify sessions where garch works
     print("\n=== Sessions where garch LIFTS Sharpe (strong_pos > strong_neg by 3+) ===")
     for (inst, sess), a in sess_agg.items():
         if a["strong_pos"] - a["strong_neg"] >= 3 and a["pos"] / max(a["total"], 1) >= 0.7:
-            print(f"  {inst} {sess}: {a['pos']}/{a['total']} positive, {a['strong_pos']} strong_pos, {a['strong_neg']} strong_neg, {a['survivors']} BH-FDR survivors")
+            print(
+                f"  {inst} {sess}: {a['pos']}/{a['total']} positive, {a['strong_pos']} strong_pos, {a['strong_neg']} strong_neg, {a['survivors']} BH-FDR survivors"
+            )
 
     print("\n=== Sessions where garch HURTS Sharpe (strong_neg > strong_pos by 3+, potential SKIP) ===")
     for (inst, sess), a in sess_agg.items():
         if a["strong_neg"] - a["strong_pos"] >= 3 and a["neg"] / max(a["total"], 1) >= 0.7:
-            print(f"  {inst} {sess}: {a['neg']}/{a['total']} negative, {a['strong_neg']} strong_neg, {a['strong_pos']} strong_pos")
+            print(
+                f"  {inst} {sess}: {a['neg']}/{a['total']} negative, {a['strong_neg']} strong_neg, {a['strong_pos']} strong_pos"
+            )
 
     # Top 30 survivors
     print("\n=== Top 30 cells by |sr_lift| among BH-FDR survivors ===")
     top = sorted(global_survivors, key=lambda r: -abs(r["sr_lift"]))[:30]
     for r in top:
         dep = "[DEPLOYED]" if r["deployed"] else ""
-        print(f"  {r['inst']} {r['sess']:14} O{r['apt']:2} RR{r['rr']} {r['dir']:5} @{r['thresh']} "
-              f"N={r['n_on']}/{r['n_off']:4} sr_lift={r['sr_lift']:+.3f} "
-              f"var={r['var_ratio']:.2f} wr_lift={r['wr_lift']:+.1%} "
-              f"p_sharpe={r['p_sharpe']:.4f} {dep}")
+        print(
+            f"  {r['inst']} {r['sess']:14} O{r['apt']:2} RR{r['rr']} {r['dir']:5} @{r['thresh']} "
+            f"N={r['n_on']}/{r['n_off']:4} sr_lift={r['sr_lift']:+.3f} "
+            f"var={r['var_ratio']:.2f} wr_lift={r['wr_lift']:+.1%} "
+            f"p_sharpe={r['p_sharpe']:.4f} {dep}"
+        )
 
     emit(results, sess_agg, len(global_survivors), tested)
 
@@ -241,7 +280,8 @@ def emit(results, sess_agg, n_survivors, n_tested):
         "# Garch Overlay — All-Sessions Universality (Trader Discipline)",
         "",
         "**Date:** 2026-04-15",
-        "**Scope:** 12 sessions × 3 instruments × 2 directions × 3 apertures × 3 RRs × 3 thresholds = 1944 theoretical cells. " + f"{n_tested} testable (N>=60 total, N>=30 both sides).",
+        "**Scope:** 12 sessions × 3 instruments × 2 directions × 3 apertures × 3 RRs × 3 thresholds = 1944 theoretical cells. "
+        + f"{n_tested} testable (N>=60 total, N>=30 both sides).",
         "",
         "**Question:** where does garch overlay work, inversely-work, or produce no signal?",
         "",
@@ -253,15 +293,21 @@ def emit(results, sess_agg, n_survivors, n_tested):
         "|---|---|---|---|---|---|---|---|",
     ]
     for (inst, sess), a in sorted(sess_agg.items(), key=lambda x: (x[0][0], x[0][1])):
-        lines.append(f"| {inst} | {sess} | {a['total']} | {a['pos']} | {a['strong_pos']} | "
-                     f"{a['neg']} | {a['strong_neg']} | {a['survivors']} |")
+        lines.append(
+            f"| {inst} | {sess} | {a['total']} | {a['pos']} | {a['strong_pos']} | "
+            f"{a['neg']} | {a['strong_neg']} | {a['survivors']} |"
+        )
 
     # Binomial sign test per (inst, sess)
-    lines += ["", "### Per-session binomial sign test (H0: garch is random, P(pos)=0.5)", "",
-              "Filters: total >= 6 cells. P-value = P(X >= observed_pos | n=total, p=0.5).",
-              "",
-              "| Inst | Session | Pos/Total | Binomial p | Verdict |",
-              "|---|---|---|---|---|"]
+    lines += [
+        "",
+        "### Per-session binomial sign test (H0: garch is random, P(pos)=0.5)",
+        "",
+        "Filters: total >= 6 cells. P-value = P(X >= observed_pos | n=total, p=0.5).",
+        "",
+        "| Inst | Session | Pos/Total | Binomial p | Verdict |",
+        "|---|---|---|---|---|",
+    ]
     for (inst, sess), a in sorted(sess_agg.items()):
         if a["total"] < 6:
             continue
@@ -280,23 +326,31 @@ def emit(results, sess_agg, n_survivors, n_tested):
     if not survivors:
         lines.append("_No survivors at global K-correction. See per-session tally above for directional evidence._")
     else:
-        lines += ["| Inst | Sess | Apt | RR | Dir | Thr | N | sr_lift | VarRatio | WR lift | MAE diff | p_sharpe | Deployed? |",
-                  "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+        lines += [
+            "| Inst | Sess | Apt | RR | Dir | Thr | N | sr_lift | VarRatio | WR lift | MAE diff | p_sharpe | Deployed? |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        ]
         for r in sorted(survivors, key=lambda x: x["p_sharpe"]):
             dep = "YES" if r["deployed"] else "no"
-            lines.append(f"| {r['inst']} | {r['sess']} | O{r['apt']} | {r['rr']} | {r['dir']} | "
-                         f"{r['thresh']} | {r['n_on']}/{r['n_off']} | {r['sr_lift']:+.3f} | "
-                         f"{r['var_ratio']:.2f} | {r['wr_lift']:+.1%} | {r['mae_diff']:+.3f} | "
-                         f"{r['p_sharpe']:.4f} | {dep} |")
+            lines.append(
+                f"| {r['inst']} | {r['sess']} | O{r['apt']} | {r['rr']} | {r['dir']} | "
+                f"{r['thresh']} | {r['n_on']}/{r['n_off']} | {r['sr_lift']:+.3f} | "
+                f"{r['var_ratio']:.2f} | {r['wr_lift']:+.1%} | {r['mae_diff']:+.3f} | "
+                f"{r['p_sharpe']:.4f} | {dep} |"
+            )
 
-    lines += ["", "---", "",
-              "## How to read this",
-              "",
-              "- **POSITIVE-LIFT sessions** (binomial p<0.05, strong_pos dominates): candidates for **R5 SIZER** overlay — size up on garch=HIGH days within this session.",
-              "- **INVERSE sessions** (strong_neg dominates): candidates for **R1 SKIP** — avoid trading on garch=HIGH days.",
-              "- **NULL sessions**: garch adds no information; do not touch.",
-              "- **BH-FDR survivors** at K_global are the most defensible single-cell claims. Non-survivors with directional consistency across thresholds should still be pre-registered as family-level hypotheses per RULE 4.1.",
-              ""]
+    lines += [
+        "",
+        "---",
+        "",
+        "## How to read this",
+        "",
+        "- **POSITIVE-LIFT sessions** (binomial p<0.05, strong_pos dominates): candidates for **R5 SIZER** overlay — size up on garch=HIGH days within this session.",
+        "- **INVERSE sessions** (strong_neg dominates): candidates for **R1 SKIP** — avoid trading on garch=HIGH days.",
+        "- **NULL sessions**: garch adds no information; do not touch.",
+        "- **BH-FDR survivors** at K_global are the most defensible single-cell claims. Non-survivors with directional consistency across thresholds should still be pre-registered as family-level hypotheses per RULE 4.1.",
+        "",
+    ]
 
     OUTPUT_MD.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n[report] {OUTPUT_MD}")

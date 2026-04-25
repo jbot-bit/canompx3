@@ -80,15 +80,26 @@ def load_h2_frame() -> pd.DataFrame:
 def load_universality_cells() -> pd.DataFrame:
     """Re-pull the 527 universality cells so we can compute per-cell per-trade SR."""
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-    sessions = ['CME_REOPEN', 'TOKYO_OPEN', 'SINGAPORE_OPEN', 'LONDON_METALS',
-                'EUROPE_FLOW', 'US_DATA_830', 'NYSE_OPEN', 'US_DATA_1000',
-                'COMEX_SETTLE', 'CME_PRECLOSE', 'NYSE_CLOSE', 'BRISBANE_1025']
+    sessions = [
+        "CME_REOPEN",
+        "TOKYO_OPEN",
+        "SINGAPORE_OPEN",
+        "LONDON_METALS",
+        "EUROPE_FLOW",
+        "US_DATA_830",
+        "NYSE_OPEN",
+        "US_DATA_1000",
+        "COMEX_SETTLE",
+        "CME_PRECLOSE",
+        "NYSE_CLOSE",
+        "BRISBANE_1025",
+    ]
     rows = []
-    for inst in ['MNQ', 'MES', 'MGC']:
+    for inst in ["MNQ", "MES", "MGC"]:
         for sess in sessions:
             for apt in [5, 15, 30]:
                 for rr in [1.0, 1.5, 2.0]:
-                    for dir_ in ['long', 'short']:
+                    for dir_ in ["long", "short"]:
                         q = f"""
                         WITH c AS (
                           SELECT o.pnl_r, CAST(d.garch_forecast_vol_pct >= {GARCH_PCT} AS INTEGER) AS fire
@@ -118,14 +129,23 @@ def load_universality_cells() -> pd.DataFrame:
                             if n_on is None or n_off is None or n_on < 30 or n_off < 30:
                                 continue
                             sr_on = (ex_on / sd_on) if sd_on and sd_on > 0 else 0.0
-                            rows.append({
-                                "inst": inst, "sess": sess, "apt": apt, "rr": rr, "dir": dir_,
-                                "n_on": int(n_on), "expr_on": float(ex_on), "sd_on": float(sd_on or 0),
-                                "sr_on": float(sr_on),
-                                "expr_off": float(ex_off), "sd_off": float(sd_off or 0),
-                                "n_off": int(n_off),
-                                "delta": float(ex_on - ex_off),
-                            })
+                            rows.append(
+                                {
+                                    "inst": inst,
+                                    "sess": sess,
+                                    "apt": apt,
+                                    "rr": rr,
+                                    "dir": dir_,
+                                    "n_on": int(n_on),
+                                    "expr_on": float(ex_on),
+                                    "sd_on": float(sd_on or 0),
+                                    "sr_on": float(sr_on),
+                                    "expr_off": float(ex_off),
+                                    "sd_off": float(sd_off or 0),
+                                    "n_off": int(n_off),
+                                    "delta": float(ex_on - ex_off),
+                                }
+                            )
                         except Exception:
                             continue
     con.close()
@@ -197,14 +217,15 @@ def step_1_dsr(universality: pd.DataFrame) -> dict:
         }
         for K in K_grid:
             sr0 = compute_sr0(n_eff=K, var_sr=var_sr_empirical)
-            dsr = compute_dsr(sr_hat=sr_hat, sr0=sr0, t_obs=int(row["n_on"]),
-                              skewness=skew, kurtosis_excess=kurt_ex)
+            dsr = compute_dsr(sr_hat=sr_hat, sr0=sr0, t_obs=int(row["n_on"]), skewness=skew, kurtosis_excess=kurt_ex)
             entry[f"DSR@K={K}"] = dsr
         dsr_table.append(entry)
     con.close()
 
     for row in dsr_table:
-        print(f"\n  {row['cell']}: SR={row['sr_hat']:.3f} N={row['N_on']} skew={row['skew']:+.2f} kurt={row['kurt_excess']:+.2f}")
+        print(
+            f"\n  {row['cell']}: SR={row['sr_hat']:.3f} N={row['N_on']} skew={row['skew']:+.2f} kurt={row['kurt_excess']:+.2f}"
+        )
         for K in K_grid:
             v = row[f"DSR@K={K}"]
             # numeric only — no Unicode characters (Windows cp1252 fallback)
@@ -263,11 +284,15 @@ def step_2_t5_family(universality: pd.DataFrame) -> dict:
     print(per_sess.to_string())
     print("\n  Per-direction:")
     print(per_dir.to_string())
-    print(f"\n  T5 VERDICT: {'PASS' if t5_pass else 'FAIL'} "
-          f"(generalization={generalization_frac:.1%}, inst_floor={instrument_floor:.1%})")
+    print(
+        f"\n  T5 VERDICT: {'PASS' if t5_pass else 'FAIL'} "
+        f"(generalization={generalization_frac:.1%}, inst_floor={instrument_floor:.1%})"
+    )
 
     return {
-        "N": N, "pos": n_pos, "neg": n_neg,
+        "N": N,
+        "pos": n_pos,
+        "neg": n_neg,
         "generalization_frac": generalization_frac,
         "instrument_floor": float(instrument_floor),
         "per_inst": per_inst.reset_index().to_dict(orient="records"),
@@ -313,15 +338,17 @@ def step_3_composite(df_h2: pd.DataFrame) -> dict:
     is_df2 = df_h2[df_h2["is_is"]]
     cells = []
     for (r, g), sub in is_df2.groupby(["fire_rel", "fire_garch"]):
-        cells.append({
-            "rel_fires": int(r),
-            "garch_fires": int(g),
-            "N": len(sub),
-            "expr": float(sub["pnl_r"].mean()),
-            "wr": float((sub["pnl_r"] > 0).mean()),
-            "dollars_per_trade": float(sub["pnl_dollars"].mean()),
-            "total_dollars": float(sub["pnl_dollars"].sum()),
-        })
+        cells.append(
+            {
+                "rel_fires": int(r),
+                "garch_fires": int(g),
+                "N": len(sub),
+                "expr": float(sub["pnl_r"].mean()),
+                "wr": float((sub["pnl_r"] > 0).mean()),
+                "dollars_per_trade": float(sub["pnl_dollars"].mean()),
+                "total_dollars": float(sub["pnl_dollars"].sum()),
+            }
+        )
     cells_df = pd.DataFrame(cells)
     print("\n  IS 4-cell decomposition:")
     print(cells_df.to_string(index=False))
@@ -350,12 +377,15 @@ def step_3_composite(df_h2: pd.DataFrame) -> dict:
     oos_df = df_h2[~df_h2["is_is"]]
     oos_cells = []
     for (r, g), sub in oos_df.groupby(["fire_rel", "fire_garch"]):
-        oos_cells.append({
-            "rel_fires": int(r), "garch_fires": int(g),
-            "N": len(sub),
-            "expr": float(sub["pnl_r"].mean()) if len(sub) else float("nan"),
-            "dollars_per_trade": float(sub["pnl_dollars"].mean()) if len(sub) else float("nan"),
-        })
+        oos_cells.append(
+            {
+                "rel_fires": int(r),
+                "garch_fires": int(g),
+                "N": len(sub),
+                "expr": float(sub["pnl_r"].mean()) if len(sub) else float("nan"),
+                "dollars_per_trade": float(sub["pnl_dollars"].mean()) if len(sub) else float("nan"),
+            }
+        )
     oos_cells_df = pd.DataFrame(oos_cells)
     print("\n  OOS 4-cell decomposition:")
     print(oos_cells_df.to_string(index=False))
@@ -425,9 +455,7 @@ def emit(step1: dict, step2: dict, step3: dict) -> None:
         assert isinstance(sk, float)
         assert isinstance(ku, float)
         dsr_cells = " | ".join(f"{row[f'DSR@K={K}']:.3f}" for K in step1["K_grid"])
-        lines.append(
-            f"| {row['cell']} | {n_on_val} | {sr:+.3f} | {sk:+.2f} | {ku:+.2f} | {dsr_cells} |"
-        )
+        lines.append(f"| {row['cell']} | {n_on_val} | {sr:+.3f} | {sk:+.2f} | {ku:+.2f} | {dsr_cells} |")
     lines += [
         "",
         "**Interpretation:** DSR > 0.95 = robust; 0.80-0.95 = marginal; < 0.80 = not distinguishable from selection bias at that N_eff.",
@@ -478,20 +506,29 @@ def emit(step1: dict, step2: dict, step3: dict) -> None:
         corr_note = "MARGINAL — moderate correlation; partial redundancy."
     else:
         corr_note = "PASS — orthogonal (|corr| <= 0.40)."
-    lines += [f"  -> {corr_note}", "", "### IS 4-cell decomposition", "",
-              "| rel_fires | garch_fires | N | ExpR | WR | $/trade | Total $ |",
-              "|---|---|---|---|---|---|---|"]
+    lines += [
+        f"  -> {corr_note}",
+        "",
+        "### IS 4-cell decomposition",
+        "",
+        "| rel_fires | garch_fires | N | ExpR | WR | $/trade | Total $ |",
+        "|---|---|---|---|---|---|---|",
+    ]
     for c in step3["cells_is"]:
         lines.append(
             f"| {c['rel_fires']} | {c['garch_fires']} | {c['N']} | "
             f"{c['expr']:+.3f} | {c['wr']:.1%} | ${c['dollars_per_trade']:,.2f} | ${c['total_dollars']:,.0f} |"
         )
-    lines += ["", "### OOS 4-cell decomposition", "",
-              "| rel_fires | garch_fires | N | ExpR | $/trade |",
-              "|---|---|---|---|---|"]
+    lines += [
+        "",
+        "### OOS 4-cell decomposition",
+        "",
+        "| rel_fires | garch_fires | N | ExpR | $/trade |",
+        "|---|---|---|---|---|",
+    ]
     for c in step3["cells_oos"]:
-        expr = "NaN" if c['N'] == 0 else f"{c['expr']:+.3f}"
-        dol = "NaN" if c['N'] == 0 else f"${c['dollars_per_trade']:,.2f}"
+        expr = "NaN" if c["N"] == 0 else f"{c['expr']:+.3f}"
+        dol = "NaN" if c["N"] == 0 else f"${c['dollars_per_trade']:,.2f}"
         lines.append(f"| {c['rel_fires']} | {c['garch_fires']} | {c['N']} | {expr} | {dol} |")
 
     if step3["synergy"] is not None:
@@ -503,10 +540,14 @@ def emit(step1: dict, step2: dict, step3: dict) -> None:
         else:
             lines.append("  -> **NO SYNERGY / SUBSUMED** — composite is not additive.")
 
-    lines += ["", f"**T6 composite bootstrap:** observed lift over baseline = {step3['observed_lift']:+.3f} R,"
-              f" p = {step3['p_boot_composite']:.4f} (B=1000).", ""]
+    lines += [
+        "",
+        f"**T6 composite bootstrap:** observed lift over baseline = {step3['observed_lift']:+.3f} R,"
+        f" p = {step3['p_boot_composite']:.4f} (B=1000).",
+        "",
+    ]
 
-    synergy_str = f"{step3['synergy']:+.3f}" if step3['synergy'] is not None else "n/a"
+    synergy_str = f"{step3['synergy']:+.3f}" if step3["synergy"] is not None else "n/a"
     lines += [
         "---",
         "",

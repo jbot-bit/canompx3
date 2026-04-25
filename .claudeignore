@@ -1,10 +1,21 @@
 # Database files
 gold.db
+gold.db.wal
 *.duckdb
+live_journal.db
+local_db/
 
 # Raw data files
 *.dbn.zst
+*.parquet
 data/
+db_export/
+databento_dbn/
+
+# Logs (often huge)
+*.log
+logs/
+config/logs/
 
 # Build artifacts and caches
 __pycache__/
@@ -12,9 +23,33 @@ __pycache__/
 *.pyo
 tmp/
 .mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+node_modules/
 
-# Research outputs (large CSVs, not code)
+# Vector DB cache (Chroma)
+chroma/
+chroma_data/
+
+# Research outputs (large CSVs / artifacts, not code)
 research/output/
+docs/audit/results/*.csv
+docs/audit/results/*_raw.csv
+docs/audit/results/*.parquet
+
+# Pulse / runtime caches (regenerated on demand)
+.pulse_cache.json
+.pulse_last_session.json
+PROJECT_PULSE.md
+.claude/hooks/.data-first-state.json
+.claude/hooks/.last_drift_ok
+
+# ChatGPT bundles (already-assembled artifacts)
+chatgpt_bundle/
+chatgpt_bundle_optional/
+CHATGPT_PROJECT_INSTRUCTIONS.md
 
 # Worktrees
 .claude/worktrees/
@@ -23,6 +58,10 @@ research/output/
 outcome_builder.heartbeat
 audit_report.js
 dashboard.html
+trade_sheet.html
+promotion_candidates.html
 
 # Environment
 .env
+.env.*
+!.env.example

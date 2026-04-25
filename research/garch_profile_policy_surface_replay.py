@@ -98,7 +98,9 @@ def make_policy_scenarios(
             if trade.trading_day not in by_day:
                 continue
             feat = feature_cache.get((lane_instr, lane_orb, trade.trading_day), {})
-            contracts = action_contracts(policy, replay.score_value("GARCH_SESSION_CLIPPED", feat), lane_session, profiles)
+            contracts = action_contracts(
+                policy, replay.score_value("GARCH_SESSION_CLIPPED", feat), lane_session, profiles
+            )
             scaled_pnl = round(trade.pnl_dollars * contracts, 2)
             delta_dollars = scaled_pnl - trade.pnl_dollars
             day_base_totals[trade.trading_day] += trade.pnl_dollars
@@ -215,9 +217,7 @@ def emit(
     if skipped_lanes:
         lines += ["", "## Skipped lanes", "", "| Strategy | Instrument | Session | Reason |", "|---|---|---|---|"]
         for row in skipped_lanes:
-            lines.append(
-                f"| {row['strategy_id']} | {row['instrument']} | {row['orb_label']} | {row['reason']} |"
-            )
+            lines.append(f"| {row['strategy_id']} | {row['instrument']} | {row['orb_label']} | {row['reason']} |")
 
     lines += [
         "",

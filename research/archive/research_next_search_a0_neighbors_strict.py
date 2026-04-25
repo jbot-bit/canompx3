@@ -107,20 +107,24 @@ def main() -> int:
                 df["l_ts"] = pd.to_datetime(df["l_ts"], utc=True)
 
                 valid = (
-                    df["f_dir"].isin(["long", "short"]) &
-                    df["l_dir"].isin(["long", "short"]) &
-                    df["l_ts"].notna() & (df["l_ts"] <= df["entry_ts"])
+                    df["f_dir"].isin(["long", "short"])
+                    & df["l_dir"].isin(["long", "short"])
+                    & df["l_ts"].notna()
+                    & (df["l_ts"] <= df["entry_ts"])
                 )
                 df = df[valid].copy()
                 if len(df) < 160:
                     continue
 
-                same = (df["l_dir"] == df["f_dir"])
+                same = df["l_dir"] == df["f_dir"]
                 conds = {
                     "same_dir": same,
                     "same_short": same & (df["f_dir"] == "short"),
                     "same_fast15": same & df["f_delay"].notna() & (df["f_delay"] <= 15),
-                    "same_short_fast15": same & (df["f_dir"] == "short") & df["f_delay"].notna() & (df["f_delay"] <= 15),
+                    "same_short_fast15": same
+                    & (df["f_dir"] == "short")
+                    & df["f_delay"].notna()
+                    & (df["f_delay"] <= 15),
                     "same_cont": same & (df["f_cont"] == True),
                 }
 
@@ -145,20 +149,22 @@ def main() -> int:
                         if mt.sum() >= 30 and (len(mt) - mt.sum()) >= 30:
                             test_up = float(te.loc[mt, "pnl_r"].mean() - te.loc[~mt, "pnl_r"].mean())
 
-                    rows.append({
-                        "entry_model": em,
-                        "confirm_bars": cb,
-                        "rr_target": rr,
-                        "condition": cname,
-                        "n": len(df),
-                        "n_on": n_on,
-                        "signals_per_year": n_on / max(1, df["year"].nunique()),
-                        "avg_on": avg_on,
-                        "avg_off": avg_off,
-                        "uplift": uplift,
-                        "perm_p": p,
-                        "test2025_uplift": test_up,
-                    })
+                    rows.append(
+                        {
+                            "entry_model": em,
+                            "confirm_bars": cb,
+                            "rr_target": rr,
+                            "condition": cname,
+                            "n": len(df),
+                            "n_on": n_on,
+                            "signals_per_year": n_on / max(1, df["year"].nunique()),
+                            "avg_on": avg_on,
+                            "avg_off": avg_off,
+                            "uplift": uplift,
+                            "perm_p": p,
+                            "test2025_uplift": test_up,
+                        }
+                    )
 
     con.close()
 
@@ -177,12 +183,16 @@ def main() -> int:
     tst = all_df.dropna(subset=["perm_p"]).copy()
     tst = bh_fdr(tst, "perm_p", Q)
 
-    passed = tst[
-        (tst["fdr_pass"] == True)
-        & (tst["avg_on"] >= 0.20)
-        & (tst["uplift"] >= 0.25)
-        & (tst["test2025_uplift"].fillna(-999) > 0)
-    ].copy().sort_values(["avg_on", "uplift"], ascending=False)
+    passed = (
+        tst[
+            (tst["fdr_pass"] == True)
+            & (tst["avg_on"] >= 0.20)
+            & (tst["uplift"] >= 0.25)
+            & (tst["test2025_uplift"].fillna(-999) > 0)
+        ]
+        .copy()
+        .sort_values(["avg_on", "uplift"], ascending=False)
+    )
 
     all_df.to_csv(p_all, index=False)
     passed.to_csv(p_pass, index=False)

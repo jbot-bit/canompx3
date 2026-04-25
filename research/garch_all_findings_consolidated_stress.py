@@ -44,9 +44,18 @@ IS_END = "2026-01-01"
 SEED = 20260415
 
 SESSIONS = [
-    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-    "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE", "BRISBANE_1025",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "EUROPE_FLOW",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
+    "BRISBANE_1025",
 ]
 
 
@@ -105,10 +114,15 @@ def stress_family(con, inst: str, sess: str, n_shuffles: int = 50) -> dict:
                     srl = sr_lift(df, thresh)
                     if srl is None:
                         continue
-                    cells.append({
-                        "apt": apt, "rr": rr, "dir": direction, "thresh": thresh,
-                        "sr_lift": srl,
-                    })
+                    cells.append(
+                        {
+                            "apt": apt,
+                            "rr": rr,
+                            "dir": direction,
+                            "thresh": thresh,
+                            "sr_lift": srl,
+                        }
+                    )
 
     if not cells:
         return {"inst": inst, "sess": sess, "skip": True}
@@ -184,7 +198,9 @@ def stress_family(con, inst: str, sess: str, n_shuffles: int = 50) -> dict:
                 if len(on) >= 3 and len(off) >= 3:
                     s_on = on["pnl_r"].std(ddof=1)
                     s_off = off["pnl_r"].std(ddof=1)
-                    yr_lift = (on["pnl_r"].mean() / s_on if s_on > 0 else 0) - (off["pnl_r"].mean() / s_off if s_off > 0 else 0)
+                    yr_lift = (on["pnl_r"].mean() / s_on if s_on > 0 else 0) - (
+                        off["pnl_r"].mean() / s_off if s_off > 0 else 0
+                    )
                     yr_fracs.setdefault(int(yr), []).append(yr_lift > 0)
     yr_summary = {y: sum(vs) / len(vs) for y, vs in yr_fracs.items()}
 
@@ -192,11 +208,20 @@ def stress_family(con, inst: str, sess: str, n_shuffles: int = 50) -> dict:
     cls = classify(envelope, long_pos_frac, short_pos_frac, regr, yr_summary)
 
     return {
-        "inst": inst, "sess": sess,
-        "n_cells": n_cells, "n_pos": n_pos, "pos_frac": pos_frac,
-        "long_pos": long_pos, "long_total": len(long_cells), "long_pos_frac": long_pos_frac,
-        "short_pos": short_pos, "short_total": len(short_cells), "short_pos_frac": short_pos_frac,
-        "shuf_median": shuf_med, "shuf_lo": shuf_lo, "shuf_hi": shuf_hi,
+        "inst": inst,
+        "sess": sess,
+        "n_cells": n_cells,
+        "n_pos": n_pos,
+        "pos_frac": pos_frac,
+        "long_pos": long_pos,
+        "long_total": len(long_cells),
+        "long_pos_frac": long_pos_frac,
+        "short_pos": short_pos,
+        "short_total": len(short_cells),
+        "short_pos_frac": short_pos_frac,
+        "shuf_median": shuf_med,
+        "shuf_lo": shuf_lo,
+        "shuf_hi": shuf_hi,
         "envelope": envelope,
         "regr": regr,
         "yr_summary": yr_summary,
@@ -286,9 +311,15 @@ def emit(results, cls_counts):
     for cls, n in sorted(cls_counts.items(), key=lambda x: -x[1]):
         lines.append(f"| {cls} | {n} |")
 
-    lines += ["", "---", "", "## Per-family full stress-test grid", "",
-              "| Inst | Session | Cells | Pos% | Long Pos% | Short Pos% | Shuf envelope | Envelope | Regr long p | Regr short p | Yr consistency | Class |",
-              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    lines += [
+        "",
+        "---",
+        "",
+        "## Per-family full stress-test grid",
+        "",
+        "| Inst | Session | Cells | Pos% | Long Pos% | Short Pos% | Shuf envelope | Envelope | Regr long p | Regr short p | Yr consistency | Class |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
 
     for r in sorted(results, key=lambda x: (x["classification"], x["inst"], x["sess"])):
         regr_l = r["regr"].get("long")
@@ -323,8 +354,10 @@ def emit(results, cls_counts):
                 action = "SKIP long-only"
             elif "INVERSE_SHORT" in r["classification"]:
                 action = "SKIP short-only"
-            lines.append(f"| {r['inst']} | {r['sess']} | {r['classification']} | "
-                         f"{r['long_pos_frac']:.1%} | {r['short_pos_frac']:.1%} | {action} |")
+            lines.append(
+                f"| {r['inst']} | {r['sess']} | {r['classification']} | "
+                f"{r['long_pos_frac']:.1%} | {r['short_pos_frac']:.1%} | {action} |"
+            )
 
     OUTPUT_MD.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n[report] {OUTPUT_MD}")

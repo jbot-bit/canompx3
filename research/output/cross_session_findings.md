@@ -8,16 +8,16 @@
 - **Q2: ORB size concordance at 1000: MGC_1000_all_wide**: raw_p=0.0002, p_bh=0.003
 - **Q2: ORB size concordance at 1000: MGC_1000_all_narrow**: raw_p=0.0002, p_bh=0.003
 - **Q2: ORB size concordance at 1000: MNQ_1000_all_narrow**: raw_p=0.009, p_bh=0.062
-- **Q5: Friday × vol regime: MGC_1000_fri_high_vol**: raw_p=0.010, p_bh=0.062
-- **Q5: Friday × vol regime: MNQ_1000_fri_high_vol**: raw_p=0.008, p_bh=0.062
+- **Q5: Friday Ã— vol regime: MGC_1000_fri_high_vol**: raw_p=0.010, p_bh=0.062
+- **Q5: Friday Ã— vol regime: MNQ_1000_fri_high_vol**: raw_p=0.008, p_bh=0.062
 - **Q2: ORB size concordance at 1000: MES_1000_all_wide**: raw_p=0.014, p_bh=0.074
 
 ## Top 5 by Raw P-Value
 - **Q2: ORB size concordance at 1000: MGC_1000_all_wide**: raw_p=0.0002, p_bh=0.003
 - **Q2: ORB size concordance at 1000: MGC_1000_all_narrow**: raw_p=0.0002, p_bh=0.003
-- **Q5: Friday × vol regime: MNQ_1000_fri_high_vol**: raw_p=0.008, p_bh=0.062
+- **Q5: Friday Ã— vol regime: MNQ_1000_fri_high_vol**: raw_p=0.008, p_bh=0.062
 - **Q2: ORB size concordance at 1000: MNQ_1000_all_narrow**: raw_p=0.009, p_bh=0.062
-- **Q5: Friday × vol regime: MGC_1000_fri_high_vol**: raw_p=0.010, p_bh=0.062
+- **Q5: Friday Ã— vol regime: MGC_1000_fri_high_vol**: raw_p=0.010, p_bh=0.062
 
 ## Q1: MGC 0900 -> MES/MNQ 1000
 - MES_1000_mgc_align_aligned: N=736, avgR=+0.014, p=0.936, d=+0.004
@@ -36,7 +36,7 @@
 - MNQ_1000_all_narrow: N=155, avgR=-0.100, p=0.009, d=-0.247 **BH-SIG**
 - MNQ_1000_mixed: N=212, avgR=+0.227, p=0.078, d=+0.159
 
-## Q3: Gap × break direction
+## Q3: Gap Ã— break direction
 - MGC_1000_big_gap_vs_small: N=612, avgR=-0.191, p=0.237, d=+0.063
 - MES_1000_big_gap_vs_small: N=445, avgR=+0.084, p=0.098, d=+0.094
 - MNQ_1000_big_gap_vs_small: N=216, avgR=+0.180, p=0.303, d=+0.093
@@ -52,7 +52,7 @@
 - MNQ_cascade_same: N=252, avgR=+0.159, p=0.493, d=+0.063
 - MNQ_cascade_flip: N=234, avgR=+0.080, p=0.493, d=-0.063
 
-## Q5: Friday × vol regime
+## Q5: Friday Ã— vol regime
 - MES_1000_fri_high_vol: N=158, avgR=-0.032, p=0.307, d=-0.092
 - MES_1000_fri_low_vol: N=153, avgR=-0.058, p=0.794, d=-0.024
 - MGC_1000_fri_high_vol: N=159, avgR=-0.311, p=0.010, d=-0.228 **BH-SIG**

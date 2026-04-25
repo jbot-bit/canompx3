@@ -12,6 +12,7 @@ import pandas as pd
 def _scipy_stats():
     """Lazy import of scipy.stats — avoids import-time dependency."""
     from scipy import stats as _sp
+
     return _sp
 
 
@@ -96,9 +97,7 @@ def compute_metrics(pnls) -> dict | None:
     }
 
 
-def year_by_year(
-    df: pd.DataFrame, date_col: str = "trading_day", value_col: str = "pnl_r"
-) -> pd.DataFrame:
+def year_by_year(df: pd.DataFrame, date_col: str = "trading_day", value_col: str = "pnl_r") -> pd.DataFrame:
     """Per-year breakdown: n, mean, win_rate, p_value.
 
     Returns DataFrame with columns: year, n, mean, win_rate, p_value.
@@ -109,13 +108,18 @@ def year_by_year(
     for year, group in df.groupby("_year"):
         vals = group[value_col].dropna().values
         n, mean, wr, _, p = ttest_1s(vals)
-        rows.append({"year": int(year), "n": n, "mean": round(mean, 4),
-                      "win_rate": round(wr, 4), "p_value": round(p, 6) if not np.isnan(p) else None})
+        rows.append(
+            {
+                "year": int(year),
+                "n": n,
+                "mean": round(mean, 4),
+                "win_rate": round(wr, 4),
+                "p_value": round(p, 6) if not np.isnan(p) else None,
+            }
+        )
     return pd.DataFrame(rows)
 
 
-def expanding_stat(
-    df: pd.DataFrame, col: str, min_periods: int = 20
-) -> pd.Series:
+def expanding_stat(df: pd.DataFrame, col: str, min_periods: int = 20) -> pd.Series:
     """Expanding-window mean (no lookahead). Returns Series aligned to df index."""
     return df[col].expanding(min_periods=min_periods).mean()

@@ -210,6 +210,33 @@ class TestCreateClose:
                 raise AssertionError("Expected RuntimeError")
 
 
+class TestEnsureSymlinkCrossDrive:
+    """Regression — os.path.relpath raises ValueError on Windows when the
+    target and link_path.parent are on different drives (CI workspace on D:,
+    pytest tmp_path on C:). ensure_symlink must fall back to an absolute
+    target rather than propagating the ValueError.
+    """
+
+    def test_cross_drive_target_falls_back_to_absolute(self, tmp_path: Path) -> None:
+        """When os.path.relpath raises ValueError, ensure_symlink must not crash."""
+        target = tmp_path / "real_target"
+        target.mkdir()
+        link = tmp_path / "link_point"
+
+        original_relpath = worktree_manager.os.path.relpath
+
+        def relpath_cross_drive(path: str, start: str | None = None) -> str:
+            raise ValueError("path is on mount 'D:', start on mount 'C:'")
+
+        with patch.object(worktree_manager.os.path, "relpath", side_effect=relpath_cross_drive):
+            # Must not raise. symlink creation itself may still silently fail
+            # on OSes without symlink perms — that path is covered by the
+            # existing except OSError, which is the intentional fail-open.
+            worktree_manager.ensure_symlink(target, link)
+        # relpath was restored
+        assert worktree_manager.os.path.relpath is original_relpath
+
+
 class TestWorkflowOperations:
     def test_handoff_worktree_updates_owner_and_state(self, tmp_path: Path) -> None:
         wt = tmp_path / ".worktrees" / "tasks" / "claude" / "foo"

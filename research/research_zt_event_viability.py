@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 import databento as db
 import pandas as pd
 
-from pipeline.asset_configs import get_asset_config
+from pipeline.asset_configs import get_asset_config, require_dbn_available
 from pipeline.calendar_filters import _FOMC_DATES_RAW, build_cpi_set, is_nfp_day
 
 NY_TZ = ZoneInfo("America/New_York")
@@ -223,10 +223,7 @@ def run_study(dbn_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, 
 
         pre = get_window_snapshot(df, event_date, family.pre_window)
         shock = get_window_snapshot(df, event_date, family.shock_window)
-        follow_raw = {
-            key: get_window_snapshot(df, event_date, window)
-            for key, window in family.follow_windows.items()
-        }
+        follow_raw = {key: get_window_snapshot(df, event_date, window) for key, window in family.follow_windows.items()}
         if pre is None or shock is None or any(v is None for v in follow_raw.values()):
             row["exclusion_reason"] = "missing_window_data"
             rows.append(row)
@@ -280,9 +277,13 @@ def run_study(dbn_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, 
                 "mean_shock_abs_ticks": mean(fam["shock_magnitude"] / tick_size) if tick_size else float("nan"),
                 "median_shock_abs_ticks": median(fam["shock_magnitude"] / tick_size) if tick_size else float("nan"),
                 "mean_follow_15_abs_ticks": mean(fam["follow_15m_abs_move"] / tick_size) if tick_size else float("nan"),
-                "median_follow_15_abs_ticks": median(fam["follow_15m_abs_move"] / tick_size) if tick_size else float("nan"),
+                "median_follow_15_abs_ticks": median(fam["follow_15m_abs_move"] / tick_size)
+                if tick_size
+                else float("nan"),
                 "mean_total_25m_abs_ticks": mean(fam["total_25m_abs_move"] / tick_size) if tick_size else float("nan"),
-                "median_total_25m_abs_ticks": median(fam["total_25m_abs_move"] / tick_size) if tick_size else float("nan"),
+                "median_total_25m_abs_ticks": median(fam["total_25m_abs_move"] / tick_size)
+                if tick_size
+                else float("nan"),
             }
         )
 
@@ -453,7 +454,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    dbn_dir = args.dbn_dir or get_asset_config("ZT")["dbn_path"]
+    if args.dbn_dir is not None:
+        dbn_dir = args.dbn_dir
+    else:
+        require_dbn_available("ZT")
+        dbn_dir = get_asset_config("ZT")["dbn_path"]
     events, economics, summary, tick_size = run_study(dbn_dir)
     write_outputs(args.output_prefix, events, economics, summary, tick_size)
 

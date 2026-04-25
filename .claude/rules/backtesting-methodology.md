@@ -1,3 +1,14 @@
+---
+paths:
+  - "research/**"
+  - "trading_app/strategy_*"
+  - "trading_app/holdout_policy.py"
+  - "pipeline/build_daily_features.py"
+  - "pipeline/cost_model.py"
+  - "docs/audit/**"
+  - "docs/institutional/**"
+---
+
 # Backtesting Methodology — Mandatory Rules
 
 **Authority:** governs every backtest, every discovery scan, every research-claim test. Complementary to `quant-audit-protocol.md`, `research-truth-protocol.md`, `RESEARCH_RULES.md`, `docs/institutional/pre_registered_criteria.md`.
@@ -124,6 +135,29 @@ K_global at very large K (e.g., K>10,000) is strong confirmatory evidence but no
 
 Per Bailey et al 2013, `MinBTL = 2·ln(N_trials) / E[max_N]²`. With the 7+ year IS window, N_trials up to ~300 on clean MNQ data or ~2000 on proxy-extended. Pre-commit before running.
 
+### 4.3 Per-cell significance requirement for classification thresholds
+
+**Any classifier, labeler, or pattern-assignment step that uses a bare numeric threshold on a cell-level metric must also compute and report the per-cell p-value.** Examples: `|delta| > 0.03`, `wr_spread > 5%`, `lift > 0.10`. A threshold label may not be presented as confirmed if the same cell fails per-cell significance at the appropriate K framing.
+
+Minimum required output columns:
+- `label_raw` — the bare-threshold classification
+- `year_t` or equivalent per-cell subset-t
+- `year_p` — two-sided p-value for the cell
+- `label_confirmed` — a BH-FDR-conditioned label that downgrades `label_raw` to `_unconfirmed` when the cell fails the relevant FDR gate
+
+**Why this rule exists.** Phase 2.8 v1 used a bare-threshold classifier to label cells as `SINGLE_YEAR_DRAG` based on `|delta|`, `n`, and `year_expr`, without a per-cell significance test. Later honest t-tests at `K_global`, `K_session`, and `K_year` showed those cells had weak |t| and large p-values; the narrative label was stronger than the evidence. The retirement verdicts survived on other grounds, but the classifier itself was statistically unsupported.
+
+Reference implementation: `research/phase_2_9_comprehensive_multi_year_stratification.py::assign_v2_pattern` uses a raw candidate label only as an intermediate state, then downgrades to `_unconfirmed` unless the cell survives BH-FDR at the relevant framing.
+
+Grounding: Harvey-Liu 2015 warns that both in-sample selection and out-of-sample success can be lucky. Bare-threshold labels are in-sample selections. Benjamini-Hochberg 1995 provides the canonical FDR gate for promoting those labels.
+
+This rule forbids:
+- verdict labels sourced from `|delta| > threshold` alone
+- counts like "N lanes show drag" derived from a bare-threshold classifier without p-values
+- final pattern labels such as `DRAG`, `BOOST`, or `RECURRING_REGIME` that skip BH-FDR confirmation
+
+This rule allows a transient `label_raw` or `label_candidate` field, provided the final published output also includes the per-cell p-value and the BH-conditioned confirmed label.
+
 ---
 
 ## RULE 5: Comprehensive scope — no hand-picking
@@ -170,8 +204,7 @@ If you can't answer (1)-(3) with certainty, do NOT use the feature. Write a prov
 - `gap_open_points`, `gap_type` (known at session open)
 - `garch_forecast_vol`, `garch_atr_ratio`, `garch_forecast_vol_pct` (forecast made at prior close)
 - `is_nfp_day`, `is_opex_day`, `is_friday`, `is_monday`, `day_of_week` (calendar, priori)
-- `orb_{s}_size`, `orb_{s}_high`, `orb_{s}_low`, `orb_{s}_break_dir` (known at ORB end, before entry for E2)
-- `orb_{s}_break_delay_min`, `orb_{s}_break_bar_continues`, `orb_{s}_break_bar_volume` (known at break-bar close, before E2 CB1 entry)
+- `orb_{s}_size`, `orb_{s}_high`, `orb_{s}_low` (known at ORB end, before entry for E2)
 - `orb_{s}_vwap`, `orb_{s}_pre_velocity` (computed over pre-ORB interval)
 - `orb_{s}_compression_z`, `orb_{s}_compression_tier` (computed pre-ORB)
 - `rel_vol_{s}` (ORB volume vs session-avg historical — known at ORB end)
@@ -185,6 +218,13 @@ If you can't answer (1)-(3) with certainty, do NOT use the feature. Write a prov
 ### 6.3 Banned (look-ahead)
 
 - `double_break`, `*_mae_r`, `*_mfe_r`, `*_outcome`, `pnl_r`, any `*_fill_price`-derived feature used as a PREDICTOR
+- **E2-look-ahead break-bar features** (valid for E1/E3 only, banned for E2 regardless of `confirm_bars`):
+  - `orb_{s}_break_ts`, `orb_{s}_break_delay_min`, `orb_{s}_break_bar_continues`, `orb_{s}_break_bar_volume`
+  - `orb_{s}_break_dir` when used as a *predictor* (direction-segmentation of an already-taken trade is fine; using it to decide whether to take the trade is E2-look-ahead)
+  - Why: E2 (stop-market) fires on the first bar whose **range** crosses the ORB boundary (wick-touch counts, including fakeouts). `daily_features` defines the "break bar" by **close-outside-ORB**, which can be a later bar. Real-data measurement on `MNQ EUROPE_FLOW E2 CB1 O5 RR1.5` IS (1,718 trades 2019-2025): `entry_ts < break_ts` on 709 trades = **41.3%** (per-year range 37.4%–48.6%), so break-bar features are post-entry for ~4 in 10 E2 trades, every year.
+  - Canonical authority: `trading_app/config.py:3540-3568` (`E2_EXCLUDED_FILTER_PREFIXES` / `E2_EXCLUDED_FILTER_SUBSTRINGS` — registered filters `BRK_FAST*`, `BRK_CONT`, `VOL_RV*`, `ATR70_VOL` are gated via `_e2_look_ahead_reason()` and return `NOT_APPLICABLE_ENTRY_MODEL` on E2).
+  - Range-cross vs close-cross code sources: `trading_app/entry_rules.py:157-216 detect_break_touch()` vs `pipeline/build_daily_features.py:285-340 detect_break()`.
+  - Postmortem: `docs/postmortems/2026-04-21-e2-break-bar-lookahead.md`.
 
 ---
 
@@ -273,24 +313,9 @@ Canonical check: run the scan, then re-run with a `mae_r` or `outcome` column in
 
 ## Historical failure log
 
-Keep this list updated with real examples of what went wrong:
+**Moved to `.claude/rules/backtesting-methodology-failure-log.md`** (self-scoped frontmatter — only auto-injects when that file is edited; `Read` on demand otherwise).
 
-- **2026-04-15: DSR over-weighted as hard gate (v1→v2 self-correction).** Initial stress test of rel_vol_HIGH finding used `var_sr=0.047` (default from `dsr.py` docstring, calibrated for `experimental_strategies`) on comprehensive-scan cells. Wrong population. v2 empirical calibration yielded var_sr=0.012 (3.8× smaller). Also K=14,261 was overly punishing — dsr.py line 35 says "DSR is INFORMATIONAL, not a hard gate" because N_eff unknown. v2 reports DSR at 7 N_eff framings (K=5/12/36/72/300/900/14261) and uses 4 CORE hard gates (bootstrap, temporal, exceeds_max_t, per_day) as primary verdict. Lesson: **always verify var_sr from the actual scan cell population; always report DSR at multiple N_eff; don't treat DSR as hard gate**. See `docs/audit/results/2026-04-15-rel-vol-stress-test-v2.md` + `research/stress_test_rel_vol_finding_v2.py`.
-- **2026-04-15: Block bootstrap preserved joint structure (bug caught same session).** v1 bootstrap resampled index and applied to BOTH pnl and mask — preserved joint (pnl, mask) structure, mechanically producing p~0.5 regardless of real signal. Fixed: resample pnl via blocks preserving autocorrelation, keep mask FIXED to break signal-outcome link. Proper moving-block bootstrap per Lahiri / Politis-Romano. After fix, bootstrap p=0.0005 on all 5 lanes (genuine signal evidence). See `research/stress_test_rel_vol_finding.py::block_bootstrap_p`.
-- **2026-04-15: Aronson Ch 6 cited for volume — WRONG.** Aronson Ch 6 is "Data-Mining Bias," not volume. Two docs had this error (edge-finding-playbook, volume-exploitation-plan). Ch 7 is "Theories of Nonrandom Price Motion" (EMH literature) — doesn't directly support volume-as-confirmation either. Volume-as-confirmation remains TRAINING MEMORY ONLY until Harris/O'Hara acquisition. Fixed both docs; quant-audit-protocol's Aronson Ch 6 reference (for data-mining/overfitting) remains CORRECT.
-- **2026-04-15: day_type is LOOK-AHEAD.** `pipeline/build_daily_features.py:510` explicit warning: uses full-day OHLC. Never use as intraday feature. Caught during mechanism-decomposition audit — removed from all stress tests.
-- **2026-04-15: T8 cross-instrument twin wrong for MGC.** `t0_t8_audit_prior_day_patterns.py::t8_cross_instrument` defaults to MNQ as MGC's twin. MNQ is equity index, MGC is gold — wrong asset class. Flag any MGC T8 result as methodologically suspect until twin logic fixed (proper: GC parent or SIL same-class if activated).
-- **2026-04-15: Look-ahead via session_* + overnight_* features.** First comprehensive scan produced 176 strict survivors, all contaminated by `session_{asia/london/ny}_*` and `overnight_*` features used on ORB sessions firing DURING the reference window. After RULE 1 gates installed, reduced to 19 real survivors. See `docs/audit/results/2026-04-15-comprehensive-deployed-lane-scan.md`.
-- **2026-04-15: Scope hand-picking.** Initial comprehensive scan tested 29 of 324 lane combos. Missed ~295 combos. Full re-run in same session produced 14,261 cells, 13 BH-global survivors (vs 3 in narrower scan).
-- **2026-04: CTE N-inflation** caught in `verify_external_ibs_nr7.py` — t=6.78 dropped to t=3.89 after adding `orb_minutes=5` to CTE. Commit `94546ccf`. Codified in `daily-features-joins.md`.
-- **2026-03-24: cost_risk_pct tautology** — |corr| = 1.0 with 1/orb_size_pts. Filed under `quant-audit-protocol.md` KNOWN FAILURE PATTERNS.
-- **2026-02: double_break lookahead** — scanned full session after entry. Banned.
-- **2026-04-08: E2 canonical window fix** — divergence between backtest and live execution ORB-window calculation was a look-ahead bias risk per Chan Ch 1. Fixed via single canonical `pipeline.dst.orb_utc_window()`. See `docs/postmortems/2026-04-07-e2-canonical-window-fix.md`.
-- **2026-04-08: Phase 3c rebuild of orb_outcomes** — FK child-DELETE invisible in same transaction requires 2-transaction split. `docs/handoffs/2026-04-08-phase-3c-rebuild-handover.md`.
-- **2026-04-19: Cross-scan "replication" without overlap decomposition.** HTF Path A prev-month v1 result doc claimed MES EUROPE_FLOW long RR2.0 wrong-sign pattern "replicated" prev-week v1. Post-commit adversarial audit showed 42.8% of prev-month trade-fires on that lane are already prev-week trade-fires; non-overlap (PM-only) subset collapses from combined t=-3.53 to t=-1.38 (N=195, raw p=0.168). In the same audit, MES TOKYO_OPEN long RR2.0 was the OPPOSITE pattern — overlap t=-1.86 (n.s.), non-overlap t=-3.37 (N=188, p=0.0009), so prev-month contributes genuinely new information there. **Lesson:** two scans over the same feature family can agree from redundancy rather than independence. Always decompose `(scan_A ∧ scan_B)` vs `(scan_B ∧ ¬scan_A)` on per-day fire masks before claiming replication or treating cross-family agreement as additional evidence. Canonical reproduction: `research/htf_path_a_overlap_decomposition.py` → `docs/audit/results/2026-04-19-htf-path-a-overlap-decomposition.md`. Result doc corrected at `docs/audit/results/2026-04-18-htf-path-a-prev-month-v1-scan.md` § "Adversarial-audit addendum — 2026-04-19".
-- **2026-04-19: Cross-instrument same-session redundancy (same class as above, different surface).** Comprehensive scan (`docs/audit/results/2026-04-15-comprehensive-deployed-lane-scan.md`) reported 5 non-twin `rel_vol_HIGH_Q3` cells at K_global=14,261 BH-global, framed as "5 independent BH-global survivors" / "universal volume confirmation." Cross-lane overlap decomposition on 2026-04-19 found MES COMEX_SETTLE short and MNQ COMEX_SETTLE short have Jaccard 0.491 — 67% overlap-of-min on fire days. MES and MNQ are near-identical equity-index drivers on the same session; their `rel_vol_HIGH_Q3` fires coincide on most days. Effective K_eff ≈ 4, not 5. Nyholt 2004 Meff (4.82) is misleadingly close to 5 because the union-grid correlation dilutes with zero-zero cross-instrument days; Jaccard is the canonical set-overlap read. **Lesson:** when collecting BH-global survivors across instruments, always pairwise-decompose `same-session same-direction cross-instrument pairs` — same underlying economic driver → dependent tests. Canonical reproduction: `research/rel_vol_cross_scan_overlap_decomposition.py` → `docs/audit/results/2026-04-19-rel-vol-cross-scan-overlap-decomposition.md`. Follow-up pointer appended to comprehensive scan result doc header.
-- **2026-04-19: Research filter delegation drift — compute_deployed_filter mis-implemented OVNRNG_100 as ratio.** `research/comprehensive_deployed_lane_scan.py::compute_deployed_filter` re-implemented four canonical filters (OVNRNG_100, VWAP_MID_ALIGNED, ORB_G5, ATR_P50) inline rather than delegating to `research.filter_utils.filter_signal`. The OVNRNG_100 re-implementation was `overnight_range / atr_20 >= 1.0` — a ratio gate — when canonical `OvernightRangeAbsFilter(min_range=100.0)` is absolute `overnight_range >= 100.0`. Verification on MNQ COMEX_SETTLE O5 RR1.5: old ratio fired 25/1698 rows (1.5%); canonical absolute fires 579/1698 rows (34.1%). A 20× gap. Every prior scan output using `compute_deployed_filter(..., "OVNRNG_100")` tested overlays on a near-empty population. Fix: delegate to `filter_signal` per research-truth-protocol.md § Canonical filter delegation. WARN header added to `docs/audit/results/2026-04-15-comprehensive-deployed-lane-scan.md` identifying affected "deployed" scope survivor cells. **Lesson:** pre-2026-04-18 research scripts that look inline-correct for canonical filter logic are suspect by default — only the canonical `filter_signal` delegation path is trustworthy. Full filter-delegation audit across 266 research/ files at `docs/audit/results/2026-04-19-research-filter-delegation-audit.md`.
-- **2026-04-19: Mode-B grandfathered validated_setups ExpR drift — 38/38 active lanes affected.** Canonical Mode A re-validation of every active `validated_setups` row (script `research/mode_a_revalidation_active_setups.py`) found ALL 38 lanes have material drift from stored `expectancy_r` values under strict Mode A (`trading_day < 2026-01-01`). Mode A N is consistently ~55% of stored N — the gap being 2026 Q1 data that was eligible under Mode B but is sacred OOS under Mode A. ExpR pattern is mixed (some lanes UP, some DOWN). Worst Mode A drops: MNQ EUROPE_FLOW OVNRNG_100 RR1.0 (0.118→0.056), MNQ NYSE_OPEN X_MES_ATR60 RR1.5 (0.132→0.066). **Lesson:** `validated_setups.expectancy_r` for ANY lane with `last_trade_day >= 2026-01-01` is Mode-B grandfathered and must not be cited as a Mode A baseline. Always recompute from canonical `orb_outcomes` + `daily_features` under `trading_day < HOLDOUT_SACRED_FROM`. Full errata at `docs/audit/results/2026-04-19-mode-a-revalidation-of-active-setups.md`.
-- **2026-04-19: Quantile-over-full-sample as feature look-ahead (new class, RULE 1 sub-clause).** Feature helpers like `bucket_high(vals, 67)` compute a percentile threshold on the full cell distribution (IS + OOS combined) and then apply it to gate IS fires. IS fire status therefore depends on OOS distribution — a subtle look-ahead at the feature-construction level (distinct from the temporal-window look-ahead that RULE 1.2 covers). Specific instance: `research/comprehensive_deployed_lane_scan.py::bucket_high` and `bucket_low`. Sensitivity check on 2026-04-19 (`research/rel_vol_cross_scan_overlap_decomposition.py --quantile-method is_only`) found the specific `rel_vol_HIGH_Q3` 5-survivor finding is ROBUST under IS-only-quantile correction (Meff = 4.817, max Jaccard = 0.491 — identical to 3 decimals with full-sample). But the methodology itself should be corrected going forward; any new percentile-binned feature must compute its threshold on IS-only data. **RULE 1 addendum:** feature helpers that use `np.nanpercentile` or `pd.quantile` on a cell's full-sample data are conditionally valid — only valid when the quantile is computed on IS subset and then applied to all rows. A feature built with a full-sample quantile and then tested against an IS-only null contains look-ahead.
+Read that file when appending a new entry or investigating a past incident. Every fresh backtesting failure still gets logged there, cited by date slug.
 
-Append to this list when new failure modes are caught.
+Append new entries to the companion file with: date slug + one-line lesson + canonical reproduction path.
+

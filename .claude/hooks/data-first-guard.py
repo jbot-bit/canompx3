@@ -19,10 +19,11 @@ State persisted to .claude/hooks/.data-first-state.json between invocations.
 import json
 import re
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
 
 STATE_FILE = Path(__file__).parent / ".data-first-state.json"
+DIRECTIVE_COOLDOWN_MINUTES = 15
 
 # Keywords that signal an investigation (user wants data, not code reading)
 INVESTIGATION_KEYWORDS = re.compile(
@@ -60,16 +61,11 @@ SESSION_TIME_KEYWORDS = re.compile(
 )
 
 TRADING_QUERY_DIRECTIVE = (
-    "TRADING QUERY DETECTED: Use build_live_portfolio() from trading_app.live_config — "
-    "NOT validated_setups. Run: python -c \"from trading_app.live_config import LIVE_PORTFOLIO; "
-    "print([s.strategy_id for s in LIVE_PORTFOLIO])\" "
-    "Lesson 1: validated_setups ≠ live portfolio. Different tables, different purpose."
+    "TRADING QUERY: Use trading_app.live_config/LIVE_PORTFOLIO, not validated_setups."
 )
 
 SESSION_TIME_DIRECTIVE = (
-    "SESSION TIME QUERY DETECTED: Do NOT compute timezone math manually. Run: "
-    "python scripts/tools/generate_trade_sheet.py — it resolves all times correctly via dst.py. "
-    "Lesson 10: Manual timezone math has been wrong EVERY time. Brisbane=UTC+10 + EDT=UTC-4 + mental math = WRONG."
+    "SESSION TIME: Use scripts/tools/generate_trade_sheet.py; do not do manual timezone math."
 )
 
 # Bash commands that count as "querying data" (resets the read counter)
@@ -151,45 +147,34 @@ RESUME_KEYWORDS = re.compile(
 )
 
 DESIGN_DIRECTIVE = (
-    "DESIGN MODE: Do NOT write code. Iterate on the plan. "
-    "Present options. Wait for explicit 'go'/'build it'/'implement' before editing files."
+    "DESIGN MODE: Plan and options only; do not edit until the user explicitly switches to implementation."
 )
 
 IMPLEMENT_DIRECTIVE = (
-    "IMPLEMENT MODE: User wants code NOW. "
-    "If non-trivial, write STAGE_STATE.md first (blast_radius + scope_lock + acceptance). "
-    "Then execute. Show evidence when done."
+    "IMPLEMENT MODE: Execute now. If non-trivial, require STAGE_STATE blast_radius/scope first."
 )
 
 COMMIT_DIRECTIVE = (
-    "GIT OPERATION: Just execute immediately. No explaining, no asking 'are you sure'. "
-    "Check git status, stage files, commit with descriptive message. Push if asked."
+    "GIT OPERATION: Execute directly; stage intentionally, commit clearly, push only if asked."
 )
 
 RESEARCH_DIRECTIVE = (
-    "RESEARCH MODE: Open docs/STRATEGY_BLUEPRINT.md. Route through test sequence. "
-    "All claims need: source layer, N, p-value, K for BH FDR, WFE. "
-    "Default to O5 aperture. Per-session, NEVER pooled."
+    "RESEARCH MODE: Use STRATEGY_BLUEPRINT sequence; every claim needs source layer, N, p-value, K, and WFE."
 )
 
 ORIENT_DIRECTIVE = (
-    "ORIENT: Check HANDOFF.md + git log --oneline -10 + STAGE_STATE.md + pipeline_status.py. "
-    "Report current state from commands, not assumptions."
+    "ORIENT: Reground from HANDOFF.md, recent git history, active stage state, and live status commands."
 )
 
 RESUME_DIRECTIVE = (
-    "RESUME: Check HANDOFF.md for last state, git log --oneline -10 for recent changes, "
-    "STAGE_STATE.md for active work. Verify before continuing."
+    "RESUME: Re-read HANDOFF.md, recent git history, and active stage state before continuing."
 )
 
 WARN_THRESHOLD = 4    # After N consecutive Reads, warn
 BLOCK_THRESHOLD = 7   # After N consecutive Reads, BLOCK
 
 INVESTIGATION_DIRECTIVE = (
-    "DATA FIRST (ENFORCED): You are investigating a data question. "
-    "QUERY the database or run a computation BEFORE reading more code files. "
-    "10 minutes of data beats hours of code reading. "
-    "Write a python -c query NOW — do not read another file until you have numbers."
+    "DATA FIRST: Query data before reading more code. Get numbers first, then explain."
 )
 
 WARN_MESSAGE = (
@@ -208,18 +193,44 @@ BLOCK_MESSAGE = (
 
 def load_state():
     try:
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
-        return {
-            "investigation_mode": False,
-            "consecutive_reads": 0,
-            "last_updated": None,
-        }
+        state = {}
+    state.setdefault("investigation_mode", False)
+    state.setdefault("consecutive_reads", 0)
+    state.setdefault("last_updated", None)
+    state.setdefault("last_prompt_directive_key", None)
+    state.setdefault("last_prompt_directive_at", None)
+    return state
 
 
 def save_state(state):
-    state["last_updated"] = datetime.now(timezone.utc).isoformat()
+    state["last_updated"] = datetime.now(UTC).isoformat()
     STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
+def _now_utc() -> datetime:
+    return datetime.now(UTC)
+
+
+def _directive_key(directives):
+    return " || ".join(directives)
+
+
+def _should_emit_directives(state, directives):
+    if not directives:
+        return False
+    key = _directive_key(directives)
+    if key != state.get("last_prompt_directive_key"):
+        return True
+    last_at = state.get("last_prompt_directive_at")
+    if not last_at:
+        return True
+    try:
+        age_min = (_now_utc() - datetime.fromisoformat(last_at)).total_seconds() / 60
+    except (ValueError, TypeError):
+        return True
+    return age_min >= DIRECTIVE_COOLDOWN_MINUTES
 
 
 def handle_user_prompt(event):
@@ -228,12 +239,22 @@ def handle_user_prompt(event):
     state = load_state()
 
     directives = []
+    matched_investigation = bool(INVESTIGATION_KEYWORDS.search(prompt))
+    matched_commit = bool(COMMIT_KEYWORDS.search(prompt))
+    matched_implement = bool(IMPLEMENT_KEYWORDS.search(prompt) and not DESIGN_KEYWORDS.search(prompt))
+    matched_design = bool(DESIGN_KEYWORDS.search(prompt))
+    matched_research = bool(RESEARCH_KEYWORDS.search(prompt))
+    matched_resume = bool(RESUME_KEYWORDS.search(prompt))
+    matched_orient = bool(ORIENT_KEYWORDS.search(prompt))
 
     # ── Data investigation detection (existing) ──────────────────────
-    if INVESTIGATION_KEYWORDS.search(prompt):
+    if matched_investigation:
         state["investigation_mode"] = True
         state["consecutive_reads"] = 0
         directives.append(INVESTIGATION_DIRECTIVE)
+    elif matched_commit or matched_implement or matched_design or matched_research or matched_resume or matched_orient:
+        state["investigation_mode"] = False
+        state["consecutive_reads"] = 0
 
     if TRADING_QUERY_KEYWORDS.search(prompt):
         directives.append(TRADING_QUERY_DIRECTIVE)
@@ -244,26 +265,29 @@ def handle_user_prompt(event):
     # ── Intent routing (new) ─────────────────────────────────────────
     # Priority: commit > implement > design > research > resume > orient
     # (most specific wins — commit is unambiguous, design/implement need priority)
-    if COMMIT_KEYWORDS.search(prompt):
+    if matched_commit:
         directives.append(COMMIT_DIRECTIVE)
-    elif IMPLEMENT_KEYWORDS.search(prompt) and not DESIGN_KEYWORDS.search(prompt):
-        # Only inject implement if NOT also design (avoid false positives)
+    elif matched_implement:
         directives.append(IMPLEMENT_DIRECTIVE)
-    elif DESIGN_KEYWORDS.search(prompt):
+    elif matched_design:
         directives.append(DESIGN_DIRECTIVE)
 
-    if RESEARCH_KEYWORDS.search(prompt):
+    if matched_research:
         directives.append(RESEARCH_DIRECTIVE)
 
-    if RESUME_KEYWORDS.search(prompt):
+    if matched_resume:
         directives.append(RESUME_DIRECTIVE)
-    elif ORIENT_KEYWORDS.search(prompt):
+    elif matched_orient:
         directives.append(ORIENT_DIRECTIVE)
 
     # ── Emit directives ──────────────────────────────────────────────
-    if directives:
+    if _should_emit_directives(state, directives):
+        state["last_prompt_directive_key"] = _directive_key(directives)
+        state["last_prompt_directive_at"] = _now_utc().isoformat()
         save_state(state)
         print("\n".join(directives), file=sys.stderr)
+    else:
+        save_state(state)
 
     sys.exit(0)
 
@@ -277,7 +301,7 @@ def handle_pre_tool_use(event):
     if state.get("last_updated"):
         try:
             last = datetime.fromisoformat(state["last_updated"])
-            age_min = (datetime.now(timezone.utc) - last).total_seconds() / 60
+            age_min = (_now_utc() - last).total_seconds() / 60
             if age_min > 30:
                 state["investigation_mode"] = False
                 state["consecutive_reads"] = 0

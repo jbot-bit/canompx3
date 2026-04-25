@@ -26,6 +26,10 @@ When the task matches, prefer these repo-local skills:
 - `canompx3-research` for research, analysis, and claim scrutiny
 - `canompx3-live-audit` for live-trading/runtime safety audits
 - `canompx3-deploy-readiness` for promotion/deployment go-no-go decisions
+- `canompx3-capital-review` for thorough capital-at-risk review orchestration
+  across code, live, deploy, research, evidence, security, threat-model, and
+  supply-chain surfaces
+- shared `.claude/agents/evidence-auditor.md` when the task is really claim scrutiny or anti-bias review
 
 ## Intent-To-Workflow Routing
 
@@ -40,6 +44,9 @@ Codex should route from intent, not from exact wording.
   - `canompx3-verify` for post-edit verification and done-definition checks
   - `canompx3-live-audit` for runtime, broker, session, or live-control safety
   - `canompx3-deploy-readiness` for go/no-go promotion decisions
+  - `canompx3-capital-review` when the ask is broad, adversarial, anti-bias,
+    "real capital", "thorough AF", or spans multiple risk surfaces
+  - `evidence-auditor.md` for separate-context scrutiny of claims, results, and readiness narratives
   - shared `.claude/skills/` recipes when the task is really a shared command
     flow
 - If multiple routes fit, prefer the path with the strongest verification and
@@ -68,6 +75,28 @@ Route to the correct source:
 - Project memory, design history, prior findings:
   - Use `.claude/skills/pinecone-assistant/SKILL.md`
 - Academic methodology: use local PDFs in `resources/` (BH FDR, walk-forward, deflated Sharpe).
+- For claim-heavy work, downgrade conclusions unless they are explicitly tagged or supportable as `MEASURED`; `INFERRED` and `UNSUPPORTED` are valid end states, not failures.
+- For research pipeline status, use
+  `docs/institutional/research_pipeline_contract.md`: discovered, confirmed,
+  validated, deployed, and executed are separate claims.
+- Route research/runtime questions to one primary option before acting:
+  `standalone_discovery`, `conditional_role`, `confirmation`,
+  `deployment_readiness`, or `operations`.
+- For new-edge discovery, noisy ideas, chart reads, or hypothesis triage, use
+  `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md` as the front door before
+  any scan, prereg, or implementation talk.
+- The human-facing interface is natural language. When the user asks to find,
+  test, classify, validate, or audit an idea, Codex should run the repo tooling
+  internally and report the result rather than asking the user to call scripts.
+- Once a prereg exists, use the prereg front door internally to inspect the
+  route before execution. Execute only after confirming the branch is correct:
+  - `standalone_edge` -> `experimental_strategies` -> validator -> `validated_setups`
+  - `conditional_role` -> bounded runner/result doc -> explicit role decision
+- For `confirmation`, `deployment_readiness`, and `operations` questions, do
+  not use the prereg front door as the authority. Use the validator / validated
+  shelf, deployment profile checks, or runtime / `paper_trades` evidence
+  respectively.
+- For institutional research review prompts, prefer the compact runtime rubric in `docs/prompts/INSTITUTIONAL_RESEARCH_REVIEW_MINI.md` instead of re-pasting long prompt blocks.
 
 ## Verification Defaults
 
@@ -89,6 +118,8 @@ For large post-edit verification, use the shared logic indexed in:
 - Narrow scripted jobs: `codex exec`
 - Non-interactive review of current changes: `codex review` or
   `scripts/infra/codex-review.sh`
+- Capital-at-risk review of current changes:
+  `scripts/infra/codex-capital-review.sh`
 - Interactive work: `scripts/infra/codex-project.sh`
 - Interactive with live web search: `scripts/infra/codex-project-search.sh`
 - Heavier coding / review profile: `canompx3_max`

@@ -117,12 +117,12 @@ COST_SPECS = {
     # @research-source: Amendment 3.1 (pre_registered_criteria.md, 2026-04-10)
     "GC": CostSpec(
         instrument="GC",
-        point_value=100.0,   # 100 troy oz * $1/oz per point
+        point_value=100.0,  # 100 troy oz * $1/oz per point
         commission_rt=17.40,  # 10x MGC ($1.74 * 10). Not canonical — GC not traded live
         spread_doubled=20.00,  # 2 ticks * $10/tick = $20 (10x MGC's $2). Dollar terms!
-        slippage=20.00,        # 2 ticks * $10/tick = $20 (10x MGC's $2). Dollar terms!
-        tick_size=0.10,        # $0.10/oz = $10/tick (vs MGC $1/tick)
-        min_ticks_floor=10,    # 1.0pt = $100 minimum risk
+        slippage=20.00,  # 2 ticks * $10/tick = $20 (10x MGC's $2). Dollar terms!
+        tick_size=0.10,  # $0.10/oz = $10/tick (vs MGC $1/tick)
+        min_ticks_floor=10,  # 1.0pt = $100 minimum risk
     ),
     # NQ = E-mini Nasdaq 100 (full-size). 10x MNQ by contract multiplier.
     # Same price, same tick size, same sessions — only the point value differs.
@@ -134,18 +134,44 @@ COST_SPECS = {
     # $4.10 / $20pt = $0.205/pt vs MNQ $1.42 / $2pt = $0.71/pt — 3.5x cheaper.
     "NQ": CostSpec(
         instrument="NQ",
-        point_value=20.0,       # $20 per index point (10x MNQ)
-        commission_rt=4.10,     # canonical TopStep Rithmic (higher than MNQ flat rate)
-        spread_doubled=5.00,    # 10x MNQ's $0.50 (same 1-tick spread, 10x $/tick)
-        slippage=10.00,         # 10x MNQ's $1.00 (same tick-based slippage model)
-        tick_size=0.25,         # Same tick size as MNQ
-        min_ticks_floor=10,     # 10 ticks = 2.5pt = $50 minimum risk
+        point_value=20.0,  # $20 per index point (10x MNQ)
+        commission_rt=4.10,  # canonical TopStep Rithmic (higher than MNQ flat rate)
+        spread_doubled=5.00,  # 10x MNQ's $0.50 (same 1-tick spread, 10x $/tick)
+        slippage=10.00,  # 10x MNQ's $1.00 (same tick-based slippage model)
+        tick_size=0.25,  # Same tick size as MNQ
+        min_ticks_floor=10,  # 10 ticks = 2.5pt = $50 minimum risk
     ),
-    # TODO(remediation-2026-03-25): MNQ slippage model is 1 tick ($0.50).
-    # MGC tbbo pilot showed mean=6.75 ticks (vs 1 modeled), std=41.57, max=263.
-    # MNQ tbbo pilot has NOT been run yet — research/research_mnq_e2_slippage_pilot.py exists.
-    # Run MNQ pilot before adjusting production slippage.
-    # Break-even analysis (scripts/tools/slippage_scenario.py):
+    # MNQ slippage model: 1 tick round-trip ($1.00 = 2 ticks × $0.50/tick).
+    #
+    # MNQ TBBO pilot (2026-04-20, N=114, 2021-02-10 to 2026-02-12,
+    # 6 sessions: CME_PRECLOSE, LONDON_METALS, NYSE_OPEN, SINGAPORE_OPEN,
+    # TOKYO_OPEN, US_DATA_830): MEDIAN=0 ticks, p95=0.35 ticks, MAX=+2 ticks,
+    # 100% of days ≤ 2 ticks. Modeled slippage is CONSERVATIVE vs measured
+    # on routine days. Deployed-lane subset (NYSE_OPEN / SINGAPORE_OPEN /
+    # TOKYO_OPEN, N=56): median=0, max=+1 tick, 100% ≤ 1 tick. Mean=-0.93
+    # is dominated by 4 BBO-staleness rows (spread ≥ 3 ticks at trigger);
+    # floor-at-zero conservative read gives mean ≈ +0.1 tick.
+    # Full doc: docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v1.md
+    #
+    # MGC TBBO pilot earlier (research/output/mgc_e2_slippage_analysis.json):
+    # N=40, MEDIAN=0, mean=6.75 dominated by ONE day (2018-01-18 gap-open
+    # event, 263 ticks). Trimmed mean ≈0.18 ticks. Honest central tendency
+    # is "both instruments fill at modeled routinely."
+    #
+    # Follow-up pilots:
+    # - MNQ v2 filled EUROPE_FLOW / COMEX_SETTLE / US_DATA_1000 gaps; see
+    #   docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v2-gap-fill.md
+    # - MES TBBO pilot v1 (2026-04-24, N=40): median=0 ticks, p95=0.00,
+    #   max=0, 100% of days <= 1 modeled tick across current deployable MES
+    #   sessions. Full doc:
+    #   docs/audit/results/2026-04-24-mes-e2-slippage-pilot-v1.md
+    #
+    # STILL OPEN:
+    # - Book-wide event-day tail remains unquantified for MNQ/MES routine samples.
+    # - Phase D MNQ COMEX_SETTLE pilot gate (2026-05-15) benefits from a
+    #   targeted COMEX_SETTLE TBBO pull before evaluation.
+    #
+    # Break-even analysis (scripts/tools/slippage_scenario.py) for REFERENCE:
     #   COMEX_SETTLE: 4.9 extra ticks to zero (FRAGILE)
     #   SINGAPORE_OPEN: 6.0 extra ticks to zero
     #   NYSE_CLOSE: 15.4 extra ticks (robust)

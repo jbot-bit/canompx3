@@ -46,21 +46,25 @@ TRADING_DAYS_PER_YEAR = 252
 # TRADE LOADING (from signal_stack.py)
 # =============================================================================
 
+
 def _get_strategy_params(con, strategy_id):
-    row = con.execute("""
+    row = con.execute(
+        """
         SELECT instrument, orb_label, orb_minutes, entry_model,
                rr_target, confirm_bars, filter_type
         FROM validated_setups
         WHERE strategy_id = ?
-    """, [strategy_id]).fetchone()
+    """,
+        [strategy_id],
+    ).fetchone()
     if not row:
         return None
-    cols = ["instrument", "orb_label", "orb_minutes", "entry_model",
-            "rr_target", "confirm_bars", "filter_type"]
+    cols = ["instrument", "orb_label", "orb_minutes", "entry_model", "rr_target", "confirm_bars", "filter_type"]
     return dict(zip(cols, row))
 
 
 _ts_check_cache = {}
+
 
 def _check_ts_columns(con):
     if "checked" in _ts_check_cache:
@@ -117,12 +121,11 @@ def load_trades_with_features(con, slots):
             if params is None:
                 continue
 
-            eligible = filter_days.get(
-                (params["filter_type"], params["orb_label"]), set()
-            )
+            eligible = filter_days.get((params["filter_type"], params["orb_label"]), set())
 
             ts_cols = ", oo.ts_pnl_r, oo.ts_outcome" if has_ts else ""
-            rows = con.execute(f"""
+            rows = con.execute(
+                f"""
                 SELECT oo.trading_day, oo.outcome, oo.pnl_r{ts_cols}
                 FROM orb_outcomes oo
                 WHERE oo.symbol = ?
@@ -133,10 +136,16 @@ def load_trades_with_features(con, slots):
                   AND oo.confirm_bars = ?
                   AND oo.outcome IN ('win', 'loss')
                 ORDER BY oo.trading_day
-            """, [
-                params["instrument"], params["orb_label"], params["orb_minutes"],
-                params["entry_model"], params["rr_target"], params["confirm_bars"],
-            ]).fetchall()
+            """,
+                [
+                    params["instrument"],
+                    params["orb_label"],
+                    params["orb_minutes"],
+                    params["entry_model"],
+                    params["rr_target"],
+                    params["confirm_bars"],
+                ],
+            ).fetchall()
 
             for r in rows:
                 td = r[0]
@@ -157,10 +166,7 @@ def load_trades_with_features(con, slots):
                     "strategy_id": sid,
                     "slot_label": f"{instrument}_{sess_label}",
                     "atr_vel_ratio": feat["atr_vel_ratio"] if feat else None,
-                    "compression_tier": (
-                        feat.get(f"orb_{sess_label}_compression_tier")
-                        if feat else None
-                    ),
+                    "compression_tier": (feat.get(f"orb_{sess_label}_compression_tier") if feat else None),
                     "atr_20": feat["atr_20"] if feat else None,
                     "day_of_week": td.weekday() if hasattr(td, "weekday") else None,
                     "is_friday": td.weekday() == 4 if hasattr(td, "weekday") else False,
@@ -176,6 +182,7 @@ def load_trades_with_features(con, slots):
 # =============================================================================
 # OVERLAY SIGNALS
 # =============================================================================
+
 
 def compute_all_narrow_days(con):
     rows = con.execute("""
@@ -194,9 +201,7 @@ def compute_all_narrow_days(con):
     medians = {}
     for sym in ["MGC", "MES", "MNQ"]:
         sym_df = df[df["symbol"] == sym].sort_values("trading_day").copy()
-        sym_df["expanding_median"] = (
-            sym_df["orb_1000_size"].expanding(min_periods=20).median().shift(1)
-        )
+        sym_df["expanding_median"] = sym_df["orb_1000_size"].expanding(min_periods=20).median().shift(1)
         sym_df["below_median"] = sym_df["orb_1000_size"] < sym_df["expanding_median"]
         medians[sym] = dict(zip(sym_df["trading_day"], sym_df["below_median"]))
 
@@ -279,6 +284,7 @@ def apply_signals(trades, all_narrow_days, atr_threshold):
 # =============================================================================
 # CORRELATION-AWARE POSITION CAPPING
 # =============================================================================
+
 
 def compute_slot_correlations(trades):
     """Compute pairwise daily-return correlations between slot_labels.
@@ -392,6 +398,7 @@ def apply_position_cap(trades, max_positions, slot_correlations, corr_penalty=0.
 # ADAPTIVE POSITION SIZING
 # =============================================================================
 
+
 def apply_adaptive_sizing(trades, dd_threshold=15.0, reduced_scale=0.5):
     """Scale down position size when in drawdown.
 
@@ -447,15 +454,27 @@ def apply_adaptive_sizing(trades, dd_threshold=15.0, reduced_scale=0.5):
 # METRICS
 # =============================================================================
 
+
 def compute_full_metrics(trades, start_date, end_date):
     """Compute comprehensive portfolio metrics."""
     n = len(trades)
     if n == 0:
-        return {"n": 0, "total_r": 0, "exp_r": 0, "wr": 0,
-                "sharpe_ann": None, "max_dd": 0, "max_dd_start": None,
-                "max_dd_end": None, "dd_duration": None, "recovery_days": None,
-                "worst_day": 0, "worst_day_date": None, "max_concurrent": 0,
-                "avg_concurrent": 0}
+        return {
+            "n": 0,
+            "total_r": 0,
+            "exp_r": 0,
+            "wr": 0,
+            "sharpe_ann": None,
+            "max_dd": 0,
+            "max_dd_start": None,
+            "max_dd_end": None,
+            "dd_duration": None,
+            "recovery_days": None,
+            "worst_day": 0,
+            "worst_day_date": None,
+            "max_concurrent": 0,
+            "avg_concurrent": 0,
+        }
 
     n_wins = sum(1 for t in trades if t["outcome"] == "win")
     total_r = sum(t["effective_pnl_r"] for t in trades)
@@ -477,7 +496,7 @@ def compute_full_metrics(trades, start_date, end_date):
     if n_days > 1:
         mean_d = sum(full_series) / n_days
         var = sum((v - mean_d) ** 2 for v in full_series) / (n_days - 1)
-        std_d = var ** 0.5
+        std_d = var**0.5
         if std_d > 0:
             sharpe_ann = (mean_d / std_d) * sqrt(TRADING_DAYS_PER_YEAR)
 
@@ -520,10 +539,10 @@ def compute_full_metrics(trades, start_date, end_date):
                 break
         if trough_idx is not None:
             cum_scan = 0.0
-            for day in all_bdays[:trough_idx + 1]:
+            for day in all_bdays[: trough_idx + 1]:
                 cum_scan += return_map.get(day.date(), 0.0)
             target = cum_scan + max_dd
-            for day in all_bdays[trough_idx + 1:]:
+            for day in all_bdays[trough_idx + 1 :]:
                 cum_scan += return_map.get(day.date(), 0.0)
                 if cum_scan >= target:
                     recovery_days = (day.date() - max_dd_end).days
@@ -581,13 +600,14 @@ def yearly_breakdown(trades):
 # MAIN
 # =============================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="Ultimate Portfolio — signals + position capping")
     parser.add_argument("--db-path", default=None)
-    parser.add_argument("--cap", type=int, default=None,
-                        help="Fixed position cap (default: sweep 6-14)")
-    parser.add_argument("--corr-penalty", type=float, default=0.3,
-                        help="Effective position penalty per correlated slot (default: 0.3)")
+    parser.add_argument("--cap", type=int, default=None, help="Fixed position cap (default: sweep 6-14)")
+    parser.add_argument(
+        "--corr-penalty", type=float, default=0.3, help="Effective position penalty per correlated slot (default: 0.3)"
+    )
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
@@ -622,8 +642,7 @@ def main():
         signaled_trades = apply_signals(raw_trades, all_narrow_days, atr_threshold)
         print(f"  After signals: {len(signaled_trades)} trades ({len(raw_trades) - len(signaled_trades)} removed)")
 
-        ts_used = sum(1 for t in signaled_trades
-                      if t.get("ts_pnl_r") is not None and t.get("ts_outcome") is not None)
+        ts_used = sum(1 for t in signaled_trades if t.get("ts_pnl_r") is not None and t.get("ts_outcome") is not None)
         print(f"  T80 time-stop applied: {ts_used}/{len(signaled_trades)} trades")
 
         if not signaled_trades:
@@ -637,8 +656,7 @@ def main():
         # Compute slot correlations for capping
         print("\nComputing slot correlations...")
         slot_corr = compute_slot_correlations(signaled_trades)
-        high_corr = [(a, b, r) for (a, b), r in slot_corr.items()
-                     if a < b and abs(r) > 0.3]
+        high_corr = [(a, b, r) for (a, b), r in slot_corr.items() if a < b and abs(r) > 0.3]
         high_corr.sort(key=lambda x: -abs(x[2]))
         print(f"  {len(high_corr)} pairs with |r| > 0.3:")
         for a, b, r in high_corr[:10]:
@@ -655,9 +673,11 @@ def main():
         print(f"\n{'=' * 100}")
         print(f"POSITION CAP SWEEP (corr_penalty={args.corr_penalty})")
         print(f"{'=' * 100}")
-        print(f"{'Cap':>5} {'N':>6} {'TotalR':>9} {'ExpR':>8} {'WR':>6} "
-              f"{'ShANN':>7} {'MaxDD':>7} {'DD days':>8} {'Recov':>7} "
-              f"{'MaxConc':>8} {'AvgConc':>8} {'Worst':>7}")
+        print(
+            f"{'Cap':>5} {'N':>6} {'TotalR':>9} {'ExpR':>8} {'WR':>6} "
+            f"{'ShANN':>7} {'MaxDD':>7} {'DD days':>8} {'Recov':>7} "
+            f"{'MaxConc':>8} {'AvgConc':>8} {'Worst':>7}"
+        )
         print("-" * 100)
 
         best_result = None
@@ -670,25 +690,25 @@ def main():
                 capped_trades = signaled_trades
                 cap_info = {"capped_days": 0, "trades_removed": 0}
             else:
-                capped_trades, cap_info = apply_position_cap(
-                    signaled_trades, cap, slot_corr, args.corr_penalty
-                )
+                capped_trades, cap_info = apply_position_cap(signaled_trades, cap, slot_corr, args.corr_penalty)
 
             m = compute_full_metrics(capped_trades, start_date, end_date)
 
-            sh = f"{m['sharpe_ann']:.2f}" if m['sharpe_ann'] else "N/A"
-            dd_dur = f"{m['dd_duration']}d" if m['dd_duration'] else "N/A"
-            recov = f"{m['recovery_days']}d" if m['recovery_days'] else "never"
+            sh = f"{m['sharpe_ann']:.2f}" if m["sharpe_ann"] else "N/A"
+            dd_dur = f"{m['dd_duration']}d" if m["dd_duration"] else "N/A"
+            recov = f"{m['recovery_days']}d" if m["recovery_days"] else "never"
 
-            print(f"{cap_label:>5} {m['n']:>6} {m['total_r']:>+8.1f}R "
-                  f"{m['exp_r']:>+7.4f} {m['wr']:>5.1%} "
-                  f"{sh:>7} {m['max_dd']:>6.1f}R {dd_dur:>8} {recov:>7} "
-                  f"{m['max_concurrent']:>8} {m['avg_concurrent']:>8.1f} "
-                  f"{m['worst_day']:>+6.2f}R")
+            print(
+                f"{cap_label:>5} {m['n']:>6} {m['total_r']:>+8.1f}R "
+                f"{m['exp_r']:>+7.4f} {m['wr']:>5.1%} "
+                f"{sh:>7} {m['max_dd']:>6.1f}R {dd_dur:>8} {recov:>7} "
+                f"{m['max_concurrent']:>8} {m['avg_concurrent']:>8.1f} "
+                f"{m['worst_day']:>+6.2f}R"
+            )
 
             # Track best Sharpe/DD ratio
-            if m['sharpe_ann'] and m['max_dd'] > 0:
-                ratio = m['sharpe_ann'] / m['max_dd']
+            if m["sharpe_ann"] and m["max_dd"] > 0:
+                ratio = m["sharpe_ann"] / m["max_dd"]
                 if ratio > best_ratio:
                     best_ratio = ratio
                     best_result = (cap, m, capped_trades)
@@ -708,13 +728,15 @@ def main():
             print(f"  Total R:         {best_m['total_r']:+.1f}")
             print(f"  ExpR:            {best_m['exp_r']:+.4f}")
             print(f"  Win rate:        {best_m['wr']:.1%}")
-            if best_m['sharpe_ann']:
+            if best_m["sharpe_ann"]:
                 print(f"  Sharpe (ann):    {best_m['sharpe_ann']:.2f}")
             print(f"  Max drawdown:    {best_m['max_dd']:.1f}R")
-            if best_m['max_dd_start'] and best_m['max_dd_end']:
-                print(f"    Period:        {best_m['max_dd_start']} to {best_m['max_dd_end']} "
-                      f"({best_m['dd_duration']} cal days)")
-                if best_m['recovery_days']:
+            if best_m["max_dd_start"] and best_m["max_dd_end"]:
+                print(
+                    f"    Period:        {best_m['max_dd_start']} to {best_m['max_dd_end']} "
+                    f"({best_m['dd_duration']} cal days)"
+                )
+                if best_m["recovery_days"]:
                     print(f"    Recovery:      {best_m['recovery_days']} cal days")
                 else:
                     print(f"    Recovery:      NOT YET RECOVERED")
@@ -729,9 +751,8 @@ def main():
             all_positive = True
             for year in sorted(yb.keys()):
                 y = yb[year]
-                print(f"  {year:>6} {y['n']:>7} {y['total_r']:>+8.1f}R "
-                      f"{y['exp_r']:>+9.4f} {y['wr']:>6.1%}")
-                if y['total_r'] < 0:
+                print(f"  {year:>6} {y['n']:>7} {y['total_r']:>+8.1f}R {y['exp_r']:>+9.4f} {y['wr']:>6.1%}")
+                if y["total_r"] < 0:
                     all_positive = False
             print(f"\n  Every year positive: {'YES' if all_positive else 'NO'}")
 
@@ -774,48 +795,56 @@ def main():
             print(f"\n{'=' * 110}")
             print(f"ADAPTIVE SIZING SWEEP (cap={best_cap}, scale down to X when DD exceeds threshold)")
             print(f"{'=' * 110}")
-            print(f"{'Threshold':>10} {'Scale':>6} {'N':>6} {'TotalR':>9} {'ExpR':>8} "
-                  f"{'ShANN':>7} {'MaxDD':>7} {'DD days':>8} {'Recov':>7} "
-                  f"{'Worst':>7} {'ScaleDays':>10}")
+            print(
+                f"{'Threshold':>10} {'Scale':>6} {'N':>6} {'TotalR':>9} {'ExpR':>8} "
+                f"{'ShANN':>7} {'MaxDD':>7} {'DD days':>8} {'Recov':>7} "
+                f"{'Worst':>7} {'ScaleDays':>10}"
+            )
             print("-" * 110)
 
             # Baseline (no adaptive sizing)
             base_m = compute_full_metrics(best_trades, start_date, end_date)
-            sh = f"{base_m['sharpe_ann']:.2f}" if base_m['sharpe_ann'] else "N/A"
-            dd_dur = f"{base_m['dd_duration']}d" if base_m['dd_duration'] else "N/A"
-            recov = f"{base_m['recovery_days']}d" if base_m['recovery_days'] else "never"
-            print(f"{'none':>10} {'1.0':>6} {base_m['n']:>6} {base_m['total_r']:>+8.1f}R "
-                  f"{base_m['exp_r']:>+7.4f} {sh:>7} {base_m['max_dd']:>6.1f}R "
-                  f"{dd_dur:>8} {recov:>7} {base_m['worst_day']:>+6.2f}R {'0':>10}")
+            sh = f"{base_m['sharpe_ann']:.2f}" if base_m["sharpe_ann"] else "N/A"
+            dd_dur = f"{base_m['dd_duration']}d" if base_m["dd_duration"] else "N/A"
+            recov = f"{base_m['recovery_days']}d" if base_m["recovery_days"] else "never"
+            print(
+                f"{'none':>10} {'1.0':>6} {base_m['n']:>6} {base_m['total_r']:>+8.1f}R "
+                f"{base_m['exp_r']:>+7.4f} {sh:>7} {base_m['max_dd']:>6.1f}R "
+                f"{dd_dur:>8} {recov:>7} {base_m['worst_day']:>+6.2f}R {'0':>10}"
+            )
 
             # Sweep thresholds and scales
             configs = [
-                (20.0, 0.5),   # Half size after -20R DD
-                (15.0, 0.5),   # Half size after -15R DD
-                (10.0, 0.5),   # Half size after -10R DD
+                (20.0, 0.5),  # Half size after -20R DD
+                (15.0, 0.5),  # Half size after -15R DD
+                (10.0, 0.5),  # Half size after -10R DD
                 (20.0, 0.25),  # Quarter size after -20R DD
                 (15.0, 0.25),  # Quarter size after -15R DD
                 (10.0, 0.25),  # Quarter size after -10R DD
             ]
 
             ultimate_best = None
-            ultimate_best_ratio = base_m['sharpe_ann'] / base_m['max_dd'] if base_m['sharpe_ann'] and base_m['max_dd'] > 0 else -999
+            ultimate_best_ratio = (
+                base_m["sharpe_ann"] / base_m["max_dd"] if base_m["sharpe_ann"] and base_m["max_dd"] > 0 else -999
+            )
 
             for threshold, scale in configs:
                 adapted, stats = apply_adaptive_sizing(best_trades, threshold, scale)
                 m = compute_full_metrics(adapted, start_date, end_date)
 
-                sh = f"{m['sharpe_ann']:.2f}" if m['sharpe_ann'] else "N/A"
-                dd_dur = f"{m['dd_duration']}d" if m['dd_duration'] else "N/A"
-                recov = f"{m['recovery_days']}d" if m['recovery_days'] else "never"
+                sh = f"{m['sharpe_ann']:.2f}" if m["sharpe_ann"] else "N/A"
+                dd_dur = f"{m['dd_duration']}d" if m["dd_duration"] else "N/A"
+                recov = f"{m['recovery_days']}d" if m["recovery_days"] else "never"
 
-                print(f"{threshold:>9.0f}R {scale:>5.2f} {m['n']:>6} {m['total_r']:>+8.1f}R "
-                      f"{m['exp_r']:>+7.4f} {sh:>7} {m['max_dd']:>6.1f}R "
-                      f"{dd_dur:>8} {recov:>7} {m['worst_day']:>+6.2f}R "
-                      f"{stats['scale_days']:>10}")
+                print(
+                    f"{threshold:>9.0f}R {scale:>5.2f} {m['n']:>6} {m['total_r']:>+8.1f}R "
+                    f"{m['exp_r']:>+7.4f} {sh:>7} {m['max_dd']:>6.1f}R "
+                    f"{dd_dur:>8} {recov:>7} {m['worst_day']:>+6.2f}R "
+                    f"{stats['scale_days']:>10}"
+                )
 
-                if m['sharpe_ann'] and m['max_dd'] > 0:
-                    ratio = m['sharpe_ann'] / m['max_dd']
+                if m["sharpe_ann"] and m["max_dd"] > 0:
+                    ratio = m["sharpe_ann"] / m["max_dd"]
                     if ratio > ultimate_best_ratio:
                         ultimate_best_ratio = ratio
                         ultimate_best = (threshold, scale, m, adapted, stats)
@@ -843,13 +872,12 @@ def main():
             print(f"  Total R:         {um['total_r']:+.1f}")
             print(f"  ExpR:            {um['exp_r']:+.4f}")
             print(f"  Win rate:        {um['wr']:.1%}")
-            if um['sharpe_ann']:
+            if um["sharpe_ann"]:
                 print(f"  Sharpe (ann):    {um['sharpe_ann']:.2f}")
             print(f"  Max drawdown:    {um['max_dd']:.1f}R")
-            if um['max_dd_start'] and um['max_dd_end']:
-                print(f"    Period:        {um['max_dd_start']} to {um['max_dd_end']} "
-                      f"({um['dd_duration']} cal days)")
-                if um['recovery_days']:
+            if um["max_dd_start"] and um["max_dd_end"]:
+                print(f"    Period:        {um['max_dd_start']} to {um['max_dd_end']} ({um['dd_duration']} cal days)")
+                if um["recovery_days"]:
                     print(f"    Recovery:      {um['recovery_days']} cal days")
                 else:
                     print(f"    Recovery:      NOT YET RECOVERED")
@@ -857,8 +885,10 @@ def main():
             print(f"  Max concurrent:  {um['max_concurrent']}")
             print(f"  Avg concurrent:  {um['avg_concurrent']:.1f}")
             if ultimate_best:
-                print(f"  Scaled-down days: {u_stats['scale_days']}/{u_stats['total_days']} "
-                      f"({u_stats['scale_days']/u_stats['total_days']:.1%})")
+                print(
+                    f"  Scaled-down days: {u_stats['scale_days']}/{u_stats['total_days']} "
+                    f"({u_stats['scale_days'] / u_stats['total_days']:.1%})"
+                )
 
             # Per-year
             yb = yearly_breakdown(u_trades)
@@ -867,9 +897,8 @@ def main():
             all_positive = True
             for year in sorted(yb.keys()):
                 y = yb[year]
-                print(f"  {year:>6} {y['n']:>7} {y['total_r']:>+8.1f}R "
-                      f"{y['exp_r']:>+9.4f} {y['wr']:>6.1%}")
-                if y['total_r'] < 0:
+                print(f"  {year:>6} {y['n']:>7} {y['total_r']:>+8.1f}R {y['exp_r']:>+9.4f} {y['wr']:>6.1%}")
+                if y["total_r"] < 0:
                     all_positive = False
             print(f"\n  Every year positive: {'YES' if all_positive else 'NO'}")
 
@@ -886,21 +915,23 @@ def main():
             print(f"{'=' * 90}")
             print(f"  Avg annual R (2024-25): {annual_r:+.1f}R")
             print(f"  Max DD:                 {um['max_dd']:.1f}R")
-            print(f"  Return/DD ratio:        {annual_r/um['max_dd']:.1f}x" if um['max_dd'] > 0 else "")
+            print(f"  Return/DD ratio:        {annual_r / um['max_dd']:.1f}x" if um["max_dd"] > 0 else "")
             print()
             print(f"  {'$ per R':>10} {'Annual $':>12} {'MaxDD $':>12} {'Min Account':>14} {'Contracts':>12}")
             print(f"  {'------':>10} {'--------':>12} {'------':>12} {'-----------':>14} {'---------':>12}")
 
             for r_dollar in [100, 200, 300, 400, 500]:
                 annual_dollar = annual_r * r_dollar
-                dd_dollar = um['max_dd'] * r_dollar
+                dd_dollar = um["max_dd"] * r_dollar
                 # Account needs: MaxDD + 50% buffer for margin
                 min_account = dd_dollar * 1.5
                 # Rough contracts: MGC ~$200/R, MES ~$500/R, MNQ ~$160/R
                 avg_r_per_contract = 250  # rough average across instruments
                 contracts = r_dollar / avg_r_per_contract
-                print(f"  ${r_dollar:>8} ${annual_dollar:>10,.0f} ${dd_dollar:>10,.0f} "
-                      f"${min_account:>12,.0f} ~{contracts:>10.1f}")
+                print(
+                    f"  ${r_dollar:>8} ${annual_dollar:>10,.0f} ${dd_dollar:>10,.0f} "
+                    f"${min_account:>12,.0f} ~{contracts:>10.1f}"
+                )
 
             print()
             print("  NOTE: 'Min Account' = 1.5x MaxDD (conservative buffer).")
@@ -918,22 +949,27 @@ def main():
         final_m = um if best_result else raw_base
 
         print(f"  {'Metric':<25} {'Signals Only':>15} {'Ultimate':>15} {'Delta':>12}")
-        print(f"  {'-'*25} {'-'*15} {'-'*15} {'-'*12}")
-        print(f"  {'Trades':<25} {raw_base['n']:>15,} {final_m['n']:>15,} "
-              f"{final_m['n'] - raw_base['n']:>+12,}")
-        print(f"  {'Total R':<25} {raw_base['total_r']:>+14.1f}R {final_m['total_r']:>+14.1f}R "
-              f"{final_m['total_r'] - raw_base['total_r']:>+11.1f}R")
-        if raw_base['sharpe_ann'] and final_m['sharpe_ann']:
-            print(f"  {'Sharpe (ann)':<25} {raw_base['sharpe_ann']:>15.2f} "
-                  f"{final_m['sharpe_ann']:>15.2f} "
-                  f"{final_m['sharpe_ann'] - raw_base['sharpe_ann']:>+12.2f}")
-        print(f"  {'Max DD':<25} {raw_base['max_dd']:>14.1f}R {final_m['max_dd']:>14.1f}R "
-              f"{final_m['max_dd'] - raw_base['max_dd']:>+11.1f}R")
-        raw_dur = f"{raw_base['dd_duration']}d" if raw_base['dd_duration'] else "N/A"
-        fin_dur = f"{final_m['dd_duration']}d" if final_m['dd_duration'] else "N/A"
+        print(f"  {'-' * 25} {'-' * 15} {'-' * 15} {'-' * 12}")
+        print(f"  {'Trades':<25} {raw_base['n']:>15,} {final_m['n']:>15,} {final_m['n'] - raw_base['n']:>+12,}")
+        print(
+            f"  {'Total R':<25} {raw_base['total_r']:>+14.1f}R {final_m['total_r']:>+14.1f}R "
+            f"{final_m['total_r'] - raw_base['total_r']:>+11.1f}R"
+        )
+        if raw_base["sharpe_ann"] and final_m["sharpe_ann"]:
+            print(
+                f"  {'Sharpe (ann)':<25} {raw_base['sharpe_ann']:>15.2f} "
+                f"{final_m['sharpe_ann']:>15.2f} "
+                f"{final_m['sharpe_ann'] - raw_base['sharpe_ann']:>+12.2f}"
+            )
+        print(
+            f"  {'Max DD':<25} {raw_base['max_dd']:>14.1f}R {final_m['max_dd']:>14.1f}R "
+            f"{final_m['max_dd'] - raw_base['max_dd']:>+11.1f}R"
+        )
+        raw_dur = f"{raw_base['dd_duration']}d" if raw_base["dd_duration"] else "N/A"
+        fin_dur = f"{final_m['dd_duration']}d" if final_m["dd_duration"] else "N/A"
         print(f"  {'DD Duration':<25} {raw_dur:>15} {fin_dur:>15}")
-        raw_rec = f"{raw_base['recovery_days']}d" if raw_base['recovery_days'] else "never"
-        fin_rec = f"{final_m['recovery_days']}d" if final_m['recovery_days'] else "never"
+        raw_rec = f"{raw_base['recovery_days']}d" if raw_base["recovery_days"] else "never"
+        fin_rec = f"{final_m['recovery_days']}d" if final_m["recovery_days"] else "never"
         print(f"  {'Recovery':<25} {raw_rec:>15} {fin_rec:>15}")
         print(f"  {'Worst Day':<25} {raw_base['worst_day']:>+14.2f}R {final_m['worst_day']:>+14.2f}R")
 

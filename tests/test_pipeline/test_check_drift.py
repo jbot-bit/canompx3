@@ -896,10 +896,7 @@ class TestCanonicalOrbUtcWindowSource:
         fake_trading = tmp_path / "trading_app"
         fake_trading.mkdir()
         offender = fake_trading / "rogue_orb.py"
-        offender.write_text(
-            "def orb_utc_window(trading_day, orb_label, orb_minutes):\n"
-            "    return None, None\n"
-        )
+        offender.write_text("def orb_utc_window(trading_day, orb_label, orb_minutes):\n    return None, None\n")
         # Keep PIPELINE_DIR/SCRIPTS_DIR pointing somewhere harmless so the
         # canonical pipeline/dst.py definer doesn't appear in the scan
         # (we want to test detection of duplicates only).
@@ -921,10 +918,7 @@ class TestCanonicalOrbUtcWindowSource:
         fake_scripts.mkdir()
         offender = fake_scripts / "tools" / "bad_orb.py"
         offender.parent.mkdir()
-        offender.write_text(
-            "def orb_utc_window(td, lbl, m):\n"
-            "    pass\n"
-        )
+        offender.write_text("def orb_utc_window(td, lbl, m):\n    pass\n")
         empty = tmp_path / "empty"
         empty.mkdir()
         monkeypatch.setattr(check_drift, "SCRIPTS_DIR", fake_scripts)
@@ -970,9 +964,7 @@ class TestNoSilentBreakTsFallback:
 
         fake_dir = tmp_path / "trading_app"
         fake_dir.mkdir()
-        (fake_dir / "outcome_builder.py").write_text(
-            "x = orb_end_utc or break_ts\n"
-        )
+        (fake_dir / "outcome_builder.py").write_text("x = orb_end_utc or break_ts\n")
         monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_dir)
 
         violations = check_drift.check_no_silent_break_ts_fallback()
@@ -985,9 +977,7 @@ class TestNoSilentBreakTsFallback:
 
         fake_dir = tmp_path / "trading_app"
         fake_dir.mkdir()
-        (fake_dir / "outcome_builder.py").write_text(
-            "orb_end_utc = break_ts - timedelta(minutes=break_delay)\n"
-        )
+        (fake_dir / "outcome_builder.py").write_text("orb_end_utc = break_ts - timedelta(minutes=break_delay)\n")
         monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_dir)
 
         violations = check_drift.check_no_silent_break_ts_fallback()
@@ -1014,8 +1004,18 @@ class TestComputeSingleOutcomeCanonicalKwargs:
         """Replace compute_single_outcome with a stub missing canonical kwargs."""
         import trading_app.outcome_builder as ob
 
-        def stub(bars_df, break_ts, orb_high, orb_low, break_dir, rr_target,
-                 confirm_bars, trading_day_end, cost_spec, entry_model="E1"):
+        def stub(
+            bars_df,
+            break_ts,
+            orb_high,
+            orb_low,
+            break_dir,
+            rr_target,
+            confirm_bars,
+            trading_day_end,
+            cost_spec,
+            entry_model="E1",
+        ):
             # Deliberately missing trading_day, orb_label, orb_minutes, orb_end_utc
             return {}
 
@@ -1026,8 +1026,9 @@ class TestComputeSingleOutcomeCanonicalKwargs:
 
         violations = check_compute_single_outcome_canonical_kwargs()
         assert len(violations) > 0
-        assert any("trading_day" in v or "orb_label" in v or "orb_minutes" in v
-                   or "orb_end_utc" in v for v in violations)
+        assert any(
+            "trading_day" in v or "orb_label" in v or "orb_minutes" in v or "orb_end_utc" in v for v in violations
+        )
 
 
 class TestNestedBuilderAbsent:
@@ -1155,6 +1156,7 @@ class TestHoldoutPolicyDeclarationConsistency:
         """If the canonical module loses one of the three required exports,
         the check must flag the missing name and bail before doc checks."""
         import trading_app.holdout_policy as hp
+
         monkeypatch.delattr(hp, "HOLDOUT_SACRED_FROM", raising=True)
         violations = check_holdout_policy_declaration_consistency()
         assert any("HOLDOUT_SACRED_FROM" in v and "EXPORT MISSING" in v for v in violations)
@@ -1163,6 +1165,7 @@ class TestHoldoutPolicyDeclarationConsistency:
         """If ``HOLDOUT_SACRED_FROM`` is changed without a new Amendment, the
         check must flag the drift and cite the lock value."""
         import trading_app.holdout_policy as hp
+
         monkeypatch.setattr(hp, "HOLDOUT_SACRED_FROM", date(2027, 1, 1))
         violations = check_holdout_policy_declaration_consistency()
         assert any("HOLDOUT_SACRED_FROM drifted" in v for v in violations)
@@ -1178,9 +1181,7 @@ class TestHoldoutPolicyDeclarationConsistency:
         )
         monkeypatch.setattr("pipeline.check_drift.__file__", str(fake_check_drift))
         violations = check_holdout_policy_declaration_consistency()
-        assert any(
-            "pre_registered_criteria.md" in v and self.AMENDMENT in v for v in violations
-        )
+        assert any("pre_registered_criteria.md" in v and self.AMENDMENT in v for v in violations)
 
     def test_criteria_md_missing_file_returns_violation(self, monkeypatch, tmp_path):
         """If ``pre_registered_criteria.md`` does not exist on disk, the
@@ -1204,9 +1205,7 @@ class TestHoldoutPolicyDeclarationConsistency:
         )
         monkeypatch.setattr("pipeline.check_drift.__file__", str(fake_check_drift))
         violations = check_holdout_policy_declaration_consistency()
-        assert any(
-            "RESEARCH_RULES.md" in v and self.SACRED_DATE_STR in v for v in violations
-        )
+        assert any("RESEARCH_RULES.md" in v and self.SACRED_DATE_STR in v for v in violations)
 
     def test_research_rules_missing_amendment_returns_violation(self, monkeypatch, tmp_path):
         """If ``RESEARCH_RULES.md`` does not cite Amendment 2.7, the check
@@ -1218,9 +1217,7 @@ class TestHoldoutPolicyDeclarationConsistency:
         )
         monkeypatch.setattr("pipeline.check_drift.__file__", str(fake_check_drift))
         violations = check_holdout_policy_declaration_consistency()
-        assert any(
-            "RESEARCH_RULES.md" in v and self.AMENDMENT in v for v in violations
-        )
+        assert any("RESEARCH_RULES.md" in v and self.AMENDMENT in v for v in violations)
 
     def test_research_rules_missing_file_returns_violation(self, monkeypatch, tmp_path):
         """If ``RESEARCH_RULES.md`` does not exist on disk, the check must
@@ -1239,6 +1236,7 @@ class TestHoldoutPolicyDeclarationConsistency:
         diverge, the check must return multiple violations (no early bail
         once we're past the export check)."""
         import trading_app.holdout_policy as hp
+
         monkeypatch.setattr(hp, "HOLDOUT_SACRED_FROM", date(2025, 7, 1))
         fake_check_drift = self._build_fake_root(
             tmp_path,
@@ -1271,8 +1269,7 @@ class TestCanonicalSourceAnnotations:
 
         violations = check_canonical_source_annotations()
         assert violations == [], (
-            f"Expected zero broken @canonical-source refs but found {len(violations)}: "
-            f"{violations[:5]}"
+            f"Expected zero broken @canonical-source refs but found {len(violations)}: {violations[:5]}"
         )
 
     def test_catches_missing_path(self, tmp_path, monkeypatch):
@@ -1282,9 +1279,7 @@ class TestCanonicalSourceAnnotations:
         fake_pkg = tmp_path / "trading_app"
         fake_pkg.mkdir()
         bad_file = fake_pkg / "_drift92_negative.py"
-        bad_file.write_text(
-            "# @canonical-source docs/research-input/topstep/THIS_FILE_DOES_NOT_EXIST.md\n"
-        )
+        bad_file.write_text("# @canonical-source docs/research-input/topstep/THIS_FILE_DOES_NOT_EXIST.md\n")
 
         monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_pkg)
         monkeypatch.setattr(check_drift, "PIPELINE_DIR", tmp_path / "pipeline")
@@ -1304,9 +1299,7 @@ class TestCanonicalSourceAnnotations:
         fake_pkg = tmp_path / "trading_app"
         archive = fake_pkg / "archive"
         archive.mkdir(parents=True)
-        (archive / "old.py").write_text(
-            "# @canonical-source docs/research-input/MISSING.md\n"
-        )
+        (archive / "old.py").write_text("# @canonical-source docs/research-input/MISSING.md\n")
 
         monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_pkg)
         monkeypatch.setattr(check_drift, "PIPELINE_DIR", tmp_path / "pipeline")
@@ -1321,9 +1314,7 @@ class TestCanonicalSourceAnnotations:
 
         fake_pkg = tmp_path / "trading_app"
         fake_pkg.mkdir()
-        (fake_pkg / "doc_template.py").write_text(
-            "# @canonical-source <relative path from project root>\n"
-        )
+        (fake_pkg / "doc_template.py").write_text("# @canonical-source <relative path from project root>\n")
 
         monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_pkg)
         monkeypatch.setattr(check_drift, "PIPELINE_DIR", tmp_path / "pipeline")
@@ -1629,18 +1620,16 @@ class TestCanonicalClaudeClientSource:
 
         # Baseline: current repo must be clean.
         baseline = check_drift.check_canonical_claude_client_source()
-        assert baseline == [], (
-            f"Clean repo expected zero violations. Offenders: {baseline}"
-        )
+        assert baseline == [], f"Clean repo expected zero violations. Offenders: {baseline}"
 
         # Inject a rogue file with both offending patterns.
         fake_trading = tmp_path / "trading_app"
         fake_trading.mkdir()
         offender = fake_trading / "rogue_ai.py"
         offender.write_text(
-            'import anthropic\n'
-            '\n'
-            'def bad():\n'
+            "import anthropic\n"
+            "\n"
+            "def bad():\n"
             '    client = anthropic.Anthropic(api_key="k")\n'
             '    return client.messages.create(model="claude-opus-4-7", max_tokens=10)\n'
         )

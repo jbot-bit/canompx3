@@ -107,9 +107,17 @@ class TestExchangeStatisticsSchema:
         con.execute(EXCHANGE_STATISTICS_SCHEMA)
         cols = {r[0] for r in con.execute("DESCRIBE exchange_statistics").fetchall()}
         expected = {
-            "cal_date", "symbol", "session_high", "session_low", "settlement",
-            "opening_price", "indicative_open", "cleared_volume", "open_interest",
-            "total_cleared_volume", "front_contract",
+            "cal_date",
+            "symbol",
+            "session_high",
+            "session_low",
+            "settlement",
+            "opening_price",
+            "indicative_open",
+            "cleared_volume",
+            "open_interest",
+            "total_cleared_volume",
+            "front_contract",
         }
         assert expected == cols
         con.close()
@@ -120,13 +128,9 @@ class TestExchangeStatisticsSchema:
         db_path = tmp_path / "test.db"
         con = duckdb.connect(str(db_path))
         con.execute(EXCHANGE_STATISTICS_SCHEMA)
-        con.execute(
-            "INSERT INTO exchange_statistics (cal_date, symbol) VALUES ('2024-01-01', 'MNQ')"
-        )
+        con.execute("INSERT INTO exchange_statistics (cal_date, symbol) VALUES ('2024-01-01', 'MNQ')")
         with pytest.raises(duckdb.ConstraintException):
-            con.execute(
-                "INSERT INTO exchange_statistics (cal_date, symbol) VALUES ('2024-01-01', 'MNQ')"
-            )
+            con.execute("INSERT INTO exchange_statistics (cal_date, symbol) VALUES ('2024-01-01', 'MNQ')")
         con.close()
 
     def test_idempotent_delete_insert(self, tmp_path):
@@ -138,18 +142,14 @@ class TestExchangeStatisticsSchema:
         con.execute(EXCHANGE_STATISTICS_SCHEMA)
         # First insert
         con.execute(
-            "INSERT INTO exchange_statistics (cal_date, symbol, settlement) "
-            "VALUES ('2024-01-01', 'MNQ', 100.0)"
+            "INSERT INTO exchange_statistics (cal_date, symbol, settlement) VALUES ('2024-01-01', 'MNQ', 100.0)"
         )
         # Idempotent re-insert
         con.execute("DELETE FROM exchange_statistics WHERE symbol = 'MNQ'")
         con.execute(
-            "INSERT INTO exchange_statistics (cal_date, symbol, settlement) "
-            "VALUES ('2024-01-01', 'MNQ', 105.0)"
+            "INSERT INTO exchange_statistics (cal_date, symbol, settlement) VALUES ('2024-01-01', 'MNQ', 105.0)"
         )
-        result = con.execute(
-            "SELECT settlement FROM exchange_statistics WHERE symbol = 'MNQ'"
-        ).fetchone()
+        result = con.execute("SELECT settlement FROM exchange_statistics WHERE symbol = 'MNQ'").fetchone()
         assert result[0] == 105.0
         con.close()
 

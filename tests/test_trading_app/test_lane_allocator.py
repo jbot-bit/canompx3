@@ -12,7 +12,6 @@ import duckdb
 import pytest
 
 from trading_app.lane_allocator import (
-    CORRELATION_REJECT_RHO,
     LaneScore,
     _classify_status,
     _effective_annual_r,
@@ -23,6 +22,7 @@ from trading_app.lane_allocator import (
     generate_report,
     load_sr_state,
 )
+from trading_app.lane_correlation import RHO_REJECT_THRESHOLD
 
 
 # ── Factories ──────────────────────────────────────────────────────
@@ -856,7 +856,9 @@ class TestCorrelationAwareSelection:
     def test_same_session_different_filters_rejected(self):
         """Same session, different filters with high rho should be deduplicated."""
         g5 = _make_score(strategy_id="MNQ_COMEX_E2_RR1.5_CB1_ORB_G5", orb_label="COMEX_SETTLE", annual_r_estimate=44.0)
-        lt12 = _make_score(strategy_id="MNQ_COMEX_E2_RR1.5_CB1_COST_LT12", orb_label="COMEX_SETTLE", annual_r_estimate=40.0)
+        lt12 = _make_score(
+            strategy_id="MNQ_COMEX_E2_RR1.5_CB1_COST_LT12", orb_label="COMEX_SETTLE", annual_r_estimate=40.0
+        )
         # Same-session filters are typically rho ≈ 1.0
         corr = {("MNQ_COMEX_E2_RR1.5_CB1_COST_LT12", "MNQ_COMEX_E2_RR1.5_CB1_ORB_G5"): 1.0}
         result = build_allocation([g5, lt12], max_slots=5, correlation_matrix=corr)
@@ -869,9 +871,9 @@ class TestCorrelationAwareSelection:
         b = _make_score(strategy_id="B", orb_label="EUROPE_FLOW", annual_r_estimate=45.0)
         c = _make_score(strategy_id="C", orb_label="TOKYO_OPEN", annual_r_estimate=30.0)
         corr = {
-            ("A", "B"): 0.85,   # A and B correlated → B rejected
-            ("A", "C"): 0.10,   # A and C independent
-            ("B", "C"): 0.05,   # B and C independent
+            ("A", "B"): 0.85,  # A and B correlated → B rejected
+            ("A", "C"): 0.10,  # A and C independent
+            ("B", "C"): 0.05,  # B and C independent
         }
         result = build_allocation([a, b, c], max_slots=5, correlation_matrix=corr)
         assert len(result) == 2
@@ -891,7 +893,7 @@ class TestCorrelationAwareSelection:
         """Exactly at threshold should pass (> not >=)."""
         a = _make_score(strategy_id="A", annual_r_estimate=44.0)
         b = _make_score(strategy_id="B", orb_label="EUROPE_FLOW", annual_r_estimate=40.0)
-        corr = {("A", "B"): CORRELATION_REJECT_RHO}  # exactly at threshold
+        corr = {("A", "B"): RHO_REJECT_THRESHOLD}  # exactly at threshold
         result = build_allocation([a, b], max_slots=5, correlation_matrix=corr)
         # At threshold (not above) → both selected
         assert len(result) == 2

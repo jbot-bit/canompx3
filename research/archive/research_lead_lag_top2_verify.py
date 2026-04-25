@@ -80,12 +80,12 @@ def _load_pair_df(con: duckdb.DuckDBPyConnection, spec: dict) -> pd.DataFrame:
      AND o.trading_day = df_f.trading_day
      AND o.orb_minutes = df_f.orb_minutes
     JOIN daily_features df_l
-      ON df_l.symbol = '{spec['leader_symbol']}'
+      ON df_l.symbol = '{spec["leader_symbol"]}'
      AND df_l.trading_day = o.trading_day
      AND df_l.orb_minutes = o.orb_minutes
     WHERE o.orb_minutes = 5
-      AND o.symbol = '{spec['follower_symbol']}'
-      AND o.orb_label = '{spec['follower_session']}'
+      AND o.symbol = '{spec["follower_symbol"]}'
+      AND o.orb_label = '{spec["follower_session"]}'
       AND o.entry_model = '{ENTRY_MODEL}'
       AND o.confirm_bars = {CONFIRM_BARS}
       AND o.rr_target = {RR_TARGET}

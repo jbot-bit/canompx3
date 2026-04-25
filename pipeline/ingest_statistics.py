@@ -129,9 +129,7 @@ def extract_statistics(instrument: str) -> pd.DataFrame:
                     vol_by_sym = matched_vol.groupby("symbol")["quantity"].sum().to_dict()
                     vol_by_sym = {s: v for s, v in vol_by_sym.items() if 0 < v < 2147483647}
                     if vol_by_sym:
-                        front_symbol = choose_front_contract(
-                            vol_by_sym, outright_pattern=pattern, prefix_len=plen
-                        )
+                        front_symbol = choose_front_contract(vol_by_sym, outright_pattern=pattern, prefix_len=plen)
                         if front_symbol:
                             break
 
@@ -199,9 +197,7 @@ def ingest_statistics(instrument: str, db_path: Path | None = None) -> int:
                FROM stats_df""",
         )
         con.commit()
-        count = con.execute(
-            "SELECT COUNT(*) FROM exchange_statistics WHERE symbol = ?", [instrument]
-        ).fetchone()[0]
+        count = con.execute("SELECT COUNT(*) FROM exchange_statistics WHERE symbol = ?", [instrument]).fetchone()[0]
         logger.info(f"  {count} rows written to exchange_statistics")
         return count
     finally:

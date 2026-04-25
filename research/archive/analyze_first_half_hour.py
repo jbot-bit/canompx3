@@ -55,44 +55,51 @@ STOP_TYPES = ["swing", "atr"]  # swing = 30min H/L, atr = 1.0*ATR_20
 # Sessions to test: 0900 Brisbane (23:00 UTC) and 1000 Brisbane (00:00 UTC)
 SESSIONS = {
     "0900": 23,  # UTC hour of session start
-    "1000": 0,   # UTC hour of session start
+    "1000": 0,  # UTC hour of session start
 }
 HALF_HOUR_BARS = 6  # 6 x 5-minute bars = 30 minutes
 
 REGIME_BOUNDARY = date(2025, 1, 1)
 
+
 def load_bars_5m_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 5-minute bars for one trading day."""
     from pipeline.build_daily_features import compute_trading_day_utc_range
+
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_5m
             WHERE symbol = 'MGC'
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [start_utc, end_utc]).fetchdf()
+        """,
+            [start_utc, end_utc],
+        ).fetchdf()
     finally:
         con.close()
     return df
 
-def compute_first_half_hour_outcomes(
-    db_path: Path, start: date, end: date
-) -> pd.DataFrame:
+
+def compute_first_half_hour_outcomes(db_path: Path, start: date, end: date) -> pd.DataFrame:
     """Compute first-half-hour momentum outcomes for all days."""
     # Get ATR from daily_features
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        features = con.execute("""
+        features = con.execute(
+            """
             SELECT trading_day, daily_high, daily_low, daily_open
             FROM daily_features
             WHERE symbol = 'MGC' AND orb_minutes = 5
               AND trading_day BETWEEN ? AND ?
             ORDER BY trading_day
-        """, [start, end]).fetchdf()
+        """,
+            [start, end],
+        ).fetchdf()
     finally:
         con.close()
 
@@ -109,7 +116,7 @@ def compute_first_half_hour_outcomes(
 
     for idx, (_, row) in enumerate(eligible.iterrows()):
         if idx % 200 == 0:
-            print(f"    Processing day {idx+1}/{total}...")
+            print(f"    Processing day {idx + 1}/{total}...")
 
         td = row["trading_day"]
         if hasattr(td, "date") and callable(td.date):
@@ -195,8 +202,12 @@ def compute_first_half_hour_outcomes(
 
                         # Resolve from bar after the 30-min mark
                         result = _resolve_5m(
-                            bars_5m, entry_price, stop_price, target_price,
-                            direction, end_bar_idx,
+                            bars_5m,
+                            entry_price,
+                            stop_price,
+                            target_price,
+                            direction,
+                            end_bar_idx,
                         )
 
                         if result is None:
@@ -208,25 +219,28 @@ def compute_first_half_hour_outcomes(
                             pnl_r = to_r_multiple(SPEC, entry_price, stop_price, result["pnl_points"])
                             outcome_type = result["outcome"]
 
-                        all_outcomes.append({
-                            "trading_day": str(td_date),
-                            "session": session_name,
-                            "direction": direction,
-                            "return_threshold": ret_thresh,
-                            "return_atr": return_atr,
-                            "half_hour_return": half_hour_return,
-                            "stop_type": stop_type,
-                            "rr_target": rr,
-                            "entry_price": entry_price,
-                            "stop_price": stop_price,
-                            "risk_points": risk_points,
-                            "pnl_r": pnl_r,
-                            "outcome": outcome_type,
-                        })
+                        all_outcomes.append(
+                            {
+                                "trading_day": str(td_date),
+                                "session": session_name,
+                                "direction": direction,
+                                "return_threshold": ret_thresh,
+                                "return_atr": return_atr,
+                                "half_hour_return": half_hour_return,
+                                "stop_type": stop_type,
+                                "rr_target": rr,
+                                "entry_price": entry_price,
+                                "stop_price": stop_price,
+                                "risk_points": risk_points,
+                                "pnl_r": pnl_r,
+                                "outcome": outcome_type,
+                            }
+                        )
 
     if not all_outcomes:
         return pd.DataFrame()
     return pd.DataFrame(all_outcomes)
+
 
 def _resolve_5m(bars, entry, stop, target, direction, start_idx):
     """Resolve outcome on 5m bars."""
@@ -250,6 +264,7 @@ def _resolve_5m(bars, entry, stop, target, direction, start_idx):
             pnl = target - entry if is_long else entry - target
             return {"outcome": "win", "pnl_points": pnl, "exit_bar_idx": i}
     return None
+
 
 def run_walk_forward(
     db_path: Path,
@@ -276,13 +291,11 @@ def run_walk_forward(
     oos_all_dates = []
 
     for w in windows:
-        train_mask = (
-            (outcomes_df["trading_day_date"] >= w["train_start"])
-            & (outcomes_df["trading_day_date"] <= w["train_end"])
+        train_mask = (outcomes_df["trading_day_date"] >= w["train_start"]) & (
+            outcomes_df["trading_day_date"] <= w["train_end"]
         )
-        test_mask = (
-            (outcomes_df["trading_day_date"] >= w["test_start"])
-            & (outcomes_df["trading_day_date"] <= w["test_end"])
+        test_mask = (outcomes_df["trading_day_date"] >= w["test_start"]) & (
+            outcomes_df["trading_day_date"] <= w["test_end"]
         )
 
         train_data = outcomes_df[train_mask]
@@ -327,13 +340,15 @@ def run_walk_forward(
         oos_all_pnls.extend(oos_pnls)
         oos_all_dates.extend(oos["trading_day_date"].values)
 
-        window_results.append({
-            "test_start": str(w["test_start"]),
-            "test_end": str(w["test_end"]),
-            "selected": f"{session_name}_RT{ret_thresh}_{stop_type}_RR{rr}",
-            "train_sharpe": best_sharpe,
-            "oos_stats": oos_stats,
-        })
+        window_results.append(
+            {
+                "test_start": str(w["test_start"]),
+                "test_end": str(w["test_end"]),
+                "selected": f"{session_name}_RT{ret_thresh}_{stop_type}_RR{rr}",
+                "train_sharpe": best_sharpe,
+                "oos_stats": oos_stats,
+            }
+        )
 
     combined_oos = None
     regime_split = None
@@ -354,6 +369,7 @@ def run_walk_forward(
         "combined_oos": combined_oos,
         "regime_split": regime_split,
     }
+
 
 def _print_go_no_go(combined: dict | None, regime_split: dict | None) -> None:
     print()
@@ -383,6 +399,7 @@ def _print_go_no_go(combined: dict | None, regime_split: dict | None) -> None:
     verdict = "GO" if all_pass else "NO-GO"
     print(f"\n  VERDICT: {verdict}")
 
+
 def main():
     parser = argparse.ArgumentParser(description="First Half-Hour Momentum analysis")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
@@ -397,9 +414,11 @@ def main():
     print()
     print("Entry: Continue first 30-minute momentum (academic-backed)")
     print(f"Sessions: {list(SESSIONS.keys())}")
-    print(f"Grid: {len(SESSIONS)} sessions x {len(RETURN_THRESHOLDS)} thresholds x "
-          f"{len(STOP_TYPES)} stop types x {len(RR_TARGETS)} RR = "
-          f"{len(SESSIONS) * len(RETURN_THRESHOLDS) * len(STOP_TYPES) * len(RR_TARGETS)} combos")
+    print(
+        f"Grid: {len(SESSIONS)} sessions x {len(RETURN_THRESHOLDS)} thresholds x "
+        f"{len(STOP_TYPES)} stop types x {len(RR_TARGETS)} RR = "
+        f"{len(SESSIONS) * len(RETURN_THRESHOLDS) * len(STOP_TYPES) * len(RR_TARGETS)} combos"
+    )
     print(f"Gate B: Risk floor >= {SPEC.min_risk_floor_points} points")
     print(f"Gate C: Ambiguous bar = LOSS")
     print()
@@ -411,24 +430,30 @@ def main():
         for w in result["windows"]:
             oos = w["oos_stats"]
             if oos:
-                print(f"  {w['test_start']} to {w['test_end']}: "
-                      f"Selected {w['selected']}, "
-                      f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
-                      f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}")
+                print(
+                    f"  {w['test_start']} to {w['test_end']}: "
+                    f"Selected {w['selected']}, "
+                    f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
+                    f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}"
+                )
 
         if result["combined_oos"]:
             c = result["combined_oos"]
-            print(f"\n  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
-                  f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}, "
-                  f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R")
+            print(
+                f"\n  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
+                f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}, "
+                f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R"
+            )
 
         if result["regime_split"]:
             rs = result["regime_split"]
             print("\n  REGIME SPLIT:")
             for label, stats in rs.items():
                 if stats:
-                    print(f"    {label}: N={stats['n']}, WR={stats['wr']:.0%}, "
-                          f"ExpR={stats['expr']:+.3f}, Sharpe={stats['sharpe']:.3f}")
+                    print(
+                        f"    {label}: N={stats['n']}, WR={stats['wr']:.0%}, "
+                        f"ExpR={stats['expr']:+.3f}, Sharpe={stats['sharpe']:.3f}"
+                    )
                 else:
                     print(f"    {label}: No data")
 
@@ -444,6 +469,7 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

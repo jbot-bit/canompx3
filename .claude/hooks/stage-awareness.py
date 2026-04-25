@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Stage awareness hook v4: fires on every user prompt.
 
-Injects stage context AND workflow directives so Claude can't skip
-blast radius, self-review, or completion evidence — regardless of
-how the user initiates work.
+Injects compact stage context AND workflow directives so Claude can't skip
+blast radius, self-review, or completion evidence.
 
 v4 changes (from v3):
 - All stages are peers — no "primary" STAGE_STATE.md. Everything in stages/*.md.
@@ -24,7 +23,7 @@ v2 changes (from v1):
 
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 STAGE_STATE = Path("docs/runtime/STAGE_STATE.md")
@@ -91,7 +90,7 @@ def check_stale(content):
     try:
         # Handle both "2026-03-27T12:00:00Z" and "2026-03-27T12:00:00+00:00"
         updated = datetime.fromisoformat(updated_str.replace("Z", "+00:00"))
-        age = datetime.now(timezone.utc) - updated
+        age = datetime.now(UTC) - updated
         return age > timedelta(hours=4)
     except (ValueError, TypeError):
         return False
@@ -99,7 +98,7 @@ def check_stale(content):
 
 def main():
     try:
-        event = json.load(sys.stdin)
+        json.load(sys.stdin)
     except (json.JSONDecodeError, Exception):
         sys.exit(0)
 
@@ -115,12 +114,8 @@ def main():
 
     if not stage_files:
         variant = datetime.now().minute % len(NONE_DIRECTIVES)
-        print(
-            "stage: none\n"
-            "WORKFLOW: Non-trivial work requires STAGE_STATE with blast_radius before edits.\n"
-            f"{NONE_DIRECTIVES[variant]}",
-            file=sys.stderr,
-        )
+        print("stage: none | non-trivial work requires STAGE_STATE with blast_radius before edits.", file=sys.stderr)
+        print(NONE_DIRECTIVES[variant], file=sys.stderr)
         sys.exit(0)
 
     # Report ALL active stages (multi-agent awareness)
@@ -140,9 +135,7 @@ def main():
         if not mode:
             continue
 
-        parts = [f"stage: {mode}"]
-        if len(stage_files) > 1:
-            parts.append(f"[{agent_name}]")
+        parts = [f"{agent_name}:{mode}"]
         if task:
             parts.append(task)
         if stage and stage_of:
@@ -154,12 +147,13 @@ def main():
         if mode == "IMPLEMENTATION" and (not blast_radius or len(blast_radius.strip()) < 30):
             parts.append("MISSING blast_radius")
 
-        output_lines.append(" | ".join(parts))
+        output_lines.append(" ".join(parts))
 
     if not output_lines:
         sys.exit(0)
 
-    print("\n".join(output_lines), file=sys.stderr)
+    prefix = "stages" if len(output_lines) > 1 else "stage"
+    print(f"{prefix}: {' ; '.join(output_lines)}", file=sys.stderr)
 
     # Directive for the first DESIGN stage found (if any)
     for _, fpath in stage_files:
@@ -171,12 +165,6 @@ def main():
                 break
         except (OSError, UnicodeDecodeError):
             continue
-
-    if len(stage_files) > 1:
-        print(
-            "MULTI-AGENT: Multiple stage files active. Your edits go through if ANY stage permits them.",
-            file=sys.stderr,
-        )
 
     sys.exit(0)
 

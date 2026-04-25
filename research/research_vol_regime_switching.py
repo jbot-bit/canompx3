@@ -80,6 +80,7 @@ CB = 1  # CB1 only
 
 # -- Statistical helpers ----------------------------------------------------
 
+
 def ttest_1s(arr, mu=0.0):
     """One-sample t-test vs mu. Returns (n, mean, wr, t, p)."""
     a = np.array(arr, dtype=float)
@@ -103,7 +104,7 @@ def bh_fdr(p_values, q=0.05):
             max_k = k
     rejected = set()
     if max_k >= 0:
-        for _k, (idx, _) in enumerate(ranked[:max_k + 1]):
+        for _k, (idx, _) in enumerate(ranked[: max_k + 1]):
             rejected.add(idx)
     return rejected
 
@@ -131,6 +132,7 @@ def sample_label(n):
 
 # -- Pre-scan validated sessions --------------------------------------------
 
+
 def get_validated_sessions(con):
     """Return dict of {instrument: [session_list]} from validated_setups."""
     try:
@@ -157,6 +159,7 @@ def get_validated_sessions(con):
 
 
 # -- Data loading ----------------------------------------------------------
+
 
 def load_data(con, instrument, session):
     """Load daily_features + orb_outcomes for (instrument, session).
@@ -221,12 +224,7 @@ def compute_vol_regime_for_instrument(con, instrument):
         return days
 
     days = days.sort_values("trading_day").reset_index(drop=True)
-    days["atr_pct_rank"] = (
-        days["atr_20"]
-        .expanding(min_periods=60)
-        .rank(pct=True)
-        .shift(1)
-    )
+    days["atr_pct_rank"] = days["atr_20"].expanding(min_periods=60).rank(pct=True).shift(1)
     days["vol_regime"] = pd.cut(
         days["atr_pct_rank"],
         bins=[0, 0.333, 0.667, 1.001],
@@ -261,12 +259,7 @@ def verify_no_lookahead(vol_regime_df):
 
     # Recompute on first half only -- should match stored rank
     half = len(days) // 2
-    recomputed = (
-        vol_regime_df["atr_20"].iloc[:half]
-        .expanding(min_periods=60)
-        .rank(pct=True)
-        .shift(1)
-    )
+    recomputed = vol_regime_df["atr_20"].iloc[:half].expanding(min_periods=60).rank(pct=True).shift(1)
 
     stored = vol_regime_df["atr_pct_rank"].iloc[:half]
     both_valid = stored.notna() & recomputed.notna()
@@ -281,6 +274,7 @@ def verify_no_lookahead(vol_regime_df):
 
 
 # -- Main analysis ---------------------------------------------------------
+
 
 def run():
     print()
@@ -297,17 +291,18 @@ def run():
     for inst, sessions in sorted(validated.items()):
         print(f"  {inst}: {sessions}")
 
-    all_records = []      # Per-regime t-test results
-    kw_records = []       # Kruskal-Wallis results
-    adaptive_records = [] # Adaptive vs static comparison
+    all_records = []  # Per-regime t-test results
+    kw_records = []  # Kruskal-Wallis results
+    adaptive_records = []  # Adaptive vs static comparison
     report_lines = []
 
     def report(line=""):
         print(line)
         report_lines.append(line)
 
-    report(f"\nParameter grid: RR={RR_TARGETS}, Filters={list(FILTER_THRESHOLDS.keys())}, "
-           f"Entry={ENTRY_MODELS}, CB={CB}")
+    report(
+        f"\nParameter grid: RR={RR_TARGETS}, Filters={list(FILTER_THRESHOLDS.keys())}, Entry={ENTRY_MODELS}, CB={CB}"
+    )
     report("BH FDR q=0.05 (stricter due to high comparison count)")
     report("Vol regime: expanding-window ATR percentile rank, terciles (LOW/MID/HIGH)")
     report("Warmup: 60 days minimum per instrument")
@@ -324,8 +319,7 @@ def run():
             report(f"\n  FATAL: Lookahead detected in vol regime for {instrument}")
             continue
         vol_regimes[instrument] = vr
-        report(f"\n  {instrument}: vol regime computed on {len(vr)} trading days, "
-               f"lookahead check PASSED")
+        report(f"\n  {instrument}: vol regime computed on {len(vr)} trading days, lookahead check PASSED")
 
     for instrument in ACTIVE_ORB_INSTRUMENTS:
         sessions = validated.get(instrument, [])
@@ -360,8 +354,7 @@ def run():
             unique_days = df[["trading_day", "vol_regime"]].drop_duplicates("trading_day")
             for regime in ["LOW", "MID", "HIGH"]:
                 n_days = (unique_days["vol_regime"] == regime).sum()
-                report(f"  {regime}: {n_days} trading days "
-                       f"({100 * n_days / len(unique_days):.0f}%)")
+                report(f"  {regime}: {n_days} trading days ({100 * n_days / len(unique_days):.0f}%)")
 
             # -- Per-regime analysis for each parameter combo -----------
             for entry_model in ENTRY_MODELS:
@@ -371,9 +364,7 @@ def run():
 
                         # Filter data
                         mask = (
-                            (df["entry_model"] == entry_model)
-                            & (df["rr_target"] == rr)
-                            & (df["orb_size"] >= filt_min)
+                            (df["entry_model"] == entry_model) & (df["rr_target"] == rr) & (df["orb_size"] >= filt_min)
                         )
                         sub = df[mask]
 
@@ -394,26 +385,26 @@ def run():
                             r_sub = sub[sub["vol_regime"] == regime]["pnl_r"].values
                             n, avg, wr, t, p = ttest_1s(r_sub)
                             sh = sharpe(r_sub)
-                            regime_data[regime] = {
-                                "n": n, "avg_r": avg, "wr": wr, "t": t, "p": p, "sharpe": sh
-                            }
+                            regime_data[regime] = {"n": n, "avg_r": avg, "wr": wr, "t": t, "p": p, "sharpe": sh}
                             regime_pnl_arrays[regime] = r_sub[~np.isnan(r_sub)]
 
-                            all_records.append({
-                                "instrument": instrument,
-                                "session": session,
-                                "entry_model": entry_model,
-                                "rr": rr,
-                                "filter": filt_name,
-                                "regime": regime,
-                                "n": n,
-                                "avg_r": avg,
-                                "wr": wr,
-                                "t_stat": t,
-                                "p_value": p,
-                                "sharpe": sh,
-                                "combo_label": combo_label,
-                            })
+                            all_records.append(
+                                {
+                                    "instrument": instrument,
+                                    "session": session,
+                                    "entry_model": entry_model,
+                                    "rr": rr,
+                                    "filter": filt_name,
+                                    "regime": regime,
+                                    "n": n,
+                                    "avg_r": avg,
+                                    "wr": wr,
+                                    "t_stat": t,
+                                    "p_value": p,
+                                    "sharpe": sh,
+                                    "combo_label": combo_label,
+                                }
+                            )
 
                         # Kruskal-Wallis across regimes
                         valid_groups = [a for a in regime_pnl_arrays.values() if len(a) >= 10]
@@ -424,27 +415,29 @@ def run():
                             except Exception:
                                 kw_p = float("nan")
 
-                        kw_records.append({
-                            "combo_label": combo_label,
-                            "instrument": instrument,
-                            "session": session,
-                            "entry_model": entry_model,
-                            "rr": rr,
-                            "filter": filt_name,
-                            "n_total": n_all,
-                            "avg_r_all": avg_all,
-                            "sharpe_all": sh_all,
-                            "kw_p": kw_p,
-                            "low_avg": regime_data["LOW"]["avg_r"],
-                            "mid_avg": regime_data["MID"]["avg_r"],
-                            "high_avg": regime_data["HIGH"]["avg_r"],
-                            "low_n": regime_data["LOW"]["n"],
-                            "mid_n": regime_data["MID"]["n"],
-                            "high_n": regime_data["HIGH"]["n"],
-                            "low_sharpe": regime_data["LOW"]["sharpe"],
-                            "mid_sharpe": regime_data["MID"]["sharpe"],
-                            "high_sharpe": regime_data["HIGH"]["sharpe"],
-                        })
+                        kw_records.append(
+                            {
+                                "combo_label": combo_label,
+                                "instrument": instrument,
+                                "session": session,
+                                "entry_model": entry_model,
+                                "rr": rr,
+                                "filter": filt_name,
+                                "n_total": n_all,
+                                "avg_r_all": avg_all,
+                                "sharpe_all": sh_all,
+                                "kw_p": kw_p,
+                                "low_avg": regime_data["LOW"]["avg_r"],
+                                "mid_avg": regime_data["MID"]["avg_r"],
+                                "high_avg": regime_data["HIGH"]["avg_r"],
+                                "low_n": regime_data["LOW"]["n"],
+                                "mid_n": regime_data["MID"]["n"],
+                                "high_n": regime_data["HIGH"]["n"],
+                                "low_sharpe": regime_data["LOW"]["sharpe"],
+                                "mid_sharpe": regime_data["MID"]["sharpe"],
+                                "high_sharpe": regime_data["HIGH"]["sharpe"],
+                            }
+                        )
 
             # -- Adaptive vs static comparison per (instrument, session, entry_model) --
             for entry_model in ENTRY_MODELS:
@@ -490,9 +483,7 @@ def run():
                                 best_sh = sh
                                 best_rr = rr
                                 best_filt = filt_name
-                    best_per_regime[regime] = {
-                        "rr": best_rr, "filter": best_filt, "sharpe": best_sh
-                    }
+                    best_per_regime[regime] = {"rr": best_rr, "filter": best_filt, "sharpe": best_sh}
 
                 # Check if regimes picked different parameters
                 regime_params = set()
@@ -516,9 +507,8 @@ def run():
                         continue
 
                     # Adaptive: use regime-best params
-                    adapt_mask = (
-                        (day_rows["rr_target"] == bp["rr"])
-                        & (day_rows["orb_size"] >= FILTER_THRESHOLDS.get(bp["filter"], 0))
+                    adapt_mask = (day_rows["rr_target"] == bp["rr"]) & (
+                        day_rows["orb_size"] >= FILTER_THRESHOLDS.get(bp["filter"], 0)
                     )
                     adapt_rows = day_rows[adapt_mask]
                     if not adapt_rows.empty:
@@ -527,9 +517,8 @@ def run():
                         adaptive_pnl.append(0.0)  # No trade = 0 R
 
                     # Static: use global best
-                    stat_mask = (
-                        (day_rows["rr_target"] == best_static_rr)
-                        & (day_rows["orb_size"] >= FILTER_THRESHOLDS.get(best_static_filt, 0))
+                    stat_mask = (day_rows["rr_target"] == best_static_rr) & (
+                        day_rows["orb_size"] >= FILTER_THRESHOLDS.get(best_static_filt, 0)
                     )
                     stat_rows = day_rows[stat_mask]
                     if not stat_rows.empty:
@@ -550,25 +539,29 @@ def run():
                     paired_t = float(paired_t)
                     paired_p = float(paired_p)
 
-                adaptive_records.append({
-                    "instrument": instrument,
-                    "session": session,
-                    "entry_model": entry_model,
-                    "best_static": f"RR{best_static_rr}_{best_static_filt}",
-                    "static_sharpe": best_static_sharpe,
-                    "params_differ": params_differ,
-                    "regime_params": {r: f"RR{bp['rr']}_{bp['filter']}"
-                                      for r, bp in best_per_regime.items()
-                                      if bp['rr'] is not None},
-                    "adaptive_avg_r": float(np.nanmean(adaptive_arr)),
-                    "static_avg_r": float(np.nanmean(static_arr)),
-                    "delta_avg_r": float(np.nanmean(adaptive_arr) - np.nanmean(static_arr)),
-                    "adaptive_sharpe": sharpe(adaptive_arr),
-                    "static_sharpe_daily": sharpe(static_arr),
-                    "paired_t": paired_t,
-                    "paired_p": paired_p,
-                    "n_days": len(adaptive_arr),
-                })
+                adaptive_records.append(
+                    {
+                        "instrument": instrument,
+                        "session": session,
+                        "entry_model": entry_model,
+                        "best_static": f"RR{best_static_rr}_{best_static_filt}",
+                        "static_sharpe": best_static_sharpe,
+                        "params_differ": params_differ,
+                        "regime_params": {
+                            r: f"RR{bp['rr']}_{bp['filter']}"
+                            for r, bp in best_per_regime.items()
+                            if bp["rr"] is not None
+                        },
+                        "adaptive_avg_r": float(np.nanmean(adaptive_arr)),
+                        "static_avg_r": float(np.nanmean(static_arr)),
+                        "delta_avg_r": float(np.nanmean(adaptive_arr) - np.nanmean(static_arr)),
+                        "adaptive_sharpe": sharpe(adaptive_arr),
+                        "static_sharpe_daily": sharpe(static_arr),
+                        "paired_t": paired_t,
+                        "paired_p": paired_p,
+                        "n_days": len(adaptive_arr),
+                    }
+                )
 
     con.close()
 
@@ -580,8 +573,7 @@ def run():
     report(f"Combos skipped (N<30): {combos_skipped_n}")
 
     # BH FDR on one-sample t-tests (per-regime)
-    valid_records = [(i, r) for i, r in enumerate(all_records)
-                     if not np.isnan(r["p_value"]) and r["n"] >= 30]
+    valid_records = [(i, r) for i, r in enumerate(all_records) if not np.isnan(r["p_value"]) and r["n"] >= 30]
     p_vals = [r["p_value"] for _, r in valid_records]
     rejected = bh_fdr(p_vals, q=0.05)
 
@@ -595,15 +587,16 @@ def run():
     # Show BH survivors
     if rejected:
         report("\n  BH FDR SURVIVORS (per-regime t-test vs zero):")
-        report(f"  {'Combo':<45} {'Regime':<6} {'N':>5} {'avgR':>7} {'WR':>6} "
-               f"{'Sharpe':>7} {'p':>8}")
+        report(f"  {'Combo':<45} {'Regime':<6} {'N':>5} {'avgR':>7} {'WR':>6} {'Sharpe':>7} {'p':>8}")
         report(f"  {'-' * 90}")
         survivors_list = [(local_i, valid_records[local_i]) for local_i in sorted(rejected)]
         survivors_list.sort(key=lambda x: x[1][1]["p_value"])
         for _local_i, (_orig_i, r) in survivors_list:
-            report(f"  {r['combo_label']:<45} {r['regime']:<6} "
-                   f"{r['n']:>5} {r['avg_r']:>+7.3f} {r['wr']:>6.1%} "
-                   f"{r['sharpe']:>7.2f} {r['p_value']:>8.4f}")
+            report(
+                f"  {r['combo_label']:<45} {r['regime']:<6} "
+                f"{r['n']:>5} {r['avg_r']:>+7.3f} {r['wr']:>6.1%} "
+                f"{r['sharpe']:>7.2f} {r['p_value']:>8.4f}"
+            )
     else:
         report("\n  NO BH FDR survivors at q=0.05")
 
@@ -625,11 +618,10 @@ def run():
         kw_survivors = [(i, kw_valid[i]) for i in sorted(kw_rejected)]
         kw_survivors.sort(key=lambda x: x[1]["kw_p"])
         for _, r in kw_survivors:
-            low_s = f"{r['low_avg']:+.3f}({r['low_n']})" if not np.isnan(r['low_avg']) else "N/A"
-            mid_s = f"{r['mid_avg']:+.3f}({r['mid_n']})" if not np.isnan(r['mid_avg']) else "N/A"
-            high_s = f"{r['high_avg']:+.3f}({r['high_n']})" if not np.isnan(r['high_avg']) else "N/A"
-            report(f"  {r['combo_label']:<45} {r['kw_p']:>8.4f} "
-                   f"{low_s:>10} {mid_s:>10} {high_s:>10}")
+            low_s = f"{r['low_avg']:+.3f}({r['low_n']})" if not np.isnan(r["low_avg"]) else "N/A"
+            mid_s = f"{r['mid_avg']:+.3f}({r['mid_n']})" if not np.isnan(r["mid_avg"]) else "N/A"
+            high_s = f"{r['high_avg']:+.3f}({r['high_n']})" if not np.isnan(r["high_avg"]) else "N/A"
+            report(f"  {r['combo_label']:<45} {r['kw_p']:>8.4f} {low_s:>10} {mid_s:>10} {high_s:>10}")
     else:
         report("\n  NO regime differences survive BH FDR at q=0.05")
         report("  Regimes do NOT significantly differ for any tested parameter set.")
@@ -643,29 +635,29 @@ def run():
         report(f"\n  {ar['instrument']} {ar['session']} {ar['entry_model']}:")
         report(f"    Best static: {ar['best_static']} (Sharpe={ar['static_sharpe']:.2f})")
         report(f"    Parameters differ across regimes: {ar['params_differ']}")
-        if ar['params_differ']:
-            for regime, params in sorted(ar['regime_params'].items()):
+        if ar["params_differ"]:
+            for regime, params in sorted(ar["regime_params"].items()):
                 report(f"      {regime}: {params}")
         report(f"    Adaptive avgR: {ar['adaptive_avg_r']:+.4f}")
         report(f"    Static avgR:   {ar['static_avg_r']:+.4f}")
         report(f"    Delta:         {ar['delta_avg_r']:+.4f}")
         report(f"    Adaptive Sharpe: {ar['adaptive_sharpe']:.2f}")
         report(f"    Static Sharpe:   {ar['static_sharpe_daily']:.2f}")
-        report(f"    Paired t-test: t={ar['paired_t']:.2f}, p={ar['paired_p']:.4f} "
-               f"(N_days={ar['n_days']})")
+        report(f"    Paired t-test: t={ar['paired_t']:.2f}, p={ar['paired_p']:.4f} (N_days={ar['n_days']})")
 
     # BH FDR on adaptive vs static paired tests
     adapt_valid = [(i, r) for i, r in enumerate(adaptive_records) if not np.isnan(r["paired_p"])]
     adapt_p_vals = [r["paired_p"] for _, r in adapt_valid]
     adapt_rejected = bh_fdr(adapt_p_vals, q=0.05)
 
-    report(f"\n  Adaptive vs Static BH FDR (q=0.05): {len(adapt_rejected)} survivors "
-           f"out of {len(adapt_valid)} tests")
+    report(f"\n  Adaptive vs Static BH FDR (q=0.05): {len(adapt_rejected)} survivors out of {len(adapt_valid)} tests")
     if adapt_rejected:
         for local_i in sorted(adapt_rejected):
             _, r = adapt_valid[local_i]
-            report(f"    {r['instrument']} {r['session']} {r['entry_model']}: "
-                   f"delta={r['delta_avg_r']:+.4f}, p={r['paired_p']:.4f}")
+            report(
+                f"    {r['instrument']} {r['session']} {r['entry_model']}: "
+                f"delta={r['delta_avg_r']:+.4f}, p={r['paired_p']:.4f}"
+            )
     else:
         report("  Regime-adaptive switching does NOT significantly improve over best static params.")
 
@@ -760,15 +752,17 @@ def run():
 
     report("\nMANDATORY DISCLOSURES:")
     report(f"  Instruments: {ACTIVE_ORB_INSTRUMENTS}")
-    report(f"  Parameter grid: RR={RR_TARGETS}, Filters={list(FILTER_THRESHOLDS.keys())}, "
-           f"Entry={ENTRY_MODELS}, CB={CB}")
-    report(f"  Total effective tests: {len(valid_records)} (per-regime) + {len(kw_valid)} (KW) "
-           f"+ {len(adapt_valid)} (adaptive)")
+    report(
+        f"  Parameter grid: RR={RR_TARGETS}, Filters={list(FILTER_THRESHOLDS.keys())}, Entry={ENTRY_MODELS}, CB={CB}"
+    )
+    report(
+        f"  Total effective tests: {len(valid_records)} (per-regime) + {len(kw_valid)} (KW) "
+        f"+ {len(adapt_valid)} (adaptive)"
+    )
     report("  BH FDR: q=0.05")
     report("  Vol regime: expanding-window percentile rank on atr_20, shift(1), 60-day warmup")
     report("  IS/OOS: In-sample only -- NO holdout OOS performed")
-    report("  What kills it: MGC regime shift (gold tripled), MNQ only ~2 years, "
-           "regime proxy for ORB size")
+    report("  What kills it: MGC regime shift (gold tripled), MNQ only ~2 years, regime proxy for ORB size")
 
     # -- Save outputs ------------------------------------------------------
     # CSV of all per-regime results

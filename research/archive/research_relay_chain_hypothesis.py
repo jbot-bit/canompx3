@@ -205,9 +205,7 @@ def main() -> int:
     lines.append("")
     lines.append(f"## Quick OOS (test year {int(test_year)})")
     for r in oos.itertuples(index=False):
-        lines.append(
-            f"- {r.bucket}: trainΔ={r.train_uplift:+.4f}, testΔ={r.test_uplift:+.4f}, n_test_on={r.n_test_on}"
-        )
+        lines.append(f"- {r.bucket}: trainΔ={r.train_uplift:+.4f}, testΔ={r.test_uplift:+.4f}, n_test_on={r.n_test_on}")
 
     # simple verdict
     verdict = "KILL"
@@ -218,12 +216,7 @@ def main() -> int:
         and te_relay_up > 0
     ):
         verdict = "PROMOTE"
-    elif (
-        relay_s["n"] >= 100
-        and relay_s["avg_r"] >= single_s["avg_r"]
-        and pd.notna(te_relay_up)
-        and te_relay_up >= 0
-    ):
+    elif relay_s["n"] >= 100 and relay_s["avg_r"] >= single_s["avg_r"] and pd.notna(te_relay_up) and te_relay_up >= 0:
         verdict = "HOLD"
     lines.append("")
     lines.append(f"## Verdict: {verdict}")

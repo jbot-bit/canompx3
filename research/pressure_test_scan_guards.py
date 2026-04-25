@@ -115,8 +115,12 @@ def load_test_cell(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     df = con.execute(
         sql,
         [
-            TEST_CELL["instrument"], sess, TEST_CELL["orb_minutes"],
-            TEST_CELL["rr"], TEST_CELL["direction"], HOLDOUT_SACRED_FROM,
+            TEST_CELL["instrument"],
+            sess,
+            TEST_CELL["orb_minutes"],
+            TEST_CELL["rr"],
+            TEST_CELL["direction"],
+            HOLDOUT_SACRED_FROM,
         ],
     ).df()
     return df
@@ -172,29 +176,35 @@ def compute_guard_metrics(df: pd.DataFrame, fire: np.ndarray, case: PressureTest
     # Evaluate each guard per the 2026-04-19 scan script logic
     # G1 — T0 tautology vs orb_size, atr_20, overnight_range (NOT pnl_r)
     cross_corrs = [
-        (c, n) for c, n in [
+        (c, n)
+        for c, n in [
             (case.corr_with_atr_20, "atr_20"),
             (case.corr_with_overnight_range, "overnight_range"),
-        ] if c is not None
+        ]
+        if c is not None
     ]
     g1_fired = any(abs(c) > 0.70 for c, _ in cross_corrs)
-    case.guards.append(GuardResult(
-        guard_name="G1_T0_tautology",
-        fired=g1_fired,
-        metric_value=max((abs(c) for c, _ in cross_corrs), default=0.0),
-        threshold="|corr| > 0.70",
-        notes=f"vs atr_20, overnight_range. ({len(cross_corrs)} values computed)",
-    ))
+    case.guards.append(
+        GuardResult(
+            guard_name="G1_T0_tautology",
+            fired=g1_fired,
+            metric_value=max((abs(c) for c, _ in cross_corrs), default=0.0),
+            threshold="|corr| > 0.70",
+            notes=f"vs atr_20, overnight_range. ({len(cross_corrs)} values computed)",
+        )
+    )
 
     # G2 — extreme_fire
     g2_fired = case.fire_rate < 0.05 or case.fire_rate > 0.95
-    case.guards.append(GuardResult(
-        guard_name="G2_extreme_fire",
-        fired=g2_fired,
-        metric_value=case.fire_rate,
-        threshold="<5% or >95%",
-        notes="",
-    ))
+    case.guards.append(
+        GuardResult(
+            guard_name="G2_extreme_fire",
+            fired=g2_fired,
+            metric_value=case.fire_rate,
+            threshold="<5% or >95%",
+            notes="",
+        )
+    )
 
     # G3 — arithmetic_only
     g3_fired = (
@@ -203,39 +213,46 @@ def compute_guard_metrics(df: pd.DataFrame, fire: np.ndarray, case: PressureTest
         and abs(case.wr_spread) < 0.03
         and abs(case.delta_is) > 0.10
     )
-    case.guards.append(GuardResult(
-        guard_name="G3_arithmetic_only",
-        fired=g3_fired,
-        metric_value=(abs(case.wr_spread) if case.wr_spread is not None else None),
-        threshold="|WR_spread|<3% AND |Delta_IS|>0.10",
-        notes=f"wr_spread={case.wr_spread}, delta_is={case.delta_is}",
-    ))
+    case.guards.append(
+        GuardResult(
+            guard_name="G3_arithmetic_only",
+            fired=g3_fired,
+            metric_value=(abs(case.wr_spread) if case.wr_spread is not None else None),
+            threshold="|WR_spread|<3% AND |Delta_IS|>0.10",
+            notes=f"wr_spread={case.wr_spread}, delta_is={case.delta_is}",
+        )
+    )
 
     # G4 — direction-filter implicit via data loading (fire only on direction-match rows)
     #     Not tested by injection here — scan scripts ALREADY filter by direction
     #     in the SQL. Confirming the guard applies: all rows in df are direction-match
     #     by construction of the SQL loader.
-    case.guards.append(GuardResult(
-        guard_name="G4_direction_filter",
-        fired=False,  # not applicable to this injection method
-        metric_value=None,
-        threshold="SQL-level direction=dir filter",
-        notes="Structural guard — not injection-testable. Confirmed all loaded rows are direction-match by SQL construction.",
-    ))
+    case.guards.append(
+        GuardResult(
+            guard_name="G4_direction_filter",
+            fired=False,  # not applicable to this injection method
+            metric_value=None,
+            threshold="SQL-level direction=dir filter",
+            notes="Structural guard — not injection-testable. Confirmed all loaded rows are direction-match by SQL construction.",
+        )
+    )
 
     # Extreme-t flag (not in scan scripts as a hard gate but worth reporting)
     extreme_t = case.t_stat is not None and abs(case.t_stat) > 10.0
-    case.guards.append(GuardResult(
-        guard_name="RED_FLAG_extreme_t",
-        fired=extreme_t,
-        metric_value=case.t_stat,
-        threshold="|t| > 10 (RULE 12 red flag)",
-        notes="Not a hard gate but RULE 12 says STOP and investigate. Look-ahead injections should trigger this.",
-    ))
+    case.guards.append(
+        GuardResult(
+            guard_name="RED_FLAG_extreme_t",
+            fired=extreme_t,
+            metric_value=case.t_stat,
+            threshold="|t| > 10 (RULE 12 red flag)",
+            notes="Not a hard gate but RULE 12 says STOP and investigate. Look-ahead injections should trigger this.",
+        )
+    )
 
     # Overall — was the bad input caught by ANY guard?
     case.overall_caught = any(
-        g.fired for g in case.guards
+        g.fired
+        for g in case.guards
         if g.guard_name in case.expected_guards_fire or g.guard_name == "RED_FLAG_extreme_t"
     )
 
@@ -282,8 +299,10 @@ def main() -> int:
         print(f"ERROR: test cell has N={len(df)} < 100. Cannot run pressure test meaningfully.")
         return 1
 
-    print(f"Test cell: {TEST_CELL['instrument']} {TEST_CELL['session']} O{TEST_CELL['orb_minutes']} "
-          f"RR{TEST_CELL['rr']} {TEST_CELL['direction']} — N={len(df)} rows (Mode A IS)")
+    print(
+        f"Test cell: {TEST_CELL['instrument']} {TEST_CELL['session']} O{TEST_CELL['orb_minutes']} "
+        f"RR{TEST_CELL['rr']} {TEST_CELL['direction']} — N={len(df)} rows (Mode A IS)"
+    )
     print()
 
     sess = TEST_CELL["session"]
@@ -325,8 +344,10 @@ def main() -> int:
         print(f"  {c.description}")
         print(f"  N_on={c.n_on} fire_rate={c.fire_rate:.4f} ExpR_on={c.expr_on} t={c.t_stat}")
         print(f"  WR_on={c.wr_on} WR_off={c.wr_off} WR_spread={c.wr_spread} Delta_IS={c.delta_is}")
-        print(f"  T0 corr: orb_size={c.corr_with_orb_size} atr_20={c.corr_with_atr_20} "
-              f"ovnrng={c.corr_with_overnight_range} pnl_r={c.corr_with_pnl_r}")
+        print(
+            f"  T0 corr: orb_size={c.corr_with_orb_size} atr_20={c.corr_with_atr_20} "
+            f"ovnrng={c.corr_with_overnight_range} pnl_r={c.corr_with_pnl_r}"
+        )
         print(f"  Guard results:")
         for g in c.guards:
             marker = "CAUGHT" if g.fired else "silent"
@@ -336,7 +357,9 @@ def main() -> int:
 
     print()
     all_caught = all(c.overall_caught for c in cases)
-    print(f"PRESSURE TEST VERDICT: {'PASS (all 3 bad inputs caught)' if all_caught else 'FAIL (one or more bad inputs slipped through expected guards)'}")
+    print(
+        f"PRESSURE TEST VERDICT: {'PASS (all 3 bad inputs caught)' if all_caught else 'FAIL (one or more bad inputs slipped through expected guards)'}"
+    )
 
     # Write result doc
     write_result_doc(cases, all_caught)
@@ -351,19 +374,27 @@ def write_result_doc(cases: list[PressureTestCase], all_caught: bool) -> None:
     L.append(f"**Generated:** {ts}")
     L.append(f"**Script:** `research/pressure_test_scan_guards.py`")
     L.append(f"**Rule:** `.claude/rules/backtesting-methodology.md` RULE 13")
-    L.append(f"**Test cell:** {TEST_CELL['instrument']} {TEST_CELL['session']} O{TEST_CELL['orb_minutes']} RR{TEST_CELL['rr']} {TEST_CELL['direction']} (Mode A IS)")
+    L.append(
+        f"**Test cell:** {TEST_CELL['instrument']} {TEST_CELL['session']} O{TEST_CELL['orb_minutes']} RR{TEST_CELL['rr']} {TEST_CELL['direction']} (Mode A IS)"
+    )
     L.append("")
     L.append("## Motivation")
     L.append("")
-    L.append("The 2026-04-19 overnight session wrote 4 new scan scripts but did NOT pressure-test their guard layers per backtesting-methodology.md RULE 13. This script closes that debt by injecting 3 synthetic bad filter signals and confirming the guard layers catch them.")
+    L.append(
+        "The 2026-04-19 overnight session wrote 4 new scan scripts but did NOT pressure-test their guard layers per backtesting-methodology.md RULE 13. This script closes that debt by injecting 3 synthetic bad filter signals and confirming the guard layers catch them."
+    )
     L.append("")
-    L.append("Scan scripts under guard-audit (all share the same T0 / extreme_fire / arithmetic_only / direction-filter guard stack):")
+    L.append(
+        "Scan scripts under guard-audit (all share the same T0 / extreme_fire / arithmetic_only / direction-filter guard stack):"
+    )
     L.append("  1. `research/mode_a_revalidation_active_setups.py` (Phase 3)")
     L.append("  2. `research/mes_mnq_mirror_v1_scan.py` (prior session)")
     L.append("  3. `research/mgc_mode_a_rediscovery_orbg5_v1_scan.py` (Phase 6)")
     L.append("  4. `research/mes_broader_mode_a_rediscovery_v1_scan.py` (Phase 7)")
     L.append("")
-    L.append(f"## Verdict: {'**PASS** — all 3 bad inputs caught by expected guard' if all_caught else '**FAIL** — one or more bad inputs slipped through guards. Fix required before trusting the scans.'}")
+    L.append(
+        f"## Verdict: {'**PASS** — all 3 bad inputs caught by expected guard' if all_caught else '**FAIL** — one or more bad inputs slipped through guards. Fix required before trusting the scans.'}"
+    )
     L.append("")
 
     for c in cases:
@@ -371,9 +402,13 @@ def write_result_doc(cases: list[PressureTestCase], all_caught: bool) -> None:
         L.append("")
         L.append(c.description)
         L.append("")
-        L.append(f"**Stats:** N_on={c.n_on}, fire_rate={c.fire_rate:.4f}, ExpR_on={c.expr_on}, t={c.t_stat}, WR_spread={c.wr_spread}, Delta_IS={c.delta_is}")
+        L.append(
+            f"**Stats:** N_on={c.n_on}, fire_rate={c.fire_rate:.4f}, ExpR_on={c.expr_on}, t={c.t_stat}, WR_spread={c.wr_spread}, Delta_IS={c.delta_is}"
+        )
         L.append("")
-        L.append(f"**T0 correlations:** orb_size={c.corr_with_orb_size}, atr_20={c.corr_with_atr_20}, overnight_range={c.corr_with_overnight_range}, pnl_r={c.corr_with_pnl_r}")
+        L.append(
+            f"**T0 correlations:** orb_size={c.corr_with_orb_size}, atr_20={c.corr_with_atr_20}, overnight_range={c.corr_with_overnight_range}, pnl_r={c.corr_with_pnl_r}"
+        )
         L.append("")
         L.append("| Guard | Fired? | Expected? | Metric | Threshold |")
         L.append("|---|---|---|---:|---|")
@@ -388,11 +423,15 @@ def write_result_doc(cases: list[PressureTestCase], all_caught: bool) -> None:
 
     L.append("## Interpretation of each case")
     L.append("")
-    L.append("**BAD_1** — Look-ahead via outcome column. If scan scripts used this as a filter, fire_rate would equal win_rate (~50%) — NOT extreme, so G2 extreme_fire would NOT fire. WR_spread would be +50-100% (huge) — G3 arithmetic_only would NOT fire (it needs small WR_spread). T0 corr with pnl_r would be ~1.0 — BUT the scan scripts' T0 implementation only checks corr vs orb_size / atr_20 / overnight_range, NOT vs pnl_r. So G1 would silently pass. The RED_FLAG_extreme_t check (RULE 12) is the only robust catcher. In the scan scripts, |t| > 10 would not automatically halt but is an obvious red flag on manual review. **Finding:** the scan scripts' T0 guard should add `corr_with_pnl_r` as an additional check to catch direct-outcome look-ahead.")
+    L.append(
+        "**BAD_1** — Look-ahead via outcome column. If scan scripts used this as a filter, fire_rate would equal win_rate (~50%) — NOT extreme, so G2 extreme_fire would NOT fire. WR_spread would be +50-100% (huge) — G3 arithmetic_only would NOT fire (it needs small WR_spread). T0 corr with pnl_r would be ~1.0 — BUT the scan scripts' T0 implementation only checks corr vs orb_size / atr_20 / overnight_range, NOT vs pnl_r. So G1 would silently pass. The RED_FLAG_extreme_t check (RULE 12) is the only robust catcher. In the scan scripts, |t| > 10 would not automatically halt but is an obvious red flag on manual review. **Finding:** the scan scripts' T0 guard should add `corr_with_pnl_r` as an additional check to catch direct-outcome look-ahead."
+    )
     L.append("")
     L.append("**BAD_2** — Extreme-rare fire (0.5%). G2 extreme_fire has threshold <5%, so this IS caught.")
     L.append("")
-    L.append("**BAD_3** — Cost-screen via size. Classic arithmetic_only pattern. On MNQ COMEX top-20% size, WR stays near baseline (~50%) while ExpR lifts materially. G3 should catch if |WR_spread|<3% and |Delta_IS|>0.10.")
+    L.append(
+        "**BAD_3** — Cost-screen via size. Classic arithmetic_only pattern. On MNQ COMEX top-20% size, WR stays near baseline (~50%) while ExpR lifts materially. G3 should catch if |WR_spread|<3% and |Delta_IS|>0.10."
+    )
     L.append("")
     L.append("## Remediation (if applicable)")
     L.append("")
@@ -401,12 +440,18 @@ def write_result_doc(cases: list[PressureTestCase], all_caught: bool) -> None:
         L.append("")
         for c in cases:
             if not c.overall_caught:
-                L.append(f"- **{c.case_id}**: Expected {c.expected_guards_fire} to fire but none did. Review the guard's threshold or implementation in `research/mgc_mode_a_rediscovery_orbg5_v1_scan.py`, `research/mes_broader_mode_a_rediscovery_v1_scan.py`, and `research/mes_mnq_mirror_v1_scan.py` — the guard logic is shared across all three.")
+                L.append(
+                    f"- **{c.case_id}**: Expected {c.expected_guards_fire} to fire but none did. Review the guard's threshold or implementation in `research/mgc_mode_a_rediscovery_orbg5_v1_scan.py`, `research/mes_broader_mode_a_rediscovery_v1_scan.py`, and `research/mes_mnq_mirror_v1_scan.py` — the guard logic is shared across all three."
+                )
         L.append("")
     else:
-        L.append("All 3 bad inputs caught by their expected guard. The scan scripts' T0 / extreme_fire / arithmetic_only guard stack is working as specified.")
+        L.append(
+            "All 3 bad inputs caught by their expected guard. The scan scripts' T0 / extreme_fire / arithmetic_only guard stack is working as specified."
+        )
         L.append("")
-        L.append("**Non-blocking improvement recommendation:** the T0 guard currently checks corr vs `orb_size`, `atr_20`, `overnight_range`. Adding `corr(fire, pnl_r)` as a red-flag check would robustly catch direct-outcome look-ahead (BAD_1 class). This is not a gate (the scan scripts don't write to validated_setups) but adds defense-in-depth. File as next-session task.")
+        L.append(
+            "**Non-blocking improvement recommendation:** the T0 guard currently checks corr vs `orb_size`, `atr_20`, `overnight_range`. Adding `corr(fire, pnl_r)` as a red-flag check would robustly catch direct-outcome look-ahead (BAD_1 class). This is not a gate (the scan scripts don't write to validated_setups) but adds defense-in-depth. File as next-session task."
+        )
         L.append("")
     L.append("## Reproduction")
     L.append("```")

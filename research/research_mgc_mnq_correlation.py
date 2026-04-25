@@ -90,9 +90,7 @@ def load_daily(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
 def load_session_dirs(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """Break direction per session for MGC and MNQ."""
     # Build SELECT for each shared session's break_dir column
-    selects = ", ".join(
-        f"orb_{s}_break_dir AS {s}" for s in SHARED_SESSIONS
-    )
+    selects = ", ".join(f"orb_{s}_break_dir AS {s}" for s in SHARED_SESSIONS)
     df = con.execute(f"""
         SELECT trading_day, symbol, {selects}
         FROM daily_features
@@ -189,8 +187,10 @@ def block1_daily_returns(con: duckdb.DuckDBPyConnection) -> None:
     rolling_corr = ret_df2["MGC"].rolling(60, min_periods=30).corr(ret_df2["MNQ"])
     rolling_corr = rolling_corr.dropna()
     if len(rolling_corr) > 0:
-        print(f"    Min: {rolling_corr.min():+.3f}   Max: {rolling_corr.max():+.3f}   "
-              f"Mean: {rolling_corr.mean():+.3f}   Std: {rolling_corr.std():.3f}")
+        print(
+            f"    Min: {rolling_corr.min():+.3f}   Max: {rolling_corr.max():+.3f}   "
+            f"Mean: {rolling_corr.mean():+.3f}   Std: {rolling_corr.std():.3f}"
+        )
         pct_negative = (rolling_corr < 0).mean() * 100
         pct_positive = (rolling_corr > 0).mean() * 100
         print(f"    {pct_negative:.0f}% of windows negative  |  {pct_positive:.0f}% positive")
@@ -201,13 +201,13 @@ def block1_daily_returns(con: duckdb.DuckDBPyConnection) -> None:
     atr_median = atr_df["atr_20"].median()
     ret_atr = ret_df2.join(atr_df.rename(columns={"atr_20": "mgc_atr"}), how="left")
     for regime, label in [(True, "HIGH-ATR"), (False, "LOW-ATR")]:
-        sub = ret_atr[ret_atr["mgc_atr"] > atr_median if regime
-                      else ret_atr["mgc_atr"] <= atr_median].dropna(subset=["MGC", "MNQ"])
+        sub = ret_atr[ret_atr["mgc_atr"] > atr_median if regime else ret_atr["mgc_atr"] <= atr_median].dropna(
+            subset=["MGC", "MNQ"]
+        )
         if len(sub) < 30:
             continue
         rr, rp = stats.pearsonr(sub["MGC"], sub["MNQ"])
-        print(f"    {label} (ATR {'>' if regime else '<='} {atr_median:.0f}): "
-              f"N={len(sub)}  r={rr:+.3f}  p={rp:.4f}")
+        print(f"    {label} (ATR {'>' if regime else '<='} {atr_median:.0f}): N={len(sub)}  r={rr:+.3f}  p={rp:.4f}")
 
     # Honest verdict
     print("\n  VERDICT:")
@@ -260,31 +260,41 @@ def block2_session_concordance(con: duckdb.DuckDBPyConnection) -> None:
 
         n_both = both_broke.sum()
         if n_both < MIN_SAMPLE:
-            all_results.append({
-                "session": session, "n_both_broke": n_both,
-                "n_opposite": None, "n_concordant": None,
-                "pct_opposite": None, "p_raw": None, "p_bh": None,
-                "note": f"N={n_both} < {MIN_SAMPLE} — skip"
-            })
+            all_results.append(
+                {
+                    "session": session,
+                    "n_both_broke": n_both,
+                    "n_opposite": None,
+                    "n_concordant": None,
+                    "pct_opposite": None,
+                    "p_raw": None,
+                    "p_bh": None,
+                    "note": f"N={n_both} < {MIN_SAMPLE} — skip",
+                }
+            )
             continue
 
         # Concordant = same direction, Opposite = different direction
-        concordant = ((mgc_broke == "long") & (mnq_broke == "long")) | \
-                     ((mgc_broke == "short") & (mnq_broke == "short"))
-        opposite = ((mgc_broke == "long") & (mnq_broke == "short")) | \
-                   ((mgc_broke == "short") & (mnq_broke == "long"))
+        concordant = ((mgc_broke == "long") & (mnq_broke == "long")) | ((mgc_broke == "short") & (mnq_broke == "short"))
+        opposite = ((mgc_broke == "long") & (mnq_broke == "short")) | ((mgc_broke == "short") & (mnq_broke == "long"))
 
         n_concordant = concordant.sum()
         n_opposite = opposite.sum()
         n_total = n_concordant + n_opposite
 
         if n_total < MIN_SAMPLE:
-            all_results.append({
-                "session": session, "n_both_broke": n_both,
-                "n_opposite": n_opposite, "n_concordant": n_concordant,
-                "pct_opposite": None, "p_raw": None, "p_bh": None,
-                "note": f"N_valid={n_total} < {MIN_SAMPLE} — skip"
-            })
+            all_results.append(
+                {
+                    "session": session,
+                    "n_both_broke": n_both,
+                    "n_opposite": n_opposite,
+                    "n_concordant": n_concordant,
+                    "pct_opposite": None,
+                    "p_raw": None,
+                    "p_bh": None,
+                    "note": f"N_valid={n_total} < {MIN_SAMPLE} — skip",
+                }
+            )
             continue
 
         pct_opposite = n_opposite / n_total
@@ -294,16 +304,18 @@ def block2_session_concordance(con: duckdb.DuckDBPyConnection) -> None:
         # One-sided "greater" would miss sessions with strong concordance signal.
         p_raw = stats.binomtest(n_opposite, n_total, p=0.5, alternative="two-sided").pvalue
 
-        all_results.append({
-            "session": session,
-            "n_both_broke": n_both,
-            "n_opposite": n_opposite,
-            "n_concordant": n_concordant,
-            "pct_opposite": pct_opposite,
-            "p_raw": p_raw,
-            "p_bh": None,
-            "note": ""
-        })
+        all_results.append(
+            {
+                "session": session,
+                "n_both_broke": n_both,
+                "n_opposite": n_opposite,
+                "n_concordant": n_concordant,
+                "pct_opposite": pct_opposite,
+                "p_raw": p_raw,
+                "p_bh": None,
+                "note": "",
+            }
+        )
 
     # Apply BH FDR
     valid = [r for r in all_results if r["p_raw"] is not None]
@@ -321,9 +333,11 @@ def block2_session_concordance(con: duckdb.DuckDBPyConnection) -> None:
             print(f"  {r['session']:20s}: {note}")
             continue
         sig = "** BH-SIG **" if r["p_bh"] < BH_Q else ""
-        print(f"  {r['session']:20s}: N={r['n_both_broke']:4d} | "
-              f"opposite={r['pct_opposite']:.1%} ({r['n_opposite']}/{r['n_opposite']+r['n_concordant']}) | "
-              f"p_raw={r['p_raw']:.4f}  p_bh={r['p_bh']:.4f}  {sig}")
+        print(
+            f"  {r['session']:20s}: N={r['n_both_broke']:4d} | "
+            f"opposite={r['pct_opposite']:.1%} ({r['n_opposite']}/{r['n_opposite'] + r['n_concordant']}) | "
+            f"p_raw={r['p_raw']:.4f}  p_bh={r['p_bh']:.4f}  {sig}"
+        )
         if r["p_bh"] < BH_Q:
             bh_survivors.append(r)
 
@@ -334,8 +348,10 @@ def block2_session_concordance(con: duckdb.DuckDBPyConnection) -> None:
         for r in bh_survivors:
             direction = "opposite" if r["pct_opposite"] > 0.5 else "concordant"
             pct_display = r["pct_opposite"] if r["pct_opposite"] > 0.5 else 1 - r["pct_opposite"]
-            print(f"    {r['session']}: {pct_display:.1%} {direction} breaks "
-                  f"(N={r['n_both_broke']}, p_bh={r['p_bh']:.4f})")
+            print(
+                f"    {r['session']}: {pct_display:.1%} {direction} breaks "
+                f"(N={r['n_both_broke']}, p_bh={r['p_bh']:.4f})"
+            )
         print("\n  MECHANISM CHECK: Does this have a structural reason?")
         print("  CONCORDANT (same direction > 50%): macro trend effect - shared directional response")
         print("  to data releases or Asian/European opens. Both assets move with the macro flow.")
@@ -358,14 +374,12 @@ def block2_session_concordance(con: duckdb.DuckDBPyConnection) -> None:
                 mb = mgc_yr.loc[common]
                 nb = mnq_yr.loc[common]
                 both = (mb.notna()) & (nb.notna())
-                n_opp = (((mb == "long") & (nb == "short")) |
-                         ((mb == "short") & (nb == "long")))[both].sum()
-                n_con = (((mb == "long") & (nb == "long")) |
-                         ((mb == "short") & (nb == "short")))[both].sum()
+                n_opp = (((mb == "long") & (nb == "short")) | ((mb == "short") & (nb == "long")))[both].sum()
+                n_con = (((mb == "long") & (nb == "long")) | ((mb == "short") & (nb == "short")))[both].sum()
                 n_t = n_opp + n_con
                 if n_t < 10:
                     continue
-                print(f"    {yr}: N={n_t:3d}  opposite={n_opp/n_t:.1%}")
+                print(f"    {yr}: N={n_t:3d}  opposite={n_opp / n_t:.1%}")
     else:
         print("\n  VERDICT: NO sessions show significant directional opposition.")
         print("  MGC and MNQ break in opposite directions no more than chance.")
@@ -391,9 +405,7 @@ def block3_portfolio_pnl(con: duckdb.DuckDBPyConnection) -> None:
         if sess_df.empty:
             continue
 
-        pivot = sess_df.pivot_table(
-            index="trading_day", columns="symbol", values="pnl_r"
-        )
+        pivot = sess_df.pivot_table(index="trading_day", columns="symbol", values="pnl_r")
         if "MGC" not in pivot.columns or "MNQ" not in pivot.columns:
             continue
 
@@ -413,19 +425,24 @@ def block3_portfolio_pnl(con: duckdb.DuckDBPyConnection) -> None:
         portfolio_r = (paired["MGC"] + paired["MNQ"]) / 2
         # Per-trade Sharpe (relative comparison only — not annualized, sessions
         # don't fire every day so sqrt(252) overstates vs daily strategies)
-        port_sharpe = (portfolio_r.mean() / portfolio_r.std()
-                       if portfolio_r.std() > 0 else np.nan)
-        mgc_sharpe = (paired["MGC"].mean() / paired["MGC"].std()
-                      if paired["MGC"].std() > 0 else np.nan)
-        mnq_sharpe = (paired["MNQ"].mean() / paired["MNQ"].std()
-                      if paired["MNQ"].std() > 0 else np.nan)
+        port_sharpe = portfolio_r.mean() / portfolio_r.std() if portfolio_r.std() > 0 else np.nan
+        mgc_sharpe = paired["MGC"].mean() / paired["MGC"].std() if paired["MGC"].std() > 0 else np.nan
+        mnq_sharpe = paired["MNQ"].mean() / paired["MNQ"].std() if paired["MNQ"].std() > 0 else np.nan
 
-        results.append({
-            "session": session, "N": N, "r": r, "p": p, "p_bh": None,
-            "co_loss": co_loss, "co_win": co_win,
-            "port_sharpe": port_sharpe, "mgc_sharpe": mgc_sharpe,
-            "mnq_sharpe": mnq_sharpe
-        })
+        results.append(
+            {
+                "session": session,
+                "N": N,
+                "r": r,
+                "p": p,
+                "p_bh": None,
+                "co_loss": co_loss,
+                "co_win": co_win,
+                "port_sharpe": port_sharpe,
+                "mgc_sharpe": mgc_sharpe,
+                "mnq_sharpe": mnq_sharpe,
+            }
+        )
 
     if not results:
         print("  No sessions with sufficient shared trade days.")
@@ -439,12 +456,16 @@ def block3_portfolio_pnl(con: duckdb.DuckDBPyConnection) -> None:
 
     for res in results:
         sig = " ** BH-SIG" if res["p_bh"] < BH_Q else ""
-        print(f"  {res['session']:20s}: N={res['N']:4d}  r={res['r']:+.3f}  "
-              f"p_raw={res['p']:.4f}  p_bh={res['p_bh']:.4f}{sig}  "
-              f"co-loss={res['co_loss']:.1%}  co-win={res['co_win']:.1%}")
-        print(f"    Sharpe (per-trade, relative): "
-              f"MGC={res['mgc_sharpe']:.2f}  MNQ={res['mnq_sharpe']:.2f}  "
-              f"Combined={res['port_sharpe']:.2f}")
+        print(
+            f"  {res['session']:20s}: N={res['N']:4d}  r={res['r']:+.3f}  "
+            f"p_raw={res['p']:.4f}  p_bh={res['p_bh']:.4f}{sig}  "
+            f"co-loss={res['co_loss']:.1%}  co-win={res['co_win']:.1%}"
+        )
+        print(
+            f"    Sharpe (per-trade, relative): "
+            f"MGC={res['mgc_sharpe']:.2f}  MNQ={res['mnq_sharpe']:.2f}  "
+            f"Combined={res['port_sharpe']:.2f}"
+        )
 
     # Overall assessment
     avg_r = np.mean([r["r"] for r in results])

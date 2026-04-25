@@ -81,7 +81,7 @@ class _StrictModel(BaseModel):
 class TradeGrade(_StrictModel):
     trade_id: str
     grade: str  # A | B | C | D | F
-    zone: str   # A-game | B-game | C-game
+    zone: str  # A-game | B-game | C-game
     reason: str
 
 
@@ -196,8 +196,7 @@ def build_digest_prompt(profile: dict, trades: list[dict], trading_rules_excerpt
     parts.append(f"## Current Trader Profile\n```json\n{json.dumps(profile, indent=2)}\n```")
     parts.append(f"## Today's Trades\n```json\n{json.dumps(trades, indent=2)}\n```")
     parts.append(
-        "Generate the session digest and profile patch. "
-        "Respond with the structured digest object — no prose wrapper."
+        "Generate the session digest and profile patch. Respond with the structured digest object — no prose wrapper."
     )
     return "\n\n".join(parts)
 

@@ -11,7 +11,8 @@ the Claude layer.
   review.
 - Codex is the second boss for implementation, targeted design analysis,
   verification, official-doc alignment, and environment hardening.
-- Shared truth belongs in `HANDOFF.md` or `docs/plans/`, not `.codex/`.
+- Shared truth belongs in `docs/runtime/action-queue.yaml`, `docs/runtime/decision-ledger.md`, `docs/runtime/debt-ledger.md`, or `docs/plans/`, not `.codex/`.
+- `HANDOFF.md` is a generated thin baton, not the canonical open-work registry.
 
 ## Surface Split
 
@@ -60,9 +61,9 @@ same branch blocks the launch early.
 - Use one thread per task, not one omnibus Codex thread for the whole project.
 - Use a managed worktree for concurrent mutable Codex work.
 - Do not let Claude and Codex mutate the same checkout at the same time.
-- Read `HANDOFF.md` before edits.
-- If a decision matters to both tools, record it in `HANDOFF.md` or
-  `docs/plans/`.
+- Read `HANDOFF.md` before edits, but treat `docs/runtime/action-queue.yaml` as the active-work source of truth.
+- If a decision matters to both tools, record it in the queue, ledgers, or
+  `docs/plans/` instead of relying on ad hoc baton prose.
 
 ## Codex App Actions
 

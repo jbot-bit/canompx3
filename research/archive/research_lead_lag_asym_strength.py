@@ -80,8 +80,18 @@ def eval_pair(con: duckdb.DuckDBPyConnection, spec: tuple) -> pd.DataFrame:
     conds = {
         "same_dir": valid & (df["l_dir"] == df["f_dir"]),
         "opp_dir": valid & (df["l_dir"] != df["f_dir"]),
-        "same_dir_strong": valid & (df["l_dir"] == df["f_dir"]) & df["l_delay"].notna() & (df["l_delay"] <= 15) & df["l_size"].notna() & (df["l_size"] >= size_q75),
-        "opp_dir_strong": valid & (df["l_dir"] != df["f_dir"]) & df["l_delay"].notna() & (df["l_delay"] <= 15) & df["l_size"].notna() & (df["l_size"] >= size_q75),
+        "same_dir_strong": valid
+        & (df["l_dir"] == df["f_dir"])
+        & df["l_delay"].notna()
+        & (df["l_delay"] <= 15)
+        & df["l_size"].notna()
+        & (df["l_size"] >= size_q75),
+        "opp_dir_strong": valid
+        & (df["l_dir"] != df["f_dir"])
+        & df["l_delay"].notna()
+        & (df["l_delay"] <= 15)
+        & df["l_size"].notna()
+        & (df["l_size"] >= size_q75),
         "same_long_only": valid & (df["l_dir"] == "long") & (df["f_dir"] == "long"),
         "same_short_only": valid & (df["l_dir"] == "short") & (df["f_dir"] == "short"),
     }

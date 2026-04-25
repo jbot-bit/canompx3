@@ -16,9 +16,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from trading_app.lane_allocator import (
-    compute_orb_size_stats,
     build_allocation,
     compute_lane_scores,
+    compute_orb_size_stats,
     compute_pairwise_correlation,
     enrich_scores_with_liveness,
     generate_report,

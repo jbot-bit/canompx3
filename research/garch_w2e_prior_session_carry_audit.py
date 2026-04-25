@@ -106,9 +106,7 @@ def load_target_population(con: duckdb.DuckDBPyConnection, row: pd.Series) -> pd
     """Pull every trade in the target cell, bringing the target's own break_dir
     and the per-day garch_forecast_vol_pct. Chronology / prior merge happens in
     Python per prior session."""
-    filter_sql, filter_join = broad.exact_filter_sql(
-        row["filter_type"], row["orb_label"], row["instrument"]
-    )
+    filter_sql, filter_join = broad.exact_filter_sql(row["filter_type"], row["orb_label"], row["instrument"])
     if filter_sql is None:
         return pd.DataFrame()
     target_session = row["orb_label"]
@@ -160,9 +158,7 @@ def attach_target_start(df: pd.DataFrame, target_session: str, orb_minutes: int)
     return out
 
 
-def load_prior_baseline(
-    con: duckdb.DuckDBPyConnection, symbol: str, prior_session: str
-) -> pd.DataFrame:
+def load_prior_baseline(con: duckdb.DuckDBPyConnection, symbol: str, prior_session: str) -> pd.DataFrame:
     """Canonical prior baseline: E2 / CB1 / RR1.0 / orb_minutes=5. The PRIOR's
     own trade outcome and exit_ts come from orb_outcomes; the PRIOR's break
     direction comes from daily_features (same trading_day / symbol row)."""
@@ -352,17 +348,11 @@ def analyze_cell(
     delta_conj_carry = conj_exp - carry_exp if (n_conj and n_carry) else float("nan")
 
     dir_match = False
-    if n_conj >= MIN_CONJ and not any(
-        pd.isna(x) for x in [delta_conj_base, delta_conj_garch, delta_conj_carry]
-    ):
+    if n_conj >= MIN_CONJ and not any(pd.isna(x) for x in [delta_conj_base, delta_conj_garch, delta_conj_carry]):
         if state.expected_role == "take_pair":
-            dir_match = (
-                delta_conj_base > 0 and delta_conj_garch > 0 and delta_conj_carry >= 0
-            )
+            dir_match = delta_conj_base > 0 and delta_conj_garch > 0 and delta_conj_carry >= 0
         elif state.expected_role == "veto_pair":
-            dir_match = (
-                delta_conj_base < 0 and delta_conj_garch < 0 and delta_conj_carry <= 0
-            )
+            dir_match = delta_conj_base < 0 and delta_conj_garch < 0 and delta_conj_carry <= 0
 
     flags: list[str] = []
     if np.isfinite(tau) and abs(tau) > 0.70:
@@ -381,13 +371,7 @@ def analyze_cell(
         and not extreme_fire
         and not (np.isfinite(tau) and abs(tau) > 0.70)
     )
-    cell_verdict = (
-        "supported"
-        if supported
-        else "not_testable"
-        if n_conj < MIN_CONJ
-        else "unsupported"
-    )
+    cell_verdict = "supported" if supported else "not_testable" if n_conj < MIN_CONJ else "unsupported"
 
     return {
         "strategy_id": row["strategy_id"],
@@ -505,9 +489,7 @@ def build() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, int]]:
 
     # Pool per (prior, target, state) across instruments + strategy rows.
     pool_rows: list[dict[str, object]] = []
-    for (prior, target, state_name), sub in cells_df.groupby(
-        ["prior_session", "target_session", "state"]
-    ):
+    for (prior, target, state_name), sub in cells_df.groupby(["prior_session", "target_session", "state"]):
         n_total = int(sub["n_total"].sum())
         n_resolved = int(sub["n_resolved"].sum())
         n_garch = int(sub["n_garch"].sum())
@@ -668,8 +650,13 @@ def emit(cells_df: pd.DataFrame, pool_df: pd.DataFrame, mismatch_df: pd.DataFram
             )
         lines.append("")
 
-    _pool_table(supported_pool, "Supported pooled handoffs (conjunction beats all marginals AND bootstrap p ≤ 0.05 on at least one instrument)")
-    _pool_table(unsupported_pool, "Unsupported pooled handoffs (enough data, but conjunction fails one or more marginals)")
+    _pool_table(
+        supported_pool,
+        "Supported pooled handoffs (conjunction beats all marginals AND bootstrap p ≤ 0.05 on at least one instrument)",
+    )
+    _pool_table(
+        unsupported_pool, "Unsupported pooled handoffs (enough data, but conjunction fails one or more marginals)"
+    )
     _pool_table(unclear_pool, "Unclear pooled handoffs")
     _pool_table(not_testable_pool, "Not testable here (N_conj < 30 after chronology)")
 
@@ -686,8 +673,7 @@ def emit(cells_df: pd.DataFrame, pool_df: pd.DataFrame, mismatch_df: pd.DataFram
             ]
         )
         supported_keys = set(
-            (r["prior_session"], r["target_session"], r["state"])
-            for _, r in supported_pool.iterrows()
+            (r["prior_session"], r["target_session"], r["state"]) for _, r in supported_pool.iterrows()
         )
         sub = cells_df[
             cells_df.apply(

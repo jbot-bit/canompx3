@@ -159,9 +159,7 @@ class BrokerRouter(ABC):
         """
         return {}
 
-    def verify_bracket_legs(
-        self, entry_order_id: int, contract_id: str
-    ) -> tuple[int | None, int | None]:
+    def verify_bracket_legs(self, entry_order_id: int, contract_id: str) -> tuple[int | None, int | None]:
         """Verify that bracket legs (SL + TP) were actually created at the broker.
 
         Returns (stop_loss_order_id, take_profit_order_id). Both None if the

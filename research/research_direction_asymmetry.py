@@ -164,21 +164,25 @@ def main():
                 t, p = t_test_vs_zero(sub)
                 delta_vs_overall = avg_r - overall_avg
 
-                rows.append({
-                    "instrument": instrument,
-                    "session": session,
-                    "direction": direction,
-                    "n": n,
-                    "n_overall": overall_n,
-                    "avg_r": round(avg_r, 4),
-                    "wr": round(wr, 4),
-                    "t_stat": round(t, 4),
-                    "p_raw": round(p, 6),
-                    "delta_vs_overall": round(delta_vs_overall, 4),
-                    "overall_avg_r": round(overall_avg, 4),
-                })
+                rows.append(
+                    {
+                        "instrument": instrument,
+                        "session": session,
+                        "direction": direction,
+                        "n": n,
+                        "n_overall": overall_n,
+                        "avg_r": round(avg_r, 4),
+                        "wr": round(wr, 4),
+                        "t_stat": round(t, 4),
+                        "p_raw": round(p, 6),
+                        "delta_vs_overall": round(delta_vs_overall, 4),
+                        "overall_avg_r": round(overall_avg, 4),
+                    }
+                )
                 label = "**" if abs(avg_r) > 0.20 and n >= 50 else "  "
-                print(f"  {label} {session} {direction:5s}: N={n:4d} avgR={avg_r:+.3f} WR={wr:.1%} p={p:.4f} d={delta_vs_overall:+.3f}")
+                print(
+                    f"  {label} {session} {direction:5s}: N={n:4d} avgR={avg_r:+.3f} WR={wr:.1%} p={p:.4f} d={delta_vs_overall:+.3f}"
+                )
 
         print()
 
@@ -195,9 +199,7 @@ def main():
     p_bh = bh_correct(raw_ps)
     results["p_bh"] = [round(x, 6) for x in p_bh]
     results["bh_sig"] = results["p_bh"] < 0.10
-    results["classification"] = results.apply(
-        lambda r: classify(r["avg_r"], r["p_bh"], r["n"]), axis=1
-    )
+    results["classification"] = results.apply(lambda r: classify(r["avg_r"], r["p_bh"], r["n"]), axis=1)
 
     # Save CSV
     results_path = OUTPUT_DIR / "direction_asymmetry_results.csv"
@@ -266,8 +268,7 @@ def main():
         asymmetry = long_r - short_r
         marker = " **" if abs(asymmetry) > 0.30 else ""
         summary_lines.append(
-            f"  {inst:3s} {sess:15s}: LONG={long_r:+.3f} SHORT={short_r:+.3f} "
-            f"asymmetry={asymmetry:+.3f}{marker}"
+            f"  {inst:3s} {sess:15s}: LONG={long_r:+.3f} SHORT={short_r:+.3f} asymmetry={asymmetry:+.3f}{marker}"
         )
 
     summary_text = "\n".join(summary_lines)

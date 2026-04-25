@@ -46,9 +46,18 @@ WF_START = {
 
 # All 12 sessions for pre_velocity and vwap
 ALL_SESSIONS_12 = [
-    "LONDON_METALS", "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN",
-    "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
-    "TOKYO_OPEN", "SINGAPORE_OPEN", "CME_REOPEN", "BRISBANE_1025",
+    "LONDON_METALS",
+    "EUROPE_FLOW",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "CME_REOPEN",
+    "BRISBANE_1025",
 ]
 
 # Only 3 sessions have compression_z populated (per build_daily_features.py COMPRESSION_SESSIONS)
@@ -64,7 +73,7 @@ def load_session_data(con, instrument: str, session: str) -> pd.DataFrame:
     comp_tier_col = f"orb_{session}_compression_tier"
 
     # Check which columns exist for this session
-    cols_exist = con.sql(f"DESCRIBE daily_features").fetchall()
+    cols_exist = con.sql("DESCRIBE daily_features").fetchall()
     col_names = {c[0] for c in cols_exist}
 
     select_cols = ["o.trading_day", "o.pnl_r", "df.daily_close", "df.atr_20"]
@@ -121,13 +130,16 @@ def continuous_test(df: pd.DataFrame, col: str) -> dict | None:
     e1 = q1["pnl_r"].mean()
     e5 = q5["pnl_r"].mean()
     mono = all(
-        valid[valid["qbin"] == bins[i]]["pnl_r"].mean() <= valid[valid["qbin"] == bins[i+1]]["pnl_r"].mean()
+        valid[valid["qbin"] == bins[i]]["pnl_r"].mean() <= valid[valid["qbin"] == bins[i + 1]]["pnl_r"].mean()
         for i in range(4)
     )
     return {
-        "n_q1": len(q1), "n_q5": len(q5),
-        "wr_q1": float(wr1), "wr_q5": float(wr5),
-        "expr_q1": float(e1), "expr_q5": float(e5),
+        "n_q1": len(q1),
+        "n_q5": len(q5),
+        "wr_q1": float(wr1),
+        "wr_q5": float(wr5),
+        "expr_q1": float(e1),
+        "expr_q5": float(e5),
         "wr_spread_pp": float((wr5 - wr1) * 100),
         "expr_spread": float(e5 - e1),
         "monotonic": bool(mono),
@@ -150,14 +162,19 @@ def categorical_test(df: pd.DataFrame, col: str) -> list[dict] | None:
         wr_o = (out_cat["pnl_r"] > 0).mean()
         e_i = in_cat["pnl_r"].mean()
         e_o = out_cat["pnl_r"].mean()
-        results.append({
-            "category": str(cat),
-            "n_in": len(in_cat), "n_out": len(out_cat),
-            "wr_in": float(wr_i), "wr_out": float(wr_o),
-            "expr_in": float(e_i), "expr_out": float(e_o),
-            "wr_spread_pp": float((wr_i - wr_o) * 100),
-            "expr_spread": float(e_i - e_o),
-        })
+        results.append(
+            {
+                "category": str(cat),
+                "n_in": len(in_cat),
+                "n_out": len(out_cat),
+                "wr_in": float(wr_i),
+                "wr_out": float(wr_o),
+                "expr_in": float(e_i),
+                "expr_out": float(e_o),
+                "wr_spread_pp": float((wr_i - wr_o) * 100),
+                "expr_spread": float(e_i - e_o),
+            }
+        )
     return results
 
 
@@ -183,17 +200,26 @@ def main():
                 continue
             flag = "T1_PASS" if abs(res["wr_spread_pp"]) >= T1_WR_THRESHOLD_PP else ""
             if flag:
-                print(f"  {inst} {sess:15s}: WR_spread={res['wr_spread_pp']:+5.1f}pp ExpR={res['expr_spread']:+.3f} mono={res['monotonic']} {flag}", file=sys.stderr)
-            results_rows.append({
-                "feature": "pre_velocity", "instrument": inst, "session": sess,
-                "type": "continuous", "n_total": len(df),
-                "wr_spread_pp": res["wr_spread_pp"],
-                "expr_spread": res["expr_spread"],
-                "monotonic": res["monotonic"],
-                "direction": "HIGH" if res["wr_spread_pp"] > 0 else "LOW",
-                "q1_expr": res["expr_q1"], "q5_expr": res["expr_q5"],
-                "t1_pass": flag == "T1_PASS",
-            })
+                print(
+                    f"  {inst} {sess:15s}: WR_spread={res['wr_spread_pp']:+5.1f}pp ExpR={res['expr_spread']:+.3f} mono={res['monotonic']} {flag}",
+                    file=sys.stderr,
+                )
+            results_rows.append(
+                {
+                    "feature": "pre_velocity",
+                    "instrument": inst,
+                    "session": sess,
+                    "type": "continuous",
+                    "n_total": len(df),
+                    "wr_spread_pp": res["wr_spread_pp"],
+                    "expr_spread": res["expr_spread"],
+                    "monotonic": res["monotonic"],
+                    "direction": "HIGH" if res["wr_spread_pp"] > 0 else "LOW",
+                    "q1_expr": res["expr_q1"],
+                    "q5_expr": res["expr_q5"],
+                    "t1_pass": flag == "T1_PASS",
+                }
+            )
 
     # VWAP distance test
     print("\n--- vwap_distance_norm (all 12 sessions) ---", file=sys.stderr)
@@ -209,17 +235,26 @@ def main():
                 continue
             flag = "T1_PASS" if abs(res["wr_spread_pp"]) >= T1_WR_THRESHOLD_PP else ""
             if flag:
-                print(f"  {inst} {sess:15s}: WR_spread={res['wr_spread_pp']:+5.1f}pp ExpR={res['expr_spread']:+.3f} mono={res['monotonic']} {flag}", file=sys.stderr)
-            results_rows.append({
-                "feature": "vwap_distance_norm", "instrument": inst, "session": sess,
-                "type": "continuous", "n_total": len(df),
-                "wr_spread_pp": res["wr_spread_pp"],
-                "expr_spread": res["expr_spread"],
-                "monotonic": res["monotonic"],
-                "direction": "HIGH" if res["wr_spread_pp"] > 0 else "LOW",
-                "q1_expr": res["expr_q1"], "q5_expr": res["expr_q5"],
-                "t1_pass": flag == "T1_PASS",
-            })
+                print(
+                    f"  {inst} {sess:15s}: WR_spread={res['wr_spread_pp']:+5.1f}pp ExpR={res['expr_spread']:+.3f} mono={res['monotonic']} {flag}",
+                    file=sys.stderr,
+                )
+            results_rows.append(
+                {
+                    "feature": "vwap_distance_norm",
+                    "instrument": inst,
+                    "session": sess,
+                    "type": "continuous",
+                    "n_total": len(df),
+                    "wr_spread_pp": res["wr_spread_pp"],
+                    "expr_spread": res["expr_spread"],
+                    "monotonic": res["monotonic"],
+                    "direction": "HIGH" if res["wr_spread_pp"] > 0 else "LOW",
+                    "q1_expr": res["expr_q1"],
+                    "q5_expr": res["expr_q5"],
+                    "t1_pass": flag == "T1_PASS",
+                }
+            )
 
     # Compression_z — only 3 sessions
     print("\n--- compression_z (CME_REOPEN, TOKYO_OPEN, LONDON_METALS only) ---", file=sys.stderr)
@@ -235,17 +270,26 @@ def main():
                 continue
             flag = "T1_PASS" if abs(res["wr_spread_pp"]) >= T1_WR_THRESHOLD_PP else ""
             if flag:
-                print(f"  {inst} {sess:15s}: WR_spread={res['wr_spread_pp']:+5.1f}pp ExpR={res['expr_spread']:+.3f} mono={res['monotonic']} {flag}", file=sys.stderr)
-            results_rows.append({
-                "feature": "compression_z", "instrument": inst, "session": sess,
-                "type": "continuous", "n_total": len(df),
-                "wr_spread_pp": res["wr_spread_pp"],
-                "expr_spread": res["expr_spread"],
-                "monotonic": res["monotonic"],
-                "direction": "HIGH" if res["wr_spread_pp"] > 0 else "LOW",
-                "q1_expr": res["expr_q1"], "q5_expr": res["expr_q5"],
-                "t1_pass": flag == "T1_PASS",
-            })
+                print(
+                    f"  {inst} {sess:15s}: WR_spread={res['wr_spread_pp']:+5.1f}pp ExpR={res['expr_spread']:+.3f} mono={res['monotonic']} {flag}",
+                    file=sys.stderr,
+                )
+            results_rows.append(
+                {
+                    "feature": "compression_z",
+                    "instrument": inst,
+                    "session": sess,
+                    "type": "continuous",
+                    "n_total": len(df),
+                    "wr_spread_pp": res["wr_spread_pp"],
+                    "expr_spread": res["expr_spread"],
+                    "monotonic": res["monotonic"],
+                    "direction": "HIGH" if res["wr_spread_pp"] > 0 else "LOW",
+                    "q1_expr": res["expr_q1"],
+                    "q5_expr": res["expr_q5"],
+                    "t1_pass": flag == "T1_PASS",
+                }
+            )
 
     # Compression tier (categorical) — 3 sessions
     print("\n--- compression_tier (categorical, 3 sessions) ---", file=sys.stderr)
@@ -262,17 +306,26 @@ def main():
             best = max(cats, key=lambda c: abs(c["wr_spread_pp"]))
             flag = "T1_PASS" if abs(best["wr_spread_pp"]) >= T1_WR_THRESHOLD_PP else ""
             if flag:
-                print(f"  {inst} {sess:15s}: cat={best['category']} WR_spread={best['wr_spread_pp']:+5.1f}pp ExpR={best['expr_spread']:+.3f} {flag}", file=sys.stderr)
-            results_rows.append({
-                "feature": "compression_tier", "instrument": inst, "session": sess,
-                "type": "categorical", "n_total": len(df),
-                "wr_spread_pp": best["wr_spread_pp"],
-                "expr_spread": best["expr_spread"],
-                "monotonic": None,
-                "direction": f"cat={best['category']}",
-                "q1_expr": best["expr_out"], "q5_expr": best["expr_in"],
-                "t1_pass": flag == "T1_PASS",
-            })
+                print(
+                    f"  {inst} {sess:15s}: cat={best['category']} WR_spread={best['wr_spread_pp']:+5.1f}pp ExpR={best['expr_spread']:+.3f} {flag}",
+                    file=sys.stderr,
+                )
+            results_rows.append(
+                {
+                    "feature": "compression_tier",
+                    "instrument": inst,
+                    "session": sess,
+                    "type": "categorical",
+                    "n_total": len(df),
+                    "wr_spread_pp": best["wr_spread_pp"],
+                    "expr_spread": best["expr_spread"],
+                    "monotonic": None,
+                    "direction": f"cat={best['category']}",
+                    "q1_expr": best["expr_out"],
+                    "q5_expr": best["expr_in"],
+                    "t1_pass": flag == "T1_PASS",
+                }
+            )
 
     # Summary
     print("\n" + "=" * 100, file=sys.stderr)

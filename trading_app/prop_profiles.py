@@ -650,7 +650,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # activation review.
         daily_lanes=(
             DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8
+            ),
             DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
             DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
             DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15", "MNQ", "US_DATA_1000", max_orb_size_pts=94.9),
@@ -689,7 +691,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # Same inactive recommendation as 50K TYPE-B under current shelf truth.
         daily_lanes=(
             DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8
+            ),
             DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
             DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
             DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15", "MNQ", "US_DATA_1000", max_orb_size_pts=94.9),
@@ -728,7 +732,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # activation review.
         daily_lanes=(
             DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8
+            ),
             DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
             DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12", "MNQ", "TOKYO_OPEN", max_orb_size_pts=45.6),
         ),
@@ -771,7 +777,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # session P90 limits rather than the older $300-budget-derived translation.
         daily_lanes=(
             DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8
+            ),
             DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
             DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
             DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12", "MNQ", "TOKYO_OPEN", max_orb_size_pts=45.6),
@@ -967,43 +975,38 @@ def get_profile_lane_definitions(profile_id: str | None = None) -> list[dict]:
     return lane_defs
 
 
-def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
-    """Return a session-keyed lane map of session-level attributes.
+def get_lane_registry(profile_id: str | None = None) -> dict[tuple[str, str], dict]:
+    """Return a (session, instrument)-keyed lane map.
 
-    Multi-RR profiles have multiple lanes per session. The ORB cap
-    (``max_orb_size_pts``) is a session-level attribute — a function of the
-    session's volatility profile, not of the specific strategy — so every
-    lane on the same session must share the same cap. This function returns
-    one representative lane dict per session and fails closed if lanes on
-    the same session disagree on ``max_orb_size_pts``.
-
-    Consumers (``live/session_orchestrator.py`` ORB cap loader,
-    ``scripts/tools/forward_monitor.py`` baseline loader) only read
-    session-level fields; they do not care which specific lane represents
-    the session.
+    Multi-RR profiles have multiple lanes per session, and multi-instrument
+    profiles can legitimately carry different ORB caps for the same wall-clock
+    session. The ORB cap (``max_orb_size_pts``) therefore belongs to the
+    ``(orb_label, instrument)`` pair, not the session alone. This function
+    returns one representative lane dict per pair and fails closed only when
+    lanes on the same ``(session, instrument)`` disagree on
+    ``max_orb_size_pts``.
     """
-    registry: dict[str, dict] = {}
-    cap_conflicts: dict[str, set[float | None]] = {}
+    registry: dict[tuple[str, str], dict] = {}
+    cap_conflicts: dict[tuple[str, str], set[float | None]] = {}
     for lane in get_profile_lane_definitions(profile_id):
-        label = lane["orb_label"]
+        key = (lane["orb_label"], lane["instrument"])
         cap = lane.get("max_orb_size_pts")
-        if label not in registry:
-            registry[label] = lane
+        if key not in registry:
+            registry[key] = lane
             continue
-        existing_cap = registry[label].get("max_orb_size_pts")
+        existing_cap = registry[key].get("max_orb_size_pts")
         if cap != existing_cap:
-            cap_conflicts.setdefault(label, set()).update([existing_cap, cap])
+            cap_conflicts.setdefault(key, set()).update([existing_cap, cap])
 
     if cap_conflicts:
         details = ", ".join(
-            f"{label}={sorted(caps, key=lambda c: (c is None, c))}"
-            for label, caps in sorted(cap_conflicts.items())
+            f"{label}/{instrument}={sorted(caps, key=lambda c: (c is None, c))}"
+            for (label, instrument), caps in sorted(cap_conflicts.items())
         )
         raise ValueError(
             "Profile has inconsistent max_orb_size_pts across lanes on the "
-            f"same session: {details}. The ORB cap is a session-level "
-            "attribute and must be identical for every lane on a given "
-            "session. Reconcile the DailyLaneSpec entries in prop_profiles.py."
+            f"same (session, instrument): {details}. Reconcile the "
+            "DailyLaneSpec entries in prop_profiles.py."
         )
 
     return registry

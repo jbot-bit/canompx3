@@ -117,13 +117,9 @@ CELLS = [
     },
 ]
 
-RESULT_PATH_FULL_SAMPLE = (
-    PROJECT_ROOT
-    / "docs/audit/results/2026-04-19-rel-vol-cross-scan-overlap-decomposition.md"
-)
+RESULT_PATH_FULL_SAMPLE = PROJECT_ROOT / "docs/audit/results/2026-04-19-rel-vol-cross-scan-overlap-decomposition.md"
 RESULT_PATH_IS_ONLY = (
-    PROJECT_ROOT
-    / "docs/audit/results/2026-04-19-rel-vol-cross-scan-overlap-decomposition-is-only-quantile.md"
+    PROJECT_ROOT / "docs/audit/results/2026-04-19-rel-vol-cross-scan-overlap-decomposition-is-only-quantile.md"
 )
 
 
@@ -285,8 +281,15 @@ def _fmt(x: float | None, places: int = 3) -> str:
     return f"{x:.{places}f}"
 
 
-def render(cells: list[CellDecomp], pair_df: pd.DataFrame, align: pd.DataFrame,
-           multi: dict[int, int], corr: pd.DataFrame, meff: float, eigs: np.ndarray) -> str:
+def render(
+    cells: list[CellDecomp],
+    pair_df: pd.DataFrame,
+    align: pd.DataFrame,
+    multi: dict[int, int],
+    corr: pd.DataFrame,
+    meff: float,
+    eigs: np.ndarray,
+) -> str:
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
     lines: list[str] = []
     lines.append("# rel_vol_HIGH_Q3 cross-lane overlap decomposition")
@@ -353,10 +356,7 @@ def render(cells: list[CellDecomp], pair_df: pd.DataFrame, align: pd.DataFrame,
         "- Jaccard > 0.30 ≈ two cells share ≥ 30% of their fire days → likely not "
         "independent hypotheses on the same underlying driver."
     )
-    lines.append(
-        "- Jaccard < 0.10 with overlap-of-min < 20% ≈ weak coupling → approximately "
-        "independent."
-    )
+    lines.append("- Jaccard < 0.10 with overlap-of-min < 20% ≈ weak coupling → approximately independent.")
     lines.append("")
     lines.append("## Simultaneous-fire distribution")
     lines.append("")
@@ -399,9 +399,7 @@ def render(cells: list[CellDecomp], pair_df: pd.DataFrame, align: pd.DataFrame,
     lines.append("")
     lines.append(f"**Meff = {meff:.3f}** (out of m={len(cells)} cells).")
     lines.append("")
-    lines.append(
-        f"Eigenvalues of the correlation matrix: {np.array2string(eigs, precision=3)}."
-    )
+    lines.append(f"Eigenvalues of the correlation matrix: {np.array2string(eigs, precision=3)}.")
     lines.append("")
     lines.append(
         "Meff heuristic: Meff ≈ m (all 5 cells here ≈ 5) means the 5 lanes are "
@@ -446,8 +444,7 @@ def render(cells: list[CellDecomp], pair_df: pd.DataFrame, align: pd.DataFrame,
     lines.append("")
     lines.append("```")
     lines.append(
-        "DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db "
-        "python research/rel_vol_cross_scan_overlap_decomposition.py"
+        "DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db python research/rel_vol_cross_scan_overlap_decomposition.py"
     )
     lines.append("```")
     lines.append("")
@@ -503,15 +500,14 @@ def _run(quantile_method: str, result_path: Path) -> tuple[float, float, int]:
     print(f"Max pairwise Jaccard = {max_jac:.3f}")
 
     result_path.parent.mkdir(parents=True, exist_ok=True)
-    result_path.write_text(
-        render(cells, pair_df, align, multi, corr, meff, eigs), encoding="utf-8"
-    )
+    result_path.write_text(render(cells, pair_df, align, multi, corr, meff, eigs), encoding="utf-8")
     print(f"Wrote {result_path.relative_to(PROJECT_ROOT)}\n")
     return meff, max_jac, len(align)
 
 
 def main() -> int:
     import argparse
+
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--quantile-method",

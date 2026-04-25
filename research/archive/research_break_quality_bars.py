@@ -35,26 +35,28 @@ from pipeline.paths import GOLD_DB_PATH
 DEFAULT_INSTRUMENT = "MGC"
 DEFAULT_SESSIONS = ["0900", "1000"]
 
-MIN_BARS_LAYER1 = 2   # >= 2 pre-break bars for compression ratio
-MIN_BARS_LAYER2 = 1   # >= 1 pre-break bar for explosion ratio denominator
+MIN_BARS_LAYER1 = 2  # >= 2 pre-break bars for compression ratio
+MIN_BARS_LAYER2 = 1  # >= 1 pre-break bar for explosion ratio denominator
 
 # Representative strategy combos: (entry_model, rr_target, confirm_bars)
 # One outcome per day per combo → valid t-test (no N-inflation)
 REPRESENTATIVE_COMBOS = [
-    ("E1", 2.0, 2),    # E1 CB2 RR2.0 — most common baseline
-    ("E0", 2.5, 1),    # E0 CB1 RR2.5 — top MGC 0900 strategy
-    ("E0", 2.0, 1),    # E0 CB1 RR2.0
-    ("E3", 2.0, 1),    # E3 CB1 RR2.0 — retrace entry
+    ("E1", 2.0, 2),  # E1 CB2 RR2.0 — most common baseline
+    ("E0", 2.5, 1),  # E0 CB1 RR2.5 — top MGC 0900 strategy
+    ("E0", 2.0, 1),  # E0 CB1 RR2.0
+    ("E3", 2.0, 1),  # E3 CB1 RR2.0 — retrace entry
 ]
 
-MIN_GROUP_SIZE = 30    # minimum per-group N for t-test
+MIN_GROUP_SIZE = 30  # minimum per-group N for t-test
 
 
 # ─── Data Loading ────────────────────────────────────────────────────────────
 
+
 def load_break_days(con, instrument, session):
     """Load all days with breaks for given session from daily_features."""
-    return con.execute(f"""
+    return con.execute(
+        f"""
         SELECT
             trading_day,
             orb_{session}_high   AS orb_high,
@@ -71,7 +73,9 @@ def load_break_days(con, instrument, session):
           AND orb_{session}_break_dir IS NOT NULL
           AND orb_{session}_break_ts IS NOT NULL
         ORDER BY trading_day
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def load_outcomes(con, instrument, session, entry_model, rr_target, confirm_bars):
@@ -79,7 +83,8 @@ def load_outcomes(con, instrument, session, entry_model, rr_target, confirm_bars
 
     Returns at most one row per trading_day → no N-inflation.
     """
-    return con.execute("""
+    return con.execute(
+        """
         SELECT
             trading_day, outcome, pnl_r
         FROM orb_outcomes
@@ -92,7 +97,9 @@ def load_outcomes(con, instrument, session, entry_model, rr_target, confirm_bars
           AND outcome IN ('win', 'loss')
           AND pnl_r IS NOT NULL
         ORDER BY trading_day
-    """, [instrument, session, entry_model, rr_target, confirm_bars]).fetchdf()
+    """,
+        [instrument, session, entry_model, rr_target, confirm_bars],
+    ).fetchdf()
 
 
 def load_all_bars_1m(con, instrument, start_date, end_date):
@@ -100,14 +107,17 @@ def load_all_bars_1m(con, instrument, start_date, end_date):
     utc_start = pd.Timestamp(start_date) - pd.Timedelta(days=2)
     utc_end = pd.Timestamp(end_date) + pd.Timedelta(days=2)
 
-    bars = con.execute("""
+    bars = con.execute(
+        """
         SELECT ts_utc, open, high, low, close, volume
         FROM bars_1m
         WHERE symbol = ?
           AND ts_utc >= ?::TIMESTAMPTZ
           AND ts_utc < ?::TIMESTAMPTZ
         ORDER BY ts_utc
-    """, [instrument, utc_start.isoformat(), utc_end.isoformat()]).fetchdf()
+    """,
+        [instrument, utc_start.isoformat(), utc_end.isoformat()],
+    ).fetchdf()
 
     # Ensure timezone-aware
     if len(bars) > 0 and bars["ts_utc"].dt.tz is None:
@@ -117,6 +127,7 @@ def load_all_bars_1m(con, instrument, start_date, end_date):
 
 
 # ─── Metric Computation ─────────────────────────────────────────────────────
+
 
 def compute_bar_metrics(bars_df, break_ts, orb_end_utc, orb_size):
     """Compute pre-break compression and explosion ratio for one day.
@@ -151,7 +162,7 @@ def compute_bar_metrics(bars_df, break_ts, orb_end_utc, orb_size):
 
     n_pre = len(pre_break)
     result["pre_break_bars"] = n_pre
-    result["immediate_break"] = (n_pre == 0)
+    result["immediate_break"] = n_pre == 0
 
     # Break bar range
     if len(break_bar) > 0:
@@ -169,9 +180,7 @@ def compute_bar_metrics(bars_df, break_ts, orb_end_utc, orb_size):
             result["pre_break_compression"] = avg_pre / orb_size
 
         # Layer 2: explosion ratio (>= 1 pre-break bar + break bar)
-        if (n_pre >= MIN_BARS_LAYER2
-                and avg_pre > 0
-                and result["break_bar_range"] is not None):
+        if n_pre >= MIN_BARS_LAYER2 and avg_pre > 0 and result["break_bar_range"] is not None:
             result["explosion_ratio"] = result["break_bar_range"] / avg_pre
 
     return result
@@ -211,6 +220,7 @@ def compute_all_metrics(break_days, bars_df):
 
 # ─── Statistical Analysis ───────────────────────────────────────────────────
 
+
 def run_ttest(data, metric_col, label):
     """Run t-test and quartile analysis for one metric.
 
@@ -220,9 +230,9 @@ def run_ttest(data, metric_col, label):
     wins = valid[valid["outcome"] == "win"][metric_col].values
     losses = valid[valid["outcome"] == "loss"][metric_col].values
 
-    print(f"\n{'='*64}")
+    print(f"\n{'=' * 64}")
     print(f"  {label}")
-    print(f"{'='*64}")
+    print(f"{'=' * 64}")
     print(f"  N = {len(valid)} ({len(wins)} W / {len(losses)} L)")
 
     if len(wins) < MIN_GROUP_SIZE or len(losses) < MIN_GROUP_SIZE:
@@ -253,8 +263,7 @@ def run_ttest(data, metric_col, label):
 
     # Quartile breakdown
     try:
-        quartiles = pd.qcut(valid[metric_col], 4, labels=["Q1", "Q2", "Q3", "Q4"],
-                            duplicates="drop")
+        quartiles = pd.qcut(valid[metric_col], 4, labels=["Q1", "Q2", "Q3", "Q4"], duplicates="drop")
     except ValueError:
         quartiles = None
 
@@ -269,14 +278,14 @@ def run_ttest(data, metric_col, label):
             q_wr = (qd["outcome"] == "win").sum() / len(qd)
             q_pnl = qd["pnl_r"].mean()
             q_range = qd[metric_col]
-            print(f"    {q}: N={len(qd):>4}, WR={q_wr:.1%}, avgR={q_pnl:+.3f}, "
-                  f"range=[{q_range.min():.4f}, {q_range.max():.4f}]")
+            print(
+                f"    {q}: N={len(qd):>4}, WR={q_wr:.1%}, avgR={q_pnl:+.3f}, "
+                f"range=[{q_range.min():.4f}, {q_range.max():.4f}]"
+            )
 
     # Year-by-year stability
     valid_yr = valid.copy()
-    valid_yr["year"] = valid_yr["trading_day"].apply(
-        lambda d: d.year if hasattr(d, "year") else int(str(d)[:4])
-    )
+    valid_yr["year"] = valid_yr["trading_day"].apply(lambda d: d.year if hasattr(d, "year") else int(str(d)[:4]))
     years_consistent = 0
     years_total = 0
 
@@ -355,10 +364,12 @@ def print_distributions(metrics_df, session):
     ]:
         vals = metrics_df[col].dropna()
         if len(vals) > 0:
-            print(f"  {label}: N={len(vals)}, "
-                  f"mean={vals.mean():.4f}, med={vals.median():.4f}, "
-                  f"std={vals.std():.4f}, "
-                  f"P5={vals.quantile(0.05):.4f}, P95={vals.quantile(0.95):.4f}")
+            print(
+                f"  {label}: N={len(vals)}, "
+                f"mean={vals.mean():.4f}, med={vals.median():.4f}, "
+                f"std={vals.std():.4f}, "
+                f"P5={vals.quantile(0.05):.4f}, P95={vals.quantile(0.95):.4f}"
+            )
 
 
 def apply_bh_fdr(results):
@@ -369,31 +380,28 @@ def apply_bh_fdr(results):
     results.sort(key=lambda r: r["p_val"])
     m = len(results)
 
-    print(f"\n{'='*64}")
+    print(f"\n{'=' * 64}")
     print(f"  BH FDR Correction ({m} tests)")
-    print(f"{'='*64}")
+    print(f"{'=' * 64}")
 
     for i, r in enumerate(results):
         rank = i + 1
         bh_threshold = 0.05 * rank / m
         survives = r["p_val"] <= bh_threshold
         tag = "SURVIVES" if survives else "rejected"
-        print(f"  [{rank}/{m}] p={r['p_val']:.6f} vs BH={bh_threshold:.6f} "
-              f"-> {tag}  ({r['label']})")
+        print(f"  [{rank}/{m}] p={r['p_val']:.6f} vs BH={bh_threshold:.6f} -> {tag}  ({r['label']})")
 
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 
+
 def main():
     import argparse
-    parser = argparse.ArgumentParser(
-        description="Break quality bar-level research"
-    )
+
+    parser = argparse.ArgumentParser(description="Break quality bar-level research")
     parser.add_argument("--db-path", default=None)
-    parser.add_argument("--instrument", default=DEFAULT_INSTRUMENT,
-                        help="Instrument symbol (default: MGC)")
-    parser.add_argument("--sessions", nargs="+", default=None,
-                        help="Session labels (default: 0900 1000)")
+    parser.add_argument("--instrument", default=DEFAULT_INSTRUMENT, help="Instrument symbol (default: MGC)")
+    parser.add_argument("--sessions", nargs="+", default=None, help="Session labels (default: 0900 1000)")
     args = parser.parse_args()
 
     instrument = args.instrument
@@ -406,9 +414,9 @@ def main():
 
     try:
         for session in sessions:
-            print(f"\n{'#'*70}")
+            print(f"\n{'#' * 70}")
             print(f"#  {instrument} {session} — Break Quality Bar-Level Analysis")
-            print(f"{'#'*70}")
+            print(f"{'#' * 70}")
 
             # ── Load break days ──────────────────────────────────────────
             break_days = load_break_days(con, instrument, session)
@@ -435,8 +443,7 @@ def main():
             n_immediate = int(metrics_df["immediate_break"].sum())
             n_l1 = int(metrics_df["pre_break_compression"].notna().sum())
             n_l2 = int(metrics_df["explosion_ratio"].notna().sum())
-            print(f"  Immediate breaks (0 pre-break bars): "
-                  f"{n_immediate} ({n_immediate/len(metrics_df):.1%})")
+            print(f"  Immediate breaks (0 pre-break bars): {n_immediate} ({n_immediate / len(metrics_df):.1%})")
             print(f"  Layer 1 computable (>= {MIN_BARS_LAYER1} pre-break bars): {n_l1}")
             print(f"  Layer 2 computable (>= {MIN_BARS_LAYER2} pre-break bars + break bar): {n_l2}")
 
@@ -455,10 +462,7 @@ def main():
                 combo_tag = f"{em}_RR{rr}_CB{cb}"
 
                 # Layer 1: pre-break compression (ALL entry types)
-                r = run_ttest(
-                    merged, "pre_break_compression",
-                    f"L1 Compression | {combo_tag} | {session}"
-                )
+                r = run_ttest(merged, "pre_break_compression", f"L1 Compression | {combo_tag} | {session}")
                 if r:
                     all_results.append(r)
 
@@ -466,25 +470,17 @@ def main():
                 if em == "E0" and cb == 1:
                     # E0 CB1: descriptive only (lookahead)
                     print(f"\n  ** E0 CB1 explosion ratio is DESCRIPTIVE (lookahead) **")
-                    r = run_ttest(
-                        merged, "explosion_ratio",
-                        f"L2 Explosion [DESCRIPTIVE] | {combo_tag} | {session}"
-                    )
+                    r = run_ttest(merged, "explosion_ratio", f"L2 Explosion [DESCRIPTIVE] | {combo_tag} | {session}")
                     # Don't add to FDR pool — not a filter candidate
                 else:
-                    r = run_ttest(
-                        merged, "explosion_ratio",
-                        f"L2 Explosion | {combo_tag} | {session}"
-                    )
+                    r = run_ttest(merged, "explosion_ratio", f"L2 Explosion | {combo_tag} | {session}")
                     if r:
                         all_results.append(r)
 
             # ── DST split (0900 only) ────────────────────────────────────
             if session == "0900" and "us_dst" in metrics_df.columns:
                 for dst_val, dst_label in [(True, "DST-ON"), (False, "DST-OFF")]:
-                    dst_days = set(
-                        metrics_df[metrics_df["us_dst"] == dst_val]["trading_day"]
-                    )
+                    dst_days = set(metrics_df[metrics_df["us_dst"] == dst_val]["trading_day"])
                     # Use E1 RR2.0 CB2 as baseline for DST analysis
                     outcomes = load_outcomes(con, instrument, session, "E1", 2.0, 2)
                     if len(outcomes) == 0:
@@ -493,8 +489,9 @@ def main():
                     dst_merged = merged[merged["trading_day"].isin(dst_days)]
                     if len(dst_merged) >= 40:
                         r = run_ttest(
-                            dst_merged, "pre_break_compression",
-                            f"L1 Compression | E1_RR2.0_CB2 | {session} {dst_label}"
+                            dst_merged,
+                            "pre_break_compression",
+                            f"L1 Compression | E1_RR2.0_CB2 | {session} {dst_label}",
                         )
                         if r:
                             all_results.append(r)
@@ -512,15 +509,17 @@ def main():
             apply_bh_fdr(actionable)
 
         # ── Summary table ────────────────────────────────────────────────
-        print(f"\n{'#'*70}")
+        print(f"\n{'#' * 70}")
         print(f"#  SUMMARY")
-        print(f"{'#'*70}")
+        print(f"{'#' * 70}")
         for r in sorted(actionable, key=lambda x: x["p_val"]):
             sig = "*" if r["p_val"] < 0.01 else ""
-            print(f"  p={r['p_val']:.6f}{sig:1s}  delta={r['delta']:+.4f}  "
-                  f"N={r['n']:>4}  "
-                  f"yr={r['years_consistent']}/{r['years_total']}  "
-                  f"{r['label']}")
+            print(
+                f"  p={r['p_val']:.6f}{sig:1s}  delta={r['delta']:+.4f}  "
+                f"N={r['n']:>4}  "
+                f"yr={r['years_consistent']}/{r['years_total']}  "
+                f"{r['label']}"
+            )
 
     finally:
         con.close()

@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_CSV = OUTPUT_DIR / "e3_direction_results.csv"
-OUTPUT_MD  = OUTPUT_DIR / "e3_direction_summary.md"
+OUTPUT_MD = OUTPUT_DIR / "e3_direction_summary.md"
 
 # Minimum N to report a group
 MIN_N = 30
@@ -115,18 +115,18 @@ def analyze(df: pd.DataFrame) -> pd.DataFrame:
     groups = df.groupby(["symbol", "session", "rr_target", "confirm_bars"])
 
     for (sym, sess, rr, cb), grp in groups:
-        all_stats  = compute_stats(grp["pnl_r"], "ALL")
+        all_stats = compute_stats(grp["pnl_r"], "ALL")
         if all_stats is None:
             continue
 
-        long_grp  = grp[grp["break_dir"] == "long"]
+        long_grp = grp[grp["break_dir"] == "long"]
         short_grp = grp[grp["break_dir"] == "short"]
 
-        long_stats  = compute_stats(long_grp["pnl_r"],  "LONG")
+        long_stats = compute_stats(long_grp["pnl_r"], "LONG")
         short_stats = compute_stats(short_grp["pnl_r"], "SHORT")
 
         # Compute direction split ratio (sanity check — should be ~50/50, not 100/0)
-        n_long  = len(long_grp)
+        n_long = len(long_grp)
         n_short = len(short_grp)
         n_total = len(grp)
         long_pct = n_long / n_total if n_total > 0 else 0
@@ -134,19 +134,21 @@ def analyze(df: pd.DataFrame) -> pd.DataFrame:
         for direction, stats in [("ALL", all_stats), ("LONG", long_stats), ("SHORT", short_stats)]:
             if stats is None:
                 continue
-            rows.append({
-                "symbol":       sym,
-                "session":      sess,
-                "rr_target":    rr,
-                "confirm_bars": int(cb),
-                "direction":    direction,
-                "n":            stats["n"],
-                "avg_r":        stats["avg_r"],
-                "win_rate":     stats["win_rate"],
-                "t_stat":       stats["t_stat"],
-                "p_val":        stats["p_val"],
-                "long_pct":     round(long_pct, 3),  # sanity: ~0.5 expected
-            })
+            rows.append(
+                {
+                    "symbol": sym,
+                    "session": sess,
+                    "rr_target": rr,
+                    "confirm_bars": int(cb),
+                    "direction": direction,
+                    "n": stats["n"],
+                    "avg_r": stats["avg_r"],
+                    "win_rate": stats["win_rate"],
+                    "t_stat": stats["t_stat"],
+                    "p_val": stats["p_val"],
+                    "long_pct": round(long_pct, 3),  # sanity: ~0.5 expected
+                }
+            )
 
     if not rows:
         return pd.DataFrame()
@@ -162,11 +164,7 @@ def analyze(df: pd.DataFrame) -> pd.DataFrame:
 
 def year_by_year(df: pd.DataFrame, sym: str, sess: str) -> pd.DataFrame:
     """Year-by-year breakdown of E3 LONG vs ALL for a given symbol/session."""
-    sub = df[
-        (df["symbol"]  == sym) &
-        (df["session"] == sess) &
-        (df["break_dir"].isin(["long", None, "short"]))
-    ].copy()
+    sub = df[(df["symbol"] == sym) & (df["session"] == sess) & (df["break_dir"].isin(["long", None, "short"]))].copy()
 
     rows = []
     for year, ygrp in sub.groupby("year"):
@@ -174,13 +172,15 @@ def year_by_year(df: pd.DataFrame, sym: str, sess: str) -> pd.DataFrame:
             n = len(dgrp)
             if n < 10:
                 continue
-            rows.append({
-                "year":      int(year),
-                "direction": direction,
-                "n":         n,
-                "avg_r":     round(dgrp["pnl_r"].mean(), 4),
-                "win_rate":  round((dgrp["pnl_r"] > 0).mean(), 4),
-            })
+            rows.append(
+                {
+                    "year": int(year),
+                    "direction": direction,
+                    "n": n,
+                    "avg_r": round(dgrp["pnl_r"].mean(), 4),
+                    "win_rate": round((dgrp["pnl_r"] > 0).mean(), 4),
+                }
+            )
 
     return pd.DataFrame(rows)
 
@@ -188,14 +188,11 @@ def year_by_year(df: pd.DataFrame, sym: str, sess: str) -> pd.DataFrame:
 def write_summary(result: pd.DataFrame, df_raw: pd.DataFrame) -> None:
     """Write markdown summary."""
     long_only = result[result["direction"] == "LONG"]
-    survivors = long_only[
-        (long_only["p_bh"] <= BH_Q) & (long_only["avg_r"] > 0)
-    ]
+    survivors = long_only[(long_only["p_bh"] <= BH_Q) & (long_only["avg_r"] > 0)]
     # Also find where LONG > ALL meaningfully
     long_vs_all = (
         result[result["direction"].isin(["LONG", "ALL"])]
-        .pivot_table(index=["symbol","session","rr_target","confirm_bars"],
-                     columns="direction", values="avg_r")
+        .pivot_table(index=["symbol", "session", "rr_target", "confirm_bars"], columns="direction", values="avg_r")
         .dropna()
         .assign(lift=lambda x: x["LONG"] - x["ALL"])
         .sort_values("lift", ascending=False)
@@ -271,9 +268,7 @@ def write_summary(result: pd.DataFrame, df_raw: pd.DataFrame) -> None:
             "|------|-----------|---|-------|----|",
         ]
         for _, r in yby.iterrows():
-            lines.append(
-                f"| {int(r.year)} | {r.direction} | {r.n} | {r.avg_r:+.4f} | {r.win_rate:.1%} |"
-            )
+            lines.append(f"| {int(r.year)} | {r.direction} | {r.n} | {r.avg_r:+.4f} | {r.win_rate:.1%} |")
         lines += [""]
 
     lines += [
@@ -298,9 +293,7 @@ def main():
     parser.add_argument("--db-path", type=str, default=None)
     args = parser.parse_args()
 
-    db_path = Path(args.db_path) if args.db_path else Path(
-        os.environ.get("DUCKDB_PATH", str(GOLD_DB_PATH))
-    )
+    db_path = Path(args.db_path) if args.db_path else Path(os.environ.get("DUCKDB_PATH", str(GOLD_DB_PATH)))
 
     OUTPUT_DIR.mkdir(exist_ok=True)
 
@@ -344,12 +337,8 @@ def main():
     # Show 1000 session comparison specifically
     for sym in INSTRUMENTS:
         sub = result[
-            (result["symbol"] == sym) &
-            (result["session"] == "1000") &
-            (result["confirm_bars"] == 1)
-        ].pivot_table(
-            index="rr_target", columns="direction", values=["avg_r", "n"]
-        )
+            (result["symbol"] == sym) & (result["session"] == "1000") & (result["confirm_bars"] == 1)
+        ].pivot_table(index="rr_target", columns="direction", values=["avg_r", "n"])
         if not sub.empty:
             logger.info(f"\n{sym} 1000 CB1 (ALL vs LONG vs SHORT):")
             logger.info(f"\n{sub.to_string()}")

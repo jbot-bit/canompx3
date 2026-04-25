@@ -46,6 +46,10 @@ Default read set:
 7. `CLAUDE.md`
 8. `CODEX.md`
 
+If `.session/task-route.md` exists, read it next before loading any broader
+repo docs. It is the generated startup packet for the current task/session and
+should replace broad cold-start wandering when present.
+
 Then, for any non-trivial repo task, resolve task context before loading extra
 docs:
 

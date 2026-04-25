@@ -170,7 +170,7 @@ The OOS window for the VWAP family was consumed in this run (one-shot OOS). Re-r
 
 1. **Update HANDOFF.md** with one-line "VWAP family DOCTRINE-CLOSED 2026-04-18" verdict citing this result.
 2. **Update STRATEGY_BLUEPRINT.md NO-GO registry** with VWAP family closure entry, citing this scan as evidence and noting the H3 specification error caveat.
-3. **Pivot to HTF Phase A build** per the surface map. The HTF orphan columns issue (`prev_week_*` / `prev_month_*` populated but no canonical build code) needs a proper port from `.worktrees/canompx3-htf` into `pipeline/build_daily_features.py`, with drift check and rebuild verification, BEFORE running an HTF scan.
+3. **Historical note:** this was correct at write time but is stale now. As of 2026-04-20, HTF Phase A build did land in canonical code (`pipeline/build_daily_features.py`), the stale-miss seed bug was fixed in commit `234c7d0d`, and the simple HTF prev-week / prev-month v1 scans were run. Result: both HTF families were FAMILY-KILLED. So the next surface-map move is no longer "build HTF Phase A"; it is "treat simple HTF level-break filters as closed unless a new mechanism is pre-registered."
 4. **Pre-reg writer hardening:** add a step to the pre-reg-writer prompt that **H3 positive-control baselines must be verified by independent SQL against the SAME data window the harness will use**, not trusted from `validated_setups` (which may use a different IS boundary).
 
 ## Hardening items surfaced by this run

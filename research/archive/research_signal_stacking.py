@@ -36,6 +36,7 @@ import pandas as pd
 
 try:
     from scipy.stats import ttest_1samp
+
     HAS_SCIPY = True
 except ImportError:
     HAS_SCIPY = False
@@ -60,23 +61,23 @@ SESSION_INSTRUMENTS = {
 
 # DST type per session
 SESSION_DST_TYPE = {
-    "1000": "CLEAN",   # No split needed
-    "0900": "US",      # Split on us_dst
-    "0030": "US",      # Split on us_dst
+    "1000": "CLEAN",  # No split needed
+    "0900": "US",  # Split on us_dst
+    "0030": "US",  # Split on us_dst
 }
 
 # Direction filter: "long" where H5 confirmed; None = bidirectional
 SESSION_DIRECTION = {
-    "1000": "long",   # H5 confirmed
-    "0900": None,     # Bidirectional
-    "0030": None,     # Bidirectional
+    "1000": "long",  # H5 confirmed
+    "0900": None,  # Bidirectional
+    "0030": None,  # Bidirectional
 }
 
 # Instruments participating in concordance per session
 SESSION_CONC_INSTRUMENTS = {
     "1000": ["MGC", "MES", "MNQ"],  # 3-way
-    "0030": ["MES", "MNQ"],          # 2-way
-    "0900": None,                    # N/A (single instrument)
+    "0030": ["MES", "MNQ"],  # 2-way
+    "0900": None,  # N/A (single instrument)
 }
 
 # G-filter thresholds (from config.py)
@@ -94,7 +95,7 @@ REF_RR_TARGET = 2.0
 
 # Volume filter threshold (from VolumeFilter default in config.py)
 VOL_THRESHOLD = 1.2
-VOL_THRESHOLD_SENSITIVITY = 1.5   # Sensitivity check: ±20%
+VOL_THRESHOLD_SENSITIVITY = 1.5  # Sensitivity check: ±20%
 VOL_LOOKBACK = 20
 
 # Stack levels
@@ -114,6 +115,7 @@ _US_EASTERN = ZoneInfo("America/New_York")
 # =========================================================================
 # Statistical utilities (sourced from research_aperture_scan.py)
 # =========================================================================
+
 
 def classify_sample(n: int) -> str:
     """Per RESEARCH_RULES.md thresholds."""
@@ -196,6 +198,7 @@ def metrics(pnl: pd.Series) -> dict:
 # DST helpers (standalone — no imports from pipeline)
 # =========================================================================
 
+
 def is_us_dst(d) -> bool:
     """True if US Eastern is in DST (EDT, UTC-4) on this date."""
     try:
@@ -208,6 +211,7 @@ def is_us_dst(d) -> bool:
 # =========================================================================
 # Data Loading
 # =========================================================================
+
 
 def load_features(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """Load daily_features for all target instruments and sessions.
@@ -235,7 +239,8 @@ def load_features(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
 
 def load_outcomes(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """Load reference outcomes: E3 / CB=1 / RR=2.0."""
-    return con.execute("""
+    return con.execute(
+        """
         SELECT trading_day, symbol, orb_label, pnl_r
         FROM orb_outcomes
         WHERE symbol IN ('MGC', 'MES', 'MNQ')
@@ -245,12 +250,15 @@ def load_outcomes(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
           AND rr_target = ?
           AND pnl_r IS NOT NULL
         ORDER BY trading_day, symbol, orb_label
-    """, [REF_ENTRY_MODEL, REF_CONFIRM_BARS, REF_RR_TARGET]).fetchdf()
+    """,
+        [REF_ENTRY_MODEL, REF_CONFIRM_BARS, REF_RR_TARGET],
+    ).fetchdf()
 
 
 # =========================================================================
 # Relative Volume (inline — based on strategy_discovery._compute_relative_volumes)
 # =========================================================================
+
 
 def _ts_minute_key(ts) -> tuple:
     """Normalize timestamp to UTC (year, month, day, hour, minute) tuple."""
@@ -347,6 +355,7 @@ def compute_rel_vol_for_session(
 # Concordance Building (adapted from research_concordance_stacking.py:103-166)
 # =========================================================================
 
+
 def build_concordance_map(
     features_df: pd.DataFrame,
     instruments: list,
@@ -363,13 +372,13 @@ def build_concordance_map(
     dfs = {}
     for inst in instruments:
         sub = features_df[features_df["symbol"] == inst][
-            ["trading_day",
-             f"orb_{orb_label}_break_dir",
-             f"orb_{orb_label}_size"]
-        ].rename(columns={
-            f"orb_{orb_label}_break_dir": f"{inst}_break_dir",
-            f"orb_{orb_label}_size": f"{inst}_orb_size",
-        })
+            ["trading_day", f"orb_{orb_label}_break_dir", f"orb_{orb_label}_size"]
+        ].rename(
+            columns={
+                f"orb_{orb_label}_break_dir": f"{inst}_break_dir",
+                f"orb_{orb_label}_size": f"{inst}_orb_size",
+            }
+        )
         dfs[inst] = sub
 
     wide = dfs[instruments[0]]
@@ -397,16 +406,19 @@ def build_concordance_map(
     maj_dir = np.where(n_long >= n_short, "long", "short")
     maj_dir = np.where(n_active < 2, "none", maj_dir)
 
-    return pd.DataFrame({
-        "trading_day": wide["trading_day"],
-        "concordance_tier": tier.values,
-        "majority_dir": maj_dir,
-    })
+    return pd.DataFrame(
+        {
+            "trading_day": wide["trading_day"],
+            "concordance_tier": tier.values,
+            "majority_dir": maj_dir,
+        }
+    )
 
 
 # =========================================================================
 # Stack Level Analysis — Core Engine
 # =========================================================================
+
 
 def build_working_df(
     features_df: pd.DataFrame,
@@ -425,21 +437,23 @@ def build_working_df(
     inst_feat = inst_feat.reset_index(drop=True)
     inst_feat["rel_vol"] = rel_vol.reset_index(drop=True).values
 
-    inst_out = outcomes_df[
-        (outcomes_df["symbol"] == instrument) &
-        (outcomes_df["orb_label"] == orb_label)
-    ][["trading_day", "pnl_r"]].copy()
+    inst_out = outcomes_df[(outcomes_df["symbol"] == instrument) & (outcomes_df["orb_label"] == orb_label)][
+        ["trading_day", "pnl_r"]
+    ].copy()
 
     merged = inst_feat.merge(inst_out, on="trading_day", how="inner")
-    merged = merged.rename(columns={
-        f"orb_{orb_label}_break_dir": "break_dir",
-        f"orb_{orb_label}_size": "orb_size",
-    })
+    merged = merged.rename(
+        columns={
+            f"orb_{orb_label}_break_dir": "break_dir",
+            f"orb_{orb_label}_size": "orb_size",
+        }
+    )
 
     if conc_map is not None:
         merged = merged.merge(
             conc_map[["trading_day", "concordance_tier", "majority_dir"]],
-            on="trading_day", how="left",
+            on="trading_day",
+            how="left",
         )
         merged["concordance_tier"] = merged["concordance_tier"].fillna("remaining")
         merged["majority_dir"] = merged["majority_dir"].fillna("none")
@@ -470,11 +484,7 @@ def stack_mask(
     """
     size_ok = df["orb_size"].notna() & (df["orb_size"] >= min_size)
 
-    dir_ok = (
-        df["break_dir"] == direction
-        if direction is not None
-        else pd.Series(True, index=df.index)
-    )
+    dir_ok = df["break_dir"] == direction if direction is not None else pd.Series(True, index=df.index)
 
     conc_ok = (
         df["concordance_tier"].isin(["concordant_3", "majority_2"])
@@ -484,9 +494,7 @@ def stack_mask(
 
     vol_ok = df["rel_vol"].notna() & (df["rel_vol"] >= vol_threshold)
 
-    cal_ok = ~(
-        df["is_nfp_day"].fillna(False) | df["is_opex_day"].fillna(False)
-    )
+    cal_ok = ~(df["is_nfp_day"].fillna(False) | df["is_opex_day"].fillna(False))
 
     masks = {
         "L0": size_ok,
@@ -502,6 +510,7 @@ def stack_mask(
 # =========================================================================
 # Analysis 1: Incremental Layer Lift
 # =========================================================================
+
 
 def run_analysis_1(
     all_working_dfs: dict,
@@ -555,25 +564,25 @@ def run_analysis_1(
                         pnl = sub.loc[m, "pnl_r"]
                         met = metrics(pnl)
 
-                        rows.append({
-                            "instrument": instrument,
-                            "session": session,
-                            "dst_regime": dst_regime,
-                            "g_filter": g_label,
-                            "stack_level": level,
-                            "stack_label": STACK_LABELS[level],
-                            "n": met["n"],
-                            "n_baseline": n_baseline,
-                            "pct_of_baseline": (
-                                round(met["n"] / n_baseline, 4) if n_baseline > 0 else np.nan
-                            ),
-                            "avg_r": met["avg_r"],
-                            "win_rate": met["win_rate"],
-                            "sharpe": met["sharpe"],
-                            "pvalue": met["pvalue"],
-                            "pvalue_bh": np.nan,   # filled after
-                            "sample_class": classify_sample(met["n"]),
-                        })
+                        rows.append(
+                            {
+                                "instrument": instrument,
+                                "session": session,
+                                "dst_regime": dst_regime,
+                                "g_filter": g_label,
+                                "stack_level": level,
+                                "stack_label": STACK_LABELS[level],
+                                "n": met["n"],
+                                "n_baseline": n_baseline,
+                                "pct_of_baseline": (round(met["n"] / n_baseline, 4) if n_baseline > 0 else np.nan),
+                                "avg_r": met["avg_r"],
+                                "win_rate": met["win_rate"],
+                                "sharpe": met["sharpe"],
+                                "pvalue": met["pvalue"],
+                                "pvalue_bh": np.nan,  # filled after
+                                "sample_class": classify_sample(met["n"]),
+                            }
+                        )
 
     if not rows:
         return pd.DataFrame()
@@ -593,6 +602,7 @@ def run_analysis_1(
 # Analysis 2: Conviction Profile
 # =========================================================================
 
+
 def run_analysis_2(lift_df: pd.DataFrame) -> pd.DataFrame:
     """
     Restructure Analysis 1: for each surviving row (CORE or REGIME, avg_r > 0),
@@ -602,15 +612,15 @@ def run_analysis_2(lift_df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
 
     # Get L0 baselines
-    l0 = lift_df[lift_df["stack_level"] == "L0"][
-        ["instrument", "session", "dst_regime", "g_filter", "avg_r"]
-    ].rename(columns={"avg_r": "baseline_avg_r"})
+    l0 = lift_df[lift_df["stack_level"] == "L0"][["instrument", "session", "dst_regime", "g_filter", "avg_r"]].rename(
+        columns={"avg_r": "baseline_avg_r"}
+    )
 
     merged = lift_df.merge(l0, on=["instrument", "session", "dst_regime", "g_filter"], how="left")
     merged = merged[
-        (merged["sample_class"].isin(["CORE", "REGIME", "PRELIMINARY"])) &
-        (merged["avg_r"].notna()) &
-        (merged["avg_r"] > 0)
+        (merged["sample_class"].isin(["CORE", "REGIME", "PRELIMINARY"]))
+        & (merged["avg_r"].notna())
+        & (merged["avg_r"] > 0)
     ].copy()
 
     if merged.empty:
@@ -640,9 +650,18 @@ def run_analysis_2(lift_df: pd.DataFrame) -> pd.DataFrame:
     merged["sizing_tier"] = merged["conviction_score"].apply(sizing_tier)
 
     cols = [
-        "instrument", "session", "dst_regime", "g_filter", "stack_level",
-        "stack_label", "n", "freq_per_year", "avg_r", "conviction_score",
-        "sizing_tier", "sample_class",
+        "instrument",
+        "session",
+        "dst_regime",
+        "g_filter",
+        "stack_level",
+        "stack_label",
+        "n",
+        "freq_per_year",
+        "avg_r",
+        "conviction_score",
+        "sizing_tier",
+        "sample_class",
     ]
     return merged[cols].reset_index(drop=True)
 
@@ -650,6 +669,7 @@ def run_analysis_2(lift_df: pd.DataFrame) -> pd.DataFrame:
 # =========================================================================
 # Analysis 3: Concordance × Size Interaction (MGC 1000 only)
 # =========================================================================
+
 
 def run_analysis_3(
     all_working_dfs: dict,
@@ -681,22 +701,22 @@ def run_analysis_3(
             pnl = wdf.loc[m, "pnl_r"]
             met = metrics(pnl)
 
-            rows.append({
-                "instrument": "MGC",
-                "session": "1000",
-                "g_filter": g_label,
-                "concordance_tier": tier,
-                "n": met["n"],
-                "n_g_filter_total": n_g,
-                "pct_of_g_filter_days": (
-                    round(met["n"] / n_g, 4) if n_g > 0 else np.nan
-                ),
-                "avg_r": met["avg_r"],
-                "win_rate": met["win_rate"],
-                "pvalue": met["pvalue"],
-                "pvalue_bh": np.nan,
-                "sample_class": classify_sample(met["n"]),
-            })
+            rows.append(
+                {
+                    "instrument": "MGC",
+                    "session": "1000",
+                    "g_filter": g_label,
+                    "concordance_tier": tier,
+                    "n": met["n"],
+                    "n_g_filter_total": n_g,
+                    "pct_of_g_filter_days": (round(met["n"] / n_g, 4) if n_g > 0 else np.nan),
+                    "avg_r": met["avg_r"],
+                    "win_rate": met["win_rate"],
+                    "pvalue": met["pvalue"],
+                    "pvalue_bh": np.nan,
+                    "sample_class": classify_sample(met["n"]),
+                }
+            )
 
     if not rows:
         return pd.DataFrame()
@@ -713,6 +733,7 @@ def run_analysis_3(
 # =========================================================================
 # Output: Sensitivity Check (Analysis 1 — vol threshold)
 # =========================================================================
+
 
 def run_sensitivity_check(
     all_working_dfs: dict,
@@ -754,38 +775,41 @@ def run_sensitivity_check(
                 for g_label, min_size in G_FILTERS.items():
                     for level in ["L4", "L5"]:
                         # Standard threshold
-                        m_std = stack_mask(sub, level, min_size, direction, has_concordance,
-                                           VOL_THRESHOLD)
+                        m_std = stack_mask(sub, level, min_size, direction, has_concordance, VOL_THRESHOLD)
                         met_std = metrics(sub.loc[m_std, "pnl_r"])
 
                         # Alternative threshold
-                        m_alt = stack_mask(sub, level, min_size, direction, has_concordance,
-                                           alt_vol_threshold)
+                        m_alt = stack_mask(sub, level, min_size, direction, has_concordance, alt_vol_threshold)
                         met_alt = metrics(sub.loc[m_alt, "pnl_r"])
 
-                        rows.append({
-                            "instrument": instrument,
-                            "session": session,
-                            "dst_regime": dst_regime,
-                            "g_filter": g_label,
-                            "stack_level": level,
-                            "n_rv12": met_std["n"],
-                            "avg_r_rv12": met_std["avg_r"],
-                            "n_rv15": met_alt["n"],
-                            "avg_r_rv15": met_alt["avg_r"],
-                            "delta_avg_r": (
-                                round(met_alt["avg_r"] - met_std["avg_r"], 4)
-                                if not np.isnan(met_std["avg_r"]) and not np.isnan(met_alt["avg_r"])
-                                else np.nan
-                            ),
-                            "verdict": (
-                                "ROBUST"
-                                if not np.isnan(met_std["avg_r"]) and not np.isnan(met_alt["avg_r"])
-                                   and met_std["avg_r"] > 0 and met_alt["avg_r"] > 0
-                                else "FRAGILE" if not np.isnan(met_std["avg_r"]) and met_std["avg_r"] > 0
-                                else "--"
-                            ),
-                        })
+                        rows.append(
+                            {
+                                "instrument": instrument,
+                                "session": session,
+                                "dst_regime": dst_regime,
+                                "g_filter": g_label,
+                                "stack_level": level,
+                                "n_rv12": met_std["n"],
+                                "avg_r_rv12": met_std["avg_r"],
+                                "n_rv15": met_alt["n"],
+                                "avg_r_rv15": met_alt["avg_r"],
+                                "delta_avg_r": (
+                                    round(met_alt["avg_r"] - met_std["avg_r"], 4)
+                                    if not np.isnan(met_std["avg_r"]) and not np.isnan(met_alt["avg_r"])
+                                    else np.nan
+                                ),
+                                "verdict": (
+                                    "ROBUST"
+                                    if not np.isnan(met_std["avg_r"])
+                                    and not np.isnan(met_alt["avg_r"])
+                                    and met_std["avg_r"] > 0
+                                    and met_alt["avg_r"] > 0
+                                    else "FRAGILE"
+                                    if not np.isnan(met_std["avg_r"]) and met_std["avg_r"] > 0
+                                    else "--"
+                                ),
+                            }
+                        )
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
@@ -793,6 +817,7 @@ def run_sensitivity_check(
 # =========================================================================
 # Markdown Summary
 # =========================================================================
+
 
 def build_summary_md(
     lift_df: pd.DataFrame,
@@ -822,11 +847,11 @@ def build_summary_md(
     lines.append("")
     if not lift_df.empty:
         survived = lift_df[
-            (lift_df["pvalue_bh"].notna()) &
-            (lift_df["pvalue_bh"] < 0.05) &
-            (lift_df["avg_r"].notna()) &
-            (lift_df["avg_r"] > 0) &
-            (~lift_df["sample_class"].isin(["INVALID"]))
+            (lift_df["pvalue_bh"].notna())
+            & (lift_df["pvalue_bh"] < 0.05)
+            & (lift_df["avg_r"].notna())
+            & (lift_df["avg_r"] > 0)
+            & (~lift_df["sample_class"].isin(["INVALID"]))
         ]
         if len(survived) > 0:
             for _, r in survived.iterrows():
@@ -848,9 +873,7 @@ def build_summary_md(
     if not lift_df.empty:
         n_positive = int((lift_df["avg_r"] > 0).sum())
         n_sig_raw = int(((lift_df["pvalue"] < 0.05) & lift_df["pvalue"].notna()).sum())
-        n_sig_bh = int(
-            ((lift_df["pvalue_bh"] < 0.05) & lift_df["pvalue_bh"].notna()).sum()
-        )
+        n_sig_bh = int(((lift_df["pvalue_bh"] < 0.05) & lift_df["pvalue_bh"].notna()).sum())
         n_total = len(lift_df)
         lines.append(f"- {n_total} total (instrument × session × g_filter × dst × stack_level) cells tested")
         lines.append(f"- {n_positive}/{n_total} had positive avg_r")
@@ -864,8 +887,12 @@ def build_summary_md(
     lines.append("1. **In-sample only.** No walk-forward or OOS validation.")
     lines.append("2. **Fixed reference params** (E3/CB1/RR2.0). Stack lift may differ at E1 or other RR targets.")
     lines.append("3. **Small N at full stack.** G6+/G8+ + all filters may drop below REGIME threshold (N<30).")
-    lines.append("4. **Concordance requires all instruments trading.** On thin days, missing one instrument falsely downgrades tier.")
-    lines.append("5. **Vol filter is fail-closed.** Days with missing bars_1m data are excluded — may skew toward liquid days.")
+    lines.append(
+        "4. **Concordance requires all instruments trading.** On thin days, missing one instrument falsely downgrades tier."
+    )
+    lines.append(
+        "5. **Vol filter is fail-closed.** Days with missing bars_1m data are excluded — may skew toward liquid days."
+    )
     lines.append("6. **DST split (0900/0030) reduces N further** — winter/summer cells may be INVALID.")
     lines.append("")
 
@@ -915,9 +942,7 @@ def build_summary_md(
     if not conviction_df.empty:
         lines.append("Rows shown: CORE/REGIME/PRELIMINARY with avg_r > 0")
         lines.append("")
-        lines.append(
-            "| inst | sess | dst | G | level | label | N | freq/yr | avgR | conviction | sizing |"
-        )
+        lines.append("| inst | sess | dst | G | level | label | N | freq/yr | avgR | conviction | sizing |")
         lines.append("|------|------|-----|---|-------|-------|---|---------|------|------------|--------|")
         for _, r in conviction_df.iterrows():
             avg_r_s = f"{r['avg_r']:+.4f}" if not np.isnan(r["avg_r"]) else "--"
@@ -977,21 +1002,17 @@ def build_summary_md(
 # Main
 # =========================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Signal stacking research — P3"
+    parser = argparse.ArgumentParser(description="Signal stacking research — P3")
+    parser.add_argument(
+        "--instruments", nargs="+", default=None, help="Instruments to run (e.g. MGC MES MNQ). Default: all."
     )
     parser.add_argument(
-        "--instruments", nargs="+", default=None,
-        help="Instruments to run (e.g. MGC MES MNQ). Default: all."
+        "--sessions", nargs="+", default=None, help="Sessions to run (e.g. 1000 0900 0030). Default: all."
     )
     parser.add_argument(
-        "--sessions", nargs="+", default=None,
-        help="Sessions to run (e.g. 1000 0900 0030). Default: all."
-    )
-    parser.add_argument(
-        "--db-path", type=str, default=None,
-        help="Path to gold.db (default: auto-resolve via pipeline.paths)"
+        "--db-path", type=str, default=None, help="Path to gold.db (default: auto-resolve via pipeline.paths)"
     )
     args = parser.parse_args()
 
@@ -1022,8 +1043,10 @@ def main():
         features_df = load_features(con)
         outcomes_df = load_outcomes(con)
 
-    print(f"  Features: {len(features_df):,} rows "
-          f"({features_df['trading_day'].min()} to {features_df['trading_day'].max()})")
+    print(
+        f"  Features: {len(features_df):,} rows "
+        f"({features_df['trading_day'].min()} to {features_df['trading_day'].max()})"
+    )
     print(f"  Outcomes: {len(outcomes_df):,} rows")
     period = (
         str(features_df["trading_day"].min()),
@@ -1040,10 +1063,7 @@ def main():
             print(f"  {session}: no concordance (single instrument)")
             continue
         # Filter to instruments we actually have
-        available_insts = [
-            i for i in conc_insts
-            if i in features_df["symbol"].unique()
-        ]
+        available_insts = [i for i in conc_insts if i in features_df["symbol"].unique()]
         if len(available_insts) < 2:
             conc_maps[session] = None
             print(f"  {session}: insufficient instruments for concordance ({available_insts})")
@@ -1051,10 +1071,12 @@ def main():
         cmap = build_concordance_map(features_df, available_insts, session)
         conc_maps[session] = cmap
         tier_dist = cmap["concordance_tier"].value_counts()
-        print(f"  {session} ({len(available_insts)}-way): "
-              f"concordant_3={tier_dist.get('concordant_3', 0)} "
-              f"majority_2={tier_dist.get('majority_2', 0)} "
-              f"remaining={tier_dist.get('remaining', 0)}")
+        print(
+            f"  {session} ({len(available_insts)}-way): "
+            f"concordant_3={tier_dist.get('concordant_3', 0)} "
+            f"majority_2={tier_dist.get('majority_2', 0)} "
+            f"remaining={tier_dist.get('remaining', 0)}"
+        )
 
     # Pre-compute relative volume
     print("\n[3/5] Computing relative volumes (bars_1m queries)...")
@@ -1063,13 +1085,9 @@ def main():
     with duckdb.connect(str(db_path), read_only=True) as con:
         for session in sessions_to_run:
             for instrument in instruments_by_session.get(session, []):
-                inst_feat = features_df[
-                    features_df["symbol"] == instrument
-                ].reset_index(drop=True)
+                inst_feat = features_df[features_df["symbol"] == instrument].reset_index(drop=True)
 
-                rv = compute_rel_vol_for_session(
-                    con, inst_feat, instrument, session
-                )
+                rv = compute_rel_vol_for_session(con, inst_feat, instrument, session)
                 rel_vol_map[(instrument, session)] = rv
                 n_valid = int(rv.notna().sum())
                 print(f"  {instrument} {session}: {n_valid}/{len(inst_feat)} days have rel_vol")
@@ -1081,16 +1099,11 @@ def main():
     for session in sessions_to_run:
         conc_map = conc_maps.get(session)
         for instrument in instruments_by_session.get(session, []):
-            inst_feat = features_df[
-                features_df["symbol"] == instrument
-            ].reset_index(drop=True)
+            inst_feat = features_df[features_df["symbol"] == instrument].reset_index(drop=True)
 
-            rv = rel_vol_map.get((instrument, session),
-                                 pd.Series(np.nan, index=inst_feat.index))
+            rv = rel_vol_map.get((instrument, session), pd.Series(np.nan, index=inst_feat.index))
 
-            wdf = build_working_df(
-                features_df, outcomes_df, instrument, session, conc_map, rv
-            )
+            wdf = build_working_df(features_df, outcomes_df, instrument, session, conc_map, rv)
             all_working_dfs[(instrument, session)] = wdf
             print(f"  {instrument} {session}: {len(wdf)} outcome rows")
 
@@ -1099,8 +1112,12 @@ def main():
 
     print("  Analysis 1: Incremental Layer Lift...")
     lift_df = run_analysis_1(
-        all_working_dfs, instruments_by_session, sessions_to_run,
-        SESSION_DST_TYPE, SESSION_DIRECTION, SESSION_CONC_INSTRUMENTS,
+        all_working_dfs,
+        instruments_by_session,
+        sessions_to_run,
+        SESSION_DST_TYPE,
+        SESSION_DIRECTION,
+        SESSION_CONC_INSTRUMENTS,
     )
 
     print("  Analysis 2: Conviction Profile...")
@@ -1111,8 +1128,12 @@ def main():
 
     print("  Sensitivity: vol threshold 1.2 vs 1.5...")
     sensitivity_df = run_sensitivity_check(
-        all_working_dfs, sessions_to_run, instruments_by_session,
-        SESSION_DIRECTION, SESSION_CONC_INSTRUMENTS, SESSION_DST_TYPE,
+        all_working_dfs,
+        sessions_to_run,
+        instruments_by_session,
+        SESSION_DIRECTION,
+        SESSION_CONC_INSTRUMENTS,
+        SESSION_DST_TYPE,
     )
 
     # --- Console summary ---
@@ -1124,30 +1145,36 @@ def main():
         print(f"\n  Total cells: {len(lift_df)}")
         n_pos = int((lift_df["avg_r"] > 0).sum())
         n_invalid = int((lift_df["sample_class"] == "INVALID").sum())
-        n_sig_bh = int(
-            ((lift_df["pvalue_bh"] < 0.05) & lift_df["pvalue_bh"].notna()).sum()
-        )
+        n_sig_bh = int(((lift_df["pvalue_bh"] < 0.05) & lift_df["pvalue_bh"].notna()).sum())
         print(f"  Positive avg_r: {n_pos}/{len(lift_df)}")
         print(f"  INVALID (N<30): {n_invalid}")
         print(f"  BH p<0.05: {n_sig_bh}")
 
         # Show L3+ rows for CORE/REGIME with positive avg_r
-        interesting = lift_df[
-            lift_df["stack_level"].isin(["L3", "L4", "L5"]) &
-            (lift_df["avg_r"] > 0) &
-            lift_df["sample_class"].isin(["CORE", "REGIME", "PRELIMINARY"])
-        ].sort_values("avg_r", ascending=False).head(20)
+        interesting = (
+            lift_df[
+                lift_df["stack_level"].isin(["L3", "L4", "L5"])
+                & (lift_df["avg_r"] > 0)
+                & lift_df["sample_class"].isin(["CORE", "REGIME", "PRELIMINARY"])
+            ]
+            .sort_values("avg_r", ascending=False)
+            .head(20)
+        )
 
         if len(interesting) > 0:
             print("\n  Top L3+ stacks (positive avg_r, N>=30):")
-            print(f"  {'inst':>4} {'sess':>5} {'dst':>6} {'G':>3} {'lvl':>3} "
-                  f"{'label':>20} {'N':>5} {'avgR':>8} {'p_bh':>8} {'class':>12}")
+            print(
+                f"  {'inst':>4} {'sess':>5} {'dst':>6} {'G':>3} {'lvl':>3} "
+                f"{'label':>20} {'N':>5} {'avgR':>8} {'p_bh':>8} {'class':>12}"
+            )
             for _, r in interesting.iterrows():
                 avg_s = f"{r['avg_r']:+8.4f}" if not np.isnan(r["avg_r"]) else "      --"
                 pb_s = f"{r['pvalue_bh']:8.4f}" if not np.isnan(r["pvalue_bh"]) else "      --"
-                print(f"  {r['instrument']:>4} {r['session']:>5} {r['dst_regime']:>6} "
-                      f"{r['g_filter']:>3} {r['stack_level']:>3} {r['stack_label']:>20} "
-                      f"{r['n']:>5} {avg_s} {pb_s} {r['sample_class']:>12}")
+                print(
+                    f"  {r['instrument']:>4} {r['session']:>5} {r['dst_regime']:>6} "
+                    f"{r['g_filter']:>3} {r['stack_level']:>3} {r['stack_label']:>20} "
+                    f"{r['n']:>5} {avg_s} {pb_s} {r['sample_class']:>12}"
+                )
 
     # --- Save outputs ---
     output_dir = Path("research/output")
@@ -1165,8 +1192,14 @@ def main():
     sensitivity_df.to_csv(out_sens, index=False, float_format="%.6f")
 
     md = build_summary_md(
-        lift_df, conviction_df, conc_size_df, sensitivity_df,
-        sessions_to_run, instruments_by_session, period, len(outcomes_df),
+        lift_df,
+        conviction_df,
+        conc_size_df,
+        sensitivity_df,
+        sessions_to_run,
+        instruments_by_session,
+        period,
+        len(outcomes_df),
     )
     out_md.write_text(md, encoding="utf-8")
 

@@ -277,9 +277,7 @@ def emit(
     if skipped_lanes:
         lines += ["", "## Skipped lanes", "", "| Strategy | Instrument | Session | Reason |", "|---|---|---|---|"]
         for row in skipped_lanes:
-            lines.append(
-                f"| {row['strategy_id']} | {row['instrument']} | {row['orb_label']} | {row['reason']} |"
-            )
+            lines.append(f"| {row['strategy_id']} | {row['instrument']} | {row['orb_label']} | {row['reason']} |")
 
     lines += [
         "",

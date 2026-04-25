@@ -37,8 +37,7 @@ SR_ALARM_REVIEWS: dict[tuple[str, str], SrAlarmReview] = {
             "floors; SR alarm is the only trigger."
         ),
         recheck_trigger=(
-            "Re-check after N>=100 monitored trades. Retire if SR remains ALARM and "
-            "(WFE < 0.50 or C8 ratio < 0.40)."
+            "Re-check after N>=100 monitored trades. Retire if SR remains ALARM and (WFE < 0.50 or C8 ratio < 0.40)."
         ),
     ),
     # L4 — reviewed 2026-04-14 autonomously per L3/COMEX_SETTLE precedent.

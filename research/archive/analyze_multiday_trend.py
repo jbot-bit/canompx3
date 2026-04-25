@@ -34,17 +34,21 @@ from pipeline.asset_configs import get_enabled_sessions
 from pipeline.cost_model import get_cost_spec
 from research._alt_strategy_utils import compute_strategy_metrics, annualize_sharpe
 
+
 def load_data(db_path: Path, instrument: str, orb_minutes: int = 5) -> pd.DataFrame:
     """Load daily_features with lagged daily closes for trend computation."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT *
             FROM daily_features
             WHERE symbol = ?
               AND orb_minutes = ?
             ORDER BY trading_day
-        """, [instrument, orb_minutes]).fetchdf()
+        """,
+            [instrument, orb_minutes],
+        ).fetchdf()
     finally:
         con.close()
 
@@ -54,29 +58,25 @@ def load_data(db_path: Path, instrument: str, orb_minutes: int = 5) -> pd.DataFr
     df["close_lag3"] = df["daily_close"].shift(3)
 
     # 2-day trend: simple direction
-    df["trend_2d"] = np.where(
-        df["close_lag1"] > df["close_lag2"], "up", "down"
-    )
+    df["trend_2d"] = np.where(df["close_lag1"] > df["close_lag2"], "up", "down")
 
     # 3-day trend: strong vs weak
     up2 = df["close_lag1"] > df["close_lag2"]
     up3 = df["close_lag2"] > df["close_lag3"]
-    df["trend_3d"] = np.where(
-        up2 & up3, "strong_up",
-        np.where(~up2 & ~up3, "strong_down", "mixed")
-    )
+    df["trend_3d"] = np.where(up2 & up3, "strong_up", np.where(~up2 & ~up3, "strong_down", "mixed"))
 
     # Gap direction
-    df["gap_dir"] = np.where(df["gap_open_points"] > 0, "up",
-                             np.where(df["gap_open_points"] < 0, "down", "flat"))
+    df["gap_dir"] = np.where(df["gap_open_points"] > 0, "up", np.where(df["gap_open_points"] < 0, "down", "flat"))
 
     return df
+
 
 def load_outcomes(db_path: Path, instrument: str, session: str) -> pd.DataFrame:
     """Load orb_outcomes for a session, E1 CB2 only (standard baseline)."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT trading_day, entry_model, rr_target, confirm_bars,
                    pnl_r, outcome, entry_price, stop_price, target_price,
                    mfe_r, mae_r
@@ -86,29 +86,45 @@ def load_outcomes(db_path: Path, instrument: str, session: str) -> pd.DataFrame:
               AND entry_ts IS NOT NULL
               AND pnl_r IS NOT NULL
             ORDER BY trading_day
-        """, [instrument, session]).fetchall()
+        """,
+            [instrument, session],
+        ).fetchall()
     finally:
         con.close()
 
-    result = pd.DataFrame(df, columns=[
-        "trading_day", "entry_model", "rr_target", "confirm_bars",
-        "pnl_r", "outcome", "entry_price", "stop_price", "target_price",
-        "mfe_r", "mae_r",
-    ])
+    result = pd.DataFrame(
+        df,
+        columns=[
+            "trading_day",
+            "entry_model",
+            "rr_target",
+            "confirm_bars",
+            "pnl_r",
+            "outcome",
+            "entry_price",
+            "stop_price",
+            "target_price",
+            "mfe_r",
+            "mae_r",
+        ],
+    )
     result["trading_day"] = pd.to_datetime(result["trading_day"])
     return result
+
 
 def fmt(m: dict, extra: str = "") -> str:
     if m is None or m["n"] == 0:
         return "N=0"
-    s = (f"N={m['n']:<5d}  WR={m['wr']*100:5.1f}%  ExpR={m['expr']:+.3f}  "
-         f"Sharpe={m['sharpe']:.3f}  MaxDD={m['maxdd']:.1f}R  Total={m['total']:+.1f}R")
+    s = (
+        f"N={m['n']:<5d}  WR={m['wr'] * 100:5.1f}%  ExpR={m['expr']:+.3f}  "
+        f"Sharpe={m['sharpe']:.3f}  MaxDD={m['maxdd']:.1f}R  Total={m['total']:+.1f}R"
+    )
     if extra:
         s += f"  {extra}"
     return s
 
-def analyze_session(features: pd.DataFrame, outcomes: pd.DataFrame,
-                    session: str, instrument: str):
+
+def analyze_session(features: pd.DataFrame, outcomes: pd.DataFrame, session: str, instrument: str):
     """Analyze alignment between multi-day trend and ORB breakout for one session."""
     break_dir_col = f"orb_{session}_break_dir"
     size_col = f"orb_{session}_size"
@@ -119,9 +135,9 @@ def analyze_session(features: pd.DataFrame, outcomes: pd.DataFrame,
 
     # Merge features with outcomes
     merged = outcomes.merge(
-        features[["trading_day", "trend_2d", "trend_3d", "gap_dir",
-                   break_dir_col, size_col, "atr_20"]],
-        on="trading_day", how="inner"
+        features[["trading_day", "trend_2d", "trend_3d", "gap_dir", break_dir_col, size_col, "atr_20"]],
+        on="trading_day",
+        how="inner",
     )
 
     if len(merged) < 30:
@@ -130,17 +146,14 @@ def analyze_session(features: pd.DataFrame, outcomes: pd.DataFrame,
 
     # Compute alignment: does break_dir match trend?
     merged["break_dir"] = merged[break_dir_col]
-    merged["aligned_2d"] = (
-        ((merged["break_dir"] == "long") & (merged["trend_2d"] == "up")) |
-        ((merged["break_dir"] == "short") & (merged["trend_2d"] == "down"))
+    merged["aligned_2d"] = ((merged["break_dir"] == "long") & (merged["trend_2d"] == "up")) | (
+        (merged["break_dir"] == "short") & (merged["trend_2d"] == "down")
     )
-    merged["aligned_3d"] = (
-        ((merged["break_dir"] == "long") & (merged["trend_3d"] == "strong_up")) |
-        ((merged["break_dir"] == "short") & (merged["trend_3d"] == "strong_down"))
+    merged["aligned_3d"] = ((merged["break_dir"] == "long") & (merged["trend_3d"] == "strong_up")) | (
+        (merged["break_dir"] == "short") & (merged["trend_3d"] == "strong_down")
     )
-    merged["counter_3d"] = (
-        ((merged["break_dir"] == "long") & (merged["trend_3d"] == "strong_down")) |
-        ((merged["break_dir"] == "short") & (merged["trend_3d"] == "strong_up"))
+    merged["counter_3d"] = ((merged["break_dir"] == "long") & (merged["trend_3d"] == "strong_down")) | (
+        (merged["break_dir"] == "short") & (merged["trend_3d"] == "strong_up")
     )
 
     # Filter to best entry: E1 CB2 (or E3 CB1 for retrace sessions)
@@ -201,17 +214,18 @@ def analyze_session(features: pd.DataFrame, outcomes: pd.DataFrame,
 
             # Gap alignment: does gap direction match break direction?
             gap_aligned = rr_data[
-                ((rr_data["break_dir"] == "long") & (rr_data["gap_dir"] == "up")) |
-                ((rr_data["break_dir"] == "short") & (rr_data["gap_dir"] == "down"))
+                ((rr_data["break_dir"] == "long") & (rr_data["gap_dir"] == "up"))
+                | ((rr_data["break_dir"] == "short") & (rr_data["gap_dir"] == "down"))
             ]
             gap_counter = rr_data[
-                ((rr_data["break_dir"] == "long") & (rr_data["gap_dir"] == "down")) |
-                ((rr_data["break_dir"] == "short") & (rr_data["gap_dir"] == "up"))
+                ((rr_data["break_dir"] == "long") & (rr_data["gap_dir"] == "down"))
+                | ((rr_data["break_dir"] == "short") & (rr_data["gap_dir"] == "up"))
             ]
             if len(gap_aligned) >= 10:
                 print(f"    Gap Aligned:           {fmt(compute_strategy_metrics(gap_aligned['pnl_r'].values))}")
             if len(gap_counter) >= 10:
                 print(f"    Gap Counter:           {fmt(compute_strategy_metrics(gap_counter['pnl_r'].values))}")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-day trend alignment analysis")
@@ -258,6 +272,7 @@ def main():
     print(f"\n{'=' * 90}")
     print("DONE")
     print("=" * 90)
+
 
 if __name__ == "__main__":
     main()

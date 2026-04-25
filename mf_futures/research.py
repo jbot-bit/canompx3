@@ -121,9 +121,15 @@ def simulate_research_path(
             vol_lookback=vol_lookback,
             min_history=min_history,
         )
-        trend_forecast = _trend_forecast_from_slice(kernel_slice, trend_sleeves=trend_sleeves, forecast_cap=combiner.forecast_cap)
+        trend_forecast = _trend_forecast_from_slice(
+            kernel_slice, trend_sleeves=trend_sleeves, forecast_cap=combiner.forecast_cap
+        )
         carry_input = carry_by_day.get(current.trading_day)
-        carry_forecast = carry_input.annualized_carry if carry_input is not None and carry_input.carry_available and carry_input.annualized_carry is not None else 0.0
+        carry_forecast = (
+            carry_input.annualized_carry
+            if carry_input is not None and carry_input.carry_available and carry_input.annualized_carry is not None
+            else 0.0
+        )
         combined_forecast = _combine_forecasts(
             trend_forecast=trend_forecast,
             carry_forecast=carry_forecast,
@@ -165,7 +171,11 @@ def simulate_research_path(
         )
 
         turnover_contracts = abs(effective_contracts - live_contracts)
-        gross_pnl_usd = effective_contracts * instrument.contract_multiplier * (next_snapshot.research_close - current.research_close)
+        gross_pnl_usd = (
+            effective_contracts
+            * instrument.contract_multiplier
+            * (next_snapshot.research_close - current.research_close)
+        )
         cost_usd = turnover_contracts * cost_model.round_turn_cost_usd
         net_pnl_usd = gross_pnl_usd - cost_usd
 
@@ -267,7 +277,9 @@ def _trend_forecast_from_slice(kernel_slice, *, trend_sleeves: tuple, forecast_c
     return max(-forecast_cap, min(forecast_cap, weighted_total / total_weight))
 
 
-def _combine_forecasts(*, trend_forecast: float, carry_forecast: float, carry_weight: float, forecast_cap: float) -> float:
+def _combine_forecasts(
+    *, trend_forecast: float, carry_forecast: float, carry_weight: float, forecast_cap: float
+) -> float:
     total_weight = 1.0 + carry_weight
     combined = (trend_forecast + carry_forecast * carry_weight) / total_weight
     return max(-forecast_cap, min(forecast_cap, combined))

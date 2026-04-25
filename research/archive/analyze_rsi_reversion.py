@@ -53,29 +53,35 @@ SWING_LOOKBACK = 10  # bars for swing stop
 
 # Time filters (UTC hours)
 TIME_FILTERS = {
-    "active": (0, 23),     # Nearly all hours (exclude 23:00 UTC = dead hour)
-    "core": (8, 18),       # London + NY core hours only
+    "active": (0, 23),  # Nearly all hours (exclude 23:00 UTC = dead hour)
+    "core": (8, 18),  # London + NY core hours only
 }
 
 REGIME_BOUNDARY = date(2025, 1, 1)
 
+
 def load_bars_5m_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 5-minute bars for one trading day (09:00 Brisbane boundary)."""
     from pipeline.build_daily_features import compute_trading_day_utc_range
+
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_5m
             WHERE symbol = 'MGC'
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [start_utc, end_utc]).fetchdf()
+        """,
+            [start_utc, end_utc],
+        ).fetchdf()
     finally:
         con.close()
     return df
+
 
 def compute_rsi(closes: np.ndarray, period: int) -> np.ndarray:
     """Compute Wilder's RSI on an array of close prices.
@@ -112,6 +118,7 @@ def compute_rsi(closes: np.ndarray, period: int) -> np.ndarray:
             rsi[i + 1] = 100.0 - (100.0 / (1.0 + rs))
 
     return rsi
+
 
 def compute_rsi_outcomes_for_day(
     bars_5m: pd.DataFrame,
@@ -167,7 +174,7 @@ def compute_rsi_outcomes_for_day(
 
         # Stop = swing extreme over lookback
         lookback_start = max(0, i - SWING_LOOKBACK + 1)
-        lookback_bars = bars_5m.iloc[lookback_start:i + 1]
+        lookback_bars = bars_5m.iloc[lookback_start : i + 1]
 
         if direction == "long":
             stop_price = lookback_bars["low"].min()
@@ -189,8 +196,12 @@ def compute_rsi_outcomes_for_day(
 
             # Resolve outcome scanning bars after entry
             result = _resolve_5m_outcome(
-                bars_5m, entry_price, stop_price, target_price,
-                direction, entry_bar_idx + 1,
+                bars_5m,
+                entry_price,
+                stop_price,
+                target_price,
+                direction,
+                entry_bar_idx + 1,
             )
 
             if result is None:
@@ -204,9 +215,7 @@ def compute_rsi_outcomes_for_day(
                 outcome_type = "eod"
                 exit_idx = len(bars_5m) - 1
             else:
-                pnl_r = to_r_multiple(
-                    SPEC, entry_price, stop_price, result["pnl_points"]
-                )
+                pnl_r = to_r_multiple(SPEC, entry_price, stop_price, result["pnl_points"])
                 outcome_type = result["outcome"]
                 exit_idx = result["exit_bar_idx"]
 
@@ -216,21 +225,24 @@ def compute_rsi_outcomes_for_day(
             else:
                 last_short_exit = max(last_short_exit, exit_idx)
 
-            outcomes.append({
-                "rsi_period": rsi_period,
-                "rsi_value": rsi_val,
-                "time_filter": time_filter_name,
-                "direction": direction,
-                "rr_target": rr,
-                "entry_price": entry_price,
-                "stop_price": stop_price,
-                "target_price": target_price,
-                "risk_points": risk_points,
-                "pnl_r": pnl_r,
-                "outcome": outcome_type,
-            })
+            outcomes.append(
+                {
+                    "rsi_period": rsi_period,
+                    "rsi_value": rsi_val,
+                    "time_filter": time_filter_name,
+                    "direction": direction,
+                    "rr_target": rr,
+                    "entry_price": entry_price,
+                    "stop_price": stop_price,
+                    "target_price": target_price,
+                    "risk_points": risk_points,
+                    "pnl_r": pnl_r,
+                    "outcome": outcome_type,
+                }
+            )
 
     return outcomes
+
 
 def _resolve_5m_outcome(
     bars: pd.DataFrame,
@@ -258,20 +270,18 @@ def _resolve_5m_outcome(
         # Gate C: ambiguous -> LOSS
         if stop_hit and target_hit:
             pnl_points = stop_price - entry_price if is_long else entry_price - stop_price
-            return {"outcome": "loss", "exit_price": stop_price,
-                    "exit_bar_idx": i, "pnl_points": pnl_points}
+            return {"outcome": "loss", "exit_price": stop_price, "exit_bar_idx": i, "pnl_points": pnl_points}
 
         if stop_hit:
             pnl_points = stop_price - entry_price if is_long else entry_price - stop_price
-            return {"outcome": "loss", "exit_price": stop_price,
-                    "exit_bar_idx": i, "pnl_points": pnl_points}
+            return {"outcome": "loss", "exit_price": stop_price, "exit_bar_idx": i, "pnl_points": pnl_points}
 
         if target_hit:
             pnl_points = target_price - entry_price if is_long else entry_price - target_price
-            return {"outcome": "win", "exit_price": target_price,
-                    "exit_bar_idx": i, "pnl_points": pnl_points}
+            return {"outcome": "win", "exit_price": target_price, "exit_bar_idx": i, "pnl_points": pnl_points}
 
     return None
+
 
 def compute_all_rsi_outcomes(
     db_path: Path,
@@ -285,13 +295,16 @@ def compute_all_rsi_outcomes(
     # Get list of trading days from daily_features
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        days = con.execute("""
+        days = con.execute(
+            """
             SELECT DISTINCT trading_day
             FROM daily_features
             WHERE symbol = 'MGC' AND orb_minutes = 5
               AND trading_day BETWEEN ? AND ?
             ORDER BY trading_day
-        """, [start, end]).fetchdf()
+        """,
+            [start, end],
+        ).fetchdf()
     finally:
         con.close()
 
@@ -304,7 +317,7 @@ def compute_all_rsi_outcomes(
 
     for idx, td in enumerate(trading_days):
         if idx % 200 == 0:
-            print(f"    Processing day {idx+1}/{total}...")
+            print(f"    Processing day {idx + 1}/{total}...")
 
         if hasattr(td, "date") and callable(td.date):
             td_date = td.date()
@@ -319,9 +332,7 @@ def compute_all_rsi_outcomes(
 
         for rsi_period in RSI_PERIODS:
             for time_filter_name in TIME_FILTERS:
-                day_outcomes = compute_rsi_outcomes_for_day(
-                    bars_5m, rsi_period, time_filter_name
-                )
+                day_outcomes = compute_rsi_outcomes_for_day(bars_5m, rsi_period, time_filter_name)
                 for o in day_outcomes:
                     o["trading_day"] = str(td_date)
                 all_outcomes.extend(day_outcomes)
@@ -329,6 +340,7 @@ def compute_all_rsi_outcomes(
     if not all_outcomes:
         return pd.DataFrame()
     return pd.DataFrame(all_outcomes)
+
 
 def run_walk_forward(
     db_path: Path,
@@ -356,13 +368,11 @@ def run_walk_forward(
     oos_all_dates = []
 
     for w in windows:
-        train_mask = (
-            (outcomes_df["trading_day_date"] >= w["train_start"])
-            & (outcomes_df["trading_day_date"] <= w["train_end"])
+        train_mask = (outcomes_df["trading_day_date"] >= w["train_start"]) & (
+            outcomes_df["trading_day_date"] <= w["train_end"]
         )
-        test_mask = (
-            (outcomes_df["trading_day_date"] >= w["test_start"])
-            & (outcomes_df["trading_day_date"] <= w["test_end"])
+        test_mask = (outcomes_df["trading_day_date"] >= w["test_start"]) & (
+            outcomes_df["trading_day_date"] <= w["test_end"]
         )
 
         train_data = outcomes_df[train_mask]
@@ -407,18 +417,22 @@ def run_walk_forward(
         oos_all_pnls.extend(oos_pnls)
         oos_all_dates.extend(oos["trading_day_date"].values)
 
-        window_results.append({
-            "test_start": str(w["test_start"]),
-            "test_end": str(w["test_end"]),
-            "train_n": len(train_data[
-                (train_data["rsi_period"] == rsi_period)
-                & (train_data["time_filter"] == tf_name)
-                & (train_data["rr_target"] == rr)
-            ]),
-            "selected": f"RSI{rsi_period}_{tf_name}_RR{rr}",
-            "train_sharpe": best_sharpe,
-            "oos_stats": oos_stats,
-        })
+        window_results.append(
+            {
+                "test_start": str(w["test_start"]),
+                "test_end": str(w["test_end"]),
+                "train_n": len(
+                    train_data[
+                        (train_data["rsi_period"] == rsi_period)
+                        & (train_data["time_filter"] == tf_name)
+                        & (train_data["rr_target"] == rr)
+                    ]
+                ),
+                "selected": f"RSI{rsi_period}_{tf_name}_RR{rr}",
+                "train_sharpe": best_sharpe,
+                "oos_stats": oos_stats,
+            }
+        )
 
     combined_oos = None
     regime_split = None
@@ -440,6 +454,7 @@ def run_walk_forward(
         "combined_oos": combined_oos,
         "regime_split": regime_split,
     }
+
 
 def run_full_period_analysis(
     db_path: Path,
@@ -463,14 +478,17 @@ def run_full_period_analysis(
                     continue
                 stats = compute_strategy_metrics(rr_data["pnl_r"].values)
                 if stats:
-                    grid_results.append({
-                        "rsi_period": rsi_period,
-                        "time_filter": tf_name,
-                        "rr_target": rr,
-                        **stats,
-                    })
+                    grid_results.append(
+                        {
+                            "rsi_period": rsi_period,
+                            "time_filter": tf_name,
+                            "rr_target": rr,
+                            **stats,
+                        }
+                    )
 
     return {"grid": grid_results}
+
 
 def _print_go_no_go(combined_oos: dict | None, regime_split: dict | None) -> None:
     """Print GO/NO-GO evaluation."""
@@ -501,13 +519,15 @@ def _print_go_no_go(combined_oos: dict | None, regime_split: dict | None) -> Non
     verdict = "GO" if all_pass else "NO-GO"
     print(f"\n  VERDICT: {verdict}")
 
+
 def main():
     parser = argparse.ArgumentParser(description="RSI Extreme Mean Reversion analysis")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     parser.add_argument("--train-months", type=int, default=12)
     parser.add_argument("--output", type=Path, default=None)
-    parser.add_argument("--full-period-only", action="store_true",
-                        help="Skip walk-forward, just run full-period grid search")
+    parser.add_argument(
+        "--full-period-only", action="store_true", help="Skip walk-forward, just run full-period grid search"
+    )
     args = parser.parse_args()
 
     sep = "=" * 80
@@ -517,8 +537,10 @@ def main():
     print()
     print("Entry: Buy when RSI < 20 (oversold), Sell when RSI > 80 (overbought)")
     print("Stop: Swing low/high over last 10 bars")
-    print(f"Grid: {len(RSI_PERIODS)} RSI periods x {len(TIME_FILTERS)} time filters x "
-          f"{len(RR_TARGETS)} RR = {len(RSI_PERIODS) * len(TIME_FILTERS) * len(RR_TARGETS)} combos")
+    print(
+        f"Grid: {len(RSI_PERIODS)} RSI periods x {len(TIME_FILTERS)} time filters x "
+        f"{len(RR_TARGETS)} RR = {len(RSI_PERIODS) * len(TIME_FILTERS) * len(RR_TARGETS)} combos"
+    )
     print(f"Gate B: Risk floor >= {SPEC.min_risk_floor_points} points")
     print(f"Gate C: Ambiguous bar = LOSS")
     print(f"Gate F: No overlapping trades per direction")
@@ -532,9 +554,11 @@ def main():
             print(f"  Grid results ({len(result['grid'])} combos):")
             sorted_grid = sorted(result["grid"], key=lambda x: x["sharpe"], reverse=True)
             for g in sorted_grid[:15]:
-                print(f"    RSI{g['rsi_period']} {g['time_filter']} RR{g['rr_target']}: "
-                      f"N={g['n']}, WR={g['wr']:.0%}, ExpR={g['expr']:+.3f}, "
-                      f"Sharpe={g['sharpe']:.3f}, MaxDD={g['maxdd']:+.1f}R")
+                print(
+                    f"    RSI{g['rsi_period']} {g['time_filter']} RR{g['rr_target']}: "
+                    f"N={g['n']}, WR={g['wr']:.0%}, ExpR={g['expr']:+.3f}, "
+                    f"Sharpe={g['sharpe']:.3f}, MaxDD={g['maxdd']:+.1f}R"
+                )
         else:
             print("  No outcomes found")
 
@@ -549,25 +573,31 @@ def main():
             for w in result["windows"]:
                 oos = w["oos_stats"]
                 if oos:
-                    print(f"  {w['test_start']} to {w['test_end']}: "
-                          f"Selected {w['selected']}, "
-                          f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
-                          f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}")
+                    print(
+                        f"  {w['test_start']} to {w['test_end']}: "
+                        f"Selected {w['selected']}, "
+                        f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
+                        f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}"
+                    )
 
             if result["combined_oos"]:
                 c = result["combined_oos"]
-                print(f"\n  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
-                      f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}, "
-                      f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R")
+                print(
+                    f"\n  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
+                    f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}, "
+                    f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R"
+                )
 
             if result["regime_split"]:
                 rs = result["regime_split"]
                 print("\n  REGIME SPLIT:")
                 for label, stats in rs.items():
                     if stats:
-                        print(f"    {label}: N={stats['n']}, WR={stats['wr']:.0%}, "
-                              f"ExpR={stats['expr']:+.3f}, Sharpe={stats['sharpe']:.3f}, "
-                              f"MaxDD={stats['maxdd']:+.1f}R")
+                        print(
+                            f"    {label}: N={stats['n']}, WR={stats['wr']:.0%}, "
+                            f"ExpR={stats['expr']:+.3f}, Sharpe={stats['sharpe']:.3f}, "
+                            f"MaxDD={stats['maxdd']:+.1f}R"
+                        )
                     else:
                         print(f"    {label}: No data")
 
@@ -583,6 +613,7 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

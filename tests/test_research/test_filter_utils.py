@@ -26,23 +26,27 @@ from trading_app.config import ALL_FILTERS
 def _vwap_df() -> pd.DataFrame:
     """5-row DataFrame exercising VWAP filter: aligned long, aligned short,
     misaligned long, misaligned short, missing vwap."""
-    return pd.DataFrame({
-        "orb_US_DATA_1000_high":      [100.0, 90.0, 100.0, 90.0, 100.0],
-        "orb_US_DATA_1000_low":       [ 99.0, 89.0,  99.0, 89.0,  99.0],
-        "orb_US_DATA_1000_vwap":      [ 98.0, 95.0, 101.0, 88.0,  float("nan")],
-        "orb_US_DATA_1000_break_dir": ["long", "short", "long", "short", "long"],
-    })
+    return pd.DataFrame(
+        {
+            "orb_US_DATA_1000_high": [100.0, 90.0, 100.0, 90.0, 100.0],
+            "orb_US_DATA_1000_low": [99.0, 89.0, 99.0, 89.0, 99.0],
+            "orb_US_DATA_1000_vwap": [98.0, 95.0, 101.0, 88.0, float("nan")],
+            "orb_US_DATA_1000_break_dir": ["long", "short", "long", "short", "long"],
+        }
+    )
 
 
 def _orb_size_df() -> pd.DataFrame:
     """4-row DataFrame exercising OrbSizeFilter (ORB_G5 => size >= 5.0)."""
-    return pd.DataFrame({
-        "orb_COMEX_SETTLE_size": [3.0, 5.0, 7.5, float("nan")],
-        # OrbSizeFilter also reads orb_{label}_break_dir for some paths
-        "orb_COMEX_SETTLE_break_dir": ["long", "long", "short", "long"],
-        "orb_COMEX_SETTLE_high": [100.0, 105.0, 107.5, 100.0],
-        "orb_COMEX_SETTLE_low":  [ 97.0, 100.0, 100.0,  99.0],
-    })
+    return pd.DataFrame(
+        {
+            "orb_COMEX_SETTLE_size": [3.0, 5.0, 7.5, float("nan")],
+            # OrbSizeFilter also reads orb_{label}_break_dir for some paths
+            "orb_COMEX_SETTLE_break_dir": ["long", "long", "short", "long"],
+            "orb_COMEX_SETTLE_high": [100.0, 105.0, 107.5, 100.0],
+            "orb_COMEX_SETTLE_low": [97.0, 100.0, 100.0, 99.0],
+        }
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -61,12 +65,14 @@ class TestFilterSignalContract:
         assert set(sig.tolist()).issubset({0, 1})
 
     def test_empty_df_returns_empty_array(self):
-        df = pd.DataFrame({
-            "orb_US_DATA_1000_high": pd.Series([], dtype=float),
-            "orb_US_DATA_1000_low": pd.Series([], dtype=float),
-            "orb_US_DATA_1000_vwap": pd.Series([], dtype=float),
-            "orb_US_DATA_1000_break_dir": pd.Series([], dtype=str),
-        })
+        df = pd.DataFrame(
+            {
+                "orb_US_DATA_1000_high": pd.Series([], dtype=float),
+                "orb_US_DATA_1000_low": pd.Series([], dtype=float),
+                "orb_US_DATA_1000_vwap": pd.Series([], dtype=float),
+                "orb_US_DATA_1000_break_dir": pd.Series([], dtype=str),
+            }
+        )
         sig = filter_signal(df, "VWAP_MID_ALIGNED", orb_label="US_DATA_1000")
         assert sig.shape == (0,)
         assert sig.dtype.kind == "i"
@@ -113,16 +119,20 @@ class TestFilterSignalEquivalence:
         self._assert_equivalent(df, "ORB_G8", "COMEX_SETTLE")
 
     def test_ovnrng_100_matches_canonical(self):
-        df = pd.DataFrame({
-            "overnight_range": [ 5.0, 20.0, 40.0, float("nan")],
-            "atr_20":          [10.0, 20.0, 20.0, 15.0],
-        })
+        df = pd.DataFrame(
+            {
+                "overnight_range": [5.0, 20.0, 40.0, float("nan")],
+                "atr_20": [10.0, 20.0, 20.0, 15.0],
+            }
+        )
         self._assert_equivalent(df, "OVNRNG_100", "COMEX_SETTLE")
 
     def test_atr_p50_matches_canonical(self):
-        df = pd.DataFrame({
-            "atr_20_pct": [10.0, 49.9, 50.0, 75.0, float("nan")],
-        })
+        df = pd.DataFrame(
+            {
+                "atr_20_pct": [10.0, 49.9, 50.0, 75.0, float("nan")],
+            }
+        )
         self._assert_equivalent(df, "ATR_P50", "COMEX_SETTLE")
 
 
@@ -137,33 +147,39 @@ class TestFilterSignalEquivalence:
 class TestVwapMidAlignedBehavior:
     def test_fires_on_aligned_long(self):
         # orb_mid=99.5 > vwap=98 => long aligned => fire
-        df = pd.DataFrame({
-            "orb_US_DATA_1000_high":      [100.0],
-            "orb_US_DATA_1000_low":       [ 99.0],
-            "orb_US_DATA_1000_vwap":      [ 98.0],
-            "orb_US_DATA_1000_break_dir": ["long"],
-        })
+        df = pd.DataFrame(
+            {
+                "orb_US_DATA_1000_high": [100.0],
+                "orb_US_DATA_1000_low": [99.0],
+                "orb_US_DATA_1000_vwap": [98.0],
+                "orb_US_DATA_1000_break_dir": ["long"],
+            }
+        )
         sig = filter_signal(df, "VWAP_MID_ALIGNED", orb_label="US_DATA_1000")
         assert sig[0] == 1
 
     def test_fails_on_misaligned_long(self):
         # orb_mid=99.5 < vwap=101 => long misaligned => no fire
-        df = pd.DataFrame({
-            "orb_US_DATA_1000_high":      [100.0],
-            "orb_US_DATA_1000_low":       [ 99.0],
-            "orb_US_DATA_1000_vwap":      [101.0],
-            "orb_US_DATA_1000_break_dir": ["long"],
-        })
+        df = pd.DataFrame(
+            {
+                "orb_US_DATA_1000_high": [100.0],
+                "orb_US_DATA_1000_low": [99.0],
+                "orb_US_DATA_1000_vwap": [101.0],
+                "orb_US_DATA_1000_break_dir": ["long"],
+            }
+        )
         sig = filter_signal(df, "VWAP_MID_ALIGNED", orb_label="US_DATA_1000")
         assert sig[0] == 0
 
     def test_fails_on_missing_vwap(self):
-        df = pd.DataFrame({
-            "orb_US_DATA_1000_high":      [100.0],
-            "orb_US_DATA_1000_low":       [ 99.0],
-            "orb_US_DATA_1000_vwap":      [float("nan")],
-            "orb_US_DATA_1000_break_dir": ["long"],
-        })
+        df = pd.DataFrame(
+            {
+                "orb_US_DATA_1000_high": [100.0],
+                "orb_US_DATA_1000_low": [99.0],
+                "orb_US_DATA_1000_vwap": [float("nan")],
+                "orb_US_DATA_1000_break_dir": ["long"],
+            }
+        )
         sig = filter_signal(df, "VWAP_MID_ALIGNED", orb_label="US_DATA_1000")
         assert sig[0] == 0
 

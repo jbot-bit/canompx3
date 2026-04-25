@@ -186,8 +186,7 @@ def build_trade_paths(
     profile = get_profile(profile_id)
     lane_specs = profile.daily_lanes if profile.daily_lanes else load_allocation_lanes(profile.profile_id)
     effective_stop_by_strategy = {
-        lane.strategy_id: float(lane.planned_stop_multiplier or profile.stop_multiplier)
-        for lane in lane_specs
+        lane.strategy_id: float(lane.planned_stop_multiplier or profile.stop_multiplier) for lane in lane_specs
     }
     out: dict[str, list[TradePath]] = {}
     skipped: list[dict[str, object]] = []
@@ -333,7 +332,9 @@ def make_daily_scenarios(
                 lots=lots_for_position(trade.instrument, contracts),
             )
             by_day[trade.trading_day].append(scaled)
-            session_contrib[lane_session] = session_contrib.get(lane_session, 0.0) + scaled.pnl_dollars - trade.pnl_dollars
+            session_contrib[lane_session] = (
+                session_contrib.get(lane_session, 0.0) + scaled.pnl_dollars - trade.pnl_dollars
+            )
     scenarios = [_scenario_from_trade_paths(d, by_day[d]) for d in cal_days]
     return scenarios, session_contrib
 
@@ -436,9 +437,7 @@ def emit(
     if skipped_lanes:
         lines += ["", "## Skipped lanes", "", "| Strategy | Instrument | Session | Reason |", "|---|---|---|---|"]
         for row in skipped_lanes:
-            lines.append(
-                f"| {row['strategy_id']} | {row['instrument']} | {row['orb_label']} | {row['reason']} |"
-            )
+            lines.append(f"| {row['strategy_id']} | {row['instrument']} | {row['orb_label']} | {row['reason']} |")
 
     lines += [
         "",

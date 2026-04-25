@@ -1232,6 +1232,27 @@ class TestPhase4DiscoveryEnforcement:
     assertion test, plus 1 legacy-mode signature test.
     """
 
+    @pytest.fixture(autouse=True)
+    def _isolate_git_env(self, monkeypatch):
+        """Drop GIT_* env vars so subprocess git calls obey cwd=tmp_path.
+
+        Without this, running these tests under a pre-commit hook (or any
+        parent that exports GIT_DIR/GIT_WORK_TREE) routes the temp-repo
+        commits to the parent worktree. monkeypatch auto-restores on
+        teardown, so a single autouse fixture protects every test in the
+        class plus any test added later.
+        """
+        for var in (
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_COMMON_DIR",
+            "GIT_NAMESPACE",
+            "GIT_PREFIX",
+        ):
+            monkeypatch.delenv(var, raising=False)
+
     @staticmethod
     def _init_git_repo(tmp_path):
         """Initialize a minimal temp git repo and return its path."""
@@ -1356,9 +1377,7 @@ class TestPhase4DiscoveryEnforcement:
 
         self._init_git_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
-        p = self._write_and_commit(
-            tmp_path, "hyp.yaml", self._minimal_hypothesis_yaml()
-        )
+        p = self._write_and_commit(tmp_path, "hyp.yaml", self._minimal_hypothesis_yaml())
         # Edit without committing
         p.write_text(
             self._minimal_hypothesis_yaml() + "# added comment\n",
@@ -1428,9 +1447,7 @@ class TestPhase4DiscoveryEnforcement:
                 hypothesis_file=p,
             )
 
-    def test_cli_translates_hypothesis_error_to_parser_error(
-        self, tmp_path, monkeypatch, capsys
-    ):
+    def test_cli_translates_hypothesis_error_to_parser_error(self, tmp_path, monkeypatch, capsys):
         """CLI wrap: HypothesisLoaderError becomes a clean parser.error exit 2."""
         from trading_app.strategy_discovery import main
 
@@ -1515,10 +1532,7 @@ class TestFlushBatchDfColumnAlignment:
             _flush_batch_df(con, [])
         except ValueError as e:
             if "column alignment" in str(e):
-                pytest.fail(
-                    "length check incorrectly fired on empty batch: "
-                    + str(e)
-                )
+                pytest.fail("length check incorrectly fired on empty batch: " + str(e))
             # Some other ValueError is fine — not our concern
         except duckdb.Error:
             pass  # expected — table doesn't exist in :memory:
@@ -1563,8 +1577,7 @@ class TestFlushBatchDfColumnAlignment:
         # only needs to exercise the SHA positional alignment, not the
         # production column types.
         col_defs = ",\n            ".join(
-            f"{name} TEXT PRIMARY KEY" if name == "strategy_id" else f"{name} TEXT"
-            for name in _BATCH_COLUMNS
+            f"{name} TEXT PRIMARY KEY" if name == "strategy_id" else f"{name} TEXT" for name in _BATCH_COLUMNS
         )
         con.execute(f"""
             CREATE TABLE experimental_strategies (
@@ -1587,8 +1600,7 @@ class TestFlushBatchDfColumnAlignment:
 
         # Query back and verify the SHA is in the row
         result = con.execute(
-            "SELECT hypothesis_file_sha FROM experimental_strategies "
-            "WHERE strategy_id = ?",
+            "SELECT hypothesis_file_sha FROM experimental_strategies WHERE strategy_id = ?",
             ["round_trip_test_strategy"],
         ).fetchone()
         assert result is not None, "row was not inserted"
@@ -1691,13 +1703,8 @@ class TestHypothesisFilterInjection:
 
         # AND into every session's per-session map
         for s in sessions:
-            assert "GAP_R015" in hypothesis_extra_by_session[s], (
-                f"session {s} did not receive the injected GAP_R015"
-            )
-            assert (
-                hypothesis_extra_by_session[s]["GAP_R015"]
-                is ALL_FILTERS["GAP_R015"]
-            )
+            assert "GAP_R015" in hypothesis_extra_by_session[s], f"session {s} did not receive the injected GAP_R015"
+            assert hypothesis_extra_by_session[s]["GAP_R015"] is ALL_FILTERS["GAP_R015"]
 
     def test_hypothesis_filter_injection_respects_dow_misalignment(self):
         """Criterion #5: DOW composite filters must NOT be injected into
@@ -1721,8 +1728,7 @@ class TestHypothesisFilterInjection:
         dow_filter_type = next(
             ft
             for ft, obj in ALL_FILTERS.items()
-            if isinstance(obj, CompositeFilter)
-            and isinstance(obj.overlay, DayOfWeekSkipFilter)
+            if isinstance(obj, CompositeFilter) and isinstance(obj.overlay, DayOfWeekSkipFilter)
         )
 
         # Guard: NYSE_OPEN is the canonical DOW-misaligned session. If the

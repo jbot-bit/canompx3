@@ -1,6 +1,6 @@
 
 ====================================================================================================
-  BREAK QUALITY RESEARCH — Post-Break Candle Behavior
+  BREAK QUALITY RESEARCH â€” Post-Break Candle Behavior
   DB: C:\db\gold.db | Instruments: ['MGC'] | Sessions: ['0900', '1000', '1800']
   Filter: G4+ | Entry: E1 | RR: 2.0 | CB: 2
 ====================================================================================================
@@ -142,14 +142,14 @@
                         Delta          +1.013
     Signal: 1.013R separation >> ACTIONABLE | p=0.0000 ***
 
-  C8b: Within 'held 30 clean' — did it EVENTUALLY return inside?
+  C8b: Within 'held 30 clean' â€” did it EVENTUALLY return inside?
                                      N     avgR      WR
     --------------------------------------------------
     Held 30 then returned inside    36   +0.576  55.6%
          Held 30, never returned    13   +1.730 100.0%
     Delta (never-returned minus returned): +1.154 ** ACTIONABLE
 
-  C8c: Case B — return inside ORB happened WHILE TRADE STILL OPEN
+  C8c: Case B â€” return inside ORB happened WHILE TRADE STILL OPEN
     Total Case B: N=19 (13% of all trades)
     Winners (C8 would scratch): N=6, avgR=+1.725
     Losers  (C8 would save):   N=13, avgR=-1.000
@@ -171,7 +171,7 @@
                (0.575, 1.031]     37   +0.529  51.4%     +19.6  ++
                (1.031, 7.869]     38   +0.931  71.1%     +35.4  ++
 
-  C10: Volume ratio (post-entry mean / break bar) — dropoff = <1.0
+  C10: Volume ratio (post-entry mean / break bar) â€” dropoff = <1.0
                        Bucket      N     avgR      WR      totR
     -------------------------------------------------------
                (0.0942, 0.49]     38   -0.001  23.7%      -0.0
@@ -209,7 +209,7 @@
                (0.351, 2.066]     38   +0.307  42.1%     +11.7  ++
 
 ====================================================================================================
-  VALIDITY TESTING — MGC 0900
+  VALIDITY TESTING â€” MGC 0900
 ====================================================================================================
 
   [C3] Pre-entry: Break speed < 3 min
@@ -275,7 +275,7 @@
       2025    16    -0.521     60    +0.420   -0.942 **
     Consistent direction: 0% of years (0/1)
 
-  BH CORRECTION SUMMARY (MGC 0900) — 4 tests, alpha=0.05:
+  BH CORRECTION SUMMARY (MGC 0900) â€” 4 tests, alpha=0.05:
                                            Signal    delta    p_raw  BH-pass Type
     ------------------------------------------------------------------------------------------
                         C3 speed<3min (pre-entry)   +0.257   0.2729        no  pre-entry
@@ -284,7 +284,7 @@
              C9 MFE<30bar p25 (30-bar look-ahead)   -0.886   0.0000 **   YES ***  post-entry 30-bar look-ahead
 
 ================================================================================
-  EXIT RULE SIMULATION — MGC 0900
+  EXIT RULE SIMULATION â€” MGC 0900
 ================================================================================
   Baseline: N=150  EV=+0.200R  totR=+30.0
 

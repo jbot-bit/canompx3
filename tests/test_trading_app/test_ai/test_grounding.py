@@ -82,9 +82,7 @@ class TestBuildGroundingPrompt:
             spec = COST_SPECS[inst]
             friction = spec.commission_rt + spec.spread_doubled + spec.slippage
             # Friction values differ per instrument; any common 2dp formatting counts
-            assert f"{friction:.2f}" in prompt, (
-                f"{inst} friction {friction:.2f} missing from prompt"
-            )
+            assert f"{friction:.2f}" in prompt, f"{inst} friction {friction:.2f} missing from prompt"
 
     def test_contains_template_list(self, mock_corpus, mock_schema):
         prompt = build_grounding_prompt(mock_corpus, mock_schema)
@@ -115,15 +113,11 @@ class TestBuildGroundingPrompt:
 
 class TestBuildInterpretationPrompt:
     def test_contains_question(self, mock_corpus):
-        prompt = build_interpretation_prompt(
-            mock_corpus, "What is the best strategy?", "some data"
-        )
+        prompt = build_interpretation_prompt(mock_corpus, "What is the best strategy?", "some data")
         assert "What is the best strategy?" in prompt
 
     def test_contains_data(self, mock_corpus):
-        prompt = build_interpretation_prompt(
-            mock_corpus, "question", "orb_label=0900 win_rate=0.42"
-        )
+        prompt = build_interpretation_prompt(mock_corpus, "question", "orb_label=0900 win_rate=0.42")
         assert "orb_label=0900" in prompt
 
     def test_contains_honesty_rules(self, mock_corpus):

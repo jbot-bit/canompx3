@@ -286,7 +286,9 @@ def test_check_survival_report_gate_blocks_missing_file(tmp_path, monkeypatch):
 
 def test_check_survival_report_gate_enforces_freshness_and_threshold(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
-    monkeypatch.setattr("trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs())
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
     report_path = get_survival_report_path("topstep_50k_mnq_auto")
     report_path.write_text(
         json.dumps(_survival_envelope(as_of_date="2026-02-01", operational_pass_probability=0.65, gate_pass=False))
@@ -304,9 +306,13 @@ def test_check_survival_report_gate_enforces_freshness_and_threshold(tmp_path, m
 
 def test_check_survival_report_gate_blocks_low_probability_even_when_fresh(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
-    monkeypatch.setattr("trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs())
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
     report_path = get_survival_report_path("topstep_50k_mnq_auto")
-    report_path.write_text(json.dumps(_survival_envelope(as_of_date="2026-04-09", operational_pass_probability=0.61, gate_pass=False)))
+    report_path.write_text(
+        json.dumps(_survival_envelope(as_of_date="2026-04-09", operational_pass_probability=0.61, gate_pass=False))
+    )
 
     ok, msg = check_survival_report_gate(
         "topstep_50k_mnq_auto",
@@ -319,9 +325,13 @@ def test_check_survival_report_gate_blocks_low_probability_even_when_fresh(tmp_p
 
 def test_check_survival_report_gate_passes_clean_report(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
-    monkeypatch.setattr("trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs())
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
     report_path = get_survival_report_path("topstep_50k_mnq_auto")
-    report_path.write_text(json.dumps(_survival_envelope(as_of_date="2026-04-09", operational_pass_probability=0.78, gate_pass=True)))
+    report_path.write_text(
+        json.dumps(_survival_envelope(as_of_date="2026-04-09", operational_pass_probability=0.78, gate_pass=True))
+    )
 
     ok, msg = check_survival_report_gate(
         "topstep_50k_mnq_auto",
@@ -334,10 +344,21 @@ def test_check_survival_report_gate_passes_clean_report(tmp_path, monkeypatch):
 
 def test_check_survival_report_gate_blocks_profile_mismatch(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
-    monkeypatch.setattr("trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs())
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
     report_path = get_survival_report_path("topstep_50k_mnq_auto")
     stale_inputs = {**_canonical_inputs(), "profile_fingerprint": "stale-fingerprint"}
-    report_path.write_text(json.dumps(_survival_envelope(as_of_date="2026-04-09", operational_pass_probability=0.78, gate_pass=True, canonical_inputs=stale_inputs)))
+    report_path.write_text(
+        json.dumps(
+            _survival_envelope(
+                as_of_date="2026-04-09",
+                operational_pass_probability=0.78,
+                gate_pass=True,
+                canonical_inputs=stale_inputs,
+            )
+        )
+    )
 
     ok, msg = check_survival_report_gate(
         "topstep_50k_mnq_auto",
@@ -350,10 +371,21 @@ def test_check_survival_report_gate_blocks_profile_mismatch(tmp_path, monkeypatc
 
 def test_check_survival_report_gate_blocks_lane_id_mismatch(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
-    monkeypatch.setattr("trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs())
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
     report_path = get_survival_report_path("topstep_50k_mnq_auto")
     stale_inputs = {**_canonical_inputs(), "lane_ids": ["STALE_LANE"]}
-    report_path.write_text(json.dumps(_survival_envelope(as_of_date="2026-04-09", operational_pass_probability=0.78, gate_pass=True, canonical_inputs=stale_inputs)))
+    report_path.write_text(
+        json.dumps(
+            _survival_envelope(
+                as_of_date="2026-04-09",
+                operational_pass_probability=0.78,
+                gate_pass=True,
+                canonical_inputs=stale_inputs,
+            )
+        )
+    )
 
     ok, msg = check_survival_report_gate("topstep_50k_mnq_auto", today=date(2026, 4, 10))
 
@@ -363,7 +395,9 @@ def test_check_survival_report_gate_blocks_lane_id_mismatch(tmp_path, monkeypatc
 
 def test_read_survival_report_state_marks_legacy_payload_invalid(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
-    monkeypatch.setattr("trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs())
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
     report_path = get_survival_report_path("topstep_50k_mnq_auto")
     report_path.write_text(
         json.dumps(
@@ -450,7 +484,9 @@ def test_load_lane_daily_pnl_uses_effective_profile_stop_multiplier(monkeypatch)
 
 def test_evaluate_profile_survival_writes_report(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
-    monkeypatch.setattr("trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs())
+    monkeypatch.setattr(
+        "trading_app.account_survival._current_survival_canonical_inputs", lambda *_args, **_kwargs: _canonical_inputs()
+    )
 
     def fake_load(_profile_id, *, as_of_date, db_path=None):
         scenarios = [

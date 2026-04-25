@@ -69,8 +69,7 @@ def main() -> int:
 
     # Frozen A0 preset filters on follower
     follower_quality = (
-        df["f_delay"].notna() & (df["f_delay"] <= 15)
-        & df["f_vol_imp"].notna() & (df["f_vol_imp"] >= vol_q60)
+        df["f_delay"].notna() & (df["f_delay"] <= 15) & df["f_vol_imp"].notna() & (df["f_vol_imp"] >= vol_q60)
     )
 
     base_dir = (
@@ -101,7 +100,9 @@ def main() -> int:
                 "signals_per_year": st["signals_per_year"],
                 "avg_r": st["avg_r"],
                 "wr": st["wr"],
-                "delta_vs_no_buffer": (st["avg_r"] - baseline_avg) if pd.notna(st["avg_r"]) and pd.notna(baseline_avg) else np.nan,
+                "delta_vs_no_buffer": (st["avg_r"] - baseline_avg)
+                if pd.notna(st["avg_r"]) and pd.notna(baseline_avg)
+                else np.nan,
             }
         )
 

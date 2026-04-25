@@ -69,11 +69,11 @@ def main() -> int:
     df["l_ts"] = pd.to_datetime(df["l_ts"], utc=True)
 
     base = (
-        df["f_dir"].isin(["long", "short"]) &
-        df["l_dir"].isin(["long", "short"]) &
-        (df["f_dir"] == df["l_dir"]) &
-        df["l_ts"].notna() &
-        (df["l_ts"] <= df["entry_ts"])
+        df["f_dir"].isin(["long", "short"])
+        & df["l_dir"].isin(["long", "short"])
+        & (df["f_dir"] == df["l_dir"])
+        & df["l_ts"].notna()
+        & (df["l_ts"] <= df["entry_ts"])
     )
 
     d = df[base].copy()

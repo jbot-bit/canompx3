@@ -39,7 +39,7 @@ import databento as db
 import duckdb
 import pandas as pd
 
-from pipeline.asset_configs import get_asset_config, list_instruments
+from pipeline.asset_configs import get_asset_config, list_instruments, require_dbn_available
 from pipeline.ingest_dbn_mgc import (
     CheckpointManager,
     check_merge_integrity,
@@ -125,8 +125,9 @@ def main():
     # =========================================================================
     # LOAD AND VALIDATE ASSET CONFIG (FAIL-CLOSED)
     # =========================================================================
-    # get_asset_config calls sys.exit(1) if instrument unknown, dbn_path None,
-    # dbn_path missing, or minimum_start_date None
+    # require_dbn_available raises ValueError / FileNotFoundError if the DBN
+    # store is not ready. get_asset_config returns metadata (no filesystem).
+    require_dbn_available(args.instrument)
     config = get_asset_config(args.instrument)
 
     symbol = config["symbol"]
@@ -161,7 +162,7 @@ def main():
     logger.info(f"  Batch size: {args.batch_size}")
 
     # =========================================================================
-    # VERIFY DBN FILE/DIRECTORY EXISTS (already checked by get_asset_config, belt+suspenders)
+    # VERIFY DBN FILE/DIRECTORY EXISTS (belt+suspenders after require_dbn_available)
     # =========================================================================
     if not dbn_path.exists():
         logger.warning(f"FATAL: DBN path not found: {dbn_path}")

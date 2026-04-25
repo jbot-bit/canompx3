@@ -220,7 +220,19 @@ def compute_family_pbo(
     ).fetchall()
 
     raw_outcomes_by_key: dict[tuple, list[dict]] = defaultdict(list)
-    for trading_day, pnl_r, mae_r, entry_price, stop_price, outcome, _orb_label, orb_minutes, entry_model, rr_target, confirm_bars in rows:
+    for (
+        trading_day,
+        pnl_r,
+        mae_r,
+        entry_price,
+        stop_price,
+        outcome,
+        _orb_label,
+        orb_minutes,
+        entry_model,
+        rr_target,
+        confirm_bars,
+    ) in rows:
         if eligible_days is not None and trading_day not in eligible_days:
             continue
         key = (_orb_label, orb_minutes, entry_model, rr_target, confirm_bars)

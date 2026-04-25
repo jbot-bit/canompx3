@@ -249,9 +249,7 @@ def test_run_monitor_reports_sr_at_alarm_not_at_stream_end():
     downstream consumer that treats `sr_stat` as "current health" may be
     misreading alarm records as active signals (or vice versa).
     """
-    monitor = ShiryaevRobertsMonitor(
-        expected_r=0.1, std_r=1.0, threshold=10.0, delta=-1.0
-    )
+    monitor = ShiryaevRobertsMonitor(expected_r=0.1, std_r=1.0, threshold=10.0, delta=-1.0)
 
     # Stream: adverse run drives SR above threshold, then recovery pulls it back.
     adverse_run = [-1.0] * 20
@@ -278,9 +276,7 @@ def test_run_monitor_reports_sr_at_alarm_not_at_stream_end():
 
     # Confirm the "post-recovery final" value would be much smaller if the
     # loop had continued — this is what the audit path-walk computed.
-    continued = ShiryaevRobertsMonitor(
-        expected_r=0.1, std_r=1.0, threshold=10.0, delta=-1.0
-    )
+    continued = ShiryaevRobertsMonitor(expected_r=0.1, std_r=1.0, threshold=10.0, delta=-1.0)
     for trade_r in stream:
         continued.update(trade_r)
     assert continued.sr_stat < monitor.sr_stat, (

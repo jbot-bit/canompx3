@@ -29,9 +29,7 @@ print("=" * 90)
 # 1. Pull MFE_R for all sessions, both instruments
 # -----------------------------------------------------------------------
 for instrument in ["MGC", "MNQ"]:
-    row_check = con.execute(
-        "SELECT COUNT(*) FROM orb_outcomes WHERE symbol = ?", [instrument]
-    ).fetchone()[0]
+    row_check = con.execute("SELECT COUNT(*) FROM orb_outcomes WHERE symbol = ?", [instrument]).fetchone()[0]
     if row_check == 0:
         continue
 
@@ -46,7 +44,8 @@ for instrument in ["MGC", "MNQ"]:
     # So use RR4.0 to get the longest hold window and truest MFE
 
     for orb in sorted(get_enabled_sessions(instrument)):
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT mfe_r, pnl_r, entry_price, stop_price,
                    o.trading_day,
                    d.atr_20
@@ -58,7 +57,9 @@ for instrument in ["MGC", "MNQ"]:
               AND o.rr_target = 4.0
               AND o.mfe_r IS NOT NULL
               AND o.entry_ts IS NOT NULL
-        """, [instrument, orb]).fetchdf()
+        """,
+            [instrument, orb],
+        ).fetchdf()
 
         if len(df) < 20:
             continue
@@ -92,14 +93,21 @@ for instrument in ["MGC", "MNQ"]:
         # With G5+ filter
         if instrument == "MGC":
             for filt_name, filt_size in [("G5", 5), ("G6", 6)]:
-                df_filt = df[df["trading_day"].isin(
-                    con.execute(f"""
+                df_filt = df[
+                    df["trading_day"].isin(
+                        con.execute(
+                            f"""
                         SELECT trading_day FROM daily_features
                         WHERE symbol = ? AND orb_minutes = 5
                           AND orb_{orb}_size >= ?
                           AND orb_{orb}_break_dir IS NOT NULL
-                    """, [instrument, filt_size]).fetchdf()["trading_day"].tolist()
-                )]
+                    """,
+                            [instrument, filt_size],
+                        )
+                        .fetchdf()["trading_day"]
+                        .tolist()
+                    )
+                ]
                 if len(df_filt) < 15:
                     continue
                 mfe_f = df_filt["mfe_r"].values
@@ -111,17 +119,22 @@ for instrument in ["MGC", "MNQ"]:
 
         # E3 comparison for 1800
         if orb in ["1800", "2300"]:
-            df_e3 = con.execute("""
+            df_e3 = con.execute(
+                """
                 SELECT mfe_r FROM orb_outcomes
                 WHERE symbol = ? AND orb_label = ?
                   AND entry_model = 'E3' AND confirm_bars = 1
                   AND rr_target = 4.0
                   AND mfe_r IS NOT NULL AND entry_ts IS NOT NULL
-            """, [instrument, orb]).fetchdf()
+            """,
+                [instrument, orb],
+            ).fetchdf()
             if len(df_e3) >= 20:
                 mfe_e3 = df_e3["mfe_r"].values
                 print(f"\n  E3 comparison (N={len(df_e3)}):")
-                print(f"    Mean MFE: {mfe_e3.mean():.2f}R  P50={np.median(mfe_e3):.2f}R  P90={np.percentile(mfe_e3, 90):.2f}R")
+                print(
+                    f"    Mean MFE: {mfe_e3.mean():.2f}R  P50={np.median(mfe_e3):.2f}R  P90={np.percentile(mfe_e3, 90):.2f}R"
+                )
                 for t in [2.0, 3.0, 4.0, 5.0, 6.0]:
                     count = (mfe_e3 >= t).sum()
                     pct = count / len(mfe_e3) * 100
@@ -136,13 +149,16 @@ print("=" * 90)
 
 # Check 0900 and 1000 specifically (our best sessions)
 for orb in ["0900", "1000"]:
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT mfe_r FROM orb_outcomes
         WHERE symbol = 'MGC' AND orb_label = ?
           AND entry_model = 'E1' AND confirm_bars = 1
           AND rr_target = 4.0
           AND mfe_r IS NOT NULL AND entry_ts IS NOT NULL
-    """, [orb]).fetchdf()
+    """,
+        [orb],
+    ).fetchdf()
     if len(df) == 0:
         continue
     mfe = df["mfe_r"].values
@@ -153,15 +169,17 @@ for orb in ["0900", "1000"]:
     reach_10 = (mfe >= 10.0).sum()
 
     print(f"\n  {orb}: {n} trades")
-    print(f"    >=5R: {reach_5} ({100*reach_5/n:.1f}%)  >=6R: {reach_6} ({100*reach_6/n:.1f}%)  "
-          f">=8R: {reach_8} ({100*reach_8/n:.1f}%)  >=10R: {reach_10} ({100*reach_10/n:.1f}%)")
+    print(
+        f"    >=5R: {reach_5} ({100 * reach_5 / n:.1f}%)  >=6R: {reach_6} ({100 * reach_6 / n:.1f}%)  "
+        f">=8R: {reach_8} ({100 * reach_8 / n:.1f}%)  >=10R: {reach_10} ({100 * reach_10 / n:.1f}%)"
+    )
 
     if reach_5 / n > 0.15:
-        print(f"    --> YES: {reach_5/n*100:.0f}% reach 5R. Worth testing RR5.0+")
+        print(f"    --> YES: {reach_5 / n * 100:.0f}% reach 5R. Worth testing RR5.0+")
     elif reach_5 / n > 0.08:
-        print(f"    --> MAYBE: {reach_5/n*100:.0f}% reach 5R. Marginal, test carefully")
+        print(f"    --> MAYBE: {reach_5 / n * 100:.0f}% reach 5R. Marginal, test carefully")
     else:
-        print(f"    --> NO: Only {reach_5/n*100:.0f}% reach 5R. Not enough follow-through")
+        print(f"    --> NO: Only {reach_5 / n * 100:.0f}% reach 5R. Not enough follow-through")
 
 con.close()
 print("\nDone.")

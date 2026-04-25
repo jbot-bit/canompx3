@@ -142,7 +142,9 @@ def main() -> int:
     lines.append("")
     lines.append(f"**Date committed:** {LOCK_DATE}")
     lines.append(f"**Window:** {RETROSPECTIVE_FROM} to {RETROSPECTIVE_TO} (exclusive upper bound)")
-    lines.append("**Governing pre-reg:** `docs/audit/hypotheses/2026-04-18-h1-mes-london-metals-signal-only-shadow.yaml`")
+    lines.append(
+        "**Governing pre-reg:** `docs/audit/hypotheses/2026-04-18-h1-mes-london-metals-signal-only-shadow.yaml`"
+    )
     lines.append("**Mode A status:** this is part of the single-shot OOS consumption. Not re-runnable.")
     lines.append("")
     lines.append("## Retrospective aggregate")
@@ -152,24 +154,26 @@ def main() -> int:
     lines.append(f"| N (long entries total) | — | {n_long_total} |")
     lines.append(f"| N (on-signal, overnight_range_pct>=80) | {IS_N} | {n_on} |")
     lines.append(
-        f"| ExpR on-signal | +{IS_EXP_R:.4f} | {expR_on:+.4f}" if expR_on is not None else f"| ExpR on-signal | +{IS_EXP_R:.4f} | — (N_on=0) |"
+        f"| ExpR on-signal | +{IS_EXP_R:.4f} | {expR_on:+.4f}"
+        if expR_on is not None
+        else f"| ExpR on-signal | +{IS_EXP_R:.4f} | — (N_on=0) |"
     )
     if expR_on is not None:
         lines[-1] += " |"
-    lines.append(
-        f"| SD on-signal | {IS_SD:.4f} | {sd_on:.4f} |" if sd_on is not None else "| SD on-signal | — | — |"
-    )
-    lines.append(
-        f"| WR on-signal | {IS_WR:.4f} | {wr_on:.4f} |" if wr_on is not None else "| WR on-signal | — | — |"
-    )
+    lines.append(f"| SD on-signal | {IS_SD:.4f} | {sd_on:.4f} |" if sd_on is not None else "| SD on-signal | — | — |")
+    lines.append(f"| WR on-signal | {IS_WR:.4f} | {wr_on:.4f} |" if wr_on is not None else "| WR on-signal | — | — |")
     lines.append(f"| Wins / Losses on-signal | — | {wins_on} / {losses_on} |")
     lines.append(
-        f"| ExpR off-signal | -0.1069 (from drift check) | {expR_off:+.4f} |" if expR_off is not None else "| ExpR off-signal | — | — |"
+        f"| ExpR off-signal | -0.1069 (from drift check) | {expR_off:+.4f} |"
+        if expR_off is not None
+        else "| ExpR off-signal | — | — |"
     )
     lines.append("")
 
     # Retrospective gate status (indicative only — combined verdict at review_date)
-    lines.append("## Retrospective gate status (INDICATIVE ONLY — final verdict is combined 2026-01-01 to 2026-12-15 at review_date)")
+    lines.append(
+        "## Retrospective gate status (INDICATIVE ONLY — final verdict is combined 2026-01-01 to 2026-12-15 at review_date)"
+    )
     lines.append("")
     if expR_on is not None:
         eff_ratio = expR_on / IS_EXP_R if IS_EXP_R != 0 else None
@@ -180,11 +184,15 @@ def main() -> int:
             else "- **Primary: eff_ratio**: N/A"
         )
         lines.append(f"- **Primary: direction match (sign +)**: {'PASS' if expR_on > 0 else 'FAIL'}")
-        lines.append(f"- **Secondary: N_OOS >= 30**: {n_on} — {'PASS' if n_on >= 30 else 'FAIL (underpowered at retrospective; forward shadow may close gap by review_date)'}")
+        lines.append(
+            f"- **Secondary: N_OOS >= 30**: {n_on} — {'PASS' if n_on >= 30 else 'FAIL (underpowered at retrospective; forward shadow may close gap by review_date)'}"
+        )
     else:
         lines.append("- No on-signal fires in retrospective window — shadow continues forward observation only.")
     lines.append("")
-    lines.append("**Interpretation:** this retrospective read is PART of the one-shot OOS consumption. It does NOT constitute a gate evaluation. Combined gate evaluation occurs ONCE at 2026-12-15 review date on the full 2026-01-01 to 2026-12-15 universe per the pre-reg. Retrospective PASSes here do not guarantee final PASS; retrospective FAILs here do not auto-kill (forward shadow may shift the combined result).")
+    lines.append(
+        "**Interpretation:** this retrospective read is PART of the one-shot OOS consumption. It does NOT constitute a gate evaluation. Combined gate evaluation occurs ONCE at 2026-12-15 review date on the full 2026-01-01 to 2026-12-15 universe per the pre-reg. Retrospective PASSes here do not guarantee final PASS; retrospective FAILs here do not auto-kill (forward shadow may shift the combined result)."
+    )
     lines.append("")
 
     lines.append("## Per-fire log (retrospective window)")
@@ -193,9 +201,7 @@ def main() -> int:
         lines.append("| trading_day | ovn_range_pct | entry_price | stop_price | target_price | pnl_r | outcome |")
         lines.append("|---|---:|---:|---:|---:|---:|---|")
         for r in on_signal_rows:
-            lines.append(
-                f"| {r[0]} | {r[2]:.2f} | {r[4]:.2f} | {r[5]:.2f} | {r[6]:.2f} | {r[8]:+.4f} | {r[9]} |"
-            )
+            lines.append(f"| {r[0]} | {r[2]:.2f} | {r[4]:.2f} | {r[5]:.2f} | {r[6]:.2f} | {r[8]:+.4f} | {r[9]} |")
     else:
         lines.append("(no on-signal fires in 2026-01-01 to 2026-04-18)")
     lines.append("")
@@ -209,8 +215,12 @@ def main() -> int:
 
     lines.append("## Compliance checklist")
     lines.append("")
-    lines.append(f"- [x] Window upper bound: `trading_day < {RETROSPECTIVE_TO}` enforced in SQL — no data >= 2026-04-18 queried.")
-    lines.append(f"- [x] Window lower bound: `trading_day >= {RETROSPECTIVE_FROM}` enforced — Mode A sacred boundary respected.")
+    lines.append(
+        f"- [x] Window upper bound: `trading_day < {RETROSPECTIVE_TO}` enforced in SQL — no data >= 2026-04-18 queried."
+    )
+    lines.append(
+        f"- [x] Window lower bound: `trading_day >= {RETROSPECTIVE_FROM}` enforced — Mode A sacred boundary respected."
+    )
     lines.append("- [x] Output written once; script refuses re-run if output md exists.")
     lines.append("- [x] No threshold tuning; `overnight_range_pct >= 80` locked from pre-reg.")
     lines.append("- [x] No gate thresholds overridden; gate values inherited from pre-reg verbatim.")

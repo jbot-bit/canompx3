@@ -196,7 +196,7 @@ def add_controls(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     # C1 destruction — within-era shuffle of F1
     df["C1_DESTRUCTION"] = df["F1_NEAR_PDH"].copy()
-    for (lo, hi) in ERA_BOUNDS:
+    for lo, hi in ERA_BOUNDS:
         mask = (df["trading_day"] >= lo) & (df["trading_day"] <= hi)
         if mask.sum() > 0:
             vals = np.array(df.loc[mask, "C1_DESTRUCTION"].values, copy=True)
@@ -276,11 +276,7 @@ def block_bootstrap_ci(
 def analyze_cell(
     df: pd.DataFrame, instrument: str, session: str, rr: float, signal: str, theta: float
 ) -> CellResult | None:
-    cell = df[
-        (df["symbol"] == instrument)
-        & (df["orb_label"] == session)
-        & (df["rr_target"] == rr)
-    ].copy()
+    cell = df[(df["symbol"] == instrument) & (df["orb_label"] == session) & (df["rr_target"] == rr)].copy()
     if len(cell) == 0:
         return None
 

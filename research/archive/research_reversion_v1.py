@@ -34,7 +34,7 @@ from pipeline.paths import GOLD_DB_PATH
 
 sys.stdout.reconfigure(line_buffering=True)
 
-SYMBOLS = ['MES', 'MNQ', 'MGC', 'M2K']
+SYMBOLS = ["MES", "MNQ", "MGC", "M2K"]
 MIN_N = 30
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -49,7 +49,7 @@ print("When first ORB break FAILS and price double-breaks,")
 print("how far does the second direction move?")
 print("=" * 70)
 
-sessions = ['0900', '1000', '1800', 'US_EQUITY_OPEN', 'CME_OPEN', 'LONDON_OPEN']
+sessions = ["0900", "1000", "1800", "US_EQUITY_OPEN", "CME_OPEN", "LONDON_OPEN"]
 
 for session in sessions:
     db_col = f"orb_{session}"
@@ -77,10 +77,10 @@ for session in sessions:
         continue
 
     # Separate: regular losses vs double-break losses
-    dbl_loss = [r for r in rows if r[4] and r[3] == 'loss']
-    reg_win   = [r for r in rows if not r[4] and r[3] == 'win']
-    reg_loss  = [r for r in rows if not r[4] and r[3] == 'loss']
-    all_rows  = rows
+    dbl_loss = [r for r in rows if r[4] and r[3] == "loss"]
+    reg_win = [r for r in rows if not r[4] and r[3] == "win"]
+    reg_loss = [r for r in rows if not r[4] and r[3] == "loss"]
+    all_rows = rows
 
     if len(dbl_loss) < MIN_N:
         continue
@@ -98,9 +98,9 @@ for session in sessions:
     # If mae_r > 2.0, the reversion trade (entered at -1R on first side = other ORB edge)
     # had at least 1R of room. We estimate "profit at RR1.5":
     # win if mae_r >= 2.5 (1R entry + 1.5R move), loss if < 2.0
-    rev_wins  = sum(1 for m in mae_vals if m >= 2.5)
+    rev_wins = sum(1 for m in mae_vals if m >= 2.5)
     rev_total = len(mae_vals)
-    rev_wr    = rev_wins / rev_total if rev_total else 0
+    rev_wr = rev_wins / rev_total if rev_total else 0
 
     # Year breakdown
     by_year = defaultdict(list)
@@ -163,12 +163,12 @@ for sym in SYMBOLS:
     if not sym_rows:
         continue
 
-    pdh_rows = [r for r in sym_rows if r[2]]   # took PDH before 10am
-    pdl_rows = [r for r in sym_rows if r[3]]   # took PDL before 10am
+    pdh_rows = [r for r in sym_rows if r[2]]  # took PDH before 10am
+    pdl_rows = [r for r in sym_rows if r[3]]  # took PDL before 10am
 
     for label, fade_rows, fade_dir_bias in [
-        ("PDH fade (short)", pdh_rows, 'short'),
-        ("PDL fade (long)",  pdl_rows, 'long'),
+        ("PDH fade (short)", pdh_rows, "short"),
+        ("PDL fade (long)", pdl_rows, "long"),
     ]:
         if len(fade_rows) < MIN_N:
             continue
@@ -179,12 +179,12 @@ for sym in SYMBOLS:
         rev_rate = len(reversion_breaks) / total if total else 0
 
         # Among those reversion breaks, win rate
-        rev_wins_n = sum(1 for r in reversion_breaks if r[7] == 'win')
+        rev_wins_n = sum(1 for r in reversion_breaks if r[7] == "win")
         rev_win_rate = rev_wins_n / len(reversion_breaks) if reversion_breaks else 0
 
         # Baseline: overall ORB_1000 win rate for this symbol
         baseline_rows = [r for r in sym_rows if r[6] == fade_dir_bias and r[7] is not None]
-        base_wr = sum(1 for r in baseline_rows if r[7] == 'win') / len(baseline_rows) if baseline_rows else 0
+        base_wr = sum(1 for r in baseline_rows if r[7] == "win") / len(baseline_rows) if baseline_rows else 0
 
         print(f"\n  {sym} {label}: n={len(fade_rows)}")
         print(f"    After testing level, {fade_dir_bias} ORB_1000 rate: {rev_rate:.1%}")
@@ -226,12 +226,12 @@ for sym in SYMBOLS:
     if not sym_rows:
         continue
 
-    gap_up   = [r for r in sym_rows if r[2] == 'gap_up'   or (r[3] and r[3] > 0)]
-    gap_down = [r for r in sym_rows if r[2] == 'gap_down' or (r[3] and r[3] < 0)]
+    gap_up = [r for r in sym_rows if r[2] == "gap_up" or (r[3] and r[3] > 0)]
+    gap_down = [r for r in sym_rows if r[2] == "gap_down" or (r[3] and r[3] < 0)]
 
     for label, g_rows, fill_cond in [
-        ("Gap UP   (fade short)", gap_up,   'took_pdl'),
-        ("Gap DOWN (fade long)",  gap_down, 'took_pdh'),
+        ("Gap UP   (fade short)", gap_up, "took_pdl"),
+        ("Gap DOWN (fade long)", gap_down, "took_pdh"),
     ]:
         if len(g_rows) < MIN_N:
             continue

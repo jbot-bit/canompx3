@@ -865,9 +865,9 @@ class TestFailClosedOnDescribeException:
 
     def test_describe_exception_surfaces_as_data_missing_condition(self):
         """Inject a broken filter into ALL_FILTERS. Verify the adapter:
-          1. Does NOT return ELIGIBLE (fail-closed)
-          2. Adds a synthetic DATA_MISSING condition for the broken filter
-          3. Preserves the exception detail in build_errors
+        1. Does NOT return ELIGIBLE (fail-closed)
+        2. Adds a synthetic DATA_MISSING condition for the broken filter
+        3. Preserves the exception detail in build_errors
         """
         from dataclasses import dataclass
 
@@ -895,22 +895,14 @@ class TestFailClosedOnDescribeException:
         assert report.overall_status != OverallStatus.ELIGIBLE
 
         # 2. Synthetic DATA_MISSING condition is present for the broken filter
-        broken_conds = [
-            c for c in report.conditions if c.source_filter == "BROKEN_TEST_FIXTURE"
-        ]
+        broken_conds = [c for c in report.conditions if c.source_filter == "BROKEN_TEST_FIXTURE"]
         assert len(broken_conds) == 1
         assert broken_conds[0].status == ConditionStatus.DATA_MISSING
 
         # 3. build_errors preserves exception detail
-        assert any(
-            "BROKEN_TEST_FIXTURE" in e and "describe raised" in e
-            for e in report.build_errors
-        )
+        assert any("BROKEN_TEST_FIXTURE" in e and "describe raised" in e for e in report.build_errors)
         # The error message should name the actual exception type + message
-        assert any(
-            "RuntimeError" in e and "simulated describe failure" in e
-            for e in report.build_errors
-        )
+        assert any("RuntimeError" in e and "simulated describe failure" in e for e in report.build_errors)
 
     def test_describe_exception_inside_composite_preserves_sibling_atoms(self):
         """If ONE leaf of a composite raises but the other succeeds, the
@@ -959,9 +951,7 @@ class TestFailClosedOnDescribeException:
         assert "ORB_G5" in sources
         # Broken leaf surfaced as a separate condition tagged with its filter_type
         assert "BRK_OVERLAY_TEST" in sources
-        broken_cond = [
-            c for c in report.conditions if c.source_filter == "BRK_OVERLAY_TEST"
-        ][0]
+        broken_cond = [c for c in report.conditions if c.source_filter == "BRK_OVERLAY_TEST"][0]
         assert broken_cond.status == ConditionStatus.DATA_MISSING
         # Overall must surface the infrastructure failure
         assert report.overall_status != OverallStatus.ELIGIBLE
@@ -972,9 +962,7 @@ class TestFailClosedOnATRVelocityException:
     DATA_MISSING on validated lanes (not propagate uncaught).
     """
 
-    def test_atr_velocity_describe_exception_on_validated_lane_surfaces_data_missing(
-        self, monkeypatch
-    ):
+    def test_atr_velocity_describe_exception_on_validated_lane_surfaces_data_missing(self, monkeypatch):
         """Patch ATRVelocityFilter.describe at the class level to raise.
         For MGC CME_REOPEN (a validated lane per VALIDATED_FOR), the
         adapter must:
@@ -1001,14 +989,9 @@ class TestFailClosedOnATRVelocityException:
         assert len(atr_vel) == 1
         assert atr_vel[0].status == ConditionStatus.DATA_MISSING
 
-        assert any(
-            "ATR_VELOCITY_OVERLAY" in e and "describe raised" in e
-            for e in report.build_errors
-        )
+        assert any("ATR_VELOCITY_OVERLAY" in e and "describe raised" in e for e in report.build_errors)
 
-    def test_atr_velocity_exception_on_non_validated_lane_skipped(
-        self, monkeypatch
-    ):
+    def test_atr_velocity_exception_on_non_validated_lane_skipped(self, monkeypatch):
         """If ATRVelocityFilter.describe would raise, but the lane is OUTSIDE
         VALIDATED_FOR (e.g. MNQ NYSE_CLOSE), the adapter MUST NOT call
         describe() at all — pre-check on VALIDATED_FOR. The overlay is
@@ -1091,17 +1074,12 @@ class TestFailClosedOnContractViolation:
         assert report.overall_status != OverallStatus.ELIGIBLE
 
         # Synthetic DATA_MISSING condition present
-        broken = [
-            c for c in report.conditions if c.source_filter == "NONE_TEST_FIXTURE"
-        ]
+        broken = [c for c in report.conditions if c.source_filter == "NONE_TEST_FIXTURE"]
         assert len(broken) == 1
         assert broken[0].status == ConditionStatus.DATA_MISSING
 
         # build_errors surfaces the specific contract violation
-        assert any(
-            "NONE_TEST_FIXTURE" in e and "NoneType" in e
-            for e in report.build_errors
-        )
+        assert any("NONE_TEST_FIXTURE" in e and "NoneType" in e for e in report.build_errors)
 
     def test_describe_returns_junk_list_surfaces_as_data_missing(self):
         """describe() returning a list with non-AtomDescription items must
@@ -1133,17 +1111,12 @@ class TestFailClosedOnContractViolation:
         assert report.overall_status != OverallStatus.ELIGIBLE
 
         # At least one DATA_MISSING condition produced for the broken filter
-        broken = [
-            c for c in report.conditions if c.source_filter == "JUNK_LIST_FIXTURE"
-        ]
+        broken = [c for c in report.conditions if c.source_filter == "JUNK_LIST_FIXTURE"]
         assert len(broken) >= 1
         assert all(c.status == ConditionStatus.DATA_MISSING for c in broken)
 
         # build_errors contains the type contract violation
-        assert any(
-            "JUNK_LIST_FIXTURE" in e and "expected AtomDescription" in e
-            for e in report.build_errors
-        )
+        assert any("JUNK_LIST_FIXTURE" in e and "expected AtomDescription" in e for e in report.build_errors)
 
     def test_atom_with_typo_category_surfaces_as_data_missing(self):
         """An atom with a typo'd .category string (e.g. 'INTRA_SESION')
@@ -1186,17 +1159,12 @@ class TestFailClosedOnContractViolation:
 
         # Even though passes=True in the atom, the typo'd category must
         # be rejected — the condition must NOT resolve to PASS.
-        broken = [
-            c for c in report.conditions if c.source_filter == "TYPO_CATEGORY_FIXTURE"
-        ]
+        broken = [c for c in report.conditions if c.source_filter == "TYPO_CATEGORY_FIXTURE"]
         assert len(broken) == 1
         assert broken[0].status == ConditionStatus.DATA_MISSING
 
         # build_errors names the invalid category string
-        assert any(
-            "TYPO_CATEGORY_FIXTURE" in e and "INTRA_SESION" in e
-            for e in report.build_errors
-        )
+        assert any("TYPO_CATEGORY_FIXTURE" in e and "INTRA_SESION" in e for e in report.build_errors)
 
         # Overall must not be ELIGIBLE (the typo invalidates the condition)
         assert report.overall_status != OverallStatus.ELIGIBLE
@@ -1242,19 +1210,12 @@ class TestFailClosedOnContractViolation:
             del ALL_FILTERS["TYPO_RESOLVES_AT_FIXTURE"]
 
         # passes=True must NOT escape as PASS — typo invalidates the condition
-        broken = [
-            c
-            for c in report.conditions
-            if c.source_filter == "TYPO_RESOLVES_AT_FIXTURE"
-        ]
+        broken = [c for c in report.conditions if c.source_filter == "TYPO_RESOLVES_AT_FIXTURE"]
         assert len(broken) == 1
         assert broken[0].status == ConditionStatus.DATA_MISSING
 
         # build_errors names the invalid resolves_at string
-        assert any(
-            "TYPO_RESOLVES_AT_FIXTURE" in e and "STARTIN" in e
-            for e in report.build_errors
-        )
+        assert any("TYPO_RESOLVES_AT_FIXTURE" in e and "STARTIN" in e for e in report.build_errors)
 
         assert report.overall_status != OverallStatus.ELIGIBLE
 
@@ -1298,18 +1259,11 @@ class TestFailClosedOnContractViolation:
         finally:
             del ALL_FILTERS["TYPO_CONFIDENCE_TIER_FIXTURE"]
 
-        broken = [
-            c
-            for c in report.conditions
-            if c.source_filter == "TYPO_CONFIDENCE_TIER_FIXTURE"
-        ]
+        broken = [c for c in report.conditions if c.source_filter == "TYPO_CONFIDENCE_TIER_FIXTURE"]
         assert len(broken) == 1
         assert broken[0].status == ConditionStatus.DATA_MISSING
 
         # build_errors names the invalid confidence_tier string
-        assert any(
-            "TYPO_CONFIDENCE_TIER_FIXTURE" in e and "PROVN" in e
-            for e in report.build_errors
-        )
+        assert any("TYPO_CONFIDENCE_TIER_FIXTURE" in e and "PROVN" in e for e in report.build_errors)
 
         assert report.overall_status != OverallStatus.ELIGIBLE

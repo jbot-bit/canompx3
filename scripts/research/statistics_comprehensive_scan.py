@@ -125,9 +125,7 @@ def extract_all_stats(instrument: str) -> pd.DataFrame:
                     vol_by_sym = matched_vol.groupby("symbol")["quantity"].sum().to_dict()
                     vol_by_sym = {s: v for s, v in vol_by_sym.items() if 0 < v < 2147483647}
                     if vol_by_sym:
-                        front_symbol = choose_front_contract(
-                            vol_by_sym, outright_pattern=pattern, prefix_len=plen
-                        )
+                        front_symbol = choose_front_contract(vol_by_sym, outright_pattern=pattern, prefix_len=plen)
                         if front_symbol:
                             break
 
@@ -171,15 +169,24 @@ def compute_features(stats_df: pd.DataFrame, feat_df: pd.DataFrame) -> pd.DataFr
     """Compute all feature constructions from raw statistics + daily_features."""
     # Merge stats with daily_features
     merged = feat_df.merge(
-        stats_df, left_on=["trading_day", "symbol"],
-        right_on=["cal_date", "instrument"], how="inner",
+        stats_df,
+        left_on=["trading_day", "symbol"],
+        right_on=["cal_date", "instrument"],
+        how="inner",
     )
     merged = merged.sort_values(["symbol", "trading_day"])
 
     # Shift to prior-day (all features use PRIOR day's data)
-    shift_cols = ["settlement", "cleared_volume", "total_cleared_volume",
-                  "open_interest", "session_high", "session_low",
-                  "indicative_open", "opening_price"]
+    shift_cols = [
+        "settlement",
+        "cleared_volume",
+        "total_cleared_volume",
+        "open_interest",
+        "session_high",
+        "session_low",
+        "indicative_open",
+        "opening_price",
+    ]
     for col in shift_cols:
         if col in merged.columns:
             merged[f"prev_{col}"] = merged.groupby("symbol")[col].shift(1)
@@ -226,15 +233,11 @@ def compute_features(stats_df: pd.DataFrame, feat_df: pd.DataFrame) -> pd.DataFr
     merged["F8_settle_close_spread"] = (merged["prev_settlement"] - merged["prev_day_close"]) / atr
 
     # F9: Volume ratio vs 20MA (already tested, include for completeness)
-    vol_20ma = merged.groupby("symbol")["prev_cleared_volume"].transform(
-        lambda x: x.rolling(20, min_periods=10).mean()
-    )
+    vol_20ma = merged.groupby("symbol")["prev_cleared_volume"].transform(lambda x: x.rolling(20, min_periods=10).mean())
     merged["F9_vol_ratio_20ma"] = prev_vol / vol_20ma.replace(0, np.nan)
 
     # F10: OI level / 20MA (different from OI change)
-    oi_20ma = merged.groupby("symbol")["prev_open_interest"].transform(
-        lambda x: x.rolling(20, min_periods=10).mean()
-    )
+    oi_20ma = merged.groupby("symbol")["prev_open_interest"].transform(lambda x: x.rolling(20, min_periods=10).mean())
     merged["F10_oi_ratio_20ma"] = prev_oi / oi_20ma.replace(0, np.nan)
 
     return merged
@@ -252,7 +255,7 @@ def main():
     for inst in INSTRUMENTS:
         print(f"  {inst}...", end=" ", flush=True)
         s = extract_all_stats(inst)
-        print(f"{len(s)} days, cols: {[c for c in s.columns if c not in ('cal_date','instrument')]}")
+        print(f"{len(s)} days, cols: {[c for c in s.columns if c not in ('cal_date', 'instrument')]}")
         if not s.empty:
             all_stats.append(s)
 
@@ -282,7 +285,7 @@ def main():
     print(f"Features computed: {len(feature_cols)}")
     for f in feature_cols:
         n_valid = merged[f].notna().sum()
-        print(f"  {f}: {n_valid} valid rows ({n_valid/len(merged):.0%})")
+        print(f"  {f}: {n_valid} valid rows ({n_valid / len(merged):.0%})")
 
     # =====================================================================
     # T0: TAUTOLOGY CHECK — each feature vs existing daily_features columns
@@ -291,8 +294,7 @@ def main():
     print("T0: TAUTOLOGY CHECK")
     print("=" * 70)
 
-    existing_cols = ["atr_20", "prev_day_range", "gap_open_points",
-                     "overnight_range", "prev_day_close"]
+    existing_cols = ["atr_20", "prev_day_range", "gap_open_points", "overnight_range", "prev_day_close"]
     existing_valid = merged.dropna(subset=existing_cols)
 
     surviving_features = []
@@ -388,17 +390,25 @@ def main():
                 p_pool = (top["is_win"].sum() + bot["is_win"].sum()) / (n_top + n_bot)
                 if p_pool in (0, 1):
                     continue
-                se = np.sqrt(p_pool * (1 - p_pool) * (1/n_top + 1/n_bot))
+                se = np.sqrt(p_pool * (1 - p_pool) * (1 / n_top + 1 / n_bot))
                 z = wr_spread / se
                 p_val = 2 * (1 - stats.norm.cdf(abs(z)))
 
-                all_tests.append({
-                    "feature": feat, "instrument": inst, "session": sess,
-                    "wr_spread": wr_spread, "wr_q5": wr_by_q["mean"].iloc[-1],
-                    "wr_q1": wr_by_q["mean"].iloc[0],
-                    "n_top": n_top, "n_bot": n_bot, "N": len(joined),
-                    "z": z, "p_value": p_val,
-                })
+                all_tests.append(
+                    {
+                        "feature": feat,
+                        "instrument": inst,
+                        "session": sess,
+                        "wr_spread": wr_spread,
+                        "wr_q5": wr_by_q["mean"].iloc[-1],
+                        "wr_q1": wr_by_q["mean"].iloc[0],
+                        "n_top": n_top,
+                        "n_bot": n_bot,
+                        "N": len(joined),
+                        "z": z,
+                        "p_value": p_val,
+                    }
+                )
 
     con.close()
 
@@ -415,17 +425,23 @@ def main():
 
     sig = tests_df[tests_df["bh_significant"]]
 
-    print(f"\n  Tests: K={K} ({len(surviving_features)} features x {len(sessions)} sessions x {len(INSTRUMENTS)} instruments)")
+    print(
+        f"\n  Tests: K={K} ({len(surviving_features)} features x {len(sessions)} sessions x {len(INSTRUMENTS)} instruments)"
+    )
     print(f"  BH FDR significant: {len(sig)}")
 
     print("\n  Top 15 by p-value:")
-    print(f"  {'Feature':<25} {'Inst':<5} {'Session':<16} {'WR_Q5':>7} {'WR_Q1':>7} {'Spread':>8} {'N':>6} {'p':>10} {'BH'}")
+    print(
+        f"  {'Feature':<25} {'Inst':<5} {'Session':<16} {'WR_Q5':>7} {'WR_Q1':>7} {'Spread':>8} {'N':>6} {'p':>10} {'BH'}"
+    )
     print("  " + "-" * 100)
     for _, r in tests_df.head(15).iterrows():
         bh = "*" if r["bh_significant"] else ""
-        print(f"  {r['feature']:<25} {r['instrument']:<5} {r['session']:<16} "
-              f"{r['wr_q5']:>6.1%} {r['wr_q1']:>6.1%} {r['wr_spread']:>+7.1%} "
-              f"{r['N']:>6.0f} {r['p_value']:>10.4f} {bh}")
+        print(
+            f"  {r['feature']:<25} {r['instrument']:<5} {r['session']:<16} "
+            f"{r['wr_q5']:>6.1%} {r['wr_q1']:>6.1%} {r['wr_spread']:>+7.1%} "
+            f"{r['N']:>6.0f} {r['p_value']:>10.4f} {bh}"
+        )
 
     # Per-feature summary
     print("\n  Per-feature best results:")
@@ -434,8 +450,10 @@ def main():
         best = ft.iloc[0] if not ft.empty else None
         n_sig = len(ft[ft["bh_significant"]])
         if best is not None:
-            print(f"  {feat:<25}: best p={best['p_value']:.4f} ({best['instrument']} {best['session']} {best['wr_spread']:+.1%}), "
-                  f"BH sig: {n_sig}/{len(ft)}")
+            print(
+                f"  {feat:<25}: best p={best['p_value']:.4f} ({best['instrument']} {best['session']} {best['wr_spread']:+.1%}), "
+                f"BH sig: {n_sig}/{len(ft)}"
+            )
 
     # Cross-instrument check for significant results
     if len(sig) > 0:
@@ -446,7 +464,9 @@ def main():
                 inst_ft = ft[ft["instrument"] == inst].sort_values("p_value")
                 if not inst_ft.empty:
                     best = inst_ft.iloc[0]
-                    print(f"    {feat} {inst}: best={best['wr_spread']:+.1%} p={best['p_value']:.4f} ({best['session']})")
+                    print(
+                        f"    {feat} {inst}: best={best['wr_spread']:+.1%} p={best['p_value']:.4f} ({best['session']})"
+                    )
 
     # =====================================================================
     # VERDICT

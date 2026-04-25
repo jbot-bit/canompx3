@@ -49,6 +49,7 @@ def _git_tracked(root: Path) -> set[Path] | None:
                 break
     return tracked
 
+
 # Budget limits (lines) per section — auto-truncate if exceeded
 TREE_BUDGET = 50
 MODULE_BUDGET = 120
@@ -181,9 +182,7 @@ def _walk_tree(
             lines.append(f"{prefix}  {entry.name}")
 
 
-def _collect_modules(
-    root: Path, scan_dirs: list[str], tracked: set[Path] | None
-) -> list[dict]:
+def _collect_modules(root: Path, scan_dirs: list[str], tracked: set[Path] | None) -> list[dict]:
     """Collect and parse all .py files in scan directories."""
     modules = []
     for scan_dir in scan_dirs:

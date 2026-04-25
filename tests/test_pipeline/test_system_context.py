@@ -73,7 +73,9 @@ class TestBuildSystemContext:
             patch.object(system_context, "list_claims", return_value=[claim]),
             patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
         ):
-            snapshot = build_system_context(tmp_path, context_name="generic", active_tool="codex", active_mode="mutating")
+            snapshot = build_system_context(
+                tmp_path, context_name="generic", active_tool="codex", active_mode="mutating"
+            )
 
         assert snapshot.handoff.exists is True
         assert snapshot.git.branch == "main"
@@ -126,7 +128,9 @@ class TestBuildSystemContext:
             patch.object(system_context, "list_claims", return_value=[relevant, unrelated]),
             patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
         ):
-            snapshot = build_system_context(current_root, context_name="generic", active_tool="codex", active_mode="mutating")
+            snapshot = build_system_context(
+                current_root, context_name="generic", active_tool="codex", active_mode="mutating"
+            )
 
         assert [claim.root for claim in snapshot.claims] == [str(current_root)]
 
@@ -163,7 +167,9 @@ class TestEvaluateSystemPolicy:
             patch.object(system_context.sys, "executable", "/usr/bin/python3"),
             patch.object(system_context.sys, "prefix", "/usr"),
         ):
-            snapshot = build_system_context(tmp_path, context_name="codex-wsl", active_tool="codex", active_mode="mutating")
+            snapshot = build_system_context(
+                tmp_path, context_name="codex-wsl", active_tool="codex", active_mode="mutating"
+            )
             decision = evaluate_system_policy(snapshot, "session_start_mutating")
 
         assert decision.allowed is False
@@ -189,6 +195,49 @@ class TestEvaluateSystemPolicy:
 
         assert decision.allowed is True
         assert any(issue.code == "active_stage_files" for issue in decision.warnings)
+
+    def test_orientation_warns_when_handoff_drifted_from_queue(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "# stale\n")
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: first",
+                    "    title: First thing",
+                    "    class: research",
+                    "    status: ready",
+                    "    priority: P1",
+                    "    close_before_new_work: true",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 2",
+                    "    next_action: Do first",
+                    "    exit_criteria: Finish first",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref: docs/runtime/stages/first.md",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        with (
+            patch.object(system_context, "_canonical_repo_root", return_value=(tmp_path, tmp_path / ".git")),
+            patch.object(system_context, "branch_name", return_value="main"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+            patch.object(system_context, "git_status_details", return_value=([], True, None)),
+            patch.object(system_context, "list_claims", return_value=[]),
+            patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
+        ):
+            snapshot = build_system_context(tmp_path, context_name="generic")
+            decision = evaluate_system_policy(snapshot, "orientation")
+
+        assert any(issue.code == "handoff_queue_mismatch" for issue in decision.warnings)
+        assert any(issue.code == "close_first_carryover" for issue in decision.warnings)
 
     def test_orientation_distinguishes_status_unavailable_from_dirty(self, tmp_path: Path) -> None:
         _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")

@@ -47,6 +47,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # -- Statistical helpers -------------------------------------------------------
 
+
 def ttest_1s(arr, mu=0.0):
     a = np.array(arr, dtype=float)
     a = a[~np.isnan(a)]
@@ -87,8 +88,7 @@ def fmt(label, n, avg_r, wr, t, p, sig=""):
     if np.isnan(avg_r):
         return f"  {label:<35} N<10 (skip)"
     s = "*** BH-SIG" if sig else ""
-    return (f"  {label:<35} N={n:>4}  avgR={avg_r:>+7.3f}  "
-            f"WR={wr:>5.1%}  t={t:>6.2f}  p={p:>7.4f}  {s}")
+    return f"  {label:<35} N={n:>4}  avgR={avg_r:>+7.3f}  WR={wr:>5.1%}  t={t:>6.2f}  p={p:>7.4f}  {s}"
 
 
 SEP = "-" * 72
@@ -96,8 +96,8 @@ SEP = "-" * 72
 
 # -- SQL builder ---------------------------------------------------------------
 
-def build_sql(instrument: str, orb_label: str, rr: float, cb: int,
-              model: str, orb_minutes: int = 5) -> str:
+
+def build_sql(instrument: str, orb_label: str, rr: float, cb: int, model: str, orb_minutes: int = 5) -> str:
     size_col = f"orb_{orb_label}_size"
     dir_col = f"orb_{orb_label}_break_dir"
 
@@ -204,9 +204,7 @@ ORDER BY f.trading_day
 def load(instrument, orb_label, rr, cb, model, orb_minutes=5):
     con = duckdb.connect(DB_PATH, read_only=True)
     try:
-        df = con.execute(
-            build_sql(instrument, orb_label, rr, cb, model, orb_minutes)
-        ).df()
+        df = con.execute(build_sql(instrument, orb_label, rr, cb, model, orb_minutes)).df()
     except Exception as e:
         print(f"  ERROR loading {instrument} {orb_label}: {e}")
         df = pd.DataFrame()
@@ -217,6 +215,7 @@ def load(instrument, orb_label, rr, cb, model, orb_minutes=5):
 
 # -- Analysis layers -----------------------------------------------------------
 
+
 def analyse(df: pd.DataFrame, config_label: str) -> list[dict]:
     """Full analysis: ATR velocity, compression, 9-combo interaction, year-by-year."""
     records = []
@@ -225,8 +224,7 @@ def analyse(df: pd.DataFrame, config_label: str) -> list[dict]:
     # L0: Baseline
     n, avg, wr, t, p = ttest_1s(df["pnl_r"])
     print(f"\n  Baseline ({config_label}): N={n}, avgR={avg:+.3f}, WR={wr:.1%}, p={p:.4f}")
-    records.append(dict(config=config_label, layer="L0_baseline", group="all",
-                        n=n, avg_r=avg, wr=wr, t=t, p=p))
+    records.append(dict(config=config_label, layer="L0_baseline", group="all", n=n, avg_r=avg, wr=wr, t=t, p=p))
 
     # L1: ATR Velocity alone
     print(f"\n{SEP}")
@@ -235,8 +233,7 @@ def analyse(df: pd.DataFrame, config_label: str) -> list[dict]:
     for regime in ["Expanding", "Stable", "Contracting"]:
         sub = df[df["atr_vel_regime"] == regime]["pnl_r"]
         n, avg, wr, t, p = ttest_1s(sub)
-        records.append(dict(config=config_label, layer="L1_atr_vel", group=regime,
-                            n=n, avg_r=avg, wr=wr, t=t, p=p))
+        records.append(dict(config=config_label, layer="L1_atr_vel", group=regime, n=n, avg_r=avg, wr=wr, t=t, p=p))
         print(fmt(f"  {regime}", n, avg, wr, t, p))
 
     # Expanding vs Contracting direct comparison
@@ -245,8 +242,18 @@ def analyse(df: pd.DataFrame, config_label: str) -> list[dict]:
         df[df["atr_vel_regime"] == "Contracting"]["pnl_r"],
     )
     print(f"  Expanding vs Contracting: t={t_ec:.2f}, p={p_ec:.4f}")
-    records.append(dict(config=config_label, layer="L1_exp_vs_con", group="vs",
-                        n=N, avg_r=float("nan"), wr=float("nan"), t=t_ec, p=p_ec))
+    records.append(
+        dict(
+            config=config_label,
+            layer="L1_exp_vs_con",
+            group="vs",
+            n=N,
+            avg_r=float("nan"),
+            wr=float("nan"),
+            t=t_ec,
+            p=p_ec,
+        )
+    )
 
     # L2: ORB Compression alone
     print(f"\n{SEP}")
@@ -255,8 +262,7 @@ def analyse(df: pd.DataFrame, config_label: str) -> list[dict]:
     for tier in ["Compressed", "Neutral", "Expanded"]:
         sub = df[df["compression_tier"] == tier]["pnl_r"]
         n, avg, wr, t, p = ttest_1s(sub)
-        records.append(dict(config=config_label, layer="L2_compression", group=tier,
-                            n=n, avg_r=avg, wr=wr, t=t, p=p))
+        records.append(dict(config=config_label, layer="L2_compression", group=tier, n=n, avg_r=avg, wr=wr, t=t, p=p))
         print(fmt(f"  {tier}", n, avg, wr, t, p))
 
     # L3: ATR Velocity x Compression (9 combos) -- the main test
@@ -265,13 +271,12 @@ def analyse(df: pd.DataFrame, config_label: str) -> list[dict]:
     print(SEP)
     for vel in ["Expanding", "Stable", "Contracting"]:
         for comp in ["Compressed", "Neutral", "Expanded"]:
-            sub = df[
-                (df["atr_vel_regime"] == vel) & (df["compression_tier"] == comp)
-            ]["pnl_r"]
+            sub = df[(df["atr_vel_regime"] == vel) & (df["compression_tier"] == comp)]["pnl_r"]
             n, avg, wr, t, p = ttest_1s(sub)
             group = f"{vel} x {comp}"
-            records.append(dict(config=config_label, layer="L3_vel_x_comp", group=group,
-                                n=n, avg_r=avg, wr=wr, t=t, p=p))
+            records.append(
+                dict(config=config_label, layer="L3_vel_x_comp", group=group, n=n, avg_r=avg, wr=wr, t=t, p=p)
+            )
             tag = ""
             if not np.isnan(avg):
                 if avg < -0.15 and n >= 20:
@@ -291,12 +296,33 @@ def analyse(df: pd.DataFrame, config_label: str) -> list[dict]:
     n_c, avg_c, wr_c, t_c, p_c = ttest_1s(con_r)
     n_r, avg_r_rest, wr_r, t_r, p_r = ttest_1s(rest_r)
     t_diff, p_diff = ttest_2s(con_r, rest_r)
-    records.append(dict(config=config_label, layer="L4_contracting_all", group="Contracting",
-                        n=n_c, avg_r=avg_c, wr=wr_c, t=t_c, p=p_c))
-    records.append(dict(config=config_label, layer="L4_rest", group="Rest",
-                        n=n_r, avg_r=avg_r_rest, wr=wr_r, t=t_r, p=p_r))
-    records.append(dict(config=config_label, layer="L4_con_vs_rest", group="vs",
-                        n=n_c + n_r, avg_r=float("nan"), wr=float("nan"), t=t_diff, p=p_diff))
+    records.append(
+        dict(
+            config=config_label,
+            layer="L4_contracting_all",
+            group="Contracting",
+            n=n_c,
+            avg_r=avg_c,
+            wr=wr_c,
+            t=t_c,
+            p=p_c,
+        )
+    )
+    records.append(
+        dict(config=config_label, layer="L4_rest", group="Rest", n=n_r, avg_r=avg_r_rest, wr=wr_r, t=t_r, p=p_r)
+    )
+    records.append(
+        dict(
+            config=config_label,
+            layer="L4_con_vs_rest",
+            group="vs",
+            n=n_c + n_r,
+            avg_r=float("nan"),
+            wr=float("nan"),
+            t=t_diff,
+            p=p_diff,
+        )
+    )
     print(fmt("  Contracting (all comp)", n_c, avg_c, wr_c, t_c, p_c))
     print(fmt("  Rest (Expanding+Stable)", n_r, avg_r_rest, wr_r, t_r, p_r))
     print(f"  Contracting vs Rest: t={t_diff:.2f}, p={p_diff:.4f}")
@@ -348,8 +374,9 @@ def sensitivity(df: pd.DataFrame, label: str) -> list[dict]:
     for vel_upper in [0.90, 0.92, 0.93, 0.95, 0.97, 0.98, 1.00]:
         sub = df[df["atr_vel_ratio"] < vel_upper]["pnl_r"]
         n, avg, wr, t, p = ttest_1s(sub)
-        records.append(dict(config=label, layer="sensitivity", group=f"vel<{vel_upper}",
-                            n=n, avg_r=avg, wr=wr, t=t, p=p))
+        records.append(
+            dict(config=label, layer="sensitivity", group=f"vel<{vel_upper}", n=n, avg_r=avg, wr=wr, t=t, p=p)
+        )
         print(fmt(f"  vel < {vel_upper}", n, avg, wr, t, p))
     return records
 
@@ -359,21 +386,27 @@ def sensitivity(df: pd.DataFrame, label: str) -> list[dict]:
 # Primary configs: MES strongest sessions with E1 and E2
 PRIMARY_CONFIGS = [
     # (instrument, orb_label, rr, cb, model, orb_min, label)
-    ("MES", "TOKYO_OPEN",     3.0, 1, "E2", 5,  "MES_TOKYO_E2_CB1_RR3_O5 [PRIMARY]"),
-    ("MES", "TOKYO_OPEN",     3.0, 1, "E1", 5,  "MES_TOKYO_E1_CB1_RR3_O5 [XCHECK]"),
-    ("MES", "NYSE_OPEN",      3.0, 1, "E2", 5,  "MES_NYSE_E2_CB1_RR3_O5 [PRIMARY]"),
-    ("MES", "NYSE_OPEN",      3.0, 1, "E1", 5,  "MES_NYSE_E1_CB1_RR3_O5 [XCHECK]"),
-    ("MES", "SINGAPORE_OPEN", 3.0, 1, "E2", 5,  "MES_SING_E2_CB1_RR3_O5 [PRIMARY]"),
-    ("MES", "SINGAPORE_OPEN", 3.0, 1, "E1", 5,  "MES_SING_E1_CB1_RR3_O5 [XCHECK]"),
+    ("MES", "TOKYO_OPEN", 3.0, 1, "E2", 5, "MES_TOKYO_E2_CB1_RR3_O5 [PRIMARY]"),
+    ("MES", "TOKYO_OPEN", 3.0, 1, "E1", 5, "MES_TOKYO_E1_CB1_RR3_O5 [XCHECK]"),
+    ("MES", "NYSE_OPEN", 3.0, 1, "E2", 5, "MES_NYSE_E2_CB1_RR3_O5 [PRIMARY]"),
+    ("MES", "NYSE_OPEN", 3.0, 1, "E1", 5, "MES_NYSE_E1_CB1_RR3_O5 [XCHECK]"),
+    ("MES", "SINGAPORE_OPEN", 3.0, 1, "E2", 5, "MES_SING_E2_CB1_RR3_O5 [PRIMARY]"),
+    ("MES", "SINGAPORE_OPEN", 3.0, 1, "E1", 5, "MES_SING_E1_CB1_RR3_O5 [XCHECK]"),
     # O15 cross-check on strongest session
-    ("MES", "TOKYO_OPEN",     3.0, 1, "E2", 15, "MES_TOKYO_E2_CB1_RR3_O15 [XCHECK]"),
-    ("MES", "NYSE_OPEN",      3.0, 1, "E2", 15, "MES_NYSE_E2_CB1_RR3_O15 [XCHECK]"),
+    ("MES", "TOKYO_OPEN", 3.0, 1, "E2", 15, "MES_TOKYO_E2_CB1_RR3_O15 [XCHECK]"),
+    ("MES", "NYSE_OPEN", 3.0, 1, "E2", 15, "MES_NYSE_E2_CB1_RR3_O15 [XCHECK]"),
 ]
 
 # Cross-session context: all remaining MES sessions at E2 CB1 RR3.0 O5
 CONTEXT_SESSIONS = [
-    "LONDON_METALS", "CME_REOPEN", "US_DATA_830", "US_DATA_1000",
-    "COMEX_SETTLE", "BRISBANE_1025", "CME_PRECLOSE", "NYSE_CLOSE",
+    "LONDON_METALS",
+    "CME_REOPEN",
+    "US_DATA_830",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "BRISBANE_1025",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
 ]
 
 
@@ -410,17 +443,21 @@ def run():
         # ATR regime distribution
         for r in ["Expanding", "Stable", "Contracting"]:
             n_r = (df["atr_vel_regime"] == r).sum()
-            print(f"    {r:<13}: {n_r:>4} ({n_r/len(df):.0%})")
+            print(f"    {r:<13}: {n_r:>4} ({n_r / len(df):.0%})")
 
         records = analyse(df, label)
         all_records.extend(records)
 
         yby_results, neg_yrs, valid_yrs = year_by_year(df, label)
-        yby_summaries.append(dict(
-            config=label, neg_years=neg_yrs, valid_years=valid_yrs,
-            pct_neg=neg_yrs / valid_yrs if valid_yrs else 0,
-            years=yby_results,
-        ))
+        yby_summaries.append(
+            dict(
+                config=label,
+                neg_years=neg_yrs,
+                valid_years=valid_yrs,
+                pct_neg=neg_yrs / valid_yrs if valid_yrs else 0,
+                years=yby_results,
+            )
+        )
 
         sens_records = sensitivity(df, label)
         all_records.extend(sens_records)
@@ -446,19 +483,21 @@ def run():
         # Baseline
         n_base, avg_base, wr_base, t_base, p_base = ttest_1s(df["pnl_r"])
         print(f"  Baseline: N={n_base}, avgR={avg_base:+.3f}, WR={wr_base:.1%}")
-        all_records.append(dict(config=label, layer="L0_baseline", group="all",
-                                n=n_base, avg_r=avg_base, wr=wr_base, t=t_base, p=p_base))
+        all_records.append(
+            dict(
+                config=label, layer="L0_baseline", group="all", n=n_base, avg_r=avg_base, wr=wr_base, t=t_base, p=p_base
+            )
+        )
 
         # 9 combos
         for vel in ["Expanding", "Stable", "Contracting"]:
             for comp in ["Compressed", "Neutral", "Expanded"]:
-                sub = df[
-                    (df["atr_vel_regime"] == vel) & (df["compression_tier"] == comp)
-                ]["pnl_r"]
+                sub = df[(df["atr_vel_regime"] == vel) & (df["compression_tier"] == comp)]["pnl_r"]
                 n, avg, wr, t, p = ttest_1s(sub)
                 group = f"{vel} x {comp}"
-                all_records.append(dict(config=label, layer="L3_vel_x_comp", group=group,
-                                        n=n, avg_r=avg, wr=wr, t=t, p=p))
+                all_records.append(
+                    dict(config=label, layer="L3_vel_x_comp", group=group, n=n, avg_r=avg, wr=wr, t=t, p=p)
+                )
                 tag = ""
                 if not np.isnan(avg):
                     if avg < -0.15 and n >= 20:
@@ -466,8 +505,7 @@ def run():
                     elif avg > 0.15 and n >= 20:
                         tag = " <-- BOOST?"
                 if not np.isnan(avg):
-                    print(f"    {group:<25}  N={n:>4}  avgR={avg:>+7.3f}  "
-                          f"WR={wr:>5.1%}  t={t:>6.2f}  p={p:.4f}{tag}")
+                    print(f"    {group:<25}  N={n:>4}  avgR={avg:>+7.3f}  WR={wr:>5.1%}  t={t:>6.2f}  p={p:.4f}{tag}")
                 else:
                     print(f"    {group:<25}  N={n:>4}  (skip)")
 
@@ -475,18 +513,25 @@ def run():
         con_mask = df["atr_vel_regime"] == "Contracting"
         con_r = df[con_mask]["pnl_r"]
         n_c, avg_c, wr_c, t_c, p_c = ttest_1s(con_r)
-        all_records.append(dict(config=label, layer="L4_contracting_all", group="Contracting",
-                                n=n_c, avg_r=avg_c, wr=wr_c, t=t_c, p=p_c))
+        all_records.append(
+            dict(
+                config=label, layer="L4_contracting_all", group="Contracting", n=n_c, avg_r=avg_c, wr=wr_c, t=t_c, p=p_c
+            )
+        )
         if not np.isnan(avg_c):
             print(f"    ** Contracting (all): N={n_c}, avgR={avg_c:+.3f}, WR={wr_c:.1%}, p={p_c:.4f}")
 
         # Year-by-year
         yby_results, neg_yrs, valid_yrs = year_by_year(df, label)
-        yby_summaries.append(dict(
-            config=label, neg_years=neg_yrs, valid_years=valid_yrs,
-            pct_neg=neg_yrs / valid_yrs if valid_yrs else 0,
-            years=yby_results,
-        ))
+        yby_summaries.append(
+            dict(
+                config=label,
+                neg_years=neg_yrs,
+                valid_years=valid_yrs,
+                pct_neg=neg_yrs / valid_yrs if valid_yrs else 0,
+                years=yby_results,
+            )
+        )
 
     # -- PART 3: Global BH FDR -------------------------------------------------
     print("\n\n" + "=" * 72)
@@ -523,16 +568,20 @@ def run():
     if avoid_survivors:
         print("\n  AVOID signals (BH-sig, avgR < -0.10):")
         for r in sorted(avoid_survivors, key=lambda x: x.get("avg_r", 0)):
-            print(f"    [{r['config']:<45}]  {r['group']:<25}  "
-                  f"N={r['n']:>4}  avgR={r['avg_r']:>+7.3f}  WR={r['wr']:.1%}  p={r['p']:.4f}")
+            print(
+                f"    [{r['config']:<45}]  {r['group']:<25}  "
+                f"N={r['n']:>4}  avgR={r['avg_r']:>+7.3f}  WR={r['wr']:.1%}  p={r['p']:.4f}"
+            )
     else:
         print("\n  No AVOID signals survived BH FDR.")
 
     if boost_survivors:
         print("\n  BOOST signals (BH-sig, avgR > +0.10):")
         for r in sorted(boost_survivors, key=lambda x: -x.get("avg_r", 0)):
-            print(f"    [{r['config']:<45}]  {r['group']:<25}  "
-                  f"N={r['n']:>4}  avgR={r['avg_r']:>+7.3f}  WR={r['wr']:.1%}  p={r['p']:.4f}")
+            print(
+                f"    [{r['config']:<45}]  {r['group']:<25}  "
+                f"N={r['n']:>4}  avgR={r['avg_r']:>+7.3f}  WR={r['wr']:.1%}  p={r['p']:.4f}"
+            )
 
     if other_survivors:
         print("\n  Other BH-sig (comparison tests):")
@@ -546,8 +595,7 @@ def run():
     print("=" * 72)
     print(f"  {'Config':<50} {'Neg':>4} {'Tot':>4} {'Hit%':>6}")
     for s in yby_summaries:
-        print(f"  {s['config']:<50} {s['neg_years']:>4} {s['valid_years']:>4} "
-              f"{s['pct_neg']:>6.0%}")
+        print(f"  {s['config']:<50} {s['neg_years']:>4} {s['valid_years']:>4} {s['pct_neg']:>6.0%}")
 
     # -- PART 5: Anomaly scan ---------------------------------------------------
     print("\n\n" + "=" * 72)
@@ -564,8 +612,7 @@ def run():
         combo = r["group"]
         combo_results.setdefault(combo, []).append(r["avg_r"])
 
-    print(f"\n  {'Combo':<25}  {'Sessions':>8}  {'% neg':>6}  {'% pos':>6}  "
-          f"{'Med avgR':>9}  {'Verdict'}")
+    print(f"\n  {'Combo':<25}  {'Sessions':>8}  {'% neg':>6}  {'% pos':>6}  {'Med avgR':>9}  {'Verdict'}")
 
     for combo, avg_rs in sorted(combo_results.items(), key=lambda x: np.median(x[1])):
         n_sess = len(avg_rs)
@@ -587,8 +634,7 @@ def run():
         elif pct_pos >= 0.60 and med_r > 0.10:
             verdict = "(weak boost)"
 
-        print(f"  {combo:<25}  {n_sess:>8}  {pct_neg:>6.0%}  {pct_pos:>6.0%}  "
-              f"{med_r:>+9.3f}  {verdict}")
+        print(f"  {combo:<25}  {n_sess:>8}  {pct_neg:>6.0%}  {pct_pos:>6.0%}  {med_r:>+9.3f}  {verdict}")
 
     # -- PART 6: Honest summary ------------------------------------------------
     print("\n\n" + "=" * 72)
@@ -601,8 +647,10 @@ def run():
     if n_avoid > 0:
         print(f"\n  SURVIVED BH FDR: {n_avoid} AVOID signal(s)")
         for r in avoid_survivors:
-            print(f"    {r['config']} | {r['group']} | N={r['n']} | "
-                  f"avgR={r['avg_r']:+.3f} | WR={r['wr']:.1%} | p={r['p']:.4f}")
+            print(
+                f"    {r['config']} | {r['group']} | N={r['n']} | "
+                f"avgR={r['avg_r']:+.3f} | WR={r['wr']:.1%} | p={r['p']:.4f}"
+            )
     else:
         print("\n  NO AVOID signals survived BH FDR at q=0.10")
 
@@ -660,9 +708,7 @@ def run():
         for yr, n_yr, avg_yr in s.get("years", []):
             yby_rows.append(dict(config=s["config"], year=yr, n=n_yr, avg_r=avg_yr))
     if yby_rows:
-        pd.DataFrame(yby_rows).to_csv(
-            OUTPUT_DIR / "mes_compressed_spring_yearly.csv", index=False
-        )
+        pd.DataFrame(yby_rows).to_csv(OUTPUT_DIR / "mes_compressed_spring_yearly.csv", index=False)
 
     print(f"\n  Output: {OUTPUT_DIR}/mes_compressed_spring_*.csv")
     print()

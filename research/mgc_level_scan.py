@@ -60,9 +60,18 @@ from research.comprehensive_deployed_lane_scan import (  # type: ignore  # noqa:
 
 SEED = 20260415
 SESSIONS = [
-    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-    "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE", "BRISBANE_1025",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "EUROPE_FLOW",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
+    "BRISBANE_1025",
 ]
 APERTURES = [5, 15, 30]
 RRS = [1.0, 1.5, 2.0]
@@ -231,18 +240,14 @@ def emit(res: pd.DataFrame) -> None:
 
     trustworthy = res[(~res["extreme_fire"]) & (~res["arithmetic_only"])].copy()
     strict = trustworthy[
-        (trustworthy["t_is"].abs() >= 3.0)
-        & (trustworthy["dir_match"])
-        & (trustworthy["n_on_is"] >= 50)
+        (trustworthy["t_is"].abs() >= 3.0) & (trustworthy["dir_match"]) & (trustworthy["n_on_is"] >= 50)
     ].copy()
     bh_global = trustworthy[trustworthy["bh_pass_global"]].copy()
     bh_family = trustworthy[trustworthy["bh_pass_family"]].copy()
     bh_lane = trustworthy[trustworthy["bh_pass_lane"]].copy()
     bh_session = trustworthy[trustworthy["bh_pass_session"]].copy()
     promising = trustworthy[
-        (trustworthy["t_is"].abs() >= 2.5)
-        & (trustworthy["dir_match"])
-        & (trustworthy["n_on_is"] >= 50)
+        (trustworthy["t_is"].abs() >= 2.5) & (trustworthy["dir_match"]) & (trustworthy["n_on_is"] >= 50)
     ].copy()
 
     lines = [
@@ -375,11 +380,15 @@ def emit(res: pd.DataFrame) -> None:
 
     OUTPUT_MD.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n[report] {OUTPUT_MD}")
-    print(f"  Strict: {len(strict)}, BH_g: {len(bh_global)}, BH_f: {len(bh_family)}, BH_l: {len(bh_lane)}, Promising: {len(promising)}")
+    print(
+        f"  Strict: {len(strict)}, BH_g: {len(bh_global)}, BH_f: {len(bh_family)}, BH_l: {len(bh_lane)}, Promising: {len(promising)}"
+    )
 
 
 def main():
-    print(f"MGC level scan — {len(SESSIONS)} sessions × {len(APERTURES)} apts × {len(RRS)} RRs × 14 features × 2 directions")
+    print(
+        f"MGC level scan — {len(SESSIONS)} sessions × {len(APERTURES)} apts × {len(RRS)} RRs × 14 features × 2 directions"
+    )
     all_rows = []
     combos_tested = 0
     combos_skipped = 0

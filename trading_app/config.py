@@ -173,8 +173,7 @@ def _e2_look_ahead_reason(filter_type: str) -> str | None:
     # module has finished importing before describe() is invoked.
     if filter_type.startswith(E2_EXCLUDED_FILTER_PREFIXES):
         return (
-            f"E2 look-ahead: filter_type '{filter_type}' depends on break-bar "
-            f"properties unknown at E2 entry placement"
+            f"E2 look-ahead: filter_type '{filter_type}' depends on break-bar properties unknown at E2 entry placement"
         )
     if is_e2_lookahead_filter(filter_type):
         for sub in E2_EXCLUDED_FILTER_SUBSTRINGS:
@@ -250,6 +249,7 @@ class AtomDescription:
     error_message: str | None = None
     size_multiplier: float = 1.0
     explanation: str = ""
+
 
 # ── Noise ExpR floor per entry model ──────────────────────────────────────
 # NO LONGER A HARD GATE (2026-03-21). Phase 2b removed from strategy_validator.
@@ -653,9 +653,7 @@ class CostRatioFilter(StrategyFilter):
             try:
                 cost_spec = get_cost_spec(str(symbol))
                 raw_risk = size * cost_spec.point_value
-                observed_ratio = (
-                    100.0 * cost_spec.total_friction / (raw_risk + cost_spec.total_friction)
-                )
+                observed_ratio = 100.0 * cost_spec.total_friction / (raw_risk + cost_spec.total_friction)
             except ValueError:
                 missing = True
                 observed_ratio = None
@@ -769,8 +767,7 @@ class VolumeFilter(StrategyFilter):
                 comparator=">=",
                 is_data_missing=missing,
                 explanation=(
-                    f"Require break-bar relative volume >= {self.min_rel_vol:g}x baseline "
-                    f"(breakout conviction gate)."
+                    f"Require break-bar relative volume >= {self.min_rel_vol:g}x baseline (breakout conviction gate)."
                 ),
             )
         ]
@@ -849,10 +846,7 @@ class CombinedATRVolumeFilter(VolumeFilter):
             threshold=self.min_atr_pct,
             comparator=">=",
             is_data_missing=atr_missing,
-            explanation=(
-                f"Require own ATR-20 rolling percentile >= {self.min_atr_pct:g}% "
-                f"(high-vol regime gate)."
-            ),
+            explanation=(f"Require own ATR-20 rolling percentile >= {self.min_atr_pct:g}% (high-vol regime gate)."),
         )
 
         # Atom 2: rel_vol (E2-excluded via filter_type prefix)
@@ -891,9 +885,7 @@ class CombinedATRVolumeFilter(VolumeFilter):
             threshold=self.min_rel_vol,
             comparator=">=",
             is_data_missing=vol_missing,
-            explanation=(
-                f"Require break-bar relative volume >= {self.min_rel_vol:g}x baseline."
-            ),
+            explanation=(f"Require break-bar relative volume >= {self.min_rel_vol:g}x baseline."),
         )
         return [atr_atom, vol_atom]
 
@@ -1202,8 +1194,7 @@ class OwnATRPercentileFilter(StrategyFilter):
                 comparator=">=",
                 is_data_missing=missing,
                 explanation=(
-                    f"Require own-instrument ATR-20 rolling percentile "
-                    f">= {self.min_pct:g}% (own-vol regime gate)."
+                    f"Require own-instrument ATR-20 rolling percentile >= {self.min_pct:g}% (own-vol regime gate)."
                 ),
             )
         ]
@@ -1262,8 +1253,7 @@ class OvernightRangeFilter(StrategyFilter):
                 comparator=">=",
                 is_data_missing=missing,
                 explanation=(
-                    f"Require overnight range rolling percentile >= {self.min_pct:g}% "
-                    f"(Asian-session activity gate)."
+                    f"Require overnight range rolling percentile >= {self.min_pct:g}% (Asian-session activity gate)."
                 ),
             )
         ]
@@ -1313,10 +1303,7 @@ class GARCHForecastVolPctFilter(StrategyFilter):
 
     def __post_init__(self):
         if self.direction not in ("low", "high"):
-            raise ValueError(
-                f"GARCHForecastVolPctFilter direction must be 'low' or 'high', "
-                f"got {self.direction!r}"
-            )
+            raise ValueError(f"GARCHForecastVolPctFilter direction must be 'low' or 'high', got {self.direction!r}")
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         _ = orb_label
@@ -1541,8 +1528,7 @@ class PrevDayRangeNormFilter(StrategyFilter):
                 )
             elif raw_atr is not None and atr is None and not _atom_is_missing(raw_atr):
                 error_message = (
-                    f"PDR: type mismatch on atr_20 — expected numeric, "
-                    f"got {type(raw_atr).__name__}({raw_atr!r})"
+                    f"PDR: type mismatch on atr_20 — expected numeric, got {type(raw_atr).__name__}({raw_atr!r})"
                 )
         elif atr <= 0:
             missing = True
@@ -1570,11 +1556,250 @@ class PrevDayRangeNormFilter(StrategyFilter):
                 confidence_tier=self.CONFIDENCE_TIER,
                 error_message=error_message,
                 explanation=(
-                    f"Require prior-day range normalized by ATR-20 "
-                    f">= {self.min_ratio:g} (prior-day expansion gate)."
+                    f"Require prior-day range normalized by ATR-20 >= {self.min_ratio:g} (prior-day expansion gate)."
                 ),
             )
         ]
+
+
+@dataclass(frozen=True)
+class PrevDayGeometryFilter(StrategyFilter):
+    """Filter by ORB-mid geometry relative to prior-day levels.
+
+    Canonical, hypothesis-scoped exact cells:
+
+    - ``below_pdl_long``: ORB midpoint is below prior-day low AND session
+      break direction is long.
+    - ``downside_displacement_long``: ORB midpoint is below prior-day low OR
+      within 0.15 ATR-20 of prior-day low, with long break direction.
+    - ``clear_of_congestion_long``: ORB midpoint is neither strictly inside
+      the prior-day range nor within 0.50 ATR-20 of the prior-day pivot, with
+      long break direction.
+    - ``go_long_context``: ORB midpoint is either in the downside
+      displacement family or outside the prior-day congestion regime, with
+      long break direction.
+    - ``inside_pdr_long``: ORB midpoint lies strictly inside the prior-day
+      range AND session break direction is long.
+    - ``near_pivot_long_50``: ORB midpoint is within 0.50 ATR-20 of the
+      prior-day pivot AND session break direction is long.
+
+    These are ORB-end / pre-break safe predicates. Prior-day levels are fixed
+    before the session starts; ORB high/low and break direction are known by
+    ORB formation / first break detection. The filter itself owns the
+    direction restriction so Phase-4 discovery does not silently widen the
+    research cell to short breaks.
+    """
+
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 22)
+    CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
+
+    mode: str
+
+    def __post_init__(self) -> None:
+        if self.mode not in (
+            "below_pdl_long",
+            "downside_displacement_long",
+            "clear_of_congestion_long",
+            "go_long_context",
+            "inside_pdr_long",
+            "near_pivot_long_50",
+        ):
+            raise ValueError(f"PrevDayGeometryFilter mode must be a supported exact geometry mode, got {self.mode!r}")
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        hi = row.get(f"orb_{orb_label}_high")
+        lo = row.get(f"orb_{orb_label}_low")
+        break_dir = row.get(f"orb_{orb_label}_break_dir")
+        pdh = row.get("prev_day_high")
+        pdl = row.get("prev_day_low")
+        pdc = row.get("prev_day_close")
+        atr = row.get("atr_20")
+        if hi is None or lo is None or pdh is None or pdl is None or break_dir != "long":
+            return False
+        orb_mid = (hi + lo) / 2.0
+        if self.mode == "below_pdl_long":
+            return orb_mid < pdl
+        if self.mode == "downside_displacement_long":
+            if atr is None or atr <= 0:
+                return False
+            return orb_mid < pdl or abs(orb_mid - pdl) / atr < 0.15
+        if self.mode == "clear_of_congestion_long":
+            if pdc is None or atr is None or atr <= 0:
+                return False
+            pivot = (pdh + pdl + pdc) / 3.0
+            inside_pdr = pdl < orb_mid < pdh
+            near_pivot = abs(orb_mid - pivot) / atr < 0.50
+            return not (inside_pdr or near_pivot)
+        if self.mode == "go_long_context":
+            if pdc is None or atr is None or atr <= 0:
+                return False
+            pivot = (pdh + pdl + pdc) / 3.0
+            downside_displacement = orb_mid < pdl or abs(orb_mid - pdl) / atr < 0.15
+            inside_pdr = pdl < orb_mid < pdh
+            near_pivot = abs(orb_mid - pivot) / atr < 0.50
+            clear_of_congestion = not (inside_pdr or near_pivot)
+            return downside_displacement or clear_of_congestion
+        if self.mode == "inside_pdr_long":
+            return pdl < orb_mid < pdh
+        if pdc is None or atr is None or atr <= 0:
+            return False
+        pivot = (pdh + pdl + pdc) / 3.0
+        return abs(orb_mid - pivot) / atr < 0.50
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        hi = df.get(f"orb_{orb_label}_high")
+        lo = df.get(f"orb_{orb_label}_low")
+        bd = df.get(f"orb_{orb_label}_break_dir")
+        pdh = df.get("prev_day_high")
+        pdl = df.get("prev_day_low")
+        pdc = df.get("prev_day_close")
+        atr = df.get("atr_20")
+        if hi is None or lo is None or bd is None or pdh is None or pdl is None:
+            return pd.Series(False, index=df.index)
+
+        valid = hi.notna() & lo.notna() & pdh.notna() & pdl.notna() & bd.eq("long")
+        orb_mid = (hi + lo) / 2.0
+        if self.mode == "below_pdl_long":
+            return valid & (orb_mid < pdl)
+        if self.mode == "downside_displacement_long":
+            if atr is None:
+                return pd.Series(False, index=df.index)
+            valid = valid & atr.notna() & (atr > 0)
+            return valid & ((orb_mid < pdl) | (((orb_mid - pdl).abs() / atr) < 0.15))
+        if self.mode == "clear_of_congestion_long":
+            if pdc is None or atr is None:
+                return pd.Series(False, index=df.index)
+            valid = valid & pdc.notna() & atr.notna() & (atr > 0)
+            pivot = (pdh + pdl + pdc) / 3.0
+            inside_pdr = (orb_mid > pdl) & (orb_mid < pdh)
+            near_pivot = ((orb_mid - pivot).abs() / atr) < 0.50
+            return valid & ~(inside_pdr | near_pivot)
+        if self.mode == "go_long_context":
+            if pdc is None or atr is None:
+                return pd.Series(False, index=df.index)
+            valid = valid & pdc.notna() & atr.notna() & (atr > 0)
+            pivot = (pdh + pdl + pdc) / 3.0
+            downside_displacement = (orb_mid < pdl) | (((orb_mid - pdl).abs() / atr) < 0.15)
+            inside_pdr = (orb_mid > pdl) & (orb_mid < pdh)
+            near_pivot = ((orb_mid - pivot).abs() / atr) < 0.50
+            clear_of_congestion = ~(inside_pdr | near_pivot)
+            return valid & (downside_displacement | clear_of_congestion)
+        if self.mode == "inside_pdr_long":
+            return valid & (orb_mid > pdl) & (orb_mid < pdh)
+        if pdc is None or atr is None:
+            return pd.Series(False, index=df.index)
+        valid = valid & pdc.notna() & atr.notna() & (atr > 0)
+        pivot = (pdh + pdl + pdc) / 3.0
+        return valid & ((orb_mid - pivot).abs() / atr < 0.50)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        _ = entry_model
+        hi = _atom_numeric(row.get(f"orb_{orb_label}_high"))
+        lo = _atom_numeric(row.get(f"orb_{orb_label}_low"))
+        pdh = _atom_numeric(row.get("prev_day_high"))
+        pdl = _atom_numeric(row.get("prev_day_low"))
+        pdc = _atom_numeric(row.get("prev_day_close"))
+        atr = _atom_numeric(row.get("atr_20"))
+        break_dir = row.get(f"orb_{orb_label}_break_dir")
+
+        observed_value: str | None = None
+        error_message: str | None = None
+        missing = False
+
+        if hi is None or lo is None or pdh is None or pdl is None:
+            missing = True
+        elif break_dir != "long":
+            observed_value = f"break_dir={break_dir!r}"
+        elif self.mode in {
+            "downside_displacement_long",
+            "clear_of_congestion_long",
+            "go_long_context",
+            "near_pivot_long_50",
+        }:
+            if atr is None or atr <= 0:
+                missing = True
+                if atr is not None and atr <= 0:
+                    error_message = f"PrevDayGeometry: invalid atr_20={atr!r} (must be > 0)"
+            elif self.mode in {"clear_of_congestion_long", "go_long_context", "near_pivot_long_50"} and pdc is None:
+                missing = True
+
+        state = None if missing else self._compute_state(row, orb_label)
+        passes = None if missing else state is not None and state.startswith("TAKE")
+        observed_value = observed_value or state
+
+        return [
+            AtomDescription(
+                name=f"Prior-day geometry ({self.filter_type})",
+                category="PRE_SESSION",
+                resolves_at="ORB_FORMATION",
+                passes=passes,
+                feature_column="prev_day_low",
+                observed_value=observed_value,
+                threshold="TAKE_*",
+                comparator="in",
+                is_data_missing=missing,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
+                error_message=error_message,
+                explanation=(
+                    "Prior-day geometry family on ORB midpoint with built-in long-break "
+                    "restriction. Registered as exact, hypothesis-scoped canonical filters."
+                ),
+            )
+        ]
+
+    def _compute_state(self, row: dict, orb_label: str) -> str | None:
+        hi = row.get(f"orb_{orb_label}_high")
+        lo = row.get(f"orb_{orb_label}_low")
+        break_dir = row.get(f"orb_{orb_label}_break_dir")
+        pdh = row.get("prev_day_high")
+        pdl = row.get("prev_day_low")
+        pdc = row.get("prev_day_close")
+        atr = row.get("atr_20")
+        if hi is None or lo is None or pdh is None or pdl is None or break_dir != "long":
+            return None
+        orb_mid = (hi + lo) / 2.0
+        if self.mode == "below_pdl_long":
+            return "TAKE_BELOW_PDL" if orb_mid < pdl else "VETO_NOT_BELOW_PDL"
+        if self.mode == "downside_displacement_long":
+            if atr is None or atr <= 0:
+                return None
+            return (
+                "TAKE_DOWNSIDE_DISPLACEMENT"
+                if (orb_mid < pdl or abs(orb_mid - pdl) / atr < 0.15)
+                else "VETO_NO_DOWNSIDE_DISPLACEMENT"
+            )
+        if self.mode == "clear_of_congestion_long":
+            if pdc is None or atr is None or atr <= 0:
+                return None
+            pivot = (pdh + pdl + pdc) / 3.0
+            inside_pdr = pdl < orb_mid < pdh
+            near_pivot = abs(orb_mid - pivot) / atr < 0.50
+            return "TAKE_CLEAR_OF_CONGESTION" if not (inside_pdr or near_pivot) else "VETO_CONGESTED"
+        if self.mode == "go_long_context":
+            if pdc is None or atr is None or atr <= 0:
+                return None
+            pivot = (pdh + pdl + pdc) / 3.0
+            downside_displacement = orb_mid < pdl or abs(orb_mid - pdl) / atr < 0.15
+            inside_pdr = pdl < orb_mid < pdh
+            near_pivot = abs(orb_mid - pivot) / atr < 0.50
+            clear_of_congestion = not (inside_pdr or near_pivot)
+            return (
+                "TAKE_GO_LONG_CONTEXT" if (downside_displacement or clear_of_congestion) else "VETO_NO_GO_LONG_CONTEXT"
+            )
+        if self.mode == "inside_pdr_long":
+            return "TAKE_INSIDE_PDR" if pdl < orb_mid < pdh else "VETO_NOT_INSIDE_PDR"
+        if pdc is None or atr is None or atr <= 0:
+            return None
+        pivot = (pdh + pdl + pdc) / 3.0
+        return "TAKE_NEAR_PIVOT_50" if abs(orb_mid - pivot) / atr < 0.50 else "VETO_NOT_NEAR_PIVOT_50"
 
 
 @dataclass(frozen=True)
@@ -1602,9 +1827,7 @@ class GapNormFilter(StrategyFilter):
     """
 
     # ── Canonical research metadata (ClassVar) ──────────────────────────
-    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (
-        ("MGC", "CME_REOPEN"),
-    )
+    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (("MGC", "CME_REOPEN"),)
     LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 2)
     CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
@@ -1655,8 +1878,7 @@ class GapNormFilter(StrategyFilter):
                 )
             elif raw_atr is not None and atr is None and not _atom_is_missing(raw_atr):
                 error_message = (
-                    f"GAP: type mismatch on atr_20 — expected numeric, "
-                    f"got {type(raw_atr).__name__}({raw_atr!r})"
+                    f"GAP: type mismatch on atr_20 — expected numeric, got {type(raw_atr).__name__}({raw_atr!r})"
                 )
         elif atr <= 0:
             missing = True
@@ -1685,8 +1907,7 @@ class GapNormFilter(StrategyFilter):
                 confidence_tier=self.CONFIDENCE_TIER,
                 error_message=error_message,
                 explanation=(
-                    f"Require absolute overnight gap normalized by ATR-20 "
-                    f">= {self.min_ratio:g} (gap-shock gate)."
+                    f"Require absolute overnight gap normalized by ATR-20 >= {self.min_ratio:g} (gap-shock gate)."
                 ),
             )
         ]
@@ -1899,10 +2120,7 @@ class DayOfWeekSkipFilter(StrategyFilter):
                 comparator="not in",
                 is_data_missing=missing,
                 confidence_tier=self._confidence_tier(),
-                explanation=(
-                    f"Skip trading on day_of_week {skip_list} "
-                    f"(0=Mon, 6=Sun, Python weekday convention)."
-                ),
+                explanation=(f"Skip trading on day_of_week {skip_list} (0=Mon, 6=Sun, Python weekday convention)."),
             )
         ]
 
@@ -2019,8 +2237,7 @@ class ATRVelocityFilter(StrategyFilter):
                     last_revalidated=self.LAST_REVALIDATED,
                     confidence_tier=self.CONFIDENCE_TIER,
                     explanation=(
-                        "ATR velocity overlay: skip when ATR is actively "
-                        "contracting AND the ORB is Neutral/Compressed."
+                        "ATR velocity overlay: skip when ATR is actively contracting AND the ORB is Neutral/Compressed."
                     ),
                 )
             ]
@@ -2115,10 +2332,7 @@ class DoubleBreakFilter(StrategyFilter):
                     "entry). Cannot be used as a real-time gate. Removed from "
                     "production discovery 2026-02."
                 ),
-                explanation=(
-                    "Deprecated filter — kept only for backward-compat with "
-                    "legacy strategy ids."
-                ),
+                explanation=("Deprecated filter — kept only for backward-compat with legacy strategy ids."),
             )
         ]
 
@@ -2227,8 +2441,7 @@ class BreakSpeedFilter(StrategyFilter):
                 last_revalidated=self.LAST_REVALIDATED,
                 confidence_tier=self.CONFIDENCE_TIER,
                 explanation=(
-                    f"Require break within {self.max_delay_min:g} minutes of ORB end "
-                    f"(momentum conviction gate)."
+                    f"Require break within {self.max_delay_min:g} minutes of ORB end (momentum conviction gate)."
                 ),
             )
         ]
@@ -2322,10 +2535,7 @@ class BreakBarContinuesFilter(StrategyFilter):
                 comparator="==",
                 is_data_missing=missing,
                 confidence_tier=self.CONFIDENCE_TIER,
-                explanation=(
-                    "Require the break bar to close in the break direction "
-                    "(conviction gate)."
-                ),
+                explanation=("Require the break bar to close in the break direction (conviction gate)."),
             )
         ]
 
@@ -2456,8 +2666,7 @@ class VWAPBreakDirectionFilter(StrategyFilter):
     def __post_init__(self) -> None:
         if self.definition not in ("orb_mid", "break_price"):
             raise ValueError(
-                f"VWAPBreakDirectionFilter definition must be 'orb_mid' or "
-                f"'break_price', got '{self.definition}'"
+                f"VWAPBreakDirectionFilter definition must be 'orb_mid' or 'break_price', got '{self.definition}'"
             )
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
@@ -2896,6 +3105,53 @@ MGC_VOLUME_FILTERS = {
 # BASE_GRID_FILTERS (always included)" invariant.
 # =========================================================================
 _HYPOTHESIS_SCOPED_FILTERS: dict[str, StrategyFilter] = {
+    # Exact MNQ prior-day geometry bridge candidate (Apr 2026).
+    # Read-only candidate-board rerun found this as the strongest new
+    # avoid-state on the live-adjacent US_DATA_1000 RR1.0 long parent lane.
+    # Registered here for Phase 4 hypothesis-file injection only; not part of
+    # the legacy base grid.
+    # @research-source research/mnq_layered_candidate_board_v1.py
+    # @entry-models E2
+    "F3_NEAR_PIVOT_50": PrevDayGeometryFilter(
+        filter_type="F3_NEAR_PIVOT_50",
+        description="Long ORB midpoint near prior-day pivot (0.50 ATR)",
+        mode="near_pivot_long_50",
+    ),
+    # Exact broader-family follow-up (Apr 2026): downside displacement on the
+    # live-adjacent MNQ US_DATA_1000 RR1.0 long parent lane.
+    # Read-only family board found the OR-union of BELOW_PDL and NEAR_PDL_15
+    # as the strongest broader take-state among the bounded MNQ prior-day
+    # families. Registered here for Phase 4 hypothesis-file injection only.
+    # @research-source research/mnq_prior_day_family_board_v1.py
+    # @entry-models E2
+    "PD_DISPLACE_LONG": PrevDayGeometryFilter(
+        filter_type="PD_DISPLACE_LONG",
+        description="Long ORB midpoint below or near prior-day low (0.15 ATR)",
+        mode="downside_displacement_long",
+    ),
+    # Exact broader-family follow-up (Apr 2026): take the complement of the
+    # prior-day congestion family on the same live-adjacent MNQ parent lane.
+    # Read-only family board found the congestion-on state to be toxic and the
+    # non-congested complement to be the economically positive side.
+    # Registered here for Phase 4 hypothesis-file injection only.
+    # @research-source research/mnq_prior_day_family_board_v1.py
+    # @entry-models E2
+    "PD_CLEAR_LONG": PrevDayGeometryFilter(
+        filter_type="PD_CLEAR_LONG",
+        description="Long ORB midpoint outside prior-day congestion regime",
+        mode="clear_of_congestion_long",
+    ),
+    # Exact broader-family follow-up (Apr 2026): positive union of the two
+    # validated prior-day geometry families on the live-adjacent MNQ parent
+    # lane. Registered here for Phase 4 hypothesis-file injection only.
+    # @research-source docs/audit/results/2026-04-22-mnq-usdata1000-downside-displacement-take-v1.md
+    # @research-source docs/audit/results/2026-04-22-mnq-usdata1000-clear-of-congestion-take-v1.md
+    # @entry-models E2
+    "PD_GO_LONG": PrevDayGeometryFilter(
+        filter_type="PD_GO_LONG",
+        description="Long ORB midpoint in validated positive prior-day context",
+        mode="go_long_context",
+    ),
     # Wave 4 Phase B T2-T8 survivor: ATR velocity ratio (expansion gate)
     # Tested at 2026-04-11 on post-Phase-3c data. 2/11 shortlist combos survived
     # full T3+T4+T6+T7 battery with in_ExpR > 0.05 (MNQ TOKYO_OPEN RR1.0,
@@ -3534,6 +3790,16 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         # (Criterion 8 OOS negative, era 2023 fails)
     if instrument == "MNQ" and session == "EUROPE_FLOW":
         filters["CROSS_SGP_MOMENTUM"] = ALL_FILTERS["CROSS_SGP_MOMENTUM"]
+
+    # Active prior-day geometry families must stay canonical-routable on the
+    # exact MNQ parent lanes where they were validated and promoted.
+    # Do not widen these routes without a separate prereg / validation pass.
+    _pd_geometry_routes = {
+        ("MNQ", "US_DATA_1000"): ("PD_DISPLACE_LONG", "PD_CLEAR_LONG", "PD_GO_LONG"),
+        ("MNQ", "COMEX_SETTLE"): ("PD_CLEAR_LONG",),
+    }
+    for filter_key in _pd_geometry_routes.get((instrument, session), ()):
+        filters[filter_key] = ALL_FILTERS[filter_key]
 
     # Pit range anti-filter: skip dead-pit days at CME_REOPEN (Apr 2026).
     # VALIDATED: 3/3 instruments pass T1-T8, BH FDR at K=320, +17% WR spread.

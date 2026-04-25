@@ -21,6 +21,8 @@ from uuid import uuid4
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from pipeline.work_queue import WorkQueueSnapshot, queue_snapshot
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ACTIVE_SESSION_DIR = Path(
     os.environ.get(
@@ -118,6 +120,7 @@ class SystemContext(StrictModel):
     active_tool: str | None = None
     active_mode: SessionMode = "read-only"
     handoff: HandoffSnapshot
+    work_queue: WorkQueueSnapshot
     git: GitContext
     interpreter: InterpreterContext
     db: DbContext
@@ -475,6 +478,7 @@ def _build_authority_context(db_path: Path) -> AuthorityContext:
     active_profiles: list[str] = []
     try:
         import importlib
+
         _mod = importlib.import_module("trading_app.prop_profiles")
         active_profiles = sorted(_mod.get_active_profile_ids())
     except (ImportError, AttributeError):
@@ -573,6 +577,7 @@ def build_system_context(
         active_tool=active_tool,
         active_mode=active_mode,
         handoff=_extract_handoff_snapshot(selected_root / "HANDOFF.md"),
+        work_queue=queue_snapshot(selected_root),
         git=git,
         interpreter=_build_interpreter_context(selected_root, context_name),
         db=DbContext(
@@ -637,7 +642,12 @@ def evaluate_system_policy(snapshot: SystemContext, action: PolicyAction) -> Pol
     warnings: list[PolicyIssue] = []
     infos: list[PolicyIssue] = []
 
-    applicable_authorities = ["HANDOFF.md", *snapshot.authority.doctrine_docs, snapshot.authority.authority_map_doc]
+    applicable_authorities = [
+        "HANDOFF.md",
+        "docs/runtime/action-queue.yaml",
+        *snapshot.authority.doctrine_docs,
+        snapshot.authority.authority_map_doc,
+    ]
     applicable_controls = [
         "pipeline/check_drift.py",
         "scripts/tools/session_preflight.py",
@@ -648,6 +658,40 @@ def evaluate_system_policy(snapshot: SystemContext, action: PolicyAction) -> Pol
 
     if not snapshot.handoff.exists:
         warnings.append(_issue("warning", "handoff_missing", "HANDOFF.md missing."))
+    elif snapshot.work_queue.exists and snapshot.work_queue.handoff_matches_rendered is False:
+        warnings.append(
+            _issue(
+                "warning",
+                "handoff_queue_mismatch",
+                "HANDOFF.md no longer matches the canonical action queue render.",
+                detail="Run python scripts/tools/work_queue.py render-handoff --write",
+            )
+        )
+    if not snapshot.work_queue.exists:
+        warnings.append(_issue("warning", "work_queue_missing", "Canonical action queue missing."))
+    elif snapshot.work_queue.stale_count:
+        detail = ", ".join(item.id for item in snapshot.work_queue.stale_items[:5])
+        warnings.append(
+            _issue(
+                "warning",
+                "stale_queue_items",
+                f"Canonical action queue has {snapshot.work_queue.stale_count} stale item(s).",
+                detail=detail,
+            )
+        )
+    if snapshot.work_queue.lease_conflicts:
+        detail = ", ".join(
+            f"{conflict.item_id}:{conflict.tool}@{conflict.branch}"
+            for conflict in snapshot.work_queue.lease_conflicts[:5]
+        )
+        warnings.append(
+            _issue(
+                "warning",
+                "queue_item_conflict",
+                "Active queue item(s) are already claimed by another fresh session.",
+                detail=detail,
+            )
+        )
 
     if not snapshot.git.status_available:
         warnings.append(
@@ -676,6 +720,17 @@ def evaluate_system_policy(snapshot: SystemContext, action: PolicyAction) -> Pol
                 "active_stage_files",
                 f"Active stage file(s) present: {len(snapshot.active_stages)}.",
                 detail=stage_names,
+            )
+        )
+
+    if snapshot.work_queue.close_first_open_count:
+        detail = ", ".join(item.id for item in snapshot.work_queue.close_first_items[:5])
+        warnings.append(
+            _issue(
+                "warning",
+                "close_first_carryover",
+                "Close-first queue items remain open before starting new meaningful work.",
+                detail=detail,
             )
         )
 
@@ -786,7 +841,8 @@ def format_system_context_text(snapshot: SystemContext, decision: PolicyDecision
         + (
             f"yes ({snapshot.git.dirty_count})"
             if snapshot.git.dirty
-            else "unknown" if not snapshot.git.status_available
+            else "unknown"
+            if not snapshot.git.status_available
             else f"no ({snapshot.git.dirty_count})"
         ),
         f"Interpreter: {snapshot.interpreter.current_python}",

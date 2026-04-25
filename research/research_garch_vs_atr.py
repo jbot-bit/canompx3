@@ -18,6 +18,7 @@ Usage:
     python research/research_garch_vs_atr.py
     python research/research_garch_vs_atr.py --instrument MGC MES
 """
+
 import argparse
 import logging
 import duckdb
@@ -34,7 +35,8 @@ from pipeline.paths import GOLD_DB_PATH
 
 def load_trades(con, instrument: str) -> pd.DataFrame:
     """Load orb_outcomes joined with daily_features GARCH/ATR columns."""
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT
             o.trading_day, o.symbol, o.orb_label AS session_label,
             o.rr_target, o.pnl_r,
@@ -51,7 +53,9 @@ def load_trades(con, instrument: str) -> pd.DataFrame:
         WHERE o.symbol = ?
             AND d.orb_minutes = 5
             AND o.pnl_r IS NOT NULL
-    """, [instrument]).df()
+    """,
+        [instrument],
+    ).df()
     return df
 
 
@@ -76,9 +80,17 @@ def evaluate_filter(df: pd.DataFrame, skip_mask: pd.Series, label: str) -> dict:
     kept = total_n - skipped
 
     if skipped == 0 or kept == 0:
-        return {"label": label, "total": total_n, "skipped": 0, "kept": kept,
-                "precision": None, "recall": None, "net_r": None,
-                "avg_r_all": None, "avg_r_kept": None}
+        return {
+            "label": label,
+            "total": total_n,
+            "skipped": 0,
+            "kept": kept,
+            "precision": None,
+            "recall": None,
+            "net_r": None,
+            "avg_r_all": None,
+            "avg_r_kept": None,
+        }
 
     losers = df["pnl_r"] < 0
     skipped_losers = int((skip_mask & losers).sum())
@@ -192,9 +204,22 @@ def main():
     print("\n" + "=" * 100)
     print("GARCH vs ATR Velocity — Head-to-Head Results")
     print("=" * 100)
-    display_cols = ["instrument", "session", "label", "total", "skipped", "kept",
-                    "precision", "recall", "avg_r_all", "avg_r_kept", "net_r",
-                    "p_val", "p_bh", "bh_sig"]
+    display_cols = [
+        "instrument",
+        "session",
+        "label",
+        "total",
+        "skipped",
+        "kept",
+        "precision",
+        "recall",
+        "avg_r_all",
+        "avg_r_kept",
+        "net_r",
+        "p_val",
+        "p_bh",
+        "bh_sig",
+    ]
     for inst in args.instrument:
         inst_df = results_df[results_df["instrument"] == inst]
         if inst_df.empty:
@@ -210,13 +235,17 @@ def main():
     for (inst, sess), group in garch_only.groupby(["instrument", "session"]):
         best = group.loc[group["net_r"].idxmax()] if group["net_r"].notna().any() else None
         if best is not None and best["net_r"] > 0:
-            atr_row = results_df[(results_df["instrument"] == inst) &
-                                 (results_df["session"] == sess) &
-                                 (results_df["label"] == "ATR_VEL")]
+            atr_row = results_df[
+                (results_df["instrument"] == inst)
+                & (results_df["session"] == sess)
+                & (results_df["label"] == "ATR_VEL")
+            ]
             atr_net = atr_row["net_r"].values[0] if len(atr_row) > 0 else None
             winner = "GARCH" if (atr_net is None or best["net_r"] > atr_net) else "ATR"
-            print(f"  {inst} {sess}: {best['label']} net_r={best['net_r']:+.4f} "
-                  f"(ATR: {atr_net if atr_net else 'N/A'}) -> {winner} wins")
+            print(
+                f"  {inst} {sess}: {best['label']} net_r={best['net_r']:+.4f} "
+                f"(ATR: {atr_net if atr_net else 'N/A'}) -> {winner} wins"
+            )
 
     # Save
     out_dir = Path("research/output")

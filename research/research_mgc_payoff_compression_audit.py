@@ -14,6 +14,7 @@ Purpose:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -239,15 +240,42 @@ def top_findings(summary: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return warm, broad
 
 
-def build_markdown(summary: pd.DataFrame) -> str:
+def classify_verdicts(
+    summary: pd.DataFrame,
+    *,
+    all_time_stop_zero: bool,
+    no_threshold_sessions: bool,
+) -> dict[str, object]:
     warm, broad = top_findings(summary)
     warm_lr05_positive = int((warm["avg_lr05_r"] > 0).sum()) if not warm.empty else 0
     broad_lr05_positive = int((broad["avg_lr05_r"] > 0).sum()) if not broad.empty else 0
+    best_warm_delta = float(warm["delta_lr05_r"].max()) if not warm.empty else float("nan")
+    time_stop_null = bool(all_time_stop_zero and no_threshold_sessions)
+    low_rr_rescue_plausible = bool(warm_lr05_positive >= 3 and math.isfinite(best_warm_delta) and best_warm_delta > 0.03)
+    no_rescue_signal = bool(warm_lr05_positive == 0 and broad_lr05_positive == 0)
+    return {
+        "PAYOFF_COMPRESSION_REAL": bool(time_stop_null and low_rr_rescue_plausible),
+        "LOW_RR_RESCUE_PLAUSIBLE": low_rr_rescue_plausible,
+        "NO_RESCUE_SIGNAL": no_rescue_signal,
+        "warm_lr05_positive": warm_lr05_positive,
+        "broad_lr05_positive": broad_lr05_positive,
+    }
+
+
+def build_markdown(summary: pd.DataFrame) -> str:
+    warm, broad = top_findings(summary)
     all_time_stop_zero = bool((summary["time_stop_rate"] == 0).all()) if not summary.empty else True
     no_threshold_sessions = all(
         EARLY_EXIT_MINUTES.get(label) is None
         for label in ("EUROPE_FLOW", "NYSE_OPEN", "US_DATA_1000")
     )
+    verdicts = classify_verdicts(
+        summary,
+        all_time_stop_zero=all_time_stop_zero,
+        no_threshold_sessions=no_threshold_sessions,
+    )
+    warm_lr05_positive = int(verdicts["warm_lr05_positive"])
+    broad_lr05_positive = int(verdicts["broad_lr05_positive"])
     lines = [
         "# MGC 5-minute Payoff-Compression Audit",
         "",
@@ -339,6 +367,29 @@ def build_markdown(summary: pd.DataFrame) -> str:
             "- this is not evidence that `MGC` is solved by one lower target",
             "- it is evidence that `RR1.0` may still be too ambitious for 5-minute `MGC` in these",
             "  sessions, including beyond the narrow translated warm rows",
+            "",
+        ]
+
+    lines += [
+        "## Verdict Labels",
+        "",
+        f"- `PAYOFF_COMPRESSION_REAL`: {'YES' if verdicts['PAYOFF_COMPRESSION_REAL'] else 'NO'}",
+        f"- `LOW_RR_RESCUE_PLAUSIBLE`: {'YES' if verdicts['LOW_RR_RESCUE_PLAUSIBLE'] else 'NO'}",
+        f"- `NO_RESCUE_SIGNAL`: {'YES' if verdicts['NO_RESCUE_SIGNAL'] else 'NO'}",
+        "",
+        "## Recommended Next Move",
+        "",
+    ]
+    if verdicts["LOW_RR_RESCUE_PLAUSIBLE"]:
+        lines += [
+            "- Treat this item as actioned and closed at the diagnostic stage.",
+            "- If revisited, do it as a narrow MGC 5-minute exit-shape / lower-target prereg.",
+            "- Do not reopen broad GC proxy discovery or treat this as a generic gold deployment claim.",
+            "",
+        ]
+    else:
+        lines += [
+            "- Treat the translation path as structurally unresolved at 5 minutes and do not reopen it without a new mechanism.",
             "",
         ]
 

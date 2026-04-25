@@ -255,13 +255,25 @@ def analyze_cell(df: pd.DataFrame, df_oos: pd.DataFrame, mech: Mechanism) -> dic
 def family_verdict(df: pd.DataFrame, mech: Mechanism) -> tuple[str, str]:
     g_support = df["g_marg_support"].mean() if df["g_marg_valid"].any() else np.nan
     p_support = df["p_marg_support"].mean() if df["p_marg_valid"].any() else np.nan
-    cond_partner_support = df["partner_inside_garch_support"].mean() if df["partner_inside_garch_valid"].any() else np.nan
+    cond_partner_support = (
+        df["partner_inside_garch_support"].mean() if df["partner_inside_garch_valid"].any() else np.nan
+    )
     cond_garch_support = df["garch_inside_partner_support"].mean() if df["garch_inside_partner_valid"].any() else np.nan
     conj_n = float(df["n_conj"].sum())
     conj_exp = float((df["exp_conj"] * df["n_conj"]).sum() / conj_n) if conj_n > 0 else np.nan
-    g_exp = float((df["exp_garch_high"] * df["n_garch_high"]).sum() / df["n_garch_high"].sum()) if df["n_garch_high"].sum() > 0 else np.nan
-    p_exp = float((df["exp_partner_fav"] * df["n_partner_fav"]).sum() / df["n_partner_fav"].sum()) if df["n_partner_fav"].sum() > 0 else np.nan
-    base_exp = float((df["base_exp_r"] * df["n_total"]).sum() / df["n_total"].sum()) if df["n_total"].sum() > 0 else np.nan
+    g_exp = (
+        float((df["exp_garch_high"] * df["n_garch_high"]).sum() / df["n_garch_high"].sum())
+        if df["n_garch_high"].sum() > 0
+        else np.nan
+    )
+    p_exp = (
+        float((df["exp_partner_fav"] * df["n_partner_fav"]).sum() / df["n_partner_fav"].sum())
+        if df["n_partner_fav"].sum() > 0
+        else np.nan
+    )
+    base_exp = (
+        float((df["base_exp_r"] * df["n_total"]).sum() / df["n_total"].sum()) if df["n_total"].sum() > 0 else np.nan
+    )
 
     if conj_n < MIN_CONJ:
         return "unclear", "unclear"
@@ -287,20 +299,28 @@ def pooled_summary(df: pd.DataFrame) -> dict[str, object]:
         "n_total": int(df["n_total"].sum()),
         "n_conj": int(df["n_conj"].sum()),
         "mean_base_exp": float((df["base_exp_r"] * df["n_total"]).sum() / df["n_total"].sum()),
-        "mean_conj_exp": float((df["exp_conj"] * df["n_conj"]).sum() / df["n_conj"].sum()) if df["n_conj"].sum() > 0 else float("nan"),
+        "mean_conj_exp": float((df["exp_conj"] * df["n_conj"]).sum() / df["n_conj"].sum())
+        if df["n_conj"].sum() > 0
+        else float("nan"),
         "g_marg_support_cells": int(df.loc[df["g_marg_valid"], "g_marg_support"].sum()),
         "g_marg_valid_cells": int(df["g_marg_valid"].sum()),
         "p_marg_support_cells": int(df.loc[df["p_marg_valid"], "p_marg_support"].sum()),
         "p_marg_valid_cells": int(df["p_marg_valid"].sum()),
-        "partner_inside_garch_support_cells": int(df.loc[df["partner_inside_garch_valid"], "partner_inside_garch_support"].sum()),
+        "partner_inside_garch_support_cells": int(
+            df.loc[df["partner_inside_garch_valid"], "partner_inside_garch_support"].sum()
+        ),
         "partner_inside_garch_valid_cells": int(df["partner_inside_garch_valid"].sum()),
-        "garch_inside_partner_support_cells": int(df.loc[df["garch_inside_partner_valid"], "garch_inside_partner_support"].sum()),
+        "garch_inside_partner_support_cells": int(
+            df.loc[df["garch_inside_partner_valid"], "garch_inside_partner_support"].sum()
+        ),
         "garch_inside_partner_valid_cells": int(df["garch_inside_partner_valid"].sum()),
     }
     return out
 
 
-def to_row(family: Family, mech: Mechanism, row: pd.Series, direction: str, res: dict[str, object]) -> dict[str, object]:
+def to_row(
+    family: Family, mech: Mechanism, row: pd.Series, direction: str, res: dict[str, object]
+) -> dict[str, object]:
     return {
         "family": family.label,
         "session": family.session,
@@ -354,7 +374,9 @@ def build() -> tuple[pd.DataFrame, dict[tuple[str, str, str], pd.DataFrame]]:
                     if not res["valid"]:
                         continue
                     result_rows.append(to_row(family, mech, row, direction, res))
-                    bucket_tables[(family.label, mech.name, f"{row['instrument']} {direction} {row['filter_type']}")] = descriptive_partner_bucket(
+                    bucket_tables[
+                        (family.label, mech.name, f"{row['instrument']} {direction} {row['filter_type']}")
+                    ] = descriptive_partner_bucket(
                         df.loc[garch_high(df)].copy(),
                         mech,
                     )
@@ -400,7 +422,9 @@ def emit(df: pd.DataFrame, bucket_tables: dict[tuple[str, str, str], pd.DataFram
                     f"- Pooled `N_total`: **{pooled['n_total']}**",
                     f"- Pooled conjunction `N`: **{pooled['n_conj']}**",
                     f"- Base ExpR: **{pooled['mean_base_exp']:+.3f}**",
-                    f"- Conjunction ExpR: **{pooled['mean_conj_exp']:+.3f}**" if not pd.isna(pooled["mean_conj_exp"]) else "- Conjunction ExpR: n/a",
+                    f"- Conjunction ExpR: **{pooled['mean_conj_exp']:+.3f}**"
+                    if not pd.isna(pooled["mean_conj_exp"])
+                    else "- Conjunction ExpR: n/a",
                     "",
                     "| Check | Support / valid cells |",
                     "|---|---:|",
@@ -418,12 +442,12 @@ def emit(df: pd.DataFrame, bucket_tables: dict[tuple[str, str, str], pd.DataFram
                     f"| {row['instrument']} | {row['direction']} | {row['filter_type']} | {int(row['n_total'])} | "
                     f"{row['base_exp_r']:+.3f} | {row['exp_garch_high']:+.3f} | {row['exp_partner_fav']:+.3f} | "
                     f"{int(row['n_conj'])} | {row['exp_conj']:+.3f} | "
-                    f"{'' if pd.isna(row['g_marg_lift']) else f'{row['g_marg_lift']:+.3f}'} | "
-                    f"{'' if pd.isna(row['p_marg_lift']) else f'{row['p_marg_lift']:+.3f}'} | "
-                    f"{'' if pd.isna(row['partner_inside_garch_lift']) else f'{row['partner_inside_garch_lift']:+.3f}'} | "
-                    f"{'' if pd.isna(row['garch_inside_partner_lift']) else f'{row['garch_inside_partner_lift']:+.3f}'} | "
+                    f"{'' if pd.isna(row['g_marg_lift']) else f'{row["g_marg_lift"]:+.3f}'} | "
+                    f"{'' if pd.isna(row['p_marg_lift']) else f'{row["p_marg_lift"]:+.3f}'} | "
+                    f"{'' if pd.isna(row['partner_inside_garch_lift']) else f'{row["partner_inside_garch_lift"]:+.3f}'} | "
+                    f"{'' if pd.isna(row['garch_inside_partner_lift']) else f'{row["garch_inside_partner_lift"]:+.3f}'} | "
                     f"{int(row['n_conj_oos'])} | "
-                    f"{'' if row['exp_conj_oos'] is None else f'{row['exp_conj_oos']:+.3f}'} |"
+                    f"{'' if row['exp_conj_oos'] is None else f'{row["exp_conj_oos"]:+.3f}'} |"
                 )
             lines.extend(
                 [
@@ -446,9 +470,7 @@ def emit(df: pd.DataFrame, bucket_tables: dict[tuple[str, str, str], pd.DataFram
                 lines.append("| Bucket | N | ExpR | Total R |")
                 lines.append("|---|---:|---:|---:|")
                 for _, row in table.iterrows():
-                    lines.append(
-                        f"| {row['bucket']} | {int(row['n'])} | {row['exp_r']:+.3f} | {row['total_r']:+.1f} |"
-                    )
+                    lines.append(f"| {row['bucket']} | {int(row['n'])} | {row['exp_r']:+.3f} | {row['total_r']:+.1f} |")
                 lines.append("")
 
             if not added:

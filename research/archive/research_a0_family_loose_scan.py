@@ -98,7 +98,11 @@ def main() -> int:
             "same_fast30": sg & g["f_delay"].notna() & (g["f_delay"] <= 30),
             "same_short_fast15": sg & (g["f_dir"] == "short") & g["f_delay"].notna() & (g["f_delay"] <= 15),
             "same_long_fast15": sg & (g["f_dir"] == "long") & g["f_delay"].notna() & (g["f_delay"] <= 15),
-            "same_fast15_size60": sg & g["f_delay"].notna() & (g["f_delay"] <= 15) & pd.Series(size_atr, index=df.index).loc[g.index].notna() & (pd.Series(size_atr, index=df.index).loc[g.index] >= q60),
+            "same_fast15_size60": sg
+            & g["f_delay"].notna()
+            & (g["f_delay"] <= 15)
+            & pd.Series(size_atr, index=df.index).loc[g.index].notna()
+            & (pd.Series(size_atr, index=df.index).loc[g.index] >= q60),
         }
 
         for vname, vm in variants.items():
@@ -167,13 +171,17 @@ def main() -> int:
     out = out.sort_values(["avg_on", "uplift"], ascending=False)
 
     # gain-first shortlist
-    top_gain = out[
-        (out["avg_on"] >= 0.12)
-        & (out["uplift"] >= 0.20)
-        & (out["years_total"] >= 3)
-        & (out["years_pos_ratio"] >= 0.6)
-        & (out["test2025_uplift"].fillna(-999) >= 0)
-    ].copy().sort_values(["avg_on", "uplift"], ascending=False)
+    top_gain = (
+        out[
+            (out["avg_on"] >= 0.12)
+            & (out["uplift"] >= 0.20)
+            & (out["years_total"] >= 3)
+            & (out["years_pos_ratio"] >= 0.6)
+            & (out["test2025_uplift"].fillna(-999) >= 0)
+        ]
+        .copy()
+        .sort_values(["avg_on", "uplift"], ascending=False)
+    )
 
     # balanced shortlist (near your tradability needs)
     balanced = top_gain[top_gain["signals_per_year"] >= 70].copy().sort_values(["avg_on", "uplift"], ascending=False)

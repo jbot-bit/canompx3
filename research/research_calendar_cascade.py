@@ -101,11 +101,7 @@ def aggregate_per_day(df: pd.DataFrame) -> pd.DataFrame:
     if "td_date" in df.columns:
         agg_dict["td_date"] = "first"
 
-    daily = (
-        df.groupby(["symbol", "orb_label", "trading_day"])
-        .agg(agg_dict)
-        .reset_index()
-    )
+    daily = df.groupby(["symbol", "orb_label", "trading_day"]).agg(agg_dict).reset_index()
     return daily
 
 
@@ -142,9 +138,7 @@ def apply_bh_fdr(results: list[dict], q: float = 0.10) -> list[dict]:
     return results
 
 
-def year_consistency_check(
-    daily_agg: pd.DataFrame, sig_col: str, expected_negative: bool
-) -> tuple[int, int]:
+def year_consistency_check(daily_agg: pd.DataFrame, sig_col: str, expected_negative: bool) -> tuple[int, int]:
     """Check how many years agree with the overall direction.
 
     Returns (consistent_years, total_years_with_sufficient_data).
@@ -196,22 +190,22 @@ def level1_portfolio_wide(
     results = apply_bh_fdr(results)
 
     # Print results
-    print(f"\n  {'Signal':15s} {'Diff':>8s} {'p_raw':>8s} {'p_bh':>8s} "
-          f"{'N_on':>6s} {'N_off':>7s} {'Rejected':>10s}")
+    print(f"\n  {'Signal':15s} {'Diff':>8s} {'p_raw':>8s} {'p_bh':>8s} {'N_on':>6s} {'N_off':>7s} {'Rejected':>10s}")
     print(f"  {'-' * 70}")
 
     rejected_signals = []
     for r in sorted(results, key=lambda x: x["p_bh"]):
         status = "REJECTED" if r["rejected"] else "neutral"
-        print(f"  {r['signal']:15s} {r['diff']:>+8.4f} {r['p_raw']:>8.4f} "
-              f"{r['p_bh']:>8.4f} {r['n_on']:>6d} {r['n_off']:>7d} {status:>10s}")
+        print(
+            f"  {r['signal']:15s} {r['diff']:>+8.4f} {r['p_raw']:>8.4f} "
+            f"{r['p_bh']:>8.4f} {r['n_on']:>6d} {r['n_off']:>7d} {status:>10s}"
+        )
         if r["rejected"]:
             rejected_signals.append(r["signal"])
 
     n_rejected = len(rejected_signals)
     n_neutral = len(results) - n_rejected
-    print(f"\n  Summary: {n_rejected} REJECTED, {n_neutral} NEUTRAL "
-          f"(out of {len(results)} testable)")
+    print(f"\n  Summary: {n_rejected} REJECTED, {n_neutral} NEUTRAL (out of {len(results)} testable)")
     if rejected_signals:
         print(f"  Rejected signals -> Level 2: {', '.join(rejected_signals)}")
     else:
@@ -264,20 +258,22 @@ def level2_per_instrument(
         if not sig_results:
             continue
         print(f"\n  --- {sig_name} ---")
-        print(f"  {'Instrument':12s} {'Diff':>8s} {'p_raw':>8s} {'p_bh':>8s} "
-              f"{'N_on':>6s} {'N_off':>7s} {'Rejected':>10s}")
+        print(
+            f"  {'Instrument':12s} {'Diff':>8s} {'p_raw':>8s} {'p_bh':>8s} {'N_on':>6s} {'N_off':>7s} {'Rejected':>10s}"
+        )
         print(f"  {'-' * 60}")
         for r in sorted(sig_results, key=lambda x: x["p_bh"]):
             status = "REJECTED" if r["rejected"] else "neutral"
-            print(f"  {r['instrument']:12s} {r['diff']:>+8.4f} {r['p_raw']:>8.4f} "
-                  f"{r['p_bh']:>8.4f} {r['n_on']:>6d} {r['n_off']:>7d} {status:>10s}")
+            print(
+                f"  {r['instrument']:12s} {r['diff']:>+8.4f} {r['p_raw']:>8.4f} "
+                f"{r['p_bh']:>8.4f} {r['n_on']:>6d} {r['n_off']:>7d} {status:>10s}"
+            )
             if r["rejected"]:
                 rejected_pairs.append((r["signal"], r["instrument"]))
 
     n_rejected = len(rejected_pairs)
     n_tested = len(results)
-    print(f"\n  Summary: {n_rejected} REJECTED, {n_tested - n_rejected} NEUTRAL "
-          f"(out of {n_tested} testable)")
+    print(f"\n  Summary: {n_rejected} REJECTED, {n_tested - n_rejected} NEUTRAL (out of {n_tested} testable)")
     if rejected_pairs:
         pair_strs = [f"{s}x{i}" for s, i in rejected_pairs]
         print(f"  Rejected pairs -> Level 3: {', '.join(pair_strs)}")
@@ -310,9 +306,7 @@ def level3_per_session(
     results = []
     for sig_name, inst in rejected_pairs:
         sig_col = sig_col_map[sig_name]
-        inst_data = daily_agg[
-            (daily_agg["symbol"] == inst)
-        ]
+        inst_data = daily_agg[(daily_agg["symbol"] == inst)]
         for sess in sessions:
             sess_data = inst_data[inst_data["orb_label"] == sess]
             on = sess_data[sess_data[sig_col]]["pnl_r"].values
@@ -331,10 +325,7 @@ def level3_per_session(
     # Year-by-year consistency for all results
     for r in results:
         sig_col = r["sig_col"]
-        sess_data = daily_agg[
-            (daily_agg["symbol"] == r["instrument"])
-            & (daily_agg["orb_label"] == r["session"])
-        ]
+        sess_data = daily_agg[(daily_agg["symbol"] == r["instrument"]) & (daily_agg["orb_label"] == r["session"])]
         expected_neg = r["diff"] < 0
         yr_cons, yr_tot = year_consistency_check(sess_data, sig_col, expected_neg)
         r["yr_consistent"] = yr_cons
@@ -342,41 +333,35 @@ def level3_per_session(
         r["yr_pct"] = (yr_cons / yr_tot * 100) if yr_tot > 0 else 0.0
 
         # Classify
-        if (
-            r["rejected"]
-            and r["yr_pct"] >= 75
-            and r["diff"] <= -0.15
-        ):
+        if r["rejected"] and r["yr_pct"] >= 75 and r["diff"] <= -0.15:
             r["action"] = "SKIP"
-        elif (
-            r["rejected"]
-            and r["yr_pct"] >= 60
-            and r["diff"] < 0
-        ):
+        elif r["rejected"] and r["yr_pct"] >= 60 and r["diff"] < 0:
             r["action"] = "HALF_SIZE"
         else:
             r["action"] = "NEUTRAL"
 
     # Print results grouped by (signal, instrument)
     for sig_name, inst in rejected_pairs:
-        pair_results = [
-            r for r in results if r["signal"] == sig_name and r["instrument"] == inst
-        ]
+        pair_results = [r for r in results if r["signal"] == sig_name and r["instrument"] == inst]
         if not pair_results:
             print(f"\n  --- {sig_name} x {inst}: no testable sessions ---")
             continue
 
         print(f"\n  --- {sig_name} x {inst} ---")
-        print(f"  {'Session':20s} {'Diff':>8s} {'p_raw':>8s} {'p_bh':>8s} "
-              f"{'N_on':>6s} {'N_off':>7s} {'YrCons':>10s} {'Action':>10s}")
+        print(
+            f"  {'Session':20s} {'Diff':>8s} {'p_raw':>8s} {'p_bh':>8s} "
+            f"{'N_on':>6s} {'N_off':>7s} {'YrCons':>10s} {'Action':>10s}"
+        )
         print(f"  {'-' * 80}")
 
         for r in sorted(pair_results, key=lambda x: x["p_bh"]):
             yr_str = f"{r['yr_consistent']}/{r['yr_total']}" if r["yr_total"] > 0 else "n/a"
             yr_pct = f"({r['yr_pct']:.0f}%)" if r["yr_total"] > 0 else ""
-            print(f"  {r['session']:20s} {r['diff']:>+8.4f} {r['p_raw']:>8.4f} "
-                  f"{r['p_bh']:>8.4f} {r['n_on']:>6d} {r['n_off']:>7d} "
-                  f"{yr_str:>5s} {yr_pct:<5s} {r['action']:>10s}")
+            print(
+                f"  {r['session']:20s} {r['diff']:>+8.4f} {r['p_raw']:>8.4f} "
+                f"{r['p_bh']:>8.4f} {r['n_on']:>6d} {r['n_off']:>7d} "
+                f"{yr_str:>5s} {yr_pct:<5s} {r['action']:>10s}"
+            )
 
     return results
 
@@ -400,18 +385,20 @@ def build_rules_json(
     for r in l3_results:
         if r["action"] == "NEUTRAL":
             continue
-        rules.append({
-            "instrument": r["instrument"],
-            "session": r["session"],
-            "signal": r["signal"],
-            "action": r["action"],
-            "diff": round(r["diff"], 4),
-            "p_bh": round(r["p_bh"], 4),
-            "yr_consistent": r["yr_consistent"],
-            "yr_total": r["yr_total"],
-            "n_on": r["n_on"],
-            "n_off": r["n_off"],
-        })
+        rules.append(
+            {
+                "instrument": r["instrument"],
+                "session": r["session"],
+                "signal": r["signal"],
+                "action": r["action"],
+                "diff": round(r["diff"], 4),
+                "p_bh": round(r["p_bh"], 4),
+                "yr_consistent": r["yr_consistent"],
+                "yr_total": r["yr_total"],
+                "n_on": r["n_on"],
+                "n_off": r["n_off"],
+            }
+        )
 
     return {
         "generated": datetime.now(tz=None).astimezone().isoformat(timespec="seconds"),
@@ -464,10 +451,7 @@ def print_final_summary(
         print(f"\n  Level 2 -- Instrument-level rejections:")
         if rejected_pairs:
             for sig, inst in rejected_pairs:
-                r = next(
-                    x for x in l2_results
-                    if x["signal"] == sig and x["instrument"] == inst
-                )
+                r = next(x for x in l2_results if x["signal"] == sig and x["instrument"] == inst)
                 print(f"    {sig:15s} x {inst:4s}  diff={r['diff']:+.4f}R  p_bh={r['p_bh']:.4f}")
         else:
             print("    None -- all instruments NEUTRAL")
@@ -481,16 +465,20 @@ def print_final_summary(
         if skip_rules:
             print(f"\n  SKIP rules ({len(skip_rules)}):")
             for r in skip_rules:
-                print(f"    {r['instrument']:4s} {r['session']:20s} {r['signal']:12s} "
-                      f"diff={r['diff']:+.4f}R  p_bh={r['p_bh']:.4f}  "
-                      f"consistency={r['yr_consistent']}/{r['yr_total']}")
+                print(
+                    f"    {r['instrument']:4s} {r['session']:20s} {r['signal']:12s} "
+                    f"diff={r['diff']:+.4f}R  p_bh={r['p_bh']:.4f}  "
+                    f"consistency={r['yr_consistent']}/{r['yr_total']}"
+                )
 
         if half_rules:
             print(f"\n  HALF_SIZE rules ({len(half_rules)}):")
             for r in half_rules:
-                print(f"    {r['instrument']:4s} {r['session']:20s} {r['signal']:12s} "
-                      f"diff={r['diff']:+.4f}R  p_bh={r['p_bh']:.4f}  "
-                      f"consistency={r['yr_consistent']}/{r['yr_total']}")
+                print(
+                    f"    {r['instrument']:4s} {r['session']:20s} {r['signal']:12s} "
+                    f"diff={r['diff']:+.4f}R  p_bh={r['p_bh']:.4f}  "
+                    f"consistency={r['yr_consistent']}/{r['yr_total']}"
+                )
     else:
         print("\n  No actionable rules (SKIP or HALF_SIZE) found.")
         print("  All calendar signals classified NEUTRAL.")
@@ -553,8 +541,11 @@ def run(db_path: Path):
 
     # DOW dummies
     for dow_num, dow_name in [
-        (0, "Monday"), (1, "Tuesday"), (2, "Wednesday"),
-        (3, "Thursday"), (4, "Friday"),
+        (0, "Monday"),
+        (1, "Tuesday"),
+        (2, "Wednesday"),
+        (3, "Thursday"),
+        (4, "Friday"),
     ]:
         df[f"is_{dow_name}"] = df["day_of_week"] == dow_num
 
@@ -567,9 +558,7 @@ def run(db_path: Path):
 
     # Run the 3-level cascade
     l1_results, rejected_signals = level1_portfolio_wide(daily_agg)
-    l2_results, rejected_pairs = level2_per_instrument(
-        daily_agg, rejected_signals, instruments
-    )
+    l2_results, rejected_pairs = level2_per_instrument(daily_agg, rejected_signals, instruments)
     l3_results = level3_per_session(daily_agg, rejected_pairs)
 
     # Build and save output JSON
@@ -584,9 +573,12 @@ def run(db_path: Path):
 
     # Print final summary
     print_final_summary(
-        l1_results, rejected_signals,
-        l2_results, rejected_pairs,
-        l3_results, rules_json,
+        l1_results,
+        rejected_signals,
+        l2_results,
+        rejected_pairs,
+        l3_results,
+        rules_json,
     )
 
     elapsed = time.time() - t0

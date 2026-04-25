@@ -35,24 +35,30 @@ sys.stdout.reconfigure(line_buffering=True)
 
 from research._alt_strategy_utils import compute_strategy_metrics, annualize_sharpe
 
+
 def load_features(db_path: Path, instrument: str = "MGC") -> pd.DataFrame:
     """Load daily_features with session stats."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT *
             FROM daily_features
             WHERE symbol = ? AND orb_minutes = 5
             ORDER BY trading_day
-        """, [instrument]).fetchdf()
+        """,
+            [instrument],
+        ).fetchdf()
     finally:
         con.close()
 
     # London range (session_london_high/low from daily_features)
     if "session_london_high" in df.columns and "session_london_low" in df.columns:
         df["london_range"] = df["session_london_high"] - df["session_london_low"]
-        df["london_range_pct"] = df["london_range"].rolling(20).apply(
-            lambda x: (x.iloc[-1] >= x.median()).astype(float) if len(x) == 20 else np.nan
+        df["london_range_pct"] = (
+            df["london_range"]
+            .rolling(20)
+            .apply(lambda x: (x.iloc[-1] >= x.median()).astype(float) if len(x) == 20 else np.nan)
         )
     else:
         df["london_range"] = np.nan
@@ -74,11 +80,13 @@ def load_features(db_path: Path, instrument: str = "MGC") -> pd.DataFrame:
 
     return df
 
+
 def load_outcomes(db_path: Path, instrument: str, session: str) -> pd.DataFrame:
     """Load outcomes for a target session."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT trading_day, entry_model, rr_target, confirm_bars,
                    pnl_r, outcome, entry_price, stop_price
             FROM orb_outcomes
@@ -87,29 +95,44 @@ def load_outcomes(db_path: Path, instrument: str, session: str) -> pd.DataFrame:
               AND entry_ts IS NOT NULL
               AND pnl_r IS NOT NULL
             ORDER BY trading_day
-        """, [instrument, session]).fetchall()
+        """,
+            [instrument, session],
+        ).fetchall()
     finally:
         con.close()
 
-    result = pd.DataFrame(rows, columns=[
-        "trading_day", "entry_model", "rr_target", "confirm_bars",
-        "pnl_r", "outcome", "entry_price", "stop_price",
-    ])
+    result = pd.DataFrame(
+        rows,
+        columns=[
+            "trading_day",
+            "entry_model",
+            "rr_target",
+            "confirm_bars",
+            "pnl_r",
+            "outcome",
+            "entry_price",
+            "stop_price",
+        ],
+    )
     result["trading_day"] = pd.to_datetime(result["trading_day"])
     return result
+
 
 def fmt(m: dict) -> str:
     if m is None or m["n"] == 0:
         return "N=0"
-    return (f"N={m['n']:<5d}  WR={m['wr']*100:5.1f}%  ExpR={m['expr']:+.3f}  "
-            f"Sharpe={m['sharpe']:.3f}  MaxDD={m['maxdd']:.1f}R  Total={m['total']:+.1f}R")
+    return (
+        f"N={m['n']:<5d}  WR={m['wr'] * 100:5.1f}%  ExpR={m['expr']:+.3f}  "
+        f"Sharpe={m['sharpe']:.3f}  MaxDD={m['maxdd']:.1f}R  Total={m['total']:+.1f}R"
+    )
 
-def analyze_cascade(features: pd.DataFrame, outcomes: pd.DataFrame,
-                    target_session: str, predictor_col: str, predictor_name: str):
+
+def analyze_cascade(
+    features: pd.DataFrame, outcomes: pd.DataFrame, target_session: str, predictor_col: str, predictor_name: str
+):
     """Test if predictor_col range predicts target_session breakout quality."""
     merged = outcomes.merge(
-        features[["trading_day", predictor_col, "atr_20"]].dropna(subset=[predictor_col]),
-        on="trading_day", how="inner"
+        features[["trading_day", predictor_col, "atr_20"]].dropna(subset=[predictor_col]), on="trading_day", how="inner"
     )
 
     if len(merged) < 30:
@@ -122,8 +145,7 @@ def analyze_cascade(features: pd.DataFrame, outcomes: pd.DataFrame,
     q67 = predictor_vals.quantile(0.67)
 
     merged["range_bucket"] = np.where(
-        predictor_vals <= q33, "narrow",
-        np.where(predictor_vals <= q67, "medium", "wide")
+        predictor_vals <= q33, "narrow", np.where(predictor_vals <= q67, "medium", "wide")
     )
 
     # Also compute range relative to ATR
@@ -162,6 +184,7 @@ def analyze_cascade(features: pd.DataFrame, outcomes: pd.DataFrame,
                 if len(high_atr) >= 5:
                     print(f"      >=0.5 ATR:   {fmt(compute_strategy_metrics(high_atr['pnl_r'].values))}")
 
+
 def main():
     parser = argparse.ArgumentParser(description="Session cascade analysis")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
@@ -185,8 +208,10 @@ def main():
     for col, name in [("london_range", "London"), ("asia_range", "Asia"), ("ny_range", "NY")]:
         if col in features.columns and features[col].notna().sum() > 0:
             vals = features[col].dropna()
-            print(f"{name} range: mean={vals.mean():.2f}, median={vals.median():.2f}, "
-                  f"std={vals.std():.2f}, min={vals.min():.2f}, max={vals.max():.2f}")
+            print(
+                f"{name} range: mean={vals.mean():.2f}, median={vals.median():.2f}, "
+                f"std={vals.std():.2f}, min={vals.min():.2f}, max={vals.max():.2f}"
+            )
 
     # Test cascades
     cascades = [
@@ -223,6 +248,7 @@ def main():
     print(f"\n{'=' * 90}")
     print("DONE")
     print("=" * 90)
+
 
 if __name__ == "__main__":
     main()

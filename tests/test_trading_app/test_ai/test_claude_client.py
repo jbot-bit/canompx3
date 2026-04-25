@@ -3,10 +3,13 @@
 Stage 1 of claude-api-modernization. See docs/runtime/stages/claude-api-modernization.md.
 """
 
+import importlib.util
 import os
 from unittest.mock import patch
 
 import pytest
+
+ANTHROPIC_AVAILABLE = importlib.util.find_spec("anthropic") is not None
 
 
 # Retired/deprecated model IDs from shared/models.md (cached 2026-04-15).
@@ -24,13 +27,17 @@ RETIRED_MODEL_IDS = {
 DEPRECATED_MODEL_IDS = {
     "claude-3-haiku-20240307",  # retires 2026-04-19
 }
-STALE_MODEL_IDS = RETIRED_MODEL_IDS | DEPRECATED_MODEL_IDS | {
-    # Pre-4.6-era models still alive but superseded — project must not pin these
-    "claude-sonnet-4-20250514",  # Sonnet 4.0
-    "claude-sonnet-4-5-20250929",  # Sonnet 4.5
-    "claude-opus-4-20250514",  # Opus 4.0
-    "claude-opus-4-1-20250805",  # Opus 4.1
-}
+STALE_MODEL_IDS = (
+    RETIRED_MODEL_IDS
+    | DEPRECATED_MODEL_IDS
+    | {
+        # Pre-4.6-era models still alive but superseded — project must not pin these
+        "claude-sonnet-4-20250514",  # Sonnet 4.0
+        "claude-sonnet-4-5-20250929",  # Sonnet 4.5
+        "claude-opus-4-20250514",  # Opus 4.0
+        "claude-opus-4-1-20250805",  # Opus 4.1
+    }
+)
 
 
 class TestModelConstants:
@@ -91,6 +98,19 @@ class TestGetClient:
             with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
                 get_client()
 
+    def test_get_client_without_sdk_raises_import_error(self):
+        """Module import stays clean without anthropic; client construction does not."""
+        from trading_app.ai.claude_client import get_client
+
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test-fake"}, clear=True):
+            if ANTHROPIC_AVAILABLE:
+                client = get_client()
+                assert client is not None
+            else:
+                with pytest.raises(ImportError, match="anthropic SDK not installed"):
+                    get_client()
+
+    @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="anthropic SDK not installed")
     def test_get_client_returns_anthropic_client(self):
         """With ANTHROPIC_API_KEY set, return a configured anthropic.Anthropic."""
         import anthropic
@@ -102,6 +122,7 @@ class TestGetClient:
 
         assert isinstance(client, anthropic.Anthropic)
 
+    @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="anthropic SDK not installed")
     def test_get_client_accepts_explicit_key(self):
         """Explicit api_key arg overrides env var (useful for tests / multi-tenant)."""
         import anthropic

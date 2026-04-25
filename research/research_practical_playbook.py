@@ -143,15 +143,17 @@ def load_slot_trades(con, slots):
         filter_types = set()
         orb_labels = set()
         for slot in inst_slots:
-            row = con.execute("""
+            row = con.execute(
+                """
                 SELECT instrument, orb_label, orb_minutes, entry_model,
                        rr_target, confirm_bars, filter_type
                 FROM validated_setups WHERE strategy_id = ?
-            """, [slot["head_strategy_id"]]).fetchone()
+            """,
+                [slot["head_strategy_id"]],
+            ).fetchone()
             if not row:
                 continue
-            cols = ["instrument", "orb_label", "orb_minutes", "entry_model",
-                    "rr_target", "confirm_bars", "filter_type"]
+            cols = ["instrument", "orb_label", "orb_minutes", "entry_model", "rr_target", "confirm_bars", "filter_type"]
             params = dict(zip(cols, row))
             slot_params[slot["head_strategy_id"]] = params
             filter_types.add(params["filter_type"])
@@ -164,42 +166,47 @@ def load_slot_trades(con, slots):
         features = _load_daily_features(con, instrument, 5, None, None)
         has_vol = any(isinstance(f, VolumeFilter) for f in needed_filters.values())
         if has_vol:
-            _compute_relative_volumes(con, features, instrument,
-                                      sorted(orb_labels), needed_filters)
-        filter_days = _build_filter_day_sets(features, sorted(orb_labels),
-                                             needed_filters)
+            _compute_relative_volumes(con, features, instrument, sorted(orb_labels), needed_filters)
+        filter_days = _build_filter_day_sets(features, sorted(orb_labels), needed_filters)
 
         for slot in inst_slots:
             sid = slot["head_strategy_id"]
             params = slot_params.get(sid)
             if not params:
                 continue
-            eligible = filter_days.get(
-                (params["filter_type"], params["orb_label"]), set()
-            )
+            eligible = filter_days.get((params["filter_type"], params["orb_label"]), set())
 
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT trading_day, outcome, pnl_r
                 FROM orb_outcomes
                 WHERE symbol = ? AND orb_label = ? AND orb_minutes = ?
                   AND entry_model = ? AND rr_target = ? AND confirm_bars = ?
                   AND outcome IN ('win', 'loss')
                 ORDER BY trading_day
-            """, [
-                params["instrument"], params["orb_label"], params["orb_minutes"],
-                params["entry_model"], params["rr_target"], params["confirm_bars"],
-            ]).fetchall()
+            """,
+                [
+                    params["instrument"],
+                    params["orb_label"],
+                    params["orb_minutes"],
+                    params["entry_model"],
+                    params["rr_target"],
+                    params["confirm_bars"],
+                ],
+            ).fetchall()
 
             slot_label = f"{instrument}_{params['orb_label']}"
             slot_trades[slot_label] = []
             for r in rows:
                 if r[0] in eligible:
-                    slot_trades[slot_label].append({
-                        "trading_day": r[0],
-                        "outcome": r[1],
-                        "pnl_r": r[2],
-                        "slot_label": slot_label,
-                    })
+                    slot_trades[slot_label].append(
+                        {
+                            "trading_day": r[0],
+                            "outcome": r[1],
+                            "pnl_r": r[2],
+                            "slot_label": slot_label,
+                        }
+                    )
 
     return slot_trades
 
@@ -225,7 +232,7 @@ def compute_portfolio_stats(all_trades, contracts=1):
     sharpe = None
     if n_days > 1:
         var = sum((v - mean_d) ** 2 for v in values) / (n_days - 1)
-        std = var ** 0.5
+        std = var**0.5
         if std > 0:
             sharpe = (mean_d / std) * sqrt(TRADING_DAYS_PER_YEAR)
 
@@ -338,26 +345,21 @@ def compute_slot_stats(trades, contracts=1):
 
 # Micro contract specs
 CONTRACT_SPECS = {
-    "MGC": {"name": "Micro Gold", "tick_size": 0.10, "tick_value": 1.00,
-             "margin": 1050, "typical_r_dollars": 100},
-    "MNQ": {"name": "Micro Nasdaq", "tick_size": 0.25, "tick_value": 0.50,
-             "margin": 2100, "typical_r_dollars": 80},
-    "MES": {"name": "Micro S&P", "tick_size": 0.25, "tick_value": 1.25,
-             "margin": 1590, "typical_r_dollars": 75},
-    "M2K": {"name": "Micro Russell", "tick_size": 0.10, "tick_value": 0.50,
-             "margin": 780, "typical_r_dollars": 60},
+    "MGC": {"name": "Micro Gold", "tick_size": 0.10, "tick_value": 1.00, "margin": 1050, "typical_r_dollars": 100},
+    "MNQ": {"name": "Micro Nasdaq", "tick_size": 0.25, "tick_value": 0.50, "margin": 2100, "typical_r_dollars": 80},
+    "MES": {"name": "Micro S&P", "tick_size": 0.25, "tick_value": 1.25, "margin": 1590, "typical_r_dollars": 75},
+    "M2K": {"name": "Micro Russell", "tick_size": 0.10, "tick_value": 0.50, "margin": 780, "typical_r_dollars": 60},
 }
 
 
 def main():
     parser = argparse.ArgumentParser(description="Practical Trading Playbook")
     parser.add_argument("--db-path", default=None)
-    parser.add_argument("--account-size", type=int, default=10000,
-                        help="Starting account size in USD (default: $10,000)")
-    parser.add_argument("--contracts", type=int, default=1,
-                        help="Contracts per trade (default: 1)")
-    parser.add_argument("--top-n", type=int, default=15,
-                        help="Use top N slots by Sharpe/DD (default: 15)")
+    parser.add_argument(
+        "--account-size", type=int, default=10000, help="Starting account size in USD (default: $10,000)"
+    )
+    parser.add_argument("--contracts", type=int, default=1, help="Contracts per trade (default: 1)")
+    parser.add_argument("--top-n", type=int, default=15, help="Use top N slots by Sharpe/DD (default: 15)")
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
@@ -370,7 +372,8 @@ def main():
             sid = slot["head_strategy_id"]
             row = con.execute(
                 "SELECT max_drawdown_r, entry_model, rr_target, confirm_bars, filter_type "
-                "FROM validated_setups WHERE strategy_id = ?", [sid],
+                "FROM validated_setups WHERE strategy_id = ?",
+                [sid],
             ).fetchone()
             slot["max_dd"] = row[0] if row and row[0] else 999
             slot["entry_model"] = row[1] if row else "?"
@@ -381,7 +384,7 @@ def main():
             slot["sh_dd_ratio"] = sh / slot["max_dd"] if slot["max_dd"] > 0 else 0
 
         ranked = sorted(all_slots, key=lambda s: -s["sh_dd_ratio"])
-        selected = ranked[:args.top_n]
+        selected = ranked[: args.top_n]
 
         # Load trades
         slot_trades = load_slot_trades(con, selected)
@@ -406,8 +409,7 @@ def main():
 
         print(f"\n{'#' * 90}")
         print(f"#  YOUR TRADING PLAYBOOK")
-        print(f"#  {len(selected)} slots | {contracts} contract(s) per trade | "
-              f"${account:,} account")
+        print(f"#  {len(selected)} slots | {contracts} contract(s) per trade | ${account:,} account")
         print(f"{'#' * 90}")
 
         # -----------------------------------------------------------------
@@ -418,23 +420,29 @@ def main():
         print("One entry model per instrument+session. Fixed 1R risk per trade.")
         print(f"{'=' * 90}\n")
 
-        print(f"  {'#':>2} {'Slot':<25} {'Entry':>5} {'RR':>4} {'CB':>3} "
-              f"{'Filter':<16} {'WR':>5} {'ExpR':>6} {'MaxDD':>6} "
-              f"{'Regime':>6} {'N':>5}")
-        print(f"  {'-'*2} {'-'*25} {'-'*5} {'-'*4} {'-'*3} "
-              f"{'-'*16} {'-'*5} {'-'*6} {'-'*6} "
-              f"{'-'*6} {'-'*5}")
+        print(
+            f"  {'#':>2} {'Slot':<25} {'Entry':>5} {'RR':>4} {'CB':>3} "
+            f"{'Filter':<16} {'WR':>5} {'ExpR':>6} {'MaxDD':>6} "
+            f"{'Regime':>6} {'N':>5}"
+        )
+        print(
+            f"  {'-' * 2} {'-' * 25} {'-' * 5} {'-' * 4} {'-' * 3} "
+            f"{'-' * 16} {'-' * 5} {'-' * 6} {'-' * 6} "
+            f"{'-' * 6} {'-' * 5}"
+        )
 
         for i, slot in enumerate(selected, 1):
             label = f"{slot['instrument']}_{slot['session']}"
             ss = slot_stats.get(label, {})
             regime = ss.get("regime", "?")
-            print(f"  {i:>2} {label:<25} {slot['entry_model']:>5} "
-                  f"{slot['rr_target']:>4} {slot['confirm_bars']:>3} "
-                  f"{slot['filter_type']:<16} "
-                  f"{ss.get('wr', 0):>4.0%} {ss.get('exp_r', 0):>+5.3f} "
-                  f"{ss.get('max_dd', 0):>5.1f}R "
-                  f"{regime:>6} {ss.get('n', 0):>5}")
+            print(
+                f"  {i:>2} {label:<25} {slot['entry_model']:>5} "
+                f"{slot['rr_target']:>4} {slot['confirm_bars']:>3} "
+                f"{slot['filter_type']:<16} "
+                f"{ss.get('wr', 0):>4.0%} {ss.get('exp_r', 0):>+5.3f} "
+                f"{ss.get('max_dd', 0):>5.1f}R "
+                f"{regime:>6} {ss.get('n', 0):>5}"
+            )
 
         # -----------------------------------------------------------------
         # SECTION 2: DAILY SCHEDULE
@@ -451,10 +459,18 @@ def main():
             time_groups[session].append(slot)
 
         # Sort sessions roughly by Brisbane time
-        session_order = ["CME_CLOSE", "0900", "1000", "1100",
-                         "LONDON_OPEN", "1800",
-                         "US_EQUITY_OPEN", "CME_OPEN", "0030",
-                         "US_POST_EQUITY"]
+        session_order = [
+            "CME_CLOSE",
+            "0900",
+            "1000",
+            "1100",
+            "LONDON_OPEN",
+            "1800",
+            "US_EQUITY_OPEN",
+            "CME_OPEN",
+            "0030",
+            "US_POST_EQUITY",
+        ]
 
         for session in session_order:
             if session not in time_groups:
@@ -465,20 +481,24 @@ def main():
             instruments = ", ".join(s["instrument"] for s in slots_in)
             print(f"  {sched.get('watch_window', session + ' (check time)')}")
             print(f"    Session: {session}  |  Instruments: {instruments}")
-            print(f"    Brisbane: {sched.get('brisbane', '?')}  |  "
-                  f"UTC: {sched.get('utc', '?')}  |  "
-                  f"NY: {sched.get('new_york', '?')}")
+            print(
+                f"    Brisbane: {sched.get('brisbane', '?')}  |  "
+                f"UTC: {sched.get('utc', '?')}  |  "
+                f"NY: {sched.get('new_york', '?')}"
+            )
             if sched.get("notes"):
                 print(f"    Notes: {sched['notes']}")
 
             for slot in slots_in:
                 label = f"{slot['instrument']}_{session}"
                 ss = slot_stats.get(label, {})
-                print(f"      -> {slot['instrument']} {slot['entry_model']} "
-                      f"RR{slot['rr_target']} CB{slot['confirm_bars']} "
-                      f"{slot['filter_type']}  "
-                      f"[WR={ss.get('wr', 0):.0%} ExpR={ss.get('exp_r', 0):+.3f} "
-                      f"Regime={ss.get('regime', '?')}]")
+                print(
+                    f"      -> {slot['instrument']} {slot['entry_model']} "
+                    f"RR{slot['rr_target']} CB{slot['confirm_bars']} "
+                    f"{slot['filter_type']}  "
+                    f"[WR={ss.get('wr', 0):.0%} ExpR={ss.get('exp_r', 0):+.3f} "
+                    f"Regime={ss.get('regime', '?')}]"
+                )
             print()
 
         # -----------------------------------------------------------------
@@ -507,8 +527,7 @@ def main():
         print("  WEEKLY CIRCUIT BREAKER:")
 
         weekly_dd = round(portfolio["max_dd"] * 0.4, 1)
-        print(f"  - If down {weekly_dd}R in a week (40% of historical max DD), "
-              "skip rest of week")
+        print(f"  - If down {weekly_dd}R in a week (40% of historical max DD), skip rest of week")
         print(f"  - Historical worst week: {portfolio['worst_day']:.1f}R single day")
         print()
         print("  REGIME GATING:")
@@ -532,18 +551,16 @@ def main():
 
         p = portfolio
         print(f"  Trades per year:     ~{p['total_trades'] / (p['trading_days'] / 252):.0f}")
-        print(f"  Trades per day:      ~{p['avg_concurrent']:.1f} average, "
-              f"{p['max_concurrent']} max")
+        print(f"  Trades per day:      ~{p['avg_concurrent']:.1f} average, {p['max_concurrent']} max")
         print(f"  Win rate:            {p['wr']:.0%}")
         print(f"  Expectancy:          {p['exp_r']:+.3f}R per trade")
         print(f"  Annual Sharpe:       {p['sharpe']}")
-        print(f"  Max drawdown:        {p['max_dd']:.1f}R "
-              f"({p['dd_start']} to {p['dd_end']})")
+        print(f"  Max drawdown:        {p['max_dd']:.1f}R ({p['dd_start']} to {p['dd_end']})")
         print(f"  Worst single day:    {p['worst_day']:+.1f}R ({p['worst_day_date']})")
 
         # Yearly breakdown
         print(f"\n  {'Year':>6} {'Trades':>7} {'WR':>6} {'Total R':>9} {'ExpR':>8}")
-        print(f"  {'-'*6} {'-'*7} {'-'*6} {'-'*9} {'-'*8}")
+        print(f"  {'-' * 6} {'-' * 7} {'-' * 6} {'-' * 9} {'-' * 8}")
 
         all_pos = True
         for year in sorted(p["yearly"].keys()):
@@ -551,8 +568,7 @@ def main():
             wr = y["wins"] / y["n"] if y["n"] > 0 else 0
             expr = y["r"] / y["n"] if y["n"] > 0 else 0
             marker = " <-- LOSS YEAR" if y["r"] < 0 else ""
-            print(f"  {year:>6} {y['n']:>7} {wr:>5.0%} "
-                  f"{y['r']:>+8.1f}R {expr:>+7.4f}{marker}")
+            print(f"  {year:>6} {y['n']:>7} {wr:>5.0%} {y['r']:>+8.1f}R {expr:>+7.4f}{marker}")
             if y["r"] < 0:
                 all_pos = False
 
@@ -583,8 +599,7 @@ def main():
             weighted_r_dollar += spec["typical_r_dollars"] * count / total_slots
 
         print(f"  Expected annual R: {avg_ann_r:+.0f}R (2024-2025 average)")
-        print(f"  Estimated $/R: ~${weighted_r_dollar:.0f} per trade "
-              "(weighted average across instruments)")
+        print(f"  Estimated $/R: ~${weighted_r_dollar:.0f} per trade (weighted average across instruments)")
         print(f"  Max DD: {p['max_dd']:.1f}R")
         print()
 
@@ -595,8 +610,7 @@ def main():
         print(f"    Annual income:     ${annual_dollars:,.0f}")
         print(f"    Monthly income:    ${monthly:,.0f}")
         print(f"    Max drawdown:      ${dd_dollars:,.0f}")
-        print(f"    Min account size:  ${dd_dollars * 3:,.0f} "
-              "(3x max DD for margin + buffer)")
+        print(f"    Min account size:  ${dd_dollars * 3:,.0f} (3x max DD for margin + buffer)")
 
         # -----------------------------------------------------------------
         # SECTION 6: SCALING PATH
@@ -606,14 +620,11 @@ def main():
         print(f"{'=' * 90}\n")
 
         # Max margin needed (worst case: all slots active simultaneously)
-        max_margin_per_contract = max(
-            spec["margin"] for inst, spec in CONTRACT_SPECS.items()
-            if inst in inst_counts
+        max_margin_per_contract = max(spec["margin"] for inst, spec in CONTRACT_SPECS.items() if inst in inst_counts)
+        avg_margin = (
+            sum(CONTRACT_SPECS.get(inst, {"margin": 1500})["margin"] * count for inst, count in inst_counts.items())
+            / total_slots
         )
-        avg_margin = sum(
-            CONTRACT_SPECS.get(inst, {"margin": 1500})["margin"] * count
-            for inst, count in inst_counts.items()
-        ) / total_slots
         max_concurrent = p["max_concurrent"]
         margin_for_max = int(avg_margin * max_concurrent)
 
@@ -624,18 +635,19 @@ def main():
         print("  4. Never scale during a losing streak (wait for recovery)")
         print()
 
-        print(f"  {'Stage':<10} {'Contracts':>10} {'$/R':>8} {'Annual':>12} "
-              f"{'MaxDD$':>10} {'Min Acct':>10}")
-        print(f"  {'-'*10} {'-'*10} {'-'*8} {'-'*12} {'-'*10} {'-'*10}")
+        print(f"  {'Stage':<10} {'Contracts':>10} {'$/R':>8} {'Annual':>12} {'MaxDD$':>10} {'Min Acct':>10}")
+        print(f"  {'-' * 10} {'-' * 10} {'-' * 8} {'-' * 12} {'-' * 10} {'-' * 10}")
 
         for n_contracts in [1, 2, 3, 5, 10]:
             dpr = weighted_r_dollar * n_contracts
             annual = avg_ann_r * dpr
             dd = p["max_dd"] * dpr
             min_acct = dd * 3 + margin_for_max * n_contracts
-            print(f"  {'Stage ' + str(n_contracts):<10} {n_contracts:>10} "
-                  f"${dpr:>7,.0f} ${annual:>10,.0f} "
-                  f"${dd:>8,.0f} ${min_acct:>8,.0f}")
+            print(
+                f"  {'Stage ' + str(n_contracts):<10} {n_contracts:>10} "
+                f"${dpr:>7,.0f} ${annual:>10,.0f} "
+                f"${dd:>8,.0f} ${min_acct:>8,.0f}"
+            )
 
         print()
         print("  PROGRESSION MILESTONES:")
@@ -654,8 +666,7 @@ def main():
 
         print("  WHAT THIS SYSTEM IS:")
         print(f"  - {len(selected)} independent ORB breakout edges across 4 instruments")
-        print(f"  - {p['total_trades']:,} backtested trades over "
-              f"~{p['trading_days'] / 252:.0f} years")
+        print(f"  - {p['total_trades']:,} backtested trades over ~{p['trading_days'] / 252:.0f} years")
         print(f"  - Walk-forward validated (OOS Sharpe=4.10, OOS MaxDD=13.3R)")
         print(f"  - All strategies FDR-significant (survives multiple comparison correction)")
         print(f"  - Sharpe {p['sharpe']} is top-decile for systematic futures trading")
@@ -668,13 +679,14 @@ def main():
         print()
         print("  REALISTIC EXPECTATIONS AT EACH STAGE:")
 
-        for n_contracts, label in [(1, "Starting"), (3, "Growing"),
-                                    (5, "Established"), (10, "Professional")]:
+        for n_contracts, label in [(1, "Starting"), (3, "Growing"), (5, "Established"), (10, "Professional")]:
             dpr = weighted_r_dollar * n_contracts
             annual = avg_ann_r * dpr
             dd = p["max_dd"] * dpr
-            print(f"    {label} ({n_contracts} contract{'s' if n_contracts > 1 else ''}): "
-                  f"~${annual:,.0f}/yr income, ~${dd:,.0f} max loss period")
+            print(
+                f"    {label} ({n_contracts} contract{'s' if n_contracts > 1 else ''}): "
+                f"~${annual:,.0f}/yr income, ~${dd:,.0f} max loss period"
+            )
 
         print()
         print("  CAN A PROFESSIONAL USE THIS?")

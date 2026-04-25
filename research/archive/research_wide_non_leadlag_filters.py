@@ -132,7 +132,10 @@ def scan_symbol_session(con: duckdb.DuckDBPyConnection, symbol: str, session: st
         "slow_gt_60": df["break_delay"].notna() & (df["break_delay"] > 60),
         "size_q50_plus": df["orb_size"].notna() & (df["orb_size"] >= q50),
         "size_q75_plus": df["orb_size"].notna() & (df["orb_size"] >= q75),
-        "fast_and_q75": df["break_delay"].notna() & (df["break_delay"] <= 15) & df["orb_size"].notna() & (df["orb_size"] >= q75),
+        "fast_and_q75": df["break_delay"].notna()
+        & (df["break_delay"] <= 15)
+        & df["orb_size"].notna()
+        & (df["orb_size"] >= q75),
         "long_fast": (df["break_dir"] == "long") & df["break_delay"].notna() & (df["break_delay"] <= 15),
         "short_fast": (df["break_dir"] == "short") & df["break_delay"].notna() & (df["break_delay"] <= 15),
     }

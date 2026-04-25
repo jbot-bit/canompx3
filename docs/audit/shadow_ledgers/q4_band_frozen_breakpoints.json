@@ -1,0 +1,174 @@
+{
+  "confirm_bars": 1,
+  "entry_model": "E2",
+  "excluded_cells": [
+    {
+      "direction": "long",
+      "session": "COMEX_SETTLE"
+    },
+    {
+      "direction": "short",
+      "session": "NYSE_OPEN"
+    },
+    {
+      "direction": "short",
+      "session": "US_DATA_830"
+    }
+  ],
+  "instrument": "MNQ",
+  "is_window_exclusive_upper": "2026-01-01",
+  "lanes": {
+    "MNQ_BRISBANE_1025_O5_E2_CB1_RR1.5_long": {
+      "direction": "long",
+      "n_is_rows": 904,
+      "p60": 1.7983999999999998,
+      "p80": 2.888840000000002,
+      "session": "BRISBANE_1025"
+    },
+    "MNQ_BRISBANE_1025_O5_E2_CB1_RR1.5_short": {
+      "direction": "short",
+      "n_is_rows": 811,
+      "p60": 1.9111,
+      "p80": 3.0444,
+      "session": "BRISBANE_1025"
+    },
+    "MNQ_CME_PRECLOSE_O5_E2_CB1_RR1.5_long": {
+      "direction": "long",
+      "n_is_rows": 655,
+      "p60": 1.2695,
+      "p80": 1.6490200000000002,
+      "session": "CME_PRECLOSE"
+    },
+    "MNQ_CME_PRECLOSE_O5_E2_CB1_RR1.5_short": {
+      "direction": "short",
+      "n_is_rows": 638,
+      "p60": 1.31452,
+      "p80": 1.7222600000000001,
+      "session": "CME_PRECLOSE"
+    },
+    "MNQ_CME_REOPEN_O5_E2_CB1_RR1.5_long": {
+      "direction": "long",
+      "n_is_rows": 382,
+      "p60": 2.2685799999999996,
+      "p80": 3.3523600000000005,
+      "session": "CME_REOPEN"
+    },
+    "MNQ_CME_REOPEN_O5_E2_CB1_RR1.5_short": {
+      "direction": "short",
+      "n_is_rows": 372,
+      "p60": 2.40472,
+      "p80": 3.6921,
+      "session": "CME_REOPEN"
+    },
+    "MNQ_COMEX_SETTLE_O5_E2_CB1_RR1.5_short": {
+      "direction": "short",
+      "n_is_rows": 764,
+      "p60": 1.7553400000000001,
+      "p80": 2.5197599999999998,
+      "session": "COMEX_SETTLE"
+    },
+    "MNQ_EUROPE_FLOW_O5_E2_CB1_RR1.5_long": {
+      "direction": "long",
+      "n_is_rows": 847,
+      "p60": 1.7235399999999998,
+      "p80": 2.61808,
+      "session": "EUROPE_FLOW"
+    },
+    "MNQ_EUROPE_FLOW_O5_E2_CB1_RR1.5_short": {
+      "direction": "short",
+      "n_is_rows": 865,
+      "p60": 1.7213800000000001,
+      "p80": 2.7840200000000004,
+      "session": "EUROPE_FLOW"
+    },
+    "MNQ_LONDON_METALS_O5_E2_CB1_RR1.5_long": {
+      "direction": "long",
+      "n_is_rows": 859,
+      "p60": 1.8168399999999998,
+      "p80": 2.57168,
+      "session": "LONDON_METALS"
+    },
+    "MNQ_LONDON_METALS_O5_E2_CB1_RR1.5_short": {
+      "direction": "short",
+      "n_is_rows": 853,
+      "p60": 1.78922,
+      "p80": 2.6742,
+      "session": "LONDON_METALS"
+    },
+    "MNQ_NYSE_CLOSE_O5_E2_CB1_RR1.5_long": {
+      "direction": "long",
+      "n_is_rows": 290,
+      "p60": 1.58664,
+      "p80": 2.6677600000000004,
+      "session": "NYSE_CLOSE"
+    },
+    "MNQ_NYSE_CLOSE_O5_E2_CB1_RR1.5_short": {
+      "direction": "short",
+      "n_is_rows": 319,
+      "p60": 1.7053599999999998,
+      "p80": 2.8472000000000004,
+      "session": "NYSE_CLOSE"
+    },
+    "MNQ_NYSE_OPEN_O5_E2_CB1_RR1.5_long": {
+      "direction": "long",
+      "n_is_rows": 828,
+      "p60": 1.3642400000000001,
+      "p80": 1.7804400000000002,
+      "session": "NYSE_OPEN"
+    },
+    "MNQ_SINGAPORE_OPEN_O5_E2_CB1_RR1.5_long": {
+      "direction": "long",
+      "n_is_rows": 881,
+      "p60": 1.9465,
+      "p80": 3.1657,
+      "session": "SINGAPORE_OPEN"
+    },
+    "MNQ_SINGAPORE_OPEN_O5_E2_CB1_RR1.5_short": {
+      "direction": "short",
+      "n_is_rows": 835,
+      "p60": 2.03066,
+      "p80": 3.23206,
+      "session": "SINGAPORE_OPEN"
+    },
+    "MNQ_TOKYO_OPEN_O5_E2_CB1_RR1.5_long": {
+      "direction": "long",
+      "n_is_rows": 855,
+      "p60": 2.0323599999999997,
+      "p80": 3.12584,
+      "session": "TOKYO_OPEN"
+    },
+    "MNQ_TOKYO_OPEN_O5_E2_CB1_RR1.5_short": {
+      "direction": "short",
+      "n_is_rows": 861,
+      "p60": 2.0444,
+      "p80": 3.1377,
+      "session": "TOKYO_OPEN"
+    },
+    "MNQ_US_DATA_1000_O5_E2_CB1_RR1.5_long": {
+      "direction": "long",
+      "n_is_rows": 866,
+      "p60": 1.5342,
+      "p80": 2.0193,
+      "session": "US_DATA_1000"
+    },
+    "MNQ_US_DATA_1000_O5_E2_CB1_RR1.5_short": {
+      "direction": "short",
+      "n_is_rows": 803,
+      "p60": 1.64148,
+      "p80": 2.0966400000000003,
+      "session": "US_DATA_1000"
+    },
+    "MNQ_US_DATA_830_O5_E2_CB1_RR1.5_long": {
+      "direction": "long",
+      "n_is_rows": 812,
+      "p60": 1.57362,
+      "p80": 2.627540000000001,
+      "session": "US_DATA_830"
+    }
+  },
+  "orb_minutes": 5,
+  "parent_universality_commit": "126ed6b8",
+  "pre_reg_sha": "aa9999a7",
+  "recalibration_allowed": false,
+  "rr_target": 1.5
+}

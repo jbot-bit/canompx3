@@ -52,17 +52,17 @@ TRADING_DAYS_PER_YEAR = 252
 # Risk profiles
 PROFILES = {
     "conservative": {
-        "kelly_fraction": 0.25,    # quarter-Kelly
-        "max_daily_r": 3.0,        # max R at risk per day
+        "kelly_fraction": 0.25,  # quarter-Kelly
+        "max_daily_r": 3.0,  # max R at risk per day
         "dd_circuit_breaker": 6.0,  # halt at 6R portfolio DD
         "dd_scale_threshold": 3.0,  # start scaling at 3R DD
-        "dd_scale_floor": 0.25,     # minimum scale in DD
-        "watch_weight": 0.0,        # don't trade WATCH slots
-        "corr_penalty": 0.5,        # 50% reduction for correlated pairs
+        "dd_scale_floor": 0.25,  # minimum scale in DD
+        "watch_weight": 0.0,  # don't trade WATCH slots
+        "corr_penalty": 0.5,  # 50% reduction for correlated pairs
         "max_slots_per_day": 6,
     },
     "moderate": {
-        "kelly_fraction": 0.40,    # ~half-Kelly
+        "kelly_fraction": 0.40,  # ~half-Kelly
         "max_daily_r": 5.0,
         "dd_circuit_breaker": 10.0,
         "dd_scale_threshold": 5.0,
@@ -72,7 +72,7 @@ PROFILES = {
         "max_slots_per_day": 10,
     },
     "aggressive": {
-        "kelly_fraction": 0.50,    # half-Kelly
+        "kelly_fraction": 0.50,  # half-Kelly
         "max_daily_r": 8.0,
         "dd_circuit_breaker": 15.0,
         "dd_scale_threshold": 8.0,
@@ -88,6 +88,7 @@ PROFILES = {
 # KELLY CRITERION
 # ---------------------------------------------------------------------------
 
+
 def compute_kelly(trades):
     """Compute Kelly fraction from trade results.
 
@@ -97,15 +98,13 @@ def compute_kelly(trades):
     Returns dict with kelly_full, kelly_half, win_rate, payoff_ratio, edge.
     """
     if len(trades) < 30:
-        return {"kelly_full": 0, "kelly_half": 0, "win_rate": 0,
-                "payoff_ratio": 0, "edge": 0, "n": len(trades)}
+        return {"kelly_full": 0, "kelly_half": 0, "win_rate": 0, "payoff_ratio": 0, "edge": 0, "n": len(trades)}
 
     wins = [t["pnl_r"] for t in trades if t["outcome"] == "win"]
     losses = [abs(t["pnl_r"]) for t in trades if t["outcome"] == "loss"]
 
     if not wins or not losses:
-        return {"kelly_full": 0, "kelly_half": 0, "win_rate": 0,
-                "payoff_ratio": 0, "edge": 0, "n": len(trades)}
+        return {"kelly_full": 0, "kelly_half": 0, "win_rate": 0, "payoff_ratio": 0, "edge": 0, "n": len(trades)}
 
     p = len(wins) / len(trades)
     q = 1 - p
@@ -150,6 +149,7 @@ def compute_slot_variance(trades):
 # CORRELATION MATRIX
 # ---------------------------------------------------------------------------
 
+
 def compute_slot_correlations(slot_trades_map, min_overlap=30):
     """Compute pairwise daily R correlation between slots.
 
@@ -168,7 +168,7 @@ def compute_slot_correlations(slot_trades_map, min_overlap=30):
     corr_map = {}
 
     for i, a in enumerate(labels):
-        for b in labels[i + 1:]:
+        for b in labels[i + 1 :]:
             # Find overlapping days
             days_a = set(slot_daily[a].keys())
             days_b = set(slot_daily[b].keys())
@@ -201,6 +201,7 @@ def compute_slot_correlations(slot_trades_map, min_overlap=30):
 # REGIME GATING
 # ---------------------------------------------------------------------------
 
+
 def compute_rolling_fitness(trades, window_days=365):
     """Compute rolling fitness for a slot.
 
@@ -220,8 +221,7 @@ def compute_rolling_fitness(trades, window_days=365):
     wr = wins / len(recent)
 
     if exp_r < -0.01:
-        return "DECAY", {"rolling_exp_r": exp_r, "rolling_wr": wr,
-                          "rolling_n": len(recent)}
+        return "DECAY", {"rolling_exp_r": exp_r, "rolling_wr": wr, "rolling_n": len(recent)}
 
     # Check recent momentum (last 60 days)
     cutoff_60 = max(t["trading_day"] for t in trades) - timedelta(days=60)
@@ -229,16 +229,15 @@ def compute_rolling_fitness(trades, window_days=365):
     if len(recent_60) >= 5:
         exp_60 = sum(t["pnl_r"] for t in recent_60) / len(recent_60)
         if exp_60 < -0.05:
-            return "WATCH", {"rolling_exp_r": exp_r, "rolling_wr": wr,
-                              "rolling_n": len(recent), "recent_exp_r": exp_60}
+            return "WATCH", {"rolling_exp_r": exp_r, "rolling_wr": wr, "rolling_n": len(recent), "recent_exp_r": exp_60}
 
-    return "FIT", {"rolling_exp_r": exp_r, "rolling_wr": wr,
-                    "rolling_n": len(recent)}
+    return "FIT", {"rolling_exp_r": exp_r, "rolling_wr": wr, "rolling_n": len(recent)}
 
 
 # ---------------------------------------------------------------------------
 # PORTFOLIO ENGINE CORE
 # ---------------------------------------------------------------------------
+
 
 def compute_daily_sizing(
     slot_kelly,
@@ -321,7 +320,7 @@ def compute_daily_sizing(
     # Step 4: Correlation penalty
     slots_list = list(gated.keys())
     for i, a in enumerate(slots_list):
-        for b in slots_list[i + 1:]:
+        for b in slots_list[i + 1 :]:
             corr = abs(slot_corr.get((a, b), 0))
             if corr > 0.3:
                 penalty = 1.0 - (corr * profile["corr_penalty"])
@@ -338,8 +337,7 @@ def compute_daily_sizing(
         range_r = profile["dd_circuit_breaker"] - profile["dd_scale_threshold"]
         if range_r > 0:
             pct_through = (portfolio_dd - profile["dd_scale_threshold"]) / range_r
-            scale = max(profile["dd_scale_floor"],
-                        1.0 - pct_through * (1.0 - profile["dd_scale_floor"]))
+            scale = max(profile["dd_scale_floor"], 1.0 - pct_through * (1.0 - profile["dd_scale_floor"]))
         else:
             scale = profile["dd_scale_floor"]
         gated = {k: v * scale for k, v in gated.items()}
@@ -352,7 +350,7 @@ def compute_daily_sizing(
 
     # Step 7: Max slots per day
     if len(gated) > profile["max_slots_per_day"]:
-        top = sorted(gated.items(), key=lambda x: -x[1])[:profile["max_slots_per_day"]]
+        top = sorted(gated.items(), key=lambda x: -x[1])[: profile["max_slots_per_day"]]
         gated = dict(top)
 
     # Floor: minimum useful size is 0.1R
@@ -364,6 +362,7 @@ def compute_daily_sizing(
 # ---------------------------------------------------------------------------
 # DATA LOADING (reuse trade_book infrastructure)
 # ---------------------------------------------------------------------------
+
 
 def load_all_slot_trades(con, slots):
     """Load trades for all slots, return dict of {slot_label: [trades]}."""
@@ -378,15 +377,17 @@ def load_all_slot_trades(con, slots):
         filter_types = set()
         orb_labels = set()
         for slot in inst_slots:
-            row = con.execute("""
+            row = con.execute(
+                """
                 SELECT instrument, orb_label, orb_minutes, entry_model,
                        rr_target, confirm_bars, filter_type
                 FROM validated_setups WHERE strategy_id = ?
-            """, [slot["head_strategy_id"]]).fetchone()
+            """,
+                [slot["head_strategy_id"]],
+            ).fetchone()
             if not row:
                 continue
-            cols = ["instrument", "orb_label", "orb_minutes", "entry_model",
-                    "rr_target", "confirm_bars", "filter_type"]
+            cols = ["instrument", "orb_label", "orb_minutes", "entry_model", "rr_target", "confirm_bars", "filter_type"]
             params = dict(zip(cols, row))
             slot_params[slot["head_strategy_id"]] = params
             filter_types.add(params["filter_type"])
@@ -407,35 +408,42 @@ def load_all_slot_trades(con, slots):
             params = slot_params.get(sid)
             if not params:
                 continue
-            eligible = filter_days.get(
-                (params["filter_type"], params["orb_label"]), set()
-            )
+            eligible = filter_days.get((params["filter_type"], params["orb_label"]), set())
 
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT trading_day, outcome, pnl_r
                 FROM orb_outcomes
                 WHERE symbol = ? AND orb_label = ? AND orb_minutes = ?
                   AND entry_model = ? AND rr_target = ? AND confirm_bars = ?
                   AND outcome IN ('win', 'loss')
                 ORDER BY trading_day
-            """, [
-                params["instrument"], params["orb_label"], params["orb_minutes"],
-                params["entry_model"], params["rr_target"], params["confirm_bars"],
-            ]).fetchall()
+            """,
+                [
+                    params["instrument"],
+                    params["orb_label"],
+                    params["orb_minutes"],
+                    params["entry_model"],
+                    params["rr_target"],
+                    params["confirm_bars"],
+                ],
+            ).fetchall()
 
             slot_label = f"{instrument}_{params['orb_label']}"
             slot_trades[slot_label] = []
             for r in rows:
                 if r[0] in eligible:
-                    slot_trades[slot_label].append({
-                        "trading_day": r[0],
-                        "outcome": r[1],
-                        "pnl_r": r[2],
-                        "instrument": instrument,
-                        "session": params["orb_label"],
-                        "slot_label": slot_label,
-                        "strategy_id": sid,
-                    })
+                    slot_trades[slot_label].append(
+                        {
+                            "trading_day": r[0],
+                            "outcome": r[1],
+                            "pnl_r": r[2],
+                            "instrument": instrument,
+                            "session": params["orb_label"],
+                            "slot_label": slot_label,
+                            "strategy_id": sid,
+                        }
+                    )
 
     return slot_trades
 
@@ -445,11 +453,14 @@ def get_slot_details(con, slots):
     details = {}
     for slot in slots:
         sid = slot["head_strategy_id"]
-        row = con.execute("""
+        row = con.execute(
+            """
             SELECT entry_model, rr_target, confirm_bars, filter_type,
                    max_drawdown_r, expectancy_r, sharpe_ratio, win_rate
             FROM validated_setups WHERE strategy_id = ?
-        """, [sid]).fetchone()
+        """,
+            [sid],
+        ).fetchone()
         if row:
             f"{slot['instrument']}_{row[3] if row else 'unknown'}"
             slot_label = f"{slot['instrument']}_{slot['session']}"
@@ -471,8 +482,10 @@ def get_slot_details(con, slots):
 # BACKTEST ENGINE
 # ---------------------------------------------------------------------------
 
-def run_backtest(slot_trades, slot_kelly, slot_variance, slot_fitness,
-                 slot_corr, profile, start_date=None, end_date=None):
+
+def run_backtest(
+    slot_trades, slot_kelly, slot_variance, slot_fitness, slot_corr, profile, start_date=None, end_date=None
+):
     """Run institutional portfolio backtest.
 
     Returns dict with equity curve, daily decisions, and metrics.
@@ -526,8 +539,13 @@ def run_backtest(slot_trades, slot_kelly, slot_variance, slot_fitness,
 
         # Compute sizing
         sizes = compute_daily_sizing(
-            slot_kelly, slot_variance, slot_fitness, slot_corr,
-            active_today, portfolio_dd, profile,
+            slot_kelly,
+            slot_variance,
+            slot_fitness,
+            slot_corr,
+            active_today,
+            portfolio_dd,
+            profile,
         )
 
         # Execute trades
@@ -547,13 +565,15 @@ def run_backtest(slot_trades, slot_kelly, slot_variance, slot_fitness,
                 # Naive: always 1R
                 naive_day_pnl += t["pnl_r"]
 
-                day_detail.append({
-                    "slot": label,
-                    "outcome": t["outcome"],
-                    "raw_pnl": t["pnl_r"],
-                    "r_size": r_size,
-                    "sized_pnl": round(sized_pnl, 4),
-                })
+                day_detail.append(
+                    {
+                        "slot": label,
+                        "outcome": t["outcome"],
+                        "raw_pnl": t["pnl_r"],
+                        "r_size": r_size,
+                        "sized_pnl": round(sized_pnl, 4),
+                    }
+                )
 
         cum_r += day_pnl
         if cum_r > peak_r:
@@ -571,32 +591,36 @@ def run_backtest(slot_trades, slot_kelly, slot_variance, slot_fitness,
         naive_dd = naive_peak - naive_cum
         naive_max_dd = max(naive_max_dd, naive_dd)
 
-        equity_curve.append({
-            "date": day,
-            "cum_r": round(cum_r, 4),
-            "portfolio_dd": round(drawdown, 4),
-            "day_pnl": round(day_pnl, 4),
-            "naive_cum": round(naive_cum, 4),
-            "slots_active": len(active_today),
-            "slots_sized": len(sizes),
-            "total_r_risked": round(sum(sizes.values()), 3),
-        })
+        equity_curve.append(
+            {
+                "date": day,
+                "cum_r": round(cum_r, 4),
+                "portfolio_dd": round(drawdown, 4),
+                "day_pnl": round(day_pnl, 4),
+                "naive_cum": round(naive_cum, 4),
+                "slots_active": len(active_today),
+                "slots_sized": len(sizes),
+                "total_r_risked": round(sum(sizes.values()), 3),
+            }
+        )
 
         daily_pnl.append(day_pnl)
 
         if day_detail:
-            daily_decisions.append({
-                "date": day,
-                "dd_level": round(portfolio_dd, 2),
-                "trades": day_detail,
-            })
+            daily_decisions.append(
+                {
+                    "date": day,
+                    "dd_level": round(portfolio_dd, 2),
+                    "trades": day_detail,
+                }
+            )
 
     # Compute overall metrics
     n_days = len(daily_pnl)
     if n_days > 1:
         mean_d = sum(daily_pnl) / n_days
         var = sum((v - mean_d) ** 2 for v in daily_pnl) / (n_days - 1)
-        std_d = var ** 0.5
+        std_d = var**0.5
         sharpe = (mean_d / std_d) * sqrt(TRADING_DAYS_PER_YEAR) if std_d > 0 else None
     else:
         sharpe = None
@@ -617,7 +641,7 @@ def run_backtest(slot_trades, slot_kelly, slot_variance, slot_fitness,
     if len(naive_pnl_list) > 1:
         nm = sum(naive_pnl_list) / len(naive_pnl_list)
         nv = sum((v - nm) ** 2 for v in naive_pnl_list) / (len(naive_pnl_list) - 1)
-        ns = nv ** 0.5
+        ns = nv**0.5
         naive_sharpe = (nm / ns) * sqrt(TRADING_DAYS_PER_YEAR) if ns > 0 else None
 
     # Yearly breakdown
@@ -650,17 +674,22 @@ def run_backtest(slot_trades, slot_kelly, slot_variance, slot_fitness,
 # REPORTING
 # ---------------------------------------------------------------------------
 
+
 def print_slot_analysis(slot_details, slot_kelly, slot_variance, slot_fitness):
     """Print per-slot institutional analysis."""
     print(f"\n{'=' * 110}")
     print("SLOT-LEVEL ANALYSIS")
     print(f"{'=' * 110}")
-    print(f"  {'Slot':<25} {'Entry':>5} {'RR':>4} {'Filter':<16} "
-          f"{'WR':>5} {'ExpR':>6} {'Kelly':>6} {'HfK':>5} "
-          f"{'Var':>6} {'Regime':>6} {'DD':>6}")
-    print(f"  {'-'*25} {'-'*5} {'-'*4} {'-'*16} "
-          f"{'-'*5} {'-'*6} {'-'*6} {'-'*5} "
-          f"{'-'*6} {'-'*6} {'-'*6}")
+    print(
+        f"  {'Slot':<25} {'Entry':>5} {'RR':>4} {'Filter':<16} "
+        f"{'WR':>5} {'ExpR':>6} {'Kelly':>6} {'HfK':>5} "
+        f"{'Var':>6} {'Regime':>6} {'DD':>6}"
+    )
+    print(
+        f"  {'-' * 25} {'-' * 5} {'-' * 4} {'-' * 16} "
+        f"{'-' * 5} {'-' * 6} {'-' * 6} {'-' * 5} "
+        f"{'-' * 6} {'-' * 6} {'-' * 6}"
+    )
 
     for label in sorted(slot_details.keys()):
         d = slot_details[label]
@@ -672,11 +701,13 @@ def print_slot_analysis(slot_details, slot_kelly, slot_variance, slot_fitness):
         # Color-code regime status
         status_str = status
 
-        print(f"  {label:<25} {d['entry_model']:>5} {d['rr_target']:>4} "
-              f"{d['filter_type']:<16} "
-              f"{d['win_rate']:>4.0%} {d['exp_r']:>+5.3f} "
-              f"{k.get('kelly_full', 0):>5.3f} {k.get('kelly_half', 0):>4.3f} "
-              f"{v:>5.3f} {status_str:>6} {d['max_dd']:>5.1f}R")
+        print(
+            f"  {label:<25} {d['entry_model']:>5} {d['rr_target']:>4} "
+            f"{d['filter_type']:<16} "
+            f"{d['win_rate']:>4.0%} {d['exp_r']:>+5.3f} "
+            f"{k.get('kelly_full', 0):>5.3f} {k.get('kelly_half', 0):>4.3f} "
+            f"{v:>5.3f} {status_str:>6} {d['max_dd']:>5.1f}R"
+        )
 
 
 def print_correlation_matrix(slot_corr, labels):
@@ -709,14 +740,16 @@ def print_backtest_results(results, profile_name, profile):
 
     print(f"\n{'#' * 110}")
     print(f"#  BACKTEST: {profile_name.upper()} PROFILE")
-    print(f"#  Kelly frac: {profile['kelly_fraction']:.0%} | "
-          f"Daily cap: {profile['max_daily_r']:.0f}R | "
-          f"DD breaker: {profile['dd_circuit_breaker']:.0f}R | "
-          f"Max slots: {profile['max_slots_per_day']}")
+    print(
+        f"#  Kelly frac: {profile['kelly_fraction']:.0%} | "
+        f"Daily cap: {profile['max_daily_r']:.0f}R | "
+        f"DD breaker: {profile['dd_circuit_breaker']:.0f}R | "
+        f"Max slots: {profile['max_slots_per_day']}"
+    )
     print(f"{'#' * 110}")
 
     print(f"\n  {'Metric':<30} {'Institutional':>15} {'Naive (1R each)':>15} {'Delta':>10}")
-    print(f"  {'-'*30} {'-'*15} {'-'*15} {'-'*10}")
+    print(f"  {'-' * 30} {'-' * 15} {'-' * 15} {'-' * 10}")
 
     def row(label, inst, naive, fmt=".1f", suffix=""):
         delta = inst - naive if inst is not None and naive is not None else None
@@ -743,13 +776,12 @@ def print_backtest_results(results, profile_name, profile):
 
     # Yearly
     print(f"\n  {'Year':>6} {'Inst R':>10} {'Naive R':>10} {'Improvement':>12} {'Trades':>8}")
-    print(f"  {'-'*6} {'-'*10} {'-'*10} {'-'*12} {'-'*8}")
+    print(f"  {'-' * 6} {'-' * 10} {'-' * 10} {'-' * 12} {'-' * 8}")
 
     for year in sorted(r["yearly"].keys()):
         y = r["yearly"][year]
         imp = y["pnl"] - y["naive_pnl"]
-        print(f"  {year:>6} {y['pnl']:>+9.1f}R {y['naive_pnl']:>+9.1f}R "
-              f"{imp:>+11.1f}R {y['n']:>8}")
+        print(f"  {year:>6} {y['pnl']:>+9.1f}R {y['naive_pnl']:>+9.1f}R {imp:>+11.1f}R {y['n']:>8}")
 
 
 def print_daily_playbook(results, slot_details, n_days=5):
@@ -766,14 +798,18 @@ def print_daily_playbook(results, slot_details, n_days=5):
 
     for day in recent:
         total_r = sum(t["r_size"] for t in day["trades"])
-        print(f"\n  {day['date']}  |  DD level: {day['dd_level']:.1f}R  |  "
-              f"Total R at risk: {total_r:.2f}R  |  {len(day['trades'])} trades")
+        print(
+            f"\n  {day['date']}  |  DD level: {day['dd_level']:.1f}R  |  "
+            f"Total R at risk: {total_r:.2f}R  |  {len(day['trades'])} trades"
+        )
         print(f"  {'Slot':<25} {'Size':>6} {'Outcome':>8} {'Raw':>7} {'Sized':>7}")
-        print(f"  {'-'*25} {'-'*6} {'-'*8} {'-'*7} {'-'*7}")
+        print(f"  {'-' * 25} {'-' * 6} {'-' * 8} {'-' * 7} {'-' * 7}")
 
         for t in sorted(day["trades"], key=lambda x: -x["r_size"]):
-            print(f"  {t['slot']:<25} {t['r_size']:>5.2f}R {t['outcome']:>8} "
-                  f"{t['raw_pnl']:>+6.2f}R {t['sized_pnl']:>+6.3f}R")
+            print(
+                f"  {t['slot']:<25} {t['r_size']:>5.2f}R {t['outcome']:>8} "
+                f"{t['raw_pnl']:>+6.2f}R {t['sized_pnl']:>+6.3f}R"
+            )
 
 
 def print_income_projection(results, profile_name, dollars_per_r=None):
@@ -792,7 +828,7 @@ def print_income_projection(results, profile_name, dollars_per_r=None):
     print(f"  Based on 2024-2025 average: {avg_ann:+.1f}R/year")
     print(f"  Max historical DD: {r['max_dd']:.1f}R")
     if r["max_dd"] > 0:
-        print(f"  Return/DD ratio: {avg_ann/r['max_dd']:.1f}x")
+        print(f"  Return/DD ratio: {avg_ann / r['max_dd']:.1f}x")
     print()
 
     tiers = [100, 200, 400, 750, 1000, 2000]
@@ -800,9 +836,8 @@ def print_income_projection(results, profile_name, dollars_per_r=None):
         tiers.append(dollars_per_r)
         tiers.sort()
 
-    print(f"  {'$/R':>8} {'Annual':>12} {'Monthly':>10} {'Max Loss':>10} "
-          f"{'Min Acct':>10} {'Contracts':>10}")
-    print(f"  {'-'*8} {'-'*12} {'-'*10} {'-'*10} {'-'*10} {'-'*10}")
+    print(f"  {'$/R':>8} {'Annual':>12} {'Monthly':>10} {'Max Loss':>10} {'Min Acct':>10} {'Contracts':>10}")
+    print(f"  {'-' * 8} {'-' * 12} {'-' * 10} {'-' * 10} {'-' * 10} {'-' * 10}")
 
     for dpr in tiers:
         annual = avg_ann * dpr
@@ -812,9 +847,11 @@ def print_income_projection(results, profile_name, dollars_per_r=None):
         # Approximate contracts (MGC=$10/pt, ~$100-200/R typical)
         contracts = max(1, round(dpr / 100))
         marker = " <--" if dollars_per_r and dpr == dollars_per_r else ""
-        print(f"  ${dpr:>7} ${annual:>10,.0f} ${monthly:>8,.0f} "
-              f"${dd_dollar:>8,.0f} ${acct:>8,.0f} "
-              f"{'~' + str(contracts):>10}{marker}")
+        print(
+            f"  ${dpr:>7} ${annual:>10,.0f} ${monthly:>8,.0f} "
+            f"${dd_dollar:>8,.0f} ${acct:>8,.0f} "
+            f"{'~' + str(contracts):>10}{marker}"
+        )
 
     print("\n  Strategy: Start at $100-200/R (1-2 micro contracts).")
     print("  Scale up only after 3+ months profitable live trading.")
@@ -831,9 +868,9 @@ def print_profile_comparison(all_results):
     for name in all_results:
         print(f" {name:>18}", end="")
     print()
-    print(f"  {'-'*25}", end="")
+    print(f"  {'-' * 25}", end="")
     for _ in all_results:
-        print(f" {'-'*18}", end="")
+        print(f" {'-' * 18}", end="")
     print()
 
     metrics = [
@@ -886,14 +923,18 @@ def print_profile_comparison(all_results):
         print(f"\n  {'RISK-EQUALIZED':=^78}")
         print(f"  Lever each profile to {naive_dd:.1f}R DD (same as naive)")
         print("  This shows what happens when you run MORE contracts to fill your risk budget\n")
-        print(f"  {'Profile':<18} {'Raw R':>8} {'Raw DD':>8} {'Lever':>6} "
-              f"{'Equalized R':>12} {'vs Naive':>10} {'Improvement':>12}")
-        print(f"  {'-'*18} {'-'*8} {'-'*8} {'-'*6} {'-'*12} {'-'*10} {'-'*12}")
+        print(
+            f"  {'Profile':<18} {'Raw R':>8} {'Raw DD':>8} {'Lever':>6} "
+            f"{'Equalized R':>12} {'vs Naive':>10} {'Improvement':>12}"
+        )
+        print(f"  {'-' * 18} {'-' * 8} {'-' * 8} {'-' * 6} {'-' * 12} {'-' * 10} {'-' * 12}")
 
         # Naive baseline
         naive_r = list(all_results.values())[0]["naive_total_r"]
-        print(f"  {'Naive (1R each)':<18} {naive_r:>+7.0f}R {naive_dd:>7.1f}R "
-              f"{'1.0x':>6} {naive_r:>+11.0f}R {naive_r:>+9.0f}R {'baseline':>12}")
+        print(
+            f"  {'Naive (1R each)':<18} {naive_r:>+7.0f}R {naive_dd:>7.1f}R "
+            f"{'1.0x':>6} {naive_r:>+11.0f}R {naive_r:>+9.0f}R {'baseline':>12}"
+        )
 
         for name, r in all_results.items():
             if r["max_dd"] and r["max_dd"] > 0:
@@ -901,9 +942,11 @@ def print_profile_comparison(all_results):
                 eq_r = r["total_r"] * lever
                 vs_naive = eq_r - naive_r
                 pct = (vs_naive / naive_r * 100) if naive_r > 0 else 0
-                print(f"  {name:<18} {r['total_r']:>+7.0f}R {r['max_dd']:>7.1f}R "
-                      f"{lever:>5.1f}x {eq_r:>+11.0f}R {eq_r:>+9.0f}R "
-                      f"{pct:>+10.0f}%")
+                print(
+                    f"  {name:<18} {r['total_r']:>+7.0f}R {r['max_dd']:>7.1f}R "
+                    f"{lever:>5.1f}x {eq_r:>+11.0f}R {eq_r:>+9.0f}R "
+                    f"{pct:>+10.0f}%"
+                )
 
         print("\n  Translation: Run more micro contracts to fill the same risk budget.")
         print("  A 5x lever means 5 micro contracts instead of 1.")
@@ -914,16 +957,18 @@ def print_profile_comparison(all_results):
 # MAIN
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(description="Institutional Portfolio Engine")
     parser.add_argument("--db-path", default=None)
-    parser.add_argument("--profile", default="all",
-                        choices=["conservative", "moderate", "aggressive", "all"],
-                        help="Risk profile (default: run all three)")
-    parser.add_argument("--dollars-per-r", type=int, default=None,
-                        help="$/R for income projection highlight")
-    parser.add_argument("--top-n", type=int, default=15,
-                        help="Use top N slots by Sharpe/DD ratio (default: 15)")
+    parser.add_argument(
+        "--profile",
+        default="all",
+        choices=["conservative", "moderate", "aggressive", "all"],
+        help="Risk profile (default: run all three)",
+    )
+    parser.add_argument("--dollars-per-r", type=int, default=None, help="$/R for income projection highlight")
+    parser.add_argument("--top-n", type=int, default=15, help="Use top N slots by Sharpe/DD ratio (default: 15)")
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
@@ -951,10 +996,9 @@ def main():
             slot["sh_dd_ratio"] = sh / slot["max_dd"] if slot["max_dd"] > 0 else 0
 
         ranked = sorted(all_slots, key=lambda s: -s["sh_dd_ratio"])
-        selected = ranked[:args.top_n]
+        selected = ranked[: args.top_n]
 
-        print(f"Selected top {len(selected)} slots by Sharpe/DD ratio "
-              f"(from {len(all_slots)} total)")
+        print(f"Selected top {len(selected)} slots by Sharpe/DD ratio (from {len(all_slots)} total)")
 
         # =====================================================================
         # STEP 2: Load all trade data
@@ -1010,18 +1054,19 @@ def main():
         # =====================================================================
         # RUN BACKTESTS
         # =====================================================================
-        profiles_to_run = (
-            list(PROFILES.keys()) if args.profile == "all"
-            else [args.profile]
-        )
+        profiles_to_run = list(PROFILES.keys()) if args.profile == "all" else [args.profile]
 
         all_results = {}
         for profile_name in profiles_to_run:
             profile = PROFILES[profile_name]
             print(f"\nRunning {profile_name} backtest...")
             results = run_backtest(
-                slot_trades, slot_kelly, slot_variance, slot_fitness,
-                slot_corr, profile,
+                slot_trades,
+                slot_kelly,
+                slot_variance,
+                slot_fitness,
+                slot_corr,
+                profile,
             )
             all_results[profile_name] = results
             print_backtest_results(results, profile_name, profile)

@@ -146,13 +146,16 @@ class TestInitSchema:
         init_trading_app_schema(db_path=db_path)
 
         con = duckdb.connect(str(db_path), read_only=True)
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT table_name, table_type
             FROM information_schema.tables
             WHERE table_schema = 'main'
               AND table_name IN (?, ?)
             ORDER BY table_name
-        """, [ACTIVE_VALIDATED_VIEW, DEPLOYABLE_VALIDATED_VIEW]).fetchall()
+        """,
+            [ACTIVE_VALIDATED_VIEW, DEPLOYABLE_VALIDATED_VIEW],
+        ).fetchall()
         con.close()
 
         assert rows == [
@@ -179,9 +182,7 @@ class TestInitSchema:
         """)
         active_ids = [
             row[0]
-            for row in con.execute(
-                f"SELECT strategy_id FROM {ACTIVE_VALIDATED_VIEW} ORDER BY strategy_id"
-            ).fetchall()
+            for row in con.execute(f"SELECT strategy_id FROM {ACTIVE_VALIDATED_VIEW} ORDER BY strategy_id").fetchall()
         ]
         deployable_ids = [
             row[0]

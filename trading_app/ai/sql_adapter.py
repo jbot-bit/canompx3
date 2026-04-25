@@ -126,8 +126,7 @@ _SQL_FRICTION_CASE = (
     + " END"
 )
 _DEPLOYABLE_VALIDATED_SQL = (
-    "LOWER(status) = 'active' AND "
-    "LOWER(COALESCE(deployment_scope, 'deployable')) = 'deployable'"
+    "LOWER(status) = 'active' AND LOWER(COALESCE(deployment_scope, 'deployable')) = 'deployable'"
 )
 
 

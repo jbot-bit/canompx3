@@ -20,6 +20,7 @@ Lookahead guards:
 
 @research-source: docs/plans/2026-03-04-m25-audit-improvements-plan.md (Phase 3 extension)
 """
+
 from __future__ import annotations
 
 import sys
@@ -57,8 +58,18 @@ PRICE_TRIGGERS = [0.5, 0.75, 1.0, 1.25, 1.5]  # in R-multiples
 # Bar-by-bar simulation
 # ---------------------------------------------------------------------------
 def sim_be_time(
-    highs, lows, closes, timestamps, direction, entry_price, stop_price,
-    target_price, risk_points, check_min, mtm_thresh, entry_ts,
+    highs,
+    lows,
+    closes,
+    timestamps,
+    direction,
+    entry_price,
+    stop_price,
+    target_price,
+    risk_points,
+    check_min,
+    mtm_thresh,
+    entry_ts,
 ):
     """Time-based breakeven: after check_min minutes, if MTM > thresh, move stop to entry."""
     n = len(highs)
@@ -122,8 +133,15 @@ def sim_be_time(
 
 
 def sim_be_price(
-    highs, lows, closes, direction, entry_price, stop_price,
-    target_price, risk_points, price_trigger_r,
+    highs,
+    lows,
+    closes,
+    direction,
+    entry_price,
+    stop_price,
+    target_price,
+    risk_points,
+    price_trigger_r,
 ):
     """Price-based breakeven: once price reaches trigger_r, move stop to entry."""
     n = len(highs)
@@ -199,8 +217,7 @@ def main():
 
         # Load bars
         bars = con.execute(
-            "SELECT ts_utc, high, low, close FROM bars_1m "
-            "WHERE symbol = ? ORDER BY ts_utc",
+            "SELECT ts_utc, high, low, close FROM bars_1m WHERE symbol = ? ORDER BY ts_utc",
             [instrument],
         ).fetchdf()
         bars["ts_utc"] = pd.to_datetime(bars["ts_utc"]).dt.tz_localize(None)
@@ -259,7 +276,18 @@ def main():
             for cm in CHECK_MINUTES:
                 for mt in MTM_THRESHOLDS:
                     exit_pnl = sim_be_time(
-                        h, l, c, ts, d, ep, sp, tp, rp, cm, mt, entry_ts,
+                        h,
+                        l,
+                        c,
+                        ts,
+                        d,
+                        ep,
+                        sp,
+                        tp,
+                        rp,
+                        cm,
+                        mt,
+                        entry_ts,
                     )
                     if exit_pnl is None or exit_pnl == 0.0:
                         delta = 0.0
@@ -269,17 +297,19 @@ def main():
                         be_r = pnl_dollars / risk_dollars
                         delta = be_r - baseline_r
 
-                    results_time.append({
-                        "trading_day": row.trading_day,
-                        "instrument": instrument,
-                        "session": row.orb_label,
-                        "rr_target": row.rr_target,
-                        "check_min": cm,
-                        "mtm_thresh": mt,
-                        "baseline_r": baseline_r,
-                        "be_r": be_r,
-                        "delta_r": delta,
-                    })
+                    results_time.append(
+                        {
+                            "trading_day": row.trading_day,
+                            "instrument": instrument,
+                            "session": row.orb_label,
+                            "rr_target": row.rr_target,
+                            "check_min": cm,
+                            "mtm_thresh": mt,
+                            "baseline_r": baseline_r,
+                            "be_r": be_r,
+                            "delta_r": delta,
+                        }
+                    )
 
             # --- Grid B: price-based ---
             for ptr in PRICE_TRIGGERS:
@@ -287,7 +317,15 @@ def main():
                     continue  # trigger above target is meaningless
 
                 exit_pnl = sim_be_price(
-                    h, l, c, d, ep, sp, tp, rp, ptr,
+                    h,
+                    l,
+                    c,
+                    d,
+                    ep,
+                    sp,
+                    tp,
+                    rp,
+                    ptr,
                 )
                 if exit_pnl is None or exit_pnl == 0.0:
                     delta = 0.0
@@ -297,24 +335,26 @@ def main():
                     be_r = pnl_dollars / risk_dollars
                     delta = be_r - baseline_r
 
-                results_price.append({
-                    "trading_day": row.trading_day,
-                    "instrument": instrument,
-                    "session": row.orb_label,
-                    "rr_target": row.rr_target,
-                    "price_trigger_r": ptr,
-                    "baseline_r": baseline_r,
-                    "be_r": be_r,
-                    "delta_r": delta,
-                })
+                results_price.append(
+                    {
+                        "trading_day": row.trading_day,
+                        "instrument": instrument,
+                        "session": row.orb_label,
+                        "rr_target": row.rr_target,
+                        "price_trigger_r": ptr,
+                        "baseline_r": baseline_r,
+                        "be_r": be_r,
+                        "delta_r": delta,
+                    }
+                )
 
             if (i + 1) % 50000 == 0:
                 el = time.time() - t0
                 rate = (i + 1) / el
                 rem = (len(outcomes) - i - 1) / rate
-                print(f"  {i+1:,}/{len(outcomes):,} ({el:.0f}s, ~{rem:.0f}s remaining)")
+                print(f"  {i + 1:,}/{len(outcomes):,} ({el:.0f}s, ~{rem:.0f}s remaining)")
 
-        print(f"  Done in {time.time()-t0:.0f}s")
+        print(f"  Done in {time.time() - t0:.0f}s")
 
     con.close()
 
@@ -352,9 +392,14 @@ def analyze_grid(df, group_cols, agg_cols):
         if n < MIN_TRADES:
             continue
 
-        daily = grp.groupby("trading_day").agg(
-            b=("baseline_r", "sum"), p=("be_r", "sum"),
-        ).reset_index()
+        daily = (
+            grp.groupby("trading_day")
+            .agg(
+                b=("baseline_r", "sum"),
+                p=("be_r", "sum"),
+            )
+            .reset_index()
+        )
         daily["d"] = daily["p"] - daily["b"]
         non_zero = daily["d"].values[daily["d"].values != 0]
         if len(non_zero) < 10:
@@ -368,15 +413,17 @@ def analyze_grid(df, group_cols, agg_cols):
         grp2["year"] = pd.to_datetime(grp2["trading_day"]).dt.year
         yearly = grp2.groupby("year")["delta_r"].sum()
 
-        vals.update({
-            "n_trades": n,
-            "total_delta_r": round(total_delta, 2),
-            "per_trade": round(total_delta / n, 4),
-            "t_stat": round(t_stat, 3),
-            "p_val": round(p_val, 6),
-            "n_years": len(yearly),
-            "years_pos": int((yearly > 0).sum()),
-        })
+        vals.update(
+            {
+                "n_trades": n,
+                "total_delta_r": round(total_delta, 2),
+                "per_trade": round(total_delta / n, 4),
+                "t_stat": round(t_stat, 3),
+                "p_val": round(p_val, 6),
+                "n_years": len(yearly),
+                "years_pos": int((yearly > 0).sum()),
+            }
+        )
         rows.append(vals)
 
     sdf = pd.DataFrame(rows)
@@ -393,47 +440,51 @@ def analyze_grid(df, group_cols, agg_cols):
     print(f"Total tests: {n_tests}, BH FDR survivors: {n_fdr}")
 
     # Aggregate by parameter combo
-    print(f"\n{'---'*25}")
+    print(f"\n{'---' * 25}")
     print("BY PARAMETER COMBO:")
     for combo_vals, sub in sdf.groupby(agg_cols):
         if not isinstance(combo_vals, tuple):
             combo_vals = (combo_vals,)
-        label = " ".join(
-            f"{c}={v}" for c, v in zip(agg_cols, combo_vals)
-        )
+        label = " ".join(f"{c}={v}" for c, v in zip(agg_cols, combo_vals))
         td = sub["total_delta_r"].sum()
         nf = sub["bh_pass"].sum()
         avg_pt = sub["per_trade"].mean()
         n_pos = (sub["total_delta_r"] > 0).sum()
-        print(f"  {label}: delta={td:+10,.0f}R  avg/trade={avg_pt:+.4f}R  "
-              f"FDR={nf}/{len(sub)}  positive={n_pos}/{len(sub)}")
+        print(
+            f"  {label}: delta={td:+10,.0f}R  avg/trade={avg_pt:+.4f}R  "
+            f"FDR={nf}/{len(sub)}  positive={n_pos}/{len(sub)}"
+        )
 
     # FDR survivors
     surv = sdf[sdf["bh_pass"]].sort_values("total_delta_r", ascending=False)
     if len(surv) > 0:
-        print(f"\n{'---'*25}")
+        print(f"\n{'---' * 25}")
         print(f"BH FDR SURVIVORS ({len(surv)}):")
         for _, r in surv.head(40).iterrows():
             params = " ".join(f"{c}={r[c]}" for c in agg_cols)
-            print(f"  {r['instrument']} {r['session']} RR{r['rr_target']} | "
-                  f"{params} | N={int(r['n_trades']):,} "
-                  f"delta={r['total_delta_r']:+,.1f}R "
-                  f"({r['per_trade']:+.4f}R/trade) "
-                  f"p={r['p_val']:.6f} yrs+={r['years_pos']}/{r['n_years']}")
+            print(
+                f"  {r['instrument']} {r['session']} RR{r['rr_target']} | "
+                f"{params} | N={int(r['n_trades']):,} "
+                f"delta={r['total_delta_r']:+,.1f}R "
+                f"({r['per_trade']:+.4f}R/trade) "
+                f"p={r['p_val']:.6f} yrs+={r['years_pos']}/{r['n_years']}"
+            )
 
     # Top positive even if not FDR
     pos = sdf[sdf["total_delta_r"] > 0].sort_values("total_delta_r", ascending=False)
     if len(pos) > 0:
-        print(f"\n{'---'*25}")
+        print(f"\n{'---' * 25}")
         print(f"TOP POSITIVE ({len(pos)} combos with positive delta):")
         for _, r in pos.head(20).iterrows():
             params = " ".join(f"{c}={r[c]}" for c in agg_cols)
             fdr_mark = " [FDR]" if r.get("bh_pass", False) else ""
-            print(f"  {r['instrument']} {r['session']} RR{r['rr_target']} | "
-                  f"{params} | N={int(r['n_trades']):,} "
-                  f"delta={r['total_delta_r']:+,.1f}R "
-                  f"({r['per_trade']:+.4f}R/trade) "
-                  f"p={r['p_val']:.4f} yrs+={r['years_pos']}/{r['n_years']}{fdr_mark}")
+            print(
+                f"  {r['instrument']} {r['session']} RR{r['rr_target']} | "
+                f"{params} | N={int(r['n_trades']):,} "
+                f"delta={r['total_delta_r']:+,.1f}R "
+                f"({r['per_trade']:+.4f}R/trade) "
+                f"p={r['p_val']:.4f} yrs+={r['years_pos']}/{r['n_years']}{fdr_mark}"
+            )
 
     # Save
     out = Path(__file__).parent / "output"

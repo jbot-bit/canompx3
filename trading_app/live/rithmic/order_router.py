@@ -27,8 +27,8 @@ log = logging.getLogger(__name__)
 _DEFAULT_PRICE_COLLAR_PCT = 0.005
 _BRIDGE_TIMEOUT = 10.0  # seconds for async→sync bridge (queries, cancels)
 _ORDER_SUBMIT_TIMEOUT = 20.0  # seconds for order submission — must exceed library's
-                               # internal 30s retry timeout (but library uses retries=1
-                               # for orders, so effective wait = retry_settings.timeout)
+# internal 30s retry timeout (but library uses retries=1
+# for orders, so effective wait = retry_settings.timeout)
 
 
 class RithmicOrderRouter(BrokerRouter):
@@ -223,7 +223,9 @@ class RithmicOrderRouter(BrokerRouter):
             status = "rejected"
             log.error(
                 "RITHMIC ORDER REJECTED: order_id=%s rp_code=%s basket_id=%s",
-                order_id, rp_code, basket_id,
+                order_id,
+                rp_code,
+                basket_id,
             )
 
         # Cache order state — keyed by generated order_id for reliable lookup.

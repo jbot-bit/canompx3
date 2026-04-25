@@ -46,6 +46,8 @@ import pandas as pd
 from scipy import stats
 
 from pipeline.paths import GOLD_DB_PATH
+from research.filter_utils import filter_signal  # canonical delegation (research-truth-protocol.md)
+from trading_app.config import ALL_FILTERS, CrossAssetATRFilter
 
 OUTPUT_MD = Path("docs/audit/results/2026-04-16-garch-validated-role-exhaustion.md")
 OUTPUT_MD.parent.mkdir(parents=True, exist_ok=True)
@@ -68,64 +70,38 @@ class ThresholdSpec:
 SPECS = [ThresholdSpec("high", t) for t in HIGH_THRESHOLDS] + [ThresholdSpec("low", t) for t in LOW_THRESHOLDS]
 
 
-def get_filter_sql(filter_type: str, orb_label: str) -> tuple[str | None, bool]:
-    """Return (predicate_sql, needs_mes_join)."""
-    if filter_type == "ORB_G5":
-        return f"d.orb_{orb_label}_size >= 5.0", False
-    if filter_type == "ORB_G5_NOFRI":
-        return f"(d.orb_{orb_label}_size >= 5.0 AND NOT d.is_friday)", False
-    if filter_type == "COST_LT12":
-        return "(2.74 / NULLIF(o.risk_dollars, 0)) < 0.12", False
-    if filter_type == "OVNRNG_100":
-        return "d.overnight_range >= 100.0", False
-    if filter_type == "ATR_P50":
-        return "d.atr_20_pct >= 50.0", False
-    if filter_type == "ATR_P70":
-        return "d.atr_20_pct >= 70.0", False
-    if filter_type == "VWAP_MID_ALIGNED":
-        return (
-            f"(((d.orb_{orb_label}_break_dir='long') AND "
-            f"(d.orb_{orb_label}_high + d.orb_{orb_label}_low)/2.0 > d.orb_{orb_label}_vwap) "
-            f"OR ((d.orb_{orb_label}_break_dir='short') AND "
-            f"(d.orb_{orb_label}_high + d.orb_{orb_label}_low)/2.0 < d.orb_{orb_label}_vwap))"
-        ), False
-    if filter_type == "VWAP_BP_ALIGNED":
-        return (
-            f"(((d.orb_{orb_label}_break_dir='long') AND d.orb_{orb_label}_high > d.orb_{orb_label}_vwap) "
-            f"OR ((d.orb_{orb_label}_break_dir='short') AND d.orb_{orb_label}_low < d.orb_{orb_label}_vwap))"
-        ), False
-    if filter_type == "X_MES_ATR60":
-        return "mes.atr_20_pct >= 60.0", True
-    return None, False
-
-
 def load_trades(con, row: pd.Series, direction: str, *, is_oos: bool) -> pd.DataFrame:
-    """Load validated-scope trades matching the strategy's exact filter."""
-    filter_sql, needs_mes_join = get_filter_sql(row["filter_type"], row["orb_label"])
-    if filter_sql is None:
+    """Load validated-scope trades matching the strategy's exact filter.
+
+    Filter application delegates to canonical ``research.filter_utils.filter_signal``
+    per `.claude/rules/research-truth-protocol.md` § Canonical filter delegation.
+    No inline filter SQL, no hardcoded cost or threshold constants in this module.
+
+    Cross-asset filters (CrossAssetATRFilter family, e.g. X_MES_ATR60) require
+    ``cross_atr_{source_instrument}_pct`` to be injected into the feature row
+    before ``filter_signal`` can evaluate. Uses a direct column-map assignment
+    (equivalent semantics to ``trading_app.strategy_fitness._enrich_cross_asset_atr``
+    but preserves dtypes — the fitness-tracker path round-trips through
+    ``list[dict] -> DataFrame`` which collapses numpy dtypes to object).
+    """
+    filter_type = row["filter_type"]
+    if filter_type not in ALL_FILTERS:
+        print(f"  ERR unknown filter_type '{filter_type}' for {row['strategy_id']}")
         return pd.DataFrame()
 
     date_clause = ">=" if is_oos else "<"
-    mes_join = ""
-    if needs_mes_join:
-        mes_join = """
-        JOIN daily_features mes
-          ON o.trading_day = mes.trading_day
-         AND mes.symbol = 'MES'
-         AND mes.orb_minutes = o.orb_minutes
-        """
-
+    # Load d.* so filter_signal has every column any canonical filter may need.
     q = f"""
     SELECT
       o.trading_day,
       o.pnl_r,
-      d.garch_forecast_vol_pct AS gp
+      o.risk_dollars,
+      d.*
     FROM orb_outcomes o
     JOIN daily_features d
       ON o.trading_day = d.trading_day
      AND o.symbol = d.symbol
      AND o.orb_minutes = d.orb_minutes
-    {mes_join}
     WHERE o.symbol = '{row["instrument"]}'
       AND o.orb_minutes = {row["orb_minutes"]}
       AND o.orb_label = '{row["orb_label"]}'
@@ -134,7 +110,6 @@ def load_trades(con, row: pd.Series, direction: str, *, is_oos: bool) -> pd.Data
       AND o.pnl_r IS NOT NULL
       AND d.garch_forecast_vol_pct IS NOT NULL
       AND d.orb_{row["orb_label"]}_break_dir = '{direction}'
-      AND {filter_sql}
       AND o.trading_day {date_clause} DATE '{IS_END}'
     ORDER BY o.trading_day
     """
@@ -146,11 +121,48 @@ def load_trades(con, row: pd.Series, direction: str, *, is_oos: bool) -> pd.Data
 
     if len(df) == 0:
         return df
+
+    # Cross-asset enrichment for CrossAssetATRFilter (e.g., X_MES_ATR60 needs
+    # cross_atr_MES_pct injected). Direct column-map assignment — avoids the
+    # DataFrame -> list[dict] -> DataFrame round-trip pattern used by the
+    # canonical fitness tracker path. Round-tripping collapses numpy/pandas
+    # dtypes to object, which can silently corrupt vectorized comparisons
+    # for other filters sharing the df. This path keeps the column's float64
+    # dtype intact.
+    filt = ALL_FILTERS[filter_type]
+    if isinstance(filt, CrossAssetATRFilter):
+        src = filt.source_instrument
+        atr_rows = con.execute(
+            """SELECT trading_day, atr_20_pct FROM daily_features
+               WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL""",
+            [src],
+        ).fetchall()
+        # Normalize trading_day key to date so the lookup works whether df's
+        # trading_day is pd.Timestamp, numpy.datetime64, or plain date.
+        atr_map: dict = {}
+        for td, pct in atr_rows:
+            key = td.date() if hasattr(td, "date") else td
+            atr_map[key] = pct
+
+        def _date_key(t):
+            return t.date() if hasattr(t, "date") else t
+
+        df[f"cross_atr_{src}_pct"] = df["trading_day"].apply(_date_key).map(atr_map)
+
+    # Canonical filter application — delegate to filter_signal. No inline SQL.
+    mask = np.asarray(filter_signal(df, filter_type, row["orb_label"])).astype(bool)
+    df = df.loc[mask].reset_index(drop=True)
+
+    if len(df) == 0:
+        return df
+
+    # Preserve the downstream consumer schema: {trading_day, pnl_r, gp, year}.
+    # "gp" is aliased from canonical garch_forecast_vol_pct for readability.
     df["trading_day"] = pd.to_datetime(df["trading_day"])
     df["year"] = df["trading_day"].dt.year
     df["pnl_r"] = df["pnl_r"].astype(float)
-    df["gp"] = df["gp"].astype(float)
-    return df
+    df["gp"] = df["garch_forecast_vol_pct"].astype(float)
+    return df[["trading_day", "pnl_r", "gp", "year"]]
 
 
 def split_mask(df: pd.DataFrame, spec: ThresholdSpec) -> pd.Series:
@@ -388,7 +400,7 @@ def main() -> None:
             f"  {r['strategy_id']} {r['direction']} {r['side']}@{int(r['threshold'])}: "
             f"lift={r['lift']:+.3f} sr_lift={r['sr_lift']:+.3f} "
             f"p_sh={r['p_sharpe']:.4f} yrs={int(r['yr_pos'])}/{int(r['yr_total'])} "
-            f"oos={('n/a' if pd.isna(r['oos_lift']) else f'{r['oos_lift']:+.3f}')}"
+            f"oos={('n/a' if pd.isna(r['oos_lift']) else f'{r["oos_lift"]:+.3f}')}"
         )
     print("\nTop 12 negative by sr_lift:")
     for _, r in results_df.sort_values("sr_lift", ascending=True).head(12).iterrows():
@@ -396,7 +408,7 @@ def main() -> None:
             f"  {r['strategy_id']} {r['direction']} {r['side']}@{int(r['threshold'])}: "
             f"lift={r['lift']:+.3f} sr_lift={r['sr_lift']:+.3f} "
             f"p_sh={r['p_sharpe']:.4f} yrs={int(r['yr_pos'])}/{int(r['yr_total'])} "
-            f"oos={('n/a' if pd.isna(r['oos_lift']) else f'{r['oos_lift']:+.3f}')}"
+            f"oos={('n/a' if pd.isna(r['oos_lift']) else f'{r["oos_lift"]:+.3f}')}"
         )
 
     role_rows = []
@@ -437,7 +449,7 @@ def emit(results_df: pd.DataFrame, shape_df: pd.DataFrame, role_df: pd.DataFrame
         "- Position-size interpretation: `docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md`.",
         "",
         f"**Primary family size:** K = {len(results_df)} tests "
-        f"({len(results_df[results_df['side']=='high'])} high-tail + {len(results_df[results_df['side']=='low'])} low-tail).",
+        f"({len(results_df[results_df['side'] == 'high'])} high-tail + {len(results_df[results_df['side'] == 'low'])} low-tail).",
         "",
         "**Thresholds:** HIGH {60,70,80}, LOW {40,30,20}. These were fixed before the run to test upper-tail, lower-tail, and inverse-high possibilities without open-ended fishing.",
         "",

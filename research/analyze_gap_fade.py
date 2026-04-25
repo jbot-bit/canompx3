@@ -50,6 +50,7 @@ SPEC = get_cost_spec("MGC")
 GAP_THRESHOLDS = [0.2, 0.3, 0.4]  # fraction of ATR_20
 STOP_MULTIPLIERS = [0.5, 1.0, 1.5]  # fraction of ATR_20
 
+
 def prepare_gap_data(features: pd.DataFrame) -> pd.DataFrame:
     """Add ATR_20 and gap metrics to features dataframe.
 
@@ -80,6 +81,7 @@ def prepare_gap_data(features: pd.DataFrame) -> pd.DataFrame:
     df["dow"] = pd.to_datetime(df["trading_day"]).dt.dayofweek
 
     return df
+
 
 def compute_gap_fade_outcomes(
     db_path: Path,
@@ -117,7 +119,7 @@ def compute_gap_fade_outcomes(
         if gap > 0:
             direction = "short"  # Gap up -> short to fill
         else:
-            direction = "long"   # Gap down -> long to fill
+            direction = "long"  # Gap down -> long to fill
 
         entry_price = daily_open
         target_price = prev_close
@@ -152,8 +154,12 @@ def compute_gap_fade_outcomes(
                     continue
 
                 result = resolve_bar_outcome(
-                    bars, entry_price, stop_price, target_price,
-                    direction, 0,  # Start from first bar (entry at open)
+                    bars,
+                    entry_price,
+                    stop_price,
+                    target_price,
+                    direction,
+                    0,  # Start from first bar (entry at open)
                 )
 
                 if result is None:
@@ -166,29 +172,30 @@ def compute_gap_fade_outcomes(
                     pnl_r = to_r_multiple(SPEC, entry_price, stop_price, pnl_points)
                     outcome_type = "eod"
                 else:
-                    pnl_r = to_r_multiple(
-                        SPEC, entry_price, stop_price, result["pnl_points"]
-                    )
+                    pnl_r = to_r_multiple(SPEC, entry_price, stop_price, result["pnl_points"])
                     outcome_type = result["outcome"]
 
-                outcomes.append({
-                    "trading_day": str(trading_day),
-                    "gap_points": gap,
-                    "gap_atr_ratio": gap_atr_ratio,
-                    "atr_20": atr,
-                    "gap_threshold": gap_thresh,
-                    "stop_multiplier": stop_mult,
-                    "direction": direction,
-                    "entry_price": entry_price,
-                    "stop_price": stop_price,
-                    "target_price": target_price,
-                    "stop_distance": stop_distance,
-                    "pnl_r": pnl_r,
-                    "outcome": outcome_type,
-                    "dow": dow,
-                })
+                outcomes.append(
+                    {
+                        "trading_day": str(trading_day),
+                        "gap_points": gap,
+                        "gap_atr_ratio": gap_atr_ratio,
+                        "atr_20": atr,
+                        "gap_threshold": gap_thresh,
+                        "stop_multiplier": stop_mult,
+                        "direction": direction,
+                        "entry_price": entry_price,
+                        "stop_price": stop_price,
+                        "target_price": target_price,
+                        "stop_distance": stop_distance,
+                        "pnl_r": pnl_r,
+                        "outcome": outcome_type,
+                        "dow": dow,
+                    }
+                )
 
     return outcomes
+
 
 def run_walk_forward(
     db_path: Path,
@@ -217,13 +224,11 @@ def run_walk_forward(
     oos_all_pnls = []
 
     for w in windows:
-        train_mask = (
-            (outcomes_df["trading_day_date"] >= w["train_start"])
-            & (outcomes_df["trading_day_date"] <= w["train_end"])
+        train_mask = (outcomes_df["trading_day_date"] >= w["train_start"]) & (
+            outcomes_df["trading_day_date"] <= w["train_end"]
         )
-        test_mask = (
-            (outcomes_df["trading_day_date"] >= w["test_start"])
-            & (outcomes_df["trading_day_date"] <= w["test_end"])
+        test_mask = (outcomes_df["trading_day_date"] >= w["test_start"]) & (
+            outcomes_df["trading_day_date"] <= w["test_end"]
         )
 
         train_data = outcomes_df[train_mask]
@@ -253,10 +258,7 @@ def run_walk_forward(
         gap_thresh, stop_mult = best_combo
 
         # Apply to OOS
-        oos = test_data[
-            (test_data["gap_threshold"] == gap_thresh)
-            & (test_data["stop_multiplier"] == stop_mult)
-        ]
+        oos = test_data[(test_data["gap_threshold"] == gap_thresh) & (test_data["stop_multiplier"] == stop_mult)]
         if oos.empty:
             continue
 
@@ -264,17 +266,20 @@ def run_walk_forward(
         oos_stats = compute_strategy_metrics(oos_pnls)
         oos_all_pnls.extend(oos_pnls)
 
-        window_results.append({
-            "test_start": str(w["test_start"]),
-            "test_end": str(w["test_end"]),
-            "train_n": len(train_data[
-                (train_data["gap_threshold"] == gap_thresh)
-                & (train_data["stop_multiplier"] == stop_mult)
-            ]),
-            "selected": f"GT{gap_thresh}_SM{stop_mult}",
-            "train_sharpe": best_sharpe,
-            "oos_stats": oos_stats,
-        })
+        window_results.append(
+            {
+                "test_start": str(w["test_start"]),
+                "test_end": str(w["test_end"]),
+                "train_n": len(
+                    train_data[
+                        (train_data["gap_threshold"] == gap_thresh) & (train_data["stop_multiplier"] == stop_mult)
+                    ]
+                ),
+                "selected": f"GT{gap_thresh}_SM{stop_mult}",
+                "train_sharpe": best_sharpe,
+                "oos_stats": oos_stats,
+            }
+        )
 
     combined_oos = None
     if oos_all_pnls:
@@ -285,6 +290,7 @@ def run_walk_forward(
         "windows": window_results,
         "combined_oos": combined_oos,
     }
+
 
 def run_full_period_analysis(
     db_path: Path,
@@ -311,11 +317,13 @@ def run_full_period_analysis(
                 continue
             stats = compute_strategy_metrics(sm_data["pnl_r"].values)
             if stats:
-                grid_results.append({
-                    "gap_threshold": gap_thresh,
-                    "stop_multiplier": stop_mult,
-                    **stats,
-                })
+                grid_results.append(
+                    {
+                        "gap_threshold": gap_thresh,
+                        "stop_multiplier": stop_mult,
+                        **stats,
+                    }
+                )
 
     # Day-of-week analysis (best combo)
     dow_analysis = []
@@ -336,17 +344,21 @@ def run_full_period_analysis(
 
     return {"grid": grid_results, "dow_analysis": dow_analysis}
 
+
 def main():
     parser = argparse.ArgumentParser(description="Gap Fade strategy analysis")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     parser.add_argument("--train-months", type=int, default=12)
     parser.add_argument("--output", type=Path, default=None)
-    parser.add_argument("--start", type=date.fromisoformat, default=None,
-                        help="Start date (YYYY-MM-DD), default 2024-08-01")
-    parser.add_argument("--end", type=date.fromisoformat, default=None,
-                        help="End date (YYYY-MM-DD), default 2026-02-01")
-    parser.add_argument("--full-period-only", action="store_true",
-                        help="Skip walk-forward, just run full-period grid search")
+    parser.add_argument(
+        "--start", type=date.fromisoformat, default=None, help="Start date (YYYY-MM-DD), default 2024-08-01"
+    )
+    parser.add_argument(
+        "--end", type=date.fromisoformat, default=None, help="End date (YYYY-MM-DD), default 2026-02-01"
+    )
+    parser.add_argument(
+        "--full-period-only", action="store_true", help="Skip walk-forward, just run full-period grid search"
+    )
     args = parser.parse_args()
 
     sep = "=" * 80
@@ -373,9 +385,11 @@ def main():
             print(f"  Grid results ({len(result['grid'])} combos):")
             sorted_grid = sorted(result["grid"], key=lambda x: x["sharpe"], reverse=True)
             for g in sorted_grid:
-                print(f"    GT{g['gap_threshold']} SM{g['stop_multiplier']}: "
-                      f"N={g['n']}, WR={g['wr']:.0%}, ExpR={g['expr']:+.3f}, "
-                      f"Sharpe={g['sharpe']:.3f}, MaxDD={g['maxdd']:+.1f}R")
+                print(
+                    f"    GT{g['gap_threshold']} SM{g['stop_multiplier']}: "
+                    f"N={g['n']}, WR={g['wr']:.0%}, ExpR={g['expr']:+.3f}, "
+                    f"Sharpe={g['sharpe']:.3f}, MaxDD={g['maxdd']:+.1f}R"
+                )
         else:
             print("  No outcomes found")
 
@@ -401,16 +415,20 @@ def main():
             for w in result["windows"]:
                 oos = w["oos_stats"]
                 if oos:
-                    print(f"  {w['test_start']} to {w['test_end']}: "
-                          f"Selected {w['selected']}, "
-                          f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
-                          f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}")
+                    print(
+                        f"  {w['test_start']} to {w['test_end']}: "
+                        f"Selected {w['selected']}, "
+                        f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
+                        f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}"
+                    )
 
             if result["combined_oos"]:
                 c = result["combined_oos"]
-                print(f"  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
-                      f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}, "
-                      f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R")
+                print(
+                    f"  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
+                    f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}, "
+                    f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R"
+                )
         else:
             print("  No qualifying windows")
 
@@ -421,6 +439,7 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

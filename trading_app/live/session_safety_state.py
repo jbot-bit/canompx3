@@ -45,6 +45,10 @@ class SessionSafetyState:
         self.daily_pnl_r: float = 0.0  # intraday P&L for daily loss circuit breaker
         self.trading_day: str = ""  # ISO date — daily_pnl_r only valid if matches current day
         self.cooldown_until: str = ""  # ISO datetime — mandatory pause after equity halt (self-funded)
+        # R3: last time a feed connection was stable for >= ORCHESTRATOR_STABLE_RUN_SECS.
+        # Used by run() to reset the reconnect counter so 24h operation isn't halted by
+        # startup-era flaps. Empty string = no stable connection recorded yet.
+        self.last_connected_at: str = ""  # ISO datetime UTC
 
         self._load_state()
 
@@ -75,9 +79,7 @@ class SessionSafetyState:
                 for sid, reason in raw_blocks.items()
                 if any(pat in str(reason) for pat in self._LEGACY_LIFECYCLE_BLOCK_PATTERNS)
             }
-            self.blocked_strategies = {
-                sid: reason for sid, reason in raw_blocks.items() if sid not in legacy
-            }
+            self.blocked_strategies = {sid: reason for sid, reason in raw_blocks.items() if sid not in legacy}
             if legacy:
                 log.info(
                     "Dropped %d legacy lifecycle-sourced block(s) from persisted state "
@@ -90,6 +92,7 @@ class SessionSafetyState:
             self.daily_pnl_r = float(data.get("daily_pnl_r", 0.0))
             self.trading_day = str(data.get("trading_day", ""))
             self.cooldown_until = str(data.get("cooldown_until", ""))
+            self.last_connected_at = str(data.get("last_connected_at", ""))
 
             # Persist the cleaned state so future loads skip the migration.
             if legacy:
@@ -119,6 +122,7 @@ class SessionSafetyState:
             "daily_pnl_r": round(self.daily_pnl_r, 4),
             "trading_day": self.trading_day,
             "cooldown_until": self.cooldown_until,
+            "last_connected_at": self.last_connected_at,
         }
         tmp = self._state_file.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=2))

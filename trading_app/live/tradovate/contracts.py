@@ -63,8 +63,6 @@ class TradovateContracts(BrokerContracts):
         best = contracts[0]
         symbol = best.get("name") or best.get("contractSymbol") or ""
         if not symbol:
-            raise RuntimeError(
-                f"Tradovate contract suggest returned no usable symbol for {instrument}: {best!r}"
-            )
+            raise RuntimeError(f"Tradovate contract suggest returned no usable symbol for {instrument}: {best!r}")
         log.info("Tradovate front month for %s: %s", instrument, symbol)
         return symbol

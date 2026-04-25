@@ -1,4 +1,5 @@
 """Extract golden nuggets from break delay data — O5 only, per methodology rules."""
+
 import numpy as np
 import duckdb
 from scipy import stats
@@ -11,14 +12,24 @@ print("GOLDEN NUGGETS FROM BREAK DELAY DATA (O5 ONLY, E2/CB1/RR1.0, NO FILTER)")
 print("=" * 100)
 
 sessions = [
-    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-    "EUROPE_FLOW", "NYSE_OPEN", "NYSE_CLOSE", "COMEX_SETTLE",
-    "US_DATA_830", "US_DATA_1000", "CME_PRECLOSE",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "EUROPE_FLOW",
+    "NYSE_OPEN",
+    "NYSE_CLOSE",
+    "COMEX_SETTLE",
+    "US_DATA_830",
+    "US_DATA_1000",
+    "CME_PRECLOSE",
 ]
 
 print()
-print(f"{'Inst':<5s} {'Session':<20s} {'Fast_mean':>10s} {'Fast_N':>7s} "
-      f"{'Slow_mean':>10s} {'Slow_N':>7s} {'d':>7s} {'p':>8s} {'Dir':>10s} {'Note':>6s}")
+print(
+    f"{'Inst':<5s} {'Session':<20s} {'Fast_mean':>10s} {'Fast_N':>7s} "
+    f"{'Slow_mean':>10s} {'Slow_N':>7s} {'d':>7s} {'p':>8s} {'Dir':>10s} {'Note':>6s}"
+)
 print("-" * 100)
 
 nuggets = []
@@ -54,10 +65,7 @@ for inst in ["MNQ", "MGC", "MES"]:
             continue
 
         n1, n2 = len(fast), len(slow)
-        pooled = np.sqrt(
-            ((n1 - 1) * fast.std(ddof=1) ** 2 + (n2 - 1) * slow.std(ddof=1) ** 2)
-            / (n1 + n2 - 2)
-        )
+        pooled = np.sqrt(((n1 - 1) * fast.std(ddof=1) ** 2 + (n2 - 1) * slow.std(ddof=1) ** 2) / (n1 + n2 - 2))
         d = (fast.mean() - slow.mean()) / pooled if pooled > 0 else 0
         t, p = stats.ttest_ind(fast, slow, equal_var=False)
 
@@ -69,11 +77,19 @@ for inst in ["MNQ", "MGC", "MES"]:
             f"{slow.mean():>+10.4f} {n2:>7d} {d:>+7.3f} {p:>8.4f} {direction:>10s} {marker:>6s}"
         )
 
-        nuggets.append({
-            "inst": inst, "sess": sess, "d": d, "p": p,
-            "fast_mean": fast.mean(), "slow_mean": slow.mean(),
-            "fast_n": n1, "slow_n": n2, "direction": direction,
-        })
+        nuggets.append(
+            {
+                "inst": inst,
+                "sess": sess,
+                "d": d,
+                "p": p,
+                "fast_mean": fast.mean(),
+                "slow_mean": slow.mean(),
+                "fast_n": n1,
+                "slow_n": n2,
+                "direction": direction,
+            }
+        )
 
 # Summary
 print()
@@ -85,6 +101,7 @@ print("=" * 100)
 print()
 print("FAST > SLOW across ALL 3 instruments (consistent direction):")
 from collections import defaultdict
+
 session_dirs = defaultdict(list)
 for n in nuggets:
     session_dirs[n["sess"]].append(n["d"])
@@ -113,7 +130,9 @@ print()
 print("STRONGEST effects (|d| > 0.1, consistent direction, p < 0.01):")
 strong = [n for n in nuggets if abs(n["d"]) >= 0.1 and n["p"] < 0.01]
 for n in sorted(strong, key=lambda x: abs(x["d"]), reverse=True):
-    print(f"  {n['inst']} {n['sess']:<20s} d={n['d']:+.3f}  {n['direction']}  "
-          f"FAST={n['fast_mean']:+.4f} SLOW={n['slow_mean']:+.4f}")
+    print(
+        f"  {n['inst']} {n['sess']:<20s} d={n['d']:+.3f}  {n['direction']}  "
+        f"FAST={n['fast_mean']:+.4f} SLOW={n['slow_mean']:+.4f}"
+    )
 
 con.close()

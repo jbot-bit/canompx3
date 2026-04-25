@@ -77,13 +77,20 @@ _ensure_repo_python()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from pipeline.paths import GOLD_DB_PATH
-from trading_app.validated_shelf import deployable_validated_relation
-
 # staleness_engine lives in scripts/tools/ (same dir as this file)
 _SCRIPTS_TOOLS_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPTS_TOOLS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_TOOLS_DIR)
+
+from pipeline.paths import GOLD_DB_PATH
+from pipeline.work_queue import (
+    load_queue,
+    top_baton_items,
+)
+from pipeline.work_queue import (
+    stale_items as queue_stale_items,
+)
+from trading_app.validated_shelf import deployable_validated_relation
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -488,7 +495,30 @@ def collect_handoff(root: Path) -> tuple[dict, list[PulseItem]]:
     context: dict = {}
     items: list[PulseItem] = []
     handoff_path = root / "HANDOFF.md"
+    queue_path = root / "docs" / "runtime" / "action-queue.yaml"
+    queue_steps: list[str] = []
+    if queue_path.exists():
+        try:
+            queue = load_queue(root)
+            queue_steps = [f"{item.title} — {item.next_action}" for item in top_baton_items(queue)]
+        except Exception:
+            queue_steps = []
     if not handoff_path.exists():
+        if queue_steps:
+            context = {
+                "tool": "Queue",
+                "summary": "Canonical action queue available; generated baton missing.",
+                "next_steps": queue_steps,
+            }
+            items.append(
+                PulseItem(
+                    category="decaying",
+                    severity="medium",
+                    source="handoff",
+                    summary="HANDOFF.md missing; falling back to canonical action queue",
+                )
+            )
+            return context, items
         items.append(
             PulseItem(
                 category="broken",
@@ -503,6 +533,17 @@ def collect_handoff(root: Path) -> tuple[dict, list[PulseItem]]:
     lines = text.splitlines()
     blocker_keywords = {"failure", "broken", "missing", "error", "cannot", "blocked"}
     context = _parse_rolling_handoff(lines) or _parse_legacy_handoff(lines)
+    if queue_steps:
+        if context.get("next_steps") != queue_steps:
+            items.append(
+                PulseItem(
+                    category="decaying",
+                    severity="medium",
+                    source="handoff",
+                    summary="HANDOFF next steps drifted from canonical action queue",
+                )
+            )
+        context["next_steps"] = queue_steps
 
     section: str | None = None
     for line in lines:
@@ -1113,6 +1154,15 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
                 }
                 for claim in snapshot.claims
             ],
+            "work_queue": {
+                "exists": snapshot.work_queue.exists,
+                "open_count": snapshot.work_queue.open_count,
+                "close_first_open_count": snapshot.work_queue.close_first_open_count,
+                "stale_count": snapshot.work_queue.stale_count,
+                "top_items": [item.model_dump(mode="json") for item in snapshot.work_queue.top_items],
+                "close_first_items": [item.model_dump(mode="json") for item in snapshot.work_queue.close_first_items],
+                "handoff_matches_rendered": snapshot.work_queue.handoff_matches_rendered,
+            },
             "policy": {
                 "allowed": decision.allowed,
                 "warnings": [issue.message for issue in decision.warnings],
@@ -1120,13 +1170,19 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
             },
         }
         for issue in decision.warnings:
-            if issue.code == "wrong_interpreter":
+            if issue.code in {
+                "wrong_interpreter",
+                "handoff_queue_mismatch",
+                "stale_queue_items",
+                "close_first_carryover",
+                "queue_item_conflict",
+            }:
                 items.append(
                     PulseItem(
                         category="decaying",
                         severity="medium",
                         source="system_identity",
-                        summary="Interpreter mismatch for repo-managed context",
+                        summary=issue.message,
                         detail=issue.detail,
                     )
                 )
@@ -1309,33 +1365,62 @@ def collect_fitness_deep(db_path: Path) -> tuple[dict, list[PulseItem]]:
     return summary, items
 
 
-def collect_worktrees(canonical: Path) -> list[PulseItem]:
+def _worktree_metadata(canonical: Path, *, authoritative: bool) -> list[dict]:
+    """Read managed worktree metadata without recursive repo crawls."""
+    worktree_root = canonical / ".worktrees"
+    if not worktree_root.exists():
+        return []
+
+    try:
+        from scripts.tools.worktree_manager import WORKTREE_META, list_worktrees, read_metadata
+    except Exception:
+        return []
+
+    canonical_resolved = canonical.resolve()
+    worktrees_by_path: dict[Path, dict] = {}
+
+    if authoritative:
+        try:
+            for info in list_worktrees(canonical):
+                path = Path(info.path).resolve()
+                if path == canonical_resolved:
+                    continue
+                meta_path = path / WORKTREE_META
+                if not meta_path.exists():
+                    continue
+                data = read_metadata(path)
+                if data:
+                    worktrees_by_path[path] = data
+        except Exception:
+            pass
+
+    shallow_patterns = (
+        f"*/{WORKTREE_META}",
+        f"*/*/{WORKTREE_META}",
+        f"*/*/*/{WORKTREE_META}",
+    )
+    for pattern in shallow_patterns:
+        for meta_path in worktree_root.glob(pattern):
+            path = meta_path.parent.resolve()
+            if path == canonical_resolved or path in worktrees_by_path:
+                continue
+            data = read_metadata(path)
+            if data:
+                worktrees_by_path[path] = data
+
+    return list(worktrees_by_path.values())
+
+
+def collect_worktrees(canonical: Path, *, fast: bool = False) -> list[PulseItem]:
     """Detect open managed worktrees. Summarizes when >3 to reduce noise."""
     items: list[PulseItem] = []
-    wt_base = canonical / ".worktrees"
-
-    if not wt_base.exists():
-        return items
-
-    worktrees: list[dict] = []
-    try:
-        meta_files = list(wt_base.rglob(".canompx3-worktree.json"))
-    except OSError:
-        # rglob can fail on Windows with broken symlinks/junctions in worktrees
-        return items
-    for meta_file in meta_files:
-        try:
-            data = json.loads(meta_file.read_text(encoding="utf-8"))
-            worktrees.append(data)
-        except (json.JSONDecodeError, OSError):
-            continue
+    worktrees = _worktree_metadata(canonical, authoritative=not fast)
 
     if not worktrees:
         return items
 
-    # Summarize when many worktrees to avoid noise
     if len(worktrees) > 3:
-        tools = {}
+        tools: dict[str, int] = {}
         for wt in worktrees:
             t = wt.get("tool", "unknown")
             tools[t] = tools.get(t, 0) + 1
@@ -1353,6 +1438,16 @@ def collect_worktrees(canonical: Path) -> list[PulseItem]:
     for data in worktrees:
         name = data.get("name", "?")
         tool = data.get("tool", "unknown")
+        if fast:
+            items.append(
+                PulseItem(
+                    category="paused",
+                    severity="low",
+                    source="worktrees",
+                    summary=f"{name} ({tool}) — metadata present",
+                )
+            )
+            continue
         momentum = _workstream_momentum(data, canonical)
         stalled = "STALLED" in momentum
         items.append(
@@ -1411,42 +1506,48 @@ def collect_session_claims(root: Path) -> list[PulseItem]:
 
 
 def collect_action_queue(canonical: Path) -> list[PulseItem]:
-    """Parse ACTION QUEUE from Claude auto-memory MEMORY.md."""
+    """Parse the canonical active-work queue."""
     items: list[PulseItem] = []
-    memory_path = _find_memory_md(canonical)
-    if memory_path is None:
+    queue_path = canonical / "docs" / "runtime" / "action-queue.yaml"
+    if not queue_path.exists():
         return items
 
-    try:
-        text = memory_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return items
-
-    in_queue = False
-    for line in text.splitlines():
-        if "## ACTION QUEUE" in line:
-            in_queue = True
+    queue = load_queue(canonical)
+    stale_ids = {item.id for item in queue_stale_items(queue)}
+    for item in queue.items:
+        if item.status in {"closed", "superseded"}:
             continue
-        if in_queue:
-            if line.startswith("## "):
-                break
-            m = re.match(r"^\d+\.\s+(.+)", line.strip())
-            if m:
-                content = m.group(1)
-                if "~~" in content:
-                    continue
-                clean = re.sub(r"\*\*(.+?)\*\*", r"\1", content).strip()
-                short = re.split(r"\s*—\s*|\.\s", clean, maxsplit=1)[0].strip()
-                if len(short) > 80:
-                    short = short[:77] + "..."
-                items.append(
-                    PulseItem(
-                        category="ready",
-                        severity="low",
-                        source="action_queue",
-                        summary=short,
-                    )
-                )
+
+        category = "ready"
+        severity = "low"
+        if item.status == "blocked":
+            category = "decaying"
+            severity = "medium"
+        elif item.status in {"waiting_observation", "parked"}:
+            category = "paused"
+            severity = "low"
+        elif item.priority == "P1":
+            severity = "medium"
+
+        if item.id in stale_ids:
+            category = "decaying"
+            severity = "medium" if item.priority != "P3" else "low"
+
+        summary = f"{item.id}: {item.title}"
+        if len(summary) > 100:
+            summary = summary[:97] + "..."
+        detail_parts = [f"status={item.status}", f"priority={item.priority}"]
+        if item.close_before_new_work:
+            detail_parts.append("close-first")
+        items.append(
+            PulseItem(
+                category=category,
+                severity=severity,
+                source="action_queue",
+                summary=summary,
+                detail=", ".join(detail_parts),
+            )
+        )
 
     return items
 
@@ -1563,30 +1664,17 @@ def collect_upcoming_sessions(db_path: Path) -> list[dict]:
 def collect_worktree_conflicts(canonical: Path) -> list[PulseItem]:
     """Detect file overlap between active worktrees (merge conflict radar)."""
     items: list[PulseItem] = []
-    wt_base = canonical / ".worktrees"
-    if not wt_base.exists():
-        return items
-
-    # Collect modified files per worktree branch
     worktree_files: dict[str, set[str]] = {}
-    try:
-        _meta_files = list(wt_base.rglob(".canompx3-worktree.json"))
-    except OSError:
-        return items
-    for meta_file in _meta_files:
-        try:
-            data = json.loads(meta_file.read_text(encoding="utf-8"))
-            branch = data.get("branch", "")
-            name = data.get("name", "?")
-            if not branch:
-                continue
-            r = _run_git(canonical, "diff", "--name-only", f"main...{branch}")
-            if r and r.returncode == 0:
-                files = {f.strip() for f in r.stdout.splitlines() if f.strip()}
-                if files:
-                    worktree_files[name] = files
-        except (json.JSONDecodeError, OSError):
+    for data in _worktree_metadata(canonical, authoritative=True):
+        branch = data.get("branch", "")
+        name = data.get("name", "?")
+        if not branch:
             continue
+        r = _run_git(canonical, "diff", "--name-only", f"main...{branch}")
+        if r and r.returncode == 0:
+            files = {f.strip() for f in r.stdout.splitlines() if f.strip()}
+            if files:
+                worktree_files[name] = files
 
     # Find overlaps
     names = list(worktree_files.keys())
@@ -1923,7 +2011,11 @@ def build_pulse(
     # --- Cheap collectors: always fresh ---
     system_identity, identity_items = collect_system_identity(root, canonical, db_path)
     work_capsule_summary, work_capsule_items = collect_work_capsule(root)
-    system_brief_bundle, system_brief_items = collect_system_brief(root, db_path, tool_name or "unknown")
+    if fast:
+        system_brief_bundle = None
+        system_brief_items = []
+    else:
+        system_brief_bundle, system_brief_items = collect_system_brief(root, db_path, tool_name or "unknown")
     system_brief_summary = system_brief_bundle["summary"] if system_brief_bundle else None
     system_brief_payload = system_brief_bundle["payload"] if system_brief_bundle else None
     staleness_items = collect_staleness(root, db_path)
@@ -1950,9 +2042,9 @@ def build_pulse(
     deployment_summary, deployment_items = collect_deployment_state(db_path)
     survival_summary, sr_summary, pause_summary, lifecycle_items = collect_lifecycle_control(db_path)
     handoff_context, handoff_items = collect_handoff(root)
-    worktree_items = collect_worktrees(canonical)
+    worktree_items = collect_worktrees(canonical, fast=fast)
     claim_items = collect_session_claims(root)
-    conflict_items = collect_worktree_conflicts(canonical)
+    conflict_items = [] if fast else collect_worktree_conflicts(canonical)
     git_items = collect_git_state(root)
     action_items = collect_action_queue(canonical)
     ralph_items = collect_ralph_deferred(root)
@@ -2085,8 +2177,8 @@ def format_text(report: PulseReport) -> str:
     if report.system_identity:
         identity = report.system_identity
         relations = identity.get("published_relations", {})
-        doctrine = ", ".join(identity.get("doctrine_docs", []))
-        backbone = ", ".join(identity.get("backbone_modules", []))
+        doctrine_count = len(identity.get("doctrine_docs", []))
+        backbone_count = len(identity.get("backbone_modules", []))
         lines.append("System identity:")
         lines.append(f"  Root: {identity.get('canonical_repo_root')}")
         lines.append(f"  Canonical DB: {identity.get('canonical_db_path')}")
@@ -2094,9 +2186,10 @@ def format_text(report: PulseReport) -> str:
             lines.append(f"  Active DB override: {identity.get('selected_db_path')}")
         lines.append(f"  Active ORB instruments: {', '.join(identity.get('active_orb_instruments', [])) or 'none'}")
         lines.append(f"  Shelf contracts: {relations.get('active', '?')}, {relations.get('deployable', '?')}")
-        lines.append(f"  Authority map: {identity.get('authority_map_doc')}")
-        lines.append(f"  Doctrine: {doctrine}")
-        lines.append(f"  Backbone: {backbone}")
+        lines.append(
+            f"  Authority: {identity.get('authority_map_doc')} "
+            f"({doctrine_count} doctrine, {backbone_count} backbone) — see --json for full list"
+        )
         lines.append("")
 
     if report.system_brief_summary:
@@ -2137,7 +2230,7 @@ def format_text(report: PulseReport) -> str:
         if report.survival_summary:
             ss = report.survival_summary
             op = ss.get("operational_pass_probability")
-            op_str = f"{float(op):.1%}" if isinstance(op, (float, int)) else "?"
+            op_str = f"{float(op):.1%}" if isinstance(op, float | int) else "?"
             lines.append(
                 "  "
                 f"C11 {('PASS' if ss.get('gate_ok') else 'BLOCK')} {op_str} | "
@@ -2147,16 +2240,18 @@ def format_text(report: PulseReport) -> str:
             sr = report.sr_summary
             counts = sr.get("counts", {})
             streams = sr.get("stream_counts", {})
+            stream_suffix = ""
+            if streams:
+                stream_parts = [f"{k}:{v}" for k, v in sorted(streams.items())]
+                stream_suffix = f" | streams {', '.join(stream_parts)}"
             lines.append(
                 "  "
                 f"C12 SR continue={counts.get('CONTINUE', 0)} alarm={counts.get('ALARM', 0)} "
                 f"no_data={counts.get('NO_DATA', 0)} | age {sr.get('state_age_days') if sr.get('state_age_days') is not None else '?'}d"
+                f"{stream_suffix}"
             )
             if sr.get("reviewed_watch_count"):
                 lines.append(f"  C12 reviewed WATCH alarms: {sr.get('reviewed_watch_count')}")
-            if streams:
-                stream_parts = [f"{k}:{v}" for k, v in sorted(streams.items())]
-                lines.append(f"  SR streams: {', '.join(stream_parts)}")
         if report.pause_summary:
             ps = report.pause_summary
             lines.append(f"  Paused lanes: {ps.get('paused_count', 0)}")
@@ -2303,7 +2398,7 @@ def format_markdown(report: PulseReport) -> str:
         if report.survival_summary:
             ss = report.survival_summary
             op = ss.get("operational_pass_probability")
-            op_str = f"{float(op):.1%}" if isinstance(op, (float, int)) else "?"
+            op_str = f"{float(op):.1%}" if isinstance(op, float | int) else "?"
             lines.append(
                 f"- **Criterion 11**: {'PASS' if ss.get('gate_ok') else 'BLOCK'} {op_str} | "
                 f"as_of={ss.get('as_of_date')} | age={ss.get('report_age_days')}d"

@@ -12,6 +12,7 @@ Computes entry_delay from timestamps, not derived columns.
   T4: Robustness (year-by-year, ORB size, DST season)
   T5: Confirm bars interaction
 """
+
 import sys
 import warnings
 from datetime import date, datetime, timedelta
@@ -33,6 +34,7 @@ INSTRUMENTS = ["MNQ", "MGC", "MES"]
 
 # -- Phase 1: Pre-compute orb_close_ts --------------------------------
 
+
 def resolve_orb_close(trading_day, session_name, orb_minutes):
     """Compute ORB close time (UTC-aware) from session catalog."""
     resolver = SESSION_CATALOG[session_name]["resolver"]
@@ -42,9 +44,7 @@ def resolve_orb_close(trading_day, session_name, orb_minutes):
     # Sessions with hour < 9 are on calendar day AFTER trading_day
     cal_day = trading_day + timedelta(days=1) if hour < 9 else trading_day
 
-    session_start = datetime(
-        cal_day.year, cal_day.month, cal_day.day, hour, minute, tzinfo=BRISBANE
-    )
+    session_start = datetime(cal_day.year, cal_day.month, cal_day.day, hour, minute, tzinfo=BRISBANE)
     return session_start + timedelta(minutes=orb_minutes)
 
 
@@ -114,8 +114,7 @@ print(f"  Resolved: {len(orb_close_cache):,} session times ({errors} errors)")
 
 # Build orb_close lookup DataFrame for vectorized merge
 orb_close_rows = [
-    {"trading_day": k[0], "orb_label": k[1], "orb_minutes": k[2], "orb_close_ts": v}
-    for k, v in orb_close_cache.items()
+    {"trading_day": k[0], "orb_label": k[1], "orb_minutes": k[2], "orb_close_ts": v} for k, v in orb_close_cache.items()
 ]
 orb_close_df = pd.DataFrame(orb_close_rows)
 orb_close_df["orb_close_ts"] = pd.to_datetime(orb_close_df["orb_close_ts"], utc=True)
@@ -128,9 +127,11 @@ df = df.dropna(subset=["entry_delay_min"])
 
 # Sanity: distribution
 print(f"  Rows with valid entry_delay: {len(df):,}")
-print(f"  entry_delay_min: min={df['entry_delay_min'].min():.1f}, "
-      f"median={df['entry_delay_min'].median():.1f}, "
-      f"max={df['entry_delay_min'].max():.1f}")
+print(
+    f"  entry_delay_min: min={df['entry_delay_min'].min():.1f}, "
+    f"median={df['entry_delay_min'].median():.1f}, "
+    f"max={df['entry_delay_min'].max():.1f}"
+)
 
 # Negative delays = entry before ORB close (shouldn't happen for valid trades)
 neg = (df["entry_delay_min"] < 0).sum()
@@ -142,14 +143,12 @@ if neg > 0:
 
 # -- Helper: statistical functions -------------------------------------
 
+
 def cohens_d(g1, g2):
     n1, n2 = len(g1), len(g2)
     if n1 < 2 or n2 < 2:
         return np.nan
-    pooled_std = np.sqrt(
-        ((n1 - 1) * g1.std(ddof=1) ** 2 + (n2 - 1) * g2.std(ddof=1) ** 2)
-        / (n1 + n2 - 2)
-    )
+    pooled_std = np.sqrt(((n1 - 1) * g1.std(ddof=1) ** 2 + (n2 - 1) * g2.std(ddof=1) ** 2) / (n1 + n2 - 2))
     if pooled_std == 0:
         return np.nan
     return (g1.mean() - g2.mean()) / pooled_std
@@ -203,21 +202,27 @@ for (inst, sess, om), grp in df.groupby(["symbol", "orb_label", "orb_minutes"]):
         std_pnl = sub.std(ddof=1)
         t_stat, p_val, _ = ttest_vs_zero(sub)
 
-        results_t1.append({
-            "instrument": inst, "session": sess, "orb_minutes": om,
-            "bucket": bucket, "N": n, "mean_pnl_r": mean_pnl,
-            "median_pnl_r": median_pnl, "win_rate": wr,
-            "std": std_pnl, "ttest_p": p_val,
-        })
+        results_t1.append(
+            {
+                "instrument": inst,
+                "session": sess,
+                "orb_minutes": om,
+                "bucket": bucket,
+                "N": n,
+                "mean_pnl_r": mean_pnl,
+                "median_pnl_r": median_pnl,
+                "win_rate": wr,
+                "std": std_pnl,
+                "ttest_p": p_val,
+            }
+        )
 
 t1_df = pd.DataFrame(results_t1)
 
 # BH FDR correction
 if len(t1_df) > 0 and t1_df["ttest_p"].notna().sum() > 0:
     valid_mask = t1_df["ttest_p"].notna()
-    reject, adj_p, _, _ = multipletests(
-        t1_df.loc[valid_mask, "ttest_p"], alpha=0.05, method="fdr_bh"
-    )
+    reject, adj_p, _, _ = multipletests(t1_df.loc[valid_mask, "ttest_p"], alpha=0.05, method="fdr_bh")
     t1_df.loc[valid_mask, "bh_adjusted_p"] = adj_p
     t1_df.loc[valid_mask, "bh_significant"] = reject
     K_t1 = valid_mask.sum()
@@ -233,21 +238,27 @@ for (inst, sess, om), grp in df.groupby(["symbol", "orb_label", "orb_minutes"]):
         continue
     t_stat, p_val, dof = ttest_two_groups(fast, slow)
     d = cohens_d(fast, slow)
-    fast_slow_results.append({
-        "instrument": inst, "session": sess, "orb_minutes": om,
-        "fast_N": len(fast), "slow_N": len(slow),
-        "fast_mean": fast.mean(), "slow_mean": slow.mean(),
-        "fast_vs_slow_p": p_val, "cohens_d": d, "dof": dof,
-    })
+    fast_slow_results.append(
+        {
+            "instrument": inst,
+            "session": sess,
+            "orb_minutes": om,
+            "fast_N": len(fast),
+            "slow_N": len(slow),
+            "fast_mean": fast.mean(),
+            "slow_mean": slow.mean(),
+            "fast_vs_slow_p": p_val,
+            "cohens_d": d,
+            "dof": dof,
+        }
+    )
 
 fs_df = pd.DataFrame(fast_slow_results)
 
 # BH FDR on FAST vs SLOW tests
 if len(fs_df) > 0 and fs_df["fast_vs_slow_p"].notna().sum() > 0:
     valid_mask = fs_df["fast_vs_slow_p"].notna()
-    reject, adj_p, _, _ = multipletests(
-        fs_df.loc[valid_mask, "fast_vs_slow_p"], alpha=0.05, method="fdr_bh"
-    )
+    reject, adj_p, _, _ = multipletests(fs_df.loc[valid_mask, "fast_vs_slow_p"], alpha=0.05, method="fdr_bh")
     fs_df.loc[valid_mask, "bh_adjusted_p"] = adj_p
     fs_df.loc[valid_mask, "bh_significant"] = reject
     K_fs = valid_mask.sum()
@@ -276,9 +287,11 @@ if len(t1_df) > 0:
             )
 
 print("\n--- FAST vs SLOW Comparison ---")
-print(f"{'Inst':<5s} {'Session':<20s} OM  {'Fast_N':>6s} {'Slow_N':>6s} "
-      f"{'Fast_mean':>10s} {'Slow_mean':>10s} {'p':>8s} {'BH_p':>8s} "
-      f"{'d':>6s} {'Sig':>4s}")
+print(
+    f"{'Inst':<5s} {'Session':<20s} OM  {'Fast_N':>6s} {'Slow_N':>6s} "
+    f"{'Fast_mean':>10s} {'Slow_mean':>10s} {'p':>8s} {'BH_p':>8s} "
+    f"{'d':>6s} {'Sig':>4s}"
+)
 print("-" * 110)
 if len(fs_df) > 0:
     for _, row in fs_df.sort_values(["session", "instrument"]).iterrows():
@@ -331,20 +344,26 @@ for (inst, sess, om), grp in df.groupby(["symbol", "orb_label", "orb_minutes"]):
         wr = (sub > 0).mean()
         std_pnl = sub.std(ddof=1)
         t_stat, p_val, _ = ttest_vs_zero(sub)
-        results_t2.append({
-            "instrument": inst, "session": sess, "orb_minutes": om,
-            "bucket": bucket, "N": n, "mean_pnl_r": mean_pnl,
-            "median_pnl_r": median_pnl, "win_rate": wr,
-            "std": std_pnl, "ttest_p": p_val,
-        })
+        results_t2.append(
+            {
+                "instrument": inst,
+                "session": sess,
+                "orb_minutes": om,
+                "bucket": bucket,
+                "N": n,
+                "mean_pnl_r": mean_pnl,
+                "median_pnl_r": median_pnl,
+                "win_rate": wr,
+                "std": std_pnl,
+                "ttest_p": p_val,
+            }
+        )
 
 t2_df = pd.DataFrame(results_t2)
 
 if len(t2_df) > 0 and t2_df["ttest_p"].notna().sum() > 0:
     valid_mask = t2_df["ttest_p"].notna()
-    reject, adj_p, _, _ = multipletests(
-        t2_df.loc[valid_mask, "ttest_p"], alpha=0.05, method="fdr_bh"
-    )
+    reject, adj_p, _, _ = multipletests(t2_df.loc[valid_mask, "ttest_p"], alpha=0.05, method="fdr_bh")
     t2_df.loc[valid_mask, "bh_adjusted_p"] = adj_p
     t2_df.loc[valid_mask, "bh_significant"] = reject
     K_t2 = valid_mask.sum()
@@ -360,20 +379,26 @@ for (inst, sess, om), grp in df.groupby(["symbol", "orb_label", "orb_minutes"]):
         continue
     t_stat, p_val, dof = ttest_two_groups(early, late)
     d = cohens_d(early, late)
-    early_late_results.append({
-        "instrument": inst, "session": sess, "orb_minutes": om,
-        "early_N": len(early), "late_N": len(late),
-        "early_mean": early.mean(), "late_mean": late.mean(),
-        "early_vs_late_p": p_val, "cohens_d": d, "dof": dof,
-    })
+    early_late_results.append(
+        {
+            "instrument": inst,
+            "session": sess,
+            "orb_minutes": om,
+            "early_N": len(early),
+            "late_N": len(late),
+            "early_mean": early.mean(),
+            "late_mean": late.mean(),
+            "early_vs_late_p": p_val,
+            "cohens_d": d,
+            "dof": dof,
+        }
+    )
 
 el_df = pd.DataFrame(early_late_results)
 
 if len(el_df) > 0 and el_df["early_vs_late_p"].notna().sum() > 0:
     valid_mask = el_df["early_vs_late_p"].notna()
-    reject, adj_p, _, _ = multipletests(
-        el_df.loc[valid_mask, "early_vs_late_p"], alpha=0.05, method="fdr_bh"
-    )
+    reject, adj_p, _, _ = multipletests(el_df.loc[valid_mask, "early_vs_late_p"], alpha=0.05, method="fdr_bh")
     el_df.loc[valid_mask, "bh_adjusted_p"] = adj_p
     el_df.loc[valid_mask, "bh_significant"] = reject
     K_el = valid_mask.sum()
@@ -401,9 +426,11 @@ if len(t2_df) > 0:
             )
 
 print("\n--- EARLY vs LATE Comparison ---")
-print(f"{'Inst':<5s} {'Session':<20s} OM  {'Early_N':>7s} {'Late_N':>7s} "
-      f"{'Early_mean':>11s} {'Late_mean':>10s} {'p':>8s} {'BH_p':>8s} "
-      f"{'d':>6s} {'Sig':>4s}")
+print(
+    f"{'Inst':<5s} {'Session':<20s} OM  {'Early_N':>7s} {'Late_N':>7s} "
+    f"{'Early_mean':>11s} {'Late_mean':>10s} {'p':>8s} {'BH_p':>8s} "
+    f"{'d':>6s} {'Sig':>4s}"
+)
 print("-" * 110)
 if len(el_df) > 0:
     for _, row in el_df.sort_values(["session", "instrument"]).iterrows():
@@ -463,10 +490,14 @@ if both_surviving:
         unfiltered = grp["pnl_r"]
 
         print(f"\n  Comparison:")
-        print(f"    FAST_EARLY:  N={len(fast_early):>5d} mean={fast_early.mean():+.4f} WR={((fast_early>0).mean()):.1%}")
-        print(f"    FAST_ALL:    N={len(fast_all):>5d} mean={fast_all.mean():+.4f} WR={((fast_all>0).mean()):.1%}")
-        print(f"    EARLY_ALL:   N={len(early_all):>5d} mean={early_all.mean():+.4f} WR={((early_all>0).mean()):.1%}")
-        print(f"    UNFILTERED:  N={len(unfiltered):>5d} mean={unfiltered.mean():+.4f} WR={((unfiltered>0).mean()):.1%}")
+        print(
+            f"    FAST_EARLY:  N={len(fast_early):>5d} mean={fast_early.mean():+.4f} WR={((fast_early > 0).mean()):.1%}"
+        )
+        print(f"    FAST_ALL:    N={len(fast_all):>5d} mean={fast_all.mean():+.4f} WR={((fast_all > 0).mean()):.1%}")
+        print(f"    EARLY_ALL:   N={len(early_all):>5d} mean={early_all.mean():+.4f} WR={((early_all > 0).mean()):.1%}")
+        print(
+            f"    UNFILTERED:  N={len(unfiltered):>5d} mean={unfiltered.mean():+.4f} WR={((unfiltered > 0).mean()):.1%}"
+        )
 
         # FAST_EARLY vs FAST_ALL
         fast_not_early = grp[(grp["speed_bucket"] == "FAST") & (grp["entry_bucket"] != "EARLY")]["pnl_r"]
@@ -514,9 +545,11 @@ for inst, sess, om in sorted(surviving_t1):
             total_years += 1
             if delta > 0:
                 fast_wins += 1
-            print(f"    {yr}: FAST={yr_fast.mean():+.4f} (N={len(yr_fast)}), "
-                  f"SLOW={yr_slow.mean():+.4f} (N={len(yr_slow)}), "
-                  f"delta={delta:+.4f} {'Y' if delta > 0 else 'N'}")
+            print(
+                f"    {yr}: FAST={yr_fast.mean():+.4f} (N={len(yr_fast)}), "
+                f"SLOW={yr_slow.mean():+.4f} (N={len(yr_slow)}), "
+                f"delta={delta:+.4f} {'Y' if delta > 0 else 'N'}"
+            )
         else:
             print(f"    {yr}: N too small (FAST={len(yr_fast)}, SLOW={len(yr_slow)})")
 
@@ -537,15 +570,19 @@ for inst, sess, om in sorted(surviving_t1):
         )
         if len(merged) > 0 and "orb_size" in merged.columns:
             median_size = merged["orb_size"].median()
-            for label, subset in [("small", merged[merged["orb_size"] <= median_size]),
-                                  ("large", merged[merged["orb_size"] > median_size])]:
+            for label, subset in [
+                ("small", merged[merged["orb_size"] <= median_size]),
+                ("large", merged[merged["orb_size"] > median_size]),
+            ]:
                 s_fast = subset[subset["speed_bucket"] == "FAST"]["pnl_r"]
                 s_slow = subset[subset["speed_bucket"] == "SLOW"]["pnl_r"]
                 if len(s_fast) >= 10 and len(s_slow) >= 10:
                     t, p, _ = ttest_two_groups(s_fast, s_slow)
-                    print(f"    {label} ORB (<=>{median_size:.1f}): "
-                          f"FAST={s_fast.mean():+.4f} (N={len(s_fast)}), "
-                          f"SLOW={s_slow.mean():+.4f} (N={len(s_slow)}), p={p:.4f}")
+                    print(
+                        f"    {label} ORB (<=>{median_size:.1f}): "
+                        f"FAST={s_fast.mean():+.4f} (N={len(s_fast)}), "
+                        f"SLOW={s_slow.mean():+.4f} (N={len(s_slow)}), p={p:.4f}"
+                    )
                 else:
                     print(f"    {label} ORB: N too small (FAST={len(s_fast)}, SLOW={len(s_slow)})")
         else:
@@ -557,17 +594,17 @@ for inst, sess, om in sorted(surviving_t1):
     print("  4c. DST/season:")
     grp_copy = grp.copy()
     grp_copy["month"] = grp_copy["trading_day"].apply(lambda d: d.month)
-    grp_copy["season"] = grp_copy["month"].apply(
-        lambda m: "WINTER" if m in [11, 12, 1, 2, 3] else "SUMMER"
-    )
+    grp_copy["season"] = grp_copy["month"].apply(lambda m: "WINTER" if m in [11, 12, 1, 2, 3] else "SUMMER")
     for season in ["WINTER", "SUMMER"]:
         s_grp = grp_copy[grp_copy["season"] == season]
         s_fast = s_grp[s_grp["speed_bucket"] == "FAST"]["pnl_r"]
         s_slow = s_grp[s_grp["speed_bucket"] == "SLOW"]["pnl_r"]
         if len(s_fast) >= 10 and len(s_slow) >= 10:
             t, p, _ = ttest_two_groups(s_fast, s_slow)
-            print(f"    {season}: FAST={s_fast.mean():+.4f} (N={len(s_fast)}), "
-                  f"SLOW={s_slow.mean():+.4f} (N={len(s_slow)}), p={p:.4f}")
+            print(
+                f"    {season}: FAST={s_fast.mean():+.4f} (N={len(s_fast)}), "
+                f"SLOW={s_slow.mean():+.4f} (N={len(s_slow)}), p={p:.4f}"
+            )
         else:
             print(f"    {season}: N too small (FAST={len(s_fast)}, SLOW={len(s_slow)})")
 
@@ -591,8 +628,7 @@ print("=" * 80)
 for inst, sess, om in sorted(surviving_t1):
     grp = df[(df["symbol"] == inst) & (df["orb_label"] == sess) & (df["orb_minutes"] == om)]
     print(f"\n  --- {inst} {sess} O{om} ---")
-    print(f"  {'CB':>4s} {'Fast_N':>7s} {'Fast_mean':>10s} {'Slow_N':>7s} "
-          f"{'Slow_mean':>10s} {'Delta':>8s} {'p':>8s}")
+    print(f"  {'CB':>4s} {'Fast_N':>7s} {'Fast_mean':>10s} {'Slow_N':>7s} {'Slow_mean':>10s} {'Delta':>8s} {'p':>8s}")
     print("  " + "-" * 65)
 
     cb_effect_at_1_only = True
@@ -604,15 +640,19 @@ for inst, sess, om in sorted(surviving_t1):
             t, p, _ = ttest_two_groups(cb_fast, cb_slow)
             delta = cb_fast.mean() - cb_slow.mean()
             sig = "*" if p < 0.05 else ""
-            print(f"  CB{cb:>2d} {len(cb_fast):>7d} {cb_fast.mean():>+10.4f} "
-                  f"{len(cb_slow):>7d} {cb_slow.mean():>+10.4f} "
-                  f"{delta:>+8.4f} {p:>8.4f}{sig}")
+            print(
+                f"  CB{cb:>2d} {len(cb_fast):>7d} {cb_fast.mean():>+10.4f} "
+                f"{len(cb_slow):>7d} {cb_slow.mean():>+10.4f} "
+                f"{delta:>+8.4f} {p:>8.4f}{sig}"
+            )
             if cb > 1 and p < 0.10:
                 cb_effect_at_1_only = False
         else:
-            print(f"  CB{cb:>2d} {len(cb_fast):>7d}        --- "
-                  f"{len(cb_slow):>7d}        --- "
-                  f"      ---       --- [N too small]")
+            print(
+                f"  CB{cb:>2d} {len(cb_fast):>7d}        --- "
+                f"{len(cb_slow):>7d}        --- "
+                f"      ---       --- [N too small]"
+            )
 
     if cb_effect_at_1_only:
         print("  -> Effect ONLY at CB=1: may be confirmation timing, not break speed")
@@ -632,5 +672,4 @@ print(f"  Total rows analyzed: {len(df):,}")
 print(f"  Test 1 survivors (break speed, BH + |d|>=0.2): {len(surviving_t1)}")
 print(f"  Test 2 survivors (late entry, BH + |d|>=0.2): {len(surviving_t2)}")
 print(f"  Test 3 interaction sessions: {len(both_surviving)}")
-print(f"  BH FDR K values: T1_buckets={K_t1}, T1_fast_slow={K_fs}, "
-      f"T2_buckets={K_t2}, T2_early_late={K_el}")
+print(f"  BH FDR K values: T1_buckets={K_t1}, T1_fast_slow={K_fs}, T2_buckets={K_t2}, T2_early_late={K_el}")

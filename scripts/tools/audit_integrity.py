@@ -117,10 +117,7 @@ def check_dead_instrument_contamination(con) -> list[str]:
         GROUP BY instrument
     """).fetchall()
     for inst, n in r:
-        violations.append(
-            f"  {inst}: {n} active validated strategies "
-            "(instrument not in ACTIVE_ORB_INSTRUMENTS)"
-        )
+        violations.append(f"  {inst}: {n} active validated strategies (instrument not in ACTIVE_ORB_INSTRUMENTS)")
     return violations
 
 

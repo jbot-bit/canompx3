@@ -119,22 +119,29 @@ def run_backfill_for_instrument(
     end = target.isoformat()
     print(f"▶ {instrument}: backfilling {start} → {end}")
 
+    # Subprocess invocations MUST use python -m <module> form.
+    # The target modules (pipeline.ingest_dbn, pipeline.build_bars_5m,
+    # pipeline.build_daily_features, trading_app.outcome_builder) all use
+    # `from pipeline.X import Y` / `from trading_app.X import Y` imports, which
+    # require the project root in sys.path. Python executed as `python foo.py`
+    # puts foo.py's directory in sys.path, breaking the package import.
+    # Regression guard: tests/test_pipeline/test_daily_backfill_subprocess_form.py
     py = sys.executable
     _run(
-        [py, "pipeline/ingest_dbn.py", "--instrument", instrument, "--start", start, "--end", end],
+        [py, "-m", "pipeline.ingest_dbn", "--instrument", instrument, "--start", start, "--end", end],
         f"ingest_dbn {instrument}",
     )
     _run(
-        [py, "pipeline/build_bars_5m.py", "--instrument", instrument, "--start", start, "--end", end],
+        [py, "-m", "pipeline.build_bars_5m", "--instrument", instrument, "--start", start, "--end", end],
         f"build_bars_5m {instrument}",
     )
     _run(
-        [py, "pipeline/build_daily_features.py", "--instrument", instrument, "--start", start, "--end", end],
+        [py, "-m", "pipeline.build_daily_features", "--instrument", instrument, "--start", start, "--end", end],
         f"build_daily_features {instrument}",
     )
     # Outcomes: incremental only. DO NOT trigger discovery/validation.
     _run(
-        [py, "trading_app/outcome_builder.py", "--instrument", instrument, "--start", start, "--end", end],
+        [py, "-m", "trading_app.outcome_builder", "--instrument", instrument, "--start", start, "--end", end],
         f"outcome_builder {instrument}",
     )
 

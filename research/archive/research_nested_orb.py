@@ -34,8 +34,14 @@ from pipeline.paths import GOLD_DB_PATH
 
 # Sessions to test — map label to column prefix in daily_features
 SESSION_LABELS = [
-    "0900", "1000", "1100", "1800", "0030", "2300",
-    "US_EQUITY_OPEN", "CME_CLOSE",
+    "0900",
+    "1000",
+    "1100",
+    "1800",
+    "0030",
+    "2300",
+    "US_EQUITY_OPEN",
+    "CME_CLOSE",
 ]
 
 # Minimum N to report a cell
@@ -175,18 +181,20 @@ def analyse(df: pd.DataFrame) -> pd.DataFrame:
         avg_r = r.mean()
         wr = (r > 0).mean()
         t_stat, p_val = stats.ttest_1samp(r, 0)
-        records.append({
-            "session": session,
-            "rr": rr,
-            "cb": cb,
-            "em": em,
-            "tier": tier,
-            "n": n,
-            "avg_r": round(avg_r, 4),
-            "win_rate": round(wr, 3),
-            "t_stat": round(t_stat, 3),
-            "p_val": round(p_val, 4),
-        })
+        records.append(
+            {
+                "session": session,
+                "rr": rr,
+                "cb": cb,
+                "em": em,
+                "tier": tier,
+                "n": n,
+                "avg_r": round(avg_r, 4),
+                "win_rate": round(wr, 3),
+                "t_stat": round(t_stat, 3),
+                "p_val": round(p_val, 4),
+            }
+        )
 
     if not records:
         return pd.DataFrame()
@@ -204,9 +212,9 @@ def print_summary(res: pd.DataFrame, instrument: str) -> None:
         print(f"\n{instrument}: No cells with N >= {MIN_N}")
         return
 
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"NESTED ORB RESULTS — {instrument}")
-    print(f"{'='*80}")
+    print(f"{'=' * 80}")
 
     # Tier distribution
     tier_counts = res.groupby("tier")["n"].sum()
@@ -218,15 +226,23 @@ def print_summary(res: pd.DataFrame, instrument: str) -> None:
 
     if not survivors.empty:
         print("\nSURVIVORS:")
-        print(survivors[["session","rr","cb","em","tier","n","avg_r","win_rate","p_val","p_bh"]].to_string(index=False))
+        print(
+            survivors[["session", "rr", "cb", "em", "tier", "n", "avg_r", "win_rate", "p_val", "p_bh"]].to_string(
+                index=False
+            )
+        )
 
     # Per-session summary: avg_r by tier (averaged across rr/cb/em)
-    print(f"\n{'-'*80}")
+    print(f"\n{'-' * 80}")
     print("Per-session avg_r by tier (averaged across all rr/cb/em combos):")
-    pivot = res.groupby(["session", "tier"]).apply(
-        lambda g: pd.Series({"avg_r": g["avg_r"].mean(), "n_cells": len(g), "total_n": g["n"].sum()}),
-        include_groups=False,
-    ).reset_index()
+    pivot = (
+        res.groupby(["session", "tier"])
+        .apply(
+            lambda g: pd.Series({"avg_r": g["avg_r"].mean(), "n_cells": len(g), "total_n": g["n"].sum()}),
+            include_groups=False,
+        )
+        .reset_index()
+    )
     print(pivot.to_string(index=False))
 
 
@@ -254,7 +270,11 @@ def save_output(res: pd.DataFrame, instrument: str) -> None:
         if not res[res["bh_sig"]].empty:
             lines.append("## BH Survivors")
             lines.append("")
-            lines.append(res[res["bh_sig"]][["session","rr","cb","em","tier","n","avg_r","p_val","p_bh"]].to_markdown(index=False))
+            lines.append(
+                res[res["bh_sig"]][["session", "rr", "cb", "em", "tier", "n", "avg_r", "p_val", "p_bh"]].to_markdown(
+                    index=False
+                )
+            )
     md_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"Saved: {md_path}")
 

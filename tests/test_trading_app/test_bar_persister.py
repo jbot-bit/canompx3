@@ -14,6 +14,7 @@ from trading_app.live.bar_persister import BarPersister
 def tmp_db():
     """Create a temp DuckDB with bars_1m schema."""
     import os
+
     path = tempfile.mktemp(suffix=".duckdb")
     con = duckdb.connect(path)
     con.execute("""
@@ -101,7 +102,11 @@ class TestBarPersister:
         good = _bar(0)
         bad = Bar(
             ts_utc=datetime(2026, 4, 13, 10, 1, 0, tzinfo=timezone.utc),
-            open=-1.0, high=0.0, low=-2.0, close=-0.5, volume=100,
+            open=-1.0,
+            high=0.0,
+            low=-2.0,
+            close=-0.5,
+            volume=100,
         )
         bp.append(good)
         bp.append(bad)

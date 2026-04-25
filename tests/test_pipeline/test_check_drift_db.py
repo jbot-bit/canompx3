@@ -5,6 +5,7 @@ Covers checks 29, 35, 42, 43, 50, 54-58.
 Each test creates a temp DuckDB, injects data, and verifies the check.
 """
 
+from datetime import date
 from pathlib import Path
 
 import duckdb
@@ -73,6 +74,36 @@ DAILY_FEATURES_SCHEMA = """
         trading_day DATE,
         symbol VARCHAR,
         orb_minutes INTEGER
+    );
+"""
+
+DAILY_FEATURES_HTF_SCHEMA = """
+    CREATE TABLE daily_features (
+        trading_day DATE,
+        symbol VARCHAR,
+        orb_minutes INTEGER,
+        prev_week_high DOUBLE,
+        prev_week_low DOUBLE,
+        prev_week_open DOUBLE,
+        prev_week_close DOUBLE,
+        prev_week_range DOUBLE,
+        prev_week_mid DOUBLE,
+        prev_month_high DOUBLE,
+        prev_month_low DOUBLE,
+        prev_month_open DOUBLE,
+        prev_month_close DOUBLE,
+        prev_month_range DOUBLE,
+        prev_month_mid DOUBLE
+    );
+"""
+
+DAILY_FEATURES_GARCH_SCHEMA = """
+    CREATE TABLE daily_features (
+        trading_day DATE,
+        symbol VARCHAR,
+        orb_minutes INTEGER,
+        garch_forecast_vol DOUBLE,
+        garch_forecast_vol_pct DOUBLE
     );
 """
 
@@ -832,3 +863,101 @@ class TestDataContinuity:
         assert len(violations) == 0
         captured = capsys.readouterr()
         assert "WARNING" not in captured.out
+
+
+# ── Recent GARCH feature coverage ─────────────────────────────────────
+
+
+class TestRecentGarchFeatureCoverage:
+    """Late-history GARCH state should not revert to NULL on recent rows."""
+
+    def test_catches_recent_nulls_after_warmup(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "test_garch_recent_nulls.db"
+        con = duckdb.connect(str(db_path))
+        con.execute(DAILY_FEATURES_GARCH_SCHEMA)
+        for i in range(340):
+            td = date.fromordinal(date(2024, 1, 1).toordinal() + i)
+            garch = None if i >= 335 else 0.10 + i / 1000.0
+            gpct = None if i >= 335 else 50.0
+            con.execute(
+                "INSERT INTO daily_features VALUES (?, 'MNQ', 5, ?, ?)",
+                [td, garch, gpct],
+            )
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_recent_garch_feature_coverage()
+        assert len(violations) == 1
+        assert "MNQ O5" in violations[0]
+        assert "5 NULL row(s)" in violations[0]
+
+    def test_ignores_early_history_warmup_and_passes_recent_coverage(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "test_garch_recent_covered.db"
+        con = duckdb.connect(str(db_path))
+        con.execute(DAILY_FEATURES_GARCH_SCHEMA)
+        for i in range(320):
+            td = date.fromordinal(date(2024, 1, 1).toordinal() + i)
+            garch = None if i < 40 else 0.10 + i / 1000.0
+            gpct = None if i < 40 else 50.0
+            con.execute(
+                "INSERT INTO daily_features VALUES (?, 'MNQ', 5, ?, ?)",
+                [td, garch, gpct],
+            )
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_recent_garch_feature_coverage()
+        assert violations == []
+
+    def test_ignores_legitimate_garch_pct_warmup_before_recent_window_is_safe(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "test_garch_pct_warmup.db"
+        con = duckdb.connect(str(db_path))
+        con.execute(DAILY_FEATURES_GARCH_SCHEMA)
+        for i in range(320):
+            td = date.fromordinal(date(2024, 1, 1).toordinal() + i)
+            garch = None if i < 252 else 0.10 + i / 1000.0
+            gpct = None if i < 312 else 50.0
+            con.execute(
+                "INSERT INTO daily_features VALUES (?, 'MNQ', 5, ?, ?)",
+                [td, garch, gpct],
+            )
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_recent_garch_feature_coverage()
+        assert violations == []
+
+
+# ── HTF aperture consistency ──────────────────────────────────────────
+
+
+class TestHTFApertureConsistency:
+    """HTF fields must match across O5/O15/O30 sibling rows."""
+
+    def test_catches_aperture_divergence(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            DAILY_FEATURES_HTF_SCHEMA,
+            """INSERT INTO daily_features VALUES
+                ('2026-04-17', 'MGC', 5, 4887.3, 4625.1, 4673.2, 4680.7, 262.2, 4756.2, 5434.4, 4100.0, 5346.4, 4709.6, 1334.4, 4767.2),
+                ('2026-04-17', 'MGC', 15, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+                ('2026-04-17', 'MGC', 30, 4887.3, 4625.1, 4673.2, 4680.7, 262.2, 4756.2, 5434.4, 4100.0, 5346.4, 4709.6, 1334.4, 4767.2)""",
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_htf_aperture_consistency()
+        assert len(violations) == 1
+        assert "MGC 2026-04-17" in violations[0]
+        assert "prev_week_high(aperture_diff)" in violations[0]
+
+    def test_passes_when_all_apertures_agree(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            DAILY_FEATURES_HTF_SCHEMA,
+            """INSERT INTO daily_features VALUES
+                ('2026-04-17', 'MGC', 5, 4887.3, 4625.1, 4673.2, 4680.7, 262.2, 4756.2, 5434.4, 4100.0, 5346.4, 4709.6, 1334.4, 4767.2),
+                ('2026-04-17', 'MGC', 15, 4887.3, 4625.1, 4673.2, 4680.7, 262.2, 4756.2, 5434.4, 4100.0, 5346.4, 4709.6, 1334.4, 4767.2),
+                ('2026-04-17', 'MGC', 30, 4887.3, 4625.1, 4673.2, 4680.7, 262.2, 4756.2, 5434.4, 4100.0, 5346.4, 4709.6, 1334.4, 4767.2)""",
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_htf_aperture_consistency()
+        assert violations == []

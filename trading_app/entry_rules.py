@@ -23,11 +23,18 @@ E2 vs E1/E3 distinction:
   E0 (limit-on-confirm) was purged Feb 2026 — 3 structural biases made it an artifact.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
-import numpy as np
-import pandas as pd
+# numpy / pandas lazy-loaded inside the functions that use them (PEP 8).
+# Dataclass fields below use only builtins + datetime, so PEP 563 string
+# annotations are safe. pd.DataFrame annotations on function signatures
+# resolve via TYPE_CHECKING for static checkers.
+if TYPE_CHECKING:
+    import pandas as pd
 
 from trading_app.config import E3_RETRACE_WINDOW_MINUTES
 
@@ -88,6 +95,8 @@ def detect_confirm(
     Returns ConfirmResult with the confirm bar's index, timestamp, and close.
     Does NOT determine entry price — that depends on the entry model.
     """
+    import numpy as np
+
     if confirm_bars < 1 or confirm_bars > 10:
         raise ValueError(f"confirm_bars must be 1-10, got {confirm_bars}")
 
@@ -163,6 +172,9 @@ def detect_break_touch(
     This is the detection path for E2 (stop-market), where a resting stop
     order triggers on any intra-bar touch of the level.
     """
+    import numpy as np
+    import pandas as pd
+
     no_touch = BreakTouchResult(
         touched=False,
         touch_bar_ts=None,
@@ -255,6 +267,8 @@ def _resolve_e1(
     scan_window_end: datetime,
 ) -> EntrySignal:
     """E1: Market-On-Confirm. Entry = next bar OPEN after confirm bar."""
+    import pandas as pd
+
     # Find bars strictly after confirm bar timestamp
     next_bars = bars_df[
         (bars_df["ts_utc"] > pd.Timestamp(confirm.confirm_bar_ts)) & (bars_df["ts_utc"] < pd.Timestamp(scan_window_end))
@@ -297,6 +311,9 @@ def _resolve_e3(
     (inclusive). If the stop is breached before or on the retrace bar, the
     fill is invalid — you cannot enter a trade that is already stopped out.
     """
+    import numpy as np
+    import pandas as pd
+
     no_fill = EntrySignal(
         triggered=False,
         entry_ts=None,
@@ -455,6 +472,8 @@ def resample_to_5m(bars_1m_df: pd.DataFrame, after_ts: datetime) -> pd.DataFrame
         DataFrame with same columns, timestamps floored to 5m boundaries.
         Empty DataFrame if no bars after after_ts.
     """
+    import pandas as pd
+
     post_orb = bars_1m_df[bars_1m_df["ts_utc"] > pd.Timestamp(after_ts)].copy()
 
     if post_orb.empty:
@@ -498,6 +517,8 @@ def _verify_e3_sub_bar_fill(
     Returns:
         True if 1m data confirms the fill, False otherwise.
     """
+    import pandas as pd
+
     # Find 1m bars within the 5m candle: [entry_ts, entry_ts + 5min)
     bucket_start = pd.Timestamp(entry_ts)
     bucket_end = bucket_start + pd.Timedelta(minutes=5)
