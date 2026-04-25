@@ -2998,6 +2998,147 @@ class TestFillPollerF7Timeout:
         # [F7-LANE-RELEASE] lane released even on exception path
         assert orch._positions.get(STRATEGY_ID) is None
 
+    async def test_filled_during_cancel_race_calls_on_entry_filled_not_cancel_trade(self):
+        """CRITICAL-2 (iter 187): when post-cancel verify returns Filled, the order
+        raced — a real broker position exists.  The handler MUST:
+          - NOT call engine.cancel_trade (that would orphan a real position)
+          - call _positions.on_entry_filled with the fill price
+          - fire kill-switch + emergency flatten (no bracket context available)
+          - send a _notify with 'raced' or 'race' signal for the operator
+        [F7-FILLED-RACE, F7-FILLED-RACE-FLATTEN]
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2352.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=101)
+        record = orch._positions.get(STRATEGY_ID)
+        record.state_changed_at = datetime.now(UTC) - timedelta(seconds=120)
+        orch.FILL_POLL_INTERVAL = 0.01
+        orch.FILL_POLL_TIMEOUT_SECS = 0.001
+        orch.FILL_CANCEL_VERIFY_TIMEOUT_SECS = 0.01
+
+        orch.order_router.cancel = MagicMock()
+        # Post-cancel verify returns Filled — the order filled during the cancel race
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 101, "status": "Filled", "fill_price": 2352.0}
+        )
+        orch._notify = MagicMock()
+        orch._emergency_flatten = AsyncMock()
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.25)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # Must NOT have called cancel_trade — position is real at broker
+        orch.engine.cancel_trade.assert_not_called()
+        # Kill-switch must have fired (unbracketed real position = halt)
+        assert orch._kill_switch_fired is True
+        # Emergency flatten must have been called  [F7-BROKER-STUCK-FLATTEN / F7-FILLED-RACE-FLATTEN]
+        orch._emergency_flatten.assert_called_once()
+        # Operator must have been notified with race signal
+        assert orch._notify.call_count >= 1
+        notify_texts = " ".join(str(c) for c in orch._notify.call_args_list)
+        assert "race" in notify_texts.lower() or "raced" in notify_texts.lower()
+        # Position should be in ENTERED state (on_entry_filled called) or gone (flatten ran)
+        # Either is correct — what must NOT happen is the position staying PENDING_ENTRY
+        pos = orch._positions.get(STRATEGY_ID)
+        from trading_app.live.position_tracker import PositionState
+
+        assert pos is None or pos.state != PositionState.PENDING_ENTRY
+
+    async def test_broker_stuck_halt_calls_emergency_flatten(self):
+        """CRITICAL-1 (iter 187): broker-stuck halt path must call _emergency_flatten
+        after _fire_kill_switch.  Without this, a position that filled silently at
+        the broker before the stuck-cancel path runs would remain naked indefinitely.
+        Mutation-proof: assertion checks for [F7-BROKER-STUCK-FLATTEN] source marker
+        in production code AND runtime call assertion.
+        [F7-HALT-ON-STUCK, F7-KILL-SWITCH-CALL, F7-BROKER-STUCK-FLATTEN]
+        """
+        import inspect
+
+        # Structural probe: source marker must be present (mutation guard)
+        from trading_app.live import session_orchestrator as _so_mod
+
+        src = inspect.getsource(_so_mod.SessionOrchestrator._handle_fill_timeout)
+        assert "[F7-BROKER-STUCK-FLATTEN]" in src, (
+            "Source marker [F7-BROKER-STUCK-FLATTEN] missing from _handle_fill_timeout — "
+            "emergency_flatten call was removed from the broker-stuck halt path (CRITICAL-1)."
+        )
+
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=200)
+        record = orch._positions.get(STRATEGY_ID)
+        record.state_changed_at = datetime.now(UTC) - timedelta(seconds=120)
+        orch.FILL_POLL_INTERVAL = 0.01
+        orch.FILL_POLL_TIMEOUT_SECS = 0.001
+        orch.FILL_CANCEL_VERIFY_TIMEOUT_SECS = 0.01
+
+        orch.order_router.cancel = MagicMock()
+        # Broker stuck: verify still returns Working after cancel
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 200, "status": "Working", "fill_price": None}
+        )
+        orch._notify = MagicMock()
+        orch._emergency_flatten = AsyncMock()
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.25)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # Kill-switch must have fired  [F7-KILL-SWITCH-CALL]
+        assert orch._kill_switch_fired is True
+        # Emergency flatten must have been called  [F7-BROKER-STUCK-FLATTEN]
+        orch._emergency_flatten.assert_called_once()
+
+    async def test_kill_switch_state_blocks_handle_fill_timeout(self):
+        """M6 silent gap (iter 186 audit): if _kill_switch_fired is already True when
+        _fill_poller next iterates, _handle_fill_timeout must NOT be called — the
+        orchestrator is already halted and a double-cancel/halt would be confusing
+        and could race with ongoing emergency-flatten work.
+
+        This tests the POLLER-level guard: when kill_switch is set, the poller's
+        timeout path is skipped.  The poller still exits on CancelledError; but
+        before that, a kill-switch-active state must prevent further timeout processing.
+        [F7-CANCEL-CALL skipped when kill_switch_fired=True]
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=300)
+        record = orch._positions.get(STRATEGY_ID)
+        # Back-date far past timeout threshold
+        record.state_changed_at = datetime.now(UTC) - timedelta(seconds=120)
+        orch.FILL_POLL_INTERVAL = 0.01
+        orch.FILL_POLL_TIMEOUT_SECS = 0.001
+        orch.FILL_CANCEL_VERIFY_TIMEOUT_SECS = 0.01
+
+        # Pre-fire kill switch — orchestrator is already halted
+        orch._kill_switch_fired = True
+
+        cancel_mock = MagicMock()
+        orch.order_router.cancel = cancel_mock
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 300, "status": "Working", "fill_price": None}
+        )
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.15)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # cancel must NOT have been called — poller should detect kill_switch_fired
+        # and skip timeout processing when already halted.
+        # If this assertion fails, the poller needs a kill-switch guard at the top
+        # of its loop body (mirror pattern from _handle_event).
+        cancel_mock.assert_not_called()
+
 
 class TestObservability:
     """Tests for SessionStats counters, upgraded _notify, heartbeat, and self-tests."""

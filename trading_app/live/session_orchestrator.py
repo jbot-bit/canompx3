@@ -2756,9 +2756,10 @@ class SessionOrchestrator:
     # institutional-rigor.md § 6 (no silent failures), integrity-guardian.md § 3.
     FILL_POLL_TIMEOUT_SECS = 60.0
     # F7: after issuing a cancel, we verify the cancel actually took by polling
-    # once more. This timeout governs that single verify poll. 15s is generous
-    # for a broker round-trip; if still PENDING after 15s we treat the broker
-    # as stuck and halt the orchestrator.
+    # once more. This timeout governs that single verify poll.
+    # Rationale: 15s is generous for a broker round-trip; if still PENDING after
+    # 15s we treat the broker as stuck and halt the orchestrator (fail-closed per
+    # integrity-guardian.md § 3). Must be < FILL_POLL_TIMEOUT_SECS (60s).
     FILL_CANCEL_VERIFY_TIMEOUT_SECS = 15.0
 
     async def _handle_fill_timeout(
@@ -2812,16 +2813,36 @@ class SessionOrchestrator:
         # Step 3 — verify the cancel took  [F7-CANCEL-VERIFY]
         await asyncio.sleep(self.FILL_CANCEL_VERIFY_TIMEOUT_SECS)
         verified_cancelled = False
+        _filled_during_cancel = False
+        _late_fill_price: float | None = None
         try:
             post_cancel = await loop.run_in_executor(None, self.order_router.query_order_status, order_id)
-            if post_cancel["status"] in ("Cancelled", "Rejected", "Filled"):
+            post_status = post_cancel["status"]
+            if post_status in ("Cancelled", "Rejected"):
+                # Clean cancel — no broker position, proceed to normal lane release below.
                 verified_cancelled = True
                 log.info(
                     "F7: post-cancel status=%s for order %s (%s)",
-                    post_cancel["status"],
+                    post_status,
                     order_id,
                     strategy_id,
                 )
+            elif post_status == "Filled":
+                # Race: order filled between our timeout decision and cancel reaching broker.
+                # The broker holds a REAL position — DO NOT pop or cancel_trade.
+                # Record fill and route to emergency flatten (no bracket context available
+                # here; _submit_bracket needs event+strategy objects).  [F7-FILLED-RACE]
+                _filled_during_cancel = True
+                raw_late_fill = post_cancel.get("fill_price")
+                _late_fill_price = self._validate_fill_price(raw_late_fill, f"F7-RACE {strategy_id}")
+                race_msg = (
+                    f"F7 TIMEOUT CANCEL RACE: order {order_id} for {strategy_id} "
+                    f"filled DURING cancel attempt (fill_price={_late_fill_price}). "
+                    "Bracket context unavailable — emergency flatten to protect position. "
+                    "(integrity-guardian.md § 3)"
+                )
+                log.critical(race_msg)
+                self._notify(race_msg)  # institutional-rigor.md § 6; operator must know
         except Exception as verify_exc:
             log.critical(
                 "F7: post-cancel verify FAILED for order %s (%s): %s",
@@ -2831,15 +2852,33 @@ class SessionOrchestrator:
             )
             self._notify(f"F7: post-cancel verify FAILED for {strategy_id} order {order_id}: {verify_exc}")
 
-        # Step 4 — release lane slot regardless (state-machine consistency)  [F7-LANE-RELEASE]
-        current = self._positions.get(strategy_id)
-        if current is not None and current.state == PositionState.PENDING_ENTRY:
-            self._positions.pop(strategy_id)
-            log.warning("F7: released lane slot for %s (position removed)", strategy_id)
-        try:
-            self.engine.cancel_trade(strategy_id)
-        except Exception as eng_exc:
-            log.error("F7: engine.cancel_trade(%s) failed: %s", strategy_id, eng_exc)
+        # Step 4 — release lane slot and handle position state  [F7-LANE-RELEASE]
+        if _filled_during_cancel:
+            # Real broker position: transition to ENTERED state so position tracker is
+            # accurate before emergency flatten runs.  Do NOT pop or cancel_trade.
+            if _late_fill_price is not None:
+                current_for_fill = self._positions.get(strategy_id)
+                if current_for_fill is not None and current_for_fill.state == PositionState.PENDING_ENTRY:
+                    self._positions.on_entry_filled(strategy_id, _late_fill_price)
+                    log.warning(
+                        "F7: late-fill race: position %s transitioned to ENTERED @ %.2f — "
+                        "emergency flatten will close it",
+                        strategy_id,
+                        _late_fill_price,
+                    )
+            # Emit kill-switch + emergency flatten: position is real but unbracketed.
+            self._fire_kill_switch()  # [F7-KILL-SWITCH-CALL]
+            await self._emergency_flatten()  # [F7-FILLED-RACE-FLATTEN]
+            return  # lane slot released implicitly by emergency_flatten position cleanup
+        else:
+            current = self._positions.get(strategy_id)
+            if current is not None and current.state == PositionState.PENDING_ENTRY:
+                self._positions.pop(strategy_id)
+                log.warning("F7: released lane slot for %s (position removed)", strategy_id)
+            try:
+                self.engine.cancel_trade(strategy_id)
+            except Exception as eng_exc:
+                log.error("F7: engine.cancel_trade(%s) failed: %s", strategy_id, eng_exc)
 
         if not verified_cancelled:
             # Broker is stuck — halt the orchestrator  [F7-HALT-ON-STUCK]
@@ -2852,6 +2891,7 @@ class SessionOrchestrator:
             log.critical(halt_msg)
             self._notify(halt_msg)  # institutional-rigor.md § 6
             self._fire_kill_switch()  # [F7-KILL-SWITCH-CALL]
+            await self._emergency_flatten()  # [F7-BROKER-STUCK-FLATTEN]
 
     async def _fill_poller(self) -> None:
         """Poll PENDING_ENTRY orders for fill confirmation every 5s.
@@ -2881,6 +2921,14 @@ class SessionOrchestrator:
         while True:
             try:
                 await asyncio.sleep(self.FILL_POLL_INTERVAL)
+
+                # M6 guard: if kill-switch is already fired, skip all timeout/cancel
+                # processing — the orchestrator is halted and emergency_flatten is either
+                # in progress or complete.  Continuing would race with ongoing flatten work
+                # and emit confusing duplicate alerts.  Mirror pattern from _handle_event.
+                if self._kill_switch_fired:
+                    continue
+
                 self._poller_active = True
 
                 # R3: reconnect detection — reset timeout anchors for all pending orders
