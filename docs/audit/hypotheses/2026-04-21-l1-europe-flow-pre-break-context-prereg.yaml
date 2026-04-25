@@ -1,0 +1,222 @@
+version: 1
+status: LOCKED
+date: 2026-04-21
+slug: l1-europe-flow-pre-break-context-prereg
+title: "MNQ EUROPE_FLOW unfiltered pre-break context family v1"
+owner: codex
+parent_spec: "docs/plans/2026-04-21-institutional-action-pack.md"
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/audit/results/2026-04-21-l1-europe-flow-filter-diagnostic.md"
+    - "docs/audit/results/2026-04-21-orb-g5-deployed-lane-arithmetic-check.md"
+  notes:
+    - "This is an unfiltered-lane study because L1 ORB_G5 was audited as a cost-gate, not a live behavioral selector."
+    - "No E2 break_* feature is admissible."
+    - "No ATR-normalized ORB_G5 replacement is in scope."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "0cdd40f4"
+  committed_required_before_run: true
+
+scope:
+  instrument: MNQ
+  lane_id: "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_UNFILTERED"
+  session: EUROPE_FLOW
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.5
+  baseline_filter: none
+  directions: pooled
+  features_in_scope:
+    - orb_EUROPE_FLOW_pre_velocity
+    - rel_vol_EUROPE_FLOW
+  features_explicitly_out_of_scope:
+    - orb_EUROPE_FLOW_break_ts
+    - orb_EUROPE_FLOW_break_delay_min
+    - orb_EUROPE_FLOW_break_bar_continues
+    - orb_EUROPE_FLOW_break_bar_volume
+    - orb_EUROPE_FLOW_break_dir
+    - atr-normalized ORB size replacement variants
+    - ORB_G5 vs non-ORB_G5 selector replication
+    - pooled ML / meta-labeling / black-box scoring
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only; descriptive only"
+  holdout_rule:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+feature_definitions:
+  - feature_name: pre_velocity_HIGH_Q3
+    column_source: "daily_features.orb_EUROPE_FLOW_pre_velocity"
+    canonical_source_of_truth: "pipeline/build_daily_features.py -> orb_{label}_pre_velocity"
+    trade_time_knowable: true
+    first_complete_time: "ORB end"
+    temporal_alignment_note: "RULE 6.1 safe ORB-end feature"
+    lookahead_check: "PASS if P67 threshold is computed on IS rows only"
+  - feature_name: rel_vol_HIGH_Q3
+    column_source: "daily_features.rel_vol_EUROPE_FLOW"
+    canonical_source_of_truth: "pipeline/build_daily_features.py -> rel_vol_{session}"
+    trade_time_knowable: true
+    first_complete_time: "ORB end"
+    temporal_alignment_note: "RULE 6.1 safe ORB-end feature"
+    lookahead_check: "PASS if P67 threshold is computed on IS rows only"
+
+calibration:
+  quantile_source:
+    pre_velocity_HIGH_Q3: "IS-only 67th percentile on the exact unfiltered EUROPE_FLOW lane universe"
+    rel_vol_HIGH_Q3: "IS-only 67th percentile on the exact unfiltered EUROPE_FLOW lane universe"
+  lock_policy: |
+    Quantile thresholds are computed once from IS rows, frozen, and then applied
+    unchanged to IS and OOS. No threshold changes after first metric inspection.
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  sources:
+    - "docs/audit/results/2026-04-21-l1-europe-flow-filter-diagnostic.md"
+    - "docs/audit/results/2026-04-21-orb-g5-deployed-lane-arithmetic-check.md"
+  upstream_scan_k_framings:
+    l1_filter_diagnostic: "diagnostic candidate-threshold scan, not current family K"
+    deployed_lane_arithmetic_check: "confirmatory audit, not current family K"
+  note: |
+    The upstream audits justify using the unfiltered lane and banning the
+    ATR-normalized replacement path. They do not define this prereg's K.
+
+baseline:
+  lane_truth:
+    note: "Unfiltered L1 lane is the baseline under test because ORB_G5 is cost-gate only."
+    source: "docs/audit/results/2026-04-21-orb-g5-deployed-lane-arithmetic-check.md"
+  baseline_metric:
+    description: "unfiltered lane net ExpR using canonical pnl_r"
+    formula: "mean(pnl_r) on all eligible non-scratch rows"
+
+primary_schema:
+  k_family: 2
+  k_global: 2
+  k_lane: 2
+  k_session: 2
+  k_instrument: 2
+  primary_promotion_gate: "BH-FDR q < 0.05 at K_family=2 plus positive-mean floor and dir_match"
+  family_cells_structured_as: "2 hypotheses x 1 unfiltered lane universe"
+
+hypotheses:
+  - id: H01_PRE_VELOCITY_HIGH_Q3
+    type: primary
+    theory_citation: |
+      `docs/institutional/literature/fitschen_2013_path_of_least_resistance.md`
+      grounds intraday trend-follow; `docs/institutional/mechanism_priors.md`
+      frames displacement / pre-break carry as a testable prior.
+    statement: |
+      On the unfiltered MNQ EUROPE_FLOW O5 E2 RR1.5 lane, rows with
+      orb_EUROPE_FLOW_pre_velocity above the IS-only 67th percentile outperform
+      off-signal rows on net ExpR.
+    pass_metric:
+      metric: "delta_IS = ExpR_on_signal - ExpR_off_signal"
+      formula: "compare pnl_r means on pre_velocity_HIGH_Q3 vs off-signal rows"
+      threshold_gte:
+        delta_is: 0.05
+        expr_on_is: 0.00
+        years_positive_is: 4
+      threshold_lt:
+        raw_p: 0.05
+      extra_gate: "dir_match_oos = true when N_on_OOS >= 5"
+    counted_against_trial_budget: true
+
+  - id: H02_RELVOL_HIGH_Q3
+    type: primary
+    theory_citation: |
+      `docs/institutional/literature/chan_2013_ch7_intraday_momentum.md`
+      and `docs/institutional/mechanism_priors.md` support higher participation
+      as a breakout-quality conditioner.
+    statement: |
+      On the unfiltered MNQ EUROPE_FLOW O5 E2 RR1.5 lane, rows with
+      rel_vol_EUROPE_FLOW above the IS-only 67th percentile outperform off-signal
+      rows on net ExpR.
+    pass_metric:
+      metric: "delta_IS = ExpR_on_signal - ExpR_off_signal"
+      formula: "compare pnl_r means on rel_vol_HIGH_Q3 vs off-signal rows"
+      threshold_gte:
+        delta_is: 0.05
+        expr_on_is: 0.00
+        years_positive_is: 4
+      threshold_lt:
+        raw_p: 0.05
+      extra_gate: "dir_match_oos = true when N_on_OOS >= 5"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 2
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "2*ln(N_trials)/(E[max_N]^2)"
+    n_trials: 2
+    expected_max_n: 1.2
+    value: 0.96
+    within_cap: true
+    cap_reference: "docs/institutional/pre_registered_criteria.md Criterion 2"
+
+kill_criteria:
+  - id: K1
+    metric: "family survivors"
+    threshold: "zero hypotheses pass BH-FDR at K=2 plus positive-mean floor"
+    action: KILL
+  - id: K2
+    metric: "dir_match_oos"
+    threshold: "false for any apparent IS survivor with N_on_OOS >= 5"
+    action: PARK
+  - id: K3
+    metric: "N_on_IS"
+    threshold: "< 100 on any candidate survivor"
+    action: KILL
+
+decision_rule:
+  continue_if: ">=1 hypothesis survives K_family=2 with delta_IS >= 0.05, expr_on_is > 0, years_positive_is >= 4, and no OOS sign flip"
+  park_if: "IS signal exists but OOS remains directional-only"
+  kill_if: "zero family survivors or any survivor fails positive-mean / sample / direction gates"
+
+methodology_rules_applied:
+  - rule: "RULE 2 filter application timing"
+    application: "Study is on the unfiltered lane because ORB_G5 is not the behavioral baseline."
+  - rule: "RULE 3 sacred holdout"
+    application: "Thresholds frozen on IS only; OOS descriptive only."
+  - rule: "RULE 4 multiple testing"
+    application: "Current family K is exactly 2."
+  - rule: "RULE 6 trade-time knowability"
+    application: "Only ORB-end features are admitted; all E2 break_* predictors are excluded."
+  - rule: "RULE 7 tautology"
+    application: "No size-threshold replacement predicate is tested."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-04-21-l1-europe-flow-pre-break-context-prereg.md"
+  - "row-level CSV with signal fires, IS/OOS split, and yearly breakdown"
+  - "BH-FDR table at K=2 with raw p and q values"
+  - "fire-rate table to ensure 5%-95% operating range"
+
+execution_gate:
+  allowed_now: true
+  forbidden_now:
+    - "any break_* E2 predictor"
+    - "any ATR-normalized ORB_G5 replacement test"
+    - "any ML framing"
+
+not_done_by_this_pre_reg:
+  - "Does not replace the live ORB_G5 filter directly."
+  - "Does not test filtered-pass residuals."
+  - "Does not register a production filter."

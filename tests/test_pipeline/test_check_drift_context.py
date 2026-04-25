@@ -18,6 +18,20 @@ def _mkfile(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _mk_generated_docs(root: Path) -> None:
+    for rel in (
+        "docs/governance/system_authority_map.md",
+        "docs/context/README.md",
+        "docs/context/source-catalog.md",
+        "docs/context/task-routes.md",
+        "docs/context/institutional-contracts.md",
+    ):
+        _mkfile(
+            root / rel,
+            "# Generated\n\nGenerated from `fixture`. Do not edit by hand.\n",
+        )
+
+
 class TestContextRoutingGovernance:
     def test_context_generated_docs_catches_missing_files(self, tmp_path: Path, monkeypatch) -> None:
         _patch_dirs(monkeypatch, tmp_path)
@@ -70,3 +84,135 @@ class TestContextRoutingGovernance:
 
         assert violations
         assert "handoff context leaked into canonical_state" in "\n".join(violations)
+
+
+class TestDocHygieneContracts:
+    def test_catches_placeholder_prereg_stamp(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/test.yaml",
+            "# Committing commit hash: TO_BE_STAMPED\nmetadata: {}\n",
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        assert violations
+        assert "placeholder provenance marker" in "\n".join(violations)
+
+    def test_design_only_must_not_have_entrypoint(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/gate0.yaml",
+            """
+metadata:
+  name: gate0
+execution:
+  mode: design_only
+  entrypoint: research/run_gate0.py
+""",
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        assert violations
+        assert "execution.mode=design_only" in "\n".join(violations)
+
+    def test_executable_prereg_requires_existing_runner(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/run.yaml",
+            """
+metadata:
+  name: run
+execution:
+  mode: execute
+  entrypoint: research/missing_runner.py
+""",
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        assert violations
+        assert "references missing path" in "\n".join(violations)
+
+    def test_generated_docs_need_source_and_do_not_edit_markers(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mkfile(tmp_path / "docs/governance/system_authority_map.md", "# Missing markers\n")
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        joined = "\n".join(violations)
+        assert "missing generated-source marker" in joined
+        assert "missing do-not-edit marker" in joined
+
+    def test_clean_design_only_and_generated_docs_pass(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/gate0.yaml",
+            """
+metadata:
+  name: gate0
+execution:
+  mode: design_only
+  entrypoint: null
+""",
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        assert violations == []
+
+    def test_catches_commit_sha_pending(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/sha_pending.yaml",
+            'metadata:\n  name: foo\n  commit_sha: "PENDING"\n',
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        joined = "\n".join(violations)
+        assert "commit_sha=PENDING" in joined
+
+    def test_catches_commit_sha_to_fill_arbitrary(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/sha_tofill.yaml",
+            "metadata:\n  name: foo\n  commit_sha: TO_FILL_LATER\n",
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        assert any("commit_sha=TO_FILL_LATER" in v for v in violations)
+
+    def test_exempts_commit_sha_to_fill_after_commit(self, tmp_path: Path, monkeypatch) -> None:
+        """Per .claude/rules/research-truth-protocol.md § 2a: TO_FILL_AFTER_COMMIT
+        is the one legitimate placeholder (chicken-and-egg before first commit)."""
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/legit.yaml",
+            'metadata:\n  name: foo\n  commit_sha: "TO_FILL_AFTER_COMMIT"\n',
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        assert violations == []
+
+    def test_real_sha_passes(self, tmp_path: Path, monkeypatch) -> None:
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/stamped.yaml",
+            'metadata:\n  name: foo\n  commit_sha: "abc123def456"\n',
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        assert violations == []

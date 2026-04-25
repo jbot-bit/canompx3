@@ -44,6 +44,7 @@ from pipeline.cost_model import CostSpec, get_cost_spec, pnl_points_to_r
 from pipeline.dst import (
     DST_AFFECTED_SESSIONS,
     DST_CLEAN_SESSIONS,
+    compute_trading_day_from_timestamp,
     compute_trading_day_utc_range,
     get_break_group,
     is_uk_dst,
@@ -107,6 +108,12 @@ ACTIVE_ORB_MINUTES = [5]
 # @revalidated-for E1/E2 event-based sessions (Mar 2026)
 COMPRESSION_SESSIONS = ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"]
 
+# GARCH post-pass warmup contract. Keep these centralized so downstream guards
+# can derive their safe coverage thresholds from the producer semantics instead
+# of drifting into hand-wavy literals.
+GARCH_MIN_PRIOR_CLOSES = 252
+GARCH_PCT_MIN_PRIOR_VALUES = 60
+
 # FAIL-CLOSED: every ORB label must be classified as DST-affected or DST-clean.
 # Prevents silent contamination if a new session is added without DST classification.
 _dst_classified = set(DST_AFFECTED_SESSIONS.keys()) | DST_CLEAN_SESSIONS
@@ -133,11 +140,7 @@ def compute_trading_day(ts_utc: pd.Timestamp) -> date:
     Formula: DATE(ts_brisbane - 9 hours)
     Equivalent: subtract 9h from Brisbane time, take the date.
     """
-    # Convert to Brisbane
-    ts_bris = ts_utc.astimezone(BRISBANE_TZ)
-    # Subtract 9 hours and take date
-    shifted = ts_bris - timedelta(hours=TRADING_DAY_START_HOUR_LOCAL)
-    return shifted.date()
+    return compute_trading_day_from_timestamp(ts_utc)
 
 
 # compute_trading_day_utc_range is now imported from pipeline.dst (E2 canonical-window
@@ -799,7 +802,7 @@ def _load_postpass_seed_rows(
     return seed
 
 
-def compute_garch_forecast(daily_closes: list[float], min_obs: int = 252) -> float | None:
+def compute_garch_forecast(daily_closes: list[float], min_obs: int = GARCH_MIN_PRIOR_CLOSES) -> float | None:
     """
     Fit GARCH(1,1) on trailing daily close-to-close log returns.
     Returns 1-step-ahead annualized conditional volatility forecast.
@@ -1486,7 +1489,11 @@ def build_daily_features(
         # threshold to handle cross-instrument distribution variance
         # (MNQ Q20 ~0.16 vs MES Q20 ~0.11) and regime drift.
         post_rows[i]["garch_forecast_vol_pct"] = _prior_rank_pct(
-            post_rows, i, "garch_forecast_vol", lookback=252, min_prior=60
+            post_rows,
+            i,
+            "garch_forecast_vol",
+            lookback=252,
+            min_prior=GARCH_PCT_MIN_PRIOR_VALUES,
         )
 
         # Per-session ORB compression z-score (prior 20 days, no look-ahead).

@@ -232,7 +232,51 @@ def format_power_report(
     return "\n".join(lines)
 
 
+def one_sample_power(d: float, n: int, alpha: float = 0.05) -> float:
+    """One-sample t-test power for effect size ``d`` at sample size ``n``."""
+    if d <= 0 or n < 2:
+        return 0.0
+    df = n - 1
+    ncp = d * np.sqrt(n)
+    t_crit = stats.t.ppf(1 - alpha / 2, df)
+    power_nct = 1.0 - stats.nct.cdf(t_crit, df, ncp) + stats.nct.cdf(-t_crit, df, ncp)
+    if np.isnan(power_nct):
+        z_crit = stats.norm.ppf(1 - alpha / 2)
+        return float(stats.norm.sf(z_crit - ncp) + stats.norm.cdf(-z_crit - ncp))
+    return float(power_nct)
+
+
+def one_sample_n_for_power(d: float, target: float = 0.80, alpha: float = 0.05) -> int:
+    """Smallest ``n`` achieving ``target`` one-sample power at effect size ``d``."""
+    if d <= 0:
+        return 10_000_000
+    lo, hi = 2, 10_000_000
+    if one_sample_power(d, hi, alpha) < target:
+        return hi
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if one_sample_power(d, mid, alpha) >= target:
+            hi = mid
+        else:
+            lo = mid + 1
+    return int(lo)
+
+
+def one_sample_tstat(mean: float, std: float, n: int) -> tuple[float, float]:
+    """One-sample t-statistic plus one-sided p-value."""
+    if n < 2 or std <= 0:
+        return float("nan"), float("nan")
+    se = std / np.sqrt(n)
+    t = mean / se
+    df = n - 1
+    p_one = float(stats.t.sf(abs(t), df))
+    return float(t), p_one
+
+
 __all__ = [
+    "one_sample_n_for_power",
+    "one_sample_power",
+    "one_sample_tstat",
     "oos_ttest_power",
     "power_verdict",
     "format_power_report",

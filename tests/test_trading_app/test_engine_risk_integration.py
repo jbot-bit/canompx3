@@ -92,6 +92,20 @@ def _fill_e1(engine, break_ts, o=2708, h=2715, low=2707, c=2712):
     return engine.on_bar(_bar(fill_ts, o, h, low, c))
 
 
+class _RiskReduceStub:
+    """Minimal risk-manager stub for contract-reduction integration tests."""
+
+    def __init__(self, factor: float):
+        self.factor = factor
+        self.daily_trade_count = 0
+
+    def can_enter(self, **_kwargs):
+        return True, "", self.factor
+
+    def on_trade_entry(self):
+        self.daily_trade_count += 1
+
+
 # ============================================================================
 # 1. Engine calls risk_manager.on_trade_entry() on entry (E1, E3)
 # ============================================================================
@@ -346,6 +360,43 @@ class TestReject:
         entered = [t for t in active if t.state == TradeState.ENTERED]
         assert len(entered) == 0
         assert engine.daily_trade_count == 0
+
+    def test_unexpressible_risk_reduction_rejects_single_contract_entry(self):
+        rm = _RiskReduceStub(0.5)
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1, max_contracts=1)
+        engine = ExecutionEngine(_make_portfolio([strategy]), _cost(), risk_manager=rm)
+        engine.on_trading_day_start(_TRADING_DAY)
+
+        break_ts = _build_orb(engine)
+        _break_long(engine, break_ts)
+        events = _fill_e1(engine, break_ts)
+
+        reject_events = [e for e in events if e.event_type == "REJECT"]
+        assert len(reject_events) == 1
+        assert "unexpressible_contract_reduction" in reject_events[0].reason
+        assert rm.daily_trade_count == 0
+        assert len([t for t in engine.active_trades if t.state == TradeState.ENTERED]) == 0
+
+    def test_risk_reduction_enters_with_smaller_size_when_expressible(self):
+        rm = _RiskReduceStub(0.5)
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1, max_contracts=100)
+        engine = ExecutionEngine(
+            _make_portfolio([strategy], account_equity=100_000.0),
+            _cost(),
+            risk_manager=rm,
+        )
+        engine.on_trading_day_start(_TRADING_DAY)
+
+        break_ts = _build_orb(engine)
+        _break_long(engine, break_ts)
+        events = _fill_e1(engine, break_ts)
+
+        entry_events = [e for e in events if e.event_type == "ENTRY"]
+        assert len(entry_events) == 1
+        trades = [t for t in engine.active_trades if t.strategy_id == strategy.strategy_id]
+        assert len(trades) == 1
+        assert trades[0].contracts == 7
+        assert rm.daily_trade_count == 1
 
 
 # ============================================================================

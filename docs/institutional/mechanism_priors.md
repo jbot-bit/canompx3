@@ -64,6 +64,10 @@ This framework predicts which signals should matter:
 
 ## 4. Signal → Role mapping (the implementation menu)
 
+The authoritative workflow for deciding which role to test first now lives in
+`docs/institutional/conditional-edge-framework.md`. This section remains the
+mechanism-side menu of possible roles.
+
 Each signal can be deployed in multiple ROLES. Binary skip is the least sophisticated. Continuous-scaling position sizing is the most sophisticated. Our roadmap is staged.
 
 | Role | What it does | Pipeline location | Grounded by |

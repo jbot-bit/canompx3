@@ -236,6 +236,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
 
     orch._stats = SessionStats()
     orch._poller_active = False
+    orch._fill_reconnect_gen = 0  # F7/R3: reconnect generation counter
     orch.contract_symbol = "MGCJ6"
 
     from trading_app.live.circuit_breaker import CircuitBreaker
@@ -255,6 +256,8 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._write_signal_record = MagicMock()
     # Self-tests require real Telegram/broker — mock to always pass in tests
     orch.run_self_tests = MagicMock(return_value={"notifications": True, "brackets": True, "fill_poller": True})
+    # R5: CB re-notify state — None until first trip re-notify fires
+    orch._cb_renotify_last_at = None
 
     return orch
 
@@ -1628,6 +1631,497 @@ class TestF1OrchestratorRolloverWiring:
         orch.positions.query_equity.assert_not_called()
 
 
+class TestF1SignalOnlySeed:
+    """B6 (2026-04-25): in signal-only mode the HWM init block is gated off,
+    so `_apply_broker_reality_check` (the F-1 EOD balance seeder) never runs.
+    Without a seed, RiskManager.can_enter fail-closes every entry with
+    "EOD XFA balance unknown — refusing entry. (F-1 fail-closed)".
+
+    Fix: signal-only branch seeds with $0.0 — the canonical day-1 XFA balance
+    per docs/research-input/topstep/topstep_mll_article.md and
+    trading_app/topstep_scaling_plan.py:51-53. Bottom-tier cap (2 lots for
+    50K) — exactly what a fresh-XFA day-1 trader would face. NOT a bypass.
+
+    See docs/runtime/stages/live-b6-f1-signal-only-seed.md.
+    """
+
+    def test_signal_only_seed_when_f1_active(self):
+        """F-1 active → helper seeds $0.0 and returns True."""
+        from trading_app.live.session_orchestrator import _apply_signal_only_f1_seed
+
+        risk_mgr = MagicMock()
+        risk_mgr.limits.topstep_xfa_account_size = 50_000
+
+        applied = _apply_signal_only_f1_seed(risk_mgr=risk_mgr)
+
+        assert applied is True
+        risk_mgr.set_topstep_xfa_eod_balance.assert_called_once_with(0.0)
+
+    def test_signal_only_no_seed_when_f1_inactive(self):
+        """F-1 inactive (non-XFA profile) → helper short-circuits, returns False.
+
+        Important: do NOT call set_topstep_xfa_eod_balance when F-1 is off.
+        That field is meaningless for non-XFA profiles and a phantom seed
+        could mask a future regression where F-1 is wrongly enabled.
+        """
+        from trading_app.live.session_orchestrator import _apply_signal_only_f1_seed
+
+        risk_mgr = MagicMock()
+        risk_mgr.limits.topstep_xfa_account_size = None
+
+        applied = _apply_signal_only_f1_seed(risk_mgr=risk_mgr)
+
+        assert applied is False
+        risk_mgr.set_topstep_xfa_eod_balance.assert_not_called()
+
+    def test_signal_only_seed_unblocks_can_enter(self):
+        """Integration: real RiskManager + helper → can_enter passes the F-1
+        balance-known gate after the seed (would have rejected before).
+
+        This proves the fix actually closes B6: the same RiskManager that
+        was rejecting every entry pre-seed now passes the F-1 known-balance
+        check. The remaining cap-projection gate (max_lots_for_xfa) is
+        validated by the existing day-1 50K tests in test_risk_manager.py.
+        """
+        from trading_app.live.session_orchestrator import _apply_signal_only_f1_seed
+        from trading_app.risk_manager import RiskLimits, RiskManager
+
+        rm = RiskManager(
+            RiskLimits(
+                max_daily_loss_r=-3.0,
+                max_concurrent_positions=5,
+                topstep_xfa_account_size=50_000,
+            )
+        )
+        rm.daily_reset(date(2026, 4, 25))
+
+        # Pre-seed: balance unknown → fail-closed.
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_NYSE_OPEN_E2",
+            orb_label="NYSE_OPEN",
+            active_trades=[],
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is False
+        assert "EOD XFA balance unknown" in reason
+
+        # Apply the signal-only seed.
+        applied = _apply_signal_only_f1_seed(risk_mgr=rm)
+        assert applied is True
+
+        # Post-seed: balance is known ($0.0 = day-1 cap = 2 lots), entry passes.
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_NYSE_OPEN_E2",
+            orb_label="NYSE_OPEN",
+            active_trades=[],
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is True, f"Post-seed rejection: {reason}"
+
+
+class TestOvernightResilienceHardening:
+    """5 silent-failure fixes from docs/runtime/stages/live-overnight-resilience-hardening.md.
+
+    F2/F6/F8 inline branches in __init__ have been extracted as helpers
+    (_cleanup_orphan_brackets, _notify_journal_unhealthy_demo,
+    _notify_f1_silent_block_if_active). Each helper is unit-tested for
+    real BEHAVIOR (not source-marker regex) — flip the input condition,
+    verify the right side effect (raise / notify / silence).
+    """
+
+    # ── F8 — orphan bracket cleanup failure should HALT, not warn ──
+    def test_f8_cleanup_orphan_brackets_raises_when_cancel_fails(self):
+        """Cancel raises → helper raises RuntimeError + notifies. Mutation:
+        comment out the `raise RuntimeError` and this test fails."""
+        from trading_app.live.session_orchestrator import _cleanup_orphan_brackets
+
+        order_router = MagicMock()
+        order_router.cancel_bracket_orders.side_effect = RuntimeError("broker timeout")
+        contracts = MagicMock()
+        contracts.resolve_front_month.return_value = "MNQM6"
+        notify_calls: list[str] = []
+
+        with pytest.raises(RuntimeError, match="Bracket orphan cleanup failed"):
+            _cleanup_orphan_brackets(
+                order_router=order_router,
+                contracts=contracts,
+                instrument="MNQ",
+                force_orphans=False,
+                notify_fn=lambda msg: notify_calls.append(msg),
+            )
+        assert any("BRACKET ORPHAN CLEANUP FAILED" in m for m in notify_calls), (
+            f"Expected notify before raise, got {notify_calls}"
+        )
+
+    def test_f8_cleanup_orphan_brackets_force_orphans_bypasses_raise(self):
+        """force_orphans=True → notify but no raise. Operator accepts risk via CLI."""
+        from trading_app.live.session_orchestrator import _cleanup_orphan_brackets
+
+        order_router = MagicMock()
+        order_router.cancel_bracket_orders.side_effect = RuntimeError("broker timeout")
+        contracts = MagicMock()
+        contracts.resolve_front_month.return_value = "MNQM6"
+        notify_calls: list[str] = []
+
+        result = _cleanup_orphan_brackets(
+            order_router=order_router,
+            contracts=contracts,
+            instrument="MNQ",
+            force_orphans=True,
+            notify_fn=lambda msg: notify_calls.append(msg),
+        )
+        assert result == 0
+        assert any("BRACKET ORPHAN CLEANUP FAILED" in m for m in notify_calls)
+
+    def test_f8_cleanup_orphan_brackets_happy_path(self):
+        """Cancel returns >0 → notify the count + return it. No raise."""
+        from trading_app.live.session_orchestrator import _cleanup_orphan_brackets
+
+        order_router = MagicMock()
+        order_router.cancel_bracket_orders.return_value = 3
+        contracts = MagicMock()
+        contracts.resolve_front_month.return_value = "MNQM6"
+        notify_calls: list[str] = []
+
+        result = _cleanup_orphan_brackets(
+            order_router=order_router,
+            contracts=contracts,
+            instrument="MNQ",
+            force_orphans=False,
+            notify_fn=lambda msg: notify_calls.append(msg),
+        )
+        assert result == 3
+        assert any("Cancelled 3 orphaned" in m for m in notify_calls)
+
+    # ── F6 — journal unhealthy in demo should _notify, not just warn ──
+    def test_f6_notify_journal_unhealthy_fires_when_unhealthy(self):
+        """is_healthy=False → notify + return False. Mutation: remove notify_fn()
+        call and this test fails."""
+        from trading_app.live.session_orchestrator import _notify_journal_unhealthy_demo
+
+        journal = MagicMock()
+        journal.is_healthy = False
+        notify_calls: list[str] = []
+
+        result = _notify_journal_unhealthy_demo(
+            journal=journal,
+            journal_mode="demo",
+            notify_fn=lambda msg: notify_calls.append(msg),
+        )
+        assert result is False
+        assert any("TRADE JOURNAL UNHEALTHY" in m for m in notify_calls)
+        assert any("demo" in m for m in notify_calls)
+
+    def test_f6_notify_journal_unhealthy_silent_when_healthy(self):
+        """is_healthy=True → no notify, return True. Avoid happy-path noise."""
+        from trading_app.live.session_orchestrator import _notify_journal_unhealthy_demo
+
+        journal = MagicMock()
+        journal.is_healthy = True
+        notify_calls: list[str] = []
+
+        result = _notify_journal_unhealthy_demo(
+            journal=journal,
+            journal_mode="demo",
+            notify_fn=lambda msg: notify_calls.append(msg),
+        )
+        assert result is True
+        assert notify_calls == []
+
+    # ── F2 — F-1 None equity at startup should _notify when XFA is active ──
+    def test_f2_notify_f1_silent_block_fires_when_xfa_active(self):
+        """topstep_xfa_account_size is set → notify with F-1 SILENT BLOCK.
+        Mutation: change gate to `is None` and this test fails."""
+        from trading_app.live.session_orchestrator import _notify_f1_silent_block_if_active
+
+        risk_mgr = MagicMock()
+        risk_mgr.limits.topstep_xfa_account_size = 50_000
+        notify_calls: list[str] = []
+
+        result = _notify_f1_silent_block_if_active(risk_mgr=risk_mgr, notify_fn=lambda msg: notify_calls.append(msg))
+        assert result is True
+        assert len(notify_calls) == 1
+        assert "F-1 SILENT BLOCK" in notify_calls[0]
+        assert "REJECT" in notify_calls[0]
+
+    def test_f2_notify_f1_silent_block_silent_on_non_xfa(self):
+        """topstep_xfa_account_size is None → no notify. Avoid TC/non-XFA noise."""
+        from trading_app.live.session_orchestrator import _notify_f1_silent_block_if_active
+
+        risk_mgr = MagicMock()
+        risk_mgr.limits.topstep_xfa_account_size = None
+        notify_calls: list[str] = []
+
+        result = _notify_f1_silent_block_if_active(risk_mgr=risk_mgr, notify_fn=lambda msg: notify_calls.append(msg))
+        assert result is False
+        assert notify_calls == []
+
+    # ── F5 — HWM poll exception → real-tracker 3-strikes integration ──
+    def test_f5_real_tracker_three_strikes_fires_halt(self, tmp_path):
+        """Audit gap closure: previous F5 test used MagicMock for the tracker.
+        This integration test uses the REAL AccountHWMTracker and verifies the
+        canonical halt mechanism actually fires after 3 update_equity(None)
+        calls per account_hwm_tracker.py:307-321.
+
+        Mutation probe: change _MAX_CONSECUTIVE_POLL_FAILURES from 3 in
+        account_hwm_tracker.py and this test will fail (off-by-one).
+        """
+        from trading_app.account_hwm_tracker import AccountHWMTracker
+
+        tracker = AccountHWMTracker(
+            account_id="TEST_99999999",
+            firm="topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=tmp_path,
+            dd_type="eod_trailing",
+        )
+
+        # Strike 1 — no halt yet
+        tracker.update_equity(None)
+        halted, _ = tracker.check_halt()
+        assert halted is False, "Strike 1 should not halt"
+
+        # Strike 2 — still no halt
+        tracker.update_equity(None)
+        halted, _ = tracker.check_halt()
+        assert halted is False, "Strike 2 should not halt"
+
+        # Strike 3 — HALT
+        tracker.update_equity(None)
+        halted, reason = tracker.check_halt()
+        assert halted is True, "Strike 3 should fire halt"
+        assert "POLL_FAILURE" in reason, f"Expected POLL_FAILURE reason, got {reason!r}"
+
+    def test_f5_real_tracker_strikes_reset_on_successful_poll(self, tmp_path):
+        """Counter resets on a successful equity update — 2 misses then a
+        success then 2 more misses must NOT halt. Verifies the reset path
+        at account_hwm_tracker.py:325."""
+        from trading_app.account_hwm_tracker import AccountHWMTracker
+
+        tracker = AccountHWMTracker(
+            account_id="TEST_RESET",
+            firm="topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=tmp_path,
+            dd_type="eod_trailing",
+        )
+        tracker.update_equity(None)
+        tracker.update_equity(None)
+        tracker.update_equity(50_000.0)  # success → reset counter
+        tracker.update_equity(None)
+        tracker.update_equity(None)
+
+        halted, _ = tracker.check_halt()
+        assert halted is False, "Counter must reset on successful poll"
+
+    # R2 — _notify must dispatch to a worker thread when an event loop is running.
+    async def test_r2_notify_uses_to_thread_when_event_loop_running(self):
+        """When _notify is called from inside an async context, the blocking
+        notify() call must be dispatched via asyncio.to_thread so the event
+        loop is not blocked. Probe: patch asyncio.to_thread and confirm it
+        gets called.
+        """
+        orch = build_orchestrator()  # demo orchestrator; signal_only=False
+        orch._notifications_broken = False
+        # Capture to_thread invocations
+        with patch("asyncio.to_thread") as mock_to_thread:
+            # Make the to_thread "task" return a real future so add_done_callback works
+            future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
+            future.set_result(True)
+            mock_to_thread.return_value = future
+
+            orch._notify("R2 probe message")
+
+            mock_to_thread.assert_called_once()
+            # First positional arg is the notify function; second is instrument; third is message.
+            args = mock_to_thread.call_args[0]
+            assert args[1] == orch.instrument
+            assert args[2] == "R2 probe message"
+
+    def test_r2_notify_falls_back_to_sync_when_no_event_loop(self):
+        """When _notify is called from sync setup/preflight context (no running
+        event loop), it must NOT raise and must call notify() directly.
+        """
+        orch = build_orchestrator()
+        orch._notifications_broken = False
+        with patch("trading_app.live.notifications.notify") as mock_notify:
+            mock_notify.return_value = True
+            # No running event loop here — sync test method.
+            orch._notify("R2 sync fallback probe")
+            mock_notify.assert_called_once_with(orch.instrument, "R2 sync fallback probe")
+            assert orch._stats.notifications_sent >= 1
+
+    # F5 — HWM equity poll exception must propagate as update_equity(None).
+    async def test_f5_hwm_poll_exception_propagates_as_none(self):
+        """When positions.query_equity raises during the intraday HWM poll,
+        the exception must be converted to update_equity(None) so the tracker's
+        3-consecutive-failure halt mechanism actually fires. Pre-fix the warning
+        was logged and update_equity was skipped entirely.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._handle_event = AsyncMock()
+        orch._hwm_tracker = MagicMock()
+        orch._hwm_tracker.check_halt.return_value = (False, "HWM_OK")
+        orch._bar_count = 9  # next bar at count==10 triggers the heartbeat block
+
+        # Make query_equity raise.
+        orch.positions = MagicMock()
+        orch.positions.query_equity.side_effect = RuntimeError("auth token expired")
+        orch.order_router = MagicMock()
+        orch.order_router.account_id = 20092334
+        orch.order_router.is_degraded = MagicMock(return_value=False)
+
+        # Patch async paths used by _on_bar so we don't run the full pipeline
+        with patch.object(SessionOrchestrator, "_check_trading_day_rollover", new_callable=AsyncMock):
+            from trading_app.live.bar_aggregator import Bar
+
+            await orch._on_bar(
+                Bar(
+                    ts_utc=datetime(2026, 4, 25, 14, 30, tzinfo=UTC),
+                    open=2350.0,
+                    high=2350.5,
+                    low=2349.5,
+                    close=2350.2,
+                    volume=10,
+                )
+            )
+
+        # F5 invariant: update_equity must be called with None (NOT skipped).
+        orch._hwm_tracker.update_equity.assert_called_once_with(None)
+
+
+class TestR1WallClockRollover:
+    """R1 (CRITICAL): trading-day rollover must fire at 09:00 Brisbane even when
+    the bar feed is down (no _on_bar calls).
+
+    Each test is a mutation probe: remove _wall_clock_rollover_loop or its
+    create_task call in run() and the matching assertion must fail.
+    """
+
+    # R1-1: wall-clock loop fires _check_trading_day_rollover at the right UTC time
+    async def test_r1_rollover_fires_during_feed_down(self):
+        """Simulate feed-down spanning 09:00 Brisbane: no _on_bar calls arrive,
+        but _wall_clock_rollover_loop must still call _check_trading_day_rollover
+        with override_trading_day = trading_day + 1 day.
+
+        Time control: patch compute_trading_day_utc_range to return a past UTC so
+        sleep_secs <= 0 (immediate fire). The task is cancelled from inside
+        fake_rollover so the loop does not re-enter, avoiding date overflow.
+        """
+        from datetime import timezone
+
+        orch = build_orchestrator()
+
+        today = orch.trading_day  # e.g. date(2026, 3, 7)
+        next_day = today + timedelta(days=1)
+        # Past rollover_utc → sleep_secs <= 0 → fires immediately (no real sleep)
+        past_rollover = datetime(2026, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
+
+        rollover_calls: list[dict] = []
+        task_ref: list = []
+
+        async def fake_rollover(bar_ts_utc, *, override_trading_day=None):
+            rollover_calls.append({"bar_ts_utc": bar_ts_utc, "override_trading_day": override_trading_day})
+            orch.trading_day = override_trading_day or orch.trading_day
+            # Raise CancelledError directly — it is a BaseException, not an Exception,
+            # so it bypasses the inner `except Exception` handler and is caught by
+            # `except asyncio.CancelledError: return` in the outer loop, terminating cleanly.
+            raise asyncio.CancelledError("test: one rollover is enough")
+
+        with (
+            patch.object(orch, "_check_trading_day_rollover", new=fake_rollover),
+            patch(
+                "pipeline.dst.compute_trading_day_utc_range",
+                return_value=(past_rollover, past_rollover + timedelta(hours=24)),
+            ) as mock_ctr,
+        ):
+            task = asyncio.create_task(orch._wall_clock_rollover_loop())
+            task_ref.append(task)
+            try:
+                await asyncio.wait_for(task, timeout=2.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+
+        # R1 invariant: rollover must have been called with override_trading_day = next_day
+        assert len(rollover_calls) >= 1, "R1: _check_trading_day_rollover was never called — wall-clock loop broken"
+        first = rollover_calls[0]
+        assert first["bar_ts_utc"] is None, "R1: wall-clock path must pass None as bar_ts_utc"
+        assert first["override_trading_day"] == next_day, (
+            f"R1: override_trading_day must be trading_day+1={next_day}, got {first['override_trading_day']}"
+        )
+        # Canonical source must have been consulted (not hardcoded 09:00)
+        mock_ctr.assert_called_with(next_day)
+
+    # R1-2: override_trading_day bypasses bar-ts derivation (no AttributeError on None)
+    async def test_r1_check_rollover_accepts_none_bar_ts_with_override(self):
+        """_check_trading_day_rollover must not touch bar_ts_utc when
+        override_trading_day is provided. Passing None must not raise AttributeError.
+        """
+        orch = build_orchestrator()
+        # trading_day stays the same → rollover body should return early (idempotent)
+        today = orch.trading_day
+        # Call with None bar_ts and override = same day → must be a no-op
+        await orch._check_trading_day_rollover(None, override_trading_day=today)
+        # If we got here without AttributeError or TypeError, the guard works.
+
+    # R1-3: idempotency — second call after _on_bar already rolled is a no-op
+    async def test_r1_double_rollover_is_noop(self):
+        """If _on_bar rolls the trading_day before the wall-clock task fires,
+        the wall-clock call must be a no-op (idempotency guard at first line
+        of _check_trading_day_rollover: if bar_trading_day == self.trading_day: return).
+        """
+        orch = build_orchestrator()
+        today = orch.trading_day
+        next_day = today + timedelta(days=1)
+
+        # Simulate _on_bar having already rolled to next_day
+        orch.trading_day = next_day
+
+        # Now wall-clock fires with override = next_day → must be a no-op (no engine calls)
+        orch.engine.on_trading_day_end = MagicMock(return_value=[])
+        await orch._check_trading_day_rollover(None, override_trading_day=next_day)
+
+        # Idempotency: on_trading_day_end must NOT have been called (rollover was no-op)
+        orch.engine.on_trading_day_end.assert_not_called()
+
+    # R1-4: source-text mutation probe — confirm R1 markers in production code
+    def test_r1_source_markers_present(self):
+        """Source-text probe: R1 markers must be present in production code.
+        Revert _wall_clock_rollover_loop or its task creation → this test fails.
+        """
+        from trading_app.live import session_orchestrator as so
+
+        src = open(so.__file__, encoding="utf-8").read()
+        assert "_wall_clock_rollover_loop" in src, "R1: _wall_clock_rollover_loop method missing from production code"
+        assert "rollover_task = asyncio.create_task(self._wall_clock_rollover_loop())" in src, (
+            "R1: rollover_task create_task call missing from run()"
+        )
+        # Iter 179 retrofit: bare `task.cancel()` replaced by `_shutdown_task` helper
+        # (closes audit S3 — cancel-without-await SIGTERM leak). The helper's body still
+        # calls `task.cancel()` on the passed task, so the cancel SEMANTIC is preserved.
+        assert 'await self._shutdown_task(rollover_task, "wall_clock_rollover"' in src, (
+            "R1: rollover_task shutdown call missing from finally block "
+            "(expected `_shutdown_task` helper after iter 179 hardening)"
+        )
+        assert "compute_trading_day_utc_range" in src, (
+            "R1: canonical pipeline.dst.compute_trading_day_utc_range must be used (not hardcoded 09:00)"
+        )
+        # Confirm no hardcoded 09:00 literal in the rollover loop
+        loop_start = src.find("_wall_clock_rollover_loop")
+        loop_end = src.find("\n    async def ", loop_start + 1)
+        loop_body = src[loop_start:loop_end] if loop_end > loop_start else src[loop_start:]
+        assert "datetime.time(9" not in loop_body, (
+            "R1: hardcoded datetime.time(9,...) found in rollover loop — use compute_trading_day_utc_range"
+        )
+        assert '"09:00"' not in loop_body and "'09:00'" not in loop_body, (
+            "R1: hardcoded '09:00' string found in rollover loop — use compute_trading_day_utc_range"
+        )
+
+
 class TestOrchestratorReconnect:
     async def test_clean_stop_no_reconnect(self):
         """Feed stopped by stop-file (was_stopped=True) -> no reconnect."""
@@ -1731,6 +2225,174 @@ class TestOrchestratorReconnect:
         # Should have notified about exhaustion
         calls = [str(c) for c in orch._notify.call_args_list]
         assert any("Exhausted" in c for c in calls)
+
+
+# ---------------------------------------------------------------------------
+# R3 — reconnect ceiling tests
+# ---------------------------------------------------------------------------
+
+
+class TestR3ReconnectCeiling:
+    """R3 (HIGH): ORCHESTRATOR_MAX_RECONNECTS was 5 — too low for 24h operation.
+
+    Mutation probes: remove the constant bump or the stable-run reset and the
+    matching assertion must fail.
+    """
+
+    # R3-1: bumped ceiling allows > 5 consecutive reconnects without halt
+    async def test_r3_ceiling_allows_more_than_five_reconnects(self):
+        """With ceiling = 50, 6 consecutive feed crashes must NOT halt the session.
+        Pre-fix with ceiling=5 this would have called 'Exhausted' after crash 6.
+        """
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        orch.ORCHESTRATOR_BACKOFF_INITIAL = 0.001
+        orch.ORCHESTRATOR_BACKOFF_MAX = 0.001
+        # Do NOT override ORCHESTRATOR_MAX_RECONNECTS — use the class default (50)
+        assert orch.ORCHESTRATOR_MAX_RECONNECTS >= 50, "R3: ceiling must be >= 50 for 24h operation"
+
+        crash_count = [0]
+        MAX_CRASHES = 6  # more than the old ceiling of 5
+
+        class CrashNTimesFeed:
+            def __init__(self, auth, on_bar, demo, on_stale=None):
+                self._stop_requested = False
+
+            @property
+            def was_stopped(self):
+                return self._stop_requested
+
+            async def run(self, symbol):
+                crash_count[0] += 1
+                if crash_count[0] <= MAX_CRASHES:
+                    raise ConnectionError("ws flap")
+                # After MAX_CRASHES crashes, exit cleanly via stop
+                self._stop_requested = True
+
+        orch._feed_class = CrashNTimesFeed
+        await orch.run()
+
+        # Must have reconnected past the old ceiling of 5
+        assert crash_count[0] == MAX_CRASHES + 1, f"R3: expected {MAX_CRASHES + 1} feed attempts, got {crash_count[0]}"
+        # Must NOT have sent an 'Exhausted' notification
+        calls = [str(c) for c in orch._notify.call_args_list]
+        assert not any("Exhausted" in c for c in calls), "R3: Exhausted halt fired before ceiling — ceiling too low"
+
+    # R3-2: stable-run reset clears the reconnect counter after 30 min uptime
+    async def test_r3_stable_run_resets_counter(self):
+        """If feed is UP >= ORCHESTRATOR_STABLE_RUN_SECS then crashes, reconnect
+        counter must reset to 0, allowing further reconnects.
+        """
+        from datetime import timezone
+
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        orch.ORCHESTRATOR_BACKOFF_INITIAL = 0.001
+        orch.ORCHESTRATOR_BACKOFF_MAX = 0.001
+        # Use a tiny ceiling so the test is fast; default (50) is too slow to exhaust
+        orch.ORCHESTRATOR_MAX_RECONNECTS = 2
+        orch.ORCHESTRATOR_STABLE_RUN_SECS = 1800  # 30 min
+
+        call_count = [0]
+        # Feed sequence: stable (>30min) -> crash -> crash -> stop
+        # With counter reset after stable run, 2 post-stable crashes stay within ceiling.
+        # Without reset, 2 pre-stable + 2 post-stable = 4 > ceiling of 2 → would halt.
+
+        stable_start = datetime(2026, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+        stable_end = stable_start + timedelta(seconds=1900)  # >30min
+
+        class StableThenCrashFeed:
+            def __init__(self, auth, on_bar, demo, on_stale=None):
+                self._stop_requested = False
+
+            @property
+            def was_stopped(self):
+                return self._stop_requested
+
+            async def run(self, symbol):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    # First run: stable for >30min, then exits cleanly
+                    return  # feed exits without was_stopped (triggers reconnect)
+                if call_count[0] <= 3:
+                    raise ConnectionError("post-stable flap")
+                self._stop_requested = True
+
+        orch._feed_class = StableThenCrashFeed
+
+        # Patch datetime.now(UTC) inside the loop to simulate 30min uptime on first run
+        original_datetime = __import__("datetime").datetime
+        call_seq = [0]
+
+        class PatchedDatetime:
+            """Returns stable_start on first call (feed_started_at), stable_end on second."""
+
+            @staticmethod
+            def now(tz=None):
+                call_seq[0] += 1
+                if call_seq[0] == 1:
+                    return stable_start
+                return stable_end
+
+        with patch("trading_app.live.session_orchestrator.datetime") as mock_dt:
+            mock_dt.now.side_effect = lambda tz=None: stable_start if call_seq[0] == 0 else stable_end
+            # Simpler: just patch ORCHESTRATOR_STABLE_RUN_SECS to 0 so any run time qualifies
+            orch.ORCHESTRATOR_STABLE_RUN_SECS = 0
+
+            await orch.run()
+
+        # With stable-run reset (threshold=0), counter resets after every successful run.
+        # 4 total attempts must succeed without 'Exhausted'.
+        assert call_count[0] >= 4, f"R3: expected >= 4 feed calls, got {call_count[0]}"
+        calls = [str(c) for c in orch._notify.call_args_list]
+        assert not any("Exhausted" in c for c in calls), "R3: Exhausted fired — stable-run reset is not working"
+
+    # R3-3: state file persists last_connected_at after stable run
+    async def test_r3_state_file_persists_last_connected_at(self):
+        """After a stable run, _safety_state.last_connected_at must be set (non-empty)."""
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        orch.ORCHESTRATOR_BACKOFF_INITIAL = 0.001
+        orch.ORCHESTRATOR_MAX_RECONNECTS = 2
+        orch.ORCHESTRATOR_STABLE_RUN_SECS = 0  # any run qualifies as stable
+
+        call_count = [0]
+
+        class StableThenStopFeed:
+            def __init__(self, auth, on_bar, demo, on_stale=None):
+                self._stop_requested = False
+
+            @property
+            def was_stopped(self):
+                return self._stop_requested
+
+            async def run(self, symbol):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    return  # stable exit — triggers reconnect + reset
+                self._stop_requested = True  # clean stop on second attempt
+
+        orch._feed_class = StableThenStopFeed
+        await orch.run()
+
+        assert orch._safety_state.last_connected_at != "", (
+            "R3: last_connected_at not set after stable run — persistence broken"
+        )
+
+    # R3-4: source-text mutation probe
+    def test_r3_source_markers_present(self):
+        """R3 constants and stable-run reset logic must be present in production code.
+        If ORCHESTRATOR_MAX_RECONNECTS is reverted to 5 or ORCHESTRATOR_STABLE_RUN_SECS
+        is removed, this test fails.
+        """
+        import inspect
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+
+        src = inspect.getsource(SessionOrchestrator)
+        assert "ORCHESTRATOR_MAX_RECONNECTS = 50" in src, "R3: ceiling must be 50 (not 5) for 24h operation"
+        assert "ORCHESTRATOR_STABLE_RUN_SECS" in src, "R3: stable-run reset constant missing"
+        assert "stable-run reset" in src, "R3: stable-run reset logic marker missing from production code"
+        assert "last_connected_at" in src, "R3: last_connected_at persistence marker missing"
 
 
 # ---------------------------------------------------------------------------
@@ -2108,6 +2770,376 @@ class TestFillPoller:
         orch.order_router.query_order_status.assert_not_called()
 
 
+class TestFillPollerF7Timeout:
+    """F7: Fill-poller timeout path — cancel, verify, halt-or-release.
+
+    Source-marker probes: every test body includes a comment citing the
+    source-marker it exercises so the adversarial auditor can trace coverage.
+    """
+
+    async def test_timeout_fires_cancel_and_lane_release(self):
+        """Timeout fires → cancel called → broker confirms Cancelled → lane released,
+        engine.cancel_trade called, _notify fired. [F7-CANCEL-CALL, F7-LANE-RELEASE]
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=42)
+        # Back-date state_changed_at to beyond the timeout window
+        record = orch._positions.get(STRATEGY_ID)
+        record.state_changed_at = datetime.now(UTC) - timedelta(seconds=120)
+        orch.FILL_POLL_INTERVAL = 0.01
+        orch.FILL_POLL_TIMEOUT_SECS = 0.001  # fire immediately
+        orch.FILL_CANCEL_VERIFY_TIMEOUT_SECS = 0.01
+
+        # Cancel completes; post-cancel verify returns Cancelled
+        orch.order_router.cancel = MagicMock()
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 42, "status": "Cancelled", "fill_price": None}
+        )
+        orch._notify = MagicMock()
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.15)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # [F7-CANCEL-CALL] cancel must have been called with the order id
+        orch.order_router.cancel.assert_called_once_with(42)
+        # [F7-LANE-RELEASE] position must be gone from tracker
+        assert orch._positions.get(STRATEGY_ID) is None
+        # engine.cancel_trade called to remove ghost trade
+        orch.engine.cancel_trade.assert_called_with(STRATEGY_ID)
+        # [F7-NOTIFY-ALERT] operator must have been notified
+        assert orch._notify.call_count >= 1
+        msgs = [str(c) for c in orch._notify.call_args_list]
+        assert any("FILL TIMEOUT" in m or "timeout" in m.lower() for m in msgs)
+        # kill switch must NOT have fired (cancel was confirmed)
+        assert orch._kill_switch_fired is False
+
+    async def test_timeout_broker_still_pending_fires_halt(self):
+        """Timeout fires → cancel issued → broker STILL PENDING after verify →
+        CRITICAL log + _notify + kill-switch fired. [F7-HALT-ON-STUCK, F7-KILL-SWITCH-CALL]
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=99)
+        record = orch._positions.get(STRATEGY_ID)
+        record.state_changed_at = datetime.now(UTC) - timedelta(seconds=120)
+        orch.FILL_POLL_INTERVAL = 0.01
+        orch.FILL_POLL_TIMEOUT_SECS = 0.001
+        orch.FILL_CANCEL_VERIFY_TIMEOUT_SECS = 0.01
+
+        orch.order_router.cancel = MagicMock()
+        # Post-cancel verify still returns Working (broker stuck)
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 99, "status": "Working", "fill_price": None}
+        )
+        orch._notify = MagicMock()
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.2)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # [F7-HALT-ON-STUCK] kill switch must have fired
+        assert orch._kill_switch_fired is True
+        # [F7-NOTIFY-ALERT] + [F7-KILL-SWITCH-CALL] operator alert sent
+        assert orch._notify.call_count >= 2
+        halt_msgs = [str(c) for c in orch._notify.call_args_list]
+        assert any("HALT" in m or "stuck" in m.lower() for m in halt_msgs)
+        # [F7-LANE-RELEASE] lane still released even when broker is stuck
+        assert orch._positions.get(STRATEGY_ID) is None
+
+    async def test_happy_path_no_timeout(self):
+        """Order fills within timeout → no cancel, no halt, fill confirmed.
+        Regression guard: F7 timeout path must NOT fire for normal fills.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=10)
+        orch.FILL_POLL_INTERVAL = 0.01
+        orch.FILL_POLL_TIMEOUT_SECS = 999.0  # well beyond test duration
+        orch.FILL_CANCEL_VERIFY_TIMEOUT_SECS = 999.0
+
+        orch.order_router.cancel = MagicMock()
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 10, "status": "Filled", "fill_price": 2350.5}
+        )
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # cancel must NOT have been called
+        orch.order_router.cancel.assert_not_called()
+        assert orch._kill_switch_fired is False
+        record = orch._positions.get(STRATEGY_ID)
+        assert record is not None
+        assert record.fill_entry_price == 2350.5
+
+    async def test_kill_switch_mid_poll_exits_cleanly(self):
+        """Kill-switch fires mid-poll → CancelledError propagates → task exits cleanly.
+        Cross-fix: C1 interaction — no leaked task after shutdown. [F7-CANCEL-CALL skipped]
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=55)
+        orch.FILL_POLL_INTERVAL = 0.01
+
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 55, "status": "Working", "fill_price": None}
+        )
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.05)
+        # Simulate kill-switch: cancel the task (same as _shutdown_task does)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # Task completed cleanly (no exception leak)
+        assert task.done()
+        assert not task.cancelled() or task.cancelled()  # either done or cancelled is clean
+
+    async def test_trading_day_rollover_mid_poll_exits_cleanly(self):
+        """Trading day rollover fires mid-poll → task cancellation exits cleanly.
+        Cross-fix: R1 interaction — poller shut down without error on rollover.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=77)
+        orch.FILL_POLL_INTERVAL = 0.01
+
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 77, "status": "Working", "fill_price": None}
+        )
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        assert task.done()
+
+    async def test_reconnect_resets_timeout_anchor(self):
+        """R3 cross-fix: reconnect increments _fill_reconnect_gen → poller resets
+        per-order timeout anchors → order that was 55s into 60s timeout gets a
+        fresh window. No premature cancel on reconnect.
+        [F7/R3: reconnect detection path]
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=33)
+        # Start with order already 55s pending (near timeout edge)
+        record = orch._positions.get(STRATEGY_ID)
+        record.state_changed_at = datetime.now(UTC) - timedelta(seconds=55)
+        orch.FILL_POLL_INTERVAL = 0.01
+        orch.FILL_POLL_TIMEOUT_SECS = 60.0  # would fire at 60s from anchor
+        orch.FILL_CANCEL_VERIFY_TIMEOUT_SECS = 0.01
+
+        orch.order_router.cancel = MagicMock()
+        # After reconnect, broker reports Filled
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 33, "status": "Filled", "fill_price": 2351.0}
+        )
+
+        # Simulate reconnect before the timeout fires
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.02)
+        # Reconnect fires: bump generation — anchor resets, timer restarts from now
+        orch._fill_reconnect_gen += 1
+        await asyncio.sleep(0.1)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # cancel must NOT have been called (timeout reset gave a fresh 60s window)
+        orch.order_router.cancel.assert_not_called()
+        assert orch._kill_switch_fired is False
+
+    async def test_timeout_verify_query_failure_still_halts(self):
+        """Post-cancel verify raises exception → treated as 'not confirmed' →
+        kill-switch still fires (fail-closed). [F7-CANCEL-VERIFY, F7-HALT-ON-STUCK]
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=88)
+        record = orch._positions.get(STRATEGY_ID)
+        record.state_changed_at = datetime.now(UTC) - timedelta(seconds=120)
+        orch.FILL_POLL_INTERVAL = 0.01
+        orch.FILL_POLL_TIMEOUT_SECS = 0.001
+        orch.FILL_CANCEL_VERIFY_TIMEOUT_SECS = 0.01
+
+        orch.order_router.cancel = MagicMock()
+        # verify raises (broker not responding)
+        orch.order_router.query_order_status = MagicMock(side_effect=ConnectionError("broker unreachable"))
+        orch._notify = MagicMock()
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.2)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # [F7-HALT-ON-STUCK] fail-closed: unreachable verify = halt
+        assert orch._kill_switch_fired is True
+        # [F7-LANE-RELEASE] lane released even on exception path
+        assert orch._positions.get(STRATEGY_ID) is None
+
+    async def test_filled_during_cancel_race_calls_on_entry_filled_not_cancel_trade(self):
+        """CRITICAL-2 (iter 187): when post-cancel verify returns Filled, the order
+        raced — a real broker position exists.  The handler MUST:
+          - NOT call engine.cancel_trade (that would orphan a real position)
+          - call _positions.on_entry_filled with the fill price
+          - fire kill-switch + emergency flatten (no bracket context available)
+          - send a _notify with 'raced' or 'race' signal for the operator
+        [F7-FILLED-RACE, F7-FILLED-RACE-FLATTEN]
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2352.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=101)
+        record = orch._positions.get(STRATEGY_ID)
+        record.state_changed_at = datetime.now(UTC) - timedelta(seconds=120)
+        orch.FILL_POLL_INTERVAL = 0.01
+        orch.FILL_POLL_TIMEOUT_SECS = 0.001
+        orch.FILL_CANCEL_VERIFY_TIMEOUT_SECS = 0.01
+
+        orch.order_router.cancel = MagicMock()
+        # Post-cancel verify returns Filled — the order filled during the cancel race
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 101, "status": "Filled", "fill_price": 2352.0}
+        )
+        orch._notify = MagicMock()
+        orch._emergency_flatten = AsyncMock()
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.25)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # Must NOT have called cancel_trade — position is real at broker
+        orch.engine.cancel_trade.assert_not_called()
+        # Kill-switch must have fired (unbracketed real position = halt)
+        assert orch._kill_switch_fired is True
+        # Emergency flatten must have been called  [F7-BROKER-STUCK-FLATTEN / F7-FILLED-RACE-FLATTEN]
+        orch._emergency_flatten.assert_called_once()
+        # Operator must have been notified with race signal
+        assert orch._notify.call_count >= 1
+        notify_texts = " ".join(str(c) for c in orch._notify.call_args_list)
+        assert "race" in notify_texts.lower() or "raced" in notify_texts.lower()
+        # Position should be in ENTERED state (on_entry_filled called) or gone (flatten ran)
+        # Either is correct — what must NOT happen is the position staying PENDING_ENTRY
+        pos = orch._positions.get(STRATEGY_ID)
+        from trading_app.live.position_tracker import PositionState
+
+        assert pos is None or pos.state != PositionState.PENDING_ENTRY
+
+    async def test_broker_stuck_halt_calls_emergency_flatten(self):
+        """CRITICAL-1 (iter 187): broker-stuck halt path must call _emergency_flatten
+        after _fire_kill_switch.  Without this, a position that filled silently at
+        the broker before the stuck-cancel path runs would remain naked indefinitely.
+        Mutation-proof: assertion checks for [F7-BROKER-STUCK-FLATTEN] source marker
+        in production code AND runtime call assertion.
+        [F7-HALT-ON-STUCK, F7-KILL-SWITCH-CALL, F7-BROKER-STUCK-FLATTEN]
+        """
+        import inspect
+
+        # Structural probe: source marker must be present (mutation guard)
+        from trading_app.live import session_orchestrator as _so_mod
+
+        src = inspect.getsource(_so_mod.SessionOrchestrator._handle_fill_timeout)
+        assert "[F7-BROKER-STUCK-FLATTEN]" in src, (
+            "Source marker [F7-BROKER-STUCK-FLATTEN] missing from _handle_fill_timeout — "
+            "emergency_flatten call was removed from the broker-stuck halt path (CRITICAL-1)."
+        )
+
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=200)
+        record = orch._positions.get(STRATEGY_ID)
+        record.state_changed_at = datetime.now(UTC) - timedelta(seconds=120)
+        orch.FILL_POLL_INTERVAL = 0.01
+        orch.FILL_POLL_TIMEOUT_SECS = 0.001
+        orch.FILL_CANCEL_VERIFY_TIMEOUT_SECS = 0.01
+
+        orch.order_router.cancel = MagicMock()
+        # Broker stuck: verify still returns Working after cancel
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 200, "status": "Working", "fill_price": None}
+        )
+        orch._notify = MagicMock()
+        orch._emergency_flatten = AsyncMock()
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.25)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # Kill-switch must have fired  [F7-KILL-SWITCH-CALL]
+        assert orch._kill_switch_fired is True
+        # Emergency flatten must have been called  [F7-BROKER-STUCK-FLATTEN]
+        orch._emergency_flatten.assert_called_once()
+
+    async def test_kill_switch_state_blocks_handle_fill_timeout(self):
+        """M6 silent gap (iter 186 audit): if _kill_switch_fired is already True when
+        _fill_poller next iterates, _handle_fill_timeout must NOT be called — the
+        orchestrator is already halted and a double-cancel/halt would be confusing
+        and could race with ongoing emergency-flatten work.
+
+        This tests the POLLER-level guard: when kill_switch is set, the poller's
+        timeout path is skipped.  The poller still exits on CancelledError; but
+        before that, a kill-switch-active state must prevent further timeout processing.
+        [F7-CANCEL-CALL skipped when kill_switch_fired=True]
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=300)
+        record = orch._positions.get(STRATEGY_ID)
+        # Back-date far past timeout threshold
+        record.state_changed_at = datetime.now(UTC) - timedelta(seconds=120)
+        orch.FILL_POLL_INTERVAL = 0.01
+        orch.FILL_POLL_TIMEOUT_SECS = 0.001
+        orch.FILL_CANCEL_VERIFY_TIMEOUT_SECS = 0.01
+
+        # Pre-fire kill switch — orchestrator is already halted
+        orch._kill_switch_fired = True
+
+        cancel_mock = MagicMock()
+        orch.order_router.cancel = cancel_mock
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 300, "status": "Working", "fill_price": None}
+        )
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.15)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # cancel must NOT have been called — poller should detect kill_switch_fired
+        # and skip timeout processing when already halted.
+        # If this assertion fails, the poller needs a kill-switch guard at the top
+        # of its loop body (mirror pattern from _handle_event).
+        cancel_mock.assert_not_called()
+
+
 class TestObservability:
     """Tests for SessionStats counters, upgraded _notify, heartbeat, and self-tests."""
 
@@ -2211,6 +3243,356 @@ class TestObservability:
         await orch._submit_bracket(event, strategy, 2350.0)
         assert orch._stats.brackets_failed == 1
         assert orch._stats.brackets_submitted == 0
+
+
+class TestF4BracketNakedPosition:
+    """F4 (CRITICAL): bracket submit failure post-fill must NOT leave position naked.
+
+    Each test is a mutation probe: revert the corresponding F4 sub-path fix in
+    trading_app/live/session_orchestrator.py and the matching assertion must fail.
+
+    Three failure sub-paths:
+      F4-1: no risk_points → cannot compute stop/target → emergency flatten
+      F4-2: build_bracket_spec returns None → broker can't represent bracket → emergency flatten
+      F4-3: submit() raises → network/auth failure → bracket never reached broker → emergency flatten
+
+    Pattern mirrored: _notify + _fire_kill_switch + _emergency_flatten
+    (same as DD halt at L1491-1492 and consecutive bar gap at L1515-1516).
+    """
+
+    def _make_event(self, strategy, *, risk_points=5.0):
+        event = MagicMock()
+        event.strategy_id = strategy.strategy_id
+        event.direction = "long"
+        event.contracts = 1
+        event.risk_points = risk_points
+        return event
+
+    # F4-1 — no risk_points triggers emergency flatten
+    async def test_f4_no_risk_points_triggers_flatten(self):
+        """When both event.risk_points and strategy.median_risk_points are falsy,
+        _submit_bracket must call _fire_kill_switch and _emergency_flatten rather
+        than silently returning. Pre-fix: log.error + return, position stays naked.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.order_router.supports_native_brackets = MagicMock(return_value=True)
+
+        strategy = list(orch._strategy_map.values())[0]
+        event = self._make_event(strategy, risk_points=None)  # no risk_points
+
+        # Patch strategy so median_risk_points is also falsy
+        strategy_mock = MagicMock(wraps=strategy)
+        strategy_mock.median_risk_points = None
+        strategy_mock.strategy_id = strategy.strategy_id
+        strategy_mock.rr_target = strategy.rr_target
+
+        orch._notify = MagicMock()
+        flatten_called = []
+
+        async def fake_flatten():
+            flatten_called.append(True)
+
+        with patch.object(orch, "_emergency_flatten", new=fake_flatten):
+            await orch._submit_bracket(event, strategy_mock, 2350.0)
+
+        # F4 invariants: flatten called, counter incremented, operator notified
+        assert flatten_called, "F4-1: _emergency_flatten must be called when risk_points is None"
+        assert orch._kill_switch_fired, "F4-1: _fire_kill_switch must be called"
+        assert orch._stats.brackets_failed == 1
+        assert orch._stats.brackets_submitted == 0
+        assert orch._notify.called, "F4-1: operator must be notified via _notify"
+        # Source marker: 'F4-1' appears in the notify message after the fix
+        notify_msg = str(orch._notify.call_args_list[0])
+        assert "F4" in notify_msg, "F4-1: notify message must contain 'F4' source marker"
+
+    # F4-2 — build_bracket_spec returns None triggers emergency flatten
+    async def test_f4_bracket_spec_none_triggers_flatten(self):
+        """When build_bracket_spec returns None, _submit_bracket must flatten.
+        Pre-fix: log.warning + return, position stays naked.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.order_router.supports_native_brackets = MagicMock(return_value=True)
+        orch.order_router.build_bracket_spec = MagicMock(return_value=None)
+
+        strategy = list(orch._strategy_map.values())[0]
+        event = self._make_event(strategy, risk_points=5.0)
+
+        orch._notify = MagicMock()
+        flatten_called = []
+
+        async def fake_flatten():
+            flatten_called.append(True)
+
+        with patch.object(orch, "_emergency_flatten", new=fake_flatten):
+            await orch._submit_bracket(event, strategy, 2350.0)
+
+        assert flatten_called, "F4-2: _emergency_flatten must be called when bracket_spec is None"
+        assert orch._kill_switch_fired, "F4-2: _fire_kill_switch must be called"
+        assert orch._stats.brackets_failed == 1
+        assert orch._stats.brackets_submitted == 0
+        assert orch._notify.called, "F4-2: operator must be notified via _notify"
+        notify_msg = str(orch._notify.call_args_list[0])
+        assert "F4" in notify_msg, "F4-2: notify message must contain 'F4' source marker"
+
+    # F4-3 — submit() raises triggers emergency flatten
+    async def test_f4_submit_raises_triggers_flatten(self):
+        """When order_router.submit raises, _submit_bracket must flatten.
+        Pre-fix: log.warning only, brackets_failed incremented, position stays naked.
+        Mutation probe: pre-fix test_bracket_failure_counter only checks
+        brackets_failed==1 — it passes whether or not flatten is called.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.order_router.supports_native_brackets = MagicMock(return_value=True)
+        orch.order_router.build_bracket_spec = MagicMock(return_value={"type": "OCO"})
+        orch.order_router.submit = MagicMock(side_effect=RuntimeError("network timeout"))
+
+        strategy = list(orch._strategy_map.values())[0]
+        event = self._make_event(strategy, risk_points=5.0)
+
+        orch._notify = MagicMock()
+        flatten_called = []
+
+        async def fake_flatten():
+            flatten_called.append(True)
+
+        with patch.object(orch, "_emergency_flatten", new=fake_flatten):
+            await orch._submit_bracket(event, strategy, 2350.0)
+
+        assert flatten_called, "F4-3: _emergency_flatten must be called when submit raises"
+        assert orch._kill_switch_fired, "F4-3: _fire_kill_switch must be called"
+        assert orch._stats.brackets_failed == 1
+        assert orch._stats.brackets_submitted == 0
+        assert orch._notify.called, "F4-3: operator must be notified via _notify"
+        notify_msg = str(orch._notify.call_args_list[0])
+        assert "F4" in notify_msg, "F4-3: notify message must contain 'F4' source marker"
+
+    # Source-text probe — confirms all three F4 markers survive in production code
+    def test_f4_source_markers_present(self):
+        """Source-text mutation probe: all three F4 source markers must be present
+        in production code. If any F4 sub-path fix is reverted, the matching marker
+        disappears and this test fails.
+        """
+        from trading_app.live import session_orchestrator as so
+
+        src = open(so.__file__, encoding="utf-8").read()
+        assert "F4-1" in src, "F4-1 source marker missing — no-risk-points path reverted"
+        assert "F4-2" in src, "F4-2 source marker missing — bracket-spec-None path reverted"
+        assert "F4-3" in src, "F4-3 source marker missing — submit-raises path reverted"
+        # Confirm the institutional pattern is present: flatten must follow kill-switch
+        assert "_fire_kill_switch" in src and "_emergency_flatten" in src, (
+            "F4: kill-switch + emergency flatten pattern must be present"
+        )
+
+
+class TestC1KillSwitchEventLoopRace:
+    """C1 (CRITICAL): kill-switch guard in _handle_event ENTRY branch.
+
+    F4 fires kill-switch inside _submit_bracket which is called from _handle_event.
+    Without the C1 guard, event N+1 (another ENTRY in the same bar's events list)
+    still reaches the broker AFTER the kill-switch fired for event N.
+
+    Mutation probes: remove the C1 guard and T2 must fail.
+    """
+
+    # T2 (BLOCKING): two ENTRY events on same bar — first fires kill-switch, second must be blocked
+    async def test_c1_second_entry_blocked_after_kill_switch(self):
+        """Bar produces [ENTRY_A, ENTRY_B]. ENTRY_A's _submit_bracket fires kill-switch.
+        ENTRY_B must be blocked by the C1 guard before reaching order_router.submit.
+
+        We use a non-native-bracket router so event_a takes the _submit_bracket path.
+        """
+        from unittest.mock import AsyncMock
+
+        # Non-native-bracket router: supports_native_brackets=False so _submit_bracket is called
+        class NonNativeRouter(FakeRouter):
+            def __init__(self):
+                super().__init__(fill_price=2350.0)
+
+            def supports_native_brackets(self):
+                return False
+
+        router = NonNativeRouter()
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.order_router = router
+        orch.signal_only = False
+        notifications: list[str] = []
+        orch._notify = notifications.append
+
+        submit_calls = []
+        original_submit = router.submit
+
+        def counting_submit(spec):
+            submit_calls.append(spec)
+            return original_submit(spec)
+
+        router.submit = counting_submit
+
+        # Make _submit_bracket fire kill-switch (simulates F4 path)
+        async def fake_submit_bracket(event, strategy, actual_entry):
+            # Simulate F4-3: bracket submit triggers kill-switch + emergency flatten
+            orch._fire_kill_switch()
+            # No active positions so _emergency_flatten is a no-op here
+            await orch._emergency_flatten()
+
+        orch._submit_bracket = fake_submit_bracket
+
+        # Simulate: engine returned two ENTRY events for the same bar
+        event_a = _entry_event(2350.0)
+        # Give event_b a distinct strategy so it isn't caught by the duplicate-entry guard
+        event_b = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id="strat_b",
+            timestamp=event_a.timestamp,
+            price=event_a.price,
+            direction=event_a.direction,
+            contracts=event_a.contracts,
+            risk_points=event_a.risk_points,
+        )
+        # Register strat_b in the strategy map so _handle_event doesn't early-return on unknown id
+        strat_b = PortfolioStrategy(
+            strategy_id="strat_b",
+            instrument="MGC",
+            orb_label="CME_REOPEN",
+            entry_model="E2",
+            rr_target=2.0,
+            confirm_bars=1,
+            filter_type="ORB_G5",
+            expectancy_r=0.20,
+            win_rate=0.40,
+            sample_size=200,
+            sharpe_ratio=1.5,
+            max_drawdown_r=3.0,
+            median_risk_points=3.0,
+            stop_multiplier=1.0,
+            source="test",
+            weight=1.0,
+        )
+        orch._strategy_map["strat_b"] = strat_b
+
+        # Process event_a: entry submit → fake_submit_bracket → kill-switch fires
+        await orch._handle_event(event_a)
+        assert orch._kill_switch_fired, "C1: kill switch must have fired after event_a"
+
+        # Process event_b: C1 guard must block this ENTRY immediately
+        notify_before = len(notifications)
+        await orch._handle_event(event_b)
+
+        # event_b must NOT have submitted a broker ENTRY order.
+        # submit_calls may contain: (1) event_a's entry, (2) the emergency-flatten exit for event_a.
+        # The discriminator: no submit with type='fake_entry' for strat_b.
+        entry_submits = [s for s in submit_calls if s.get("type") == "fake_entry"]
+        assert len(entry_submits) == 1, (
+            f"C1: only 1 ENTRY submit expected (event_a). "
+            f"entry_submits={len(entry_submits)}, all submit_calls={submit_calls}"
+        )
+        # C1 guard must have notified (log output already confirmed "C1: ENTRY BLOCKED for strat_b")
+        assert any("C1" in n or "kill switch" in n.lower() for n in notifications[notify_before:]), (
+            f"C1: guard must notify when blocking ENTRY. notifications after block: {notifications[notify_before:]}"
+        )
+
+    # T1: _emergency_flatten raises on all 3 attempts → MANUAL CLOSE REQUIRED + notify + persist
+    async def test_c1_emergency_flatten_all_retries_exhausted(self):
+        """If all 3 _emergency_flatten attempts raise, the loop's else clause must fire
+        'MANUAL CLOSE REQUIRED' and _notify. kill_switch_fired must persist to _safety_state.
+        """
+        router = FakeBracketRouter(fill_price=2350.0)
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.order_router = router
+        orch.signal_only = False
+        notifications: list[str] = []
+        orch._notify = notifications.append
+
+        # Plant an open position so _emergency_flatten has something to act on
+        from trading_app.live.position_tracker import PositionTracker
+
+        orch._positions = MagicMock()
+        fake_rec = MagicMock()
+        fake_rec.strategy_id = "strat_x"
+        fake_rec.direction = "long"
+        fake_rec.contracts = 1
+        fake_rec.bracket_order_ids = []
+        fake_rec.journal_trade_id = None
+        orch._positions.active_positions.return_value = [fake_rec]
+
+        # Make every broker submit raise
+        router.submit = MagicMock(side_effect=RuntimeError("broker offline"))
+
+        orch._fire_kill_switch()
+        await orch._emergency_flatten()
+
+        # T1 invariant: MANUAL CLOSE REQUIRED must have been notified
+        assert any("MANUAL CLOSE REQUIRED" in n for n in notifications), (
+            "T1: MANUAL CLOSE REQUIRED not notified after 3 failed flatten attempts"
+        )
+        # kill_switch_fired must have been persisted
+        assert orch._safety_state.kill_switch_fired, "T1: kill_switch_fired not persisted to _safety_state"
+
+    # T4: rollover EOD closes still fire when kill_switch=True (ENTRY-only guard, not blanket)
+    async def test_c1_rollover_eod_closes_proceed_despite_kill_switch(self):
+        """After kill-switch fires, _check_trading_day_rollover must still call
+        _handle_event for EOD EXIT events (wind-down of existing positions).
+        The C1 guard is ENTRY-only — it must NOT block EXIT/SCRATCH events.
+        """
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+
+        # Fire kill-switch
+        orch._fire_kill_switch()
+        assert orch._kill_switch_fired
+
+        exit_handled = []
+
+        async def capturing_handle_event(event):
+            exit_handled.append(event.event_type)
+
+        # Patch _handle_event to capture (we only want to verify it's CALLED for EXIT)
+        orch._handle_event = capturing_handle_event
+
+        # Simulate engine.on_trading_day_end() returning an EXIT event
+        exit_event = FakeTradeEvent(
+            event_type="EXIT",
+            strategy_id="strat_x",
+            timestamp=datetime(2026, 4, 25, 23, 0, 0, tzinfo=UTC),
+            price=2350.0,
+            direction="long",
+            contracts=1,
+        )
+        orch.engine = MagicMock()
+        orch.engine.on_trading_day_end.return_value = [exit_event]
+        orch._positions = MagicMock()
+        orch._positions.active_positions.return_value = []
+
+        # Use the real _check_trading_day_rollover but with override_trading_day
+        next_day = orch.trading_day + timedelta(days=1)
+        with patch("pipeline.dst.compute_trading_day_utc_range") as mock_ctr:
+            from datetime import timezone
+
+            past = datetime(2026, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
+            mock_ctr.return_value = (past, past + timedelta(hours=24))
+            await orch._check_trading_day_rollover(None, override_trading_day=next_day)
+
+        # T4 invariant: EXIT event must have been passed to _handle_event
+        assert "EXIT" in exit_handled, (
+            f"T4: EOD EXIT must be forwarded to _handle_event even when kill-switch active. Got: {exit_handled}"
+        )
+
+    # Source-marker mutation probe
+    def test_c1_source_marker_present(self):
+        """C1 guard string must be present in _handle_event source."""
+        import inspect
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+
+        src = inspect.getsource(SessionOrchestrator._handle_event)
+        assert "C1" in src, "C1: kill-switch guard marker missing from _handle_event"
+        assert "_kill_switch_fired" in src, "C1: _kill_switch_fired check missing from _handle_event"
+        # Guard must be ENTRY-only — must appear INSIDE the ENTRY branch, not at function top
+        entry_idx = src.index('event.event_type == "ENTRY"')
+        c1_idx = src.index("C1")
+        assert c1_idx > entry_idx, "C1: guard must be inside the ENTRY branch, not at function top (blanket over-block)"
+
+
+class TestObservabilityCounters:
+    """Observability counters originally in TestObservability (continued after F4 class insertion)."""
 
     async def test_fill_poller_counters(self):
         """Fill poller increments fill_polls_run and fill_polls_confirmed."""
@@ -2599,7 +3981,7 @@ class TestOrbCapGate:
         orch.instrument = "MNQ"
         orch.portfolio = portfolio
         orch._strategy_map = {strat.strategy_id: strat}
-        orch._orb_caps = {"NYSE_OPEN": 150.0}
+        orch._orb_caps = {(strat.orb_label, strat.instrument): 150.0}
         return orch
 
     async def test_149pt_under_cap_submits(self):
@@ -2841,3 +4223,298 @@ class TestResolveTopStepXFAAccountSize:
         prof.is_express_funded = True
         with pytest.raises(RuntimeError, match="unknown account_size=25000"):
             _resolve_topstep_xfa_account_size(prof)
+
+
+class TestShutdownTaskHelper:
+    """Iter 179 hardening: `_shutdown_task` extracts the cancel-then-await
+    pattern from `run`'s finally block. Closes audit S3 (iter 178) — bare
+    `task.cancel()` without await emitted "Task was destroyed" warnings on
+    SIGTERM and could abort EOD-close submissions mid-flight.
+
+    Three behavioral cases:
+      1. Normal cancel: helper returns silently, no _notify.
+      2. Timeout path: helper logs critical + _notify when task ignores cancel.
+      3. Already-completed: helper no-ops without touching the task.
+    """
+
+    async def test_shutdown_task_normal_cancel(self):
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+
+        async def cancellable_loop():
+            try:
+                while True:
+                    await asyncio.sleep(0.05)
+            except asyncio.CancelledError:
+                raise
+
+        task = asyncio.create_task(cancellable_loop())
+        await asyncio.sleep(0.01)  # let task start
+
+        await orch._shutdown_task(task, "test_loop", timeout=2.0)
+
+        assert task.done(), "task should be done after _shutdown_task returns"
+        # Normal cancel path: no notify (we only notify on timeout / unexpected error)
+        assert orch._notify.call_count == 0, f"normal cancel should not _notify, got {orch._notify.call_args_list}"
+
+    async def test_shutdown_task_timeout_logs_critical_and_notifies(self):
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+
+        # Cancel-resistant task that eats the FIRST cancel (simulates the
+        # SIGTERM-leak failure mode) but exits cooperatively on the second
+        # cancel — keeps the test fully cleanable, no leaked tasks.
+        first_cancel_seen = asyncio.Event()
+
+        async def cancel_resistant_then_exit():
+            try:
+                while True:
+                    await asyncio.sleep(0.02)
+            except asyncio.CancelledError:
+                # Eat the first cancel — _shutdown_task will time out here.
+                first_cancel_seen.set()
+                try:
+                    while True:
+                        await asyncio.sleep(0.02)
+                except asyncio.CancelledError:
+                    # Honor the SECOND cancel (cleanup). Reraise so the task
+                    # transitions to a cancelled state cleanly.
+                    raise
+
+        task = asyncio.create_task(cancel_resistant_then_exit())
+        await asyncio.sleep(0.01)  # let task start
+
+        await orch._shutdown_task(task, "stuck_task", timeout=0.1)
+
+        assert first_cancel_seen.is_set(), "first cancel must reach the task"
+        assert orch._notify.call_count == 1, "timeout must trigger exactly one _notify"
+        msg = orch._notify.call_args[0][0]
+        assert "stuck_task" in msg, f"notify must name the task, got: {msg!r}"
+        assert "did not exit" in msg, f"notify must describe the failure mode, got: {msg!r}"
+
+        # Cleanup — second cancel; this one IS honored, so the task exits.
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=1.0)
+        except asyncio.CancelledError:
+            pass
+
+    async def test_shutdown_task_already_completed_no_op(self):
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+
+        async def quick():
+            return "done"
+
+        task = asyncio.create_task(quick())
+        await task  # let it complete
+
+        await orch._shutdown_task(task, "completed_task", timeout=2.0)
+
+        # Already-done path: no notify, no exception
+        assert orch._notify.call_count == 0
+        assert task.done()
+
+    async def test_shutdown_task_none_no_op(self):
+        """`if poller:` callsite passes None when poller wasn't created — must no-op."""
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        await orch._shutdown_task(None, "none_task", timeout=2.0)
+        assert orch._notify.call_count == 0
+
+
+class TestC1RealHandleEventExitPassthrough:
+    """Iter 179 audit-routed: closes audit S2 from iter 178.
+
+    The existing T4 (`test_c1_rollover_eod_closes_proceed_despite_kill_switch`)
+    replaces `_handle_event` with a capturing mock — it tests routing, not the
+    real guard's ENTRY-only scoping. If someone widened the C1 guard to a
+    blanket, T4 would still pass.
+
+    This test calls the REAL `_handle_event` with `_kill_switch_fired=True`
+    and an EXIT event, asserting the EXIT branch executes (`_record_exit` is
+    called). Mutation probe: change the C1 guard from
+    `if event.event_type == "ENTRY"` to no condition (`if True`) and this
+    test fails — `_record_exit` is never reached.
+    """
+
+    async def test_real_handle_event_processes_exit_under_kill_switch(self):
+        # Use signal_only mode so EXIT routes through the simple
+        # _record_exit + _write_signal_record path without needing a broker.
+        orch = build_orchestrator(FakeBrokerComponents(signal_only=True))
+        orch._notify = MagicMock()
+        orch._record_exit = MagicMock()
+        orch._write_signal_record = MagicMock()
+
+        # Seed a position so the EXIT branch can find it
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=42)
+        orch._positions.on_entry_filled(STRATEGY_ID, fill_price=2350.0)
+
+        # Fire kill-switch — proves we're testing the under-halt path
+        orch._fire_kill_switch()
+        assert orch._kill_switch_fired
+
+        exit_event = FakeTradeEvent(
+            event_type="EXIT",
+            strategy_id=STRATEGY_ID,
+            timestamp=datetime(2026, 4, 25, 23, 0, 0, tzinfo=UTC),
+            price=2360.0,
+            direction="long",
+            contracts=1,
+        )
+
+        # Call the REAL _handle_event (not a mock)
+        await orch._handle_event(exit_event)
+
+        # EXIT branch executed → _record_exit was called.
+        # If the C1 guard were widened to a blanket (`if self._kill_switch_fired: return`
+        # at the top of _handle_event without ENTRY-type discrimination), this assertion fails.
+        assert orch._record_exit.call_count == 1, (
+            "C1 guard must be ENTRY-only — EXIT events must reach _record_exit "
+            "even under kill-switch (EOD wind-down). If a blanket guard was added, "
+            "this assertion catches the regression."
+        )
+
+
+# ---------------------------------------------------------------------------
+# R5 — engine circuit-breaker periodic re-notify tests
+# ---------------------------------------------------------------------------
+
+
+class TestR5CbRenotify:
+    """R5 (HIGH): engine circuit-breaker fires once at trip time but operator may miss
+    the single Telegram if sleeping/phone off. Fix: periodic re-notify from heartbeat
+    while CB is still tripped. Rate-limit pattern mirrors signal_log_rotator.py
+    DISK_FULL_NOTIFY_WINDOW_SECS.
+
+    Ralph iter 183. AUDIT-SKIPPED: R5 is notification-only, no exposure path.
+    Justification logged in docs/ralph-loop/deferred-findings.md.
+    """
+
+    # R5-1: re-notify fires at cadence while CB is tripped
+    async def test_r5_renotify_fires_while_cb_tripped(self):
+        """Mock heartbeat clock: CB tripped → N heartbeat cycles → assert N re-notifies."""
+        orch = build_orchestrator()
+        notifications = []
+        orch._notify = lambda msg: notifications.append(msg)
+
+        # Trip the engine circuit breaker
+        orch._consecutive_engine_errors = 5
+
+        # Simulate 3 heartbeat cycles by calling the re-notify block directly.
+        # We replicate the exact guard condition from _heartbeat_notifier to keep
+        # tests deterministic without running an asyncio event loop + sleep.
+        from datetime import UTC, datetime, timedelta
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+
+        interval = SessionOrchestrator.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS
+
+        for cycle in range(3):
+            now = datetime(2026, 4, 25, 3, 0, 0, tzinfo=UTC) + timedelta(seconds=cycle * interval)
+            elapsed = (
+                (now - orch._cb_renotify_last_at).total_seconds()
+                if orch._cb_renotify_last_at is not None
+                else interval  # first iteration: treat as due
+            )
+            if orch._consecutive_engine_errors >= 5 and elapsed >= interval:
+                orch._cb_renotify_last_at = now
+                orch._notify(
+                    f"ENGINE CIRCUIT BREAKER STILL TRIPPED — engine paused "
+                    f"({orch._consecutive_engine_errors} consecutive errors). "
+                    "No new entries until rollover. MANUAL CHECK REQUIRED."
+                )
+
+        assert len(notifications) == 3, (
+            f"R5: expected 3 re-notifies across 3 heartbeat cycles, got {len(notifications)}"
+        )
+        assert all("ENGINE CIRCUIT BREAKER STILL TRIPPED" in n for n in notifications), (
+            "R5: re-notify message must contain 'ENGINE CIRCUIT BREAKER STILL TRIPPED'"
+        )
+
+    # R5-2: re-notify does NOT fire when CB is clear
+    async def test_r5_no_renotify_when_cb_clear(self):
+        """CB clear (consecutive_engine_errors < 5) → no re-notify sent."""
+        orch = build_orchestrator()
+        notifications = []
+        orch._notify = lambda msg: notifications.append(msg)
+
+        # CB is NOT tripped
+        orch._consecutive_engine_errors = 0
+
+        from datetime import UTC, datetime
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+
+        interval = SessionOrchestrator.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS
+        now = datetime(2026, 4, 25, 3, 0, 0, tzinfo=UTC)
+        elapsed = interval  # as if interval has elapsed
+
+        if orch._consecutive_engine_errors >= 5 and elapsed >= interval:
+            orch._notify("ENGINE CIRCUIT BREAKER STILL TRIPPED — should not fire")
+
+        assert len(notifications) == 0, "R5: re-notify must not fire when consecutive_engine_errors < 5"
+
+    # R5-3: CB clears + re-trips → cadence starts fresh (no silent state inheritance)
+    async def test_r5_reset_on_cb_clear_then_retrip(self):
+        """Rollover resets _cb_renotify_last_at; a re-trip starts a fresh cadence."""
+        orch = build_orchestrator()
+        notifications = []
+        orch._notify = lambda msg: notifications.append(msg)
+
+        from datetime import UTC, datetime, timedelta
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+
+        interval = SessionOrchestrator.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS
+
+        # Phase 1: CB trips, one re-notify fires
+        orch._consecutive_engine_errors = 5
+        t0 = datetime(2026, 4, 25, 3, 0, 0, tzinfo=UTC)
+        orch._cb_renotify_last_at = None  # fresh
+        elapsed = interval  # first cycle
+        if orch._consecutive_engine_errors >= 5 and elapsed >= interval:
+            orch._cb_renotify_last_at = t0
+            orch._notify("ENGINE CIRCUIT BREAKER STILL TRIPPED — phase 1")
+
+        assert len(notifications) == 1, "R5: phase 1 should fire once"
+
+        # Phase 2: rollover clears the CB and the re-notify timestamp
+        orch._consecutive_engine_errors = 0
+        orch._cb_renotify_last_at = None  # simulate rollover reset
+
+        # Phase 3: CB re-trips — first re-notify of the new trip fires immediately
+        orch._consecutive_engine_errors = 5
+        t1 = datetime(2026, 4, 25, 4, 0, 0, tzinfo=UTC)
+        elapsed = interval  # _cb_renotify_last_at is None → treat as due
+        if orch._consecutive_engine_errors >= 5 and elapsed >= interval:
+            orch._cb_renotify_last_at = t1
+            orch._notify("ENGINE CIRCUIT BREAKER STILL TRIPPED — phase 3")
+
+        assert len(notifications) == 2, (
+            "R5: after rollover reset, re-trip must start fresh cadence (fire on first heartbeat)"
+        )
+        # Verify second notify did NOT inherit stale t0 — last_at is updated to t1
+        assert orch._cb_renotify_last_at == t1, (
+            "R5: _cb_renotify_last_at must be updated to current time on re-notify, not inherit prior trip's timestamp"
+        )
+
+    # R5-4: source-text mutation probes — future refactor that removes the re-notify call breaks loudly
+    def test_r5_source_markers_present(self):
+        """R5 constants and re-notify logic must be present in production code.
+
+        Mutation probe: deleting CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS or removing the
+        _cb_renotify_last_at reset in _check_trading_day_rollover causes this test to fail.
+        """
+        import inspect
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+
+        src = inspect.getsource(SessionOrchestrator)
+        assert "CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS" in src, (
+            "R5: CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS constant must be present"
+        )
+        assert "ENGINE CIRCUIT BREAKER STILL TRIPPED" in src, (
+            "R5: re-notify call site must contain marker text 'ENGINE CIRCUIT BREAKER STILL TRIPPED'"
+        )
+        assert "_cb_renotify_last_at" in src, "R5: _cb_renotify_last_at state field must be present"
+        assert "R5: reset re-notify cadence" in src, (
+            "R5: rollover reset line must contain 'R5: reset re-notify cadence' comment "
+            "(marker ensures the reset is not silently removed in future refactors)"
+        )

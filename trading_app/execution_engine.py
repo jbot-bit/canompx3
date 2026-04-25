@@ -18,6 +18,7 @@ Usage:
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from enum import Enum
+from typing import Any
 
 from pipeline.cost_model import CostSpec, get_session_cost_spec, to_r_multiple
 from pipeline.dst import DYNAMIC_ORB_RESOLVERS, orb_utc_window
@@ -169,6 +170,9 @@ class ActiveTrade:
     # Calendar overlay sizing (1.0 = full, 0.5 = half)
     size_multiplier: float = 1.0
 
+    # Phase 2: Conditional-role context (shadow/live overlays)
+    overlay_context: dict[str, dict[str, Any]] = field(default_factory=dict)
+
     # Outcome tracking
     exit_ts: datetime | None = None
     exit_price: float | None = None
@@ -196,11 +200,13 @@ class ExecutionEngine:
         live_session_costs: bool = True,
         atr_velocity_overlay=None,
         e2_order_timeout: dict[tuple[str, str], float] | None = None,
+        role_resolver=None,
     ):
         self.portfolio = portfolio
         self.cost_spec = cost_spec
         self.risk_manager = risk_manager  # Optional RiskManager for position limits
         self.market_state = market_state  # Optional MarketState for scoring
+        self.role_resolver = role_resolver  # Optional RoleResolver for conditional overlays
         self._live_session_costs = live_session_costs  # Use session-adjusted slippage
         self.atr_velocity_overlay = atr_velocity_overlay  # Contracting ATR skip overlay
         # E2 order timeout: {(instrument, session) -> minutes}. After ORB completes,
@@ -224,6 +230,27 @@ class ExecutionEngine:
         # Paper trader / session orchestrator load one row per unique aperture
         # in the portfolio, so _arm_strategies can pick the correct ORB columns.
         self._daily_features_rows: dict[int, dict] = {}
+
+    def _apply_conditional_roles(self, trade: ActiveTrade, session: str) -> None:
+        """Query RoleResolver and record shadow conditional-role context.
+
+        Conditional overlays are not an approved live sizing surface. The
+        engine records context for operator/journal evidence only; execution
+        size remains controlled by the existing risk/calendar paths.
+        """
+        if self.role_resolver is None:
+            return
+
+        context = self.role_resolver.get_overlay_context(trade.strategy_id, session, trade.direction)
+        trade.overlay_context = context
+        if context:
+            logger.info(
+                "CONDITIONAL_OVERLAY_SHADOW: %s %s %s context=%s",
+                trade.strategy_id,
+                session,
+                trade.direction,
+                context,
+            )
 
     def _compute_contracts(self, risk_points: float, cost: CostSpec, max_contracts: int = 1) -> int:
         """Compute position size using vol-adjusted sizing from portfolio params.
@@ -289,6 +316,48 @@ class ExecutionEngine:
                         else:
                             unrealized += (t.entry_price - current_price) / risk
         return self.daily_pnl_r + unrealized
+
+    def _apply_risk_contract_factor_or_reject(
+        self,
+        trade: ActiveTrade,
+        suggested_contract_factor: float,
+        *,
+        timestamp: datetime,
+        price: float,
+        events: list[TradeEvent],
+    ) -> bool:
+        """Apply risk-manager derisking or fail closed if it cannot be expressed.
+
+        A suggested factor below 1.0 is a real control-surface request, not a
+        hint. If the current contract count is already 1, silently flooring
+        back to 1 would convert "reduced risk" into full-size exposure.
+        """
+        if suggested_contract_factor >= 1.0:
+            return True
+
+        base_contracts = trade.contracts
+        reduced_contracts = int(base_contracts * suggested_contract_factor)
+        if reduced_contracts < 1:
+            trade.state = TradeState.EXITED
+            self.completed_trades.append(trade)
+            events.append(
+                TradeEvent(
+                    event_type="REJECT",
+                    strategy_id=trade.strategy_id,
+                    timestamp=timestamp,
+                    price=price,
+                    direction=trade.direction,
+                    contracts=base_contracts,
+                    reason=(
+                        "risk_rejected: unexpressible_contract_reduction "
+                        f"factor={suggested_contract_factor:.2f} base_contracts={base_contracts}"
+                    ),
+                )
+            )
+            return False
+
+        trade.contracts = reduced_contracts
+        return True
 
     def mark_strategy_traded(self, strategy_id: str) -> None:
         """Mark a strategy as already traded today (crash recovery).
@@ -882,8 +951,19 @@ class ExecutionEngine:
                     )
                     return events
 
-            trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
-            # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0).
+            if not self._apply_risk_contract_factor_or_reject(
+                trade,
+                suggested_contract_factor,
+                timestamp=confirm_bar["ts_utc"],
+                price=entry_price,
+                events=events,
+            ):
+                return events
+
+            # Apply Phase 2 conditional roles (MGC shadow overlay etc.)
+            self._apply_conditional_roles(trade, trade.orb_label)
+
+            # Apply sizing multiplier (calendar + conditional roles).
             # NOTE: For single-contract strategies, max(1, ...) floor means
             # HALF_SIZE is a no-op — effective only for multi-contract sizing.
             if trade.size_multiplier != 1.0:
@@ -1093,8 +1173,19 @@ class ExecutionEngine:
                             continue
 
                     # Apply suggested contract factor
-                    trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
-                    # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0)
+                    if not self._apply_risk_contract_factor_or_reject(
+                        trade,
+                        suggested_contract_factor,
+                        timestamp=entry_ts,
+                        price=entry_price,
+                        events=events,
+                    ):
+                        continue
+
+                    # Apply Phase 2 conditional roles (MGC shadow overlay etc.)
+                    self._apply_conditional_roles(trade, trade.orb_label)
+
+                    # Apply sizing multiplier (calendar + conditional roles)
                     if trade.size_multiplier != 1.0:
                         trade.contracts = max(1, int(trade.contracts * trade.size_multiplier))
 
@@ -1258,8 +1349,19 @@ class ExecutionEngine:
                                 continue
 
                         # Apply suggested contract factor
-                        trade.contracts = max(1, int(trade.contracts * suggested_contract_factor))
-                        # Apply calendar overlay sizing (HALF_SIZE=0.5, NEUTRAL=1.0)
+                        if not self._apply_risk_contract_factor_or_reject(
+                            trade,
+                            suggested_contract_factor,
+                            timestamp=bar["ts_utc"],
+                            price=entry_price,
+                            events=events,
+                        ):
+                            continue
+
+                        # Apply Phase 2 conditional roles (MGC shadow overlay etc.)
+                        self._apply_conditional_roles(trade, trade.orb_label)
+
+                        # Apply sizing multiplier (calendar + conditional roles)
                         if trade.size_multiplier != 1.0:
                             trade.contracts = max(1, int(trade.contracts * trade.size_multiplier))
 

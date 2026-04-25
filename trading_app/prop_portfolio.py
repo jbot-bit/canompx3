@@ -105,6 +105,31 @@ def _apply_instrument_bans(
     return kept, excluded
 
 
+def profile_static_gate_reason(
+    profile: AccountProfile,
+    instrument: str,
+    orb_label: str,
+) -> str | None:
+    """Return the canonical static routing rejection reason for one candidate.
+
+    This is the shared gate layer used before portfolio ranking/filling:
+    - firm-level banned instruments
+    - profile-level session assignment
+    - profile-level instrument assignment
+
+    Keep routing/audit tools on this helper so research surfaces do not drift
+    from portfolio-construction behavior.
+    """
+    firm_spec = get_firm_spec(profile.firm)
+    if instrument in firm_spec.banned_instruments:
+        return f"Instrument banned by firm ({instrument})"
+    if profile.allowed_sessions is not None and orb_label not in profile.allowed_sessions:
+        return f"Session not assigned to this profile ({orb_label})"
+    if profile.allowed_instruments is not None and instrument not in profile.allowed_instruments:
+        return f"Instrument not assigned to this profile ({instrument})"
+    return None
+
+
 def _deduplicate_sessions(
     strategies: list[PortfolioStrategy],
 ) -> tuple[list[PortfolioStrategy], list[ExcludedEntry]]:
@@ -507,43 +532,14 @@ def select_for_profile(
     tier = get_account_tier(profile.firm, profile.account_size)
     all_excluded: list[ExcludedEntry] = []
 
-    # 1. Instrument bans (firm-level)
-    candidates, banned_excluded = _apply_instrument_bans(strategies, firm_spec.banned_instruments)
-    all_excluded.extend(banned_excluded)
-
-    # 1b. Session routing (profile-level — from playbook account grid)
-    if profile.allowed_sessions is not None:
-        routed = []
-        for s in candidates:
-            if s.orb_label in profile.allowed_sessions:
-                routed.append(s)
-            else:
-                all_excluded.append(
-                    ExcludedEntry(
-                        s.strategy_id,
-                        s.instrument,
-                        s.orb_label,
-                        f"Session not assigned to this profile ({s.orb_label})",
-                    )
-                )
-        candidates = routed
-
-    # 1c. Instrument routing (profile-level — e.g. Tradeify=MNQ, TopStep=MGC)
-    if profile.allowed_instruments is not None:
-        routed = []
-        for s in candidates:
-            if s.instrument in profile.allowed_instruments:
-                routed.append(s)
-            else:
-                all_excluded.append(
-                    ExcludedEntry(
-                        s.strategy_id,
-                        s.instrument,
-                        s.orb_label,
-                        f"Instrument not assigned to this profile ({s.instrument})",
-                    )
-                )
-        candidates = routed
+    # 1. Static routing gates (firm bans + profile session/instrument assignment)
+    candidates = []
+    for s in strategies:
+        reason = profile_static_gate_reason(profile, s.instrument, s.orb_label)
+        if reason is None:
+            candidates.append(s)
+        else:
+            all_excluded.append(ExcludedEntry(s.strategy_id, s.instrument, s.orb_label, reason))
 
     # 2. Deduplicate sessions
     candidates, dedup_excluded = _deduplicate_sessions(candidates)

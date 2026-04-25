@@ -1,5 +1,7 @@
 # Context Source Catalog
 
+Generated from `context/registry.py` and `context/institutional.py`. Do not edit by hand.
+
 Generated catalog of canonical routing sources and published read models.
 
 ## Domains

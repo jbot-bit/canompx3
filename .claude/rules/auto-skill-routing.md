@@ -26,6 +26,7 @@ Match by INTENT, not exact words. ADHD-friendly — user phrases things casually
 | Plan/design | "plan", "design", "brainstorm", "think about", "how should we", "4t", "approach" | `/design` |
 | Past findings | "didn't we test", "wasn't that dead", "what did we find", "remind me", "history of", "NO-GO?" | `/pinecone-assistant` |
 | Test a hypothesis | "is this real", "does X work", "test this", "research", "investigate edge", "deep dive" | `/research` |
+| Capital-risk review | "real capital", "capital review", "thorough AF", "bias check", "no pigeon holing", "security review", "threat model", "before deploy" | `/capital-review` |
 | Code review | "review", "check my work", "bloomey", "seven sins", "before I commit", "anything wrong" | `/code-review` |
 | Schema/config edit | (editing init_db, config.py, cost_model) | Full stage-gate |
 | Improve skill | "improve skill", "skill loop", "optimize skill" | `/skill-improve` |

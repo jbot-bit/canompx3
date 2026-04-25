@@ -1,5 +1,7 @@
 # Institutional Routing Contracts
 
+Generated from `context/registry.py` and `context/institutional.py`. Do not edit by hand.
+
 Generated registry of concepts, protocols, answer contracts, and briefing rules.
 
 ## Concepts

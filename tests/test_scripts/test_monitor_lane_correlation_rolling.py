@@ -19,6 +19,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import duckdb
 import numpy as np
 import pandas as pd
 import pytest
@@ -28,8 +29,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.reports.monitor_lane_correlation_rolling import (  # noqa: E402
+    build_report,
     compute_alarms,
     consecutive_breach_runs,
+    load_daily_pnl_series,
     rolling_pairwise_corr,
 )
 
@@ -139,6 +142,53 @@ def test_compute_alarms_transient_spike_under_min_run_ignored():
     # Any alarm must have run_length >= 10
     for a in alarms:
         assert a["run_length_days"] >= 10
+
+
+def test_load_daily_pnl_series_keeps_missing_whole_book_days_as_explicit_zero_slots(tmp_path):
+    db_path = tmp_path / "lane_corr_monitor.db"
+    con = duckdb.connect(str(db_path))
+    try:
+        con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE)")
+        con.execute("INSERT INTO paper_trades VALUES ('A', DATE '2026-01-01', 1.0)")
+        con.execute("INSERT INTO paper_trades VALUES ('B', DATE '2026-01-03', -1.0)")
+
+        wide = load_daily_pnl_series(con, ["A", "B"], days_back=5000)
+
+        assert [str(day.date()) for day in wide.index] == ["2026-01-01", "2026-01-02", "2026-01-03"]
+        assert pd.isna(wide.loc[pd.Timestamp("2026-01-02"), "A"])
+        assert pd.isna(wide.loc[pd.Timestamp("2026-01-02"), "B"])
+    finally:
+        con.close()
+
+
+def test_build_report_marks_no_data_instead_of_clear():
+    report = build_report(
+        ["A", "B"],
+        pd.DataFrame(),
+        pd.DataFrame(),
+        [],
+        history_days_loaded=45,
+    )
+
+    assert report["monitor_status"] == "NO_DATA"
+    assert report["history_days_loaded"] == 45
+
+
+def test_build_report_preserves_requested_history_window_when_data_is_present():
+    returns_wide = pd.DataFrame(
+        {"A": [1.0], "B": [0.0]},
+        index=pd.to_datetime(["2026-01-01"]),
+    )
+    report = build_report(
+        ["A", "B"],
+        returns_wide,
+        pd.DataFrame(),
+        [],
+        history_days_loaded=45,
+    )
+
+    assert report["monitor_status"] == "INSUFFICIENT_DATA"
+    assert report["history_days_loaded"] == 45
 
 
 if __name__ == "__main__":
