@@ -114,7 +114,7 @@ primary_schema:
   k_session: 2
   k_instrument: 2
   primary_promotion_gate: "BH-FDR q < 0.05 at K_family=2 plus positive-mean floor and dir_match"
-  family_cells_structured_as: "2 hypotheses x 1 unfiltered lane universe"
+  family_cells_structured_as: "2 hypotheses × 1 unfiltered lane universe"
 
 hypotheses:
   - id: H01_PRE_VELOCITY_HIGH_Q3
