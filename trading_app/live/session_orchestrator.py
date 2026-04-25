@@ -287,8 +287,12 @@ class SessionStats:
 
 
 class SessionOrchestrator:
-    # JSONL file for UI signal display — written by this process, read by Streamlit
-    SIGNALS_FILE = Path(__file__).parent.parent.parent / "live_signals.jsonl"
+    # Directory for daily-partitioned signal log files.
+    # Files are named live_signals_YYYY-MM-DD.jsonl (trading day = 09:00 Brisbane boundary).
+    # R4 (Ralph iter 181): replaced single unbounded live_signals.jsonl with daily rotation
+    # via SignalLogRotator. The log directory is the project root (same location as the old
+    # monolithic file) so the Live Monitor UI path prefix is unchanged.
+    SIGNALS_DIR = Path(__file__).parent.parent.parent
 
     def __init__(
         self,
@@ -790,6 +794,20 @@ class SessionOrchestrator:
         # Resolve front-month contract symbol (needed even in signal-only for logging)
         self.contract_symbol = contracts.resolve_front_month(instrument)
         self._account_name = self.portfolio.name  # For dashboard display
+
+        # R4 (Ralph iter 181): daily-rotation signal log rotator.
+        # SignalLogRotator partitions writes into live_signals_YYYY-MM-DD.jsonl
+        # files (trading-day boundary = 09:00 Brisbane, canonical per pipeline.dst).
+        # The rotator's trading_day_fn lambda always reads self.trading_day so it
+        # picks up the new day after _check_trading_day_rollover updates it.
+        from trading_app.live.signal_log_rotator import SignalLogRotator
+
+        self._signal_rotator = SignalLogRotator(
+            log_dir=self.SIGNALS_DIR,
+            trading_day_fn=lambda: self.trading_day,
+            notify_fn=self._notify,
+        )
+
         log.info(
             "Session ready: %s → %s (%s)",
             instrument,
@@ -1353,21 +1371,36 @@ class SessionOrchestrator:
         return results
 
     def _write_signal_record(self, extra: dict) -> None:
-        """Append a signal record to the JSONL file read by the Live Monitor UI.
+        """Append a signal record to the daily JSONL file read by the Live Monitor UI.
+
+        Delegates to self._signal_rotator (SignalLogRotator) which:
+          - Partitions writes into live_signals_YYYY-MM-DD.jsonl files.
+          - Rotates at 09:00 Brisbane (canonical trading-day boundary).
+          - Notifies operator on first OSError per rate-limit window (institutional-rigor.md § 6).
+          - Prunes files older than LIVE_SIGNALS_RETENTION_DAYS (default 30).
 
         Thread safety: safe under single-threaded asyncio (all orchestrators share
-        one event loop). If this ever moves to multi-process, this append needs a lock.
+        one event loop). If this ever moves to multi-process, callers must hold an
+        external lock before calling write() — documented on SignalLogRotator.write().
         """
         record = {
             "ts": datetime.now(UTC).isoformat(),
             "instrument": self.instrument,
             **extra,
         }
-        try:
-            with open(self.SIGNALS_FILE, "a") as fh:
-                fh.write(json.dumps(record) + "\n")
-        except OSError as e:
-            log.warning("Could not write signal record: %s", e)
+        line = json.dumps(record) + "\n"
+        # _signal_rotator is initialized in __init__ before first _write_signal_record call.
+        # Defensive guard for unit tests that mock _write_signal_record directly on a
+        # partially-constructed orchestrator: use raw open() fallback when rotator absent.
+        rotator = getattr(self, "_signal_rotator", None)
+        if rotator is not None:
+            rotator.write(line)
+        else:
+            # Fallback path: partially-constructed orchestrator (test harness) or
+            # pre-init call. Write to stderr so the record is not silently dropped.
+            import sys
+
+            print(line, file=sys.stderr, end="")
 
     async def _check_trading_day_rollover(
         self,

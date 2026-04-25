@@ -5688,6 +5688,54 @@ def check_deployable_subset_of_active() -> list[str]:
     return violations
 
 
+def check_signal_log_rotation_not_bypassed() -> list[str]:
+    """_write_signal_record must delegate to SignalLogRotator, not raw open().
+
+    R4 fix (Ralph iter 181): live_signals.jsonl was written via a bare `open(..., "a")`
+    call inside `_write_signal_record`. This bypassed rotation and swallowed disk-full
+    errors silently (institutional-rigor.md § 6 violation).
+
+    After the fix, `_write_signal_record` must:
+      (1) NOT contain `open(self.SIGNALS_FILE` (raw file open bypasses rotator).
+      (2) Contain `_signal_rotator` (delegates to SignalLogRotator).
+      (3) SIGNALS_FILE must NOT appear in the class body (replaced by SIGNALS_DIR).
+
+    A future refactor that reverts to raw open() trips this check.
+    """
+    violations = []
+    target = TRADING_APP_DIR / "live" / "session_orchestrator.py"
+    if not target.exists():
+        violations.append(f"  {target}: missing — cannot verify signal log rotation guard")
+        return violations
+
+    try:
+        source = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        violations.append(f"  {target.name}: failed to read for signal rotation check: {exc}")
+        return violations
+
+    # Offense: raw open() on a monolithic signals file in _write_signal_record.
+    if "open(self.SIGNALS_FILE" in source:
+        violations.append(
+            "  session_orchestrator.py: `open(self.SIGNALS_FILE` found — _write_signal_record "
+            "must delegate to SignalLogRotator, not write directly. R4 rotation bypass."
+        )
+    # Offense: SIGNALS_FILE class attribute still present (replaced by SIGNALS_DIR in R4).
+    if "SIGNALS_FILE = " in source:
+        violations.append(
+            "  session_orchestrator.py: `SIGNALS_FILE = ` found — R4 replaced this with "
+            "SIGNALS_DIR. Remove SIGNALS_FILE or the rotation invariant is broken."
+        )
+    # Required: _signal_rotator delegation present.
+    if "_signal_rotator" not in source:
+        violations.append(
+            "  session_orchestrator.py: `_signal_rotator` not found — _write_signal_record "
+            "must delegate to SignalLogRotator (R4 fix). Rotation is absent."
+        )
+
+    return violations
+
+
 def check_c1_kill_switch_guards_intact() -> list[str]:
     """C1 kill-switch guards must remain in place at the canonical insertion points.
 
@@ -6221,6 +6269,12 @@ CHECKS = [
     (
         "C1 kill-switch guards intact at _on_bar and _handle_event ENTRY branch",
         check_c1_kill_switch_guards_intact,
+        False,
+        False,
+    ),
+    (
+        "Signal log rotation: _write_signal_record delegates to SignalLogRotator (R4 fix)",
+        check_signal_log_rotation_not_bypassed,
         False,
         False,
     ),
