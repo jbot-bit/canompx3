@@ -2948,7 +2948,7 @@
       "finding_type": "silent_failure",
       "severity": "MEDIUM",
       "verdict": "FIXED",
-      "commit": "(pending)"
+      "commit": "87dffa38"
     }
   ]
 }

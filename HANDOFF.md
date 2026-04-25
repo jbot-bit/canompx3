@@ -9,14 +9,18 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 2f45a3e8 — [judgment] audit: Ralph Loop iter 173 — verify e02c529d 5 silent-failure fixes
-- **Files changed:** 6 files
+- **Commit:** 87dffa38 — [judgment] fix: Ralph Loop iter 174 — F4 bracket submit failure triggers emergency flatten (CRITICAL)
+- **Files changed:** 10 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/deferred-findings.md`
-  - `docs/ralph-loop/import_centrality.json`
   - `docs/ralph-loop/ralph-ledger.json`
   - `docs/ralph-loop/ralph-loop-audit.md`
   - `docs/ralph-loop/ralph-loop-history.md`
+  - `docs/runtime/stages/live-overnight-resilience-hardening.md`
+  - `docs/runtime/stages/ralph-iter-174-f4-bracket-naked.md`
+  - `scripts/run_live_session.py`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `trading_app/live/projectx/positions.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Next Steps — Active
 

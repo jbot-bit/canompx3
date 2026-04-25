@@ -14,7 +14,7 @@
 - Action: All 3 paths now: log.critical + _notify + brackets_failed++ + _fire_kill_switch + await _emergency_flatten. Mirror pattern from DD halt (L1491) and bar gap halt (L1515). 4 mutation-proof tests added (TestF4BracketNakedPosition).
 - Blast radius: 2 files (session_orchestrator.py, test_session_orchestrator.py)
 - Verification: PASS — 148/148 tests green, 107/107 drift
-- Commit: (pending)
+- Commit: 87dffa38
 
 ---
 
