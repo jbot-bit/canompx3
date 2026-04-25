@@ -4,9 +4,27 @@ mode: IMPLEMENTATION
 date: 2026-04-25
 scope_lock:
   - trading_app/live/session_orchestrator.py
+  - trading_app/live/projectx/positions.py
+  - scripts/run_live_session.py
   - tests/test_trading_app/test_session_orchestrator.py
+  - tests/test_trading_app/test_projectx_positions.py
   - docs/runtime/stages/live-overnight-resilience-hardening.md
   - HANDOFF.md
+
+# Scope expanded 2026-04-25 02:35 Brisbane during live launch attempt.
+# 3 launch-blocking bugs discovered in sequence:
+#   (a) F2 regression: self._notify in F2 fix fires before self._stats init in __init__,
+#       causing AttributeError that fails-closed the entire orchestrator startup.
+#   (b) --account-id ignored when copies>1: scripts/run_live_session.py:542
+#       slices all_accounts[:n_copies] BEFORE checking user's account-id, so the
+#       user's choice can fall outside the candidate set and silently route to
+#       the wrong account.
+#   (c) ProjectX query_equity returns None for $0-balance accounts: positions.py:68
+#       uses `acct.get("balance") or acct.get("cashBalance")` — 0.0 is falsy, so
+#       day-1 XFA accounts (which legitimately start at $0) report "not found"
+#       and break F-1 EOD seeding for the live XFA path.
+# All 3 fixes are contiguous: same launch attempt, same failure cascade, same root
+# cause class (silent state-degradation). One commit, one verification pass.
 
 ## Why
 

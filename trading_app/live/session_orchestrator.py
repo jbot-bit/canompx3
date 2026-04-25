@@ -1131,13 +1131,23 @@ class SessionOrchestrator:
             source="session_orchestrator",
             trading_day=str(getattr(self, "trading_day", "")) or None,
         )
-        if self._notifications_broken:
+        if getattr(self, "_notifications_broken", False):
             print(f"[NOTIFY-FALLBACK] {self.instrument}: {message}")
             log.warning("Notification (fallback): %s", message)
-            self._stats.notifications_failed += 1
+            _stats_early = getattr(self, "_stats", None)
+            if _stats_early is not None:
+                _stats_early.notifications_failed += 1
             return
 
         from trading_app.live.notifications import notify
+
+        # Defensive: _notify can be called during partial __init__ (e.g. F2's
+        # F-1 SILENT BLOCK notify fires before self._stats is set up at L709).
+        # The notify contract is "never raises" — that must hold even when
+        # called from a half-constructed orchestrator. _get_stats returns a
+        # null-stub when _stats isn't ready, so the failure path still logs+
+        # prints but doesn't crash with AttributeError.
+        stats = getattr(self, "_stats", None)
 
         def _record_failure(exc: Exception | None) -> None:
             """Centralized failure handling: increment counter, log, print on first failure.
@@ -1145,16 +1155,27 @@ class SessionOrchestrator:
             Either path (sync False/raise OR async task False/raise) routes here so
             observability is identical regardless of dispatch mode.
             """
-            self._stats.notifications_failed += 1
+            first_failure = False
+            if stats is not None:
+                stats.notifications_failed += 1
+                first_failure = stats.notifications_failed == 1
+            else:
+                # Pre-_stats init context — treat as first failure for print purposes.
+                first_failure = True
             if exc is not None:
                 log.error("Notification failed (will not retry): %s", exc)
             else:
                 log.warning("Notification returned False — Telegram pipe broken")
-            if self._stats.notifications_failed == 1:
+            if first_failure:
                 if exc is not None:
                     print(f"!!! NOTIFICATION FAILURE: {exc} — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID !!!")
                 else:
                     print("!!! NOTIFICATION FAILURE — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID !!!")
+
+        def _bump_sent(delta: int = 1) -> None:
+            """Defensive stats increment — no-op when _stats isn't initialized."""
+            if stats is not None:
+                stats.notifications_sent += delta
 
         try:
             loop = asyncio.get_running_loop()
@@ -1164,7 +1185,7 @@ class SessionOrchestrator:
             # to preserve historical observability for callers that pre-date B2.
             try:
                 if notify(self.instrument, message):
-                    self._stats.notifications_sent += 1
+                    _bump_sent(1)
                 else:
                     _record_failure(None)
             except Exception as exc:
@@ -1173,17 +1194,17 @@ class SessionOrchestrator:
 
         # Async dispatch: run blocking notify() on a worker thread, do NOT await.
         # Stats are corrected in the done-callback so the count reflects real outcomes.
-        self._stats.notifications_sent += 1  # optimistic; corrected on failure
+        _bump_sent(1)  # optimistic; corrected on failure
 
         def _on_notify_done(task: "asyncio.Task[bool]") -> None:
             try:
                 ok = task.result()
             except Exception as exc:
-                self._stats.notifications_sent -= 1
+                _bump_sent(-1)
                 _record_failure(exc)
                 return
             if not ok:
-                self._stats.notifications_sent -= 1
+                _bump_sent(-1)
                 _record_failure(None)
 
         task = loop.create_task(asyncio.to_thread(notify, self.instrument, message))
@@ -1643,16 +1664,38 @@ class SessionOrchestrator:
         self._safety_state.save()
 
     async def _submit_bracket(self, event, strategy, entry_price: float) -> None:
-        """Submit broker-side stop/target bracket after entry fill. Never raises."""
+        """Submit broker-side stop/target bracket after entry fill. Never raises.
+
+        F4: ALL failure sub-paths that leave a position without broker-side stop/target
+        now trigger _notify + _fire_kill_switch + _emergency_flatten. A naked position
+        (entry filled, no bracket at broker) is the highest unattended-overnight risk:
+        an adverse gap will run the full account without any automatic stop.
+
+        Three sub-paths that previously left a naked position:
+          1. No risk_points — bracket would be wrong; safer to flatten than guess.
+          2. build_bracket_spec returns None — broker cannot represent this bracket.
+          3. submit() raises — network/auth failure; bracket never reached broker.
+
+        In all three cases: log.critical + _notify (operator alert) + _fire_kill_switch
+        + await _emergency_flatten (market-close the position immediately).
+        Mirror pattern: lines 1491-1492 (DD halt), 1515-1516 (consecutive bar gap).
+        """
         if self.order_router is None or not self.order_router.supports_native_brackets():
             return
         try:
             risk_pts = event.risk_points or strategy.median_risk_points
             if not risk_pts:
-                log.error(
-                    "No risk_points for %s — skipping bracket (would place wrong stop/target)",
-                    event.strategy_id,
+                # F4-1: Cannot compute stop/target without risk_points.
+                # Bracket would be placed at wrong price; safer to flatten immediately.
+                msg = (
+                    f"F4: No risk_points for {event.strategy_id} — cannot place stop/target. "
+                    f"EMERGENCY FLATTEN to avoid naked position."
                 )
+                log.critical(msg)
+                self._notify(msg)
+                self._stats.brackets_failed += 1
+                self._fire_kill_switch()
+                await self._emergency_flatten()
                 return
             mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
             stop_dist = risk_pts * mult
@@ -1669,7 +1712,16 @@ class SessionOrchestrator:
                 qty=event.contracts,
             )
             if bracket is None:
-                log.warning("Bracket spec returned None for %s — NO CRASH PROTECTION", event.strategy_id)
+                # F4-2: Broker cannot represent this bracket spec.
+                msg = (
+                    f"F4: build_bracket_spec returned None for {event.strategy_id} — "
+                    f"broker cannot place stop/target. EMERGENCY FLATTEN to avoid naked position."
+                )
+                log.critical(msg)
+                self._notify(msg)
+                self._stats.brackets_failed += 1
+                self._fire_kill_switch()
+                await self._emergency_flatten()
                 return
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(None, self.order_router.submit, bracket)
@@ -1685,8 +1737,16 @@ class SessionOrchestrator:
             log.info("Bracket submitted for %s: stop=%.2f target=%.2f", event.strategy_id, stop_price, target_price)
             self._stats.brackets_submitted += 1
         except Exception as e:
+            # F4-3: submit() raised — network/auth failure; bracket never reached broker.
+            msg = (
+                f"F4: Bracket submit raised for {event.strategy_id}: {e} — "
+                f"stop/target NOT at broker. EMERGENCY FLATTEN to avoid naked position."
+            )
+            log.critical(msg)
+            self._notify(msg)
             self._stats.brackets_failed += 1
-            log.warning("Bracket submit failed for %s (position still managed by engine): %s", event.strategy_id, e)
+            self._fire_kill_switch()
+            await self._emergency_flatten()
 
     async def _cancel_brackets(self, strategy_id: str) -> None:
         """Cancel bracket orders before submitting exit. Never raises.

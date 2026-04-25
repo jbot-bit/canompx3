@@ -9,9 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** a8ff06cc — [judgment] audit: Ralph Loop iter 172 — verify B6 F-1 signal-only seed fix (CRITICAL, ca363e1a)
-- **Files changed:** 4 files
+- **Commit:** 2f45a3e8 — [judgment] audit: Ralph Loop iter 173 — verify e02c529d 5 silent-failure fixes
+- **Files changed:** 6 files
   - `HANDOFF.md`
+  - `docs/ralph-loop/deferred-findings.md`
+  - `docs/ralph-loop/import_centrality.json`
   - `docs/ralph-loop/ralph-ledger.json`
   - `docs/ralph-loop/ralph-loop-audit.md`
   - `docs/ralph-loop/ralph-loop-history.md`

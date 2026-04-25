@@ -2436,6 +2436,149 @@ class TestObservability:
         assert orch._stats.brackets_failed == 1
         assert orch._stats.brackets_submitted == 0
 
+
+class TestF4BracketNakedPosition:
+    """F4 (CRITICAL): bracket submit failure post-fill must NOT leave position naked.
+
+    Each test is a mutation probe: revert the corresponding F4 sub-path fix in
+    trading_app/live/session_orchestrator.py and the matching assertion must fail.
+
+    Three failure sub-paths:
+      F4-1: no risk_points → cannot compute stop/target → emergency flatten
+      F4-2: build_bracket_spec returns None → broker can't represent bracket → emergency flatten
+      F4-3: submit() raises → network/auth failure → bracket never reached broker → emergency flatten
+
+    Pattern mirrored: _notify + _fire_kill_switch + _emergency_flatten
+    (same as DD halt at L1491-1492 and consecutive bar gap at L1515-1516).
+    """
+
+    def _make_event(self, strategy, *, risk_points=5.0):
+        event = MagicMock()
+        event.strategy_id = strategy.strategy_id
+        event.direction = "long"
+        event.contracts = 1
+        event.risk_points = risk_points
+        return event
+
+    # F4-1 — no risk_points triggers emergency flatten
+    async def test_f4_no_risk_points_triggers_flatten(self):
+        """When both event.risk_points and strategy.median_risk_points are falsy,
+        _submit_bracket must call _fire_kill_switch and _emergency_flatten rather
+        than silently returning. Pre-fix: log.error + return, position stays naked.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.order_router.supports_native_brackets = MagicMock(return_value=True)
+
+        strategy = list(orch._strategy_map.values())[0]
+        event = self._make_event(strategy, risk_points=None)  # no risk_points
+
+        # Patch strategy so median_risk_points is also falsy
+        strategy_mock = MagicMock(wraps=strategy)
+        strategy_mock.median_risk_points = None
+        strategy_mock.strategy_id = strategy.strategy_id
+        strategy_mock.rr_target = strategy.rr_target
+
+        orch._notify = MagicMock()
+        flatten_called = []
+
+        async def fake_flatten():
+            flatten_called.append(True)
+
+        with patch.object(orch, "_emergency_flatten", new=fake_flatten):
+            await orch._submit_bracket(event, strategy_mock, 2350.0)
+
+        # F4 invariants: flatten called, counter incremented, operator notified
+        assert flatten_called, "F4-1: _emergency_flatten must be called when risk_points is None"
+        assert orch._kill_switch_fired, "F4-1: _fire_kill_switch must be called"
+        assert orch._stats.brackets_failed == 1
+        assert orch._stats.brackets_submitted == 0
+        assert orch._notify.called, "F4-1: operator must be notified via _notify"
+        # Source marker: 'F4-1' appears in the notify message after the fix
+        notify_msg = str(orch._notify.call_args_list[0])
+        assert "F4" in notify_msg, "F4-1: notify message must contain 'F4' source marker"
+
+    # F4-2 — build_bracket_spec returns None triggers emergency flatten
+    async def test_f4_bracket_spec_none_triggers_flatten(self):
+        """When build_bracket_spec returns None, _submit_bracket must flatten.
+        Pre-fix: log.warning + return, position stays naked.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.order_router.supports_native_brackets = MagicMock(return_value=True)
+        orch.order_router.build_bracket_spec = MagicMock(return_value=None)
+
+        strategy = list(orch._strategy_map.values())[0]
+        event = self._make_event(strategy, risk_points=5.0)
+
+        orch._notify = MagicMock()
+        flatten_called = []
+
+        async def fake_flatten():
+            flatten_called.append(True)
+
+        with patch.object(orch, "_emergency_flatten", new=fake_flatten):
+            await orch._submit_bracket(event, strategy, 2350.0)
+
+        assert flatten_called, "F4-2: _emergency_flatten must be called when bracket_spec is None"
+        assert orch._kill_switch_fired, "F4-2: _fire_kill_switch must be called"
+        assert orch._stats.brackets_failed == 1
+        assert orch._stats.brackets_submitted == 0
+        assert orch._notify.called, "F4-2: operator must be notified via _notify"
+        notify_msg = str(orch._notify.call_args_list[0])
+        assert "F4" in notify_msg, "F4-2: notify message must contain 'F4' source marker"
+
+    # F4-3 — submit() raises triggers emergency flatten
+    async def test_f4_submit_raises_triggers_flatten(self):
+        """When order_router.submit raises, _submit_bracket must flatten.
+        Pre-fix: log.warning only, brackets_failed incremented, position stays naked.
+        Mutation probe: pre-fix test_bracket_failure_counter only checks
+        brackets_failed==1 — it passes whether or not flatten is called.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.order_router.supports_native_brackets = MagicMock(return_value=True)
+        orch.order_router.build_bracket_spec = MagicMock(return_value={"type": "OCO"})
+        orch.order_router.submit = MagicMock(side_effect=RuntimeError("network timeout"))
+
+        strategy = list(orch._strategy_map.values())[0]
+        event = self._make_event(strategy, risk_points=5.0)
+
+        orch._notify = MagicMock()
+        flatten_called = []
+
+        async def fake_flatten():
+            flatten_called.append(True)
+
+        with patch.object(orch, "_emergency_flatten", new=fake_flatten):
+            await orch._submit_bracket(event, strategy, 2350.0)
+
+        assert flatten_called, "F4-3: _emergency_flatten must be called when submit raises"
+        assert orch._kill_switch_fired, "F4-3: _fire_kill_switch must be called"
+        assert orch._stats.brackets_failed == 1
+        assert orch._stats.brackets_submitted == 0
+        assert orch._notify.called, "F4-3: operator must be notified via _notify"
+        notify_msg = str(orch._notify.call_args_list[0])
+        assert "F4" in notify_msg, "F4-3: notify message must contain 'F4' source marker"
+
+    # Source-text probe — confirms all three F4 markers survive in production code
+    def test_f4_source_markers_present(self):
+        """Source-text mutation probe: all three F4 source markers must be present
+        in production code. If any F4 sub-path fix is reverted, the matching marker
+        disappears and this test fails.
+        """
+        from trading_app.live import session_orchestrator as so
+
+        src = open(so.__file__, encoding="utf-8").read()
+        assert "F4-1" in src, "F4-1 source marker missing — no-risk-points path reverted"
+        assert "F4-2" in src, "F4-2 source marker missing — bracket-spec-None path reverted"
+        assert "F4-3" in src, "F4-3 source marker missing — submit-raises path reverted"
+        # Confirm the institutional pattern is present: flatten must follow kill-switch
+        assert "_fire_kill_switch" in src and "_emergency_flatten" in src, (
+            "F4: kill-switch + emergency flatten pattern must be present"
+        )
+
+
+class TestObservabilityCounters:
+    """Observability counters originally in TestObservability (continued after F4 class insertion)."""
+
     async def test_fill_poller_counters(self):
         """Fill poller increments fill_polls_run and fill_polls_confirmed."""
         orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))

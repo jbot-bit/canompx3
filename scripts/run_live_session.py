@@ -539,9 +539,28 @@ def main() -> None:
                 len(all_accounts),
             )
 
-        account_ids = [aid for aid, _name in all_accounts[:n_copies]]
-        if args.account_id and args.account_id in account_ids:
-            # User-specified account is primary
+        # Bug-fix 2026-04-25: previously this sliced all_accounts[:n_copies] FIRST
+        # then checked `args.account_id in account_ids`. If the user-specified
+        # account was past the slice horizon (e.g. profile.copies=2 and the user
+        # wants the 3rd-listed XFA), the check silently failed and the code
+        # routed to all_accounts[0] — the WRONG account. Now: validate the
+        # account exists, then move it to the front so the slice always
+        # includes it. Hard-fail if the user's choice doesn't exist at the broker.
+        all_account_ids = [aid for aid, _name in all_accounts]
+        if args.account_id is not None:
+            if args.account_id not in all_account_ids:
+                raise RuntimeError(
+                    f"--account-id {args.account_id} is not in the broker's discovered "
+                    f"accounts {all_account_ids}. Verify the account ID is correct and "
+                    f"the account is active and visible at the broker."
+                )
+            # Move user's account to the front so it's always inside the n_copies slice.
+            all_account_ids.remove(args.account_id)
+            all_account_ids.insert(0, args.account_id)
+
+        account_ids = all_account_ids[:n_copies]
+        if args.account_id is not None:
+            # Already at index 0 by construction above.
             account_ids.remove(args.account_id)
             primary_id = args.account_id
         else:

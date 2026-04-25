@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 174 — 2026-04-25
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py:1666-1740 (_submit_bracket)
+- Finding: 3 silent-failure sub-paths in _submit_bracket leave position naked (no broker stop/target): F4-1 no risk_points, F4-2 bracket spec None, F4-3 submit raises
+- Doctrine cited: institutional-rigor.md § 6 (no silent failures); integrity-guardian.md § 3 (fail-closed)
+- Action: All 3 paths now: log.critical + _notify + brackets_failed++ + _fire_kill_switch + await _emergency_flatten. Mirror pattern from DD halt (L1491) and bar gap halt (L1515). 4 mutation-proof tests added (TestF4BracketNakedPosition).
+- Blast radius: 2 files (session_orchestrator.py, test_session_orchestrator.py)
+- Verification: PASS — 148/148 tests green, 107/107 drift
+- Commit: (pending)
+
+---
+
 ## Iteration 173 — 2026-04-25
 - Phase: audit-only (verify-only)
 - Classification: [judgment]
