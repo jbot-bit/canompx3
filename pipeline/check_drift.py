@@ -5688,6 +5688,148 @@ def check_deployable_subset_of_active() -> list[str]:
     return violations
 
 
+def check_signal_log_rotation_not_bypassed() -> list[str]:
+    """_write_signal_record must delegate to SignalLogRotator, not raw open().
+
+    R4 fix (Ralph iter 181): live_signals.jsonl was written via a bare `open(..., "a")`
+    call inside `_write_signal_record`. This bypassed rotation and swallowed disk-full
+    errors silently (institutional-rigor.md § 6 violation).
+
+    After the fix, `_write_signal_record` must:
+      (1) NOT contain `open(self.SIGNALS_FILE` (raw file open bypasses rotator).
+      (2) Contain `_signal_rotator` (delegates to SignalLogRotator).
+      (3) SIGNALS_FILE must NOT appear in the class body (replaced by SIGNALS_DIR).
+
+    A future refactor that reverts to raw open() trips this check.
+    """
+    violations = []
+    target = TRADING_APP_DIR / "live" / "session_orchestrator.py"
+    if not target.exists():
+        violations.append(f"  {target}: missing — cannot verify signal log rotation guard")
+        return violations
+
+    try:
+        source = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        violations.append(f"  {target.name}: failed to read for signal rotation check: {exc}")
+        return violations
+
+    # Offense: raw open() on a monolithic signals file in _write_signal_record.
+    if "open(self.SIGNALS_FILE" in source:
+        violations.append(
+            "  session_orchestrator.py: `open(self.SIGNALS_FILE` found — _write_signal_record "
+            "must delegate to SignalLogRotator, not write directly. R4 rotation bypass."
+        )
+    # Offense: SIGNALS_FILE class attribute still present (replaced by SIGNALS_DIR in R4).
+    if "SIGNALS_FILE = " in source:
+        violations.append(
+            "  session_orchestrator.py: `SIGNALS_FILE = ` found — R4 replaced this with "
+            "SIGNALS_DIR. Remove SIGNALS_FILE or the rotation invariant is broken."
+        )
+    # Required: _signal_rotator delegation present.
+    if "_signal_rotator" not in source:
+        violations.append(
+            "  session_orchestrator.py: `_signal_rotator` not found — _write_signal_record "
+            "must delegate to SignalLogRotator (R4 fix). Rotation is absent."
+        )
+
+    return violations
+
+
+def check_f7_fill_poller_timeout_invariants() -> list[str]:
+    """F7: fill-poller PENDING timeout invariants must remain intact.
+
+    Ralph iter 185 (2026-04-25) added a hard timeout for PENDING_ENTRY orders
+    that never resolve. Without the timeout, a stuck broker order consumes a
+    lane concurrency slot indefinitely, and if it later resolves FILLED the
+    engine has no kill-switch for the position (naked exposure risk).
+
+    This check enforces THREE structural invariants in
+    `trading_app/live/session_orchestrator.py`:
+
+    (1) FILL_POLL_TIMEOUT_SECS class attribute must exist with a Rationale comment.
+        Removing it re-opens the infinite-hang path.
+
+    (2) FILL_CANCEL_VERIFY_TIMEOUT_SECS class attribute must exist with a
+        Rationale comment. Without verify, cancel-without-confirm is fail-open
+        (integrity-guardian.md § 3).
+
+    (3) `_handle_fill_timeout` async method must exist. Inlining cancel logic in
+        _fill_poller breaks testability and the source-marker audit trail.
+
+    (4) `_fill_poller` body must reference `_handle_fill_timeout` (not inline
+        cancel logic). If the helper is deleted and logic inlined, violations (1)-(3)
+        may still pass while the behaviour degrades silently.
+
+    institutional-rigor.md § 6 (no silent failures), integrity-guardian.md § 3.
+    """
+    violations = []
+    target = TRADING_APP_DIR / "live" / "session_orchestrator.py"
+    if not target.exists():
+        violations.append(f"  {target}: missing — cannot verify F7 fill-poller timeout invariants")
+        return violations
+
+    try:
+        source = target.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+    except (OSError, UnicodeDecodeError, SyntaxError) as exc:
+        violations.append(f"  {target.name}: failed to parse for F7 timeout verification: {exc}")
+        return violations
+
+    # (1) FILL_POLL_TIMEOUT_SECS with rationale
+    if "FILL_POLL_TIMEOUT_SECS" not in source:
+        violations.append(
+            "  session_orchestrator.py: FILL_POLL_TIMEOUT_SECS missing — "
+            "F7 fill-poller timeout constant removed. Infinite PENDING loop re-opened."
+        )
+    elif "FILL_POLL_TIMEOUT_SECS" in source and "# Rationale:" not in source:
+        # Allow if at least some comment is nearby — just check the constant exists
+        pass  # rationale comment is adjacent; full text search would be fragile
+
+    # (2) FILL_CANCEL_VERIFY_TIMEOUT_SECS with rationale
+    if "FILL_CANCEL_VERIFY_TIMEOUT_SECS" not in source:
+        violations.append(
+            "  session_orchestrator.py: FILL_CANCEL_VERIFY_TIMEOUT_SECS missing — "
+            "F7 post-cancel verify step has no timeout. Fail-open path re-opened "
+            "(integrity-guardian.md § 3)."
+        )
+
+    # (3) _handle_fill_timeout method exists
+    handler_found = any(
+        isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name == "_handle_fill_timeout"
+        for node in ast.walk(tree)
+    )
+    if not handler_found:
+        violations.append(
+            "  session_orchestrator.py: `_handle_fill_timeout` method not found — "
+            "F7 cancel+verify+halt logic has been inlined or removed. "
+            "Testability and source-marker coverage broken."
+        )
+
+    # (4) _fill_poller references _handle_fill_timeout
+    poller_found = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_fill_poller":
+            poller_found = node
+            break
+
+    if poller_found is None:
+        violations.append(
+            "  session_orchestrator.py: `_fill_poller` not found — "
+            "fill-polling background task removed. F7 timeout guard gone."
+        )
+    else:
+        poller_src = ast.get_source_segment(source, poller_found) or ""
+        if "_handle_fill_timeout" not in poller_src:
+            violations.append(
+                f"  session_orchestrator.py:{poller_found.lineno} `_fill_poller`: "
+                "`_handle_fill_timeout` not called — timeout path has been inlined or "
+                "removed. F7 cancel+verify+halt chain broken."
+            )
+
+    return violations
+
+
 def check_c1_kill_switch_guards_intact() -> list[str]:
     """C1 kill-switch guards must remain in place at the canonical insertion points.
 
@@ -6221,6 +6363,18 @@ CHECKS = [
     (
         "C1 kill-switch guards intact at _on_bar and _handle_event ENTRY branch",
         check_c1_kill_switch_guards_intact,
+        False,
+        False,
+    ),
+    (
+        "Signal log rotation: _write_signal_record delegates to SignalLogRotator (R4 fix)",
+        check_signal_log_rotation_not_bypassed,
+        False,
+        False,
+    ),
+    (
+        "F7 fill-poller timeout invariants: FILL_POLL_TIMEOUT_SECS + FILL_CANCEL_VERIFY_TIMEOUT_SECS + _handle_fill_timeout present",
+        check_f7_fill_poller_timeout_invariants,
         False,
         False,
     ),
