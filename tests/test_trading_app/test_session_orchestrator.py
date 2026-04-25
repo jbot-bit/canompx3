@@ -2121,6 +2121,72 @@ class TestR1WallClockRollover:
             "R1: hardcoded '09:00' string found in rollover loop — use compute_trading_day_utc_range"
         )
 
+    # R1-5 / S2: multi-day gap startup catch-up
+    async def test_r1_multi_day_gap_startup_catches_up(self):
+        """S2: orchestrator startup where last bar was 3 days ago — the
+        wall-clock rollover loop must fire _check_trading_day_rollover three
+        times in succession (catching up each missed day), then sleep until
+        the next genuine 09:00 Brisbane.
+
+        Mechanism: each iteration computes next_day rollover_utc via
+        compute_trading_day_utc_range. When that UTC is in the past
+        (sleep_secs <= 0) the rollover fires immediately, trading_day
+        advances by one day, and the loop re-evaluates. The cascade unwinds
+        the gap one day per iteration.
+
+        Mutation probe: removing the while-True wrapper or swapping
+        compute_trading_day_utc_range for a hardcoded next-day fall-through
+        breaks this test.
+        [R1-CATCHUP-MULTI-DAY]
+        """
+        from datetime import timezone
+
+        orch = build_orchestrator()
+        starting_day = orch.trading_day
+
+        rollover_calls: list = []
+
+        async def fake_rollover(bar_ts_utc, *, override_trading_day=None):
+            rollover_calls.append(override_trading_day)
+            # Production behaviour: rollover advances trading_day. The fake
+            # mirrors that so the loop's next iteration sees a new next_day.
+            if override_trading_day is not None:
+                orch.trading_day = override_trading_day
+            if len(rollover_calls) >= 3:
+                # After 3 catch-up rollovers, terminate cleanly.
+                raise asyncio.CancelledError("test: 3-day gap closed")
+
+        past = datetime(2026, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
+        future = datetime(2099, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
+        call_count = [0]
+
+        def mock_ctr(day):
+            # First 3 calls: past (immediate fire); thereafter: future (sleep).
+            call_count[0] += 1
+            if call_count[0] <= 3:
+                return (past, past + timedelta(hours=24))
+            return (future, future + timedelta(hours=24))
+
+        with (
+            patch.object(orch, "_check_trading_day_rollover", new=fake_rollover),
+            patch(
+                "pipeline.dst.compute_trading_day_utc_range",
+                side_effect=mock_ctr,
+            ),
+        ):
+            task = asyncio.create_task(orch._wall_clock_rollover_loop())
+            try:
+                await asyncio.wait_for(task, timeout=2.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+
+        # Three catch-up rollovers fired, each advancing by exactly one day.
+        assert len(rollover_calls) == 3
+        expected = [starting_day + timedelta(days=i + 1) for i in range(3)]
+        assert rollover_calls == expected
+        # Final state: trading_day caught up to starting_day + 3.
+        assert orch.trading_day == starting_day + timedelta(days=3)
+
 
 class TestOrchestratorReconnect:
     async def test_clean_stop_no_reconnect(self):
@@ -2225,6 +2291,46 @@ class TestOrchestratorReconnect:
         # Should have notified about exhaustion
         calls = [str(c) for c in orch._notify.call_args_list]
         assert any("Exhausted" in c for c in calls)
+
+    async def test_reconnect_path_increments_fill_reconnect_gen(self):
+        """M5: end-to-end reconnect via orchestrator.run() must increment
+        _fill_reconnect_gen exactly once per reconnect. The increment lives at
+        session_orchestrator.py:3254 inside the reconnect loop and is the
+        F7/R3 hand-off signal that lets _fill_poller drop stale timeout
+        anchors. Other tests bump the counter manually; this test exercises
+        the production reconnect path.
+        [F7-RECONNECT-GEN-E2E]
+        """
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        orch.ORCHESTRATOR_BACKOFF_INITIAL = 0.01
+        orch.ORCHESTRATOR_BACKOFF_MAX = 0.01
+        orch.ORCHESTRATOR_MAX_RECONNECTS = 3
+        assert orch._fill_reconnect_gen == 0
+
+        crash_count = 0
+
+        class CrashTwiceFeed:
+            def __init__(self, auth, on_bar, demo, on_stale=None):
+                self._stop_requested = False
+
+            @property
+            def was_stopped(self):
+                return self._stop_requested
+
+            async def run(self, symbol):
+                nonlocal crash_count
+                crash_count += 1
+                if crash_count <= 2:
+                    raise ConnectionError(f"feed crash #{crash_count}")
+                self._stop_requested = True  # third attempt: clean stop
+
+        orch._feed_class = CrashTwiceFeed
+        await orch.run()
+
+        # Two crashes → two reconnect-loop increments at production line 3254.
+        assert crash_count == 3
+        assert orch._fill_reconnect_gen == 2
 
 
 # ---------------------------------------------------------------------------
@@ -2967,6 +3073,45 @@ class TestFillPollerF7Timeout:
         # cancel must NOT have been called (timeout reset gave a fresh 60s window)
         orch.order_router.cancel.assert_not_called()
         assert orch._kill_switch_fired is False
+
+    async def test_production_fill_poll_timeout_value_fires(self):
+        """M4: exercise FILL_POLL_TIMEOUT_SECS production default WITHOUT
+        overriding the constant. All other F7 tests set
+        FILL_POLL_TIMEOUT_SECS=0.001 to fire instantly; this leaves the
+        production default in place and instead backdates state_changed_at by
+        (production_timeout + 1)s so the very first poll iteration sees an
+        already-expired anchor and fires. Asserts the production constant has
+        not silently regressed from 60.0s.
+        [F7-PROD-CONST-EXERCISE]
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        # Document the production default — assertion catches silent regression.
+        assert orch.FILL_POLL_TIMEOUT_SECS == 60.0
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=44)
+        record = orch._positions.get(STRATEGY_ID)
+        # Backdate to (prod timeout + 1)s ago — first poll iteration must fire.
+        record.state_changed_at = datetime.now(UTC) - timedelta(seconds=orch.FILL_POLL_TIMEOUT_SECS + 1)
+        orch.FILL_POLL_INTERVAL = 0.01
+        # Deliberately do NOT touch FILL_POLL_TIMEOUT_SECS.
+        orch.FILL_CANCEL_VERIFY_TIMEOUT_SECS = 0.01
+
+        orch.order_router.cancel = MagicMock()
+        orch.order_router.query_order_status = MagicMock(
+            return_value={"order_id": 44, "status": "Cancelled", "fill_price": None}
+        )
+        orch._notify = MagicMock()
+
+        task = asyncio.create_task(orch._fill_poller())
+        await asyncio.sleep(0.2)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        # Production timeout fired against the production constant.
+        orch.order_router.cancel.assert_called_once()
+        assert orch._positions.get(STRATEGY_ID) is None
 
     async def test_timeout_verify_query_failure_still_halts(self):
         """Post-cancel verify raises exception → treated as 'not confirmed' →

@@ -8,12 +8,11 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-04-25
-- **Commit:** e58e4ae4 — [mechanical] docs: Ralph Loop iter 185 — update audit state, history, ledger
-- **Files changed:** 3 files
-  - `docs/ralph-loop/ralph-ledger.json`
-  - `docs/ralph-loop/ralph-loop-audit.md`
-  - `docs/ralph-loop/ralph-loop-history.md`
+- **Date:** 2026-04-26
+- **Commit:** fb2f113a — chore(v6.1): preserve global-hardening design doc + gitignore logs/live/
+- **Files changed:** 2 files
+  - `.gitignore`
+  - `docs/plans/2026-04-25-claude-code-global-hardening-design.md`
 
 ## Next Steps — Active
 
