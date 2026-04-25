@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 176 — 2026-04-25
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py:ORCHESTRATOR_MAX_RECONNECTS + run() reconnect loop; trading_app/live/session_safety_state.py:last_connected_at
+- Finding: R3 HIGH — ORCHESTRATOR_MAX_RECONNECTS=5 too low for 24h; no stable-run reset; counter was monotonic for process lifetime
+- Doctrine cited: institutional-rigor.md § 6 (no silent halt); integrity-guardian.md § 3 (fail-closed); institutional-rigor.md § 4 (reuse SessionSafetyState)
+- Action: Bumped ceiling 5->50 with operational rationale comment. Added ORCHESTRATOR_STABLE_RUN_SECS=1800. Converted for-loop to while+mutable-counter for reset. Fail-closed state persist (log.error on failure, reset still applies in-memory). Added last_connected_at field to SessionSafetyState. 4 mutation-proof tests added (TestR3ReconnectCeiling).
+- Blast radius: 3 files (session_orchestrator.py, session_safety_state.py, test_session_orchestrator.py)
+- Verification: PASS — 156/156 tests green, 107/107 drift
+- Commit: 64d0952d
+
+---
+
 ## Iteration 175 — 2026-04-25
 - Phase: fix
 - Classification: [judgment]

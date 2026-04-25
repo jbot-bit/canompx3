@@ -3,39 +3,43 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 175
+## Last iteration: 176
 
-## RALPH AUDIT — Iteration 175
+## RALPH AUDIT — Iteration 176
 ## Date: 2026-04-25
-## Infrastructure Gates: drift 107/107 PASS; 152/152 test_session_orchestrator.py PASS
-## Scope: R1 (CRITICAL) — trading-day rollover only fires from _on_bar; feed-down at 09:00 Brisbane misses rollover
+## Infrastructure Gates: drift 107/107 PASS; 156/156 test_session_orchestrator.py PASS
+## Scope: R3 (HIGH) — ORCHESTRATOR_MAX_RECONNECTS=5 too low for 24h operation
 
 ---
 
-## Iteration 175 — R1 Wall-Clock Rollover Fix
+## Iteration 176 — R3 Reconnect Ceiling Fix
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Silent failure / State persistence gap (institutional-rigor.md § 6; integrity-guardian.md § 3) | `_check_trading_day_rollover` was only called from `_on_bar`. If the bar feed is down at 09:00 Brisbane (reconnecting, auth expiry, holiday gap), the trading day is never rolled. Engine keeps yesterday's ORB windows, calendar flags, daily P&L counters, and risk limits — every subsequent bar is misclassified. | CRITICAL | FIXED — iter 175 |
+| Silent failure / Fail-open (institutional-rigor.md § 6; integrity-guardian.md § 3) | `ORCHESTRATOR_MAX_RECONNECTS = 5` exhausts in <30 min on a flaky network, silently halting a 24h demo run with no recourse. No stable-run reset existed — the counter was monotonic for the process lifetime. | HIGH | FIXED — iter 176 |
 
 ### Fix Summary
-- Refactored `_check_trading_day_rollover` to accept `override_trading_day: date | None` — wall-clock path passes override, skipping bar-timestamp derivation.
-- Added `_wall_clock_rollover_loop()` — mirrors `_heartbeat_notifier` lifecycle; sleeps until `compute_trading_day_utc_range(next_day)` UTC boundary (never hardcodes 09:00); fires `_check_trading_day_rollover(None, override_trading_day=next_day)`.
-- `run()`: `rollover_task = asyncio.create_task(_wall_clock_rollover_loop())`
-- `finally:`: `rollover_task.cancel()`
-- 4 mutation-proof tests: `TestR1WallClockRollover` (feed-down behavioral, None-bar-ts safety, idempotency guard, source-text probe).
+- `ORCHESTRATOR_MAX_RECONNECTS`: 5 -> 50. Rationale: 2 reconnects/hr x 24h + 2 buffer = 50. At BACKOFF_MAX (5 min), 50 reconnects = up to 4h of pure backoff before halt.
+- Added `ORCHESTRATOR_STABLE_RUN_SECS = 1800` (30 min). Feed UP >= 30 min -> counter resets to 0 and backoff resets to BACKOFF_INITIAL.
+- Persistence: `SessionSafetyState.last_connected_at` (new field) records last stable-run UTC timestamp.
+- Fail-closed: if `_safety_state.save()` fails, `log.error` and continue — reset still applies in-memory (integrity-guardian.md § 3).
+- Converted `for attempt in range()` -> `while reconnect_count <= MAX` to allow in-loop counter reset.
+- 4 mutation-proof tests: `TestR3ReconnectCeiling`.
 
-### Canonical Source Citation
-`pipeline.dst.compute_trading_day_utc_range` — never hardcoded `datetime.time(9, 0)`.
+### Doctrine Cited
+- institutional-rigor.md § 6 (no silent halt)
+- integrity-guardian.md § 3 (fail-closed: state-write failure degrades gracefully)
+- institutional-rigor.md § 4 (reuse `SessionSafetyState` persistence — no new layer)
 
 ### Verification
-- 152/152 tests green
+- 156/156 tests green (up from 152 — 4 new R3 tests)
 - 107/107 drift pass
-- Commit: 6dafda10
+- Commit: 64d0952d
 
 ---
 
 ## Files Fully Scanned
-- trading_app/live/session_orchestrator.py (iters 173, 174, 175)
-- tests/test_trading_app/test_session_orchestrator.py (iters 173, 174, 175)
+- trading_app/live/session_orchestrator.py (iters 173, 174, 175, 176)
+- trading_app/live/session_safety_state.py (iter 176)
+- tests/test_trading_app/test_session_orchestrator.py (iters 173, 174, 175, 176)
 - scripts/infra/telegram_feed.py (iter 173)
