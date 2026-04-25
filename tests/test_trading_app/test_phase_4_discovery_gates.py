@@ -31,6 +31,7 @@ def _make_fixture_db() -> duckdb.DuckDBPyConnection:
     con.execute("""
         CREATE TABLE experimental_strategies (
             strategy_id TEXT,
+            instrument TEXT DEFAULT 'MNQ',
             hypothesis_file_sha TEXT,
             created_at TIMESTAMPTZ,
             orb_minutes INTEGER DEFAULT 5
@@ -111,6 +112,27 @@ class TestCheckGitCleanlinessIntegration:
     """One end-to-end test against a real temp git repo to verify the
     mocked unit tests don't diverge from real git behavior. Covers the
     full tracked+committed → edit → clean workflow in one scenario."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_git_env(self, monkeypatch):
+        """Drop GIT_* env vars so subprocess git calls obey cwd=tmp_path.
+
+        Without this, running these tests under a pre-commit hook (or any
+        parent that exports GIT_DIR/GIT_WORK_TREE) routes the temp-repo
+        commits to the parent worktree. monkeypatch auto-restores on
+        teardown, so a single autouse fixture protects every test in the
+        class plus any test added later.
+        """
+        for var in (
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_COMMON_DIR",
+            "GIT_NAMESPACE",
+            "GIT_PREFIX",
+        ):
+            monkeypatch.delenv(var, raising=False)
 
     def test_real_git_tracked_clean_dirty_sequence(self, tmp_path, monkeypatch):
         # Build a minimal git repo in tmp_path
@@ -279,6 +301,22 @@ class TestCheckSingleUse:
         )
         with pytest.raises(HypothesisLoaderError, match="already been used"):
             check_single_use("shared_sha", con, orb_minutes=15)
+
+    def test_different_instrument_same_aperture_does_not_block_when_scoped(self):
+        """Multi-instrument preregs can run one instrument at a time without
+        falsely colliding, while same instrument+aperture still blocks."""
+        con = _make_fixture_db()
+        con.execute(
+            "INSERT INTO experimental_strategies "
+            "(strategy_id, instrument, hypothesis_file_sha, created_at, orb_minutes) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ["mnq_O5", "MNQ", "shared_sha", datetime(2026, 4, 13, 9, 0, 0, tzinfo=UTC), 5],
+        )
+
+        check_single_use("shared_sha", con, instrument="MGC", orb_minutes=5)
+
+        with pytest.raises(HypothesisLoaderError, match="instrument=MNQ"):
+            check_single_use("shared_sha", con, instrument="MNQ", orb_minutes=5)
 
     def test_legacy_no_orb_minutes_still_blocks_globally(self):
         """When orb_minutes is None (legacy), ANY row with the SHA blocks."""

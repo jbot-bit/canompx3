@@ -12,9 +12,14 @@ from pathlib import Path
 
 import duckdb
 
-from pipeline.paths import DAILY_DBN_DIR, GOLD_DB_PATH
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, require_dbn_available
+from pipeline.paths import GOLD_DB_PATH
 
 PROJECT_ROOT = Path(__file__).parent.parent
+DRIFT_TIMEOUT_SECONDS = 120
+TEST_TIMEOUT_SECONDS = 600
+INTEGRITY_TIMEOUT_SECONDS = 60
+M25_TIMEOUT_SECONDS = 300
 
 
 def check_python_deps() -> tuple[bool, str]:
@@ -91,13 +96,25 @@ def check_database() -> tuple[bool, str]:
 
 
 def check_dbn_files() -> tuple[bool, str]:
-    """Check DBN files are present."""
-    if not DAILY_DBN_DIR.exists():
-        return False, f"Data dir missing: {DAILY_DBN_DIR}"
-    count = len(list(DAILY_DBN_DIR.glob("glbx-mdp3-*.ohlcv-1m.dbn.zst")))
-    if count == 0:
-        return False, "No .dbn.zst files found"
-    return True, f"{count:,} DBN files present"
+    """Check raw DBN stores are present for active ORB instruments."""
+    missing: list[str] = []
+    file_count = 0
+
+    for instrument in ACTIVE_ORB_INSTRUMENTS:
+        try:
+            dbn_path = require_dbn_available(instrument)
+        except (FileNotFoundError, ValueError) as e:
+            missing.append(f"{instrument}: {e}")
+            continue
+
+        if dbn_path.is_file():
+            file_count += 1
+        else:
+            file_count += sum(1 for _ in dbn_path.rglob("*.dbn.zst"))
+
+    if missing:
+        return False, "Missing raw DBN store(s): " + "; ".join(missing)
+    return True, f"Raw DBN stores present for {len(ACTIVE_ORB_INSTRUMENTS)} active instruments ({file_count:,} files)"
 
 
 def check_drift() -> tuple[bool, str]:
@@ -107,7 +124,7 @@ def check_drift() -> tuple[bool, str]:
             [sys.executable, "pipeline/check_drift.py"],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=DRIFT_TIMEOUT_SECONDS,
             cwd=str(PROJECT_ROOT),
         )
         if proc.returncode == 0:
@@ -123,6 +140,8 @@ def check_drift() -> tuple[bool, str]:
         if total > 0:
             return False, f"Drift detection: {passed}/{total} passing ({failed} FAILED)"
         return False, "Drift detection: FAILED"
+    except subprocess.TimeoutExpired:
+        return False, f"Drift detection timed out after {DRIFT_TIMEOUT_SECONDS}s"
     except Exception as e:
         return False, f"Drift detection error: {e}"
 
@@ -134,7 +153,7 @@ def check_tests() -> tuple[bool, str]:
             [sys.executable, "-m", "pytest", "tests/", "-x", "-q", "--tb=no"],
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=TEST_TIMEOUT_SECONDS,
             cwd=str(PROJECT_ROOT),
         )
         # Parse "N passed" from output
@@ -142,6 +161,8 @@ def check_tests() -> tuple[bool, str]:
             if "passed" in line:
                 return proc.returncode == 0, f"Tests: {line.strip()}"
         return proc.returncode == 0, f"Tests: exit code {proc.returncode}"
+    except subprocess.TimeoutExpired:
+        return False, f"Tests timed out after {TEST_TIMEOUT_SECONDS}s"
     except Exception as e:
         return False, f"Tests error: {e}"
 
@@ -153,7 +174,7 @@ def check_integrity() -> tuple[bool, str]:
             [sys.executable, "scripts/tools/audit_integrity.py"],
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=INTEGRITY_TIMEOUT_SECONDS,
             cwd=str(PROJECT_ROOT),
         )
         if proc.returncode == 0:
@@ -235,7 +256,7 @@ def check_m25_audit() -> tuple[bool, str]:
             [sys.executable, "scripts/tools/m25_auto_audit.py", "--since", "HEAD~1", "--quick", "--advisory"],
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=M25_TIMEOUT_SECONDS,
             cwd=str(PROJECT_ROOT),
         )
         # Parse output for summary line
@@ -264,13 +285,15 @@ def main():
         check_git_hooks,
     ]
 
-    # Phase 2: Slow subprocess checks (parallel)
-    slow_checks = [
+    # Phase 2: Slow subprocess checks that can safely run in parallel.
+    # The full pytest leg is intentionally excluded here: running the entire
+    # suite alongside drift / integrity / M2.5 subprocesses creates enough
+    # shared-resource contention to manufacture false failures.
+    parallel_slow_checks = [
         check_drift,
-        check_integrity,
-        check_tests,
         check_m25_audit,
     ]
+    serial_slow_checks = [check_integrity, check_tests]
 
     all_ok = True
 
@@ -289,7 +312,7 @@ def main():
     print("  Running slow checks in parallel...")
     results = {}
     with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {pool.submit(check): check.__name__ for check in slow_checks}
+        futures = {pool.submit(check): check.__name__ for check in parallel_slow_checks}
         for future in as_completed(futures):
             name = futures[future]
             try:
@@ -299,8 +322,17 @@ def main():
             results[name] = (ok, msg)
 
     # Print slow check results (deterministic order, not completion order)
-    for check in slow_checks:
+    for check in parallel_slow_checks:
         ok, msg = results[check.__name__]
+        status = "[OK]" if ok else "[FAIL]"
+        print(f"  {status} {msg}")
+        if not ok:
+            all_ok = False
+
+    print()
+    print("  Running serial slow checks...")
+    for check in serial_slow_checks:
+        ok, msg = check()
         status = "[OK]" if ok else "[FAIL]"
         print(f"  {status} {msg}")
         if not ok:

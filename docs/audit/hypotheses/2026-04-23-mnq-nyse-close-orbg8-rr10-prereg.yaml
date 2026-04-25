@@ -1,0 +1,42 @@
+metadata:
+  name: "mnq-nyse-close-orbg8-rr10-prereg"
+  purpose: "Exact native governance prereg for MNQ NYSE_CLOSE O5 E2 RR1.0 ORB_G8, promoted from the 2026-04-23 failure-mode follow-up as the highest-EV unresolved path"
+  date_locked: "2026-04-23T23:59:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "individual"
+
+hypotheses:
+  - id: 1
+    name: "MNQ NYSE_CLOSE RR1.0 ORB_G8 take"
+    theory_citation: |
+      Repo-local grounding:
+      - docs/audit/results/2026-04-19-mnq-nyse-close-failure-mode-audit.md
+      - docs/audit/results/2026-04-23-mnq-nyse-close-rr10-followup.md
+      - docs/audit/hypotheses/2026-04-09-mnq-comprehensive.yaml
+      - docs/audit/hypotheses/2026-04-13-wave4-session-rr-expansion.yaml
+    economic_basis: |
+      NYSE closing-auction flow is the native mechanism already established for
+      MNQ NYSE_CLOSE RR1.0. The honest unresolved question is not whether some
+      new filter family exists, but whether the already-locked ORB-size gate
+      (`ORB_G8`) survives as the exact native governance path on the broad
+      O5 RR1.0 lane.
+    filter:
+      type: "ORB_G8"
+      column: "orb_NYSE_CLOSE_size"
+      thresholds:
+        - "ORB size >= 8.0 points"
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_CLOSE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      orb_minutes: [5]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Canonical filter delegation does not reproduce the exact MNQ NYSE_CLOSE O5 E2 CB1 RR1.0 lane"
+      - "IS on-signal expectancy is non-positive or one-sample t-statistic is materially below the prereg threshold"
+      - "Any pre-2026 calendar year with N_on >= 50 has ExpR < -0.05"
+      - "2026 OOS on-signal subset flips negative once N_on_OOS >= 10"

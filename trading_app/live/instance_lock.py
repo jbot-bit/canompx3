@@ -39,7 +39,7 @@ def acquire_instance_lock(instrument: str) -> None:
             content = lock_path.read_text().strip()
             if content:
                 old_pid = int(content)
-                if _is_pid_alive(old_pid):
+                if is_pid_alive(old_pid):
                     log.critical(
                         "Another bot instance is running (PID %d). If stale, delete %s and retry.",
                         old_pid,
@@ -121,7 +121,7 @@ def _release_one(instrument: str) -> None:
     lock_path.unlink(missing_ok=True)
 
 
-def _is_pid_alive(pid: int) -> bool:
+def is_pid_alive(pid: int) -> bool:
     if sys.platform == "win32":
         import ctypes
 

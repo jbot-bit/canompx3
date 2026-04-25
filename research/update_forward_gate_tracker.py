@@ -7,15 +7,18 @@ Applies frozen presets per strategy id.
 
 from __future__ import annotations
 
-from pathlib import Path
-from datetime import datetime
 import re
+from datetime import datetime
+from pathlib import Path
+
 import duckdb
-import pandas as pd
 import numpy as np
+import pandas as pd
+
+from pipeline.paths import GOLD_DB_PATH
 
 ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "gold.db"
+DB_PATH = GOLD_DB_PATH
 REG_PATH = ROOT / "research" / "output" / "shinies_registry.csv"
 TRACKER_PATH = ROOT / "research" / "output" / "forward_gate_tracker.csv"
 STATUS_LATEST_PATH = ROOT / "research" / "output" / "forward_gate_status_latest.md"

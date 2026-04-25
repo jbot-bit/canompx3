@@ -130,6 +130,18 @@ def compute_trading_day_utc_range(trading_day: date) -> tuple[datetime, datetime
     return start_utc, end_utc
 
 
+def compute_trading_day_from_timestamp(ts: datetime) -> date:
+    """
+    Assign an aware timestamp to its Brisbane trading day.
+
+    Trading day boundary is 09:00 Brisbane. Callers must pass timezone-aware
+    timestamps so UTC/local ambiguity cannot silently change the trading day.
+    """
+    if ts.tzinfo is None:
+        raise ValueError("compute_trading_day_from_timestamp requires a timezone-aware timestamp")
+    return (ts.astimezone(BRISBANE_TZ) - timedelta(hours=TRADING_DAY_START_HOUR_LOCAL)).date()
+
+
 # Note: `orb_utc_window` (the canonical ORB window function) is defined
 # further down in this module, AFTER `DYNAMIC_ORB_RESOLVERS` is populated
 # from SESSION_CATALOG. This ordering is deliberate: placing the function

@@ -223,6 +223,11 @@ class TestAllFiltersSync:
         "ATR_VEL_GE105",
         "ATR_VEL_GE110",
         "ATR_VEL_GE115",
+        # Exact MNQ prior-day geometry filters (Apr 2026 bounded family bridge).
+        "F3_NEAR_PIVOT_50",
+        "PD_DISPLACE_LONG",
+        "PD_CLEAR_LONG",
+        "PD_GO_LONG",
         # GARCH forecast vol rolling percentile (Apr 2026 Wave 5 G5 deployment).
         # Phase B T2-T8 survivor: MNQ NYSE_OPEN RR1.5 LOW-vol regime,
         # in_ExpR +0.240, WFE 1.00, p=0.042. Rolling 252d percentile from
@@ -277,8 +282,8 @@ class TestAllFiltersSync:
         from trading_app.config import (
             ATRVelRatioFilter,
             CompositeFilter,
-            CrossSessionMomentumFilter,
             CrossAssetATRFilter,
+            CrossSessionMomentumFilter,
             DirectionFilter,
             GapNormFilter,
             GARCHForecastVolPctFilter,
@@ -286,6 +291,7 @@ class TestAllFiltersSync:
             OvernightRangeAbsFilter,
             OwnATRPercentileFilter,
             PitRangeFilter,
+            PrevDayGeometryFilter,
             PrevDayRangeNormFilter,
         )
 
@@ -302,6 +308,7 @@ class TestAllFiltersSync:
                     OvernightRangeAbsFilter,
                     OwnATRPercentileFilter,
                     PrevDayRangeNormFilter,
+                    PrevDayGeometryFilter,
                     GapNormFilter,
                     PitRangeFilter,
                     ATRVelRatioFilter,

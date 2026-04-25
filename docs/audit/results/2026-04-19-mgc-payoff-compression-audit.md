@@ -51,6 +51,18 @@ Interpretation should stay disciplined:
 - it is evidence that `RR1.0` may still be too ambitious for 5-minute `MGC` in these
   sessions, including beyond the narrow translated warm rows
 
+## Verdict Labels
+
+- `PAYOFF_COMPRESSION_REAL`: YES
+- `LOW_RR_RESCUE_PLAUSIBLE`: YES
+- `NO_RESCUE_SIGNAL`: NO
+
+## Recommended Next Move
+
+- Treat this item as actioned and closed at the diagnostic stage.
+- If revisited, do it as a narrow MGC 5-minute exit-shape / lower-target prereg.
+- Do not reopen broad GC proxy discovery or treat this as a generic gold deployment claim.
+
 ## Family Summary
 
 | Family | Kind | N | Raw avg R | T80 avg R | 0.5R avg | 0.75R avg | reach 0.5 | reach 0.75 | time-stop | ambiguous |

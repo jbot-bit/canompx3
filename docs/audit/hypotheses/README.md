@@ -8,14 +8,33 @@
 
 ## Workflow
 
+0. **Use the agent-facing contract** in [`docs/institutional/research_pipeline_contract.md`](../../institutional/research_pipeline_contract.md). The human-facing workflow is natural language; agents use repo tooling internally.
+   First classify the request as `standalone_discovery`, `conditional_role`,
+   `confirmation`, `deployment_readiness`, or `operations`.
 1. **Read** [`docs/institutional/pre_registered_criteria.md`](../../institutional/pre_registered_criteria.md) — the 12 locked criteria any strategy must meet. Note the v2 amendments (DSR as cross-check, Chordia banded, Criterion 8 contingent on holdout policy).
 2. **Read** [`docs/institutional/finite_data_framework.md`](../../institutional/finite_data_framework.md) — the short-sample methodology.
 3. **Declare holdout policy** — **Mode A (holdout-clean) is operative project-wide as of 2026-04-08 per Amendment 2.7.** Sacred window is 2026-01-01 onwards. Every hypothesis file must include `holdout_date: 2026-01-01` (or earlier) in its metadata. Mode B was briefly declared 2026-04-07 and rescinded the next day; see `../../plans/2026-04-07-holdout-policy-decision.md` for the audit trail.
 4. **Compute the MinBTL bound** — `MinBTL = 2·Ln[N] / E[max_N]²` with N = total pre-registered trials. If `MinBTL > available_clean_data_years`, reduce N. No exceptions.
 5. **Copy the template** — `cp docs/institutional/hypothesis_registry_template.md docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml` and fill in the specifics.
 6. **Commit the hypothesis file BEFORE any backtest code runs.** The pre-commit hook captures the committing SHA as the lock point.
-7. **Run discovery** with `--hypothesis-file` pointing at the committed file. (The `--hypothesis-file` CLI arg is not yet wired into `strategy_discovery.py`; see `docs/plans/2026-04-07-canonical-data-redownload.md` § Phase 4a for the follow-up task.)
-8. **Report results against the pre-registered kill criteria** — no retroactive broadening of the family.
+7. **Inspect the route first** with the prereg front door. This is an internal
+   agent/operator guard, not a command the user must memorize:
+   - `scripts/infra/prereg-loop.sh --hypothesis-file docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml`
+   - This tells you whether the prereg is a `grid_discovery` object that writes to `experimental_strategies` or a `bounded_runner` object that stays in a dedicated result-doc flow.
+8. **Execute the prereg on the correct branch**:
+   - `standalone_edge` / `grid_discovery`:
+     - `scripts/infra/prereg-loop.sh --hypothesis-file docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml --execute`
+     - Output lands in `experimental_strategies`, then must go through `trading_app/strategy_validator.py` before anything reaches `validated_setups`.
+     - For multi-instrument or multi-aperture preregs, execute once per
+       disjoint slice using `--instrument` and/or `--orb-minutes`; the
+       single-use gate is scoped by hypothesis SHA + instrument + aperture.
+   - `conditional_role` / `bounded_runner`:
+     - use the prereg front door with `--runner ...` or add an `execution.entrypoint` block to the prereg
+     - output lands in a bounded result artifact, not in `experimental_strategies`
+9. **Report results against the pre-registered kill criteria** — no retroactive broadening of the family.
+10. **Classify status correctly** — validation does not require live routing or
+    `paper_trades`; deployment does not create research proof.
+    Execution records do not create research proof either.
 
 ---
 
@@ -60,12 +79,21 @@ See [`docs/institutional/hypothesis_registry_template.md`](../../institutional/h
 - **Amending a locked file to rescue a failing hypothesis.** Supersede only.
 - **Citing the template or another hypothesis file as justification.** Each file must cite external literature.
 - **Mixing holdout modes.** Amendment 2.3 — declare A or B, commit to one.
+- **Treating every prereg as a grid-discovery object.** `conditional_role` and other bounded studies do not belong in `experimental_strategies` unless they are explicitly designed for that path.
 
 ### Required
 
 - **Theory before data.** LdP 2020 Lesson 1 (`literature/lopez_de_prado_2020_ml_for_asset_managers.md` § 1.2.1): *"Contrary to popular belief, backtesting is not a research tool. Backtests can never prove that a strategy is a true positive."*
 - **Kill criteria pre-committed.** The hypothesis must specify what outcome would refute it, written before results are seen.
 - **Provenance.** Every threshold in the file must reference either a literature extract in [`docs/institutional/literature/`](../../institutional/literature/) or a prior validated finding in this repo (with commit SHA).
+- **Pipeline branch must be explicit.** A prereg must make it obvious whether it routes to `experimental_strategies` (`standalone_edge`) or to a bounded result-doc runner (`conditional_role` / other non-grid studies).
+- **Pipeline status must be explicit.** Use the status ladder in
+  [`docs/institutional/research_pipeline_contract.md`](../../institutional/research_pipeline_contract.md):
+  discovered, confirmed, validated, deployed, and executed are different
+  claims.
+- **Pipeline route must be explicit.** Use one primary route:
+  `standalone_discovery`, `conditional_role`, `confirmation`,
+  `deployment_readiness`, or `operations`.
 
 ---
 

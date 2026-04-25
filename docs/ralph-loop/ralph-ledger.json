@@ -1,30 +1,30 @@
 {
-  "total_iterations": 161,
-  "last_updated": "2026-04-18",
-  "consecutive_low_only": 5,
-  "last_high_finding_iter": 163,
+  "total_iterations": 170,
+  "last_updated": "2026-04-25",
+  "consecutive_low_only": 1,
+  "last_high_finding_iter": 176,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 55,
-      "fixed": 42,
+      "found": 56,
+      "fixed": 43,
       "deferred": 4,
-      "fix_rate": 0.76
+      "fix_rate": 0.77
     },
     "silent_failure": {
-      "found": 36,
-      "fixed": 34,
-      "deferred": 1,
-      "fix_rate": 0.94
+      "found": 39,
+      "fixed": 36,
+      "deferred": 2,
+      "fix_rate": 0.92
     },
     "other": {
-      "found": 24,
-      "fixed": 12,
+      "found": 27,
+      "fixed": 15,
       "deferred": 3,
-      "fix_rate": 0.5
+      "fix_rate": 0.56
     },
     "dead_code": {
-      "found": 15,
-      "fixed": 15,
+      "found": 16,
+      "fixed": 16,
       "deferred": 0,
       "fix_rate": 1.0
     },
@@ -111,23 +111,34 @@
       "fixed": 1,
       "deferred": 0,
       "fix_rate": 1.0
+    },
+    "fail_closed_fix": {
+      "found": 1,
+      "fixed": 0,
+      "deferred": 1,
+      "fix_rate": 0.0
     }
   },
   "findings_by_severity": {
-    "CRITICAL": 3,
-    "HIGH": 12,
-    "MEDIUM": 42,
-    "LOW": 104
+    "CRITICAL": 5,
+    "HIGH": 13,
+    "MEDIUM": 45,
+    "LOW": 107
   },
   "classifications": {
-    "judgment": 74,
-    "mechanical": 58,
+    "judgment": 80,
+    "mechanical": 61,
     "audit-only": 29
   },
   "files_audited": {
     "execution_engine.py": {
       "audit_count": 6,
       "last_iter": 24,
+      "findings": 4
+    },
+    "trading_app/live/session_orchestrator.py": {
+      "audit_count": 6,
+      "last_iter": 185,
       "findings": 4
     },
     "trading_app/execution_engine.py": {
@@ -154,6 +165,11 @@
       "audit_count": 4,
       "last_iter": 119,
       "findings": 3
+    },
+    "trading_app/outcome_builder.py": {
+      "audit_count": 4,
+      "last_iter": 170,
+      "findings": 4
     },
     "webhook_server.py": {
       "audit_count": 3,
@@ -190,15 +206,15 @@
       "last_iter": 43,
       "findings": 3
     },
-    "trading_app/outcome_builder.py": {
-      "audit_count": 3,
-      "last_iter": 115,
-      "findings": 3
-    },
     "trading_app/strategy_discovery.py": {
       "audit_count": 3,
       "last_iter": 116,
       "findings": 3
+    },
+    "trading_app/db_manager.py": {
+      "audit_count": 3,
+      "last_iter": 169,
+      "findings": 2
     },
     "scripts/tools/build_edge_families.py": {
       "audit_count": 3,
@@ -250,6 +266,11 @@
       "last_iter": 158,
       "findings": 2
     },
+    "trading_app/risk_manager.py": {
+      "audit_count": 2,
+      "last_iter": 172,
+      "findings": 1
+    },
     "trading_app/strategy_fitness.py": {
       "audit_count": 2,
       "last_iter": 49,
@@ -259,11 +280,6 @@
       "audit_count": 2,
       "last_iter": 118,
       "findings": 2
-    },
-    "trading_app/db_manager.py": {
-      "audit_count": 2,
-      "last_iter": 120,
-      "findings": 1
     },
     "trading_app/prop_portfolio.py": {
       "audit_count": 2,
@@ -333,6 +349,11 @@
     "research/research_1015_vs_1000.py": {
       "audit_count": 2,
       "last_iter": 109,
+      "findings": 2
+    },
+    "trading_app/lane_allocator.py": {
+      "audit_count": 2,
+      "last_iter": 171,
       "findings": 2
     },
     "trading_app/pre_session_check.py": {
@@ -438,11 +459,6 @@
     "trading_app/market_state.py": {
       "audit_count": 1,
       "last_iter": 38,
-      "findings": 1
-    },
-    "trading_app/risk_manager.py": {
-      "audit_count": 1,
-      "last_iter": 39,
       "findings": 1
     },
     "trading_app/entry_rules.py": {
@@ -990,11 +1006,6 @@
       "last_iter": 141,
       "findings": 0
     },
-    "trading_app/lane_allocator.py": {
-      "audit_count": 1,
-      "last_iter": 143,
-      "findings": 1
-    },
     "trading_app/live/multi_runner.py": {
       "audit_count": 1,
       "last_iter": 144,
@@ -1089,6 +1100,21 @@
       "audit_count": 1,
       "last_iter": 168,
       "findings": 0
+    },
+    "lane_correlation.py": {
+      "audit_count": 1,
+      "last_iter": 171,
+      "findings": 1
+    },
+    "scripts/infra/telegram_feed.py": {
+      "audit_count": 1,
+      "last_iter": 173,
+      "findings": 0
+    },
+    "trading_app/live/session_safety_state.py": {
+      "audit_count": 1,
+      "last_iter": 176,
+      "findings": 1
     }
   },
   "iterations": [
@@ -2862,6 +2888,105 @@
       "severity": "LOW",
       "verdict": "NOTED",
       "commit": "NONE"
+    },
+    {
+      "iter": 169,
+      "date": "2026-04-25",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/db_manager.py:verify_trading_app_schema (lines 883-965)",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "6811640a"
+    },
+    {
+      "iter": 170,
+      "date": "2026-04-25",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/outcome_builder.py:_compute_outcomes_all_rr (line 217)",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "9b16c4eb"
+    },
+    {
+      "iter": 171,
+      "date": "2026-04-25",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/lane_allocator.py:506 (finding rooted in lane_correlation.py audit)",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "9809f1b8"
+    },
+    {
+      "iter": 172,
+      "date": "2026-04-25",
+      "phase": "audit-only",
+      "classification": "judgment",
+      "target": "trading_app/live/session_orchestrator.py:386-387 + trading_app/risk_manager.py:220-229",
+      "finding_type": "fail_closed_fix",
+      "severity": "CRITICAL",
+      "verdict": "NOTED",
+      "commit": "ca363e1a (fix, pre-landed)"
+    },
+    {
+      "iter": 173,
+      "date": "2026-04-25",
+      "phase": "audit-only",
+      "classification": "judgment",
+      "target": "trading_app/live/session_orchestrator.py (e02c529d), scripts/infra/telegram_feed.py",
+      "finding_type": "silent_failure",
+      "severity": "LOW",
+      "verdict": "NOTED",
+      "commit": "(audit-only, no code change \u2014 ledger/audit-doc commit)"
+    },
+    {
+      "iter": 174,
+      "date": "2026-04-25",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/session_orchestrator.py:1666-1740 (_submit_bracket)",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "87dffa38"
+    },
+    {
+      "iter": 175,
+      "date": "2026-04-25",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/session_orchestrator.py:_check_trading_day_rollover + _wall_clock_rollover_loop (new) + run() + finally",
+      "finding_type": "other",
+      "severity": "CRITICAL",
+      "verdict": "FIXED",
+      "commit": "6dafda10"
+    },
+    {
+      "iter": 176,
+      "date": "2026-04-25",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/session_orchestrator.py:ORCHESTRATOR_MAX_RECONNECTS + run() reconnect loop; trading_app/live/session_safety_state.py:last_connected_at",
+      "finding_type": "other",
+      "severity": "HIGH",
+      "verdict": "FIXED",
+      "commit": "64d0952d"
+    },
+    {
+      "iter": 185,
+      "date": "2026-04-25",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/session_orchestrator.py:2749 (_fill_poller)",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "f69b9fd8"
     }
   ]
 }

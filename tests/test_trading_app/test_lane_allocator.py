@@ -12,7 +12,6 @@ import duckdb
 import pytest
 
 from trading_app.lane_allocator import (
-    CORRELATION_REJECT_RHO,
     LaneScore,
     _classify_status,
     _effective_annual_r,
@@ -23,6 +22,7 @@ from trading_app.lane_allocator import (
     generate_report,
     load_sr_state,
 )
+from trading_app.lane_correlation import RHO_REJECT_THRESHOLD
 
 
 # ── Factories ──────────────────────────────────────────────────────
@@ -893,7 +893,7 @@ class TestCorrelationAwareSelection:
         """Exactly at threshold should pass (> not >=)."""
         a = _make_score(strategy_id="A", annual_r_estimate=44.0)
         b = _make_score(strategy_id="B", orb_label="EUROPE_FLOW", annual_r_estimate=40.0)
-        corr = {("A", "B"): CORRELATION_REJECT_RHO}  # exactly at threshold
+        corr = {("A", "B"): RHO_REJECT_THRESHOLD}  # exactly at threshold
         result = build_allocation([a, b], max_slots=5, correlation_matrix=corr)
         # At threshold (not above) → both selected
         assert len(result) == 2

@@ -1,10 +1,23 @@
 # PP-167 — Per-(session, instrument) ORB Cap Design Proposal
 
 **Created:** 2026-04-19
-**Status:** DRAFT — design-proposal-gate. No code changes authorized by this document. User sign-off required before any implementation.
+**Status:** IMPLEMENTED — landed on `main` 2026-04-23 after autonomous follow-through on the repo cleanup queue.
 **Owner:** canompx3
 **Campaign:** 2026-04-19 MAX-EV extraction campaign, Phase 4.1
 **Authority:** `.claude/rules/institutional-rigor.md` § Design Proposal Gate; `.claude/rules/branch-discipline.md`
+
+## Implementation outcome
+
+The recommended option **(a)** was implemented on `2026-04-23`:
+
+- `get_lane_registry()` now returns `dict[tuple[str, str], dict]` keyed by `(orb_label, instrument)`.
+- `trading_app/live/session_orchestrator.py` now loads and checks ORB caps with the same `(session, instrument)` key.
+- The remaining runtime registry consumers (`scripts/tools/slippage_scenario.py` and `scripts/tools/forward_monitor.py`) were updated in the same change so the key-shape migration landed closed.
+- Targeted verification passed:
+  - `./.venv-wsl/bin/pytest tests/test_trading_app/test_prop_profiles.py tests/test_trading_app/test_session_orchestrator.py -q`
+  - `./.venv-wsl/bin/python pipeline/check_drift.py`
+
+`self_funded_tradovate.active` was intentionally left unchanged. Repo truth still says activation is gated on opening the account and passing API tests (`trading_app/prop_profiles.py`), and the readiness/deployment audits still classify that surface as not currently deployable (`docs/audit/results/2026-04-19-dormant-profile-activation-readiness-scan.md`, `docs/audit/results/2026-04-19-validated-shelf-vs-live-deployment-audit.md`). This change closes the false schema conflict without promoting an unready profile.
 
 ---
 

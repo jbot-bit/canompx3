@@ -29,6 +29,23 @@ RESEARCH_DIR = PROJECT_ROOT / "research"
 # Module-level override for tests; production uses GOLD_DB_PATH from pipeline.paths
 GOLD_DB_PATH_FOR_CHECKS = None  # Set by tests; production uses GOLD_DB_PATH
 
+ACTIVE_DB_PATH_SCAN_DIRS = [
+    RESEARCH_DIR,
+    SCRIPTS_DIR / "research",
+]
+
+ACTIVE_DB_PATH_SKIP_FILES = {
+    "pipeline/paths.py",
+    "research/research_alt_stops.py",
+    "research/research_false_breakout_bqs_tests.py",
+    "research/research_gold_compass.py",
+    "research/research_mnq_singapore_avoid.py",
+    "research/research_shinies_bqs_overlay_tests.py",
+    "research/research_shinies_universal_overlays.py",
+    "research/research_universal_hypothesis_pool.py",
+    "research/research_v3_mechanism.py",
+}
+
 
 def _import_duckdb_or_exit():
     """Import duckdb with a fail-closed environment hint."""
@@ -110,6 +127,27 @@ def _missing_table_columns(con, table_name: str, required: list[str]) -> list[st
     ).fetchall()
     present = {row[0] for row in rows}
     return sorted(col for col in required if col not in present)
+
+
+def _looks_like_sql_block(text: str) -> bool:
+    """Return True only for real SQL statement blocks, not prose/docstrings."""
+    statement_patterns = (
+        re.compile(r"\bSELECT\b[\s\S]*\bFROM\s+\w+\b", re.IGNORECASE),
+        re.compile(r"\bINSERT\s+INTO\s+\w+\b", re.IGNORECASE),
+        re.compile(r"\bDELETE\s+FROM\s+\w+\b", re.IGNORECASE),
+        re.compile(r"^\s*UPDATE\s+\w+\s+SET\b", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^\s*CREATE\s+(TABLE|VIEW|INDEX|SCHEMA)\b", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^\s*WITH\s+\w+\s+AS\s*\(", re.IGNORECASE | re.MULTILINE),
+    )
+    return any(pattern.search(text) for pattern in statement_patterns)
+
+
+def _has_sql_literal_context(content: str, match_start: int) -> bool:
+    """Return True when a triple-quoted string is used as a SQL literal."""
+    prefix = content[max(0, match_start - 160) : match_start]
+    execute_call = re.search(r"(?:\.|^)\s*(execute|executemany|sql)\s*\(\s*$", prefix, re.IGNORECASE)
+    sql_assignment = re.search(r"[\w_]*(sql|query|schema)[\w_]*\s*=\s*$", prefix, re.IGNORECASE)
+    return bool(execute_call or sql_assignment)
 
 
 # =============================================================================
@@ -333,7 +371,6 @@ def check_schema_query_consistency(pipeline_dir: Path) -> list[str]:
 
     # Extract triple-quoted strings that contain SQL
     sql_string_pattern = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.DOTALL)
-    sql_indicator = re.compile(r"\b(SELECT|INSERT|DELETE|UPDATE|CREATE)\b", re.IGNORECASE)
 
     for fpath in pipeline_dir.glob("*.py"):
         if fpath.name in ("init_db.py", "check_drift.py"):
@@ -344,8 +381,12 @@ def check_schema_query_consistency(pipeline_dir: Path) -> list[str]:
         for match in sql_string_pattern.finditer(content):
             sql_text = match.group(1) or match.group(2)
 
-            # Only check strings that look like SQL
-            if not sql_indicator.search(sql_text):
+            if not _has_sql_literal_context(content, match.start()):
+                continue
+            # Only check strings that actually start like SQL. This avoids
+            # prose false positives such as "update the baton", which would
+            # otherwise be parsed as UPDATE <table>.
+            if not _looks_like_sql_block(sql_text):
                 continue
 
             # Extract CTE names from this SQL block
@@ -798,6 +839,7 @@ def check_schema_query_consistency_trading_app(trading_app_dir: Path) -> list[st
     schema_files = [
         PIPELINE_DIR / "init_db.py",
         trading_app_dir / "db_manager.py",
+        trading_app_dir / "live" / "trade_journal.py",
         trading_app_dir / "nested" / "schema.py",
         trading_app_dir / "regime" / "schema.py",
     ]
@@ -908,7 +950,6 @@ def check_schema_query_consistency_trading_app(trading_app_dir: Path) -> list[st
     cte_pattern = re.compile(r"(?:WITH|,)\s+(\w+)\s+AS\s*\(", re.IGNORECASE)
     table_ref_pattern = re.compile(r"(?:FROM|INTO|UPDATE|JOIN)\s+(\w+)", re.IGNORECASE)
     sql_string_pattern = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.DOTALL)
-    sql_indicator = re.compile(r"\b(SELECT|INSERT|DELETE|UPDATE|CREATE)\b", re.IGNORECASE)
 
     if not trading_app_dir.exists():
         return violations
@@ -922,10 +963,9 @@ def check_schema_query_consistency_trading_app(trading_app_dir: Path) -> list[st
         for match in sql_string_pattern.finditer(content):
             sql_text = match.group(1) or match.group(2)
 
-            # Require at least 2 SQL keywords to distinguish real SQL from docstrings
-            # (docstrings can contain "Update", "Create" etc. as English words)
-            sql_hits = sql_indicator.findall(sql_text)
-            if len(sql_hits) < 2:
+            if not _has_sql_literal_context(content, match.start()):
+                continue
+            if not _looks_like_sql_block(sql_text):
                 continue
 
             cte_names = {m.group(1) for m in cte_pattern.finditer(sql_text)}
@@ -1608,6 +1648,134 @@ def check_doc_stats_consistency(con=None) -> list[str]:
     return violations
 
 
+def _doc_hygiene_rel(path: Path) -> str:
+    return str(path.relative_to(PROJECT_ROOT)).replace("\\", "/")
+
+
+def _read_yaml_doc(path: Path):
+    try:
+        import yaml
+    except ImportError as exc:
+        return None, f"PyYAML unavailable: {exc}"
+
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}, None
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def _looks_like_python_entrypoint(value: str) -> bool:
+    return value.endswith(".py") or ".py " in value
+
+
+def _entrypoint_path(value: str) -> Path | None:
+    entry = value.strip()
+    if not _looks_like_python_entrypoint(entry):
+        return None
+    first_token = entry.split()[0]
+    path = Path(first_token)
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+def check_doc_hygiene_contracts() -> list[str]:
+    """Enforce doc truth hygiene for preregs/results and generated docs.
+
+    This intentionally targets high-signal failure modes instead of linting all
+    prose. Broad historical-doc scanning belongs in scripts/tools/stale_doc_scanner.py.
+    """
+    violations: list[str] = []
+
+    # 1. Preregs/results must not carry placeholder provenance stamps.
+    # Bare-word markers (always violations).
+    stamp_dirs = [
+        PROJECT_ROOT / "docs" / "audit" / "hypotheses",
+        PROJECT_ROOT / "docs" / "audit" / "results",
+    ]
+    stamp_patterns = ("UNSTAMPED", "TO_BE_STAMPED")
+    # commit_sha placeholder regex. Per .claude/rules/research-truth-protocol.md
+    # § 2a, `commit_sha: TO_FILL_AFTER_COMMIT` is legitimate (chicken-and-egg
+    # before first commit). Any OTHER placeholder value on commit_sha is rot.
+    commit_sha_placeholder = re.compile(
+        r"""commit_sha\s*:\s*["']?(PENDING|TO_FILL_(?!AFTER_COMMIT\b)[A-Z_]+|UNSTAMPED|TO_BE_STAMPED)["']?""",
+        re.IGNORECASE,
+    )
+    for directory in stamp_dirs:
+        if not directory.exists():
+            continue
+        for path in sorted((*directory.glob("*.md"), *directory.glob("*.yaml"), *directory.glob("*.yml"))):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for line_num, line in enumerate(text.splitlines(), 1):
+                hits = [marker for marker in stamp_patterns if marker in line]
+                sha_match = commit_sha_placeholder.search(line)
+                if sha_match:
+                    hits.append(f"commit_sha={sha_match.group(1)}")
+                if hits:
+                    violations.append(
+                        f"  {_doc_hygiene_rel(path)}:{line_num}: placeholder provenance marker ({', '.join(hits)})"
+                    )
+
+    # 2. Execution metadata must not imply an unavailable or fake runner.
+    hyp_dir = PROJECT_ROOT / "docs" / "audit" / "hypotheses"
+    if hyp_dir.exists():
+        for path in sorted((*hyp_dir.glob("*.yaml"), *hyp_dir.glob("*.yml"))):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if "execution:" not in text:
+                # Many older hypothesis files are prose-heavy YAML-ish archives.
+                # Only enforce executable/design-only contracts once a prereg
+                # declares the execution block this check owns.
+                continue
+            body, error = _read_yaml_doc(path)
+            if error:
+                violations.append(f"  {_doc_hygiene_rel(path)}: YAML parse failed in doc hygiene check: {error}")
+                continue
+            if not isinstance(body, dict):
+                continue
+            execution = body.get("execution")
+            if not isinstance(execution, dict):
+                continue
+            mode = str(execution.get("mode", "")).strip().lower()
+            entrypoint = execution.get("entrypoint")
+            rel = _doc_hygiene_rel(path)
+            if mode == "design_only":
+                if entrypoint not in (None, "", "null"):
+                    violations.append(
+                        f"  {rel}: execution.mode=design_only but execution.entrypoint is populated ({entrypoint!r})"
+                    )
+                continue
+            if entrypoint in (None, "", "null"):
+                violations.append(f"  {rel}: executable prereg missing execution.entrypoint")
+                continue
+            if not isinstance(entrypoint, str):
+                violations.append(f"  {rel}: execution.entrypoint must be a string or null")
+                continue
+            entry_path = _entrypoint_path(entrypoint)
+            if entry_path is not None and not entry_path.exists():
+                violations.append(
+                    f"  {rel}: execution.entrypoint references missing path "
+                    f"{_doc_hygiene_rel(entry_path) if entry_path.is_relative_to(PROJECT_ROOT) else entry_path}"
+                )
+
+    # 3. Generated docs must name their source and block hand edits.
+    generated_docs = [
+        PROJECT_ROOT / "docs" / "governance" / "system_authority_map.md",
+        PROJECT_ROOT / "docs" / "context" / "README.md",
+        PROJECT_ROOT / "docs" / "context" / "source-catalog.md",
+        PROJECT_ROOT / "docs" / "context" / "task-routes.md",
+        PROJECT_ROOT / "docs" / "context" / "institutional-contracts.md",
+    ]
+    for path in generated_docs:
+        if not path.exists():
+            violations.append(f"  {_doc_hygiene_rel(path)} missing")
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if "Generated from" not in text and "Auto-generated from" not in text:
+            violations.append(f"  {_doc_hygiene_rel(path)} missing generated-source marker")
+        if "Do not edit by hand" not in text and "do not edit by hand" not in text:
+            violations.append(f"  {_doc_hygiene_rel(path)} missing do-not-edit marker")
+
+    return violations
+
+
 def check_stale_scratch_db() -> list[str]:
     """Check #37: Canonical gold.db must exist where pipeline.paths points.
 
@@ -1635,6 +1803,58 @@ def check_stale_scratch_db() -> list[str]:
             "  DEPRECATED scratch DB still exists at C:/db/gold.db. "
             "Delete it to prevent stale-data bugs: del C:\\db\\gold.db"
         )
+    return violations
+
+
+def check_active_code_uses_canonical_db_path() -> list[str]:
+    """Check: active research code must delegate DB selection to pipeline.paths."""
+    violations = []
+    patterns = [
+        (
+            re.compile(r"""\bDB_PATH\s*=\s*["']gold\.db["']"""),
+            "direct DB_PATH literal",
+        ),
+        (
+            re.compile(r"""\b(?:DB_PATH|GOLD_DB_PATH)\s*=\s*(?:ROOT|PROJECT_ROOT|REPO_ROOT)\s*/\s*["']gold\.db["']"""),
+            "repo-root gold.db join",
+        ),
+        (
+            re.compile(
+                r"""os\.environ\.get\(\s*["']DUCKDB_PATH["']\s*,\s*str\((?:ROOT|PROJECT_ROOT|REPO_ROOT)\s*/\s*["']gold\.db["']\)\s*\)"""
+            ),
+            "manual DUCKDB_PATH fallback",
+        ),
+        (
+            re.compile(
+                r"""parser\.add_argument\(["']--db-path["'][^)]*default\s*=\s*(?:ROOT|PROJECT_ROOT|REPO_ROOT)\s*/\s*["']gold\.db["']"""
+            ),
+            "parser default bypasses pipeline.paths",
+        ),
+    ]
+
+    for scan_dir in ACTIVE_DB_PATH_SCAN_DIRS:
+        if not scan_dir.exists():
+            continue
+        for py_file in sorted(scan_dir.rglob("*.py")):
+            rel = py_file.relative_to(PROJECT_ROOT).as_posix()
+            if rel in ACTIVE_DB_PATH_SKIP_FILES:
+                continue
+            if rel.startswith("research/archive/") or rel.startswith("scripts/archive/"):
+                continue
+
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, PermissionError):
+                continue
+
+            for i, line in enumerate(content.splitlines(), 1):
+                stripped = line.lstrip()
+                if stripped.startswith("#"):
+                    continue
+                for pattern, reason in patterns:
+                    if pattern.search(line):
+                        violations.append(f"  {rel}:{i}: {reason} — delegate to pipeline.paths.GOLD_DB_PATH")
+                        break
     return violations
 
 
@@ -3397,6 +3617,10 @@ def check_recent_garch_feature_coverage(con=None) -> list[str]:
     _own_con = False
     try:
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.build_daily_features import GARCH_MIN_PRIOR_CLOSES, GARCH_PCT_MIN_PRIOR_VALUES
+
+        recent_rows = 20
+        min_total_rows = GARCH_MIN_PRIOR_CLOSES + GARCH_PCT_MIN_PRIOR_VALUES + recent_rows
 
         if con is None:
             import duckdb
@@ -3432,8 +3656,8 @@ def check_recent_garch_feature_coverage(con=None) -> list[str]:
                    MAX(trading_day) AS last_bad_day,
                    COUNT(*) AS bad_rows
             FROM ranked
-            WHERE n_total >= 300
-              AND rn_recent <= 20
+            WHERE n_total >= {min_total_rows}
+              AND rn_recent <= {recent_rows}
               AND (garch_forecast_vol IS NULL OR garch_forecast_vol_pct IS NULL)
             GROUP BY symbol, orb_minutes
             ORDER BY symbol, orb_minutes
@@ -5533,6 +5757,128 @@ def check_deployable_subset_of_active() -> list[str]:
     return violations
 
 
+def check_signal_log_rotation_not_bypassed() -> list[str]:
+    """_write_signal_record must delegate to SignalLogRotator, not raw open().
+
+    R4 fix (Ralph iter 181): live_signals.jsonl was written via a bare `open(..., "a")`
+    call inside `_write_signal_record`. This bypassed rotation and swallowed disk-full
+    errors silently (institutional-rigor.md § 6 violation).
+
+    After the fix, `_write_signal_record` must:
+      (1) NOT contain `open(self.SIGNALS_FILE` (raw file open bypasses rotator).
+      (2) Contain `_signal_rotator` (delegates to SignalLogRotator).
+      (3) SIGNALS_FILE must NOT appear in the class body (replaced by SIGNALS_DIR).
+
+    A future refactor that reverts to raw open() trips this check.
+    """
+    violations = []
+    target = TRADING_APP_DIR / "live" / "session_orchestrator.py"
+    if not target.exists():
+        violations.append(f"  {target}: missing — cannot verify signal log rotation guard")
+        return violations
+
+    try:
+        source = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        violations.append(f"  {target.name}: failed to read for signal rotation check: {exc}")
+        return violations
+
+    # Offense: raw open() on a monolithic signals file in _write_signal_record.
+    if "open(self.SIGNALS_FILE" in source:
+        violations.append(
+            "  session_orchestrator.py: `open(self.SIGNALS_FILE` found — _write_signal_record "
+            "must delegate to SignalLogRotator, not write directly. R4 rotation bypass."
+        )
+    # Offense: SIGNALS_FILE class attribute still present (replaced by SIGNALS_DIR in R4).
+    if "SIGNALS_FILE = " in source:
+        violations.append(
+            "  session_orchestrator.py: `SIGNALS_FILE = ` found — R4 replaced this with "
+            "SIGNALS_DIR. Remove SIGNALS_FILE or the rotation invariant is broken."
+        )
+    # Required: _signal_rotator delegation present.
+    if "_signal_rotator" not in source:
+        violations.append(
+            "  session_orchestrator.py: `_signal_rotator` not found — _write_signal_record "
+            "must delegate to SignalLogRotator (R4 fix). Rotation is absent."
+        )
+
+    return violations
+
+
+def check_c1_kill_switch_guards_intact() -> list[str]:
+    """C1 kill-switch guards must remain in place at the canonical insertion points.
+
+    The C1 race (iter 174 F4 audit, 2026-04-25) was: `_handle_event` had no
+    `_kill_switch_fired` guard, so an entry-creating event N+1 in the same bar
+    could submit a NEW broker entry after the kill-switch fired for event N.
+    The fix (commit f8f993b7) added a guard at the top of the ENTRY branch.
+
+    This check enforces TWO regression-prevention invariants in
+    `trading_app/live/session_orchestrator.py`:
+
+    (1) `_on_bar` body must contain `_kill_switch_fired` near its top.
+        Canonical guard added in pre-history; protects bar-level dispatch.
+
+    (2) `_handle_event` body must contain `_kill_switch_fired` AND must contain
+        a check on `event.event_type == "ENTRY"` near the same line — the
+        guard must be ENTRY-scoped so EXIT/SCRATCH events still wind down
+        existing exposure during a halt (do-not-touch from iter 178 audit).
+
+    A future refactor that removes either guard, OR widens the C1 guard to
+    blanket all event types (breaking EOD wind-down), trips this check.
+    """
+    violations = []
+    target = TRADING_APP_DIR / "live" / "session_orchestrator.py"
+    if not target.exists():
+        violations.append(f"  {target}: missing — cannot verify C1 kill-switch guards")
+        return violations
+
+    try:
+        source = target.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+    except (OSError, UnicodeDecodeError, SyntaxError) as exc:
+        violations.append(f"  {target.name}: failed to parse for C1 guard verification: {exc}")
+        return violations
+
+    methods_to_check = {"_on_bar", "_handle_event"}
+    found: dict[str, ast.AsyncFunctionDef | ast.FunctionDef] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name in methods_to_check:
+            found[node.name] = node
+
+    for missing in methods_to_check - set(found):
+        violations.append(
+            f"  session_orchestrator.py: method `{missing}` not found — "
+            f"C1 guard cannot be verified. If renamed, update check 114 to match."
+        )
+
+    if "_on_bar" in found:
+        body_src = ast.get_source_segment(source, found["_on_bar"]) or ""
+        if "_kill_switch_fired" not in body_src:
+            violations.append(
+                f"  session_orchestrator.py:{found['_on_bar'].lineno} `_on_bar`: "
+                f"`_kill_switch_fired` guard missing. C1 race re-opened — "
+                f"events arriving on a halted orchestrator can reach broker."
+            )
+
+    if "_handle_event" in found:
+        body_src = ast.get_source_segment(source, found["_handle_event"]) or ""
+        if "_kill_switch_fired" not in body_src:
+            violations.append(
+                f"  session_orchestrator.py:{found['_handle_event'].lineno} `_handle_event`: "
+                f"C1 ENTRY-branch `_kill_switch_fired` guard missing. "
+                f"See iter 174 audit + iter 177 fix `f8f993b7`."
+            )
+        elif 'event_type == "ENTRY"' not in body_src and "event_type == 'ENTRY'" not in body_src:
+            violations.append(
+                f"  session_orchestrator.py:{found['_handle_event'].lineno} `_handle_event`: "
+                f"C1 guard present but ENTRY-branch discriminator missing — "
+                f"a blanket guard would break EOD wind-down (iter 178 audit do-not-touch)."
+            )
+
+    return violations
+
+
 def check_canonical_claude_client_source() -> list[str]:
     """Only `trading_app/ai/claude_client.py` may hardcode Claude model IDs
     or instantiate `anthropic.Anthropic(...)` directly.
@@ -5671,7 +6017,14 @@ CHECKS = [
     ("sql_adapter VALID_* sets match outcome_builder grids", check_sql_adapter_validation_sync, False, False),
     ("No E0 rows in trading tables", check_no_e0_in_db, False, True),  # requires_db
     ("Doc stats match DB ground truth", check_doc_stats_consistency, False, True),  # requires_db
+    ("Doc hygiene contracts (stamps, design-only, generated markers)", check_doc_hygiene_contracts, False, False),
     ("No duplicate gold.db at project root", check_stale_scratch_db, False, False),
+    (
+        "Active research code uses pipeline.paths for DB selection",
+        check_active_code_uses_canonical_db_path,
+        False,
+        False,
+    ),
     ("No old session names in active code", check_old_session_names, False, False),
     ("No active E3 strategies (soft-retired Feb 2026)", check_no_active_e3, False, True),  # requires_db
     (
@@ -5985,6 +6338,18 @@ CHECKS = [
     (
         "Canonical Claude client source (claude_client.py is the only place for Claude model IDs + anthropic.Anthropic)",
         check_canonical_claude_client_source,
+        False,
+        False,
+    ),
+    (
+        "C1 kill-switch guards intact at _on_bar and _handle_event ENTRY branch",
+        check_c1_kill_switch_guards_intact,
+        False,
+        False,
+    ),
+    (
+        "Signal log rotation: _write_signal_record delegates to SignalLogRotator (R4 fix)",
+        check_signal_log_rotation_not_bypassed,
         False,
         False,
     ),

@@ -214,7 +214,6 @@ def _compute_outcomes_all_rr(
     cost_spec,
     entry_model: str = "E1",
     orb_label: str | None = None,
-    break_ts=None,
 ) -> list[dict]:
     """Compute outcomes for ALL RR targets from a single pre-detected entry.
 
@@ -874,7 +873,6 @@ def build_outcomes(
                             cost_spec=cost_spec,
                             entry_model=em,
                             orb_label=orb_label,
-                            break_ts=break_ts,
                         )
                         for rr_target, outcome in zip(RR_TARGETS, outcomes, strict=False):
                             day_batch.append(
@@ -935,7 +933,6 @@ def build_outcomes(
                             cost_spec=cost_spec,
                             entry_model=em,
                             orb_label=orb_label,
-                            break_ts=break_ts,
                         )
 
                         for rr_target, outcome in zip(RR_TARGETS, outcomes, strict=False):
