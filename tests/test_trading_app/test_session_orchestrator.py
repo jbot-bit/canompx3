@@ -3005,6 +3005,219 @@ class TestF4BracketNakedPosition:
         )
 
 
+class TestC1KillSwitchEventLoopRace:
+    """C1 (CRITICAL): kill-switch guard in _handle_event ENTRY branch.
+
+    F4 fires kill-switch inside _submit_bracket which is called from _handle_event.
+    Without the C1 guard, event N+1 (another ENTRY in the same bar's events list)
+    still reaches the broker AFTER the kill-switch fired for event N.
+
+    Mutation probes: remove the C1 guard and T2 must fail.
+    """
+
+    # T2 (BLOCKING): two ENTRY events on same bar — first fires kill-switch, second must be blocked
+    async def test_c1_second_entry_blocked_after_kill_switch(self):
+        """Bar produces [ENTRY_A, ENTRY_B]. ENTRY_A's _submit_bracket fires kill-switch.
+        ENTRY_B must be blocked by the C1 guard before reaching order_router.submit.
+
+        We use a non-native-bracket router so event_a takes the _submit_bracket path.
+        """
+        from unittest.mock import AsyncMock
+
+        # Non-native-bracket router: supports_native_brackets=False so _submit_bracket is called
+        class NonNativeRouter(FakeRouter):
+            def __init__(self):
+                super().__init__(fill_price=2350.0)
+
+            def supports_native_brackets(self):
+                return False
+
+        router = NonNativeRouter()
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.order_router = router
+        orch.signal_only = False
+        notifications: list[str] = []
+        orch._notify = notifications.append
+
+        submit_calls = []
+        original_submit = router.submit
+
+        def counting_submit(spec):
+            submit_calls.append(spec)
+            return original_submit(spec)
+
+        router.submit = counting_submit
+
+        # Make _submit_bracket fire kill-switch (simulates F4 path)
+        async def fake_submit_bracket(event, strategy, actual_entry):
+            # Simulate F4-3: bracket submit triggers kill-switch + emergency flatten
+            orch._fire_kill_switch()
+            # No active positions so _emergency_flatten is a no-op here
+            await orch._emergency_flatten()
+
+        orch._submit_bracket = fake_submit_bracket
+
+        # Simulate: engine returned two ENTRY events for the same bar
+        event_a = _entry_event(2350.0)
+        # Give event_b a distinct strategy so it isn't caught by the duplicate-entry guard
+        event_b = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id="strat_b",
+            timestamp=event_a.timestamp,
+            price=event_a.price,
+            direction=event_a.direction,
+            contracts=event_a.contracts,
+            risk_points=event_a.risk_points,
+        )
+        # Register strat_b in the strategy map so _handle_event doesn't early-return on unknown id
+        strat_b = PortfolioStrategy(
+            strategy_id="strat_b",
+            instrument="MGC",
+            orb_label="CME_REOPEN",
+            entry_model="E2",
+            rr_target=2.0,
+            confirm_bars=1,
+            filter_type="ORB_G5",
+            expectancy_r=0.20,
+            win_rate=0.40,
+            sample_size=200,
+            sharpe_ratio=1.5,
+            max_drawdown_r=3.0,
+            median_risk_points=3.0,
+            stop_multiplier=1.0,
+            source="test",
+            weight=1.0,
+        )
+        orch._strategy_map["strat_b"] = strat_b
+
+        # Process event_a: entry submit → fake_submit_bracket → kill-switch fires
+        await orch._handle_event(event_a)
+        assert orch._kill_switch_fired, "C1: kill switch must have fired after event_a"
+
+        # Process event_b: C1 guard must block this ENTRY immediately
+        notify_before = len(notifications)
+        await orch._handle_event(event_b)
+
+        # event_b must NOT have submitted a broker ENTRY order.
+        # submit_calls may contain: (1) event_a's entry, (2) the emergency-flatten exit for event_a.
+        # The discriminator: no submit with type='fake_entry' for strat_b.
+        entry_submits = [s for s in submit_calls if s.get("type") == "fake_entry"]
+        assert len(entry_submits) == 1, (
+            f"C1: only 1 ENTRY submit expected (event_a). "
+            f"entry_submits={len(entry_submits)}, all submit_calls={submit_calls}"
+        )
+        # C1 guard must have notified (log output already confirmed "C1: ENTRY BLOCKED for strat_b")
+        assert any("C1" in n or "kill switch" in n.lower() for n in notifications[notify_before:]), (
+            f"C1: guard must notify when blocking ENTRY. notifications after block: {notifications[notify_before:]}"
+        )
+
+    # T1: _emergency_flatten raises on all 3 attempts → MANUAL CLOSE REQUIRED + notify + persist
+    async def test_c1_emergency_flatten_all_retries_exhausted(self):
+        """If all 3 _emergency_flatten attempts raise, the loop's else clause must fire
+        'MANUAL CLOSE REQUIRED' and _notify. kill_switch_fired must persist to _safety_state.
+        """
+        router = FakeBracketRouter(fill_price=2350.0)
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch.order_router = router
+        orch.signal_only = False
+        notifications: list[str] = []
+        orch._notify = notifications.append
+
+        # Plant an open position so _emergency_flatten has something to act on
+        from trading_app.live.position_tracker import PositionTracker
+
+        orch._positions = MagicMock()
+        fake_rec = MagicMock()
+        fake_rec.strategy_id = "strat_x"
+        fake_rec.direction = "long"
+        fake_rec.contracts = 1
+        fake_rec.bracket_order_ids = []
+        fake_rec.journal_trade_id = None
+        orch._positions.active_positions.return_value = [fake_rec]
+
+        # Make every broker submit raise
+        router.submit = MagicMock(side_effect=RuntimeError("broker offline"))
+
+        orch._fire_kill_switch()
+        await orch._emergency_flatten()
+
+        # T1 invariant: MANUAL CLOSE REQUIRED must have been notified
+        assert any("MANUAL CLOSE REQUIRED" in n for n in notifications), (
+            "T1: MANUAL CLOSE REQUIRED not notified after 3 failed flatten attempts"
+        )
+        # kill_switch_fired must have been persisted
+        assert orch._safety_state.kill_switch_fired, (
+            "T1: kill_switch_fired not persisted to _safety_state"
+        )
+
+    # T4: rollover EOD closes still fire when kill_switch=True (ENTRY-only guard, not blanket)
+    async def test_c1_rollover_eod_closes_proceed_despite_kill_switch(self):
+        """After kill-switch fires, _check_trading_day_rollover must still call
+        _handle_event for EOD EXIT events (wind-down of existing positions).
+        The C1 guard is ENTRY-only — it must NOT block EXIT/SCRATCH events.
+        """
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+
+        # Fire kill-switch
+        orch._fire_kill_switch()
+        assert orch._kill_switch_fired
+
+        exit_handled = []
+
+        async def capturing_handle_event(event):
+            exit_handled.append(event.event_type)
+
+        # Patch _handle_event to capture (we only want to verify it's CALLED for EXIT)
+        orch._handle_event = capturing_handle_event
+
+        # Simulate engine.on_trading_day_end() returning an EXIT event
+        exit_event = FakeTradeEvent(
+            event_type="EXIT",
+            strategy_id="strat_x",
+            timestamp=datetime(2026, 4, 25, 23, 0, 0, tzinfo=UTC),
+            price=2350.0,
+            direction="long",
+            contracts=1,
+        )
+        orch.engine = MagicMock()
+        orch.engine.on_trading_day_end.return_value = [exit_event]
+        orch._positions = MagicMock()
+        orch._positions.active_positions.return_value = []
+
+        # Use the real _check_trading_day_rollover but with override_trading_day
+        next_day = orch.trading_day + timedelta(days=1)
+        with patch("pipeline.dst.compute_trading_day_utc_range") as mock_ctr:
+            from datetime import timezone
+            past = datetime(2026, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
+            mock_ctr.return_value = (past, past + timedelta(hours=24))
+            await orch._check_trading_day_rollover(None, override_trading_day=next_day)
+
+        # T4 invariant: EXIT event must have been passed to _handle_event
+        assert "EXIT" in exit_handled, (
+            f"T4: EOD EXIT must be forwarded to _handle_event even when kill-switch active. "
+            f"Got: {exit_handled}"
+        )
+
+    # Source-marker mutation probe
+    def test_c1_source_marker_present(self):
+        """C1 guard string must be present in _handle_event source."""
+        import inspect
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+
+        src = inspect.getsource(SessionOrchestrator._handle_event)
+        assert "C1" in src, "C1: kill-switch guard marker missing from _handle_event"
+        assert "_kill_switch_fired" in src, (
+            "C1: _kill_switch_fired check missing from _handle_event"
+        )
+        # Guard must be ENTRY-only — must appear INSIDE the ENTRY branch, not at function top
+        entry_idx = src.index('event.event_type == "ENTRY"')
+        c1_idx = src.index("C1")
+        assert c1_idx > entry_idx, (
+            "C1: guard must be inside the ENTRY branch, not at function top (blanket over-block)"
+        )
+
+
 class TestObservabilityCounters:
     """Observability counters originally in TestObservability (continued after F4 class insertion)."""
 

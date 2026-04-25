@@ -1979,6 +1979,16 @@ class SessionOrchestrator:
             return
 
         if event.event_type == "ENTRY":
+            # C1: kill-switch guard — block NEW entries while emergency-flatten is active.
+            # EXIT/SCRATCH events are NOT guarded here: they close existing exposure and must
+            # proceed even under a halt (mirrors circuit-breaker comment at L2366).
+            # Mirror of the canonical _on_bar guard at L1612.
+            if self._kill_switch_fired:
+                msg = f"C1: ENTRY BLOCKED for {event.strategy_id} — kill switch active (emergency flatten in progress)"
+                log.critical(msg)
+                self._notify(msg)
+                return
+
             # Orphan containment gate (applies to both signal-only and live)
             if event.strategy_id in self._blocked_strategies:
                 reason = self._blocked_strategy_reasons.get(event.strategy_id, "Blocked pending manual review.")
