@@ -9,12 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 6c9b8bea — [mechanical] fix: Ralph Loop iter 177 — audit docs + ledger rebuild
-- **Files changed:** 4 files
+- **Commit:** 5b172a44 — feat(live): Stage 1 — HWM warning tier (50%/75%) reaches operator via Telegram
+- **Files changed:** 5 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/ralph-ledger.json`
-  - `docs/ralph-loop/ralph-loop-audit.md`
-  - `docs/ralph-loop/ralph-loop-history.md`
+  - `docs/plans/2026-04-25-hwm-persistence-integrity-hardening-design.md`
+  - `docs/runtime/stages/hwm-warning-tier-notify-dispatch.md`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Next Steps — Active
 

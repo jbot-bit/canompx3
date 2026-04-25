@@ -2116,6 +2116,103 @@ class TestHWMWarningTierNotifyDispatch:
             f"OK case must dispatch nothing on Telegram; got {orch._notify.call_count} notify calls"
         )
 
+    # ── Test 6 — None reason must not crash the elif guard ──
+    async def test_hwm_check_halt_none_reason_does_not_raise(self, caplog):
+        """Audit-gate CRITICAL-1 (2026-04-25): if `check_halt()` returns
+        `(False, None)` the elif `"WARN" in reason` evaluates `"WARN" in None`
+        which raises `TypeError: argument of type 'NoneType' is not iterable`.
+        Pre-fix that TypeError is caught silently by the bare exception
+        handler at the bottom of the HWM-poll block, recreating the exact
+        silent-failure mode Stage 1 was designed to close.
+
+        Post-fix: the elif is guarded with `reason is not None` so a None
+        reason short-circuits cleanly with no exception, no log.error from
+        the exception handler, and no spurious notify.
+
+        Mutation: revert the None-guard → TypeError → exception handler logs
+        'HWM tracker update/check raised' → the second assertion fails.
+        """
+        import logging
+
+        orch = await self._make_orch_with_hwm((False, None))
+        orch._notify = MagicMock()
+
+        with caplog.at_level(logging.ERROR, logger="trading_app.live.session_orchestrator"):
+            await self._fire_one_bar(orch)
+
+        # No spurious warning notify on a None reason.
+        assert orch._notify.call_count == 0, (
+            f"None reason must not dispatch a warning notify; got {orch._notify.call_count}"
+        )
+        # The exception handler must NOT have caught a TypeError. Pre-fix this
+        # message would appear because `"WARN" in None` raised.
+        spurious = [r.message for r in caplog.records if "HWM tracker update/check raised" in r.message]
+        assert not spurious, (
+            f"None reason must not crash the elif; expected no exception-handler log, got: {spurious!r}"
+        )
+
+    # ── Test 7 — update_equity must be called BEFORE check_halt on each poll ──
+    async def test_hwm_poll_update_equity_before_check_halt(self):
+        """Mutation guard: a refactor that swaps the call order would let
+        `check_halt()` run against stale state (the in-memory equity from the
+        previous poll), masking a fresh DD breach for one poll cycle. Pin the
+        order via `parent.method_calls` index ordering on a shared mock.
+
+        Mutation: swap the two lines at session_orchestrator.py:1594-1595 →
+        ordered_names becomes ['check_halt', 'update_equity'] → assertion
+        fails.
+        """
+        orch = await self._make_orch_with_hwm((False, "HWM_OK"))
+        # Wire both tracker methods through one parent so call order is
+        # globally observable. update_equity returns None (real signature).
+        parent = MagicMock()
+        parent.check_halt.return_value = (False, "HWM_OK")
+        orch._hwm_tracker.update_equity = parent.update_equity
+        orch._hwm_tracker.check_halt = parent.check_halt
+
+        await self._fire_one_bar(orch)
+
+        ordered = [c[0] for c in parent.method_calls]
+        ue_idx = ordered.index("update_equity")
+        ch_idx = ordered.index("check_halt")
+        assert ue_idx < ch_idx, f"update_equity must be called BEFORE check_halt on each poll; got order: {ordered}"
+
+    # ── Test 8 — check_halt raising is caught silently, no spurious notify ──
+    async def test_hwm_check_halt_raises_is_caught_silently(self, caplog):
+        """Mutation guard: if `check_halt()` itself raises, the bar loop must
+        continue (the exception handler at the bottom of the HWM-poll block
+        keeps the engine alive with last-known DD state — a future refactor
+        that propagates the exception would kill the bar feed). And no
+        `_notify` must fire with a spurious warning, because no warning was
+        actually determined.
+
+        Mutation: remove the bare except → exception propagates out of
+        `_on_bar` → `_fire_one_bar` raises → pytest fails the test on the
+        unhandled exception.
+        """
+        import logging
+
+        orch = await self._make_orch_with_hwm((False, "HWM_OK"))
+        orch._hwm_tracker.check_halt.side_effect = RuntimeError("synthetic check_halt failure")
+        orch._notify = MagicMock()
+
+        with caplog.at_level(logging.ERROR, logger="trading_app.live.session_orchestrator"):
+            # Must not raise — the exception handler catches it.
+            await self._fire_one_bar(orch)
+
+        # No spurious warning notify when check_halt raised.
+        assert orch._notify.call_count == 0, (
+            f"check_halt raising must not dispatch a warning notify; got {orch._notify.call_count}"
+        )
+        # The exception handler must HAVE caught the RuntimeError and logged it
+        # (this confirms the exception path actually fired — guards against the
+        # test passing because check_halt was never reached).
+        caught = [r.message for r in caplog.records if "HWM tracker update/check raised" in r.message]
+        assert caught, (
+            "check_halt raising must be caught and logged by the bare except handler; "
+            f"got no matching log.error records. caplog: {[r.message for r in caplog.records]}"
+        )
+
     # ── Test 5 — halt path unchanged: notify, kill switch, flatten — IN ORDER ──
     async def test_hwm_halt_path_unchanged_by_warning_wiring(self):
         """Stage 1 must not alter the halt branch. Pin that on a halt result:

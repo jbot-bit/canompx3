@@ -1638,7 +1638,7 @@ class SessionOrchestrator:
                         self._notify(f"ACCOUNT DD LIMIT: {reason}")
                         self._fire_kill_switch()
                         await self._emergency_flatten()
-                    elif "WARN" in reason:
+                    elif reason is not None and "WARN" in reason:
                         # Stage 1 of HWM persistence integrity hardening (2026-04-25 design v3).
                         # Wire warning tier to operator. Pre-fix this branch was log.warning-only,
                         # leaving the operator unaware of 50%/75% DD crossings on a 24h overnight
@@ -1646,6 +1646,10 @@ class SessionOrchestrator:
                         # for advance Telegram notice. See:
                         #   docs/plans/2026-04-25-hwm-persistence-integrity-hardening-design.md § 4
                         #   .claude/rules/institutional-rigor.md § 6 — no silent failures
+                        # `reason is not None` guard added per Stage 1 audit-gate CRITICAL-1
+                        # (2026-04-25): if check_halt() returns (False, None), `"WARN" in None`
+                        # raises TypeError caught silently by the bare except below — recreating
+                        # the very silent-failure mode this stage closes.
                         log.warning("HWM: %s", reason)
                         self._notify(f"HWM WARNING: {reason}")
                 except Exception as inner:
