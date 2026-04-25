@@ -26,11 +26,25 @@ right move. No new measurement is run by this doc.
   MNQ/MES routine samples (known-unknown, not refuted concern)."
 - `pipeline/cost_model.py` — the modeled MES friction the routine pilot
   checked against. Canonical queried value at commit time
-  (`get_cost_spec("MES")`):
-  `tick_size = 0.25`, `slippage = 1.25` points = **5 ticks per side**,
-  `spread_doubled = 1.25` points, `friction_in_points = 0.784`,
-  `total_friction = 3.92` points round-trip, `point_value = $5.00`,
-  `commission_rt = $1.42`, `min_ticks_floor = 10`.
+  (`get_cost_spec("MES")`). The dollar fields below are denominated in
+  **US dollars per round-trip** (per the `CostSpec.slippage` and
+  `CostSpec.spread_doubled` docstrings: "both sides ($)") — they are
+  NOT point values and NOT per-side values:
+  `tick_size = 0.25` points, `slippage = $1.25` round-trip,
+  `spread_doubled = $1.25` round-trip, `friction_in_points = 0.784`
+  points, `total_friction = $3.92` round-trip,
+  `point_value = $5.00`, `commission_rt = $1.42` round-trip,
+  `min_ticks_floor = 10`. Canonical tick conversion (from
+  `research/mes_e2_tbbo_slippage_pilot.py` line 85):
+  `int(round(spec.slippage / spec.point_value / spec.tick_size))` =
+  `int(round(1.25 / 5.0 / 0.25))` = **1 tick** (round-trip total). The
+  `2026-04-24` routine pilot result doc reports this as
+  "Modeled slippage: 1 ticks". The verdict-bar arithmetic in this doc
+  uses **1 tick (round-trip)** as the modeled baseline, NOT 5 ticks
+  per side. (Initial draft of this doc had a unit error reading
+  `slippage = 1.25` as points and deriving "5 ticks per side"; this
+  was caught by an evidence-auditor pass and corrected before merge —
+  see PR #105 follow-up commit.)
 - `research/databento_microstructure.reprice_e2_entry` — the canonical
   repricer the routine pilot delegates to.
 - `trading_app/holdout_policy.py::HOLDOUT_SACRED_FROM` — Mode A holdout.
@@ -73,14 +87,21 @@ window. Its evidence applies only to days drawn from that distribution.
 
 - Not a claim that MES routine slippage is wrong. The routine pilot
   passed; modeled friction is conservative for routine days (measured
-  median 0 ticks vs modeled 5 ticks/side).
+  per-side median `0 ticks` and p95 `0 ticks` vs the modeled
+  round-trip baseline of `1 tick`).
 - Not a claim that event-tail behaviour is necessarily worse. It is
   **unmeasured**, not **adverse**.
 - Not a discovery question. Cost-realism does not change MES alpha
   evidence; it changes net-of-cost expectancy at deployment.
-- Not a blocker on current live state. MES has zero live lanes in
-  `docs/runtime/lane_allocation.json` (verified at commit time: only six
-  MNQ lanes are routed). The debt is dormant for current exposure.
+- Not a blocker on current live state. MES has zero **deployed** lanes
+  in `docs/runtime/lane_allocation.json` `lanes[]` (verified at commit
+  time: only six MNQ lanes are routed). However, two MES lanes already
+  exist in the same file's `paused[]` array
+  (`MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8` and
+  `MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08`, both flagged
+  "Session regime COLD"). An operator un-pause of either lane fires
+  Trigger A with **no code change**, so dormancy is contingent on the
+  paused state being preserved — not on the code being unmodified.
 
 ## When the debt becomes load-bearing (escalation triggers)
 
@@ -114,6 +135,16 @@ tendency answer:
   shows measured slippage `> 1 tick` for a calendar-routine day, the
   pilot's central-tendency claim itself is impeached and the event-tail
   question becomes secondary to a routine-tendency re-audit.
+- **Trigger E — `HOLDOUT_SACRED_FROM` is changed.** Any edit to
+  `trading_app/holdout_policy.py::HOLDOUT_SACRED_FROM` shifts the
+  IS/OOS boundary that the pre-registered method below relies on.
+  Without this trigger, a future author running the measurement after
+  a holdout-date change would silently reclassify the available data
+  across the IS/OOS line. The pre-registered method's "IS for any
+  future cost-model change; OOS evidence is monitor-only" rule is
+  meaningful only against a fixed `HOLDOUT_SACRED_FROM`. A change
+  forces a re-derivation of which window the measurement may draw
+  from.
 
 ## Pre-registered method for the eventual measurement
 
@@ -133,15 +164,19 @@ question after looking at outcomes.
   4. Microstructure-burst-window (entry within 5 minutes of a
      same-session range Z `>= 2` move).
 - Sample size: pre-commit at the trigger to a minimum of `30` repriced
-  fills per cell. This uses the project's exploratory-entry floor from
-  `docs/institutional/pre_registered_criteria.md` Criterion 7
-  ("`N >= 30` for exploratory discovery entry"); it is a stability
-  floor for median / p95 estimation on a one-sided distribution, not a
-  Bailey-2013 MinBTL bound (MinBTL bounds strategy selection over
-  Sharpe, which is a different question from distribution estimation on
-  a fixed process). If event density is too low to reach `30` per cell
-  over the available window, report as power-floor `UNVERIFIED` for
-  that cell, not as proof of "no event effect."
+  fills per cell. This is an **analogy** to the project's
+  exploratory-entry floor in `docs/institutional/pre_registered_criteria.md`
+  Criterion 7 ("`N >= 30` for exploratory discovery entry") — Criterion
+  7 itself is a strategy-level trade-count floor for shelf eligibility,
+  not a distribution-estimation floor; it is borrowed here as a
+  ballpark stability floor for median / p95 estimation. The underlying
+  `N >= 30` heuristic is a CLT rule of thumb for distribution-shape
+  estimation, not a literature-derived bound. Crucially, it is **not**
+  a Bailey-2013 MinBTL bound (MinBTL bounds strategy selection over
+  Sharpe, which is a different question from distribution estimation
+  on a fixed process). If event density is too low to reach `30` per
+  cell over the available window, report as power-floor `UNVERIFIED`
+  for that cell, not as proof of "no event effect."
 
 ### Measurement
 
@@ -149,21 +184,61 @@ question after looking at outcomes.
   exclusively. No bespoke repricer.
 - Boundary: `pipeline.dst.orb_utc_window`. No fallback to `break_ts` or
   `break_delay_min`.
-- Compare measured per-cell median, p95, and max slippage (in ticks)
-  against the current `pipeline.cost_model.get_cost_spec("MES")`
-  modeled-slippage baseline of **5 ticks per side** (1.25 points).
+- Slippage convention: the routine pilot measures **signed** per-side
+  slippage at the entry fill (`fill_price - orb_level` for long,
+  `orb_level - fill_price` for short, per
+  `research/databento_microstructure.py` lines 368-371). Negative
+  values are price improvement; positive values are adverse. The
+  verdict bar below applies to **signed** measured slippage in ticks
+  per side: a price-improvement cell trivially passes; only adverse
+  ticks count toward bar breach.
+- Compare measured per-cell median, p95, and max signed slippage
+  (in ticks per side) against the canonical modeled baseline of
+  **1 tick (round-trip total)** derived from
+  `pipeline.cost_model.get_cost_spec("MES")` via the
+  `slippage / point_value / tick_size` conversion in the pilot script.
+  The comparison is therefore **per-side measured against round-trip
+  modeled** — apples-to-oranges only in that direction (per-side
+  measured exceeding round-trip modeled is more conservative than
+  per-side-vs-per-side); see Verdict bar for the calibration.
 - Holdout discipline: `HOLDOUT_SACRED_FROM = 2026-01-01`. Event-tail
   evidence drawn from before the holdout is IS for any future
   cost-model change; OOS evidence is monitor-only.
 
 ### Verdict bar
 
-All slippage figures are **measured slippage in ticks** (not
-modeled-tick units). The "modeled-conservative" claim is preserved iff
-**every cell** shows median `<= 1 tick` AND p95 `<= 2 ticks` — i.e.,
-measured central tendency stays at least `~5x` below the modeled
-5-ticks-per-side baseline and measured p95 stays at least `~2.5x`
-below it.
+All slippage figures are **measured signed slippage in ticks per
+side**. The modeled baseline is **1 tick (round-trip total)**, derived
+from the canonical pilot-script conversion. The "modeled-conservative"
+claim is preserved iff **every cell** shows:
+
+- median `<= 1 tick` per side AND
+- p95 `<= 2 ticks` per side.
+
+Calibration of this bar against the modeled baseline (this is **not**
+a "Nx safety margin" claim — earlier draft of this doc made that
+claim incorrectly):
+
+- The median bar (`<= 1 tick` per side) sits **at the same numeric
+  value as the round-trip modeled baseline**, but measured per-side
+  vs modeled round-trip is the more conservative direction (a fill
+  that adversely slips 1 tick on entry would, if symmetric, slip
+  another tick on exit, totaling 2 ticks round-trip = 2x modeled).
+  So at the median, the bar is **breakeven against the modeled tick
+  count** under per-side reading and **2x permissive** when
+  re-expressed as round-trip.
+- The p95 bar (`<= 2 ticks` per side) is **2x the modeled tick count
+  per side** and roughly **4x modeled round-trip** under symmetric
+  reading. It is explicitly a permissive event-tail bar: 5% of
+  event-class days may slip up to 2 ticks per side before the model
+  is declared insufficient.
+
+This bar is therefore a governance threshold, not a tight conservatism
+guarantee. The choice reflects that event-tail days are a known
+adverse cell where the cost of false-positive re-derivation is high
+(forces a model rebuild on noisy event sub-samples) and the cost of a
+slightly-permissive p95 bar is bounded (post-hoc detectable on
+ongoing live fills via Trigger D).
 
 Any cell breaching that bar triggers a cost-model re-derivation
 proposal (separate stage, not this debt scope).
@@ -188,10 +263,13 @@ proposal (separate stage, not this debt scope).
   one. The author at trigger time should review whether new event types
   (e.g., a new policy-rate cycle, exchange schedule changes) need to be
   added to the partition before sampling.
-- The "modeled-conservative" preservation bar (median `<= 1 tick`, p95
-  `<= 2 ticks`) is set against the current `cost_model` 5-ticks-per-side
-  baseline. If the cost-model slippage assumption changes (Trigger B),
-  the bar moves with it and must be re-derived at trigger time.
+- The "modeled-conservative" preservation bar (median `<= 1 tick` per
+  side, p95 `<= 2 ticks` per side) is set against the current
+  `cost_model` 1-tick-round-trip baseline. If the cost-model slippage
+  assumption changes (Trigger B), the bar moves with it and must be
+  re-derived at trigger time. The bar is a **governance threshold**,
+  not a tight conservatism guarantee — see Verdict bar section for
+  the explicit calibration math.
 - Trigger A is deliberately session-agnostic rather than session-scoped.
   The cost of a false-positive trigger (running the measurement earlier
   than strictly necessary) is bounded; the cost of a false-negative
