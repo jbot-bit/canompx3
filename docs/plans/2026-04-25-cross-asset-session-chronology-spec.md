@@ -61,12 +61,24 @@ input to a later-ORB entry on target lane `L`, trading day `D`, aperture
 5. The admissibility boundary is defined against `orb_utc_window`, never
    against `break_ts`, `break_delay_min`, or any post-break quantity.
 6. Cross-Brisbane-trading-day sourcing is allowed only when the source
-   trading day differs from the target trading day by exactly one, and
-   rule 1 still holds. The canonical Brisbane-day alignment applies.
+   trading day index differs from the target trading day index by exactly
+   one, and rule 1 still holds. **Trading day index is the canonical
+   `trading_day` value from `bars_1m` / `daily_features` / `orb_outcomes`,
+   not a calendar-day count.** Friday → Monday is a one-step trading-day-
+   index transition, not three calendar days; the canonical Brisbane-day
+   alignment is what governs.
 
 Symmetry note: rules 1–6 make no distinction between same-instrument and
 cross-instrument sourcing. A MNQ-earlier-session source and a MGC-earlier
 -session source are governed identically.
+
+Bar-close semantics for rules 1, 2, and 4: "at or before X UTC" means the
+bar's close UTC is at or before X UTC. A bar closing exactly at the
+earlier session-end UTC is admissible because that bar is fully closed at
+that instant. A bar closing exactly at the target ORB end UTC is
+admissible because E2 entries fire on bars *after* that boundary; the
+fact computed from the bar at ORB end is therefore knowable to the entry
+logic at decision time.
 
 ## 4. Banned Constructions
 
@@ -88,6 +100,17 @@ at review, not at runtime.
 - Continuous transfer-function fitting over multiple source sessions,
   under any relabeling. Source: the existing cross-asset lead-lag NO-GO
   registered in `MEMORY.md`.
+- **Pooling or summing facts across two or more earlier same-Brisbane-day
+  sessions into one composite source predictor.** A source predictor must
+  be derivable from a single named earlier session `S` (rule 1 in the
+  admissibility contract). Combining e.g. SINGAPORE_OPEN + EUROPE_FLOW
+  into a single same-day "earlier-session context" composite is a
+  same-day pooled-narrative path under a different name and is forbidden.
+  This rule is independent of the cross-asset lead-lag NO-GO above; it
+  applies even when all sessions involved are on the same instrument.
+  The honest path for "earlier-session context across multiple sessions"
+  is per-session per-lane reporting under §5 heterogeneity discipline,
+  not a single pooled predictor.
 - `prev_day_range` as a standalone source fact without explicit per-lane
   justification. Source: the existing `prev_day_range` standalone NO-GO.
 - `prev_close_position` as a source fact. Source: the existing standalone
