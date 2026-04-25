@@ -1852,6 +1852,134 @@ class TestOvernightResilienceHardening:
         orch._hwm_tracker.update_equity.assert_called_once_with(None)
 
 
+class TestR1WallClockRollover:
+    """R1 (CRITICAL): trading-day rollover must fire at 09:00 Brisbane even when
+    the bar feed is down (no _on_bar calls).
+
+    Each test is a mutation probe: remove _wall_clock_rollover_loop or its
+    create_task call in run() and the matching assertion must fail.
+    """
+
+    # R1-1: wall-clock loop fires _check_trading_day_rollover at the right UTC time
+    async def test_r1_rollover_fires_during_feed_down(self):
+        """Simulate feed-down spanning 09:00 Brisbane: no _on_bar calls arrive,
+        but _wall_clock_rollover_loop must still call _check_trading_day_rollover
+        with override_trading_day = trading_day + 1 day.
+
+        Time control: patch compute_trading_day_utc_range to return a past UTC so
+        sleep_secs <= 0 (immediate fire). The task is cancelled from inside
+        fake_rollover so the loop does not re-enter, avoiding date overflow.
+        """
+        from datetime import timezone
+
+        orch = build_orchestrator()
+
+        today = orch.trading_day  # e.g. date(2026, 3, 7)
+        next_day = today + timedelta(days=1)
+        # Past rollover_utc → sleep_secs <= 0 → fires immediately (no real sleep)
+        past_rollover = datetime(2026, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
+
+        rollover_calls: list[dict] = []
+        task_ref: list = []
+
+        async def fake_rollover(bar_ts_utc, *, override_trading_day=None):
+            rollover_calls.append(
+                {"bar_ts_utc": bar_ts_utc, "override_trading_day": override_trading_day}
+            )
+            orch.trading_day = override_trading_day or orch.trading_day
+            # Raise CancelledError directly — it is a BaseException, not an Exception,
+            # so it bypasses the inner `except Exception` handler and is caught by
+            # `except asyncio.CancelledError: return` in the outer loop, terminating cleanly.
+            raise asyncio.CancelledError("test: one rollover is enough")
+
+        with (
+            patch.object(orch, "_check_trading_day_rollover", new=fake_rollover),
+            patch(
+                "pipeline.dst.compute_trading_day_utc_range",
+                return_value=(past_rollover, past_rollover + timedelta(hours=24)),
+            ) as mock_ctr,
+        ):
+            task = asyncio.create_task(orch._wall_clock_rollover_loop())
+            task_ref.append(task)
+            try:
+                await asyncio.wait_for(task, timeout=2.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+
+        # R1 invariant: rollover must have been called with override_trading_day = next_day
+        assert len(rollover_calls) >= 1, "R1: _check_trading_day_rollover was never called — wall-clock loop broken"
+        first = rollover_calls[0]
+        assert first["bar_ts_utc"] is None, "R1: wall-clock path must pass None as bar_ts_utc"
+        assert first["override_trading_day"] == next_day, (
+            f"R1: override_trading_day must be trading_day+1={next_day}, got {first['override_trading_day']}"
+        )
+        # Canonical source must have been consulted (not hardcoded 09:00)
+        mock_ctr.assert_called_with(next_day)
+
+    # R1-2: override_trading_day bypasses bar-ts derivation (no AttributeError on None)
+    async def test_r1_check_rollover_accepts_none_bar_ts_with_override(self):
+        """_check_trading_day_rollover must not touch bar_ts_utc when
+        override_trading_day is provided. Passing None must not raise AttributeError.
+        """
+        orch = build_orchestrator()
+        # trading_day stays the same → rollover body should return early (idempotent)
+        today = orch.trading_day
+        # Call with None bar_ts and override = same day → must be a no-op
+        await orch._check_trading_day_rollover(None, override_trading_day=today)
+        # If we got here without AttributeError or TypeError, the guard works.
+
+    # R1-3: idempotency — second call after _on_bar already rolled is a no-op
+    async def test_r1_double_rollover_is_noop(self):
+        """If _on_bar rolls the trading_day before the wall-clock task fires,
+        the wall-clock call must be a no-op (idempotency guard at first line
+        of _check_trading_day_rollover: if bar_trading_day == self.trading_day: return).
+        """
+        orch = build_orchestrator()
+        today = orch.trading_day
+        next_day = today + timedelta(days=1)
+
+        # Simulate _on_bar having already rolled to next_day
+        orch.trading_day = next_day
+
+        # Now wall-clock fires with override = next_day → must be a no-op (no engine calls)
+        orch.engine.on_trading_day_end = MagicMock(return_value=[])
+        await orch._check_trading_day_rollover(None, override_trading_day=next_day)
+
+        # Idempotency: on_trading_day_end must NOT have been called (rollover was no-op)
+        orch.engine.on_trading_day_end.assert_not_called()
+
+    # R1-4: source-text mutation probe — confirm R1 markers in production code
+    def test_r1_source_markers_present(self):
+        """Source-text probe: R1 markers must be present in production code.
+        Revert _wall_clock_rollover_loop or its task creation → this test fails.
+        """
+        from trading_app.live import session_orchestrator as so
+
+        src = open(so.__file__, encoding="utf-8").read()
+        assert "_wall_clock_rollover_loop" in src, (
+            "R1: _wall_clock_rollover_loop method missing from production code"
+        )
+        assert "rollover_task = asyncio.create_task(self._wall_clock_rollover_loop())" in src, (
+            "R1: rollover_task create_task call missing from run()"
+        )
+        assert "rollover_task.cancel()" in src, (
+            "R1: rollover_task.cancel() missing from finally block"
+        )
+        assert "compute_trading_day_utc_range" in src, (
+            "R1: canonical pipeline.dst.compute_trading_day_utc_range must be used (not hardcoded 09:00)"
+        )
+        # Confirm no hardcoded 09:00 literal in the rollover loop
+        loop_start = src.find("_wall_clock_rollover_loop")
+        loop_end = src.find("\n    async def ", loop_start + 1)
+        loop_body = src[loop_start:loop_end] if loop_end > loop_start else src[loop_start:]
+        assert "datetime.time(9" not in loop_body, (
+            "R1: hardcoded datetime.time(9,...) found in rollover loop — use compute_trading_day_utc_range"
+        )
+        assert '"09:00"' not in loop_body and "'09:00'" not in loop_body, (
+            "R1: hardcoded '09:00' string found in rollover loop — use compute_trading_day_utc_range"
+        )
+
+
 class TestOrchestratorReconnect:
     async def test_clean_stop_no_reconnect(self):
         """Feed stopped by stop-file (was_stopped=True) -> no reconnect."""

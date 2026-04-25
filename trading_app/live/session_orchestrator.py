@@ -1300,7 +1300,12 @@ class SessionOrchestrator:
         except OSError as e:
             log.warning("Could not write signal record: %s", e)
 
-    async def _check_trading_day_rollover(self, bar_ts_utc) -> None:
+    async def _check_trading_day_rollover(
+        self,
+        bar_ts_utc,
+        *,
+        override_trading_day: "date | None" = None,
+    ) -> None:
         """Detect 9:00 AM Brisbane boundary crossing and roll to new trading day.
 
         Without this, a session running past 9 AM Brisbane would continue using
@@ -1308,13 +1313,23 @@ class SessionOrchestrator:
 
         Uses _handle_event() for each EOD close so broker orders are submitted
         (not just engine-side closes).
+
+        R1: override_trading_day lets the wall-clock rollover loop call this
+        without a real bar timestamp. When provided, the bar-timestamp day
+        derivation is skipped — the caller (always _wall_clock_rollover_loop)
+        has already determined the new trading day via compute_trading_day_utc_range.
+        The idempotency guard below (bar_trading_day == self.trading_day) still fires
+        if _on_bar raced us to the rollover first.
         """
-        _bris = ZoneInfo("Australia/Brisbane")
-        bris_time = bar_ts_utc.astimezone(_bris)
-        if bris_time.hour < 9:
-            bar_trading_day = (bris_time - timedelta(days=1)).date()
+        if override_trading_day is not None:
+            bar_trading_day = override_trading_day
         else:
-            bar_trading_day = bris_time.date()
+            _bris = ZoneInfo("Australia/Brisbane")
+            bris_time = bar_ts_utc.astimezone(_bris)
+            if bris_time.hour < 9:
+                bar_trading_day = (bris_time - timedelta(days=1)).date()
+            else:
+                bar_trading_day = bris_time.date()
 
         if bar_trading_day == self.trading_day:
             return
@@ -2529,6 +2544,60 @@ class SessionOrchestrator:
             except Exception as e:
                 log.error("Heartbeat error (will retry): %s", e)
 
+    async def _wall_clock_rollover_loop(self) -> None:
+        """Wall-clock rollover: fire _check_trading_day_rollover at 09:00 Brisbane
+        regardless of bar-feed state.
+
+        R1: _check_trading_day_rollover previously only fired from _on_bar. If the
+        feed is down at 09:00 Brisbane (reconnecting, auth expiry, holiday gap),
+        the trading day is never rolled. The engine keeps yesterday's ORB windows,
+        calendar flags, daily P&L counters, and risk limits — every subsequent bar
+        is misclassified. In the worst case: an overnight session that crosses 09:00
+        with no bars silently operates on the wrong day for the entire new session.
+
+        Pattern: mirror _heartbeat_notifier lifecycle (create_task in run(), cancel
+        in finally).
+
+        Canonical source: pipeline.dst.compute_trading_day_utc_range — never
+        hardcode 09:00 or datetime.time(9, 0).
+
+        Idempotency: _check_trading_day_rollover's first guard is
+        `if bar_trading_day == self.trading_day: return`. If _on_bar fires rollover
+        before this task wakes up, the second call is a no-op.
+        """
+        from pipeline.dst import compute_trading_day_utc_range
+
+        while True:
+            try:
+                # Next rollover fires at the start of (self.trading_day + 1 day),
+                # which is 09:00 Brisbane on that calendar date = canonical UTC boundary.
+                next_day = self.trading_day + timedelta(days=1)
+                rollover_utc, _ = compute_trading_day_utc_range(next_day)
+                now_utc = datetime.now(UTC)
+                sleep_secs = (rollover_utc - now_utc).total_seconds()
+                if sleep_secs > 0:
+                    await asyncio.sleep(sleep_secs)
+                # Fire rollover for the new trading day.
+                # override_trading_day bypasses bar-timestamp derivation.
+                log.info(
+                    "R1 wall-clock rollover: firing for trading_day %s -> %s",
+                    self.trading_day,
+                    next_day,
+                )
+                await self._check_trading_day_rollover(None, override_trading_day=next_day)
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                # R1: rollover failure is not silent — notify operator.
+                # institutional-rigor.md § 6 (no silent failures).
+                msg = f"R1: wall-clock rollover failed for {self.trading_day}: {e} — retrying in 60s"
+                log.error(msg)
+                self._notify(msg)
+                try:
+                    await asyncio.sleep(60)
+                except asyncio.CancelledError:
+                    return
+
     FILL_POLL_INTERVAL = 5.0  # seconds between fill status checks
 
     async def _fill_poller(self) -> None:
@@ -2696,6 +2765,9 @@ class SessionOrchestrator:
         backoff = self.ORCHESTRATOR_BACKOFF_INITIAL
         watchdog = asyncio.create_task(self._watchdog())
         heartbeat = asyncio.create_task(self._heartbeat_notifier())
+        # R1: wall-clock rollover fires at 09:00 Brisbane regardless of bar-feed state.
+        # Runs unconditionally (signal_only and live alike) — rollover is always needed.
+        rollover_task = asyncio.create_task(self._wall_clock_rollover_loop())
         poller = None
         if not self.signal_only:
             poller = asyncio.create_task(self._fill_poller())
@@ -2781,6 +2853,7 @@ class SessionOrchestrator:
         finally:
             watchdog.cancel()
             heartbeat.cancel()
+            rollover_task.cancel()
             if poller:
                 poller.cancel()
 
