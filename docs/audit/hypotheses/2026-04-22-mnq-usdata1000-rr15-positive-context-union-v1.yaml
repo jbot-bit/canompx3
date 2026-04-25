@@ -1,0 +1,42 @@
+metadata:
+  name: "mnq-usdata1000-rr15-positive-context-union-v1"
+  purpose: "Exact bridge prereg for MNQ US_DATA_1000 O5 E2 RR1.5 long union of validated positive prior-day families"
+  date_locked: "2026-04-22T17:06:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "individual"
+
+hypotheses:
+  - id: 1
+    name: "MNQ US_DATA_1000 RR1.5 long positive-context union"
+    theory_citation: |
+      Crabel, Toby. Day Trading with Short Term Price Patterns and Opening Range Breakout.
+      Repo-local mechanism grounding: docs/institutional/mechanism_priors.md,
+      RESEARCH_RULES.md mechanism-first doctrine, and the already-promoted
+      broader family results for PD_DISPLACE_LONG, PD_CLEAR_LONG, and
+      PD_GO_LONG on the adjacent RR1.0 parent lane.
+    economic_basis: |
+      On MNQ US_DATA_1000, the same positive prior-day geometry regime that
+      survives on the RR1.0 parent lane may also survive on the adjacent RR1.5
+      parent lane. The exact research claim is the bounded union of downside
+      displacement and non-congestion context, not a fresh feature search. The
+      long-direction restriction is owned by the filter itself so discovery
+      does not widen to short breaks.
+    filter:
+      type: "PD_GO_LONG"
+      column: "orb_mid vs validated positive prior-day geometry union"
+      thresholds:
+        - "(orb_mid < prev_day_low) OR (|orb_mid - prev_day_low| / atr_20 < 0.15)"
+        - "OR NOT ((prev_day_low < orb_mid < prev_day_high) OR (|orb_mid - pivot| / atr_20 < 0.50))"
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Experimental row does not match the exact audited strategy surface"
+      - "IS expectancy on-signal is non-positive after canonical discovery write"
+      - "Validator rejects the row for lifecycle illegality, Phase 4 gates, walk-forward insufficiency, or era instability"

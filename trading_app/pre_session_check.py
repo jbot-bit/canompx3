@@ -200,10 +200,7 @@ def check_slippage_pilot_progress(con) -> str:
 
 def check_hwm_tracker() -> tuple[bool, str]:
     """Check account HWM DD tracker status."""
-    from pathlib import Path as _P
-
-    hwm_dir = _P(__file__).resolve().parents[1] / "data" / "state"
-    hwm_files = list(hwm_dir.glob("account_hwm_*.json"))
+    hwm_files = list(STATE_DIR.glob("account_hwm_*.json"))
     if not hwm_files:
         return True, "No HWM tracker active (first session — will init from broker)"
 
@@ -389,6 +386,33 @@ def _lane_lifecycle_from_lifecycle(lifecycle: dict, strategy_id: str) -> tuple[b
     return True, "Criterion 12 SR state unavailable"
 
 
+def _conditional_overlay_from_lifecycle(lifecycle: dict) -> tuple[bool, str]:
+    """Interpret shadow-only conditional overlays from a shared lifecycle snapshot."""
+    overlay_state = lifecycle.get("conditional_overlays", {})
+    if not overlay_state.get("available"):
+        return True, "No shadow-only conditional overlays configured"
+
+    overlays = overlay_state.get("overlays", [])
+    if not overlays:
+        return True, "No shadow-only conditional overlays configured"
+
+    invalid = [row for row in overlays if not row.get("valid") or row.get("status") == "invalid"]
+    if invalid:
+        reasons = ", ".join(f"{row.get('overlay_id')}: {row.get('reason') or 'invalid'}" for row in invalid)
+        return True, f"WARN: conditional overlay state invalid ({reasons})"
+
+    ready = [row for row in overlays if row.get("status") == "ready"]
+    if ready:
+        details = ", ".join(
+            f"{row.get('overlay_id')} ready ({row.get('summary', {}).get('ready_count', 0)}/{row.get('summary', {}).get('row_count', 0)} rows)"
+            for row in ready
+        )
+        return True, f"Shadow overlay: {details}"
+
+    details = ", ".join(f"{row.get('overlay_id')} {row.get('status')}" for row in overlays)
+    return True, f"Shadow overlay: {details}"
+
+
 def check_allocation_staleness_gate() -> tuple[bool, str]:
     """Check if lane allocation is stale (>35d warn, >60d block).
 
@@ -555,6 +579,9 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
         # Slippage pilot progress
         slip_msg = check_slippage_pilot_progress(con)
         results.append(("Slippage pilot", True, slip_msg))
+
+        ok, msg = _conditional_overlay_from_lifecycle(lifecycle)
+        results.append(("Conditional overlays", ok, msg))
 
     # DD budget check (from daily_lanes)
     try:

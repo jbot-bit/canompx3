@@ -158,11 +158,16 @@ COST_SPECS = {
     # event, 263 ticks). Trimmed mean ≈0.18 ticks. Honest central tendency
     # is "both instruments fill at modeled routinely."
     #
+    # Follow-up pilots:
+    # - MNQ v2 filled EUROPE_FLOW / COMEX_SETTLE / US_DATA_1000 gaps; see
+    #   docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v2-gap-fill.md
+    # - MES TBBO pilot v1 (2026-04-24, N=40): median=0 ticks, p95=0.00,
+    #   max=0, 100% of days <= 1 modeled tick across current deployable MES
+    #   sessions. Full doc:
+    #   docs/audit/results/2026-04-24-mes-e2-slippage-pilot-v1.md
+    #
     # STILL OPEN:
-    # - MNQ sample missing EUROPE_FLOW / COMEX_SETTLE / US_DATA_1000 (3 of 5
-    #   deployed sessions absent from cache)
-    # - Event-day tail NOT measured for MNQ (sample had no MGC-2018-type gap)
-    # - MES TBBO pilot has NOT been run. Book-wide event-day tail unquantified.
+    # - Book-wide event-day tail remains unquantified for MNQ/MES routine samples.
     # - Phase D MNQ COMEX_SETTLE pilot gate (2026-05-15) benefits from a
     #   targeted COMEX_SETTLE TBBO pull before evaluation.
     #

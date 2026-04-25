@@ -31,7 +31,7 @@ from pipeline.cost_model import COST_SPECS
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS
-from trading_app.lane_correlation import _load_lane_daily_pnl, _pearson
+from trading_app.lane_correlation import RHO_REJECT_THRESHOLD, _load_lane_daily_pnl, _pearson
 from trading_app.validated_shelf import deployable_validated_relation
 
 # ---------------------------------------------------------------------------
@@ -503,9 +503,6 @@ def _effective_annual_r(s: LaneScore) -> float:
     return adj
 
 
-CORRELATION_REJECT_RHO = 0.70  # Same as lane_correlation.RHO_REJECT_THRESHOLD
-
-
 def compute_pairwise_correlation(
     candidates: list[LaneScore],
     db_path: str | Path | None = None,
@@ -625,7 +622,7 @@ def build_allocation(
                     else (sel.strategy_id, lane.strategy_id)
                 )
                 rho = correlation_matrix.get(key, 0.0)
-                if rho > CORRELATION_REJECT_RHO:
+                if rho > RHO_REJECT_THRESHOLD:
                     corr_reject = True
                     break
             if corr_reject:

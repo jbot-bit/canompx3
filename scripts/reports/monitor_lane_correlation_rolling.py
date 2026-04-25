@@ -65,22 +65,67 @@ ALARM_CONSECUTIVE_DAYS = 10
 HISTORY_DAYS = 180  # enough for 30-day rolling + consecutive-day runs
 
 
-def load_deployed_lane_ids() -> list[str]:
+def load_deployed_lanes() -> list[dict]:
     with open(LANE_ALLOC_PATH) as f:
         data = json.load(f)
-    raw = data.get("deployed_lanes") or data.get("lanes") or []
-    return [ln["strategy_id"] for ln in raw]
+    return data.get("deployed_lanes") or data.get("lanes") or []
+
+
+def load_deployed_lane_ids() -> list[str]:
+    return [ln["strategy_id"] for ln in load_deployed_lanes()]
+
+
+def load_monitor_calendar(
+    con: duckdb.DuckDBPyConnection,
+    instruments: list[str],
+    days_back: int,
+) -> pd.DatetimeIndex:
+    """Load the canonical day index for the monitoring window.
+
+    Distinct `daily_features.trading_day` gives the book's market-day calendar
+    even when the entire deployed set was flat. This avoids silently shrinking
+    the rolling window to only days with paper_trades rows.
+    """
+    if not instruments:
+        return pd.DatetimeIndex([])
+
+    placeholders = ", ".join(["?"] * len(instruments))
+    try:
+        rows = con.execute(
+            f"""
+            SELECT DISTINCT trading_day
+              FROM daily_features
+             WHERE symbol IN ({placeholders})
+               AND trading_day >= CURRENT_DATE - INTERVAL '{days_back} DAY'
+             ORDER BY trading_day
+            """,
+            instruments,
+        ).fetchdf()
+    except duckdb.Error:
+        return pd.DatetimeIndex([])
+
+    if rows.empty:
+        return pd.DatetimeIndex([])
+    return pd.to_datetime(rows["trading_day"])
 
 
 def load_daily_pnl_series(
     con: duckdb.DuckDBPyConnection,
     strategy_ids: list[str],
     days_back: int,
+    *,
+    calendar_index: pd.DatetimeIndex | None = None,
 ) -> pd.DataFrame:
     """Return wide DataFrame indexed by trading_day, one column per strategy_id,
     cells = summed pnl_r on days where any live/shadow trade was placed for
-    that strategy. NaN on no-trade days → treated as 0.0 for correlation
-    (portfolio accounting: no-trade day = 0 subsystem return)."""
+    that strategy.
+
+    We then reindex to the canonical monitor calendar when available so
+    whole-book flat days remain explicit in the rolling window. If the
+    canonical calendar is unavailable, fall back to the inclusive daily span
+    between the first and last observed trade day rather than silently dropping
+    interior zero-return days.
+    """
     placeholders = ", ".join(["?"] * len(strategy_ids))
     rows = con.execute(
         f"""
@@ -98,6 +143,12 @@ def load_daily_pnl_series(
         return pd.DataFrame()
     wide = rows.pivot(index="trading_day", columns="strategy_id", values="pnl_r")
     wide.index = pd.to_datetime(wide.index)
+    if calendar_index is not None and len(calendar_index) > 0:
+        full_index = pd.DatetimeIndex(pd.to_datetime(calendar_index)).sort_values().unique()
+        wide = wide.reindex(full_index)
+    elif len(wide.index) >= 2:
+        wide = wide.reindex(pd.date_range(wide.index.min(), wide.index.max(), freq="D"))
+    wide.index.name = "trading_day"
     return wide
 
 
@@ -122,7 +173,9 @@ def rolling_pairwise_corr(returns_wide: pd.DataFrame, window: int) -> pd.DataFra
     return pd.DataFrame(records)
 
 
-def consecutive_breach_runs(series: pd.Series, threshold: float, min_run: int) -> list[tuple[pd.Timestamp, pd.Timestamp, int]]:
+def consecutive_breach_runs(
+    series: pd.Series, threshold: float, min_run: int
+) -> list[tuple[pd.Timestamp, pd.Timestamp, int]]:
     """Find runs of consecutive days where series > threshold.
     Returns list of (run_start_date, run_end_date, run_length) for runs >= min_run."""
     above = (series > threshold).astype(int).values
@@ -205,28 +258,42 @@ def build_report(
     returns_wide: pd.DataFrame,
     rolling_df: pd.DataFrame,
     alarms: list[dict],
+    *,
+    history_days_loaded: int,
 ) -> dict:
     current = summarize_current_window(rolling_df)
     per_lane_coverage = {
         sid: {
-            "n_days_with_trade": int((returns_wide[sid].notna() & (returns_wide[sid] != 0)).sum()) if sid in returns_wide.columns else 0,
-            "first_day": str(returns_wide[sid].dropna().index.min().date()) if sid in returns_wide.columns and returns_wide[sid].notna().any() else None,
-            "last_day": str(returns_wide[sid].dropna().index.max().date()) if sid in returns_wide.columns and returns_wide[sid].notna().any() else None,
+            "n_days_with_trade": int((returns_wide[sid].notna() & (returns_wide[sid] != 0)).sum())
+            if sid in returns_wide.columns
+            else 0,
+            "first_day": str(returns_wide[sid].dropna().index.min().date())
+            if sid in returns_wide.columns and returns_wide[sid].notna().any()
+            else None,
+            "last_day": str(returns_wide[sid].dropna().index.max().date())
+            if sid in returns_wide.columns and returns_wide[sid].notna().any()
+            else None,
         }
         for sid in deployed_ids
     }
+    if returns_wide.empty:
+        monitor_status = "NO_DATA"
+    elif rolling_df.empty:
+        monitor_status = "INSUFFICIENT_DATA"
+    else:
+        monitor_status = "ALARM" if alarms else "CLEAR"
     return {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "deployed_lane_ids": deployed_ids,
         "rolling_window_days": ROLLING_WINDOW_DAYS,
         "alarm_corr_threshold": ALARM_CORR_THRESHOLD,
         "alarm_consecutive_days": ALARM_CONSECUTIVE_DAYS,
-        "history_days_loaded": HISTORY_DAYS,
+        "history_days_loaded": history_days_loaded,
         "current_window": current,
         "per_lane_coverage": per_lane_coverage,
         "alarms": alarms,
         "alarm_count": len(alarms),
-        "monitor_status": "ALARM" if alarms else "CLEAR",
+        "monitor_status": monitor_status,
     }
 
 
@@ -238,7 +305,9 @@ def main() -> int:
     parser.add_argument("--verbose", action="store_true", help="Print current-window rolling detail")
     args = parser.parse_args()
 
-    deployed_ids = load_deployed_lane_ids()
+    deployed_lanes = load_deployed_lanes()
+    deployed_ids = [lane["strategy_id"] for lane in deployed_lanes]
+    deployed_instruments = sorted({lane["instrument"] for lane in deployed_lanes if lane.get("instrument")})
     if not deployed_ids:
         print("ERROR: no deployed lanes in manifest")
         return 2
@@ -247,18 +316,38 @@ def main() -> int:
 
     con = duckdb.connect(args.db_path, read_only=True)
     try:
-        returns_wide = load_daily_pnl_series(con, deployed_ids, args.days_back)
+        calendar_index = load_monitor_calendar(con, deployed_instruments, args.days_back)
+        returns_wide = load_daily_pnl_series(
+            con,
+            deployed_ids,
+            args.days_back,
+            calendar_index=calendar_index,
+        )
     finally:
         con.close()
 
     if returns_wide.empty:
         print(f"WARN: no paper_trades rows in last {args.days_back} days for deployed lanes")
-        report = build_report(deployed_ids, returns_wide, pd.DataFrame(), [])
+        report = build_report(
+            deployed_ids,
+            returns_wide,
+            pd.DataFrame(),
+            [],
+            history_days_loaded=args.days_back,
+        )
     else:
-        print(f"Loaded returns window: {returns_wide.index.min().date()} -> {returns_wide.index.max().date()} ({len(returns_wide)} days)")
+        print(
+            f"Loaded returns window: {returns_wide.index.min().date()} -> {returns_wide.index.max().date()} ({len(returns_wide)} days)"
+        )
         rolling_df = rolling_pairwise_corr(returns_wide, ROLLING_WINDOW_DAYS)
         alarms = compute_alarms(rolling_df)
-        report = build_report(deployed_ids, returns_wide, rolling_df, alarms)
+        report = build_report(
+            deployed_ids,
+            returns_wide,
+            rolling_df,
+            alarms,
+            history_days_loaded=args.days_back,
+        )
 
     # Write JSON artefact
     out_path = Path(args.json_out)

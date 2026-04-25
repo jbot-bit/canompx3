@@ -1,0 +1,19 @@
+# Pin Python sources to LF line endings.
+#
+# Why: recurring CRLF-only diff noise on a small set of files
+# (scripts/tools/context_views.py, trading_app/phase_4_discovery_gates.py,
+#  trading_app/strategy_discovery.py, several test files) caused by
+# autocrlf mismatch across machines/terminals.
+#
+# Scope is intentionally narrow (*.py only). Adding other text types
+# risks rewriting files that have legitimately been committed with CRLF.
+# Future text types should be added one at a time after verifying the
+# current line-ending state across the tree.
+#
+# This file does NOT renormalize existing files. To apply LF to all .py
+# in one sweep: `git add --renormalize "*.py" && git commit`. Coordinate
+# across terminals first — that operation will collide with anyone
+# holding CRLF dirty WIP.
+#
+# Origin: HANDOFF item O-CRLF, landed 2026-04-25.
+*.py text eol=lf

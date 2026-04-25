@@ -8,7 +8,19 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+def _writable_project_root() -> Path:
+    """Resolve repo root without tripping WSL's /mnt/c/Users read-only alias."""
+    resolved = Path(__file__).resolve().parents[2]
+    text = str(resolved)
+    if text.startswith("/mnt/c/Users/"):
+        candidate = Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
+        if candidate.exists():
+            return candidate
+    return resolved
+
+
+PROJECT_ROOT = _writable_project_root()
 
 
 def _preferred_repo_python() -> Path | None:

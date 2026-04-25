@@ -43,7 +43,7 @@ import numpy as np  # noqa: E402
 from scipy import stats as scipy_stats  # noqa: E402
 
 from trading_app.lane_allocator import (  # noqa: E402
-    CORRELATION_REJECT_RHO,
+    RHO_REJECT_THRESHOLD,
     LaneScore,
     _effective_annual_r,
     build_allocation,
@@ -327,7 +327,7 @@ def classify_excluded(lane: LaneScore, state: dict, rank: int) -> dict:
     # Gate-order classification (allocator's order: rank → rho → DD)
     if rank > max_slots:
         verdict = "BLOCKED_BY_RANKING"
-    elif abs(max_rho) > CORRELATION_REJECT_RHO:
+    elif abs(max_rho) > RHO_REJECT_THRESHOLD:
         verdict = "BLOCKED_BY_RHO"
     elif not would_fit_dd:
         verdict = "BLOCKED_BY_DD"

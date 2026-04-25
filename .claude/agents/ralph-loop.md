@@ -83,6 +83,15 @@ Read `docs/ralph-loop/import_centrality.json`. Check the `generated` date:
 ### Auto-Targeting (replaces manual "Next Targets" queue)
 If SCOPE is provided in the task prompt, use it. Otherwise, auto-select target using this priority:
 
+**Priority 0 — Known-CRITICAL backlog (CHECK FIRST):**
+Before running auto-targeting, read these two sources for already-identified CRIT/HIGH work:
+1. `HANDOFF.md` § `Next Steps — Active` — items explicitly tagged `BLOCKER`, `REAL BLOCKER`, `HARD-FAIL`, or described as "fail-closes every entry / hard-gate / silently drops / masks".
+2. `docs/ralph-loop/deferred-findings.md` § `Open Findings` — rows with Severity `HIGH` or `CRITICAL`.
+
+If EITHER source has an unresolved CRIT/HIGH item and the fix is <150 lines across ≤3 files, that IS this iteration's scope. Do NOT fall through to Priority 1 while real CRIT/HIGH work is pending. Override only if the item is explicitly blocked by an external dependency (e.g., requires user deployment decision, literature re-grounding, or data that isn't in the repo yet) — cite the blocker inline if so.
+
+Rationale: Priority 1-4 auto-targeting discovers NEW findings via scan. Priority 0 burns down ALREADY-DISCOVERED findings that the repo is telling you about in plain English. If both exist, always pick Priority 0 — the blast radius of a scanned-and-logged CRIT is smaller than the blast radius of a not-yet-scanned CRIT (you already know what it is and where).
+
 **Priority 1 — Unscanned critical/high files:**
 Files in `import_centrality.json` with tier `critical` or `high` that are NOT in the `Files Fully Scanned` list. Pick the one with most importers.
 
