@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** fb2f113a — chore(v6.1): preserve global-hardening design doc + gitignore logs/live/
+- **Commit:** e7d82e9d — test(live): close v5 tail gaps M4 + M5 + S2 (production-path coverage)
 - **Files changed:** 2 files
-  - `.gitignore`
-  - `docs/plans/2026-04-25-claude-code-global-hardening-design.md`
+  - `HANDOFF.md`
+  - `tests/test_trading_app/test_session_orchestrator.py`
 
 ## Next Steps — Active
 
