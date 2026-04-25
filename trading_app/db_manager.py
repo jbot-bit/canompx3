@@ -366,10 +366,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("regime_waivers", "TEXT"),
             ("regime_waiver_count", "INTEGER DEFAULT 0"),
         ]:
-            try:
-                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: promotion-time provenance fields (Apr 2026)
         # These are the provenance fields we can populate honestly today
@@ -384,10 +381,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("promotion_provenance", "TEXT DEFAULT 'LEGACY'"),
             ("deployment_scope", "TEXT DEFAULT 'deployable'"),
         ]:
-            try:
-                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Backfill explicit deployable-shelf scope for legacy rows.
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
@@ -415,17 +409,11 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
         ]
         for table in ["experimental_strategies", "validated_setups"]:
             for col, typedef in dst_cols:
-                try:
-                    con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
-                except duckdb.CatalogException:
-                    pass  # column already exists
+                con.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: add DOW columns on daily_features (Feb 2026 DOW research)
         for col, typedef in [("is_monday", "BOOLEAN"), ("is_tuesday", "BOOLEAN"), ("day_of_week", "INTEGER")]:
-            try:
-                con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass
+            con.execute(f"ALTER TABLE daily_features ADD COLUMN IF NOT EXISTS {col} {typedef}")
         # Backfill day_of_week from trading_day for existing rows
         con.execute("""
             UPDATE daily_features
@@ -440,10 +428,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("risk_dollars", "DOUBLE"),
             ("pnl_dollars", "DOUBLE"),
         ]:
-            try:
-                con.execute(f"ALTER TABLE orb_outcomes ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE orb_outcomes ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         dollar_agg_cols = [
             ("median_risk_dollars", "DOUBLE"),
@@ -453,10 +438,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
         ]
         for table in ["experimental_strategies", "validated_setups"]:
             for col, typedef in dollar_agg_cols:
-                try:
-                    con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
-                except duckdb.CatalogException:
-                    pass  # column already exists
+                con.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: add statistical honesty columns (Feb 2026 audit fixes)
         # F-04: p_value on experimental_strategies (t-test H0: mean_pnl_r = 0)
@@ -468,10 +450,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("autocorr_lag1", "DOUBLE"),
         ]
         for col, typedef in audit_exp_cols:
-            try:
-                con.execute(f"ALTER TABLE experimental_strategies ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE experimental_strategies ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         audit_val_cols = [
             ("fdr_significant", "BOOLEAN"),
@@ -480,17 +459,11 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("sharpe_ann_adj", "DOUBLE"),
         ]
         for col, typedef in audit_val_cols:
-            try:
-                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: add ambiguous_bar tracking (F-05 audit fix)
         # Flags outcomes where both target and stop hit in same 1m bar
-        try:
-            con.execute("ALTER TABLE orb_outcomes ADD COLUMN ambiguous_bar BOOLEAN DEFAULT FALSE")
-        except duckdb.CatalogException:
-            pass  # column already exists
+        con.execute("ALTER TABLE orb_outcomes ADD COLUMN IF NOT EXISTS ambiguous_bar BOOLEAN DEFAULT FALSE")
 
         # Migration: add time-stop columns (T80 conditional exit)
         # Stores outcome/pnl_r/exit_ts if EARLY_EXIT_MINUTES time-stop fires.
@@ -500,10 +473,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("ts_pnl_r", "DOUBLE"),
             ("ts_exit_ts", "TIMESTAMPTZ"),
         ]:
-            try:
-                con.execute(f"ALTER TABLE orb_outcomes ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE orb_outcomes ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: add walk-forward soft gate columns (PASS2 audit Phase B)
         wf_cols = [
@@ -512,10 +482,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("wf_windows", "INTEGER"),
         ]
         for col, typedef in wf_cols:
-            try:
-                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: Haircut Sharpe (Bailey & Lopez de Prado, 2014)
         haircut_cols = [
@@ -525,10 +492,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
         ]
         for table in ["experimental_strategies", "validated_setups"]:
             for col, typedef in haircut_cols:
-                try:
-                    con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
-                except duckdb.CatalogException:
-                    pass  # column already exists
+                con.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: n_trials_at_discovery (Mar 2026 — paper audit Phase 1B)
         # Records K (total combos tested) at discovery time. Required for
@@ -539,10 +503,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("fst_hurdle", "DOUBLE"),
         ]:
             for table in ["experimental_strategies", "validated_setups"]:
-                try:
-                    con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
-                except duckdb.CatalogException:
-                    pass  # column already exists
+                con.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: BH FDR at discovery (Mar 2026 — Bloomey statistical hardening)
         # Annotates each strategy with whether its p-value survives BH FDR correction
@@ -551,10 +512,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("fdr_significant_discovery", "BOOLEAN"),
             ("fdr_adjusted_p_discovery", "DOUBLE"),
         ]:
-            try:
-                con.execute(f"ALTER TABLE experimental_strategies ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE experimental_strategies ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: PBO on edge_families (Mar 2026 — Bloomey FIX 12)
         # Probability of Backtest Overfitting (Bailey et al. 2014).
@@ -566,55 +524,37 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ).fetchall()
         }
         if "edge_families" in ef_tables:
-            try:
-                con.execute("ALTER TABLE edge_families ADD COLUMN pbo DOUBLE")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute("ALTER TABLE edge_families ADD COLUMN IF NOT EXISTS pbo DOUBLE")
 
         # Migration: Walk-Forward Efficiency (Mar 2026 — Bloomey statistical hardening)
         # WFE = mean(OOS ExpR) / mean(IS ExpR) per Pardo. WFE > 0.50 = healthy.
-        try:
-            con.execute("ALTER TABLE validated_setups ADD COLUMN wfe DOUBLE")
-        except duckdb.CatalogException:
-            pass  # column already exists
+        con.execute("ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS wfe DOUBLE")
 
         # Migration: stop_multiplier (Mar 2026 — tight stop feature)
         # 1.0 = standard stop at ORB edge, 0.75 = tight stop at 75% of ORB range.
         # Loss capped at -stop_multiplier R (e.g. -0.75R) instead of -1.0R.
         for table in ["experimental_strategies", "validated_setups"]:
-            try:
-                con.execute(f"ALTER TABLE {table} ADD COLUMN stop_multiplier DOUBLE DEFAULT 1.0")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS stop_multiplier DOUBLE DEFAULT 1.0")
 
         # Migration: DSR columns (Mar 2026 — adversarial validation)
         # dsr_score: Deflated Sharpe Ratio (Bailey & Lopez de Prado 2014)
         # sr0_at_discovery: expected max Sharpe from noise at time of validation
         for col, typedef in [("dsr_score", "DOUBLE"), ("sr0_at_discovery", "DOUBLE")]:
-            try:
-                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: noise_risk flag + oos_exp_r (2026-03-21 → 2026-03-22)
         # oos_exp_r: aggregate OOS ExpR from walk-forward (fresh, post-cost).
         # noise_risk: True if oos_exp_r <= per-instrument p95 noise floor.
         # Post-validation flag, NOT a hard gate.
         for col, typedef in [("noise_risk", "BOOLEAN"), ("oos_exp_r", "DOUBLE")]:
-            try:
-                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: discovery_k + discovery_date (2026-03-26 — FDR K freeze)
         # Freeze K at the time each strategy was validated so it doesn't change
         # retroactively when new strategies are added in future discovery runs.
         # Per Harvey & Liu (2015): K must be the honest count at discovery time.
         for col, typedef in [("discovery_k", "INTEGER"), ("discovery_date", "DATE")]:
-            try:
-                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: era_dependent + max_year_pct (2026-03-26 — concentration check)
         # Phase 3 checks sign (75% positive years) but not concentration.
@@ -625,10 +565,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("era_dependent", "BOOLEAN"),
             ("max_year_pct", "DOUBLE"),
         ]:
-            try:
-                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: WFE investigation fields (2026-03-26 — audit trail)
         # Records human verdict for WFE outliers (>1.50 or <0.50).
@@ -639,18 +576,12 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("wfe_investigation_date", "DATE"),
             ("wfe_investigation_notes", "TEXT"),
         ]:
-            try:
-                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: slippage_validation_status (2026-03-26 — COMEX fragility)
         # Tracks whether the backtest slippage model has been validated with
         # field data (tbbo pilot). Values: ROBUST, PENDING, FRAGILE, VALIDATED.
-        try:
-            con.execute("ALTER TABLE validated_setups ADD COLUMN slippage_validation_status VARCHAR")
-        except duckdb.CatalogException:
-            pass  # column already exists
+        con.execute("ALTER TABLE validated_setups ADD COLUMN IF NOT EXISTS slippage_validation_status VARCHAR")
 
         # Migration: Phase 4 Stage 4.0 (2026-04-08) — institutional criteria gates
         # Two new columns on experimental_strategies for the locked 12-criteria
@@ -667,10 +598,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("hypothesis_file_sha", "TEXT"),
             ("rejection_reason", "TEXT"),
         ]:
-            try:
-                con.execute(f"ALTER TABLE experimental_strategies ADD COLUMN {col} {typedef}")
-            except duckdb.CatalogException:
-                pass  # column already exists
+            con.execute(f"ALTER TABLE experimental_strategies ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Migration: Bloomey Pathway B audit trail (2026-04-09)
         # validation_pathway: 'family' (Pathway A / BH FDR), 'individual'
@@ -686,10 +614,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
         #   Amendment 3.0 (2026-04-09)
         for col, typedef in [("validation_pathway", "VARCHAR"), ("c8_oos_status", "VARCHAR")]:
             for table in ["experimental_strategies", "validated_setups"]:
-                try:
-                    con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
-                except duckdb.CatalogException:
-                    pass  # column already exists
+                con.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {typedef}")
 
         # Table 7: validation_run_log (Mar 2026 — Bloomey FIX 8)
         # Tracks rejection rate per phase per validation run for auditability.
