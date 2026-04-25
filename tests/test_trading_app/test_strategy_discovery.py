@@ -1232,6 +1232,27 @@ class TestPhase4DiscoveryEnforcement:
     assertion test, plus 1 legacy-mode signature test.
     """
 
+    @pytest.fixture(autouse=True)
+    def _isolate_git_env(self, monkeypatch):
+        """Drop GIT_* env vars so subprocess git calls obey cwd=tmp_path.
+
+        Without this, running these tests under a pre-commit hook (or any
+        parent that exports GIT_DIR/GIT_WORK_TREE) routes the temp-repo
+        commits to the parent worktree. monkeypatch auto-restores on
+        teardown, so a single autouse fixture protects every test in the
+        class plus any test added later.
+        """
+        for var in (
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_COMMON_DIR",
+            "GIT_NAMESPACE",
+            "GIT_PREFIX",
+        ):
+            monkeypatch.delenv(var, raising=False)
+
     @staticmethod
     def _init_git_repo(tmp_path):
         """Initialize a minimal temp git repo and return its path."""
