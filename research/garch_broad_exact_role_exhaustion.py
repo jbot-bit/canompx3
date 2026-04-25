@@ -39,8 +39,10 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from pipeline.cost_model import COST_SPECS
+from pipeline.cost_model import COST_SPECS  # noqa: F401 — retained for downstream cost-weighted aggregates
 from pipeline.paths import GOLD_DB_PATH
+from research.filter_utils import filter_signal  # canonical delegation (research-truth-protocol.md)
+from trading_app.config import ALL_FILTERS, CrossAssetATRFilter
 
 OUTPUT_MD = Path("docs/audit/results/2026-04-16-garch-broad-exact-role-exhaustion.md")
 OUTPUT_MD.parent.mkdir(parents=True, exist_ok=True)
@@ -69,7 +71,16 @@ GAP_RE = re.compile(r"^GAP_R(\d{3})$")
 
 
 def exact_filter_sql(filter_type: str, orb_label: str, instrument: str) -> tuple[str | None, str]:
-    """Return (predicate_sql, join_sql_suffix)."""
+    """DEPRECATED 2026-04-19 — retained only for backward reference / diff readability.
+
+    All production callers should use ``research.filter_utils.filter_signal``
+    via the canonical delegation path. This function is no longer called
+    from ``load_trades``; kept here as a paper trail of the pre-delegation
+    inline SQL semantics so future readers can audit any divergence.
+
+    See ``docs/audit/results/2026-04-19-research-filter-delegation-audit.md``
+    addendum 2 for the delegation history.
+    """
     match = ORB_RE.match(filter_type)
     if match:
         min_size = float(match.group(1))
@@ -180,18 +191,35 @@ def sharpe(arr: np.ndarray) -> float:
 
 
 def load_trades(con, row: pd.Series, direction: str, *, is_oos: bool) -> pd.DataFrame:
-    filter_sql, join_sql = exact_filter_sql(row["filter_type"], row["orb_label"], row["instrument"])
-    if filter_sql is None:
+    """Load filtered trades for one strategy cell.
+
+    Filter application delegates to canonical `research.filter_utils.filter_signal`
+    per `.claude/rules/research-truth-protocol.md` § Canonical filter delegation.
+    No inline filter SQL, no hardcoded cost or threshold constants.
+
+    Cross-asset filters (CrossAssetATRFilter family, e.g. X_MES_ATR60) are
+    handled via direct column-map enrichment to preserve dtypes (unlike the
+    fitness tracker's list[dict] round-trip, which collapses to object dtype).
+    """
+    filter_type = row["filter_type"]
+    # in_scope() is the routing predicate — it tells us whether this file
+    # handles the filter family. Once past that gate, the filter MUST be in
+    # ALL_FILTERS for the canonical delegation to succeed. Fail-closed.
+    if filter_type not in ALL_FILTERS:
+        print(f"  ERR unknown filter_type '{filter_type}' for {row['strategy_id']}")
         return pd.DataFrame()
+
     date_clause = ">=" if is_oos else "<"
+    # Load d.* so filter_signal sees every column any canonical filter may need.
     q = f"""
-    SELECT o.trading_day, o.pnl_r, d.garch_forecast_vol_pct AS gp
+    SELECT
+      o.trading_day, o.pnl_r,
+      d.*
     FROM orb_outcomes o
     JOIN daily_features d
       ON o.trading_day = d.trading_day
      AND o.symbol = d.symbol
      AND o.orb_minutes = d.orb_minutes
-    {join_sql}
     WHERE o.symbol = '{row["instrument"]}'
       AND o.orb_minutes = {row["orb_minutes"]}
       AND o.orb_label = '{row["orb_label"]}'
@@ -200,7 +228,6 @@ def load_trades(con, row: pd.Series, direction: str, *, is_oos: bool) -> pd.Data
       AND o.pnl_r IS NOT NULL
       AND d.garch_forecast_vol_pct IS NOT NULL
       AND d.orb_{row["orb_label"]}_break_dir = '{direction}'
-      AND {filter_sql}
       AND o.trading_day {date_clause} DATE '{IS_END}'
     ORDER BY o.trading_day
     """
@@ -211,11 +238,42 @@ def load_trades(con, row: pd.Series, direction: str, *, is_oos: bool) -> pd.Data
         return pd.DataFrame()
     if len(df) == 0:
         return df
+
+    # Cross-asset enrichment for CrossAssetATRFilter (e.g., X_MES_ATR60). Direct
+    # column-map assignment preserves dtypes; the fitness-tracker round-trip
+    # pattern collapses to object, which can silently corrupt filter_signal's
+    # vectorized comparisons for other filters sharing the df.
+    filt = ALL_FILTERS[filter_type]
+    if isinstance(filt, CrossAssetATRFilter):
+        src = filt.source_instrument
+        atr_rows = con.execute(
+            """SELECT trading_day, atr_20_pct FROM daily_features
+               WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL""",
+            [src],
+        ).fetchall()
+        atr_map: dict = {}
+        for td, pct in atr_rows:
+            key = td.date() if hasattr(td, "date") else td
+            atr_map[key] = pct
+
+        def _date_key(t):
+            return t.date() if hasattr(t, "date") else t
+
+        df[f"cross_atr_{src}_pct"] = df["trading_day"].apply(_date_key).map(atr_map)
+
+    # Canonical filter application — delegate to filter_signal. No inline SQL.
+    mask = np.asarray(filter_signal(df, filter_type, row["orb_label"])).astype(bool)
+    df = df.loc[mask].reset_index(drop=True)
+
+    if len(df) == 0:
+        return df
+
+    # Preserve the downstream consumer schema: {trading_day, pnl_r, gp, year}.
     df["trading_day"] = pd.to_datetime(df["trading_day"])
     df["year"] = df["trading_day"].dt.year
     df["pnl_r"] = df["pnl_r"].astype(float)
-    df["gp"] = df["gp"].astype(float)
-    return df
+    df["gp"] = df["garch_forecast_vol_pct"].astype(float)
+    return df[["trading_day", "pnl_r", "gp", "year"]]
 
 
 def ntile_shape(df: pd.DataFrame) -> dict[str, object]:
