@@ -44,7 +44,7 @@ items:
   - id: gc_mgc_15m_30m_translation_question
     title: GC to MGC 15m and 30m translation question
     class: research
-    status: done
+    status: closed
     priority: P2
     close_before_new_work: true
     owner_hint: codex-or-claude
