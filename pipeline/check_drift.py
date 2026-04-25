@@ -5688,6 +5688,80 @@ def check_deployable_subset_of_active() -> list[str]:
     return violations
 
 
+def check_c1_kill_switch_guards_intact() -> list[str]:
+    """C1 kill-switch guards must remain in place at the canonical insertion points.
+
+    The C1 race (iter 174 F4 audit, 2026-04-25) was: `_handle_event` had no
+    `_kill_switch_fired` guard, so an entry-creating event N+1 in the same bar
+    could submit a NEW broker entry after the kill-switch fired for event N.
+    The fix (commit f8f993b7) added a guard at the top of the ENTRY branch.
+
+    This check enforces TWO regression-prevention invariants in
+    `trading_app/live/session_orchestrator.py`:
+
+    (1) `_on_bar` body must contain `_kill_switch_fired` near its top.
+        Canonical guard added in pre-history; protects bar-level dispatch.
+
+    (2) `_handle_event` body must contain `_kill_switch_fired` AND must contain
+        a check on `event.event_type == "ENTRY"` near the same line — the
+        guard must be ENTRY-scoped so EXIT/SCRATCH events still wind down
+        existing exposure during a halt (do-not-touch from iter 178 audit).
+
+    A future refactor that removes either guard, OR widens the C1 guard to
+    blanket all event types (breaking EOD wind-down), trips this check.
+    """
+    violations = []
+    target = TRADING_APP_DIR / "live" / "session_orchestrator.py"
+    if not target.exists():
+        violations.append(f"  {target}: missing — cannot verify C1 kill-switch guards")
+        return violations
+
+    try:
+        source = target.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+    except (OSError, UnicodeDecodeError, SyntaxError) as exc:
+        violations.append(f"  {target.name}: failed to parse for C1 guard verification: {exc}")
+        return violations
+
+    methods_to_check = {"_on_bar", "_handle_event"}
+    found: dict[str, ast.AsyncFunctionDef | ast.FunctionDef] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name in methods_to_check:
+            found[node.name] = node
+
+    for missing in methods_to_check - set(found):
+        violations.append(
+            f"  session_orchestrator.py: method `{missing}` not found — "
+            f"C1 guard cannot be verified. If renamed, update check 114 to match."
+        )
+
+    if "_on_bar" in found:
+        body_src = ast.get_source_segment(source, found["_on_bar"]) or ""
+        if "_kill_switch_fired" not in body_src:
+            violations.append(
+                f"  session_orchestrator.py:{found['_on_bar'].lineno} `_on_bar`: "
+                f"`_kill_switch_fired` guard missing. C1 race re-opened — "
+                f"events arriving on a halted orchestrator can reach broker."
+            )
+
+    if "_handle_event" in found:
+        body_src = ast.get_source_segment(source, found["_handle_event"]) or ""
+        if "_kill_switch_fired" not in body_src:
+            violations.append(
+                f"  session_orchestrator.py:{found['_handle_event'].lineno} `_handle_event`: "
+                f"C1 ENTRY-branch `_kill_switch_fired` guard missing. "
+                f"See iter 174 audit + iter 177 fix `f8f993b7`."
+            )
+        elif 'event_type == "ENTRY"' not in body_src and "event_type == 'ENTRY'" not in body_src:
+            violations.append(
+                f"  session_orchestrator.py:{found['_handle_event'].lineno} `_handle_event`: "
+                f"C1 guard present but ENTRY-branch discriminator missing — "
+                f"a blanket guard would break EOD wind-down (iter 178 audit do-not-touch)."
+            )
+
+    return violations
+
+
 def check_canonical_claude_client_source() -> list[str]:
     """Only `trading_app/ai/claude_client.py` may hardcode Claude model IDs
     or instantiate `anthropic.Anthropic(...)` directly.
@@ -6141,6 +6215,12 @@ CHECKS = [
     (
         "Canonical Claude client source (claude_client.py is the only place for Claude model IDs + anthropic.Anthropic)",
         check_canonical_claude_client_source,
+        False,
+        False,
+    ),
+    (
+        "C1 kill-switch guards intact at _on_bar and _handle_event ENTRY branch",
+        check_c1_kill_switch_guards_intact,
         False,
         False,
     ),

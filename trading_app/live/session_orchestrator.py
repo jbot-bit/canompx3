@@ -2980,11 +2980,47 @@ class SessionOrchestrator:
             log.critical(msg)
             self._notify(f"CRITICAL: {msg}")
         finally:
-            watchdog.cancel()
-            heartbeat.cancel()
-            rollover_task.cancel()
+            await self._shutdown_task(watchdog, "watchdog")
+            await self._shutdown_task(heartbeat, "heartbeat_notifier")
+            await self._shutdown_task(rollover_task, "wall_clock_rollover")
             if poller:
-                poller.cancel()
+                await self._shutdown_task(poller, "fill_poller")
+
+    async def _shutdown_task(self, task, name: str, timeout: float = 5.0) -> None:
+        """Cancel and await a background task on orchestrator shutdown.
+
+        Mitigates audit finding S3 (iter 178): the prior pattern was bare
+        `task.cancel()` without await, which on SIGTERM emitted "Task was
+        destroyed but it is pending!" warnings and could abort in-progress
+        EOD-close submissions mid-flight.
+
+        Contract:
+        - No-op if the task is None or already done.
+        - Cancels the task, then awaits it with a bounded timeout.
+        - Swallows asyncio.CancelledError (the expected outcome of cancel).
+        - Logs critical + notifies if the task does NOT exit within `timeout`
+          seconds — institutional-rigor.md § 6 (no silent failures).
+        - Logs critical + notifies if the task raises a non-cancellation
+          exception during teardown.
+        """
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=timeout)
+        except asyncio.CancelledError:
+            return
+        except TimeoutError:
+            msg = (
+                f"SHUTDOWN: task '{name}' did not exit within {timeout:.1f}s of cancel — "
+                f"possible position-close abort or resource leak"
+            )
+            log.critical(msg)
+            self._notify(msg)
+        except Exception as exc:
+            msg = f"SHUTDOWN: task '{name}' raised on cancel: {exc}"
+            log.critical(msg)
+            self._notify(msg)
 
     def post_session(self) -> None:
         """EOD: close open positions, log summary, run incremental backfill.
