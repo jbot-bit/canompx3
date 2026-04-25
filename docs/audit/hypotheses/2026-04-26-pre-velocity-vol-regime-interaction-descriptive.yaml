@@ -1,0 +1,169 @@
+# Hypothesis Registry — 2026-04-26 pre-velocity × vol-regime interaction (descriptive)
+#
+# Locked: 2026-04-26T18:30:00+10:00
+# Author: Claude session (joshd)
+# Committing commit hash: c8129a47
+# Origin: institutional researcher framework applied to PR #119 + #115 cluster
+#   on 2026-04-26 found that the cross-session pre-velocity descriptive at
+#   K=89 produced 0 BH-FDR survivors (universal null on the binary
+#   aligned-vs-opposed framing). The framework's "missed framing #2" was
+#   pre-velocity × vol-regime interaction — Chan Ch 7's stop-cascade mechanism
+#   predicts continuation should be STRONGER in high-volatility regimes
+#   (more stops cluster, more cascade-driven momentum). NOT yet tested.
+#
+# Decision-authority: per RULE 10 of backtesting-methodology.md, descriptive
+# diagnostics that do NOT write to experimental_strategies or validated_setups
+# do not strictly require pre-registration. THIS LOCK FILE EXISTS ANYWAY to
+# pre-commit the cell selection rule, test stat, sign prediction, and
+# decision criteria — preventing the same post-hoc K-rescue pattern that the
+# 2026-04-26 framework just caught.
+
+metadata:
+  name: "pre_velocity_vol_regime_interaction_descriptive"
+  purpose: |
+    Test whether pre-velocity-alignment edge (binary, aligned vs opposed) is
+    significantly STRONGER in high-volatility regimes than low-volatility
+    regimes, across the same 12 × 3 × 3 cross-section as PR #119 descriptive.
+    If interaction effect survives BH-FDR at q=0.05 with the mechanism-predicted
+    sign, surviving cells become Pathway-A candidates with locked mechanism
+    grounding. If 0 survive, close the cluster as a null and add NO-GO entry.
+  date_locked: "2026-04-26T18:30:00+10:00"
+  commit_sha: "c8129a47"
+  holdout_date: "2026-01-01"
+  testing_mode: "descriptive_diagnostic"  # RULE 10 carve-out
+  research_question_type: "interaction_effect"
+  total_expected_trials: 89  # same K as PR #119 — same scope, no cherry-picking
+  k_global: 89
+  k_family_per_instrument: { MNQ: 33, MES: 31, MGC: 25 }
+
+# ---------------------------------------------------------------------------
+# Mechanism prior — locked BEFORE any data is examined
+# ---------------------------------------------------------------------------
+
+mechanism_prior:
+  citation: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md p.155-156"
+  verbatim_extract: |
+    "There is an additional cause of momentum that is mainly applicable to the
+    short time frame: the triggering of stops. Such triggers often lead to the
+    so-called breakout strategies."
+    "[A]t the shortest possible time scale, the imbalance of the bid and ask
+    sizes, the changes in order flow, or the aforementioned nonuniform
+    distribution of stop orders can all induce momentum in prices."
+  prediction: |
+    Under Chan's stop-cascade mechanism, pre-ORB directional momentum reflects
+    accumulated order-flow imbalance. The strength of cascade response depends
+    on how much stop-density has clustered. In Expanding (high-vol) regimes,
+    larger price ranges and elevated dealer hedging increase stop-density per
+    price unit. Therefore the alignment edge (Δ_ExpR_aligned - Δ_ExpR_opposed)
+    should be GREATER in Expanding than in Contracting regime within the same
+    instrument-session-aperture cell.
+  predicted_sign: "interaction > 0"
+  one_sided_justification: |
+    Chan's mechanism predicts sign. Two-sided test would dilute power. Per
+    pre_registered_criteria.md, one-sided is allowed when mechanism prior
+    predicts direction; significance threshold remains q=0.05 BH-FDR.
+  fallback_if_unsupported: |
+    If a survivor cell shows interaction < 0 (alignment edge LARGER in
+    Contracting), report as MECHANISM_INVERTED — does NOT count toward the
+    pre-registered prediction; flagged for follow-up investigation only.
+
+# ---------------------------------------------------------------------------
+# Cell-selection rule (LOCKED before run)
+# ---------------------------------------------------------------------------
+
+cell_selection_rule:
+  description: |
+    Use the SAME 12 × 3 × 3 = 108 cross-section as PR #119 descriptive.
+    Power floor per RULE 3.2: each of the 4 sub-cells (Expanding-aligned,
+    Expanding-opposed, Contracting-aligned, Contracting-opposed) needs
+    N >= 30. 'Stable' regime trades are excluded from the interaction test
+    (they're the middle bucket, not informative for the high-vs-low
+    interaction). A cell is 'adequately powered for interaction' if all 4
+    sub-cells meet the floor.
+  no_cherry_picking_clause: |
+    Cells are NOT selected based on the PR #119 descriptive's |t| values.
+    Every cell that meets the power floor enters the BH-FDR pool.
+  expected_powered_cells: "<=89, likely fewer due to thinner Expanding+Contracting subsets"
+
+# ---------------------------------------------------------------------------
+# Test stat (LOCKED)
+# ---------------------------------------------------------------------------
+
+test_stat:
+  primary: |
+    For each cell (instrument, session, aperture), compute:
+      delta_E = mean(R_aligned | regime=Expanding) - mean(R_opposed | regime=Expanding)
+      delta_C = mean(R_aligned | regime=Contracting) - mean(R_opposed | regime=Contracting)
+      interaction = delta_E - delta_C
+    Test: H0: interaction = 0 vs H1: interaction > 0 (one-sided per mechanism).
+    Use Welch's t-test on the per-trade R distributions of the 4 sub-cells,
+    with appropriate variance for the difference-in-differences.
+  secondary_diagnostics:
+    - "delta_E and delta_C separately (so we can see WHICH regime drives the result)"
+    - "Win-rate spread per regime (RULE 8.2 ARITHMETIC_ONLY guard)"
+    - "Sub-cell N counts (transparency for power-floor verification)"
+  fdr:
+    framing: "BH-FDR at q=0.05, K_global=89 (or fewer if power-floor reduces pool)"
+    family: "K_family per instrument also reported (MNQ/MES/MGC), per RULE 4"
+
+# ---------------------------------------------------------------------------
+# Pre-commit honesty checks
+# ---------------------------------------------------------------------------
+
+pre_commit_honesty:
+  - check: "Mode A holdout discipline"
+    status: "OBSERVED — IS only, trading_day < 2026-01-01"
+  - check: "Mechanism cited from local extract before run (institutional-rigor.md § 5)"
+    status: "OBSERVED — Chan Ch 7 verbatim quoted above; prediction direction locked"
+  - check: "Cell selection by theory not by IS-significance"
+    status: "OBSERVED — full PR #119 cross-section, no top-|t| filtering"
+  - check: "Sign prediction locked before run"
+    status: "OBSERVED — interaction > 0 (one-sided)"
+  - check: "Decision criteria locked"
+    status: "OBSERVED — see pass/kill below"
+  - check: "RULE 6.1 trade-time knowability"
+    status: "OBSERVED — atr_vel_regime derives from atr_vel_ratio (Safe list)"
+
+# ---------------------------------------------------------------------------
+# Pass / kill criteria
+# ---------------------------------------------------------------------------
+
+pass_criteria:
+  cell_level:
+    - "Welch t > 3.0 (with mechanism prior cited per Chordia 2018)"
+    - "BH-FDR survivor at q=0.05, K_global"
+    - "Mechanism-predicted sign (interaction > 0)"
+    - "All 4 sub-cells meet N >= 30 power floor"
+    - "Not flagged ARITHMETIC_ONLY"
+  family_level:
+    - "If at least one cell per family (MNQ/MES/MGC) survives, the descriptive
+       is COVERAGE_POSITIVE and surviving cells become Pathway-A candidates"
+
+kill_criteria:
+  - "0 BH-FDR survivors at K_global → close cluster as null; add NO-GO entry to
+    STRATEGY_BLUEPRINT.md for 'pre-velocity × atr_vel_regime interaction'"
+  - "All survivors show interaction < 0 (mechanism-inverted) → flag for
+    investigation; do NOT promote (sign mismatch with prior)"
+  - "Top-|t| cell shows |Δ_WR| < 3% AND |interaction| > 0.10R → ARITHMETIC_ONLY,
+    cost-class only, no edge claim"
+
+out_of_scope:
+  - "OOS validation (deferred to a follow-up Pathway-A prereg if any survivor)"
+  - "Magnitude-quintile framing (separate hypothesis)"
+  - "Pass-2 filtered framing (separate hypothesis)"
+  - "Stable-regime cells (the middle bucket; not informative for high-vs-low)"
+
+# ---------------------------------------------------------------------------
+# Bailey-LdP MinBTL budget check
+# ---------------------------------------------------------------------------
+
+budget_check:
+  k_global: 89
+  total_phase0_cap: 300  # per institutional/pre_registered_criteria.md
+  cumulative_in_session: "this scan: 89; well under cap"
+  status: "WITHIN_BUDGET"
+
+decision_authority: |
+  This lock file fixes the cells, the test stat, the sign prediction, and the
+  decision criteria. Any deviation requires a NEW lock file referencing this
+  one. No goalpost moving. No K-rescue. No post-hoc reframe.
