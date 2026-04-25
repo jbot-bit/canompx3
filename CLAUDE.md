@@ -28,6 +28,17 @@ Non-trivial repo tasks: resolve the task first via the deterministic front door 
 
 Fallback if unavailable or ambiguous: `AGENTS.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`, `scripts/tools/system_context.py`, `scripts/tools/project_pulse.py`.
 
+## Default Thinking Mode
+
+All research, analysis, and decisions must:
+- pass institutional audit loop
+- avoid tunnel vision
+- verify against canonical layers
+- include alternate framing before conclusion
+- produce a final EV-based decision
+
+If not explicitly stated, assume this mode.
+
 ---
 
 ## Architecture

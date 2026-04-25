@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from trading_app.pre_session_check import (
+    _conditional_overlay_from_lifecycle,
     _resolve_session_lane,
     _resolve_session_lanes,
     check_consistency_rule,
@@ -272,20 +273,18 @@ class TestDailyEquityDLLFallback:
 class TestHWMTrackerFailClosed:
     """check_hwm_tracker must fail-closed on corrupt HWM files."""
 
-    def test_corrupt_hwm_file_blocks_trading(self):
+    def test_corrupt_hwm_file_blocks_trading(self, tmp_path):
         """Corrupt HWM file → check_hwm_tracker returns False (fail-closed)."""
-        from trading_app.pre_session_check import STATE_DIR
+        state_dir = tmp_path / "data" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        corrupt = state_dir / "account_hwm_TEST_BAD_DATA.json"
+        corrupt.write_text("{{{not valid json")
 
-        STATE_DIR.mkdir(parents=True, exist_ok=True)
-        corrupt = STATE_DIR / "account_hwm_TEST_BAD_DATA.json"
-        try:
-            corrupt.write_text("{{{not valid json")
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
             ok, msg = check_hwm_tracker()
-            assert ok is False, f"Corrupt HWM file should block trading: {msg}"
-            assert "BLOCKED" in msg
-        finally:
-            if corrupt.exists():
-                corrupt.unlink()
+
+        assert ok is False, f"Corrupt HWM file should block trading: {msg}"
+        assert "BLOCKED" in msg
 
 
 def test_resolve_session_lane_ambiguous_profile_requires_strategy_specific_tool():
@@ -395,6 +394,72 @@ class TestLaneLifecycle:
         assert ok is False
         assert "BLOCKED" in msg
         assert "unavailable" in msg
+
+
+def test_conditional_overlay_from_lifecycle_reports_ready_overlay():
+    ok, msg = _conditional_overlay_from_lifecycle(
+        {
+            "conditional_overlays": {
+                "available": True,
+                "overlays": [
+                    {
+                        "overlay_id": "pr48_mgc_cont_exec_v1",
+                        "valid": True,
+                        "status": "ready",
+                        "summary": {"ready_count": 3, "row_count": 18},
+                    }
+                ],
+            }
+        }
+    )
+
+    assert ok is True
+    assert "Shadow overlay" in msg
+    assert "3/18" in msg
+
+
+def test_conditional_overlay_from_lifecycle_warns_on_invalid_state():
+    ok, msg = _conditional_overlay_from_lifecycle(
+        {
+            "conditional_overlays": {
+                "available": True,
+                "overlays": [
+                    {
+                        "overlay_id": "pr48_mgc_cont_exec_v1",
+                        "valid": False,
+                        "reason": "missing breakpoint row",
+                        "status": "invalid",
+                    }
+                ],
+            }
+        }
+    )
+
+    assert ok is True
+    assert "WARN" in msg
+    assert "missing breakpoint row" in msg
+
+
+def test_conditional_overlay_from_lifecycle_warns_on_invalid_status_even_when_envelope_valid():
+    ok, msg = _conditional_overlay_from_lifecycle(
+        {
+            "conditional_overlays": {
+                "available": True,
+                "overlays": [
+                    {
+                        "overlay_id": "pr48_mgc_cont_exec_v1",
+                        "valid": True,
+                        "reason": "missing breakpoint row",
+                        "status": "invalid",
+                    }
+                ],
+            }
+        }
+    )
+
+    assert ok is True
+    assert "WARN" in msg
+    assert "missing breakpoint row" in msg
 
 
 # ─── F-6: TopStep 5-XFA aggregate cap ────────────────────────────────────

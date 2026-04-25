@@ -1,0 +1,98 @@
+version: 1
+hypothesis_id: 2026-04-22-mnq-layered-candidate-board-v1
+title: MNQ layered candidate board on positive parent lanes
+status: active
+owner: codex
+created_at: 2026-04-22
+mode: discovery
+decision_context: >
+  MNQ-first bounded discovery board for stacked prior-day geometry and gap
+  overlays on the strongest positive parent lanes. This is exploratory,
+  read-only, and canonical-only. It is not a promotion request.
+data:
+  canonical_layers:
+    - bars_1m
+    - daily_features
+    - orb_outcomes
+  holdout_policy:
+    in_sample_end_exclusive: 2026-01-01
+    out_of_sample_start_inclusive: 2026-01-01
+    out_of_sample_end_inclusive: 2026-04-22
+  joins:
+    - orb_outcomes.trading_day = daily_features.trading_day
+    - orb_outcomes.symbol = daily_features.symbol
+    - orb_outcomes.orb_minutes = daily_features.orb_minutes
+scope:
+  symbol: MNQ
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  parent_lanes:
+    - orb_label: CME_PRECLOSE
+      rr_target: 1.0
+      direction: long
+    - orb_label: CME_PRECLOSE
+      rr_target: 1.0
+      direction: short
+    - orb_label: NYSE_OPEN
+      rr_target: 1.5
+      direction: long
+    - orb_label: NYSE_OPEN
+      rr_target: 1.5
+      direction: short
+    - orb_label: US_DATA_1000
+      rr_target: 1.0
+      direction: long
+    - orb_label: US_DATA_1000
+      rr_target: 1.5
+      direction: short
+signals:
+  base_features:
+    - F1_NEAR_PDH_15
+    - F2_NEAR_PDL_15
+    - F3_NEAR_PIVOT_15
+    - F3_NEAR_PIVOT_50
+    - F4_ABOVE_PDH
+    - F5_BELOW_PDL
+    - F6_INSIDE_PDR
+    - F7_GAP_UP
+    - F8_GAP_DOWN
+  pairwise_rule: all unordered pairs of base_features except excluded_pairs
+  excluded_pairs:
+    - [F4_ABOVE_PDH, F5_BELOW_PDL]
+    - [F4_ABOVE_PDH, F6_INSIDE_PDR]
+    - [F5_BELOW_PDL, F6_INSIDE_PDR]
+    - [F7_GAP_UP, F8_GAP_DOWN]
+    - [F3_NEAR_PIVOT_15, F3_NEAR_PIVOT_50]
+  expected_trial_count_per_lane: 40
+  total_expected_trials: 240
+metrics:
+  primary:
+    - n_on_is
+    - n_off_is
+    - expr_on_is
+    - expr_off_is
+    - delta_is
+    - winrate_on_is
+    - winrate_off_is
+    - welch_t
+    - welch_p
+    - bh_p
+  secondary:
+    - n_on_oos
+    - n_off_oos
+    - expr_on_oos
+    - expr_off_oos
+    - delta_oos
+    - same_sign_oos
+decision_rules:
+  - Skip any tested signal with n_on_is < 30 or n_off_is < 30.
+  - Treat all outputs as exploratory candidate-board evidence only.
+  - Do not claim a validated edge from this board alone.
+  - Promote at most one exact next-step candidate, chosen by mechanism,
+    delta size, BH-adjusted evidence, and OOS sign behavior.
+notes:
+  - No MES.
+  - No ML.
+  - No break-bar or post-break features.
+  - No runtime promotion from this file alone.

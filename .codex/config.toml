@@ -14,6 +14,9 @@ Repo-specific Codex startup contract for canompx3:
 - Follow `AGENTS.md`, `CLAUDE.md`, and `CODEX.md`; the Claude layer remains canonical and `.codex/` is additive only.
 - If the user's intent is clear but the wording is fuzzy, infer the nearest valid workflow, skill, verification path, and guardrails instead of waiting for exact trigger words.
 - If multiple valid routes exist, choose the highest-signal, lowest-risk one and state the mapping briefly.
+- For research, review, deploy-readiness, and result-interpretation work, treat prior summaries as CLAIMS, not evidence.
+- For those tasks, lead with disconfirming checks and label conclusions `MEASURED`, `INFERRED`, or `UNSUPPORTED`.
+- Ground thresholds and methodological claims in repo-local literature or primary sources; if grounding is missing, say `UNSUPPORTED`.
 - Do not mutate `CLAUDE.md`, `.claude/`, `claude.bat`, or Claude-owned settings/hooks unless the user explicitly requests it.
 - Do not mutate `.claude/` or `CLAUDE.md` unless the user explicitly asks.
 """
@@ -48,6 +51,9 @@ url = "https://developers.openai.com/mcp"
 approval_mode = "approve"
 
 [mcp_servers.openaiDeveloperDocs.tools.fetch_openai_doc]
+approval_mode = "approve"
+
+[mcp_servers.openaiDeveloperDocs.tools.search_openai_docs]
 approval_mode = "approve"
 
 [profiles.canompx3]

@@ -69,6 +69,39 @@ sql = """WITH recent AS (SELECT * FROM bars_1m) SELECT * FROM recent"""
         violations = check_drift.check_schema_query_consistency(tmp_path)
         assert len(violations) == 0
 
+    def test_skips_prose_triple_quoted_strings(self, tmp_path):
+        _mkfile(tmp_path / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts_utc TEXT)")
+        _mkfile(
+            tmp_path / "work_queue.py",
+            '''
+HANDOFF_HEADER = """# HANDOFF.md
+
+Please update the baton before you leave.
+"""
+''',
+        )
+        violations = check_drift.check_schema_query_consistency(tmp_path)
+        assert violations == []
+
+    def test_skips_prose_with_with_and_from_phrasing(self, tmp_path):
+        _mkfile(tmp_path / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts_utc TEXT)")
+        _mkfile(
+            tmp_path / "db_lock.py",
+            '''
+DOC = """Usage:
+    from pipeline.db_lock import PipelineLock
+
+    With dynamic sessions, adding a nearby session from silently shrinking
+    another window would be wrong.
+
+    with PipelineLock("builder"):
+        pass
+"""
+''',
+        )
+        violations = check_drift.check_schema_query_consistency(tmp_path)
+        assert violations == []
+
 
 # ── Check 5: Import cycles ────────────────────────────────────────────
 
@@ -344,6 +377,41 @@ sql = """SELECT COUNT(*) FROM validated_setups
         )
         violations = check_drift.check_schema_query_consistency_trading_app(tmp_path / "trading_app")
         assert len(violations) == 0
+
+    def test_skips_prose_docstrings_in_trading_app(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        _mkfile(tmp_path / "pipeline" / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts TEXT)")
+        _mkfile(tmp_path / "trading_app" / "db_manager.py", "CREATE TABLE IF NOT EXISTS validated_setups (id TEXT)")
+        _mkfile(
+            tmp_path / "trading_app" / "lane_allocator.py",
+            '''
+def helper():
+    """Select top lanes for a profile.
+
+    With dynamic sessions, a nearby session from silently shrinking another
+    window would be wrong.
+    """
+''',
+        )
+        violations = check_drift.check_schema_query_consistency_trading_app(tmp_path / "trading_app")
+        assert violations == []
+
+    def test_includes_trade_journal_schema_sources(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        _mkfile(tmp_path / "pipeline" / "init_db.py", "CREATE TABLE IF NOT EXISTS bars_1m (ts TEXT)")
+        _mkfile(tmp_path / "trading_app" / "db_manager.py", "CREATE TABLE IF NOT EXISTS validated_setups (id TEXT)")
+        _mkfile(
+            tmp_path / "trading_app" / "live" / "trade_journal.py",
+            "LIVE_TRADES_SCHEMA = '''CREATE TABLE IF NOT EXISTS live_trades (trade_id TEXT)'''",
+        )
+        _mkfile(
+            tmp_path / "trading_app" / "live" / "dashboard.py",
+            '''
+sql = """SELECT trade_id FROM live_trades"""
+''',
+        )
+        violations = check_drift.check_schema_query_consistency_trading_app(tmp_path / "trading_app")
+        assert violations == []
 
 
 # ── Check 19: Timezone hygiene ────────────────────────────────────────

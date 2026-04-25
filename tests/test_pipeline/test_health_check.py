@@ -97,28 +97,52 @@ class TestCheckDatabase:
 
 class TestCheckDbnFiles:
     def test_missing_dir(self, tmp_path):
-        """Missing data directory returns failure."""
-        with patch("pipeline.health_check.DAILY_DBN_DIR", tmp_path / "nope"):
+        """Missing active-instrument DBN store returns failure."""
+        with (
+            patch("pipeline.health_check.ACTIVE_ORB_INSTRUMENTS", ["MNQ"]),
+            patch(
+                "pipeline.health_check.require_dbn_available",
+                side_effect=FileNotFoundError("DBN file not found for instrument 'MNQ'"),
+            ),
+        ):
             ok, msg = check_dbn_files()
             assert ok is False
-            assert "missing" in msg.lower()
+            assert "missing raw dbn store" in msg.lower()
+            assert "MNQ" in msg
 
     def test_no_files(self, tmp_path):
-        """Empty directory returns failure."""
+        """Configured store with no matching DBN files returns failure."""
         empty_dir = tmp_path / "empty"
         empty_dir.mkdir()
-        with patch("pipeline.health_check.DAILY_DBN_DIR", empty_dir):
+        with (
+            patch("pipeline.health_check.ACTIVE_ORB_INSTRUMENTS", ["MNQ"]),
+            patch(
+                "pipeline.health_check.require_dbn_available",
+                side_effect=FileNotFoundError(
+                    f"DBN store for instrument 'MNQ' exists but contains no matching raw DBN files under {empty_dir}"
+                ),
+            ),
+        ):
             ok, msg = check_dbn_files()
             assert ok is False
-            assert "No .dbn.zst files" in msg
+            assert "no matching raw dbn files" in msg.lower()
 
     def test_files_present(self, tmp_path):
-        """Directory with DBN files returns success."""
-        dbn_dir = tmp_path / "dbn"
-        dbn_dir.mkdir()
-        (dbn_dir / "glbx-mdp3-20240101.ohlcv-1m.dbn.zst").touch()
-        (dbn_dir / "glbx-mdp3-20240102.ohlcv-1m.dbn.zst").touch()
-        with patch("pipeline.health_check.DAILY_DBN_DIR", dbn_dir):
+        """Active-instrument raw DBN stores return success."""
+        mnq_dir = tmp_path / "MNQ"
+        mes_dir = tmp_path / "MES"
+        mnq_dir.mkdir()
+        mes_dir.mkdir()
+        (mnq_dir / "mnq_real_micro_backfill_2024-01-01_to_2024-01-31.ohlcv-1m.dbn.zst").touch()
+        (mes_dir / "mes_real_micro_backfill_2024-01-01_to_2024-01-31.ohlcv-1m.dbn.zst").touch()
+
+        def _require(inst: str):
+            return {"MNQ": mnq_dir, "MES": mes_dir}[inst]
+
+        with (
+            patch("pipeline.health_check.ACTIVE_ORB_INSTRUMENTS", ["MNQ", "MES"]),
+            patch("pipeline.health_check.require_dbn_available", side_effect=_require),
+        ):
             ok, msg = check_dbn_files()
             assert ok is True
             assert "2" in msg
@@ -158,10 +182,10 @@ class TestCheckDrift:
 
     def test_drift_timeout(self):
         """Timeout during drift check."""
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="", timeout=30)):
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="", timeout=120)):
             ok, msg = check_drift()
             assert ok is False
-            assert "error" in msg.lower()
+            assert "timed out" in msg.lower()
 
 
 class TestCheckIntegrity:

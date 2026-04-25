@@ -195,3 +195,33 @@ class TestSessionSafetyState:
         assert len(loaded.blocked_strategies) == 2
         assert "STRAT_A" in loaded.blocked_strategies
         assert "STRAT_B" in loaded.blocked_strategies
+
+    def test_last_connected_at_round_trips_across_restart(self, state_dir: Path) -> None:
+        """Iter 179 audit-routed (closes audit S1 from iter 178).
+
+        The R3 reconnect-ceiling test in test_session_orchestrator.py
+        (`test_r3_state_file_persists_last_connected_at`) only asserts that
+        `_safety_state.last_connected_at` is non-empty in memory — it never
+        re-instantiates `SessionSafetyState` from the same file to verify the
+        load path. The `_load_state` branch at session_safety_state.py:95
+        (`self.last_connected_at = str(data.get("last_connected_at", ""))`)
+        currently has zero coverage.
+
+        This test closes the gap: write a known value via save(), construct
+        a fresh instance pointing at the same state file, assert the loaded
+        value matches what was written.
+
+        Mutation probe: delete the L95 line in `_load_state` and this test
+        fails (loaded.last_connected_at == "" instead of the saved value).
+        """
+        ts = "2026-04-25T03:14:15+00:00"
+
+        state1 = SessionSafetyState("profile_test", "MNQ")
+        state1.last_connected_at = ts
+        state1.save()
+
+        state2 = SessionSafetyState("profile_test", "MNQ")
+        assert state2.last_connected_at == ts, (
+            f"R3 cross-restart broken: saved {ts!r}, loaded {state2.last_connected_at!r}. "
+            f"Check _load_state branch at session_safety_state.py:95."
+        )

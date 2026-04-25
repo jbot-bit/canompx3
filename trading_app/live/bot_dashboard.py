@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -30,6 +31,7 @@ from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.live.alert_engine import read_operator_alerts, summarize_operator_alerts
 from trading_app.live.bot_state import read_state
+from trading_app.live.instance_lock import is_pid_alive
 
 log = logging.getLogger(__name__)
 
@@ -39,22 +41,28 @@ JOURNAL_PATH = LIVE_JOURNAL_DB_PATH
 STOP_FILE = PROJECT_ROOT / "live_session.stop"
 LOG_DIR = PROJECT_ROOT / "logs"
 BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
+# 2x the ~60s bar cadence (SessionOrchestrator._publish_state runs once per 1m bar) —
+# two consecutive missed writes flips the dashboard to STALE.
+HEARTBEAT_STALE_AFTER_S = 120
 
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Startup: clean stale locks/state. Shutdown: terminate child processes."""
     # ── Startup ──
-    import tempfile
-
     lock_dir = Path(tempfile.gettempdir()) / "canompx3"
     if lock_dir.exists():
         for lock_file in lock_dir.glob("bot_*.lock"):
             try:
+                content = lock_file.read_text(encoding="utf-8").strip()
+                pid = int(content) if content else None
+                if pid and is_pid_alive(pid):
+                    log.info("Startup: keeping live lock %s (PID %d)", lock_file.name, pid)
+                    continue
                 lock_file.unlink()
                 log.info("Startup: removed stale lock %s", lock_file.name)
-            except PermissionError:
-                log.warning("Startup: lock %s still held — process may be running", lock_file.name)
+            except ValueError:
+                lock_file.unlink(missing_ok=True)
             except Exception:
                 pass
 
@@ -307,13 +315,215 @@ def _legacy_lanes_to_lane_cards(
 # "NEVER run two write processes against the same DuckDB file simultaneously").
 _bg_processes: dict[str, subprocess.Popen] = {}
 _bg_lock = threading.Lock()
+
+# _state_lock guards _preflight_cache + _handoff_state. Reentrant so helpers can
+# nest, but lock hierarchy rule: NEVER hold _state_lock while acquiring _bg_lock
+# (or vice versa). Cross-lock nesting would deadlock under threaded access.
+_state_lock = threading.RLock()
 _preflight_cache: dict[str, dict[str, object]] = {}
+_handoff_state: dict[str, object] = {
+    "active": False,
+    "status": "idle",
+    "target_profile": None,
+    "target_mode": None,
+    "requested_at": None,
+    "message": "",
+}
 
 
 def _ensure_log_dir() -> Path:
     """Create logs/ directory if it doesn't exist."""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     return LOG_DIR
+
+
+def _lock_dir() -> Path:
+    return Path(tempfile.gettempdir()) / "canompx3"
+
+
+def _close_bg_handle(key: str) -> None:
+    handle = _bg_processes.pop(key, None)
+    if handle and hasattr(handle, "close"):
+        try:
+            handle.close()
+        except Exception:
+            pass
+
+
+def _prune_bg_processes() -> None:
+    with _bg_lock:
+        for name in ("session", "refresh"):
+            proc = _bg_processes.get(name)
+            if not isinstance(proc, subprocess.Popen) or proc.poll() is None:
+                continue
+            _bg_processes.pop(name, None)
+            suffix = "session" if name == "session" else "refresh"
+            _close_bg_handle(f"_{suffix}_logfile")
+            _bg_processes.pop(f"_{suffix}_log", None)
+
+
+def _heartbeat_age_s(state: dict[str, object]) -> float:
+    age = float(state.get("heartbeat_age_s") or 9999)
+    if state and "heartbeat_age_s" not in state:
+        hb = state.get("heartbeat_utc")
+        if hb:
+            try:
+                age = (datetime.now(UTC) - datetime.fromisoformat(str(hb))).total_seconds()
+            except (TypeError, ValueError):
+                age = 9999
+    return age
+
+
+def _session_snapshot() -> dict[str, object]:
+    _prune_bg_processes()
+    state = read_state()
+    raw_mode = str(state.get("mode") or "STOPPED").upper()
+    heartbeat_age_s = _heartbeat_age_s(state)
+    account_name = str(state.get("account_name") or "")
+    profile = account_name.removeprefix("profile_") if account_name.startswith("profile_") else None
+    with _bg_lock:
+        tracked = _bg_processes.get("session")
+        tracked_alive = isinstance(tracked, subprocess.Popen) and tracked.poll() is None
+    running = tracked_alive or (raw_mode in {"SIGNAL", "DEMO", "LIVE"} and heartbeat_age_s < HEARTBEAT_STALE_AFTER_S)
+    return {
+        "running": running,
+        "raw_mode": raw_mode,
+        "heartbeat_age_s": heartbeat_age_s,
+        "profile": profile,
+        "tracked_alive": tracked_alive,
+    }
+
+
+def _refresh_snapshot() -> dict[str, object]:
+    _prune_bg_processes()
+    with _bg_lock:
+        proc = _bg_processes.get("refresh")
+        running = isinstance(proc, subprocess.Popen) and proc.poll() is None
+    return {"running": running}
+
+
+def _journal_lock_status() -> dict[str, object]:
+    if not JOURNAL_PATH.exists():
+        return {"locked": False, "detail": "journal absent"}
+    try:
+        con = duckdb.connect(str(JOURNAL_PATH), read_only=True)
+        con.close()
+        return {"locked": False, "detail": "journal available"}
+    except duckdb.IOException as exc:
+        return {"locked": True, "detail": str(exc)}
+
+
+def _instance_lock_status() -> dict[str, object]:
+    active: list[dict[str, object]] = []
+    lock_dir = _lock_dir()
+    if not lock_dir.exists():
+        return {"locked": False, "locks": active}
+    for lock_file in lock_dir.glob("bot_*.lock"):
+        try:
+            content = lock_file.read_text(encoding="utf-8").strip()
+            pid = int(content) if content else None
+        except (OSError, ValueError):
+            pid = None
+        if pid and is_pid_alive(pid):
+            active.append({"path": str(lock_file), "pid": pid})
+        elif pid is None:
+            active.append({"path": str(lock_file), "pid": None})
+    return {"locked": bool(active), "locks": active}
+
+
+def _clear_handoff() -> None:
+    with _state_lock:
+        _handoff_state.update(
+            {
+                "active": False,
+                "status": "idle",
+                "target_profile": None,
+                "target_mode": None,
+                "requested_at": None,
+                "message": "",
+            }
+        )
+
+
+def _set_handoff(profile: str, mode: str, message: str) -> None:
+    with _state_lock:
+        _handoff_state.update(
+            {
+                "active": True,
+                "status": "stopping",
+                "target_profile": profile,
+                "target_mode": mode,
+                "requested_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "message": message,
+            }
+        )
+
+
+def _handoff_snapshot(
+    *,
+    data_summary: dict[str, object] | None = None,
+    preflight_summary: dict[str, object] | None = None,
+) -> dict[str, object]:
+    # Read _handoff_state under _state_lock, but release it before calling the
+    # snapshot helpers that acquire _bg_lock (hierarchy rule at module top).
+    with _state_lock:
+        if not bool(_handoff_state.get("active")):
+            return {"active": False, "status": "idle", "reason": "", "action": None}
+        target_profile = str(_handoff_state.get("target_profile") or "")
+        target_mode = str(_handoff_state.get("target_mode") or "")
+
+    session = _session_snapshot()
+    refresh = _refresh_snapshot()
+    journal = _journal_lock_status()
+    instance_locks = _instance_lock_status()
+
+    if session["running"]:
+        status = "stopping"
+        reason = f"Stopping current session before switching to {target_mode.upper()}."
+        action = {"id": "stop_session", "label": "Stop Session"}
+    elif journal["locked"] or instance_locks["locked"]:
+        status = "waiting_cleanup"
+        reason = "Waiting for runtime locks to clear before continuing."
+        action = {"id": "wait_cleanup", "label": "Waiting For Cleanup"}
+    elif refresh["running"]:
+        status = "waiting_refresh"
+        reason = "Data refresh is running. Wait for it to finish before continuing."
+        action = {"id": "wait_refresh", "label": "Refresh Running"}
+    else:
+        summary = data_summary or _collect_data_status()
+        if bool(summary.get("any_stale", True)):
+            status = "needs_refresh"
+            reason = "Data is stale. Refresh before continuing the handoff."
+            action = {"id": "refresh_data", "label": "Refresh Data"}
+        else:
+            with _state_lock:
+                pf = preflight_summary or _preflight_cache.get(target_profile)
+            pf_status = str((pf or {}).get("status") or "")
+            if pf is None or pf_status in {"fail", "error", "timeout"}:
+                status = "needs_preflight"
+                reason = "Run preflight again before continuing the handoff."
+                action = {"id": "run_preflight", "label": "Run Preflight"}
+            else:
+                status = "ready_to_start"
+                reason = f"Cleanup finished. Ready to start {target_mode.upper()}."
+                action = {
+                    "id": "continue_handoff",
+                    "label": f"Start {target_mode.upper()}",
+                }
+
+    with _state_lock:
+        _handoff_state["status"] = status
+        _handoff_state["message"] = reason
+        requested_at = _handoff_state.get("requested_at")
+    return {
+        "active": True,
+        "status": status,
+        "target_profile": target_profile,
+        "target_mode": target_mode,
+        "requested_at": requested_at,
+        "reason": reason,
+        "action": action,
+    }
 
 
 def _normalize_check_status(raw_status: str) -> str:
@@ -409,6 +619,13 @@ def _profile_session_ambiguity(profile_id: str | None) -> dict[str, object]:
 
 
 def _collect_data_status() -> dict[str, object]:
+    if _refresh_snapshot()["running"]:
+        return {
+            "status": "busy",
+            "instruments": {},
+            "any_stale": True,
+            "busy_reason": "Data refresh in progress",
+        }
     try:
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 
@@ -496,6 +713,71 @@ def _choose_operator_profile(requested_profile: str | None, state: dict[str, obj
     return None
 
 
+def _build_action_guard(
+    *,
+    data_summary: dict[str, object],
+    preflight_summary: dict[str, object] | None,
+) -> dict[str, object]:
+    session = _session_snapshot()
+    refresh = _refresh_snapshot()
+    journal = _journal_lock_status()
+    instance_locks = _instance_lock_status()
+    handoff = _handoff_snapshot(data_summary=data_summary, preflight_summary=preflight_summary)
+
+    blocked_action_ids: list[str] = []
+    top_state = None
+    reason = ""
+    action = None
+
+    if session["running"]:
+        blocked_action_ids.extend(["start_signal", "start_demo", "start_live", "run_preflight", "refresh_data"])
+    if refresh["running"]:
+        blocked_action_ids.extend(["start_signal", "start_demo", "start_live", "run_preflight", "refresh_data"])
+        top_state = "BLOCKED"
+        reason = "Data refresh is in progress. Wait for it to finish."
+        action = {"id": "wait_refresh", "label": "Refresh Running"}
+
+    if handoff["active"]:
+        top_state = "BLOCKED" if handoff["status"] != "ready_to_start" else "READY"
+        reason = str(handoff["reason"])
+        action = handoff["action"]
+        blocked_action_ids.extend(["start_signal", "start_demo", "start_live"])
+        if handoff["status"] in {"stopping", "waiting_cleanup", "waiting_refresh"}:
+            blocked_action_ids.extend(["run_preflight", "refresh_data"])
+
+    if not session["running"] and not refresh["running"] and not handoff["active"]:
+        if data_summary.get("status") == "busy":
+            top_state = "BLOCKED"
+            reason = str(data_summary.get("busy_reason") or "Data refresh in progress.")
+            action = {"id": "wait_refresh", "label": "Refresh Running"}
+            blocked_action_ids.extend(["start_signal", "start_demo", "start_live", "run_preflight", "refresh_data"])
+        elif bool(data_summary.get("any_stale", True)) or (
+            preflight_summary is None or str(preflight_summary.get("status") or "") in {"fail", "error", "timeout"}
+        ):
+            blocked_action_ids.extend(["start_signal", "start_demo", "start_live"])
+
+    return {
+        "top_state": top_state,
+        "reason": reason,
+        "action": action,
+        "blocked_action_ids": sorted(set(blocked_action_ids)),
+        "busy_reason": reason if top_state == "BLOCKED" else "",
+        "resource_locks": {
+            "journal": journal,
+            "instance_lock": instance_locks,
+            "refresh": refresh,
+            "session": {
+                "running": session["running"],
+                "mode": session["raw_mode"],
+                "profile": session["profile"],
+            },
+        },
+        "handoff": handoff,
+        "session": session,
+        "refresh": refresh,
+    }
+
+
 def _derive_operator_state(
     *,
     raw_mode: str,
@@ -509,7 +791,7 @@ def _derive_operator_state(
     any_stale = bool(data_summary.get("any_stale", True))
 
     if raw_mode in {"SIGNAL", "DEMO", "LIVE"}:
-        if heartbeat_age_s >= 120:
+        if heartbeat_age_s >= HEARTBEAT_STALE_AFTER_S:
             return (
                 "STALE",
                 "Bot heartbeat is stale. Current runtime state cannot be trusted.",
@@ -578,21 +860,24 @@ def _derive_operator_state(
 
 def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
     state = read_state()
-    raw_mode = str(state.get("mode") or "STOPPED").upper()
-    heartbeat_age_s = float(state.get("heartbeat_age_s") or 9999)
-    if state and "heartbeat_age_s" not in state:
-        hb = state.get("heartbeat_utc")
-        if hb:
-            try:
-                heartbeat_age_s = (datetime.now(UTC) - datetime.fromisoformat(str(hb))).total_seconds()
-            except (TypeError, ValueError):
-                heartbeat_age_s = 9999
+    session_snapshot = _session_snapshot()
+    raw_mode = str(session_snapshot.get("raw_mode") or "STOPPED")
+    heartbeat_age_s = float(session_snapshot.get("heartbeat_age_s") or 9999)
 
     operator_profile = _choose_operator_profile(profile, state)
+    overlay_summary = None
+    if operator_profile:
+        try:
+            from trading_app.lifecycle_state import read_lifecycle_state
+
+            overlay_summary = read_lifecycle_state(operator_profile).get("conditional_overlays")
+        except Exception as exc:
+            overlay_summary = {"available": False, "error": str(exc)}
     broker_summary = _collect_broker_status()
     data_summary = _collect_data_status()
     alert_summary = _collect_alert_summary(profile=operator_profile, mode=None if raw_mode == "STOPPED" else raw_mode)
-    preflight_summary = _preflight_cache.get(operator_profile or "")
+    with _state_lock:
+        preflight_summary = _preflight_cache.get(operator_profile or "")
     session_gate = _profile_session_ambiguity(operator_profile)
     top_state, reason, action = _derive_operator_state(
         raw_mode=raw_mode,
@@ -601,6 +886,14 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
         data_summary=data_summary,
         preflight_summary=preflight_summary,
     )
+    guard = _build_action_guard(
+        data_summary=data_summary,
+        preflight_summary=preflight_summary,
+    )
+    if guard["top_state"]:
+        top_state = str(guard["top_state"])
+        reason = str(guard["reason"])
+        action = guard["action"]
 
     checks: list[dict[str, str]] = []
 
@@ -614,7 +907,15 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
     broker_status = "pass" if connected_count > 0 else "fail"
     checks.append({"name": "Broker", "status": broker_status, "detail": broker_detail})
 
-    if data_summary.get("status") == "error":
+    if data_summary.get("status") == "busy":
+        checks.append(
+            {
+                "name": "Data",
+                "status": "warn",
+                "detail": str(data_summary.get("busy_reason") or "Data refresh in progress"),
+            }
+        )
+    elif data_summary.get("status") == "error":
         checks.append(
             {
                 "name": "Data",
@@ -675,6 +976,34 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
         }
     )
 
+    if overlay_summary and overlay_summary.get("available"):
+        overlays = overlay_summary.get("overlays", [])
+        invalid = [row for row in overlays if not row.get("valid") or row.get("status") == "invalid"]
+        ready = [row for row in overlays if row.get("status") == "ready"]
+        if invalid:
+            detail = ", ".join(f"{row.get('overlay_id')}: {row.get('reason') or 'invalid'}" for row in invalid)
+            checks.append({"name": "Conditional overlays", "status": "warn", "detail": detail})
+        elif ready:
+            detail = ", ".join(
+                f"{row.get('overlay_id')} ready ({row.get('summary', {}).get('ready_count', 0)}/{row.get('summary', {}).get('row_count', 0)} rows)"
+                for row in ready
+            )
+            checks.append({"name": "Conditional overlays", "status": "info", "detail": detail})
+        else:
+            detail = (
+                ", ".join(f"{row.get('overlay_id')} {row.get('status')}" for row in overlays)
+                or "No overlay rows available"
+            )
+            checks.append({"name": "Conditional overlays", "status": "info", "detail": detail})
+    elif overlay_summary and overlay_summary.get("error"):
+        checks.append(
+            {
+                "name": "Conditional overlays",
+                "status": "warn",
+                "detail": f"Overlay state unavailable: {overlay_summary['error']}",
+            }
+        )
+
     if alert_summary.get("status") == "error":
         checks.append(
             {
@@ -708,10 +1037,15 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
         "recommended_action": action,
         "checks": checks,
         "heartbeat_age_s": heartbeat_age_s,
+        "blocked_action_ids": guard["blocked_action_ids"],
+        "busy_reason": guard["busy_reason"],
+        "resource_locks": guard["resource_locks"],
+        "handoff": guard["handoff"],
         "preflight": preflight_summary,
         "broker_summary": broker_summary,
         "data_summary": data_summary,
         "alert_summary": alert_summary,
+        "conditional_overlays": overlay_summary,
     }
 
 
@@ -847,7 +1181,11 @@ async def action_kill():
                     log_file.close()
                 except Exception:
                     pass
-        return {"status": "ok", "message": "Stop file created — bot will shut down within 5 seconds"}
+        with _state_lock:
+            if bool(_handoff_state.get("active")):
+                _handoff_state["status"] = "stopping"
+                _handoff_state["message"] = "Waiting for the current session to stop."
+        return {"status": "ok", "message": "Stop sent — waiting for session shutdown"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
@@ -857,6 +1195,20 @@ async def action_preflight(profile: str | None = None):
     """Run preflight checks and return output."""
     try:
         profile = profile or _resolve_profile()
+        session = _session_snapshot()
+        refresh = _refresh_snapshot()
+        if refresh["running"]:
+            return {
+                "status": "blocked",
+                "profile": profile,
+                "output": "Data refresh is running — wait for it to finish before preflight.",
+            }
+        if session["running"]:
+            return {
+                "status": "blocked",
+                "profile": profile,
+                "output": "A session is already running — stop it before preflight.",
+            }
         result = subprocess.run(
             [sys.executable, "-m", "scripts.run_live_session", "--profile", profile, "--preflight"],
             capture_output=True,
@@ -877,7 +1229,8 @@ async def action_preflight(profile: str | None = None):
             **parsed,
             "output": result.stdout + result.stderr,
         }
-        _preflight_cache[profile] = cache_entry
+        with _state_lock:
+            _preflight_cache[profile] = cache_entry
         return {
             "status": status,
             "output": result.stdout + result.stderr,
@@ -900,7 +1253,8 @@ async def action_preflight(profile: str | None = None):
             "output": "Preflight timed out after 60s",
         }
         if profile:
-            _preflight_cache[profile] = cache_entry
+            with _state_lock:
+                _preflight_cache[profile] = cache_entry
         return cache_entry
     except Exception as e:
         cache_entry = {
@@ -914,7 +1268,8 @@ async def action_preflight(profile: str | None = None):
             "output": str(e),
         }
         if profile:
-            _preflight_cache[profile] = cache_entry
+            with _state_lock:
+                _preflight_cache[profile] = cache_entry
         return cache_entry
 
 
@@ -1368,6 +1723,19 @@ async def action_refresh():
     Output goes to logs/refresh.log (not a pipe — prevents deadlock on Windows
     where the 64KB pipe buffer fills and blocks the child process forever).
     """
+    session = _session_snapshot()
+    if session["running"]:
+        return {
+            "status": "blocked",
+            "message": "A session is active and owns runtime state. Stop it before refreshing data.",
+        }
+    handoff = _handoff_snapshot()
+    if handoff["active"] and handoff["status"] in {"stopping", "waiting_cleanup", "waiting_refresh"}:
+        return {
+            "status": "blocked",
+            "message": str(handoff["reason"]),
+        }
+
     with _bg_lock:
         if "refresh" in _bg_processes:
             proc = _bg_processes["refresh"]
@@ -1454,15 +1822,59 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
     if mode not in ("signal", "demo", "live"):
         return JSONResponse(status_code=400, content={"status": "error", "message": f"Invalid mode: {mode}"})
 
+    profile = profile or _resolve_profile()
+    session = _session_snapshot()
+    refresh = _refresh_snapshot()
+    with _state_lock:
+        preflight_summary = _preflight_cache.get(profile or "")
+    handoff = _handoff_snapshot(preflight_summary=preflight_summary)
+    data_summary = _collect_data_status()
+
+    if refresh["running"]:
+        return {"status": "blocked", "message": "Data refresh is running. Wait for it to finish."}
+
+    if session["running"]:
+        same_mode = session["raw_mode"].lower() == mode
+        same_profile = session["profile"] == profile
+        if same_mode and same_profile:
+            return {"status": "running", "message": "Requested session is already running"}
+        _set_handoff(profile, mode, f"Stopping current session before switching to {mode.upper()}.")
+        await action_kill()
+        return {
+            "status": "handoff_started",
+            "message": f"Stopping current session before switching to {mode.upper()}.",
+            "handoff": _handoff_snapshot(),
+        }
+
+    if handoff["active"]:
+        target_profile = str(handoff.get("target_profile") or "")
+        target_mode = str(handoff.get("target_mode") or "")
+        if target_profile and target_mode and (profile != target_profile or mode != target_mode):
+            return {
+                "status": "blocked",
+                "message": (
+                    f"Handoff in progress to {target_mode.upper()} for {target_profile}. Finish or cancel that first."
+                ),
+            }
+        if handoff["status"] != "ready_to_start":
+            return {
+                "status": "handoff_wait",
+                "message": str(handoff["reason"]),
+                "handoff": handoff,
+            }
+
+    if bool(data_summary.get("any_stale", True)):
+        return {"status": "blocked", "message": "Market data is stale. Refresh data before starting."}
+
+    pf_status = str((preflight_summary or {}).get("status") or "")
+    if preflight_summary is None or pf_status in {"fail", "error", "timeout"}:
+        return {"status": "blocked", "message": "Run preflight before starting a session."}
+
     with _bg_lock:
         if "session" in _bg_processes:
             proc = _bg_processes["session"]
             if proc.poll() is None:
                 return {"status": "running", "message": "Session already running"}
-
-        # Use explicit profile from card button, or fallback
-        if not profile:
-            profile = _resolve_profile()
 
         # Close any stale log handle from a previous session
         old_log = _bg_processes.pop("_session_logfile", None)
@@ -1503,6 +1915,7 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
             )
             _bg_processes["session"] = proc
             _bg_processes["_session_logfile"] = log_file  # type: ignore[assignment]
+            _clear_handoff()
             return {
                 "status": "started",
                 "message": f"{mode_label} session started: {profile}",

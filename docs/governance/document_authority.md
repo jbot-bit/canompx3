@@ -28,6 +28,24 @@ to mean, and what it is not allowed to mean.
 | `docs/context/*.md` | generated task-routing orientation | deterministic task-context views when rendered from `context/registry.py` | live runtime truth by itself; policy beyond the canonical doctrine docs |
 | `REPO_MAP.md` | generated inventory | file/directory layout snapshot generated from the repo | behavior, policy, runtime state |
 
+## Document classes
+
+Use these classes instead of mixing live facts, decisions, and snapshots in the
+same prose.
+
+| Class | Allowed content | Required marker |
+|---|---|---|
+| `generated` | Dynamic facts rendered from code, registries, or published read models | Source path plus "do not edit by hand" |
+| `snapshot` | Dated/commit-stamped state captured for audit history | Date/commit plus "not live truth" |
+| `decision` | Rationale, verdicts, and ownership decisions | Evidence links and scope |
+| `contract` | Active interface expectations between repo surfaces | Owning source and verification gate |
+| `result` | Research/audit output | Verdict, provenance, reproduction, caveats |
+| `handoff` | Current cross-tool baton | Compact current-state warning only |
+
+Dynamic facts include counts, active lanes, strategy IDs, live profile contents,
+session lists, schemas, and current git/runtime state. Those belong in code,
+canonical data, generated docs, or stamped snapshots — not unqualified prose.
+
 ## Conflict rules
 
 1. If live code or DB behavior disagrees with a document, code/DB wins for
@@ -44,6 +62,9 @@ to mean, and what it is not allowed to mean.
 6. `docs/ARCHITECTURE.md`, `docs/MONOREPO_ARCHITECTURE.md`, and `REPO_MAP.md`
    are reference surfaces. They must point back to canonical code or generated
    sources and must not drift into pseudo-authority.
+7. Generated docs win over hand-edited copies of the same facts only when they
+   are in sync with their generator. If generated output drifts from the
+   generator, the generator wins and the doc must be re-rendered.
 
 ## Maintenance rules
 
@@ -53,3 +74,9 @@ to mean, and what it is not allowed to mean.
    authority doc in the same workstream or record the gap explicitly in
    `HANDOFF.md`.
 3. Archived plans are historical only. They do not carry current authority.
+4. Do not commit preregs/results with placeholder provenance markers such as
+   `UNSTAMPED` or `TO_BE_STAMPED`.
+5. Do not describe a `design_only` prereg as executable. It must remain blocked
+   until its data tables and bounded runner exist.
+6. If a doc says "current", "live", or "deployed" about dynamic state, it must
+   either link to the canonical source or declare itself as a dated snapshot.

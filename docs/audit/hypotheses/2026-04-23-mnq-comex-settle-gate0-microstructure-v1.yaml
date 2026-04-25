@@ -1,0 +1,72 @@
+# Hypothesis Registry — 2026-04-23 mnq comex settle gate0 microstructure v1
+#
+# Locked: 2026-04-23T12:00:00+10:00
+# Author: Gemini session
+# Committing commit hash: 34d9e7321fee9f9022cc9945a53c664825411238
+# Data horizon: 6.65yr clean MNQ + future Databento top-of-book pilot windows
+# Intended discovery holdout: 2026-01-01
+# Execution status: DESIGN_ONLY — runner and Databento tables are not built yet.
+
+metadata:
+  name: "mnq_comex_settle_gate0_microstructure_v1"
+  purpose: "Microstructure Gate 0 falsification study for MNQ COMEX_SETTLE using top-of-book imbalance."
+  date_locked: "2026-04-23T12:00:00+10:00"
+  commit_sha: "34d9e7321fee9f9022cc9945a53c664825411238"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 4
+  testing_mode: "family"
+  research_question_type: "conditional_role"
+
+hypotheses:
+  - id: 1
+    name: "Pre-break top-of-book imbalance predicts MNQ COMEX_SETTLE breakout follow-through"
+    theory_citation: "Cont, Kukanov, Stoikov (2014); Gould and Bonart (2016)"
+    economic_basis: |
+      Short-horizon price changes and breakout follow-through are more robustly 
+      linked to order-flow imbalance (OFI) and queue imbalance than to raw 
+      volume. Positive book pressure (buy-side depth and aggressor-buy 
+      imbalance) immediately before a high-side break should increase the 
+      probability of follow-through.
+    role:
+      kind: "filter"
+      parent: "MNQ COMEX_SETTLE O5 E2 RR1.5 (Long and Short)"
+      comparator: "Parent vs OFI_60s_Q4 vs TBI_60s_Q4 vs QI_1s_Q4 vs (OFI_60s_Q4 AND QI_1s_Q4)"
+      primary_metric: "policy_ev_per_opportunity_r"
+      promotion_target: "shadow_only"
+    microstructure_features:
+      - id: "signed_ofi_60s_high"
+        description: "Order Flow Imbalance over 60s before touch, signed to break direction, top quartile."
+      - id: "signed_tbi_60s_high"
+        description: "Trade-space Imbalance over 60s before touch, signed to break direction, top quartile."
+      - id: "signed_qi_last_1s_high"
+        description: "Queue Imbalance over last 1s before touch, signed to break direction, top quartile."
+      - id: "signed_ofi_60s_high_AND_signed_qi_last_1s_high"
+        description: "Union of OFI and Queue Imbalance signals."
+    scope:
+      instruments: [MNQ]
+      sessions: [COMEX_SETTLE]
+      orb_minutes: [5]
+      entry_models: [E2]
+      rr_targets: [1.5]
+    expected_trial_count: 4
+    kill_criteria:
+      - "No feature improves IS policy_ev_per_opportunity_r versus parent"
+      - "Sacred OOS 2026-01-01 onward reverses the IS role ordering"
+      - "The best feature clears the rule but reduces trade count so much that capital-normalized EV falls"
+      - "Policy value fails to improve versus the exact parent despite selected-trade mean lift"
+
+execution:
+  mode: "design_only"
+  entrypoint: null
+  default_args: []
+  required_before_execution:
+    - "Databento top-of-book event tables are implemented and populated for the frozen windows."
+    - "A bounded runner is written and reviewed before any scan."
+    - "No 2026 OOS threshold tuning; holdout remains 2026-01-01."
+
+total_hypothesis_count: 1
+total_expected_trials: 4
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"

@@ -1,0 +1,69 @@
+metadata:
+  name: "mnq-usdata1000-f5-below-pdl-rr15-v1"
+  purpose: "Exact K=1 prereg for the MNQ US_DATA_1000 O5 E2 RR1.5 long below-PDL .4R frontier"
+  date_locked: "2026-04-24T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "individual"
+  research_question_type: "standalone_edge"
+
+hypotheses:
+  - id: 1
+    name: "MNQ US_DATA_1000 O5 E2 RR1.5 long below-PDL"
+    theory_citation: |
+      Fitschen 2013 path-of-least-resistance intraday trend-following extract:
+      docs/institutional/literature/fitschen_2013_path_of_least_resistance.md.
+      Repo-local mechanism prior for prior-day liquidity/displacement:
+      docs/institutional/mechanism_priors.md.
+      Triage evidence and caveats:
+      docs/audit/results/2026-04-24-highest-ev-roi-4r-triage.md.
+    economic_basis: |
+      This test asks whether an already pre-entry-visible prior-day geometry
+      state can isolate a high-expectancy standalone MNQ US_DATA_1000 long
+      subset at O5 RR1.5. The mechanism prior is that an ORB midpoint below
+      prior-day low represents downside displacement where long breakouts can
+      catch a failed-auction or mean-reversion continuation path. This is a
+      standalone-candidate test only; passing discovery writes candidate
+      evidence to experimental_strategies and still requires validator /
+      confirmation before validated_setups, plus separate deployment review
+      before any live routing.
+    filter:
+      type: "F5_BELOW_PDL"
+      column: "orb_mid vs prev_day_low"
+      thresholds:
+        - "orb_mid < prev_day_low"
+      direction_gate: "long breakouts only, owned by PrevDayGeometryFilter(mode=below_pdl_long)"
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      orb_minutes: [5]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    expected_pre_holdout_context: |
+      Read-only canonical triage found the pre-2026 selected-trade cell at
+      approximately N=135 and AvgR=+0.4022, but this file treats that as
+      orientation, not proof. The sacred 2026 window remains held out for
+      Criterion 8 and must not be used to select or edit this scope.
+    kill_criteria:
+      - "Phase 4 discovery does not enumerate exactly this one accepted scope"
+      - "Experimental row does not match MNQ US_DATA_1000 O5 E2 RR1.5 CB1 F5_BELOW_PDL"
+      - "IS expectancy on-signal is non-positive after canonical discovery write"
+      - "Sample size falls below Criterion 7 minimum for exploratory discovery entry"
+      - "Validator rejects the row for lifecycle illegality, Phase 4 gates, walk-forward insufficiency, era instability, or 2026 OOS failure"
+
+execution:
+  mode: "grid_discovery"
+  entrypoint: "trading_app.strategy_discovery"
+
+non_actions:
+  - "Does NOT widen default discovery grids; F5_BELOW_PDL is hypothesis-injection only."
+  - "Does NOT claim validated_setups promotion."
+  - "Does NOT change live routing, profiles, lane allocation, or paper_trades."
+  - "Does NOT tune RR, aperture, session, direction, stop, or filter threshold after seeing results."
+
+outputs:
+  discovery_destination: "experimental_strategies"
+  next_surface: "strategy_validator -> validated_setups if and only if validation gates pass"

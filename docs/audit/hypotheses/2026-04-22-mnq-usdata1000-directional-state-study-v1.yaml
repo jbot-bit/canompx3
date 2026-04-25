@@ -1,0 +1,340 @@
+version: 1
+status: LOCKED
+date: 2026-04-22
+slug: mnq-usdata1000-directional-state-study-v1
+title: "MNQ US_DATA_1000 bounded directional state study — confluence-long vs near-pivot-short across O5/O15 × RR{1.0,1.5,2.0}"
+owner: codex
+parent_spec:
+  - "docs/runtime/stages/prior-day-pathway-b-hot-cell-prereg.md"
+  - "docs/institutional/mechanism_priors.md"
+  - "docs/plans/2026-04-22-recent-pr-followthrough-queue.md"
+
+testing_mode: family
+pathway: A_family
+
+purpose: |
+  This pre-reg reframes the prior-day geometry branch as a bounded directional
+  state study instead of another long-overlay rescue. The exact state machine is
+  frozen before execution:
+
+  - confluence_both -> long
+  - near_pivot -> short
+  - else -> no trade (with parent-lane and no-trade comparators reported)
+
+  Scope is locked to one lane family only: MNQ US_DATA_1000, E2, CB1,
+  O{5,15}, RR{1.0,1.5,2.0}. No threshold widening, no extra sessions, no extra
+  instruments, no OOS tuning, and 2026 remains sacred.
+
+deployment_not_done_here: |
+  This file authorizes a bounded research run only. No strategy promotion,
+  no live-config change, no allocator change, and no branch broadening are
+  permitted from this pre-reg alone.
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/quant-audit-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/prompts/prereg-writer-prompt.md"
+  notes:
+    - "Canonical truth must come only from bars_1m, daily_features, orb_outcomes."
+    - "Mode A is operative. 2026-01-01 onwards is sacred holdout and descriptive-only for this study."
+    - "This is a directional state study, not a generic overlay-rescue story."
+    - "Broad rolling-regime broadening is already NO-GO per mechanism_priors.md and is explicitly out of scope."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "2a5b617e"
+  committed_required_before_run: true
+
+scope:
+  instrument: MNQ
+  session: US_DATA_1000
+  entry_model: E2
+  confirm_bars: 1
+  apertures:
+    - 5
+    - 15
+  rr_targets:
+    - 1.0
+    - 1.5
+    - 2.0
+  directions_in_parent:
+    - long
+    - short
+  state_machine:
+    take_long_state: confluence_both
+    take_short_state: near_pivot
+    else_state: no_trade
+  states_explicitly_out_of_scope:
+    - "PD_GO_LONG union as a separate take-state"
+    - "PD_CLEAR_LONG alone as a separate take-state"
+    - "PD_DISPLACE_LONG alone as a separate take-state"
+    - "Any session other than US_DATA_1000"
+    - "Any instrument other than MNQ"
+    - "Any filter threshold other than dist_pdl_atr < 0.15 and dist_pivot_atr < 0.50"
+    - "Any aperture other than O5/O15"
+    - "Any RR other than 1.0/1.5/2.0"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "Mode A sacred; descriptive only"
+  holdout_rule:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+feature_definitions:
+  - feature_name: confluence_both
+    column_source: "computed from daily_features.prev_day_* + daily_features.orb_US_DATA_1000_*"
+    canonical_source_of_truth: "daily_features"
+    trade_time_knowable: true
+    first_complete_time: "ORB end"
+    temporal_alignment_note: |
+      RULE 6.1 safe. Prior-day levels are fixed before the session starts and
+      ORB midpoint is known at ORB end, before entry. This state is long-only
+      when break_dir = 'long'.
+    lookahead_check: "PASS"
+    definition: |
+      atr_20 > 0
+      AND prev_day_close IS NOT NULL
+      AND (orb_mid < prev_day_low OR abs(orb_mid - prev_day_low) / atr_20 < 0.15)
+      AND NOT ((prev_day_low < orb_mid < prev_day_high)
+               OR abs(orb_mid - pivot) / atr_20 < 0.50)
+      AND break_dir = 'long'
+  - feature_name: near_pivot_short
+    column_source: "computed from daily_features.prev_day_* + daily_features.orb_US_DATA_1000_*"
+    canonical_source_of_truth: "daily_features"
+    trade_time_knowable: true
+    first_complete_time: "ORB end"
+    temporal_alignment_note: |
+      RULE 6.1 safe. Prior-day pivot is fixed pre-session and ORB midpoint is
+      known at ORB end. This state is short-only when break_dir = 'short'.
+    lookahead_check: "PASS"
+    definition: |
+      atr_20 > 0
+      AND prev_day_close IS NOT NULL
+      AND abs(orb_mid - pivot) / atr_20 < 0.50
+      AND break_dir = 'short'
+  - feature_name: combined_directional_policy
+    column_source: "logical OR of the two frozen states above"
+    canonical_source_of_truth: "daily_features + orb_outcomes join"
+    trade_time_knowable: true
+    first_complete_time: "ORB end"
+    temporal_alignment_note: "RULE 6.1 safe binary policy gate."
+    lookahead_check: "PASS"
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  sources:
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/audit/hypotheses/2026-04-22-mnq-usdata1000-downside-displacement-take-v1.yaml"
+    - "docs/audit/hypotheses/2026-04-22-mnq-usdata1000-clear-of-congestion-take-v1.yaml"
+    - "docs/audit/hypotheses/2026-04-22-mnq-usdata1000-near-pivot-50-avoid-v1.yaml"
+    - "docs/audit/hypotheses/2026-04-22-mnq-usdata1000-positive-context-union-v1.yaml"
+  upstream_scan_k_framings:
+    prior_day_pathway_b_singletons: "Four Pathway B individual K=1 preregs on O5 long-side geometry states"
+  note: |
+    These upstream files motivated the bounded directional reframing. They are
+    provenance only. The current study's honest family K is defined below and
+    does not inherit the upstream singleton K values.
+
+primary_schema:
+  k_family: 6
+  k_global: 6
+  k_lane:
+    O5_RR1.0: 1
+    O5_RR1.5: 1
+    O5_RR2.0: 1
+    O15_RR1.0: 1
+    O15_RR1.5: 1
+    O15_RR2.0: 1
+  family_cells_structured_as: |
+    Six primary cells = O{5,15} × RR{1.0,1.5,2.0}. Each cell tests one frozen
+    combined directional policy. The else branch is reported as comparator only
+    and does not add to the family K.
+  primary_promotion_gate: |
+    Family BH-FDR q < 0.05 on the six-cell family is reported, but this study
+    also requires the non-waivable downstream gates and the portfolio-EV
+    comparison gates below before a CONTINUE verdict.
+
+hypotheses:
+  - id: H01_O5_RR1.0
+    type: primary
+    theory_citation: |
+      docs/institutional/mechanism_priors.md §2 and §8. The mechanism prior is
+      directional: confluence_both captures downside displacement + non-
+      congestion for long continuation, while near_pivot is a likely rejection /
+      two-sided state that can invert into short opportunity. This is a bounded
+      directional state study on one session family, not a fresh broad search.
+    statement: |
+      On MNQ US_DATA_1000 O5 E2 RR1.0 CB1, the frozen directional policy
+      (confluence_both -> long, near_pivot -> short, else no trade) has
+      positive IS policy EV per parent opportunity, positive on-signal ExpR,
+      and outperforms the inverse directional policy.
+    scope:
+      aperture: 5
+      rr_target: 1.0
+    expected_trial_count: 1
+    counted_against_trial_budget: true
+  - id: H02_O5_RR1.5
+    type: primary
+    theory_citation: "Same as H01."
+    statement: "Same as H01 on O5 RR1.5."
+    scope:
+      aperture: 5
+      rr_target: 1.5
+    expected_trial_count: 1
+    counted_against_trial_budget: true
+  - id: H03_O5_RR2.0
+    type: primary
+    theory_citation: "Same as H01."
+    statement: "Same as H01 on O5 RR2.0."
+    scope:
+      aperture: 5
+      rr_target: 2.0
+    expected_trial_count: 1
+    counted_against_trial_budget: true
+  - id: H04_O15_RR1.0
+    type: primary
+    theory_citation: "Same as H01."
+    statement: "Same as H01 on O15 RR1.0."
+    scope:
+      aperture: 15
+      rr_target: 1.0
+    expected_trial_count: 1
+    counted_against_trial_budget: true
+  - id: H05_O15_RR1.5
+    type: primary
+    theory_citation: "Same as H01."
+    statement: "Same as H01 on O15 RR1.5."
+    scope:
+      aperture: 15
+      rr_target: 1.5
+    expected_trial_count: 1
+    counted_against_trial_budget: true
+  - id: H06_O15_RR2.0
+    type: primary
+    theory_citation: "Same as H01."
+    statement: "Same as H01 on O15 RR2.0."
+    scope:
+      aperture: 15
+      rr_target: 2.0
+    expected_trial_count: 1
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 6
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "2 * ln(N_trials) / expected_t^2"
+    expected_t: 3.0
+    n_trials: 6
+    years_required: 0.40
+    available_clean_years: 6.65
+    within_cap: true
+    cap_reference: "Criterion 2 MinBTL"
+
+pass_gates:
+  G1_positive_policy_ev_is:
+    metric: "policy_ev_per_parent_day_IS = mean(CASE WHEN combined_policy THEN pnl_r ELSE 0 END)"
+    threshold_gt: 0.0
+    failure_action: "KILL"
+  G2_positive_on_signal_expr_is:
+    metric: "ExpR_on_signal_IS"
+    threshold_gt: 0.0
+    failure_action: "KILL"
+  G3_inverse_policy_dominated:
+    metric: "policy_ev_per_parent_day_IS - inverse_policy_ev_per_parent_day_IS"
+    threshold_gt: 0.0
+    failure_action: "KILL"
+  G4_null_floor:
+    metric: "T6 permutation p-value on IS"
+    threshold_lt: 0.05
+    failure_action: "KILL"
+  G5_per_year_consistency:
+    metric: "T7 fraction of IS years with positive on-signal ExpR"
+    threshold_gte: 0.50
+    threshold_continue_gte: 0.70
+    failure_action: "PARK"
+  G6_oos_dir_match:
+    metric: "sign(policy_ev_per_parent_day_OOS) == sign(policy_ev_per_parent_day_IS)"
+    threshold: true
+    oos_min_n_on: 10
+    failure_action: "PARK"
+  G7_parent_comparator:
+    metric: "policy_ev_per_parent_day_IS - parent_avg_r_IS"
+    threshold_gt: 0.0
+    failure_action: "PARK"
+
+kill_criteria:
+  - id: K1
+    metric: "G1_positive_policy_ev_is"
+    threshold: "<= 0"
+    action: "KILL"
+  - id: K2
+    metric: "G2_positive_on_signal_expr_is"
+    threshold: "<= 0"
+    action: "KILL"
+  - id: K3
+    metric: "G3_inverse_policy_dominated"
+    threshold: "<= 0"
+    action: "KILL"
+  - id: K4
+    metric: "G4_null_floor"
+    threshold: ">= 0.05"
+    action: "KILL"
+  - id: K5
+    metric: "G7_parent_comparator"
+    threshold: "<= 0"
+    action: "PARK"
+
+decision_rule:
+  continue_if: |
+    At least one family cell passes G1-G7, survives family BH-FDR reporting,
+    and the result memo concludes that the path is competitive with or superior
+    to the current queue leader on expected portfolio EV.
+  park_if: |
+    One or more cells pass G1-G6 but fail G7, or the path remains portfolio-EV
+    inferior to the queue leader. In this case the study may remain a bounded
+    allocator/conditioner note but does not outrank the queue leader.
+  kill_if: |
+    All cells fail any of G1-G4, or the inverse policy dominates, or the null
+    floor rejects the bounded directional story.
+
+methodology_rules_applied:
+  - "backtesting-methodology.md RULE 3 — IS only for calibration and verdict-driving metrics"
+  - "backtesting-methodology.md RULE 4 — family K=6, BH-FDR reported at the current test scope"
+  - "backtesting-methodology.md RULE 6 — all state inputs are trade-time knowable at ORB end"
+  - "backtesting-methodology.md RULE 9 — canonical orb_outcomes x daily_features join"
+  - "research-truth-protocol.md — canonical layers only; derived layers are provenance only"
+  - "quant-audit-protocol.md — T0-T8 battery required before any continue verdict"
+
+outputs_required_after_run:
+  - "docs/audit/results/2026-04-22-mnq-usdata1000-directional-state-study-v1.md"
+  - "raw canonical state matrix by O{5,15} × RR{1.0,1.5,2.0}"
+  - "T0-T8 audit table per family cell"
+  - "adversarial checks: inverse policy, component-direction dominance, parent comparator"
+  - "IS/OOS direction-match table"
+  - "portfolio-EV comparison against docs/plans/2026-04-22-recent-pr-followthrough-queue.md item #1"
+
+execution_gate:
+  allowed_now: true
+  forbidden_now:
+    - "Any rerun with widened thresholds"
+    - "Any OOS-driven pruning or selection"
+    - "Any change to session, instrument, aperture, RR, or direction mapping"
+    - "Any deployment claim"
+
+not_done_by_this_pre_reg:
+  - "Does NOT reopen the broader prior-day family"
+  - "Does NOT test COMEX_SETTLE"
+  - "Does NOT test PD_GO_LONG as a separate long-union policy"
+  - "Does NOT test live portfolio routing or position sizing"

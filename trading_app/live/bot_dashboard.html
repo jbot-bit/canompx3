@@ -1986,6 +1986,12 @@ function renderAccounts(accounts) {
             '<span class="btn-title">Live</span><span class="btn-sub">Real Combine $$</span>' +
           '</button>';
         const [bs, bd, bl] = ar.querySelectorAll("button");
+        const signalBlocked = blockedActionReason("start_signal");
+        const demoBlocked = blockedActionReason("start_demo");
+        const liveBlocked = blockedActionReason("start_live");
+        if (signalBlocked) { bs.disabled = true; bs.title = signalBlocked; }
+        if (demoBlocked) { bd.disabled = true; bd.title = demoBlocked; }
+        if (liveBlocked) { bl.disabled = true; bl.title = liveBlocked; }
         bs.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "signal"));
         bd.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "demo"));
         card.appendChild(ar);
@@ -2000,7 +2006,7 @@ function renderAccounts(accounts) {
         const gate = document.createElement("div"); gate.className = "live-gate";
         gate.innerHTML = '<label>To enable <b>Live</b>, type <b>LIVE</b> then click the Live button:</label><input type="text" placeholder="Type LIVE here to unlock real trading">';
         const inp = gate.querySelector("input");
-        inp.addEventListener("input", () => { bl.disabled = inp.value.trim() !== "LIVE"; });
+        inp.addEventListener("input", () => { bl.disabled = !!liveBlocked || inp.value.trim() !== "LIVE"; });
         bl.addEventListener("click", () => { if (inp.value.trim() !== "LIVE") return; launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "live"); inp.value = ""; bl.disabled = true; });
         card.appendChild(gate);
       }
@@ -2112,6 +2118,17 @@ function showActivity(title, text, tone) {
 }
 function appendActivity(text) { const o = $("activity-output"); o.textContent += `\n${text}`; o.scrollTop = o.scrollHeight; }
 
+function blockedActionReason(actionId) {
+  const blocked = new Set(lastOperatorState?.blocked_action_ids || []);
+  if (!blocked.has(actionId)) {
+    if (actionId.startsWith("start_") && lastOperatorState?.top_state && lastOperatorState.top_state !== "READY") {
+      return lastOperatorState?.reason || "";
+    }
+    return "";
+  }
+  return lastOperatorState?.busy_reason || lastOperatorState?.reason || "Unavailable right now";
+}
+
 async function handleOperatorAction(action, data) {
   if (!action || !action.id) return;
 
@@ -2137,6 +2154,22 @@ async function handleOperatorAction(action, data) {
 
   if (action.id === "refresh_data") {
     $("btn-refresh").click();
+    return;
+  }
+
+  if (action.id === "wait_refresh" || action.id === "wait_cleanup") {
+    showActivity(action.label || "Please wait", data?.reason || "Operation in progress.", "warning");
+    return;
+  }
+
+  if (action.id === "continue_handoff") {
+    const handoff = data?.handoff || {};
+    const acct = getProfileRecord(handoff.target_profile || data?.profile);
+    if (!acct || !handoff.target_mode) {
+      showActivity("Continue Handoff", "Pending handoff target is unavailable.", "error");
+      return;
+    }
+    launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", handoff.target_mode);
     return;
   }
 
@@ -2186,6 +2219,12 @@ function renderOperatorState(data) {
     btn.style.display = "none";
     btn.onclick = null;
   }
+
+  const blocked = new Set(data?.blocked_action_ids || []);
+  $("btn-refresh").disabled = blocked.has("refresh_data") && action?.id !== "refresh_data";
+  $("btn-preflight").disabled = blocked.has("run_preflight") && action?.id !== "run_preflight";
+  $("btn-refresh").title = $("btn-refresh").disabled ? (data?.reason || "Unavailable right now") : "";
+  $("btn-preflight").title = $("btn-preflight").disabled ? (data?.reason || "Unavailable right now") : "";
 
   const checks = Array.isArray(data?.checks) ? data.checks : [];
   const wrap = $("operator-checks");
@@ -2474,6 +2513,7 @@ function updatePrimaryCta() {
   const statusMode = ($("summary-mode")?.textContent || "Stopped").toString();
   const isRunning = statusMode !== "Stopped" && statusMode !== "Offline" && statusMode !== "—";
   const acct = activeProfileData;
+  const recommended = lastOperatorState?.recommended_action || null;
 
   if (_primaryCtaBusy) { return; }
 
@@ -2495,6 +2535,14 @@ function updatePrimaryCta() {
         setTimeout(() => { _primaryCtaBusy = false; btn.disabled = false; updatePrimaryCta(); }, 2000);
       }
     };
+    return;
+  }
+
+  if (recommended && recommended.id && recommended.id !== "start_signal") {
+    btn.style.display = "";
+    btn.className = `topbar-btn primary ${operatorButtonTone(recommended.id)}`.trim();
+    btn.innerHTML = `${escapeHtml(recommended.label || "Continue")} <span class="cta-sub">${escapeHtml(lastOperatorState?.reason || "")}</span>`;
+    btn.onclick = () => { handleOperatorAction(recommended, lastOperatorState); };
     return;
   }
 
@@ -3221,15 +3269,21 @@ async function launchSession(pid, firm, instr, mode) {
   const warn = mode === "live" ? "\n\nREAL MONEY." : mode === "demo" ? "\n\nPaper orders." : "\n\nSignals only.";
   if (!confirm(`Start ${lbl[mode]}?\n\n${firm} | ${instr}\n${pid}${warn}`)) return;
   showActivity(`${lbl[mode]} Start`, `Launching ${pid}...`, mode === "live" ? "error" : "info");
-  try { const d = await (await fetch(`/api/action/start?${new URLSearchParams({profile: pid, mode})}`, {method: "POST"})).json(); appendActivity(d.message || d.status || "No response"); if (d.pid) appendActivity(`PID: ${d.pid}`); setTimeout(fetchOperatorState, 1000); }
+  try {
+    const d = await (await fetch(`/api/action/start?${new URLSearchParams({profile: pid, mode})}`, {method: "POST"})).json();
+    const tone = ["blocked", "handoff_wait"].includes(d.status) ? "warning" : d.status === "started" ? "success" : "info";
+    showActivity(`${lbl[mode]} ${String(d.status || "").toUpperCase()}`, d.message || d.status || "No response", tone);
+    if (d.pid) appendActivity(`PID: ${d.pid}`);
+    setTimeout(fetchOperatorState, 1000);
+  }
   catch (e) { appendActivity("Error: " + e.message); }
 }
-
 $("btn-refresh").addEventListener("click", async () => {
   showActivity("Refresh", "Starting data refresh...", "info");
   try {
     const d = await (await fetch("/api/action/refresh", {method: "POST"})).json();
-    appendActivity(d.message || d.status);
+    const tone = d.status === "blocked" ? "warning" : d.status === "started" ? "success" : "info";
+    showActivity(`Refresh ${String(d.status || "").toUpperCase()}`, d.message || d.status, tone);
     if ((d.status === "started" || d.status === "running") && !refreshPolling) {
       refreshPolling = true;
       const poll = setInterval(async () => {
@@ -3246,7 +3300,7 @@ $("btn-preflight").addEventListener("click", async () => {
     const profile = runningProfile || activeProfileData?.profile_id;
     if (profile) q.set("profile", profile);
     const d = await (await fetch(`/api/action/preflight?${q.toString()}`, {method: "POST"})).json();
-    const tone = d.status === "pass" ? "success" : d.status === "warn" ? "warning" : "error";
+    const tone = d.status === "pass" ? "success" : d.status === "warn" || d.status === "blocked" ? "warning" : "error";
     showActivity(`Preflight ${String(d.status || "").toUpperCase()}`, d.output || "No output", tone);
     fetchOperatorState();
   }

@@ -24,12 +24,28 @@ import pytest
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, risk_in_dollars, to_r_multiple
 from trading_app.config import ENTRY_MODELS
 from trading_app.entry_rules import detect_confirm, resolve_entry
+from trading_app.holdout_policy import HOLDOUT_GRANDFATHER_CUTOFF, HOLDOUT_SACRED_FROM
 from trading_app.hypothesis_loader import load_hypothesis_by_sha
 from trading_app.outcome_builder import compute_single_outcome
 
 
 def _cost():
     return get_cost_spec("MGC")
+
+
+def _effective_recompute_holdout(strategy_row: dict, holdout_cache: dict) -> date | None:
+    """Mirror discovery-era holdout semantics for stored strategy rows."""
+    hypothesis_sha = strategy_row.get("hypothesis_file_sha")
+    if hypothesis_sha:
+        if hypothesis_sha not in holdout_cache:
+            meta = load_hypothesis_by_sha(hypothesis_sha)
+            holdout_cache[hypothesis_sha] = meta["holdout_date"] if meta is not None else None
+        return holdout_cache[hypothesis_sha]
+
+    created_at = strategy_row.get("created_at")
+    if created_at is not None and created_at > HOLDOUT_GRANDFATHER_CUTOFF:
+        return HOLDOUT_SACRED_FROM
+    return None
 
 
 def _make_bars(start_ts, prices, interval_minutes=1):
@@ -1169,7 +1185,7 @@ class TestRandomStrategyMath:
         con = duckdb.connect(str(GOLD_DB), read_only=True)
         try:
             strats = con.execute(
-                "SELECT strategy_id, orb_label, entry_model, rr_target, "
+                "SELECT strategy_id, created_at, orb_label, entry_model, rr_target, "
                 "confirm_bars, filter_type, win_rate, sample_size, expectancy_r, "
                 "orb_minutes, stop_multiplier, hypothesis_file_sha "
                 "FROM experimental_strategies "
@@ -1178,6 +1194,7 @@ class TestRandomStrategyMath:
             ).fetchall()
             strat_cols = [
                 "strategy_id",
+                "created_at",
                 "orb_label",
                 "entry_model",
                 "rr_target",
@@ -1206,13 +1223,7 @@ class TestRandomStrategyMath:
                 cb = s["confirm_bars"]
                 ft = s["filter_type"]
                 om = s["orb_minutes"]
-                holdout_date = None
-                hypothesis_sha = s.get("hypothesis_file_sha")
-                if hypothesis_sha:
-                    if hypothesis_sha not in holdout_cache:
-                        meta = load_hypothesis_by_sha(hypothesis_sha)
-                        holdout_cache[hypothesis_sha] = meta["holdout_date"] if meta is not None else None
-                    holdout_date = holdout_cache[hypothesis_sha]
+                holdout_date = _effective_recompute_holdout(s, holdout_cache)
 
                 # Skip stop-multiplier variants — orb_outcomes stores outcomes at
                 # base stop only; adjusted stops are applied at discovery level
@@ -1287,7 +1298,7 @@ class TestRandomStrategyMath:
         con = duckdb.connect(str(GOLD_DB), read_only=True)
         try:
             strats = con.execute(
-                "SELECT strategy_id, orb_label, entry_model, rr_target, "
+                "SELECT strategy_id, created_at, orb_label, entry_model, rr_target, "
                 "confirm_bars, filter_type, win_rate, sample_size, expectancy_r, "
                 "orb_minutes, stop_multiplier, hypothesis_file_sha "
                 "FROM experimental_strategies "
@@ -1296,6 +1307,7 @@ class TestRandomStrategyMath:
             ).fetchall()
             strat_cols = [
                 "strategy_id",
+                "created_at",
                 "orb_label",
                 "entry_model",
                 "rr_target",
@@ -1321,13 +1333,7 @@ class TestRandomStrategyMath:
                 cb = s["confirm_bars"]
                 ft = s["filter_type"]
                 om = s["orb_minutes"]
-                holdout_date = None
-                hypothesis_sha = s.get("hypothesis_file_sha")
-                if hypothesis_sha:
-                    if hypothesis_sha not in holdout_cache:
-                        meta = load_hypothesis_by_sha(hypothesis_sha)
-                        holdout_cache[hypothesis_sha] = meta["holdout_date"] if meta is not None else None
-                    holdout_date = holdout_cache[hypothesis_sha]
+                holdout_date = _effective_recompute_holdout(s, holdout_cache)
 
                 # Skip stop-multiplier variants — orb_outcomes stores outcomes at
                 # base stop only; adjusted stops are applied at discovery level
@@ -1402,7 +1408,7 @@ class TestRandomStrategyMath:
         con = duckdb.connect(str(GOLD_DB), read_only=True)
         try:
             strats = con.execute(
-                "SELECT strategy_id, orb_label, entry_model, rr_target, "
+                "SELECT strategy_id, created_at, orb_label, entry_model, rr_target, "
                 "confirm_bars, filter_type, max_drawdown_r, orb_minutes, "
                 "stop_multiplier, hypothesis_file_sha "
                 "FROM experimental_strategies "
@@ -1411,6 +1417,7 @@ class TestRandomStrategyMath:
             ).fetchall()
             strat_cols = [
                 "strategy_id",
+                "created_at",
                 "orb_label",
                 "entry_model",
                 "rr_target",
@@ -1434,13 +1441,7 @@ class TestRandomStrategyMath:
                 cb = s["confirm_bars"]
                 ft = s["filter_type"]
                 om = s["orb_minutes"]
-                holdout_date = None
-                hypothesis_sha = s.get("hypothesis_file_sha")
-                if hypothesis_sha:
-                    if hypothesis_sha not in holdout_cache:
-                        meta = load_hypothesis_by_sha(hypothesis_sha)
-                        holdout_cache[hypothesis_sha] = meta["holdout_date"] if meta is not None else None
-                    holdout_date = holdout_cache[hypothesis_sha]
+                holdout_date = _effective_recompute_holdout(s, holdout_cache)
 
                 # Skip stop-multiplier variants — orb_outcomes stores outcomes at
                 # base stop only; adjusted stops are applied at discovery level

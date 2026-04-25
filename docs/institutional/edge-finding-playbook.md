@@ -8,6 +8,10 @@
 
 ## The 12 commandments of edge finding
 
+**Cross-reference:** once a signal is found, classify the role with
+`docs/institutional/conditional-edge-framework.md` before judging it. Many real
+signals in this repo are useful as filters or allocators, not standalone lanes.
+
 ### 1. ALWAYS scope comprehensively first, narrow second
 
 Enumerate ALL axes (sessions × instruments × apertures × RRs × directions × features). Then filter to what's relevant. **Never** hand-pick a subset and assume it's representative.
@@ -60,6 +64,16 @@ A validated cell without mechanism is a **working signal with unknown durability
 - Break-timing finding → hypothesized as **stop-hunt completion** (immediate breaks = stacked stops). Order-flow literature — NOT in `resources/`.
 
 No mechanism + BH survivor = deploy with caution, instrument the monitoring, decompose the signal with available data. Do NOT demote to "monitoring only" purely for lack of literature.
+
+### 5.5 Role-fit before verdict
+
+Before saying `alive`, `dead`, or `deployable`, ask:
+
+- is this a `standalone` question?
+- or a `filter`, `conditioner`, `allocator`, `confluence`, or `execution` question?
+
+If the answer is conditional, compare it against the parent on the right
+metric. Do not kill a useful state variable because it fails the wrong role.
 
 ### 6. Direction asymmetry hunting — LONG vs SHORT split
 

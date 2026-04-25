@@ -26,6 +26,8 @@ The first review of eligibility Phase 0+1 caught a HALF_SIZE bug that would have
 
 Fixes introduce new bugs. The eligibility hardening commit closed seven findings and introduced four new ones. Expect this. Plan for it. Do not declare "done" after a fix without a second review pass.
 
+**For CRIT/HIGH fixes in truth-layer paths, the review pass is formalized as the adversarial-audit gate — see `.claude/rules/adversarial-audit-gate.md`.** The gate requires an independent-context `evidence-auditor` pass before the next phase dispatches. The C1 kill-switch race (iter 174 F4 fix, caught by audit in 2026-04-25) is the proof case for why single-agent self-review is insufficient on exposure-creating paths.
+
 ### 3. Refactor when you see a pattern of bugs
 
 If review cycles keep finding new divergences, the architecture is wrong — stop patching. Name the root cause, propose the structural change, present options with blast radius and trade-offs. Do not offer "just ship it" as a realistic option — frame it honestly as debt.
