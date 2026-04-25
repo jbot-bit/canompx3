@@ -298,17 +298,33 @@ def save_trades(trades: list[dict], *, path: Path = TRADES_PATH) -> int:
 
 
 def _load_signals() -> list[dict]:
-    """Load live signals for source detection."""
-    signals_path = PROJECT_ROOT / "live_signals.jsonl"
-    if not signals_path.exists():
-        return []
+    """Load live signals for source detection.
+
+    R4 (Ralph iter 181): signal logs are now daily-partitioned as
+    live_signals_YYYY-MM-DD.jsonl. Read all matching files in the project
+    root so trade_matcher sees both today's signals and any historical day
+    files (needed when --date spans multiple trading days).
+
+    Falls back gracefully if no files exist (e.g., signal-only not yet run).
+    """
+    from trading_app.live.signal_log_rotator import _FILE_STEM, _FILE_SUFFIX
+
+    pattern = f"{_FILE_STEM}_*{_FILE_SUFFIX}"
+    signal_files = sorted(PROJECT_ROOT.glob(pattern))
+
+    # Also load the legacy monolithic file if it still exists (migration compat).
+    legacy = PROJECT_ROOT / "live_signals.jsonl"
+    if legacy.exists() and legacy not in signal_files:
+        signal_files = [legacy] + signal_files
+
     signals = []
-    for line in signals_path.read_text(encoding="utf-8").strip().split("\n"):
-        if line.strip():
-            try:
-                signals.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
+    for signals_path in signal_files:
+        for line in signals_path.read_text(encoding="utf-8").strip().split("\n"):
+            if line.strip():
+                try:
+                    signals.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
     return signals
 
 
