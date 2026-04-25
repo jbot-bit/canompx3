@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 175 — 2026-04-25
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py:_check_trading_day_rollover + _wall_clock_rollover_loop (new) + run() + finally
+- Finding: R1 CRITICAL — trading-day rollover only fires from _on_bar; feed-down at 09:00 Brisbane misses rollover, engine operates on wrong day indefinitely
+- Doctrine cited: institutional-rigor.md § 6 (no silent failures); integrity-guardian.md § 3 (fail-closed); canonical source compute_trading_day_utc_range
+- Action: Added _wall_clock_rollover_loop() mirroring _heartbeat_notifier lifecycle. Refactored _check_trading_day_rollover to accept override_trading_day. rollover_task created in run() and cancelled in finally. 4 mutation-proof tests added (TestR1WallClockRollover).
+- Blast radius: 2 files (session_orchestrator.py, test_session_orchestrator.py)
+- Verification: PASS — 152/152 tests green, 107/107 drift
+- Commit: 6dafda10
+
+---
+
 ## Iteration 174 — 2026-04-25
 - Phase: fix
 - Classification: [judgment]

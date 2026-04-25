@@ -3,62 +3,39 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 174
+## Last iteration: 175
 
-## RALPH AUDIT — Iteration 174
+## RALPH AUDIT — Iteration 175
 ## Date: 2026-04-25
-## Infrastructure Gates: drift 107/107 PASS; 148/148 test_session_orchestrator.py PASS
-## Scope: F4 (CRITICAL) — bracket submit failure post-fill leaves position naked
+## Infrastructure Gates: drift 107/107 PASS; 152/152 test_session_orchestrator.py PASS
+## Scope: R1 (CRITICAL) — trading-day rollover only fires from _on_bar; feed-down at 09:00 Brisbane misses rollover
 
 ---
 
-## Iteration 174 — F4 Bracket Naked Position Fix
+## Iteration 175 — R1 Wall-Clock Rollover Fix
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Silent failure / Fail-open (institutional-rigor.md § 6; integrity-guardian.md § 3) | `_submit_bracket` had 3 failure sub-paths that left a live position without broker-side stop/target protection: (1) no risk_points → log.error + return; (2) bracket spec None → log.warning + return; (3) submit raises → log.warning only. In all 3 cases position remained at broker with no stop/target. | CRITICAL | FIXED — iter 174 |
+| Silent failure / State persistence gap (institutional-rigor.md § 6; integrity-guardian.md § 3) | `_check_trading_day_rollover` was only called from `_on_bar`. If the bar feed is down at 09:00 Brisbane (reconnecting, auth expiry, holiday gap), the trading day is never rolled. Engine keeps yesterday's ORB windows, calendar flags, daily P&L counters, and risk limits — every subsequent bar is misclassified. | CRITICAL | FIXED — iter 175 |
 
-### Trace
+### Fix Summary
+- Refactored `_check_trading_day_rollover` to accept `override_trading_day: date | None` — wall-clock path passes override, skipping bar-timestamp derivation.
+- Added `_wall_clock_rollover_loop()` — mirrors `_heartbeat_notifier` lifecycle; sleeps until `compute_trading_day_utc_range(next_day)` UTC boundary (never hardcodes 09:00); fires `_check_trading_day_rollover(None, override_trading_day=next_day)`.
+- `run()`: `rollover_task = asyncio.create_task(_wall_clock_rollover_loop())`
+- `finally:`: `rollover_task.cancel()`
+- 4 mutation-proof tests: `TestR1WallClockRollover` (feed-down behavioral, None-bar-ts safety, idempotency guard, source-text probe).
 
-- Call site: `session_orchestrator.py:2200` → `await self._submit_bracket(event, strategy, actual_entry)`
-- `_submit_bracket:1670-1677` — F4-1: `if not risk_pts: log.error(...); return` — naked
-- `_submit_bracket:1692-1694` — F4-2: `if bracket is None: log.warning(...); return` — naked
-- `_submit_bracket:1708-1710` — F4-3: `except Exception as e: log.warning(...)` — naked
-
-### Fix
-
-All 3 sub-paths now: `log.critical` + `self._notify(f"F4-{N}: ...")` + `self._stats.brackets_failed += 1` + `self._fire_kill_switch()` + `await self._emergency_flatten()`.
-
-Mirror pattern: DD halt at lines 1491-1492 and consecutive bar gap at lines 1515-1516.
-
-Source markers F4-1, F4-2, F4-3 in notify messages — mutation-proof.
-
-### Blast radius
-
-- `trading_app/live/session_orchestrator.py` — `_submit_bracket` method only (~30 lines net)
-- `tests/test_trading_app/test_session_orchestrator.py` — `TestF4BracketNakedPosition` class added (4 tests)
-- No other files touched
+### Canonical Source Citation
+`pipeline.dst.compute_trading_day_utc_range` — never hardcoded `datetime.time(9, 0)`.
 
 ### Verification
-
-- 4/4 `TestF4BracketNakedPosition` PASS
-- 148/148 `test_session_orchestrator.py` PASS
-- 107/107 drift PASS
-
-### Self-review
-
-- `_fire_kill_switch()` is sync, called without await ✓
-- `_emergency_flatten()` is async, called with `await` ✓
-- Position is in `_positions` at bracket-submit time (filled at line 2099 before submit at 2200) ✓
-- Kill switch prevents re-entry after flatten ✓ (line 1528 gate)
-- No `COST_SPECS` needed — fix does not compute costs ✓
-- Codex staged changes (lines 1131-1220, `_notify` refactor) do not overlap F4 fix (lines 1666-1740) ✓
+- 152/152 tests green
+- 107/107 drift pass
+- Commit: 6dafda10
 
 ---
 
 ## Files Fully Scanned
-
-trading_app/live/session_orchestrator.py (iters 172, 173, 174)
-scripts/infra/telegram_feed.py (iter 173)
-trading_app/live/account_hwm_tracker.py (iter 172 reference)
-trading_app/risk_manager.py (iter 172)
+- trading_app/live/session_orchestrator.py (iters 173, 174, 175)
+- tests/test_trading_app/test_session_orchestrator.py (iters 173, 174, 175)
+- scripts/infra/telegram_feed.py (iter 173)

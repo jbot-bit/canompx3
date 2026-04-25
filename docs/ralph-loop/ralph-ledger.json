@@ -1,8 +1,8 @@
 {
-  "total_iterations": 167,
+  "total_iterations": 168,
   "last_updated": "2026-04-25",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 174,
+  "last_high_finding_iter": 175,
   "findings_by_type": {
     "canonical_violation": {
       "found": 56,
@@ -17,10 +17,10 @@
       "fix_rate": 0.92
     },
     "other": {
-      "found": 24,
-      "fixed": 12,
+      "found": 25,
+      "fixed": 13,
       "deferred": 3,
-      "fix_rate": 0.5
+      "fix_rate": 0.52
     },
     "dead_code": {
       "found": 16,
@@ -120,13 +120,13 @@
     }
   },
   "findings_by_severity": {
-    "CRITICAL": 4,
+    "CRITICAL": 5,
     "HIGH": 12,
     "MEDIUM": 45,
     "LOW": 106
   },
   "classifications": {
-    "judgment": 77,
+    "judgment": 78,
     "mechanical": 61,
     "audit-only": 29
   },
@@ -165,6 +165,11 @@
       "audit_count": 4,
       "last_iter": 170,
       "findings": 4
+    },
+    "trading_app/live/session_orchestrator.py": {
+      "audit_count": 4,
+      "last_iter": 175,
+      "findings": 2
     },
     "webhook_server.py": {
       "audit_count": 3,
@@ -220,11 +225,6 @@
       "audit_count": 3,
       "last_iter": 167,
       "findings": 2
-    },
-    "trading_app/live/session_orchestrator.py": {
-      "audit_count": 3,
-      "last_iter": 174,
-      "findings": 1
     },
     "tradovate/order_router.py": {
       "audit_count": 2,
@@ -2949,6 +2949,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "87dffa38"
+    },
+    {
+      "iter": 175,
+      "date": "2026-04-25",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/session_orchestrator.py:_check_trading_day_rollover + _wall_clock_rollover_loop (new) + run() + finally",
+      "finding_type": "other",
+      "severity": "CRITICAL",
+      "verdict": "FIXED",
+      "commit": "6dafda10"
     }
   ]
 }
