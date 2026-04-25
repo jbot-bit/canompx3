@@ -1,7 +1,11 @@
-## Iteration: 166
-## Target: trading_app/consistency_tracker.py:111,213,349
-## Finding: CAST(entry_time AS DATE) used for trade-day grouping instead of canonical trading_day column — UTC-cast date differs from Brisbane trading day for trades near midnight UTC
+## Iteration: 171
+## Target: trading_app/lane_allocator.py:506 (finding rooted in lane_correlation.py audit)
+## Finding: CORRELATION_REJECT_RHO = 0.70 in lane_allocator.py duplicates RHO_REJECT_THRESHOLD = 0.70 from lane_correlation.py — parallel constants that can silently diverge. Comment on line 506 explicitly acknowledges it ("Same as lane_correlation.RHO_REJECT_THRESHOLD").
 ## Classification: [mechanical]
-## Blast Radius: 1 production file, 1 test file, 2 read-only callers (pre_session_check.py, weekly_review.py — no signature change)
-## Invariants: [1] check_consistency returns same result for same input data; [2] tests still pass; [3] no schema changes
-## Diff estimate: 3 production lines
+## Blast Radius: 2 files (lane_allocator.py, test_lane_allocator.py), 0 callers change behavior
+## Invariants:
+##   1. Threshold value 0.70 must remain unchanged (research-derived)
+##   2. build_allocation correlation gate behavior (rho > threshold) must not change
+##   3. test_corr_threshold_boundary semantics (at threshold = pass, NOT above = reject) must not change
+## Diff estimate: 4 lines
+## Doctrine cited: integrity-guardian.md § 2 (never hardcode — import from canonical source); institutional-rigor.md § 4 (delegate to canonical sources, never re-encode)

@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from trading_app.live.instance_lock import (
-    _is_pid_alive,
+    is_pid_alive,
     _lock_file_for,
     acquire_instance_lock,
     release_instance_lock,
@@ -44,7 +44,7 @@ class TestInstanceLock:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_path.write_text("99999999")
 
-        with patch("trading_app.live.instance_lock._is_pid_alive", return_value=False):
+        with patch("trading_app.live.instance_lock.is_pid_alive", return_value=False):
             acquire_instance_lock("TEST_STALE")
 
         assert "TEST_STALE" in mod._locks
@@ -57,7 +57,7 @@ class TestInstanceLock:
         lock_path.write_text(str(os.getpid()))
 
         with pytest.raises(SystemExit) as exc_info:
-            with patch("trading_app.live.instance_lock._is_pid_alive", return_value=True):
+            with patch("trading_app.live.instance_lock.is_pid_alive", return_value=True):
                 acquire_instance_lock("TEST_BLOCK")
 
         assert exc_info.value.code == 1
@@ -92,10 +92,10 @@ class TestInstanceLock:
         assert len(mod._locks) == 1
 
     def test_pid_alive_current_process(self):
-        assert _is_pid_alive(os.getpid()) is True
+        assert is_pid_alive(os.getpid()) is True
 
     def test_pid_alive_dead_process(self):
-        assert _is_pid_alive(99999999) is False
+        assert is_pid_alive(99999999) is False
 
     def test_pid_alive_zombie_process_windows(self):
         """Regression test: Windows zombie PIDs (OpenProcess returns handle but
@@ -129,7 +129,7 @@ class TestInstanceLock:
                     break
         if zombie_pid is None:
             pytest.skip("No zombie PID found in scan window (OS state)")
-        assert _is_pid_alive(zombie_pid) is False, (
+        assert is_pid_alive(zombie_pid) is False, (
             f"PID {zombie_pid} is a zombie (exit_code != STILL_ACTIVE) "
-            "but _is_pid_alive returned True. Would block bot restart after crash."
+            "but is_pid_alive returned True. Would block bot restart after crash."
         )

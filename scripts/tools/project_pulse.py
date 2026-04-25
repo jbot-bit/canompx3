@@ -77,13 +77,20 @@ _ensure_repo_python()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from pipeline.paths import GOLD_DB_PATH
-from trading_app.validated_shelf import deployable_validated_relation
-
 # staleness_engine lives in scripts/tools/ (same dir as this file)
 _SCRIPTS_TOOLS_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPTS_TOOLS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_TOOLS_DIR)
+
+from pipeline.paths import GOLD_DB_PATH
+from pipeline.work_queue import (
+    load_queue,
+    top_baton_items,
+)
+from pipeline.work_queue import (
+    stale_items as queue_stale_items,
+)
+from trading_app.validated_shelf import deployable_validated_relation
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -488,7 +495,30 @@ def collect_handoff(root: Path) -> tuple[dict, list[PulseItem]]:
     context: dict = {}
     items: list[PulseItem] = []
     handoff_path = root / "HANDOFF.md"
+    queue_path = root / "docs" / "runtime" / "action-queue.yaml"
+    queue_steps: list[str] = []
+    if queue_path.exists():
+        try:
+            queue = load_queue(root)
+            queue_steps = [f"{item.title} — {item.next_action}" for item in top_baton_items(queue)]
+        except Exception:
+            queue_steps = []
     if not handoff_path.exists():
+        if queue_steps:
+            context = {
+                "tool": "Queue",
+                "summary": "Canonical action queue available; generated baton missing.",
+                "next_steps": queue_steps,
+            }
+            items.append(
+                PulseItem(
+                    category="decaying",
+                    severity="medium",
+                    source="handoff",
+                    summary="HANDOFF.md missing; falling back to canonical action queue",
+                )
+            )
+            return context, items
         items.append(
             PulseItem(
                 category="broken",
@@ -503,6 +533,17 @@ def collect_handoff(root: Path) -> tuple[dict, list[PulseItem]]:
     lines = text.splitlines()
     blocker_keywords = {"failure", "broken", "missing", "error", "cannot", "blocked"}
     context = _parse_rolling_handoff(lines) or _parse_legacy_handoff(lines)
+    if queue_steps:
+        if context.get("next_steps") != queue_steps:
+            items.append(
+                PulseItem(
+                    category="decaying",
+                    severity="medium",
+                    source="handoff",
+                    summary="HANDOFF next steps drifted from canonical action queue",
+                )
+            )
+        context["next_steps"] = queue_steps
 
     section: str | None = None
     for line in lines:
@@ -1113,6 +1154,15 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
                 }
                 for claim in snapshot.claims
             ],
+            "work_queue": {
+                "exists": snapshot.work_queue.exists,
+                "open_count": snapshot.work_queue.open_count,
+                "close_first_open_count": snapshot.work_queue.close_first_open_count,
+                "stale_count": snapshot.work_queue.stale_count,
+                "top_items": [item.model_dump(mode="json") for item in snapshot.work_queue.top_items],
+                "close_first_items": [item.model_dump(mode="json") for item in snapshot.work_queue.close_first_items],
+                "handoff_matches_rendered": snapshot.work_queue.handoff_matches_rendered,
+            },
             "policy": {
                 "allowed": decision.allowed,
                 "warnings": [issue.message for issue in decision.warnings],
@@ -1120,13 +1170,19 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
             },
         }
         for issue in decision.warnings:
-            if issue.code == "wrong_interpreter":
+            if issue.code in {
+                "wrong_interpreter",
+                "handoff_queue_mismatch",
+                "stale_queue_items",
+                "close_first_carryover",
+                "queue_item_conflict",
+            }:
                 items.append(
                     PulseItem(
                         category="decaying",
                         severity="medium",
                         source="system_identity",
-                        summary="Interpreter mismatch for repo-managed context",
+                        summary=issue.message,
                         detail=issue.detail,
                     )
                 )
@@ -1450,42 +1506,48 @@ def collect_session_claims(root: Path) -> list[PulseItem]:
 
 
 def collect_action_queue(canonical: Path) -> list[PulseItem]:
-    """Parse ACTION QUEUE from Claude auto-memory MEMORY.md."""
+    """Parse the canonical active-work queue."""
     items: list[PulseItem] = []
-    memory_path = _find_memory_md(canonical)
-    if memory_path is None:
+    queue_path = canonical / "docs" / "runtime" / "action-queue.yaml"
+    if not queue_path.exists():
         return items
 
-    try:
-        text = memory_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return items
-
-    in_queue = False
-    for line in text.splitlines():
-        if "## ACTION QUEUE" in line:
-            in_queue = True
+    queue = load_queue(canonical)
+    stale_ids = {item.id for item in queue_stale_items(queue)}
+    for item in queue.items:
+        if item.status in {"closed", "superseded"}:
             continue
-        if in_queue:
-            if line.startswith("## "):
-                break
-            m = re.match(r"^\d+\.\s+(.+)", line.strip())
-            if m:
-                content = m.group(1)
-                if "~~" in content:
-                    continue
-                clean = re.sub(r"\*\*(.+?)\*\*", r"\1", content).strip()
-                short = re.split(r"\s*—\s*|\.\s", clean, maxsplit=1)[0].strip()
-                if len(short) > 80:
-                    short = short[:77] + "..."
-                items.append(
-                    PulseItem(
-                        category="ready",
-                        severity="low",
-                        source="action_queue",
-                        summary=short,
-                    )
-                )
+
+        category = "ready"
+        severity = "low"
+        if item.status == "blocked":
+            category = "decaying"
+            severity = "medium"
+        elif item.status in {"waiting_observation", "parked"}:
+            category = "paused"
+            severity = "low"
+        elif item.priority == "P1":
+            severity = "medium"
+
+        if item.id in stale_ids:
+            category = "decaying"
+            severity = "medium" if item.priority != "P3" else "low"
+
+        summary = f"{item.id}: {item.title}"
+        if len(summary) > 100:
+            summary = summary[:97] + "..."
+        detail_parts = [f"status={item.status}", f"priority={item.priority}"]
+        if item.close_before_new_work:
+            detail_parts.append("close-first")
+        items.append(
+            PulseItem(
+                category=category,
+                severity=severity,
+                source="action_queue",
+                summary=summary,
+                detail=", ".join(detail_parts),
+            )
+        )
 
     return items
 
@@ -2115,8 +2177,8 @@ def format_text(report: PulseReport) -> str:
     if report.system_identity:
         identity = report.system_identity
         relations = identity.get("published_relations", {})
-        doctrine = ", ".join(identity.get("doctrine_docs", []))
-        backbone = ", ".join(identity.get("backbone_modules", []))
+        doctrine_count = len(identity.get("doctrine_docs", []))
+        backbone_count = len(identity.get("backbone_modules", []))
         lines.append("System identity:")
         lines.append(f"  Root: {identity.get('canonical_repo_root')}")
         lines.append(f"  Canonical DB: {identity.get('canonical_db_path')}")
@@ -2124,9 +2186,10 @@ def format_text(report: PulseReport) -> str:
             lines.append(f"  Active DB override: {identity.get('selected_db_path')}")
         lines.append(f"  Active ORB instruments: {', '.join(identity.get('active_orb_instruments', [])) or 'none'}")
         lines.append(f"  Shelf contracts: {relations.get('active', '?')}, {relations.get('deployable', '?')}")
-        lines.append(f"  Authority map: {identity.get('authority_map_doc')}")
-        lines.append(f"  Doctrine: {doctrine}")
-        lines.append(f"  Backbone: {backbone}")
+        lines.append(
+            f"  Authority: {identity.get('authority_map_doc')} "
+            f"({doctrine_count} doctrine, {backbone_count} backbone) — see --json for full list"
+        )
         lines.append("")
 
     if report.system_brief_summary:
@@ -2177,16 +2240,18 @@ def format_text(report: PulseReport) -> str:
             sr = report.sr_summary
             counts = sr.get("counts", {})
             streams = sr.get("stream_counts", {})
+            stream_suffix = ""
+            if streams:
+                stream_parts = [f"{k}:{v}" for k, v in sorted(streams.items())]
+                stream_suffix = f" | streams {', '.join(stream_parts)}"
             lines.append(
                 "  "
                 f"C12 SR continue={counts.get('CONTINUE', 0)} alarm={counts.get('ALARM', 0)} "
                 f"no_data={counts.get('NO_DATA', 0)} | age {sr.get('state_age_days') if sr.get('state_age_days') is not None else '?'}d"
+                f"{stream_suffix}"
             )
             if sr.get("reviewed_watch_count"):
                 lines.append(f"  C12 reviewed WATCH alarms: {sr.get('reviewed_watch_count')}")
-            if streams:
-                stream_parts = [f"{k}:{v}" for k, v in sorted(streams.items())]
-                lines.append(f"  SR streams: {', '.join(stream_parts)}")
         if report.pause_summary:
             ps = report.pause_summary
             lines.append(f"  Paused lanes: {ps.get('paused_count', 0)}")

@@ -149,6 +149,8 @@ mlprompt*.txt
 
 # External repos cloned into project tree
 CodePilot/
+gemini-cli/
+GEMINI.md
 
 # Outcome builder heartbeat (runtime artifact)
 outcome_builder.heartbeat

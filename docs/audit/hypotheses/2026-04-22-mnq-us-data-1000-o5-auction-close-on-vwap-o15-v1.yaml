@@ -1,0 +1,132 @@
+title: "MNQ US_DATA_1000 O15 VWAP lane — O5 auction-close confluence v1"
+status: "LOCKED_PREREG_PENDING_SHA"
+owner: "codex"
+created_at: "2026-04-22"
+
+hypothesis:
+  summary: >
+    On the fixed MNQ US_DATA_1000 O15 E2 RR1.5 CB1 VWAP_MID_ALIGNED lane,
+    the first 5 minutes of the same session contain additional pre-entry
+    auction-state information. If the O5 subwindow closes near the later
+    break side of its own 5-minute range, the later O15 trade should have
+    better expectancy than the same filtered O15 lane when the O5 close does
+    not show that one-sided early auction shape.
+  role: "R1 binary confluence overlay on one fixed O15 lane"
+  mechanism_type: "nested same-session ORB state"
+  mechanism_detail:
+    - "Not HTF confluence. Not aperture-family rescue. This is LTF->HTF nested same-session conditioning."
+    - "The first 5 minutes can reveal one-sided price discovery before the 15-minute ORB completes."
+    - "A close near the O5 range extreme in the eventual break direction is treated as evidence of early directional auction control, not of absolute range size."
+    - "This is intended to test auction-shape information, not friction or size gating."
+
+scope:
+  instrument: "MNQ"
+  session: "US_DATA_1000"
+  orb_minutes_target: 15
+  orb_minutes_feature: 5
+  entry_model: "E2"
+  confirm_bars: 1
+  rr_target: 1.5
+  base_filter: "VWAP_MID_ALIGNED"
+  direction: "both"
+  holdout_sacred_from: "2026-01-01"
+  oos_end_inclusive: "2026-04-16"
+
+authority_chain:
+  repo_rules:
+    - "RESEARCH_RULES.md:84"
+    - "docs/STRATEGY_BLUEPRINT.md:273"
+    - "docs/audit/hypotheses/2026-04-15-multi-timeframe-chain-full-scope-nogo.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/plans/ml-v3-research-design.md:312"
+  local_literature:
+    - "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+    - "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+  external_refs:
+    - "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3095239"
+    - "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3553682"
+    - "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3830914"
+
+why_old_kills_do_not_bind:
+  - old_claim: "O15/O30 ORB aperture (as portfolio) is ARITHMETIC_ONLY"
+    why_not_binding: >
+      That kill is class-level and friction-based. This study does not claim
+      O15 is broadly superior. It tests one same-session pre-entry state on one
+      fixed O15 lane with a non-friction mechanism.
+  - old_claim: "multi-timeframe chaining full scope is NO-GO"
+    why_not_binding: >
+      That kill is structural and combinatorial. This study is one pre-registered
+      lane, one feature, one threshold, one role, K=1. No chain enumeration.
+  - old_claim: "new-on-new confluence stacking is DEAD"
+    why_not_binding: >
+      That no-go covered broad pair-stacking of newly discovered confluences.
+      This study uses an already validated O15 lane plus one new same-session
+      auction-state feature. It is still high-risk, but not the same killed path.
+
+feature_contract:
+  source_layers:
+    - "gold.db::orb_outcomes"
+    - "gold.db::daily_features"
+    - "gold.db::bars_1m"
+  admissible_inputs:
+    - "O15 target lane membership via canonical VWAP_MID_ALIGNED filter delegation"
+    - "US_DATA_1000 O15 break direction from daily_features/orb_outcomes at target entry time"
+    - "US_DATA_1000 O5 bars from bars_1m over the canonical orb_utc_window(trading_day, 'US_DATA_1000', 5)"
+  forbidden_inputs:
+    - "Any O5 or O15 break-delay / break-bar / outcome / MAE / MFE columns"
+    - "Any O5 or O15 post-entry path information"
+    - "Any holdout-shaped thresholding"
+    - "Any pooled cross-session or cross-asset extension"
+
+feature_definition:
+  name: "O5_AUCTION_CLOSE_ALIGNED_Q1"
+  description: >
+    Binary same-session confluence from the first 5 minutes of US_DATA_1000.
+    Compute O5 close location within the O5 range:
+      clv = (close_5 - low_5) / (high_5 - low_5)
+    For later long O15 breaks, feature fires when clv >= 0.75.
+    For later short O15 breaks, feature fires when clv <= 0.25.
+    Range<=0 => missing/feature_off.
+  thresholding:
+    type: "fixed theory threshold"
+    values:
+      long_min_clv: 0.75
+      short_max_clv: 0.25
+  rationale:
+    - "Close near the extreme is a one-sided auction-close pattern, not a size threshold."
+    - "Fixed quartile edges avoid IS threshold tuning."
+
+evaluation_design:
+  baseline_question: >
+    Within the fixed O15 VWAP_MID_ALIGNED lane, do days with the O5
+    auction-close confluence outperform days without it?
+  comparison_unit: "Trade-level pnl_r on filtered-lane trades only"
+  honest_k:
+    local_k: 1
+    family_k_note: "Single-cell confirmation. No family sweep."
+  protocol:
+    chordia_t_threshold: 3.79
+    theory_note: >
+      External and local literature support intraday momentum broadly, but do
+      not specifically ground this exact O5 close-location construction well
+      enough to lower the threshold. Protocol B stays binding.
+
+kill_criteria:
+  - "IS Welch |t| < 3.79"
+  - "IS delta sign opposite to mechanism expectation"
+  - "OOS direction mismatch versus IS delta sign"
+  - "N_on_OOS < 15"
+  - "T0 tautology max |corr| > 0.70 against base-lane proxies"
+  - "Feature effect collapses when scratches are included as 0R"
+  - "Feature is explainable as pure O5 size/friction gating rather than auction-close shape"
+
+required_outputs:
+  - "Markdown result note"
+  - "Row-level CSV with target lane membership, O5 CLV, feature_fire, pnl_r, outcome, IS/OOS flags"
+  - "Explicit T0/T1/T3/T6/T7/T8 readout"
+  - "Explicit statement that result is local to this lane and not an O15 class claim"
+
+reproducibility:
+  repo_root: "/tmp/canompx3-o5-o15-nested-auction"
+  script_path: "research/mnq_us_data_1000_o5_auction_close_on_vwap_o15_v1.py"
+  commit_sha: "5536258b"

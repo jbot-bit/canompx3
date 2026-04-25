@@ -42,29 +42,34 @@
   - any need to retune map, cutoffs, or support table
   - provenance failure for `garch_forecast_vol_pct`
 
-### 2. L1 `EUROPE_FLOW` raw break-quality overlay
+### 2. L1 `EUROPE_FLOW` pre-break-context overlay
 
-- Status: `PREREG NEXT`
-- Why: ATR-normalized replacement failed, but raw break-quality / pre-break context was explicitly not killed.
-- Exact action:
-  - prereg a small K family using raw break geometry only
-  - admissible features limited to break-bar / pre-break context
-  - no ATR-normalized ratio variants
+- Status: `ACTIONED -> KILL`
+- Why: the restored frozen prereg was executed on 2026-04-23 and no admissible
+  feature survived honestly.
+- What actually happened:
+  - frozen prereg restored at
+    `docs/audit/hypotheses/2026-04-21-l1-europe-flow-pre-break-context-prereg.yaml`
+  - executed via `research/l1_europe_flow_pre_break_context_scan.py`
+  - result written to
+    `docs/audit/results/2026-04-21-l1-europe-flow-pre-break-context-prereg.md`
+  - `pre_velocity_HIGH_Q3` did not reach raw significance
+  - `rel_vol_HIGH_Q3` showed IS lift but failed `K=2` BH-FDR and flipped OOS sign
 - Stop condition:
-  - any feature depending on post-break information
-  - any reframing into a broad pooled ML score
+  - do not reopen banned `break_*` or ATR-normalized replacement variants from this path
 
 ### 3. Prior-day level Pathway-B on one strongest hot cell
 
-- Status: `PREREG NEXT`
-- Why: family not dead; broad sweep already identified hot cells; next honest move is a narrow single-cell confirmation path.
+- Status: `LOCKS_WRITTEN -> EXECUTION TRIAGE NEXT`
+- Why: family not dead; the repo now contains locked exact bridge hypotheses,
+  but the next executed path has not yet been chosen and run.
 - Exact action:
-  - pick one strongest cell from prior-day exploration
-  - prereg single-cell or max-K=3 confirmation only
+  - triage the already-locked exact hypotheses
+  - execute one confirm-or-kill path only
   - no renewed mega scan
 - Stop condition:
   - broad rescan over the whole prior-day family
-  - multiple hot-cell shopping after seeing forward behavior
+  - multiple lock-shopping after seeing forward behavior
 
 ### 4. Cross-asset earlier-session context for later ORB quality
 
@@ -96,4 +101,4 @@
 
 1. Treat the GARCH `R3` shadow as an active forward-monitoring artifact, not a blocked hypothesis stub.
 2. Leave the frozen policy untouched; monitor ledger deltas instead of retuning.
-3. Start the L1 raw break-quality prereg as the next open research path.
+3. Start the Prior-day Pathway-B execution triage as the next open research path.

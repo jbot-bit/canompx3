@@ -107,6 +107,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python C:/Users/joshd/canompx3/scripts/tools/bias_grounding_guard.py",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
             "command": "python C:/Users/joshd/canompx3/.claude/hooks/data-first-guard.py",
             "timeout": 3
           }

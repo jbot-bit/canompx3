@@ -6,6 +6,13 @@
 
 **Authority:** Discovery code reads this file and restricts itself to the pre-registered specifications. A drift check verifies validated_setups entries match a registered hypothesis.
 
+**Operator contract:** The human-facing workflow is natural language. Agents use
+this file and the prereg front door internally; users should not need to
+remember command syntax. See `docs/institutional/research_pipeline_contract.md`.
+Prereg files cover the `standalone_discovery` and `conditional_role` routes.
+The `confirmation`, `deployment_readiness`, and `operations` routes use their
+own repo surfaces after research evidence exists.
+
 ---
 
 ## Template format
@@ -29,6 +36,7 @@ metadata:
   data_horizon_years_proxy: 16.0
   holdout_date: "2026-01-01"
   total_expected_trials: 0   # sum across all hypotheses; must be ≤ 300 (clean) or 2000 (proxy)
+  research_question_type: "standalone_edge"   # or "conditional_role"
 
   # ---- Phase 4 Stage 4.1b: MinBTL proxy-mode opt-in (OPTIONAL) ----
   # By default, Criterion 2's clean-data bound of 300 trials applies.
@@ -58,6 +66,17 @@ metadata:
   #   data_source_disclosure: "NQ parent futures 2009-2024-02-05 as proxy for MNQ micro"
   #   total_expected_trials: 1500
 
+# Optional operator routing block.
+# Use this when the prereg is a bounded study with a dedicated runner rather
+# than a broad grid-discovery write into experimental_strategies.
+#
+# execution:
+#   mode: "bounded_runner"            # optional; inferred for conditional_role
+#   entrypoint: "research/my_study.py"
+#   default_args:
+#     - "--output"
+#     - "docs/audit/results/YYYY-MM-DD-my-study.md"
+
 hypotheses:
   - id: 1
     name: "Overnight range predicts EUROPE_FLOW follow-through"
@@ -78,6 +97,7 @@ hypotheses:
       entry_models: [E2]
       confirm_bars: [1]
       stop_multipliers: [1.0]
+      orb_minutes: [5]
     expected_trial_count: 20
     kill_criteria:
       - "BH FDR q=0.05 fails across all 20 trials"
@@ -103,6 +123,7 @@ hypotheses:
       entry_models: [E2]
       confirm_bars: [1]
       stop_multipliers: [1.0]
+      orb_minutes: [5]
     expected_trial_count: 16
     kill_criteria:
       - "BH FDR q=0.05 fails across all 16 trials"
@@ -114,9 +135,21 @@ hypotheses:
   # Each must have:
   #  - id, name, theory_citation (REQUIRED), economic_basis (REQUIRED)
   #  - filter (type, column, thresholds)
-  #  - scope (instruments, sessions, rr_targets, entry_models, confirm_bars, stop_multipliers)
+  #  - scope (instruments, sessions, rr_targets, entry_models, confirm_bars, stop_multipliers, orb_minutes)
   #  - expected_trial_count (sum across all hypotheses ≤ budget)
   #  - kill_criteria (must be pre-registered, not post-hoc)
+  #
+  # If metadata.research_question_type == "conditional_role", each hypothesis
+  # must ALSO include:
+  #
+  #   role:
+  #     kind: "filter" | "conditioner" | "allocator" | "confluence" | "execution" | "standalone"
+  #     parent: "<exact parent population>"
+  #     comparator: "<exact comparison being judged>"
+  #     primary_metric: "<policy_ev_per_opportunity_r / selected_trade_mean_r / portfolio_ev_r / ...>"
+  #     promotion_target: "<shadow_only / deployable_filter / portfolio_only / ...>"
+  #
+  # This is enforced by trading_app.hypothesis_loader for role-aware studies.
 
 total_hypothesis_count: 2
 total_expected_trials: 36   # must equal sum of expected_trial_count above
@@ -144,6 +177,16 @@ budget_check:
 
 Copy the template above, fill in hypotheses with real theory citations and specifications. Do not skip the theory citation step. A hypothesis without a theory citation is by definition a data-mined pattern and cannot be accepted under `pre_registered_criteria.md` § Criterion 1.
 
+If the study is about a conditional state variable rather than a new standalone lane, set:
+
+```yaml
+metadata:
+  research_question_type: "conditional_role"
+```
+
+Then add a `role:` block to every hypothesis. This prevents a filter or
+allocator question from being judged as if it were a standalone strategy.
+
 ### Step 2 — Compute MinBTL sanity check
 
 ```
@@ -161,18 +204,45 @@ git commit -m "hypotheses: pre-register <slug> for YYYY-MM-DD discovery run"
 
 ### Step 4 — Run discovery with the file
 
+Agent/operator note: this is an internal routing step. If a human asks to run
+the discovery, the agent should execute the correct branch and report the
+result. Do not make the human memorize this command. If the human asks whether
+something is validated, deployable, or executed, route to `confirmation`,
+`deployment_readiness`, or `operations` instead of treating it as discovery.
+
 ```bash
-python -m trading_app.strategy_discovery \
-  --hypotheses docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml \
-  --holdout-date 2026-01-01 \
-  --instrument MNQ
+scripts/infra/prereg-loop.sh \
+  --hypothesis-file docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml \
+  --execute
 ```
 
-(Note: `--hypotheses` flag does not yet exist in `strategy_discovery.py`. Adding it is part of Phase 4+ implementation.)
+For `standalone_edge` preregs this routes to `trading_app.strategy_discovery`
+with the prereg's `holdout_date` and `--hypothesis-file` wired correctly.
+
+For `conditional_role` preregs, the same front door will inspect and report the
+route, but execution requires either:
+
+```yaml
+execution:
+  entrypoint: "research/my_bounded_runner.py"
+```
+
+or a manual override:
+
+```bash
+scripts/infra/prereg-loop.sh \
+  --hypothesis-file docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml \
+  --runner research/my_bounded_runner.py \
+  --execute
+```
 
 ### Step 5 — Apply criteria from `pre_registered_criteria.md`
 
 After discovery completes, each candidate is evaluated against all 12 criteria. No candidate is "validated" until all 12 pass.
+
+Validation does not require live routing or `paper_trades`. Those are deployment
+and operations gates. A candidate can be validated research inventory and still
+not be selected for the live book.
 
 ### Step 6 — Write a post-mortem
 
@@ -228,6 +298,42 @@ See the main template section above for the good pattern. Key features of a good
 - Kill criteria are concrete and pre-registered
 - Holdout date is committed to
 
+### Example — conditional role study
+
+```yaml
+metadata:
+  name: "pr48_conditional_role_implementation_v1"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 9
+  research_question_type: "conditional_role"
+
+hypotheses:
+  - id: 1
+    name: "MES participation acts as a filter or allocator"
+    theory_citation: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    economic_basis: "Participation state should improve selection or sizing quality."
+    role:
+      kind: "filter"
+      parent: "All canonical MES O5 E2 CB1 RR1.5 trades"
+      comparator: "Parent vs Q4+Q5 vs Q5 vs continuous quintile sizer"
+      primary_metric: "policy_ev_per_opportunity_r"
+      promotion_target: "deployable_filter_or_sizer"
+    filter:
+      type: "REL_VOL_STATE"
+      column: "rel_vol_{session}"
+      thresholds: ["q4_plus_q5", "q5_only", "continuous"]
+    scope:
+      instruments: [MES]
+      sessions: [ALL_CANONICAL_5M]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 3
+    kill_criteria:
+      - "No role improves policy EV versus parent"
+```
+
 ---
 
 ## Related files
@@ -237,3 +343,4 @@ See the main template section above for the good pattern. Key features of a good
 - `pre_registered_criteria.md` — the 12 locked criteria hypotheses must meet
 - `literature/bailey_et_al_2013_pseudo_mathematics.md` — MinBTL justification
 - `literature/lopez_de_prado_2020_ml_for_asset_managers.md` — theory-first principle (pending)
+- `conditional-edge-framework.md` — when the right question is filter / allocator / confluence instead of standalone

@@ -1956,6 +1956,42 @@ class TestPathwayBEndToEnd:
         base.update(overrides)
         return base
 
+    def _seed_oos_window(self, db_path, row, oos_pnls):
+        con = duckdb.connect(str(db_path))
+        base_day = date(2026, 1, 5)
+        for i, pnl in enumerate(oos_pnls):
+            day = base_day + timedelta(days=i)
+            con.execute(
+                "INSERT INTO daily_features (trading_day, symbol, orb_minutes, orb_nyse_open_break_dir) VALUES (?, ?, ?, ?)",
+                [day, row["instrument"], row["orb_minutes"], "LONG"],
+            )
+            con.execute(
+                """
+                INSERT INTO orb_outcomes (
+                    trading_day, symbol, orb_minutes, orb_label, entry_model,
+                    confirm_bars, rr_target, outcome, pnl_r, mae_r, mfe_r,
+                    entry_price, stop_price
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    day,
+                    row["instrument"],
+                    row["orb_minutes"],
+                    row["orb_label"],
+                    row["entry_model"],
+                    row["confirm_bars"],
+                    row["rr_target"],
+                    "win" if pnl >= 0 else "loss",
+                    pnl,
+                    0.2,
+                    1.0,
+                    100.0,
+                    95.0,
+                ],
+            )
+        con.commit()
+        con.close()
+
     def test_pathway_b_promotes_valid_strategy(self, tmp_path, monkeypatch):
         """Strategy passing all gates → in validated_setups with pathway='individual'."""
         sid = "MNQ_NYSE_OPEN_E2_RR2.0_CB1_NO_FILTER_S1.0"
@@ -1972,6 +2008,7 @@ class TestPathwayBEndToEnd:
             instrument="MNQ",
             testing_mode="individual",
             workers=1,  # serial mode: monkeypatch can't pickle across processes
+            wf_output_path=str(tmp_path / "wf.jsonl"),
         )
         assert passed == 1, f"Expected 1 promoted, got {passed} passed / {rejected} rejected"
 
@@ -2005,6 +2042,7 @@ class TestPathwayBEndToEnd:
             instrument="MNQ",
             testing_mode="individual",
             workers=1,  # serial mode: monkeypatch can't pickle across processes
+            wf_output_path=str(tmp_path / "wf.jsonl"),
         )
         assert passed == 0 and rejected == 1
 
@@ -2034,6 +2072,7 @@ class TestPathwayBEndToEnd:
             instrument="MNQ",
             testing_mode="individual",
             workers=1,
+            wf_output_path=str(tmp_path / "wf.jsonl"),
         )
         assert passed == 0 and rejected == 1
 
@@ -2062,6 +2101,7 @@ class TestPathwayBEndToEnd:
             instrument="MNQ",
             testing_mode="individual",
             workers=1,
+            wf_output_path=str(tmp_path / "wf.jsonl"),
         )
         assert passed == 0 and rejected == 1
 
@@ -2091,6 +2131,7 @@ class TestPathwayBEndToEnd:
             instrument="MNQ",
             testing_mode="individual",
             workers=1,
+            wf_output_path=str(tmp_path / "wf.jsonl"),
         )
         assert passed == 0 and rejected == 1
 
@@ -2160,6 +2201,84 @@ class TestPathwayBEndToEnd:
         assert notes is not None
         assert reason == notes
         assert "Phase 3" in reason
+
+    def test_pathway_b_sparse_oos_reject_writes_structured_fields(self, tmp_path, monkeypatch):
+        sid = "MNQ_NYSE_OPEN_E2_RR2.0_CB1_NO_FILTER_S1.0"
+        row = self._pathway_b_row(
+            hypothesis_file_sha="a" * 64,
+            created_at=datetime(2026, 4, 9, 12, 0, 0, tzinfo=UTC),
+        )
+        db_path = self._setup_db(tmp_path, [row])
+        self._seed_oos_window(db_path, row, [1.0, -0.5, -0.3, 0.2, -0.1, 0.4, -0.2, 0.1])
+
+        monkeypatch.setattr("trading_app.strategy_validator.load_hypothesis_by_sha", lambda sha: {"metadata": {}})
+        monkeypatch.setattr(
+            "trading_app.strategy_validator.enforce_minbtl_bound",
+            lambda meta, on_proxy_data=False: (None, None),
+        )
+
+        passed, rejected = run_validation(
+            db_path=db_path,
+            instrument="MNQ",
+            testing_mode="individual",
+            workers=1,
+            wf_output_path=str(tmp_path / "wf.jsonl"),
+        )
+        assert passed == 0 and rejected == 1
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        row_out = con.execute(
+            "SELECT validation_pathway, c8_oos_status, rejection_reason FROM experimental_strategies WHERE strategy_id = ?",
+            [sid],
+        ).fetchone()
+        validated_count = con.execute("SELECT COUNT(*) FROM validated_setups").fetchone()[0]
+        con.close()
+
+        assert row_out == (
+            "individual",
+            "INSUFFICIENT_N_PATHWAY_B_REJECT",
+            "criterion_8: N_oos=8 < 30 (Amendment 3.0 condition 4: no insufficient-OOS-data exemptions for Pathway B individual testing mode)",
+        )
+        assert validated_count == 0
+
+    def test_pathway_a_sparse_oos_pass_through_persists_structured_fields(self, tmp_path, monkeypatch):
+        sid = "MNQ_NYSE_OPEN_E2_RR1.5_CB1_NO_FILTER"
+        row = _phase_4_row(
+            strategy_id=sid,
+            rr_target=1.5,
+            hypothesis_file_sha="b" * 64,
+            created_at=datetime(2026, 4, 9, 12, 0, 0, tzinfo=UTC),
+        )
+        db_path = self._setup_db(tmp_path, [row], instrument="MNQ")
+        self._seed_oos_window(db_path, row, [1.0, -0.5, -0.3, 0.2, -0.1, 0.4, -0.2, 0.1])
+
+        monkeypatch.setattr("trading_app.strategy_validator.load_hypothesis_by_sha", lambda sha: {"metadata": {}})
+        monkeypatch.setattr(
+            "trading_app.strategy_validator.enforce_minbtl_bound",
+            lambda meta, on_proxy_data=False: (None, None),
+        )
+
+        passed, rejected = run_validation(
+            db_path=db_path,
+            instrument="MNQ",
+            testing_mode="family",
+            enable_walkforward=False,
+        )
+        assert passed == 1 and rejected == 0
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        experimental = con.execute(
+            "SELECT validation_pathway, c8_oos_status FROM experimental_strategies WHERE strategy_id = ?",
+            [sid],
+        ).fetchone()
+        validated = con.execute(
+            "SELECT validation_pathway, c8_oos_status FROM validated_setups WHERE strategy_id = ?",
+            [sid],
+        ).fetchone()
+        con.close()
+
+        assert experimental == ("family", "INSUFFICIENT_N_PATHWAY_A_PASS_THROUGH")
+        assert validated == ("family", "INSUFFICIENT_N_PATHWAY_A_PASS_THROUGH")
 
 
 class TestPhaseC_DeleteScope:

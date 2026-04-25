@@ -69,13 +69,13 @@ def _build_lanes() -> list[dict]:
     registry = get_lane_registry()
     reference_stats = _load_reference_stats()
     lanes = []
-    for i, (label, lane) in enumerate(sorted(registry.items()), 1):
+    for i, ((label, instrument), lane) in enumerate(sorted(registry.items()), 1):
         bt = reference_stats.get(lane["strategy_id"], {"backtest_expr": 0.10, "backtest_std": 1.0})
         lanes.append(
             {
-                "name": f"L{i} {label} {lane['filter_type']} RR{lane['rr_target']} O{lane['orb_minutes']}",
+                "name": f"L{i} {instrument} {label} {lane['filter_type']} RR{lane['rr_target']} O{lane['orb_minutes']}",
                 "strategy_id": lane["strategy_id"],
-                "symbol": lane["instrument"],
+                "symbol": instrument,
                 "orb_label": label,
                 "entry_model": lane["entry_model"],
                 "rr_target": lane["rr_target"],
