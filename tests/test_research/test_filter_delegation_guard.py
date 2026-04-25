@@ -65,7 +65,7 @@ BANNED_INLINE_FILTER_PATTERNS = [
         "Inline ORB_G* SQL fragment. Use filter_signal(df, 'ORB_G{N}', orb_label).",
     ),
     (
-        r'mes\.atr_20_pct\s*>=',
+        r"mes\.atr_20_pct\s*>=",
         "Inline cross-asset MES ATR SQL. Use filter_signal with 'X_MES_ATR{N}' "
         "and CrossAssetATRFilter enrichment path.",
     ),
@@ -92,10 +92,7 @@ def test_delegated_file_imports_filter_signal(relpath: str) -> None:
     path = REPO_ROOT / relpath
     assert path.exists(), f"Delegated file missing: {path}"
     text = path.read_text(encoding="utf-8")
-    assert (
-        "from research.filter_utils import filter_signal" in text
-        or "import research.filter_utils" in text
-    ), (
+    assert "from research.filter_utils import filter_signal" in text or "import research.filter_utils" in text, (
         f"{relpath} is listed as delegated but does not import "
         f"research.filter_utils.filter_signal. "
         f"Per research-truth-protocol.md § Canonical filter delegation, "
@@ -116,8 +113,7 @@ def test_delegated_file_no_inline_filter_sql(relpath: str) -> None:
             violations.append(f"  {relpath}:{line_no} — {desc}\n    match: {match.group(0)!r}")
     assert not violations, (
         "Delegated file contains inline canonical filter SQL "
-        "(research-truth-protocol.md § Canonical filter delegation):\n"
-        + "\n".join(violations)
+        "(research-truth-protocol.md § Canonical filter delegation):\n" + "\n".join(violations)
     )
 
 
@@ -138,6 +134,5 @@ def test_delegated_file_no_hardcoded_commission(relpath: str) -> None:
             violations.append(f"  {relpath}:{line_no} — {desc}\n    match: {match.group(0)!r}")
     assert not violations, (
         "Delegated file hardcodes a commission/friction constant that "
-        "should be sourced from pipeline.cost_model.COST_SPECS:\n"
-        + "\n".join(violations)
+        "should be sourced from pipeline.cost_model.COST_SPECS:\n" + "\n".join(violations)
     )
