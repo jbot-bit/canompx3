@@ -1994,6 +1994,174 @@ class TestOvernightResilienceHardening:
         orch._hwm_tracker.update_equity.assert_called_once_with(None)
 
 
+class TestHWMWarningTierNotifyDispatch:
+    """Stage 1 of HWM persistence integrity hardening (2026-04-25 design v3).
+
+    Wires `_notify()` into the DD warning tier (50%/75%) at
+    session_orchestrator.py:1601. Pre-fix: warning tier reached log file only;
+    operator unaware DD crossed 50% or 75% on a 24h overnight run until the
+    full halt fires at 100%.
+
+    All 5 tests are mutation-proof per stage doc
+    `docs/runtime/stages/hwm-warning-tier-notify-dispatch.md`.
+
+    Setup pattern mirrors TestOvernightResilienceHardening F5 test:
+    bar_count=9 so the next bar at count==10 triggers the heartbeat block
+    where the HWM equity poll lives.
+    """
+
+    async def _make_orch_with_hwm(self, check_halt_return):
+        """Build an orch wired so the 10-bar HWM poll fires on next _on_bar
+        call and check_halt() returns the supplied (halted, reason) tuple.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._handle_event = AsyncMock()
+        orch._hwm_tracker = MagicMock()
+        orch._hwm_tracker.check_halt.return_value = check_halt_return
+        orch._bar_count = 9  # next bar at count==10 triggers heartbeat block
+        orch.positions = MagicMock()
+        orch.positions.query_equity.return_value = 49_000.0
+        orch.order_router = MagicMock()
+        orch.order_router.account_id = 21944866
+        orch.order_router.is_degraded = MagicMock(return_value=False)
+        orch._notify = MagicMock()
+        return orch
+
+    async def _fire_one_bar(self, orch):
+        """Drive one bar through _on_bar with the trading-day rollover patched."""
+        with patch.object(SessionOrchestrator, "_check_trading_day_rollover", new_callable=AsyncMock):
+            from trading_app.live.bar_aggregator import Bar
+
+            await orch._on_bar(
+                Bar(
+                    ts_utc=datetime(2026, 4, 25, 14, 30, tzinfo=UTC),
+                    open=2350.0,
+                    high=2350.5,
+                    low=2349.5,
+                    close=2350.2,
+                    volume=10,
+                )
+            )
+
+    # ── Test 1 — 50% warning dispatches notify with full reason ──
+    async def test_hwm_warning_50_dispatches_notify(self):
+        """check_halt returns a 50% warning reason → _notify is called exactly
+        once with the full reason string including dollar amounts.
+
+        Mutation: remove the new self._notify call from line 1601-1602 →
+        notify call count drops to 0 → assertion fails.
+        """
+        reason = "HWM_WARNING_50: DD $1000.00 = 50% of $2000.00 limit ($1000.00 remaining)"
+        orch = await self._make_orch_with_hwm((False, reason))
+
+        await self._fire_one_bar(orch)
+
+        # Exactly one notify call this bar.
+        assert orch._notify.call_count == 1, (
+            f"Expected exactly 1 notify call for 50% warning, got {orch._notify.call_count}"
+        )
+        # The dispatched message must contain the reason verbatim
+        # (including dollar amounts) so the operator sees the actual DD figures.
+        sent_msg = orch._notify.call_args.args[0]
+        assert reason in sent_msg, f"Expected notify message to contain the full reason '{reason}', got: {sent_msg!r}"
+
+    # ── Test 2 — 75% warning dispatches notify with full reason ──
+    async def test_hwm_warning_75_dispatches_notify(self):
+        """Mirror of test 1 at the 75% tier. Pin both tiers separately so a
+        mutation that handles only one tier is caught.
+        """
+        reason = "HWM_WARNING_75: DD $1500.00 = 75% of $2000.00 limit ($500.00 remaining)"
+        orch = await self._make_orch_with_hwm((False, reason))
+
+        await self._fire_one_bar(orch)
+
+        assert orch._notify.call_count == 1, (
+            f"Expected exactly 1 notify call for 75% warning, got {orch._notify.call_count}"
+        )
+        sent_msg = orch._notify.call_args.args[0]
+        assert reason in sent_msg, f"Expected notify message to contain the full reason '{reason}', got: {sent_msg!r}"
+
+    # ── Test 3 — generic WARN substring match, not literal tier name ──
+    async def test_hwm_warning_generic_substring_match_not_literal(self):
+        """Mutation guard: dispatch logic must be `'WARN' in reason`, not a
+        literal tier match like `'HWM_WARNING_50' in reason`. A future
+        WARNING_60 (or any reason containing 'WARN') must also dispatch.
+
+        Pre-fix the branch already used 'WARN' in reason for logging; this test
+        pins that the new notify dispatch is gated on the SAME generic
+        substring, not narrowed.
+        """
+        reason = "HWM_WARNING_60: DD $1200.00 = 60% of $2000.00 limit"  # synthetic future tier
+        orch = await self._make_orch_with_hwm((False, reason))
+
+        await self._fire_one_bar(orch)
+
+        assert orch._notify.call_count == 1, (
+            "WARN substring match must dispatch for any WARNING_* tier; "
+            f"got {orch._notify.call_count} notify calls for synthetic WARNING_60 reason"
+        )
+
+    # ── Test 4 — OK case dispatches NOTHING ──
+    async def test_hwm_ok_does_not_dispatch_notify(self):
+        """Mutation guard against the warning dispatch leaking into the OK
+        branch. If the elif-WARN guard is removed (e.g. fall-through to
+        unconditional dispatch), this test fails immediately.
+        """
+        reason = "HWM_OK: DD $0.00 = 0% of $2000.00 limit"
+        orch = await self._make_orch_with_hwm((False, reason))
+
+        await self._fire_one_bar(orch)
+
+        assert orch._notify.call_count == 0, (
+            f"OK case must dispatch nothing on Telegram; got {orch._notify.call_count} notify calls"
+        )
+
+    # ── Test 5 — halt path unchanged: notify, kill switch, flatten — IN ORDER ──
+    async def test_hwm_halt_path_unchanged_by_warning_wiring(self):
+        """Stage 1 must not alter the halt branch. Pin that on a halt result:
+        (a) _notify still fires with the ACCOUNT DD LIMIT prefix,
+        (b) _fire_kill_switch is called,
+        (c) _emergency_flatten is awaited,
+        AND the call ORDER is _notify -> _fire_kill_switch -> _emergency_flatten
+        (asserted via mock.call_args_list index ordering, per v3 design audit).
+        """
+        reason = "DD_TRAILING: DD $2000.00 >= limit $2000.00 (HWM=$50000.00 on 2026-04-20, equity=$48000.00)"
+        orch = await self._make_orch_with_hwm((True, reason))
+
+        # Wire all three sinks to a single tracker so we can pin call ORDER, not
+        # just presence. parent_mock.method_calls preserves global ordering.
+        parent = MagicMock()
+        orch._notify = parent.notify
+        orch._fire_kill_switch = parent.fire_kill_switch
+        orch._emergency_flatten = parent.emergency_flatten
+        # _emergency_flatten is awaited, so wrap in AsyncMock attached to parent.
+        parent.emergency_flatten = AsyncMock()
+        orch._emergency_flatten = parent.emergency_flatten
+
+        await self._fire_one_bar(orch)
+
+        # All three called exactly once.
+        assert orch._notify.call_count == 1
+        assert orch._fire_kill_switch.call_count == 1
+        assert orch._emergency_flatten.call_count == 1
+
+        # Halt-path notify message is the existing 'ACCOUNT DD LIMIT' prefix,
+        # NOT the new 'HWM WARNING' prefix from Stage 1.
+        halt_msg = orch._notify.call_args.args[0]
+        assert "ACCOUNT DD LIMIT" in halt_msg, (
+            f"Halt notify must use the existing 'ACCOUNT DD LIMIT' prefix, got: {halt_msg!r}"
+        )
+        assert "HWM WARNING" not in halt_msg, "Halt branch must not use the Stage 1 'HWM WARNING' prefix"
+
+        # Call order: notify -> fire_kill_switch -> emergency_flatten.
+        # parent.method_calls is a global, ordered list of all calls on child
+        # mocks; the names are 'notify', 'fire_kill_switch', 'emergency_flatten'.
+        ordered_names = [c[0] for c in parent.method_calls]
+        assert ordered_names == ["notify", "fire_kill_switch", "emergency_flatten"], (
+            f"Halt branch call order must be notify -> fire_kill_switch -> emergency_flatten, got: {ordered_names}"
+        )
+
+
 class TestR1WallClockRollover:
     """R1 (CRITICAL): trading-day rollover must fire at 09:00 Brisbane even when
     the bar feed is down (no _on_bar calls).

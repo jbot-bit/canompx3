@@ -1639,7 +1639,15 @@ class SessionOrchestrator:
                         self._fire_kill_switch()
                         await self._emergency_flatten()
                     elif "WARN" in reason:
+                        # Stage 1 of HWM persistence integrity hardening (2026-04-25 design v3).
+                        # Wire warning tier to operator. Pre-fix this branch was log.warning-only,
+                        # leaving the operator unaware of 50%/75% DD crossings on a 24h overnight
+                        # run until the full halt fires at 100%. The 50/75 tiers exist precisely
+                        # for advance Telegram notice. See:
+                        #   docs/plans/2026-04-25-hwm-persistence-integrity-hardening-design.md § 4
+                        #   .claude/rules/institutional-rigor.md § 6 — no silent failures
                         log.warning("HWM: %s", reason)
+                        self._notify(f"HWM WARNING: {reason}")
                 except Exception as inner:
                     # update_equity / check_halt should never raise. If they do, log loud
                     # but keep the bar loop alive — the tracker is degraded but the engine
