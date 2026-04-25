@@ -258,13 +258,15 @@ class TestLaneRegistryOrbCap:
 
     def test_registry_has_max_orb_field(self):
         registry = get_lane_registry()
-        for label, info in registry.items():
-            assert "max_orb_size_pts" in info, f"{label} missing max_orb_size_pts"
+        for (label, instrument), info in registry.items():
+            assert "max_orb_size_pts" in info, f"{label}/{instrument} missing max_orb_size_pts"
 
     def test_tokyo_open_cap_in_registry(self):
         registry = get_lane_registry()
-        if "TOKYO_OPEN" in registry:
-            cap = registry["TOKYO_OPEN"]["max_orb_size_pts"]
+        tokyo_caps = [
+            info["max_orb_size_pts"] for (label, _instrument), info in registry.items() if label == "TOKYO_OPEN"
+        ]
+        for cap in tokyo_caps:
             assert cap is not None and cap > 0, "TOKYO_OPEN cap must be positive"
 
     def test_all_registry_lanes_have_caps(self):
@@ -272,15 +274,15 @@ class TestLaneRegistryOrbCap:
         caps are per-session P90 from allocator JSON (not hardcoded flat values).
         """
         registry = get_lane_registry()
-        for label, info in registry.items():
+        for (label, instrument), info in registry.items():
             cap = info.get("max_orb_size_pts")
-            assert cap is not None, f"{label} missing ORB cap"
-            assert cap > 0, f"{label} cap must be positive"
+            assert cap is not None, f"{label}/{instrument} missing ORB cap"
+            assert cap > 0, f"{label}/{instrument} cap must be positive"
 
-    def test_duplicate_session_profile_raises_on_session_registry(self):
-        """get_lane_registry must fail closed on same-session cap conflicts."""
-        conflict = AccountProfile(
-            profile_id="dup_conflict_profile",
+    def test_multi_instrument_session_profile_keeps_distinct_caps(self):
+        """Different instruments on the same session must keep their own cap."""
+        multi_instrument = AccountProfile(
+            profile_id="multi_instrument_profile",
             firm="topstep",
             account_size=50_000,
             active=False,
@@ -289,9 +291,29 @@ class TestLaneRegistryOrbCap:
                 DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12", "MES", "NYSE_OPEN", max_orb_size_pts=30.0),
             ),
         )
+        ACCOUNT_PROFILES["multi_instrument_profile"] = multi_instrument
+        try:
+            registry = get_lane_registry("multi_instrument_profile")
+            assert registry[("NYSE_OPEN", "MNQ")]["max_orb_size_pts"] == 117.8
+            assert registry[("NYSE_OPEN", "MES")]["max_orb_size_pts"] == 30.0
+        finally:
+            ACCOUNT_PROFILES.pop("multi_instrument_profile", None)
+
+    def test_duplicate_session_instrument_profile_raises_on_registry(self):
+        """get_lane_registry must still fail closed on true cap conflicts."""
+        conflict = AccountProfile(
+            profile_id="dup_conflict_profile",
+            firm="topstep",
+            account_size=50_000,
+            active=False,
+            daily_lanes=(
+                DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
+                DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=130.0),
+            ),
+        )
         ACCOUNT_PROFILES["dup_conflict_profile"] = conflict
         try:
-            with pytest.raises(ValueError, match="inconsistent max_orb_size_pts"):
+            with pytest.raises(ValueError, match="same \\(session, instrument\\)"):
                 get_lane_registry("dup_conflict_profile")
         finally:
             ACCOUNT_PROFILES.pop("dup_conflict_profile", None)
@@ -313,10 +335,10 @@ class TestLaneRegistryOrbCap:
         # Since 2026-04-13, caps are per-session P90 from allocator JSON.
         # Assert structure (caps exist and are positive), not exact values.
         assert len(registry) >= 1, "expected at least one session in registry"
-        for label, info in registry.items():
+        for (label, instrument), info in registry.items():
             cap = info.get("max_orb_size_pts")
-            assert cap is not None, f"{label} registry entry missing max_orb_size_pts"
-            assert cap > 0, f"{label} cap must be positive"
+            assert cap is not None, f"{label}/{instrument} registry entry missing max_orb_size_pts"
+            assert cap > 0, f"{label}/{instrument} cap must be positive"
 
     def test_duplicate_session_profile_preserves_all_lane_definitions(self):
         duplicate = AccountProfile(

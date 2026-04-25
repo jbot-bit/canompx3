@@ -65,9 +65,19 @@ class ProjectXPositions(BrokerPositions):
             for acct in accounts:
                 acct_id = acct.get("id") or acct.get("accountId")
                 if acct_id is not None and int(acct_id) == account_id:
-                    balance = acct.get("balance") or acct.get("cashBalance")
+                    # Use explicit None check, not `or`: a $0.00 balance is a
+                    # legitimate value (day-1 XFA, fresh accounts) — falsy `or`
+                    # collapses 0.0 to None and falsely reports "not found".
+                    balance = acct.get("balance")
+                    if balance is None:
+                        balance = acct.get("cashBalance")
                     if balance is not None:
                         return float(balance)
+                    log.warning(
+                        "ProjectX account %d found but no balance/cashBalance field",
+                        account_id,
+                    )
+                    return None
             log.warning("ProjectX account %d not found in search results", account_id)
             return None
         except Exception as e:

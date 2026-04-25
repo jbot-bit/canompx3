@@ -1,5 +1,8 @@
 # OVNRNG Allocator-Routing Diagnostic — ROUTER_HOLDS_OOS
 
+**Status:** superseded the same day by `docs/audit/results/2026-04-21-ovnrng-router-rolling-cv.md`.
+Do **not** cite `ROUTER_HOLDS_OOS` as current truth; the later rolling-CV audit retracts it and closes the line as `ROUTER_BRITTLE — DEAD`.
+
 **Date:** 2026-04-21
 **Branch:** `research/ovnrng-allocator-routing-diagnostic`
 **Script:** `research/audit_ovnrng_allocator_routing.py`
@@ -272,6 +275,19 @@ specific and the pre-reg is not worth writing.
 - No 2026 OOS tested (sacred).
 - No new filter registered.
 - No production code touched.
+
+## Reproduction / outputs
+
+- Primary script: `python research/audit_ovnrng_allocator_routing.py`
+- Canonical inputs: `orb_outcomes`, `daily_features`
+- Output class: read-only diagnostic result doc only; no writes to runtime allocation surfaces
+- Current repo truth override: this document is retained for provenance, but current decision authority is the later rolling-CV re-audit in `docs/audit/results/2026-04-21-ovnrng-router-rolling-cv.md`
+
+## Caveats / limitations
+
+- This document reports a single-fold walk-forward result, which was later shown to be insufficient for a router-style claim
+- Do not use this file alone as evidence that the router is alive; the later rolling-CV audit retracts that conclusion
+- No 2026 OOS was touched here, so this file never constituted deploy authority by itself
 
 ---
 

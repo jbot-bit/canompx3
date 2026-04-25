@@ -875,10 +875,10 @@ class TestRecentGarchFeatureCoverage:
         db_path = tmp_path / "test_garch_recent_nulls.db"
         con = duckdb.connect(str(db_path))
         con.execute(DAILY_FEATURES_GARCH_SCHEMA)
-        for i in range(320):
+        for i in range(340):
             td = date.fromordinal(date(2024, 1, 1).toordinal() + i)
-            garch = None if i >= 315 else 0.10 + i / 1000.0
-            gpct = None if i >= 315 else 50.0
+            garch = None if i >= 335 else 0.10 + i / 1000.0
+            gpct = None if i >= 335 else 50.0
             con.execute(
                 "INSERT INTO daily_features VALUES (?, 'MNQ', 5, ?, ?)",
                 [td, garch, gpct],
@@ -899,6 +899,24 @@ class TestRecentGarchFeatureCoverage:
             td = date.fromordinal(date(2024, 1, 1).toordinal() + i)
             garch = None if i < 40 else 0.10 + i / 1000.0
             gpct = None if i < 40 else 50.0
+            con.execute(
+                "INSERT INTO daily_features VALUES (?, 'MNQ', 5, ?, ?)",
+                [td, garch, gpct],
+            )
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_recent_garch_feature_coverage()
+        assert violations == []
+
+    def test_ignores_legitimate_garch_pct_warmup_before_recent_window_is_safe(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "test_garch_pct_warmup.db"
+        con = duckdb.connect(str(db_path))
+        con.execute(DAILY_FEATURES_GARCH_SCHEMA)
+        for i in range(320):
+            td = date.fromordinal(date(2024, 1, 1).toordinal() + i)
+            garch = None if i < 252 else 0.10 + i / 1000.0
+            gpct = None if i < 312 else 50.0
             con.execute(
                 "INSERT INTO daily_features VALUES (?, 'MNQ', 5, ?, ?)",
                 [td, garch, gpct],

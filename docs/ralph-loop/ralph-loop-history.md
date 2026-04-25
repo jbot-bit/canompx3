@@ -5,6 +5,71 @@
 
 ---
 
+## Iteration 185 — 2026-04-25
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py:2749 (_fill_poller)
+- Finding: Fill poller stuck PENDING consumes lane concurrency slot indefinitely — no timeout, no cancel, no halt on broker-stuck, naked exposure risk
+- Doctrine cited: institutional-rigor.md § 6 (no silent failures), integrity-guardian.md § 3 (fail-closed)
+- Action: Added FILL_POLL_TIMEOUT_SECS=60 + FILL_CANCEL_VERIFY_TIMEOUT_SECS=15 constants; _handle_fill_timeout helper (cancel→verify→halt-or-release with source-markers on every branch); per-order timeout anchors in _fill_poller; R3 cross-fix _fill_reconnect_gen counter; drift check 116; 7 new F7 tests
+- Blast radius: 3 files (session_orchestrator.py, test_session_orchestrator.py, check_drift.py)
+- Verification: PASS (182/182 tests, 116/116 drift, 8/8 pre-commit)
+- Commit: f69b9fd8
+
+---
+
+## Iteration 176 — 2026-04-25
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py:ORCHESTRATOR_MAX_RECONNECTS + run() reconnect loop; trading_app/live/session_safety_state.py:last_connected_at
+- Finding: R3 HIGH — ORCHESTRATOR_MAX_RECONNECTS=5 too low for 24h; no stable-run reset; counter was monotonic for process lifetime
+- Doctrine cited: institutional-rigor.md § 6 (no silent halt); integrity-guardian.md § 3 (fail-closed); institutional-rigor.md § 4 (reuse SessionSafetyState)
+- Action: Bumped ceiling 5->50 with operational rationale comment. Added ORCHESTRATOR_STABLE_RUN_SECS=1800. Converted for-loop to while+mutable-counter for reset. Fail-closed state persist (log.error on failure, reset still applies in-memory). Added last_connected_at field to SessionSafetyState. 4 mutation-proof tests added (TestR3ReconnectCeiling).
+- Blast radius: 3 files (session_orchestrator.py, session_safety_state.py, test_session_orchestrator.py)
+- Verification: PASS — 156/156 tests green, 107/107 drift
+- Commit: 64d0952d
+
+---
+
+## Iteration 175 — 2026-04-25
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py:_check_trading_day_rollover + _wall_clock_rollover_loop (new) + run() + finally
+- Finding: R1 CRITICAL — trading-day rollover only fires from _on_bar; feed-down at 09:00 Brisbane misses rollover, engine operates on wrong day indefinitely
+- Doctrine cited: institutional-rigor.md § 6 (no silent failures); integrity-guardian.md § 3 (fail-closed); canonical source compute_trading_day_utc_range
+- Action: Added _wall_clock_rollover_loop() mirroring _heartbeat_notifier lifecycle. Refactored _check_trading_day_rollover to accept override_trading_day. rollover_task created in run() and cancelled in finally. 4 mutation-proof tests added (TestR1WallClockRollover).
+- Blast radius: 2 files (session_orchestrator.py, test_session_orchestrator.py)
+- Verification: PASS — 152/152 tests green, 107/107 drift
+- Commit: 6dafda10
+
+---
+
+## Iteration 174 — 2026-04-25
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py:1666-1740 (_submit_bracket)
+- Finding: 3 silent-failure sub-paths in _submit_bracket leave position naked (no broker stop/target): F4-1 no risk_points, F4-2 bracket spec None, F4-3 submit raises
+- Doctrine cited: institutional-rigor.md § 6 (no silent failures); integrity-guardian.md § 3 (fail-closed)
+- Action: All 3 paths now: log.critical + _notify + brackets_failed++ + _fire_kill_switch + await _emergency_flatten. Mirror pattern from DD halt (L1491) and bar gap halt (L1515). 4 mutation-proof tests added (TestF4BracketNakedPosition).
+- Blast radius: 2 files (session_orchestrator.py, test_session_orchestrator.py)
+- Verification: PASS — 148/148 tests green, 107/107 drift
+- Commit: 87dffa38
+
+---
+
+## Iteration 173 — 2026-04-25
+- Phase: audit-only (verify-only)
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py (e02c529d), scripts/infra/telegram_feed.py
+- Finding: 5 pre-landed silent-failure fixes in e02c529d — F8 (orphan-bracket halt), R2 (async notify), F2 (F-1 None-equity notify), F5 (equity poll None propagation), F6 (journal unhealthy notify)
+- Doctrine cited: institutional-rigor.md § 6 (no silent failures); integrity-guardian.md § 3 (fail-closed)
+- Action: Verified all 5 fixes code-correct + institutionally grounded. 6/6 TestOvernightResilienceHardening PASS. Drift 106/107 (Check 46 pre-existing DB staleness, not from this commit). No new silent-failure reintroduced. Marked F8/R2/F2/F5/F6 RESOLVED in deferred-findings.
+- Blast radius: 0 (audit-only)
+- Verification: PASS — 6/6 tests green, drift 106/107 (pre-existing violation)
+- Commit: (audit-only, no code change — ledger/audit-doc commit)
+
+---
+
 ## Iteration 131 — 2026-03-18
 - Phase: fix
 - Classification: [mechanical]
@@ -1773,3 +1838,55 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 0 files modified
 - Verification: PASS — 49/49 test_topstep_scaling_plan.py; drift 101/101 (5 pre-existing, 6 advisory); behavioral 7/7
 - Commit: NONE
+
+---
+
+## Iteration 172 — 2026-04-25
+- Phase: audit-only (verification of pre-landed fix)
+- Classification: [judgment] (CRIT finding — behavioral safety)
+- Target: trading_app/live/session_orchestrator.py:386-387 + trading_app/risk_manager.py:220-229
+- Finding: CRITICAL — B6: F-1 gate fail-closes every entry in signal-only mode because _apply_broker_reality_check (the only caller of set_topstep_xfa_eod_balance) is gated `if not signal_only`. _topstep_xfa_eod_balance remains None, risk_manager.can_enter rejects with "EOD XFA balance unknown — refusing entry". Every entry since 2026-04-15 blocked.
+- Doctrine cited: integrity-guardian.md § 3 (fail-closed — chose seed over disable_f1); institutional-rigor.md § 6 (no silent failures); institutional-rigor.md § 4 (delegate to canonical $0.0 from topstep_scaling_plan.py:51-53)
+- Action: VERIFIED CLOSED. Fix landed ca363e1a before this iteration ran. _apply_signal_only_f1_seed() seeds $0.00 (canonical day-1 XFA bottom-tier cap) gated on signal_only=True. Non-XFA profiles no-op. Regression check: e02c529d does not overlap the B6 fix block.
+- Blast radius: 1 file modified (session_orchestrator.py), 3 tests added (TestF1SignalOnlySeed)
+- Verification: PASS — 22 F-1/signal_only tests; 204/204 orchestrator+risk_manager; 107/107 drift
+- Commit: ca363e1a (fix, pre-landed)
+
+---
+
+## Iteration 171 — 2026-04-25
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/lane_allocator.py:506 (finding rooted in lane_correlation.py audit)
+- Finding: CORRELATION_REJECT_RHO = 0.70 in lane_allocator.py duplicates RHO_REJECT_THRESHOLD = 0.70 from lane_correlation.py. Comment on line 506 acknowledged the duplication but did not import from canonical source. Silent divergence risk if threshold changes.
+- Doctrine cited: integrity-guardian.md § 2 (import from single source of truth); institutional-rigor.md § 4 (delegate to canonical sources, never re-encode)
+- Action: Added RHO_REJECT_THRESHOLD to existing lane_correlation import in lane_allocator.py; deleted local CORRELATION_REJECT_RHO constant; updated usage at line 628; updated test_lane_allocator.py import.
+- Blast radius: 2 files (lane_allocator.py + test_lane_allocator.py)
+- Verification: PASS — 39/39 test_lane_allocator.py; 107/107 drift checks; 8/8 pre-commit hooks
+- Commit: 9809f1b8
+
+---
+
+## Iteration 170 — 2026-04-25
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/outcome_builder.py:_compute_outcomes_all_rr (line 217)
+- Finding: break_ts=None accepted in _compute_outcomes_all_rr signature but never read in the 219-line function body. Two production callsites in build_outcomes and two test callsites in test_stress_hardcore.py passed break_ts=break_ts, unnecessarily. Dead parameter is drift bait — residue of E2 canonical window fix (0c56c7f7) which removed the break_ts fallback as look-ahead bias.
+- Doctrine cited: institutional-rigor.md § 5 (no dead parameters — drift bait)
+- Action: Removed break_ts=None from signature and break_ts=break_ts, from all 4 callsites (2 production, 2 test). 5 lines net changed.
+- Blast radius: 2 files (outcome_builder.py + test_stress_hardcore.py)
+- Verification: PASS — 223/223 tests (test_outcome_builder + test_stress_hardcore); 107/107 drift checks; 8/8 pre-commit hooks
+- Commit: 9b16c4eb
+
+---
+
+## Iteration 169 — 2026-04-25
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/db_manager.py:verify_trading_app_schema (lines 883-965)
+- Finding: verify_trading_app_schema expected_cols for validated_setups missing 10 migration-added columns (discovery_k, discovery_date, era_dependent, max_year_pct, wfe_verdict, wfe_investigation_date, wfe_investigation_notes, slippage_validation_status, validation_pathway, c8_oos_status); experimental_strategies missing 2 (validation_pathway, c8_oos_status). Verifier silently returned (True, []) even when those 12 columns absent.
+- Doctrine cited: integrity-guardian.md § 3 (fail-closed — never return success in audit/health paths when gaps exist), § 5 (evidence over assertion — verifier must actually verify all schema columns)
+- Action: Added all 12 missing column names to the two expected_cols sets. No behavior change to init_trading_app_schema.
+- Blast radius: 2 files (db_manager.py production + line-ending normalization in pre-commit for test file)
+- Verification: PASS — 13/13 test_db_manager.py; 107/107 drift checks; 324 fast tests (pre-commit)
+- Commit: 6811640a

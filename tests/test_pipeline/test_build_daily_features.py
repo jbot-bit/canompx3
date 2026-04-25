@@ -40,6 +40,7 @@ from pipeline.build_daily_features import (
     detect_break,
     verify_daily_features,
 )
+from pipeline.dst import compute_trading_day_from_timestamp
 
 # =============================================================================
 # HELPERS
@@ -109,6 +110,11 @@ class TestTradingDay:
         """Range is exactly 24 hours."""
         start, end = compute_trading_day_utc_range(date(2024, 6, 15))
         assert (end - start) == timedelta(hours=24)
+
+    def test_canonical_timestamp_helper_requires_timezone(self):
+        """Naive timestamps are rejected instead of guessed."""
+        with pytest.raises(ValueError, match="timezone-aware"):
+            compute_trading_day_from_timestamp(datetime(2024, 1, 4, 23, 0, 0))
 
 
 # =============================================================================
