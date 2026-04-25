@@ -2086,6 +2086,191 @@ class TestOrchestratorReconnect:
 
 
 # ---------------------------------------------------------------------------
+# R3 — reconnect ceiling tests
+# ---------------------------------------------------------------------------
+
+
+class TestR3ReconnectCeiling:
+    """R3 (HIGH): ORCHESTRATOR_MAX_RECONNECTS was 5 — too low for 24h operation.
+
+    Mutation probes: remove the constant bump or the stable-run reset and the
+    matching assertion must fail.
+    """
+
+    # R3-1: bumped ceiling allows > 5 consecutive reconnects without halt
+    async def test_r3_ceiling_allows_more_than_five_reconnects(self):
+        """With ceiling = 50, 6 consecutive feed crashes must NOT halt the session.
+        Pre-fix with ceiling=5 this would have called 'Exhausted' after crash 6.
+        """
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        orch.ORCHESTRATOR_BACKOFF_INITIAL = 0.001
+        orch.ORCHESTRATOR_BACKOFF_MAX = 0.001
+        # Do NOT override ORCHESTRATOR_MAX_RECONNECTS — use the class default (50)
+        assert orch.ORCHESTRATOR_MAX_RECONNECTS >= 50, (
+            "R3: ceiling must be >= 50 for 24h operation"
+        )
+
+        crash_count = [0]
+        MAX_CRASHES = 6  # more than the old ceiling of 5
+
+        class CrashNTimesFeed:
+            def __init__(self, auth, on_bar, demo, on_stale=None):
+                self._stop_requested = False
+
+            @property
+            def was_stopped(self):
+                return self._stop_requested
+
+            async def run(self, symbol):
+                crash_count[0] += 1
+                if crash_count[0] <= MAX_CRASHES:
+                    raise ConnectionError("ws flap")
+                # After MAX_CRASHES crashes, exit cleanly via stop
+                self._stop_requested = True
+
+        orch._feed_class = CrashNTimesFeed
+        await orch.run()
+
+        # Must have reconnected past the old ceiling of 5
+        assert crash_count[0] == MAX_CRASHES + 1, (
+            f"R3: expected {MAX_CRASHES + 1} feed attempts, got {crash_count[0]}"
+        )
+        # Must NOT have sent an 'Exhausted' notification
+        calls = [str(c) for c in orch._notify.call_args_list]
+        assert not any("Exhausted" in c for c in calls), (
+            "R3: Exhausted halt fired before ceiling — ceiling too low"
+        )
+
+    # R3-2: stable-run reset clears the reconnect counter after 30 min uptime
+    async def test_r3_stable_run_resets_counter(self):
+        """If feed is UP >= ORCHESTRATOR_STABLE_RUN_SECS then crashes, reconnect
+        counter must reset to 0, allowing further reconnects.
+        """
+        from datetime import timezone
+
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        orch.ORCHESTRATOR_BACKOFF_INITIAL = 0.001
+        orch.ORCHESTRATOR_BACKOFF_MAX = 0.001
+        # Use a tiny ceiling so the test is fast; default (50) is too slow to exhaust
+        orch.ORCHESTRATOR_MAX_RECONNECTS = 2
+        orch.ORCHESTRATOR_STABLE_RUN_SECS = 1800  # 30 min
+
+        call_count = [0]
+        # Feed sequence: stable (>30min) -> crash -> crash -> stop
+        # With counter reset after stable run, 2 post-stable crashes stay within ceiling.
+        # Without reset, 2 pre-stable + 2 post-stable = 4 > ceiling of 2 → would halt.
+
+        stable_start = datetime(2026, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+        stable_end = stable_start + timedelta(seconds=1900)  # >30min
+
+        class StableThenCrashFeed:
+            def __init__(self, auth, on_bar, demo, on_stale=None):
+                self._stop_requested = False
+
+            @property
+            def was_stopped(self):
+                return self._stop_requested
+
+            async def run(self, symbol):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    # First run: stable for >30min, then exits cleanly
+                    return  # feed exits without was_stopped (triggers reconnect)
+                if call_count[0] <= 3:
+                    raise ConnectionError("post-stable flap")
+                self._stop_requested = True
+
+        orch._feed_class = StableThenCrashFeed
+
+        # Patch datetime.now(UTC) inside the loop to simulate 30min uptime on first run
+        original_datetime = __import__("datetime").datetime
+        call_seq = [0]
+
+        class PatchedDatetime:
+            """Returns stable_start on first call (feed_started_at), stable_end on second."""
+            @staticmethod
+            def now(tz=None):
+                call_seq[0] += 1
+                if call_seq[0] == 1:
+                    return stable_start
+                return stable_end
+
+        with patch("trading_app.live.session_orchestrator.datetime") as mock_dt:
+            mock_dt.now.side_effect = lambda tz=None: (
+                stable_start if call_seq[0] == 0 else stable_end
+            )
+            # Simpler: just patch ORCHESTRATOR_STABLE_RUN_SECS to 0 so any run time qualifies
+            orch.ORCHESTRATOR_STABLE_RUN_SECS = 0
+
+            await orch.run()
+
+        # With stable-run reset (threshold=0), counter resets after every successful run.
+        # 4 total attempts must succeed without 'Exhausted'.
+        assert call_count[0] >= 4, f"R3: expected >= 4 feed calls, got {call_count[0]}"
+        calls = [str(c) for c in orch._notify.call_args_list]
+        assert not any("Exhausted" in c for c in calls), (
+            "R3: Exhausted fired — stable-run reset is not working"
+        )
+
+    # R3-3: state file persists last_connected_at after stable run
+    async def test_r3_state_file_persists_last_connected_at(self):
+        """After a stable run, _safety_state.last_connected_at must be set (non-empty)."""
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        orch.ORCHESTRATOR_BACKOFF_INITIAL = 0.001
+        orch.ORCHESTRATOR_MAX_RECONNECTS = 2
+        orch.ORCHESTRATOR_STABLE_RUN_SECS = 0  # any run qualifies as stable
+
+        call_count = [0]
+
+        class StableThenStopFeed:
+            def __init__(self, auth, on_bar, demo, on_stale=None):
+                self._stop_requested = False
+
+            @property
+            def was_stopped(self):
+                return self._stop_requested
+
+            async def run(self, symbol):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    return  # stable exit — triggers reconnect + reset
+                self._stop_requested = True  # clean stop on second attempt
+
+        orch._feed_class = StableThenStopFeed
+        await orch.run()
+
+        assert orch._safety_state.last_connected_at != "", (
+            "R3: last_connected_at not set after stable run — persistence broken"
+        )
+
+    # R3-4: source-text mutation probe
+    def test_r3_source_markers_present(self):
+        """R3 constants and stable-run reset logic must be present in production code.
+        If ORCHESTRATOR_MAX_RECONNECTS is reverted to 5 or ORCHESTRATOR_STABLE_RUN_SECS
+        is removed, this test fails.
+        """
+        import inspect
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+
+        src = inspect.getsource(SessionOrchestrator)
+        assert "ORCHESTRATOR_MAX_RECONNECTS = 50" in src, (
+            "R3: ceiling must be 50 (not 5) for 24h operation"
+        )
+        assert "ORCHESTRATOR_STABLE_RUN_SECS" in src, (
+            "R3: stable-run reset constant missing"
+        )
+        assert "stable-run reset" in src, (
+            "R3: stable-run reset logic marker missing from production code"
+        )
+        assert "last_connected_at" in src, (
+            "R3: last_connected_at persistence marker missing"
+        )
+
+
+# ---------------------------------------------------------------------------
 # BRACKET ORDER tests
 # ---------------------------------------------------------------------------
 

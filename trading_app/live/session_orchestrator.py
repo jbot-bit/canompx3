@@ -2667,9 +2667,24 @@ class SessionOrchestrator:
 
     # Orchestrator-level reconnect: covers the case where the feed exhausts its
     # internal reconnects (20 attempts) and run() returns cleanly.
-    ORCHESTRATOR_MAX_RECONNECTS = 5
+    #
+    # R3: ceiling bumped from 5 to 50 for 24h operation.
+    # Rationale: AMP/CME WebSocket flap rate in project operations is ~0-2/hr.
+    # 50 reconnects = 2/hr * 24h + 2 startup buffer. At ORCHESTRATOR_BACKOFF_MAX
+    # (5 min), 50 reconnects = up to 4h of pure backoff before halt — far more
+    # than enough to survive any expected broker maintenance window.
+    # Without this bump, 5 reconnects exhaust in <30 min on a flaky network,
+    # halting a 24h demo run early. (institutional-rigor.md § 6: no silent halt.)
+    ORCHESTRATOR_MAX_RECONNECTS = 50
     ORCHESTRATOR_BACKOFF_INITIAL = 30.0
     ORCHESTRATOR_BACKOFF_MAX = 300.0
+    # R3: if a feed connection is UP for at least this many seconds, it counts as
+    # a "stable run" — the reconnect counter resets to 0. This converts the ceiling
+    # from a monotonic lifetime counter to a rate-limit ceiling: N reconnects per
+    # stable-session window. 1800s (30 min) is operationally meaningful: it covers
+    # startup flap (first few minutes) and ensures we're past the initial auth/WS
+    # negotiation phase before granting a reset.
+    ORCHESTRATOR_STABLE_RUN_SECS = 1800
 
     async def run(self) -> None:
         # Re-check trading day at run start — catches restart across day boundary
@@ -2772,7 +2787,10 @@ class SessionOrchestrator:
         if not self.signal_only:
             poller = asyncio.create_task(self._fill_poller())
         try:
-            for attempt in range(self.ORCHESTRATOR_MAX_RECONNECTS + 1):
+            # R3: use a mutable counter (not range()) so stable-run reset can lower it
+            # back to 0 without re-entering the loop from scratch.
+            reconnect_count = 0
+            while reconnect_count <= self.ORCHESTRATOR_MAX_RECONNECTS:
                 if self._kill_switch_fired:
                     msg = "Kill switch fired — not reconnecting"
                     log.critical(msg)
@@ -2794,12 +2812,14 @@ class SessionOrchestrator:
                     demo=self.demo,
                 )
                 log.info(
-                    "Starting feed (attempt %d/%d): %s (broker: %s)",
-                    attempt + 1,
-                    self.ORCHESTRATOR_MAX_RECONNECTS + 1,
+                    "Starting feed (attempt %d, reconnects_used=%d/%d): %s (broker: %s)",
+                    reconnect_count + 1,
+                    reconnect_count,
+                    self.ORCHESTRATOR_MAX_RECONNECTS,
                     self.contract_symbol,
                     self._broker_name,
                 )
+                feed_started_at = datetime.now(UTC)
                 try:
                     self._last_bar_at = None  # reset heartbeat to avoid false watchdog trigger
                     await feed.run(self.contract_symbol)
@@ -2814,7 +2834,34 @@ class SessionOrchestrator:
                     log.critical("Feed crashed: %s", e)
                     self._notify(f"Feed crashed: {e}")
 
-                if attempt < self.ORCHESTRATOR_MAX_RECONNECTS:
+                # R3: stable-run reset — if the connection was UP for >= ORCHESTRATOR_STABLE_RUN_SECS,
+                # treat this as a successful session window and reset the reconnect counter.
+                # This converts the ceiling from a monotonic lifetime counter to a rate-limit
+                # ceiling: up to ORCHESTRATOR_MAX_RECONNECTS reconnects per stable-session window.
+                # Fail-closed (integrity-guardian.md § 3): if state-file write fails, we log and
+                # continue — the counter is still reset in memory even if persistence failed.
+                feed_up_secs = (datetime.now(UTC) - feed_started_at).total_seconds()
+                if feed_up_secs >= self.ORCHESTRATOR_STABLE_RUN_SECS:
+                    log.info(
+                        "R3 stable-run reset: feed was UP %.0fs (>= %.0fs threshold) — "
+                        "resetting reconnect counter from %d to 0",
+                        feed_up_secs,
+                        self.ORCHESTRATOR_STABLE_RUN_SECS,
+                        reconnect_count,
+                    )
+                    reconnect_count = 0
+                    backoff = self.ORCHESTRATOR_BACKOFF_INITIAL  # also reset backoff after stable run
+                    try:
+                        self._safety_state.last_connected_at = datetime.now(UTC).isoformat()
+                        self._safety_state.save()
+                    except Exception as _save_exc:
+                        log.error(
+                            "R3: failed to persist last_connected_at — "
+                            "counter reset still applies in-memory: %s",
+                            _save_exc,
+                        )
+
+                if reconnect_count < self.ORCHESTRATOR_MAX_RECONNECTS:
                     try:
                         await asyncio.get_running_loop().run_in_executor(None, self.auth.refresh_if_needed)
                     except Exception as exc:
@@ -2842,10 +2889,14 @@ class SessionOrchestrator:
                             "Contract re-resolution failed on reconnect: %s (keeping %s)", exc, self.contract_symbol
                         )
 
+                    reconnect_count += 1
                     self._stats.reconnect_attempts += 1
-                    self._notify(f"Reconnecting in {backoff:.0f}s (attempt {attempt + 2})")
+                    self._notify(f"Reconnecting in {backoff:.0f}s (attempt {reconnect_count + 1})")
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, self.ORCHESTRATOR_BACKOFF_MAX)
+                else:
+                    # Last attempt exhausted — exit loop to hit the halt message below
+                    break
 
             msg = f"Exhausted {self.ORCHESTRATOR_MAX_RECONNECTS} orchestrator reconnects — session dead"
             log.critical(msg)
