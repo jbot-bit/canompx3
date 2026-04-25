@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 173 — 2026-04-25
+- Phase: audit-only (verify-only)
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py (e02c529d), scripts/infra/telegram_feed.py
+- Finding: 5 pre-landed silent-failure fixes in e02c529d — F8 (orphan-bracket halt), R2 (async notify), F2 (F-1 None-equity notify), F5 (equity poll None propagation), F6 (journal unhealthy notify)
+- Doctrine cited: institutional-rigor.md § 6 (no silent failures); integrity-guardian.md § 3 (fail-closed)
+- Action: Verified all 5 fixes code-correct + institutionally grounded. 6/6 TestOvernightResilienceHardening PASS. Drift 106/107 (Check 46 pre-existing DB staleness, not from this commit). No new silent-failure reintroduced. Marked F8/R2/F2/F5/F6 RESOLVED in deferred-findings.
+- Blast radius: 0 (audit-only)
+- Verification: PASS — 6/6 tests green, drift 106/107 (pre-existing violation)
+- Commit: (audit-only, no code change — ledger/audit-doc commit)
+
+---
+
 ## Iteration 131 — 2026-03-18
 - Phase: fix
 - Classification: [mechanical]

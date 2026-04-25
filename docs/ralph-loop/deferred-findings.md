@@ -27,6 +27,11 @@
 
 | ID | Iter Found | Resolved | Commit | Description |
 |----|-----------|----------|--------|-------------|
+| F8 | pre-173 | iter 173 | e02c529d | Orphan-bracket cleanup failure now halts unless --force-orphans (session_orchestrator.py:507-521) |
+| R2 | pre-173 | iter 173 | e02c529d | _notify dispatches via asyncio.to_thread when event loop running; sync fallback outside async (session_orchestrator.py:1109-1211) |
+| F2 | pre-173 | iter 173 | e02c529d | F-1 None-equity at startup now triggers _notify gated on topstep_xfa_account_size (session_orchestrator.py:655-670) |
+| F5 | pre-173 | iter 173 | e02c529d | query_equity exception now propagates as update_equity(None) so 3-strike halt fires (session_orchestrator.py:1499-1510) |
+| F6 | pre-173 | iter 173 | e02c529d | Journal-unhealthy in demo/signal-only now accompanied by _notify (session_orchestrator.py:541-545) |
 | DF-01 | 9/11 | 23 | f7bd0c4 | Conditional EXITED trade prune — made unconditional; silent-exit paths now pruned correctly |
 | DF-03 | 9/11 | 40 | ACCEPTABLE | IB hardcoded 23:00 UTC — reassessed: correctly documents Brisbane UTC+10 fixed offset, no DST, IB_DURATION_MINUTES from config. Not a defect. |
 | DF-07 | 13 | slate-clear | 7cf57cb | HOT tier thresholds unannotated — @research-source annotation added |

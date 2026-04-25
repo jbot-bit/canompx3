@@ -1,7 +1,7 @@
 {
-  "total_iterations": 165,
+  "total_iterations": 166,
   "last_updated": "2026-04-25",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 172,
   "findings_by_type": {
     "canonical_violation": {
@@ -11,10 +11,10 @@
       "fix_rate": 0.77
     },
     "silent_failure": {
-      "found": 37,
+      "found": 38,
       "fixed": 35,
-      "deferred": 1,
-      "fix_rate": 0.95
+      "deferred": 2,
+      "fix_rate": 0.92
     },
     "other": {
       "found": 24,
@@ -123,10 +123,10 @@
     "CRITICAL": 4,
     "HIGH": 12,
     "MEDIUM": 44,
-    "LOW": 105
+    "LOW": 106
   },
   "classifications": {
-    "judgment": 75,
+    "judgment": 76,
     "mechanical": 61,
     "audit-only": 29
   },
@@ -360,6 +360,11 @@
       "audit_count": 2,
       "last_iter": 153,
       "findings": 2
+    },
+    "trading_app/live/session_orchestrator.py": {
+      "audit_count": 2,
+      "last_iter": 173,
+      "findings": 0
     },
     "strategy_validator.py": {
       "audit_count": 1,
@@ -1101,9 +1106,9 @@
       "last_iter": 171,
       "findings": 1
     },
-    "trading_app/live/session_orchestrator.py": {
+    "scripts/infra/telegram_feed.py": {
       "audit_count": 1,
-      "last_iter": 172,
+      "last_iter": 173,
       "findings": 0
     }
   },
@@ -2922,6 +2927,17 @@
       "severity": "CRITICAL",
       "verdict": "NOTED",
       "commit": "ca363e1a (fix, pre-landed)"
+    },
+    {
+      "iter": 173,
+      "date": "2026-04-25",
+      "phase": "audit-only",
+      "classification": "judgment",
+      "target": "trading_app/live/session_orchestrator.py (e02c529d), scripts/infra/telegram_feed.py",
+      "finding_type": "silent_failure",
+      "severity": "LOW",
+      "verdict": "NOTED",
+      "commit": "(audit-only, no code change \u2014 ledger/audit-doc commit)"
     }
   ]
 }

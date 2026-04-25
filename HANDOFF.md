@@ -9,10 +9,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 8ca4e1c6 — feat(ralph): add Priority 0 — known-CRITICAL backlog check before auto-targeting
-- **Files changed:** 2 files
-  - `.claude/agents/ralph-loop.md`
+- **Commit:** a8ff06cc — [judgment] audit: Ralph Loop iter 172 — verify B6 F-1 signal-only seed fix (CRITICAL, ca363e1a)
+- **Files changed:** 4 files
   - `HANDOFF.md`
+  - `docs/ralph-loop/ralph-ledger.json`
+  - `docs/ralph-loop/ralph-loop-audit.md`
+  - `docs/ralph-loop/ralph-loop-history.md`
 
 ## Next Steps — Active
 
