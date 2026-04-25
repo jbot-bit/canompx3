@@ -9,11 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** f40ac4dd — [mechanical] fix: Ralph Loop iter 176 — audit docs + ledger rebuild
-- **Files changed:** 3 files
-  - `docs/ralph-loop/ralph-ledger.json`
-  - `docs/ralph-loop/ralph-loop-audit.md`
-  - `docs/ralph-loop/ralph-loop-history.md`
+- **Commit:** f8f993b7 — [judgment] fix: Ralph Loop iter 177 — C1 kill-switch race in _handle_event ENTRY branch (C1-CRITICAL)
+- **Files changed:** 2 files
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Next Steps — Active
 
