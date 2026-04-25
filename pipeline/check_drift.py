@@ -5776,22 +5776,60 @@ def check_f7_fill_poller_timeout_invariants() -> list[str]:
         violations.append(f"  {target.name}: failed to parse for F7 timeout verification: {exc}")
         return violations
 
-    # (1) FILL_POLL_TIMEOUT_SECS with rationale
+    # Build a line-indexed list for fast window lookups used in (1) and (2) below.
+    source_lines = source.splitlines()
+
+    def _has_rationale_near_constant(const_name: str, window: int = 5) -> bool:
+        """Return True if '# Rationale:' appears within `window` lines of the
+        constant assignment in the source.  Uses AST to find the exact line,
+        not a full-text search (which would pass even if the comment were in an
+        unrelated function miles away)."""
+        for node in ast.walk(tree):
+            # Class-level constant: ast.Assign or ast.AnnAssign inside a ClassDef
+            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+                continue
+            # Resolve the target name
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+                names = [t.id for t in targets if isinstance(t, ast.Name)]
+            else:  # AnnAssign
+                names = [node.target.id] if isinstance(node.target, ast.Name) else []
+            if const_name not in names:
+                continue
+            # node.lineno is 1-based; source_lines is 0-based
+            start = max(0, node.lineno - 1 - window)
+            end = min(len(source_lines), node.lineno - 1 + window + 1)
+            window_text = "\n".join(source_lines[start:end])
+            if "# Rationale:" in window_text:
+                return True
+        return False
+
+    # (1) FILL_POLL_TIMEOUT_SECS must exist AND have a nearby Rationale comment
     if "FILL_POLL_TIMEOUT_SECS" not in source:
         violations.append(
             "  session_orchestrator.py: FILL_POLL_TIMEOUT_SECS missing — "
             "F7 fill-poller timeout constant removed. Infinite PENDING loop re-opened."
         )
-    elif "FILL_POLL_TIMEOUT_SECS" in source and "# Rationale:" not in source:
-        # Allow if at least some comment is nearby — just check the constant exists
-        pass  # rationale comment is adjacent; full text search would be fragile
+    elif not _has_rationale_near_constant("FILL_POLL_TIMEOUT_SECS"):
+        violations.append(
+            "  session_orchestrator.py: FILL_POLL_TIMEOUT_SECS exists but has no "
+            "'# Rationale:' comment within 5 lines of its definition. "
+            "Rationale comment required so reviewers understand why the value is safe "
+            "(institutional-rigor.md § 7 — never trust a value without documented reasoning)."
+        )
 
-    # (2) FILL_CANCEL_VERIFY_TIMEOUT_SECS with rationale
+    # (2) FILL_CANCEL_VERIFY_TIMEOUT_SECS must exist AND have a nearby Rationale comment
     if "FILL_CANCEL_VERIFY_TIMEOUT_SECS" not in source:
         violations.append(
             "  session_orchestrator.py: FILL_CANCEL_VERIFY_TIMEOUT_SECS missing — "
             "F7 post-cancel verify step has no timeout. Fail-open path re-opened "
             "(integrity-guardian.md § 3)."
+        )
+    elif not _has_rationale_near_constant("FILL_CANCEL_VERIFY_TIMEOUT_SECS"):
+        violations.append(
+            "  session_orchestrator.py: FILL_CANCEL_VERIFY_TIMEOUT_SECS exists but has no "
+            "'# Rationale:' comment within 5 lines of its definition. "
+            "Rationale comment required (institutional-rigor.md § 7)."
         )
 
     # (3) _handle_fill_timeout method exists
