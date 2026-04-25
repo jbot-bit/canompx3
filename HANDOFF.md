@@ -9,17 +9,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 0e27c85b — chore: unblock CI + harden iter-179 leftovers (ruff format + test isolation + DuckDB migration)
-- **Files changed:** 9 files
-  - `docs/runtime/stages/ruff-format-iter179-fixup.md`
-  - `scripts/tools/context_views.py`
-  - `tests/test_tools/test_claude_superpower_brief.py`
-  - `tests/test_tools/test_context_views.py`
-  - `tests/test_trading_app/test_phase_4_discovery_gates.py`
-  - `tests/test_trading_app/test_strategy_discovery.py`
-  - `trading_app/db_manager.py`
-  - `trading_app/phase_4_discovery_gates.py`
-  - `trading_app/strategy_discovery.py`
+- **Commit:** 687bcf1b — [judgment] fix: Ralph Loop iter 181 — R4 live_signals.jsonl daily rotation + disk-full notify
+- **Files changed:** 6 files
+  - `docs/runtime/stages/ralph-iter-181-r4-signals-rotation.md`
+  - `pipeline/check_drift.py`
+  - `scripts/tools/trade_matcher.py`
+  - `tests/test_trading_app/test_signal_log_rotator.py`
+  - `trading_app/live/session_orchestrator.py`
+  - `trading_app/live/signal_log_rotator.py`
 
 ## Next Steps — Active
 
