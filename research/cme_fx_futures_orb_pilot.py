@@ -42,10 +42,10 @@ from pipeline.build_daily_features import detect_break, detect_double_break
 from pipeline.cost_model import CostSpec
 from pipeline.dst import compute_trading_day_utc_range, orb_utc_window
 from pipeline.ingest_dbn_mgc import choose_front_contract, compute_trading_days
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.outcome_builder import compute_single_outcome
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-GOLD_DB_PATH = PROJECT_ROOT / "gold.db"
 OUTPUT_DIR = PROJECT_ROOT / "research" / "output"
 RESULTS_DIR = PROJECT_ROOT / "docs" / "audit" / "results"
 
