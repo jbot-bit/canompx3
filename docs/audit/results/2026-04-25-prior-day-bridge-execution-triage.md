@@ -174,9 +174,22 @@ becomes true.
 - **Trigger A — OOS horizon clears the power floor.** When per-cell
   `N_OOS_on` against the Mode A holdout reaches a power-floor-passing
   sample given the observed IS effect sizes, a single-cell confirm-or
-  -kill prereg on the strongest remaining cell becomes honest. At
-  current fire rates this is an elapsed-time trigger, not a re-tuning
-  trigger; do not change cell parameters to hit it faster.
+  -kill prereg on the strongest remaining cell becomes honest.
+
+  Concrete threshold (back-of-envelope, not a hard kill bar): with a
+  trade-level standard deviation of roughly `1.0 R` typical for ORB
+  pnl, the strongest cell's IS effect of `+0.23 R` corresponds to
+  Cohen's `d ≈ 0.23`. A two-sided one-sample `t` test at α=0.05 hits
+  50 percent power at approximately `N ≈ 195`. The other four cells
+  have smaller IS effects and need larger N (`+0.16 R` cell ≈ N ≈ 385).
+  At current measured fire rates (10–15 OOS trades per cell over
+  ~0.32 years of holdout), reaching `N ≈ 195` on any single cell is an
+  elapsed-time horizon of roughly 4–6 years, not weeks or months.
+  Do not change cell parameters or filter definitions to hit the
+  threshold faster — that is the post-hoc rescue path the discovery
+  protocol forbids. The exact threshold should be re-derived under the
+  actual cell's measured σ at re-open time, not relied on from this
+  back-of-envelope.
 - **Trigger B — same-session execution-translation scaffolding lands.**
   Either (1) `trading_app/risk_manager.py` / `trading_app/portfolio.py`
   / `trading_app/execution_engine.py` gain an expressible half-size
