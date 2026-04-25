@@ -124,7 +124,7 @@ items:
   - id: mes_event_tail_slippage_realism
     title: MES event-tail slippage realism debt
     class: debt
-    status: done
+    status: closed
     priority: P3
     close_before_new_work: false
     owner_hint: codex-or-claude
