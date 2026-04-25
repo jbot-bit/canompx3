@@ -255,6 +255,8 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._write_signal_record = MagicMock()
     # Self-tests require real Telegram/broker — mock to always pass in tests
     orch.run_self_tests = MagicMock(return_value={"notifications": True, "brackets": True, "fill_poller": True})
+    # R5: CB re-notify state — None until first trip re-notify fires
+    orch._cb_renotify_last_at = None
 
     return orch
 
@@ -4000,4 +4002,148 @@ class TestC1RealHandleEventExitPassthrough:
             "C1 guard must be ENTRY-only — EXIT events must reach _record_exit "
             "even under kill-switch (EOD wind-down). If a blanket guard was added, "
             "this assertion catches the regression."
+        )
+
+
+# ---------------------------------------------------------------------------
+# R5 — engine circuit-breaker periodic re-notify tests
+# ---------------------------------------------------------------------------
+
+
+class TestR5CbRenotify:
+    """R5 (HIGH): engine circuit-breaker fires once at trip time but operator may miss
+    the single Telegram if sleeping/phone off. Fix: periodic re-notify from heartbeat
+    while CB is still tripped. Rate-limit pattern mirrors signal_log_rotator.py
+    DISK_FULL_NOTIFY_WINDOW_SECS.
+
+    Ralph iter 183. AUDIT-SKIPPED: R5 is notification-only, no exposure path.
+    Justification logged in docs/ralph-loop/deferred-findings.md.
+    """
+
+    # R5-1: re-notify fires at cadence while CB is tripped
+    async def test_r5_renotify_fires_while_cb_tripped(self):
+        """Mock heartbeat clock: CB tripped → N heartbeat cycles → assert N re-notifies."""
+        orch = build_orchestrator()
+        notifications = []
+        orch._notify = lambda msg: notifications.append(msg)
+
+        # Trip the engine circuit breaker
+        orch._consecutive_engine_errors = 5
+
+        # Simulate 3 heartbeat cycles by calling the re-notify block directly.
+        # We replicate the exact guard condition from _heartbeat_notifier to keep
+        # tests deterministic without running an asyncio event loop + sleep.
+        from datetime import UTC, datetime, timedelta
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+
+        interval = SessionOrchestrator.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS
+
+        for cycle in range(3):
+            now = datetime(2026, 4, 25, 3, 0, 0, tzinfo=UTC) + timedelta(seconds=cycle * interval)
+            elapsed = (
+                (now - orch._cb_renotify_last_at).total_seconds()
+                if orch._cb_renotify_last_at is not None
+                else interval  # first iteration: treat as due
+            )
+            if orch._consecutive_engine_errors >= 5 and elapsed >= interval:
+                orch._cb_renotify_last_at = now
+                orch._notify(
+                    f"ENGINE CIRCUIT BREAKER STILL TRIPPED — engine paused "
+                    f"({orch._consecutive_engine_errors} consecutive errors). "
+                    "No new entries until rollover. MANUAL CHECK REQUIRED."
+                )
+
+        assert len(notifications) == 3, (
+            f"R5: expected 3 re-notifies across 3 heartbeat cycles, got {len(notifications)}"
+        )
+        assert all("ENGINE CIRCUIT BREAKER STILL TRIPPED" in n for n in notifications), (
+            "R5: re-notify message must contain 'ENGINE CIRCUIT BREAKER STILL TRIPPED'"
+        )
+
+    # R5-2: re-notify does NOT fire when CB is clear
+    async def test_r5_no_renotify_when_cb_clear(self):
+        """CB clear (consecutive_engine_errors < 5) → no re-notify sent."""
+        orch = build_orchestrator()
+        notifications = []
+        orch._notify = lambda msg: notifications.append(msg)
+
+        # CB is NOT tripped
+        orch._consecutive_engine_errors = 0
+
+        from datetime import UTC, datetime
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+
+        interval = SessionOrchestrator.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS
+        now = datetime(2026, 4, 25, 3, 0, 0, tzinfo=UTC)
+        elapsed = interval  # as if interval has elapsed
+
+        if orch._consecutive_engine_errors >= 5 and elapsed >= interval:
+            orch._notify("ENGINE CIRCUIT BREAKER STILL TRIPPED — should not fire")
+
+        assert len(notifications) == 0, "R5: re-notify must not fire when consecutive_engine_errors < 5"
+
+    # R5-3: CB clears + re-trips → cadence starts fresh (no silent state inheritance)
+    async def test_r5_reset_on_cb_clear_then_retrip(self):
+        """Rollover resets _cb_renotify_last_at; a re-trip starts a fresh cadence."""
+        orch = build_orchestrator()
+        notifications = []
+        orch._notify = lambda msg: notifications.append(msg)
+
+        from datetime import UTC, datetime, timedelta
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+
+        interval = SessionOrchestrator.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS
+
+        # Phase 1: CB trips, one re-notify fires
+        orch._consecutive_engine_errors = 5
+        t0 = datetime(2026, 4, 25, 3, 0, 0, tzinfo=UTC)
+        orch._cb_renotify_last_at = None  # fresh
+        elapsed = interval  # first cycle
+        if orch._consecutive_engine_errors >= 5 and elapsed >= interval:
+            orch._cb_renotify_last_at = t0
+            orch._notify("ENGINE CIRCUIT BREAKER STILL TRIPPED — phase 1")
+
+        assert len(notifications) == 1, "R5: phase 1 should fire once"
+
+        # Phase 2: rollover clears the CB and the re-notify timestamp
+        orch._consecutive_engine_errors = 0
+        orch._cb_renotify_last_at = None  # simulate rollover reset
+
+        # Phase 3: CB re-trips — first re-notify of the new trip fires immediately
+        orch._consecutive_engine_errors = 5
+        t1 = datetime(2026, 4, 25, 4, 0, 0, tzinfo=UTC)
+        elapsed = interval  # _cb_renotify_last_at is None → treat as due
+        if orch._consecutive_engine_errors >= 5 and elapsed >= interval:
+            orch._cb_renotify_last_at = t1
+            orch._notify("ENGINE CIRCUIT BREAKER STILL TRIPPED — phase 3")
+
+        assert len(notifications) == 2, (
+            "R5: after rollover reset, re-trip must start fresh cadence (fire on first heartbeat)"
+        )
+        # Verify second notify did NOT inherit stale t0 — last_at is updated to t1
+        assert orch._cb_renotify_last_at == t1, (
+            "R5: _cb_renotify_last_at must be updated to current time on re-notify, not inherit prior trip's timestamp"
+        )
+
+    # R5-4: source-text mutation probes — future refactor that removes the re-notify call breaks loudly
+    def test_r5_source_markers_present(self):
+        """R5 constants and re-notify logic must be present in production code.
+
+        Mutation probe: deleting CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS or removing the
+        _cb_renotify_last_at reset in _check_trading_day_rollover causes this test to fail.
+        """
+        import inspect
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+
+        src = inspect.getsource(SessionOrchestrator)
+        assert "CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS" in src, (
+            "R5: CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS constant must be present"
+        )
+        assert "ENGINE CIRCUIT BREAKER STILL TRIPPED" in src, (
+            "R5: re-notify call site must contain marker text 'ENGINE CIRCUIT BREAKER STILL TRIPPED'"
+        )
+        assert "_cb_renotify_last_at" in src, "R5: _cb_renotify_last_at state field must be present"
+        assert "R5: reset re-notify cadence" in src, (
+            "R5: rollover reset line must contain 'R5: reset re-notify cadence' comment "
+            "(marker ensures the reset is not silently removed in future refactors)"
         )

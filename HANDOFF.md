@@ -9,10 +9,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** f8f993b7 — [judgment] fix: Ralph Loop iter 177 — C1 kill-switch race in _handle_event ENTRY branch (C1-CRITICAL)
-- **Files changed:** 2 files
-  - `tests/test_trading_app/test_session_orchestrator.py`
+- **Commit:** 687bcf1b — [judgment] fix: Ralph Loop iter 181 — R4 live_signals.jsonl daily rotation + disk-full notify
+- **Files changed:** 6 files
+  - `docs/runtime/stages/ralph-iter-181-r4-signals-rotation.md`
+  - `pipeline/check_drift.py`
+  - `scripts/tools/trade_matcher.py`
+  - `tests/test_trading_app/test_signal_log_rotator.py`
   - `trading_app/live/session_orchestrator.py`
+  - `trading_app/live/signal_log_rotator.py`
 
 ## Next Steps — Active
 

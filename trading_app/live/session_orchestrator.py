@@ -782,6 +782,9 @@ class SessionOrchestrator:
         self._stats = SessionStats()  # observability counters
         self._poller_active = False  # set True once fill poller runs a cycle
         self._consecutive_engine_errors = 0  # circuit breaker for engine crashes
+        # R5: UTC timestamp of last CB-tripped re-notify (None = not yet sent this trip).
+        # Reset to None on rollover / CB clear so each new trip starts a fresh cadence.
+        self._cb_renotify_last_at: datetime | None = None
         # Restore blocked strategies from crash-recovery state (if any)
         self._blocked_strategies: set[str] = set(self._safety_state.blocked_strategies.keys())
         self._blocked_strategy_reasons: dict[str, str] = dict(self._safety_state.blocked_strategies)
@@ -1497,6 +1500,7 @@ class SessionOrchestrator:
         self.monitor.reset_daily()
         self.risk_mgr.daily_reset(self.trading_day)
         self._consecutive_engine_errors = 0
+        self._cb_renotify_last_at = None  # R5: reset re-notify cadence — new trip starts fresh
         self._close_time_forced = False  # Reset so next day's close-time flatten can fire
 
         # F-1 TopStep XFA Scaling Plan: refresh EOD balance from broker equity
@@ -2633,6 +2637,13 @@ class SessionOrchestrator:
 
     HEARTBEAT_INTERVAL = 1800.0  # 30 minutes between heartbeat notifications
 
+    # R5 (Ralph iter 183): periodic re-notify while engine circuit-breaker is tripped.
+    # Rationale: 30 min — matches HEARTBEAT_INTERVAL (one sleep cycle cannot be missed).
+    # Short enough that an operator who misses the initial trip notify at 03:00 will
+    # receive a follow-up by 03:30, 04:00, etc. Long enough to avoid Telegram spam.
+    # Same rate-limit pattern as DISK_FULL_NOTIFY_WINDOW_SECS in signal_log_rotator.py.
+    CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS: float = 1800.0  # 30 minutes
+
     async def _heartbeat_notifier(self) -> None:
         """Send periodic alive notification. Absence of heartbeat = notifications broken."""
         # Emit immediate heartbeat so user knows session is alive without waiting 30 min
@@ -2651,6 +2662,29 @@ class SessionOrchestrator:
                 self._notify(
                     f"Heartbeat: {self._bar_count} bars, {n_trades} trades, {active} active, poller={poller_status}"
                 )
+                # R5: periodic re-notify while engine circuit-breaker is tripped.
+                # The initial trip fires once at trip time (line ~1678). If the operator
+                # misses that single Telegram (sleeping, phone off), the engine may stay
+                # paused for hours until rollover. Re-notify every
+                # CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS while still tripped.
+                # Rate-limit: same pattern as DISK_FULL_NOTIFY_WINDOW_SECS in
+                # signal_log_rotator.py — track last-sent timestamp, skip if within window.
+                # Reset: _cb_renotify_last_at is cleared in _check_trading_day_rollover so
+                # a future re-trip starts a fresh cadence (no silent state inheritance).
+                if self._consecutive_engine_errors >= 5:
+                    now = datetime.now(UTC)
+                    elapsed = (
+                        (now - self._cb_renotify_last_at).total_seconds()
+                        if self._cb_renotify_last_at is not None
+                        else self.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS  # first re-notify
+                    )
+                    if elapsed >= self.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS:
+                        self._cb_renotify_last_at = now
+                        self._notify(
+                            f"ENGINE CIRCUIT BREAKER STILL TRIPPED — engine paused "
+                            f"({self._consecutive_engine_errors} consecutive errors). "
+                            "No new entries until rollover. MANUAL CHECK REQUIRED."
+                        )
             except asyncio.CancelledError:
                 return
             except Exception as e:
