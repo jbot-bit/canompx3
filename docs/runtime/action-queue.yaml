@@ -4,7 +4,7 @@ items:
   - id: prior_day_bridge_execution_triage
     title: Prior-day Pathway-B bridge execution triage
     class: research
-    status: done
+    status: closed
     priority: P1
     close_before_new_work: true
     owner_hint: codex-or-claude
