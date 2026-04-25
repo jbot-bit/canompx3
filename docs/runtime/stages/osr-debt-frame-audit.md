@@ -1,7 +1,10 @@
 # Stage: osr-debt-frame-audit
 
-mode: RESEARCH
+mode: IMPLEMENTATION
 date: 2026-04-25
+mode_history:
+  - 2026-04-25 RESEARCH (Stage 1 audit drafted + adversarial-audit-cleared + audit doc committed at 3745ba2a)
+  - 2026-04-25 IMPLEMENTATION (Stage 2 closeout: decision-ledger entry + cusum_monitor.py docstring clarifier; bundled into PR #106 per user direction "finishing what we started" after verdict was already locked)
 worktree: C:/Users/joshd/canompx3-osr-audit
 branch: research/osr-shiryaev-roberts-audit
 anchor_commit: 73329cd1
@@ -10,6 +13,13 @@ scope_lock:
   - docs/audit/results/2026-04-25-osr-debt-frame-audit.md
   - docs/runtime/stages/osr-debt-frame-audit.md
   - docs/plans/2026-04-25-osr-debt-frame-audit-design.md
+  # Stage 2 closeout (added 2026-04-25 after Stage 1 verdict locked + auditor cleared):
+  - docs/runtime/decision-ledger.md
+  # Deferred from Stage 2 closeout (audit recommendation #3, explicitly "optional"):
+  #   trading_app/live/cusum_monitor.py — docstring clarifier blocked by parallel-session
+  #   RESEARCH/DESIGN stages in other worktrees (stage-gate-guard.py global mode rule).
+  #   Defer to a later TRIVIAL fix when parallel stages clear. The decision-ledger entry
+  #   is the durable canonical record; the docstring is a nice-to-have surface clarifier.
 
 read_only_sources:
   - docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md
@@ -69,4 +79,19 @@ After draft, dispatch:
 
 ## Why RESEARCH not IMPLEMENTATION
 
-This stage produces a verdict doc only. No code change, no test change, no canonical-surface edit. The verdict's downstream actions are the subject of a separate Stage 2 design.
+This stage produces a verdict doc as its primary artefact. The Stage 2 closeout actions added below are mechanical post-verdict execution (decision-ledger entry locking the MISFRAMED finding + a 3-line docstring clarifier). They are added to scope_lock after the Stage 1 verdict was locked and adversarial-audit-cleared (no design freedom remaining for the action shape — verdict mechanically constrains it).
+
+## Stage 2 closeout (rolled into the same PR)
+
+Per user direction "finishing what we started" after Stage 1 verdict was locked and adversarial-audit-cleared:
+
+- `docs/runtime/decision-ledger.md` — one entry recording the MISFRAMED verdict so the question cannot be reopened without primary-source evidence that a Criterion 12 parameter is actually failing. **Shipped in this PR.**
+
+**Deliberately NOT touched in Stage 2 closeout:**
+
+- `HANDOFF.md` line 30 — volatile surface (auto-written by post-commit hook, actively edited by parallel sessions). The decision-ledger is the canonical durable record per the `work-queue-is-canonical` decision; once the ledger entry exists, the HANDOFF line being stale is harmless and self-correcting.
+- Monitor implementations themselves — the audit confirmed both are faithful to their stated intents.
+
+**Deferred from Stage 2 closeout (audit recommendation #3, explicitly "optional"):**
+
+- `trading_app/live/cusum_monitor.py` module docstring clarifier (3-line addition pointing at `sr_monitor.py` and the audit verdict). Blocked at edit time by `.claude/hooks/stage-gate-guard.py` because parallel-session worktrees hold RESEARCH/DESIGN-mode stages on other branches; the hook requires all active stages to be TRIVIAL or IMPLEMENTATION before any production-code edit anywhere. The blocking is a correct safety property (it prevents cross-stage contamination on shared production code), not a bug. The docstring clarifier is a nice-to-have surface fix — the durable closure of the question is the decision-ledger entry, which is on a doc-only path and shipped in this PR. When parallel RESEARCH/DESIGN stages clear, this becomes a one-line TRIVIAL fix.
