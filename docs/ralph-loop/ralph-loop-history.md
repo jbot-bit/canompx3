@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 185 — 2026-04-25
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py:2749 (_fill_poller)
+- Finding: Fill poller stuck PENDING consumes lane concurrency slot indefinitely — no timeout, no cancel, no halt on broker-stuck, naked exposure risk
+- Doctrine cited: institutional-rigor.md § 6 (no silent failures), integrity-guardian.md § 3 (fail-closed)
+- Action: Added FILL_POLL_TIMEOUT_SECS=60 + FILL_CANCEL_VERIFY_TIMEOUT_SECS=15 constants; _handle_fill_timeout helper (cancel→verify→halt-or-release with source-markers on every branch); per-order timeout anchors in _fill_poller; R3 cross-fix _fill_reconnect_gen counter; drift check 116; 7 new F7 tests
+- Blast radius: 3 files (session_orchestrator.py, test_session_orchestrator.py, check_drift.py)
+- Verification: PASS (182/182 tests, 116/116 drift, 8/8 pre-commit)
+- Commit: f69b9fd8
+
+---
+
 ## Iteration 176 — 2026-04-25
 - Phase: fix
 - Classification: [judgment]
