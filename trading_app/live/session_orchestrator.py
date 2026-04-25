@@ -287,8 +287,12 @@ class SessionStats:
 
 
 class SessionOrchestrator:
-    # JSONL file for UI signal display — written by this process, read by Streamlit
-    SIGNALS_FILE = Path(__file__).parent.parent.parent / "live_signals.jsonl"
+    # Directory for daily-partitioned signal log files.
+    # Files are named live_signals_YYYY-MM-DD.jsonl (trading day = 09:00 Brisbane boundary).
+    # R4 (Ralph iter 181): replaced single unbounded live_signals.jsonl with daily rotation
+    # via SignalLogRotator. The log directory is the project root (same location as the old
+    # monolithic file) so the Live Monitor UI path prefix is unchanged.
+    SIGNALS_DIR = Path(__file__).parent.parent.parent
 
     def __init__(
         self,
@@ -777,7 +781,13 @@ class SessionOrchestrator:
                 log.warning("Failed to load firm close time: %s", e)
         self._stats = SessionStats()  # observability counters
         self._poller_active = False  # set True once fill poller runs a cycle
+        # F7/R3: generation counter incremented on each broker reconnect so the
+        # fill poller can detect reconnects and reset its per-order timeout anchors.
+        self._fill_reconnect_gen: int = 0
         self._consecutive_engine_errors = 0  # circuit breaker for engine crashes
+        # R5: UTC timestamp of last CB-tripped re-notify (None = not yet sent this trip).
+        # Reset to None on rollover / CB clear so each new trip starts a fresh cadence.
+        self._cb_renotify_last_at: datetime | None = None
         # Restore blocked strategies from crash-recovery state (if any)
         self._blocked_strategies: set[str] = set(self._safety_state.blocked_strategies.keys())
         self._blocked_strategy_reasons: dict[str, str] = dict(self._safety_state.blocked_strategies)
@@ -790,6 +800,20 @@ class SessionOrchestrator:
         # Resolve front-month contract symbol (needed even in signal-only for logging)
         self.contract_symbol = contracts.resolve_front_month(instrument)
         self._account_name = self.portfolio.name  # For dashboard display
+
+        # R4 (Ralph iter 181): daily-rotation signal log rotator.
+        # SignalLogRotator partitions writes into live_signals_YYYY-MM-DD.jsonl
+        # files (trading-day boundary = 09:00 Brisbane, canonical per pipeline.dst).
+        # The rotator's trading_day_fn lambda always reads self.trading_day so it
+        # picks up the new day after _check_trading_day_rollover updates it.
+        from trading_app.live.signal_log_rotator import SignalLogRotator
+
+        self._signal_rotator = SignalLogRotator(
+            log_dir=self.SIGNALS_DIR,
+            trading_day_fn=lambda: self.trading_day,
+            notify_fn=self._notify,
+        )
+
         log.info(
             "Session ready: %s → %s (%s)",
             instrument,
@@ -1353,21 +1377,36 @@ class SessionOrchestrator:
         return results
 
     def _write_signal_record(self, extra: dict) -> None:
-        """Append a signal record to the JSONL file read by the Live Monitor UI.
+        """Append a signal record to the daily JSONL file read by the Live Monitor UI.
+
+        Delegates to self._signal_rotator (SignalLogRotator) which:
+          - Partitions writes into live_signals_YYYY-MM-DD.jsonl files.
+          - Rotates at 09:00 Brisbane (canonical trading-day boundary).
+          - Notifies operator on first OSError per rate-limit window (institutional-rigor.md § 6).
+          - Prunes files older than LIVE_SIGNALS_RETENTION_DAYS (default 30).
 
         Thread safety: safe under single-threaded asyncio (all orchestrators share
-        one event loop). If this ever moves to multi-process, this append needs a lock.
+        one event loop). If this ever moves to multi-process, callers must hold an
+        external lock before calling write() — documented on SignalLogRotator.write().
         """
         record = {
             "ts": datetime.now(UTC).isoformat(),
             "instrument": self.instrument,
             **extra,
         }
-        try:
-            with open(self.SIGNALS_FILE, "a") as fh:
-                fh.write(json.dumps(record) + "\n")
-        except OSError as e:
-            log.warning("Could not write signal record: %s", e)
+        line = json.dumps(record) + "\n"
+        # _signal_rotator is initialized in __init__ before first _write_signal_record call.
+        # Defensive guard for unit tests that mock _write_signal_record directly on a
+        # partially-constructed orchestrator: use raw open() fallback when rotator absent.
+        rotator = getattr(self, "_signal_rotator", None)
+        if rotator is not None:
+            rotator.write(line)
+        else:
+            # Fallback path: partially-constructed orchestrator (test harness) or
+            # pre-init call. Write to stderr so the record is not silently dropped.
+            import sys
+
+            print(line, file=sys.stderr, end="")
 
     async def _check_trading_day_rollover(
         self,
@@ -1464,6 +1503,7 @@ class SessionOrchestrator:
         self.monitor.reset_daily()
         self.risk_mgr.daily_reset(self.trading_day)
         self._consecutive_engine_errors = 0
+        self._cb_renotify_last_at = None  # R5: reset re-notify cadence — new trip starts fresh
         self._close_time_forced = False  # Reset so next day's close-time flatten can fire
 
         # F-1 TopStep XFA Scaling Plan: refresh EOD balance from broker equity
@@ -2600,6 +2640,13 @@ class SessionOrchestrator:
 
     HEARTBEAT_INTERVAL = 1800.0  # 30 minutes between heartbeat notifications
 
+    # R5 (Ralph iter 183): periodic re-notify while engine circuit-breaker is tripped.
+    # Rationale: 30 min — matches HEARTBEAT_INTERVAL (one sleep cycle cannot be missed).
+    # Short enough that an operator who misses the initial trip notify at 03:00 will
+    # receive a follow-up by 03:30, 04:00, etc. Long enough to avoid Telegram spam.
+    # Same rate-limit pattern as DISK_FULL_NOTIFY_WINDOW_SECS in signal_log_rotator.py.
+    CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS: float = 1800.0  # 30 minutes
+
     async def _heartbeat_notifier(self) -> None:
         """Send periodic alive notification. Absence of heartbeat = notifications broken."""
         # Emit immediate heartbeat so user knows session is alive without waiting 30 min
@@ -2618,6 +2665,29 @@ class SessionOrchestrator:
                 self._notify(
                     f"Heartbeat: {self._bar_count} bars, {n_trades} trades, {active} active, poller={poller_status}"
                 )
+                # R5: periodic re-notify while engine circuit-breaker is tripped.
+                # The initial trip fires once at trip time (line ~1678). If the operator
+                # misses that single Telegram (sleeping, phone off), the engine may stay
+                # paused for hours until rollover. Re-notify every
+                # CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS while still tripped.
+                # Rate-limit: same pattern as DISK_FULL_NOTIFY_WINDOW_SECS in
+                # signal_log_rotator.py — track last-sent timestamp, skip if within window.
+                # Reset: _cb_renotify_last_at is cleared in _check_trading_day_rollover so
+                # a future re-trip starts a fresh cadence (no silent state inheritance).
+                if self._consecutive_engine_errors >= 5:
+                    now = datetime.now(UTC)
+                    elapsed = (
+                        (now - self._cb_renotify_last_at).total_seconds()
+                        if self._cb_renotify_last_at is not None
+                        else self.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS  # first re-notify
+                    )
+                    if elapsed >= self.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS:
+                        self._cb_renotify_last_at = now
+                        self._notify(
+                            f"ENGINE CIRCUIT BREAKER STILL TRIPPED — engine paused "
+                            f"({self._consecutive_engine_errors} consecutive errors). "
+                            "No new entries until rollover. MANUAL CHECK REQUIRED."
+                        )
             except asyncio.CancelledError:
                 return
             except Exception as e:
@@ -2678,6 +2748,150 @@ class SessionOrchestrator:
                     return
 
     FILL_POLL_INTERVAL = 5.0  # seconds between fill status checks
+    # F7: hard timeout for a PENDING_ENTRY order that never resolves.
+    # Rationale: 60s is long enough for normal E2 stop-market slippage in
+    # PENDING state (entry price not yet reached), short enough that a stuck
+    # broker does not cost the full trade window. At this point we cancel the
+    # order and release the lane slot — operator is notified with full context.
+    # institutional-rigor.md § 6 (no silent failures), integrity-guardian.md § 3.
+    FILL_POLL_TIMEOUT_SECS = 60.0
+    # F7: after issuing a cancel, we verify the cancel actually took by polling
+    # once more. This timeout governs that single verify poll.
+    # Rationale: 15s is generous for a broker round-trip; if still PENDING after
+    # 15s we treat the broker as stuck and halt the orchestrator (fail-closed per
+    # integrity-guardian.md § 3). Must be < FILL_POLL_TIMEOUT_SECS (60s).
+    FILL_CANCEL_VERIFY_TIMEOUT_SECS = 15.0
+
+    async def _handle_fill_timeout(
+        self,
+        order_id: int,
+        strategy_id: str,
+        last_state: str,
+    ) -> None:
+        """F7: Handle a fill-poll timeout — cancel order, verify, halt or release.
+
+        Called when a PENDING_ENTRY order has been unresolved for longer than
+        FILL_POLL_TIMEOUT_SECS. Protocol (institutional-rigor.md § 6,
+        integrity-guardian.md § 3 fail-closed):
+
+        1. Notify operator with full order context.
+        2. Cancel the broker order.
+        3. Verify cancellation: re-query after FILL_CANCEL_VERIFY_TIMEOUT_SECS.
+           - If Cancelled/Rejected: release lane slot (pop position), cancel
+             engine trade, log WARNING.
+           - If still PENDING (broker stuck): log.critical + _notify + halt
+             orchestrator via _fire_kill_switch. Lane slot released regardless
+             so the state machine stays consistent.
+        4. Mark strategy failed-entry in lifecycle (engine.cancel_trade) so it
+           is not double-charged.
+
+        Source-marker: F7-TIMEOUT-HANDLER
+        """
+        # Step 1 — operator alert with full context  [F7-NOTIFY-ALERT]
+        alert_msg = (
+            f"FILL TIMEOUT: order {order_id} for {strategy_id} has been "
+            f"PENDING_ENTRY for >{self.FILL_POLL_TIMEOUT_SECS:.0f}s "
+            f"(last_state={last_state}). Cancelling order now."
+        )
+        log.warning(alert_msg)
+        self._notify(alert_msg)  # institutional-rigor.md § 6
+
+        # Step 2 — cancel the broker order  [F7-CANCEL-CALL]
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, self.order_router.cancel, order_id)
+            log.info("F7: cancel issued for order %s (%s)", order_id, strategy_id)
+        except Exception as cancel_exc:
+            log.critical(
+                "F7: cancel call FAILED for order %s (%s): %s — proceeding to verify",
+                order_id,
+                strategy_id,
+                cancel_exc,
+            )
+            self._notify(f"F7: cancel FAILED for order {order_id} ({strategy_id}): {cancel_exc}")
+
+        # Step 3 — verify the cancel took  [F7-CANCEL-VERIFY]
+        await asyncio.sleep(self.FILL_CANCEL_VERIFY_TIMEOUT_SECS)
+        verified_cancelled = False
+        _filled_during_cancel = False
+        _late_fill_price: float | None = None
+        try:
+            post_cancel = await loop.run_in_executor(None, self.order_router.query_order_status, order_id)
+            post_status = post_cancel["status"]
+            if post_status in ("Cancelled", "Rejected"):
+                # Clean cancel — no broker position, proceed to normal lane release below.
+                verified_cancelled = True
+                log.info(
+                    "F7: post-cancel status=%s for order %s (%s)",
+                    post_status,
+                    order_id,
+                    strategy_id,
+                )
+            elif post_status == "Filled":
+                # Race: order filled between our timeout decision and cancel reaching broker.
+                # The broker holds a REAL position — DO NOT pop or cancel_trade.
+                # Record fill and route to emergency flatten (no bracket context available
+                # here; _submit_bracket needs event+strategy objects).  [F7-FILLED-RACE]
+                _filled_during_cancel = True
+                raw_late_fill = post_cancel.get("fill_price")
+                _late_fill_price = self._validate_fill_price(raw_late_fill, f"F7-RACE {strategy_id}")
+                race_msg = (
+                    f"F7 TIMEOUT CANCEL RACE: order {order_id} for {strategy_id} "
+                    f"filled DURING cancel attempt (fill_price={_late_fill_price}). "
+                    "Bracket context unavailable — emergency flatten to protect position. "
+                    "(integrity-guardian.md § 3)"
+                )
+                log.critical(race_msg)
+                self._notify(race_msg)  # institutional-rigor.md § 6; operator must know
+        except Exception as verify_exc:
+            log.critical(
+                "F7: post-cancel verify FAILED for order %s (%s): %s",
+                order_id,
+                strategy_id,
+                verify_exc,
+            )
+            self._notify(f"F7: post-cancel verify FAILED for {strategy_id} order {order_id}: {verify_exc}")
+
+        # Step 4 — release lane slot and handle position state  [F7-LANE-RELEASE]
+        if _filled_during_cancel:
+            # Real broker position: transition to ENTERED state so position tracker is
+            # accurate before emergency flatten runs.  Do NOT pop or cancel_trade.
+            if _late_fill_price is not None:
+                current_for_fill = self._positions.get(strategy_id)
+                if current_for_fill is not None and current_for_fill.state == PositionState.PENDING_ENTRY:
+                    self._positions.on_entry_filled(strategy_id, _late_fill_price)
+                    log.warning(
+                        "F7: late-fill race: position %s transitioned to ENTERED @ %.2f — "
+                        "emergency flatten will close it",
+                        strategy_id,
+                        _late_fill_price,
+                    )
+            # Emit kill-switch + emergency flatten: position is real but unbracketed.
+            self._fire_kill_switch()  # [F7-KILL-SWITCH-CALL]
+            await self._emergency_flatten()  # [F7-FILLED-RACE-FLATTEN]
+            return  # lane slot released implicitly by emergency_flatten position cleanup
+        else:
+            current = self._positions.get(strategy_id)
+            if current is not None and current.state == PositionState.PENDING_ENTRY:
+                self._positions.pop(strategy_id)
+                log.warning("F7: released lane slot for %s (position removed)", strategy_id)
+            try:
+                self.engine.cancel_trade(strategy_id)
+            except Exception as eng_exc:
+                log.error("F7: engine.cancel_trade(%s) failed: %s", strategy_id, eng_exc)
+
+        if not verified_cancelled:
+            # Broker is stuck — halt the orchestrator  [F7-HALT-ON-STUCK]
+            halt_msg = (
+                f"F7 HALT: order {order_id} for {strategy_id} is STILL PENDING "
+                f"after cancel + {self.FILL_CANCEL_VERIFY_TIMEOUT_SECS:.0f}s verify. "
+                "Broker appears stuck. Halting orchestrator. "
+                "Manual intervention required. (integrity-guardian.md § 3)"
+            )
+            log.critical(halt_msg)
+            self._notify(halt_msg)  # institutional-rigor.md § 6
+            self._fire_kill_switch()  # [F7-KILL-SWITCH-CALL]
+            await self._emergency_flatten()  # [F7-BROKER-STUCK-FLATTEN]
 
     async def _fill_poller(self) -> None:
         """Poll PENDING_ENTRY orders for fill confirmation every 5s.
@@ -2685,58 +2899,124 @@ class SessionOrchestrator:
         E2 stop-market orders rest until price reaches stop level. Without polling,
         PositionTracker stays PENDING_ENTRY indefinitely. This background task
         detects fills and cancellations.
+
+        F7: orders pending longer than FILL_POLL_TIMEOUT_SECS are escalated via
+        _handle_fill_timeout (cancel + verify + halt-or-release).
+
+        R3 cross-fix: _fill_reconnect_gen is incremented on each reconnect. When
+        the poller detects a generation change it flags all currently-PENDING_ENTRY
+        orders for immediate re-query, resetting their effective timeout start to
+        the reconnect time. This prevents double-charging the timer across a
+        disconnect gap where broker state was unavailable.
         """
         assert self.order_router is not None, (
             "_fill_poller started but order_router is None (signal_only=True). "
             "Live-only background task reached in signal mode."
         )
+        # R3: per-strategy timeout start anchors — reset on reconnect to avoid
+        # double-charging the 60s window across a disconnect gap.
+        _timeout_anchors: dict[str, float] = {}
+        _last_seen_gen: int = getattr(self, "_fill_reconnect_gen", 0)
+
         while True:
             try:
                 await asyncio.sleep(self.FILL_POLL_INTERVAL)
+
+                # M6 guard: if kill-switch is already fired, skip all timeout/cancel
+                # processing — the orchestrator is halted and emergency_flatten is either
+                # in progress or complete.  Continuing would race with ongoing flatten work
+                # and emit confusing duplicate alerts.  Mirror pattern from _handle_event.
+                if self._kill_switch_fired:
+                    continue
+
                 self._poller_active = True
+
+                # R3: reconnect detection — reset timeout anchors for all pending orders
+                # so a reconnect-during-pending does not prematurely expire the timer.
+                current_gen = getattr(self, "_fill_reconnect_gen", 0)
+                if current_gen != _last_seen_gen:
+                    log.info(
+                        "F7/R3: reconnect detected (gen %d→%d) — resetting fill-poll "
+                        "timeout anchors for all PENDING_ENTRY orders",
+                        _last_seen_gen,
+                        current_gen,
+                    )
+                    _timeout_anchors.clear()  # anchors reset; orders will re-query next cycle
+                    _last_seen_gen = current_gen
+
                 pending_count = 0
+                now = datetime.now(UTC)
                 for record in self._positions.active_positions():
                     if record.state != PositionState.PENDING_ENTRY:
                         continue
                     if record.entry_order_id is None:
                         continue
                     pending_count += 1
+                    sid = record.strategy_id
+
+                    # F7: seed per-order timeout anchor on first poll cycle
+                    if sid not in _timeout_anchors:
+                        _timeout_anchors[sid] = record.state_changed_at.timestamp()
+
+                    elapsed = now.timestamp() - _timeout_anchors[sid]
+
+                    # F7: timeout path — escalate before issuing the normal poll query
+                    if elapsed > self.FILL_POLL_TIMEOUT_SECS:
+                        # Remove anchor so if somehow the position survives (e.g.
+                        # cancel_trade left it in ENTERED) we do not re-trigger.
+                        _timeout_anchors.pop(sid, None)
+                        try:
+                            await self._handle_fill_timeout(record.entry_order_id, sid, record.state.value)
+                        except asyncio.CancelledError:
+                            raise  # propagate shutdown signal cleanly
+                        except Exception as timeout_exc:
+                            log.critical(
+                                "F7: _handle_fill_timeout raised for %s: %s",
+                                sid,
+                                timeout_exc,
+                            )
+                            self._notify(f"F7: fill-timeout handler error for {sid}: {timeout_exc}")
+                        continue
+
                     try:
                         loop = asyncio.get_running_loop()
                         status = await loop.run_in_executor(
                             None, self.order_router.query_order_status, record.entry_order_id
                         )
                         # Re-check state after await — another coroutine may have handled this
-                        current = self._positions.get(record.strategy_id)
+                        current = self._positions.get(sid)
                         if current is None or current.state != PositionState.PENDING_ENTRY:
+                            _timeout_anchors.pop(sid, None)
                             continue
                         self._stats.fill_polls_run += 1
                         if status["status"] == "Filled":
                             raw_poll_fill = status.get("fill_price")
-                            fill_price = self._validate_fill_price(raw_poll_fill, f"POLL {record.strategy_id}")
+                            fill_price = self._validate_fill_price(raw_poll_fill, f"POLL {sid}")
                             if fill_price is not None:
-                                self._positions.on_entry_filled(record.strategy_id, fill_price)
+                                self._positions.on_entry_filled(sid, fill_price)
                                 # Update journal with confirmed fill price
                                 if record.journal_trade_id:
                                     self.journal.update_entry_fill(
                                         trade_id=record.journal_trade_id,
                                         fill_entry=fill_price,
                                     )
-                            log.info("Fill confirmed for %s: %s", record.strategy_id, status)
+                            log.info("Fill confirmed for %s: %s", sid, status)
                             self._stats.fill_polls_confirmed += 1
+                            _timeout_anchors.pop(sid, None)
                         elif status["status"] in ("Cancelled", "Rejected"):
-                            self._positions.pop(record.strategy_id)
+                            self._positions.pop(sid)
                             # R2-C3: notify engine to remove ghost trade from active_trades.
                             # Without this, the engine keeps emitting EXIT events for a
                             # position that was never filled at the broker.
-                            self.engine.cancel_trade(record.strategy_id)
-                            log.warning("Order %s for %s: %s", status["status"], record.strategy_id, status)
-                            self._notify(f"Order {status['status']}: {record.strategy_id} — entry cancelled by broker")
+                            self.engine.cancel_trade(sid)
+                            log.warning("Order %s for %s: %s", status["status"], sid, status)
+                            self._notify(f"Order {status['status']}: {sid} — entry cancelled by broker")
+                            _timeout_anchors.pop(sid, None)
                     except NotImplementedError:
                         log.debug("Fill poller: %s broker does not support order polling", self._broker_name)
                     except Exception as e:
                         self._stats.fill_polls_failed += 1
-                        log.warning("Fill poll failed for %s: %s", record.strategy_id, e)
+                        log.warning("Fill poll failed for %s: %s", sid, e)
                 if pending_count > 0:
                     log.info("Fill poller: checked %d pending orders", pending_count)
             except asyncio.CancelledError:
@@ -2969,6 +3249,9 @@ class SessionOrchestrator:
 
                     reconnect_count += 1
                     self._stats.reconnect_attempts += 1
+                    # F7/R3: signal fill poller to reset timeout anchors — broker state
+                    # may have changed during the disconnect; re-query before applying timeout.
+                    self._fill_reconnect_gen += 1
                     self._notify(f"Reconnecting in {backoff:.0f}s (attempt {reconnect_count + 1})")
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, self.ORCHESTRATOR_BACKOFF_MAX)

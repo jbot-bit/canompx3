@@ -1,7 +1,7 @@
 {
-  "total_iterations": 169,
+  "total_iterations": 170,
   "last_updated": "2026-04-25",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 176,
   "findings_by_type": {
     "canonical_violation": {
@@ -17,10 +17,10 @@
       "fix_rate": 0.92
     },
     "other": {
-      "found": 26,
-      "fixed": 14,
+      "found": 27,
+      "fixed": 15,
       "deferred": 3,
-      "fix_rate": 0.54
+      "fix_rate": 0.56
     },
     "dead_code": {
       "found": 16,
@@ -123,10 +123,10 @@
     "CRITICAL": 5,
     "HIGH": 13,
     "MEDIUM": 45,
-    "LOW": 106
+    "LOW": 107
   },
   "classifications": {
-    "judgment": 79,
+    "judgment": 80,
     "mechanical": 61,
     "audit-only": 29
   },
@@ -136,15 +136,15 @@
       "last_iter": 24,
       "findings": 4
     },
+    "trading_app/live/session_orchestrator.py": {
+      "audit_count": 6,
+      "last_iter": 185,
+      "findings": 4
+    },
     "trading_app/execution_engine.py": {
       "audit_count": 5,
       "last_iter": 164,
       "findings": 4
-    },
-    "trading_app/live/session_orchestrator.py": {
-      "audit_count": 5,
-      "last_iter": 176,
-      "findings": 3
     },
     "session_orchestrator.py": {
       "audit_count": 4,
@@ -2976,6 +2976,17 @@
       "severity": "HIGH",
       "verdict": "FIXED",
       "commit": "64d0952d"
+    },
+    {
+      "iter": 185,
+      "date": "2026-04-25",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/session_orchestrator.py:2749 (_fill_poller)",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "f69b9fd8"
     }
   ]
 }
