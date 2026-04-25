@@ -2097,7 +2097,13 @@ class TestR1WallClockRollover:
         assert "rollover_task = asyncio.create_task(self._wall_clock_rollover_loop())" in src, (
             "R1: rollover_task create_task call missing from run()"
         )
-        assert "rollover_task.cancel()" in src, "R1: rollover_task.cancel() missing from finally block"
+        # Iter 179 retrofit: bare `task.cancel()` replaced by `_shutdown_task` helper
+        # (closes audit S3 — cancel-without-await SIGTERM leak). The helper's body still
+        # calls `task.cancel()` on the passed task, so the cancel SEMANTIC is preserved.
+        assert 'await self._shutdown_task(rollover_task, "wall_clock_rollover"' in src, (
+            "R1: rollover_task shutdown call missing from finally block "
+            "(expected `_shutdown_task` helper after iter 179 hardening)"
+        )
         assert "compute_trading_day_utc_range" in src, (
             "R1: canonical pipeline.dst.compute_trading_day_utc_range must be used (not hardcoded 09:00)"
         )
@@ -3146,9 +3152,7 @@ class TestC1KillSwitchEventLoopRace:
             "T1: MANUAL CLOSE REQUIRED not notified after 3 failed flatten attempts"
         )
         # kill_switch_fired must have been persisted
-        assert orch._safety_state.kill_switch_fired, (
-            "T1: kill_switch_fired not persisted to _safety_state"
-        )
+        assert orch._safety_state.kill_switch_fired, "T1: kill_switch_fired not persisted to _safety_state"
 
     # T4: rollover EOD closes still fire when kill_switch=True (ENTRY-only guard, not blanket)
     async def test_c1_rollover_eod_closes_proceed_despite_kill_switch(self):
@@ -3189,14 +3193,14 @@ class TestC1KillSwitchEventLoopRace:
         next_day = orch.trading_day + timedelta(days=1)
         with patch("pipeline.dst.compute_trading_day_utc_range") as mock_ctr:
             from datetime import timezone
+
             past = datetime(2026, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
             mock_ctr.return_value = (past, past + timedelta(hours=24))
             await orch._check_trading_day_rollover(None, override_trading_day=next_day)
 
         # T4 invariant: EXIT event must have been passed to _handle_event
         assert "EXIT" in exit_handled, (
-            f"T4: EOD EXIT must be forwarded to _handle_event even when kill-switch active. "
-            f"Got: {exit_handled}"
+            f"T4: EOD EXIT must be forwarded to _handle_event even when kill-switch active. Got: {exit_handled}"
         )
 
     # Source-marker mutation probe
@@ -3207,15 +3211,11 @@ class TestC1KillSwitchEventLoopRace:
 
         src = inspect.getsource(SessionOrchestrator._handle_event)
         assert "C1" in src, "C1: kill-switch guard marker missing from _handle_event"
-        assert "_kill_switch_fired" in src, (
-            "C1: _kill_switch_fired check missing from _handle_event"
-        )
+        assert "_kill_switch_fired" in src, "C1: _kill_switch_fired check missing from _handle_event"
         # Guard must be ENTRY-only — must appear INSIDE the ENTRY branch, not at function top
         entry_idx = src.index('event.event_type == "ENTRY"')
         c1_idx = src.index("C1")
-        assert c1_idx > entry_idx, (
-            "C1: guard must be inside the ENTRY branch, not at function top (blanket over-block)"
-        )
+        assert c1_idx > entry_idx, "C1: guard must be inside the ENTRY branch, not at function top (blanket over-block)"
 
 
 class TestObservabilityCounters:
@@ -3850,3 +3850,154 @@ class TestResolveTopStepXFAAccountSize:
         prof.is_express_funded = True
         with pytest.raises(RuntimeError, match="unknown account_size=25000"):
             _resolve_topstep_xfa_account_size(prof)
+
+
+class TestShutdownTaskHelper:
+    """Iter 179 hardening: `_shutdown_task` extracts the cancel-then-await
+    pattern from `run`'s finally block. Closes audit S3 (iter 178) — bare
+    `task.cancel()` without await emitted "Task was destroyed" warnings on
+    SIGTERM and could abort EOD-close submissions mid-flight.
+
+    Three behavioral cases:
+      1. Normal cancel: helper returns silently, no _notify.
+      2. Timeout path: helper logs critical + _notify when task ignores cancel.
+      3. Already-completed: helper no-ops without touching the task.
+    """
+
+    async def test_shutdown_task_normal_cancel(self):
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+
+        async def cancellable_loop():
+            try:
+                while True:
+                    await asyncio.sleep(0.05)
+            except asyncio.CancelledError:
+                raise
+
+        task = asyncio.create_task(cancellable_loop())
+        await asyncio.sleep(0.01)  # let task start
+
+        await orch._shutdown_task(task, "test_loop", timeout=2.0)
+
+        assert task.done(), "task should be done after _shutdown_task returns"
+        # Normal cancel path: no notify (we only notify on timeout / unexpected error)
+        assert orch._notify.call_count == 0, f"normal cancel should not _notify, got {orch._notify.call_args_list}"
+
+    async def test_shutdown_task_timeout_logs_critical_and_notifies(self):
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+
+        # Cancel-resistant task that eats the FIRST cancel (simulates the
+        # SIGTERM-leak failure mode) but exits cooperatively on the second
+        # cancel — keeps the test fully cleanable, no leaked tasks.
+        first_cancel_seen = asyncio.Event()
+
+        async def cancel_resistant_then_exit():
+            try:
+                while True:
+                    await asyncio.sleep(0.02)
+            except asyncio.CancelledError:
+                # Eat the first cancel — _shutdown_task will time out here.
+                first_cancel_seen.set()
+                try:
+                    while True:
+                        await asyncio.sleep(0.02)
+                except asyncio.CancelledError:
+                    # Honor the SECOND cancel (cleanup). Reraise so the task
+                    # transitions to a cancelled state cleanly.
+                    raise
+
+        task = asyncio.create_task(cancel_resistant_then_exit())
+        await asyncio.sleep(0.01)  # let task start
+
+        await orch._shutdown_task(task, "stuck_task", timeout=0.1)
+
+        assert first_cancel_seen.is_set(), "first cancel must reach the task"
+        assert orch._notify.call_count == 1, "timeout must trigger exactly one _notify"
+        msg = orch._notify.call_args[0][0]
+        assert "stuck_task" in msg, f"notify must name the task, got: {msg!r}"
+        assert "did not exit" in msg, f"notify must describe the failure mode, got: {msg!r}"
+
+        # Cleanup — second cancel; this one IS honored, so the task exits.
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=1.0)
+        except asyncio.CancelledError:
+            pass
+
+    async def test_shutdown_task_already_completed_no_op(self):
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+
+        async def quick():
+            return "done"
+
+        task = asyncio.create_task(quick())
+        await task  # let it complete
+
+        await orch._shutdown_task(task, "completed_task", timeout=2.0)
+
+        # Already-done path: no notify, no exception
+        assert orch._notify.call_count == 0
+        assert task.done()
+
+    async def test_shutdown_task_none_no_op(self):
+        """`if poller:` callsite passes None when poller wasn't created — must no-op."""
+        orch = build_orchestrator()
+        orch._notify = MagicMock()
+        await orch._shutdown_task(None, "none_task", timeout=2.0)
+        assert orch._notify.call_count == 0
+
+
+class TestC1RealHandleEventExitPassthrough:
+    """Iter 179 audit-routed: closes audit S2 from iter 178.
+
+    The existing T4 (`test_c1_rollover_eod_closes_proceed_despite_kill_switch`)
+    replaces `_handle_event` with a capturing mock — it tests routing, not the
+    real guard's ENTRY-only scoping. If someone widened the C1 guard to a
+    blanket, T4 would still pass.
+
+    This test calls the REAL `_handle_event` with `_kill_switch_fired=True`
+    and an EXIT event, asserting the EXIT branch executes (`_record_exit` is
+    called). Mutation probe: change the C1 guard from
+    `if event.event_type == "ENTRY"` to no condition (`if True`) and this
+    test fails — `_record_exit` is never reached.
+    """
+
+    async def test_real_handle_event_processes_exit_under_kill_switch(self):
+        # Use signal_only mode so EXIT routes through the simple
+        # _record_exit + _write_signal_record path without needing a broker.
+        orch = build_orchestrator(FakeBrokerComponents(signal_only=True))
+        orch._notify = MagicMock()
+        orch._record_exit = MagicMock()
+        orch._write_signal_record = MagicMock()
+
+        # Seed a position so the EXIT branch can find it
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=42)
+        orch._positions.on_entry_filled(STRATEGY_ID, fill_price=2350.0)
+
+        # Fire kill-switch — proves we're testing the under-halt path
+        orch._fire_kill_switch()
+        assert orch._kill_switch_fired
+
+        exit_event = FakeTradeEvent(
+            event_type="EXIT",
+            strategy_id=STRATEGY_ID,
+            timestamp=datetime(2026, 4, 25, 23, 0, 0, tzinfo=UTC),
+            price=2360.0,
+            direction="long",
+            contracts=1,
+        )
+
+        # Call the REAL _handle_event (not a mock)
+        await orch._handle_event(exit_event)
+
+        # EXIT branch executed → _record_exit was called.
+        # If the C1 guard were widened to a blanket (`if self._kill_switch_fired: return`
+        # at the top of _handle_event without ENTRY-type discrimination), this assertion fails.
+        assert orch._record_exit.call_count == 1, (
+            "C1 guard must be ENTRY-only — EXIT events must reach _record_exit "
+            "even under kill-switch (EOD wind-down). If a blanket guard was added, "
+            "this assertion catches the regression."
+        )
