@@ -339,6 +339,34 @@ def _session_lock_lines() -> tuple[list[str], bool]:
     ], True)
 
 
+def _action_queue_ready_lines() -> list[str]:
+    """Surface action-queue items with status:ready as a 1-line nudge.
+
+    Prevents the 2026-04-26 stale-status-ready miss (PR #140 follow-up): a
+    P1 ready item sat for 2+ days because no startup signal surfaced it.
+
+    Delegates parsing to `pipeline.work_queue.load_queue()` (canonical source
+    per institutional-rigor §4 — never re-encode YAML schema logic).
+
+    Returns: list of lines (typically 0 or 1). On any failure (missing file,
+    malformed YAML, import error, schema drift), returns [] — must never
+    block session start.
+    """
+    try:
+        from pipeline.work_queue import load_queue
+    except BaseException:  # pragma: no cover - hook fallback path
+        return []
+    try:
+        queue = load_queue(PROJECT_ROOT)
+    except BaseException:  # pragma: no cover - hook fallback path
+        return []
+
+    ready_ids = [item.id for item in queue.items if item.status == "ready"]
+    if not ready_ids:
+        return []
+    return [f"  Action queue READY: {', '.join(ready_ids)}"]
+
+
 def _parallel_session_lines() -> list[str]:
     """Detect other active worktrees and warn on cross-session collision risk.
 
@@ -453,6 +481,7 @@ def main() -> None:
     if lines:
         lines.extend(_origin_drift_lines())
         lines.extend(_env_drift_lines())
+        lines.extend(_action_queue_ready_lines())
         lines.extend(_parallel_session_lines())
         print("\n".join(lines), file=sys.stderr)
 
