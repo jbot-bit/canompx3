@@ -324,7 +324,9 @@ def check_topstep_inactivity_window() -> tuple[bool, str]:
         if age >= _INACTIVITY_BLOCK_DAYS:
             any_block = True
             results.append(
-                f"BLOCKED {f.name}: {age_int}d old >= 30d inactivity boundary (archive or delete state file to clear)"
+                f"BLOCKED {f.name}: {age_int}d old >= 30d inactivity boundary "
+                f"(figure borrowed by analogy from TopStep XFA rule — see pre_session_check.py "
+                f"docstring; archive or delete state file to clear)"
             )
         elif age >= _INACTIVITY_WARN_DAYS:
             results.append(f"WARN {f.name}: {age_int}d old (block at 30d)")

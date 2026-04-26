@@ -748,7 +748,13 @@ class TestStage4InactivityWindow:
         assert "29d" in msg
 
     def test_30_days_plus_1s_blocks(self, tmp_path):
-        """Upper-boundary direction (>= 30). Mutation: > 30 flips."""
+        """Upper-boundary direction (>= 30). Mutation: > 30 flips.
+
+        Stage 4 audit-gate SG-1 closure: BLOCK message must include the
+        analogy disclaimer to prevent operators from mistakenly believing
+        TopStep enforces account closure at exactly the 30-day bot-poll
+        boundary. Mutation: removing the analogy text flips this test.
+        """
         state_dir = _seed_aged_state_file(tmp_path, "B30P", age_days=30.0 + 1 / 86400.0)
         with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
             ok, msg = check_topstep_inactivity_window()
@@ -756,6 +762,11 @@ class TestStage4InactivityWindow:
         assert "BLOCKED" in msg
         assert "30d inactivity boundary" in msg
         assert "archive or delete" in msg
+        # SG-1 audit-gate fix-up: disclaimer must be in the runtime message,
+        # not only in the docstring.
+        assert "borrowed by analogy" in msg, (
+            f"Stage 4 audit-gate SG-1: BLOCK message must surface the analogy disclaimer; got {msg!r}"
+        )
 
     def test_30_days_minus_1s_warns_does_not_block(self, tmp_path):
         """Boundary direction reverse: 30 - 1s is WARN, not BLOCK."""
