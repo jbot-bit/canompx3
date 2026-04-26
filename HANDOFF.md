@@ -9,10 +9,17 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 9dd4e7b5 — chore(stages): close main-ci-preflight stage (PR #143 merged at 574912e2)
-- **Files changed:** 2 files
+- **Commit:** TBD — chore(handoff): close 2026-04-27 PR-#124 re-extraction session (PR #147 merged at 170b6085)
+- **Files changed:** 1 file
   - `HANDOFF.md`
-  - `docs/runtime/stages/main-ci-preflight.md`
+
+## Session decisions (2026-04-27 — PR #124 re-extraction + cleanup)
+
+- **PR #147 merged (170b6085)** — re-extract of abandoned PR #124 onto fresh main. Original PR #124 (`chore/pass-three-drift`, commit `6c279810`) was based on `cebefd92` (pre-PR-#126 + pre-PR-#130-renormalization); CI failed on the wall-clock-time-bomb test fix landed by PR #126, and local rebase developed 4 production-code conflicts (`pipeline/check_drift.py`, `trading_app/live/alert_engine.py`, `trading_app/live/webhook_server.py`, `tests/test_pipeline/test_work_queue.py`) plus 79 CRLF-only files from missing PR #130 renormalization on its base. PR #124 closed with cross-link.
+- **Drift check #120 live** — `check_magic_number_rationale(trading_app_dir)` AST-walks `trading_app/live/` for UPPER_SNAKE_CASE numeric constants `abs(value) > 10` and requires `Rationale:` / `rationale` (case-insensitive) within ±10 lines OR membership in `RATIONALE_WHITELIST` (initially empty). Cites Robert Carver, *Systematic Trading*, Ch. 4 (parameter-justification discipline). 9 existing constants retagged to satisfy.
+- **Criterion 11 / 12 control state refresh** — both `valid=False reason=db identity mismatch` cleared via `python scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto`. C11 now operational 83.1% / age=0d / paths=10000; C12 5 CONTINUE / 1 ALARM (L4 NYSE_OPEN COST_LT12 SR=33.27 vs threshold=31.96 — pre-existing, expected blocked-lane state).
+- **Worktree + branch cleanup** — `canompx3-pt` worktree force-removed (held 79 CRLF-only files + 1 stale HANDOFF auto-update stub, no real WIP); `canompx3-pr124` temp worktree removed after PR #147 merge; local branches `chore/pass-three-drift{,-v2}` deleted; remote branches `chore/pass-three-drift{,-v2}` deleted on origin. 3 obsolete stashes dropped (PR #124 cleanup wash, PR #138 mutex already-landed, PR #135 pre-merge HANDOFF state).
+- **PR #99 (Codex DRAFT) standing-instruction acknowledgment** — DEFERRED. Hook treated retry as duplicate-attempt. Standing instruction in HANDOFF still holds: leave for Codex.
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 
@@ -43,11 +50,11 @@
 | ralph-iter-185-f7-fill-poller-timeout | `36276381` (#110) |
 | hardening-three-fixes | `290006e5` (#137) |
 | open-pr-review-debt | (this PR — obligation discharged historically) |
+| pass-three-magic-number-drift-check | `170b6085` (#147 — re-extracted from abandoned #124) |
 
-## Active stages (2 remaining)
+## Active stages (1 remaining)
 
-1. **`pass-three-magic-number-drift-check.md`** (IMPLEMENTATION) — **PARALLEL TERMINAL `canompx3-pt`** (PR #124). Do not touch.
-2. **`pr48-mgc-shadow-only-overlay-contract.md`** (IMPLEMENTATION) — operator observation pending; do not action without observation result.
+1. **`pr48-mgc-shadow-only-overlay-contract.md`** (IMPLEMENTATION) — operator observation pending; do not action without observation result.
 
 ## Next Steps — Active
 
@@ -59,9 +66,10 @@
 
 ## Parallel session activity (DO NOT TOUCH)
 
-- **`canompx3-pt`** — `chore/pass-three-drift` (PR #124 OPEN, CI failed; magic-number rationale audit + 9 trading_app/live constants; 69 dirty files). Owner: parallel Claude session.
+- **`canompx3`** — `chore/brain-skill` (orphan branch with merged-content commits + ralph-loop session committing here). Ralph terminal active 2026-04-27 — do not write to this worktree.
 - **`canompx3-ralph-burndown`** — `ralph/crit-high-burndown-v5.2` (branch `[gone]` on remote; HEAD `6740d938` predates merged Ralph PRs #107/#110). Stale; do not write to it. Local branch retained because of this worktree.
-- **`canompx3-ghost`** — checked out on `main` (PR #135 work landed; worktree may be idle or retained for next ghost task).
+- **`canompx3-ghost`** — checked out on `main` (this handoff PR's worktree); idle after this session.
+- **`canompx3-pt`** — REMOVED 2026-04-27 after PR #124 closed.
 - **MGC shadow observation** — operator action; observation result unblocks `mes_q45_exec_bridge` action-queue item.
 
 ## Blockers / Warnings
