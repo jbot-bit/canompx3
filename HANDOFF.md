@@ -9,6 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
+- **Commit:** 441ef57a — docs(handoff): 2026-04-26 session — PR #125 hooks + #126 test fixes landed
+- **Files changed:** 1 files
+  - `HANDOFF.md`
+
+## Prior session (kept for context)
+- **Tool:** Claude Code
+- **Date:** 2026-04-26
 - **Commit:** e7d82e9d — test(live): close v5 tail gaps M4 + M5 + S2 (production-path coverage)
 - **Files changed:** 2 files
   - `HANDOFF.md`
