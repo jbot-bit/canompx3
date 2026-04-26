@@ -9,11 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 1663dbb6 — [mechanical] type: drive pipeline/check_drift.py to 0 pyright errors
+- **Commit:** aa09fbcd — [mechanical] type: drive pipeline/build_bars_5m.py to 0 pyright errors
 - **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/check-drift-pyright-narrow.md`
-  - `pipeline/check_drift.py`
+  - `docs/runtime/stages/build-bars-5m-pyright-narrow.md`
+  - `pipeline/build_bars_5m.py`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 

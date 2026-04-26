@@ -120,16 +120,16 @@ def build_system_brief(
 
     for path in (*route.doctrine_files, *route.canonical_files):
         if not (root / path).exists():
-            issue = {
+            path_issue: dict[str, object] = {
                 "level": "blocker",
                 "code": "missing_owner_path",
                 "message": "Required route path missing.",
                 "detail": path,
             }
             if briefing_level == "mutating":
-                blockers.append(issue)
+                blockers.append(path_issue)
             else:
-                warnings.append(issue)
+                warnings.append(path_issue)
 
     warnings.extend(
         {

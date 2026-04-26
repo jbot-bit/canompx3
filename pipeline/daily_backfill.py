@@ -80,14 +80,14 @@ def _patch_atr_percentiles(db_path: str, instrument: str) -> None:
                          AND trading_day >= ?::DATE - INTERVAL '504 DAY'
                          AND atr_20 < ?""",
                     [instrument, om, td_str, td_str, atr],
-                ).fetchone()[0]
+                ).fetchone()[0]  # type: ignore[index]
                 total = con.execute(
                     """SELECT COUNT(*) FROM daily_features
                        WHERE symbol=? AND orb_minutes=? AND trading_day < ?
                          AND atr_20 IS NOT NULL
                          AND trading_day >= ?::DATE - INTERVAL '504 DAY'""",
                     [instrument, om, td_str, td_str],
-                ).fetchone()[0]
+                ).fetchone()[0]  # type: ignore[index]
                 if total > 0:
                     pct = round(rank / total * 100, 2)
                     con.execute(

@@ -68,7 +68,7 @@ def is_us_dst(trading_day: date) -> bool:
     """
     # Use noon to avoid any ambiguity on transition days
     dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_US_EASTERN)
-    return dt.utcoffset().total_seconds() == -4 * 3600
+    return dt.utcoffset().total_seconds() == -4 * 3600  # type: ignore[union-attr]
 
 
 def is_uk_dst(trading_day: date) -> bool:
@@ -80,7 +80,7 @@ def is_uk_dst(trading_day: date) -> bool:
       08:00 London = 08:00 UTC
     """
     dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_UK_LONDON)
-    return dt.utcoffset().total_seconds() == 1 * 3600
+    return dt.utcoffset().total_seconds() == 1 * 3600  # type: ignore[union-attr]
 
 
 # =========================================================================

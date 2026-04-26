@@ -198,7 +198,7 @@ def ingest_statistics(instrument: str, db_path: Path | None = None) -> int:
                FROM stats_df""",
         )
         con.commit()
-        count = con.execute("SELECT COUNT(*) FROM exchange_statistics WHERE symbol = ?", [instrument]).fetchone()[0]
+        count = con.execute("SELECT COUNT(*) FROM exchange_statistics WHERE symbol = ?", [instrument]).fetchone()[0]  # type: ignore[index]
         logger.info(f"  {count} rows written to exchange_statistics")
         return count
     finally:

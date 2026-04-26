@@ -47,7 +47,7 @@ def export_table(
     Returns:
         Number of rows exported.
     """
-    row_count = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+    row_count = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # type: ignore[index]
     if row_count == 0:
         print(f"  {table}: 0 rows — skipping")
         return 0

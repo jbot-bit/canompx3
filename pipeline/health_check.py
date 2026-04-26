@@ -80,7 +80,7 @@ def check_database() -> tuple[bool, str]:
         errors = []
         for table in ("bars_1m", "bars_5m", "daily_features"):
             try:
-                counts[table] = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                counts[table] = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # type: ignore[index]
             except duckdb.CatalogException:
                 errors.append(f"{table} missing")
             except Exception as e:
