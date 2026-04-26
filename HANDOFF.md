@@ -9,10 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 29834981 — chore(handoff,stages): post-pyright-batch ledger sync + adopt orphaned pass-three stage doc
-- **Files changed:** 2 files
+- **Commit:** bb6f7ee1 — chore(handoff): close session — pyright sweep + worktree cleanup
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/pass-three-magic-number-drift-check.md`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 
