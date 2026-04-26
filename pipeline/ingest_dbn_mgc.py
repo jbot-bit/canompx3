@@ -82,7 +82,7 @@ MINIMUM_START_DATE = date(2010, 6, 6)
 class CheckpointManager:
     """Append-only JSONL checkpoint system."""
 
-    def __init__(self, checkpoint_dir: Path, source_file: Path, db_path: Path = None):
+    def __init__(self, checkpoint_dir: Path, source_file: Path, db_path: Path | None = None):
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
@@ -167,7 +167,9 @@ class CheckpointManager:
 
         return True
 
-    def write_checkpoint(self, chunk_start: str, chunk_end: str, status: str, rows_written: int = 0, error: str = None):
+    def write_checkpoint(
+        self, chunk_start: str, chunk_end: str, status: str, rows_written: int = 0, error: str | None = None
+    ):
         """Append checkpoint record (immutable)."""
         record = {
             "chunk_start": chunk_start,
@@ -221,7 +223,7 @@ def validate_chunk(df: pd.DataFrame) -> tuple[bool, str, pd.DataFrame | None]:
     price_cols = ["open", "high", "low", "close"]
     inf_mask = ~np.isfinite(df[price_cols].values).all(axis=1)
     if inf_mask.any():
-        return False, "Infinite price values", df[inf_mask].head(5)
+        return False, "Infinite price values", df[inf_mask].head(5)  # type: ignore[return-value]
 
     # Check prices > 0
     nonpos_mask = (df[price_cols] <= 0).any(axis=1)
@@ -263,14 +265,14 @@ def validate_timestamp_utc(df: pd.DataFrame) -> tuple[bool, str]:
     if not hasattr(df.index, "tz"):
         return False, "Index has no timezone info"
 
-    if df.index.tz is None:
+    if df.index.tz is None:  # type: ignore[attr-defined]
         return False, "Index timezone is None (tz-naive)"
 
-    if str(df.index.tz) != "UTC":
-        return False, f"Index timezone is {df.index.tz}, not UTC"
+    if str(df.index.tz) != "UTC":  # type: ignore[attr-defined]
+        return False, f"Index timezone is {df.index.tz}, not UTC"  # type: ignore[attr-defined]
 
     # Check for null timestamps
-    if df.index.isna().any():
+    if df.index.isna().any():  # type: ignore[union-attr]
         return False, "Null timestamps found"
 
     return True, ""
@@ -359,7 +361,7 @@ def compute_trading_days(df: pd.DataFrame) -> pd.Series:
     Bars before 09:00 local belong to PREVIOUS trading day.
     """
     # Convert to Brisbane time
-    ts_local = df.index.tz_convert(str(TZ_LOCAL))
+    ts_local = df.index.tz_convert(str(TZ_LOCAL))  # type: ignore[attr-defined]
 
     # Extract components
     hours = ts_local.hour
@@ -391,7 +393,7 @@ def check_pk_safety(df: pd.DataFrame, trading_day: date) -> tuple[bool, str]:
 
 
 def check_merge_integrity(
-    con: duckdb.DuckDBPyConnection, chunk_start: str, chunk_end: str, symbol: str = None
+    con: duckdb.DuckDBPyConnection, chunk_start: str, chunk_end: str, symbol: str | None = None
 ) -> tuple[bool, str]:
     """
     Assert no duplicates or NULL source_symbol after merge.
@@ -434,7 +436,7 @@ def check_merge_integrity(
         AND source_symbol IS NULL
     """,
         null_params,
-    ).fetchone()[0]
+    ).fetchone()[0]  # type: ignore[index]
 
     if null_check > 0:
         return False, f"NULL source_symbol found after merge: {null_check} rows"
@@ -473,7 +475,7 @@ def run_final_gates(con: duckdb.DuckDBPyConnection) -> tuple[bool, list[str]]:
             GROUP BY symbol, ts_utc
             HAVING COUNT(*) > 1
         )
-    """).fetchone()[0]
+    """).fetchone()[0]  # type: ignore[index]
 
     if dupe_count > 0:
         failures.append(f"Global duplicate (symbol, ts_utc) found: {dupe_count}")
@@ -481,7 +483,7 @@ def run_final_gates(con: duckdb.DuckDBPyConnection) -> tuple[bool, list[str]]:
     # Gate 3: Check for any NULL source_symbol
     null_count = con.execute("""
         SELECT COUNT(*) FROM bars_1m WHERE source_symbol IS NULL
-    """).fetchone()[0]
+    """).fetchone()[0]  # type: ignore[index]
 
     if null_count > 0:
         failures.append(f"NULL source_symbol found: {null_count} rows")
@@ -937,13 +939,13 @@ def main():
 
     if not args.dry_run and con:
         # Get actual DB stats
-        count = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = 'MGC'").fetchone()[0]
+        count = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = 'MGC'").fetchone()[0]  # type: ignore[index]
         date_range = con.execute(
             "SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = 'MGC'"
         ).fetchone()
 
         logger.info(f"Database rows (MGC): {count:,}")
-        logger.info(f"Date range in DB: {date_range[0]} to {date_range[1]}")
+        logger.info(f"Date range in DB: {date_range[0]} to {date_range[1]}")  # type: ignore[index]
 
         con.close()
 

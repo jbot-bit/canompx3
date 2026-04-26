@@ -338,9 +338,9 @@ def main():
         # AGGREGATE BY TRADING DAY
         # =================================================================
         for tday, day_df in chunk_df.groupby("trading_day"):
-            if start_filter and tday < start_filter:
+            if start_filter and tday < start_filter:  # type: ignore[operator]
                 continue
-            if end_filter and tday > end_filter:
+            if end_filter and tday > end_filter:  # type: ignore[operator]
                 continue
 
             volumes = day_df.groupby("symbol")["volume"].sum().to_dict()
@@ -358,7 +358,7 @@ def main():
 
             front_df = day_df[day_df["symbol"] == front].copy()
 
-            pk_ok, pk_reason = check_pk_safety(front_df, tday)
+            pk_ok, pk_reason = check_pk_safety(front_df, tday)  # type: ignore[arg-type]
             if not pk_ok:
                 logger.warning(f"FATAL: PK safety check failed: {pk_reason}")
                 logger.warning("ABORT: Primary key safety gate failed (FAIL-CLOSED)")
@@ -570,13 +570,13 @@ def main():
     logger.info(f"Wall time: {elapsed}")
 
     if not args.dry_run and con:
-        count = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = ?", [symbol]).fetchone()[0]
+        count = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = ?", [symbol]).fetchone()[0]  # type: ignore[index]
         date_range = con.execute(
             "SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = ?", [symbol]
         ).fetchone()
 
         logger.info(f"Database rows ({symbol}): {count:,}")
-        logger.info(f"Date range in DB: {date_range[0]} to {date_range[1]}")
+        logger.info(f"Date range in DB: {date_range[0]} to {date_range[1]}")  # type: ignore[index]
 
         con.close()
 

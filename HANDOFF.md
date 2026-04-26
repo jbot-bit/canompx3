@@ -9,16 +9,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 168b84d3 — [mechanical] type: drive 6 small pipeline files to 0 pyright errors
-- **Files changed:** 8 files
+- **Commit:** 93c06770 — [mechanical] type: drive pipeline/dashboard.py + pipeline/check_db.py to 0 pyright errors
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/pipeline-pyright-small-cleanup.md`
-  - `pipeline/daily_backfill.py`
-  - `pipeline/dst.py`
-  - `pipeline/export_parquet.py`
-  - `pipeline/health_check.py`
-  - `pipeline/ingest_statistics.py`
-  - `pipeline/system_brief.py`
+  - `docs/runtime/stages/dashboard-checkdb-pyright.md`
+  - `pipeline/check_db.py`
+  - `pipeline/dashboard.py`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 

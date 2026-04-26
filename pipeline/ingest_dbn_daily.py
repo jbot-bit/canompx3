@@ -32,7 +32,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 # Force unbuffered stdout so progress prints appear immediately
-sys.stdout.reconfigure(line_buffering=True)
+sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
 
 import databento as db
 import duckdb
@@ -348,7 +348,7 @@ def main():
             chunk_df["trading_day"] = trading_days
 
             for tday, day_df in chunk_df.groupby("trading_day"):
-                if tday < start_filter or tday > end_filter:
+                if tday < start_filter or tday > end_filter:  # type: ignore[operator]
                     continue
 
                 volumes = day_df.groupby("symbol")["volume"].sum().to_dict()
@@ -361,7 +361,7 @@ def main():
                 stats["contracts_used"].add(front)
                 front_df = day_df[day_df["symbol"] == front].copy()
 
-                pk_ok, pk_reason = check_pk_safety(front_df, tday)
+                pk_ok, pk_reason = check_pk_safety(front_df, tday)  # type: ignore[arg-type]
                 if not pk_ok:
                     logger.warning(f"FATAL: PK safety failed for {fpath.name}: {pk_reason}")
                     sys.exit(1)
@@ -554,12 +554,12 @@ def main():
     logger.info(f"Wall time: {elapsed}")
 
     if not args.dry_run and con:
-        count = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = ?", [symbol]).fetchone()[0]
+        count = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = ?", [symbol]).fetchone()[0]  # type: ignore[index]
         date_range = con.execute(
             "SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = ?", [symbol]
         ).fetchone()
         logger.info(f"Database rows ({symbol}): {count:,}")
-        logger.info(f"Date range: {date_range[0]} to {date_range[1]}")
+        logger.info(f"Date range: {date_range[0]} to {date_range[1]}")  # type: ignore[index]
         con.close()
 
     logger.info(f"SUCCESS: {symbol} daily ingestion complete and validated.")
