@@ -734,3 +734,356 @@ class TestDDTrailingTakesPrecedence:
             halted, reason = t.check_halt()
             assert halted
             assert "DD_TRAILING" in reason
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Stage 2 — HWM persistence integrity hardening (design v3 § 5)
+#
+# Tests in this section pin behavior introduced by stage doc
+# `docs/runtime/stages/hwm-stage2-tracker-integrity.md` and parent design
+# `docs/plans/2026-04-25-hwm-persistence-integrity-hardening-design.md`.
+#
+# Mutation-proof — each test asserts a specific code path with substring
+# tokens that survive cosmetic refactor but fail when the path is removed.
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _write_state_file_with_age(state_dir: Path, account_id: str, age_seconds: float) -> Path:
+    """Write a minimal valid HWM state file with last_equity_timestamp set
+    to (now - age_seconds). Returns the file path.
+
+    Uses real timestamps (no datetime patching) so state_file_age_days()
+    reads a genuinely-old file. Avoids the patch interaction with the
+    pure helper.
+    """
+    state_dir.mkdir(parents=True, exist_ok=True)
+    last_ts = (datetime.now(UTC) - timedelta(seconds=age_seconds)).isoformat()
+    data = {
+        "account_id": account_id,
+        "firm": "topstep",
+        "hwm_dollars": 50000.0,
+        "hwm_timestamp": last_ts,
+        "last_equity": 50000.0,
+        "last_equity_timestamp": last_ts,
+        "halt_triggered": False,
+        "halt_timestamp": None,
+        "halt_reason": "",
+        "consecutive_poll_failures": 0,
+        "hwm_frozen": False,
+        "session_log": [],
+    }
+    path = state_dir / f"account_hwm_{account_id}.json"
+    path.write_text(json.dumps(data))
+    return path
+
+
+class TestStaleStateBoundaries:
+    """B2/B3 — stale-state warn (24h) and fail-closed raise (30 days)."""
+
+    def test_load_stale_30_days_plus_1s_raises_with_stale_state_fail_token(self, state_dir):
+        path = _write_state_file_with_age(state_dir, "STALE001", age_seconds=30 * 86400 + 1)
+        with pytest.raises(RuntimeError, match=r"STALE_STATE_FAIL"):
+            AccountHWMTracker("STALE001", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        # Verify message also names file path and the age figure
+        try:
+            AccountHWMTracker("STALE001", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        except RuntimeError as exc:
+            msg = str(exc)
+            assert str(path) in msg or path.name in msg, f"file path missing from raise: {msg!r}"
+            assert "30" in msg, f"30-day threshold figure missing from raise: {msg!r}"
+            assert "archive" in msg.lower() or "delete" in msg.lower(), f"repair recipe missing from raise: {msg!r}"
+
+    def test_load_stale_30_days_minus_1s_warns_does_not_raise(self, state_dir, caplog):
+        import logging
+
+        _write_state_file_with_age(state_dir, "STALE002", age_seconds=30 * 86400 - 1)
+        with caplog.at_level(logging.WARNING, logger="trading_app.account_hwm_tracker"):
+            t = AccountHWMTracker("STALE002", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        assert t._hwm == 50000.0  # loaded successfully
+        warns = [r for r in caplog.records if "old" in r.message.lower()]
+        assert warns, f"Expected stale-state log.warning; got: {[r.message for r in caplog.records]!r}"
+
+    def test_load_stale_29_days_logs_warning_continues(self, state_dir, caplog):
+        import logging
+
+        _write_state_file_with_age(state_dir, "STALE003", age_seconds=29 * 86400)
+        with caplog.at_level(logging.WARNING, logger="trading_app.account_hwm_tracker"):
+            t = AccountHWMTracker("STALE003", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        assert t._hwm == 50000.0
+        warns = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("29" in r.message or "days old" in r.message for r in warns), (
+            f"Expected age in warning message; got: {[r.message for r in warns]!r}"
+        )
+
+    def test_load_warn_24h_plus_1s_emits_log_warning(self, state_dir, caplog):
+        import logging
+
+        _write_state_file_with_age(state_dir, "STALE004", age_seconds=86400 + 1)
+        with caplog.at_level(logging.WARNING, logger="trading_app.account_hwm_tracker"):
+            AccountHWMTracker("STALE004", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        warns = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert warns, f"24h+1s must warn; got no WARNING records"
+
+    def test_load_warn_24h_minus_1s_silent(self, state_dir, caplog):
+        import logging
+
+        _write_state_file_with_age(state_dir, "STALE005", age_seconds=86400 - 1)
+        with caplog.at_level(logging.WARNING, logger="trading_app.account_hwm_tracker"):
+            AccountHWMTracker("STALE005", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        # Filter for stale-related WARNINGs only (other unrelated logs may exist)
+        stale_warns = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and ("days old" in r.message or "old (account" in r.message)
+        ]
+        assert not stale_warns, f"Under-24h must be silent; got: {[r.message for r in stale_warns]!r}"
+
+    def test_load_recent_silent(self, state_dir, caplog):
+        import logging
+
+        _write_state_file_with_age(state_dir, "STALE006", age_seconds=3600)  # 1 hour
+        with caplog.at_level(logging.WARNING, logger="trading_app.account_hwm_tracker"):
+            AccountHWMTracker("STALE006", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        stale_warns = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and ("days old" in r.message or "old (account" in r.message)
+        ]
+        assert not stale_warns
+
+    def test_load_stale_message_does_not_claim_canonical_grounding(self, state_dir):
+        """Mutation guard: design v3 § 2 explicitly disclaims canonical grounding
+        for the 30-day figure. The raised message MUST NOT contain @canonical-source
+        or topstep_xfa_parameters.txt:349 — those would falsely promote the
+        operational heuristic to a literature-grounded rule."""
+        _write_state_file_with_age(state_dir, "STALE007", age_seconds=30 * 86400 + 60)
+        with pytest.raises(RuntimeError) as exc_info:
+            AccountHWMTracker("STALE007", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        msg = str(exc_info.value)
+        assert "@canonical-source" not in msg, f"Forbidden token in raise: {msg!r}"
+        assert "topstep_xfa_parameters.txt:349" not in msg, f"Forbidden citation in raise: {msg!r}"
+
+
+class TestNotifyCallback:
+    """B4 / B5 / B6 — notify_callback dispatch on integrity events."""
+
+    def test_load_corrupt_invokes_notify_callback_when_provided(self, state_dir):
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "account_hwm_NOTIFY001.json").write_text("{garbage")
+        calls: list[str] = []
+        AccountHWMTracker(
+            "NOTIFY001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            notify_callback=calls.append,
+        )
+        assert len(calls) == 1, f"Expected exactly one corrupt-state notify; got {len(calls)}: {calls!r}"
+        assert "CORRUPT" in calls[0], f"Notify must mention CORRUPT; got: {calls[0]!r}"
+
+    def test_load_corrupt_no_callback_preserves_existing_behavior(self, state_dir):
+        """Backwards compat — log.error, backup, reinit. No exception."""
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "account_hwm_NOTIFY002.json").write_text("{garbage")
+        t = AccountHWMTracker("NOTIFY002", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        assert t._hwm == 0.0  # reinit
+        assert list(state_dir.glob("account_hwm_NOTIFY002_CORRUPT_*.json"))  # backup exists
+
+    def test_load_corrupt_callback_raises_does_not_break_construction(self, state_dir, caplog):
+        import logging
+
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "account_hwm_NOTIFY003.json").write_text("{garbage")
+
+        def _bad_callback(_msg: str) -> None:
+            raise RuntimeError("simulated callback failure")
+
+        with caplog.at_level(logging.ERROR, logger="trading_app.account_hwm_tracker"):
+            t = AccountHWMTracker(
+                "NOTIFY003",
+                "topstep",
+                dd_limit_dollars=2000.0,
+                state_dir=state_dir,
+                notify_callback=_bad_callback,
+            )
+        assert t._hwm == 0.0  # construction succeeded despite callback raise
+        dispatch_failures = [r for r in caplog.records if "notify_callback dispatch failed" in r.message]
+        assert dispatch_failures, "Expected log.error from _safe_notify dispatch failure"
+
+    def test_poll_recovery_from_one_dispatches_notify_with_prior_count(self, state_dir):
+        calls: list[str] = []
+        t = AccountHWMTracker(
+            "POLL001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            notify_callback=calls.append,
+        )
+        t.update_equity(None)  # 1 failure
+        t.update_equity(50000.0)  # recovery
+        recovery_msgs = [c for c in calls if "RECOVERY" in c]
+        assert len(recovery_msgs) == 1, f"Expected one recovery notify; got: {calls!r}"
+        assert "1 consecutive failure" in recovery_msgs[0], (
+            f"Expected '1 consecutive failure' in message; got: {recovery_msgs[0]!r}"
+        )
+
+    def test_poll_recovery_from_two_dispatches_notify_with_prior_count(self, state_dir):
+        """Mutation guard: verify the count is the actual prior count, not a constant."""
+        calls: list[str] = []
+        t = AccountHWMTracker(
+            "POLL002",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            notify_callback=calls.append,
+        )
+        t.update_equity(None)  # 1
+        t.update_equity(None)  # 2
+        t.update_equity(50000.0)  # recovery from 2
+        recovery_msgs = [c for c in calls if "RECOVERY" in c]
+        assert len(recovery_msgs) == 1
+        assert "2 consecutive failure" in recovery_msgs[0], (
+            f"Expected '2 consecutive failure' (not 1); got: {recovery_msgs[0]!r}"
+        )
+
+    def test_poll_recovery_from_zero_does_not_dispatch(self, state_dir):
+        """Mutation guard against spam — steady-state successes are silent."""
+        calls: list[str] = []
+        t = AccountHWMTracker(
+            "POLL003",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            notify_callback=calls.append,
+        )
+        t.update_equity(50000.0)
+        t.update_equity(50100.0)
+        t.update_equity(50200.0)
+        recovery_msgs = [c for c in calls if "RECOVERY" in c]
+        assert recovery_msgs == [], f"Steady-state must be silent; got: {recovery_msgs!r}"
+
+    def test_save_state_oserror_dispatches_notify_and_reraises_with_persist_fail_token(self, state_dir):
+        calls: list[str] = []
+        t = AccountHWMTracker(
+            "PERSIST001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            notify_callback=calls.append,
+        )
+        t.update_equity(50000.0)  # primes state
+        # Inject OSError on the next write_text call
+        original_write = Path.write_text
+
+        def _raising_write(self, *args, **kwargs):
+            if "tmp" in self.name:
+                raise OSError("disk full simulated")
+            return original_write(self, *args, **kwargs)
+
+        with patch.object(Path, "write_text", _raising_write):
+            with pytest.raises(OSError, match="disk full simulated"):
+                t.update_equity(50100.0)
+        persist_msgs = [c for c in calls if "STATE_PERSIST_FAIL" in c]
+        assert len(persist_msgs) == 1, f"Expected one persist-fail notify; got: {calls!r}"
+
+    def test_save_state_oserror_does_not_increment_poll_failure_counter(self, state_dir):
+        """Mutation guard — persistence and broker-poll failure modes stay separate."""
+        t = AccountHWMTracker(
+            "PERSIST002",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            notify_callback=lambda _msg: None,
+        )
+        t.update_equity(50000.0)
+        original_write = Path.write_text
+
+        def _raising_write(self, *args, **kwargs):
+            if "tmp" in self.name:
+                raise OSError("simulated")
+            return original_write(self, *args, **kwargs)
+
+        prior = t._consecutive_poll_failures
+        with patch.object(Path, "write_text", _raising_write):
+            with pytest.raises(OSError):
+                t.update_equity(50100.0)
+        assert t._consecutive_poll_failures == prior, (
+            f"OSError on persist must not increment broker-poll failure counter "
+            f"(was {prior}, now {t._consecutive_poll_failures})"
+        )
+
+
+class TestAnnotationDiscipline:
+    """B7 / B8 — UNGROUNDED+Rationale on 6 constants; @canonical-source on class docstring."""
+
+    def test_eod_trailing_class_docstring_has_canonical_source_annotation_block(self):
+        doc = AccountHWMTracker.__doc__ or ""
+        assert "@canonical-source" in doc, "Class docstring missing @canonical-source token"
+        assert "@verbatim" in doc, "Class docstring missing @verbatim token"
+        assert "@audit-finding" in doc, "Class docstring missing @audit-finding token"
+        assert "topstep_xfa_parameters.txt:289" in doc, (
+            "Class docstring must cite topstep_xfa_parameters.txt:289 (rule-breach grounding)"
+        )
+
+    def test_ungrounded_constants_have_explicit_label_and_rationale_within_5_lines_above(self):
+        """Positional check (not file-wide grep): for each named constant, both
+        UNGROUNDED token AND a Rationale: block must appear within the 5 lines
+        immediately above the assignment. Pass Three drift-check forward-compat
+        + institutional-rigor.md § 7 honesty requirement.
+        """
+        import inspect
+        from trading_app import account_hwm_tracker as mod
+
+        source_lines = inspect.getsource(mod).splitlines()
+        target_constants = [
+            "_MAX_SESSION_LOG = 30",
+            "_MAX_CONSECUTIVE_POLL_FAILURES = 3",
+            "_STATE_STALENESS_FAIL_DAYS = 30",
+            "_STATE_STALENESS_WARN_DAYS = 1",
+        ]
+        for needle in target_constants:
+            idx = next((i for i, line in enumerate(source_lines) if line.strip() == needle), None)
+            assert idx is not None, f"Constant {needle!r} not found in module source"
+            window = "\n".join(source_lines[max(0, idx - 5) : idx])
+            assert "UNGROUNDED" in window, f"{needle}: missing UNGROUNDED token within 5 lines above. Window:\n{window}"
+            assert "Rationale:" in window, (
+                f"{needle}: missing 'Rationale:' block within 5 lines above. Window:\n{window}"
+            )
+
+
+class TestStateFileAgeDays:
+    """B9 — shared pure helper for age computation."""
+
+    def test_state_file_age_days_pure_function_no_logging(self, state_dir, caplog, tmp_path):
+        from trading_app.account_hwm_tracker import state_file_age_days
+
+        path = _write_state_file_with_age(state_dir, "AGE001", age_seconds=3600)
+        before_files = set(state_dir.iterdir())
+        with caplog.at_level("DEBUG", logger="trading_app.account_hwm_tracker"):
+            age = state_file_age_days(path)
+        assert age is not None
+        assert 0.04 <= age <= 0.05, f"Expected ~1h ({3600 / 86400:.4f} days); got {age}"
+        assert caplog.records == [], f"Helper must be silent; got: {[r.message for r in caplog.records]!r}"
+        after_files = set(state_dir.iterdir())
+        assert before_files == after_files, "Helper must not create files"
+
+    def test_state_file_age_days_returns_none_on_missing_file(self, tmp_path):
+        from trading_app.account_hwm_tracker import state_file_age_days
+
+        assert state_file_age_days(tmp_path / "does_not_exist.json") is None
+
+    def test_state_file_age_days_returns_none_on_corrupt_json(self, state_dir):
+        from trading_app.account_hwm_tracker import state_file_age_days
+
+        state_dir.mkdir(parents=True, exist_ok=True)
+        path = state_dir / "corrupt.json"
+        path.write_text("{not json")
+        assert state_file_age_days(path) is None
+
+    def test_state_file_age_days_returns_none_on_missing_timestamp(self, state_dir):
+        from trading_app.account_hwm_tracker import state_file_age_days
+
+        state_dir.mkdir(parents=True, exist_ok=True)
+        path = state_dir / "no_ts.json"
+        path.write_text(json.dumps({"hwm_dollars": 50000.0}))
+        assert state_file_age_days(path) is None

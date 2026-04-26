@@ -15,6 +15,7 @@ This module:
 import json
 import logging
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -24,6 +25,39 @@ log = logging.getLogger(__name__)
 
 _DEFAULT_STATE_DIR = Path(__file__).resolve().parent.parent / "data" / "state"
 _BRISBANE = ZoneInfo("Australia/Brisbane")
+
+
+def state_file_age_days(path: Path) -> float | None:
+    """Compute age in days from persisted last_equity_timestamp.
+
+    Pure function. No side effects, no logging. Returns None when:
+      - file does not exist, OR
+      - file unreadable / parse error / missing/empty timestamp.
+
+    Single source of truth for state-file age. Used by:
+      - _load_state (B2/B3 stale-state gate, this module)
+      - check_topstep_inactivity_window (Stage 4 pre-session check, future)
+
+    HWM persistence integrity hardening design v3 § 5 sub-bullet
+    "Shared age computation" — never reimplement either consumer.
+    """
+    if not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError, ValueError, TypeError):
+        return None
+    ts = raw.get("last_equity_timestamp") if isinstance(raw, dict) else None
+    if not ts:
+        return None
+    try:
+        last = datetime.fromisoformat(ts)
+    except (ValueError, TypeError):
+        return None
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=UTC)
+    delta = datetime.now(UTC) - last
+    return delta.total_seconds() / 86400.0
 
 
 @dataclass
@@ -60,8 +94,28 @@ class HWMState:
         return max(0.0, self.dd_limit_dollars - self.dd_used_dollars)
 
 
+# UNGROUNDED — operational default.
+# Rationale: ~5 trading days at 6 sessions/day. Bounds session-log retention
+# so persisted JSON does not grow unboundedly. No literature citation.
 _MAX_SESSION_LOG = 30
+
+# UNGROUNDED — operational default.
+# Rationale: ~30 min visibility window at 10-bar polling cadence. Long enough
+# to absorb a transient broker outage; short enough to halt before DD ages out
+# of view. No literature citation.
 _MAX_CONSECUTIVE_POLL_FAILURES = 3
+
+# UNGROUNDED operational heuristic. Figure borrowed by analogy from TopStep
+# inactivity window (topstep_xfa_parameters.txt:349-351), NOT derived.
+# Rationale: bot-state freshness, not broker-account activity. Boundary
+# direction: >= 30 days raises (file age, not match window). False-positive
+# resolution: operator archives or deletes the state file.
+_STATE_STALENESS_FAIL_DAYS = 30
+
+# UNGROUNDED — operational suppression floor.
+# Rationale: 24h floor blocks restart-cycle noise. Under 24h silent;
+# 24h–30 days warn + notify; >= 30 days raises via _STATE_STALENESS_FAIL_DAYS.
+_STATE_STALENESS_WARN_DAYS = 1
 
 
 class AccountHWMTracker:
@@ -75,6 +129,17 @@ class AccountHWMTracker:
 
     Supports freeze_at_balance: when HWM reaches this level, it locks permanently.
     Example: freeze_at_balance = starting_balance + max_dd + 100.
+
+    @canonical-source: docs/research-input/topstep/topstep_xfa_parameters.txt:289 —
+        "If you break a rule, your Express Funded Account will be liquidated immediately"
+    @canonical-source: docs/research-input/topstep/topstep_mll_article.md —
+        EOD trailing mechanic verbatim
+    @verbatim: see source files for exact wording; this class implements the
+        operator-side enforcement of those rules in software.
+    @audit-finding: HWM persistence integrity audit 2026-04-25 (UNSUPPORTED-1) —
+        the eod_trailing description was previously informal ("matches the supported
+        EOD trailing mechanics used in the active project"). Closed by Stage 2 of
+        docs/plans/2026-04-25-hwm-persistence-integrity-hardening-design.md (v3 § 5).
     """
 
     def __init__(
@@ -88,6 +153,7 @@ class AccountHWMTracker:
         freeze_at_balance: float | None = None,
         daily_loss_limit: float | None = None,
         weekly_loss_limit: float | None = None,
+        notify_callback: Callable[[str], None] | None = None,
     ):
         if dd_limit_dollars <= 0:
             raise ValueError(f"dd_limit_dollars must be positive, got {dd_limit_dollars}")
@@ -106,6 +172,7 @@ class AccountHWMTracker:
         self._hwm_frozen = False
         self._daily_loss_limit = daily_loss_limit
         self._weekly_loss_limit = weekly_loss_limit
+        self._notify_callback = notify_callback
         self._state_dir = state_dir or _DEFAULT_STATE_DIR
         self._state_dir.mkdir(parents=True, exist_ok=True)
         self._state_file = self._state_dir / f"account_hwm_{self._account_id}.json"
@@ -133,10 +200,56 @@ class AccountHWMTracker:
     def _state_path(self) -> Path:
         return self._state_file
 
+    def _safe_notify(self, message: str) -> None:
+        """Bounded dispatch of an operator-visible message via notify_callback.
+
+        No-op when callback is None. Wraps callback exceptions so a notify
+        failure NEVER breaks tracker construction or update_equity flow.
+        Per design v3 § 5 AC 14 (synchronous-Telegram startup-latency hazard
+        accepted; callback exception MUST NOT propagate).
+        """
+        if self._notify_callback is None:
+            return
+        try:
+            self._notify_callback(message)
+        except Exception as exc:
+            log.error("HWM notify_callback dispatch failed: %s — continuing", exc)
+
     def _load_state(self) -> None:
         if not self._state_file.exists():
             log.info("HWM tracker: no state file for account %s — will init on first equity update", self._account_id)
             return
+
+        # Stale-state gate (B2/B3) — fires BEFORE the JSON load attempt so
+        # a 30-day-old state file with valid JSON still raises. Uses the
+        # shared state_file_age_days() helper (single source of truth shared
+        # with Stage 4's pre-session inactivity check).
+        age_days = state_file_age_days(self._state_file)
+        if age_days is not None:
+            if age_days >= _STATE_STALENESS_FAIL_DAYS:
+                msg = (
+                    f"STALE_STATE_FAIL: HWM state file age {age_days:.1f} days "
+                    f">= {_STATE_STALENESS_FAIL_DAYS} day fail-closed threshold "
+                    f"({self._state_file}). Operator must archive (rename to "
+                    f"{self._state_file.name}.STALE_<YYYYMMDD>.json) or delete "
+                    f"the file before resuming. The 30-day figure is an operational "
+                    f"heuristic borrowed by analogy from TopStep's account-trading-"
+                    f"inactivity rule, NOT derived from it; see "
+                    f"_STATE_STALENESS_FAIL_DAYS comment."
+                )
+                raise RuntimeError(msg)
+            if age_days >= _STATE_STALENESS_WARN_DAYS:
+                log.warning(
+                    "HWM state file is %.1f days old (account %s) — approaching %d-day fail-closed threshold",
+                    age_days,
+                    self._account_id,
+                    _STATE_STALENESS_FAIL_DAYS,
+                )
+                self._safe_notify(
+                    f"HWM STATE STALE: account {self._account_id} state file "
+                    f"is {age_days:.1f} days old (fail-closed at "
+                    f"{_STATE_STALENESS_FAIL_DAYS} days)"
+                )
 
         try:
             data = json.loads(self._state_file.read_text())
@@ -172,6 +285,11 @@ class AccountHWMTracker:
             )
             shutil.copy2(self._state_file, corrupt_path)
             log.error("Corrupt state backed up to %s", corrupt_path)
+            self._safe_notify(
+                f"HWM STATE CORRUPT: account {self._account_id} state file "
+                f"unreadable ({type(e).__name__}: {e}); backed up to "
+                f"{corrupt_path.name}; reinitialising from broker on next poll"
+            )
             # Reset to fresh state — will init on first equity update
             self._hwm = 0.0
             self._hwm_ts = ""
@@ -289,8 +407,26 @@ class AccountHWMTracker:
             "session_log": self._session_log[-_MAX_SESSION_LOG:],
         }
         tmp = self._state_file.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2))
-        tmp.replace(self._state_file)
+        try:
+            tmp.write_text(json.dumps(data, indent=2))
+            tmp.replace(self._state_file)
+        except OSError as exc:
+            # B6: persist-IO failure dispatch. Narrow OSError catch (NOT
+            # broad Exception) so JSON-encoding bugs still surface as
+            # programming errors. Notify-then-reraise preserves existing
+            # caller semantics (callers see the OSError); the dispatch is
+            # the only new behavior. Distinct from the broker-poll failure
+            # path: this does NOT increment _consecutive_poll_failures.
+            log.error(
+                "HWM state persist failed for account %s: %s — re-raising",
+                self._account_id,
+                exc,
+            )
+            self._safe_notify(
+                f"STATE_PERSIST_FAIL: HWM state file write failed for account "
+                f"{self._account_id} ({self._state_file}): {exc!r}"
+            )
+            raise
 
     def _dd_used(self) -> float:
         if self._hwm <= 0:
@@ -322,7 +458,20 @@ class AccountHWMTracker:
             self._save_state()
             return self._build_state()
 
+        prior_failures = self._consecutive_poll_failures
         self._consecutive_poll_failures = 0
+        if prior_failures > 0:
+            # B5: poll-failure recovery dispatch. Steady-state successes
+            # (prior_failures == 0) stay silent — mutation guard against spam.
+            log.info(
+                "HWM: equity poll RECOVERED after %d consecutive failure(s)",
+                prior_failures,
+            )
+            self._safe_notify(
+                f"HWM POLL RECOVERY: equity poll succeeded after "
+                f"{prior_failures} consecutive failure(s) (account "
+                f"{self._account_id})"
+            )
         now = datetime.now(UTC).isoformat()
         self._last_equity = current_equity
         self._last_equity_ts = now
