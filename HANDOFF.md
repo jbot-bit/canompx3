@@ -8,11 +8,14 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-04-25
-- **Commit:** 26557922 — docs: Stage 1 closure baton — audit-gate PASS-CONDITIONAL, GAP-1 logged, Stage 2 cleared
-- **Files changed:** 2 files
+- **Date:** 2026-04-26
+- **Commit:** 45720109 — [judgment] fix(live): HWM Stage 1 fix-up — STAGE1-GAP-1 None-reason contract-drift visibility
+- **Files changed:** 5 files
   - `HANDOFF.md`
   - `docs/ralph-loop/deferred-findings.md`
+  - `docs/runtime/stages/hwm-stage1-gap1-none-reason-contract-guard.md`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Next Steps — Active
 
