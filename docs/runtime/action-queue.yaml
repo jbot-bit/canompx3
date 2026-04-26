@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: 2026-04-25T00:00:00+00:00
+updated_at: 2026-04-26T00:00:00+00:00
 items:
   - id: prior_day_bridge_execution_triage
     title: Prior-day Pathway-B bridge execution triage
@@ -28,22 +28,22 @@ items:
   - id: cross_asset_session_chronology_spec
     title: Cross-asset earlier-session to later-ORB chronology spec
     class: research
-    status: ready
+    status: closed
     priority: P1
     close_before_new_work: true
     owner_hint: codex-or-claude
-    last_verified_at: 2026-04-24
+    last_verified_at: 2026-04-26
     freshness_sla_days: 3
-    next_action: Write the chronology discipline/spec before any cross-asset timing scan or execution.
+    next_action: "Closed — chronology spec frozen at docs/plans/2026-04-25-cross-asset-session-chronology-spec.md (278 lines, PR #101 commit 87ebc885). Exit criteria met: spec exists; bounded execution gated on a future cross-asset prereg consuming it."
     exit_criteria: A narrow chronology spec exists and the branch is either ready for bounded execution or explicitly parked.
     blocked_by: []
     decision_refs:
       - docs/runtime/decision-ledger.md
     evidence_refs:
       - docs/plans/2026-04-22-recent-pr-followthrough-queue.md
-      - docs/runtime/stages/cross-asset-session-chronology-spec.md
-    notes_ref: docs/runtime/stages/cross-asset-session-chronology-spec.md
-    override_note:
+      - docs/plans/2026-04-25-cross-asset-session-chronology-spec.md
+    notes_ref: docs/plans/2026-04-25-cross-asset-session-chronology-spec.md
+    override_note: "PARKED 2026-04-26 — spec frozen and ready for reference. Re-opens when a cross-asset timing scan or execution prereg explicitly cites and gates on this spec."
 
   - id: gc_mgc_15m_30m_translation_question
     title: GC to MGC 15m and 30m translation question

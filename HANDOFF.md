@@ -52,7 +52,7 @@
 
 1. **PR #99** (DRAFT, Codex's `wt-codex-mnq-hiroi-scan`) — research(mnq) MNQ COMEX geometry hardening + COMEX family stamp. Standing instruction: comment + leave for Codex.
 
-2. **Action queue P1 close-first** — `cross_asset_session_chronology_spec` (frozen reference doc at `docs/plans/2026-04-25-cross-asset-session-chronology-spec.md`; no stage yet, deploy if a future cross-asset prereg consumes it).
+2. **Action queue** — fully closed as of 2026-04-26. `cross_asset_session_chronology_spec` marked CLOSED (spec frozen at `docs/plans/2026-04-25-cross-asset-session-chronology-spec.md` via PR #101 / `87ebc885`); re-opens when a future cross-asset prereg explicitly cites and gates on it. No P1 ready items remain.
 
 3. **Operator action** — MGC shadow observation; result unblocks `mes_q45_exec_bridge` action-queue item.
 
