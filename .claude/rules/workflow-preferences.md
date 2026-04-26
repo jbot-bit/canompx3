@@ -13,6 +13,9 @@ If the user says "plan" and you write code, you have failed. #1 source of fricti
 ## Git Operations — Just Execute
 "commit", "push", "merge" (including typos) → check status, stage, execute. No explaining, no "are you sure?", no describing what you're about to do. Exception: warn if staging secrets.
 
+## Trivial-Change Tier — Skip Ceremony
+A change is **trivial** when ALL hold: (a) no `pipeline/` or `trading_app/` files touched, (b) no schema/canonical-source change, (c) <100 lines of net diff, (d) tests or verification land in the same diff. Trivial = edit, run tests, commit, push on whatever branch is currently checked out. NO branch cut, NO design doc in `docs/plans/`, NO stage file in `docs/runtime/stages/`. The full ceremony (stage-gate, design doc, branch-from-origin/main, scope_lock) applies to NON-trivial work — production code, schema edits, multi-stage features. Hook helpers, frontmatter additions, gitignore tweaks, single-rule edits, drift-check additions are trivial. Do NOT invent stage files for them.
+
 ## Response Style — Concise, No Extras
 - No CLI docs, no docstrings on unchanged code, no unsolicited background tasks
 - No summaries >3 lines, no unnecessary type annotations or "improvements"

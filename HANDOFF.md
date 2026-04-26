@@ -9,11 +9,15 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** 24aae18c — chore(stages): close session-start-mutex-tests-aq-surfacer + pre-commit-autoformat-gitignore-fix
-- **Files changed:** 3 files
+- **Commit:** 1a49af91 — feat(hooks): main-CI-red pre-flight + pooled-finding path-scope leak fix
+- **Files changed:** 7 files
+  - `.claude/hooks/session-start.py`
+  - `.claude/hooks/tests/__init__.py`
+  - `.claude/hooks/tests/test_main_ci_preflight.py`
+  - `.claude/rules/pooled-finding-rule.md`
   - `HANDOFF.md`
-  - `docs/runtime/stages/pre-commit-autoformat-gitignore-fix.md`
-  - `docs/runtime/stages/session-start-mutex-tests-aq-surfacer.md`
+  - `docs/plans/2026-04-26-token-efficiency-design.md`
+  - `docs/runtime/stages/main-ci-preflight.md`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 
