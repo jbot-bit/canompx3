@@ -71,8 +71,8 @@ This plan burns down the remaining known CRIT/HIGH work. **Success:** every CRIT
 | 175-m | mechanical | Ledger update | `ac8e0169` | n/a | n/a |
 | 176 | judgment fix | R3 reconnect ceiling plus stable-run reset | `64d0952d` | ACCEPT | pending iter 178 |
 | 176-m | mechanical | Ledger update | `f40ac4dd` | n/a | n/a |
-| 177 | judgment fix | C1 kill-switch event-loop race plus T1, T2, T4 tests | — | in flight | — |
-| 178 | judgment audit-only | Adversarial audit of iters 176 and 177 | — | — | — |
+| 177 | judgment fix | C1 kill-switch event-loop race plus T1, T2, T4 tests | f8f993b7 | ACCEPT | PASS (iter 178) |
+| 178 | judgment audit-only | Adversarial audit of iters 176 and 177 | da2c4dfb | ACCEPT | PASS — no CRIT/HIGH, 4 LOW all ACCEPTABLE |
 | 179 | judgment fix | Hardening Pass one: shutdown helper plus kill-switch drift check | — | — | — |
 | 180 | judgment docs | Hardening Pass two: durable plan file plus audit-gate rule | — | — | — |
 | 181 | judgment fix | R4 live signals log rotation | — | — | — |
@@ -171,8 +171,8 @@ Mechanical and ledger commits are exempt.
 | Iter 174 | F4 fix landed; 4 of 4 mutation-proof tests PASS; drift 107 of 107; audit CONDITIONAL (C1) |
 | Iter 175 | R1 fix landed; mutation-proof tests PASS; drift 107 of 107; audit CONDITIONAL (S2/S3/S4) |
 | Iter 176 | R3 fix landed; 4 tests PASS; drift 107 of 107; audit pending iter 178 |
-| Iter 177 | C1 fix plus T1/T2/T4 tests; audit in iter 178 |
-| Iter 178 | Adversarial audit of iters 176 and 177 |
+| Iter 177 | C1 fix plus T1/T2/T4 tests; 166/166; drift 107/107; commit f8f993b7 |
+| Iter 178 | Adversarial audit iters 176+177; PASS; 4 LOW ACCEPTABLE; commit da2c4dfb |
 | Iter 179 | Pass one complete; drift 114 of 114 |
 | Iter 180 | Pass two complete; plan file and rule file landed |
 | Iter 181 to 186 | R4, audit, R5, audit, F7, audit |

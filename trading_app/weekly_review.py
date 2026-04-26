@@ -39,42 +39,46 @@ def section_0_account_health():
         print("  No HWM tracker files found. Will init on first live session.")
         return
 
+    # Stage 3 of HWM persistence integrity hardening: delegate JSON parsing
+    # to the canonical reader. Corrupt files no longer print to stdout —
+    # granular reason captured by read_state_file's log.warning.
+    from trading_app.account_hwm_tracker import read_state_file
+
     for f in hwm_files:
         if "CORRUPT" in f.name:
             continue
-        try:
-            data = json.loads(f.read_text())
-            acct = data.get("account_id", "?")
-            firm = data.get("firm", "?")
-            equity = data.get("last_equity", 0)
-            hwm = data.get("hwm_dollars", 0)
-            used = data.get("dd_used_dollars", 0)
-            limit_d = data.get("dd_limit_dollars", 0)
-            pct = data.get("dd_pct_used", 0)
-            halted = data.get("halt_triggered", False)
+        data = read_state_file(f)
+        if data is None:
+            continue  # granular reason in operator logs via read_state_file
+        acct = data.get("account_id", "?")
+        firm = data.get("firm", "?")
+        equity = data.get("last_equity", 0)
+        hwm = data.get("hwm_dollars", 0)
+        used = data.get("dd_used_dollars", 0)
+        limit_d = data.get("dd_limit_dollars", 0)
+        pct = data.get("dd_pct_used", 0)
+        halted = data.get("halt_triggered", False)
 
-            status = "HALTED" if halted else ("WARNING" if pct >= 0.75 else "OK")
-            flag = " ***" if pct >= 0.50 else ""
-            pct_display = pct * 100 if pct <= 1.0 else pct  # stored as decimal (0.75) or pct (75.0)
-            print(
-                f"  {acct:<15} {firm:<12} ${equity:>9,.0f} ${hwm:>9,.0f} "
-                f"${used:>9,.0f} ${limit_d:>9,.0f} {pct_display:>7.1f}% {status:>10}{flag}"
-            )
+        status = "HALTED" if halted else ("WARNING" if pct >= 0.75 else "OK")
+        flag = " ***" if pct >= 0.50 else ""
+        pct_display = pct * 100 if pct <= 1.0 else pct  # stored as decimal (0.75) or pct (75.0)
+        print(
+            f"  {acct:<15} {firm:<12} ${equity:>9,.0f} ${hwm:>9,.0f} "
+            f"${used:>9,.0f} ${limit_d:>9,.0f} {pct_display:>7.1f}% {status:>10}{flag}"
+        )
 
-            # Session history
-            sessions = data.get("session_log", [])
-            if sessions:
-                recent = sessions[-3:]  # last 3 sessions
-                for s in recent:
-                    s_dd = s.get("session_dd", 0)
-                    print(
-                        f"    {s.get('date', '?')[:10]}: "
-                        f"start=${s.get('start_equity', 0):,.0f} "
-                        f"end=${s.get('end_equity', 0):,.0f} "
-                        f"dd=${s_dd:+,.0f}"
-                    )
-        except Exception as e:
-            print(f"  ERROR: {f.name}: {e}")
+        # Session history
+        sessions = data.get("session_log", [])
+        if sessions:
+            recent = sessions[-3:]  # last 3 sessions
+            for s in recent:
+                s_dd = s.get("session_dd", 0)
+                print(
+                    f"    {s.get('date', '?')[:10]}: "
+                    f"start=${s.get('start_equity', 0):,.0f} "
+                    f"end=${s.get('end_equity', 0):,.0f} "
+                    f"dd=${s_dd:+,.0f}"
+                )
 
 
 def section_0b_consistency():

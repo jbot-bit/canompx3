@@ -3,62 +3,75 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 185
+## Last iteration: 178
 
-## RALPH AUDIT — Iteration 185
-## Date: 2026-04-25
-## Infrastructure Gates: drift 116/116 PASS (110 non-advisory + 6 advisory); 182/182 test_session_orchestrator.py PASS
-## Scope: F7 (HIGH) — Fill poller stuck PENDING consumes lane concurrency slot indefinitely
+## RALPH AUDIT — Iteration 178
+## Date: 2026-04-26
+## Infrastructure Gates: drift 93/93 PASS (16 skipped DB unavailable, 4 advisory); 181/181 test_session_orchestrator.py PASS; behavioral audit 7/7 PASS
+## Scope: Adversarial audit of iters 176 (R3) and 177 (C1) per burndown plan v5.2
 
 ---
 
-## Iteration 185 — F7 Fill-Poller PENDING Timeout + Halt-on-Broker-Stuck
+## Iteration 178 — Adversarial Audit of R3 + C1
 
-| Sin | Finding | Severity | Status |
-|-----|---------|----------|--------|
-| Silent failure / Fail-open (institutional-rigor.md § 6; integrity-guardian.md § 3) | `_fill_poller` had no timeout on PENDING_ENTRY orders. A broker that never returns FILLED (network drop, rejected-silently, broker bug) would loop forever: lane concurrency slot consumed indefinitely, no operator alert, no cancel, no halt. Worst case: broker resolves FILLED later with no kill-switch armed for that position → naked exposure. | HIGH | FIXED — iter 185 |
+### Audit Target
+- Iter 176 fix: R3 reconnect ceiling (ORCHESTRATOR_MAX_RECONNECTS 5→50 + stable-run reset)
+- Iter 177 fix: C1 kill-switch race in _handle_event ENTRY branch
 
-### Fix Summary
-- `FILL_POLL_TIMEOUT_SECS = 60.0` (with Rationale comment): hard cap per PENDING_ENTRY order before escalation.
-- `FILL_CANCEL_VERIFY_TIMEOUT_SECS = 15.0` (with Rationale comment): post-cancel verify window — 15s for broker round-trip.
-- `_handle_fill_timeout(order_id, strategy_id, last_state)` helper: encapsulates the full cancel→verify→halt-or-release protocol. Source-markers on every branch: F7-NOTIFY-ALERT, F7-CANCEL-CALL, F7-CANCEL-VERIFY, F7-LANE-RELEASE, F7-HALT-ON-STUCK, F7-KILL-SWITCH-CALL.
-  - Step 1: `_notify` operator alert with full order context.
-  - Step 2: `order_router.cancel(order_id)`.
-  - Step 3: Wait `FILL_CANCEL_VERIFY_TIMEOUT_SECS`, re-query broker status.
-    - Cancelled/Rejected/Filled: release lane slot, `engine.cancel_trade`, log WARNING.
-    - Still PENDING (or verify exception): `log.critical` + `_notify` + `_fire_kill_switch` (halt).
-  - Step 4: Release lane slot regardless of cancel outcome (state-machine consistency).
-- `_fill_poller` modifications:
-  - Per-order `_timeout_anchors` dict keyed by `strategy_id`. Seeded on first poll cycle from `record.state_changed_at`.
-  - On each cycle: `elapsed = now - anchor`. If `> FILL_POLL_TIMEOUT_SECS`, call `_handle_fill_timeout` and continue (skip normal poll for that order).
-  - Anchor cleaned on fill/cancel confirmation.
-- R3 cross-fix: `_fill_reconnect_gen: int = 0` counter added to `__init__`. Incremented on each broker reconnect in `run()`. Fill poller detects generation change → clears all timeout anchors so reconnect-during-pending gets a fresh 60s window (prevents double-charging the timer across a disconnect gap).
-- `_fill_reconnect_gen = 0` wired into `build_orchestrator()` test helper.
-- Drift check 116: enforces FILL_POLL_TIMEOUT_SECS + FILL_CANCEL_VERIFY_TIMEOUT_SECS + `_handle_fill_timeout` present + `_fill_poller` calls handler.
-- 7 new tests in `TestFillPollerF7Timeout` (182 total, up from 175):
-  1. `test_timeout_fires_cancel_and_lane_release`
-  2. `test_timeout_broker_still_pending_fires_halt`
-  3. `test_happy_path_no_timeout` (regression guard)
-  4. `test_kill_switch_mid_poll_exits_cleanly`
-  5. `test_trading_day_rollover_mid_poll_exits_cleanly`
-  6. `test_reconnect_resets_timeout_anchor`
-  7. `test_timeout_verify_query_failure_still_halts`
+### Semi-Formal Reasoning
 
-### Doctrine Cited
-- institutional-rigor.md § 6 (no silent failures — operator MUST be alerted on timeout)
-- integrity-guardian.md § 3 (fail-closed: broker unreachable on verify = halt, not ignore)
+**R3 (iter 176):**
 
-### Verification
-- 182/182 tests green (up from 175 — 7 new F7 tests)
-- 116/116 drift PASS (check 116 newly added)
-- Pre-commit: 8/8 checks PASS
-- Commit: f69b9fd8
+PREMISE: The stable-run reset correctly converts the monotonic ceiling to a rate-limit ceiling without introducing infinite-reconnect risk in flap-only scenarios.
+
+TRACE:
+- `session_orchestrator.py:2899` — `while reconnect_count <= ORCHESTRATOR_MAX_RECONNECTS`
+- `session_orchestrator.py:2949-2958` — stable-run check: if `feed_up_secs >= threshold`, reset `reconnect_count = 0`
+- `session_orchestrator.py:2969` — `if reconnect_count < ORCHESTRATOR_MAX_RECONNECTS: reconnect_count += 1`
+- If NO stable run and reconnect_count=50: `50 < 50 = False` → break → Exhausted message
+- If stable run and reconnect_count=50: reset to 0, then `0 < 50 = True` → increment to 1 → continue
+
+EVIDENCE: Traced code paths. For pure-flap scenario (no stable run): counter accumulates monotonically to 50, loop breaks, session halts. For alternating stable/crash: counter resets after each stable run — by design.
+
+VERDICT: SUPPORT (R3 logic is correct)
+
+**C1 (iter 177):**
+
+PREMISE: The C1 guard at top of ENTRY branch prevents event N+1 broker submission after kill-switch fires for event N; guard is correctly scoped (ENTRY-only, not blanket).
+
+TRACE:
+- `session_orchestrator.py:1684-1685` — sequential `for event in events: await self._handle_event(event)` — no concurrent execution; kill-switch set synchronously by event_a's `_fire_kill_switch()` is visible to event_b's guard check
+- `session_orchestrator.py:2008-2017` — `if event.event_type == "ENTRY": if self._kill_switch_fired: return`
+- `session_orchestrator.py:2362` — `elif event.event_type in ("EXIT", "SCRATCH"):` — structurally after the ENTRY branch; kill-switch guard cannot reach
+
+EVIDENCE: Code trace confirms ENTRY-only guard. Async safety: no `await` between guard check and the broker submit path that fires kill-switch. Sequential event loop guarantees kill-switch visibility.
+
+VERDICT: SUPPORT (C1 guard is correct and ENTRY-only)
+
+### Findings
+
+| ID | Severity | Finding | Verdict |
+|----|----------|---------|---------|
+| R3-A | LOW | "Exhausted N reconnects" message off-by-1 (N+1 feed attempts actually run). Inherited from original range(MAX+1) — not new regression. | ACCEPTABLE — cosmetic, inherited |
+| R3-B | LOW | Stable-run reset allows indefinite reconnects if feed alternates stable/crash | ACCEPTABLE — by design, rate-limit ceiling is the R3 fix intent |
+| R3-C | LOW | `last_connected_at` persisted and loaded but never read for decisions — informational only | ACCEPTABLE — informational persistence; in-memory counter is the mechanism |
+| C1-A | PASS | ENTRY guard correctly scoped; EXIT/SCRATCH structurally cannot reach guard | PASS |
+| C1-B | PASS | T4 patches _handle_event itself; structural ENTRY-branch constraint is stronger | PASS |
+| C1-C | LOW | `_notify` in C1 guard can raise — same pattern at 20+ other sites; not new regression | ACCEPTABLE — same upstream pattern, not new |
+
+### Overall Verdict: PASS
+No CRITICAL or HIGH findings in adversarial audit of iters 176 and 177.
+R3 and C1 fixes are institutionally sound. Stage 2 (HWM tracker integrity package) is cleared to proceed.
+
+### Infrastructure Gate Results
+- check_drift.py: 93 PASS, 16 skip (DB unavailable), 4 advisory — NO DRIFT DETECTED
+- test_session_orchestrator.py: 181/181 PASS
+- audit_behavioral.py: 7/7 PASS
 
 ---
 
 ## Files Fully Scanned
-- trading_app/live/session_orchestrator.py (iters 173, 174, 175, 176, 185)
-- trading_app/live/session_safety_state.py (iter 176)
-- trading_app/live/position_tracker.py (iter 185 — read for state_changed_at and PositionRecord)
-- tests/test_trading_app/test_session_orchestrator.py (iters 173, 174, 175, 176, 185)
+- trading_app/live/session_orchestrator.py (iters 173, 174, 175, 176, 177, 178)
+- trading_app/live/session_safety_state.py (iters 176, 178)
+- tests/test_trading_app/test_session_orchestrator.py (iters 173, 174, 175, 176, 177, 178)
 - scripts/infra/telegram_feed.py (iter 173)
