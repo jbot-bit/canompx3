@@ -1726,6 +1726,16 @@ def build_daily_features(
         con.execute("COMMIT")
 
         logger.info(f"  Inserted {len(rows):,} daily_features rows")
+
+        # Post-pass enrichment: populate pit_range_atr from exchange_statistics
+        # for the freshly-written slice. PitRangeFilter is fail-closed at
+        # eligibility time, so a missing upstream stats row drops that day
+        # from any PIT_MIN-gated lane rather than silently passing.
+        from pipeline.backfill_pit_range_atr import enrich_date_range
+
+        populated = enrich_date_range(con, symbol, start_date, end_date)
+        logger.info(f"  pit_range_atr: {populated:,} rows populated in written slice")
+
         return len(rows)
 
     except Exception as e:

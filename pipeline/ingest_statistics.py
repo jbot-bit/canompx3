@@ -5,7 +5,8 @@ Ingest CME exchange statistics into exchange_statistics table.
 Reads statistics files (databento .dbn.zst) and extracts per-calendar-date
 statistics (session high/low, settlement, OI, volume) for front-month contracts.
 Populates the exchange_statistics table. The pit_range_atr column in
-daily_features is backfilled separately using the data stored here.
+daily_features is populated by pipeline/backfill_pit_range_atr.py, which
+reads this table and writes the computed ratio back to daily_features.
 
 Idempotent: DELETE+INSERT per instrument. Safe to re-run.
 
