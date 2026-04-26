@@ -4,6 +4,7 @@ Use this file for unresolved integrity, runtime, and context debt that should re
 
 ## Open Debt
 
+- `l6-us-data-2026-diagnostic-recovered` — L6 `US_DATA_1000` 2026 breakdown diagnostic recovered from stash archive 2026-04-26. Audit + supporting script landed via `recover/l6-us-data-2026-diagnostic`; needs author review of findings before exiting deferred. Refs: `docs/audit/results/2026-04-21-l6-us-data-2026-diagnostic.md`, `docs/runtime/stages/l6-us-data-1000-2026-diagnostic.md`, `research/audit_l6_us_data_2026_breakdown.py`.
 - `phase4-hypothesis-sha` — Phase 4 hypothesis SHA integrity debt remains an explicit unresolved item until repaired or quarantined.
 - `operator-pulse-latency` — `project_pulse --fast` should stay bounded enough for frequent shell use and must avoid broad startup scans.
 - `capsule-hygiene` — Work capsules need disciplined upkeep so scope, verification, and ledger refs remain accurate.
