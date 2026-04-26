@@ -2518,8 +2518,13 @@ class SessionOrchestrator:
                 }
             )
 
-    # Kill switch: emergency flatten if feed dies with open positions.
-    # 5 minutes of silence = assume feed is dead. This is the last line of defense.
+    # Rationale: kill switch — emergency flatten if feed dies with open
+    # positions. 300s (5 min) of silence is the assume-feed-is-dead threshold:
+    # well past any normal websocket reconnect (typically <30s) yet short
+    # enough that an actually-dead feed gets flatlined before next bar window.
+    # 30s check interval gives 10 evaluations per timeout window — enough
+    # resolution to trip on real silence, infrequent enough to avoid log
+    # noise. This is the last line of defense (institutional-rigor.md § 6).
     KILL_SWITCH_TIMEOUT = 300.0  # seconds without a bar before emergency flatten
     KILL_SWITCH_CHECK_INTERVAL = 30.0  # how often the watchdog checks
 
@@ -3037,12 +3042,13 @@ class SessionOrchestrator:
     ORCHESTRATOR_MAX_RECONNECTS = 50
     ORCHESTRATOR_BACKOFF_INITIAL = 30.0
     ORCHESTRATOR_BACKOFF_MAX = 300.0
-    # R3: if a feed connection is UP for at least this many seconds, it counts as
-    # a "stable run" — the reconnect counter resets to 0. This converts the ceiling
-    # from a monotonic lifetime counter to a rate-limit ceiling: N reconnects per
-    # stable-session window. 1800s (30 min) is operationally meaningful: it covers
-    # startup flap (first few minutes) and ensures we're past the initial auth/WS
-    # negotiation phase before granting a reset.
+    # Rationale (R3): if a feed connection is UP for at least this many seconds,
+    # it counts as a "stable run" — the reconnect counter resets to 0. This
+    # converts the ceiling from a monotonic lifetime counter to a rate-limit
+    # ceiling: N reconnects per stable-session window. 1800s (30 min) is
+    # operationally meaningful: it covers startup flap (first few minutes) and
+    # ensures we're past the initial auth/WS negotiation phase before granting
+    # a reset.
     ORCHESTRATOR_STABLE_RUN_SECS = 1800
 
     async def run(self) -> None:

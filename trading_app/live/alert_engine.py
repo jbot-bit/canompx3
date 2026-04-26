@@ -19,6 +19,10 @@ log = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 ALERTS_PATH = PROJECT_ROOT / "data" / "runtime" / "operator_alerts.jsonl"
+# Rationale: 30 min de-dup window for "recent alert" lookback. Long enough
+# to suppress repeated spam from a single underlying condition (e.g. a
+# data-feed stale chain firing every minute), short enough that a fresh
+# instance of the same condition after recovery still pages the operator.
 RECENT_ALERT_WINDOW_MINUTES = 30
 
 
