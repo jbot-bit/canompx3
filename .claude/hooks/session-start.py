@@ -199,6 +199,77 @@ def _origin_drift_lines() -> list[str]:
     return [f"  Origin: {state} vs origin/main — {guidance}"]
 
 
+def _parallel_session_lines() -> list[str]:
+    """Detect other active worktrees and warn on cross-session collision risk.
+
+    Reports each worktree (other than the current one), its branch, and whether
+    it has uncommitted changes. If 2+ worktrees are dirty simultaneously this
+    is the documented "open 2 terminals and start working" failure mode — it
+    causes CRLF noise, lost stashes, and merge conflicts.
+
+    Output is informational at start, escalating to a warning when 2+ dirty
+    worktrees coexist.
+    """
+    rc, out = _git(["worktree", "list", "--porcelain"])
+    if rc != 0 or not out:
+        return []
+
+    rc_pwd, current_path = _git(["rev-parse", "--show-toplevel"])
+    if rc_pwd != 0:
+        return []
+    current_path = current_path.strip()
+
+    # Parse worktree blocks: each starts with `worktree <path>`
+    worktrees: list[dict[str, str]] = []
+    block: dict[str, str] = {}
+    for line in out.splitlines():
+        if not line.strip():
+            if block:
+                worktrees.append(block)
+                block = {}
+        elif line.startswith("worktree "):
+            block["path"] = line[len("worktree "):].strip()
+        elif line.startswith("branch "):
+            block["branch"] = line[len("branch "):].strip().replace("refs/heads/", "")
+        elif line.startswith("HEAD "):
+            block["head"] = line[len("HEAD "):].strip()[:8]
+    if block:
+        worktrees.append(block)
+
+    others = [w for w in worktrees if w.get("path") and w["path"] != current_path]
+    if not others:
+        return []
+
+    # Check dirtiness of each other worktree
+    lines = [f"  Parallel worktrees: {len(others)} other active"]
+    dirty_count = 0
+    for w in others[:6]:  # cap noise
+        wt_path = w.get("path", "?")
+        wt_branch = w.get("branch", w.get("head", "?"))
+        rc_st, st = _git(["-C", wt_path, "status", "--porcelain"], timeout=3)
+        is_dirty = rc_st == 0 and bool(st.strip())
+        if is_dirty:
+            dirty_count += 1
+        marker = " [DIRTY]" if is_dirty else ""
+        # Trim path for display
+        display_path = wt_path.split("/")[-1] if "/" in wt_path else wt_path
+        lines.append(f"    - {display_path} on {wt_branch}{marker}")
+
+    rc_self_st, self_st = _git(["status", "--porcelain"])
+    self_dirty = rc_self_st == 0 and bool(self_st.strip())
+
+    if self_dirty and dirty_count >= 1:
+        lines.append(
+            f"  WARNING: {dirty_count + 1} dirty worktrees active — "
+            "edit collision/CRLF/stash-loss risk."
+        )
+        lines.append(
+            "  Each Claude session should work in its own worktree. "
+            "Spawn one: scripts/tools/new_session.sh"
+        )
+    return lines
+
+
 def main() -> None:
     try:
         event = json.load(sys.stdin)
@@ -232,6 +303,7 @@ def main() -> None:
 
     if lines:
         lines.extend(_origin_drift_lines())
+        lines.extend(_parallel_session_lines())
         print("\n".join(lines), file=sys.stderr)
 
     sys.exit(0)
