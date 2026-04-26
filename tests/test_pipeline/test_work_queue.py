@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from pipeline import work_queue
+
+# Frozen reference clock used by tests that exercise staleness logic.
+# Seeded items use last_verified_at 2026-04-24 (sla=2d) and 2026-04-10 (sla=1d).
+# Reference 2026-04-25 00:00 UTC: `first` is fresh (24+2=26 > 25), `second` is stale.
+_TEST_NOW = datetime(2026, 4, 25, 0, 0, tzinfo=UTC)
 
 
 def _mkfile(path: Path, content: str) -> None:
@@ -71,7 +77,7 @@ class TestRenderHandoff:
         _seed_queue(tmp_path)
         _mkfile(tmp_path / "HANDOFF.md", "# stale\n")
 
-        snapshot = work_queue.queue_snapshot(tmp_path)
+        snapshot = work_queue.queue_snapshot(tmp_path, now=_TEST_NOW)
 
         assert snapshot.exists is True
         assert snapshot.handoff_matches_rendered is False
