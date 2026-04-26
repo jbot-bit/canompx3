@@ -665,6 +665,9 @@ class SessionOrchestrator:
         #   Polls broker equity every ~10 bars. Triggers kill switch on breach.
         # BOTH layers must clear before any order is submitted.
         # Layer 1 resets daily. Layer 2 never resets automatically.
+        # Signal-only sessions: HWM tracker intentionally NOT constructed.
+        # pre_session_check.check_hwm_tracker is the DD authority for
+        # signal-only — operates on persisted state files.
         self._hwm_tracker = None
         if not signal_only and portfolio is not None and portfolio.strategies:
             first = portfolio.strategies[0]
@@ -705,6 +708,7 @@ class SessionOrchestrator:
                                 dd_limit_dollars=float(tier.max_dd),
                                 dd_type=firm_spec.dd_type,
                                 freeze_at_balance=freeze,
+                                notify_callback=self._notify,  # Stage 3 wire-up — operator-visible state-integrity events
                             )
                             # Query initial equity from broker
                             if self.positions is not None:
@@ -1638,8 +1642,31 @@ class SessionOrchestrator:
                         self._notify(f"ACCOUNT DD LIMIT: {reason}")
                         self._fire_kill_switch()
                         await self._emergency_flatten()
-                    elif "WARN" in reason:
+                    elif reason is not None and "WARN" in reason:
+                        # Stage 1 of HWM persistence integrity hardening (2026-04-25 design v3).
+                        # Wire warning tier to operator. Pre-fix this branch was log.warning-only,
+                        # leaving the operator unaware of 50%/75% DD crossings on a 24h overnight
+                        # run until the full halt fires at 100%. The 50/75 tiers exist precisely
+                        # for advance Telegram notice. See:
+                        #   docs/plans/2026-04-25-hwm-persistence-integrity-hardening-design.md § 4
+                        #   .claude/rules/institutional-rigor.md § 6 — no silent failures
+                        # `reason is not None` guard added per Stage 1 audit-gate CRITICAL-1
+                        # (2026-04-25): if check_halt() returns (False, None), `"WARN" in None`
+                        # raises TypeError caught silently by the bare except below — recreating
+                        # the very silent-failure mode this stage closes.
                         log.warning("HWM: %s", reason)
+                        self._notify(f"HWM WARNING: {reason}")
+                    elif reason is None:
+                        # Stage 1 fix-up — STAGE1-GAP-1 (2026-04-26 audit-gate CONDITIONAL).
+                        # check_halt() never returns (False, None) in current tracker code, but
+                        # a future refactor or mock misconfiguration could regress the contract.
+                        # Log-only (no notify) — contract drift is a developer-visible signal,
+                        # not an operator-actionable DD event. See:
+                        #   docs/runtime/stages/hwm-stage1-gap1-none-reason-contract-guard.md
+                        log.warning(
+                            "HWM check_halt returned (False, None) — tracker contract drift; "
+                            "expected non-None reason string"
+                        )
                 except Exception as inner:
                     # update_equity / check_halt should never raise. If they do, log loud
                     # but keep the bar loop alive — the tracker is degraded but the engine
@@ -3387,8 +3414,20 @@ class SessionOrchestrator:
                     self._hwm_tracker.record_session_end(end_equity)
                     _, reason = self._hwm_tracker.check_halt()
                     log.info("HWM session close: %s", reason)
+                else:
+                    # SILENT-4 (Stage 3): EOD equity unavailable — operator-visible
+                    # unless kill switch already fired (operator already notified by
+                    # the kill-switch path; suppression prevents duplicate alerts).
+                    msg = "HWM EOD: broker equity unavailable — session-end DD not recorded"
+                    log.warning(msg)
+                    if not self._kill_switch_fired:
+                        self._notify(msg)
             except Exception as e:
-                log.warning("HWM session-end recording failed: %s", e)
+                # SILENT-4 (Stage 3): EOD recording exception — same suppression rule.
+                msg = f"HWM EOD: session-end recording failed: {e}"
+                log.warning(msg)
+                if not self._kill_switch_fired:
+                    self._notify(msg)
 
         # EOD position reconciliation (M2.5 P0)
         if self.positions and not self.signal_only:

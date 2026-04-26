@@ -5,16 +5,29 @@
 
 ---
 
-## Iteration 185 — 2026-04-25
+## Iteration 178 — 2026-04-26
+- Phase: audit-only
+- Classification: [judgment]
+- Target: trading_app/live/session_orchestrator.py + trading_app/live/session_safety_state.py (R3 iter 176 + C1 iter 177)
+- Finding: Adversarial audit of R3 (reconnect ceiling + stable-run reset) and C1 (kill-switch ENTRY guard race). No CRITICAL or HIGH findings discovered.
+- Doctrine cited: adversarial-audit-gate.md (independent context audit); institutional-rigor.md § 2 (review the fix); integrity-guardian.md § 3 (fail-closed)
+- Action: Audit-only. 4 LOW findings all ACCEPTABLE (R3-A inherited off-by-1 message, R3-B by-design infinite-reconnect in alternating scenario, R3-C informational-only persistence, C1-C notify-raise pattern same as 20+ other sites). R3 and C1 confirmed institutionally sound. Stage 2 cleared.
+- Blast radius: 0 files changed
+- Verification: PASS — 181/181 tests green, 93/93 drift pass, 7/7 behavioral audit pass
+- Commit: NONE (audit-only)
+
+---
+
+## Iteration 177 — 2026-04-25
 - Phase: fix
 - Classification: [judgment]
-- Target: trading_app/live/session_orchestrator.py:2749 (_fill_poller)
-- Finding: Fill poller stuck PENDING consumes lane concurrency slot indefinitely — no timeout, no cancel, no halt on broker-stuck, naked exposure risk
-- Doctrine cited: institutional-rigor.md § 6 (no silent failures), integrity-guardian.md § 3 (fail-closed)
-- Action: Added FILL_POLL_TIMEOUT_SECS=60 + FILL_CANCEL_VERIFY_TIMEOUT_SECS=15 constants; _handle_fill_timeout helper (cancel→verify→halt-or-release with source-markers on every branch); per-order timeout anchors in _fill_poller; R3 cross-fix _fill_reconnect_gen counter; drift check 116; 7 new F7 tests
-- Blast radius: 3 files (session_orchestrator.py, test_session_orchestrator.py, check_drift.py)
-- Verification: PASS (182/182 tests, 116/116 drift, 8/8 pre-commit)
-- Commit: f69b9fd8
+- Target: trading_app/live/session_orchestrator.py:_handle_event ENTRY branch (top guard)
+- Finding: C1 CRITICAL — _handle_event had no _kill_switch_fired guard; event N+1 in same bar's loop could submit NEW broker entry after kill-switch fired for event N
+- Doctrine cited: institutional-rigor.md § 2 (adversarial-audit gate: review the fix); integrity-guardian.md § 3 (fail-closed)
+- Action: Added ENTRY-only guard (if self._kill_switch_fired: log.critical + _notify + return) at top of ENTRY branch. EXIT/SCRATCH unaffected. 4 mutation-proof tests (T2 two-event race, T1 emergency_flatten retries exhausted, T4 rollover EOD closes unblocked, source marker).
+- Blast radius: 2 files (session_orchestrator.py, test_session_orchestrator.py)
+- Verification: PASS — 166/166 tests green, 107/107 drift
+- Commit: f8f993b7
 
 ---
 

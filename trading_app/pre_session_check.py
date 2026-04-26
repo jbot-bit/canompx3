@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import json
+import logging
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -22,6 +23,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.lifecycle_state import read_lifecycle_state
+
+# Module logger — granular operator-log reasons on fail-closed paths
+# (institutional-rigor.md § 6: every fail-closed branch records the reason).
+log = logging.getLogger(__name__)
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -125,31 +130,40 @@ def check_paper_trades_accessible(con) -> tuple[bool, str]:
 def check_dd_circuit_breaker() -> tuple[bool, str]:
     """Check DD status from AccountHWMTracker state files.
 
-    Replaces the previous dd_circuit_breaker.json ghost check (file was never
-    written by any code path). Now reads the authoritative HWM tracker state
-    which IS written by session_orchestrator on every equity poll.
+    Reads the authoritative HWM tracker state via the shared
+    `account_hwm_tracker.read_state_file` helper. Corrupt or unreadable
+    state files block the check (fail-closed per integrity-guardian.md § 3).
+
+    Stage 3 of HWM persistence integrity hardening: delegates JSON parsing
+    to the canonical reader. Granular failure reasons (missing / empty /
+    corrupt / OSError) are captured by the helper's log.warning calls.
     """
-    # Primary: check HWM tracker state files (authoritative source)
+    from trading_app.account_hwm_tracker import read_state_file
+
     hwm_files = list(STATE_DIR.glob("account_hwm_*.json"))
     hwm_files = [f for f in hwm_files if "CORRUPT" not in f.name]
-    if hwm_files:
-        for f in hwm_files:
-            try:
-                text = f.read_text()
-                if not text.strip():
-                    return False, f"BLOCKED: HWM file unreadable ({f.name} is empty)"
-                data = json.loads(text)
-                if data.get("halt_triggered"):
-                    return (
-                        False,
-                        f"DD HALT ACTIVE: account {data.get('account_id', '?')} — DD ${data.get('dd_used_dollars', 0):.0f} >= limit ${data.get('dd_limit_dollars', 0):.0f}",
-                    )
-            except (json.JSONDecodeError, ValueError):
-                return False, f"BLOCKED: HWM file unreadable ({f.name} is corrupt)"
-            except OSError:
-                return False, f"BLOCKED: HWM file unreadable ({f.name})"
-        return True, "DD circuit breaker: clear (HWM tracker)"
-    return True, "No DD tracker state (first session — will init from broker)"
+    if not hwm_files:
+        return True, "No DD tracker state (first session — will init from broker)"
+
+    for f in hwm_files:
+        data = read_state_file(f)
+        if data is None:
+            return False, f"BLOCKED {f.name}: state file unreadable (see logs)"
+        # Narrow defensive scope: a state file with valid JSON shape but
+        # wrong field types (e.g. dd_used_dollars stored as a string)
+        # would raise during numeric formatting. Fail-closed per
+        # integrity-guardian.md § 3 — DD state cannot be verified.
+        try:
+            if data.get("halt_triggered"):
+                return (
+                    False,
+                    f"DD HALT ACTIVE: account {data.get('account_id', '?')} — "
+                    f"DD ${data.get('dd_used_dollars', 0):.0f} >= "
+                    f"limit ${data.get('dd_limit_dollars', 0):.0f}",
+                )
+        except (TypeError, ValueError) as exc:
+            return False, f"BLOCKED {f.name}: field-type error: {exc}"
+    return True, "DD circuit breaker: clear (HWM tracker)"
 
 
 def check_daily_equity(profile_id: str | None = None) -> tuple[bool, str]:
@@ -199,7 +213,16 @@ def check_slippage_pilot_progress(con) -> str:
 
 
 def check_hwm_tracker() -> tuple[bool, str]:
-    """Check account HWM DD tracker status."""
+    """Check account HWM DD tracker status.
+
+    Stage 3 of HWM persistence integrity hardening: delegates JSON parsing
+    to the canonical `account_hwm_tracker.read_state_file` reader. Corrupt
+    or unreadable state files fail-closed (any_halt=True) with the unified
+    `BLOCKED <filename>:` message format. Granular failure reasons are
+    captured by the helper's log.warning calls.
+    """
+    from trading_app.account_hwm_tracker import read_state_file
+
     hwm_files = list(STATE_DIR.glob("account_hwm_*.json"))
     if not hwm_files:
         return True, "No HWM tracker active (first session — will init from broker)"
@@ -209,8 +232,16 @@ def check_hwm_tracker() -> tuple[bool, str]:
     for f in hwm_files:
         if "CORRUPT" in f.name:
             continue
+        data = read_state_file(f)
+        if data is None:
+            any_halt = True  # fail-closed: can't verify DD state → block
+            results.append(f"BLOCKED {f.name}: state file unreadable")
+            continue
+        # Narrow defensive scope: a state file with valid JSON shape but
+        # wrong field types (e.g. dd_used_dollars stored as a string)
+        # would raise during numeric formatting. Fail-closed per
+        # integrity-guardian.md § 3.
         try:
-            data = json.loads(f.read_text())
             acct = data.get("account_id", "?")
             hwm = data.get("hwm_dollars", 0)
             used = data.get("dd_used_dollars", 0)
@@ -230,12 +261,110 @@ def check_hwm_tracker() -> tuple[bool, str]:
                 )
             else:
                 results.append(f"OK {acct}: DD ${used:.0f}/{limit:.0f} ({pct:.0%}) — ${remaining:.0f} remaining")
-        except Exception as e:
-            any_halt = True  # fail-closed: can't verify DD state → block
-            results.append(f"BLOCKED {f.name}: {e}")
+        except (TypeError, ValueError) as exc:
+            any_halt = True  # fail-closed: malformed field types
+            results.append(f"BLOCKED {f.name}: field-type error: {exc}")
 
     msg = " | ".join(results)
     return (not any_halt), f"DD TRACKER: {msg}"
+
+
+def check_topstep_inactivity_window() -> tuple[bool, str]:
+    """Pre-session pre-flight: surface the TopStep XFA inactivity-closure boundary.
+
+    For each non-CORRUPT account_hwm_*.json in STATE_DIR, compute age in days
+    via the canonical account_hwm_tracker.state_file_age_days helper (single
+    source of truth — never reimplement the age computation; integrity-
+    guardian.md § 2 + institutional-rigor.md § 4).
+
+    Verdicts:
+      - <25 days: OK
+      - >=25 and <30 days: WARNING (still OK to proceed; operator action buffer)
+      - >=30 days: BLOCKED (fail-closed per integrity-guardian.md § 3)
+      - state_file_age_days returns None: BLOCKED (fail-closed; granular
+        reason captured by the helper's own logging)
+
+    @canonical-source: docs/research-input/topstep/topstep_xfa_parameters.txt:351 —
+        "If there is no trading activity (no trades entered) on your Express
+        Funded Account for more than 30 days, it may be subject to closure
+        due to inactivity."
+    @verbatim: see source file at line 351 for exact wording
+    @audit-finding: HWM persistence integrity audit 2026-04-25 (UNSUPPORTED-7)
+                    — closed by Stage 4 of design v3.
+
+    Honesty disclaimer: the 30-day figure is borrowed by ANALOGY. TopStep's
+    rule fires on no broker trades. This gate fires on no bot equity polls.
+    The semantics differ; the numeric value is shared by convention. An
+    operator legitimately trading manually with no bot running will see this
+    BLOCK as a false positive — resolution is to archive (rename to
+    .STALE_<YYYYMMDD>.json) or delete the state file.
+
+    Boundary direction: `>= 30` matches Stage 2's load-time raise convention
+    (account_hwm_tracker.py _STATE_STALENESS_FAIL_DAYS). Both gates fire on
+    the same day; the figure is borrowed by analogy regardless.
+    """
+    from trading_app.account_hwm_tracker import read_state_file, state_file_age_days
+
+    hwm_files = list(STATE_DIR.glob("account_hwm_*.json"))
+    hwm_files = [f for f in hwm_files if "CORRUPT" not in f.name]
+    if not hwm_files:
+        return True, "No account state files (first session — inactivity gate not applicable)"
+
+    # UNGROUNDED — operational buffer.
+    # Rationale: 5-day buffer between WARNING and BLOCK gives the operator
+    # advance notice to either resume bot trading, manually rotate the state
+    # file, or accept the upcoming block. No literature citation.
+    _INACTIVITY_WARN_DAYS = 25.0
+    _INACTIVITY_BLOCK_DAYS = 30.0
+
+    results = []
+    any_block = False
+    for f in hwm_files:
+        # F-1 audit-fix: defense-in-depth parseability check before age
+        # computation. state_file_age_days falls back to mtime on corrupt
+        # JSON (Stage 2 SG1 behavior — correct for the load-time gate).
+        # Without this read_state_file gate, a corrupt-JSON file with
+        # recent mtime would silently pass this check as "OK 0d old"
+        # while check_dd_circuit_breaker (which uses read_state_file)
+        # correctly BLOCKs. Same file, contradictory verdicts. Fail-closed
+        # symmetric to the sibling DD checks per integrity-guardian.md § 3.
+        # Granular failure reason (missing/empty/JSON-error/OSError) is
+        # captured by read_state_file's own log.warning.
+        data = read_state_file(f)
+        if data is None:
+            any_block = True
+            results.append(f"BLOCKED {f.name}: state file unreadable (see logs)")
+            continue
+        age = state_file_age_days(f)
+        if age is None:
+            # F-2 audit-fix: residual race case (file read by read_state_file
+            # then disappeared/permission-revoked before stat) — record a
+            # granular reason in the operator log. state_file_age_days is
+            # pure-no-logging by Stage 2 contract; the granular reason has
+            # to be emitted at the call site to satisfy IR § 6.
+            log.warning(
+                "check_topstep_inactivity_window: %s — state_file_age_days returned None "
+                "(file likely disappeared between reads, or stat() permission revoked)",
+                f,
+            )
+            any_block = True
+            results.append(f"BLOCKED {f.name}: state file unreadable (cannot compute age)")
+            continue
+        age_int = int(age)
+        if age >= _INACTIVITY_BLOCK_DAYS:
+            any_block = True
+            results.append(
+                f"BLOCKED {f.name}: {age_int}d old >= 30d inactivity boundary "
+                f"(figure borrowed by analogy from TopStep XFA rule — see pre_session_check.py "
+                f"docstring; archive or delete state file to clear)"
+            )
+        elif age >= _INACTIVITY_WARN_DAYS:
+            results.append(f"WARN {f.name}: {age_int}d old (block at 30d)")
+        else:
+            results.append(f"OK {f.name}: {age_int}d old")
+
+    msg = " | ".join(results)
+    return (not any_block), f"INACTIVITY: {msg}"
 
 
 def check_topstep_xfa_aggregate_cap() -> tuple[bool, str]:
@@ -564,6 +693,9 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
 
         ok, msg = check_dd_circuit_breaker()
         results.append(("DD circuit breaker (intraday)", ok, msg))
+
+        ok, msg = check_topstep_inactivity_window()
+        results.append(("TopStep inactivity window", ok, msg))
 
         ok, msg = check_daily_equity(resolved_profile_id)
         results.append(("Daily equity", ok, msg))
