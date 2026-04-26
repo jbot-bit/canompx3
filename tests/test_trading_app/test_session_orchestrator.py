@@ -2151,6 +2151,47 @@ class TestHWMWarningTierNotifyDispatch:
             f"None reason must not crash the elif; expected no exception-handler log, got: {spurious!r}"
         )
 
+    # ── Test 6.5 — STAGE1-GAP-1 contract-drift visibility on (False, None) ──
+    async def test_hwm_check_halt_false_none_logs_contract_drift_warning(self, caplog):
+        """STAGE1-GAP-1 (audit-gate verdict CONDITIONAL on commit 68c63482,
+        2026-04-25): after Stage 1's None-guard `reason is not None and "WARN"
+        in reason` was added, a `(False, None)` return short-circuits the elif
+        with zero log/notify visibility. The auditor's recommendation:
+
+            elif reason is None:
+                log.warning("HWM check_halt returned (False, None) — tracker
+                contract drift; expected non-None reason string")
+
+        Closed as item-zero of HWM Stage 2 per
+        `docs/runtime/stages/hwm-stage1-gap1-none-reason-contract-guard.md`.
+
+        Asserts:
+        - log.warning emitted containing the substring `tracker contract drift`
+        - no `_notify` dispatched (developer-visible signal, not operator alert)
+        - no exception propagates (existing bare-except behavior preserved)
+
+        Mutation: remove the new `elif reason is None` branch → no log captured
+        with the contract-drift substring → assertion fails.
+        """
+        import logging
+
+        orch = await self._make_orch_with_hwm((False, None))
+        orch._notify = MagicMock()
+
+        with caplog.at_level(logging.WARNING, logger="trading_app.live.session_orchestrator"):
+            await self._fire_one_bar(orch)
+
+        drift_logs = [r for r in caplog.records if "tracker contract drift" in r.message]
+        assert len(drift_logs) == 1, (
+            f"Expected exactly one contract-drift WARNING; got {len(drift_logs)}: {[r.message for r in drift_logs]!r}"
+        )
+        assert drift_logs[0].levelno == logging.WARNING, (
+            f"Contract-drift log must be WARNING level; got level={drift_logs[0].levelno}"
+        )
+        assert orch._notify.call_count == 0, (
+            f"Contract drift must not dispatch operator notify; got {orch._notify.call_count}"
+        )
+
     # ── Test 7 — update_equity must be called BEFORE check_halt on each poll ──
     async def test_hwm_poll_update_equity_before_check_halt(self):
         """Mutation guard: a refactor that swaps the call order would let

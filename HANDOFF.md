@@ -9,11 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-25
-- **Commit:** 68c63482 — fix(live): Stage 1 audit-gate CRITICAL-1 — None-guard the elif-WARN dispatch
-- **Files changed:** 3 files
+- **Commit:** 26557922 — docs: Stage 1 closure baton — audit-gate PASS-CONDITIONAL, GAP-1 logged, Stage 2 cleared
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_session_orchestrator.py`
-  - `trading_app/live/session_orchestrator.py`
+  - `docs/ralph-loop/deferred-findings.md`
 
 ## Next Steps — Active
 

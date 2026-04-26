@@ -1652,6 +1652,17 @@ class SessionOrchestrator:
                         # the very silent-failure mode this stage closes.
                         log.warning("HWM: %s", reason)
                         self._notify(f"HWM WARNING: {reason}")
+                    elif reason is None:
+                        # Stage 1 fix-up — STAGE1-GAP-1 (2026-04-26 audit-gate CONDITIONAL).
+                        # check_halt() never returns (False, None) in current tracker code, but
+                        # a future refactor or mock misconfiguration could regress the contract.
+                        # Log-only (no notify) — contract drift is a developer-visible signal,
+                        # not an operator-actionable DD event. See:
+                        #   docs/runtime/stages/hwm-stage1-gap1-none-reason-contract-guard.md
+                        log.warning(
+                            "HWM check_halt returned (False, None) — tracker contract drift; "
+                            "expected non-None reason string"
+                        )
                 except Exception as inner:
                     # update_equity / check_halt should never raise. If they do, log loud
                     # but keep the bar loop alive — the tracker is degraded but the engine
