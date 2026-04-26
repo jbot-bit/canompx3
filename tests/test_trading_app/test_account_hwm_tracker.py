@@ -1072,18 +1072,187 @@ class TestStateFileAgeDays:
 
         assert state_file_age_days(tmp_path / "does_not_exist.json") is None
 
-    def test_state_file_age_days_returns_none_on_corrupt_json(self, state_dir):
+    def test_state_file_age_days_corrupt_json_falls_back_to_mtime(self, state_dir):
+        """SG1 fix (Stage 2 audit-gate): corrupt JSON must NOT return None,
+        because that bypasses the fail-closed stale gate. Falls back to file
+        mtime — strictly fresher than last_equity_timestamp would be."""
+        import os
         from trading_app.account_hwm_tracker import state_file_age_days
 
         state_dir.mkdir(parents=True, exist_ok=True)
         path = state_dir / "corrupt.json"
         path.write_text("{not json")
-        assert state_file_age_days(path) is None
+        # Force mtime to 40 days ago — proves the fallback is used
+        forty_days_ago = datetime.now(UTC).timestamp() - (40 * 86400)
+        os.utime(path, (forty_days_ago, forty_days_ago))
+        age = state_file_age_days(path)
+        assert age is not None, "Corrupt JSON must NOT return None — that bypasses the stale gate"
+        assert 39.5 < age < 40.5, f"Expected ~40 day mtime-based age; got {age}"
 
-    def test_state_file_age_days_returns_none_on_missing_timestamp(self, state_dir):
+    def test_state_file_age_days_missing_timestamp_falls_back_to_mtime(self, state_dir):
+        """SG1 fix: missing/null last_equity_timestamp must NOT return None."""
+        import os
         from trading_app.account_hwm_tracker import state_file_age_days
 
         state_dir.mkdir(parents=True, exist_ok=True)
         path = state_dir / "no_ts.json"
-        path.write_text(json.dumps({"hwm_dollars": 50000.0}))
-        assert state_file_age_days(path) is None
+        path.write_text(json.dumps({"hwm_dollars": 50000.0, "last_equity_timestamp": None}))
+        forty_days_ago = datetime.now(UTC).timestamp() - (40 * 86400)
+        os.utime(path, (forty_days_ago, forty_days_ago))
+        age = state_file_age_days(path)
+        assert age is not None
+        assert 39.5 < age < 40.5
+
+    def test_state_file_age_days_returns_none_only_when_file_missing(self, tmp_path):
+        """Helper returns None ONLY when the file does not exist. All other
+        paths fall back to mtime so the stale gate cannot be bypassed."""
+        from trading_app.account_hwm_tracker import state_file_age_days
+
+        assert state_file_age_days(tmp_path / "nope.json") is None
+
+    def test_load_stale_gate_fires_on_null_timestamp_old_mtime(self, state_dir):
+        """SG1 — fail-closed gate must fire when timestamp is null but file
+        is genuinely stale by mtime. Pre-fix this bypassed both gates and
+        loaded successfully with stale balance."""
+        import os
+
+        state_dir.mkdir(parents=True, exist_ok=True)
+        path = state_dir / "account_hwm_SG1NULL.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "account_id": "SG1NULL",
+                    "firm": "topstep",
+                    "hwm_dollars": 50000.0,
+                    "last_equity": 50000.0,
+                    "last_equity_timestamp": None,  # the bug condition
+                }
+            )
+        )
+        forty_days_ago = datetime.now(UTC).timestamp() - (40 * 86400)
+        os.utime(path, (forty_days_ago, forty_days_ago))
+        with pytest.raises(RuntimeError, match=r"STALE_STATE_FAIL"):
+            AccountHWMTracker("SG1NULL", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+
+    def test_load_stale_gate_fires_on_corrupt_json_old_mtime(self, state_dir):
+        """SG1 — fail-closed gate must fire when JSON is corrupt but file is
+        old. Pre-fix the corrupt path would run instead, silently reinitialising
+        from broker without any age signal."""
+        import os
+
+        state_dir.mkdir(parents=True, exist_ok=True)
+        path = state_dir / "account_hwm_SG1CORRUPT.json"
+        path.write_text("{not json")
+        forty_days_ago = datetime.now(UTC).timestamp() - (40 * 86400)
+        os.utime(path, (forty_days_ago, forty_days_ago))
+        with pytest.raises(RuntimeError, match=r"STALE_STATE_FAIL"):
+            AccountHWMTracker("SG1CORRUPT", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+
+
+class TestPostHaltRecoveryQualifier:
+    """SG3 fix — post-halt POLL_FAILURE recovery notify includes
+    REMAINS HALTED qualifier so operator does not misread RECOVERY as 'safe'."""
+
+    def test_post_halt_recovery_notify_includes_remains_halted_qualifier(self, state_dir):
+        calls: list[str] = []
+        t = AccountHWMTracker(
+            "SG3HALT",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            notify_callback=calls.append,
+        )
+        t.update_equity(50000.0)
+        # 3 consecutive None polls → POLL_FAILURE halt
+        t.update_equity(None)
+        t.update_equity(None)
+        t.update_equity(None)
+        assert t._halt is True
+        assert t._halt_reason == "POLL_FAILURE"
+        # Recovery while still halted
+        t.update_equity(50100.0)
+        recovery = [c for c in calls if "RECOVERY" in c]
+        assert len(recovery) == 1
+        assert "REMAINS HALTED" in recovery[0], (
+            f"Post-halt recovery notify must mention REMAINS HALTED; got: {recovery[0]!r}"
+        )
+        assert "reset_halt" in recovery[0], f"Notify must name the operator action; got: {recovery[0]!r}"
+
+    def test_pre_halt_recovery_notify_excludes_remains_halted_qualifier(self, state_dir):
+        """Mutation guard: the qualifier must NOT fire when recovery happens
+        before the halt threshold is hit. (1 failure → recovery: silent halt
+        reason, no qualifier needed.)"""
+        calls: list[str] = []
+        t = AccountHWMTracker(
+            "SG3OK",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            notify_callback=calls.append,
+        )
+        t.update_equity(50000.0)
+        t.update_equity(None)  # 1 failure, below threshold
+        assert t._halt is False
+        t.update_equity(50100.0)
+        recovery = [c for c in calls if "RECOVERY" in c]
+        assert len(recovery) == 1
+        assert "REMAINS HALTED" not in recovery[0], (
+            f"Pre-halt recovery must NOT mention REMAINS HALTED; got: {recovery[0]!r}"
+        )
+
+
+class TestNonFiniteEquity:
+    """SG4 fix — NaN/Inf equity from broker routes through poll-failure path
+    so the 3-strike halt mechanism actually engages instead of NaN silently
+    bypassing every comparison."""
+
+    def test_nan_equity_treated_as_poll_failure(self, state_dir):
+        t = AccountHWMTracker("SG4NAN", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        t.update_equity(50000.0)  # primes a real value
+        prior = t._consecutive_poll_failures
+        t.update_equity(float("nan"))
+        assert t._consecutive_poll_failures == prior + 1, (
+            f"NaN must increment poll-failure counter; was {prior}, now {t._consecutive_poll_failures}"
+        )
+        # Equity field MUST NOT have absorbed the NaN
+        assert t._last_equity == 50000.0, f"NaN must not propagate into _last_equity; got {t._last_equity}"
+
+    def test_positive_inf_equity_treated_as_poll_failure(self, state_dir):
+        t = AccountHWMTracker("SG4INF", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        t.update_equity(50000.0)
+        t.update_equity(float("inf"))
+        assert t._consecutive_poll_failures == 1
+        assert t._last_equity == 50000.0
+
+    def test_three_consecutive_nan_polls_fire_halt(self, state_dir):
+        """Mutation guard for SG4: NaN must walk to halt just like None."""
+        t = AccountHWMTracker("SG4HALT", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        t.update_equity(50000.0)
+        t.update_equity(float("nan"))
+        t.update_equity(float("nan"))
+        t.update_equity(float("nan"))
+        assert t._halt is True
+        assert t._halt_reason == "POLL_FAILURE"
+
+
+class TestEmptyStateFile:
+    """SG2 — empty state file routes through corrupt path with notify dispatch."""
+
+    def test_empty_file_with_callback_dispatches_corrupt_notify(self, state_dir):
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "account_hwm_SG2EMPTY.json").write_text("")
+        calls: list[str] = []
+        t = AccountHWMTracker(
+            "SG2EMPTY",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            notify_callback=calls.append,
+        )
+        # Empty file routes through corrupt path → reinit
+        assert t._hwm == 0.0
+        # Backup created
+        assert list(state_dir.glob("account_hwm_SG2EMPTY_CORRUPT_*.json"))
+        # Notify dispatched
+        corrupt_notifies = [c for c in calls if "CORRUPT" in c]
+        assert len(corrupt_notifies) == 1, f"Expected one CORRUPT notify; got {calls!r}"

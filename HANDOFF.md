@@ -9,10 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** df00589b — [mechanical] docs: replace (this commit) placeholder with literal hash 45720109 in STAGE1-GAP-1 resolved row
-- **Files changed:** 2 files
+- **Commit:** 1f29009b — [judgment] feat(hwm): Stage 2 — tracker integrity package (notify_callback, stale-state gate, persist-IO + corrupt-state notify, UNGROUNDED+Rationale annotations)
+- **Files changed:** 5 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/deferred-findings.md`
+  - `docs/runtime/stages/hwm-stage2-tracker-integrity.md`
+  - `tests/test_trading_app/test_account_hwm_tracker.py`
+  - `tests/test_trading_app/test_account_hwm_tracker_integration.py`
+  - `trading_app/account_hwm_tracker.py`
 
 ## Next Steps — Active
 

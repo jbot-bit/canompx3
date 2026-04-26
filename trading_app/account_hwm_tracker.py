@@ -14,6 +14,7 @@ This module:
 
 import json
 import logging
+import math
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -27,12 +28,36 @@ _DEFAULT_STATE_DIR = Path(__file__).resolve().parent.parent / "data" / "state"
 _BRISBANE = ZoneInfo("Australia/Brisbane")
 
 
+def _is_finite_equity(value: float) -> bool:
+    """Return True iff value is a real number (not NaN, not +/-Inf).
+
+    Stage 2 audit-gate SG4 fix — broker contract is `float | None` but
+    technically a NaN/Inf is a valid `float`. Treating NaN as a real
+    equity reading would silently bypass every halt comparison (NaN >=
+    limit is False, NaN < threshold is False — kill switch never fires).
+    Tracker treats non-finite as a poll failure (route through the
+    consecutive-failure halt path).
+    """
+    return isinstance(value, int | float) and math.isfinite(value)
+
+
 def state_file_age_days(path: Path) -> float | None:
     """Compute age in days from persisted last_equity_timestamp.
 
-    Pure function. No side effects, no logging. Returns None when:
+    Pure function. No side effects, no logging. Returns None ONLY when:
       - file does not exist, OR
-      - file unreadable / parse error / missing/empty timestamp.
+      - file unreadable (OSError on read).
+
+    Resolution order for the age value (Stage 2 audit-gate SG1 fix —
+    closes fail-closed gate bypass for files with null/missing/unparseable
+    timestamps):
+      1. Parse JSON; read `last_equity_timestamp`. If valid, use it.
+      2. If timestamp missing/null/unparseable BUT file readable, fall back
+         to file mtime. Persisted by `_save_state` at every write, so mtime
+         tracks last-attempted-persist — operationally a strictly fresher
+         lower bound than last_equity_timestamp.
+      3. Only return None if BOTH paths fail (file unreadable OR mtime
+         unavailable).
 
     Single source of truth for state-file age. Used by:
       - _load_state (B2/B3 stale-state gate, this module)
@@ -43,21 +68,31 @@ def state_file_age_days(path: Path) -> float | None:
     """
     if not path.exists():
         return None
+    # Try the in-file timestamp first (most precise).
     try:
         raw = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError, ValueError, TypeError):
+        ts = raw.get("last_equity_timestamp") if isinstance(raw, dict) else None
+        if ts:
+            last = datetime.fromisoformat(ts)
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=UTC)
+            delta = datetime.now(UTC) - last
+            return delta.total_seconds() / 86400.0
+    except (json.JSONDecodeError, ValueError, TypeError):
+        # JSON corrupt OR timestamp unparseable — fall through to mtime
+        # fallback so a corrupt file with a recent mtime does not bypass
+        # the stale gate (closes audit-gate SG1).
+        pass
+    except OSError:
         return None
-    ts = raw.get("last_equity_timestamp") if isinstance(raw, dict) else None
-    if not ts:
-        return None
+    # Fallback: file mtime. Catches null/missing/unparseable timestamp
+    # without bypassing the fail-closed gate.
     try:
-        last = datetime.fromisoformat(ts)
-    except (ValueError, TypeError):
+        mtime = path.stat().st_mtime
+    except OSError:
         return None
-    if last.tzinfo is None:
-        last = last.replace(tzinfo=UTC)
-    delta = datetime.now(UTC) - last
-    return delta.total_seconds() / 86400.0
+    delta_seconds = datetime.now(UTC).timestamp() - mtime
+    return delta_seconds / 86400.0
 
 
 @dataclass
@@ -440,6 +475,19 @@ class AccountHWMTracker:
 
     def update_equity(self, current_equity: float | None) -> HWMState:
         """Update with current broker equity. Returns current state."""
+        # SG4 fix (Stage 2 audit-gate): treat NaN/Inf equity as a poll
+        # failure. Without this, NaN propagates into _last_equity, then
+        # _dd_used()/_dd_pct() return NaN, and every halt comparison
+        # (>=, >) silently evaluates False — the kill switch never fires
+        # on a degraded broker that returns NaN. Route through the
+        # consecutive-failure path so the 3-strike halt mechanism
+        # actually engages.
+        if current_equity is not None and not _is_finite_equity(current_equity):
+            log.error(
+                "HWM: equity poll returned non-finite value %r — treating as poll failure",
+                current_equity,
+            )
+            current_equity = None
         if current_equity is None:
             self._consecutive_poll_failures += 1
             log.warning(
@@ -463,14 +511,24 @@ class AccountHWMTracker:
         if prior_failures > 0:
             # B5: poll-failure recovery dispatch. Steady-state successes
             # (prior_failures == 0) stay silent — mutation guard against spam.
+            # SG3 fix (Stage 2 audit-gate): if halt fired during the failure
+            # streak (POLL_FAILURE), append a halt-still-active qualifier so
+            # the operator does not read "RECOVERY" as "safe to resume". The
+            # poll did recover; the halt persists until reset_halt() is called.
+            halt_qualifier = ""
+            if self._halt and self._halt_reason == "POLL_FAILURE":
+                halt_qualifier = (
+                    " — account REMAINS HALTED (POLL_FAILURE). Manual reset_halt() required before trading resumes."
+                )
             log.info(
-                "HWM: equity poll RECOVERED after %d consecutive failure(s)",
+                "HWM: equity poll RECOVERED after %d consecutive failure(s)%s",
                 prior_failures,
+                " (halt still active)" if halt_qualifier else "",
             )
             self._safe_notify(
                 f"HWM POLL RECOVERY: equity poll succeeded after "
                 f"{prior_failures} consecutive failure(s) (account "
-                f"{self._account_id})"
+                f"{self._account_id}){halt_qualifier}"
             )
         now = datetime.now(UTC).isoformat()
         self._last_equity = current_equity
