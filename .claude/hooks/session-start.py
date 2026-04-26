@@ -199,6 +199,39 @@ def _origin_drift_lines() -> list[str]:
     return [f"  Origin: {state} vs origin/main — {guidance}"]
 
 
+def _env_drift_lines() -> list[str]:
+    """Detect venv drift vs uv.lock. Read-only; never modifies env.
+
+    `uv sync --frozen --check` prints a diff when the venv has drifted from
+    the lock and "Would make no changes" when in sync. Silent drift (caused
+    by raw `pip install` or `uv pip install` against the venv) is the #1
+    cause of irreproducible backtests — surfacing it at session start makes
+    it loud instead of buried.
+    """
+    if not (PROJECT_ROOT / "uv.lock").exists():
+        return []
+    try:
+        r = subprocess.run(
+            ["uv", "sync", "--frozen", "--check"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return []
+
+    output = r.stdout + r.stderr
+    if "Would make no changes" in output:
+        return ["  Env: in sync with uv.lock"]
+
+    drift_count = sum(1 for line in output.splitlines() if line.startswith(" - "))
+    if drift_count == 0:
+        return []
+    return [f"  Env: {drift_count} pkg(s) drifted from uv.lock — run `uv sync --frozen` to repair"]
+
+
 def _parallel_session_lines() -> list[str]:
     """Detect other active worktrees and warn on cross-session collision risk.
 
@@ -303,6 +336,7 @@ def main() -> None:
 
     if lines:
         lines.extend(_origin_drift_lines())
+        lines.extend(_env_drift_lines())
         lines.extend(_parallel_session_lines())
         print("\n".join(lines), file=sys.stderr)
 
