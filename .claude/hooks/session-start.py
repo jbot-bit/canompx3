@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -232,6 +233,112 @@ def _env_drift_lines() -> list[str]:
     return [f"  Env: {drift_count} pkg(s) drifted from uv.lock — run `uv sync --frozen` to repair"]
 
 
+def _git_dir() -> Path | None:
+    """Return per-worktree git directory (`.git/` for main, `.git/worktrees/<name>/`
+    for linked worktrees). Used for per-worktree state files.
+    """
+    rc, out = _git(["rev-parse", "--git-dir"])
+    if rc != 0 or not out:
+        return None
+    p = Path(out.strip())
+    if not p.is_absolute():
+        p = (PROJECT_ROOT / p).resolve()
+    return p
+
+
+def _session_lock_lines() -> tuple[list[str], bool]:
+    """Detect concurrent Claude sessions in THIS worktree. Hard-block if found.
+
+    Mechanism: write a PID file at `<git-dir>/.claude.pid` on session startup.
+    On the next startup, if the file already exists, BLOCK with cleanup
+    instructions (returns block=True so main() exits non-zero).
+
+    Cleanup is intentionally MANUAL: if Claude crashed without releasing the
+    lock, the user deletes the file. Auto-cleanup via PID liveness was
+    considered and rejected — Windows process trees (Claude → bash → python
+    hook) make `os.getppid()` ambiguous, and parsing `tasklist` for Claude's
+    actual PID is brittle. Manual delete is the safe default; the BLOCK
+    message includes the exact `rm` command.
+
+    Why this exists: per `feedback_shared_worktree_concurrent_commits.md`,
+    two Claude sessions in the SAME worktree corrupt `.git/index` and produce
+    `cannot lock ref 'HEAD'` mid-commit. This is the dominant collision
+    pattern (per 2026-04-26 incident) — clones don't fix it; only a mutex
+    does. Aligns with 2026 industry consensus on AI-agent runtime isolation:
+    git-level isolation is necessary but not sufficient; per-runtime locks
+    are required to make parallel agents safe.
+
+    Returns: (lines_to_print, should_block).
+    """
+    git_dir = _git_dir()
+    if git_dir is None:
+        return [], False  # not in a git repo — skip (no contention possible)
+
+    lock_path = git_dir / ".claude.pid"
+    payload = json.dumps({
+        "pid": os.getpid(),
+        "ppid": os.getppid(),
+        "iso_started": datetime.now(timezone.utc).isoformat(),
+        "worktree": str(PROJECT_ROOT),
+    }, indent=2).encode("utf-8")
+
+    # Atomic create-or-fail. O_EXCL closes the TOCTOU race that a check-then-
+    # write pattern would have: two simultaneous startups can't both believe
+    # they hold the lock.
+    try:
+        fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        try:
+            os.write(fd, payload)
+        finally:
+            os.close(fd)
+        return [], False  # we own the lock
+    except FileExistsError:
+        pass  # conflict — fall through to BLOCK message
+    except OSError as e:
+        # Transient FS issue (perms, disk full, etc.). Warn loudly but don't
+        # block: a write-side failure here would otherwise lock out every
+        # future session, which is a worse failure mode than the contention
+        # we're trying to prevent.
+        return ([f"  WARNING: could not write Claude session lock at {lock_path}: {e}"], False)
+
+    # Conflict path: read existing lock for the BLOCK message. Tolerate
+    # corruption (treat as "unknown other session" — still safer to BLOCK).
+    try:
+        existing = json.loads(lock_path.read_text(encoding="utf-8"))
+        other_pid = existing.get("pid", "?")
+        other_started = existing.get("iso_started", "?")
+        other_worktree = existing.get("worktree", "?")
+    except (json.JSONDecodeError, OSError, ValueError):
+        other_pid = "(corrupted lock file)"
+        other_started = "?"
+        other_worktree = "?"
+
+    return ([
+        "",
+        "  ====================================================================",
+        "  BLOCKED: Another Claude session is active in this worktree.",
+        "  --------------------------------------------------------------------",
+        f"  Active PID:   {other_pid}",
+        f"  Started:      {other_started}",
+        f"  Worktree:     {other_worktree}",
+        f"  Lock file:    {lock_path}",
+        "  --------------------------------------------------------------------",
+        "  Two Claudes in one worktree corrupt .git/index. See:",
+        "  memory/feedback_shared_worktree_concurrent_commits.md",
+        "",
+        "  Resolutions (pick one):",
+        "    1. Switch to the other session and continue there.",
+        "    2. If that session is dead, run:",
+        f"         rm '{lock_path}'",
+        "       (manual delete — PID liveness is unreliable across Windows",
+        "       process trees, so we don't auto-clean.)",
+        "    3. Spawn a fresh worktree:",
+        "         scripts/tools/new_session.sh",
+        "  ====================================================================",
+        "",
+    ], True)
+
+
 def _parallel_session_lines() -> list[str]:
     """Detect other active worktrees and warn on cross-session collision risk.
 
@@ -314,7 +421,16 @@ def main() -> None:
     task_route_lines = _task_route_lines()
 
     if session_type == "startup":
+        # Hard-block FIRST if another Claude session holds the worktree lock.
+        # Doing this before any context generation prevents the user from
+        # accidentally starting work in a soon-to-be-corrupted state.
+        block_lines, should_block = _session_lock_lines()
+        if should_block:
+            print("\n".join(block_lines), file=sys.stderr)
+            sys.exit(2)
         lines = task_route_lines or _superpower_lines("session-start") or _legacy_startup_lines()
+        if block_lines:  # warning lines (e.g., lock-write failure) — surface them
+            lines.extend(block_lines)
     elif session_type == "resume":
         if task_route_lines:
             lines = ["RESUMED SESSION — Task route restored:"]
