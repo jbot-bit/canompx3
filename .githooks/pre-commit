@@ -101,16 +101,23 @@ echo "[2/8] Ruff format..."
 if ! "$RUFF" format --check pipeline/ trading_app/ scripts/ tests/ > /dev/null 2>&1; then
     echo "  Auto-formatting..."
     "$RUFF" format pipeline/ trading_app/ scripts/ tests/ > /dev/null 2>&1
-    # Re-stage only the files that were already staged (don't add new files)
+    # Re-stage only the files that were already staged (don't add new files).
+    # Use `-f` unconditionally: every file in STAGED_FOR_FMT was already staged
+    # for this commit, so we KNOW it should be added — `-f` only suppresses the
+    # "path is ignored" warning that fires for paths under whitelisted-but-
+    # globally-ignored dirs (e.g. `.claude/hooks/*.py` whitelisted via
+    # `!.claude/hooks/` in `.gitignore`). Without `-f` here, ruff-formatting
+    # such a file leaves the format diff in the working tree post-commit
+    # (real incident: PR #141 first attempt). `git check-ignore` returns
+    # "not ignored" for those paths but `git add` still warns + exits 1 —
+    # so the prior `if check-ignore; then -f; else plain` branching couldn't
+    # detect the case. Forcing `-f` for all already-staged files is safe
+    # because the diff-filter restricts us to files git is already tracking.
     STAGED_FOR_FMT=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
     if [ -n "$STAGED_FOR_FMT" ]; then
         while IFS= read -r staged_file; do
             [ -z "$staged_file" ] && continue
-            if git check-ignore -q "$staged_file"; then
-                git add -f -- "$staged_file"
-            else
-                git add -- "$staged_file"
-            fi
+            git add -f -- "$staged_file"
         done <<EOF
 $STAGED_FOR_FMT
 EOF
