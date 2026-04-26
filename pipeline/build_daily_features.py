@@ -320,9 +320,9 @@ def detect_break(
     window_bars = bars_df[mask].sort_values("ts_utc")
 
     for bar in window_bars.itertuples():
-        close = float(bar.close)
-        bar_open = float(bar.open)
-        bar_ts = bar.ts_utc.to_pydatetime()
+        close = float(bar.close)  # type: ignore[arg-type]
+        bar_open = float(bar.open)  # type: ignore[arg-type]
+        bar_ts = bar.ts_utc.to_pydatetime()  # type: ignore[union-attr]
 
         if close > orb_high:
             delay = (bar_ts - orb_end).total_seconds() / 60.0
@@ -331,7 +331,7 @@ def detect_break(
                 "break_ts": bar_ts,
                 "break_delay_min": delay,
                 "break_bar_continues": close > bar_open,  # green candle = continuation
-                "break_bar_volume": int(bar.volume),
+                "break_bar_volume": int(bar.volume),  # type: ignore[arg-type]
             }
         elif close < orb_low:
             delay = (bar_ts - orb_end).total_seconds() / 60.0
@@ -340,7 +340,7 @@ def detect_break(
                 "break_ts": bar_ts,
                 "break_delay_min": delay,
                 "break_bar_continues": close < bar_open,  # red candle = continuation
-                "break_bar_volume": int(bar.volume),
+                "break_bar_volume": int(bar.volume),  # type: ignore[arg-type]
             }
 
     return no_break

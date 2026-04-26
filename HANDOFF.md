@@ -9,9 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 9fd9bd9c — chore(handoff): close 2026-04-26/27 token-efficiency + rework-prevention session
-- **Files changed:** 1 files
+- **Commit:** 2a8c18fd — [mechanical] fix: Ralph Loop iter 179 — enrich_date_range after COMMIT masked by dead ROLLBACK (BDF-ROLLBACK)
+- **Files changed:** 2 files
   - `HANDOFF.md`
+  - `pipeline/build_daily_features.py`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 
