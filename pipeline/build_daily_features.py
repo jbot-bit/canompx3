@@ -524,7 +524,7 @@ def classify_day_type(
     NOTE: This is LOOK-AHEAD relative to intraday entry. For research only.
     Do NOT use as a live trading filter.
     """
-    if None in (daily_open, daily_high, daily_low, daily_close, atr_20):
+    if daily_open is None or daily_high is None or daily_low is None or daily_close is None or atr_20 is None:
         return None
     if atr_20 <= 0:
         return None
@@ -826,12 +826,12 @@ def compute_garch_forecast(daily_closes: list[float], min_obs: int = GARCH_MIN_P
     try:
         from arch import arch_model
 
-        model = arch_model(log_returns, vol="Garch", p=1, q=1, dist="Normal", mean="Zero")
+        model = arch_model(log_returns, vol="GARCH", p=1, q=1, dist="normal", mean="Zero")
         result = model.fit(disp="off", show_warning=False)
         forecast = result.forecast(horizon=1)
         cond_var = forecast.variance.iloc[-1, 0]
         # Undo percentage scaling, annualize
-        daily_vol = (cond_var**0.5) / 100
+        daily_vol = (cond_var**0.5) / 100  # type: ignore[operator]
         annual_vol = daily_vol * (252**0.5)
         return round(float(annual_vol), 6)
     except ImportError:
@@ -904,7 +904,7 @@ def compute_rsi_at_cme_reopen(
 
     # Sort ascending for computation
     df = df.sort_values("ts_utc").reset_index(drop=True)
-    closes = df["close"].astype(float).values
+    closes = df["close"].astype(float).to_numpy()
 
     # Compute RSI with Wilder's smoothing
     return _wilders_rsi(closes, period=14)
@@ -943,7 +943,7 @@ def _wilders_rsi(closes: np.ndarray, period: int = 14) -> float | None:
 
     rs = avg_gain / avg_loss
     rsi = 100.0 - (100.0 / (1.0 + rs))
-    return round(rsi, 4)
+    return round(float(rsi), 4)
 
 
 # =============================================================================
@@ -987,7 +987,7 @@ def compute_outcome(
 
     Returns dict: outcome, mae_r, mfe_r
     """
-    result = {"outcome": None, "mae_r": None, "mfe_r": None}
+    result: dict[str, str | float | None] = {"outcome": None, "mae_r": None, "mfe_r": None}
 
     if break_dir is None or break_ts is None or orb_high is None or orb_low is None:
         return result
@@ -1016,8 +1016,8 @@ def compute_outcome(
     max_favorable_points = 0.0  # best excursion for us
 
     for bar in post_break.itertuples():
-        bar_high = float(bar.high)
-        bar_low = float(bar.low)
+        bar_high = float(bar.high)  # type: ignore[arg-type]
+        bar_low = float(bar.low)  # type: ignore[arg-type]
 
         # Track excursions
         if break_dir == "long":
@@ -1238,8 +1238,8 @@ def build_features_for_day(
 
         # VWAP: cumulative (price × volume) / cumulative(volume) from day start to session
         if len(pre_bars) >= 5 and pre_bars["volume"].sum() > 0:
-            vwap_prices = pre_bars["close"].values.astype(float)
-            vwap_vols = pre_bars["volume"].values.astype(float)
+            vwap_prices = pre_bars["close"].to_numpy(dtype=float)
+            vwap_vols = pre_bars["volume"].to_numpy(dtype=float)
             row[f"orb_{label}_vwap"] = round(float((vwap_prices * vwap_vols).sum() / vwap_vols.sum()), 4)
         else:
             row[f"orb_{label}_vwap"] = None
@@ -1247,7 +1247,7 @@ def build_features_for_day(
         # Pre-session velocity: slope of last 5 closes before session start
         # Positive = trending up into session, negative = trending down
         if len(pre_bars) >= 5:
-            last5 = pre_bars.iloc[-5:]["close"].values.astype(float)
+            last5 = pre_bars.iloc[-5:]["close"].to_numpy(dtype=float)
             # Simple linear slope: points per bar (ATR-normalized downstream)
             slope = (last5[-1] - last5[0]) / 4.0  # points per bar
             row[f"orb_{label}_pre_velocity"] = round(float(slope), 4)
@@ -1315,6 +1315,9 @@ def build_daily_features(
         all_bars_df["ts_utc"] = pd.to_datetime(all_bars_df["ts_utc"], utc=True)
 
     # Pre-compute sorted timestamps for binary search (O(log n) per day)
+    # Use .values (not .to_numpy()) for ts_utc: .values implicitly strips tz to
+    # tz-naive datetime64[ns], matching `pd.Timestamp(td).asm8` used in searchsorted
+    # below. .to_numpy() preserves tz and breaks the comparison.
     all_ts = all_bars_df["ts_utc"].values if not all_bars_df.empty else np.array([])
 
     logger.info(f"  Loaded {len(all_bars_df):,} bars for slicing")
@@ -1341,8 +1344,10 @@ def build_daily_features(
     if not all_bars_5m_df.empty:
         all_bars_5m_df["ts_utc"] = pd.to_datetime(all_bars_5m_df["ts_utc"], utc=True)
 
+    # Same tz-strip rationale as `all_ts` above — keep .values to preserve naive
+    # datetime64 expected by downstream searchsorted on `pd.Timestamp(...).asm8`.
     bars_5m_ts = all_bars_5m_df["ts_utc"].values if not all_bars_5m_df.empty else np.array([])
-    bars_5m_closes = all_bars_5m_df["close"].astype(float).values if not all_bars_5m_df.empty else np.array([])
+    bars_5m_closes = all_bars_5m_df["close"].astype(float).to_numpy() if not all_bars_5m_df.empty else np.array([])
 
     logger.info(f"  Loaded {len(all_bars_5m_df):,} 5m bars for RSI")
 
@@ -1351,8 +1356,8 @@ def build_daily_features(
     for i, td in enumerate(trading_days):
         # Slice bars for this trading day using binary search
         td_start, td_end = compute_trading_day_utc_range(td)
-        start_idx = int(np.searchsorted(all_ts, pd.Timestamp(td_start).asm8, side="left"))
-        end_idx = int(np.searchsorted(all_ts, pd.Timestamp(td_end).asm8, side="left"))
+        start_idx = int(np.searchsorted(all_ts, pd.Timestamp(td_start).asm8, side="left"))  # type: ignore[arg-type, call-overload]
+        end_idx = int(np.searchsorted(all_ts, pd.Timestamp(td_end).asm8, side="left"))  # type: ignore[arg-type, call-overload]
         day_bars = all_bars_df.iloc[start_idx:end_idx]
 
         row = build_features_for_day(
@@ -1362,8 +1367,8 @@ def build_daily_features(
             orb_minutes,
             cost_spec,
             bars_df=day_bars,
-            bars_5m_ts=bars_5m_ts,
-            bars_5m_closes=bars_5m_closes,
+            bars_5m_ts=bars_5m_ts,  # type: ignore[arg-type]
+            bars_5m_closes=bars_5m_closes,  # type: ignore[arg-type]
         )
         rows.append(row)
 
@@ -1700,7 +1705,7 @@ def build_daily_features(
             AND orb_minutes = ?
         """,
             [symbol, start_date, end_date, orb_minutes],
-        ).fetchone()[0]
+        ).fetchone()[0]  # type: ignore[index]
 
         con.execute(
             """
@@ -1796,7 +1801,7 @@ def verify_daily_features(
         )
     """,
         base_params,
-    ).fetchone()[0]
+    ).fetchone()[0]  # type: ignore[index]
 
     if dupe_count > 0:
         failures.append(f"Duplicate (symbol, trading_day, orb_minutes): {dupe_count}")
@@ -1811,7 +1816,7 @@ def verify_daily_features(
         AND (bar_count_1m IS NULL OR bar_count_1m <= 0)
     """,
         base_params,
-    ).fetchone()[0]
+    ).fetchone()[0]  # type: ignore[index]
 
     if zero_bars > 0:
         failures.append(f"Rows with zero/null bar_count_1m: {zero_bars}")
@@ -1827,7 +1832,7 @@ def verify_daily_features(
             AND orb_{label}_size < 0
         """,
             base_params,
-        ).fetchone()[0]
+        ).fetchone()[0]  # type: ignore[index]
 
         if neg_size > 0:
             failures.append(f"Negative ORB size for {label}: {neg_size}")
@@ -1844,7 +1849,7 @@ def verify_daily_features(
             AND orb_{label}_break_dir NOT IN ('long', 'short')
         """,
             base_params,
-        ).fetchone()[0]
+        ).fetchone()[0]  # type: ignore[index]
 
         if bad_dir > 0:
             failures.append(f"Invalid break_dir for {label}: {bad_dir}")
@@ -1861,7 +1866,7 @@ def verify_daily_features(
             AND orb_{label}_outcome NOT IN ('win', 'loss', 'scratch')
         """,
             base_params,
-        ).fetchone()[0]
+        ).fetchone()[0]  # type: ignore[index]
 
         if bad_outcome > 0:
             failures.append(f"Invalid outcome for {label}: {bad_outcome}")

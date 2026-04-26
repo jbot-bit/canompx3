@@ -9,9 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 2a8c18fd — [mechanical] fix: Ralph Loop iter 179 — enrich_date_range after COMMIT masked by dead ROLLBACK (BDF-ROLLBACK)
-- **Files changed:** 2 files
+- **Commit:** 412ef1be — [mechanical] type: silence pyright Scalar narrowing in detect_break (BDF-NARROW)
+- **Files changed:** 3 files
   - `HANDOFF.md`
+  - `docs/runtime/stages/detect-break-pyright-narrow.md`
   - `pipeline/build_daily_features.py`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
