@@ -41,8 +41,8 @@ JOURNAL_PATH = LIVE_JOURNAL_DB_PATH
 STOP_FILE = PROJECT_ROOT / "live_session.stop"
 LOG_DIR = PROJECT_ROOT / "logs"
 BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
-# 2x the ~60s bar cadence (SessionOrchestrator._publish_state runs once per 1m bar) —
-# two consecutive missed writes flips the dashboard to STALE.
+# Rationale: 2x the ~60s bar cadence (SessionOrchestrator._publish_state runs
+# once per 1m bar) — two consecutive missed writes flips the dashboard to STALE.
 HEARTBEAT_STALE_AFTER_S = 120
 
 

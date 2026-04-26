@@ -48,7 +48,11 @@ BROKER = os.environ.get("WEBHOOK_BROKER", "tradovate")  # "tradovate" | "project
 DEDUP_WINDOW = float(os.environ.get("WEBHOOK_DEDUP_SECONDS", "10"))
 _DEDUP_CACHE: dict[str, tuple[float, TradeResponse]] = {}  # key → (monotonic_ts, cached_response)
 
-# Rate limiting: max 3 orders per 60 seconds (guards against runaway alerts)
+# Rationale: rate limiting — max 3 orders per 60 seconds. Guards against
+# runaway TradingView alert storms (a flapping setup that fires on every bar
+# would otherwise spam the broker and trip account-level lockouts). 60s
+# window matches our 1m bar cadence: at most one order per bar per side is
+# the operational normal; 3-order ceiling absorbs an honest reversal sequence.
 _ORDER_TIMESTAMPS: deque[float] = deque(maxlen=10)
 RATE_LIMIT_ORDERS = 3
 RATE_LIMIT_WINDOW = 60.0  # seconds
@@ -68,6 +72,10 @@ _ALLOWED_INSTRUMENTS = frozenset(ACTIVE_ORB_INSTRUMENTS)
 _auth = None
 _account_id: int | None = None
 _contract_cache: dict[str, tuple[str, float]] = {}  # instrument → (symbol, resolved_at)
+# Rationale: 1 hour TTL — front-month contract symbols change at quarterly
+# rolls and on early-rollover days; 1h is short enough to catch a same-day
+# rollover (operator notices stale resolution within an hour) and long
+# enough to avoid pummeling the broker contract API on every webhook hit.
 CONTRACT_TTL = 3600.0  # re-resolve front month after 1 hour
 
 

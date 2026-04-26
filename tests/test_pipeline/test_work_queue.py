@@ -68,10 +68,19 @@ class TestRenderHandoff:
         assert "docs/runtime/action-queue.yaml" in rendered
 
     def test_snapshot_detects_handoff_mismatch(self, tmp_path: Path) -> None:
+        from datetime import UTC, datetime
+
         _seed_queue(tmp_path)
         _mkfile(tmp_path / "HANDOFF.md", "# stale\n")
 
-        snapshot = work_queue.queue_snapshot(tmp_path)
+        # Pin reference time so the test is not a wall-clock time-bomb:
+        # _seed_queue items have last_verified_at = 2026-04-24 (SLA 2d) and
+        # 2026-04-10 (SLA 1d). Pin reference at 2026-04-25 12:00 — first
+        # item is still fresh (24+2=26 > 25), second is stale (10+1=11 < 25).
+        # Without pinning, the wall clock eventually crosses both SLAs and
+        # stale_count becomes 2 instead of 1 (caught 2026-04-26 in v6.1 P5).
+        pinned_now = datetime(2026, 4, 25, 12, 0, 0, tzinfo=UTC)
+        snapshot = work_queue.queue_snapshot(tmp_path, now=pinned_now)
 
         assert snapshot.exists is True
         assert snapshot.handoff_matches_rendered is False
