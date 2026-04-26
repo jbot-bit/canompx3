@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 891c1aaa — chore(handoff): sync to 9dd4e7b5 (post-commit auto-update)
+- **Commit:** 9fd9bd9c — chore(handoff): close 2026-04-26/27 token-efficiency + rework-prevention session
 - **Files changed:** 1 files
   - `HANDOFF.md`
 

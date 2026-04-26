@@ -1727,21 +1727,26 @@ def build_daily_features(
 
         logger.info(f"  Inserted {len(rows):,} daily_features rows")
 
-        # Post-pass enrichment: populate pit_range_atr from exchange_statistics
-        # for the freshly-written slice. PitRangeFilter is fail-closed at
-        # eligibility time, so a missing upstream stats row drops that day
-        # from any PIT_MIN-gated lane rather than silently passing.
-        from pipeline.backfill_pit_range_atr import enrich_date_range
-
-        populated = enrich_date_range(con, symbol, start_date, end_date)
-        logger.info(f"  pit_range_atr: {populated:,} rows populated in written slice")
-
-        return len(rows)
-
     except Exception as e:
         con.execute("ROLLBACK")
         logger.error(f"FATAL: Exception during daily_features build: {e}")
         raise
+
+    # Post-pass enrichment: populate pit_range_atr from exchange_statistics for
+    # the freshly-written slice. Runs AFTER the COMMIT so the daily_features rows
+    # are already durable. Called outside the try-except-ROLLBACK block because
+    # enrich_date_range is fail-open (silently skips when exchange_statistics is
+    # absent) and a ROLLBACK cannot undo the already-committed INSERT — calling
+    # it here lets any unexpected error surface directly rather than being masked
+    # by a TransactionContext Error from a dead ROLLBACK. PitRangeFilter is
+    # fail-closed at eligibility time: a NULL pit_range_atr drops that day from
+    # any PIT_MIN-gated lane rather than silently passing.
+    from pipeline.backfill_pit_range_atr import enrich_date_range
+
+    populated = enrich_date_range(con, symbol, start_date, end_date)
+    logger.info(f"  pit_range_atr: {populated:,} rows populated in written slice")
+
+    return len(rows)
 
 
 # =============================================================================
