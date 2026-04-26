@@ -51,6 +51,36 @@ if git diff --name-only -- HANDOFF.md 2>/dev/null | grep -q 'HANDOFF.md'; then
     git add HANDOFF.md
 fi
 
+# 0b. Auto-normalize line endings — prevents CRLF reintroduction.
+# Detects any staged text file with CRLF in the staged blob, renormalizes to LF
+# per .gitattributes (eol=lf), and re-stages. Silent fix unless something was
+# actually normalized. This automates away the recurring "stash@{N}: pre-rebase
+# CRLF noise" pattern that has cost multiple sessions.
+STAGED_TEXT=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)
+if [ -n "$STAGED_TEXT" ]; then
+    NORMALIZED_FILES=""
+    while IFS= read -r f; do
+        [ -z "$f" ] && continue
+        attr=$(git check-attr text -- "$f" 2>/dev/null)
+        case "$attr" in
+            *": text: set"*|*": text: auto"*)
+                if git show ":$f" 2>/dev/null | grep -lU $'\r$' >/dev/null 2>&1; then
+                    git add --renormalize -- "$f" 2>/dev/null
+                    NORMALIZED_FILES="$NORMALIZED_FILES$f
+"
+                fi
+                ;;
+        esac
+    done <<INNER_EOF
+$STAGED_TEXT
+INNER_EOF
+    if [ -n "$NORMALIZED_FILES" ]; then
+        echo "[0b] Auto-renormalized CRLF->LF in staged blobs (per .gitattributes eol=lf):"
+        printf "  %s" "$NORMALIZED_FILES" | sed 's/^/  /'
+    fi
+fi
+
+
 # 1. Ruff lint check (~1 second)
 echo "[1/8] Ruff lint..."
 RUFF="ruff"
