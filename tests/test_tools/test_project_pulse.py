@@ -11,15 +11,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pipeline import work_queue
 from pipeline.system_context import PolicyDecision, PolicyIssue
 from scripts.tools import project_pulse
 
 # Frozen reference clock for tests that exercise action-queue staleness.
 # Seeded items use last_verified_at 2026-04-24 with freshness_sla_days=2.
-# At 2026-04-25 00:00 UTC the items are still fresh (24+2=26 > 25), so
-# `first` retains category="ready" instead of being downgraded to "decaying"
-# by the stale-id sweep. Wall-clock-relative tests are time-bombs.
+# At 2026-04-25 00:00 UTC items are still fresh (24+2=26 > 25), so the
+# stale-sweep does NOT downgrade `first` from "ready" to "decaying".
 _TEST_NOW = datetime(2026, 4, 25, 0, 0, tzinfo=UTC)
 from scripts.tools.project_pulse import (
     PulseItem,
@@ -595,10 +593,7 @@ class TestCollectFitnessFastDeployable:
 
 
 class TestCollectActionQueue:
-    def test_parses_open_items(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Pin the clock so the staleness sweep doesn't re-categorize "ready" → "decaying"
-        # once wall-clock time advances past last_verified_at + freshness_sla_days.
-        monkeypatch.setattr(work_queue, "_utc_now", lambda: _TEST_NOW)
+    def test_parses_open_items(self, tmp_path: Path) -> None:
         _mkfile(
             tmp_path / "docs" / "runtime" / "action-queue.yaml",
             "\n".join(
@@ -657,7 +652,7 @@ class TestCollectActionQueue:
                 ]
             ),
         )
-        items = collect_action_queue(tmp_path)
+        items = collect_action_queue(tmp_path, now=_TEST_NOW)
         assert len(items) == 2
         assert items[0].summary == "first: First thing"
         assert items[0].category == "ready"
@@ -820,23 +815,8 @@ class TestCollectRalphDeferred:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def _scrub_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Clear inherited GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE.
-
-    Pre-commit hook runs with these set by git. They leak into test subprocesses
-    and make ``git worktree list`` (invoked by ``_worktree_metadata`` ->
-    ``list_worktrees``) report the PARENT repo's worktrees instead of erroring
-    on the empty ``tmp_path``. Outside pre-commit the tests pass without this;
-    inside pre-commit / CI they fail. Scrubbing makes both contexts deterministic.
-    """
-    monkeypatch.delenv("GIT_DIR", raising=False)
-    monkeypatch.delenv("GIT_WORK_TREE", raising=False)
-    monkeypatch.delenv("GIT_INDEX_FILE", raising=False)
-
-
 class TestCollectWorktrees:
-    def test_detects_worktree(self, tmp_path: Path, _scrub_git_env: None) -> None:
+    def test_detects_worktree(self, tmp_path: Path) -> None:
         meta = tmp_path / ".worktrees" / "claude" / "my-task" / ".canompx3-worktree.json"
         _mkfile(
             meta,
@@ -1408,7 +1388,7 @@ class TestWorkstreamMomentum:
 
 
 class TestWorktreeConflicts:
-    def test_detects_overlap(self, tmp_path: Path, _scrub_git_env: None) -> None:
+    def test_detects_overlap(self, tmp_path: Path) -> None:
         from scripts.tools.project_pulse import collect_worktree_conflicts
 
         wt_a = tmp_path / ".worktrees" / "claude" / "task-a"
@@ -1431,7 +1411,7 @@ class TestWorktreeConflicts:
         assert "config.py" in items[0].summary
         assert items[0].category == "decaying"
 
-    def test_no_overlap(self, tmp_path: Path, _scrub_git_env: None) -> None:
+    def test_no_overlap(self, tmp_path: Path) -> None:
         from scripts.tools.project_pulse import collect_worktree_conflicts
 
         wt_a = tmp_path / ".worktrees" / "claude" / "task-a"

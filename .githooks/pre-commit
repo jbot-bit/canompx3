@@ -150,8 +150,13 @@ if [ -z "$TEST_ARGS" ]; then
 else
     TEST_TMPFILE=$(mktemp)
     set +e
+    # Scrub git env vars that the commit hook inherits — they leak into test
+    # subprocesses (e.g. tests calling `git worktree list` from a tmp_path)
+    # and make those calls report the parent repo's worktrees instead of
+    # erroring on the empty tmp_path. See PR #126 postmortem.
     # shellcheck disable=SC2086  # intentional word-splitting for TEST_ARGS
-    "$PYTHON" -m pytest $TEST_ARGS -x -q > "$TEST_TMPFILE" 2>&1
+    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE \
+        "$PYTHON" -m pytest $TEST_ARGS -x -q > "$TEST_TMPFILE" 2>&1
     TEST_EXIT=$?
     set -e
     tail -5 "$TEST_TMPFILE"

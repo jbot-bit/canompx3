@@ -183,6 +183,19 @@ GIT_TIMEOUT = 5
 SUBPROCESS_TIMEOUT = 60
 
 
+def _scrubbed_git_env() -> dict[str, str]:
+    """os.environ minus GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE.
+
+    These are pre-populated by pre-commit hooks and other git contexts; if
+    inherited, they override cwd-based repo resolution and make subprocess
+    git calls report the wrong repo. See PR #126 postmortem.
+    """
+    env = os.environ.copy()
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        env.pop(var, None)
+    return env
+
+
 def _run_git(root: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
     try:
         return subprocess.run(
@@ -194,6 +207,7 @@ def _run_git(root: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
             errors="replace",
             timeout=GIT_TIMEOUT,
             check=False,
+            env=_scrubbed_git_env(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -1505,15 +1519,20 @@ def collect_session_claims(root: Path) -> list[PulseItem]:
     return items
 
 
-def collect_action_queue(canonical: Path) -> list[PulseItem]:
-    """Parse the canonical active-work queue."""
+def collect_action_queue(canonical: Path, *, now: datetime | None = None) -> list[PulseItem]:
+    """Parse the canonical active-work queue.
+
+    `now` overrides the reference clock for the staleness sweep. Default uses
+    wall clock; tests pass an explicit datetime to make staleness assertions
+    deterministic.
+    """
     items: list[PulseItem] = []
     queue_path = canonical / "docs" / "runtime" / "action-queue.yaml"
     if not queue_path.exists():
         return items
 
     queue = load_queue(canonical)
-    stale_ids = {item.id for item in queue_stale_items(queue)}
+    stale_ids = {item.id for item in queue_stale_items(queue, now=now)}
     for item in queue.items:
         if item.status in {"closed", "superseded"}:
             continue
