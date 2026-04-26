@@ -9,13 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 9f676c47 — [mechanical] type: drive 3 ingest_dbn files to 0 pyright errors
-- **Files changed:** 5 files
+- **Commit:** 29834981 — chore(handoff,stages): post-pyright-batch ledger sync + adopt orphaned pass-three stage doc
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/ingest-dbn-pyright-cleanup.md`
-  - `pipeline/ingest_dbn.py`
-  - `pipeline/ingest_dbn_daily.py`
-  - `pipeline/ingest_dbn_mgc.py`
+  - `docs/runtime/stages/pass-three-magic-number-drift-check.md`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 
