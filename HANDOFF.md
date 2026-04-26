@@ -9,10 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** 9844e81f — feat(hooks): same-worktree multi-Claude hard block (Phase 1A)
-- **PR:** [#138](https://github.com/jbot-bit/canompx3/pull/138) (OPEN — hooks-only, ready to merge)
+- **Commit:** a2f5e2cd — docs(handoff): session decisions for 2026-04-26 (Phase 1A + arch decision)
 - **Files changed:** 1 files
-  - `.claude/hooks/session-start.py`
+  - `HANDOFF.md`
 
 ## Session decisions (2026-04-26 evening)
 
