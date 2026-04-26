@@ -17,6 +17,7 @@ Usage:
 
 import ast
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -5879,6 +5880,79 @@ def check_c1_kill_switch_guards_intact() -> list[str]:
     return violations
 
 
+def check_no_crlf_in_tracked_text_blobs() -> list[str]:
+    """No tracked text file may have CRLF line endings in its committed blob.
+
+    Defense-in-depth for the pre-commit `[0b]` auto-renormalize hook.
+    The hook prevents new CRLF entering commits via the normal commit path; this
+    check catches anything that bypassed the hook — `--no-verify`, direct API push,
+    `git lfs`, hook tampering, or a missing hooksPath setting on a contributor box.
+
+    Scope: every file with `.gitattributes` `text=set` or `text=auto` whose blob
+    at HEAD contains a `\\r\\n` byte sequence is a violation.
+
+    Why blob-not-WT: working-tree state is environment-specific (Windows checkout
+    can produce CRLF on disk even from LF blobs). The COMMITTED blob is the
+    canonical contract — that is what reaches CI, other contributors, and merge
+    conflict resolution. Phantom-modified WT files do NOT trigger this check;
+    only actual CRLF in HEAD's tree does.
+
+    History: PR #130 (2026-04-26) renormalized 83 historical CRLF blobs to LF
+    after multiple sessions hit the recurring `pre-rebase CRLF noise` pattern
+    (stash@{6-10} in repo). This check exists so that debt class never returns.
+    """
+    violations: list[str] = []
+    try:
+        ls_files = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            check=True,
+            timeout=20,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return []  # not a git repo / git unavailable — skip silently
+
+    tracked = [p for p in ls_files.stdout.decode("utf-8", "replace").split("\x00") if p]
+
+    for rel_path in tracked:
+        # Determine if file is text per .gitattributes
+        try:
+            attr = subprocess.run(
+                ["git", "check-attr", "text", "--", rel_path],
+                cwd=PROJECT_ROOT,
+                capture_output=True,
+                check=False,
+                timeout=5,
+            ).stdout.decode("utf-8", "replace")
+        except (subprocess.SubprocessError, FileNotFoundError):
+            continue
+        if not (": text: set" in attr or ": text: auto" in attr):
+            continue
+
+        # Read blob bytes from HEAD (raw, no filters)
+        try:
+            blob = subprocess.run(
+                ["git", "show", f"HEAD:{rel_path}"],
+                cwd=PROJECT_ROOT,
+                capture_output=True,
+                check=False,
+                timeout=5,
+            ).stdout
+        except (subprocess.SubprocessError, FileNotFoundError):
+            continue
+
+        if b"\r\n" in blob:
+            crlf_lines = blob.count(b"\r\n")
+            violations.append(
+                f"  {rel_path} — committed blob has {crlf_lines} CRLF line(s). "
+                f"Per .gitattributes eol=lf, must be LF. "
+                f"Fix: `git add --renormalize -- {rel_path} && git commit`."
+            )
+
+    return violations
+
+
 def check_canonical_claude_client_source() -> list[str]:
     """Only `trading_app/ai/claude_client.py` may hardcode Claude model IDs
     or instantiate `anthropic.Anthropic(...)` directly.
@@ -6342,6 +6416,12 @@ CHECKS = [
         False,
     ),
     (
+        "No CRLF in tracked text blobs (defense-in-depth for pre-commit [0b] auto-renormalize)",
+        check_no_crlf_in_tracked_text_blobs,
+        False,
+        False,
+    ),
+    (
         "C1 kill-switch guards intact at _on_bar and _handle_event ENTRY branch",
         check_c1_kill_switch_guards_intact,
         False,
@@ -6380,6 +6460,7 @@ SLOW_CHECK_LABELS = frozenset(
         "Naive datetime detection",
         "No old fixed-clock session names in Python source",
         "Trading app schema-query consistency",
+        "No CRLF in tracked text blobs (defense-in-depth for pre-commit [0b] auto-renormalize)",
     }
 )
 
