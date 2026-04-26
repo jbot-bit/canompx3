@@ -9,11 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** cc20f52c — [mechanical] fix(hwm): Stage 3 audit-gate — close C-1 (Scenario 6) + TM-2 (path-in-warning)
-- **Files changed:** 3 files
+- **Commit:** 95adb0a6 — [judgment] feat(hwm): Stage 4 — TopStep inactivity-window pre-flight + HANDOFF closure
+- **Files changed:** 5 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_account_hwm_tracker.py`
-  - `tests/test_trading_app/test_account_hwm_tracker_integration.py`
+  - `docs/ralph-loop/deferred-findings.md`
+  - `docs/runtime/stages/hwm-stage4-inactivity-monitor.md`
+  - `tests/test_trading_app/test_pre_session_check.py`
+  - `trading_app/pre_session_check.py`
 
 ## Next Steps — Active
 
