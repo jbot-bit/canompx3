@@ -9,10 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 9dd4e7b5 — chore(stages): close main-ci-preflight stage (PR #143 merged at 574912e2)
-- **Files changed:** 2 files
+- **Commit:** 891c1aaa — chore(handoff): sync to 9dd4e7b5 (post-commit auto-update)
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/main-ci-preflight.md`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 
