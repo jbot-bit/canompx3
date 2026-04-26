@@ -9,24 +9,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** a41dcb50 — Merge remote-tracking branch 'origin/main' into chore/hardening-three-ghost-deployments
-- **Files changed:** 16 files
+- **Commit:** a2bfc631 — chore(stages): close ruff-format-iter179-fixup (all 4 sub-fixes obsolete)
+- **Files changed:** 4 files
   - `.claude/hooks/session-start.py`
   - `HANDOFF.md`
-  - `docs/runtime/stages/debt-burndown-import-side-effects.md`
-  - `docs/runtime/stages/hwm-stage1-gap1-none-reason-contract-guard.md`
-  - `docs/runtime/stages/hwm-stage2-tracker-integrity.md`
-  - `docs/runtime/stages/hwm-stage3-orchestrator-pre-session.md`
-  - `docs/runtime/stages/hwm-stage4-inactivity-monitor.md`
-  - `docs/runtime/stages/hwm-warning-tier-notify-dispatch.md`
-  - `docs/runtime/stages/live-overnight-resilience-hardening.md`
-  - `docs/runtime/stages/osr-debt-frame-audit.md`
-  - `docs/runtime/stages/ralph-iter-174-f4-bracket-naked.md`
-  - `docs/runtime/stages/ralph-iter-179-pass-one-hardening.md`
-  - `docs/runtime/stages/ralph-iter-181-r4-signals-rotation.md`
-  - `docs/runtime/stages/ralph-iter-185-f7-fill-poller-timeout.md`
   - `docs/runtime/stages/ruff-format-iter179-fixup.md`
-  - ... and 1 more
+  - `requirements.txt`
 
 ## Stages closed this session (work landed, file deleted)
 
