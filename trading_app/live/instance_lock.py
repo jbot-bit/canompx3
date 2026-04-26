@@ -125,12 +125,13 @@ def is_pid_alive(pid: int) -> bool:
     if sys.platform == "win32":
         import ctypes
 
-        # Windows quirk: OpenProcess can return a valid handle for an
-        # already-exited ("zombie") process whose PID slot has not yet been
-        # recycled. We must additionally call GetExitCodeProcess and check
-        # for STILL_ACTIVE (259). Without this check, `acquire_instance_lock`
+        # Rationale: Windows quirk — OpenProcess can return a valid handle for
+        # an already-exited ("zombie") process whose PID slot has not yet been
+        # recycled. We must additionally call GetExitCodeProcess and check for
+        # STILL_ACTIVE (259). Without this check, `acquire_instance_lock`
         # refuses to start the bot after a crash until the operator manually
-        # deletes the lock file.
+        # deletes the lock file. Both numeric values (259 and 0x1000) are
+        # Win32 API constants dictated by the OS — not arbitrary tunables.
         STILL_ACTIVE = 259
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
         handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)

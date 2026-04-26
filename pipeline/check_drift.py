@@ -6304,6 +6304,87 @@ def check_pooled_finding_annotations() -> list[str]:
     return violations
 
 
+def check_magic_number_rationale(trading_app_dir: Path) -> list[str]:
+    """Pass Three: magic-number rationale audit on trading_app/live/.
+
+    Every UPPER_SNAKE_CASE assignment (class-body or module-level) in
+    trading_app/live/ whose value is a numeric literal with
+    abs(value) > RATIONALE_THRESHOLD must have either:
+      (a) a comment containing "Rationale:" or "rationale" (case-insensitive)
+          within +/- 10 lines of the assignment (covers multi-paragraph
+          comment blocks where the explicit "Rationale:" tag lands a few
+          lines above the literal), OR
+      (b) the constant name appears in RATIONALE_WHITELIST below.
+
+    Why: parameter-justification discipline per Robert Carver,
+    "Systematic Trading" Ch. 4 (resources/Robert Carver - Systematic
+    Trading.pdf) — every magic number in production code should encode a
+    documented decision, not an undefended choice. Untraceable constants
+    are how prop-desk strategies silently overfit and how operators lose
+    track of why a timeout / threshold / cap was set.
+
+    Introduced: 2026-04-26 as part of v6.1 open-work burndown (Pass Three).
+    """
+    import ast
+
+    RATIONALE_THRESHOLD = 10
+    # Names whose meaning is self-evident by context. Add here only after
+    # confirming there is no plausible operator question of "why this value".
+    RATIONALE_WHITELIST: set[str] = set()
+
+    violations: list[str] = []
+    live_dir = trading_app_dir / "live"
+    if not live_dir.exists():
+        return [f"  trading_app/live/ not found at {live_dir}"]
+
+    name_re = re.compile(r"[A-Z][A-Z0-9_]+")
+    rationale_re = re.compile(r"#.*\brationale\b", re.IGNORECASE)
+
+    for fpath in sorted(live_dir.rglob("*.py")):
+        try:
+            content = fpath.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        lines = content.splitlines()
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            continue
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                continue
+            tgt = node.targets[0]
+            if not isinstance(tgt, ast.Name) or not name_re.fullmatch(tgt.id):
+                continue
+            val = node.value
+            if not isinstance(val, ast.Constant):
+                continue
+            v = val.value
+            # bool is a subclass of int — exclude explicitly.
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                continue
+            if abs(v) <= RATIONALE_THRESHOLD:
+                continue
+            if tgt.id in RATIONALE_WHITELIST:
+                continue
+            line_no = node.lineno
+            window_start = max(0, line_no - 11)
+            window_end = min(len(lines), line_no + 10)
+            window = lines[window_start:window_end]
+            if any(rationale_re.search(line) for line in window):
+                continue
+            try:
+                rel = fpath.relative_to(trading_app_dir.parent)
+            except ValueError:
+                rel = fpath
+            violations.append(
+                f"  {rel}:{line_no}: magic number {tgt.id}={v} lacks "
+                f"'Rationale:' comment within +/- 10 lines (Carver Ch. 4)"
+            )
+    return violations
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -6728,6 +6809,12 @@ CHECKS = [
     (
         "Pooled-finding audit files carry per-cell breakdown annotation (RULE 14)",
         check_pooled_finding_annotations,
+        False,
+        False,
+    ),
+    (
+        "Magic-number rationale audit on trading_app/live/ (Carver Ch. 4)",
+        lambda: check_magic_number_rationale(TRADING_APP_DIR),
         False,
         False,
     ),
