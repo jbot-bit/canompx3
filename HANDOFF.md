@@ -7,29 +7,11 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
-- **Tool:** Claude Code (canonical worktree)
+- **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **PRs landed this session (origin/main):**
-  - `eedb8517` — PR #125 — chore(hooks): SessionStart auto-fetch + safe-FF + drift-line; fix `task_route_packet` respawn-on-import
-  - `20cabbc3` — PR #126 — fix(tests): pin clock + scrub git env in fragile pulse/queue tests (unblocked main from inherited time-bombs)
-- **Global settings hardened** at `~/.claude/settings.json` (cross-project, outside repo):
-  - `permissions.deny`: force-push, dd, mkfs, chmod 777
-  - `permissions.ask`: rm -rf, reset --hard, clean -fd, checkout -- .
-  - `sandbox.filesystem.denyRead`: ~/.ssh, ~/.aws, .env, .pem, .key, secrets/
-  - `sandbox.network.deniedDomains`: pastebin.com, paste.ee, 0x0.st, transfer.sh, ix.io
-  - `attribution.commit`: stripped stale "Opus 4.6" version label
-  - These actively defended against my own destructive shortcuts 3x this session (rm-rf junction, checkout -- ., reset --hard).
-- **3 memory rules added** (`~/.claude/projects/.../memory/`):
-  - `feedback_session_start_origin_drift.md` — SessionStart MUST print `Origin: N behind, M ahead`; auto-FF only when `branch==main` AND `ahead==0` AND clean tree.
-  - `feedback_gha_merge_ref_staleness.md` — GHA `pull_request` CI uses cached `refs/pull/N/merge`; close+reopen does NOT refresh; only `git push` to head branch (e.g. empty commit) does.
-  - `feedback_test_clock_injection.md` — hardcoded `last_verified_at` + `freshness_sla_days` in test seeds is a wall-clock time-bomb; inject clock via `now=` or monkeypatch `_utc_now()`.
-- **Plan doc moved DESIGN → APPLIED:** `docs/plans/2026-04-25-claude-code-global-hardening-design.md`.
-- **Debt flagged (NOT fixed — stage-gate-blocked while 8+ RESEARCH/DESIGN stages open):**
-  - `scripts/tools/task_route_packet.py` — move `_ensure_repo_python()` into `if __name__ == '__main__'` block (imports should be side-effect-free).
-  - `scripts/tools/project_pulse.py::collect_action_queue()` — accept `now=` for testability.
-  - `scripts/tools/project_pulse.py::collect_worktrees()` / `_worktree_metadata()` and `worktree_manager.py::list_worktrees()` — scrub `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` before invoking git.
-  - `.githooks/pre-commit` — run tests with `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE` to prevent env-leak test contamination.
-- **Cross-terminal coordination:** other terminal (canompx3-ralph-burndown worktree) paused with stash@{0} containing pre-fix hook copies + HANDOFF + untracked plan/stage docs. After this handover lands they will `git pull --rebase`, run gates, push their 2 ralph commits. Stash@{0} content was superseded by my PRs (hooks now on origin/main); operator may drop stash@{0} once their pull lands.
+- **Commit:** 441ef57a — docs(handoff): 2026-04-26 session — PR #125 hooks + #126 test fixes landed
+- **Files changed:** 1 files
+  - `HANDOFF.md`
 
 ## Prior session (kept for context)
 - **Tool:** Claude Code
