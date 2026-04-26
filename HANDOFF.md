@@ -9,11 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** e3b26c6b — [mechanical] fix(hwm): self-audit F-1/F-2/F-3 — defense-in-depth + granular log + HANDOFF hashes
-- **Files changed:** 3 files
-  - `HANDOFF.md`
-  - `tests/test_trading_app/test_pre_session_check.py`
-  - `trading_app/pre_session_check.py`
+- **Commit:** ea586864 — [mechanical] WIP feat(hardening): re-extract #36 additive files for fresh ghost-deployment chore
+- **Files changed:** 5 files
+  - `.claude/rules/pooled-finding-rule.md`
+  - `docs/audit/results/TEMPLATE-pooled-finding.md`
+  - `docs/plans/2026-04-20-hardening-three-fixes-design.md`
+  - `docs/runtime/stages/hardening-three-fixes.md`
+  - `pipeline/backfill_pit_range_atr.py`
 
 ## Next Steps — Active
 

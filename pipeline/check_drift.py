@@ -21,11 +21,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PIPELINE_DIR = PROJECT_ROOT / "pipeline"
 TRADING_APP_DIR = PROJECT_ROOT / "trading_app"
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 RESEARCH_DIR = PROJECT_ROOT / "research"
+
+# Ensure PROJECT_ROOT is first on sys.path so `pipeline.X` and `trading_app.X`
+# imports resolve before sys.path[0] (which Python sets to the script's parent
+# dir, i.e. `pipeline/`, when invoked as `python pipeline/check_drift.py`).
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Module-level override for tests; production uses GOLD_DB_PATH from pipeline.paths
 GOLD_DB_PATH_FOR_CHECKS = None  # Set by tests; production uses GOLD_DB_PATH
@@ -6018,6 +6024,286 @@ def check_canonical_claude_client_source() -> list[str]:
     return violations
 
 
+def check_routed_filter_columns_populated(con=None) -> list[str]:
+    """Every routed filter's required daily_features columns must be populated.
+
+    Catches ghost deployments — a filter registered in ALL_FILTERS and
+    routed to a session via get_session_filters, where the daily_features
+    column it depends on is 0%-populated (or near-zero). The filter is
+    fail-closed on NULL, so such a lane silently produces zero trades.
+
+    Canonical example: PIT_MIN was routed to CME_REOPEN in commit
+    f776bc13 (2026-04-06) but daily_features.pit_range_atr was never
+    populated — the backfill code did not land with the schema. Zero
+    live-trade impact only because no deployed lane used PIT_MIN; the
+    trap would have fired on the first deployment.
+
+    What this check enforces:
+      1. Collect the routed set: every filter_type string that appears
+         in get_session_filters output across all SESSION_CATALOG entries.
+      2. For each routed filter, walk composites to leaves and call
+         describe() to collect every feature_column reporting a scalar
+         daily_features column (skip orb_* per-aperture columns — those
+         are session-conditional by design and checked elsewhere).
+      3. Query the live DB for population fraction of each column scoped
+         to ACTIVE_ORB_INSTRUMENTS at orb_minutes=5.
+      4. Flag when fraction < 0.50 — catches both 0%-populated ghost
+         deployments and writer regressions while tolerating sparse
+         early-history warmups.
+
+    @rule backfill-integrity
+    @stage hardening-three-fixes (2026-04-20)
+    """
+    violations: list[str] = []
+    if con is None:
+        return violations  # DB-required check skips cleanly when unavailable
+
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.dst import SESSION_CATALOG
+        from trading_app.config import (
+            ALL_FILTERS,
+            CompositeFilter,
+            NoFilter,
+            StrategyFilter,
+            get_filters_for_grid,
+        )
+    except ImportError as exc:
+        return [f"  Could not import required modules: {exc}"]
+
+    # Collect the ROUTED set: filter_type strings appearing in any
+    # (instrument, session) filter map. This is the production-contract set.
+    routed: set[str] = set()
+    for inst in ACTIVE_ORB_INSTRUMENTS:
+        for session_label in SESSION_CATALOG:
+            try:
+                filters = get_filters_for_grid(inst, session_label)
+            except Exception:
+                continue
+            routed.update(filters.keys())
+
+    if not routed:
+        return ["  Could not enumerate routed filters — SESSION_CATALOG or get_session_filters failed"]
+
+    # Walk composites to leaves and collect scalar daily_features columns.
+    # Sample row gives describe() enough context to return atoms without
+    # raising. CME_REOPEN chosen because it routes the largest filter set.
+    sample_row = {
+        "orb_CME_REOPEN_size": 8.0,
+        "orb_CME_REOPEN_break_delay_min": 3.0,
+        "orb_CME_REOPEN_break_bar_continues": True,
+        "orb_CME_REOPEN_break_dir": "long",
+        "orb_CME_REOPEN_compression_tier": "Compressed",
+        "orb_volume_ratio_CME_REOPEN": 1.5,
+        "rel_vol_CME_REOPEN": 1.4,
+        "symbol": "MGC",
+        "pit_range_atr": 0.15,
+        "prev_day_range": 200.0,
+        "atr_20": 150.0,
+        "gap_open_points": 5.0,
+        "overnight_range": 80.0,
+        "overnight_range_pct": 60.0,
+        "atr_20_pct": 75.0,
+        "cross_atr_MES_pct": 75.0,
+        "cross_atr_MGC_pct": 75.0,
+        "atr_vel_regime": "Stable",
+        "day_of_week": 2,
+        "is_nfp_day": False,
+        "is_opex_day": False,
+        "is_friday": False,
+        "double_break": 0,
+        "garch_forecast_vol_pct": 80.0,
+    }
+
+    def _walk_leaves(filt: StrategyFilter) -> list[StrategyFilter]:
+        if isinstance(filt, CompositeFilter):
+            return _walk_leaves(filt.base) + _walk_leaves(filt.overlay)
+        return [filt]
+
+    # Map each required scalar column back to the filter(s) that need it.
+    col_to_filters: dict[str, set[str]] = {}
+    for ft in sorted(routed):
+        if ft not in ALL_FILTERS:
+            continue
+        if isinstance(ALL_FILTERS[ft], NoFilter):
+            continue
+        for leaf in _walk_leaves(ALL_FILTERS[ft]):
+            if isinstance(leaf, NoFilter):
+                continue
+            try:
+                atoms = leaf.describe(sample_row, "CME_REOPEN", "E2")
+            except Exception:
+                continue
+            for atom in atoms:
+                col = getattr(atom, "feature_column", None)
+                if col is None:
+                    continue
+                # Skip per-aperture nested columns — they are session-specific
+                # by construction and covered by other integrity checks.
+                if col.startswith("orb_"):
+                    continue
+                col_to_filters.setdefault(col, set()).add(ft)
+
+    # Verify each scalar column is present in daily_features schema AND
+    # populated at >= 50% for active instruments at orb_minutes=5.
+    try:
+        known_cols = {
+            row[0]
+            for row in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
+            ).fetchall()
+        }
+    except Exception as exc:
+        return [f"  Could not introspect daily_features schema: {exc}"]
+
+    active = tuple(ACTIVE_ORB_INSTRUMENTS)
+    if not active:
+        return []  # nothing to check
+
+    placeholders = ",".join(["?"] * len(active))
+    # Runtime-injected columns (not backed by daily_features schema) are
+    # tracked separately. They fail-closed at eligibility time if the
+    # injector is broken, so visibility matters. The primary violation
+    # surface of this check is schema-population; runtime-injected
+    # coverage is a separate check class, emitted as advisory via stderr.
+    runtime_injected: list[str] = []
+    for col in sorted(col_to_filters):
+        if col not in known_cols:
+            filters_list = ", ".join(sorted(col_to_filters[col]))
+            runtime_injected.append(f"    {col} (required by [{filters_list}])")
+            continue
+        try:
+            row = con.execute(
+                f"SELECT COUNT(*) total, COUNT({col}) populated "
+                f"FROM daily_features WHERE orb_minutes = 5 "
+                f"AND symbol IN ({placeholders})",
+                list(active),
+            ).fetchone()
+        except Exception as exc:
+            violations.append(f"  Could not query {col} population: {exc}")
+            continue
+        if row is None:
+            continue
+        total, populated = int(row[0]), int(row[1])
+        if total == 0:
+            continue
+        pct = populated / total
+        if pct < 0.50:
+            filters_list = ", ".join(sorted(col_to_filters[col]))
+            violations.append(
+                f"  Column '{col}' is {pct:.1%} populated across "
+                f"ACTIVE_ORB_INSTRUMENTS but is required by routed filters "
+                f"[{filters_list}] — likely ghost deployment or writer regression"
+            )
+
+    if runtime_injected:
+        # Informational only — these columns are not in daily_features and
+        # must be covered by runtime-injection integrity checks elsewhere.
+        # Emit to stderr so they appear in the audit log but do not block.
+        import sys as _sys
+
+        print(
+            "  INFO: routed filters require runtime-injected columns (not daily_features-backed):",
+            file=_sys.stderr,
+        )
+        for entry in runtime_injected:
+            print(entry, file=_sys.stderr)
+
+    return violations
+
+
+def check_pooled_finding_annotations() -> list[str]:
+    """Audit-result files claiming pooled-universe findings must carry schema.
+
+    RULE 14 (2026-04-20 retroactive heterogeneity audit, commit aa3399b3):
+    pooled-universe p-values and ExpR averages hide opposite-sign
+    per-cell behavior. A pooled claim without a per-cell breakdown is
+    a silent heterogeneity artefact.
+
+    What this check enforces on audit-result files created or modified
+    after the sentinel date 2026-04-20:
+      1. If YAML front-matter sets pooled_finding: true, the file must
+         also carry per_cell_breakdown_path: <repo-relative path> and
+         flip_rate_pct: <0-100 numeric>.
+      2. If flip_rate_pct >= 25, the file must carry
+         heterogeneity_ack: true to acknowledge the heterogeneity finding.
+
+    Historical audits modified before the sentinel are exempt — editing
+    an older file after the sentinel opts into the schema.
+
+    @rule pooled-finding-rule
+    @stage hardening-three-fixes (2026-04-20)
+    """
+    sentinel_date = "2026-04-20"
+    results_dir = PROJECT_ROOT / "docs" / "audit" / "results"
+    if not results_dir.is_dir():
+        return []
+
+    violations: list[str] = []
+
+    for md_file in sorted(results_dir.glob("*.md")):
+        # Skip the template itself
+        if md_file.name.startswith("TEMPLATE-"):
+            continue
+
+        try:
+            content = md_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        # Only files whose name starts with the sentinel date or later.
+        # Filename convention: YYYY-MM-DD-<slug>.md
+        fname = md_file.name
+        date_prefix = fname[:10] if len(fname) >= 10 else ""
+        if date_prefix < sentinel_date:
+            continue
+
+        # Extract YAML front-matter (between leading --- delimiters).
+        # Minimal parser: only looks at top-level key: value lines.
+        if not content.startswith("---"):
+            continue  # no front-matter — rule does not apply
+        end_marker = content.find("\n---", 3)
+        if end_marker < 0:
+            continue
+        fm_text = content[3:end_marker]
+        fm: dict[str, str] = {}
+        for line in fm_text.splitlines():
+            if ":" in line and not line.lstrip().startswith("#"):
+                k, _, v = line.partition(":")
+                fm[k.strip()] = v.strip().strip('"').strip("'")
+
+        pooled_flag = fm.get("pooled_finding", "").lower()
+        if pooled_flag not in ("true", "yes", "1"):
+            continue  # not a pooled-finding file
+
+        rel = md_file.relative_to(PROJECT_ROOT)
+
+        breakdown_path = fm.get("per_cell_breakdown_path", "")
+        if not breakdown_path:
+            violations.append(f"  {rel}: pooled_finding: true but per_cell_breakdown_path missing")
+        flip_rate_str = fm.get("flip_rate_pct", "")
+        flip_rate: float | None = None
+        if flip_rate_str:
+            try:
+                flip_rate = float(flip_rate_str)
+            except ValueError:
+                violations.append(f"  {rel}: flip_rate_pct={flip_rate_str!r} is not a number")
+        else:
+            violations.append(f"  {rel}: pooled_finding: true but flip_rate_pct missing")
+
+        if flip_rate is not None and flip_rate >= 25.0:
+            ack = fm.get("heterogeneity_ack", "").lower()
+            if ack not in ("true", "yes", "1"):
+                violations.append(
+                    f"  {rel}: flip_rate_pct={flip_rate:.1f} >= 25 but "
+                    f"heterogeneity_ack not set to true — RULE 14 requires "
+                    f"explicit acknowledgement when pooled framing hides "
+                    f"≥25% cell-level sign flips"
+                )
+
+    return violations
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -6430,6 +6716,18 @@ CHECKS = [
     (
         "Signal log rotation: _write_signal_record delegates to SignalLogRotator (R4 fix)",
         check_signal_log_rotation_not_bypassed,
+        False,
+        False,
+    ),
+    (
+        "Routed filter required columns populated (catches ghost deployments)",
+        check_routed_filter_columns_populated,
+        False,
+        True,
+    ),
+    (
+        "Pooled-finding audit files carry per-cell breakdown annotation (RULE 14)",
+        check_pooled_finding_annotations,
         False,
         False,
     ),
