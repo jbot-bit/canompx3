@@ -1,3 +1,11 @@
+---
+paths:
+  - "docs/audit/results/**/*.md"
+  - "docs/audit/hypotheses/**/*.md"
+  - "docs/institutional/**/*.md"
+  - "research/**/*.py"
+---
+
 # Pooled-finding rule — per-cell breakdown is mandatory
 
 **Authority:** governs every new audit-result file under `docs/audit/results/` dated 2026-04-20 or later. Enforced by `pipeline/check_drift.py::check_pooled_finding_annotations`.
