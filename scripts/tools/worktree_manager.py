@@ -51,6 +51,21 @@ class ManagedWorktreeInfo:
     dirty: bool = False
 
 
+def _scrubbed_git_env() -> dict[str, str]:
+    """Return os.environ with GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE removed.
+
+    Pre-commit hooks and other git-invoked contexts pre-populate these vars,
+    which override cwd-based repo resolution and can make ``git worktree list``
+    inside a tmp_path or unrelated cwd report the parent repo's worktrees
+    instead of erroring out. Subprocess git calls that must respect cwd should
+    pass this env explicitly.
+    """
+    env = os.environ.copy()
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+        env.pop(var, None)
+    return env
+
+
 def _run_git(*args: str, cwd: Path = PROJECT_ROOT) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
@@ -60,6 +75,7 @@ def _run_git(*args: str, cwd: Path = PROJECT_ROOT) -> subprocess.CompletedProces
         encoding="utf-8",
         errors="replace",
         check=False,
+        env=_scrubbed_git_env(),
     )
 
 

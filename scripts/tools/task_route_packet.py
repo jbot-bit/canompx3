@@ -49,7 +49,6 @@ def _ensure_repo_python() -> None:
     )
 
 
-_ensure_repo_python()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -184,4 +183,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # Bootstrap the repo venv only when invoked as CLI. Importing this module
+    # (e.g. from a hook) must NOT re-exec the process — see PR #125 postmortem
+    # where the silent SystemExit broke session-start.py under system python.
+    _ensure_repo_python()
     raise SystemExit(main())
