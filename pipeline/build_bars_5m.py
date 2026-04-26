@@ -63,7 +63,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
         AND ts_utc >= ?::TIMESTAMPTZ
         AND ts_utc < ?::TIMESTAMPTZ
     """
-    source_count = con.execute(count_query, [symbol, start_ts, end_ts]).fetchone()[0]
+    source_count = con.execute(count_query, [symbol, start_ts, end_ts]).fetchone()[0]  # type: ignore[index]
     logger.info(f"  Source bars_1m rows: {source_count:,}")
 
     if source_count == 0:
@@ -148,7 +148,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
             AND ts_utc < ?::TIMESTAMPTZ
         """,
             [symbol, start_ts, end_ts],
-        ).fetchone()[0]
+        ).fetchone()[0]  # type: ignore[index]
         logger.info(f"  DRY RUN: Would build {count_result:,} bars_5m rows")
         return count_result
 
@@ -165,7 +165,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
             AND ts_utc < ?::TIMESTAMPTZ
         """,
             [symbol, start_ts, end_ts],
-        ).fetchone()[0]
+        ).fetchone()[0]  # type: ignore[index]
 
         con.execute(
             """
@@ -198,7 +198,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
             AND ts_utc < ?::TIMESTAMPTZ
         """,
             [symbol, start_ts, end_ts],
-        ).fetchone()[0]
+        ).fetchone()[0]  # type: ignore[index]
 
         con.execute("COMMIT")
 
@@ -241,7 +241,7 @@ def verify_5m_integrity(
         )
     """,
         [symbol, start_ts, end_ts],
-    ).fetchone()[0]
+    ).fetchone()[0]  # type: ignore[index]
 
     if dupe_count > 0:
         failures.append(f"Duplicate (symbol, ts_utc) in bars_5m: {dupe_count}")
@@ -256,7 +256,7 @@ def verify_5m_integrity(
         AND EXTRACT(EPOCH FROM ts_utc)::BIGINT % 300 != 0
     """,
         [symbol, start_ts, end_ts],
-    ).fetchone()[0]
+    ).fetchone()[0]  # type: ignore[index]
 
     if misaligned > 0:
         failures.append(f"Misaligned timestamps (not 5m boundary): {misaligned}")
@@ -271,7 +271,7 @@ def verify_5m_integrity(
         AND (high < low OR high < open OR high < close OR low > open OR low > close)
     """,
         [symbol, start_ts, end_ts],
-    ).fetchone()[0]
+    ).fetchone()[0]  # type: ignore[index]
 
     if ohlcv_bad > 0:
         failures.append(f"OHLCV sanity failures (high/low violations): {ohlcv_bad}")
@@ -286,7 +286,7 @@ def verify_5m_integrity(
         AND volume < 0
     """,
         [symbol, start_ts, end_ts],
-    ).fetchone()[0]
+    ).fetchone()[0]  # type: ignore[index]
 
     if vol_bad > 0:
         failures.append(f"Negative volume: {vol_bad}")

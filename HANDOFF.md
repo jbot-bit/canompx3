@@ -9,13 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 4a4e19ef — chore(handoff,ralph): sync ledger after iter 179 + pyright cleanup commits
-- **Files changed:** 5 files
+- **Commit:** 1663dbb6 — [mechanical] type: drive pipeline/check_drift.py to 0 pyright errors
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/ralph-ledger.json`
-  - `docs/ralph-loop/ralph-loop-audit.md`
-  - `docs/ralph-loop/ralph-loop-history.md`
-  - `docs/ralph-loop/ralph-loop-plan.md`
+  - `docs/runtime/stages/check-drift-pyright-narrow.md`
+  - `pipeline/check_drift.py`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 
