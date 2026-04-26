@@ -9,12 +9,18 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** a2bfc631 — chore(stages): close ruff-format-iter179-fixup (all 4 sub-fixes obsolete)
-- **Files changed:** 4 files
-  - `.claude/hooks/session-start.py`
+- **Commit:** a2f5e2cd — docs(handoff): session decisions for 2026-04-26 (Phase 1A + arch decision)
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/ruff-format-iter179-fixup.md`
-  - `requirements.txt`
+
+## Session decisions (2026-04-26 evening)
+
+- **Env hardening landed** (PR #136, merged) — venv pinned to `uv.lock`, `_env_drift_lines()` reports drift at session-start, `requirements.txt` regenerated from lock.
+- **Same-worktree mutex landed** (PR #138, open) — atomic `O_EXCL` lock at `<git-dir>/.claude.pid` prevents two Claudes in one worktree (the `cannot lock ref 'HEAD'` race that wasted ~30 min tonight). 4 scenarios tested: clean / held / corrupted / 10x TOCTOU race.
+- **Architecture decision: per-session clones REJECTED.** Researched against 2026 industry consensus (Anthropic, Augment Code, Penligent, Upsun) — worktrees + runtime isolation is the recommended pattern, not clone-per-agent. Existing `_discover_git_common_root()` in `pipeline/paths.py:33-65` already implements canonical worktree-shared-DB pattern. Switching to clones would lose this and not solve the dominant collision class.
+- **Phase 1B (cross-worktree push lock) DEFERRED — not your issue.** Memory entries show no recurrence of this race; git's content-addressed object DB + non-FF-rejection covers it.
+- **Phase 1C (runtime isolation audit) DEFERRED — advisory only.** Low-priority diagnostic; can do later.
+- **Hook-output trim DEFERRED to next session** — needs production-code edits to `scripts/tools/task_route_packet.py`; properly stage-gated, not late-night work.
 
 ## Stages closed this session (work landed, file deleted)
 
