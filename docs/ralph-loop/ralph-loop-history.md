@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 179 — 2026-04-27
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/build_daily_features.py:1726-1744
+- Finding: enrich_date_range() called inside try-except-ROLLBACK block after COMMIT; any exception from enrich_date_range caused dead ROLLBACK raising TransactionContext Error, masking original exception
+- Doctrine cited: integrity-guardian.md § 6 (no silent failures / exception masking); institutional-rigor.md rule 6
+- Action: moved enrich_date_range call outside the try-except block; ROLLBACK still guards the INSERT (pre-COMMIT path); enrichment exceptions now surface directly
+- Blast radius: 1 file (pipeline/build_daily_features.py)
+- Verification: 84/84 test_build_daily_features.py PASS; 1234/1234 full pre-commit suite PASS; drift 113 PASS; ruff PASS
+- Commit: 2a8c18fd
+
+---
+
 ## Iteration 178 — 2026-04-26
 - Phase: audit-only
 - Classification: [judgment]

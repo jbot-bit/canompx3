@@ -1,8 +1,14 @@
-## Iteration: 178
-## Target: trading_app/live/session_orchestrator.py (R3, iter 176) + trading_app/live/session_orchestrator.py (C1, iter 177)
-## Finding: Adversarial audit of iters 176 (R3 reconnect ceiling) and 177 (C1 kill-switch race)
-## Classification: [judgment] (audit-only, no production edits)
-## Blast Radius: 0 new files changed (audit-only)
+## Iteration: 179
+## Target: pipeline/build_daily_features.py:1736-1742
+## Finding: enrich_date_range() called AFTER con.execute("COMMIT") but inside the try-except-ROLLBACK block; if enrich_date_range raises, the except clause calls ROLLBACK on a closed transaction which raises TransactionContext Error, masking the original exception.
+## Classification: [mechanical]
+## Blast Radius: 1 production file (pipeline/build_daily_features.py), companion test file (tests/test_pipeline/test_build_daily_features.py)
+## Invariants:
+##   1. daily_features rows MUST still be committed before enrich_date_range runs (enrichment reads the committed rows)
+##   2. ROLLBACK must still protect the daily_features INSERT if it fails (exception before COMMIT line 1726)
+##   3. enrich_date_range must still be called after successful INSERT+COMMIT
+## Diff estimate: ~5 lines moved (no logic change)
+## Doctrine cited: integrity-guardian.md § 6 (No silent failures / exception masking); institutional-rigor.md rule 6
 ## Invariants: [1] R3 stable-run reset logic must remain in-memory; [2] C1 guard must remain ENTRY-only; [3] EXIT/SCRATCH events must not be guarded by kill-switch
 ## Diff estimate: 0 lines production code (audit-only)
 ## Doctrine cited: adversarial-audit-gate.md (independent context audit after every judgment CRIT/HIGH commit); institutional-rigor.md § 2 (review the fix); integrity-guardian.md § 3 (fail-closed)

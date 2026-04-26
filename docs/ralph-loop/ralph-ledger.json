@@ -1,7 +1,7 @@
 {
-  "total_iterations": 171,
-  "last_updated": "2026-04-26",
-  "consecutive_low_only": 0,
+  "total_iterations": 172,
+  "last_updated": "2026-04-27",
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 178,
   "findings_by_type": {
     "canonical_violation": {
@@ -17,10 +17,10 @@
       "fix_rate": 0.92
     },
     "other": {
-      "found": 28,
-      "fixed": 15,
+      "found": 29,
+      "fixed": 16,
       "deferred": 4,
-      "fix_rate": 0.54
+      "fix_rate": 0.55
     },
     "dead_code": {
       "found": 16,
@@ -127,7 +127,7 @@
   },
   "classifications": {
     "judgment": 81,
-    "mechanical": 61,
+    "mechanical": 62,
     "audit-only": 29
   },
   "files_audited": {
@@ -150,6 +150,11 @@
       "audit_count": 4,
       "last_iter": 10,
       "findings": 3
+    },
+    "pipeline/build_daily_features.py": {
+      "audit_count": 4,
+      "last_iter": 179,
+      "findings": 4
     },
     "trading_app/strategy_validator.py": {
       "audit_count": 4,
@@ -174,11 +179,6 @@
     "webhook_server.py": {
       "audit_count": 3,
       "last_iter": 9,
-      "findings": 3
-    },
-    "pipeline/build_daily_features.py": {
-      "audit_count": 3,
-      "last_iter": 138,
       "findings": 3
     },
     "performance_monitor.py": {
@@ -2998,6 +2998,17 @@
       "severity": "CRITICAL",
       "verdict": "NOTED",
       "commit": "NONE (audit-only)"
+    },
+    {
+      "iter": 179,
+      "date": "2026-04-27",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "pipeline/build_daily_features.py:1726-1744",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "2a8c18fd"
     }
   ]
 }

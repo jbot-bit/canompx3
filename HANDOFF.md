@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 412ef1be — [mechanical] type: silence pyright Scalar narrowing in detect_break (BDF-NARROW)
+- **Commit:** 92c1f2f4 — [mechanical] type: drive pipeline/build_daily_features.py to 0 pyright errors
 - **Files changed:** 3 files
   - `HANDOFF.md`
   - `docs/runtime/stages/detect-break-pyright-narrow.md`
