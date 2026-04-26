@@ -1556,7 +1556,7 @@ def check_no_e0_in_db(con=None) -> list[str]:
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
         for table in ["orb_outcomes", "experimental_strategies", "validated_setups"]:
-            count = con.execute(f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0'").fetchone()[0]
+            count = con.execute(f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0'").fetchone()[0]  # type: ignore[index]
             if count > 0:
                 violations.append(f"  {table}: {count} rows with entry_model='E0' (purged Feb 2026)")
     except (ImportError, OSError) as e:
@@ -1587,11 +1587,11 @@ def check_doc_stats_consistency(con=None) -> list[str]:
                 return violations  # Skip if no DB (CI)
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
-        validated_active = con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone()[0]
+        validated_active = con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone()[0]  # type: ignore[index]
         fdr_significant = con.execute(
             "SELECT COUNT(*) FROM validated_setups WHERE status = 'active' AND fdr_significant"
-        ).fetchone()[0]
-        edge_families_count = con.execute("SELECT COUNT(*) FROM edge_families").fetchone()[0]
+        ).fetchone()[0]  # type: ignore[index]
+        edge_families_count = con.execute("SELECT COUNT(*) FROM edge_families").fetchone()[0]  # type: ignore[index]
         # Per-aperture validated counts
         aperture_rows = con.execute(
             "SELECT orb_minutes, COUNT(*) FROM validated_setups WHERE status = 'active' GROUP BY orb_minutes"
@@ -2118,7 +2118,7 @@ def check_no_active_e3(con=None) -> list[str]:
             _own_con = True
         count = con.execute(
             "SELECT COUNT(*) FROM validated_setups WHERE entry_model = 'E3' AND status = 'active'"
-        ).fetchone()[0]
+        ).fetchone()[0]  # type: ignore[index]
         if count > 0:
             violations.append(f"  validated_setups: {count} active E3 strategies (soft-retired Feb 2026)")
     except (ImportError, OSError) as e:
@@ -2648,7 +2648,7 @@ def check_wf_coverage(con=None) -> list[str]:
                 "WHERE instrument = ? AND status = 'active'",
                 [inst],
             ).fetchone()
-            total, tested = row[0], row[1]
+            total, tested = row[0], row[1]  # type: ignore[index]
             if total > 0 and tested < total:
                 warnings.append(f"  {inst}: {total - tested}/{total} active strategies missing WF test (soft gate)")
     except (ImportError, OSError) as e:
@@ -3061,7 +3061,7 @@ def check_audit_columns_populated(con=None) -> list[str]:
             total = con.execute(
                 "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ?",
                 [inst],
-            ).fetchone()[0]
+            ).fetchone()[0]  # type: ignore[index]
             if total == 0:
                 continue
             # At least some rows must have audit columns populated
@@ -3069,7 +3069,7 @@ def check_audit_columns_populated(con=None) -> list[str]:
                 populated = con.execute(
                     f"SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ? AND {col} IS NOT NULL",
                     [inst],
-                ).fetchone()[0]
+                ).fetchone()[0]  # type: ignore[index]
                 if populated == 0:
                     violations.append(f"  {inst}: 0/{total} rows have {col} (re-run strategy_discovery)")
             # sharpe_haircut: at least some rows with sample_size>=30
@@ -3077,11 +3077,11 @@ def check_audit_columns_populated(con=None) -> list[str]:
             eligible = con.execute(
                 "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ? AND sample_size >= 30",
                 [inst],
-            ).fetchone()[0]
+            ).fetchone()[0]  # type: ignore[index]
             populated_dsr = con.execute(
                 "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ? AND sharpe_haircut IS NOT NULL",
                 [inst],
-            ).fetchone()[0]
+            ).fetchone()[0]  # type: ignore[index]
             if eligible > 0 and populated_dsr == 0:
                 violations.append(
                     f"  {inst}: 0/{eligible} eligible rows have sharpe_haircut (re-run strategy_discovery)"
@@ -4108,11 +4108,11 @@ def check_pipeline_staleness(con=None) -> list[str]:
             df_max = con.execute(
                 "SELECT MAX(trading_day) FROM daily_features WHERE symbol = ? AND orb_minutes = 5",
                 [inst],
-            ).fetchone()[0]
+            ).fetchone()[0]  # type: ignore[index]
             oo_max = con.execute(
                 "SELECT MAX(trading_day) FROM orb_outcomes WHERE symbol = ?",
                 [inst],
-            ).fetchone()[0]
+            ).fetchone()[0]  # type: ignore[index]
 
             if df_max is None or oo_max is None:
                 continue  # No data yet — not a staleness issue
@@ -4347,7 +4347,7 @@ def check_holdout_contamination(con=None) -> list[str]:
                    AND yearly_results IS NOT NULL
                    AND json_extract_string(yearly_results, '$."' || ? || '"') IS NOT NULL""",
                 [instrument, HOLDOUT_GRANDFATHER_CUTOFF, sacred_year_key],
-            ).fetchone()[0]
+            ).fetchone()[0]  # type: ignore[index]
             if contaminated > 0:
                 violations.append(
                     f"  HOLDOUT CONTAMINATION: {instrument} has {contaminated} experimental_strategies "
@@ -5097,7 +5097,7 @@ def check_phase_4_sha_integrity(con=None) -> list[str]:
                     """SELECT COUNT(*) FROM experimental_strategies
                        WHERE hypothesis_file_sha = ?""",
                     [sha],
-                ).fetchone()[0]
+                ).fetchone()[0]  # type: ignore[index]
                 violations.append(
                     f"  PHASE 4 SHA INTEGRITY: orphaned SHA {sha[:12]}... "
                     f"({row_count} row(s)) — no file in "

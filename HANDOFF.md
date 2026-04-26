@@ -9,11 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 92c1f2f4 — [mechanical] type: drive pipeline/build_daily_features.py to 0 pyright errors
-- **Files changed:** 3 files
+- **Commit:** 4a4e19ef — chore(handoff,ralph): sync ledger after iter 179 + pyright cleanup commits
+- **Files changed:** 5 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/detect-break-pyright-narrow.md`
-  - `pipeline/build_daily_features.py`
+  - `docs/ralph-loop/ralph-ledger.json`
+  - `docs/ralph-loop/ralph-loop-audit.md`
+  - `docs/ralph-loop/ralph-loop-history.md`
+  - `docs/ralph-loop/ralph-loop-plan.md`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 
