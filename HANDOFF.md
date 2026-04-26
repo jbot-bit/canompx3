@@ -9,10 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** e7d82e9d — test(live): close v5 tail gaps M4 + M5 + S2 (production-path coverage)
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `tests/test_trading_app/test_session_orchestrator.py`
+- **Commit:** d33f4890 — [mechanical] feat(drift): check #111 — no CRLF in tracked text blobs
+- **Files changed:** 1 files
+  - `pipeline/check_drift.py`
 
 ## Next Steps — Active
 

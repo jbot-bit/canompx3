@@ -39,6 +39,11 @@ All research, analysis, and decisions must:
 
 If not explicitly stated, assume this mode.
 
+## Workflow Mandates
+- When running audits/code reviews, ALWAYS implement fixes in the same session — do not just present findings. User has explicitly demanded 'GROUND IN TRUTH AND CONTEXT AND YES IMPLEMENT FIXES PHASES'.
+- After fixes, run the full test suite and commit. Report pass/fail counts.
+- When generating the trade book or HTML reports, open in browser by default (do NOT pass --no-open unless asked).
+
 ---
 
 ## Architecture
