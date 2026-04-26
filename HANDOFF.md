@@ -9,12 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 93c06770 — [mechanical] type: drive pipeline/dashboard.py + pipeline/check_db.py to 0 pyright errors
-- **Files changed:** 4 files
+- **Commit:** 9f676c47 — [mechanical] type: drive 3 ingest_dbn files to 0 pyright errors
+- **Files changed:** 5 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/dashboard-checkdb-pyright.md`
-  - `pipeline/check_db.py`
-  - `pipeline/dashboard.py`
+  - `docs/runtime/stages/ingest-dbn-pyright-cleanup.md`
+  - `pipeline/ingest_dbn.py`
+  - `pipeline/ingest_dbn_daily.py`
+  - `pipeline/ingest_dbn_mgc.py`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 
