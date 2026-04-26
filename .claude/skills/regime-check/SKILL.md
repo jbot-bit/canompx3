@@ -124,11 +124,13 @@ data = json.loads(Path('docs/runtime/lane_allocation.json').read_text())
 diag = data.get('dsr_diagnostics')
 if diag:
     print('=== DSR DIAGNOSTICS (informational, not consumed by selection) ===')
-    print(f\"  N_eff_raw (validator): {diag['n_eff_raw']}\")
-    print(f\"  N_hat_eq9 (Bailey-LdP): {diag['n_hat_eq9']}  (avg_rho_hat = {diag['avg_rho_hat']})\")
+    print(f\"  Validation-layer M (n_eff_raw from edge_families): {diag['n_eff_raw']}\")
+    print(f\"  Allocation-layer M (m_deployable):                  {diag.get('m_deployable', 'n/a')}\")
+    print(f\"  rho_hat (deployable pairs):                         {diag['avg_rho_hat']}\")
+    print(f\"  N_hat_eq9 (Bailey-LdP allocation-layer):            {diag['n_hat_eq9']}\")
     print(f\"  var_sr_em: {diag['var_sr_em']}\")
     print('  --- per-lane DSR ---')
-    print(f\"  {'lane':38} {'DSR_raw':>8} {'DSR_eq9':>8} {'sr0':>6}\")
+    print(f\"  {'lane':38} {'DSR_val':>8} {'DSR_alc':>8} {'sr0':>6}\")
     for L in data['lanes']:
         if 'dsr_score' in L:
             print(f\"  {L['strategy_id'][:38]:38} {L['dsr_at_n_eff_raw']:>8.4f} {L['dsr_at_n_hat_eq9']:>8.4f} {L['sr0_at_rebalance']:>6.3f}\")

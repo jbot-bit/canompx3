@@ -1008,7 +1008,9 @@ class TestDsrDiagnosticEnrichment:
         assert globals_d["n_eff_raw"] == 21
         assert "E2" in globals_d["var_sr_em"]
         assert globals_d["avg_rho_hat"] == 0.0  # empty pairs → ρ̂=0
-        assert globals_d["n_hat_eq9"] == 21.0  # ρ̂=0 → N̂=M
+        # Empty pairs → m_deployable=0 → fallback to n_hat_eq9 = n_eff_raw
+        assert globals_d["m_deployable"] == 0
+        assert globals_d["n_hat_eq9"] == 21.0  # fallback to n_eff_raw
 
     def test_t2_dsr_canonical_equivalence(self, dsr_test_db):
         """T2 — LaneScore.dsr_score equals direct compute_dsr() with same inputs."""
@@ -1040,6 +1042,66 @@ class TestDsrDiagnosticEnrichment:
         assert ls.dsr_at_n_hat_eq9 is None
         # Backward-compat: ranking unaffected
         assert _effective_annual_r(ls) == ls.annual_r_estimate
+
+    def test_t5_eq9_multi_pair_averaging_uses_m_deployable(self, dsr_test_db):
+        """T5 — Eq 9 path with 3 pairs: ρ̂ averages cleanly, M = distinct deployable.
+
+        Adds three pairs with mixed ρ values among 3 distinct strategies.
+        Verifies (a) ρ̂ = arithmetic mean of pair rhos, (b) M = count of
+        unique strategy_ids in the eligible pairs (not n_eff_raw), and
+        (c) n_hat_eq9 follows literal Eq 9 over that internally
+        consistent population.
+        """
+        # Seed a 3rd validated lane so per_lane lookups don't drop rows
+        con = duckdb.connect(str(dsr_test_db))
+        con.execute(
+            """INSERT INTO validated_setups VALUES
+               ('S_THIRD', 'MNQ', 'TOKYO_OPEN', 'E2', 1.0, 1,
+                'COST_LT12', 1.0, 200, 0.20, -0.5, -1.0, 'active')"""
+        )
+        con.close()
+
+        scores = [
+            _make_score(strategy_id="S_STRONG", filter_type="OVNRNG_100"),
+            _make_score(strategy_id="S_WEAK", orb_label="EUROPE_FLOW",
+                        rr_target=1.5, filter_type="ORB_G5"),
+            _make_score(strategy_id="S_THIRD", orb_label="TOKYO_OPEN",
+                        filter_type="COST_LT12"),
+        ]
+        # Three pairs with mixed rho — 0.10, 0.40, 0.70 — mean = 0.40
+        pairs = {
+            ("S_STRONG", "S_WEAK"): 0.10,
+            ("S_STRONG", "S_THIRD"): 0.40,
+            ("S_WEAK", "S_THIRD"): 0.70,
+        }
+        globals_d = enrich_scores_with_dsr_diagnostics(
+            scores, pairs=pairs, db_path=dsr_test_db
+        )
+
+        # ρ̂ = arithmetic mean of three rhos
+        assert globals_d["avg_rho_hat"] == pytest.approx(0.40, abs=1e-9)
+        # M = 3 distinct deployable strategy_ids in eligible pairs
+        # (NOT n_eff_raw=21)
+        assert globals_d["m_deployable"] == 3
+        # Eq 9 = ρ̂ + (1-ρ̂)·M = 0.40 + 0.60·3 = 2.20
+        assert globals_d["n_hat_eq9"] == pytest.approx(2.20, abs=1e-3)
+        # Validation-layer field unchanged at n_eff_raw
+        assert globals_d["n_eff_raw"] == 21
+
+    def test_t6_eq9_falls_back_when_m_deployable_lt_2(self, dsr_test_db):
+        """T6 — fallback: pairs present but only 1 distinct strategy → fallback to n_eff_raw.
+
+        Pathological input (a self-pair, malformed key) shouldn't drive
+        a meaningless Eq 9. Must fall back to n_eff_raw and zero rho.
+        """
+        scores = [_make_score(strategy_id="S_STRONG", filter_type="OVNRNG_100")]
+        # Empty pairs: m_deployable=0 → fallback
+        globals_d = enrich_scores_with_dsr_diagnostics(
+            scores, pairs={}, db_path=dsr_test_db
+        )
+        assert globals_d["m_deployable"] == 0
+        assert globals_d["avg_rho_hat"] == 0.0
+        assert globals_d["n_hat_eq9"] == float(globals_d["n_eff_raw"])
 
     def test_t4_save_allocation_writes_dsr_block(self, dsr_test_db, tmp_path):
         """T4 — save_allocation writes per-lane DSR fields + per-rebalance globals when populated."""
@@ -1075,11 +1137,19 @@ class TestDsrDiagnosticEnrichment:
         diag = data["dsr_diagnostics"]
         assert diag["n_eff_raw"] == 21
         assert diag["avg_rho_hat"] == 0.3  # single pair, value=0.3
-        # N̂ = ρ̂ + (1-ρ̂)·M = 0.3 + 0.7*21 = 15.0 (Bailey-LdP Eq 9)
-        assert diag["n_hat_eq9"] == pytest.approx(15.0, abs=0.01)
+        # m_deployable = 2 (S_STRONG + S_WEAK appear in the single pair)
+        assert diag["m_deployable"] == 2
+        # Allocation-layer Eq 9: N̂ = ρ̂ + (1-ρ̂)·M_deployable
+        #                       = 0.3 + 0.7 * 2 = 1.7
+        assert diag["n_hat_eq9"] == pytest.approx(1.7, abs=0.01)
         assert "var_sr_em" in diag
         assert "doctrine" in diag and "INFORMATIONAL" in diag["doctrine"]
         assert "lit_ref" in diag and "Bailey" in diag["lit_ref"]
+        # New lit_ref must surface the two-layer framing so operators
+        # don't read "Eq 9" as exact across the wrong population.
+        assert "m_deployable" in diag["lit_ref"]
+        assert "validation-layer" in diag["lit_ref"].lower()
+        assert "allocation-layer" in diag["lit_ref"].lower()
 
     def test_save_allocation_omits_dsr_block_when_globals_none(self, dsr_test_db, tmp_path):
         """T4 boundary — when dsr_globals=None (pre-Shape-E callers), JSON has no dsr block."""
