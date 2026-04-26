@@ -1234,6 +1234,56 @@ class TestNonFiniteEquity:
         assert t._halt is True
         assert t._halt_reason == "POLL_FAILURE"
 
+    def test_bool_equity_treated_as_poll_failure(self, state_dir):
+        """SG-NEW-1 (audit-gate follow-up to SG4): a buggy adapter returning
+        True/False must NOT be silently recorded as equity=1.0 / equity=0.0.
+        Python `isinstance(True, int)` is True by language design — without
+        an explicit bool guard, _is_finite_equity(True) would pass and the
+        kill-switch would never engage on this caller-contract violation."""
+        t = AccountHWMTracker("SGNEWBOOL", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        t.update_equity(50000.0)
+        prior = t._consecutive_poll_failures
+        t.update_equity(True)  # type: ignore[arg-type]
+        assert t._consecutive_poll_failures == prior + 1, (
+            f"True must route through poll-failure path; was {prior}, now {t._consecutive_poll_failures}"
+        )
+        assert t._last_equity == 50000.0, f"True must not propagate into _last_equity; got {t._last_equity}"
+        # And False
+        t.update_equity(False)  # type: ignore[arg-type]
+        assert t._consecutive_poll_failures == prior + 2
+
+    def test_daily_loss_halt_active_at_recovery_does_not_get_poll_failure_qualifier(self, state_dir):
+        """SG-NEW-2 (audit-gate documentation): the REMAINS HALTED qualifier
+        is intentionally scoped to halt_reason == "POLL_FAILURE" only. A halt
+        from DAILY_LOSS / WEEKLY_LOSS / DD_TRAILING is unrelated to poll
+        recovery — the operator action required is different (review the
+        actual DD breach, not retry the broker connection). This test pins
+        that intentional design so a future Stage 3 refactor does not
+        accidentally widen the qualifier to all halt reasons."""
+        calls: list[str] = []
+        t = AccountHWMTracker(
+            "SGNEW2",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            daily_loss_limit=500.0,
+            dd_type="intraday_trailing",
+            notify_callback=calls.append,
+        )
+        t.update_equity(50000.0)
+        # Trigger DAILY_LOSS halt
+        t.update_equity(49400.0)  # daily loss = 600 > 500 limit
+        assert t._halt is True
+        assert t._halt_reason == "DAILY_LOSS"
+        # Now a poll failure followed by recovery (still halted by DAILY_LOSS)
+        t.update_equity(None)
+        t.update_equity(49500.0)
+        recovery = [c for c in calls if "RECOVERY" in c]
+        assert len(recovery) == 1
+        assert "REMAINS HALTED" not in recovery[0], (
+            f"Non-POLL_FAILURE halt must not get the qualifier; got: {recovery[0]!r}"
+        )
+
 
 class TestEmptyStateFile:
     """SG2 — empty state file routes through corrupt path with notify dispatch."""

@@ -29,7 +29,7 @@ _BRISBANE = ZoneInfo("Australia/Brisbane")
 
 
 def _is_finite_equity(value: float) -> bool:
-    """Return True iff value is a real number (not NaN, not +/-Inf).
+    """Return True iff value is a real number (not NaN, not +/-Inf, not bool).
 
     Stage 2 audit-gate SG4 fix — broker contract is `float | None` but
     technically a NaN/Inf is a valid `float`. Treating NaN as a real
@@ -37,7 +37,15 @@ def _is_finite_equity(value: float) -> bool:
     limit is False, NaN < threshold is False — kill switch never fires).
     Tracker treats non-finite as a poll failure (route through the
     consecutive-failure halt path).
+
+    SG-NEW-1 (audit-gate follow-up): also reject `bool` because Python
+    `isinstance(True, int)` is True by language design. A buggy broker
+    adapter returning `True`/`False` (e.g. confused with a healthcheck
+    flag) would otherwise be recorded as equity=$1.00 or equity=$0.00
+    without engaging the poll-failure path.
     """
+    if isinstance(value, bool):
+        return False
     return isinstance(value, int | float) and math.isfinite(value)
 
 

@@ -9,12 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** 1f29009b — [judgment] feat(hwm): Stage 2 — tracker integrity package (notify_callback, stale-state gate, persist-IO + corrupt-state notify, UNGROUNDED+Rationale annotations)
-- **Files changed:** 5 files
+- **Commit:** e67f46f6 — [judgment] fix(hwm): Stage 2 audit-gate — close SG1 (null-timestamp gate bypass), SG3 (post-halt RECOVERY misleading), SG4 (NaN equity bypasses halt)
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/hwm-stage2-tracker-integrity.md`
   - `tests/test_trading_app/test_account_hwm_tracker.py`
-  - `tests/test_trading_app/test_account_hwm_tracker_integration.py`
   - `trading_app/account_hwm_tracker.py`
 
 ## Next Steps — Active
