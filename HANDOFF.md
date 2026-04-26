@@ -9,9 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** 489eb05d — chore(stages): close session-start-mutex-tests-aq-surfacer + pre-commit-autoformat-gitignore-fix
-- **Files changed:** 0
-0 files
+- **Commit:** 24aae18c — chore(stages): close session-start-mutex-tests-aq-surfacer + pre-commit-autoformat-gitignore-fix
+- **Files changed:** 3 files
+  - `HANDOFF.md`
+  - `docs/runtime/stages/pre-commit-autoformat-gitignore-fix.md`
+  - `docs/runtime/stages/session-start-mutex-tests-aq-surfacer.md`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 

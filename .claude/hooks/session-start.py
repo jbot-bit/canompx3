@@ -7,6 +7,8 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -246,6 +248,142 @@ def _git_dir() -> Path | None:
     return p
 
 
+def _git_common_dir() -> Path | None:
+    """Return per-repo git common directory, shared across all worktrees.
+
+    Differs from `_git_dir()`: linked worktrees have their own `.git/worktrees/<name>/`,
+    but the COMMON dir is the repo's main `.git/`. Use this for repo-state caches
+    that all worktrees should share (e.g. CI status of `main` is repo state, not
+    worktree state — without this, every worktree would do its own gh API call).
+    """
+    rc, out = _git(["rev-parse", "--git-common-dir"])
+    if rc != 0 or not out:
+        return None
+    p = Path(out.strip())
+    if not p.is_absolute():
+        p = (PROJECT_ROOT / p).resolve()
+    return p
+
+
+_MAIN_CI_CACHE_TTL_SECS = 300  # 5 min — bounds API hits without staling beyond useful
+
+
+def _format_ci_line(payload: dict) -> list[str]:
+    """Render a cached or fresh CI payload to one stderr line. Pure function:
+    no side effects, deterministic on input. Kept separate from
+    `_main_ci_status_lines` so the cache-hit and cache-miss paths share a
+    single source of truth for the output format.
+    """
+    conclusion = payload.get("conclusion", "unknown")
+    if conclusion == "success":
+        return ["  Main CI: green"]
+    if conclusion == "failure":
+        run_id = payload.get("run_id", "?")
+        workflow = payload.get("workflow", "?")
+        return [
+            f"  Main CI: RED on run {run_id} ({workflow}) — verify before PR work; "
+            f"`gh run view {run_id}`"
+        ]
+    return [f"  Main CI: last completed run = {conclusion}"]
+
+
+def _main_ci_status_lines() -> list[str]:
+    """Surface main-branch CI status at session start to prevent the
+    PR-#108-class cascade where work is sunk into a PR before discovering
+    `main` is red and downstream PRs inherit the break.
+
+    Mechanism: query `gh run list --branch main --limit 1 --status completed`
+    for the conclusion of the most recent COMPLETED run on origin/main. The
+    `--status completed` filter excludes in-progress runs so we always report
+    the last verdict. Cache the result repo-wide via `git-common-dir` (NOT
+    per-worktree — CI status is repo state) for `_MAIN_CI_CACHE_TTL_SECS` to
+    bound the API hit rate to roughly 12/hour/worktree even on aggressive
+    session-flipping.
+
+    Atomic cache write via `tempfile.NamedTemporaryFile` + `os.replace` so
+    no interrupt mid-write can leave a partial JSON file.
+
+    Silent on every failure path (offline, gh missing, gh unauth, no GitHub
+    remote, parse error, timeout). This matches the offline-tolerance
+    pattern of every other helper in this module. Anthropic's 2026 hooks
+    documentation publishes this exact pattern (curl + warn-don't-block) as
+    a sanctioned SessionStart template.
+    """
+    common_dir = _git_common_dir()
+    if common_dir is None:
+        return []
+    cache_path = common_dir / ".claude.main-ci-status"
+    now = int(time.time())
+
+    # Cache hit path: read cached result if fresh.
+    try:
+        cached = json.loads(cache_path.read_text(encoding="utf-8"))
+        if (
+            isinstance(cached, dict)
+            and now - int(cached.get("timestamp", 0)) < _MAIN_CI_CACHE_TTL_SECS
+        ):
+            return _format_ci_line(cached)
+    except (FileNotFoundError, json.JSONDecodeError, ValueError, OSError):
+        pass  # fall through to fresh fetch
+
+    # Cache miss path: query gh CLI.
+    try:
+        r = subprocess.run(
+            [
+                "gh", "run", "list",
+                "--branch", "main",
+                "--limit", "1",
+                "--status", "completed",
+                "--json", "conclusion,databaseId,name",
+            ],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return []
+
+    if r.returncode != 0:
+        return []  # gh unauth, no remote, network failure — silent skip
+
+    try:
+        runs = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(runs, list) or not runs:
+        return []  # no completed runs on main yet
+    run = runs[0]
+    if not isinstance(run, dict):
+        return []
+
+    payload = {
+        "timestamp": now,
+        "conclusion": run.get("conclusion", "unknown"),
+        "run_id": run.get("databaseId", 0),
+        "workflow": run.get("name", "?"),
+    }
+
+    # Atomic cache write: write to temp file in same dir, then atomic rename.
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=str(common_dir),
+            prefix=".claude.main-ci-status.",
+            suffix=".tmp",
+            delete=False,
+            encoding="utf-8",
+        ) as tmp:
+            json.dump(payload, tmp)
+            tmp_path = tmp.name
+        os.replace(tmp_path, cache_path)
+    except OSError:
+        pass  # cache write failure is non-fatal — we still report this fetch's result
+
+    return _format_ci_line(payload)
+
+
 def _session_lock_lines() -> tuple[list[str], bool]:
     """Detect concurrent Claude sessions in THIS worktree. Hard-block if found.
 
@@ -483,6 +621,7 @@ def main() -> None:
         lines.extend(_env_drift_lines())
         lines.extend(_action_queue_ready_lines())
         lines.extend(_parallel_session_lines())
+        lines.extend(_main_ci_status_lines())
         print("\n".join(lines), file=sys.stderr)
 
     sys.exit(0)
