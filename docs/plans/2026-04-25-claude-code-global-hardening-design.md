@@ -1,8 +1,15 @@
 # Claude Code Global Hardening — Design (2026-04-25)
 
-Status: DESIGN — awaiting approval.
+Status: APPLIED 2026-04-26.
 Target file: `C:/Users/joshd/.claude/settings.json` (global, cross-project).
 Scope: client tool safety policy only. No repo code, pipeline, or trading logic touched.
+
+## Application notes (2026-04-26)
+
+- Items 1, 2, 5, 6 (`permissions.deny`, `permissions.ask`, `fileCheckpointingEnabled`, `showClearContextOnPlanAccept`) had already been merged into global settings on 2026-04-25.
+- Items 3, 4, 7 (`sandbox.filesystem.denyRead`, `sandbox.network.deniedDomains`, `attribution.commit` strip) initially leaked into PROJECT `.claude/settings.json`. Corrected this commit: applied to GLOBAL and reverted PROJECT to last commit.
+- Project-side `.claude/settings.json` is unchanged from origin/main.
+- User explicitly authorized the global edit ("yes you write it") given the harness self-modification block.
 
 ## Why
 

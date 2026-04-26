@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,14 +13,20 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+# Suppress task_route_packet's _ensure_repo_python() respawn when imported from
+# hook context. The respawn passes argv[1:] which (for hooks) is [] — that makes
+# the CLI run in --clear mode and raise SystemExit, killing the hook silently.
+# Hooks only need read-only file access; they don't need venv-specific deps.
+os.environ.setdefault("CANOMPX3_BOOTSTRAP_DONE", "1")
+
 try:
     from scripts.tools.claude_superpower_brief import build_brief
-except Exception:  # pragma: no cover - hook fallback path
+except BaseException:  # pragma: no cover - hook fallback path (catches SystemExit too)
     build_brief = None
 
 try:
     from scripts.tools.task_route_packet import read_task_route_packet
-except Exception:  # pragma: no cover - hook fallback path
+except BaseException:  # pragma: no cover - hook fallback path (catches SystemExit too)
     read_task_route_packet = None
 
 
@@ -106,6 +113,92 @@ def _task_route_lines() -> list[str]:
         return []
 
 
+def _git(args: list[str], timeout: int = 5) -> tuple[int, str]:
+    try:
+        r = subprocess.run(
+            ["git", *args],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        return r.returncode, r.stdout.strip()
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return 1, ""
+
+
+def _origin_drift_lines() -> list[str]:
+    """Fetch, then auto-fast-forward when safe; otherwise warn.
+
+    Safe-FF preconditions (ALL must hold):
+      1. Working tree is clean (no modified, no untracked-blocking files).
+      2. Local has 0 ahead commits vs origin/main.
+      3. Current branch tracks origin/main.
+
+    When all three hold, run `git pull --ff-only`. No data loss possible:
+    we are replaying remote commits onto identical local state.
+
+    When any fails, fall back to warn-only with a specific next step.
+    Never auto-rebases or auto-merges (risk of clobbering parallel sessions).
+    """
+    rc_fetch, _ = _git(["fetch", "origin", "--quiet"], timeout=10)
+    if rc_fetch != 0:
+        return ["  Origin: fetch failed (offline?) — skipping drift check"]
+
+    rc_branch, branch = _git(["branch", "--show-current"])
+    if rc_branch != 0:
+        return []
+    if not branch:
+        return ["  Origin: detached HEAD — checkout a branch before committing"]
+
+    rc_count, count_out = _git(["rev-list", "--left-right", "--count", "HEAD...origin/main"])
+    if rc_count != 0 or not count_out:
+        return []
+    try:
+        ahead_n, behind_n = (int(x) for x in count_out.split())
+    except ValueError:
+        return []
+
+    if ahead_n == 0 and behind_n == 0:
+        return ["  Origin: in sync with origin/main"]
+
+    rc_status, status_out = _git(["status", "--porcelain"])
+    dirty = rc_status == 0 and bool(status_out)
+
+    can_ff = (
+        branch == "main"
+        and ahead_n == 0
+        and behind_n > 0
+        and not dirty
+    )
+    if can_ff:
+        rc_pull, _ = _git(["pull", "--ff-only", "origin", "main"], timeout=15)
+        if rc_pull == 0:
+            return [f"  Origin: auto-fast-forwarded {behind_n} commit(s) from origin/main"]
+        return [f"  Origin: {behind_n} behind on main, ff-pull failed — run `git pull --ff-only` manually"]
+
+    parts = []
+    if behind_n:
+        parts.append(f"{behind_n} behind")
+    if ahead_n:
+        parts.append(f"{ahead_n} ahead")
+    state = ", ".join(parts)
+
+    if branch != "main":
+        guidance = f"on branch `{branch}` — verify base before pushing"
+    elif ahead_n > 0 and behind_n > 0:
+        guidance = "diverged — rebase ahead commits onto origin/main on a fresh branch"
+    elif dirty and behind_n > 0:
+        guidance = "dirty working tree blocks ff-pull — stash/commit WIP, then pull"
+    elif ahead_n > 0 and behind_n == 0:
+        guidance = "unpushed commits on main — push when ready"
+    else:
+        guidance = "branch from origin/main per .claude/rules/branch-discipline.md"
+
+    return [f"  Origin: {state} vs origin/main — {guidance}"]
+
+
 def main() -> None:
     try:
         event = json.load(sys.stdin)
@@ -138,6 +231,7 @@ def main() -> None:
             )
 
     if lines:
+        lines.extend(_origin_drift_lines())
         print("\n".join(lines), file=sys.stderr)
 
     sys.exit(0)

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -11,14 +12,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+# Suppress task_route_packet's _ensure_repo_python() respawn when imported from
+# hook context. See session-start.py for full rationale.
+os.environ.setdefault("CANOMPX3_BOOTSTRAP_DONE", "1")
+
 try:
     from scripts.tools.claude_superpower_brief import build_brief
-except Exception:  # pragma: no cover - hook fallback path
+except BaseException:  # pragma: no cover - hook fallback path (catches SystemExit)
     build_brief = None
 
 try:
     from scripts.tools.task_route_packet import read_task_route_packet
-except Exception:  # pragma: no cover - hook fallback path
+except BaseException:  # pragma: no cover - hook fallback path (catches SystemExit)
     read_task_route_packet = None
 
 
