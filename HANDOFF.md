@@ -8,9 +8,13 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-04-26 (Brisbane evening)
-- **Commit:** `chore(stages): close 12 stage files for landed work + compact HANDOFF`
-- **Files changed:** 12 stage-file deletes + this rewrite
+- **Date:** 2026-04-26
+- **Commit:** a2bfc631 — chore(stages): close ruff-format-iter179-fixup (all 4 sub-fixes obsolete)
+- **Files changed:** 4 files
+  - `.claude/hooks/session-start.py`
+  - `HANDOFF.md`
+  - `docs/runtime/stages/ruff-format-iter179-fixup.md`
+  - `requirements.txt`
 
 ## Stages closed this session (work landed, file deleted)
 
