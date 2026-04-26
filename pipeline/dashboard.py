@@ -67,26 +67,26 @@ def collect_db_metrics(db_path: Path) -> dict:
         result["tables"] = [t[0] for t in tables]
 
         if "bars_1m" in result["tables"]:
-            result["bars_1m_count"] = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]
+            result["bars_1m_count"] = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]  # type: ignore[index]
             if result["bars_1m_count"] > 0:
                 dr = con.execute("SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m").fetchone()
-                result["bars_1m_min_date"] = str(dr[0])
-                result["bars_1m_max_date"] = str(dr[1])
+                result["bars_1m_min_date"] = str(dr[0])  # type: ignore[index]
+                result["bars_1m_max_date"] = str(dr[1])  # type: ignore[index]
                 result["symbols"] = [r[0] for r in con.execute("SELECT DISTINCT symbol FROM bars_1m").fetchall()]
 
         if "bars_5m" in result["tables"]:
-            result["bars_5m_count"] = con.execute("SELECT COUNT(*) FROM bars_5m").fetchone()[0]
+            result["bars_5m_count"] = con.execute("SELECT COUNT(*) FROM bars_5m").fetchone()[0]  # type: ignore[index]
             if result["bars_5m_count"] > 0:
                 dr = con.execute("SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_5m").fetchone()
-                result["bars_5m_min_date"] = str(dr[0])
-                result["bars_5m_max_date"] = str(dr[1])
+                result["bars_5m_min_date"] = str(dr[0])  # type: ignore[index]
+                result["bars_5m_max_date"] = str(dr[1])  # type: ignore[index]
 
         if "daily_features" in result["tables"]:
-            result["daily_features_count"] = con.execute("SELECT COUNT(*) FROM daily_features").fetchone()[0]
+            result["daily_features_count"] = con.execute("SELECT COUNT(*) FROM daily_features").fetchone()[0]  # type: ignore[index]
             if result["daily_features_count"] > 0:
                 dr = con.execute("SELECT MIN(trading_day), MAX(trading_day) FROM daily_features").fetchone()
-                result["daily_features_min_date"] = str(dr[0])
-                result["daily_features_max_date"] = str(dr[1])
+                result["daily_features_min_date"] = str(dr[0])  # type: ignore[index]
+                result["daily_features_max_date"] = str(dr[1])  # type: ignore[index]
     finally:
         con.close()
 
@@ -273,7 +273,7 @@ def collect_data_quality(db_path: Path) -> dict:
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        count = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]
+        count = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]  # type: ignore[index]
         if count == 0:
             return result
         result["has_data"] = True
@@ -285,21 +285,21 @@ def collect_data_quality(db_path: Path) -> dict:
                 FROM bars_1m GROUP BY d
             )
         """).fetchone()
-        result["bars_per_day_avg"] = round(bpd[0], 1) if bpd[0] else 0
-        result["bars_per_day_min"] = int(bpd[1]) if bpd[1] else 0
-        result["bars_per_day_max"] = int(bpd[2]) if bpd[2] else 0
+        result["bars_per_day_avg"] = round(bpd[0], 1) if bpd[0] else 0  # type: ignore[index]
+        result["bars_per_day_min"] = int(bpd[1]) if bpd[1] else 0  # type: ignore[index]
+        result["bars_per_day_max"] = int(bpd[2]) if bpd[2] else 0  # type: ignore[index]
 
         # Gap days (weekdays with no data)
         date_range = con.execute("SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m").fetchone()
-        actual_days = con.execute("SELECT COUNT(DISTINCT DATE(ts_utc)) FROM bars_1m").fetchone()[0]
-        if date_range[0] and date_range[1]:
-            total_span = (date_range[1] - date_range[0]).days + 1
+        actual_days = con.execute("SELECT COUNT(DISTINCT DATE(ts_utc)) FROM bars_1m").fetchone()[0]  # type: ignore[index]
+        if date_range[0] and date_range[1]:  # type: ignore[index]
+            total_span = (date_range[1] - date_range[0]).days + 1  # type: ignore[index]
             # Rough weekday estimate: ~5/7 of span
             expected_weekdays = int(total_span * 5 / 7)
             result["gap_days"] = max(0, expected_weekdays - actual_days)
 
         # OHLCV sanity: high < low
-        result["ohlcv_issues"] = con.execute("SELECT COUNT(*) FROM bars_1m WHERE high < low").fetchone()[0]
+        result["ohlcv_issues"] = con.execute("SELECT COUNT(*) FROM bars_1m WHERE high < low").fetchone()[0]  # type: ignore[index]
 
         # Duplicates
         result["duplicate_count"] = con.execute("""
@@ -307,12 +307,12 @@ def collect_data_quality(db_path: Path) -> dict:
                 SELECT symbol, ts_utc FROM bars_1m
                 GROUP BY symbol, ts_utc HAVING COUNT(*) > 1
             )
-        """).fetchone()[0]
+        """).fetchone()[0]  # type: ignore[index]
 
         # NULL source_symbol
         result["null_source_count"] = con.execute(
             "SELECT COUNT(*) FROM bars_1m WHERE source_symbol IS NULL"
-        ).fetchone()[0]
+        ).fetchone()[0]  # type: ignore[index]
     finally:
         con.close()
 
@@ -347,7 +347,7 @@ def collect_strategy_metrics(db_path: Path) -> dict:
             return result
 
         shelf_relation = deployable_validated_relation(con, alias="vs")
-        count = con.execute(f"SELECT COUNT(*) FROM {shelf_relation}").fetchone()[0]
+        count = con.execute(f"SELECT COUNT(*) FROM {shelf_relation}").fetchone()[0]  # type: ignore[index]
         if count == 0:
             return result
 
@@ -355,7 +355,7 @@ def collect_strategy_metrics(db_path: Path) -> dict:
         result["validated_count"] = count
 
         if "experimental_strategies" in tables:
-            result["experimental_count"] = con.execute("SELECT COUNT(*) FROM experimental_strategies").fetchone()[0]
+            result["experimental_count"] = con.execute("SELECT COUNT(*) FROM experimental_strategies").fetchone()[0]  # type: ignore[index]
 
         # Top 10 by ExpR
         top = con.execute(f"""
@@ -402,8 +402,8 @@ def collect_strategy_metrics(db_path: Path) -> dict:
             SELECT MAX(expectancy_r), MAX(sharpe_ratio)
             FROM {shelf_relation}
         """).fetchone()
-        result["best_expr"] = round(bests[0], 3) if bests[0] else 0
-        result["best_sharpe"] = round(bests[1], 3) if bests[1] else 0
+        result["best_expr"] = round(bests[0], 3) if bests[0] else 0  # type: ignore[index]
+        result["best_sharpe"] = round(bests[1], 3) if bests[1] else 0  # type: ignore[index]
 
     finally:
         con.close()

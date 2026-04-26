@@ -9,11 +9,16 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** aa09fbcd — [mechanical] type: drive pipeline/build_bars_5m.py to 0 pyright errors
-- **Files changed:** 3 files
+- **Commit:** 168b84d3 — [mechanical] type: drive 6 small pipeline files to 0 pyright errors
+- **Files changed:** 8 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/build-bars-5m-pyright-narrow.md`
-  - `pipeline/build_bars_5m.py`
+  - `docs/runtime/stages/pipeline-pyright-small-cleanup.md`
+  - `pipeline/daily_backfill.py`
+  - `pipeline/dst.py`
+  - `pipeline/export_parquet.py`
+  - `pipeline/health_check.py`
+  - `pipeline/ingest_statistics.py`
+  - `pipeline/system_brief.py`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 

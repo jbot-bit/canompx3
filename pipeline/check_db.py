@@ -43,12 +43,12 @@ def check_db():
         # Check bars_1m
         if "bars_1m" in table_names:
             logger.info("bars_1m:")
-            count = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]
+            count = con.execute("SELECT COUNT(*) FROM bars_1m").fetchone()[0]  # type: ignore[index]
             logger.info(f"  Row count: {count:,}")
 
             if count > 0:
                 date_range = con.execute("SELECT MIN(ts_utc), MAX(ts_utc) FROM bars_1m").fetchone()
-                logger.info(f"  Date range: {date_range[0]} to {date_range[1]}")
+                logger.info(f"  Date range: {date_range[0]} to {date_range[1]}")  # type: ignore[index]
 
                 symbols = con.execute("SELECT DISTINCT symbol FROM bars_1m").fetchall()
                 logger.info(f"  Symbols: {[s[0] for s in symbols]}")
@@ -62,23 +62,23 @@ def check_db():
         # Check bars_5m
         if "bars_5m" in table_names:
             logger.info("bars_5m:")
-            count = con.execute("SELECT COUNT(*) FROM bars_5m").fetchone()[0]
+            count = con.execute("SELECT COUNT(*) FROM bars_5m").fetchone()[0]  # type: ignore[index]
             logger.info(f"  Row count: {count:,}")
 
             if count > 0:
                 date_range = con.execute("SELECT MIN(ts_utc), MAX(ts_utc) FROM bars_5m").fetchone()
-                logger.info(f"  Date range: {date_range[0]} to {date_range[1]}")
+                logger.info(f"  Date range: {date_range[0]} to {date_range[1]}")  # type: ignore[index]
             print()
 
         # Check daily_features
         if "daily_features" in table_names:
             logger.info("daily_features:")
-            count = con.execute("SELECT COUNT(*) FROM daily_features").fetchone()[0]
+            count = con.execute("SELECT COUNT(*) FROM daily_features").fetchone()[0]  # type: ignore[index]
             logger.info(f"  Row count: {count:,}")
 
             if count > 0:
                 date_range = con.execute("SELECT MIN(trading_day), MAX(trading_day) FROM daily_features").fetchone()
-                logger.info(f"  Date range: {date_range[0]} to {date_range[1]}")
+                logger.info(f"  Date range: {date_range[0]} to {date_range[1]}")  # type: ignore[index]
 
                 orb_minutes = con.execute("SELECT DISTINCT orb_minutes FROM daily_features").fetchall()
                 logger.info(f"  ORB durations: {[o[0] for o in orb_minutes]}")
