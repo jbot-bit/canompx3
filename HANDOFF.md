@@ -8,16 +8,10 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-04-26
-- **Commit:** 1a49af91 — feat(hooks): main-CI-red pre-flight + pooled-finding path-scope leak fix
-- **Files changed:** 7 files
-  - `.claude/hooks/session-start.py`
-  - `.claude/hooks/tests/__init__.py`
-  - `.claude/hooks/tests/test_main_ci_preflight.py`
-  - `.claude/rules/pooled-finding-rule.md`
-  - `HANDOFF.md`
-  - `docs/plans/2026-04-26-token-efficiency-design.md`
-  - `docs/runtime/stages/main-ci-preflight.md`
+- **Date:** 2026-04-27
+- **Commit:** 1fcffc46 — feat(skills): /brain — master orchestrator with intent routing + ceremony tier
+- **Files changed:** 1 files
+  - `.claude/skills/brain/SKILL.md`
 
 ## Session decisions (2026-04-26 evening + late-evening sweep)
 
