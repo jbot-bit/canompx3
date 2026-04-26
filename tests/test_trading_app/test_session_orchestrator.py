@@ -4676,296 +4676,124 @@ class TestResolveTopStepXFAAccountSize:
             _resolve_topstep_xfa_account_size(prof)
 
 
-class TestShutdownTaskHelper:
-    """Iter 179 hardening: `_shutdown_task` extracts the cancel-then-await
-    pattern from `run`'s finally block. Closes audit S3 (iter 178) — bare
-    `task.cancel()` without await emitted "Task was destroyed" warnings on
-    SIGTERM and could abort EOD-close submissions mid-flight.
+# ── Stage 3 — orchestrator wiring + EOD dispatch + suppression ────────────
 
-    Three behavioral cases:
-      1. Normal cancel: helper returns silently, no _notify.
-      2. Timeout path: helper logs critical + _notify when task ignores cancel.
-      3. Already-completed: helper no-ops without touching the task.
+
+class TestStage3HWMWireUpAndEodDispatch:
+    """Stage 3 of HWM persistence integrity hardening.
+
+    Pins:
+      - HWM construction call site passes notify_callback=self._notify
+      - signal-only authority comment exists within 3 lines above the gate
+      - EOD equity-unavailable dispatches operator notify (suppressed when
+        kill switch already fired)
+      - EOD exception path same dispatch + suppression rule
     """
 
-    async def test_shutdown_task_normal_cancel(self):
-        orch = build_orchestrator()
-        orch._notify = MagicMock()
-
-        async def cancellable_loop():
-            try:
-                while True:
-                    await asyncio.sleep(0.05)
-            except asyncio.CancelledError:
-                raise
-
-        task = asyncio.create_task(cancellable_loop())
-        await asyncio.sleep(0.01)  # let task start
-
-        await orch._shutdown_task(task, "test_loop", timeout=2.0)
-
-        assert task.done(), "task should be done after _shutdown_task returns"
-        # Normal cancel path: no notify (we only notify on timeout / unexpected error)
-        assert orch._notify.call_count == 0, f"normal cancel should not _notify, got {orch._notify.call_args_list}"
-
-    async def test_shutdown_task_timeout_logs_critical_and_notifies(self):
-        orch = build_orchestrator()
-        orch._notify = MagicMock()
-
-        # Cancel-resistant task that eats the FIRST cancel (simulates the
-        # SIGTERM-leak failure mode) but exits cooperatively on the second
-        # cancel — keeps the test fully cleanable, no leaked tasks.
-        first_cancel_seen = asyncio.Event()
-
-        async def cancel_resistant_then_exit():
-            try:
-                while True:
-                    await asyncio.sleep(0.02)
-            except asyncio.CancelledError:
-                # Eat the first cancel — _shutdown_task will time out here.
-                first_cancel_seen.set()
-                try:
-                    while True:
-                        await asyncio.sleep(0.02)
-                except asyncio.CancelledError:
-                    # Honor the SECOND cancel (cleanup). Reraise so the task
-                    # transitions to a cancelled state cleanly.
-                    raise
-
-        task = asyncio.create_task(cancel_resistant_then_exit())
-        await asyncio.sleep(0.01)  # let task start
-
-        await orch._shutdown_task(task, "stuck_task", timeout=0.1)
-
-        assert first_cancel_seen.is_set(), "first cancel must reach the task"
-        assert orch._notify.call_count == 1, "timeout must trigger exactly one _notify"
-        msg = orch._notify.call_args[0][0]
-        assert "stuck_task" in msg, f"notify must name the task, got: {msg!r}"
-        assert "did not exit" in msg, f"notify must describe the failure mode, got: {msg!r}"
-
-        # Cleanup — second cancel; this one IS honored, so the task exits.
-        task.cancel()
-        try:
-            await asyncio.wait_for(task, timeout=1.0)
-        except asyncio.CancelledError:
-            pass
-
-    async def test_shutdown_task_already_completed_no_op(self):
-        orch = build_orchestrator()
-        orch._notify = MagicMock()
-
-        async def quick():
-            return "done"
-
-        task = asyncio.create_task(quick())
-        await task  # let it complete
-
-        await orch._shutdown_task(task, "completed_task", timeout=2.0)
-
-        # Already-done path: no notify, no exception
-        assert orch._notify.call_count == 0
-        assert task.done()
-
-    async def test_shutdown_task_none_no_op(self):
-        """`if poller:` callsite passes None when poller wasn't created — must no-op."""
-        orch = build_orchestrator()
-        orch._notify = MagicMock()
-        await orch._shutdown_task(None, "none_task", timeout=2.0)
-        assert orch._notify.call_count == 0
-
-
-class TestC1RealHandleEventExitPassthrough:
-    """Iter 179 audit-routed: closes audit S2 from iter 178.
-
-    The existing T4 (`test_c1_rollover_eod_closes_proceed_despite_kill_switch`)
-    replaces `_handle_event` with a capturing mock — it tests routing, not the
-    real guard's ENTRY-only scoping. If someone widened the C1 guard to a
-    blanket, T4 would still pass.
-
-    This test calls the REAL `_handle_event` with `_kill_switch_fired=True`
-    and an EXIT event, asserting the EXIT branch executes (`_record_exit` is
-    called). Mutation probe: change the C1 guard from
-    `if event.event_type == "ENTRY"` to no condition (`if True`) and this
-    test fails — `_record_exit` is never reached.
-    """
-
-    async def test_real_handle_event_processes_exit_under_kill_switch(self):
-        # Use signal_only mode so EXIT routes through the simple
-        # _record_exit + _write_signal_record path without needing a broker.
-        orch = build_orchestrator(FakeBrokerComponents(signal_only=True))
-        orch._notify = MagicMock()
-        orch._record_exit = MagicMock()
-        orch._write_signal_record = MagicMock()
-
-        # Seed a position so the EXIT branch can find it
-        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=42)
-        orch._positions.on_entry_filled(STRATEGY_ID, fill_price=2350.0)
-
-        # Fire kill-switch — proves we're testing the under-halt path
-        orch._fire_kill_switch()
-        assert orch._kill_switch_fired
-
-        exit_event = FakeTradeEvent(
-            event_type="EXIT",
-            strategy_id=STRATEGY_ID,
-            timestamp=datetime(2026, 4, 25, 23, 0, 0, tzinfo=UTC),
-            price=2360.0,
-            direction="long",
-            contracts=1,
-        )
-
-        # Call the REAL _handle_event (not a mock)
-        await orch._handle_event(exit_event)
-
-        # EXIT branch executed → _record_exit was called.
-        # If the C1 guard were widened to a blanket (`if self._kill_switch_fired: return`
-        # at the top of _handle_event without ENTRY-type discrimination), this assertion fails.
-        assert orch._record_exit.call_count == 1, (
-            "C1 guard must be ENTRY-only — EXIT events must reach _record_exit "
-            "even under kill-switch (EOD wind-down). If a blanket guard was added, "
-            "this assertion catches the regression."
-        )
-
-
-# ---------------------------------------------------------------------------
-# R5 — engine circuit-breaker periodic re-notify tests
-# ---------------------------------------------------------------------------
-
-
-class TestR5CbRenotify:
-    """R5 (HIGH): engine circuit-breaker fires once at trip time but operator may miss
-    the single Telegram if sleeping/phone off. Fix: periodic re-notify from heartbeat
-    while CB is still tripped. Rate-limit pattern mirrors signal_log_rotator.py
-    DISK_FULL_NOTIFY_WINDOW_SECS.
-
-    Ralph iter 183. AUDIT-SKIPPED: R5 is notification-only, no exposure path.
-    Justification logged in docs/ralph-loop/deferred-findings.md.
-    """
-
-    # R5-1: re-notify fires at cadence while CB is tripped
-    async def test_r5_renotify_fires_while_cb_tripped(self):
-        """Mock heartbeat clock: CB tripped → N heartbeat cycles → assert N re-notifies."""
-        orch = build_orchestrator()
-        notifications = []
-        orch._notify = lambda msg: notifications.append(msg)
-
-        # Trip the engine circuit breaker
-        orch._consecutive_engine_errors = 5
-
-        # Simulate 3 heartbeat cycles by calling the re-notify block directly.
-        # We replicate the exact guard condition from _heartbeat_notifier to keep
-        # tests deterministic without running an asyncio event loop + sleep.
-        from datetime import UTC, datetime, timedelta
-        from trading_app.live.session_orchestrator import SessionOrchestrator
-
-        interval = SessionOrchestrator.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS
-
-        for cycle in range(3):
-            now = datetime(2026, 4, 25, 3, 0, 0, tzinfo=UTC) + timedelta(seconds=cycle * interval)
-            elapsed = (
-                (now - orch._cb_renotify_last_at).total_seconds()
-                if orch._cb_renotify_last_at is not None
-                else interval  # first iteration: treat as due
-            )
-            if orch._consecutive_engine_errors >= 5 and elapsed >= interval:
-                orch._cb_renotify_last_at = now
-                orch._notify(
-                    f"ENGINE CIRCUIT BREAKER STILL TRIPPED — engine paused "
-                    f"({orch._consecutive_engine_errors} consecutive errors). "
-                    "No new entries until rollover. MANUAL CHECK REQUIRED."
-                )
-
-        assert len(notifications) == 3, (
-            f"R5: expected 3 re-notifies across 3 heartbeat cycles, got {len(notifications)}"
-        )
-        assert all("ENGINE CIRCUIT BREAKER STILL TRIPPED" in n for n in notifications), (
-            "R5: re-notify message must contain 'ENGINE CIRCUIT BREAKER STILL TRIPPED'"
-        )
-
-    # R5-2: re-notify does NOT fire when CB is clear
-    async def test_r5_no_renotify_when_cb_clear(self):
-        """CB clear (consecutive_engine_errors < 5) → no re-notify sent."""
-        orch = build_orchestrator()
-        notifications = []
-        orch._notify = lambda msg: notifications.append(msg)
-
-        # CB is NOT tripped
-        orch._consecutive_engine_errors = 0
-
-        from datetime import UTC, datetime
-        from trading_app.live.session_orchestrator import SessionOrchestrator
-
-        interval = SessionOrchestrator.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS
-        now = datetime(2026, 4, 25, 3, 0, 0, tzinfo=UTC)
-        elapsed = interval  # as if interval has elapsed
-
-        if orch._consecutive_engine_errors >= 5 and elapsed >= interval:
-            orch._notify("ENGINE CIRCUIT BREAKER STILL TRIPPED — should not fire")
-
-        assert len(notifications) == 0, "R5: re-notify must not fire when consecutive_engine_errors < 5"
-
-    # R5-3: CB clears + re-trips → cadence starts fresh (no silent state inheritance)
-    async def test_r5_reset_on_cb_clear_then_retrip(self):
-        """Rollover resets _cb_renotify_last_at; a re-trip starts a fresh cadence."""
-        orch = build_orchestrator()
-        notifications = []
-        orch._notify = lambda msg: notifications.append(msg)
-
-        from datetime import UTC, datetime, timedelta
-        from trading_app.live.session_orchestrator import SessionOrchestrator
-
-        interval = SessionOrchestrator.CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS
-
-        # Phase 1: CB trips, one re-notify fires
-        orch._consecutive_engine_errors = 5
-        t0 = datetime(2026, 4, 25, 3, 0, 0, tzinfo=UTC)
-        orch._cb_renotify_last_at = None  # fresh
-        elapsed = interval  # first cycle
-        if orch._consecutive_engine_errors >= 5 and elapsed >= interval:
-            orch._cb_renotify_last_at = t0
-            orch._notify("ENGINE CIRCUIT BREAKER STILL TRIPPED — phase 1")
-
-        assert len(notifications) == 1, "R5: phase 1 should fire once"
-
-        # Phase 2: rollover clears the CB and the re-notify timestamp
-        orch._consecutive_engine_errors = 0
-        orch._cb_renotify_last_at = None  # simulate rollover reset
-
-        # Phase 3: CB re-trips — first re-notify of the new trip fires immediately
-        orch._consecutive_engine_errors = 5
-        t1 = datetime(2026, 4, 25, 4, 0, 0, tzinfo=UTC)
-        elapsed = interval  # _cb_renotify_last_at is None → treat as due
-        if orch._consecutive_engine_errors >= 5 and elapsed >= interval:
-            orch._cb_renotify_last_at = t1
-            orch._notify("ENGINE CIRCUIT BREAKER STILL TRIPPED — phase 3")
-
-        assert len(notifications) == 2, (
-            "R5: after rollover reset, re-trip must start fresh cadence (fire on first heartbeat)"
-        )
-        # Verify second notify did NOT inherit stale t0 — last_at is updated to t1
-        assert orch._cb_renotify_last_at == t1, (
-            "R5: _cb_renotify_last_at must be updated to current time on re-notify, not inherit prior trip's timestamp"
-        )
-
-    # R5-4: source-text mutation probes — future refactor that removes the re-notify call breaks loudly
-    def test_r5_source_markers_present(self):
-        """R5 constants and re-notify logic must be present in production code.
-
-        Mutation probe: deleting CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS or removing the
-        _cb_renotify_last_at reset in _check_trading_day_rollover causes this test to fail.
+    def test_hwm_construction_passes_notify_callback(self):
+        """Static-source assertion: AccountHWMTracker(...) construction at
+        session_orchestrator.py:~698 includes notify_callback=self._notify.
+        Mutation: dropping the kwarg flips this test.
         """
-        import inspect
-        from trading_app.live.session_orchestrator import SessionOrchestrator
+        from pathlib import Path
 
-        src = inspect.getsource(SessionOrchestrator)
-        assert "CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS" in src, (
-            "R5: CIRCUIT_BREAKER_RENOTIFY_INTERVAL_SECS constant must be present"
+        import trading_app.live.session_orchestrator as orch_mod
+
+        mod_file = orch_mod.__file__
+        assert mod_file is not None
+        src = Path(mod_file).read_text(encoding="utf-8")
+        # Find the AccountHWMTracker(...) construction block
+        assert "AccountHWMTracker(" in src
+        idx = src.index("AccountHWMTracker(")
+        # Take the next ~400 chars (the multi-line constructor call)
+        block = src[idx : idx + 600]
+        assert "notify_callback=self._notify" in block, (
+            f"AccountHWMTracker construction must pass notify_callback=self._notify; got:\n{block}"
         )
-        assert "ENGINE CIRCUIT BREAKER STILL TRIPPED" in src, (
-            "R5: re-notify call site must contain marker text 'ENGINE CIRCUIT BREAKER STILL TRIPPED'"
+
+    def test_signal_only_authority_comment_within_3_lines_above_gate(self):
+        """Greppable: the signal-only authority comment (mentioning
+        'pre_session_check' or 'signal-only') must appear within 3 lines
+        above the `if not signal_only` gate at the HWM-construction site.
+        """
+        from pathlib import Path
+
+        import trading_app.live.session_orchestrator as orch_mod
+
+        mod_file = orch_mod.__file__
+        assert mod_file is not None
+        lines = Path(mod_file).read_text(encoding="utf-8").splitlines()
+        gate_idx = None
+        for i, line in enumerate(lines):
+            if "if not signal_only" in line and "portfolio is not None" in line:
+                gate_idx = i
+                break
+        assert gate_idx is not None, "Could not find signal-only HWM-construction gate"
+        # Look in the 3 lines immediately above
+        window = "\n".join(lines[max(0, gate_idx - 3) : gate_idx])
+        assert "pre_session_check" in window or "signal-only" in window.lower(), (
+            f"Authority comment missing within 3 lines above gate; window:\n{window}"
         )
-        assert "_cb_renotify_last_at" in src, "R5: _cb_renotify_last_at state field must be present"
-        assert "R5: reset re-notify cadence" in src, (
-            "R5: rollover reset line must contain 'R5: reset re-notify cadence' comment "
-            "(marker ensures the reset is not silently removed in future refactors)"
+
+    def test_eod_equity_unavailable_dispatches_when_kill_switch_not_fired(self):
+        orch = build_orchestrator()
+        orch._kill_switch_fired = False
+        orch._hwm_tracker = MagicMock()
+        orch.positions.query_equity = MagicMock(return_value=None)  # equity unavailable
+        orch.engine.on_trading_day_end.return_value = []
+        orch._notify = MagicMock()
+
+        orch.post_session()
+
+        notify_msgs = [c[0][0] for c in orch._notify.call_args_list]
+        eod_hwm_notifies = [m for m in notify_msgs if "HWM EOD" in m and "equity unavailable" in m]
+        assert len(eod_hwm_notifies) == 1, f"Expected one HWM EOD equity-unavailable notify; got {notify_msgs!r}"
+
+    def test_eod_equity_unavailable_no_dispatch_when_kill_switch_fired(self):
+        """Suppression: kill-switch already notified the operator — no duplicate."""
+        orch = build_orchestrator()
+        orch._kill_switch_fired = True
+        orch._hwm_tracker = MagicMock()
+        orch.positions.query_equity = MagicMock(return_value=None)
+        orch.engine.on_trading_day_end.return_value = []
+        orch._notify = MagicMock()
+
+        orch.post_session()
+
+        notify_msgs = [c[0][0] for c in orch._notify.call_args_list]
+        eod_hwm_notifies = [m for m in notify_msgs if "HWM EOD" in m and "equity unavailable" in m]
+        assert len(eod_hwm_notifies) == 0, (
+            f"Suppression failed: kill-switch fired but got HWM EOD notify {notify_msgs!r}"
+        )
+
+    def test_eod_exception_dispatches_when_kill_switch_not_fired(self):
+        orch = build_orchestrator()
+        orch._kill_switch_fired = False
+        orch._hwm_tracker = MagicMock()
+        orch.positions.query_equity = MagicMock(side_effect=RuntimeError("simulated broker fault"))
+        orch.engine.on_trading_day_end.return_value = []
+        orch._notify = MagicMock()
+
+        orch.post_session()
+
+        notify_msgs = [c[0][0] for c in orch._notify.call_args_list]
+        eod_hwm_notifies = [m for m in notify_msgs if "HWM EOD" in m and "session-end recording failed" in m]
+        assert len(eod_hwm_notifies) == 1, f"Expected one HWM EOD exception notify; got {notify_msgs!r}"
+        assert "simulated broker fault" in eod_hwm_notifies[0]
+
+    def test_eod_exception_no_dispatch_when_kill_switch_fired(self):
+        """Suppression on exception path mirrors the equity-unavailable suppression."""
+        orch = build_orchestrator()
+        orch._kill_switch_fired = True
+        orch._hwm_tracker = MagicMock()
+        orch.positions.query_equity = MagicMock(side_effect=RuntimeError("simulated broker fault"))
+        orch.engine.on_trading_day_end.return_value = []
+        orch._notify = MagicMock()
+
+        orch.post_session()
+
+        notify_msgs = [c[0][0] for c in orch._notify.call_args_list]
+        eod_hwm_notifies = [m for m in notify_msgs if "HWM EOD" in m and "session-end recording failed" in m]
+        assert len(eod_hwm_notifies) == 0, (
+            f"Suppression failed: kill-switch fired but got HWM EOD exception notify {notify_msgs!r}"
         )

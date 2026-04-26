@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** e67f46f6 — [judgment] fix(hwm): Stage 2 audit-gate — close SG1 (null-timestamp gate bypass), SG3 (post-halt RECOVERY misleading), SG4 (NaN equity bypasses halt)
+- **Commit:** c5be3453 — [mechanical] fix(hwm): SG-NEW-1 — reject bool in _is_finite_equity (Python True is int)
 - **Files changed:** 3 files
   - `HANDOFF.md`
   - `tests/test_trading_app/test_account_hwm_tracker.py`

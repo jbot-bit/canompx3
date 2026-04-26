@@ -1306,3 +1306,83 @@ class TestEmptyStateFile:
         # Notify dispatched
         corrupt_notifies = [c for c in calls if "CORRUPT" in c]
         assert len(corrupt_notifies) == 1, f"Expected one CORRUPT notify; got {calls!r}"
+
+
+class TestReadStateFileSharedHelper:
+    """Stage 3 — shared `read_state_file` helper for external consumers
+    (pre_session_check, weekly_review, scripts). Returns dict on success,
+    None on missing/empty/JSON-error/non-dict-top-level/OSError; emits
+    log.warning with file path + granular reason on every None-return path
+    (institutional-rigor.md § 6 — no silent failures).
+    """
+
+    def test_read_state_file_returns_dict_on_valid_state(self, tmp_path):
+        from trading_app.account_hwm_tracker import read_state_file
+
+        f = tmp_path / "account_hwm_OK.json"
+        f.write_text(json.dumps({"account_id": "OK", "hwm_dollars": 50000.0}))
+        data = read_state_file(f)
+        assert data is not None
+        assert data["account_id"] == "OK"
+        assert data["hwm_dollars"] == 50000.0
+
+    def test_read_state_file_returns_none_on_missing_file(self, tmp_path, caplog):
+        from trading_app.account_hwm_tracker import read_state_file
+
+        missing = tmp_path / "account_hwm_MISSING.json"
+        with caplog.at_level("WARNING", logger="trading_app.account_hwm_tracker"):
+            assert read_state_file(missing) is None
+        assert any("does not exist" in r.message for r in caplog.records), (
+            f"Expected 'does not exist' in log; got {[r.message for r in caplog.records]!r}"
+        )
+
+    def test_read_state_file_returns_none_on_empty_file(self, tmp_path, caplog):
+        from trading_app.account_hwm_tracker import read_state_file
+
+        f = tmp_path / "account_hwm_EMPTY.json"
+        f.write_text("")
+        with caplog.at_level("WARNING", logger="trading_app.account_hwm_tracker"):
+            assert read_state_file(f) is None
+        assert any("is empty" in r.message for r in caplog.records)
+
+    def test_read_state_file_returns_none_on_corrupt_json(self, tmp_path, caplog):
+        from trading_app.account_hwm_tracker import read_state_file
+
+        f = tmp_path / "account_hwm_CORRUPT.json"
+        f.write_text("{not valid json")
+        with caplog.at_level("WARNING", logger="trading_app.account_hwm_tracker"):
+            assert read_state_file(f) is None
+        assert any("JSON parse failed" in r.message for r in caplog.records)
+
+    def test_read_state_file_returns_none_on_non_dict_top_level(self, tmp_path, caplog):
+        from trading_app.account_hwm_tracker import read_state_file
+
+        f = tmp_path / "account_hwm_LIST.json"
+        f.write_text(json.dumps([1, 2, 3]))
+        with caplog.at_level("WARNING", logger="trading_app.account_hwm_tracker"):
+            assert read_state_file(f) is None
+        assert any("not a dict" in r.message for r in caplog.records)
+
+    def test_read_state_file_returns_none_on_oserror(self, tmp_path, caplog, monkeypatch):
+        """Mutation guard: silently swallowing the OSError (no log.warning) flips this test."""
+        from trading_app.account_hwm_tracker import read_state_file
+
+        f = tmp_path / "account_hwm_OSERROR.json"
+        f.write_text(json.dumps({"account_id": "X"}))
+
+        # Patch read_text on Path to raise OSError
+        from pathlib import Path as _Path
+
+        original_read_text = _Path.read_text
+
+        def boom(self, *args, **kwargs):
+            if str(self).endswith("account_hwm_OSERROR.json"):
+                raise OSError("simulated permission denied")
+            return original_read_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(_Path, "read_text", boom)
+        with caplog.at_level("WARNING", logger="trading_app.account_hwm_tracker"):
+            assert read_state_file(f) is None
+        assert any("OSError" in r.message for r in caplog.records), (
+            f"Expected granular OSError reason in log (no silent swallow); got {[r.message for r in caplog.records]!r}"
+        )

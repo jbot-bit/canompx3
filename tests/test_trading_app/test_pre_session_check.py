@@ -544,3 +544,123 @@ class TestTopstepXfaAggregateCap:
         """Sanity check on the actual ACCOUNT_PROFILES — must be ≤ 5 right now."""
         ok, msg = check_topstep_xfa_aggregate_cap()
         assert ok is True, f"Repo state breaches 5-XFA cap: {msg}"
+
+
+# ── Stage 3 — shared-reader delegation + message-format unification ───────
+
+
+class TestStage3SharedReaderDelegation:
+    """Stage 3 of HWM persistence integrity hardening.
+
+    Pins:
+      - both pre-session HWM functions delegate to account_hwm_tracker.read_state_file
+      - corrupt-state message format unified to BLOCKED <filename>: <reason>
+      - boolean behavior on corrupt is unchanged (False — already True before Stage 3)
+      - no inline json.loads against account_hwm_*.json paths in pre_session_check
+        or weekly_review (canonical owner is account_hwm_tracker.py)
+    """
+
+    def test_check_dd_circuit_breaker_calls_shared_reader(self, tmp_path):
+        """Mutation guard: re-introducing inline json.loads flips this test."""
+        state_dir = _make_hwm_file(
+            tmp_path,
+            {"account_id": "DELEG", "halt_triggered": False, "dd_used_dollars": 100, "dd_limit_dollars": 2000},
+        )
+        with (
+            patch("trading_app.pre_session_check.STATE_DIR", state_dir),
+            patch("trading_app.account_hwm_tracker.read_state_file") as mock_reader,
+        ):
+            mock_reader.return_value = {"account_id": "DELEG", "halt_triggered": False}
+            check_dd_circuit_breaker()
+        assert mock_reader.call_count >= 1, "check_dd_circuit_breaker must delegate to read_state_file"
+
+    def test_check_hwm_tracker_calls_shared_reader(self, tmp_path):
+        """Mutation guard: re-introducing inline json.loads flips this test."""
+        state_dir = _make_hwm_file(
+            tmp_path,
+            {
+                "account_id": "DELEG",
+                "halt_triggered": False,
+                "dd_used_dollars": 100,
+                "dd_limit_dollars": 2000,
+                "dd_pct_used": 0.05,
+                "hwm_dollars": 50000,
+                "hwm_timestamp": "2026-04-26T00:00:00",
+            },
+        )
+        with (
+            patch("trading_app.pre_session_check.STATE_DIR", state_dir),
+            patch("trading_app.account_hwm_tracker.read_state_file") as mock_reader,
+        ):
+            mock_reader.return_value = {
+                "account_id": "DELEG",
+                "halt_triggered": False,
+                "dd_used_dollars": 100,
+                "dd_limit_dollars": 2000,
+                "dd_pct_used": 0.05,
+                "hwm_dollars": 50000,
+                "hwm_timestamp": "2026-04-26T00:00:00",
+            }
+            check_hwm_tracker()
+        assert mock_reader.call_count >= 1, "check_hwm_tracker must delegate to read_state_file"
+
+    def test_corrupt_state_returns_blocked_filename_format_dd_circuit_breaker(self, tmp_path):
+        """Both functions return (False, 'BLOCKED <filename>...') on corrupt input."""
+        state_dir = tmp_path / "data" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "account_hwm_BAD.json").write_text("{not json")
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok, msg = check_dd_circuit_breaker()
+        assert ok is False
+        assert msg.startswith("BLOCKED "), f"Message must start with 'BLOCKED '; got {msg!r}"
+        assert "account_hwm_BAD.json" in msg
+
+    def test_corrupt_state_returns_blocked_filename_format_hwm_tracker(self, tmp_path):
+        state_dir = tmp_path / "data" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "account_hwm_BAD2.json").write_text("{not json")
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok, msg = check_hwm_tracker()
+        assert ok is False
+        assert "BLOCKED account_hwm_BAD2.json" in msg, (
+            f"check_hwm_tracker must produce unified BLOCKED <filename>: format; got {msg!r}"
+        )
+
+    def test_no_inline_json_loads_against_account_hwm_in_pre_session(self):
+        """Stage 3 AC 10: no `json.loads` co-occurring with `account_hwm` token in
+        pre_session_check.py or weekly_review.py source. Mutation guard against
+        any future re-introduction of inline JSON parsing for tracker state files.
+        """
+        from trading_app import pre_session_check as ps_mod
+        from trading_app import weekly_review as wr_mod
+
+        for mod in (ps_mod, wr_mod):
+            mod_file = mod.__file__
+            assert mod_file is not None, f"{mod} has no __file__ — cannot scan source"
+            src = Path(mod_file).read_text(encoding="utf-8")
+            for line in src.splitlines():
+                if "json.loads" in line and "account_hwm" in line:
+                    raise AssertionError(
+                        f"{mod_file}: inline json.loads against account_hwm — "
+                        f"must delegate to read_state_file. Offending line: {line.strip()!r}"
+                    )
+
+    def test_clean_state_unchanged_behavior(self, tmp_path):
+        """Backward compat: clean state file → both functions return True/passing."""
+        state_dir = _make_hwm_file(
+            tmp_path,
+            {
+                "account_id": "CLEAN",
+                "halt_triggered": False,
+                "dd_used_dollars": 100,
+                "dd_limit_dollars": 2000,
+                "dd_pct_used": 0.05,
+                "hwm_dollars": 50000,
+                "hwm_timestamp": "2026-04-26T00:00:00",
+            },
+        )
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok1, _ = check_dd_circuit_breaker()
+            ok2, _ = check_hwm_tracker()
+        assert ok1 is True
+        assert ok2 is True

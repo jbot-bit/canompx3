@@ -125,31 +125,40 @@ def check_paper_trades_accessible(con) -> tuple[bool, str]:
 def check_dd_circuit_breaker() -> tuple[bool, str]:
     """Check DD status from AccountHWMTracker state files.
 
-    Replaces the previous dd_circuit_breaker.json ghost check (file was never
-    written by any code path). Now reads the authoritative HWM tracker state
-    which IS written by session_orchestrator on every equity poll.
+    Reads the authoritative HWM tracker state via the shared
+    `account_hwm_tracker.read_state_file` helper. Corrupt or unreadable
+    state files block the check (fail-closed per integrity-guardian.md § 3).
+
+    Stage 3 of HWM persistence integrity hardening: delegates JSON parsing
+    to the canonical reader. Granular failure reasons (missing / empty /
+    corrupt / OSError) are captured by the helper's log.warning calls.
     """
-    # Primary: check HWM tracker state files (authoritative source)
+    from trading_app.account_hwm_tracker import read_state_file
+
     hwm_files = list(STATE_DIR.glob("account_hwm_*.json"))
     hwm_files = [f for f in hwm_files if "CORRUPT" not in f.name]
-    if hwm_files:
-        for f in hwm_files:
-            try:
-                text = f.read_text()
-                if not text.strip():
-                    return False, f"BLOCKED: HWM file unreadable ({f.name} is empty)"
-                data = json.loads(text)
-                if data.get("halt_triggered"):
-                    return (
-                        False,
-                        f"DD HALT ACTIVE: account {data.get('account_id', '?')} — DD ${data.get('dd_used_dollars', 0):.0f} >= limit ${data.get('dd_limit_dollars', 0):.0f}",
-                    )
-            except (json.JSONDecodeError, ValueError):
-                return False, f"BLOCKED: HWM file unreadable ({f.name} is corrupt)"
-            except OSError:
-                return False, f"BLOCKED: HWM file unreadable ({f.name})"
-        return True, "DD circuit breaker: clear (HWM tracker)"
-    return True, "No DD tracker state (first session — will init from broker)"
+    if not hwm_files:
+        return True, "No DD tracker state (first session — will init from broker)"
+
+    for f in hwm_files:
+        data = read_state_file(f)
+        if data is None:
+            return False, f"BLOCKED {f.name}: state file unreadable (see logs)"
+        # Narrow defensive scope: a state file with valid JSON shape but
+        # wrong field types (e.g. dd_used_dollars stored as a string)
+        # would raise during numeric formatting. Fail-closed per
+        # integrity-guardian.md § 3 — DD state cannot be verified.
+        try:
+            if data.get("halt_triggered"):
+                return (
+                    False,
+                    f"DD HALT ACTIVE: account {data.get('account_id', '?')} — "
+                    f"DD ${data.get('dd_used_dollars', 0):.0f} >= "
+                    f"limit ${data.get('dd_limit_dollars', 0):.0f}",
+                )
+        except (TypeError, ValueError) as exc:
+            return False, f"BLOCKED {f.name}: field-type error: {exc}"
+    return True, "DD circuit breaker: clear (HWM tracker)"
 
 
 def check_daily_equity(profile_id: str | None = None) -> tuple[bool, str]:
@@ -199,7 +208,16 @@ def check_slippage_pilot_progress(con) -> str:
 
 
 def check_hwm_tracker() -> tuple[bool, str]:
-    """Check account HWM DD tracker status."""
+    """Check account HWM DD tracker status.
+
+    Stage 3 of HWM persistence integrity hardening: delegates JSON parsing
+    to the canonical `account_hwm_tracker.read_state_file` reader. Corrupt
+    or unreadable state files fail-closed (any_halt=True) with the unified
+    `BLOCKED <filename>:` message format. Granular failure reasons are
+    captured by the helper's log.warning calls.
+    """
+    from trading_app.account_hwm_tracker import read_state_file
+
     hwm_files = list(STATE_DIR.glob("account_hwm_*.json"))
     if not hwm_files:
         return True, "No HWM tracker active (first session — will init from broker)"
@@ -209,8 +227,16 @@ def check_hwm_tracker() -> tuple[bool, str]:
     for f in hwm_files:
         if "CORRUPT" in f.name:
             continue
+        data = read_state_file(f)
+        if data is None:
+            any_halt = True  # fail-closed: can't verify DD state → block
+            results.append(f"BLOCKED {f.name}: state file unreadable")
+            continue
+        # Narrow defensive scope: a state file with valid JSON shape but
+        # wrong field types (e.g. dd_used_dollars stored as a string)
+        # would raise during numeric formatting. Fail-closed per
+        # integrity-guardian.md § 3.
         try:
-            data = json.loads(f.read_text())
             acct = data.get("account_id", "?")
             hwm = data.get("hwm_dollars", 0)
             used = data.get("dd_used_dollars", 0)
@@ -230,9 +256,9 @@ def check_hwm_tracker() -> tuple[bool, str]:
                 )
             else:
                 results.append(f"OK {acct}: DD ${used:.0f}/{limit:.0f} ({pct:.0%}) — ${remaining:.0f} remaining")
-        except Exception as e:
-            any_halt = True  # fail-closed: can't verify DD state → block
-            results.append(f"BLOCKED {f.name}: {e}")
+        except (TypeError, ValueError) as exc:
+            any_halt = True  # fail-closed: malformed field types
+            results.append(f"BLOCKED {f.name}: field-type error: {exc}")
 
     msg = " | ".join(results)
     return (not any_halt), f"DD TRACKER: {msg}"

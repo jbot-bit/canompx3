@@ -665,6 +665,9 @@ class SessionOrchestrator:
         #   Polls broker equity every ~10 bars. Triggers kill switch on breach.
         # BOTH layers must clear before any order is submitted.
         # Layer 1 resets daily. Layer 2 never resets automatically.
+        # Signal-only sessions: HWM tracker intentionally NOT constructed.
+        # pre_session_check.check_hwm_tracker is the DD authority for
+        # signal-only — operates on persisted state files.
         self._hwm_tracker = None
         if not signal_only and portfolio is not None and portfolio.strategies:
             first = portfolio.strategies[0]
@@ -705,6 +708,7 @@ class SessionOrchestrator:
                                 dd_limit_dollars=float(tier.max_dd),
                                 dd_type=firm_spec.dd_type,
                                 freeze_at_balance=freeze,
+                                notify_callback=self._notify,  # Stage 3 wire-up — operator-visible state-integrity events
                             )
                             # Query initial equity from broker
                             if self.positions is not None:
@@ -3410,8 +3414,20 @@ class SessionOrchestrator:
                     self._hwm_tracker.record_session_end(end_equity)
                     _, reason = self._hwm_tracker.check_halt()
                     log.info("HWM session close: %s", reason)
+                else:
+                    # SILENT-4 (Stage 3): EOD equity unavailable — operator-visible
+                    # unless kill switch already fired (operator already notified by
+                    # the kill-switch path; suppression prevents duplicate alerts).
+                    msg = "HWM EOD: broker equity unavailable — session-end DD not recorded"
+                    log.warning(msg)
+                    if not self._kill_switch_fired:
+                        self._notify(msg)
             except Exception as e:
-                log.warning("HWM session-end recording failed: %s", e)
+                # SILENT-4 (Stage 3): EOD recording exception — same suppression rule.
+                msg = f"HWM EOD: session-end recording failed: {e}"
+                log.warning(msg)
+                if not self._kill_switch_fired:
+                    self._notify(msg)
 
         # EOD position reconciliation (M2.5 P0)
         if self.positions and not self.signal_only:

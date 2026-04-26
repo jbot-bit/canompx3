@@ -103,6 +103,54 @@ def state_file_age_days(path: Path) -> float | None:
     return delta_seconds / 86400.0
 
 
+def read_state_file(path: Path) -> dict | None:
+    """Read and parse a tracker state file. Single source of truth for
+    external consumers (pre_session_check, weekly_review, scripts).
+
+    Returns:
+        Parsed dict on success.
+        None on missing / empty / JSON-parse-error / value-error /
+        non-dict-top-level / OSError.
+
+    Granular reason logged via log.warning on each None-return path
+    (per institutional-rigor.md § 6 — never silently swallow exceptions).
+    Callers map None to their respective response (typically a fail-closed
+    BLOCKED message containing the file name).
+
+    NOT used by tracker-internal _load_state (which performs corrupt-rename
+    + reinit beyond this helper's scope) or state_file_age_days (which has
+    its own mtime-fallback semantics for the SG1 audit-gate fix). Those two
+    helpers are intentionally distinct because they serve different purposes
+    (full dict for external consumers vs derived age for the load gate).
+
+    HWM persistence integrity hardening design v3 § 6.
+    """
+    if not path.exists():
+        log.warning("read_state_file: %s does not exist", path)
+        return None
+    try:
+        text = path.read_text()
+    except OSError as exc:
+        log.warning("read_state_file: %s OSError on read: %s", path, exc)
+        return None
+    if not text.strip():
+        log.warning("read_state_file: %s is empty", path)
+        return None
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError) as exc:
+        log.warning("read_state_file: %s JSON parse failed: %s", path, exc)
+        return None
+    if not isinstance(data, dict):
+        log.warning(
+            "read_state_file: %s top-level is not a dict (got %s)",
+            path,
+            type(data).__name__,
+        )
+        return None
+    return data
+
+
 @dataclass
 class SessionLogEntry:
     date: str
