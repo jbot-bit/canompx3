@@ -179,3 +179,71 @@ def test_state_file_age_days_helper_used_by_load_state(state_dir):
         AccountHWMTracker("AGE_INT", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
 
     assert calls, "_load_state must delegate to state_file_age_days; helper was not called"
+
+
+def test_scenario_6_orchestrator_bound_method_wired_as_notify_callback(state_dir):
+    """Scenario 6 (Stage 3 wire-up integration) — design v3 § 12.2 / Stage 3 stage doc.
+
+    Real-object integration: construct a SessionOrchestrator-shaped class with a
+    real `_notify` bound method, pass that bound method as `notify_callback` to a
+    real `AccountHWMTracker`, then verify:
+      (a) tracker._notify_callback compares equal to the bound method
+      (mutation guard against passing None or a different attribute);
+      (b) when the tracker invokes its callback path (B4 corrupt-state notify),
+      the bound method actually receives the message — proving runtime wiring,
+      not just static-source pattern matching.
+
+    This complements the static-source assertion in test_session_orchestrator.py
+    (which pins the construction call site against grep) by exercising the
+    callback at runtime through the tracker's actual dispatch path. A future
+    refactor that drops the kwarg silently or rebinds it to a no-op would pass
+    the static grep but fail this test.
+
+    Stage 3 of HWM persistence integrity hardening: closes audit-gate finding C-1
+    (Scenario 6 not in integration file).
+    """
+
+    class _OrchestratorStub:
+        """Minimal orchestrator-shaped class with a real bound _notify method.
+
+        Mirrors the SessionOrchestrator._notify contract: takes a string message,
+        returns None, never raises. Records calls for assertion.
+        """
+
+        def __init__(self):
+            self.calls: list[str] = []
+
+        def _notify(self, message: str) -> None:
+            self.calls.append(message)
+
+    orch = _OrchestratorStub()
+
+    # Seed a CORRUPT state file so construction triggers the B4 corrupt-state
+    # notify path through the bound method (exercises the runtime wiring).
+    (state_dir / "account_hwm_SCEN6.json").write_text("{not valid json")
+
+    tracker = AccountHWMTracker(
+        "SCEN6",
+        "topstep",
+        dd_limit_dollars=2000.0,
+        state_dir=state_dir,
+        notify_callback=orch._notify,
+    )
+
+    # Assertion (a): bound-method equality (== not is, per pre-execution audit
+    # improvement — Python bound methods are fresh wrappers per access).
+    assert tracker._notify_callback is not None, "callback must not be None when explicitly passed at construction"
+    assert tracker._notify_callback == orch._notify, (
+        "tracker._notify_callback must equal orchestrator's bound _notify method"
+    )
+    assert tracker._notify_callback.__func__ is type(orch)._notify, (  # type: ignore[attr-defined]
+        "callback must wrap the orchestrator's _notify function (not a different attribute)"
+    )
+
+    # Assertion (b): runtime dispatch path actually calls the bound method.
+    # Corrupt state file → tracker invokes _safe_notify → callback fires → orch
+    # receives the message via its real _notify implementation.
+    corrupt_notifies = [c for c in orch.calls if "CORRUPT" in c]
+    assert len(corrupt_notifies) == 1, (
+        f"Expected one CORRUPT notify dispatched through the bound method; got {orch.calls!r}"
+    )

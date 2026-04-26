@@ -9,11 +9,18 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** c5be3453 — [mechanical] fix(hwm): SG-NEW-1 — reject bool in _is_finite_equity (Python True is int)
-- **Files changed:** 3 files
+- **Commit:** 1de0f17f — [judgment] feat(hwm): Stage 3 — orchestrator wiring + EOD dispatch + shared reader
+- **Files changed:** 10 files
   - `HANDOFF.md`
+  - `docs/runtime/stages/hwm-stage3-orchestrator-pre-session.md`
   - `tests/test_trading_app/test_account_hwm_tracker.py`
+  - `tests/test_trading_app/test_pre_session_check.py`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `tests/test_trading_app/test_weekly_review.py`
   - `trading_app/account_hwm_tracker.py`
+  - `trading_app/live/session_orchestrator.py`
+  - `trading_app/pre_session_check.py`
+  - `trading_app/weekly_review.py`
 
 ## Next Steps — Active
 

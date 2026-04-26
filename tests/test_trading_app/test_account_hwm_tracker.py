@@ -1327,14 +1327,15 @@ class TestReadStateFileSharedHelper:
         assert data["hwm_dollars"] == 50000.0
 
     def test_read_state_file_returns_none_on_missing_file(self, tmp_path, caplog):
+        """Stage 3 audit-gate TM-2: warning must include both reason AND file path."""
         from trading_app.account_hwm_tracker import read_state_file
 
         missing = tmp_path / "account_hwm_MISSING.json"
         with caplog.at_level("WARNING", logger="trading_app.account_hwm_tracker"):
             assert read_state_file(missing) is None
-        assert any("does not exist" in r.message for r in caplog.records), (
-            f"Expected 'does not exist' in log; got {[r.message for r in caplog.records]!r}"
-        )
+        msgs = [r.message for r in caplog.records]
+        assert any("does not exist" in m for m in msgs), f"Expected reason token; got {msgs!r}"
+        assert any(str(missing) in m for m in msgs), f"Stage 3 TM-2: warning must include the file path; got {msgs!r}"
 
     def test_read_state_file_returns_none_on_empty_file(self, tmp_path, caplog):
         from trading_app.account_hwm_tracker import read_state_file
@@ -1343,7 +1344,9 @@ class TestReadStateFileSharedHelper:
         f.write_text("")
         with caplog.at_level("WARNING", logger="trading_app.account_hwm_tracker"):
             assert read_state_file(f) is None
-        assert any("is empty" in r.message for r in caplog.records)
+        msgs = [r.message for r in caplog.records]
+        assert any("is empty" in m for m in msgs)
+        assert any(str(f) in m for m in msgs), f"Stage 3 TM-2: missing path in warning; got {msgs!r}"
 
     def test_read_state_file_returns_none_on_corrupt_json(self, tmp_path, caplog):
         from trading_app.account_hwm_tracker import read_state_file
@@ -1352,7 +1355,9 @@ class TestReadStateFileSharedHelper:
         f.write_text("{not valid json")
         with caplog.at_level("WARNING", logger="trading_app.account_hwm_tracker"):
             assert read_state_file(f) is None
-        assert any("JSON parse failed" in r.message for r in caplog.records)
+        msgs = [r.message for r in caplog.records]
+        assert any("JSON parse failed" in m for m in msgs)
+        assert any(str(f) in m for m in msgs), f"Stage 3 TM-2: missing path in warning; got {msgs!r}"
 
     def test_read_state_file_returns_none_on_non_dict_top_level(self, tmp_path, caplog):
         from trading_app.account_hwm_tracker import read_state_file
@@ -1361,7 +1366,9 @@ class TestReadStateFileSharedHelper:
         f.write_text(json.dumps([1, 2, 3]))
         with caplog.at_level("WARNING", logger="trading_app.account_hwm_tracker"):
             assert read_state_file(f) is None
-        assert any("not a dict" in r.message for r in caplog.records)
+        msgs = [r.message for r in caplog.records]
+        assert any("not a dict" in m for m in msgs)
+        assert any(str(f) in m for m in msgs), f"Stage 3 TM-2: missing path in warning; got {msgs!r}"
 
     def test_read_state_file_returns_none_on_oserror(self, tmp_path, caplog, monkeypatch):
         """Mutation guard: silently swallowing the OSError (no log.warning) flips this test."""
@@ -1383,6 +1390,8 @@ class TestReadStateFileSharedHelper:
         monkeypatch.setattr(_Path, "read_text", boom)
         with caplog.at_level("WARNING", logger="trading_app.account_hwm_tracker"):
             assert read_state_file(f) is None
-        assert any("OSError" in r.message for r in caplog.records), (
-            f"Expected granular OSError reason in log (no silent swallow); got {[r.message for r in caplog.records]!r}"
+        msgs = [r.message for r in caplog.records]
+        assert any("OSError" in m for m in msgs), (
+            f"Expected granular OSError reason in log (no silent swallow); got {msgs!r}"
         )
+        assert any(str(f) in m for m in msgs), f"Stage 3 TM-2: missing path in warning; got {msgs!r}"
