@@ -776,21 +776,55 @@ class TestStage4InactivityWindow:
         assert ok is True, f"Should not block at 30d-1s; got blocked: {msg!r}"
         assert "WARN" in msg
 
-    def test_state_unreadable_blocks(self, tmp_path):
-        """state_file_age_days returns None → BLOCKED (fail-closed)."""
+    def test_state_unreadable_blocks_via_age_helper_residual_race(self, tmp_path, caplog):
+        """F-2 audit-fix residual-race path: file is parseable JSON dict
+        (read_state_file returns dict) but state_file_age_days returns None
+        (e.g. file disappeared between reads or stat() permission revoked).
+        Operator log must record the granular reason (institutional-rigor.md § 6).
+        """
+        import logging as _logging
+
         state_dir = tmp_path / "data" / "state"
         state_dir.mkdir(parents=True, exist_ok=True)
-        # Create a file that exists but is unreadable enough that
-        # state_file_age_days returns None (e.g. mock the helper).
-        (state_dir / "account_hwm_NONE.json").write_text("garbage")
+        # Valid JSON dict so read_state_file returns dict, not None.
+        (state_dir / "account_hwm_RACE.json").write_text(
+            json.dumps({"account_id": "RACE", "last_equity_timestamp": "2026-04-26T00:00:00+00:00"})
+        )
         with (
             patch("trading_app.pre_session_check.STATE_DIR", state_dir),
             patch("trading_app.account_hwm_tracker.state_file_age_days", return_value=None),
+            caplog.at_level(_logging.WARNING, logger="trading_app.pre_session_check"),
         ):
             ok, msg = check_topstep_inactivity_window()
         assert ok is False
         assert "BLOCKED" in msg
         assert "state file unreadable (cannot compute age)" in msg
+        # F-2: granular reason in the log
+        msgs = [r.message for r in caplog.records]
+        assert any("state_file_age_days returned None" in m for m in msgs), (
+            f"F-2 audit-fix: expected granular log on age-helper None-return; got {msgs!r}"
+        )
+
+    def test_corrupt_json_with_recent_mtime_blocks(self, tmp_path):
+        """F-1 audit-fix mutation guard: a corrupt-JSON file with a fresh
+        mtime would have silently passed the inactivity check pre-fix
+        (state_file_age_days falls back to mtime → returns ~0 days → 'OK').
+        After the fix, read_state_file detects the parse failure FIRST and
+        the check fail-closes. Mutation: removing the read_state_file gate
+        flips this test (function would say 'OK 0d old').
+        """
+        state_dir = tmp_path / "data" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        # Corrupt JSON content, but the file was just written so mtime is fresh.
+        # NOTE: filename must NOT contain "CORRUPT" — that name pattern is
+        # filtered out by the skip-CORRUPT filter. We're testing corrupt
+        # CONTENT in a normally-named file.
+        (state_dir / "account_hwm_BADJSON.json").write_text("{not valid json — fresh mtime")
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok, msg = check_topstep_inactivity_window()
+        assert ok is False, f"F-1: corrupt-JSON file with fresh mtime must BLOCK, not pass as 'OK 0d old'; got {msg!r}"
+        assert "BLOCKED" in msg
+        assert "state file unreadable" in msg
 
     def test_no_files_returns_ok(self, tmp_path):
         state_dir = tmp_path / "data" / "state"

@@ -33,20 +33,23 @@
    - `1de0f17f` — feat: `notify_callback=self._notify` wired at construction; signal-only authority comment; EOD silent-skip resolved on BOTH branches (`end_equity is None` AND `Exception`) with kill-switch suppression; new `read_state_file(path)` shared helper; pre_session × 2 + weekly_review converted to delegate; unified `BLOCKED <filename>:` message format.
    - `cc20f52c` — Stage 3 audit-gate fix-up: closes C-1 (Scenario 6 added to `test_account_hwm_tracker_integration.py`) + TM-2 (path-in-warning assertions added to all 5 read_state_file None-return tests). C-2 (HANDOFF closure) deferred to Stage 4 per design v3 § 7 — closed by this commit.
 
-   **Stage 4 — TopStep inactivity-window pre-flight + HANDOFF closure (LANDED — see this commit):**
-   - This commit — feat: `check_topstep_inactivity_window` in `pre_session_check.py` delegating to Stage 2's `state_file_age_days` (single source of truth). Warn ≥25 days, block ≥30 days. 12 mutation-proof tests. Wires into `run_checks`. Three deferred-findings rows added (HWM-SIL6, HWM-UNS5, HWM-UNS6). HANDOFF closure (this update). Stage 3 audit-gate finding C-2 closed.
+   **Stage 4 — TopStep inactivity-window pre-flight + HANDOFF closure (LANDED):**
+   - `95adb0a6` — feat: `check_topstep_inactivity_window` in `pre_session_check.py` delegating to Stage 2's `state_file_age_days` (single source of truth). Warn ≥25 days, block ≥30 days. 12 mutation-proof tests. Wires into `run_checks`. Three deferred-findings rows added (HWM-SIL6, HWM-UNS5, HWM-UNS6). HANDOFF closure landed. Stage 3 audit-gate finding C-2 closed.
+   - `ed6d9f81` — Stage 4 audit-gate fix-up: closes SG-1 (analogy disclaimer surfaced in BLOCK runtime message, not only docstring).
+   - **Self-audit fix-up (this commit)** — closes F-1 (corrupt-JSON with recent mtime silently passing inactivity check; defense-in-depth gap), F-2 (silent fail on residual `state_file_age_days` None-return; institutional-rigor § 6 gap), F-3 (HANDOFF.md ambiguous "this commit" references). Adds `read_state_file` parseability gate to `check_topstep_inactivity_window`; module-level logger in `pre_session_check.py`; 1 mutation-guard test + 1 residual-race test (13 tests total in TestStage4InactivityWindow).
 
    **Audit-gate verdict closures:**
    - Stage 1: CONDITIONAL CRITICAL-1 + 3 mutation-tests → CLOSED (`68c63482`).
    - Stage 1 GAP-1 (None-reason contract drift, LOW) → CLOSED (`45720109`).
    - Stage 2: CONDITIONAL SG1/SG3/SG4 + SG-NEW-1 → CLOSED (`e67f46f6`, `c5be3453`).
-   - Stage 3: CONDITIONAL C-1/TM-2 → CLOSED (`cc20f52c`); C-2 deferred to Stage 4 → CLOSED (this commit).
+   - Stage 3: CONDITIONAL C-1/TM-2 → CLOSED (`cc20f52c`); C-2 deferred to Stage 4 → CLOSED (`95adb0a6`).
+   - Stage 4: CONDITIONAL SG-1 → CLOSED (`ed6d9f81`).
+   - Self-audit (third-pass institutional review by implementer): F-1/F-2/F-3 → CLOSED (this commit). F-4/F-5 deferred (LOW, not blocking). F-6 (TRADING_RULES.md governance gap) parked — out of design v3 scope.
    - SILENT-6, UNSUPPORTED-5, UNSUPPORTED-6 → DEFERRED, see `docs/ralph-loop/deferred-findings.md` rows HWM-SIL6, HWM-UNS5, HWM-UNS6.
 
 2. **HWM hardening — POST-LANDING NEXT STEPS:**
-   - Dispatch `evidence-auditor` on this Stage 4 commit per `.claude/rules/adversarial-audit-gate.md`. Final stage of the design v3 plan.
+   - Recommended (not blocking): dispatch a third-party `evidence-auditor` on the full 12-commit chain after this self-audit fix-up. The per-stage auditors saw each commit in isolation; cross-stage interaction (Stage 4 inactivity check vs Stage 3 read_state_file vs Stage 2 state_file_age_days) is exactly where F-1 surfaced and is exactly the surface a per-stage audit can't fully cover.
    - Operator action on `data/state/account_hwm_20092334.json` (~20 days old): inside the WARN band but well clear of the 30-day BLOCK boundary. No immediate action; the new check will warn at next pre_session run.
-   - After Stage 4 audit-gate PASS: design v3 work complete. Move to next priority.
 
 3. **Code-review LOW findings on Stage 1 (NOT blockers):** auto-staged HANDOFF (process-doc gap, hook behavior); 6-line in-code comment block at `session_orchestrator.py:1602-1607` is verbose. Cosmetic only — defer to optional cleanup commit (rejected as Stage 1 fix-up scope per option-(c)-was-wrong audit).
 

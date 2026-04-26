@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import json
+import logging
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -22,6 +23,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.lifecycle_state import read_lifecycle_state
+
+# Module logger — granular operator-log reasons on fail-closed paths
+# (institutional-rigor.md § 6: every fail-closed branch records the reason).
+log = logging.getLogger(__name__)
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -298,7 +303,7 @@ def check_topstep_inactivity_window() -> tuple[bool, str]:
     (account_hwm_tracker.py _STATE_STALENESS_FAIL_DAYS). Both gates fire on
     the same day; the figure is borrowed by analogy regardless.
     """
-    from trading_app.account_hwm_tracker import state_file_age_days
+    from trading_app.account_hwm_tracker import read_state_file, state_file_age_days
 
     hwm_files = list(STATE_DIR.glob("account_hwm_*.json"))
     hwm_files = [f for f in hwm_files if "CORRUPT" not in f.name]
@@ -315,8 +320,33 @@ def check_topstep_inactivity_window() -> tuple[bool, str]:
     results = []
     any_block = False
     for f in hwm_files:
+        # F-1 audit-fix: defense-in-depth parseability check before age
+        # computation. state_file_age_days falls back to mtime on corrupt
+        # JSON (Stage 2 SG1 behavior — correct for the load-time gate).
+        # Without this read_state_file gate, a corrupt-JSON file with
+        # recent mtime would silently pass this check as "OK 0d old"
+        # while check_dd_circuit_breaker (which uses read_state_file)
+        # correctly BLOCKs. Same file, contradictory verdicts. Fail-closed
+        # symmetric to the sibling DD checks per integrity-guardian.md § 3.
+        # Granular failure reason (missing/empty/JSON-error/OSError) is
+        # captured by read_state_file's own log.warning.
+        data = read_state_file(f)
+        if data is None:
+            any_block = True
+            results.append(f"BLOCKED {f.name}: state file unreadable (see logs)")
+            continue
         age = state_file_age_days(f)
         if age is None:
+            # F-2 audit-fix: residual race case (file read by read_state_file
+            # then disappeared/permission-revoked before stat) — record a
+            # granular reason in the operator log. state_file_age_days is
+            # pure-no-logging by Stage 2 contract; the granular reason has
+            # to be emitted at the call site to satisfy IR § 6.
+            log.warning(
+                "check_topstep_inactivity_window: %s — state_file_age_days returned None "
+                "(file likely disappeared between reads, or stat() permission revoked)",
+                f,
+            )
             any_block = True
             results.append(f"BLOCKED {f.name}: state file unreadable (cannot compute age)")
             continue
