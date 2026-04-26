@@ -9,31 +9,45 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-26
-- **Commit:** 1de0f17f — [judgment] feat(hwm): Stage 3 — orchestrator wiring + EOD dispatch + shared reader
-- **Files changed:** 10 files
+- **Commit:** cc20f52c — [mechanical] fix(hwm): Stage 3 audit-gate — close C-1 (Scenario 6) + TM-2 (path-in-warning)
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/hwm-stage3-orchestrator-pre-session.md`
   - `tests/test_trading_app/test_account_hwm_tracker.py`
-  - `tests/test_trading_app/test_pre_session_check.py`
-  - `tests/test_trading_app/test_session_orchestrator.py`
-  - `tests/test_trading_app/test_weekly_review.py`
-  - `trading_app/account_hwm_tracker.py`
-  - `trading_app/live/session_orchestrator.py`
-  - `trading_app/pre_session_check.py`
-  - `trading_app/weekly_review.py`
+  - `tests/test_trading_app/test_account_hwm_tracker_integration.py`
 
 ## Next Steps — Active
 
-1. **HWM persistence integrity hardening — IN PROGRESS, Stage 1 of 4 LANDED.** Parent design: `docs/plans/2026-04-25-hwm-persistence-integrity-hardening-design.md` (v3 — passed two design audits, 19 + 8 revisions applied). Stage 1 commits this session:
-   - `5b172a44` — feat(live) Stage 1: DD warning tier (50%/75%) reaches operator via Telegram. Wires `self._notify` into the elif-WARN branch at `session_orchestrator.py:1601`. Closes design audit CRITICAL-2.
-   - `68c63482` — fix(live) Stage 1 audit-gate fix-up: None-guard the elif (was `"WARN" in reason`, now `reason is not None and "WARN" in reason`). Closes audit-gate CRITICAL-1 (TypeError on None reason silently swallowed by bare except → recreated the very silent-failure mode Stage 1 was meant to close).
-   - 8 mutation-proof tests in `TestHWMWarningTierNotifyDispatch` (50/75/generic-WARN/OK/halt-order-pinning + None-guard/update-equity-ordering/check-halt-raises). 174/174 full suite passes. Drift 107/107 + 6 advisory.
-   - Stage 1 audit-gate re-fired on `68c63482` per `.claude/rules/adversarial-audit-gate.md`. **Result: CONDITIONAL — Stage 2 CLEARED to proceed.** All 4 prior audit findings CLOSED (CRITICAL-1 None-guard + 3 mutation-proof tests verified by independent code-trace). One new LOW silent gap surfaced (GAP-1 below) — auditor says "may be addressed as the first item in Stage 2 or logged as a deferred finding... must not be silently dropped." Logged to `docs/ralph-loop/deferred-findings.md` as `STAGE1-GAP-1`. Stage 2 will close it as item-zero before any other Stage 2 work.
+1. **HWM persistence integrity hardening — ALL 4 STAGES LANDED.** Parent design: `docs/plans/2026-04-25-hwm-persistence-integrity-hardening-design.md` (v3 — passed two design audits, 19 + 8 revisions applied). All four stages commit-and-audit-gate complete this session.
 
-2. **Stage 2-4 NOT YET STARTED.** Per design v3 § 5-7 and the audit-gate per-commit cadence:
-   - **Stage 2** — tracker integrity package (`trading_app/account_hwm_tracker.py` + tests). Adds `notify_callback` constructor param, 30-day stale-state fail-closed raise (UNGROUNDED operational heuristic per design § 2 — figure borrowed from TopStep inactivity rule, not derived), 24-hour soft warning, corrupt-state notify, poll-recovery notify, persist-IO notify, UNGROUNDED labels on 4 existing constants + 2 new ones. Plus 5 integration scenarios in new file.
-   - **Stage 3** — orchestrator integration + pre-session shared reader. **v3 audit added `weekly_review.py:37,46` to scope_lock** as third hidden consumer of `account_hwm_*.json`. Behavior change: corrupt-state message format unification across 3 callers (boolean already correct, message format diverges today).
-   - **Stage 4** — `check_topstep_inactivity_window` in `pre_session_check.py` + escalation docs (SILENT-6 S2/S3/S4 undefined, UNSUPPORTED-5/6 R3 numeric values ungrounded — escalate to Ralph's iter 178 audit pass).
+   **Stage 1 — DD warning tier reaches operator (LANDED + audit-gate CONDITIONAL → closed):**
+   - `5b172a44` — feat: wires `self._notify` into elif-WARN branch at `session_orchestrator.py:1601`. Closes design audit CRITICAL-2.
+   - `68c63482` — fix-up: None-guard the elif. Closes audit-gate CRITICAL-1.
+   - `45720109` — fix-up: STAGE1-GAP-1 None-reason contract-drift visibility.
+   - `df00589b` — docs: replace placeholder commit hash with literal `45720109`.
+
+   **Stage 2 — tracker integrity package (LANDED + audit-gate CONDITIONAL → closed):**
+   - `1f29009b` — feat: tracker integrity package (`notify_callback` ctor param, 30-day stale-state raise, 24h soft warning, corrupt-state notify, poll-recovery notify, persist-IO notify, UNGROUNDED+Rationale annotations on 6 constants, `state_file_age_days` pure helper, `@canonical-source` block on class docstring).
+   - `e67f46f6` — Stage 2 audit-gate fix-up: closes SG1 (null-timestamp gate bypass), SG3 (post-halt RECOVERY misleading), SG4 (NaN equity bypasses halt).
+   - `c5be3453` — SG-NEW-1 fix: reject `bool` in `_is_finite_equity` (Python `True is int`).
+
+   **Stage 3 — orchestrator wiring + EOD dispatch + shared reader (LANDED + audit-gate CONDITIONAL → closed):**
+   - `1de0f17f` — feat: `notify_callback=self._notify` wired at construction; signal-only authority comment; EOD silent-skip resolved on BOTH branches (`end_equity is None` AND `Exception`) with kill-switch suppression; new `read_state_file(path)` shared helper; pre_session × 2 + weekly_review converted to delegate; unified `BLOCKED <filename>:` message format.
+   - `cc20f52c` — Stage 3 audit-gate fix-up: closes C-1 (Scenario 6 added to `test_account_hwm_tracker_integration.py`) + TM-2 (path-in-warning assertions added to all 5 read_state_file None-return tests). C-2 (HANDOFF closure) deferred to Stage 4 per design v3 § 7 — closed by this commit.
+
+   **Stage 4 — TopStep inactivity-window pre-flight + HANDOFF closure (LANDED — see this commit):**
+   - This commit — feat: `check_topstep_inactivity_window` in `pre_session_check.py` delegating to Stage 2's `state_file_age_days` (single source of truth). Warn ≥25 days, block ≥30 days. 12 mutation-proof tests. Wires into `run_checks`. Three deferred-findings rows added (HWM-SIL6, HWM-UNS5, HWM-UNS6). HANDOFF closure (this update). Stage 3 audit-gate finding C-2 closed.
+
+   **Audit-gate verdict closures:**
+   - Stage 1: CONDITIONAL CRITICAL-1 + 3 mutation-tests → CLOSED (`68c63482`).
+   - Stage 1 GAP-1 (None-reason contract drift, LOW) → CLOSED (`45720109`).
+   - Stage 2: CONDITIONAL SG1/SG3/SG4 + SG-NEW-1 → CLOSED (`e67f46f6`, `c5be3453`).
+   - Stage 3: CONDITIONAL C-1/TM-2 → CLOSED (`cc20f52c`); C-2 deferred to Stage 4 → CLOSED (this commit).
+   - SILENT-6, UNSUPPORTED-5, UNSUPPORTED-6 → DEFERRED, see `docs/ralph-loop/deferred-findings.md` rows HWM-SIL6, HWM-UNS5, HWM-UNS6.
+
+2. **HWM hardening — POST-LANDING NEXT STEPS:**
+   - Dispatch `evidence-auditor` on this Stage 4 commit per `.claude/rules/adversarial-audit-gate.md`. Final stage of the design v3 plan.
+   - Operator action on `data/state/account_hwm_20092334.json` (~20 days old): inside the WARN band but well clear of the 30-day BLOCK boundary. No immediate action; the new check will warn at next pre_session run.
+   - After Stage 4 audit-gate PASS: design v3 work complete. Move to next priority.
 
 3. **Code-review LOW findings on Stage 1 (NOT blockers):** auto-staged HANDOFF (process-doc gap, hook behavior); 6-line in-code comment block at `session_orchestrator.py:1602-1607` is verbose. Cosmetic only — defer to optional cleanup commit (rejected as Stage 1 fix-up scope per option-(c)-was-wrong audit).
 

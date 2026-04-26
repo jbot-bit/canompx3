@@ -18,6 +18,7 @@ from trading_app.pre_session_check import (
     check_hwm_tracker,
     check_lane_lifecycle,
     check_manual_halt,
+    check_topstep_inactivity_window,
     check_topstep_xfa_aggregate_cap,
 )
 from trading_app.prop_profiles import ACCOUNT_PROFILES, DailyLaneSpec, get_profile
@@ -664,3 +665,180 @@ class TestStage3SharedReaderDelegation:
             ok2, _ = check_hwm_tracker()
         assert ok1 is True
         assert ok2 is True
+
+
+# ── Stage 4 — TopStep inactivity-window pre-flight check ──────────────────
+
+
+def _seed_aged_state_file(tmp_path: Path, account_id: str, *, age_days: float) -> Path:
+    """Helper: write an account_hwm_*.json with last_equity_timestamp aged
+    exactly age_days from now. Returns the STATE_DIR for use with patch.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    state_dir = tmp_path / "data" / "state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    last_ts = (datetime.now(UTC) - timedelta(days=age_days)).isoformat()
+    data = {
+        "account_id": account_id,
+        "firm": "topstep",
+        "hwm_dollars": 50000.0,
+        "hwm_timestamp": last_ts,
+        "last_equity": 50000.0,
+        "last_equity_timestamp": last_ts,
+        "halt_triggered": False,
+        "halt_timestamp": None,
+        "halt_reason": "",
+        "consecutive_poll_failures": 0,
+        "hwm_frozen": False,
+        "session_log": [],
+    }
+    f = state_dir / f"account_hwm_{account_id}.json"
+    f.write_text(json.dumps(data))
+    return state_dir
+
+
+class TestStage4InactivityWindow:
+    """Stage 4 of HWM persistence integrity hardening — pre-session
+    pre-flight surfacing the TopStep XFA inactivity-closure boundary.
+
+    Pins:
+      - <25 days OK; >=25 and <30 WARN (still proceed); >=30 BLOCK.
+      - state_file_age_days returning None blocks (fail-closed).
+      - canonical-source annotation, UNGROUNDED+Rationale on the buffer.
+      - delegation to state_file_age_days (no inline age computation).
+
+    Boundary direction: `>= 25` and `>= 30` (not `>` either) — matches
+    Stage 2's `_STATE_STALENESS_FAIL_DAYS` convention. Mutation guards on
+    each boundary direction.
+    """
+
+    def test_under_25_days_returns_ok(self, tmp_path):
+        state_dir = _seed_aged_state_file(tmp_path, "U25", age_days=10.0)
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok, msg = check_topstep_inactivity_window()
+        assert ok is True
+        assert "OK" in msg
+        assert "BLOCKED" not in msg
+        assert "WARN" not in msg
+
+    def test_25_days_plus_1s_warns_continues(self, tmp_path):
+        """Lower-boundary direction (>= 25). Mutation: > 25 flips."""
+        state_dir = _seed_aged_state_file(tmp_path, "W25P", age_days=25.0 + 1 / 86400.0)
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok, msg = check_topstep_inactivity_window()
+        assert ok is True, f"Should still proceed at 25d+1s; got blocked: {msg!r}"
+        assert "WARN" in msg, f"Expected WARN; got {msg!r}"
+
+    def test_25_days_minus_1s_silent_ok(self, tmp_path):
+        """Boundary direction reverse: 25 - 1s is still OK band."""
+        state_dir = _seed_aged_state_file(tmp_path, "W25M", age_days=25.0 - 1 / 86400.0)
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok, msg = check_topstep_inactivity_window()
+        assert ok is True
+        assert "WARN" not in msg
+        assert "OK" in msg
+
+    def test_29_days_warns(self, tmp_path):
+        state_dir = _seed_aged_state_file(tmp_path, "W29", age_days=29.0)
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok, msg = check_topstep_inactivity_window()
+        assert ok is True
+        assert "WARN" in msg
+        assert "29d" in msg
+
+    def test_30_days_plus_1s_blocks(self, tmp_path):
+        """Upper-boundary direction (>= 30). Mutation: > 30 flips."""
+        state_dir = _seed_aged_state_file(tmp_path, "B30P", age_days=30.0 + 1 / 86400.0)
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok, msg = check_topstep_inactivity_window()
+        assert ok is False, f"Should block at 30d+1s; got OK: {msg!r}"
+        assert "BLOCKED" in msg
+        assert "30d inactivity boundary" in msg
+        assert "archive or delete" in msg
+
+    def test_30_days_minus_1s_warns_does_not_block(self, tmp_path):
+        """Boundary direction reverse: 30 - 1s is WARN, not BLOCK."""
+        state_dir = _seed_aged_state_file(tmp_path, "B30M", age_days=30.0 - 1 / 86400.0)
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok, msg = check_topstep_inactivity_window()
+        assert ok is True, f"Should not block at 30d-1s; got blocked: {msg!r}"
+        assert "WARN" in msg
+
+    def test_state_unreadable_blocks(self, tmp_path):
+        """state_file_age_days returns None → BLOCKED (fail-closed)."""
+        state_dir = tmp_path / "data" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        # Create a file that exists but is unreadable enough that
+        # state_file_age_days returns None (e.g. mock the helper).
+        (state_dir / "account_hwm_NONE.json").write_text("garbage")
+        with (
+            patch("trading_app.pre_session_check.STATE_DIR", state_dir),
+            patch("trading_app.account_hwm_tracker.state_file_age_days", return_value=None),
+        ):
+            ok, msg = check_topstep_inactivity_window()
+        assert ok is False
+        assert "BLOCKED" in msg
+        assert "state file unreadable (cannot compute age)" in msg
+
+    def test_no_files_returns_ok(self, tmp_path):
+        state_dir = tmp_path / "data" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok, msg = check_topstep_inactivity_window()
+        assert ok is True
+        assert "first session" in msg.lower() or "no account state" in msg.lower()
+
+    def test_skips_corrupt_named_files(self, tmp_path):
+        """CORRUPT-named files are skipped (consistent with the rest of pre_session_check)."""
+        state_dir = tmp_path / "data" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        # Write only a CORRUPT-named file → loop skips it → no other files → OK
+        (state_dir / "account_hwm_X_CORRUPT_20260101.json").write_text("garbage")
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok, msg = check_topstep_inactivity_window()
+        assert ok is True
+        # Should hit the no-files branch (CORRUPT filtered out)
+        assert "first session" in msg.lower() or "no account state" in msg.lower()
+
+    def test_carries_canonical_source_annotation(self):
+        """Greppable: docstring contains @canonical-source, @verbatim,
+        @audit-finding, AND topstep_xfa_parameters.txt:351.
+        Mutation: dropping any token flips this test.
+        """
+        doc = check_topstep_inactivity_window.__doc__ or ""
+        assert "@canonical-source" in doc, "Missing @canonical-source token"
+        assert "@verbatim" in doc, "Missing @verbatim token"
+        assert "@audit-finding" in doc, "Missing @audit-finding token"
+        assert "topstep_xfa_parameters.txt:351" in doc, "Missing canonical citation to topstep_xfa_parameters.txt:351"
+
+    def test_25_day_buffer_has_ungrounded_rationale_comment(self):
+        """Source-file scan: UNGROUNDED + Rationale: tokens in the function
+        body, near the 25-day buffer constant.
+        """
+        from trading_app import pre_session_check as ps_mod
+
+        mod_file = ps_mod.__file__
+        assert mod_file is not None
+        src = Path(mod_file).read_text(encoding="utf-8")
+        # Locate the function body
+        assert "def check_topstep_inactivity_window" in src
+        idx = src.index("def check_topstep_inactivity_window")
+        # Grab the next 3000 chars (function body)
+        body = src[idx : idx + 3000]
+        assert "UNGROUNDED" in body, "Missing UNGROUNDED label on the buffer constant"
+        assert "Rationale:" in body, "Missing Rationale: block on the buffer constant"
+        assert "_INACTIVITY_WARN_DAYS" in body or "25.0" in body, "Missing buffer constant"
+
+    def test_delegates_to_state_file_age_days(self, tmp_path):
+        """Mutation guard: re-introducing inline mtime/timestamp parsing flips this test."""
+        state_dir = _seed_aged_state_file(tmp_path, "DELEG_S4", age_days=10.0)
+        with (
+            patch("trading_app.pre_session_check.STATE_DIR", state_dir),
+            patch(
+                "trading_app.account_hwm_tracker.state_file_age_days",
+                return_value=10.0,
+            ) as mock_helper,
+        ):
+            check_topstep_inactivity_window()
+        assert mock_helper.call_count >= 1, "check_topstep_inactivity_window must delegate to state_file_age_days"

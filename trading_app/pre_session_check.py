@@ -264,6 +264,77 @@ def check_hwm_tracker() -> tuple[bool, str]:
     return (not any_halt), f"DD TRACKER: {msg}"
 
 
+def check_topstep_inactivity_window() -> tuple[bool, str]:
+    """Pre-session pre-flight: surface the TopStep XFA inactivity-closure boundary.
+
+    For each non-CORRUPT account_hwm_*.json in STATE_DIR, compute age in days
+    via the canonical account_hwm_tracker.state_file_age_days helper (single
+    source of truth — never reimplement the age computation; integrity-
+    guardian.md § 2 + institutional-rigor.md § 4).
+
+    Verdicts:
+      - <25 days: OK
+      - >=25 and <30 days: WARNING (still OK to proceed; operator action buffer)
+      - >=30 days: BLOCKED (fail-closed per integrity-guardian.md § 3)
+      - state_file_age_days returns None: BLOCKED (fail-closed; granular
+        reason captured by the helper's own logging)
+
+    @canonical-source: docs/research-input/topstep/topstep_xfa_parameters.txt:351 —
+        "If there is no trading activity (no trades entered) on your Express
+        Funded Account for more than 30 days, it may be subject to closure
+        due to inactivity."
+    @verbatim: see source file at line 351 for exact wording
+    @audit-finding: HWM persistence integrity audit 2026-04-25 (UNSUPPORTED-7)
+                    — closed by Stage 4 of design v3.
+
+    Honesty disclaimer: the 30-day figure is borrowed by ANALOGY. TopStep's
+    rule fires on no broker trades. This gate fires on no bot equity polls.
+    The semantics differ; the numeric value is shared by convention. An
+    operator legitimately trading manually with no bot running will see this
+    BLOCK as a false positive — resolution is to archive (rename to
+    .STALE_<YYYYMMDD>.json) or delete the state file.
+
+    Boundary direction: `>= 30` matches Stage 2's load-time raise convention
+    (account_hwm_tracker.py _STATE_STALENESS_FAIL_DAYS). Both gates fire on
+    the same day; the figure is borrowed by analogy regardless.
+    """
+    from trading_app.account_hwm_tracker import state_file_age_days
+
+    hwm_files = list(STATE_DIR.glob("account_hwm_*.json"))
+    hwm_files = [f for f in hwm_files if "CORRUPT" not in f.name]
+    if not hwm_files:
+        return True, "No account state files (first session — inactivity gate not applicable)"
+
+    # UNGROUNDED — operational buffer.
+    # Rationale: 5-day buffer between WARNING and BLOCK gives the operator
+    # advance notice to either resume bot trading, manually rotate the state
+    # file, or accept the upcoming block. No literature citation.
+    _INACTIVITY_WARN_DAYS = 25.0
+    _INACTIVITY_BLOCK_DAYS = 30.0
+
+    results = []
+    any_block = False
+    for f in hwm_files:
+        age = state_file_age_days(f)
+        if age is None:
+            any_block = True
+            results.append(f"BLOCKED {f.name}: state file unreadable (cannot compute age)")
+            continue
+        age_int = int(age)
+        if age >= _INACTIVITY_BLOCK_DAYS:
+            any_block = True
+            results.append(
+                f"BLOCKED {f.name}: {age_int}d old >= 30d inactivity boundary (archive or delete state file to clear)"
+            )
+        elif age >= _INACTIVITY_WARN_DAYS:
+            results.append(f"WARN {f.name}: {age_int}d old (block at 30d)")
+        else:
+            results.append(f"OK {f.name}: {age_int}d old")
+
+    msg = " | ".join(results)
+    return (not any_block), f"INACTIVITY: {msg}"
+
+
 def check_topstep_xfa_aggregate_cap() -> tuple[bool, str]:
     """Enforce TopStep's 5-XFA simultaneous-active cap.
 
@@ -590,6 +661,9 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
 
         ok, msg = check_dd_circuit_breaker()
         results.append(("DD circuit breaker (intraday)", ok, msg))
+
+        ok, msg = check_topstep_inactivity_window()
+        results.append(("TopStep inactivity window", ok, msg))
 
         ok, msg = check_daily_equity(resolved_profile_id)
         results.append(("Daily equity", ok, msg))
