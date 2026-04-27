@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: 2026-04-26T00:00:00+00:00
+updated_at: 2026-04-27T00:00:00+00:00
 items:
   - id: prior_day_bridge_execution_triage
     title: Prior-day Pathway-B bridge execution triage
@@ -75,7 +75,7 @@ items:
     priority: P2
     close_before_new_work: false
     owner_hint: operator
-    last_verified_at: 2026-04-24
+    last_verified_at: 2026-04-27
     freshness_sla_days: 2
     next_action: Observe the MGC shadow-only context in dashboard and live logs and record whether the visibility path behaves as designed.
     exit_criteria: Observation is recorded as PASS, FAIL, or redesign-needed with a durable result note.

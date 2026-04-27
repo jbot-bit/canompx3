@@ -9,10 +9,26 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** a954cd18 — fix(format): ruff format + lint scripts/tools/{token_hygiene_report,claude_superpower_brief}.py
-- **Files changed:** 2 files
-  - `scripts/tools/claude_superpower_brief.py`
-  - `scripts/tools/token_hygiene_report.py`
+- **Commit:** 6e26e4b9 — chore(handoff): hook auto-update last-session pointer to 339c515f
+- **Files changed:** 1 files
+  - `HANDOFF.md`
+
+## Session decisions (2026-04-27 — sizing-substrate audit closure)
+
+- **Stage-1 sizing-substrate diagnostic SUBSTRATE_WEAK.** 2/6 lanes PASS (EUROPE_FLOW + TOKYO_OPEN, both via rel_vol_session, both UNSTABLE per Carver Ch.7 fn78 → stage2_eligible=False). Tier-A 0/18 STRONG NEGATIVE: deployed binary filters carry no continuous predictive substrate. Pre-reg `docs/audit/hypotheses/2026-04-27-sizing-substrate-prereg.yaml`; result `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md`.
+- **Institutional code+quant audit (evidence-auditor) returned PASS_WITH_RISKS.** Verdict upheld; 5 load-bearing findings. Closures in this session:
+  - Finding A (MED, ATR_P50 vol_norm = raw identity): identity test added; effective unique cells = 42 (not K=48) documented in result MD header.
+  - Finding B (LOW, COST_LT12 inline formula): anti-drift equivalence test asserts `derive_features` matches canonical `CostRatioFilter`.
+  - Finding C (MED rule violation, pooled-finding YAML absent): front-matter added (`flip_rate_pct: 67.0` lane-level, `heterogeneity_ack: true`).
+  - Finding D (MED mandatory rule, RULE 13 pressure-test absent): `feature_temporal_validity` extended for RULE 1.1 (hard-banned: `double_break`, `mae_r`, `mfe_r`, `outcome`, `pnl_r`) + RULE 6.3 (E2 break-bar suffixes via `entry_model=E2` gate, canonical authority `trading_app/config.py:3540-3568`); 4 pressure tests + E1 control test added.
+  - Finding E (INFO, monotonicity gate `inc or dec`): verified correct, no fix.
+  - Findings F/G (INFO): accurate label / pre-specified design, no fix.
+  - **Finding H (LOW, deferred):** pre-reg YAML uses `testing_mode: diagnostic_descriptive` which is not in the canonical {`family`, `individual`} set per `pre_registered_criteria.md`/`research-truth-protocol.md`. Doctrine-formalization gap; doesn't affect operative methodology. Future doctrine review to either (a) add `diagnostic_descriptive` as a third canonical value or (b) revise the pre-reg with `corrigendum.md` subdoc.
+- **Cross-walk note:** `rel_vol_session` is the SAME column (`daily_features.rel_vol_{ORB_LABEL}`) used by PR #51's universal-scope monotonic-up regression (β₁=+0.278/+0.330/+0.300; t=+9.6/+11.8/+7.5 across MNQ/MES/MGC at 5m E2 RR1.5). Stage-1's 2 PASS cells are lane-level cuts of that universal base, attenuated by stricter cell gates + Carver fn78. Theory grounded in `fitschen_2013_path_of_least_resistance.md` + `chan_2013_ch7_intraday_momentum.md` (already extracted). Hong-Stein attention cite NOT REQUIRED and would be invented.
+- **Doctrine entry — `mechanism_priors.md` §7 PARKED:** continuous-sizing substrate of deployed binary filters. Reopen gate: AFML Ch.19 sigmoid bet-sizer (NOT in `resources/`) + per-lane fresh mechanism citation + new pre-reg.
+- **Follow-on routing:** do NOT author Path-β `rel_vol_session`-conditioner pre-reg (duplicates PR #51 at lane scope, breaches cumulative-trial Bailey MinBTL bound). Route to existing PR #51 candidate-activation plan in flight per `memory/amendment_3_2_and_cpcv_parked_apr21.md`.
+- **Branch finalization:** `chore/freshness-bumps` was scope-bled with 17 unrelated sizing commits. Split via non-destructive label move: `git branch research/sizing-substrate-stage1-2026-04-27` at HEAD, then `git reset --hard 993daccb` on the freshness branch. All sizing commits preserved on the new branch. 8/8 pre-commit checks green on every commit. Neither branch pushed.
+- **Test count:** 29 → 35 (all pass).
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
