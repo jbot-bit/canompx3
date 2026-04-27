@@ -1,13 +1,23 @@
+---
+pooled_finding: true
+per_cell_breakdown_path: docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md#per-cell-results
+flip_rate_pct: 67.0
+heterogeneity_ack: true
+---
+
 # Sizing-Substrate Diagnostic — Result
 
 - Design doc: `docs/plans/2026-04-27-sizing-substrate-diagnostic-design.md`
 - Pre-reg: `docs\audit\hypotheses\2026-04-27-sizing-substrate-prereg.yaml`
+- Cross-walk vs PR #51: `docs/audit/results/2026-04-27-sizing-substrate-vs-pr51-cross-walk.md`
 - Git HEAD: `60556b6d031fcd9c98582110e74847cc277d682d`
 - DB schema fingerprint: `27885f79609cd9b7d4ffc45b50d2e5ab`
 - Bootstrap seed: 42; B=10000
-- K = 48
-- **VERDICT: SUBSTRATE_WEAK**
+- K = 48 declared; **effective unique cells = 42** (6 ATR_P50 raw/vol_norm cells are identical column derivations — see audit Finding A in § Caveats)
+- **VERDICT: SUBSTRATE_WEAK** (institutional code+quant audit 2026-04-27: PASS_WITH_RISKS — verdict upheld; 5 load-bearing findings documented)
 - Lanes with substrate: ['MNQ_EUROPE_FLOW_E2_O5_RR1.5_CB1_ORB_G5', 'MNQ_TOKYO_OPEN_E2_O5_RR1.5_CB1_COST_LT12']
+- **Tier-A diagnostic — STRONG NEGATIVE:** all 18 deployed-filter substrate cells (ORB_G5/ATR_P50/COST_LT12 in raw/vol_norm/rank_252d forms across 6 lanes) FAIL. The currently deployed binary filters carry NO measurable continuous predictive substrate. A Carver-style continuous scaler **on the deployed filters themselves** is therefore not supported; this is the more important diagnostic result than the 2-cell Tier-B PASS.
+- **Lane-level heterogeneity on rel_vol_session:** 2/6 lanes PASS at strict cell gates (EUROPE_FLOW, TOKYO_OPEN); 4/6 FAIL (SINGAPORE_OPEN, COMEX_SETTLE, NYSE_OPEN, US_DATA_1000). Lane-level flip rate = 67% → `heterogeneity_ack: true` per `.claude/rules/pooled-finding-rule.md`. The 4 FAIL lanes show positive ρ in 3/4 cases; failure is via monotonicity / |Q5−Q1| / bootstrap-CI gates, not direction. This is consistent with PR #51's universal monotonic-up effect attenuating below the strict cell-level threshold at lane scope; see cross-walk note for full treatment.
 
 ## Scope / Question
 
@@ -65,6 +75,55 @@ explicit mechanism citation per lane.
   form deferred. Stage 2 (if any) defaults to Carver-only sizing.
 - **Single-pass discipline.** Re-running with different feature lists, weight
   schemas, thresholds, or expanded K is a NEW pre-reg, not a re-run.
+
+### Audit findings (institutional code+quant audit 2026-04-27, PASS_WITH_RISKS)
+
+- **A. ATR_P50 vol_norm = raw identity (MED).** `derive_features` in
+  `research/audit_sizing_substrate_diagnostic.py` returns `atr_20_pct`
+  for both `raw` and `vol_norm` forms when the lane's substrate is
+  ATR-percentile (lane `MNQ_SINGAPORE_OPEN_E2_O15_RR1.5_CB1_ATR_P50`).
+  Effect: 6 cells are identical column derivations rather than independent
+  forms — effective unique cell count = 42, not the K=48 declared in
+  pre-reg. The BH-FDR denominator stays K=48 (conservative direction),
+  so no PASS verdict is spuriously promoted; the overstatement is in
+  the diagnostic's coverage of normalization variants, not in any FDR
+  inflation. Stage-2 pre-regs (if authored) must use a distinct vol_norm
+  column (e.g., `atr_20 / atr_vel_ratio`) — requires fresh pre-reg.
+- **B. COST_LT12 inline formula not delegated to canonical (LOW).**
+  `derive_features` re-encodes the cost-ratio formula rather than calling
+  `trading_app.config.CostRatioFilter.matches_row`. Run-time equivalent
+  at this commit; future drift risk only. Anti-drift test added; see
+  § Audit-recommended tests below.
+- **C. Pooled-finding YAML front-matter absent (MED — RULE VIOLATION).**
+  `.claude/rules/pooled-finding-rule.md` requires `pooled_finding: true`
+  + `flip_rate_pct` + `per_cell_breakdown_path` on every audit-result MD
+  dated 2026-04-20+ that makes a pooled-universe claim. K=48 BH-FDR is a
+  pooled framing. Fixed in this commit (front-matter added at top of
+  file, `flip_rate_pct: 67.0` lane-level, `heterogeneity_ack: true`).
+- **D. RULE 13 pressure-test absent from test suite (MED — MANDATORY RULE).**
+  `.claude/rules/backtesting-methodology.md` RULE 13 requires every new
+  scan to deliberately inject a known-bad feature (e.g., `mae_r`,
+  `outcome`) and confirm the script flags or filters it. Missing from
+  `tests/test_research/test_audit_sizing_substrate_diagnostic.py` at
+  the time of audit. Test added; see § Audit-recommended tests below.
+- **E. Monotonicity gate dominates failures — verified correct (INFO).**
+  Direction-agnostic gate (`inc or dec`); failing cells are genuinely
+  non-monotonic in either direction. No fix needed.
+
+### Audit-recommended tests (added in companion commit)
+
+- `test_rule13_lookahead_inject_mae_r` — RULE 13 pressure-test: confirm
+  banned look-ahead features (`mae_r`, `outcome`, `pnl_r`) are blocked
+  by the temporal-validity / pre-reg-allowlist gates.
+- `test_atr_p50_vol_norm_raw_identity_documented` — make Finding A
+  identity explicit so a future "fix" cannot accidentally diverge them
+  without a conscious design decision.
+- `test_cost_lt12_formula_equivalence_with_canonical` — anti-drift gate
+  asserting `derive_features` cost-ratio matches `CostRatioFilter` at
+  run time.
+- `test_stage2_eligible_false_for_unstable_pass` — confirm UNSTABLE PASS
+  cells are correctly blocked from Stage-2 promotion (already present
+  per commit `19a7a534`; verified by audit).
 
 ## Per-cell results
 

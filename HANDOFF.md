@@ -9,9 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 9a51a45d — chore(handoff): sync last-session header to 45b67617
-- **Files changed:** 1 files
+- **Commit:** 2bd2ca6f — docs(audit): cross-walk sizing-substrate Stage-1 vs PR #51 participation-shape
+- **Files changed:** 2 files
   - `HANDOFF.md`
+  - `docs/audit/results/2026-04-27-sizing-substrate-vs-pr51-cross-walk.md`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
