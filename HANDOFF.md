@@ -9,12 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 60556b6d — research(sizing): Stage-1 sizing-substrate diagnostic — verdict=SUBSTRATE_WEAK
-- **Files changed:** 4 files
+- **Commit:** 19a7a534 — fix(sizing): post-review hardening — stage2_eligible flag + B alignment + tests
+- **Files changed:** 5 files
   - `HANDOFF.md`
   - `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.json`
   - `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md`
   - `research/audit_sizing_substrate_diagnostic.py`
+  - `tests/test_research/test_audit_sizing_substrate_diagnostic.py`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
