@@ -84,6 +84,65 @@ class TestBuildSystemContext:
         assert len(snapshot.claims) == 1
         assert snapshot.authority.backbone_modules[-1] == "pipeline/system_context.py"
 
+    def test_closed_stage_files_do_not_count_as_active(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "- **Tool:** Codex\n- **Date:** 2026-04-12\n- **Summary:** Stage test\n")
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "stages" / "executed-stage.md",
+            "\n".join(
+                [
+                    "---",
+                    "task: Executed stage",
+                    "mode: RESEARCH",
+                    "---",
+                    "# Stage",
+                    "",
+                    "## Execution Outcome",
+                    "",
+                    "- Executed and closed.",
+                ]
+            ),
+        )
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "stages" / "closed-stage.md",
+            "\n".join(
+                [
+                    "---",
+                    "task: Closed stage",
+                    "mode: IMPLEMENTATION",
+                    "status: closed -> KILL",
+                    "---",
+                    "# Stage",
+                ]
+            ),
+        )
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "stages" / "active-stage.md",
+            "\n".join(
+                [
+                    "---",
+                    "task: Active stage",
+                    "mode: IMPLEMENTATION",
+                    "scope_lock:",
+                    "  - pipeline/system_context.py",
+                    "---",
+                    "# Stage",
+                ]
+            ),
+        )
+
+        with (
+            patch.object(system_context, "_canonical_repo_root", return_value=(tmp_path, tmp_path / ".git")),
+            patch.object(system_context, "branch_name", return_value="main"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+            patch.object(system_context, "git_status_details", return_value=([], True, None)),
+            patch.object(system_context, "list_claims", return_value=[]),
+            patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
+        ):
+            snapshot = build_system_context(tmp_path, context_name="generic")
+
+        assert len(snapshot.active_stages) == 1
+        assert Path(snapshot.active_stages[0].path).name == "active-stage.md"
+
     def test_filters_claims_from_unrelated_repos(self, tmp_path: Path) -> None:
         current_root = tmp_path / "repo"
         unrelated_root = tmp_path / "other"
