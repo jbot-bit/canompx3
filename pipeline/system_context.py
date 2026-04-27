@@ -438,6 +438,8 @@ def _parse_stage_file(path: Path) -> ActiveStage | None:
         return None
     if not isinstance(data, dict):
         return None
+    if _stage_file_is_closed(text, data):
+        return None
     scope_lock = data.get("scope_lock") or []
     if not isinstance(scope_lock, list):
         scope_lock = []
@@ -449,6 +451,16 @@ def _parse_stage_file(path: Path) -> ActiveStage | None:
         updated=str(data.get("updated")) if data.get("updated") is not None else None,
         scope_lock=[str(item) for item in scope_lock],
     )
+
+
+def _stage_file_is_closed(text: str, metadata: dict[object, object]) -> bool:
+    status = metadata.get("status")
+    if status is not None:
+        normalized = re.sub(r"[^a-z0-9]+", " ", str(status).lower()).strip()
+        if normalized.split(" ", 1)[0] in {"closed", "complete", "completed", "done", "implemented"}:
+            return True
+
+    return re.search(r"(?m)^##\s+Execution Outcome\s*$", text) is not None
 
 
 def _list_active_stages(root: Path) -> list[ActiveStage]:
