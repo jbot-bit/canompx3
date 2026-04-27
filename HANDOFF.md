@@ -9,15 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 62dd9f4b — doctrine(mechanism): park continuous-sizing substrate of deployed binary filters
-- **Branch:** `research/sizing-substrate-stage1-2026-04-27` (sizing-substrate Stage-1 work + audit-closure)
-- **Sister branch:** `chore/freshness-bumps` (clean 2-commit scope: pr48_mgc_shadow freshness + handoff sync) — split from sizing branch on 2026-04-27 per branch-discipline.md
-- **Files changed (audit-closure pass):** 5 files
-  - `HANDOFF.md` (this file)
-  - `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md` (pooled-finding YAML + Tier-A/heterogeneity prominence)
-  - `docs/audit/results/2026-04-27-sizing-substrate-vs-pr51-cross-walk.md` (NEW)
-  - `docs/institutional/mechanism_priors.md` (§7 entry)
-  - `research/audit_sizing_substrate_diagnostic.py` + `tests/test_research/test_audit_sizing_substrate_diagnostic.py` (RULE 13 gates + 6 new tests)
+- **Commit:** 339c515f — chore(handoff): record sizing-substrate audit closure + branch finalization
+- **Files changed:** 1 files
+  - `HANDOFF.md`
 
 ## Session decisions (2026-04-27 — sizing-substrate audit closure)
 
