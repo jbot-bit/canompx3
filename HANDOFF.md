@@ -9,11 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 61c65712 — fix(hooks): bump SessionStart timeout 5s->30s; cap post-edit pytest stdout to last 80 lines
-- **Files changed:** 3 files
-  - `.claude/hooks/post-edit-pipeline.py`
-  - `.claude/settings.json`
+- **Commit:** aadf7fef — docs(audit): corrigendum on F8/F9 (gitignored, not version-controlled); record C4+C5 landed
+- **Files changed:** 2 files
   - `HANDOFF.md`
+  - `docs/audit/claude-system-refactor-2026-04-27.md`
 
 ## Session decisions (2026-04-27 — sizing-substrate audit closure)
 
