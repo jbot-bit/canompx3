@@ -176,3 +176,26 @@ not_done_by_this_pre_reg:
   - "Does NOT re-validate filter overlays — filter-overlay families have separate pre-regs (parent's note re: PR #53/#55 etc.)."
   - "Does NOT scan MES or MGC — those are separate parallel pre-regs (parent context: 2026-04-20-mes-mgc-unfiltered-baseline-cross-family-v1 and follow-ons came up DEAD; not re-tested here)."
   - "Does NOT introduce a new feature class beyond entry-model + ORB end."
+
+correction_notice:
+  date: 2026-04-27
+  type: implementation_drift_discovered
+  severity: MAJOR
+  summary: |
+    Pre-reg authority block line 22 declared scratch-inclusive policy ("scratch rows
+    counted with pnl_eff = 0"). The runner script research/mnq_unfiltered_high_rr_family_v1.py
+    line 87 implemented the OPPOSITE policy — WHERE pnl_r IS NOT NULL — silently dropping
+    all 65,683 MNQ E2 confirm_bars=1 scratch rows from the IS distribution. The original
+    result document docs/audit/results/2026-04-27-mnq-unfiltered-high-rr-family-v1.md
+    reports survivor-only ExpR; the corrected scratch-inclusive ExpR is 1.5%-292% smaller
+    in absolute magnitude depending on cell scratch rate. Sign of every t-stat preserved
+    (0 of 144 cells flipped). H1 verdicts unchanged for all 5 CANDIDATE_READY survivors.
+  result_correction_path: docs/audit/results/2026-04-27-mnq-unfiltered-high-rr-family-v1-CORRECTION.md
+  failure_log_entry: ".claude/rules/backtesting-methodology-failure-log.md (2026-04-27 entry)"
+  class_bug_root_cause: trading_app/outcome_builder.py produces outcome='scratch' rows with pnl_r=NULL; the IS-NOT-NULL filter silently drops them.
+  canonical_fix_spec: docs/specs/outcome_builder_scratch_eod_mtm.md
+  do_not_re_run_v1: |
+    Per Backtesting Rule 11 (audit trail), the v1 script is frozen. Future cross-family
+    high-RR scans inherit the canonical scratch-inclusive treatment via Stage 5 fix to
+    outcome_builder.py + Criterion 13 in pre_registered_criteria.md. Do not retro-edit
+    research/mnq_unfiltered_high_rr_family_v1.py.

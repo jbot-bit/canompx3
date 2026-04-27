@@ -6385,6 +6385,79 @@ def check_magic_number_rationale(trading_app_dir: Path) -> list[str]:
     return violations
 
 
+def check_research_scratch_policy_annotation() -> list[str]:
+    """Research scripts using ``pnl_r IS NOT NULL`` must annotate scratch policy.
+
+    Class bug discovered 2026-04-27: ``trading_app/outcome_builder.py`` produces
+    ``outcome='scratch'`` rows with ``pnl_r=NULL`` when neither stop nor target
+    hits by trading-day-end. Research scripts using ``WHERE pnl_r IS NOT NULL``
+    silently drop those rows, inflating measured ExpR by 10-45% on the
+    survivor lanes (verified MNQ NYSE_OPEN 15m: 9.9% scratch at RR=1.0,
+    44.6% at RR=4.0).
+
+    This check fires on any ``research/**.py`` file (excluding
+    ``research/archive/``) that contains the literal string
+    ``pnl_r IS NOT NULL`` AND does NOT also contain a canonical
+    scratch-policy comment marker. Acceptable markers (case-insensitive):
+      - ``# scratch-policy: drop`` (deliberate exclusion of scratches)
+      - ``# scratch-policy: include-as-zero`` (count scratches as 0R)
+      - ``# scratch-policy: realized-eod`` (count scratches at EOD MTM)
+
+    Companion to Stage 5 fix in ``trading_app/outcome_builder.py`` and
+    Criterion 13 in ``docs/institutional/pre_registered_criteria.md``.
+
+    @rule scratch-policy-annotation
+    @stage stage-2 of 2026-04-27 scratch-eod-mtm plan
+    """
+    research_dir = PROJECT_ROOT / "research"
+    if not research_dir.is_dir():
+        return []
+
+    violations: list[str] = []
+    needle = "pnl_r IS NOT NULL"
+    marker_prefix = "# scratch-policy:"
+    valid_markers = ("drop", "include-as-zero", "realized-eod")
+
+    for py_file in sorted(research_dir.rglob("*.py")):
+        try:
+            rel = py_file.relative_to(research_dir)
+        except ValueError:
+            continue
+        # Skip archive — frozen scans are not retro-edited per Backtesting Rule 11.
+        if rel.parts and rel.parts[0] == "archive":
+            continue
+
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        if needle not in content:
+            continue
+
+        marker_found_with_valid_value = False
+        for line in content.splitlines():
+            stripped = line.strip().lower()
+            idx = stripped.find(marker_prefix)
+            if idx < 0:
+                continue
+            value = stripped[idx + len(marker_prefix) :].strip()
+            if any(value.startswith(m) for m in valid_markers):
+                marker_found_with_valid_value = True
+                break
+
+        if not marker_found_with_valid_value:
+            rel_repo = py_file.relative_to(PROJECT_ROOT)
+            violations.append(
+                f"  {rel_repo}: contains 'pnl_r IS NOT NULL' but no "
+                f"'# scratch-policy: drop|include-as-zero|realized-eod' annotation. "
+                f"Class bug 2026-04-27: scratch rows have NULL pnl_r and are silently "
+                f"dropped. See memory/feedback_scratch_pnl_null_class_bug.md."
+            )
+
+    return violations
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -6816,6 +6889,12 @@ CHECKS = [
         "Magic-number rationale audit on trading_app/live/ (Carver Ch. 4)",
         lambda: check_magic_number_rationale(TRADING_APP_DIR),
         False,
+        False,
+    ),
+    (
+        "Research scripts using 'pnl_r IS NOT NULL' annotate scratch policy (2026-04-27 class bug)",
+        check_research_scratch_policy_annotation,
+        True,  # advisory until Stage 6 of 2026-04-27 plan annotates the 131 pre-existing scripts
         False,
     ),
 ]  # end CHECKS

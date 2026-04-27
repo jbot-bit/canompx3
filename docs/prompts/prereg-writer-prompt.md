@@ -114,6 +114,24 @@ FORBIDDEN IN ANY PRE-REG
   EXACT window the harness will use. See `.claude/rules/research-truth-protocol.md`
   § "Mode B grandfathered validated_setups baselines" for the authoritative
   warning. Origin: 2026-04-18 VWAP comprehensive scan H3 specification error.
+- **Silent scratch dropout** — any pre-reg whose runner intends to use
+  `WHERE pnl_r IS NOT NULL` (or any equivalent that excludes `outcome='scratch'`
+  rows) MUST declare a top-level `scratch_policy:` field with one of three
+  values + a 1–2 line justification citing the literature extracts in
+  `docs/institutional/literature/`:
+    - `drop` — only justified when the deployable lane spec forbids holding to
+      session end (e.g., a time-stop strategy with `EARLY_EXIT_MINUTES <
+      session length`). Not the default.
+    - `include-as-zero` — first-order correction; appropriate only when
+      `outcome_builder.py` has not yet been canonically fixed.
+    - `realized-eod` — count scratches at session-end close MTM via
+      `pipeline.cost_model.pnl_points_to_r(...)`. Required default after the
+      Stage 5 fix to `outcome_builder.py` lands.
+  Origin: 2026-04-27 class-of-bug discovery — silent scratch dropout
+  inflated measured ExpR by 10–45% on MNQ E2 confirm_bars=1 survivor lanes.
+  See `pre_registered_criteria.md` Criterion 13 +
+  `memory/feedback_scratch_pnl_null_class_bug.md` +
+  `docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md`.
 
 MANDATORY GATE CLAUSES (Pathway A_family pre-regs)
 

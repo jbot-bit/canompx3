@@ -219,9 +219,49 @@ Price-based filters (ORB_G, COST_LT, OVNRNG using range points, ATR_P30/P50/P70)
 
 ---
 
+## Criterion 13 — Scratch treatment policy (declared, justified)
+
+**Added 2026-04-27.** Origin: institutional re-audit of `docs/audit/results/2026-04-27-mnq-unfiltered-high-rr-family-v1.md` discovered a class-of-bug — `trading_app/outcome_builder.py:586-594, :612-616, :357-381` produces `outcome="scratch"` rows with `pnl_r=NULL` when neither stop nor target hits by trading-day-end. Every research script using `WHERE pnl_r IS NOT NULL` silently drops those rows, inflating measured ExpR by 10–45% on the survivor lanes. Sign of every conclusion was preserved (0/144 cells flipped on the v1 scan), but magnitudes were systematically wrong.
+
+**Sources:**
+- `literature/bailey_lopezdeprado_2014_dsr_sample_selection.md` — names sample-selection bias as a first-class inflation source on equal footing with multiple-testing bias and non-Normality.
+- `literature/carver_2015_ch12_speed_and_size.md` — backtest cost realism: every round trip (entry + exit) must be priced. A scratch IS a round trip; the live system forces flat at session end.
+- `literature/chan_2013_ch1_backtesting_lookahead.md` — unified backtest/live program doctrine: any divergence between backtest P&L attribution and live execution P&L attribution is a class of bias.
+- `literature/chan_2009_ch1_intraday_session_handling.md` — UNSUPPORTED (Chan 2008/2009 §1.4 does not exist; documented to prevent fabrication and route forward to Chan 2013 Ch 1).
+
+**Rule:** Every pre-reg under `docs/audit/hypotheses/` MUST declare a `scratch_policy:` field at the top level. Allowed values:
+
+- `drop` — exclude scratches from the IS/OOS distribution. Justified ONLY when the deployable lane spec forbids holding to session end (e.g., a time-stop strategy with `EARLY_EXIT_MINUTES < session length`). Not the default.
+- `include-as-zero` — count scratches as `pnl_r = 0`. First-order correction; appropriate when `outcome_builder.py` has not yet been canonically fixed (pre-Stage 5) or when realized-EOD MTM is unavailable.
+- `realized-eod` — count scratches at realized session-end close MTM via `pipeline.cost_model.pnl_points_to_r(cost_spec, entry_price, stop_price, last_close - entry_price)`. Required default after the Stage 5 fix to `outcome_builder.py` lands.
+
+**Pre-reg requirement:** the `scratch_policy:` field must include a 1–2 line justification citing one of the literature extracts above. Example:
+
+```yaml
+scratch_policy:
+  policy: realized-eod
+  justification: >
+    Live execution path (TopStep prop-firm session-end flat rule + AMP/EdgeClear
+    futures EOD close) realizes a P&L at the session boundary. Backtest must
+    book the same value to satisfy Chan 2013 Ch 1 unified-program doctrine.
+    Sample-selection bias from drop policy quantified at 10–45% ExpR inflation
+    on MNQ E2 confirm_bars=1 — see Bailey-LdP 2014 sample selection extract
+    + 2026-04-27 corrected scan.
+```
+
+**Backward compatibility:** pre-regs committed before 2026-04-27 are grandfathered with implicit `drop` policy. `pipeline/check_drift.py::check_pre_registered_criteria_consistency` (existing check) is not modified by this amendment; the new `scratch_policy:` field is enforced by `docs/prompts/prereg-writer-prompt.md` self-review and (after Stage 5 lands) `pipeline/check_drift.py::check_orb_outcomes_scratch_pnl` which asserts ≥99% of scratch rows have non-NULL `pnl_r` post-rebuild.
+
+**Drift-check companion (Stage 2):** `pipeline/check_drift.py::check_research_scratch_policy_annotation` (advisory until Stage 6 annotates the existing 131 research scripts) catches any new research file using `WHERE pnl_r IS NOT NULL` without a `# scratch-policy:` comment annotation.
+
+**Result-doc companion:** any audit-result file claiming a numeric ExpR / Sharpe / DSR / PBO MUST cite the scratch policy of the underlying scan in its body. The pooled-finding-rule front-matter is unchanged; this is body-text discipline, not front-matter.
+
+**Per-lane verification at deployment:** for any lane proposed for deployment, the deployment-gate review must confirm the lane's IS/OOS computation used `realized-eod` (post Stage 5) — `drop` and `include-as-zero` are NOT acceptable for capital allocation decisions.
+
+---
+
 ## Acceptance matrix
 
-A strategy is ELIGIBLE FOR DEPLOYMENT if and only if all 12 criteria pass:
+A strategy is ELIGIBLE FOR DEPLOYMENT if and only if all 13 criteria pass:
 
 | Criterion | Threshold | Required |
 |---|---|---|
@@ -237,6 +277,7 @@ A strategy is ELIGIBLE FOR DEPLOYMENT if and only if all 12 criteria pass:
 | 10 Data era compat | Volume filters only on MICRO era data | YES |
 | 11 Account MC | 90-day survival ≥ 70% | YES (at deployment) |
 | 12 SR monitor | Active drift monitoring in place | YES (post-deployment) |
+| 13 Scratch policy | declared+justified; `realized-eod` for deployment (post Stage 5) | YES |
 
 Strategies passing 1-10 can promote to `validated_setups` as CANDIDATE.
 Strategies passing 11 can be added to `prop_profiles.ACCOUNT_PROFILES` as PROVISIONAL (1 contract, 1 copy).
