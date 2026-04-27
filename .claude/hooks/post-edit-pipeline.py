@@ -206,7 +206,16 @@ def main():
             if result.returncode != 0:
                 print(f"TESTS FAILED after editing {file_path}", file=sys.stderr)
                 print(f"Test file: {test_file}", file=sys.stderr)
-                print(result.stdout, file=sys.stderr)
+                # Cap stdout at last 80 lines: pytest's failure summary lives at
+                # the tail (FAILED block + final counts). Full stdout on a wide
+                # failure can be 100s of lines = thousands of context tokens
+                # per hook fire. User can re-run pytest manually for full output.
+                stdout_lines = result.stdout.splitlines()
+                if len(stdout_lines) > 80:
+                    print(f"... ({len(stdout_lines) - 80} earlier lines truncated)", file=sys.stderr)
+                    print("\n".join(stdout_lines[-80:]), file=sys.stderr)
+                else:
+                    print(result.stdout, file=sys.stderr)
                 if result.stderr:
                     print(result.stderr, file=sys.stderr)
                 sys.exit(2)

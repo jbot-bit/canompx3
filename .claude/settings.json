@@ -175,7 +175,7 @@
           {
             "type": "command",
             "command": "python C:/Users/joshd/canompx3/.claude/hooks/session-start.py",
-            "timeout": 5
+            "timeout": 30
           }
         ]
       }
