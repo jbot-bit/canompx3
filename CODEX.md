@@ -39,12 +39,17 @@ Default read set:
 
 1. `HANDOFF.md`
 2. `AGENTS.md`
-3. `SOUL.md`
-4. `USER.md`
-5. `memory/YYYY-MM-DD.md` for today and yesterday
-6. `MEMORY.md` in the main session
-7. `CLAUDE.md`
-8. `CODEX.md`
+3. `CLAUDE.md`
+4. `CODEX.md`
+
+Private personal context should live in Claude-native user/local memory, not in
+gitignored repo-root files. Prefer:
+
+- `~/.claude/CLAUDE.md` for user-level preferences that should work across worktrees
+- `CLAUDE.local.md` only for worktree-local preferences you explicitly want to keep local
+
+Do not treat gitignored repo-root files like `SOUL.md`, `USER.md`, or
+`memory/*.md` as required startup context for Codex worktrees.
 
 If `.session/task-route.md` exists, read it next before loading any broader
 repo docs. It is the generated startup packet for the current task/session and
@@ -73,10 +78,8 @@ for.
 
 - Identity and continuity:
   - `AGENTS.md`
-  - `SOUL.md`
-  - `USER.md`
-  - `MEMORY.md`
-  - `memory/*.md`
+  - `~/.claude/CLAUDE.md` for user-level private preferences
+  - `MEMORY.md` when explicitly needed as project memory
 - Architecture and implementation guardrails:
   - `CLAUDE.md`
   - `.claude/`
@@ -214,6 +217,8 @@ Open these only when the task calls for them:
   - report-only Codex maintenance automation templates
 - `.codex/CODEX_IMPROVEMENT_PLAN.md`
   - Codex improvement backlog
+- `docs/reference/claude-token-hygiene.md`
+  - shared cheap-default / high-rigor operating model
 
 ## Codex Responsibilities
 
@@ -225,4 +230,6 @@ Open these only when the task calls for them:
 - Prefer isolated worktrees for concurrent Claude/Codex mutating work.
 - Keep Codex automations report-only unless the user explicitly asks for
   mutating behavior.
+- For token or context-efficiency work, prefer the report-only audit:
+  - `python3 scripts/tools/token_hygiene_report.py`
 - Update `HANDOFF.md` when you leave durable decisions or meaningful changes.

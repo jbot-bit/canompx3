@@ -1,20 +1,24 @@
 # Workflow Preferences
 
 ## Data First — MANDATORY
-Query data BEFORE reading code. `data-first-guard.py` hook enforces this with blocking after 7 consecutive reads. Trigger words: "check", "investigate", "why is X", "what's happening" → QUERY FIRST.
+Query data before reading code when the user is asking what happened, how bad, or why numbers differ. `data-first-guard.py` enforces this after repeated reads.
 
 ## Implementation Gating — MANDATORY
 Do NOT write code until the user explicitly says to implement.
-- DESIGN MODE: "plan", "design", "think about", "brainstorm", "iterate", "4t"
-- IMPLEMENT NOW: "build it", "do it", "implement", "go", "ship it"
-
-If the user says "plan" and you write code, you have failed. #1 source of friction.
+- Design: "plan", "design", "brainstorm", "iterate", "4t"
+- Implement: "build it", "do it", "implement", "go", "ship it"
 
 ## Git Operations — Just Execute
-"commit", "push", "merge" (including typos) → check status, stage, execute. No explaining, no "are you sure?", no describing what you're about to do. Exception: warn if staging secrets.
+"commit", "push", and "merge" mean execute, not discuss. Warn only for real risk like secrets or destructive scope.
 
 ## Trivial-Change Tier — Skip Ceremony
-A change is **trivial** when ALL hold: (a) no `pipeline/` or `trading_app/` files touched, (b) no schema/canonical-source change, (c) <100 lines of net diff, (d) tests or verification land in the same diff. Trivial = edit, run tests, commit, push on whatever branch is currently checked out. NO branch cut, NO design doc in `docs/plans/`, NO stage file in `docs/runtime/stages/`. The full ceremony (stage-gate, design doc, branch-from-origin/main, scope_lock) applies to NON-trivial work — production code, schema edits, multi-stage features. Hook helpers, frontmatter additions, gitignore tweaks, single-rule edits, drift-check additions are trivial. Do NOT invent stage files for them.
+Trivial means all of:
+- no `pipeline/` or `trading_app/` production logic touched
+- no schema or canonical-source change
+- under 100 net diff lines
+- verification lands in the same change
+
+Trivial work skips branch/design/stage ceremony. Non-trivial work keeps the full stage-gate.
 
 ## Response Style — Concise, No Extras
 - No CLI docs, no docstrings on unchanged code, no unsolicited background tasks
@@ -22,7 +26,7 @@ A change is **trivial** when ALL hold: (a) no `pipeline/` or `trading_app/` file
 - Direct questions → direct answers. Tasks → do it, report result.
 
 ## No Performative Self-Correction — MANDATORY
-Never narrate your internal process ("let me stop and orient", "I should read first"). Just do the right thing silently. Guardrail rules (2-pass, design gate) apply to CODE CHANGES, not discussion.
+Do the right thing without narrating obvious internal process. Guardrail rules apply to code changes, not casual discussion.
 
 ## Trading Queries — Exact Format
 - Return EXACTLY the count requested. "Top 2" = 2 rows. Not 3.
@@ -32,3 +36,6 @@ Never narrate your internal process ("let me stop and orient", "I should read fi
 
 ## Session Start
 Ambiguous first message → ask ONE question: "Design or implement?" Then follow strictly.
+
+## Subagents And Teams
+Prefer subagents only when a side task would flood the main conversation with logs, search results, or file dumps. Keep prompts narrow and returned summaries short. Do not use agent teams by default; they multiply context and cost.

@@ -18,7 +18,7 @@ v3 changes (from v2):
 v2 changes (from v1):
 - Injects self-review directive when no stage or in DESIGN mode
 - Warns when IMPLEMENTATION mode is missing blast_radius
-- Keeps output to 1-3 lines (token efficient)
+- Keeps output compact
 """
 
 import json
@@ -43,6 +43,8 @@ DESIGN_DIRECTIVES = (
     "SELF-CHECK: Walk through your plan step by step. At each step: what if NULL? What if missing? What if the interface changed? Fix first, present second.",
     "EXECUTION PLAN: Every plan MUST include HOW to deploy, not just WHAT to change. FK constraints, rebuild ordering, data migration steps. Code without deployment = half a plan.",
 )
+
+MAX_STAGE_PREVIEW = 3
 
 
 def parse_field(content, field):
@@ -118,8 +120,10 @@ def main():
         print(NONE_DIRECTIVES[variant], file=sys.stderr)
         sys.exit(0)
 
-    # Report ALL active stages (multi-agent awareness)
+    # Report a compact summary rather than dumping every active stage on each prompt.
     output_lines = []
+    missing_blast_radius = 0
+    stale_count = 0
     for agent_name, fpath in stage_files:
         try:
             content = fpath.read_text(encoding="utf-8")
@@ -144,8 +148,10 @@ def main():
             parts.append(f"(stage {stage})")
         if is_stale:
             parts.append("STALE(>4h)")
+            stale_count += 1
         if mode == "IMPLEMENTATION" and (not blast_radius or len(blast_radius.strip()) < 30):
             parts.append("MISSING blast_radius")
+            missing_blast_radius += 1
 
         output_lines.append(" ".join(parts))
 
@@ -153,7 +159,18 @@ def main():
         sys.exit(0)
 
     prefix = "stages" if len(output_lines) > 1 else "stage"
-    print(f"{prefix}: {' ; '.join(output_lines)}", file=sys.stderr)
+    shown = output_lines[:MAX_STAGE_PREVIEW]
+    summary = " ; ".join(shown)
+    extra = len(output_lines) - len(shown)
+    if extra > 0:
+        summary = f"{summary} ; (+{extra} more)"
+    suffix_bits = []
+    if stale_count:
+        suffix_bits.append(f"stale={stale_count}")
+    if missing_blast_radius:
+        suffix_bits.append(f"missing_blast_radius={missing_blast_radius}")
+    suffix = f" | {' | '.join(suffix_bits)}" if suffix_bits else ""
+    print(f"{prefix}: {summary}{suffix}", file=sys.stderr)
 
     # Directive for the first DESIGN stage found (if any)
     for _, fpath in stage_files:

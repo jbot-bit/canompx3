@@ -36,14 +36,15 @@ Normal session:
 
 1. `HANDOFF.md`
 2. `AGENTS.md`
-3. `SOUL.md`
-4. `USER.md`
-5. today/yesterday `memory/*.md`
-6. `MEMORY.md` in the main session
-7. `CLAUDE.md`
-8. `CODEX.md`
+3. `CLAUDE.md`
+4. `CODEX.md`
 
 Only then load extra Codex docs if needed.
+
+Private personal context should not depend on gitignored repo-root files that
+disappear in new worktrees. Prefer `~/.claude/CLAUDE.md` for user-level
+preferences that should follow you across worktrees. Use `CLAUDE.local.md`
+only when the preference is intentionally local to one worktree.
 
 Typical deepen rules:
 
@@ -56,6 +57,9 @@ Typical deepen rules:
 - Codex-layer maintenance:
   - `.codex/OPENAI_CODEX_STANDARDS.md`
   - `.codex/CODEX_IMPROVEMENT_PLAN.md`
+- Token or context hygiene:
+  - `docs/reference/claude-token-hygiene.md`
+  - `python3 scripts/tools/token_hygiene_report.py`
 - Runtime/integration question:
   - `.codex/INTEGRATIONS.md`
 - Execution or verification question:
