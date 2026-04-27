@@ -86,6 +86,18 @@ live_signals.jsonl
 !.claude/agents/
 !.claude/settings.json
 .claude/hooks/.last_drift_ok
+# Per-guard runtime state — ephemeral. The state/ directory itself is tracked
+# (it has its own .gitignore allowing only that file) so fresh checkouts work
+# without mkdir-on-startup. Legacy dotfile state from pre-broker hooks
+# (.bias-grounding-state.json, .risk-tier-state.json, .data-first-state.json,
+# .token-budget-state.json) is also ignored here — defense in depth, since
+# those were previously caught only by the unrelated `hooks/` git-internals rule.
+.claude/hooks/state/*
+!.claude/hooks/state/.gitignore
+.claude/hooks/.bias-grounding-state.json
+.claude/hooks/.data-first-state.json
+.claude/hooks/.risk-tier-state.json
+.claude/hooks/.token-budget-state.json
 memory/
 
 # Windows junk
@@ -207,10 +219,12 @@ scripts/tools/.pinecone_sync_state.json
 .gitmodules
 .ripgreprc
 
-# Git internals leaked into worktree root
-hooks/
-objects/
-refs/
+# Git internals leaked into worktree root — anchored so they only match
+# the top level (otherwise `hooks/` accidentally hides anything under
+# `.claude/hooks/`, including new tracked files like prompt-broker.py).
+/hooks/
+/objects/
+/refs/
 
 # Venv path artifacts
 ..venv*
