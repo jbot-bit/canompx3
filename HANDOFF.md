@@ -9,23 +9,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 43286a5f — docs(scratch-eod-mtm): Stage 0-4 — literature, failure log, drift guard, Criterion 13, spec
-- **Files changed:** 15 files
-  - `.claude/rules/backtesting-methodology-failure-log.md`
+- **Commit:** 68ee35f8 — fix(outcome_builder): canonical scratch-EOD-MTM (Stage 5 of 2026-04-27 plan)
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `docs/audit/hypotheses/2026-04-27-mnq-unfiltered-high-rr-family-v1.yaml`
-  - `docs/audit/results/2026-04-27-mnq-unfiltered-high-rr-family-v1-CORRECTION.md`
-  - `docs/audit/results/2026-04-27-mnq-unfiltered-high-rr-family-v1.md`
-  - `docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md`
-  - `docs/institutional/literature/carver_2015_ch12_speed_and_size.md`
-  - `docs/institutional/literature/chan_2009_ch1_intraday_session_handling.md`
-  - `docs/institutional/mechanism_priors.md`
-  - `docs/institutional/pre_registered_criteria.md`
-  - `docs/prompts/prereg-writer-prompt.md`
-  - `docs/runtime/stages/scratch-eod-mtm-canonical-fix.md`
-  - `docs/specs/outcome_builder_scratch_eod_mtm.md`
   - `pipeline/check_drift.py`
-  - `tests/test_pipeline/test_check_drift_scratch_policy.py`
+  - `tests/test_trading_app/test_outcome_builder.py`
+  - `trading_app/outcome_builder.py`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
