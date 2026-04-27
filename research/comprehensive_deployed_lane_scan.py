@@ -318,24 +318,19 @@ def build_features(df: pd.DataFrame) -> dict[str, np.ndarray]:
         return {}
     feats: dict[str, np.ndarray] = {}
 
-    # Timing
-    if df["break_delay_min"].notna().any():
-        bd = df["break_delay_min"].astype(float)
-        feats["break_delay_LT2"] = (bd < 2).fillna(False).astype(int).values
-        feats["break_delay_GT10"] = (bd > 10).fillna(False).astype(int).values
-    if df["break_bar_continues"].notna().any():
-        feats["break_bar_continues_TRUE"] = df["break_bar_continues"].fillna(False).astype(int).values
+    # E2 BREAK-BAR LOOK-AHEAD GATE (canonical authority: trading_app/config.py:3857-3865
+    # E2_EXCLUDED_FILTER_PREFIXES/SUBSTRINGS + _e2_look_ahead_reason()). The scan is
+    # E2-only (load_lane WHERE entry_model='E2'). E2 fires on the first range-cross
+    # bar (wick-touch); daily_features defines the "break bar" by close-outside-ORB,
+    # which on ~41% of E2 trades is a LATER bar than entry_ts (postmortem
+    # 2026-04-21-e2-break-bar-lookahead.md, MNQ EUROPE_FLOW IS measurement). Therefore
+    # break_delay_min, break_bar_continues, break_bar_volume, and rel_vol (which has
+    # break_bar_volume in its numerator per build_daily_features.py:1602) are all
+    # post-entry data on E2 and are BANNED as predictors. Audit-fix: 2026-04-28.
 
-    # Volume
-    if df["rel_vol"].notna().any():
-        feats["rel_vol_LOW_Q1"] = bucket_low(df["rel_vol"], 33)
-        feats["rel_vol_HIGH_Q3"] = bucket_high(df["rel_vol"], 67)
-    if df["break_bar_volume"].notna().any() and df["orb_volume"].notna().any():
-        orb_vol = df["orb_volume"].astype(float).replace(0, np.nan)
-        bb_ratio = df["break_bar_volume"].astype(float) / orb_vol
-        if bb_ratio.notna().sum() >= 20:
-            feats["bb_volume_ratio_HIGH"] = bucket_high(bb_ratio, 67)
-            feats["bb_volume_ratio_LOW"] = bucket_low(bb_ratio, 33)
+    # Timing — break-bar features REMOVED (E2 look-ahead)
+
+    # Volume — break-bar-volume features REMOVED (E2 look-ahead)
 
     # Pre-ORB state
     if df["pre_velocity"].notna().any():
@@ -914,6 +909,61 @@ def emit(res: pd.DataFrame) -> None:
             f"| {scope} | {instr} | {session} | O{apt} | {rr:.1f} | {filt or 'NONE'} | "
             f"{len(is_f)} | {len(oos_f)} | {expr_is:+.3f} | {expr_oos:+.3f} | {fire_pct:.1%} |"
         )
+
+    # Hygiene tail sections — required by scripts/tools/check_claim_hygiene.py
+    lines += [
+        "",
+        "## Verdict",
+        "",
+        "Discovery scan (Pathway A). Output is research-survivor classification, not deploy-ready.",
+        "Strict survivors (|t|>=3 + dir_match + N>=50 + trustworthy) and BH_global / BH_family",
+        "survivors are inputs to a separate Pathway B K=1 confirmatory pre-reg per",
+        "`docs/institutional/pre_registered_criteria.md` Amendment 3.0. No survivor advances",
+        "to deployment without C5 DSR + C6 WFE + C8 dir-match + C9 era-stability + C11 MC",
+        "+ C12 Shiryaev-Roberts checks landing in a downstream document. Promotion of any",
+        "cell directly from this table to live capital is forbidden.",
+        "",
+        "## Reproduction",
+        "",
+        f"```",
+        f"DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db python research/comprehensive_deployed_lane_scan.py",
+        f"```",
+        "",
+        f"- DB path: `pipeline.paths.GOLD_DB_PATH`",
+        f"- Holdout: `trading_app.holdout_policy.HOLDOUT_SACRED_FROM` ({HOLDOUT_SACRED_FROM})",
+        f"- Scratch policy: scratch rows treated as 0R via `pnl_r IS NOT NULL` filter (rebuilt orb_outcomes Stage 5 fix populates pnl_r for ~99.7% of active-instrument scratches)",
+        f"- E2 break-bar look-ahead gate: applied per `trading_app/config.py:3857` and postmortem `docs/postmortems/2026-04-21-e2-break-bar-lookahead.md`",
+        f"- BH-FDR multi-K framings: K_global, K_family, K_lane, K_session, K_instrument, K_feature",
+        f"- T0 tautology / extreme-fire / arithmetic-only flags excluded from survivors",
+        "",
+        "## Caveats / limitations",
+        "",
+        "- **No BH_global pass does NOT mean no signal.** K_global is the strictest framing;",
+        "  per Phase 0 promotion gate, K_family OR K_lane is the legitimate cut for downstream",
+        "  Pathway B, with theory citation per Chordia HLZ-tier (`t >= 3.00`).",
+        "- **OOS power floor:** OOS sample is ~3 months; cells with N_oos<50 are UNVERIFIED",
+        "  on dir-match, NOT failed. Phase 0 C8 explicit power threshold.",
+        "- **Bucket-quantile feature leak:** features computed via `bucket_high/low` (`pre_velocity_*`,",
+        "  `atr_vel_*`) use the FULL series 67/33 percentile threshold, including OOS data. Hard-",
+        "  threshold features (`ovn_range_pct_GT80`, `garch_vol_pct_GT70/LT30`, `atr_20_pct_GT80/LT20`)",
+        "  are not affected. Survivors using bucket-quantile features must be flagged.",
+        "- **Instrument-family discipline:** MGC (gold) does NOT share equity-index continuation",
+        "  premium mechanism (Chan Ch7 grounds equities); pooled MNQ+MES+MGC findings are NOT",
+        "  universal claims and per RULE 14 require per-family flip-rate disclosure.",
+        "- **Pathway A scan ≠ deployable.** Promotion to capital requires Pathway B K=1 +",
+        "  per-cell DSR + WFE + lane-correlation + MC survival + Shiryaev-Roberts monitor.",
+        "",
+        "## Not done by this scan",
+        "",
+        "- No DSR (C5 Bailey-LdP Eq.9) computation per cell",
+        "- No WFE (C6) per cell",
+        "- No lane-correlation matrix vs deployed portfolio",
+        "- No 90-day account-death MC per prop ruleset (C11)",
+        "- No Shiryaev-Roberts monitor registration (C12)",
+        "- No vol-conditional-RR test (Carver Ch9-10)",
+        "- No direction-split per session (already-deployed lanes)",
+        "",
+    ]
 
     OUTPUT_MD.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n[report] {OUTPUT_MD}")

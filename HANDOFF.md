@@ -9,13 +9,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-28
-- **Commit:** ecfeb33c — docs(scratch-eod-mtm): Stage 5b rebuild + Stage 6 downstream impact + Stage 7 paper_trades parity
-- **Files changed:** 5 files
-  - `.gitignore`
+- **Commit:** 2a6a2293 — research(scratch-eod-mtm): Stage 8 MFE-distribution endogenous-RR v1 — KILL
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `docs/audit/results/2026-04-27-canonical-scratch-fix-downstream-impact.md`
-  - `docs/audit/results/2026-04-27-paper-trades-scratch-parity.md`
-  - `docs/specs/paper_trades_scratch_policy.md`
+  - `docs/audit/hypotheses/2026-04-27-mnq-mfe-distribution-endogenous-rr-v1.yaml`
+  - `docs/audit/results/2026-04-27-mnq-mfe-distribution-endogenous-rr-v1.md`
+  - `research/mnq_mfe_distribution_endogenous_rr_v1.py`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
