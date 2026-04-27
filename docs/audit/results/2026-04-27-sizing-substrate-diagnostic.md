@@ -109,6 +109,18 @@ explicit mechanism citation per lane.
 - **E. Monotonicity gate dominates failures — verified correct (INFO).**
   Direction-agnostic gate (`inc or dec`); failing cells are genuinely
   non-monotonic in either direction. No fix needed.
+- **H. `testing_mode: diagnostic_descriptive` non-canonical metadata
+  value (LOW).** Pre-reg uses a value not in the canonical
+  `{family, individual}` enum per
+  `docs/institutional/pre_registered_criteria.md` Amendment 3.0.
+  Closed via corrigendum subdoc
+  `docs/audit/hypotheses/2026-04-27-sizing-substrate-prereg-corrigendum.md`
+  (option 3: corrigendum without doctrine amendment, single-pass
+  discipline preserved on locked pre-reg). Functional methodology was
+  correct (Pathway-A family test with explicit no-writes boundary);
+  metadata label was non-canonical. Future sessions: prefer
+  `testing_mode: family` + `boundary.diagnostic_only: true` to express
+  the same intent within the canonical enum.
 
 ### Audit-recommended tests (added in companion commit)
 

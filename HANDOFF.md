@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 339c515f — chore(handoff): record sizing-substrate audit closure + branch finalization
+- **Commit:** 6e26e4b9 — chore(handoff): hook auto-update last-session pointer to 339c515f
 - **Files changed:** 1 files
   - `HANDOFF.md`
 
