@@ -13,6 +13,11 @@
 - **Files changed:** 1 files
   - `HANDOFF.md`
 
+## Session decisions (2026-04-27 — orphan-branch recovery)
+
+- **Recovered registry hygiene from `codex/control-plane-unify`** (original `9550a668`, 2026-04-24). Manually applied the additive `context/registry.py` subset of the 18-file orphaned commit: registers existing canonical control-plane infrastructure (`docs/runtime/action-queue.yaml`, `pipeline/work_queue.py`, `scripts/tools/work_queue.py`, `pipeline/system_authority.py`, `pipeline/system_context.py`) into FALLBACK_READ_SET + 2 task manifests' canonical_files/doctrine_files; adds `## Control-Plane Truth/Notes/Plane` H2 sections to the 3 markdown render functions. All referenced files VERIFIED present in main. Re-rendered `docs/context/*.md` via `scripts/tools/render_context_catalog.py`. Other 17 files in original commit had heavy CRLF + functional drift; not recovered (separate decision).
+- **`codex/control-plane-unify` branch retained locally** — original audit's "DROP — superseded" verdict was wrong on 2 of 3 cited grounds; branch carries unrecovered substantive content; revisit when needed.
+
 ## Session decisions (2026-04-27 — sizing-substrate audit closure)
 
 - **Stage-1 sizing-substrate diagnostic SUBSTRATE_WEAK.** 2/6 lanes PASS (EUROPE_FLOW + TOKYO_OPEN, both via rel_vol_session, both UNSTABLE per Carver Ch.7 fn78 → stage2_eligible=False). Tier-A 0/18 STRONG NEGATIVE: deployed binary filters carry no continuous predictive substrate. Pre-reg `docs/audit/hypotheses/2026-04-27-sizing-substrate-prereg.yaml`; result `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md`.

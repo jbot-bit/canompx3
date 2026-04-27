@@ -32,11 +32,12 @@ CONTEXT_GENERATED_NOTICE = "Generated from `context/registry.py` and `context/in
 
 FALLBACK_READ_SET: tuple[str, ...] = (
     "AGENTS.md",
-    "HANDOFF.md",
     "CLAUDE.md",
     "CODEX.md",
     "docs/governance/document_authority.md",
     "docs/governance/system_authority_map.md",
+    "docs/runtime/action-queue.yaml",
+    "HANDOFF.md",
 )
 
 
@@ -254,8 +255,12 @@ TASKS: dict[str, TaskManifest] = {
         ),
         canonical_files=(
             "context/registry.py",
+            "pipeline/system_authority.py",
+            "pipeline/system_context.py",
             "pipeline/system_brief.py",
+            "pipeline/work_queue.py",
             "scripts/tools/context_resolver.py",
+            "scripts/tools/work_queue.py",
             "scripts/tools/session_preflight.py",
             "scripts/tools/task_route_packet.py",
             "scripts/infra/windows_agent_launch.py",
@@ -466,17 +471,19 @@ TASKS: dict[str, TaskManifest] = {
         variables=("deployable_validated_relation", "orb_utc_window"),
         doctrine_files=(
             "AGENTS.md",
-            "HANDOFF.md",
             "CLAUDE.md",
             "CODEX.md",
             "docs/governance/document_authority.md",
             "docs/governance/system_authority_map.md",
+            "docs/runtime/action-queue.yaml",
+            "HANDOFF.md",
         ),
         canonical_files=(
             "pipeline/system_authority.py",
             "pipeline/system_context.py",
             "pipeline/work_capsule.py",
             "pipeline/system_brief.py",
+            "pipeline/work_queue.py",
             "context/registry.py",
             "context/institutional.py",
         ),
@@ -691,6 +698,14 @@ def render_source_catalog_markdown() -> str:
     lines.extend(["", "## Concepts", ""])
     for concept in CONCEPTS.values():
         lines.append(f"- `{concept.id}` — `{concept.owner_path}`")
+    lines.extend(["", "## Control-Plane Truth", ""])
+    lines.extend(
+        [
+            "- `docs/runtime/action-queue.yaml` — canonical active-work truth",
+            "- `.session/work_queue_leases.json` — local runtime ownership only",
+            "- `HANDOFF.md` — rendered baton view, not canonical active-work truth",
+        ]
+    )
     lines.extend(["", "## Live Views", ""])
     for view in LIVE_VIEWS.values():
         lines.append(f"- `{view.id}` — {view.summary} (`{view.owner}`)")
@@ -733,6 +748,15 @@ def render_task_routes_markdown() -> str:
         )
     lines.extend(["## Fallback Read Set", ""])
     lines.extend(f"- `{path}`" for path in FALLBACK_READ_SET)
+    lines.extend(
+        [
+            "",
+            "## Control-Plane Notes",
+            "",
+            "- `docs/runtime/action-queue.yaml` is the canonical active-work registry when present.",
+            "- `HANDOFF.md` is baton context only and should be rendered from the queue, not maintained as a parallel backlog.",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -780,5 +804,10 @@ def render_readme_markdown() -> str:
         "- `source-catalog.md` — published live views, packs, variables, and verification steps",
         "- `task-routes.md` — deterministic task routes",
         "- `institutional-contracts.md` — concepts, protocols, and briefing contracts",
+        "",
+        "## Control Plane",
+        "",
+        "- `docs/runtime/action-queue.yaml` is the canonical active-work registry.",
+        "- `HANDOFF.md` is a generated baton view for session startup only.",
     ]
     return "\n".join(lines) + "\n"

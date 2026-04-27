@@ -17,6 +17,12 @@ Generated catalog of canonical routing sources and published read models.
 - `shared_root_mutation_override` — `pipeline/system_context.py`
 - `task_packet_contract` — `pipeline/work_capsule.py`
 
+## Control-Plane Truth
+
+- `docs/runtime/action-queue.yaml` — canonical active-work truth
+- `.session/work_queue_leases.json` — local runtime ownership only
+- `HANDOFF.md` — rendered baton view, not canonical active-work truth
+
 ## Live Views
 
 - `gold_db_mcp` — Canonical live trading/research query surface. (`trading_app/mcp_server.py`)
