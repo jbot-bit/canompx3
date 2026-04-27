@@ -13,7 +13,9 @@ import pytest
 from research.audit_sizing_substrate_diagnostic import (
     apply_bh_fdr,
     bootstrap_sized_vs_flat_ci,
+    derive_features,
     feature_temporal_validity,
+    resolve_substrate_column,
     stage2_eligible_flag,
     check_forecast_stability,
     classify_cell,
@@ -301,3 +303,106 @@ def test_stage2_eligible_false_for_non_pass():
     for status in ("FAIL", "INVALID"):
         cell = {"status": status, "stability_status": "STABLE"}
         assert stage2_eligible_flag(cell) is False
+
+
+# -- Audit findings 2026-04-27 (PASS_WITH_RISKS) --------------------------------
+# Companion tests for findings A, B, D from institutional code+quant audit on
+# this diagnostic. Finding C (pooled-finding YAML front-matter) is a doc-only
+# fix on the result MD; finding E was verified-correct (no test needed beyond
+# existing monotonicity coverage).
+
+
+# RULE 13 pressure-test (Finding D, MED — mandatory rule).
+# .claude/rules/backtesting-methodology.md RULE 13:
+#   "deliberately introduce a known-bad feature ... and confirm the script
+#    flags or filters it. If the pressure test passes through silently, fix
+#    the guard before trusting the scan."
+
+
+def test_rule13_pressure_test_double_break_blocked():
+    """RULE 1.1 hard look-ahead: double_break must be rejected at every session."""
+    for session in ("EUROPE_FLOW", "TOKYO_OPEN", "NYSE_OPEN"):
+        lane = {"orb_label": session, "entry_model": "E2"}
+        status, reason = feature_temporal_validity(lane, "double_break")
+        assert status == "INVALID", f"double_break should be blocked on {session}"
+        assert "RULE 1.1" in reason or "look-ahead" in reason.lower()
+
+
+def test_rule13_pressure_test_post_trade_columns_blocked():
+    """Hard-banned post-trade columns (mae_r, mfe_r, outcome, pnl_r-as-predictor)
+    must be rejected regardless of session or entry_model."""
+    lane = {"orb_label": "EUROPE_FLOW", "entry_model": "E2"}
+    for banned in ("mae_r", "mfe_r", "outcome", "pnl_r"):
+        status, reason = feature_temporal_validity(lane, banned)
+        assert status == "INVALID", f"{banned} should be hard-banned"
+        assert banned in reason
+
+
+def test_rule13_pressure_test_e2_break_bar_features_blocked():
+    """RULE 6.3 E2 look-ahead: break-bar columns are post-entry on ~41% of E2
+    trades because E2 fires on range-touch but daily_features defines break
+    by close-outside-ORB. Canonical authority: trading_app/config.py:3540-3568."""
+    lane_e2 = {"orb_label": "EUROPE_FLOW", "entry_model": "E2"}
+    for sfx in ("_break_ts", "_break_delay_min", "_break_bar_volume", "_break_bar_continues", "_break_dir"):
+        col = f"orb_EUROPE_FLOW{sfx}"
+        status, reason = feature_temporal_validity(lane_e2, col)
+        assert status == "INVALID", f"{col} should be E2-blocked"
+        assert "RULE 6.3" in reason or "E2" in reason
+
+
+def test_rule13_pressure_test_break_bar_features_allowed_on_non_e2():
+    """E2 break-bar lookahead applies only to E2; E1/E3 use these legitimately."""
+    lane_e1 = {"orb_label": "EUROPE_FLOW", "entry_model": "E1"}
+    status, _ = feature_temporal_validity(lane_e1, "orb_EUROPE_FLOW_break_delay_min")
+    assert status == "OK", "E1 may use break_delay_min — gate is E2-specific"
+
+
+# Finding A documentation: ATR_P50 vol_norm and raw resolve to the same column.
+# Effective unique cells = 42, not the K=48 declared in pre-reg. This test makes
+# the identity explicit so a future "fix" cannot accidentally diverge them
+# without a conscious design decision.
+
+
+def test_atr_p50_vol_norm_raw_identity_documented():
+    lane = {"deployed_filter": "ATR_P50", "orb_label": "SINGAPORE_OPEN"}
+    raw = resolve_substrate_column(lane, "raw")
+    vol_norm = resolve_substrate_column(lane, "vol_norm")
+    assert raw == vol_norm == "atr_20_pct", (
+        f"ATR_P50 raw and vol_norm intentionally resolve to the same column "
+        f"per pre-reg design (atr_20_pct is already volatility-normalized). "
+        f"got raw={raw}, vol_norm={vol_norm}. Effective unique cells=42, K=48 declared."
+    )
+
+
+# Finding B anti-drift: derive_features cost-ratio formula must equal canonical
+# CostRatioFilter formula in trading_app/config.py:602-613. Run-time equivalent
+# at this commit; this test guards against future drift.
+
+
+def test_cost_lt12_formula_equivalence_with_canonical():
+    from pipeline.cost_model import get_cost_spec
+
+    cs = get_cost_spec("MNQ")
+    orb_size = 12.0  # arbitrary positive
+    raw_risk_canonical = orb_size * cs.point_value
+    canonical_cost_ratio_pct = 100.0 * cs.total_friction / (raw_risk_canonical + cs.total_friction)
+
+    lane = {
+        "instrument": "MNQ",
+        "orb_label": "EUROPE_FLOW",
+        "deployed_filter": "COST_LT12",
+    }
+    df = pd.DataFrame(
+        {
+            "orb_EUROPE_FLOW_size": [orb_size],
+            "atr_20_pct": [50.0],
+        }
+    )
+    out = derive_features(df, lane)
+    diagnostic_cost_ratio_pct = float(out["_cost_ratio"].iloc[0])
+
+    assert abs(diagnostic_cost_ratio_pct - canonical_cost_ratio_pct) < 1e-9, (
+        f"derive_features cost_ratio {diagnostic_cost_ratio_pct} != canonical "
+        f"CostRatioFilter formula {canonical_cost_ratio_pct} for MNQ orb_size=12. "
+        f"Drift detected — re-align with trading_app/config.py:602-613."
+    )

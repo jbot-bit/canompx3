@@ -330,21 +330,58 @@ _OVERNIGHT_VALID_SESSIONS = frozenset({
     "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
 })
 
+# RULE 1.1 hard-banned look-ahead features per .claude/rules/backtesting-methodology.md.
+# These are post-trade or full-session-scan columns that are NEVER decision-time-knowable.
+_BANNED_LOOKAHEAD_COLUMNS = frozenset({
+    "double_break",   # RULE 1.1: scans full session AFTER entry
+    "mae_r",          # intra-trade retrospective
+    "mfe_r",          # intra-trade retrospective
+    "outcome",        # post-trade
+    "pnl_r",          # post-trade — only valid as response variable
+})
+
+# RULE 6.3 E2-banned break-bar feature suffixes — break_ts/break_bar_* are
+# post-entry for ~41% of E2 trades because E2 fires on first range-touch
+# (wick), but daily_features defines "break bar" by close-outside-ORB.
+# Canonical authority: trading_app/config.py:3540-3568 E2_EXCLUDED_FILTER_*.
+_E2_LOOKAHEAD_BREAK_BAR_SUFFIXES = (
+    "_break_ts",
+    "_break_delay_min",
+    "_break_bar_volume",
+    "_break_bar_continues",
+    "_break_dir",
+)
+
 
 def feature_temporal_validity(lane: dict, col: str) -> tuple[str, str]:
     """Return ('OK', '') or ('INVALID', reason).
 
-    Enforces .claude/rules/backtesting-methodology.md RULE 1.2:
-    overnight_* features are valid only for ORB sessions starting >=17:00 Brisbane.
-    Session catalog confirms TOKYO_OPEN(10:00) and SINGAPORE_OPEN(11:00) are
-    EARLIER than the overnight window close at 17:00 Brisbane, so any
-    overnight_* feature value at those sessions is forward-looking on the same
-    trading day.
+    Enforces .claude/rules/backtesting-methodology.md:
+    - RULE 1.1: hard-banned look-ahead features (double_break, mae_r, mfe_r,
+      outcome, pnl_r) are NEVER decision-time-knowable and are rejected at
+      every session.
+    - RULE 1.2: overnight_* features are valid only for ORB sessions starting
+      >=17:00 Brisbane (TOKYO_OPEN/SINGAPORE_OPEN/early sessions reject).
+    - RULE 6.3: E2-look-ahead break-bar features (*_break_ts, *_break_delay_min,
+      *_break_bar_*, *_break_dir-as-predictor) are rejected for entry_model=E2
+      because E2 fires on first range-touch (wick) but daily_features defines
+      break by close-outside-ORB — post-entry for ~41% of E2 trades. Canonical
+      authority: trading_app/config.py:3540-3568.
+
+    This is the RULE 13 pressure-test gate: any future pre-reg attempting to
+    introduce a banned feature MUST be flagged here, fail-closed, before
+    entering the cell-level statistics.
     """
     if col is None:
         return ("OK", "")
+    if col in _BANNED_LOOKAHEAD_COLUMNS:
+        return ("INVALID", f"RULE 1.1 hard-banned look-ahead column: {col}")
     if col.startswith("overnight_") and lane["orb_label"] not in _OVERNIGHT_VALID_SESSIONS:
         return ("INVALID", f"overnight_* lookahead on session {lane['orb_label']} (<17:00 Brisbane)")
+    if lane.get("entry_model") == "E2":
+        for sfx in _E2_LOOKAHEAD_BREAK_BAR_SUFFIXES:
+            if col.endswith(sfx):
+                return ("INVALID", f"RULE 6.3 E2 break-bar lookahead: column ends with {sfx}")
     return ("OK", "")
 
 

@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 2bd2ca6f — docs(audit): cross-walk sizing-substrate Stage-1 vs PR #51 participation-shape
+- **Commit:** 0e1f3c27 — docs(audit): address audit findings on sizing-substrate result MD
 - **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/audit/results/2026-04-27-sizing-substrate-vs-pr51-cross-walk.md`
+  - `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
