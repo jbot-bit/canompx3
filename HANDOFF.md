@@ -9,9 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 6e26e4b9 — chore(handoff): hook auto-update last-session pointer to 339c515f
+- **Commit:** 9e7adb58 — audit: Claude Code system refactor proposal (design-only)
 - **Files changed:** 1 files
-  - `HANDOFF.md`
+  - `docs/audit/claude-system-refactor-2026-04-27.md`
 
 ## Session decisions (2026-04-27 — sizing-substrate audit closure)
 
