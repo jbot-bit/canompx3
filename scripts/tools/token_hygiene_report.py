@@ -13,7 +13,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RULES_DIR = PROJECT_ROOT / ".claude" / "rules"
 STAGES_DIR = PROJECT_ROOT / "docs" / "runtime" / "stages"
@@ -156,7 +155,9 @@ def main() -> int:
     print()
     print("Recommendations")
     if effort == "high" or always_thinking is True:
-        print("- Keep default reasoning cheaper. Reserve high reasoning for risky final review, not routine exploration.")
+        print(
+            "- Keep default reasoning cheaper. Reserve high reasoning for risky final review, not routine exploration."
+        )
     else:
         print("- Default reasoning is already in the cheaper tier. Keep escalation reserved for risky work.")
     if teams_enabled:
@@ -164,7 +165,9 @@ def main() -> int:
     else:
         print("- Agent teams are off by default. Only enable them for bounded parallel work with real payoff.")
     if not risk_tier_hook:
-        print("- Add a tiny prompt-tier hook so risky prompts escalate without paying a max-reasoning tax on every turn.")
+        print(
+            "- Add a tiny prompt-tier hook so risky prompts escalate without paying a max-reasoning tax on every turn."
+        )
     if len(always_on) > 3:
         print("- Trim or split always-on rules. Move long examples and rationale into appendices or skills.")
     else:
@@ -180,10 +183,18 @@ def main() -> int:
 
     print()
     print("Operational Notes")
-    print("- Local-only work saves tokens only when it avoids web/MCP/GitHub lookups. It is not a major savings lever by itself.")
-    print("- Skipping commits usually does not save tokens. Small commits often reduce re-orientation and repeated review.")
-    print("- The most reliable savings come from fresh sessions, narrower prompts, smaller always-on context, and disciplined subagent use.")
-    print("- For live measurement, compare fresh-session `/context` before and after touching a high-doctrine path like `pipeline/`.")
+    print(
+        "- Local-only work saves tokens only when it avoids web/MCP/GitHub lookups. It is not a major savings lever by itself."
+    )
+    print(
+        "- Skipping commits usually does not save tokens. Small commits often reduce re-orientation and repeated review."
+    )
+    print(
+        "- The most reliable savings come from fresh sessions, narrower prompts, smaller always-on context, and disciplined subagent use."
+    )
+    print(
+        "- For live measurement, compare fresh-session `/context` before and after touching a high-doctrine path like `pipeline/`."
+    )
     return 0
 
 

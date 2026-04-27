@@ -24,7 +24,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from scripts.tools.project_pulse import PulseReport, build_pulse  # noqa: E402
 
-
 MAX_STAGE_LINES = 3
 
 
@@ -137,14 +136,13 @@ def _fallback_lines(root: Path, *, mode: str, error: Exception) -> list[str]:
     if summary:
         lines.append(f"  Last: {tool or '?'} ({when or '?'}) — {summary}")
 
-    if mode != "session-start":
-        topics = _extract_memory_topics(root)
-        if topics:
-            lines.append(f"  Memory topics: {' | '.join(topics)}")
+    topics = _extract_memory_topics(root)
+    if topics:
+        lines.append(f"  Memory topics: {' | '.join(topics)}")
 
-        note_line = _memory_note_line(root)
-        if note_line:
-            lines.append(note_line)
+    note_line = _memory_note_line(root)
+    if note_line:
+        lines.append(note_line)
 
     if mode == "post-compact":
         lines.append("  Compact rule: re-check live files before trusting prior context.")
@@ -235,14 +233,13 @@ def _render_lines(report: PulseReport, *, mode: str, root: Path) -> list[str]:
             top_sessions.append(f"{session['label']} {session['brisbane_time']} (+{session['hours_away']}h)")
         lines.append(f"  Upcoming: {' | '.join(top_sessions)}")
 
-    if mode != "session-start":
-        topics = _extract_memory_topics(root)
-        if topics:
-            lines.append(f"  Memory topics: {' | '.join(topics)}")
+    topics = _extract_memory_topics(root)
+    if topics:
+        lines.append(f"  Memory topics: {' | '.join(topics)}")
 
-        note_line = _memory_note_line(root)
-        if note_line:
-            lines.append(note_line)
+    note_line = _memory_note_line(root)
+    if note_line:
+        lines.append(note_line)
 
     if mode == "post-compact":
         lines.append("  Compact rule: re-check live files before trusting prior context.")
