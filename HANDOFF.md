@@ -9,10 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 1bcd65b7 — research(sizing): record pre-reg commit_sha
-- **Files changed:** 2 files
+- **Commit:** d812d5cf — research(sizing): pure-function gates + tests for sizing-substrate diagnostic
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/audit/hypotheses/2026-04-27-sizing-substrate-prereg.yaml`
+  - `research/audit_sizing_substrate_diagnostic.py`
+  - `tests/test_research/test_audit_sizing_substrate_diagnostic.py`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 

@@ -8,11 +8,23 @@ Read-only over gold.db. Raises on any 2026 row.
 """
 from __future__ import annotations
 
+import json
+import sys
+from pathlib import Path
 from typing import Any
 
+import duckdb
 import numpy as np
 import pandas as pd
+import yaml
 from scipy import stats
+
+from pipeline.paths import GOLD_DB_PATH
+
+
+PREREG_PATH = Path("docs/audit/hypotheses/2026-04-27-sizing-substrate-prereg.yaml")
+RESULT_MD = Path("docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md")
+RESULT_JSON = Path("docs/audit/results/2026-04-27-sizing-substrate-diagnostic.json")
 
 
 def is_holdout_clean(df: pd.DataFrame, holdout: str) -> bool:
@@ -134,3 +146,274 @@ def classify_cell(cell: dict[str, Any]) -> str:
         cell.get("predicted_sign") == cell.get("realized_sign"),
     ]
     return "PASS" if all(required) else "FAIL"
+
+
+def load_prereg() -> dict:
+    return yaml.safe_load(PREREG_PATH.read_text(encoding="utf-8"))
+
+
+def load_lane_tape(con: duckdb.DuckDBPyConnection, lane: dict, holdout: str) -> pd.DataFrame:
+    """Load IS trade tape for one lane joined with daily_features. Raise on holdout row."""
+    q = """
+    SELECT o.trading_day, o.symbol, o.pnl_r, d.*
+    FROM orb_outcomes o
+    JOIN daily_features d
+      ON o.trading_day = d.trading_day
+     AND o.symbol = d.symbol
+     AND o.orb_minutes = d.orb_minutes
+    WHERE o.symbol = ?
+      AND o.orb_label = ?
+      AND o.orb_minutes = ?
+      AND o.rr_target = ?
+      AND o.confirm_bars = ?
+      AND o.entry_model = ?
+      AND o.pnl_r IS NOT NULL
+      AND o.trading_day < DATE ?
+    ORDER BY o.trading_day
+    """
+    df = con.execute(q, [
+        lane["instrument"], lane["orb_label"], lane["orb_minutes"],
+        lane["rr_target"], lane["confirm_bars"], lane["entry_model"],
+        holdout,
+    ]).fetchdf()
+    is_holdout_clean(df, holdout=holdout)  # raises if leak
+    return df
+
+
+def resolve_substrate_column(lane: dict, form_id: str) -> str | None:
+    """Map (lane.deployed_filter, form_id) to a daily_features column name OR a derivation key."""
+    f = lane["deployed_filter"]
+    sess = lane["orb_label"]
+    if f == "ORB_G5":
+        if form_id == "raw":         return f"orb_{sess}_size"
+        if form_id == "vol_norm":    return f"orb_{sess}_size__div__atr_20_pct"
+        if form_id == "rank_252d":   return f"orb_{sess}_size__rank252"
+    if f == "ATR_P50":
+        if form_id == "raw":         return "atr_20_pct"
+        if form_id == "vol_norm":    return "atr_20_pct"  # already vol-normalized
+        if form_id == "rank_252d":   return "atr_20_pct__rank252"
+    if f == "COST_LT12":
+        if form_id == "raw":         return "_cost_ratio"  # derived in derive_features()
+        if form_id == "vol_norm":    return "_cost_ratio__div__atr_20_pct"
+        if form_id == "rank_252d":   return "_cost_ratio__rank252"
+    return None
+
+
+def derive_features(df: pd.DataFrame, lane: dict) -> pd.DataFrame:
+    """Add derived columns (vol-norm, 252d rank, cost ratio) to the lane tape."""
+    sess = lane["orb_label"]
+    out = df.copy()
+    # Tier-A vol-normalized + rank forms (ORB_G5 substrate)
+    if lane["deployed_filter"] == "ORB_G5":
+        size_col = f"orb_{sess}_size"
+        if size_col in out.columns:
+            out[f"{size_col}__div__atr_20_pct"] = out[size_col] / out["atr_20_pct"].replace(0, np.nan)
+            out[f"{size_col}__rank252"] = out[size_col].rolling(252, min_periods=63).rank(pct=True)
+    # Tier-A vol-normalized + rank forms (ATR_P50 substrate is already atr_20_pct, no vol-norm needed)
+    if lane["deployed_filter"] == "ATR_P50":
+        out["atr_20_pct__rank252"] = out["atr_20_pct"].rolling(252, min_periods=63).rank(pct=True)
+    # Tier-A COST_LT12 substrate — cost ratio per trade
+    if lane["deployed_filter"] == "COST_LT12":
+        from pipeline.cost_model import get_session_cost_spec
+        cs = get_session_cost_spec(lane["instrument"], lane["orb_label"])
+        cost_pts = cs.total_cost_points
+        # Cost ratio: cost in points divided by per-trade ORB-distance in points (proxy for R distance)
+        avg_orb_pts_col = f"orb_{sess}_size"
+        out["_cost_ratio"] = cost_pts / out[avg_orb_pts_col].replace(0, np.nan)
+        out["_cost_ratio__div__atr_20_pct"] = out["_cost_ratio"] / out["atr_20_pct"].replace(0, np.nan)
+        out["_cost_ratio__rank252"] = out["_cost_ratio"].rolling(252, min_periods=63).rank(pct=True)
+    return out
+
+
+def run_diagnostic() -> dict:
+    """Top-level. Returns the structured result dict."""
+    prereg = load_prereg()
+    holdout = prereg["metadata"]["holdout_date"]
+    rho_min = prereg["metadata"]["rho_min"]
+    n_min = prereg["metadata"]["power_floor_N"]
+    null_max = prereg["metadata"]["null_coverage_max"]
+    sd_max = prereg["metadata"]["stability_sd_variation_max"]
+    seed = prereg["metadata"]["bootstrap_seed"]
+    B = prereg["metadata"]["bootstrap_B"]
+    weights = (0.6, 0.8, 1.0, 1.2, 1.4)
+
+    cells: list[dict] = []
+    pvals: list[float] = []
+
+    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+
+    for lane in prereg["lanes"]:
+        df = load_lane_tape(con, lane, holdout=holdout)
+        df = derive_features(df, lane)
+
+        # --- Tier-A: 3 forms of the deployed-filter substrate ---
+        for form in prereg["features"]["tier_a"]:
+            col = resolve_substrate_column(lane, form["form_id"])
+            pred_sign = prereg["ex_ante_directions_tier_a"][f"{lane['deployed_filter']}_{form['form_id']}"]
+            cells.append(_compute_cell(df, lane, col, pred_sign, "tier_a", form["form_id"],
+                                        rho_min, n_min, null_max, sd_max, seed, B, weights))
+        # --- Tier-B: 5 orthogonal features ---
+        for feat in prereg["features"]["tier_b"]:
+            col = feat.get("column") or feat["column_template"].format(ORB_LABEL=lane["orb_label"])
+            pred_sign = feat["ex_ante_direction"]
+            cells.append(_compute_cell(df, lane, col, pred_sign, "tier_b", feat["feature_id"],
+                                        rho_min, n_min, null_max, sd_max, seed, B, weights))
+
+    # BH-FDR over the full K=48 family
+    pvals = [c["rho_p"] if c.get("rho_p") is not None else 1.0 for c in cells]
+    bh = apply_bh_fdr(pvals, q=prereg["metadata"]["bh_fdr_q"])
+    for c, p in zip(cells, bh):
+        c["bh_fdr_pass"] = bool(p)
+        c["status"] = classify_cell(c)
+
+    # Lane-level + global verdict
+    by_lane: dict[str, list[dict]] = {}
+    for c in cells:
+        by_lane.setdefault(c["lane_id"], []).append(c)
+    lanes_with_substrate = [lid for lid, lc in by_lane.items() if any(x["status"] == "PASS" for x in lc)]
+    n_passing_lanes = len(lanes_with_substrate)
+    if n_passing_lanes >= 3:
+        verdict = "SUBSTRATE_CONFIRMED"
+    elif n_passing_lanes in (1, 2):
+        verdict = "SUBSTRATE_WEAK"
+    else:
+        verdict = "THESIS_KILLED"
+    # Tier-level inconclusive guard
+    tier_a_cells = [c for c in cells if c["tier"] == "tier_a"]
+    tier_b_cells = [c for c in cells if c["tier"] == "tier_b"]
+    inv_a = sum(1 for c in tier_a_cells if c["status"] in ("INVALID",) or c.get("power_status") == "UNDERPOWERED")
+    inv_b = sum(1 for c in tier_b_cells if c["status"] in ("INVALID",) or c.get("power_status") == "UNDERPOWERED")
+    if inv_a / max(1, len(tier_a_cells)) >= 0.5 or inv_b / max(1, len(tier_b_cells)) >= 0.5:
+        verdict = "INCONCLUSIVE"
+
+    db_sha = con.execute("SELECT md5(string_agg(table_name, ',')) FROM information_schema.tables").fetchone()[0]
+    git_sha = _git_head_sha()
+
+    result = {
+        "design_doc": "docs/plans/2026-04-27-sizing-substrate-diagnostic-design.md",
+        "prereg": str(PREREG_PATH),
+        "git_head_sha": git_sha,
+        "db_sha_proxy": db_sha,
+        "bootstrap_seed": seed,
+        "bootstrap_B": B,
+        "K": len(cells),
+        "verdict": verdict,
+        "lanes_with_substrate": lanes_with_substrate,
+        "cells": cells,
+    }
+    return result
+
+
+def _compute_cell(df, lane, col, pred_sign, tier, form_id,
+                  rho_min, n_min, null_max, sd_max, seed, B, weights) -> dict:
+    cell = {
+        "lane_id": lane["id"], "tier": tier, "form_or_feature": form_id, "column": col,
+        "predicted_sign": pred_sign,
+    }
+    if col is None or col not in df.columns:
+        cell.update({"null_status": "INVALID", "power_status": "n/a", "rho_p": 1.0,
+                     "rho": 0.0, "monotonic": False, "q5_minus_q1": 0.0,
+                     "sized_flat_delta_lo": 0.0, "sized_flat_delta_hi": 0.0,
+                     "split_half_rho_match": False, "split_half_delta_match": False,
+                     "stability_status": "n/a", "realized_sign": "?", "n": 0,
+                     "drop_frac": 1.0, "note": "column missing"})
+        return cell
+
+    # NULL coverage
+    null_status, drop_frac = null_coverage_mark(df[col], threshold=null_max)
+    cell["null_status"] = null_status
+    cell["drop_frac"] = drop_frac
+    df2 = df.dropna(subset=[col, "pnl_r"]).copy()
+    cell["n"] = len(df2)
+    cell["power_status"] = power_floor_mark(len(df2), min_n=n_min)
+    if cell["null_status"] == "INVALID" or cell["power_status"] == "UNDERPOWERED":
+        cell["rho_p"] = 1.0
+        cell.update({"rho": 0.0, "monotonic": False, "q5_minus_q1": 0.0,
+                     "sized_flat_delta_lo": 0.0, "sized_flat_delta_hi": 0.0,
+                     "split_half_rho_match": False, "split_half_delta_match": False,
+                     "stability_status": "n/a", "realized_sign": "?"})
+        return cell
+
+    # Spearman rho
+    rho, p = stats.spearmanr(df2[col], df2["pnl_r"])
+    cell["rho"] = float(rho)
+    cell["rho_p"] = float(p)
+    cell["realized_sign"] = "+" if rho >= 0 else "-"
+    # Quintile lift
+    ql = compute_quintile_lift(df2, feature_col=col, outcome_col="pnl_r")
+    cell.update({"q1_mean_r": ql["q1_mean_r"], "q5_mean_r": ql["q5_mean_r"],
+                 "q5_minus_q1": ql["q5_minus_q1"], "monotonic": ql["monotonic"]})
+    # Sized vs flat
+    ci = bootstrap_sized_vs_flat_ci(df2, feature_col=col, outcome_col="pnl_r",
+                                    weights=weights, predicted_sign=pred_sign, B=B, seed=seed)
+    cell.update({"sized_flat_delta_obs": ci["observed"],
+                 "sized_flat_delta_lo": ci["lo"], "sized_flat_delta_hi": ci["hi"]})
+    # Split-half
+    cell["split_half_rho_match"] = sign_match_split_half(df2, feature_col=col, outcome_col="pnl_r")
+    df_sorted = df2.sort_values("trading_day").reset_index(drop=True)
+    median_day = df_sorted["trading_day"].iloc[len(df_sorted) // 2]
+    h1 = df_sorted[df_sorted["trading_day"] < median_day]
+    h2 = df_sorted[df_sorted["trading_day"] >= median_day]
+    if len(h1) > 30 and len(h2) > 30:
+        ci1 = bootstrap_sized_vs_flat_ci(h1, col, "pnl_r", weights, pred_sign, B=1000, seed=seed)
+        ci2 = bootstrap_sized_vs_flat_ci(h2, col, "pnl_r", weights, pred_sign, B=1000, seed=seed)
+        cell["split_half_delta_match"] = bool(np.sign(ci1["observed"]) == np.sign(ci2["observed"])
+                                              and ci1["observed"] != 0 and ci2["observed"] != 0)
+    else:
+        cell["split_half_delta_match"] = False
+    # Forecast stability
+    cell["stability_status"] = check_forecast_stability(df2, feature_col=col, window=252, max_rel_var=sd_max)
+    return cell
+
+
+def _git_head_sha() -> str:
+    import subprocess
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    except Exception:
+        return "unknown"
+
+
+def render_markdown(result: dict) -> str:
+    lines: list[str] = []
+    lines.append("# Sizing-Substrate Diagnostic — Result")
+    lines.append("")
+    lines.append(f"- Design doc: `{result['design_doc']}`")
+    lines.append(f"- Pre-reg: `{result['prereg']}`")
+    lines.append(f"- Git HEAD: `{result['git_head_sha']}`")
+    lines.append(f"- DB schema fingerprint: `{result['db_sha_proxy']}`")
+    lines.append(f"- Bootstrap seed: {result['bootstrap_seed']}; B={result['bootstrap_B']}")
+    lines.append(f"- K = {result['K']}")
+    lines.append(f"- **VERDICT: {result['verdict']}**")
+    lines.append(f"- Lanes with substrate: {result['lanes_with_substrate']}")
+    lines.append("")
+    lines.append("## Per-cell results")
+    lines.append("")
+    lines.append("| lane | tier | feature/form | n | rho | p | bh-fdr | Q5-Q1 R | mono | delta CI | split | stable | pred | real | status |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    for c in result["cells"]:
+        ci_str = f"[{c.get('sized_flat_delta_lo', 0):+.3f}, {c.get('sized_flat_delta_hi', 0):+.3f}]"
+        split = "Y" if c.get("split_half_rho_match") and c.get("split_half_delta_match") else "N"
+        lines.append(f"| {c['lane_id']} | {c['tier']} | {c.get('form_or_feature')} | "
+                     f"{c.get('n', 0)} | {c.get('rho', 0):+.3f} | {c.get('rho_p', 1):.4f} | "
+                     f"{'Y' if c.get('bh_fdr_pass') else 'N'} | {c.get('q5_minus_q1', 0):+.3f} | "
+                     f"{'Y' if c.get('monotonic') else 'N'} | {ci_str} | {split} | "
+                     f"{c.get('stability_status', '?')[:1]} | {c.get('predicted_sign', '?')} | "
+                     f"{c.get('realized_sign', '?')} | **{c.get('status', '?')}** |")
+    return "\n".join(lines) + "\n"
+
+
+def main() -> int:
+    result = run_diagnostic()
+    RESULT_JSON.parent.mkdir(parents=True, exist_ok=True)
+    RESULT_JSON.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
+    RESULT_MD.write_text(render_markdown(result), encoding="utf-8")
+    print(f"VERDICT: {result['verdict']}")
+    print(f"Lanes with substrate: {result['lanes_with_substrate']}")
+    print(f"Wrote {RESULT_MD}")
+    print(f"Wrote {RESULT_JSON}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
