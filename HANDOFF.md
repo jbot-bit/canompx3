@@ -9,13 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 19a7a534 — fix(sizing): post-review hardening — stage2_eligible flag + B alignment + tests
-- **Files changed:** 5 files
+- **Commit:** 45b67617 — docs(handoffs): session resume note for sizing-substrate work + queued audits
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.json`
-  - `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md`
-  - `research/audit_sizing_substrate_diagnostic.py`
-  - `tests/test_research/test_audit_sizing_substrate_diagnostic.py`
+  - `docs/handoffs/2026-04-27-sizing-substrate-session-resume.md`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
