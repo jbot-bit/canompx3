@@ -9,9 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 6c0e467f — chore(queue): bump pr48_mgc_shadow_observation freshness
+- **Commit:** caa0980c — docs(plans): add sizing-substrate diagnostic design (Stage 1 falsifier)
 - **Files changed:** 1 files
-  - `docs/runtime/action-queue.yaml`
+  - `docs/plans/2026-04-27-sizing-substrate-diagnostic-design.md`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
