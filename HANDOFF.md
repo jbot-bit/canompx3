@@ -9,13 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** TBD — docs(audit): recover 4 orphaned 0.4R-frontier negative-result notes
-- **Files changed:** 5 files
-  - `HANDOFF.md`
-  - `docs/audit/results/2026-04-24-4r-frontier-post-kill-routing.md` (NEW)
-  - `docs/audit/results/2026-04-24-highest-ev-roi-4r-triage.md` (NEW)
-  - `docs/audit/results/2026-04-24-mnq-usdata1000-f5-below-pdl-rr15-v1.md` (NEW)
-  - `docs/audit/results/2026-04-24-prior-day-shelf-deploy-readiness-refresh.md` (NEW)
+- **Commit:** a954cd18 — fix(format): ruff format + lint scripts/tools/{token_hygiene_report,claude_superpower_brief}.py
+- **Files changed:** 2 files
+  - `scripts/tools/claude_superpower_brief.py`
+  - `scripts/tools/token_hygiene_report.py`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
