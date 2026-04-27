@@ -13,6 +13,8 @@ import pytest
 from research.audit_sizing_substrate_diagnostic import (
     apply_bh_fdr,
     bootstrap_sized_vs_flat_ci,
+    feature_temporal_validity,
+    stage2_eligible_flag,
     check_forecast_stability,
     classify_cell,
     compute_quintile_lift,
@@ -238,3 +240,64 @@ def test_classify_cell_fail_when_prediction_flipped():
 def test_classify_cell_invalid_when_null_heavy():
     cell = {"null_status": "INVALID"}
     assert classify_cell(cell) == "INVALID"
+
+
+# -- Feature temporal validity (RULE 1.2 lookahead gate) -----------------------
+
+
+def test_feature_validity_overnight_invalid_on_tokyo_open():
+    lane = {"orb_label": "TOKYO_OPEN"}
+    status, reason = feature_temporal_validity(lane, "overnight_range_pct")
+    assert status == "INVALID"
+    assert "TOKYO_OPEN" in reason
+
+
+def test_feature_validity_overnight_invalid_on_singapore_open():
+    lane = {"orb_label": "SINGAPORE_OPEN"}
+    status, _ = feature_temporal_validity(lane, "overnight_range_pct")
+    assert status == "INVALID"
+
+
+def test_feature_validity_overnight_ok_on_europe_flow():
+    lane = {"orb_label": "EUROPE_FLOW"}  # 18:00 Brisbane >= 17:00 cutoff
+    status, _ = feature_temporal_validity(lane, "overnight_range_pct")
+    assert status == "OK"
+
+
+def test_feature_validity_overnight_ok_on_late_us_sessions():
+    for sess in ("NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE"):
+        lane = {"orb_label": sess}
+        status, _ = feature_temporal_validity(lane, "overnight_range_pct")
+        assert status == "OK", f"{sess} should accept overnight_*"
+
+
+def test_feature_validity_non_overnight_features_unaffected():
+    lane = {"orb_label": "TOKYO_OPEN"}
+    for col in ("rel_vol_TOKYO_OPEN", "atr_vel_ratio", "garch_forecast_vol_pct", "pit_range_atr"):
+        status, _ = feature_temporal_validity(lane, col)
+        assert status == "OK", f"{col} should not be gated"
+
+
+def test_feature_validity_none_column_passes():
+    lane = {"orb_label": "TOKYO_OPEN"}
+    status, _ = feature_temporal_validity(lane, None)
+    assert status == "OK"
+
+
+# -- Stage-2 eligibility (UNSTABLE PASS cells barred) --------------------------
+
+
+def test_stage2_eligible_true_for_stable_pass():
+    cell = {"status": "PASS", "stability_status": "STABLE"}
+    assert stage2_eligible_flag(cell) is True
+
+
+def test_stage2_eligible_false_for_unstable_pass():
+    cell = {"status": "PASS", "stability_status": "UNSTABLE"}
+    assert stage2_eligible_flag(cell) is False
+
+
+def test_stage2_eligible_false_for_non_pass():
+    for status in ("FAIL", "INVALID"):
+        cell = {"status": status, "stability_status": "STABLE"}
+        assert stage2_eligible_flag(cell) is False

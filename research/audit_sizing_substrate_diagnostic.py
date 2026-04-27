@@ -130,7 +130,13 @@ def sign_match_split_half(df: pd.DataFrame, feature_col: str, outcome_col: str) 
 
 
 def classify_cell(cell: dict[str, Any]) -> str:
-    """Return PASS / FAIL / INVALID per spec §5.3 + §5.4a."""
+    """Return PASS / FAIL / INVALID per spec §5.3 + §5.4a.
+
+    Spec §5.3 final bullet: UNSTABLE cells may PASS numerically but cannot be
+    promoted to Stage 2 without an explicit forecast-normalization pre-reg.
+    The implementation here returns PASS for numerically-passing UNSTABLE cells
+    and sets stage2_eligible=False on them (set by stage2_eligible_flag below).
+    """
     if cell.get("null_status") == "INVALID":
         return "INVALID"
     if cell.get("power_status") == "UNDERPOWERED":
@@ -146,6 +152,18 @@ def classify_cell(cell: dict[str, Any]) -> str:
         cell.get("predicted_sign") == cell.get("realized_sign"),
     ]
     return "PASS" if all(required) else "FAIL"
+
+
+def stage2_eligible_flag(cell: dict[str, Any]) -> bool:
+    """A PASS cell is Stage-2 eligible only if forecast-stability is STABLE.
+
+    Per spec §5.3 final bullet — UNSTABLE numerically-passing cells require a
+    fresh Stage-2 pre-reg with explicit forecast-normalization, so they are
+    NOT eligible for direct Stage-2 promotion under this diagnostic.
+    """
+    if cell.get("status") != "PASS":
+        return False
+    return cell.get("stability_status") == "STABLE"
 
 
 def load_prereg() -> dict:
@@ -267,6 +285,7 @@ def run_diagnostic() -> dict:
     for c, p in zip(cells, bh):
         c["bh_fdr_pass"] = bool(p)
         c["status"] = classify_cell(c)
+        c["stage2_eligible"] = stage2_eligible_flag(c)
 
     # Lane-level + global verdict
     by_lane: dict[str, list[dict]] = {}
@@ -391,8 +410,8 @@ def _compute_cell(df, lane, col, pred_sign, tier, form_id,
     h1 = df_sorted[df_sorted["trading_day"] < median_day]
     h2 = df_sorted[df_sorted["trading_day"] >= median_day]
     if len(h1) > 30 and len(h2) > 30:
-        ci1 = bootstrap_sized_vs_flat_ci(h1, col, "pnl_r", weights, pred_sign, B=1000, seed=seed)
-        ci2 = bootstrap_sized_vs_flat_ci(h2, col, "pnl_r", weights, pred_sign, B=1000, seed=seed)
+        ci1 = bootstrap_sized_vs_flat_ci(h1, col, "pnl_r", weights, pred_sign, B=B, seed=seed)
+        ci2 = bootstrap_sized_vs_flat_ci(h2, col, "pnl_r", weights, pred_sign, B=B, seed=seed)
         cell["split_half_delta_match"] = bool(np.sign(ci1["observed"]) == np.sign(ci2["observed"])
                                               and ci1["observed"] != 0 and ci2["observed"] != 0)
     else:
@@ -471,6 +490,17 @@ def render_markdown(result: dict) -> str:
     lines.append("  on TOKYO_OPEN/SINGAPORE_OPEN (sessions starting <17:00 Brisbane) are marked")
     lines.append("  INVALID per `.claude/rules/backtesting-methodology.md` RULE 1.2. The")
     lines.append("  unguarded run had additional apparent passes that disappeared under the gate.")
+    n_invalid_la = sum(1 for c in result["cells"]
+                       if c.get("status") == "INVALID"
+                       and "lookahead" in str(c.get("note", "")))
+    lines.append(f"- **Effective tested K = {result['K'] - n_invalid_la}** ({n_invalid_la} cells gated INVALID by lookahead;")
+    lines.append("  pre-reg K=48 unchanged but BH-FDR denominator includes the gated cells, making")
+    lines.append("  the family-wise correction conservative — survivors are if anything stronger")
+    lines.append("  evidence than the q value suggests.)")
+    lines.append("- **Stage-2 eligibility:** PASS cells are stage-2 eligible only if their")
+    lines.append("  `stability_status == STABLE`. UNSTABLE PASS cells require a fresh Stage-2")
+    lines.append("  pre-reg with explicit forecast-normalization per Carver Ch.7 fn 78. Check")
+    lines.append("  the `stage2_eligible` field in the JSON twin.")
     lines.append("- **Linear-rank weights {0.6, 0.8, 1.0, 1.2, 1.4} are diagnostic-only,**")
     lines.append("  NOT Carver's actual recipe (Ch. 7 forecast scalar to abs-mean=10, cap=±20).")
     lines.append("  Stage-2 must implement the canonical Carver scaling, not the rank proxy.")

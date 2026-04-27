@@ -9,9 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 9d63ea4c — fix(sizing): enforce overnight_* lookahead validity gate per RULE 1.2
-- **Files changed:** 2 files
+- **Commit:** 60556b6d — research(sizing): Stage-1 sizing-substrate diagnostic — verdict=SUBSTRATE_WEAK
+- **Files changed:** 4 files
   - `HANDOFF.md`
+  - `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.json`
+  - `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md`
   - `research/audit_sizing_substrate_diagnostic.py`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)

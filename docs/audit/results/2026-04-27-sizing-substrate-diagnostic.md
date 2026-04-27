@@ -2,7 +2,7 @@
 
 - Design doc: `docs/plans/2026-04-27-sizing-substrate-diagnostic-design.md`
 - Pre-reg: `docs\audit\hypotheses\2026-04-27-sizing-substrate-prereg.yaml`
-- Git HEAD: `9d63ea4c35d9b68d4fd8c68d5568d8cc1e7f09f6`
+- Git HEAD: `60556b6d031fcd9c98582110e74847cc277d682d`
 - DB schema fingerprint: `27885f79609cd9b7d4ffc45b50d2e5ab`
 - Bootstrap seed: 42; B=10000
 - K = 48
@@ -48,6 +48,14 @@ explicit mechanism citation per lane.
   on TOKYO_OPEN/SINGAPORE_OPEN (sessions starting <17:00 Brisbane) are marked
   INVALID per `.claude/rules/backtesting-methodology.md` RULE 1.2. The
   unguarded run had additional apparent passes that disappeared under the gate.
+- **Effective tested K = 46** (2 cells gated INVALID by lookahead;
+  pre-reg K=48 unchanged but BH-FDR denominator includes the gated cells, making
+  the family-wise correction conservative — survivors are if anything stronger
+  evidence than the q value suggests.)
+- **Stage-2 eligibility:** PASS cells are stage-2 eligible only if their
+  `stability_status == STABLE`. UNSTABLE PASS cells require a fresh Stage-2
+  pre-reg with explicit forecast-normalization per Carver Ch.7 fn 78. Check
+  the `stage2_eligible` field in the JSON twin.
 - **Linear-rank weights {0.6, 0.8, 1.0, 1.2, 1.4} are diagnostic-only,**
   NOT Carver's actual recipe (Ch. 7 forecast scalar to abs-mean=10, cap=±20).
   Stage-2 must implement the canonical Carver scaling, not the rank proxy.
