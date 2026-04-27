@@ -9,8 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 1c478589 — chore(handoff): hook auto-update pointer to 9e7adb58
-- **Files changed:** 1 files
+- **Commit:** 61c65712 — fix(hooks): bump SessionStart timeout 5s->30s; cap post-edit pytest stdout to last 80 lines
+- **Files changed:** 3 files
+  - `.claude/hooks/post-edit-pipeline.py`
+  - `.claude/settings.json`
   - `HANDOFF.md`
 
 ## Session decisions (2026-04-27 — sizing-substrate audit closure)

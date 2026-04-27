@@ -341,6 +341,13 @@ If those conditions hold, every guarantee in the table above is preserved with m
 
 ---
 
+## Corrigendum (added 2026-04-27 post-audit)
+
+- **F8** — `.claude/hooks/bias-grounding-guard.py` exists only in the main worktree's local working tree. It is **gitignored** (matched by `.gitignore:211 hooks/`, not whitelisted by `!.claude/hooks/`). Not in version control, costs zero per-clone storage. Action: optional local cleanup only — no PR needed.
+- **F9** — `.claude/commands` (zero-byte file) is similarly gitignored (`.claude/*` rule, no whitelist). Local cleanup only.
+- **PASS 0 hook line counts** were measured against the local main worktree. Tracked-only versions may differ. The behavioral findings (hook wiring, output channels, redundancy) hold because they were verified against `.claude/settings.json` (tracked) and the file contents read at audit time match what the harness executes.
+- **Implementation status:** C4 (SessionStart timeout 5s→30s) and C5 (post-edit pytest stdout cap) landed in commit `61c65712` on this branch. Other ranked changes (C1/C2/C3/C7) still require user sign-off per audit risk analysis.
+
 ## What I Did NOT Verify (do not act on these)
 
 - **F12** — CLAUDE.md "auto-loads on X edit" mechanism. Need to grep for the loader.
