@@ -1,8 +1,7 @@
 {
   "env": {
     "VIRTUAL_ENV": ".venv",
-    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70",
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70"
   },
   "statusLine": {
     "type": "command",
@@ -17,8 +16,8 @@
       "mcp__claude_ai_Slack__slack_read_channel"
     ]
   },
-  "effortLevel": "high",
-  "alwaysThinkingEnabled": true,
+  "effortLevel": "medium",
+  "alwaysThinkingEnabled": false,
   "autoUpdatesChannel": "latest",
   "includeGitInstructions": false,
   "worktree": {
@@ -118,6 +117,16 @@
           {
             "type": "command",
             "command": "python C:/Users/joshd/canompx3/.claude/hooks/data-first-guard.py",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/risk-tier-guard.py",
             "timeout": 3
           }
         ]

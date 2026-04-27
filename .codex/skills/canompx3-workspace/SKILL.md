@@ -10,10 +10,12 @@ Use this skill when Codex is operating in this repo and needs its own adapter la
 ## Load Order
 
 1. Read `AGENTS.md`.
-2. Read `SOUL.md`, `USER.md`, `memory/<today>.md`, `memory/<yesterday>.md`, and `MEMORY.md` when in the main session.
-3. Read `CLAUDE.md`.
-4. Read `CODEX.md`.
-5. Load only the extra files needed for the current task.
+2. Read `CLAUDE.md`.
+3. Read `CODEX.md`.
+4. Load only the extra files needed for the current task.
+
+Personal preferences that must survive across worktrees should live in
+Claude-native user/local memory, not in gitignored repo-root files.
 
 ## Canonical Rule
 

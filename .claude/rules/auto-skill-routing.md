@@ -1,35 +1,28 @@
-# Auto-Skill Routing — Proactive Invocation
+# Auto-Skill Routing
 
-The user does NOT type `/skill` commands. Claude invokes skills proactively based on context.
+The user does not type `/skill` commands. Route by intent.
 
-Before routing a non-trivial repo task, prefer the deterministic repo router:
-
+For non-trivial repo work, scope first with:
 `python scripts/tools/context_resolver.py --task "<user request>" --format markdown`
 
-Use it to scope what should be read first. Skill routing then operates inside
-that scoped context instead of replacing it.
+Use skills only after the route narrows what should be read.
 
-## Auto-Triggers
+## Intent Map
 
-Match by INTENT, not exact words. ADHD-friendly — user phrases things casually.
+- Session start, status, catch-up, "where are we" -> `/orient`
+- Continue, next, what now, keep going -> `/next`
+- Git ops like commit/push/merge -> execute directly
+- Done / complete / finished -> `/verify done`
+- Trading book / what's live / tonight / playbook -> `/trade-book`
+- Health / decay / fitness / regime -> `/regime-check`
+- Something wrong / weird / doesn't add up / failing -> `/quant-debug`
+- Plan / design / brainstorm / approach / 4t -> `/design`
+- Past findings / history / NO-GO / remind me -> `/pinecone-assistant`
+- Test a hypothesis / research / investigate edge -> `/research`
+- Real-capital scrutiny / bias check / before deploy -> `/capital-review`
+- Review / check my work / before I commit -> `/code-review`
+- Editing schema or canonical config -> full stage-gate
+- Improve a skill -> `/skill-improve`
 
-| Intent | Example phrases | Action |
-|--------|----------------|--------|
-| Session start | (first message) | `/orient` |
-| Keep going | "next", "keep going", "continue", "what now", "more" | `/next` |
-| Git ops | "commit", "push", "pusdh", "comit" | Just execute |
-| Stage done | "done", "complete", "finished", "that's it" | `/verify done` |
-| What do I trade | "book", "portfolio", "what's live", "tonight", "strats", "playbook", "what am I trading", "show me my stuff" | `/trade-book` |
-| Health/fitness | "how's it going", "performing", "decay", "regime", "fitness", "healthy", "anything dying" | `/regime-check` |
-| Project state | "status", "where are we", "what's broken", "catch me up", "orient" | `/orient` |
-| Something wrong | "off", "wrong", "broken", "doesn't add up", "weird", "failing", "bug", "numbers look wrong", "this doesn't make sense" | `/quant-debug` |
-| Plan/design | "plan", "design", "brainstorm", "think about", "how should we", "4t", "approach" | `/design` |
-| Past findings | "didn't we test", "wasn't that dead", "what did we find", "remind me", "history of", "NO-GO?" | `/pinecone-assistant` |
-| Test a hypothesis | "is this real", "does X work", "test this", "research", "investigate edge", "deep dive" | `/research` |
-| Capital-risk review | "real capital", "capital review", "thorough AF", "bias check", "no pigeon holing", "security review", "threat model", "before deploy" | `/capital-review` |
-| Code review | "review", "check my work", "bloomey", "seven sins", "before I commit", "anything wrong" | `/code-review` |
-| Schema/config edit | (editing init_db, config.py, cost_model) | Full stage-gate |
-| Improve skill | "improve skill", "skill loop", "optimize skill" | `/skill-improve` |
-
-Proactively invoke when context matches. Destructive skills require explicit `/name`.
-Post-work auto-checks (drift + tests) are handled by hooks — no need to duplicate.
+Match intent, not exact words. Destructive skills still require explicit user intent.
+Hooks already handle routine post-work verification, so do not restate that ceremony here.

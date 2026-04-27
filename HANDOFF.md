@@ -13,6 +13,17 @@
 - **Files changed:** 1 file
   - `HANDOFF.md`
 
+## Session decisions (2026-04-27 — token-hygiene automation, uncommitted)
+
+- **Valid isolated worktree used** — token/context-efficiency work lives in `/tmp/canompx3-token-audit-v2` on branch `wt-codex-token-audit-v2`. Earlier `.worktrees/tasks/codex/token-audit` path was orphaned; do not rely on it.
+- **Cheap-default / high-rigor policy built in** — `.claude/settings.json` now defaults to `effortLevel: medium`, `alwaysThinkingEnabled: false`, and no default experimental agent teams. New `UserPromptSubmit` hook `risk-tier-guard.py` injects a short escalation hint only for `high`/`critical` prompts; low-risk prompts get nothing.
+- **Startup/context noise trimmed** — `stage-awareness.py` now caps prompt-stage previews and `claude_superpower_brief.py` no longer dumps memory chatter on session start. Always-on rules remain limited to `workflow-preferences.md` and `auto-skill-routing.md`, both shortened.
+- **Private startup context moved out of gitignored repo-root dependency** — repo docs now treat `SOUL.md`, `USER.md`, and `memory/*.md` as optional legacy notes rather than required startup context for worktrees. User-level Claude memory created at `/mnt/c/Users/joshd/.claude/CLAUDE.md` with small imported canompx3-specific note `/mnt/c/Users/joshd/.claude/canompx3-personal.md`.
+- **Operational inspection surface added** — `scripts/tools/token_hygiene_report.py` reports measured startup-doc sizes, always-on vs path-scoped rules, stage-file count, reasoning defaults, agent-team status, and whether user-level Claude memory exists. Shared playbook added at `docs/reference/claude-token-hygiene.md`; startup docs now point to both.
+- **Measured state after changes** — report in the isolated worktree shows `effortLevel: medium`, `alwaysThinkingEnabled: False`, agent teams off, risk-tier hook present, only 2 always-on rules, 2 active stage files, and user-level Claude memory detected. `python3 -m py_compile` passed for `risk-tier-guard.py`, `stage-awareness.py`, `claude_superpower_brief.py`, and `token_hygiene_report.py`.
+- **Explicit remaining gap** — no live Claude UI session was run to verify `/context` deltas or hook behavior end-to-end inside Claude Code. Integration is verified syntactically and behaviorally via direct script execution only.
+- **Environment warning** — manual `python3 scripts/tools/session_preflight.py --context codex-wsl` from this isolated worktree failed with `ModuleNotFoundError: pydantic`, indicating this checkout currently lacks the expected Python deps / `.venv-wsl` availability for full preflight.
+
 ## Session decisions (2026-04-27 — PR #124 re-extraction + cleanup)
 
 - **PR #147 merged (170b6085)** — re-extract of abandoned PR #124 onto fresh main. Original PR #124 (`chore/pass-three-drift`, commit `6c279810`) was based on `cebefd92` (pre-PR-#126 + pre-PR-#130-renormalization); CI failed on the wall-clock-time-bomb test fix landed by PR #126, and local rebase developed 4 production-code conflicts (`pipeline/check_drift.py`, `trading_app/live/alert_engine.py`, `trading_app/live/webhook_server.py`, `tests/test_pipeline/test_work_queue.py`) plus 79 CRLF-only files from missing PR #130 renormalization on its base. PR #124 closed with cross-link.

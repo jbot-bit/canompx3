@@ -25,6 +25,9 @@ if str(PROJECT_ROOT) not in sys.path:
 from scripts.tools.project_pulse import PulseReport, build_pulse  # noqa: E402
 
 
+MAX_STAGE_LINES = 3
+
+
 def _extract_memory_topics(root: Path, limit: int = 4) -> list[str]:
     memory_md = root / "MEMORY.md"
     if not memory_md.exists():
@@ -100,6 +103,7 @@ def _fallback_lines(root: Path, *, mode: str, error: Exception) -> list[str]:
 
     # Read all stage files (stages/*.md + legacy STAGE_STATE.md)
     stages_dir = root / "docs" / "runtime" / "stages"
+    stage_lines: list[str] = []
     if stages_dir.is_dir():
         for sf in sorted(stages_dir.glob("*.md")):
             if sf.name == ".gitkeep":
@@ -109,7 +113,9 @@ def _fallback_lines(root: Path, *, mode: str, error: Exception) -> list[str]:
                 sm = re.search(r"^mode:\s*(.+)$", sc, flags=re.MULTILINE)
                 st = re.search(r"^task:\s*(.+)$", sc, flags=re.MULTILINE)
                 if st or sm:
-                    lines.append(f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}")
+                    stage_lines.append(
+                        f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}"
+                    )
             except OSError:
                 pass
     legacy_file = root / "docs" / "runtime" / "STAGE_STATE.md"
@@ -118,21 +124,27 @@ def _fallback_lines(root: Path, *, mode: str, error: Exception) -> list[str]:
         mode_match = re.search(r"^mode:\s*(.+)$", content, flags=re.MULTILINE)
         task_match = re.search(r"^task:\s*(.+)$", content, flags=re.MULTILINE)
         if task_match or mode_match:
-            lines.append(
+            stage_lines.append(
                 f"  Stage [legacy]: {task_match.group(1) if task_match else '?'} — {mode_match.group(1) if mode_match else '?'}"
             )
+    if stage_lines:
+        lines.extend(stage_lines[:MAX_STAGE_LINES])
+        extra = len(stage_lines) - min(len(stage_lines), MAX_STAGE_LINES)
+        if extra > 0:
+            lines.append(f"  Stages: +{extra} more")
 
     tool, when, summary = _extract_handoff_context(root)
     if summary:
         lines.append(f"  Last: {tool or '?'} ({when or '?'}) — {summary}")
 
-    topics = _extract_memory_topics(root)
-    if topics:
-        lines.append(f"  Memory topics: {' | '.join(topics)}")
+    if mode != "session-start":
+        topics = _extract_memory_topics(root)
+        if topics:
+            lines.append(f"  Memory topics: {' | '.join(topics)}")
 
-    note_line = _memory_note_line(root)
-    if note_line:
-        lines.append(note_line)
+        note_line = _memory_note_line(root)
+        if note_line:
+            lines.append(note_line)
 
     if mode == "post-compact":
         lines.append("  Compact rule: re-check live files before trusting prior context.")
@@ -149,6 +161,7 @@ def _render_lines(report: PulseReport, *, mode: str, root: Path) -> list[str]:
 
     # Read all stage files (stages/*.md + legacy STAGE_STATE.md)
     stages_dir = root / "docs" / "runtime" / "stages"
+    stage_lines: list[str] = []
     if stages_dir.is_dir():
         for sf in sorted(stages_dir.glob("*.md")):
             if sf.name == ".gitkeep":
@@ -158,7 +171,9 @@ def _render_lines(report: PulseReport, *, mode: str, root: Path) -> list[str]:
                 sm = re.search(r"^mode:\s*(.+)$", sc, flags=re.MULTILINE)
                 st = re.search(r"^task:\s*(.+)$", sc, flags=re.MULTILINE)
                 if st or sm:
-                    lines.append(f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}")
+                    stage_lines.append(
+                        f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}"
+                    )
             except OSError:
                 pass
     legacy_file = root / "docs" / "runtime" / "STAGE_STATE.md"
@@ -167,9 +182,14 @@ def _render_lines(report: PulseReport, *, mode: str, root: Path) -> list[str]:
         mode_match = re.search(r"^mode:\s*(.+)$", content, flags=re.MULTILINE)
         task_match = re.search(r"^task:\s*(.+)$", content, flags=re.MULTILINE)
         if task_match or mode_match:
-            lines.append(
+            stage_lines.append(
                 f"  Stage [legacy]: {task_match.group(1) if task_match else '?'} — {mode_match.group(1) if mode_match else '?'}"
             )
+    if stage_lines:
+        lines.extend(stage_lines[:MAX_STAGE_LINES])
+        extra = len(stage_lines) - min(len(stage_lines), MAX_STAGE_LINES)
+        if extra > 0:
+            lines.append(f"  Stages: +{extra} more")
 
     if report.handoff_summary:
         tool = report.handoff_tool or "?"
@@ -215,13 +235,14 @@ def _render_lines(report: PulseReport, *, mode: str, root: Path) -> list[str]:
             top_sessions.append(f"{session['label']} {session['brisbane_time']} (+{session['hours_away']}h)")
         lines.append(f"  Upcoming: {' | '.join(top_sessions)}")
 
-    topics = _extract_memory_topics(root)
-    if topics:
-        lines.append(f"  Memory topics: {' | '.join(topics)}")
+    if mode != "session-start":
+        topics = _extract_memory_topics(root)
+        if topics:
+            lines.append(f"  Memory topics: {' | '.join(topics)}")
 
-    note_line = _memory_note_line(root)
-    if note_line:
-        lines.append(note_line)
+        note_line = _memory_note_line(root)
+        if note_line:
+            lines.append(note_line)
 
     if mode == "post-compact":
         lines.append("  Compact rule: re-check live files before trusting prior context.")

@@ -10,12 +10,13 @@ If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it, figure out w
 
 Before doing anything else:
 
-1. Read `SOUL.md` — this is who you are
-2. Read `USER.md` — this is who you're helping
-3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
-4. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
-5. Read `CLAUDE.md` - this is the canonical project doc, and `.claude/` contains the related rules, commands, agents, plugins, and memory
-6. If you are Codex and `CODEX.md` exists, read it after `CLAUDE.md` - it is your own adapter layer, not a replacement for the Claude files
+1. Read `CLAUDE.md` - this is the canonical project doc, and `.claude/` contains the related rules, commands, agents, plugins, and memory
+2. If you are Codex and `CODEX.md` exists, read it after `CLAUDE.md` - it is your own adapter layer, not a replacement for the Claude files
+3. Read `HANDOFF.md` for cross-tool session state
+4. If your tool supports user-level memory, load that next
+
+Legacy note:
+- `SOUL.md`, `USER.md`, and `memory/YYYY-MM-DD.md` are local optional notes, not required startup context for new worktrees
 
 Don't ask permission. Just do it.
 
@@ -23,6 +24,8 @@ Don't ask permission. Just do it.
 
 - `CLAUDE.md` and `.claude/` are the canonical project intelligence for this workspace
 - `CODEX.md` and `.codex/` are allowed as a separate Codex-only adapter layer, but they must not replace or rename the Claude layer
+- For Claude Code, private personal context should prefer `~/.claude/CLAUDE.md` or `CLAUDE.local.md` rather than gitignored repo-root files that do not travel cleanly across worktrees
+- For token/context-efficiency work, prefer the report-only audit at `python3 scripts/tools/token_hygiene_report.py`
 - For scoped repo tasks, prefer `python scripts/tools/context_resolver.py --task "<request>"` to get the exact read set and live views for that task.
 - If the resolver is unavailable or ambiguous, fall back to: `AGENTS.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`, `scripts/tools/system_context.py`, and `scripts/tools/project_pulse.py`.
 
@@ -72,6 +75,7 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 - Write significant events, thoughts, decisions, opinions, lessons learned
 - This is your curated memory — the distilled essence, not raw logs
 - Over time, review your daily files and update MEMORY.md with what's worth keeping
+- For Claude Code, prefer `~/.claude/CLAUDE.md` or `CLAUDE.local.md` for private startup preferences that must work across worktrees
 
 ### 📝 Write It Down - No "Mental Notes"!
 
