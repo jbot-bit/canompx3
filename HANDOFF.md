@@ -9,9 +9,18 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** TBD — chore(handoff): close 2026-04-27 PR-#124 re-extraction session (PR #147 merged at 170b6085)
-- **Files changed:** 1 file
+- **Commit:** TBD — docs(audit): recover 4 orphaned 0.4R-frontier negative-result notes
+- **Files changed:** 5 files
   - `HANDOFF.md`
+  - `docs/audit/results/2026-04-24-4r-frontier-post-kill-routing.md` (NEW)
+  - `docs/audit/results/2026-04-24-highest-ev-roi-4r-triage.md` (NEW)
+  - `docs/audit/results/2026-04-24-mnq-usdata1000-f5-below-pdl-rr15-v1.md` (NEW)
+  - `docs/audit/results/2026-04-24-prior-day-shelf-deploy-readiness-refresh.md` (NEW)
+
+## Session decisions (2026-04-27 — orphan-branch recovery)
+
+- **Recovered 4 negative-result research notes from `codex/ev-roi-4r-hunt`** (originals: `ea9a2818`, `7205b63e`, `428cda03`, `34e17aad`). Code from that branch (F5_BELOW_PDL filter, prereg, hunt harness) landed via PR #116 then was killed by one-shot Mode A IS/OOS validator (`90a815dd`, "OOS direction flip on sacred window"). The 4 docs document the WHY behind the kill and the post-kill routing decisions — preserved here so the NO-GO is discoverable. Branched from `origin/main` as `recover/ev-roi-4r-docs`. Original 4 commits dropped (HANDOFF.md noise only outside the 4 doc files).
+- **`codex/ev-roi-4r-hunt` branch retained locally** for now — the 5th non-doc commit (`80bda59c research(discovery): lock mnq below-pdl frontier prereg`) is also in main as part of the F5 work landed via PR #116. Branch can be deleted once recovery PR is merged.
 
 ## Session decisions (2026-04-27 — token-hygiene automation, uncommitted)
 
