@@ -29,7 +29,7 @@ authority:
 
 reproducibility:
   repo_root: canompx3
-  commit_sha: TO_FILL_AFTER_COMMIT
+  commit_sha: "d58e5ce2"   # stamped 2026-04-28; pre-reg locked before runner executes
   committed_required_before_run: true
   branch: research/2026-04-28-phase-d-mes-europe-flow-pathway-b
   base_branch: research/mnq-unfiltered-high-rr-family

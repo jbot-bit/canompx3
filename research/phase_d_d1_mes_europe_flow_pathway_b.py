@@ -202,6 +202,17 @@ def emit_result(state: dict) -> None:
     lines.append(f"**DB freshness:** orb_outcomes max trading_day = {s['db_max_day']}")
     lines.append(f"**Holdout boundary (Mode A):** {HOLDOUT_SACRED_FROM}")
     lines.append("")
+    lines.append("## Scope")
+    lines.append("")
+    lines.append(
+        "Pathway B K=1 confirmatory test of B-MES-EUR (the highest-EV "
+        "PATHWAY_B_ELIGIBLE candidate from the 2026-04-28 Phase B per-candidate "
+        "evidence pass). The question this run answers: under the locked schema, "
+        "do all KILL criteria pass and do the C5/C6/C7/C8/C9 gates support "
+        "promotion to CANDIDATE_READY, or does the OOS power floor force a "
+        "PARK verdict, or does any KILL criterion fire?"
+    )
+    lines.append("")
     lines.append("## Locked schema (verbatim from pre-reg)")
     lines.append("")
     for k, v in LOCKED.items():

@@ -6,11 +6,41 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session (2026-04-28 — edge-extraction phased plan A→B)
+## Last Session (2026-04-28 — Phase D D1 + cleanup + hardening)
 
-- **Tool:** Claude Code
+- **Tool:** Claude Code (autonomous)
 - **Date:** 2026-04-28
-- **Pickup point:** Phase B done, awaiting your go for Phase D (Pathway B K=1 pre-regs)
+- **Pickup point:** Phase D D1 verdict landed (B-MES-EUR PARK_PENDING_OOS_POWER); D2/D3/D4 pending user GO
+
+### What landed this session
+
+1. **Stage hygiene cleanup** (`chore/close-landed-stages-2026-04-28`, commits `55c458d7` + `2a474ea7`)
+   - Closed 2 stage files for already-merged PRs #158 + #152
+   - Added drift check 121 `check_stage_file_landed_drift` (advisory) — surfaces stages
+     where `updated:` is >7d old AND ≥3 commits reference the slug, exactly the class
+     of bug that caused this session's "thought we sorted this already" confusion.
+
+2. **Phase D D1 — B-MES-EUR Pathway B K=1** (`research/2026-04-28-phase-d-mes-europe-flow-pathway-b`,
+   commits `d58e5ce2` + the verdict commit)
+   - Pre-reg: `docs/audit/hypotheses/2026-04-28-mes-europe-flow-ovn-range-pathway-b-v1.yaml`
+   - Runner: `research/phase_d_d1_mes_europe_flow_pathway_b.py`
+   - Result: `docs/audit/results/2026-04-28-mes-europe-flow-pathway-b-v1-result.md`
+   - **Verdict: PARK_PENDING_OOS_POWER** — all 7 KILL criteria PASS, all non-conditional
+     C5/C7/C9/Sharpe gates PASS, but C6/C8 are GATE_INACTIVE_LOWPOWER (N_OOS_on=9, power=0.106).
+     Per Amendment 3.2: UNVERIFIED ≠ KILL. Cell parks until N_OOS_on ≥ 50 (~Q3-2026).
+   - Pre-reg locked → no post-hoc threshold rescue when OOS accrues.
+   - DSR_PB = 0.9845, Welch p = 0.000602, bootstrap p = 0.000500, |t| = 3.47, era stable 7/7.
+
+### Decision gate at session-end
+
+D1 (B-MES-EUR) → PARK. D2/D3/D4 still pending user GO before pre-regs are written:
+  - **D2** B-MES-LON: MES LONDON_METALS O30 RR2.0 long + ovn_range_pct_GT80 (Chan Ch7 + Fitschen Ch3)
+  - **D3** B-MNQ-NYC: MNQ NYSE_CLOSE O5 RR1.0 long + ovn_range_pct_GT80 (Chan Ch7 + Fitschen Ch3)
+  - **D4** B-MNQ-COX: MNQ COMEX_SETTLE O5 RR1.0 long + garch_vol_pct_GT70 (Carver Ch9-10) —
+    CAVEAT: B6 lane-correlation +0.773 vs deployed COMEX_SETTLE ORB_G5 — likely portfolio overlap, run anyway but flag for Phase E.
+
+All 4 candidates expected to land at PARK_PENDING_OOS_POWER given identical N_OOS power-floor situation.
+Real promotion to Phase E requires N_OOS_on ≥ 50 (Q3-2026 timeframe at current trade rates).
 
 ### Decision gate at session-end
 
