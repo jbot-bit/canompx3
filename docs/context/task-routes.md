@@ -41,7 +41,7 @@ Generated canonical task routes for cold-start orientation.
 - Briefing contract: `orientation_briefing`
 - Packs: `coding_runtime_pack`, `project_orientation_pack`
 - Doctrine: `AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`
-- Canonical owners: `context/registry.py`, `pipeline/system_brief.py`, `scripts/tools/context_resolver.py`, `scripts/tools/session_preflight.py`, `scripts/tools/task_route_packet.py`, `scripts/infra/windows_agent_launch.py`, `scripts/infra/claude-worktree.sh`, `scripts/infra/codex-project.sh`, `scripts/infra/codex-worktree.sh`
+- Canonical owners: `context/registry.py`, `pipeline/system_authority.py`, `pipeline/system_context.py`, `pipeline/system_brief.py`, `pipeline/work_queue.py`, `scripts/tools/context_resolver.py`, `scripts/tools/work_queue.py`, `scripts/tools/session_preflight.py`, `scripts/tools/task_route_packet.py`, `scripts/infra/windows_agent_launch.py`, `scripts/infra/claude-worktree.sh`, `scripts/infra/codex-project.sh`, `scripts/infra/codex-worktree.sh`
 - Live views: `verification_context`, `system_brief`
 
 ## `research_discovery`
@@ -70,15 +70,21 @@ Generated canonical task routes for cold-start orientation.
 - Verification profile: `orientation`
 - Briefing contract: `orientation_briefing`
 - Packs: `coding_runtime_pack`, `trading_runtime_pack`, `project_orientation_pack`
-- Doctrine: `AGENTS.md`, `HANDOFF.md`, `CLAUDE.md`, `CODEX.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`
-- Canonical owners: `pipeline/system_authority.py`, `pipeline/system_context.py`, `pipeline/work_capsule.py`, `pipeline/system_brief.py`, `context/registry.py`, `context/institutional.py`
+- Doctrine: `AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`, `docs/runtime/action-queue.yaml`, `HANDOFF.md`
+- Canonical owners: `pipeline/system_authority.py`, `pipeline/system_context.py`, `pipeline/work_capsule.py`, `pipeline/system_brief.py`, `pipeline/work_queue.py`, `context/registry.py`, `context/institutional.py`
 - Live views: `system_brief`
 
 ## Fallback Read Set
 
 - `AGENTS.md`
-- `HANDOFF.md`
 - `CLAUDE.md`
 - `CODEX.md`
 - `docs/governance/document_authority.md`
 - `docs/governance/system_authority_map.md`
+- `docs/runtime/action-queue.yaml`
+- `HANDOFF.md`
+
+## Control-Plane Notes
+
+- `docs/runtime/action-queue.yaml` is the canonical active-work registry when present.
+- `HANDOFF.md` is baton context only and should be rendered from the queue, not maintained as a parallel backlog.
