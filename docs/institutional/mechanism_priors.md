@@ -142,6 +142,7 @@ Full spec: `docs/institutional/pre_registered_criteria.md`. Enforcement: `.claud
 
 From `docs/STRATEGY_BLUEPRINT.md` § 5 NO-GO and prior research:
 
+- **Continuous-sizing substrate of deployed binary filters (R3 role) — PARKED 2026-04-27.** Stage-1 sizing-substrate diagnostic (K=48, 6 deployed lanes × 8 features) returned `SUBSTRATE_WEAK` (2/6 lanes PASS via rel_vol_session, both UNSTABLE per Carver Ch.7 fn78 → stage2_eligible=False). Tier-A diagnostic STRONG NEGATIVE: all 18 deployed-filter substrate cells (ORB_G5/ATR_P50/COST_LT12 across raw/vol_norm/rank_252d) FAIL — the deployed binary filters carry NO measurable continuous predictive substrate. The 2 PASS cells are lane-level cuts of PR #51's universal monotonic-up finding on the same column (`daily_features.rel_vol_{ORB_LABEL}`); see cross-walk note. Reopen requires AFML Ch.19 sigmoid bet-sizer recipe (NOT in `resources/`) AND fresh per-lane mechanism citation AND new pre-reg. Pre-reg `docs/audit/hypotheses/2026-04-27-sizing-substrate-prereg.yaml`; result `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md`; cross-walk `docs/audit/results/2026-04-27-sizing-substrate-vs-pr51-cross-walk.md`. Audit `PASS_WITH_RISKS` (verdict upheld).
 - **ML on ORB outcomes** — DEAD (V1/V2/V3 all failed, `docs/audit/hypotheses/2026-04-11-ml-v3-pooled-confluence-postmortem.md`)
 - **`prev_day_range/atr × NYSE_OPEN × MNQ`** — KILLED (OOS sign flip, `docs/specs/presession-volatility-filters.md:78`)
 - **`took_pdh × US_DATA_1000`** — QUARANTINED (WFE>1.89 leakage suspect)
@@ -239,3 +240,4 @@ Priors don't validate; testing does.
 | Date | Change | Reason |
 |------|--------|--------|
 | 2026-04-15 | Initial write | Session HTF: user explicit request to bake trading logic into project so it doesn't pigeonhole |
+| 2026-04-27 | §7 entry: continuous-sizing substrate of deployed binary filters PARKED | Stage-1 sizing-substrate diagnostic returned SUBSTRATE_WEAK; Tier-A 0/18 establishes deployed binary filters carry no continuous substrate; 2 PASS cells (rel_vol_session) are lane-cuts of PR #51 universal finding. Audit PASS_WITH_RISKS. |

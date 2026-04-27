@@ -9,10 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 0e1f3c27 — docs(audit): address audit findings on sizing-substrate result MD
-- **Files changed:** 2 files
+- **Commit:** d7d670b5 — fix(sizing): RULE 13 pressure-test gates + audit Findings A/B/D coverage
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md`
+  - `research/audit_sizing_substrate_diagnostic.py`
+  - `tests/test_research/test_audit_sizing_substrate_diagnostic.py`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
