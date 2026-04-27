@@ -9,10 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** a954cd18 — fix(format): ruff format + lint scripts/tools/{token_hygiene_report,claude_superpower_brief}.py
-- **Files changed:** 2 files
-  - `scripts/tools/claude_superpower_brief.py`
-  - `scripts/tools/token_hygiene_report.py`
+- **Commit:** 6c0e467f — chore(queue): bump pr48_mgc_shadow_observation freshness
+- **Files changed:** 1 files
+  - `docs/runtime/action-queue.yaml`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
