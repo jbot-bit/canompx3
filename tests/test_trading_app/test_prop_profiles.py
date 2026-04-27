@@ -23,6 +23,7 @@ from trading_app.prop_profiles import (
     get_lane_registry,
     get_profile,
     get_profile_lane_definitions,
+    resolve_execution_symbol,
     resolve_profile_id,
 )
 
@@ -643,3 +644,92 @@ class TestLoadAllocationLanes:
         lanes = load_allocation_lanes("test_profile", allocation_path=str(path))
         assert all(isinstance(lane, DailyLaneSpec) for lane in lanes)
         assert isinstance(lanes, tuple)
+
+
+class TestExecutionSymbolMap:
+    """Stage 1 of NQ-mini execution feature: AccountProfile symbol-substitution contract."""
+
+    @staticmethod
+    def _base_profile(**overrides):
+        kwargs = dict(profile_id="test_exec", firm="topstep", account_size=50000)
+        kwargs.update(overrides)
+        return AccountProfile(**kwargs)
+
+    def test_identity_default(self):
+        profile = self._base_profile()
+        assert profile.execution_symbol_map is None
+        assert profile.execution_qty_divisor is None
+        assert resolve_execution_symbol(profile, "MNQ") == ("MNQ", 1)
+        assert resolve_execution_symbol(profile, "MES") == ("MES", 1)
+
+    def test_valid_nq_mapping(self):
+        profile = self._base_profile(
+            execution_symbol_map={"MNQ": "NQ"},
+            execution_qty_divisor={"MNQ": 10},
+        )
+        assert resolve_execution_symbol(profile, "MNQ") == ("NQ", 10)
+        # Unmapped symbol falls through to identity.
+        assert resolve_execution_symbol(profile, "MES") == ("MES", 1)
+
+    def test_only_map_populated_fails(self):
+        with pytest.raises(ValueError, match="declared together"):
+            self._base_profile(
+                execution_symbol_map={"MNQ": "NQ"},
+                execution_qty_divisor=None,
+            )
+
+    def test_only_divisor_populated_fails(self):
+        with pytest.raises(ValueError, match="declared together"):
+            self._base_profile(
+                execution_symbol_map=None,
+                execution_qty_divisor={"MNQ": 10},
+            )
+
+    def test_divisor_missing_for_mapped_symbol(self):
+        with pytest.raises(ValueError, match="must also appear in execution_qty_divisor"):
+            self._base_profile(
+                execution_symbol_map={"MNQ": "NQ", "MES": "ES"},
+                execution_qty_divisor={"MNQ": 10},
+            )
+
+    def test_unknown_source_symbol_rejected(self):
+        with pytest.raises(ValueError, match="ASSET_CONFIGS"):
+            self._base_profile(
+                execution_symbol_map={"BOGUS": "NQ"},
+                execution_qty_divisor={"BOGUS": 10},
+            )
+
+    def test_unknown_target_symbol_rejected(self):
+        with pytest.raises(ValueError, match="COST_SPECS"):
+            self._base_profile(
+                execution_symbol_map={"MNQ": "BOGUS"},
+                execution_qty_divisor={"MNQ": 10},
+            )
+
+    def test_zero_divisor_rejected(self):
+        with pytest.raises(ValueError, match="int >= 1"):
+            self._base_profile(
+                execution_symbol_map={"MNQ": "NQ"},
+                execution_qty_divisor={"MNQ": 0},
+            )
+
+    def test_negative_divisor_rejected(self):
+        with pytest.raises(ValueError, match="int >= 1"):
+            self._base_profile(
+                execution_symbol_map={"MNQ": "NQ"},
+                execution_qty_divisor={"MNQ": -1},
+            )
+
+    def test_non_int_divisor_rejected(self):
+        with pytest.raises(ValueError, match="int >= 1"):
+            self._base_profile(
+                execution_symbol_map={"MNQ": "NQ"},
+                execution_qty_divisor={"MNQ": 10.0},
+            )
+
+    def test_existing_profiles_use_identity(self):
+        # Stage 1 must preserve byte-equivalent behaviour for every shipped profile.
+        for profile in ACCOUNT_PROFILES.values():
+            assert profile.execution_symbol_map is None, profile.profile_id
+            assert profile.execution_qty_divisor is None, profile.profile_id
+            assert resolve_execution_symbol(profile, "MNQ") == ("MNQ", 1)

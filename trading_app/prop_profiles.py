@@ -22,6 +22,7 @@ Topstep-alone promotion climb.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -112,6 +113,69 @@ class AccountProfile:
     # Stage 4 reserves the slot; LFA DLL semantics will be wired in a future stage.
     is_live_funded: bool = False
     notes: str = ""
+    # Execution-layer symbol-substitution contract (Stage 1 of NQ-mini feature).
+    # Both fields default None for identity behaviour. When populated, downstream
+    # order-build sites (Stage 2) translate strategy_symbol → broker_symbol and
+    # divide qty by the declared integer ratio. Must be declared together: the
+    # divisor is explicit (not derived from cost-spec point values) so cost-spec
+    # edits cannot silently change executed exposure.
+    execution_symbol_map: Mapping[str, str] | None = None
+    execution_qty_divisor: Mapping[str, int] | None = None
+
+    def __post_init__(self) -> None:
+        sym_map = self.execution_symbol_map
+        qty_div = self.execution_qty_divisor
+        if (sym_map is None) != (qty_div is None):
+            raise ValueError(
+                f"profile {self.profile_id!r}: execution_symbol_map and "
+                f"execution_qty_divisor must be declared together (both None "
+                f"for identity, or both populated)."
+            )
+        if sym_map is None:
+            return
+        # Lazy imports to avoid circulars at module-init time.
+        from pipeline.asset_configs import ASSET_CONFIGS
+        from pipeline.cost_model import COST_SPECS
+
+        if not set(sym_map.keys()).issubset(qty_div.keys()):
+            raise ValueError(
+                f"profile {self.profile_id!r}: every execution_symbol_map "
+                f"source key must also appear in execution_qty_divisor "
+                f"(missing: {sorted(set(sym_map.keys()) - set(qty_div.keys()))})."
+            )
+        for src, dst in sym_map.items():
+            if src not in ASSET_CONFIGS:
+                raise ValueError(
+                    f"profile {self.profile_id!r}: execution_symbol_map source "
+                    f"{src!r} not in pipeline.asset_configs.ASSET_CONFIGS."
+                )
+            if dst not in COST_SPECS:
+                raise ValueError(
+                    f"profile {self.profile_id!r}: execution_symbol_map target "
+                    f"{dst!r} not in pipeline.cost_model.COST_SPECS."
+                )
+        for src, divisor in qty_div.items():
+            if not isinstance(divisor, int) or divisor < 1:
+                raise ValueError(
+                    f"profile {self.profile_id!r}: execution_qty_divisor [{src!r}]={divisor!r} must be int >= 1."
+                )
+
+
+def resolve_execution_symbol(profile: AccountProfile, strategy_symbol: str) -> tuple[str, int]:
+    """Return (broker_symbol, qty_divisor) for an order build.
+
+    Defaults to (strategy_symbol, 1) when the profile has no symbol map or
+    when the strategy symbol is not mapped. Stage 2 consumers (order build
+    sites in session_orchestrator + webhook_server) call this exactly once
+    per order and feed the result into the order spec + qty math.
+    """
+    sym_map = profile.execution_symbol_map
+    qty_div = profile.execution_qty_divisor
+    if sym_map is None or qty_div is None:
+        return strategy_symbol, 1
+    if strategy_symbol not in sym_map:
+        return strategy_symbol, 1
+    return sym_map[strategy_symbol], qty_div[strategy_symbol]
 
 
 @dataclass(frozen=True)
