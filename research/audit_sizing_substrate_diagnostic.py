@@ -306,12 +306,46 @@ def run_diagnostic() -> dict:
     return result
 
 
+_OVERNIGHT_VALID_SESSIONS = frozenset({
+    "LONDON_METALS", "EUROPE_FLOW", "BRISBANE_1955", "US_DATA_830",
+    "NYSE_OPEN", "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+})
+
+
+def feature_temporal_validity(lane: dict, col: str) -> tuple[str, str]:
+    """Return ('OK', '') or ('INVALID', reason).
+
+    Enforces .claude/rules/backtesting-methodology.md RULE 1.2:
+    overnight_* features are valid only for ORB sessions starting >=17:00 Brisbane.
+    Session catalog confirms TOKYO_OPEN(10:00) and SINGAPORE_OPEN(11:00) are
+    EARLIER than the overnight window close at 17:00 Brisbane, so any
+    overnight_* feature value at those sessions is forward-looking on the same
+    trading day.
+    """
+    if col is None:
+        return ("OK", "")
+    if col.startswith("overnight_") and lane["orb_label"] not in _OVERNIGHT_VALID_SESSIONS:
+        return ("INVALID", f"overnight_* lookahead on session {lane['orb_label']} (<17:00 Brisbane)")
+    return ("OK", "")
+
+
 def _compute_cell(df, lane, col, pred_sign, tier, form_id,
                   rho_min, n_min, null_max, sd_max, seed, B, weights) -> dict:
     cell = {
         "lane_id": lane["id"], "tier": tier, "form_or_feature": form_id, "column": col,
         "predicted_sign": pred_sign,
     }
+    # Pre-NULL temporal-validity gate (RULE 1.2 lookahead enforcement)
+    validity_status, validity_reason = feature_temporal_validity(lane, col)
+    if validity_status == "INVALID":
+        cell.update({"null_status": "INVALID", "power_status": "n/a", "rho_p": 1.0,
+                     "rho": 0.0, "monotonic": False, "q5_minus_q1": 0.0,
+                     "sized_flat_delta_lo": 0.0, "sized_flat_delta_hi": 0.0,
+                     "split_half_rho_match": False, "split_half_delta_match": False,
+                     "stability_status": "n/a", "realized_sign": "?", "n": 0,
+                     "drop_frac": 0.0, "note": f"lookahead_invalid: {validity_reason}"})
+        return cell
+
     if col is None or col not in df.columns:
         cell.update({"null_status": "INVALID", "power_status": "n/a", "rho_p": 1.0,
                      "rho": 0.0, "monotonic": False, "q5_minus_q1": 0.0,

@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** e7ad48cb — research(sizing): SQL loader + main runner for sizing-substrate diagnostic
+- **Commit:** 9f8a1873 — fix(sizing): SQL DATE-param + cost_ratio_pct formula in diagnostic
 - **Files changed:** 2 files
   - `HANDOFF.md`
   - `research/audit_sizing_substrate_diagnostic.py`
