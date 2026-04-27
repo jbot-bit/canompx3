@@ -9,8 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** caa0980c — docs(plans): add sizing-substrate diagnostic design (Stage 1 falsifier)
-- **Files changed:** 1 files
+- **Commit:** c0d18bca — docs(plans): harden sizing-substrate diagnostic v0.2 — fix lit citations, add gaps
+- **Files changed:** 2 files
+  - `HANDOFF.md`
   - `docs/plans/2026-04-27-sizing-substrate-diagnostic-design.md`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
