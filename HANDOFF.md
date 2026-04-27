@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** c0d18bca — docs(plans): harden sizing-substrate diagnostic v0.2 — fix lit citations, add gaps
+- **Commit:** df1cae8a — docs(plans): add implementation plan for sizing-substrate diagnostic
 - **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/plans/2026-04-27-sizing-substrate-diagnostic-design.md`
+  - `docs/plans/2026-04-27-sizing-substrate-diagnostic-implementation-plan.md`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
