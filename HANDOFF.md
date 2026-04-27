@@ -8,13 +8,14 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-04-27
-- **Commit:** 68ee35f8 — fix(outcome_builder): canonical scratch-EOD-MTM (Stage 5 of 2026-04-27 plan)
-- **Files changed:** 4 files
+- **Date:** 2026-04-28
+- **Commit:** ecfeb33c — docs(scratch-eod-mtm): Stage 5b rebuild + Stage 6 downstream impact + Stage 7 paper_trades parity
+- **Files changed:** 5 files
+  - `.gitignore`
   - `HANDOFF.md`
-  - `pipeline/check_drift.py`
-  - `tests/test_trading_app/test_outcome_builder.py`
-  - `trading_app/outcome_builder.py`
+  - `docs/audit/results/2026-04-27-canonical-scratch-fix-downstream-impact.md`
+  - `docs/audit/results/2026-04-27-paper-trades-scratch-parity.md`
+  - `docs/specs/paper_trades_scratch_policy.md`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
