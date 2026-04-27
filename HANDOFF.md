@@ -8,12 +8,11 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-04-27
-- **Commit:** 6e18dde3 — feat(profiles): NQ-mini execution-layer Stage 1 — AccountProfile symbol-substitution contract
-- **Files changed:** 3 files
+- **Date:** 2026-04-28
+- **Commit:** 55c458d7 — chore(stages): close 2 landed stage files (PR #158 + PR #152)
+- **Files changed:** 2 files
   - `docs/runtime/stages/nq-mini-execution-stage1-account-profile.md`
-  - `tests/test_trading_app/test_prop_profiles.py`
-  - `trading_app/prop_profiles.py`
+  - `docs/runtime/stages/recover-registry-hygiene.md`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 

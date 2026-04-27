@@ -6385,6 +6385,103 @@ def check_magic_number_rationale(trading_app_dir: Path) -> list[str]:
     return violations
 
 
+def check_stage_file_landed_drift() -> list[str]:
+    """ADVISORY: stage files claiming work-in-progress while git log shows landings.
+
+    Catches the "I thought we sorted this already" failure mode where a
+    stage file under docs/runtime/stages/ describes Stage N as in-progress,
+    but commits since the file's `updated:` date land Stage M (M > N) or
+    otherwise reference the stage's slug. Without this surface, /next and
+    /orient resume already-landed work, wasting cycles.
+
+    Heuristic — emits advisory, never blocks:
+      1. Skip files without YAML frontmatter, auto_trivial.md, or files
+         flagged operator-gated in body ("Status: implemented", "operator").
+      2. If `updated:` < 7 days old, skip (still fresh).
+      3. Count git commits since `updated:` whose messages reference the
+         stage's `slug:`. If >= 3, emit advisory line.
+
+    Why this rule exists: 2026-04-28 stage cleanup pass found 4 stage
+    files where 3 of 4 had landed work but were never closed; the 4th
+    was operator-gated (legitimate). User feedback: "harden and
+    future-proof as we go — i don't like wasting tokens for nothing."
+    This check makes the staleness visible in the routine drift surface
+    rather than re-discovering it manually each session.
+    """
+    issues: list[str] = []
+    stages_dir = PROJECT_ROOT / "docs" / "runtime" / "stages"
+    if not stages_dir.exists():
+        return issues
+
+    import datetime as _dt
+
+    today = _dt.date.today()
+    for stage_file in sorted(stages_dir.glob("*.md")):
+        if stage_file.name == "auto_trivial.md":
+            continue
+        try:
+            text = stage_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if not text.startswith("---"):
+            continue  # plain stage file (no frontmatter); skip
+        end = text.find("\n---", 3)
+        if end < 0:
+            continue
+        fm_text = text[3:end]
+        fm: dict[str, str] = {}
+        for raw in fm_text.splitlines():
+            if ":" in raw and not raw.lstrip().startswith("#"):
+                k, _, v = raw.partition(":")
+                fm[k.strip()] = v.strip().strip('"').strip("'")
+        slug = fm.get("slug", "").strip()
+        updated_str = fm.get("updated", "").strip()
+        if not slug or not updated_str:
+            continue
+        # Operator-gated exemption — body declares it's waiting on a person.
+        body_lower = text[end:].lower()
+        if (
+            "operator-gated" in body_lower
+            or "operator action" in body_lower
+            or "operator observation" in body_lower
+            or ("status:" in body_lower and "implemented" in body_lower and "pending" in body_lower)
+        ):
+            continue
+        try:
+            updated_date = _dt.date.fromisoformat(updated_str[:10])
+        except ValueError:
+            continue
+        age_days = (today - updated_date).days
+        if age_days < 7:
+            continue
+        # Commits since `updated:` mentioning this slug.
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "log",
+                    f"--since={updated_date.isoformat()}",
+                    "--all",
+                    "--oneline",
+                    f"--grep={slug}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=str(PROJECT_ROOT),
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            continue
+        commit_lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+        if len(commit_lines) >= 3:
+            issues.append(
+                f"  {stage_file.relative_to(PROJECT_ROOT).as_posix()}: "
+                f"updated {age_days}d ago, {len(commit_lines)} commits since "
+                f"reference slug '{slug}' — verify still active or close stage"
+            )
+    return issues
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -6816,6 +6913,12 @@ CHECKS = [
         "Magic-number rationale audit on trading_app/live/ (Carver Ch. 4)",
         lambda: check_magic_number_rationale(TRADING_APP_DIR),
         False,
+        False,
+    ),
+    (
+        "Stage-file staleness vs landed commits (advisory; prevents re-litigation)",
+        check_stage_file_landed_drift,
+        True,
         False,
     ),
 ]  # end CHECKS
