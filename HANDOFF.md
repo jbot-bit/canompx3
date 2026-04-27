@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 6a18980d — @docs(scratch-eod-mtm): Stage 0-4 — literature, failure log, drift guard, Criterion 13, spec
+- **Commit:** 43286a5f — docs(scratch-eod-mtm): Stage 0-4 — literature, failure log, drift guard, Criterion 13, spec
 - **Files changed:** 15 files
   - `.claude/rules/backtesting-methodology-failure-log.md`
   - `HANDOFF.md`

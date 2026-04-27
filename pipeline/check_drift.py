@@ -6385,6 +6385,47 @@ def check_magic_number_rationale(trading_app_dir: Path) -> list[str]:
     return violations
 
 
+def check_orb_outcomes_scratch_pnl(con=None) -> list[str]:
+    """Post Stage 5 fix: ≥99% of scratch rows must have non-NULL ``pnl_r``.
+
+    The canonical ``trading_app/outcome_builder.py`` fix (Stage 5 of
+    ``docs/runtime/stages/scratch-eod-mtm-canonical-fix.md``) populates
+    ``pnl_r`` / ``exit_ts`` / ``exit_price`` for ``outcome='scratch'``
+    rows from realized session-end close MTM. Pre-fix baseline was
+    0% of scratch rows populated. Post-fix target is ≥99% — the <1% gap
+    is the pathological no-post-bars edge case explicitly documented in
+    ``docs/specs/outcome_builder_scratch_eod_mtm.md``.
+
+    Pre-rebuild this check fires on stale data; it is registered as
+    advisory until Stage 5b rebuild completes.
+
+    @rule scratch-eod-mtm-canonical-fix
+    @stage stage-5b drift companion
+    """
+    if con is None:
+        return []  # SKIPPED message handled by caller via requires_db=True
+    try:
+        rows = con.execute("SELECT COUNT(*), COUNT(pnl_r) FROM orb_outcomes WHERE outcome = 'scratch'").fetchone()
+    except Exception as exc:
+        return [f"  query failed: {exc!r}"]
+    if rows is None:
+        return []
+    total = int(rows[0])
+    populated = int(rows[1])
+    if total == 0:
+        return []
+    pct_populated = 100.0 * populated / total
+    if pct_populated < 99.0:
+        return [
+            f"  scratch rows with non-NULL pnl_r: {populated}/{total} = "
+            f"{pct_populated:.2f}% (expected ≥ 99% post-Stage-5 fix; "
+            f"rebuild outcome_builder for affected instruments — see "
+            f"docs/specs/outcome_builder_scratch_eod_mtm.md and "
+            f".claude/rules/validation-workflow.md § Full Rebuild Chain)"
+        ]
+    return []
+
+
 def check_research_scratch_policy_annotation() -> list[str]:
     """Research scripts using ``pnl_r IS NOT NULL`` must annotate scratch policy.
 
@@ -6896,6 +6937,12 @@ CHECKS = [
         check_research_scratch_policy_annotation,
         True,  # advisory until Stage 6 of 2026-04-27 plan annotates the 131 pre-existing scripts
         False,
+    ),
+    (
+        "orb_outcomes scratch rows have non-NULL pnl_r post Stage-5 canonical fix",
+        check_orb_outcomes_scratch_pnl,
+        True,  # advisory until Stage 5b rebuild completes for all instruments
+        True,  # requires_db
     ),
 ]  # end CHECKS
 
