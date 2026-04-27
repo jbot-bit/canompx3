@@ -9,10 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 45b67617 — docs(handoffs): session resume note for sizing-substrate work + queued audits
-- **Files changed:** 2 files
+- **Commit:** 9a51a45d — chore(handoff): sync last-session header to 45b67617
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/handoffs/2026-04-27-sizing-substrate-session-resume.md`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
