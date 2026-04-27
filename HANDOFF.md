@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** df1cae8a — docs(plans): add implementation plan for sizing-substrate diagnostic
+- **Commit:** 4e9c268c — @ research(sizing): lock pre-reg YAML for sizing-substrate diagnostic (K=48)
 - **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/plans/2026-04-27-sizing-substrate-diagnostic-implementation-plan.md`
+  - `docs/audit/hypotheses/2026-04-27-sizing-substrate-prereg.yaml`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 

@@ -1,0 +1,366 @@
+# Hypothesis Registry — 2026-04-27 Sizing-Substrate Diagnostic (Stage 1)
+#
+# Locked: 2026-04-27T06:43+10:00
+# Author: Claude session (joshd)
+# Committing commit hash: <fill at commit time>
+# Origin: docs/plans/2026-04-27-sizing-substrate-diagnostic-design.md v0.2 (commit c0d18bca)
+#
+# Decision-authority: Stage-1 falsifier of the "convert binary filters into
+# continuous sizing" thesis. Diagnostic only — passing cells qualify a Stage-2
+# sizing-model pre-reg, they do not authorize live changes.
+
+metadata:
+  name: "sizing_substrate_diagnostic_stage1"
+  purpose: |
+    Test whether the 6 deployed lanes' binary filters have continuous
+    substrate that justifies a Carver-style forecast-scaling sizing layer.
+    Per design v0.2: K=48 cells (6 lanes x 8 features), BH-FDR q=0.05,
+    sized-vs-flat ExpR delta with 10k bootstrap CI seed=42, split-half
+    sign stability, ex-ante direction prediction, power floor N>=902,
+    NULL coverage <= 20%, forecast-stability gate.
+  date_locked: "2026-04-27T06:43+10:00"
+  commit_sha: "<fill at commit time>"
+  holdout_date: "2026-01-01"
+  testing_mode: "diagnostic_descriptive"  # Per pre_registered_criteria.md RULE 10 carve-out: descriptive diagnostics that do not write to validated_setups
+  research_question_type: "edge_elasticity"
+  total_expected_trials: 48
+  k_global: 48
+  bh_fdr_q: 0.05  # Pre-reg Criterion 3 Pathway A canonical
+  bootstrap_B: 10000
+  bootstrap_seed: 42
+  power_floor_N: 902  # for rho=0.10 at t>=3.00 (Harvey-Liu-Zhu with-theory)
+  null_coverage_max: 0.20
+  stability_sd_variation_max: 0.50
+  rho_min: 0.10
+  q5_minus_q1_min: 0.20
+
+# ---------------------------------------------------------------------------
+# Mechanism prior — locked BEFORE any data is examined
+# ---------------------------------------------------------------------------
+mechanism_priors:
+  carver_ch7_per_rule_scaling: |
+    Recipe (Appendix D, "Rescaling forecasts", p. 295):
+
+    IF YOU'RE GOING TO CREATE YOUR OWN TRADING RULES YOU NEED
+    to rescale them, so that the average absolute value of the forecast is around 10. To do
+    this you need to run a back-test of the trading strategy, although you only require forecast
+    values and you don't need to check performance. You should also average across as many
+    instruments as possible.
+    From the back-test you should measure the average absolute value of forecast values from
+    a back-test, or at least eyeball them to estimate the average absolute forecast. These values
+    should be roughly similar across instruments and long periods of time, otherwise your
+    trading rule could be badly specified and not properly volatility normalised.
+    Once you have the average absolute value then you should divide it into 10. The result is
+    the trading rule's forecast scalar. So for example if the average absolute value was 0.3 then
+    the scalar would be 10 � 0.3 = 33.33.
+
+    Target=10 statement (Ch.7, p. ~112):
+
+    My recommendation is to create forecasts which have an expected absolute value of 10.
+    So +10 is an average buy and -10 an average sell. A forecast of +5 would be a weak buy,
+    and -20 is a very strong sell.
+
+    Cap at +/-20 (Ch.7, p. ~113-114):
+
+    Forecasts should be capped at a maximum absolute
+    value and I recommend a limit of 20.
+    ...
+    Staunch systems traders shouldn't ignore forecasts that are outside of the range -20 to
+    +20, but cap them. A forecast of +25 from your trading rule should be reduced to +20.
+    Increase any forecast lower than -20 to that level. All your forecasts will then be in the
+    range -20 to +20.
+  carver_ch7_continuous_vs_binary: |
+    (Ch.7, p. ~111):
+
+    A forecast
+    shouldn't be binary � buy or sell � but should be scaled. Forecasts close to zero indicate
+    a small movement in prices and larger absolute values mean you expect bigger returns.
+
+    There are three reasons why scaled forecasts make sense. Firstly, if you were to examine
+    the returns made by a trading rule given the size of its forecasts, you'd normally find that
+    forecasts closer to zero aren't as profitable as those further away. Secondly, binary systems
+    cost more to trade, since to go from long to short you'd need to sell twice a full size
+    position immediately. Finally, the rest of the framework assumes that the forecasts you get
+    are not binary or lumpy in other ways.78 It's better to see forecasts changing continuously
+    rather than jumping around.
+  carver_ch7_fn78_stability: |
+    (Ch.7, footnote 78, p. ~111):
+
+    78. Technical notes: There are two main reasons for this. Firstly, forecasts should have well defined and
+    relatively stable standard deviations, otherwise the risk properties of the trading system will not be well
+    defined or stable. Secondly, as we'll see subsequently I recommend limiting absolute forecast values to twice
+    their average. Forecast distributions which are more extreme than Gaussian normal distributions will see an
+    undesirable level of forecast capping. Note that there is a special case where lumpy or even binary forecasts
+    will work just fine. If we have a large number of relatively uncorrelated binary forecasts then once combined
+    these will approach a desirable Gaussian normal.
+  carver_ch8_combined_multiplier: |
+    (Ch.8, "Getting to 10", p. 128-129):
+
+    Getting to 10
+
+    I recommended in chapter six that all your individual forecasts should have the same
+    expected variability � equivalent to an expected absolute value of 10. But unless your
+    trading rules are perfectly correlated it's likely that the combined forecast will end up
+    on a smaller scale. It's the same general effect you get from putting less than perfectly
+    correlated assets into any portfolio, where the overall portfolio will always end up with
+    lower risk than its constituents. The magnitude of the fall in standard deviation will
+    depend on the degree of diversification.
+
+    However the trading system framework will not work consistently if combined forecasts
+    have a low and unpredictable scaling. You need your combined forecasts to maintain the
+    same expected absolute value of 10 as you required for individual forecasts. To fix this the
+    combined forecast is multiplied by a forecast diversification multiplier.
+
+    Concept box (p. 129):
+
+    CONCEPT: DIVERSIFICATION MULTIPLIER
+
+    ... In the framework we are concerned with putting together volatility standardised
+    assets that have the same expected average standard deviation of returns; and to
+    do this we need forecasts to have the same average absolute value. To ensure this is
+    always the case you need to multiply the forecasts or positions you have to account
+    for portfolio diversification, so that your total portfolio also achieves the standard
+    volatility target.
+
+    This multiplication factor is the diversification multiplier.
+
+    Cap on multiplier (Ch.8, p. ~133):
+
+    To avoid this I advocate using a maximum diversification multiplier of 2.5, regardless of
+    [the calculated value].
+  ml4am_section1_fn7_sign_vs_size: |
+    (Lopez de Prado 2020, Machine Learning for Asset Managers, section 1.9 "Why Don't You Discuss a Wide Range of ML Algorithms?", p. ~22):
+
+    Compare an
+    algorithm that forecasted a change of 1, but received a realized change of 3,
+    with another algorithm that forecasted a change of -1, but received a realized
+    change of 1. In both cases, the forecast error is 2. In many industrial applica-
+    tions, we would be indifferent between both errors. That is not the case in
+    finance. In the first instance, an investor makes one-third of the predicted
+    profit, whereas in the second instance the investor suffers a loss equal to the
+    predicted profit. Failing to predict the size is an opportunity loss, but failing to
+    predict the sign is an actual loss. Investors penalize actual losses much more
+    than opportunity losses. Predicting the sign of an outcome is often more
+    important than predicting its size, and a reason for favoring classifiers over
+    regression methods in finance. In addition, it is common in finance to find that
+    the sign and size of an outcome depend on different features, so jointly
+    forecasting the sign and size of an outcome with a unique set of features can
+    lead to subpar results.7
+
+    Footnote 7 (p. 22):
+
+    7 See Lopez de Prado (2018a) for a discussion of meta-labeling algorithms, where the sign and size
+      decision is made by independent algorithms.
+
+    NOTE: AFML 2018a Ch.19 sigmoid bet-sizing recipe is NOT in resources/. Stage 2
+    must either acquire AFML or pre-register a Carver-only sizer.
+  bailey_selection_bias: |
+    Pseudo-mathematics — MinBTL "necessary, non-sufficient"
+
+    (Bailey, Borwein, Lopez de Prado, Zhu — "Pseudo-Mathematics and Financial Charlatanism", section 3 Minimum Backtest Length, p. ~8):
+
+    THEOREM 1: The Minimum Backtest Length (MinBTL, in years) needed to avoid
+    [selecting a skill-less strategy with an in-sample Sharpe ratio of 1 among N independent trials with an expected OOS Sharpe ratio of zero]
+    ...
+    Of course, a backtest may be overfit even if it is computed on a sample greater than
+    MinBTL. From that perspective, MinBTL should be considered a necessary, non-
+    sufficient condition to avoid overfitting.
+
+    Upper-bound rule of thumb (p. ~8):
+
+    ... the
+    reader may find helpful to remember the upper bound to the minimum backtest length (in
+    years), [MinBTL <= ln(N) / E[max SR]^2 approx form per Eq. (6)].
+
+    Deflated Sharpe — selection bias under multiple testing
+
+    (Bailey & Lopez de Prado, "The Deflated Sharpe Ratio: Correcting for Selection Bias, Backtest Overfitting and Non-Normality", Abstract, p. 2):
+
+    With the advent in recent years of large financial data sets, machine learning and high-
+    performance computing, analysts can backtest millions (if not billions) of alternative investment
+    strategies. Backtest optimizers search for combinations of parameters that maximize the
+    simulated historical performance of a strategy, leading to backtest overfitting.
+    The problem of performance inflation extends beyond backtesting. More generally, researchers
+    and investment managers tend to report only positive outcomes, a phenomenon known as
+    selection bias. Not controlling for the number of trials involved in a particular discovery leads to
+    over-optimistic performance expectations.
+    The Deflated Sharpe Ratio (DSR) corrects for two leading sources of performance inflation:
+    Selection bias under multiple testing and non-Normally distributed returns. In doing so, DSR
+    helps separate legitimate empirical findings from statistical flukes.
+
+    False-strategy — single test assumption
+
+    (Bailey & Lopez de Prado, "The False Strategy Theorem", section 2 "Selection Bias Under Multiple Testing", p. 1-2):
+
+    2. SELECTION BIAS UNDER MULTIPLE TESTING ... If a treatment
+    is dispensed to a thousand individuals, it is possible that a few patients improve their
+    condition out of luck. ... In statistics, this kind of
+    scientific fraud (intentional or unintentional) is known as selection bias under multiple
+    testing. ...
+
+       The standard hypothesis testing framework, first published in Neyman and Pearson
+    [9], was designed for single-trial tests. To correct for selection bias under multiple test-
+    ing, statisticians have developed two main approaches, known as familywise error rate
+    and false discovery rate. ...
+
+       In contrast, widely used econometrics textbooks, such as Greene [7] or Hamilton
+    [8], tend to ignore or downplay the challenges posed by selection bias under mul-
+    tiple testing. What's more, even at the present date most academic finance journals
+    do not require authors to declare the number of trials involved in a discovery, even
+    though the authors may well have performed an extensive computer search for optimal
+    parameters, effectively iterating over millions of possibilities. Journals operate under
+    the demonstrably false assumption that researchers have carried out a single test. The
+    sobering implication of this fact is that many discoveries in finance may be false, and
+    it may be very difficult to determine which are true.
+
+    NOTE: K=48 controls only this new diagnostic family; does NOT deflate prior
+    lane-discovery multiplicity (lanes are themselves survivors of an earlier,
+    larger trial space). Stage 2 must apply DSR with the cumulative trial count.
+  aronson_dropped_note: |
+    Aronson Ch.6 verified as "Data-Mining Bias", not quantization loss. Citation
+    dropped from design v0.2. Continuous-vs-binary doctrine grounded directly
+    in Carver Ch.7 quote above.
+
+# ---------------------------------------------------------------------------
+# Universe of cells — locked
+# ---------------------------------------------------------------------------
+lanes:
+  - id: "MNQ_EUROPE_FLOW_E2_O5_RR1.5_CB1_ORB_G5"
+    instrument: "MNQ"
+    orb_label: "EUROPE_FLOW"
+    orb_minutes: 5
+    rr_target: 1.5
+    confirm_bars: 1
+    entry_model: "E2"
+    deployed_filter: "ORB_G5"
+    deployed_filter_class: "OrbSizeFilter"
+    deployed_filter_class_line: 2980  # trading_app/config.py — verify in Task 2
+    binary_threshold: "min_size=5.0 (ORB size >= 5 points)"
+  - id: "MNQ_SINGAPORE_OPEN_E2_O15_RR1.5_CB1_ATR_P50"
+    instrument: "MNQ"
+    orb_label: "SINGAPORE_OPEN"
+    orb_minutes: 15
+    rr_target: 1.5
+    confirm_bars: 1
+    entry_model: "E2"
+    deployed_filter: "ATR_P50"
+    deployed_filter_class: "OwnATRPercentileFilter"
+    deployed_filter_class_line: 3072
+    binary_threshold: "median split on atr_20_pct"
+  - id: "MNQ_COMEX_SETTLE_E2_O5_RR1.5_CB1_ORB_G5"
+    instrument: "MNQ"
+    orb_label: "COMEX_SETTLE"
+    orb_minutes: 5
+    rr_target: 1.5
+    confirm_bars: 1
+    entry_model: "E2"
+    deployed_filter: "ORB_G5"
+    deployed_filter_class: "OrbSizeFilter"
+    deployed_filter_class_line: 2980
+    binary_threshold: "min_size=5.0"
+  - id: "MNQ_NYSE_OPEN_E2_O5_RR1.0_CB1_COST_LT12"
+    instrument: "MNQ"
+    orb_label: "NYSE_OPEN"
+    orb_minutes: 5
+    rr_target: 1.0
+    confirm_bars: 1
+    entry_model: "E2"
+    deployed_filter: "COST_LT12"
+    deployed_filter_class: "CostRatioFilter"
+    deployed_filter_class_line: 3274
+    binary_threshold: "cost_ratio < 0.12 R"
+  - id: "MNQ_TOKYO_OPEN_E2_O5_RR1.5_CB1_COST_LT12"
+    instrument: "MNQ"
+    orb_label: "TOKYO_OPEN"
+    orb_minutes: 5
+    rr_target: 1.5
+    confirm_bars: 1
+    entry_model: "E2"
+    deployed_filter: "COST_LT12"
+    deployed_filter_class: "CostRatioFilter"
+    deployed_filter_class_line: 3274
+    binary_threshold: "cost_ratio < 0.12 R"
+  - id: "MNQ_US_DATA_1000_E2_O15_RR1.5_CB1_ORB_G5"
+    instrument: "MNQ"
+    orb_label: "US_DATA_1000"
+    orb_minutes: 15
+    rr_target: 1.5
+    confirm_bars: 1
+    entry_model: "E2"
+    deployed_filter: "ORB_G5"
+    deployed_filter_class: "OrbSizeFilter"
+    deployed_filter_class_line: 2980
+    binary_threshold: "min_size=5.0"
+
+features:
+  tier_a:
+    # 3 functional forms per substrate, applied to each lane's deployed-filter substrate.
+    # Ex-ante direction is set per lane based on filter mechanism — see directions section.
+    - form_id: "raw"
+      description: "Raw substrate value at trade time (lane-relative)"
+    - form_id: "vol_norm"
+      description: "Substrate divided by atr_20_pct (vol-adjusted)"
+    - form_id: "rank_252d"
+      description: "Substrate as 252d rolling-percentile rank (regime-relative)"
+  tier_b:
+    # 5 orthogonal continuous features applied to all 6 lanes.
+    - feature_id: "rel_vol_session"
+      column_template: "rel_vol_{ORB_LABEL}"
+      ex_ante_direction: "+"  # Higher participation predicted to give cleaner break per-trade.
+    - feature_id: "overnight_range_pct"
+      column: "overnight_range_pct"
+      ex_ante_direction: "+"  # Wider overnight range predicted to prefigure bigger trend day.
+    - feature_id: "atr_vel_ratio"
+      column: "atr_vel_ratio"
+      ex_ante_direction: "+"  # Rising-vol regime predicted to favour breakout follow-through.
+    - feature_id: "garch_forecast_vol_pct"
+      column: "garch_forecast_vol_pct"
+      ex_ante_direction: "+"  # Forecast-vol elevated days predicted to have larger realized R.
+    - feature_id: "pit_range_atr"
+      column: "pit_range_atr"
+      ex_ante_direction: "+"  # Wider pit range predicted to indicate already-active price discovery.
+
+ex_ante_directions_tier_a:
+  # Per (lane, substrate-form) — set BEFORE running, locked at YAML commit
+  ORB_G5_raw: "+"            # Bigger ORB predicted to signal stronger trend day (Crabel "compression-then-expansion" — bigger expansion -> bigger follow-through)
+  ORB_G5_vol_norm: "+"
+  ORB_G5_rank_252d: "+"
+  ATR_P50_raw: "+"           # Higher ATR predicted to give bigger R per trade (Carver scale-with-volatility)
+  ATR_P50_vol_norm: "+"
+  ATR_P50_rank_252d: "+"
+  COST_LT12_raw: "-"         # HIGHER cost_ratio predicted to REDUCE realized R (cost is a drag); inverse direction
+  COST_LT12_vol_norm: "-"
+  COST_LT12_rank_252d: "-"
+
+# ---------------------------------------------------------------------------
+# Decision rule (binding once committed)
+# ---------------------------------------------------------------------------
+decision_rule:
+  cell_pass_requires_all:
+    - "not INVALID (NULL coverage > 20%)"
+    - "not UNDERPOWERED (N < 902 after NULL drop)"
+    - "|spearman_rho| >= 0.10"
+    - "monotonic Q1->Q5 AND |Q5_mean_R - Q1_mean_R| >= 0.20"
+    - "sized-vs-flat ExpR delta 95% bootstrap CI strictly positive"
+    - "two-sided p-value survives BH-FDR at q=0.05 over K=48"
+    - "split-half: sign of rho matches both halves AND sign of sized-flat delta matches both halves"
+    - "realized rho sign matches ex-ante prediction (prediction-flipped cells barred from Stage 2)"
+  lane_has_substrate_iff: ">=1 of its 8 cells passes"
+  substrate_confirmed_globally_iff: ">=3 of 6 lanes have substrate"
+  substrate_weak_iff: "1-2 lanes have substrate (park, no Stage 2)"
+  thesis_killed_iff: "0 lanes have substrate (NO-GO entry; reopen requires new mechanism citation)"
+  diagnostic_inconclusive_iff: ">=50% INVALID+UNDERPOWERED in any tier (does NOT confirm H0)"
+
+# ---------------------------------------------------------------------------
+# Boundary discipline
+# ---------------------------------------------------------------------------
+boundary:
+  read_only: true
+  raises_on_holdout_row: true   # script raises RuntimeError if any row has trading_day >= 2026-01-01
+  single_pass: true             # no rerunning with different feature lists or thresholds
+  reopen_requires_new_mechanism: true
+  output_artifact_md: "docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md"
+  output_artifact_json: "docs/audit/results/2026-04-27-sizing-substrate-diagnostic.json"
+  no_writes_to_validated_setups: true
+  no_writes_to_experimental_strategies: true
+  no_writes_to_lane_allocation: true
