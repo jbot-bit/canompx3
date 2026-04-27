@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 9f8a1873 — fix(sizing): SQL DATE-param + cost_ratio_pct formula in diagnostic
+- **Commit:** 9d63ea4c — fix(sizing): enforce overnight_* lookahead validity gate per RULE 1.2
 - **Files changed:** 2 files
   - `HANDOFF.md`
   - `research/audit_sizing_substrate_diagnostic.py`
