@@ -6,15 +6,70 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session
+## Last Session (2026-04-28 — edge-extraction phased plan A→B)
+
 - **Tool:** Claude Code
 - **Date:** 2026-04-28
-- **Commit:** 2a6a2293 — research(scratch-eod-mtm): Stage 8 MFE-distribution endogenous-RR v1 — KILL
-- **Files changed:** 4 files
-  - `HANDOFF.md`
-  - `docs/audit/hypotheses/2026-04-27-mnq-mfe-distribution-endogenous-rr-v1.yaml`
-  - `docs/audit/results/2026-04-27-mnq-mfe-distribution-endogenous-rr-v1.md`
-  - `research/mnq_mfe_distribution_endogenous_rr_v1.py`
+- **Pickup point:** Phase B done, awaiting your go for Phase D (Pathway B K=1 pre-regs)
+
+### Decision gate at session-end
+
+Phase B (verification) returned **4 of 4 candidates as PATHWAY_B_ELIGIBLE** — they fail Pathway A discovery DSR (K_family=1850-2700) but pass Pathway B K=1 DSR with theory-citation per Phase 0 Amendment 3.0. All 4 are mechanism-grounded (Chan Ch7 + Fitschen Ch3 for ovn_range_pct_GT80; Carver Ch9-10 for garch_vol_pct_GT70). C8 dir-match and C6 WFE are UNVERIFIED for all 4 (N_OOS = 9-17, below the 50 power floor) — this is the legitimate Phase 0 verdict, not failure.
+
+**Decision needed:** approve Phase D (write Pathway B K=1 pre-regs for D1-D4) or redirect.
+
+### Plan progress (full plan: `docs/plans/2026-04-28-edge-extraction-phased-plan.md`)
+
+- ✅ **Phase A** — Contamination sweep (commit `96bba7a7`)
+  - E2 break-bar look-ahead fix in `research/comprehensive_deployed_lane_scan.py`
+  - Mode A revalidation of all 59 active validated_setups
+  - 18-script E2 LA contamination registry written
+  - PR #48 "monotonic-up universal" memory entry flagged TAINTED
+  - RULE 16 added to backtesting-methodology-failure-log
+- ✅ **Phase B** — Per-candidate verification (this session)
+  - DSR Eq.2 + Eq.9 effective-N per cell (Pathway A FAIL, Pathway B PASS)
+  - Per-year era stability per cell (all 4 PASS C9)
+  - Lane-correlation matrix vs deployed 6 lanes (all |corr| ≤ 0.36, additive)
+  - Result: `docs/audit/results/2026-04-28-phase-b-candidate-evidence.md`
+- ⏸ **Phase C** — Instrument-family discipline (pending — autonomous)
+- ⏸ **Phase D** — Pathway B K=1 pre-regs (REQUIRES YOUR GO)
+- ⏸ **Phase E** — Capital integration (REQUIRES YOUR GO + capital-review skill)
+- ⏸ **Phase F** — Adjacent edge hunts (deferred until D returns)
+
+### Phase B candidates (all PATHWAY_B_ELIGIBLE)
+
+| ID | Cell | N_IS | ExpR_IS | SR_ann | DSR_PB | Mechanism |
+|---|---|---|---|---|---|---|
+| B-MES-EUR | MES EUROPE_FLOW O15 RR1.0 long + ovn_range_pct_GT80 | 186 | +0.143 | 0.89 | 0.985 | Chan Ch7 + Fitschen Ch3 |
+| B-MES-LON | MES LONDON_METALS O30 RR2.0 long + ovn_range_pct_GT80 | 183 | +0.242 | 0.94 | 0.993 | Chan Ch7 + Fitschen Ch3 |
+| B-MNQ-NYC | MNQ NYSE_CLOSE O5 RR1.0 long + ovn_range_pct_GT80 | 160 | +0.219 | 1.53 | 0.999 | Chan Ch7 + Fitschen Ch3 |
+| B-MNQ-COX | MNQ COMEX_SETTLE O5 RR1.0 long + garch_vol_pct_GT70 | 199 | +0.245 | 1.69 | 0.999 | Carver Ch9-10 |
+
+### KILLED in this session
+
+- 3 prior-scan "candidates" using `rel_vol_HIGH_Q3` (E2 break-bar look-ahead, 40-43% post-entry data verified)
+- 11 prior-scan OOS-flipped survivors (the OOS flips were the look-ahead artifact's signature; 0 flips on clean scan)
+- `dow_thu` / `is_monday` / `is_friday` survivors (no mechanism per Aronson EBTA Ch6)
+- PR #48 "monotonic-up universal" TAINTED (rel_vol regression on E2 = post-entry data)
+
+### Files added/changed this session
+
+- `research/phase_b_candidate_evidence_v1.py` (new — Phase B evidence script)
+- `docs/audit/results/2026-04-28-phase-b-candidate-evidence.md` (new — verdict per candidate)
+- `HANDOFF.md` (this update)
+- Memory: `MEMORY.md` flag for PR #48 + registry pointer
+
+### How to pick up
+
+1. Read `docs/plans/2026-04-28-edge-extraction-phased-plan.md` (master plan)
+2. Read `docs/audit/results/2026-04-28-phase-b-candidate-evidence.md` (Phase B verdict)
+3. User decision: approve Phase D pre-reg writing for B-MES-EUR (highest EV) or redirect
+4. If approved: write `docs/audit/hypotheses/2026-04-28-mes-europe-flow-ovn-range-pathway-b-v1.yaml` per `docs/prompts/prereg-writer-prompt.md`
+5. Phase C (instrument-family discipline) can run in parallel — autonomous, no capital touched
+
+### Prior commit context (earlier today)
+
+- **Commit:** 96bba7a7 — research(phase-a): contamination sweep + scan hardening + phased plan
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
