@@ -168,7 +168,7 @@ def load_lane_tape(con: duckdb.DuckDBPyConnection, lane: dict, holdout: str) -> 
       AND o.confirm_bars = ?
       AND o.entry_model = ?
       AND o.pnl_r IS NOT NULL
-      AND o.trading_day < DATE ?
+      AND o.trading_day < CAST(? AS DATE)
     ORDER BY o.trading_day
     """
     df = con.execute(q, [
@@ -212,14 +212,16 @@ def derive_features(df: pd.DataFrame, lane: dict) -> pd.DataFrame:
     # Tier-A vol-normalized + rank forms (ATR_P50 substrate is already atr_20_pct, no vol-norm needed)
     if lane["deployed_filter"] == "ATR_P50":
         out["atr_20_pct__rank252"] = out["atr_20_pct"].rolling(252, min_periods=63).rank(pct=True)
-    # Tier-A COST_LT12 substrate — cost ratio per trade
+    # Tier-A COST_LT12 substrate — cost_ratio_pct per trade.
+    # Canonical formula from trading_app/config.py:593 CostRatioFilter.matches_row:
+    #   raw_risk = orb_size * cost_spec.point_value
+    #   cost_ratio_pct = 100 * total_friction / (raw_risk + total_friction)
     if lane["deployed_filter"] == "COST_LT12":
-        from pipeline.cost_model import get_session_cost_spec
-        cs = get_session_cost_spec(lane["instrument"], lane["orb_label"])
-        cost_pts = cs.total_cost_points
-        # Cost ratio: cost in points divided by per-trade ORB-distance in points (proxy for R distance)
-        avg_orb_pts_col = f"orb_{sess}_size"
-        out["_cost_ratio"] = cost_pts / out[avg_orb_pts_col].replace(0, np.nan)
+        from pipeline.cost_model import get_cost_spec
+        cs = get_cost_spec(lane["instrument"])
+        size_col = f"orb_{sess}_size"
+        raw_risk = out[size_col] * cs.point_value
+        out["_cost_ratio"] = 100.0 * cs.total_friction / (raw_risk + cs.total_friction)
         out["_cost_ratio__div__atr_20_pct"] = out["_cost_ratio"] / out["atr_20_pct"].replace(0, np.nan)
         out["_cost_ratio__rank252"] = out["_cost_ratio"].rolling(252, min_periods=63).rank(pct=True)
     return out

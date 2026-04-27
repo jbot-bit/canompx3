@@ -9,11 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** d812d5cf — research(sizing): pure-function gates + tests for sizing-substrate diagnostic
-- **Files changed:** 3 files
+- **Commit:** e7ad48cb — research(sizing): SQL loader + main runner for sizing-substrate diagnostic
+- **Files changed:** 2 files
   - `HANDOFF.md`
   - `research/audit_sizing_substrate_diagnostic.py`
-  - `tests/test_research/test_audit_sizing_substrate_diagnostic.py`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
