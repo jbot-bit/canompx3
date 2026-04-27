@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** 57f72f33 — research(sizing): lock pre-reg YAML for sizing-substrate diagnostic (K=48)
+- **Commit:** 1bcd65b7 — research(sizing): record pre-reg commit_sha
 - **Files changed:** 2 files
   - `HANDOFF.md`
   - `docs/audit/hypotheses/2026-04-27-sizing-substrate-prereg.yaml`
