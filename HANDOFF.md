@@ -9,10 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-27
-- **Commit:** aadf7fef — docs(audit): corrigendum on F8/F9 (gitignored, not version-controlled); record C4+C5 landed
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `docs/audit/claude-system-refactor-2026-04-27.md`
+- **Commit:** 6e18dde3 — feat(profiles): NQ-mini execution-layer Stage 1 — AccountProfile symbol-substitution contract
+- **Files changed:** 3 files
+  - `docs/runtime/stages/nq-mini-execution-stage1-account-profile.md`
+  - `tests/test_trading_app/test_prop_profiles.py`
+  - `trading_app/prop_profiles.py`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 

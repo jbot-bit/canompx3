@@ -34,8 +34,19 @@ SAFE_JOIN = """
         AND o.orb_minutes = d.orb_minutes
 """
 
-# Sessions ordered by time-of-day (Brisbane time)
-ALL_SESSIONS = ["0900", "1000", "1100", "1130", "1800", "2300", "0030"]
+# Sessions ordered by time-of-day (Brisbane time).
+# NOTE: the numeric "0900"-style labels were retired when SESSION_CATALOG became
+# canonical. Pull active labels from SESSION_CATALOG so this stays in sync with
+# pipeline/dst.py rather than drifting with hardcoded values.
+def _active_session_labels() -> list[str]:
+    # SESSION_CATALOG is insertion-ordered by Brisbane time-of-day in pipeline/dst.py;
+    # preserve that ordering by reading keys directly.
+    from pipeline.dst import SESSION_CATALOG
+
+    return list(SESSION_CATALOG.keys())
+
+
+ALL_SESSIONS = _active_session_labels()
 
 # Which sessions happen before each session (for cross-session predictors)
 EARLIER_SESSIONS = {
@@ -422,8 +433,16 @@ def scan_session(con, instrument, session, entry_model="E1", rr=2.0, cb=2, size_
     }
 
 
-def run_discovery(instrument, sessions=None, entry_model="E1", rr=2.0, cb=2, size_min=4.0, output_json=False):
-    """Run discovery across one or more sessions."""
+def run_discovery(
+    instrument, sessions=None, entry_model="E1", rr=2.0, cb=2, size_min=4.0, output_json=False, out_path=None
+):
+    """Run discovery across one or more sessions.
+
+    If `out_path` is set, writes the full JSON result to that file and prints a
+    1-line-per-cell summary to stdout (token-light; suitable for piping into
+    automated triage). `output_json` (legacy) dumps the full JSON to stdout.
+    Default: full text-block per cell.
+    """
     if sessions is None:
         sessions = ALL_SESSIONS
 
@@ -433,6 +452,25 @@ def run_discovery(instrument, sessions=None, entry_model="E1", rr=2.0, cb=2, siz
     for session in sessions:
         scan = scan_session(con, instrument, session, entry_model, rr, cb, size_min)
         all_scans.append(scan)
+
+        if out_path:
+            # 1-line summary mode — top BH-significant survivor per cell, or "—" when none.
+            if scan.get("skipped"):
+                print(f"{instrument:<4} {session:<6} SKIP {scan.get('reason','')}")
+                continue
+            if scan.get("error"):
+                print(f"{instrument:<4} {session:<6} ERR  {scan['error']}")
+                continue
+            top = next((r for r in scan["results"] if r.get("bh_significant")), None)
+            top_str = (
+                f"{top['name']} delta={top['delta']:+.4f} p={top['p']:.4f}" if top else "(none)"
+            )
+            print(
+                f"{instrument:<4} {session:<6} {entry_model} RR{rr:<3} CB{cb} G{int(size_min)}+ "
+                f"N={scan['n_filtered']:>4} base={scan['baseline_expr']:+.4f} "
+                f"BH={scan['n_bh_significant']:>2}/{scan['n_tests']:<2} top: {top_str}"
+            )
+            continue
 
         if not output_json:
             if scan.get("skipped"):
@@ -465,6 +503,11 @@ def run_discovery(instrument, sessions=None, entry_model="E1", rr=2.0, cb=2, siz
 
     con.close()
 
+    if out_path:
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(out_path).write_text(json.dumps(all_scans, indent=2, default=str))
+        print(f"\n-> wrote {len(all_scans)} cell scans to {out_path}")
+
     if output_json:
         print(json.dumps(all_scans, indent=2, default=str))
 
@@ -480,7 +523,12 @@ def main():
     parser.add_argument("--rr", type=float, default=2.0, help="RR target (default: 2.0)")
     parser.add_argument("--cb", type=int, default=2, help="Confirm bars (default: 2)")
     parser.add_argument("--size-min", type=float, default=4.0, help="Min ORB size filter (default: 4.0)")
-    parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument("--json", action="store_true", help="Output full JSON to stdout")
+    parser.add_argument(
+        "--out",
+        default=None,
+        help="Path to write full JSON result; stdout becomes a 1-line-per-cell summary",
+    )
     args = parser.parse_args()
 
     sessions = None
@@ -497,6 +545,7 @@ def main():
         cb=args.cb,
         size_min=args.size_min,
         output_json=args.json,
+        out_path=args.out,
     )
 
 
