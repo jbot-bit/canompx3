@@ -24,7 +24,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from scripts.tools.project_pulse import PulseReport, build_pulse  # noqa: E402
 
-
 MAX_STAGE_LINES = 3
 
 
