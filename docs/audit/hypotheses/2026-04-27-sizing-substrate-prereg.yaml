@@ -2,7 +2,7 @@
 #
 # Locked: 2026-04-27T06:43+10:00
 # Author: Claude session (joshd)
-# Committing commit hash: <fill at commit time>
+# Committing commit hash: 57f72f337ce69b8a7b4efde606f2c21509381677
 # Origin: docs/plans/2026-04-27-sizing-substrate-diagnostic-design.md v0.2 (commit c0d18bca)
 #
 # Decision-authority: Stage-1 falsifier of the "convert binary filters into
@@ -19,7 +19,7 @@ metadata:
     sign stability, ex-ante direction prediction, power floor N>=902,
     NULL coverage <= 20%, forecast-stability gate.
   date_locked: "2026-04-27T06:43+10:00"
-  commit_sha: "<fill at commit time>"
+  commit_sha: "57f72f337ce69b8a7b4efde606f2c21509381677"
   holdout_date: "2026-01-01"
   testing_mode: "diagnostic_descriptive"  # Per pre_registered_criteria.md RULE 10 carve-out: descriptive diagnostics that do not write to validated_setups
   research_question_type: "edge_elasticity"
