@@ -1,12 +1,12 @@
 ---
 slug: scratch-eod-mtm-canonical-fix
-classification: IMPLEMENTATION
-mode: IMPLEMENTATION
-stage: 2
+classification: COMPLETE
+mode: COMPLETE
+stage: 8
 of: 8
 created: 2026-04-27
-updated: 2026-04-27
-task: Canonical scratch-EOD-MTM fix for outcome_builder.py + downstream re-verification + MFE-distribution endogenous-RR research. 8-stage plan. Stage 0-1 complete (literature, failure log, CORRECTION result). Currently Stage 2 — drift-check guard.
+updated: 2026-04-28
+task: Canonical scratch-EOD-MTM fix for outcome_builder.py + downstream re-verification + MFE-distribution endogenous-RR research. 8-stage plan. ALL STAGES COMPLETE. Stage 8 result: KILL (0/7 cells pass Chordia threshold; descriptive IS-optimal RR=4.0 on 6/7 cells is below t>=3.0; OOS mixed, consistent with noise). Honest negative result. No deployment.
 ---
 
 # Multi-stage canonical scratch-handling fix
@@ -18,14 +18,14 @@ Class bug discovered 2026-04-27: `trading_app/outcome_builder.py:586-594, :612-6
 Stage progression:
 - Stage 0: Literature extraction (3 new files in `docs/institutional/literature/`) — DONE
 - Stage 1: Failure log + memory + CORRECTION result file + hypothesis YAML correction_notice — DONE
-- Stage 2: Drift-check guard `check_research_scratch_policy_annotation` — IN PROGRESS
-- Stage 3: Pre-registered Criterion 13 + mechanism_priors cross-ref + prereg-writer prompt update
-- Stage 4: DESIGN ONLY spec at `docs/specs/outcome_builder_scratch_eod_mtm.md` (USER REVIEW GATE)
-- Stage 5: `outcome_builder.py` 4-site fix + 4 unit tests + companion drift check `check_orb_outcomes_scratch_pnl`
-- Stage 5b: orb_outcomes rebuild for MNQ/MES/MGC × {5,15,30}m (DESTRUCTIVE-SHARED — USER REVIEW GATE)
-- Stage 6: Downstream re-verification (USER REVIEW GATE if any DEPLOYED lane flips to DECAY)
-- Stage 7: paper_trades parity audit
-- Stage 8: MFE-distribution endogenous-RR research
+- Stage 2: Drift-check guard `check_research_scratch_policy_annotation` — DONE (commit 43286a5f)
+- Stage 3: Pre-registered Criterion 13 + mechanism_priors cross-ref + prereg-writer prompt update — DONE (commit 43286a5f)
+- Stage 4: DESIGN ONLY spec at `docs/specs/outcome_builder_scratch_eod_mtm.md` — DONE (commit 43286a5f)
+- Stage 5: `outcome_builder.py` 4-site fix + 5 unit tests + companion drift check `check_orb_outcomes_scratch_pnl` — DONE (commit 43286a5f, 36 tests pass)
+- Stage 5b: orb_outcomes rebuild for MNQ/MES/MGC × {5,15,30}m (DESTRUCTIVE-SHARED — USER REVIEW GATE) — DONE (2026-04-28, 9 combos, all ≥99% scratch populated)
+- Stage 6: Downstream re-verification (USER REVIEW GATE if any DEPLOYED lane flips to DECAY) — DONE (2026-04-28, no DECAY, 6/6 lanes positive, 20/144 high-RR sign-flips → Stage 8)
+- Stage 7: paper_trades parity audit — DONE (commit ecfeb33c, deployed-lane scratch population 100%)
+- Stage 8: MFE-distribution endogenous-RR research — DONE (commit 2a6a2293, KILL — 0/7 cells pass Chordia t≥3.0)
 
 ## scope_lock
 
