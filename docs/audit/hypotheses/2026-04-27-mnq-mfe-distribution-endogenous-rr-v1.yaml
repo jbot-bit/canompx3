@@ -1,0 +1,185 @@
+version: 1
+status: LOCKED
+date: 2026-04-28
+slug: mnq-mfe-distribution-endogenous-rr-v1
+title: "MNQ endogenous-RR via IS-grid optimization on realized-EOD-MTM data — v1"
+owner: claude
+parent_spec: "docs/runtime/stages/scratch-eod-mtm-canonical-fix.md (Stage 8)"
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/audit/results/2026-04-27-canonical-scratch-fix-downstream-impact.md"
+  notes:
+    - "Stage 5 fix landed (commit 68ee35f8) — orb_outcomes.pnl_r now reflects realized-EOD MTM for scratches per Criterion 13. The v1 high-RR scan's KILL verdicts at RR>=2.0 on 4 sessions sign-flipped under realized-EOD; this scan tests whether per-lane optimal RR beats fixed RR=1.5."
+    - "Mode A strict: IS = trading_day < 2026-01-01; OOS read-only descriptive."
+    - "Direction pooled per the v1 parent convention."
+
+scratch_policy:
+  policy: realized-eod
+  justification: >
+    Live execution path forces flat at session end (TopStep prop-firm + futures EOD).
+    Backtest must book the same value per Chan 2013 Ch 1 unified-program doctrine.
+    Sample-selection bias from drop policy quantified at 10-45% ExpR inflation
+    on MNQ E2 confirm_bars=1 — see bailey_lopezdeprado_2014_dsr_sample_selection.md +
+    docs/audit/results/2026-04-27-mnq-unfiltered-high-rr-family-v1-CORRECTION.md.
+    Stage 5 fix in trading_app/outcome_builder.py landed 2026-04-27 (commit 68ee35f8);
+    orb_outcomes rebuilt for MNQ x {5,15,30}m on 2026-04-28.
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+scope:
+  instrument: MNQ
+  apertures: [5, 15]
+  rr_targets_grid: [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
+  entry_model: E2
+  confirm_bars: 1
+  baseline_filter: none
+  directions: pooled
+  sessions:
+    - NYSE_OPEN       # sign-flipped at RR>=2.5 in v1 corrected scan
+    - US_DATA_1000    # sign-flipped at RR>=2.5
+    - CME_PRECLOSE    # sign-flipped at RR>=2.0
+    - COMEX_SETTLE    # sign-flipped at RR=4.0
+  cell_axes_count: "1 instrument x 4 sessions x 2 apertures = 8 cells"
+  rr_grid_per_cell: 6
+  total_grid_evaluations: 48
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only; descriptive only; no threshold tuning"
+  tuning_against_oos: false
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  parent_audits:
+    - "v1 high-RR family scan (docs/audit/results/2026-04-27-mnq-unfiltered-high-rr-family-v1.md) — 144 cells, 5 CANDIDATE_READY at RR<=1.5, 135 KILL_IS"
+    - "Corrected scan (docs/audit/results/2026-04-27-mnq-unfiltered-high-rr-family-v1-CORRECTION.md) under scratch-as-0R — 0/144 sign flips claimed"
+    - "Stage 6 downstream impact (docs/audit/results/2026-04-27-canonical-scratch-fix-downstream-impact.md) — 20/144 sign flips found under realized-EOD. The 4 selected sessions are those with sign-flips."
+
+mechanism_grounding:
+  literature_extracts:
+    - "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md (Ch 9-10) — RR target as a function of forecast strength per Carver framework. Higher signal strength warrants larger profit target relative to risk."
+    - "docs/institutional/literature/carver_2015_ch12_speed_and_size.md — cost realism; backtest must price every round trip"
+    - "docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md — selection bias as first-class inflation source"
+  mechanism_claim: >
+    For an E2 confirmed-break entry, the conditional MFE distribution given
+    entry has positive mass beyond fixed RR=1.5 — the corrected scan empirically
+    shows scratch_mean_R = +1 on MNQ NYSE_OPEN 15m RR=4.0, evidence that markets
+    continue past 1.5R after confirmed break with non-trivial probability.
+    Per Carver Ch 9-10, the optimal RR is a function of signal strength;
+    if signal strength varies by session, optimal RR should too.
+  mechanism_status: PROVISIONAL_HYPOTHESIS
+  pre_test_acknowledgement: >
+    The mechanism is plausible but not yet verified. This pre-reg's role is to
+    test whether IS evidence supports per-session RR variation; OOS evidence
+    will inform but not gate (Mode A discipline).
+
+hypotheses:
+  - id: H1
+    type: primary
+    theory_citation: "carver_2015_volatility_targeting_position_sizing.md (Ch 9-10) + bailey_lopezdeprado_2014_dsr_sample_selection.md"
+    statement: >
+      For each cell (instrument, session, aperture), the IS-grid-optimal RR
+      target produces a measurably higher IS ExpR than the deployed-default
+      RR=1.5. Specifically, exists r* in {1.0, 1.5, 2.0, 2.5, 3.0, 4.0}
+      such that ExpR(r*) - ExpR(1.5) > 0 with t-stat passing BH-FDR at K=8.
+    pass_metric:
+      metric: per-cell paired t-stat on (pnl_r at optimal RR) - (pnl_r at RR=1.5)
+      formula: t = mean(diff_i) / (std(diff_i) / sqrt(N))
+      threshold_gte: 3.0  # Chordia with theory
+      bh_fdr_q: 0.05
+      bh_fdr_k: 8
+    counted_against_trial_budget: true
+
+  - id: H2
+    type: secondary_descriptive_only
+    statement: >
+      The IS-optimal RR per cell is consistent with the corrected v1 scan's
+      sign-flip pattern: cells whose corrected ExpR is positive at RR>=2.0
+      should have IS-optimal RR > 1.5.
+    pass_metric:
+      metric: descriptive — count of cells where optimal_RR > 1.5
+      formula: count(cells where argmax_r ExpR(r) > 1.5)
+      threshold_gte: 0  # descriptive
+    counted_against_trial_budget: false
+
+baseline:
+  rr_target: 1.5
+  rationale: "Deployed default for 5/6 lanes in topstep_50k_mnq_auto. NYSE_OPEN deployed at RR=1.0; this scan's NYSE_OPEN cell uses 1.5 baseline for consistency across sessions."
+
+trial_budget:
+  primary_selection_trials: 8
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2*ln(N_trials) / E[max_N]^2"
+    n_trials: 8
+    e_max_n_squared_estimate: 9.0  # Bailey 2013 conservative for E[max sharpe]^2 ~ 3 over 7-yr clean MNQ
+    bound_years: 0.46
+    available_years: 7.0
+    within_cap: true
+    cap_reference: "Bailey et al 2013 MinBTL via bailey_et_al_2013_pseudo_mathematics.md"
+
+kill_criteria:
+  - id: K1
+    metric: "0 of 8 cells pass H1 BH-FDR"
+    threshold: "all_cells_fail"
+    action: KILL — endogenous-RR hypothesis refuted on the 4 sign-flipped sessions; do not extend to MES/MGC.
+  - id: K2
+    metric: "Optimal RR for any cell == RR=1.5"
+    threshold: "any_cell_equals_baseline"
+    action: NO_PROMOTION_FOR_THAT_CELL — endogenous RR same as baseline; baseline retained.
+
+decision_rule:
+  continue_if: ">= 3 of 8 cells pass H1 BH-FDR"
+  park_if: "1-2 of 8 cells pass — preliminary; queue Pathway B K=1 verification under separate pre-reg"
+  kill_if: "0 of 8 cells pass"
+
+methodology_rules_applied:
+  - rule: backtesting-methodology RULE 1 (feature temporal alignment)
+    application: "RR is a target distance set at entry time. No look-ahead."
+  - rule: backtesting-methodology RULE 3 (IS/OOS discipline)
+    application: "IS only for selection. OOS reported descriptively per Mode A."
+  - rule: backtesting-methodology RULE 4 (BH FDR)
+    application: "K_family = 8 (per cell). BH-FDR at q=0.05."
+  - rule: backtesting-methodology RULE 5 (comprehensive scope)
+    application: "Within-scope: 4 sessions x 2 apertures = 8. Narrowed scope justified: only sign-flipped sessions tested per upstream provenance."
+  - rule: backtesting-methodology RULE 11 (audit trail)
+    application: "Result MD at docs/audit/results/2026-04-27-mnq-mfe-distribution-endogenous-rr-v1.md. Runner at research/mnq_mfe_distribution_endogenous_rr_v1.py."
+  - rule: pre_registered_criteria.md Criterion 13 (scratch policy)
+    application: "scratch_policy: realized-eod (declared above)."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-04-27-mnq-mfe-distribution-endogenous-rr-v1.md"
+  - "per-cell table: session, aperture, ExpR per RR, optimal RR, IS t-stat vs RR=1.5, BH-FDR q, OOS ExpR (descriptive)"
+  - "if any cell passes H1: explicit follow-on routing — Pathway B K=1 confirmatory pre-reg per Amendment 3.0"
+
+execution_gate:
+  allowed_now: true
+  forbidden_now:
+    - "any threshold change after a result is read"
+    - "any RR/aperture/session axis expansion mid-run"
+    - "any sizing or allocator wiring on a survivor without a separate pre-reg"
+    - "writes to validated_setups / edge_families / lane_allocation / live_config"
+    - "extension to MES/MGC without independent pre-reg"
+
+not_done_by_this_pre_reg:
+  - "Does NOT vol-adaptive RR (per-trade RR conditional on garch_atr_ratio) — separate Stage-2 pre-reg."
+  - "Does NOT test continuous percentile cuts on MFE distribution — discretized 6-RR grid only."
+  - "Does NOT test MES or MGC — separate parallel pre-regs."
+  - "Does NOT promote any cell to deployment — promotion requires Pathway B K=1 pre-reg per Amendment 3.0."
+  - "Does NOT modify deployed lane RRs — observation only."

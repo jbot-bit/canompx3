@@ -227,6 +227,23 @@ Priors don't validate; testing does.
 
 ---
 
+## 11.5 Scratch handling (added 2026-04-27)
+
+**Default policy: `realized-eod`** (after Stage 5 fix to `trading_app/outcome_builder.py` lands; see plan in `docs/runtime/stages/scratch-eod-mtm-canonical-fix.md`).
+
+A "scratch" outcome is a simulated trade where neither stop nor target hits by trading-day-end. The live execution path (TopStep prop-firm session-end flat rule, AMP/EdgeClear futures EOD close, exchange close) realizes a P&L at the session boundary. The backtest must book the same value to satisfy:
+- Backtest cost realism (`literature/carver_2015_ch12_speed_and_size.md`).
+- Sample-selection-bias guard (`literature/bailey_lopezdeprado_2014_dsr_sample_selection.md`).
+- Unified backtest/live program doctrine (`literature/chan_2013_ch1_backtesting_lookahead.md`).
+
+Empirical magnitude: dropping scratches via `WHERE pnl_r IS NOT NULL` inflates measured ExpR by 10–45% on MNQ E2 confirm_bars=1 survivor lanes. Sign of every conclusion is preserved (0/144 cells flipped on the v1 high-RR scan), but magnitudes are systematically wrong.
+
+This subsection cross-references **Criterion 13 (Scratch treatment policy)** in `pre_registered_criteria.md` — every pre-reg must declare its scratch policy with literature-grounded justification.
+
+**Scaling-stage interaction:** This is independent of Stage 1–4 deployment progression (binary filters → sizing → geometry → portfolio). Scratch handling is a **measurement** discipline, not a deployment-stage signal. Every stage uses `realized-eod`.
+
+---
+
 ## 12. Referenced from
 
 - `CLAUDE.md` § Research methodology grounding — **ADD POINTER**

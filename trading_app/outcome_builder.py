@@ -296,6 +296,16 @@ def _compute_outcomes_all_rr(
             pe_favorable = entry_price - pe_lows
             pe_adverse = pe_highs - entry_price
 
+        # Realized session-end MTM for scratch outcomes (Criterion 13 / Stage 5
+        # of docs/runtime/stages/scratch-eod-mtm-canonical-fix.md). RR-invariant —
+        # computed once and re-used across the per-RR loop. Sign convention
+        # matches break_dir: long earns close-above-entry; short earns close-below.
+        # See docs/specs/outcome_builder_scratch_eod_mtm.md.
+        _eod_last_bar = post_entry.iloc[-1]
+        _eod_close = float(_eod_last_bar["close"])
+        _eod_ts = _eod_last_bar["ts_utc"].to_pydatetime()
+        _eod_pnl_points = (_eod_close - entry_price) if break_dir == "long" else (entry_price - _eod_close)
+
     results = []
     for rr, target_price in zip(rr_targets, target_prices, strict=False):
         result = {
@@ -354,7 +364,13 @@ def _compute_outcomes_all_rr(
                 results.append(result)
                 continue
 
-        # --- No post-entry bars ---
+        # --- No post-entry bars (pathological edge case) ---
+        # Per docs/specs/outcome_builder_scratch_eod_mtm.md (Stage 4 spec):
+        # entry triggered on a bar with no successor in the trading session.
+        # No realizable EOD MTM since no later bar exists. Keep pnl_r = None
+        # (Criterion 13 'drop' policy applied implicitly via downstream
+        # `pnl_r IS NOT NULL` filters). Drift check check_orb_outcomes_scratch_pnl
+        # asserts <1% of scratch rows hit this branch.
         if not has_post:
             result["outcome"] = "scratch"
             result["mae_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, 0.0), 4)
@@ -376,7 +392,19 @@ def _compute_outcomes_all_rr(
         # --- Standard target/stop scan ---
         any_hit = pe_hit_target | pe_hit_stop
         if not any_hit.any():
+            # Realized session-end MTM (Criterion 13 'realized-eod' policy).
+            # Live execution path force-flats at session end (TopStep prop-firm
+            # rule + futures EOD close); backtest must book the same P&L per
+            # Chan 2013 Ch 1 unified-program doctrine. Pre-fix behavior left
+            # pnl_r=NULL and downstream `WHERE pnl_r IS NOT NULL` silently
+            # dropped these rows, inflating measured ExpR by 10-45% on
+            # MNQ E2 confirm_bars=1 survivor lanes. See
+            # docs/specs/outcome_builder_scratch_eod_mtm.md and
+            # docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md.
             result["outcome"] = "scratch"
+            result["exit_ts"] = _eod_ts
+            result["exit_price"] = _eod_close
+            result["pnl_r"] = round(to_r_multiple(cost_spec, entry_price, stop_price, _eod_pnl_points), 4)
             max_fav = max(float(np.max(pe_favorable)), 0.0)
             max_adv = max(float(np.max(pe_adverse)), 0.0)
         else:
@@ -583,6 +611,11 @@ def compute_single_outcome(
         (bars_df["ts_utc"] > pd.Timestamp(entry_ts)) & (bars_df["ts_utc"] < pd.Timestamp(trading_day_end))
     ].sort_values(by="ts_utc")  # type: ignore[call-overload]
 
+    # No post-entry bars (pathological edge case). Per
+    # docs/specs/outcome_builder_scratch_eod_mtm.md (Stage 4 spec):
+    # entry triggered on a bar with no successor in the trading session.
+    # No realizable EOD MTM since no later bar exists. Keep pnl_r = None
+    # (Criterion 13 'drop' policy applied implicitly).
     if post_entry.empty:
         result["outcome"] = "scratch"
         result["mae_r"] = round(pnl_points_to_r(cost_spec, entry_price, stop_price, 0.0), 4)
@@ -610,8 +643,17 @@ def compute_single_outcome(
     any_hit = hit_target | hit_stop
 
     if not any_hit.any():
-        # No target or stop hit — scratch
+        # No target or stop hit — scratch with realized session-end MTM.
+        # Criterion 13 'realized-eod' policy. See
+        # docs/specs/outcome_builder_scratch_eod_mtm.md.
+        last_bar = post_entry.iloc[-1]
+        last_close = float(last_bar["close"])
+        last_ts = last_bar["ts_utc"].to_pydatetime()
+        eod_pnl_points = (last_close - entry_price) if break_dir == "long" else (entry_price - last_close)
         result["outcome"] = "scratch"
+        result["exit_ts"] = last_ts
+        result["exit_price"] = last_close
+        result["pnl_r"] = round(to_r_multiple(cost_spec, entry_price, stop_price, eod_pnl_points), 4)
         max_favorable_points = max(float(np.max(favorable)), 0.0)
         max_adverse_points = max(float(np.max(adverse)), 0.0)
     else:

@@ -6385,6 +6385,120 @@ def check_magic_number_rationale(trading_app_dir: Path) -> list[str]:
     return violations
 
 
+def check_orb_outcomes_scratch_pnl(con=None) -> list[str]:
+    """Post Stage 5 fix: ≥99% of scratch rows must have non-NULL ``pnl_r``.
+
+    The canonical ``trading_app/outcome_builder.py`` fix (Stage 5 of
+    ``docs/runtime/stages/scratch-eod-mtm-canonical-fix.md``) populates
+    ``pnl_r`` / ``exit_ts`` / ``exit_price`` for ``outcome='scratch'``
+    rows from realized session-end close MTM. Pre-fix baseline was
+    0% of scratch rows populated. Post-fix target is ≥99% — the <1% gap
+    is the pathological no-post-bars edge case explicitly documented in
+    ``docs/specs/outcome_builder_scratch_eod_mtm.md``.
+
+    Pre-rebuild this check fires on stale data; it is registered as
+    advisory until Stage 5b rebuild completes.
+
+    @rule scratch-eod-mtm-canonical-fix
+    @stage stage-5b drift companion
+    """
+    if con is None:
+        return []  # SKIPPED message handled by caller via requires_db=True
+    try:
+        rows = con.execute("SELECT COUNT(*), COUNT(pnl_r) FROM orb_outcomes WHERE outcome = 'scratch'").fetchone()
+    except Exception as exc:
+        return [f"  query failed: {exc!r}"]
+    if rows is None:
+        return []
+    total = int(rows[0])
+    populated = int(rows[1])
+    if total == 0:
+        return []
+    pct_populated = 100.0 * populated / total
+    if pct_populated < 99.0:
+        return [
+            f"  scratch rows with non-NULL pnl_r: {populated}/{total} = "
+            f"{pct_populated:.2f}% (expected ≥ 99% post-Stage-5 fix; "
+            f"rebuild outcome_builder for affected instruments — see "
+            f"docs/specs/outcome_builder_scratch_eod_mtm.md and "
+            f".claude/rules/validation-workflow.md § Full Rebuild Chain)"
+        ]
+    return []
+
+
+def check_research_scratch_policy_annotation() -> list[str]:
+    """Research scripts using ``pnl_r IS NOT NULL`` must annotate scratch policy.
+
+    Class bug discovered 2026-04-27: ``trading_app/outcome_builder.py`` produces
+    ``outcome='scratch'`` rows with ``pnl_r=NULL`` when neither stop nor target
+    hits by trading-day-end. Research scripts using ``WHERE pnl_r IS NOT NULL``
+    silently drop those rows, inflating measured ExpR by 10-45% on the
+    survivor lanes (verified MNQ NYSE_OPEN 15m: 9.9% scratch at RR=1.0,
+    44.6% at RR=4.0).
+
+    This check fires on any ``research/**.py`` file (excluding
+    ``research/archive/``) that contains the literal string
+    ``pnl_r IS NOT NULL`` AND does NOT also contain a canonical
+    scratch-policy comment marker. Acceptable markers (case-insensitive):
+      - ``# scratch-policy: drop`` (deliberate exclusion of scratches)
+      - ``# scratch-policy: include-as-zero`` (count scratches as 0R)
+      - ``# scratch-policy: realized-eod`` (count scratches at EOD MTM)
+
+    Companion to Stage 5 fix in ``trading_app/outcome_builder.py`` and
+    Criterion 13 in ``docs/institutional/pre_registered_criteria.md``.
+
+    @rule scratch-policy-annotation
+    @stage stage-2 of 2026-04-27 scratch-eod-mtm plan
+    """
+    research_dir = PROJECT_ROOT / "research"
+    if not research_dir.is_dir():
+        return []
+
+    violations: list[str] = []
+    needle = "pnl_r IS NOT NULL"
+    marker_prefix = "# scratch-policy:"
+    valid_markers = ("drop", "include-as-zero", "realized-eod")
+
+    for py_file in sorted(research_dir.rglob("*.py")):
+        try:
+            rel = py_file.relative_to(research_dir)
+        except ValueError:
+            continue
+        # Skip archive — frozen scans are not retro-edited per Backtesting Rule 11.
+        if rel.parts and rel.parts[0] == "archive":
+            continue
+
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        if needle not in content:
+            continue
+
+        marker_found_with_valid_value = False
+        for line in content.splitlines():
+            stripped = line.strip().lower()
+            idx = stripped.find(marker_prefix)
+            if idx < 0:
+                continue
+            value = stripped[idx + len(marker_prefix) :].strip()
+            if any(value.startswith(m) for m in valid_markers):
+                marker_found_with_valid_value = True
+                break
+
+        if not marker_found_with_valid_value:
+            rel_repo = py_file.relative_to(PROJECT_ROOT)
+            violations.append(
+                f"  {rel_repo}: contains 'pnl_r IS NOT NULL' but no "
+                f"'# scratch-policy: drop|include-as-zero|realized-eod' annotation. "
+                f"Class bug 2026-04-27: scratch rows have NULL pnl_r and are silently "
+                f"dropped. See memory/feedback_scratch_pnl_null_class_bug.md."
+            )
+
+    return violations
+
+
 def check_stage_file_landed_drift() -> list[str]:
     """ADVISORY: stage files claiming work-in-progress while git log shows landings.
 
@@ -6914,6 +7028,18 @@ CHECKS = [
         lambda: check_magic_number_rationale(TRADING_APP_DIR),
         False,
         False,
+    ),
+    (
+        "Research scripts using 'pnl_r IS NOT NULL' annotate scratch policy (2026-04-27 class bug)",
+        check_research_scratch_policy_annotation,
+        True,  # advisory until Stage 6 of 2026-04-27 plan annotates the 131 pre-existing scripts
+        False,
+    ),
+    (
+        "orb_outcomes scratch rows have non-NULL pnl_r post Stage-5 canonical fix",
+        check_orb_outcomes_scratch_pnl,
+        True,  # advisory until Stage 5b rebuild completes for all instruments
+        True,  # requires_db
     ),
     (
         "Stage-file staleness vs landed commits (advisory; prevents re-litigation)",
