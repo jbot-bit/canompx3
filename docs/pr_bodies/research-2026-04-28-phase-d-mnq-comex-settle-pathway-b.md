@@ -50,3 +50,15 @@ All literature citations use verbatim extracts from `docs/institutional/literatu
 - Real-money flip on D4 — D5 KILLED; deployed lane unchanged; Amendment 3.2 NOT_OOS_CONFIRMABLE per-trade-R framing unresolved
 - RULE 14/15/16 numbering doctrine drift — separate housekeeping task
 - Branch hygiene (`live_signals_*.jsonl`, `live_session.stop`, `bias-grounding-guard.py`) — separate concern
+
+## Known doctrine debt landed by this PR (forward-looking hardening)
+
+Amendment 3.2 (MinTRL gate) and the lock-before-run discipline that caught D5 are landed as **doctrine** but not yet enforced by automated drift checks. Future Pathway B pre-regs can ship without an Amendment 3.2 block and nothing in `pipeline/check_drift.py` will catch the omission. Three follow-on hardening items, scoped for separate stage-gated PRs (NOT this one):
+
+1. **Drift check `check_amendment_3_2_compliance`** — scan every `docs/audit/hypotheses/*.yaml` whose `pathway: B_individual` and verify it carries an `amendment_3_2_min_trl_classification` block with all four required keys (`computation`, `classification`, `chosen_metric_for_classification`, `min_trl_years`). Pattern follows existing `check_pooled_finding_annotations` at `pipeline/check_drift.py:6215`. Production-code change → requires stage-gate file.
+2. **Claim-hygiene extension** — `scripts/tools/check_claim_hygiene.py` should require Amendment 3.2 classification verification in any audit-result doc that cites a Pathway B pre-reg. Production-code change → requires stage-gate file.
+3. **Lock-before-run commit-graph check** — drift check that any `research/phase_d_*` runner committed in the past N days has its corresponding pre-reg's most-recent commit as an ancestor. Catches "ran before pre-reg locked." Production-code change → requires stage-gate file.
+
+These are doctrine-debt items, registered here so future sessions know to land them. Until they land, the doctrine is honor-system enforced (which is what this PR demonstrated working honestly — D5 KILLED by author-respected gates, not by automated enforcement).
+
+The dormant `bias-grounding-guard.py` hook in `.claude/hooks/` is committed to disk but NOT wired into `settings*.json` — it's available for future activation but currently inert. Activating it requires a separate `.claude/settings.json` change; left out of this PR to avoid hook-side-effects landing without explicit user consent.
