@@ -8,8 +8,68 @@ parent_spec: "docs/audit/hypotheses/2026-04-15-phase-d-volume-pilot-spec.md"
 predecessor_pre_reg: "docs/audit/hypotheses/2026-04-18-phase-d-d0-rel-vol-sizing-mnq-comex-settle.yaml"
 predecessor_verdict: "KILL (df05b861) — sharpe_uplift_pct +7.33% < 10% threshold"
 testing_mode: individual
-pathway: B_individual
+pathway: B_individual_falsification
 pathway_source: "docs/institutional/pre_registered_criteria.md Amendment 3.0 (2026-04-09)"
+pathway_note: >
+  v2 is exploratory-at-K=1, not confirmatory. The predecessor mechanism
+  (rel_vol regime-amplification on this lane) was KILLED at +7.33%; v2
+  retests the same mechanism with a clean predictor. C6/C8/C9 downstream
+  gates remain non-waivable (Amendment 3.0 framework) but the framing is
+  honest: a PASS here is a fresh signal requiring its own confirmatory
+  follow-up, not a confirmation of a prior validated edge.
+
+pre_run_correction_2026_04_28:
+  corrected: true
+  correction_scope: "TIGHTENING_PRE_RUN — gates strengthened, no thresholds relaxed; declared before any backtest run"
+  substantive_rules_modified: partial_tightening_only
+  triggered_by: "Opus self-review against pre-reg writer prompt § D — 9 gaps identified before model swap"
+  reviewer: "claude-opus pre-execution"
+  what_changed:
+    - "pathway label: B_individual -> B_individual_falsification (honest framing)"
+    - "H1 pass_metric: added absolute Sharpe-difference floor (>= 0.05) to prevent tiny-baseline degeneracy"
+    - "raw_p_method: paired bootstrap method tightened — independent paired bootstrap on per-trade pairs (no block) is canonical; if calendar-day clustering exists, document and rerun with day-block"
+    - "execution_gate.forbidden_now: added 'reverse bucket direction is a separate pre-reg, not a v2 follow-up' to prevent K=2-disguised-as-K=1"
+    - "expectations: declared honest prior — v2 is EXPECTED TO KILL (predecessor +7.33% < 10% threshold; Wave 5 G5 found opposite direction on a different lane); a PASS verdict triggers extra audit"
+    - "K3 retained but slimmed — only the genuinely-novel temporal-input check (feature_input_close_ts vs entry_ts) stays in K3; redundant items folded into K2"
+    - "sharpe_definition: per-trade-R Sharpe = mean(R)/std(R), no annualization, no rf — explicit"
+    - "tied-percentile bucket assignment: low if x < P33; mid if P33 <= x < P67; high if x >= P67. Ties at boundaries go HIGH (>= rule applied)."
+    - "comparison-to-v1: tagged DESCRIPTIVE_ONLY_NOT_STATISTICALLY_COMPARABLE — v2 N=468 excludes ~16% NULL-garch rows that v1 included via rel_vol coverage; samples are not the same."
+  what_did_NOT_change:
+    - "H1 pass threshold (Sharpe uplift >= 15%)"
+    - "K1 kill threshold (< 10%)"
+    - "K2 implementation_integrity items"
+    - "predictor choice (garch_forecast_vol_pct)"
+    - "bucket schema 0.5x / 1.0x / 1.5x"
+    - "bucket direction (high garch -> 1.5x)"
+    - "lane scope"
+    - "IS-only quantile rule"
+    - "scratch_policy: realized-eod"
+    - "any threshold the backtest will use to compute its verdict"
+  rationale_for_in_place_amendment: >
+    All 9 fixes are pre-run clarifications/tightenings of an unrun pre-reg.
+    None relax kill criteria. None redirect the test. Per predecessor's
+    `post_run_correction_2026_04_18` precedent (substantive_rules_modified:
+    false) on similar pre-run/post-run framing corrections. v2 file remains
+    DRAFT until commit_sha re-stamp post-amendment.
+
+expectation_of_failure:
+  honest_prior: KILL_LIKELY
+  reasoning:
+    - "Predecessor v1 KILLED at +7.33% < 10% threshold on the contaminated rel_vol predictor"
+    - "Wave 5 G5 (2026-04-11, MNQ NYSE_OPEN RR1.5) found LOW garch -> BETTER outcomes; v2 tests the OPPOSITE direction (high garch -> upsize) on a DIFFERENT lane (COMEX_SETTLE)"
+    - "If predecessor's rel_vol uplift was driven by the ~41% post-entry-data leak, the clean garch proxy should produce a smaller uplift, not a larger one"
+  pass_triggers_extra_audit: >
+    A v2 PASS (>=15% AND raw_p<0.05 AND K2/K3 PASS) is contrary to the
+    honest prior. If observed, the result doc must include:
+      - Sensitivity check on bucket boundaries (re-run with P30/P70 and P25/P75)
+      - Per-year breakdown of sized vs baseline Sharpe
+      - Cross-instrument check: same direction on MGC and MES?
+      - Investigate if any K2/K3 item is borderline (PASSes but close)
+    A PASS contrary to the prior is a possible discovery; it is also
+    a possible undetected methodology error. Treat with elevated audit
+    standard, not premature celebration.
+  kill_does_not_require_extra_audit: >
+    A KILL is consistent with the prior. Standard result doc suffices.
 
 amendment_rationale:
   trigger: "2026-04-28 E2 look-ahead contamination registry catalogued rel_vol_<SESSION> as post-entry on E2"
