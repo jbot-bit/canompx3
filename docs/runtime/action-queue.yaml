@@ -4,13 +4,12 @@ items:
   - id: phase_d_d0_clean_rederivation
     title: Phase D D-0 clean re-derivation (E2 LA contamination — rel_vol → safe predictor)
     class: research
-    status: open
+    status: ready
     priority: P1
     close_before_new_work: false
     owner_hint: codex-or-claude
     last_verified_at: 2026-04-28
     freshness_sla_days: 3
-    deadline_hard: 2026-05-15
     next_action: Amend pre-reg `docs/audit/hypotheses/2026-04-18-phase-d-d0-rel-vol-sizing-mnq-comex-settle.yaml` to swap predictor from `rel_vol_COMEX_SETTLE` to `garch_forecast_vol_pct` (first choice); preserve H1 metric, kill criteria, K=1 framing. Recompute P33/P67 locks against new predictor. Re-run shadow-append accumulation against new buckets. Land before 2026-05-15 gate eval.
     exit_criteria: Clean re-derivation result doc lands under `docs/audit/results/` with verdict (PASS/KILL) computed against a pre-break predictor from RULE 6.1 safe list. Original `phase_d_d0_backtest.py` remains tainted (do not modify); replacement script lives alongside.
     blocked_by: []
