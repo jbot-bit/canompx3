@@ -261,3 +261,8 @@ scripts/tmp_lit_results.txt
 scripts/infra/wsl-env.ps1
 deets.txt
 docs/runtime/lane_correlation_monitor.json
+
+# Live runtime artefacts (not for VCS)
+live_session.stop
+live_signals_*.jsonl
+.claude/hooks/.completion-notify-last
