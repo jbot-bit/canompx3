@@ -4,6 +4,12 @@ Question: does garch_forecast_vol_pct add conditional ExpR edge on top of each
 of the 6 currently deployed lanes? (R5 sizer hypothesis per mechanism_priors.md.)
 
 Source: docs/runtime/lane_allocation.json (rebalance 2026-04-13).
+
+# e2-lookahead-policy: tainted
+# orb_{lane}_break_dir='long'/'short' used as WHERE predicates (lines ~130-133, ~157, ~182)
+# to select fire-days by direction. On E2, break_dir is post-entry for ~42% of fills
+# (range-cross precedes close-cross). IS/OOS findings segmented by direction are suspect.
+# Re-pre-register with a pre-break direction proxy before deployment use.
 Trigger: user demands no-bias, no-lookahead, all-variant, K-corrected proof
   before crowning R5 a validated signal.
 

@@ -1,4 +1,12 @@
-"""Extract golden nuggets from break delay data — O5 only, per methodology rules."""
+"""Extract golden nuggets from break delay data — O5 only, per methodology rules.
+
+# e2-lookahead-policy: tainted
+# break_delay_min (orb_{sess}_break_delay_min) is used as a predictor of pnl_r on E2 entries.
+# On E2, ~41% of trades have entry_ts < break_ts, making break_delay_min post-entry on that
+# subset. All "golden nuggets" found here for E2 lanes are unreliable. Clean re-derivation
+# required using pre-break features before any finding can be cited.
+# Registry: docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md
+"""
 
 import numpy as np
 import duckdb

@@ -3,6 +3,13 @@
 Scope is locked by:
   docs/audit/hypotheses/2026-04-21-l1-europe-flow-pre-break-context-prereg.yaml
 
+# e2-lookahead-policy: tainted
+# rel_vol_EUROPE_FLOW is used as a predictor/filter signal on E2 entries. On E2, ~41% of
+# trades have entry_ts < break_ts (range-touch fires before close-outside-ORB), making
+# break-bar volume (rel_vol numerator) post-entry on that subset. All findings for E2 lanes
+# are unreliable and must not be cited. Clean re-derivation with ovn_range_pct required.
+# Registry: docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md
+
 This runner evaluates exactly two pre-registered overlay hypotheses on the
 unfiltered MNQ EUROPE_FLOW O5 E2 CB1 RR1.5 lane using canonical
 orb_outcomes + daily_features joins.

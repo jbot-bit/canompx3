@@ -5,6 +5,12 @@ the claim. The finding:
   MNQ_NYSE_OPEN across 54 (apt x RR x dir x threshold) cells: 46/54
   negative sr_lift, binomial sign p=6.9e-8 BH-FDR K=32.
 
+# e2-lookahead-policy: tainted
+# orb_NYSE_OPEN_break_dir='{direction}' used as a WHERE predicate (line ~71) to
+# select fire-days. On E2, break_dir is post-entry for ~42% of fills (range-cross
+# precedes close-cross). IS findings segmented by direction are suspect.
+# Re-pre-register with a pre-break direction proxy before deployment use.
+
 Adversarial tests:
   S1. Shuffle control: shuffle garch_pct labels, rerun pipeline. Should yield
       ~50/50 split. If inverse pattern persists on shuffled data -> methodology

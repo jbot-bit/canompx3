@@ -3,6 +3,12 @@
 Scope is locked by:
   docs/audit/hypotheses/2026-04-22-mnq-comex-settle-f6-inside-pdr-v1.yaml
 
+# e2-lookahead-policy: tainted
+# orb_COMEX_SETTLE_break_dir = 'long' used as a WHERE predicate (line ~108) to
+# select fire-days. On E2, break_dir is post-entry for ~42% of fills (range-cross
+# precedes close-cross). All IS findings from this script are directionally suspect.
+# Re-pre-register with a pre-break direction proxy before deployment use.
+
 This runner evaluates exactly one pre-registered Pathway-B prior-day cell on
 the locked MNQ COMEX_SETTLE O5 E2 CB1 RR1.0 long lane using canonical
 orb_outcomes + daily_features joins.

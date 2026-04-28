@@ -6,7 +6,51 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session (2026-04-28 — Phase D D1 + cleanup + hardening)
+## Last Session (2026-04-28 — doctrine fix + Phase D dispatch — branch `triage-e2-lookahead-9-candidates`)
+
+### What landed this session
+
+**Root-cause doctrine fix for the 2026-04-21 postmortem § 5.1 retro-audit:**
+- `.claude/rules/backtesting-methodology.md § 6.1`: removed `rel_vol_{s}` from safe list (the description contradicted `pipeline/build_daily_features.py:1600-1660` which computes numerator as `break_bar_volume`).
+- `.claude/rules/backtesting-methodology.md § 6.3`: added `rel_vol_{s}` to E2 banned list with canonical-source cite + Chan Ch 1 p.4 cite.
+- `docs/postmortems/2026-04-21-e2-break-bar-lookahead.md § 9`: closure note for 2026-04-28 follow-up. Documents two found drifts: rel_vol § 6.1 wording, and `late-fill-only` annotation as statistically unsafe for signal discovery (Chan p.4 selection bias).
+- `docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md`: added "Re-derivation dispatch" section. Priority 1 = Phase D D-0 clean re-derivation with HARD DEADLINE 2026-05-15 (predictor swap: `garch_forecast_vol_pct` first, `atr_20_pct` second). Priority 2 = historical predictor-tainted scripts deferred unless downstream citation appears.
+- Memory: `phase_d_daily_runbook.md` flagged D-0 locks as research-provisional pending clean re-derivation.
+- Stage file: `docs/runtime/stages/triage-e2-lookahead-9-candidates.md`.
+
+### Decision gate
+
+Phase D D2/D3/D4 still pending user GO. **Phase D D-0 clean re-derivation must land before 2026-05-15** to avoid the gate eval consuming contaminated baseline. Recipe is in registry dispatch § Priority 1 — pre-reg amendment + predictor swap, K=1 framing preserved.
+
+### Verification
+
+- `python pipeline/check_drift.py`: 114 passed, 0 skipped, 10 advisory (0 violations on check 124).
+- `pytest tests/test_pipeline/test_check_drift_e2_lookahead.py`: 10/10 pass.
+- No `pipeline/`, `trading_app/`, schema, or canonical-config files touched.
+
+---
+
+## Prior Session (2026-04-28 — drift check 124: 9 e2-lookahead-policy annotations)
+
+### What landed this session
+
+**Drift check 124 clearance** — 9 scripts surfaced by `check_e2_lookahead_research_contamination()` annotated:
+- TAINTED (7): `phase_d_d0_backtest.py`, `break_delay_filtered.py`, `break_delay_nuggets.py`, `l1_europe_flow_pre_break_context_scan.py`, `mnq_comex_unfiltered_overlay_v1.py`, `mnq_l1_europe_flow_prebreak_context_v1.py`, `shadow_htf_mes_europe_flow_long_skip.py` (reclassified after Opus audit)
+- CLEARED (1): `audit_sizing_substrate_diagnostic.py` (implements the gate itself)
+- NOT-PREDICTOR (1): `output/confluence_program/phase0_run.py`
+- Registry rows 19-27 added; row 27 reclassified `not-predictor → tainted` after real-data audit on MES EUROPE_FLOW O15 E2 IS (N=1719) showed 42.6% trades have `entry_ts < break_ts` → `break_dir='long'` selector is post-entry on those rows
+- Drift check 124 now passes (0 remaining unannotated)
+- Pre-existing test failure `test_pulse_integration::test_text_output_is_scannable` (61>60 lines) confirmed pre-existing
+
+### Decision gate
+
+Phase D D2/D3/D4 still pending user GO (HANDOFF below).
+`phase_d_d0_backtest.py` is TAINTED — D-0 pre-reg result needs clean re-derivation before D-0 claim can be cited (high-EV next step: re-derive on `garch_forecast_vol_pct` per Carver Ch 9-10).
+`shadow_htf` ledger continues recording (zero-capital observational); re-pre-register required before any deployment use.
+
+---
+
+## Prior Session (2026-04-28 — Phase D D1 + cleanup + hardening)
 
 - **Tool:** Claude Code (autonomous)
 - **Date:** 2026-04-28

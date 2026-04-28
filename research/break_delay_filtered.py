@@ -1,5 +1,14 @@
 """Break delay tested WITHIN deployed lane filters — the correct test.
-O5 default per methodology rules. Exact deployed parameters."""
+O5 default per methodology rules. Exact deployed parameters.
+
+# e2-lookahead-policy: tainted
+# break_delay_min (orb_{sess}_break_delay_min) is used as a predictor of pnl_r on E2 entries.
+# On E2, ~41% of trades have entry_ts < break_ts (range-touch fires before close-outside-ORB),
+# making break_delay_min post-entry on that subset. All findings from this script should be
+# treated as unreliable for E2 lanes. Clean re-derivation using pre-ORB features (atr_20_pct,
+# ovn_range_pct) is required before any result can be cited.
+# Registry: docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md
+"""
 
 import numpy as np
 import duckdb

@@ -4,6 +4,12 @@ Frozen scope:
   - instrument: MNQ
   - session: US_DATA_1000
   - entry model: E2
+
+# e2-lookahead-policy: not-predictor
+# orb_US_DATA_1000_break_dir is selected as a context column (line ~75) and used
+# for direction-segmentation of already-taken trades (pandas groupby, lines ~354-355).
+# No WHERE predicate uses break_dir to decide whether to take a trade.
+# Direction-segmentation post-entry is permitted per backtesting-methodology.md § 6.3.
   - confirm bars: 1
   - apertures: 5, 15
   - RR: 1.0, 1.5, 2.0

@@ -3,6 +3,12 @@
 
 Locked by:
   docs/audit/hypotheses/2026-04-19-mnq-nyse-close-failure-mode-audit.yaml
+
+# e2-lookahead-policy: not-predictor
+# orb_NYSE_CLOSE_break_dir selected as a context column (line ~43) and used
+# for per-direction breakdown of already-taken trades (lines ~133-134).
+# No WHERE predicate uses break_dir to decide whether to take a trade.
+# Direction-segmentation post-entry is permitted per backtesting-methodology.md § 6.3.
 """
 
 from __future__ import annotations
