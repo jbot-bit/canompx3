@@ -52,7 +52,7 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "TO_FILL_AFTER_COMMIT"
+  commit_sha: "6a6561d6"
   committed_required_before_run: true
   commit_sha_note: "Stamp the SHA of the commit that first writes this file. Append-only — any edit requires a new dated slug."
 
