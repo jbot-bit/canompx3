@@ -7,6 +7,14 @@
         "trading_app/mcp_server.py"
       ],
       "env": {}
+    },
+    "code-review-graph": {
+      "command": "uvx",
+      "args": [
+        "code-review-graph",
+        "serve"
+      ],
+      "type": "stdio"
     }
   }
 }
