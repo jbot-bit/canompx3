@@ -6499,6 +6499,137 @@ def check_research_scratch_policy_annotation() -> list[str]:
     return violations
 
 
+def check_e2_lookahead_research_contamination() -> list[str]:
+    """Research scripts combining ``entry_model='E2'`` with break-bar predictors.
+
+    Class bug catalogued 2026-04-28: 18 of 73 E2-using research scripts use
+    ``rel_vol``, ``break_bar_volume``, ``break_bar_continues``, or
+    ``break_delay_min`` as predictors. Real-data verification shows ~41% of
+    E2 trades have ``entry_ts < break_ts`` (the canonical "break bar"
+    defined by close-outside-ORB is later than E2's range-cross entry on
+    that subset), so break-bar features are post-entry data on ~4 in 10
+    E2 rows. Canonical authority for the gate at the registered-filter
+    layer: ``trading_app/config.py`` ``E2_EXCLUDED_FILTER_PREFIXES`` /
+    ``E2_EXCLUDED_FILTER_SUBSTRINGS``. Research scripts that bypass
+    ``ALL_FILTERS`` and read ``daily_features`` directly are not gated.
+
+    Fires on any ``research/**.py`` file (excluding ``research/archive/``)
+    that contains BOTH:
+      1. an ``entry_model='E2'`` or ``entry_model="E2"`` literal, AND
+      2. a tainted feature reference: ``rel_vol``, ``break_bar_volume``,
+         ``break_bar_continues``, or ``break_delay_min``.
+
+    Skips and policies:
+      - ``research/archive/`` is skipped (frozen scans not retro-edited).
+      - The 18 known-tainted scripts from the 2026-04-28 registry are
+        grandfathered via ``known_tainted_registry`` — the registry doc
+        is the canonical record of their status.
+      - Scripts with a canonical annotation are cleared.
+
+    Acceptable annotations (case-insensitive):
+      - ``# e2-lookahead-policy: cleared`` (verified clean post-fix)
+      - ``# e2-lookahead-policy: late-fill-only`` (filter ``entry_ts >= break_ts``)
+      - ``# e2-lookahead-policy: not-predictor`` (feature is window-sizing only)
+      - ``# e2-lookahead-policy: tainted`` (acknowledges, kept for audit trail)
+
+    See ``docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md``.
+    @rule e2-lookahead-policy
+    """
+    research_dir = PROJECT_ROOT / "research"
+    if not research_dir.is_dir():
+        return []
+
+    known_tainted_registry = frozenset(
+        {
+            "comprehensive_deployed_lane_scan.py",
+            "participation_optimum_universality_v1.py",
+            "participation_optimum_mes_universality_v1.py",
+            "participation_optimum_mgc_universality_v1.py",
+            "participation_shape_cross_instrument_v1.py",
+            "pr48_participation_shape_oos_replication_v1.py",
+            "q1_h04_mechanism_shape_validation_v1.py",
+            "close_h2_book_path_c.py",
+            "h2_exploitation_audit.py",
+            "audit_comex_settle_orb_g5_failure_pocket.py",
+            "rel_vol_is_only_quantile_sensitivity.py",
+            "rel_vol_mechanism_decomposition.py",
+            "research_vol_regime_wf.py",
+            "stress_test_rel_vol_finding.py",
+            "stress_test_rel_vol_finding_v2.py",
+            "t0_t8_audit_volume_cells.py",
+            "vwap_comprehensive_family_scan.py",
+            "research_mgc_e2_microstructure_pilot.py",
+        }
+    )
+
+    # Canonical contamination patterns from `daily_features` columns.
+    # `rel_vol_<UPPER>` matches `rel_vol_NYSE_OPEN` etc but NOT `rel_vol_session_norm`
+    # (a script-local clean-replacement name). break_bar / break_delay substrings
+    # are unambiguous — no clean features share those substrings.
+    tainted_feature_re = re.compile(
+        r"\brel_vol_[A-Z]"  # rel_vol_NYSE_OPEN, rel_vol_TOKYO_OPEN, etc
+        r"|break_bar_volume"
+        r"|break_bar_continues"
+        r"|break_delay_min"
+    )
+    marker_prefix = "# e2-lookahead-policy:"
+    valid_markers = ("cleared", "late-fill-only", "not-predictor", "tainted")
+
+    # Match permissively: any file mentioning entry_model AND an 'E2' / "E2"
+    # literal AND a tainted feature. This catches kwarg form (entry_model='E2'),
+    # SQL form (entry_model = 'E2' with spaces), and dict form ('entry_model':
+    # 'E2'). False positives are tolerable because the check is advisory.
+    e2_literals = ("'E2'", '"E2"')
+
+    violations: list[str] = []
+    for py_file in sorted(research_dir.rglob("*.py")):
+        try:
+            rel = py_file.relative_to(research_dir)
+        except ValueError:
+            continue
+        if rel.parts and rel.parts[0] == "archive":
+            continue
+        if py_file.name in known_tainted_registry:
+            continue
+
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        if "entry_model" not in content:
+            continue
+        if not any(lit in content for lit in e2_literals):
+            continue
+        if not tainted_feature_re.search(content):
+            continue
+
+        marker_found = False
+        for line in content.splitlines():
+            stripped = line.strip().lower()
+            idx = stripped.find(marker_prefix)
+            if idx < 0:
+                continue
+            value = stripped[idx + len(marker_prefix) :].strip()
+            if any(value.startswith(m) for m in valid_markers):
+                marker_found = True
+                break
+
+        if not marker_found:
+            rel_repo = py_file.relative_to(PROJECT_ROOT)
+            violations.append(
+                f"  {rel_repo}: combines entry_model='E2' with break-bar feature "
+                f"(rel_vol/break_bar_volume/break_bar_continues/break_delay_min) "
+                f"but no '# e2-lookahead-policy: cleared|late-fill-only|"
+                f"not-predictor|tainted' annotation. ~41% of E2 trades have "
+                f"entry_ts<break_ts; break-bar features are post-entry on that "
+                f"subset. See docs/audit/results/"
+                f"2026-04-28-e2-lookahead-contamination-registry.md."
+            )
+
+    return violations
+
+
 def check_stage_file_landed_drift() -> list[str]:
     """ADVISORY: stage files claiming work-in-progress while git log shows landings.
 
@@ -7045,6 +7176,12 @@ CHECKS = [
         "Stage-file staleness vs landed commits (advisory; prevents re-litigation)",
         check_stage_file_landed_drift,
         True,
+        False,
+    ),
+    (
+        "E2 entry_model + break-bar features in research/ require e2-lookahead-policy annotation (2026-04-28 class bug)",
+        check_e2_lookahead_research_contamination,
+        True,  # advisory — surfaces new contamination without blocking commits
         False,
     ),
 ]  # end CHECKS
