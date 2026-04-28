@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
-"""Data-First Guard + Intent Router: enforces querying data before theorizing
-and routes user intent to the correct workflow mode.
+"""Data-First Guard — PreToolUse(Read|Bash) only.
 
-Modes based on hook event:
+Tracks consecutive Read calls without an intervening data query.
+Warns at WARN_THRESHOLD, blocks at BLOCK_THRESHOLD when in
+investigation mode.
 
-1. UserPromptSubmit: detects intent keywords in user message —
-   investigation, trading query, design/implement/commit/research/orient/resume —
-   injects the appropriate workflow directive so Claude routes correctly.
+The UserPromptSubmit branch (intent classification + investigation-mode
+toggle) was merged into `prompt-broker.py` on 2026-04-27. This file
+keeps only the tool-use enforcement path. The broker writes to the
+same `state/data-first.json` file, so PreToolUse here observes the
+investigation-mode flag and consecutive-reads counter the broker sets.
 
-2. PreToolUse (Read): tracks consecutive Read calls without a Bash/query call.
-   After threshold, warns via stderr. After hard limit, BLOCKS the Read.
-
-3. PreToolUse (Bash): resets the consecutive-read counter (query happened).
-
-State persisted to .claude/hooks/.data-first-state.json between invocations.
+State file path moved from `.claude/hooks/.data-first-state.json` to
+`.claude/hooks/state/data-first.json` as part of the broker merge.
 """
 
 import json
@@ -22,51 +21,9 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-STATE_FILE = Path(__file__).parent / ".data-first-state.json"
-DIRECTIVE_COOLDOWN_MINUTES = 15
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+STATE_FILE = PROJECT_ROOT / ".claude" / "hooks" / "state" / "data-first.json"
 
-# Keywords that signal an investigation (user wants data, not code reading)
-INVESTIGATION_KEYWORDS = re.compile(
-    r"\b("
-    r"check|investigate|why is|why are|why does|why did|what.?s happening|"
-    r"what happened|how many|mismatch|diverge|divergence|wrong|bug|"
-    r"real data|actual number|empirical|verify|count|trade count|"
-    r"sample size|performance|how bad|magnitude|compare.*actual|"
-    r"query first|data first|doesn.?t add up|looks? wrong|off|"
-    r"doesn.?t make sense|weird|something.?s off|numbers"
-    r")\b",
-    re.IGNORECASE,
-)
-
-# Keywords for trading queries — must use build_live_portfolio(), not validated_setups
-TRADING_QUERY_KEYWORDS = re.compile(
-    r"\b("
-    r"what do i trade|what.?s live|my trades|my playbook|my portfolio|"
-    r"trade tonight|trading tonight|what.?s on tonight|"
-    r"morning trades|evening trades|active strategies|"
-    r"what am i trading|current positions|my strats|my book|"
-    r"show me my stuff|what.?s deployed|what.?s running"
-    r")\b",
-    re.IGNORECASE,
-)
-
-# Keywords for session time queries — must run generate_trade_sheet.py, not mental math
-SESSION_TIME_KEYWORDS = re.compile(
-    r"\b("
-    r"what time|when does|when is|session time|trade time|"
-    r"tonight.?s session|what.?s on at|schedule tonight|"
-    r"session start|when.*open|when.*close"
-    r")\b",
-    re.IGNORECASE,
-)
-
-TRADING_QUERY_DIRECTIVE = (
-    "TRADING QUERY: Use trading_app.live_config/LIVE_PORTFOLIO, not validated_setups."
-)
-
-SESSION_TIME_DIRECTIVE = (
-    "SESSION TIME: Use scripts/tools/generate_trade_sheet.py; do not do manual timezone math."
-)
 
 # Bash commands that count as "querying data" (resets the read counter)
 QUERY_PATTERNS = re.compile(
@@ -85,97 +42,16 @@ REBUILD_PATTERNS = re.compile(
 
 REBUILD_DIRECTIVE = (
     "PIPELINE REBUILD DETECTED. Before running, verify:\n"
-    "1. FK constraints: orb_outcomes → daily_features → bars_5m → bars_1m. "
+    "1. FK constraints: orb_outcomes -> daily_features -> bars_5m -> bars_1m. "
     "Cannot DELETE upstream while downstream references it.\n"
-    "2. Rebuild order: ingest → bars_5m → daily_features → outcomes → discovery → validator → edge_families\n"
+    "2. Rebuild order: ingest -> bars_5m -> daily_features -> outcomes -> discovery -> validator -> edge_families\n"
     "3. For daily_features column changes: USE UPDATE (not DELETE+INSERT) to avoid FK violations.\n"
-    "4. For full rebuilds: delete DOWNSTREAM first (outcomes), then rebuild upstream → downstream.\n"
+    "4. For full rebuilds: delete DOWNSTREAM first (outcomes), then rebuild upstream -> downstream.\n"
     "5. Lesson 15: init_db BEFORE daily_features when adding sessions."
-)
-
-# ── Intent routing: detect user's MODE from natural language ─────────
-DESIGN_KEYWORDS = re.compile(
-    r"\b("
-    r"plan|design|think about|brainstorm|how would|how should|what if|"
-    r"explore|iterate|4t|approach|architecture|consider|strategy for|"
-    r"pros and cons|trade.?offs|options for"
-    r")\b",
-    re.IGNORECASE,
-)
-
-IMPLEMENT_KEYWORDS = re.compile(
-    r"\b("
-    r"build it|do it|implement|go ahead|ship it|make it happen|just do it|"
-    r"write the code|code it|execute|deploy|wire it up|hook it up|"
-    r"yes|looks good|approved|lgtm"
-    r")\b",
-    re.IGNORECASE,
-)
-
-COMMIT_KEYWORDS = re.compile(
-    r"\b("
-    r"commit|push|comit|pusdh|vcommit|merge|commit all|push it|"
-    r"stage and commit|git push|commit and push"
-    r")\b",
-    re.IGNORECASE,
-)
-
-RESEARCH_KEYWORDS = re.compile(
-    r"\b("
-    r"hypothesis|test.*edge|research|validate.*signal|stress test|"
-    r"is this real|backtest|forward test|null test|significance|"
-    r"p.?value|sharpe|fdr|discover|noise floor"
-    r")\b",
-    re.IGNORECASE,
-)
-
-ORIENT_KEYWORDS = re.compile(
-    r"\b("
-    r"where are we|what.?s the status|orient|what.?s broken|"
-    r"state of|health check|what needs doing|what.?s next"
-    r")\b",
-    re.IGNORECASE,
-)
-
-RESUME_KEYWORDS = re.compile(
-    r"\b("
-    r"resume|pick up where|last conversation|last session|"
-    r"where was i|what were we doing|carry on from|"
-    r"it closed|conversation closed|got disconnected|session crashed"
-    r")\b",
-    re.IGNORECASE,
-)
-
-DESIGN_DIRECTIVE = (
-    "DESIGN MODE: Plan and options only; do not edit until the user explicitly switches to implementation."
-)
-
-IMPLEMENT_DIRECTIVE = (
-    "IMPLEMENT MODE: Execute now. If non-trivial, require STAGE_STATE blast_radius/scope first."
-)
-
-COMMIT_DIRECTIVE = (
-    "GIT OPERATION: Execute directly; stage intentionally, commit clearly, push only if asked."
-)
-
-RESEARCH_DIRECTIVE = (
-    "RESEARCH MODE: Use STRATEGY_BLUEPRINT sequence; every claim needs source layer, N, p-value, K, and WFE."
-)
-
-ORIENT_DIRECTIVE = (
-    "ORIENT: Reground from HANDOFF.md, recent git history, active stage state, and live status commands."
-)
-
-RESUME_DIRECTIVE = (
-    "RESUME: Re-read HANDOFF.md, recent git history, and active stage state before continuing."
 )
 
 WARN_THRESHOLD = 4    # After N consecutive Reads, warn
 BLOCK_THRESHOLD = 7   # After N consecutive Reads, BLOCK
-
-INVESTIGATION_DIRECTIVE = (
-    "DATA FIRST: Query data before reading more code. Get numbers first, then explain."
-)
 
 WARN_MESSAGE = (
     "DATA FIRST WARNING: You have read {count} files without running a single query. "
@@ -199,97 +75,17 @@ def load_state():
     state.setdefault("investigation_mode", False)
     state.setdefault("consecutive_reads", 0)
     state.setdefault("last_updated", None)
-    state.setdefault("last_prompt_directive_key", None)
-    state.setdefault("last_prompt_directive_at", None)
     return state
 
 
 def save_state(state):
     state["last_updated"] = datetime.now(UTC).isoformat()
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
 def _now_utc() -> datetime:
     return datetime.now(UTC)
-
-
-def _directive_key(directives):
-    return " || ".join(directives)
-
-
-def _should_emit_directives(state, directives):
-    if not directives:
-        return False
-    key = _directive_key(directives)
-    if key != state.get("last_prompt_directive_key"):
-        return True
-    last_at = state.get("last_prompt_directive_at")
-    if not last_at:
-        return True
-    try:
-        age_min = (_now_utc() - datetime.fromisoformat(last_at)).total_seconds() / 60
-    except (ValueError, TypeError):
-        return True
-    return age_min >= DIRECTIVE_COOLDOWN_MINUTES
-
-
-def handle_user_prompt(event):
-    """Detect user intent and inject appropriate workflow directive."""
-    prompt = event.get("prompt", "")
-    state = load_state()
-
-    directives = []
-    matched_investigation = bool(INVESTIGATION_KEYWORDS.search(prompt))
-    matched_commit = bool(COMMIT_KEYWORDS.search(prompt))
-    matched_implement = bool(IMPLEMENT_KEYWORDS.search(prompt) and not DESIGN_KEYWORDS.search(prompt))
-    matched_design = bool(DESIGN_KEYWORDS.search(prompt))
-    matched_research = bool(RESEARCH_KEYWORDS.search(prompt))
-    matched_resume = bool(RESUME_KEYWORDS.search(prompt))
-    matched_orient = bool(ORIENT_KEYWORDS.search(prompt))
-
-    # ── Data investigation detection (existing) ──────────────────────
-    if matched_investigation:
-        state["investigation_mode"] = True
-        state["consecutive_reads"] = 0
-        directives.append(INVESTIGATION_DIRECTIVE)
-    elif matched_commit or matched_implement or matched_design or matched_research or matched_resume or matched_orient:
-        state["investigation_mode"] = False
-        state["consecutive_reads"] = 0
-
-    if TRADING_QUERY_KEYWORDS.search(prompt):
-        directives.append(TRADING_QUERY_DIRECTIVE)
-
-    if SESSION_TIME_KEYWORDS.search(prompt):
-        directives.append(SESSION_TIME_DIRECTIVE)
-
-    # ── Intent routing (new) ─────────────────────────────────────────
-    # Priority: commit > implement > design > research > resume > orient
-    # (most specific wins — commit is unambiguous, design/implement need priority)
-    if matched_commit:
-        directives.append(COMMIT_DIRECTIVE)
-    elif matched_implement:
-        directives.append(IMPLEMENT_DIRECTIVE)
-    elif matched_design:
-        directives.append(DESIGN_DIRECTIVE)
-
-    if matched_research:
-        directives.append(RESEARCH_DIRECTIVE)
-
-    if matched_resume:
-        directives.append(RESUME_DIRECTIVE)
-    elif matched_orient:
-        directives.append(ORIENT_DIRECTIVE)
-
-    # ── Emit directives ──────────────────────────────────────────────
-    if _should_emit_directives(state, directives):
-        state["last_prompt_directive_key"] = _directive_key(directives)
-        state["last_prompt_directive_at"] = _now_utc().isoformat()
-        save_state(state)
-        print("\n".join(directives), file=sys.stderr)
-    else:
-        save_state(state)
-
-    sys.exit(0)
 
 
 def handle_pre_tool_use(event):
@@ -365,9 +161,9 @@ def main():
 
     hook_event = event.get("hook_event_name", "")
 
-    if hook_event == "UserPromptSubmit":
-        handle_user_prompt(event)
-    elif hook_event == "PreToolUse":
+    # UserPromptSubmit handling moved to prompt-broker.py on 2026-04-27.
+    # This script only handles PreToolUse now.
+    if hook_event == "PreToolUse":
         handle_pre_tool_use(event)
     else:
         sys.exit(0)

@@ -20,66 +20,90 @@ def _load_module():
     return module
 
 
-def test_repeated_prompt_directives_are_suppressed_within_cooldown(tmp_path: Path) -> None:
+def test_pretooluse_query_resets_consecutive_reads(tmp_path: Path) -> None:
+    """A Bash query command must reset the read counter. Replaces the
+    deleted UserPromptSubmit-branch tests — that path now lives in
+    `.claude/hooks/tests/test_prompt_broker.py` (broker merge 2026-04-27).
+    """
     module = _load_module()
-    module.STATE_FILE = tmp_path / ".data-first-state.json"
-    state = {
-        "investigation_mode": False,
-        "consecutive_reads": 0,
-        "last_updated": datetime.now(UTC).isoformat(),
-        "last_prompt_directive_key": module._directive_key([module.ORIENT_DIRECTIVE]),
-        "last_prompt_directive_at": datetime.now(UTC).isoformat(),
-    }
-    module.save_state(state)
-
-    stderr = io.StringIO()
-    try:
-        with redirect_stderr(stderr):
-            module.handle_user_prompt({"prompt": "what's the status"})
-    except SystemExit as exc:
-        assert exc.code == 0
-
-    assert stderr.getvalue() == ""
-
-
-def test_implementation_prompt_clears_stale_investigation_mode(tmp_path: Path) -> None:
-    module = _load_module()
-    module.STATE_FILE = tmp_path / ".data-first-state.json"
+    module.STATE_FILE = tmp_path / "data-first.json"
     module.save_state(
         {
             "investigation_mode": True,
             "consecutive_reads": 5,
             "last_updated": datetime.now(UTC).isoformat(),
-            "last_prompt_directive_key": None,
-            "last_prompt_directive_at": None,
+        }
+    )
+
+    try:
+        module.handle_pre_tool_use(
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "python -c 'print(1)'"},
+            }
+        )
+    except SystemExit as exc:
+        assert exc.code == 0
+
+    state = module.load_state()
+    assert state["consecutive_reads"] == 0
+
+
+def test_pretooluse_blocks_after_threshold_in_investigation_mode(tmp_path: Path) -> None:
+    module = _load_module()
+    module.STATE_FILE = tmp_path / "data-first.json"
+    module.save_state(
+        {
+            "investigation_mode": True,
+            "consecutive_reads": module.BLOCK_THRESHOLD - 1,
+            "last_updated": datetime.now(UTC).isoformat(),
         }
     )
 
     stderr = io.StringIO()
     try:
         with redirect_stderr(stderr):
-            module.handle_user_prompt({"prompt": "build it now"})
+            module.handle_pre_tool_use({"tool_name": "Read"})
     except SystemExit as exc:
-        assert exc.code == 0
-
-    state = module.load_state()
-    assert state["investigation_mode"] is False
-    assert state["consecutive_reads"] == 0
-    assert "IMPLEMENT MODE" in stderr.getvalue()
+        assert exc.code == 2  # BLOCK
+    assert "DATA FIRST BLOCK" in stderr.getvalue()
 
 
-def test_investigation_prompt_sets_mode_and_emits_once(tmp_path: Path) -> None:
+def test_pretooluse_warns_at_warn_threshold(tmp_path: Path) -> None:
     module = _load_module()
-    module.STATE_FILE = tmp_path / ".data-first-state.json"
+    module.STATE_FILE = tmp_path / "data-first.json"
+    module.save_state(
+        {
+            "investigation_mode": True,
+            "consecutive_reads": module.WARN_THRESHOLD - 1,
+            "last_updated": datetime.now(UTC).isoformat(),
+        }
+    )
 
     stderr = io.StringIO()
     try:
         with redirect_stderr(stderr):
-            module.handle_user_prompt({"prompt": "investigate why the numbers are off"})
+            module.handle_pre_tool_use({"tool_name": "Read"})
+    except SystemExit as exc:
+        assert exc.code == 0  # WARN, allow
+    assert "DATA FIRST WARNING" in stderr.getvalue()
+
+
+def test_pretooluse_no_warn_outside_investigation_mode_below_block_plus_3(tmp_path: Path) -> None:
+    module = _load_module()
+    module.STATE_FILE = tmp_path / "data-first.json"
+    module.save_state(
+        {
+            "investigation_mode": False,
+            "consecutive_reads": 5,
+            "last_updated": datetime.now(UTC).isoformat(),
+        }
+    )
+
+    stderr = io.StringIO()
+    try:
+        with redirect_stderr(stderr):
+            module.handle_pre_tool_use({"tool_name": "Read"})
     except SystemExit as exc:
         assert exc.code == 0
-
-    state = module.load_state()
-    assert state["investigation_mode"] is True
-    assert state["consecutive_reads"] == 0
-    assert "DATA FIRST" in stderr.getvalue()
+    assert stderr.getvalue() == ""
