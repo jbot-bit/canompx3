@@ -1018,4 +1018,28 @@ close_run(
 
 ---
 
+## 16. Evidence-pack compiler (added 2026-04-28)
+
+The canonical evidence-pack compiler is `scripts/tools/build_evidence_pack.py`
+(supporting package: `scripts/tools/evidence_pack/`). It is the only tool that
+should be used to bundle a candidate's pre-reg YAML, result MD, validated_setups
+row, and twelve-criteria gate evaluation into a single audit-grade artefact.
+The compiler is **derivative**: it reads canonical sources and emits a
+deterministic `manifest.json` + `decision_card.md` + `gate_table.json` +
+`report.md` under `reports/evidence_packs/<slug>/<run-iso8601>/`. It is not
+authoritative for any decision-ledger entry; the canonical sources remain the
+truth surface. Design doc: `docs/plans/2026-04-28-evidence-pack-generator-design.md`.
+
+The compiler enforces five fail-closed gates (hypothesis missing, holdout not
+declared, derived-layer-as-truth, fingerprint drift, pooled-finding lane
+misuse) and one soft warning (E2 look-ahead contamination registry missing →
+amber banner, verdict unaffected). The contamination check uses a sorted
+recursive glob against `docs/audit/**/*e2*lookahead*contamination*.md`; when
+the canonical registry is later promoted from its current
+unmerged-research branches to `origin/main`, the amber banner disappears with
+no code change. Future PRs add Parquet extracts (`--include-extracts`), HTML
+rendering (`--html`), and a marimo viewer; PR1 ships text-only.
+
+---
+
 **End of spec.** § 9 WFE decision RESOLVED 2026-04-07 (Modified Option A, zero-cost, literature-grounding caveat). Phase A completion pending the doc cross-link updates listed in § 10. Phase E implementation is unblocked (canonical-filter stage closed at `cd9b5e9`) but not yet scheduled — awaiting user authorization to execute the § 9.4 implementation contract.
