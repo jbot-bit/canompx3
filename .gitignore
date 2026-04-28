@@ -266,3 +266,6 @@ docs/runtime/lane_correlation_monitor.json
 live_session.stop
 live_signals_*.jsonl
 .claude/hooks/.completion-notify-last
+
+# Added by code-review-graph
+.code-review-graph/

@@ -2,6 +2,7 @@
 status: active
 created: 2026-04-28
 purpose: ADHD-friendly single source of truth for repo tooling + git survival
+related: docs/specs/crg-integration.md (CRG details), docs/external/code-review-graph/ (verbatim official CRG docs)
 ---
 
 # Repo + Tooling Cheat Sheet
@@ -23,48 +24,58 @@ One page. Read this before you spiral.
 
 ---
 
-## 2. code-review-graph (CRG) — KEPT, used for navigation only
+## 2. code-review-graph (CRG) — KEPT and wired
 
-- Python tool + MCP server. v2.3.2.
-- Builds a code knowledge graph: callers, callees, imports, tests-for-symbol, blast radius.
-- **Not a source of truth.** It's a faster grep with edges. Truth = canonical code + `gold.db`.
-- DB lives at `.code-review-graph/` (gitignored).
-- Wired in `.mcp.json` on `tooling/gitnexus-eval` branch — not yet on main.
+- Python tool + MCP server, v2.3.2.
+- Code knowledge graph: callers, callees, imports, tests-for-symbol, blast radius, semantic search.
+- **Not a truth layer.** Truth = canonical code + `gold.db`. CRG = navigation only.
+- Graph DB: `.code-review-graph/graph.db` (gitignored, ~175 MB).
+- MCP wired in `.mcp.json` (server: `code-review-graph` via `uvx`).
+- Spec: `docs/specs/crg-integration.md`.
+- Verbatim official docs: `docs/external/code-review-graph/` (11 files).
 
-### When to use CRG
-- Before non-trivial code edit: ask "what calls this?" / "what tests cover this?"
-- Before PR review: blast-radius / impact-radius on the diff.
-- Big audits where grep would flood your context.
+### Daily slash commands (use in this order)
+
+1. `/crg-context <task>` — minimal context (~80 tokens), reads risk + suggests next tool
+2. `/crg-search <free-text>` — semantic/FTS node search. Best tool in 2026-04-28 benchmark.
+3. `/crg-blast <file>` — impact radius. Only if step 1 flagged risk medium/high.
+4. `/crg-tests <file::symbol>` — affected tests. Fully qualify the symbol.
+
+### Maintenance
+
+```bash
+code-review-graph update    # incremental, <2s — after pipeline/ or trading_app/ edits
+code-review-graph build     # full rebuild, ~30s — after CRG version bumps
+code-review-graph status    # nodes/edges/last-updated sanity check
+```
 
 ### When NOT to use CRG
-- For trading data, strategy stats, fitness → use `gold-db` MCP.
-- For doctrine / thresholds → read `docs/institutional/` directly.
-- For trivial 1-file edits → just Read + Grep.
 
-### Rebuild after pipeline/trading_app edits
-```bash
-code-review-graph build
-```
+- Trading data, fitness, strategy stats → `gold-db` MCP
+- Doctrine / thresholds → `docs/institutional/`
+- Trivial 1-file edits → just Read + Grep
+- "What is true right now?" → canonical code, never the graph
 
 ---
 
-## 3. Daily flow
+## 3. Daily flow (from CLAUDE.md routing)
 
-**Before code edit:**
+**Before non-trivial code edit:**
 1. `python scripts/tools/context_resolver.py --task "<intent>" --format markdown`
-2. (optional) CRG `get_minimal_context_tool` for the symbol you're touching
-3. Read canonical files
+2. `/crg-context <intent>` (read suggested next tool)
+3. `/crg-search <symbols>` if needed to locate canonical files
+4. Read the canonical files directly
 
 **Before PR / review:**
-1. CRG `get_impact_radius_tool` on changed files
-2. Run drift + tests
-3. Self-review against `.claude/rules/institutional-rigor.md`
+1. `/crg-context "review current diff"`
+2. If risk medium/high: `/crg-blast <each-changed-file>`
+3. `/crg-tests <each-touched-public-symbol>` for coverage gaps
+4. Run drift + tests (existing pre-commit gauntlet)
 
 **For "what's true right now":**
-- Strategies / fitness: `gold-db` MCP
-- Sessions / costs / instruments: `pipeline.dst`, `pipeline.cost_model`, `pipeline.asset_configs`
-- Doctrine: `docs/institutional/`
-- **Never CRG. Never docs. Never memory.**
+- Strategies / fitness → `gold-db` MCP
+- Sessions / costs / instruments → `pipeline.dst`, `pipeline.cost_model`, `pipeline.asset_configs`
+- Doctrine → `docs/institutional/`
 
 ---
 
@@ -76,13 +87,14 @@ code-review-graph build
 4. Runtime junk (`live_*.jsonl`, `.stop` files, `.completion-notify-last`) → gitignore, never commit.
 5. If confused, stop and `git status` again. The repo is not lying to you.
 
-### Worktrees you have right now
+### Worktrees (current)
 | Path | Branch | Job |
 |---|---|---|
 | `C:/Users/joshd/canompx3` | `research/2026-04-28-phase-d-...` | Phase-D Pathway-B research |
 | `.worktrees/canonaudit` | `canonaudit` | Canonical-source audits |
 | `.worktrees/cockpit-ledger-20260428` | `design/cockpit-ledger-...` | Cockpit/ledger design |
-| `.worktrees/gitnexus-eval` | `tooling/gitnexus-eval` | CRG/GitNexus eval (DONE — merge or close) |
+| `.worktrees/gitnexus-eval` | `tooling/gitnexus-eval` | CRG/GitNexus eval (DONE — keep until merged) |
+| `.worktrees/crg-wiring` | `tooling/crg-wiring` | This work — CRG MCP wiring |
 
 ---
 
@@ -93,7 +105,7 @@ git status --short                                      # where am I, what's dir
 git worktree list                                       # what branches are open
 git log --oneline -5                                    # last 5 commits on this branch
 python scripts/tools/context_resolver.py --task "X"     # what to read for task X
-code-review-graph build                                 # refresh CRG after pipeline edits
+code-review-graph update                                # refresh graph after pipeline edits
 ```
 
 That's it. Anything beyond this — ask first.
