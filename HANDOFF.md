@@ -9,9 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-28
-- **Commit:** cba05880 — chore(stages): close pr-open-helper (1-stage landed)
-- **Files changed:** 1 files
-  - `docs/runtime/stages/pr-open-helper.md`
+- **Commit:** 057210fe — chore(streamline): /ship alias + system-streamline audit
+- **Files changed:** 3 files
+  - `.claude/skills/ship/SKILL.md`
+  - `HANDOFF.md`
+  - `docs/audit/results/2026-04-28-claude-system-streamline-audit.md`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
