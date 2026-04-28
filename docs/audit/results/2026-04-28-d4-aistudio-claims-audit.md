@@ -186,3 +186,14 @@ A follow-up cross-session audit performed later the same day (canonical query, s
 - **MinTRL math (Bailey 2013):** N_OOS_on=17 with sd≈1.0R has power ≈ 0.17 to detect the IS effect. To reach Cohen power 0.80 requires N ≈ 131 OOS-on observations. At current accrual ~24 OOS-on/year for this cell, that is **≈ 5.5 calendar years**, not the implicit "Q3-2026" interpretation of PARK_PENDING_OOS_POWER. This surfaces a doctrine gap for Amendment 3.2 — see the separate MinTRL amendment commit landing alongside this self-correction.
 
 **Net change to D4 verdict:** PARK_PENDING_OOS_POWER stands. The Carver mechanism reading is qualified (cell-specific, not universal). The next bounded test is **D5 BOTH-SIDES conditional sizing pre-reg**, NOT D2/D3 expansion, NOT additional reviewer-claim adjudication.
+
+---
+
+## Self-correction (2nd pass) — independent evidence-auditor findings 2026-04-28
+
+An independent evidence-auditor (separate context, no prior framing exposure) re-ran the load-bearing canonical claims and found two numerical errors above. Documenting honestly:
+
+1. **Cross-session BH-FDR figure was wrong.** The 1st-pass self-correction above states "K=12 BH-FDR best q = 0.391." That figure has no reproducible source in any committed script. The correct number, re-derived with exact SQL on the D5 framing (RR1.5 BOTH-SIDES `garch>70` vs off across all 12 sessions IS): **best q = 0.0707** (COMEX_SETTLE, raw p=0.0059). At the D4 framing (RR1.0 long-only) the auditor reported best q = 0.0252 (COMEX_SETTLE survives). Either way the substantive conclusion ("no universal mechanism survives FDR; the effect is COMEX_SETTLE-specific at the deployed framing") is unchanged. The 0.391 figure is retracted as evidence; the conclusion stands on the correct 0.0707 figure.
+2. **MGC SR_ann figure was wrong.** The 1st-pass self-correction states "SR_ann +0.094 on full N=66." The correct figure with the proper years divisor (MGC COMEX_SETTLE IS span = 2022..2025 = 4 years, not 7): **SR_ann = +0.124** (SR_pt=+0.031, sqrt(66/4)). The "noise / not coherent sister" conclusion (p=0.805 from auditor) is unchanged. The 0.094 figure is retracted as evidence; the conclusion stands.
+
+Both errors were toward the same direction (overstating the negative finding). They do not change any verdict but they were sloppy. The independent-auditor pass surfaced them; without it they would have stayed in the doctrine record.
