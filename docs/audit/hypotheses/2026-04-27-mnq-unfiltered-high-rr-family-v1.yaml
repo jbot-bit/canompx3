@@ -1,0 +1,178 @@
+version: 1
+status: LOCKED
+date: 2026-04-27
+slug: mnq-unfiltered-high-rr-family-v1
+title: "MNQ unfiltered HIGH-RR cross-family scan v1 — extended RR axis on PR #51 parent"
+owner: claude
+parent_spec: "docs/audit/hypotheses/2026-04-20-mnq-unfiltered-baseline-cross-family-v1.yaml"
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/audit/results/2026-04-21-mnq-pr51-dsr-audit-v1.md"
+    - "docs/audit/results/2026-04-21-mnq-pr51-dsr-audit-v2-effective-n.md"
+  notes:
+    - "Mode A strict: IS = trading_day < 2026-01-01; OOS is read-only descriptive."
+    - "All evaluation is scratch-inclusive: scratch rows counted with pnl_eff = 0."
+    - "Direction-pooled per the parent cross-family pre-reg convention."
+    - "30m aperture dropped from the parent's axis: PR #49 (30m RR=1.0) found 30m thin and no current deployed lane uses 30m. Parent scan covers 30m RR=1.0/1.5/2.0 already."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "8bef5eb1"
+  committed_required_before_run: true
+
+scope:
+  instrument: MNQ
+  apertures: [5, 15]
+  rr_targets: [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
+  entry_model: E2
+  confirm_bars: 1
+  baseline_filter: none
+  directions: pooled
+  sessions: "all 12 active per pipeline.dst.SESSION_CATALOG (CME_REOPEN, TOKYO_OPEN, SINGAPORE_OPEN, LONDON_METALS, EUROPE_FLOW, US_DATA_830, NYSE_OPEN, US_DATA_1000, COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE, BRISBANE_1025)"
+  cell_axes_count: "12 sessions × 2 apertures × 6 RRs = 144 cells (less data-availability skips)"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only; descriptive only; no threshold tuning"
+  holdout_rule:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  parent_audits:
+    - "PR #48 28279719 — monotonic-up universal on MNQ × (5m,15m,30m) × (RR1.0,1.5,2.0)."
+    - "PR #49 0b27c01c — MNQ 30m RR=1.0 K=4 audit found 2 RESEARCH_SURVIVORs."
+    - "PR #50 ec4a14de — MNQ 15m RR=1.0 K=3 audit found 2 CANDIDATE_READYs."
+    - "PR #51 2ed62dc3 — MNQ cross-family Pathway A K=105 found 5 CANDIDATE_READYs (RR ≤ 2.0 axis)."
+    - "DSR audit v1 (2026-04-21-mnq-pr51-dsr-audit-v1.md) — all 5 fail Phase 0 C5 at M=105 independent."
+    - "DSR audit v2 (2026-04-21-mnq-pr51-dsr-audit-v2-effective-n.md) — all 5 fail Phase 0 C5 at corrected N̂=98.99 (ρ̂=+0.058)."
+  upstream_scan_k_framings:
+    pr51_cross_family_k: "K=105 with N_IS≥100 — provenance only"
+  note: |
+    The parent PR #51 scan capped RR at 2.0. This pre-reg extends the same
+    family along the RR axis to {2.5, 3.0, 4.0}, justified by Chan Ch7
+    stop-cascade-momentum theory (a triggered cascade can extend well past
+    a 1:2 R-target on the same session). Does NOT re-test the parent's
+    capped-RR cells under any new method — those remain DSR-failed and
+    parked under their own audit chain.
+
+theory_citations:
+  grounded_in_local_extracts:
+    - path: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      claim: "Stop-cascade momentum at session opens can extend the realised move past a 1:2 R-target. Chan p.155-157 grounds the breakout-stop-cascade mechanism."
+    - path: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      claim: "Intraday trend-follow on equity indices and futures — grounds the broader strategy class."
+    - path: "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+      claim: "MinBTL bound — K ≤ 300 for clean MNQ data. This scan: K = 144, well within budget."
+    - path: "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+      claim: "BH-FDR family discipline per Phase 0 C3."
+    - path: "docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md"
+      claim: "t ≥ 3.00 with theory citation per Phase 0 Amendment 2.2 (HLZ-tier banding)."
+    - path: "docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md"
+      claim: "DSR ≥ 0.95 mandatory before any survivor advances per Phase 0 C5 (Eq. 2 + Eq. 9 effective-N correction)."
+
+primary_schema:
+  k_family: 144
+  k_global: 144
+  primary_promotion_gate: "BH-FDR q < 0.05 at K_family=144 PLUS positive net-IS ExpR PLUS dir_match OOS when N_OOS ≥ MIN_N_OOS PLUS Chordia t ≥ 3.00 (HLZ-tier with theory)"
+  family_cells_structured_as: "1 hypothesis per (aperture, rr, session) cell; pooled-direction; binary 'cell has positive ExpR with high t-stat'"
+
+hypothesis_template: |
+  H{cell_id}: For MNQ × {aperture}m × E2 × CB1 × RR={rr} × {session} × pooled-direction
+  unfiltered, the IS ExpR is > 0 with t ≥ 3.00 (HLZ-tier with theory),
+  raw p < 0.05, AND no era-year shows ExpR < -0.05 (with N≥50 in that era).
+
+trial_budget:
+  primary_selection_trials: 144
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2*ln(N_trials) / E[max_N]^2"
+    n_trials: 144
+    expected_max_n: 1.2
+    value_years: 6.9
+    available_clean_mnq_years: 7.0
+    within_cap: true
+    cap_reference: "docs/institutional/pre_registered_criteria.md Criterion 2 (Bailey et al 2013)"
+
+kill_criteria:
+  - id: K1
+    metric: "family BH-FDR survivors with t ≥ 3.00, ExpR > 0, raw p < 0.05"
+    threshold: "zero such cells"
+    action: KILL
+  - id: K2
+    metric: "C8 dir_match_oos for any apparent IS survivor with N_oos ≥ 50"
+    threshold: "false on any survivor"
+    action: PARK
+  - id: K3
+    metric: "C9 era_min ExpR for any apparent IS survivor"
+    threshold: "< -0.05 in any era-year with N_era ≥ 50"
+    action: PARK
+  - id: K4
+    metric: "N_IS"
+    threshold: "< 100 on any survivor"
+    action: KILL
+  - id: K5
+    metric: "C5 Bailey-LdP DSR for any apparent IS survivor"
+    threshold: "DSR < 0.95 at corrected N̂ (Bailey Eq. 9)"
+    action: PARK_PENDING_PATHWAY_B
+    note: "If DSR fails, the cell does NOT advance under Pathway A. A Pathway B K=1 follow-up pre-reg is the only legitimate next step (per Amendment 3.0 + DSR-audit-v2 explicit guidance)."
+
+decision_rule:
+  continue_if: "≥1 cell passes K1 + K4 AND clears C5 DSR"
+  park_if: "IS signal exists but C5 DSR < 0.95 OR C8 dir_match fails OR C9 era stability fails — survivors park, not promote"
+  kill_if: "zero family survivors at K1 + K4"
+  follow_on_pathway_b_if: "C5 DSR fails on a K1+K4 survivor — open Pathway B K=1 pre-reg per pre_registered_criteria.md Amendment 3.0"
+
+methodology_rules_applied:
+  - rule: "RULE 2 filter application timing"
+    application: "Unfiltered baseline only; no post-hoc subset rescue."
+  - rule: "RULE 3 sacred holdout"
+    application: "Thresholds frozen on IS only; OOS read-only descriptive."
+  - rule: "RULE 4 multiple testing"
+    application: "BH-FDR at K_family = 144 (pre-registered). No K_global swap post-hoc."
+  - rule: "RULE 5 comprehensive scope"
+    application: "Full 12 sessions × 2 apertures × 6 RRs enumerated. Data-availability auto-skips logged."
+  - rule: "RULE 6 trade-time knowability"
+    application: "Unfiltered cell test — only entry-model + ORB end is knowable; no overlay features tested."
+  - rule: "RULE 7 tautology"
+    application: "No filter overlay tested — tautology check N/A at the cell-baseline level."
+  - rule: "RULE 10 pre-registration"
+    application: "This file is the pre-reg; locked before run; commit_sha = 8bef5eb1."
+  - rule: "RULE 13 pressure-test"
+    application: "Runner mirrors the parent v1 runner whose pressure-test history is documented in PR #51's review thread; no new feature class introduced."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-04-27-mnq-unfiltered-high-rr-family-v1.md"
+  - "per-cell BH-FDR table with raw p, q, t-stat, N_IS, net ExpR, WFE, era_min, N_OOS, OOS ExpR, OOS/IS ratio, verdict"
+  - "any K1+K4 survivor must include a C5 DSR computation block (Bailey Eq. 2 at raw M and Eq. 9 corrected N̂)"
+  - "explicit follow-on routing: PARK_PENDING_PATHWAY_B if C5 fails on any survivor"
+
+execution_gate:
+  allowed_now: true
+  forbidden_now:
+    - "any threshold change after a result is read"
+    - "any RR/aperture/session axis expansion mid-run"
+    - "any sizing or allocator wiring on a survivor without a separate pre-reg"
+    - "writes to validated_setups / edge_families / lane_allocation / live_config"
+
+not_done_by_this_pre_reg:
+  - "Does NOT re-test the parent PR #51 cells (RR ≤ 2.0). Those remain DSR-failed and parked."
+  - "Does NOT promote any cell to deployment — promotion requires a separate Pathway B K=1 + C5/C6/C8/C9/C11/C12 deployment-gate pre-reg."
+  - "Does NOT re-validate filter overlays — filter-overlay families have separate pre-regs (parent's note re: PR #53/#55 etc.)."
+  - "Does NOT scan MES or MGC — those are separate parallel pre-regs (parent context: 2026-04-20-mes-mgc-unfiltered-baseline-cross-family-v1 and follow-ons came up DEAD; not re-tested here)."
+  - "Does NOT introduce a new feature class beyond entry-model + ORB end."
