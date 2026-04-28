@@ -172,3 +172,27 @@ items:
       - docs/runtime/debt-ledger.md
     notes_ref: docs/plans/2026-04-25-mes-event-tail-slippage-debt-scope.md
     override_note:
+
+  - id: parked_pathway_b_additivity_triage
+    title: Parked Pathway-B (D2/D4) RULE 7 additivity triage vs topstep_50k_mnq_auto
+    class: research
+    status: closed
+    priority: P1
+    close_before_new_work: false
+    owner_hint: claude
+    last_verified_at: 2026-04-29
+    freshness_sla_days: 14
+    next_action: "Closed — D2 PASS_ADDITIVITY (worst_rho +0.32, N=387). D4 FAIL_ADDITIVITY (worst_rho +0.81 vs deployed COMEX_SETTLE ORB_G5; subset 100%; N=407). D4 cannot deploy as additive even if OOS power clears; recovery requires re-spec as same-cell replacement Pathway-B or indefinite park. D2 stays in OOS-power-floor wait queue (~Q3-2026)."
+    exit_criteria: Verdict matrix exists for each PARKed Pathway-B candidate against canonical lane-correlation gate; per-candidate disposition (PASS_ADDITIVITY / FAIL_ADDITIVITY) documented.
+    blocked_by: []
+    decision_refs:
+      - docs/audit/results/2026-04-29-parked-pathway-b-additivity-triage.md
+    evidence_refs:
+      - trading_app/lane_correlation.py
+      - trading_app/config.py
+      - research/2026-04-29-parked-pathway-b-additivity-audit.py
+      - tests/test_trading_app/test_config.py
+      - docs/audit/hypotheses/2026-04-28-mes-europe-flow-ovn-range-pathway-b-v1.yaml
+      - docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-pathway-b-v1.yaml
+    notes_ref: docs/audit/results/2026-04-29-parked-pathway-b-additivity-triage.md
+    override_note: "D4 dual-gate (OOS power + RULE 7) — re-open only if user accepts re-spec as replacement-lane Pathway-B or the deployed COMEX_SETTLE ORB_G5 anchor decays out of the book. D2 re-opens automatically when N_OOS_on >= 50."

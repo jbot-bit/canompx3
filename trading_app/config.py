@@ -1216,19 +1216,23 @@ class OvernightRangeFilter(StrategyFilter):
     """
 
     min_pct: float = 60.0
+    strict_gt: bool = False  # default False preserves >= semantics for all existing instances
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         val = row.get("overnight_range_pct")
         if val is None:
             return False
-        return val >= self.min_pct
+        return val > self.min_pct if self.strict_gt else val >= self.min_pct
 
     def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
         import pandas as pd
 
         if "overnight_range_pct" not in df.columns:
             return pd.Series(False, index=df.index)
-        return df["overnight_range_pct"].notna() & (df["overnight_range_pct"] >= self.min_pct)
+        col = df["overnight_range_pct"]
+        if self.strict_gt:
+            return col.notna() & (col > self.min_pct)
+        return col.notna() & (col >= self.min_pct)
 
     def describe(
         self,
@@ -1240,20 +1244,26 @@ class OvernightRangeFilter(StrategyFilter):
         _ = (orb_label, entry_model)
         observed = _atom_numeric(row.get("overnight_range_pct"))
         missing = observed is None
-        passes = None if missing else observed >= self.min_pct
+        if missing:
+            passes = None
+        elif self.strict_gt:
+            passes = observed > self.min_pct
+        else:
+            passes = observed >= self.min_pct
+        comparator = ">" if self.strict_gt else ">="
         return [
             AtomDescription(
-                name=f"Overnight range percentile >= {self.min_pct:g}",
+                name=f"Overnight range percentile {comparator} {self.min_pct:g}",
                 category="PRE_SESSION",
                 resolves_at="STARTUP",
                 passes=passes,
                 feature_column="overnight_range_pct",
                 observed_value=observed,
                 threshold=self.min_pct,
-                comparator=">=",
+                comparator=comparator,
                 is_data_missing=missing,
                 explanation=(
-                    f"Require overnight range rolling percentile >= {self.min_pct:g}% (Asian-session activity gate)."
+                    f"Require overnight range rolling percentile {comparator} {self.min_pct:g}% (Asian-session activity gate)."
                 ),
             )
         ]
@@ -1299,11 +1309,14 @@ class GARCHForecastVolPctFilter(StrategyFilter):
     CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
 
     pct_threshold: float = 20.0
-    direction: str = "low"  # "low" → <= threshold, "high" → >= threshold
+    direction: str = "low"  # "low" → <=/<, "high" → >=/> (strict_gt selects strict variant)
+    strict_gt: bool = False  # when True with direction="high": use > (strict); ignored for direction="low"
 
     def __post_init__(self):
         if self.direction not in ("low", "high"):
             raise ValueError(f"GARCHForecastVolPctFilter direction must be 'low' or 'high', got {self.direction!r}")
+        if self.strict_gt and self.direction != "high":
+            raise ValueError("GARCHForecastVolPctFilter strict_gt=True is only valid with direction='high'")
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         _ = orb_label
@@ -1316,7 +1329,7 @@ class GARCHForecastVolPctFilter(StrategyFilter):
             return False
         if self.direction == "low":
             return coerced <= self.pct_threshold
-        return coerced >= self.pct_threshold
+        return coerced > self.pct_threshold if self.strict_gt else coerced >= self.pct_threshold
 
     def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
         _ = orb_label
@@ -1327,6 +1340,8 @@ class GARCHForecastVolPctFilter(StrategyFilter):
         col = df["garch_forecast_vol_pct"]
         if self.direction == "low":
             return col.notna() & (col <= self.pct_threshold)
+        if self.strict_gt:
+            return col.notna() & (col > self.pct_threshold)
         return col.notna() & (col >= self.pct_threshold)
 
     def describe(
@@ -1343,9 +1358,14 @@ class GARCHForecastVolPctFilter(StrategyFilter):
             passes = None
         elif self.direction == "low":
             passes = observed <= self.pct_threshold
+        elif self.strict_gt:
+            passes = observed > self.pct_threshold
         else:
             passes = observed >= self.pct_threshold
-        comparator = "<=" if self.direction == "low" else ">="
+        if self.direction == "low":
+            comparator = "<="
+        else:
+            comparator = ">" if self.strict_gt else ">="
         regime_word = "low-vol" if self.direction == "low" else "high-vol"
         return [
             AtomDescription(
@@ -3255,6 +3275,33 @@ _HYPOTHESIS_SCOPED_FILTERS: dict[str, StrategyFilter] = {
         filter_type="CROSS_SGP_MOMENTUM",
         description="SINGAPORE_OPEN winning + same direction = take; losing + same = veto",
         prior_session="SINGAPORE_OPEN",
+    ),
+    # Phase D D2 PARK candidate (B-MES-EUR Pathway B K=1, 2026-04-28).
+    # Pre-reg cell predicate: daily_features.overnight_range_pct > 80 (strict gt).
+    # Registered hypothesis-scoped ONLY for canonical lane-correlation
+    # additivity audit of PARK_PENDING_OOS_POWER candidate. NOT routed into
+    # any per-session discovery grid; not part of BASE_GRID_FILTERS.
+    # @research-source docs/audit/hypotheses/2026-04-28-mes-europe-flow-ovn-range-pathway-b-v1.yaml
+    # @entry-models E2
+    "OVNRNG_PCT_GT80": OvernightRangeFilter(
+        filter_type="OVNRNG_PCT_GT80",
+        description="Overnight range rolling percentile > 80 (strict)",
+        min_pct=80.0,
+        strict_gt=True,
+    ),
+    # Phase D D4 PARK candidate (B-MNQ-COX Pathway B K=1, 2026-04-28).
+    # Pre-reg cell predicate: daily_features.garch_forecast_vol_pct > 70 (strict gt).
+    # Registered hypothesis-scoped ONLY for canonical lane-correlation
+    # additivity audit of PARK_PENDING_OOS_POWER candidate. NOT routed into
+    # any per-session discovery grid; not part of BASE_GRID_FILTERS.
+    # @research-source docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-pathway-b-v1.yaml
+    # @entry-models E2
+    "GARCH_VOL_PCT_GT70": GARCHForecastVolPctFilter(
+        filter_type="GARCH_VOL_PCT_GT70",
+        description="GARCH forecast vol rolling percentile > 70 (strict, high-vol regime)",
+        pct_threshold=70.0,
+        direction="high",
+        strict_gt=True,
     ),
 }
 

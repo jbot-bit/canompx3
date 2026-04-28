@@ -168,8 +168,10 @@ class TestAllFilters:
         #     PD_DISPLACE_LONG (Apr 2026 broader MNQ downside-displacement family)
         #     PD_CLEAR_LONG (Apr 2026 broader MNQ non-congestion family)
         #     PD_GO_LONG (Apr 2026 union of validated positive MNQ prior-day families)
-        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 13 scoped = 95
-        assert len(ALL_FILTERS) == 95
+        #     OVNRNG_PCT_GT80 (Apr 2026 Phase D D2 PARK candidate B-MES-EUR — additivity audit only)
+        #     GARCH_VOL_PCT_GT70 (Apr 2026 Phase D D4 PARK candidate B-MNQ-COX — additivity audit only)
+        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 15 scoped = 97
+        assert len(ALL_FILTERS) == 97
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -864,6 +866,249 @@ class TestGARCHForecastVolPctFilter:
         assert len(atoms) == 1
         assert atoms[0].is_data_missing is True
         assert atoms[0].passes is None
+
+
+class TestStrictGtVariants:
+    """Regression + new-key tests for strict_gt opt-in on pct-based filters.
+
+    Covers Phase D PARK-candidate registrations (2026-04-29):
+    OVNRNG_PCT_GT80 + GARCH_VOL_PCT_GT70. Default strict_gt=False MUST
+    preserve all existing >= behaviour.
+    """
+
+    # ── OvernightRangeFilter (pct, NOT Abs) ─────────────────────────────
+
+    def test_ovnrng_pct_default_ge_at_boundary(self):
+        """Default strict_gt=False keeps >= semantics: val == threshold passes."""
+        from trading_app.config import OvernightRangeFilter
+
+        f = OvernightRangeFilter(filter_type="TEST", description="test", min_pct=80.0)
+        assert f.strict_gt is False
+        assert f.matches_row({"overnight_range_pct": 80.0}, "EUROPE_FLOW") is True
+        assert f.matches_row({"overnight_range_pct": 80.5}, "EUROPE_FLOW") is True
+        assert f.matches_row({"overnight_range_pct": 79.9}, "EUROPE_FLOW") is False
+
+    def test_ovnrng_pct_strict_gt_at_boundary(self):
+        """strict_gt=True flips to > : val == threshold fails, val > threshold passes."""
+        from trading_app.config import OvernightRangeFilter
+
+        f = OvernightRangeFilter(filter_type="TEST", description="test", min_pct=80.0, strict_gt=True)
+        assert f.matches_row({"overnight_range_pct": 80.0}, "EUROPE_FLOW") is False
+        assert f.matches_row({"overnight_range_pct": 80.0001}, "EUROPE_FLOW") is True
+        assert f.matches_row({"overnight_range_pct": 79.9}, "EUROPE_FLOW") is False
+
+    def test_ovnrng_pct_fail_closed_missing(self):
+        """Both variants fail-closed on missing data."""
+        from trading_app.config import OvernightRangeFilter
+
+        ge = OvernightRangeFilter(filter_type="TEST_GE", description="test", min_pct=80.0)
+        gt = OvernightRangeFilter(filter_type="TEST_GT", description="test", min_pct=80.0, strict_gt=True)
+        assert ge.matches_row({}, "EUROPE_FLOW") is False
+        assert ge.matches_row({"overnight_range_pct": None}, "EUROPE_FLOW") is False
+        assert gt.matches_row({}, "EUROPE_FLOW") is False
+        assert gt.matches_row({"overnight_range_pct": None}, "EUROPE_FLOW") is False
+
+    def test_ovnrng_pct_matches_df_consistency(self):
+        """matches_df agrees with matches_row on a small frame across the boundary."""
+        import pandas as pd
+
+        from trading_app.config import OvernightRangeFilter
+
+        ge = OvernightRangeFilter(filter_type="TEST_GE", description="test", min_pct=80.0)
+        gt = OvernightRangeFilter(filter_type="TEST_GT", description="test", min_pct=80.0, strict_gt=True)
+        df = pd.DataFrame({"overnight_range_pct": [79.9, 80.0, 80.5, None]})
+        assert list(ge.matches_df(df, "EUROPE_FLOW")) == [False, True, True, False]
+        assert list(gt.matches_df(df, "EUROPE_FLOW")) == [False, False, True, False]
+
+    def test_ovnrng_pct_describe_comparator_reflects_strict_gt(self):
+        """describe() comparator switches between '>=' and '>' based on strict_gt."""
+        from trading_app.config import OvernightRangeFilter
+
+        ge = OvernightRangeFilter(filter_type="TEST_GE", description="test", min_pct=80.0)
+        gt = OvernightRangeFilter(filter_type="TEST_GT", description="test", min_pct=80.0, strict_gt=True)
+        ge_atom = ge.describe({"overnight_range_pct": 80.0}, "EUROPE_FLOW", "E2")[0]
+        gt_atom = gt.describe({"overnight_range_pct": 80.0}, "EUROPE_FLOW", "E2")[0]
+        assert ge_atom.comparator == ">="
+        assert ge_atom.passes is True
+        assert gt_atom.comparator == ">"
+        assert gt_atom.passes is False  # 80.0 > 80.0 is False
+
+    # ── OVNRNG_PCT_GT80 hypothesis-scoped registration ─────────────────
+
+    def test_ovnrng_pct_gt80_registered(self):
+        """OVNRNG_PCT_GT80 lives in ALL_FILTERS with strict_gt=True, min_pct=80."""
+        from trading_app.config import OvernightRangeFilter
+
+        assert "OVNRNG_PCT_GT80" in ALL_FILTERS
+        f = ALL_FILTERS["OVNRNG_PCT_GT80"]
+        assert isinstance(f, OvernightRangeFilter)
+        assert f.filter_type == "OVNRNG_PCT_GT80"
+        assert f.min_pct == 80.0
+        assert f.strict_gt is True
+
+    def test_ovnrng_pct_gt80_not_in_base_grid(self):
+        """OVNRNG_PCT_GT80 must NOT be in BASE_GRID_FILTERS (hypothesis-scoped only)."""
+        from trading_app.config import BASE_GRID_FILTERS
+
+        assert "OVNRNG_PCT_GT80" not in BASE_GRID_FILTERS
+
+    def test_ovnrng_pct_gt80_not_in_legacy_grid_for_any_session(self):
+        """OVNRNG_PCT_GT80 must NOT appear in get_filters_for_grid for any session.
+
+        Access path is canonical ALL_FILTERS lookup (e.g. lane_correlation) or
+        Phase 4 hypothesis-injection only.
+        """
+        from trading_app.config import get_filters_for_grid
+
+        sessions = [
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "BRISBANE_1025",
+            "CME_REOPEN",
+            "LONDON_METALS",
+            "EUROPE_FLOW",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
+        ]
+        for inst in ("MNQ", "MES", "MGC"):
+            for sess in sessions:
+                grid = get_filters_for_grid(inst, sess)
+                assert "OVNRNG_PCT_GT80" not in grid, f"OVNRNG_PCT_GT80 leaked into {inst} {sess} grid"
+
+    # ── GARCHForecastVolPctFilter strict_gt regression + new key ──────
+
+    def test_garch_lt20_unchanged_default(self):
+        """Existing GARCH_VOL_PCT_LT20 default behavior preserved (strict_gt=False, direction='low')."""
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = ALL_FILTERS["GARCH_VOL_PCT_LT20"]
+        assert isinstance(f, GARCHForecastVolPctFilter)
+        assert f.direction == "low"
+        assert f.pct_threshold == 20.0
+        assert f.strict_gt is False
+        # boundary: <= preserves
+        assert f.matches_row({"garch_forecast_vol_pct": 20.0}, "NYSE_OPEN") is True
+        assert f.matches_row({"garch_forecast_vol_pct": 19.9}, "NYSE_OPEN") is True
+        assert f.matches_row({"garch_forecast_vol_pct": 20.1}, "NYSE_OPEN") is False
+
+    def test_garch_high_default_ge_at_boundary(self):
+        """direction='high', strict_gt=False keeps >= semantics."""
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST",
+            description="test",
+            pct_threshold=70.0,
+            direction="high",
+        )
+        assert f.matches_row({"garch_forecast_vol_pct": 70.0}, "COMEX_SETTLE") is True
+        assert f.matches_row({"garch_forecast_vol_pct": 69.9}, "COMEX_SETTLE") is False
+
+    def test_garch_high_strict_gt_at_boundary(self):
+        """direction='high' + strict_gt=True flips to > : val == threshold fails."""
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST",
+            description="test",
+            pct_threshold=70.0,
+            direction="high",
+            strict_gt=True,
+        )
+        assert f.matches_row({"garch_forecast_vol_pct": 70.0}, "COMEX_SETTLE") is False
+        assert f.matches_row({"garch_forecast_vol_pct": 70.0001}, "COMEX_SETTLE") is True
+        assert f.matches_row({"garch_forecast_vol_pct": 69.9}, "COMEX_SETTLE") is False
+
+    def test_garch_strict_gt_with_low_direction_raises(self):
+        """strict_gt=True is only valid with direction='high'; low must raise."""
+        import pytest
+
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        with pytest.raises(ValueError, match="strict_gt"):
+            GARCHForecastVolPctFilter(
+                filter_type="TEST",
+                description="test",
+                pct_threshold=20.0,
+                direction="low",
+                strict_gt=True,
+            )
+
+    def test_garch_strict_gt_matches_df_consistency(self):
+        """GARCH strict_gt matches_df agrees with matches_row across boundary."""
+        import pandas as pd
+
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        ge = GARCHForecastVolPctFilter(filter_type="TEST_GE", description="test", pct_threshold=70.0, direction="high")
+        gt = GARCHForecastVolPctFilter(
+            filter_type="TEST_GT", description="test", pct_threshold=70.0, direction="high", strict_gt=True
+        )
+        df = pd.DataFrame({"garch_forecast_vol_pct": [69.9, 70.0, 70.5, None]})
+        assert list(ge.matches_df(df, "COMEX_SETTLE")) == [False, True, True, False]
+        assert list(gt.matches_df(df, "COMEX_SETTLE")) == [False, False, True, False]
+
+    def test_garch_strict_gt_describe_comparator(self):
+        """describe() comparator '>=' default, '>' under strict_gt."""
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        ge = GARCHForecastVolPctFilter(filter_type="TEST_GE", description="test", pct_threshold=70.0, direction="high")
+        gt = GARCHForecastVolPctFilter(
+            filter_type="TEST_GT", description="test", pct_threshold=70.0, direction="high", strict_gt=True
+        )
+        ge_atom = ge.describe({"garch_forecast_vol_pct": 70.0}, "COMEX_SETTLE", "E2")[0]
+        gt_atom = gt.describe({"garch_forecast_vol_pct": 70.0}, "COMEX_SETTLE", "E2")[0]
+        assert ge_atom.comparator == ">="
+        assert ge_atom.passes is True
+        assert gt_atom.comparator == ">"
+        assert gt_atom.passes is False
+        assert "high-vol" in gt_atom.explanation
+
+    # ── GARCH_VOL_PCT_GT70 hypothesis-scoped registration ───────────────
+
+    def test_garch_gt70_registered(self):
+        """GARCH_VOL_PCT_GT70 in ALL_FILTERS with direction='high', strict_gt=True, threshold=70."""
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        assert "GARCH_VOL_PCT_GT70" in ALL_FILTERS
+        f = ALL_FILTERS["GARCH_VOL_PCT_GT70"]
+        assert isinstance(f, GARCHForecastVolPctFilter)
+        assert f.filter_type == "GARCH_VOL_PCT_GT70"
+        assert f.direction == "high"
+        assert f.pct_threshold == 70.0
+        assert f.strict_gt is True
+
+    def test_garch_gt70_not_in_base_grid(self):
+        from trading_app.config import BASE_GRID_FILTERS
+
+        assert "GARCH_VOL_PCT_GT70" not in BASE_GRID_FILTERS
+
+    def test_garch_gt70_not_in_legacy_grid_for_any_session(self):
+        """GARCH_VOL_PCT_GT70 must NOT appear in any per-session grid."""
+        from trading_app.config import get_filters_for_grid
+
+        sessions = [
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "BRISBANE_1025",
+            "CME_REOPEN",
+            "LONDON_METALS",
+            "EUROPE_FLOW",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
+        ]
+        for inst in ("MNQ", "MES", "MGC"):
+            for sess in sessions:
+                grid = get_filters_for_grid(inst, sess)
+                assert "GARCH_VOL_PCT_GT70" not in grid, f"GARCH_VOL_PCT_GT70 leaked into {inst} {sess} grid"
 
 
 class TestCombinedATRVolumeFilter:

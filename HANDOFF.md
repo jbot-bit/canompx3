@@ -6,7 +6,40 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session (2026-04-28 — Phase D D4 B-MNQ-COX Pathway B K=1 — PARK_PENDING_OOS_POWER)
+## Last Session (2026-04-29 — PARKed Pathway-B Additivity Triage)
+
+### What landed this session
+
+**Additivity audit for D2 + D4 PARK candidates** (research/2026-04-29-parked-pathway-b-additivity-audit.py)
+- Result: `docs/audit/results/2026-04-29-parked-pathway-b-additivity-triage.md`
+- Verdict matrix:
+  - **D2 B-MES-EUR** → **PASS_ADDITIVITY** (worst_rho +0.32, N=387). Optionality preserved; Phase E admission still gated on OOS power floor (~Q3-2026).
+  - **D4 B-MNQ-COX** → **FAIL_ADDITIVITY** (worst_rho **+0.81** vs deployed `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5`, subset 100%, N=407). Confirms HANDOFF flag (+0.7733) and exceeds canonical `RHO_REJECT_THRESHOLD = 0.70`. **D4 cannot deploy as additive even if OOS power clears.** Two recovery paths: (1) re-spec as a same-cell *replacement* of the deployed lane (head-to-head pre-reg required); (2) park indefinitely until the deployed COMEX_SETTLE ORB_G5 anchor decays out.
+- Brute-force OOS accrual on D4's existing predicate is wasted under the current canonical threshold.
+
+**Production-code change (config.py only):** Two `_HYPOTHESIS_SCOPED_FILTERS` registrations + `strict_gt: bool = False` opt-in field added to `OvernightRangeFilter` and `GARCHForecastVolPctFilter`.
+- `OVNRNG_PCT_GT80` (`overnight_range_pct > 80` strict) — for D2 audit.
+- `GARCH_VOL_PCT_GT70` (`garch_forecast_vol_pct > 70` strict, direction="high") — for D4 audit.
+- Both filters NOT in `BASE_GRID_FILTERS`, NOT routed in `get_filters_for_grid()` for any (instrument, session). Reachable only via canonical `ALL_FILTERS` lookup or Phase-4 hypothesis-injection. Verified by 36-cell test sweep in `TestStrictGtVariants`.
+- Default `strict_gt=False` preserves existing `>=` semantics on all 5 prior `OvernightRangeFilter`/`GARCHForecastVolPctFilter`-shaped instances (regression-tested).
+
+### Decision gate
+
+D2 stays in PARK queue for OOS accrual (additivity-clean).
+D4 is now **dual-gated**: OOS power floor + RULE 7 additivity. Existing predicate cannot pass both. Decision moves from "wait for N" to "respec or park". Recommend respec as replacement-lane Pathway-B if user wants D4 alive; otherwise close.
+
+D-0 v2 (PARK_ABSOLUTE_FLOOR_FAIL) excluded from this triage — different failure class. B-MNQ-EUR does not exist as pre-reg (verified 2026-04-29).
+
+### Verification
+
+- `tests/test_trading_app/test_config.py`: 203/203 pass (186 prior + 17 new strict-gt regression tests).
+- `pipeline/check_drift.py`: 20 pre-existing violations from local `certifi`/`annotated_types`/`click` env gaps; verified unchanged pre/post edit via `git stash` baseline. No new violations introduced.
+- Audit runner exit 0 on canonical `gold.db`. D2 N=387, D4 N=407 — both above noise floor.
+- Read-only against canonical layers; no writes to `validated_setups`, `lane_allocation.json`, or live config.
+
+---
+
+## Prior Session (2026-04-28 — Phase D D4 B-MNQ-COX Pathway B K=1 — PARK_PENDING_OOS_POWER)
 
 ### What landed this session
 
