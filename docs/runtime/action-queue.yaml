@@ -4,24 +4,25 @@ items:
   - id: phase_d_d0_clean_rederivation
     title: Phase D D-0 clean re-derivation (E2 LA contamination — rel_vol → safe predictor)
     class: research
-    status: ready
+    status: closed
     priority: P1
     close_before_new_work: false
     owner_hint: codex-or-claude
     last_verified_at: 2026-04-28
     freshness_sla_days: 3
-    next_action: Amend pre-reg `docs/audit/hypotheses/2026-04-18-phase-d-d0-rel-vol-sizing-mnq-comex-settle.yaml` to swap predictor from `rel_vol_COMEX_SETTLE` to `garch_forecast_vol_pct` (first choice); preserve H1 metric, kill criteria, K=1 framing. Recompute P33/P67 locks against new predictor. Re-run shadow-append accumulation against new buckets. Land before 2026-05-15 gate eval.
+    next_action: Closed — PARK_ABSOLUTE_FLOOR_FAIL. Sharpe uplift +16.48% (>= 15% relative gate PASS) but absolute Sharpe diff +0.0283 < 0.05 floor and p=0.50 (underpowered). Clean predictor does not rescue regime-amplification thesis with statistical confidence. 2026-05-15 gate eval has no clean D-0 v2 PASS basis — daily shadow accumulation should be parked rather than promoted.
     exit_criteria: Clean re-derivation result doc lands under `docs/audit/results/` with verdict (PASS/KILL) computed against a pre-break predictor from RULE 6.1 safe list. Original `phase_d_d0_backtest.py` remains tainted (do not modify); replacement script lives alongside.
     blocked_by: []
     decision_refs:
       - docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md
       - docs/postmortems/2026-04-21-e2-break-bar-lookahead.md
+      - docs/audit/results/2026-04-28-phase-d-d0-v2-garch-backtest.md
     evidence_refs:
       - pipeline/build_daily_features.py
       - .claude/rules/backtesting-methodology.md
       - docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md
     notes_ref: docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md
-    override_note: HARD external deadline 2026-05-15 — daily shadow-append gate eval fires once on this date per phase_d_volume_sizing_pilot_d1_review.py. If clean re-derivation does not land by then, gate decision MUST be deferred (do not promote tainted D-0 verdict to deployment).
+    override_note: HARD external deadline 2026-05-15 — D-0 v2 PARKED (not PASS), so gate eval must be deferred. Do not promote tainted D-0 v1 verdict or D-0 v2 PARK to deployment.
 
 
   - id: prior_day_bridge_execution_triage

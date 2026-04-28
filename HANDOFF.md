@@ -6,7 +6,36 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session (2026-04-28 — doctrine fix + Phase D dispatch — branch `triage-e2-lookahead-9-candidates`)
+## Last Session (2026-04-28 — Phase D D-0 v2 clean re-derivation — PARK_ABSOLUTE_FLOOR_FAIL)
+
+### What landed this session
+
+**Phase D D-0 v2 clean re-derivation (MNQ COMEX_SETTLE E2 CB1 OVNRNG_100 RR1.5):**
+- Pre-reg: `docs/audit/hypotheses/2026-04-28-phase-d-d0-v2-garch-clean-rederivation.yaml` (SHA `823b0127`, PR #170 merged)
+- Runner: `research/phase_d_d0_v2_backtest.py` (new, scratch-policy: realized-eod, garch predictor, bootstrap p)
+- Result: `docs/audit/results/2026-04-28-phase-d-d0-v2-garch-backtest.md`
+- **Verdict: PARK_ABSOLUTE_FLOOR_FAIL**
+  - Relative Sharpe uplift: **+16.48%** ≥ 15% threshold → PASS
+  - Absolute Sharpe diff: **+0.0283** < 0.05 floor → FAIL
+  - Bootstrap p: **0.50** > 0.05 → FAIL (underpowered)
+  - H1 requires ALL THREE gates; 2/3 fail → PARK, not KILL
+- Action-queue item `phase_d_d0_clean_rederivation` closed with override note: gate eval deferred to 2026-05-15 or later; do NOT promote tainted D-0 v1 or D-0 v2 PARK to deployment.
+- `phase_d_d0_backtest.py` remains TAINTED (do not modify); v2 script lives alongside.
+
+### Decision gate
+
+D-0 v2 is PARKED — clean predictor does not rescue the regime-amplification thesis with statistical confidence at IS N. **2026-05-15 gate eval has no clean D-0 v2 PASS basis.** Daily shadow accumulation should remain parked.
+
+D2/D3/D4 pre-regs remain pending user GO (see prior session below).
+
+### Verification
+
+- PR #170 merged, 5029 tests passed, 28 skipped (CI SUCCESS).
+- `python pipeline/check_drift.py`: run on prior session; no pipeline/ or trading_app/ files touched this session.
+
+---
+
+## Prior Session (2026-04-28 — doctrine fix + Phase D dispatch — branch `triage-e2-lookahead-9-candidates`)
 
 ### What landed this session
 
