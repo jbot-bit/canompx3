@@ -116,3 +116,4 @@
 - `docs/plans/2026-04-25-hwm-persistence-integrity-hardening-design.md` — HWM Stages 1-4 design (landed in #129)
 - `docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md` — O-SR grounding (still pending: cusum_monitor → SR Eq 10)
 - `docs/institutional/literature/fitschen_2013_path_of_least_resistance.md` — ORB premise
+
