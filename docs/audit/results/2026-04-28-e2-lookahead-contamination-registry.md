@@ -50,7 +50,7 @@ Audit all 73 `research/*.py` scripts that load `orb_outcomes` with `entry_model=
 | 24 | `mnq_l1_europe_flow_prebreak_context_v1.py` | rel_vol as predictor | TAINTED | `# e2-lookahead-policy: tainted` |
 | 25 | `audit_sizing_substrate_diagnostic.py` | break_bar suffixes in guard list (not predictor) | CLEARED | `# e2-lookahead-policy: cleared` — implements the gate |
 | 26 | `output/confluence_program/phase0_run.py` | rel_vol in eligibility matrix analysis | NOT-PREDICTOR | `# e2-lookahead-policy: not-predictor` — audits the feature |
-| 27 | `shadow_htf_mes_europe_flow_long_skip.py` | break_bar_volume + rel_vol as ledger context | NOT-PREDICTOR | `# e2-lookahead-policy: not-predictor` — observational columns only |
+| 27 | `shadow_htf_mes_europe_flow_long_skip.py` | `break_dir='long'` as fire-day SELECTOR predicate (+ break_bar_volume/rel_vol as ledger context) | TAINTED (reclassified 2026-04-28 via real-data audit; was NOT-PREDICTOR) | `# e2-lookahead-policy: tainted` — measured 42.6% of MES EUROPE_FLOW O15 E2 RR1.5 IS trades have `entry_ts < break_ts` (N=1719). Fire-day selection by `break_dir='long'` is post-entry on those rows. Zero-capital observational ledger so deployment risk = 0; methodologically dirty per postmortem § 5.2 + RULE 6.3. Re-pre-register with pre-break direction proxy required before any deployment use. |
 
 ## Confirmed downstream contamination
 

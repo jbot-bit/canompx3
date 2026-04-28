@@ -4,12 +4,19 @@
 Pre-registered at:
   docs/audit/hypotheses/2026-04-18-htf-mes-europe-flow-long-skip-rule-shadow.yaml
 
-# e2-lookahead-policy: not-predictor
-# orb_EUROPE_FLOW_break_bar_volume and rel_vol_EUROPE_FLOW are selected as OBSERVATIONAL
-# CONTEXT columns in the ledger table (line ~61-62), not as predictors of pnl_r.
-# The filter predicate is break_dir='long' AND orb_high > prev_week_high — pre-break features.
-# pnl_r is the response variable (outcome), not a predictor. No look-ahead contamination.
-# Registry: docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md
+# e2-lookahead-policy: tainted
+# Reclassified 2026-04-28 (was: not-predictor) after real-data audit on this exact lane.
+# The filter predicate `orb_EUROPE_FLOW_break_dir = 'long'` (line ~71) is post-entry for
+# ~42.6% of MES EUROPE_FLOW O15 E2 CB1 RR1.5 IS trades (real-data measurement, N=1719).
+# break_bar_volume and rel_vol are also selected for the ledger but NOT used as predicates.
+# Per postmortem 2026-04-21-e2-break-bar-lookahead.md § 5.2 and quant-audit-protocol RULE 6.3,
+# break_dir as a fire-day SELECTOR for E2 = look-ahead even though VWAPBreakDirectionFilter
+# canonical doctrine (config.py:2648) claims "known at entry time." Doctrine is partially
+# wrong: range-touch-then-reverse fakeouts make break_dir post-entry on ~42% of E2 fills.
+# Blast radius: ZERO CAPITAL — observational shadow ledger only, no live deployment risk.
+# Action required: re-pre-register the shadow with a pre-break direction proxy (e.g.,
+# orb_high > prev_week_high alone, or pre-break VWAP slope) before any deployment use.
+# Registry: docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md row 27
 
 Zero-capital observational contract. Reads canonical tables (daily_features
 + orb_outcomes) and appends one row per HTF fire trading-day to the ledger:

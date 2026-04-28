@@ -11,17 +11,18 @@
 ### What landed this session
 
 **Drift check 124 clearance** — 9 scripts surfaced by `check_e2_lookahead_research_contamination()` annotated:
-- TAINTED (6): `phase_d_d0_backtest.py`, `break_delay_filtered.py`, `break_delay_nuggets.py`, `l1_europe_flow_pre_break_context_scan.py`, `mnq_comex_unfiltered_overlay_v1.py`, `mnq_l1_europe_flow_prebreak_context_v1.py`
+- TAINTED (7): `phase_d_d0_backtest.py`, `break_delay_filtered.py`, `break_delay_nuggets.py`, `l1_europe_flow_pre_break_context_scan.py`, `mnq_comex_unfiltered_overlay_v1.py`, `mnq_l1_europe_flow_prebreak_context_v1.py`, `shadow_htf_mes_europe_flow_long_skip.py` (reclassified after Opus audit)
 - CLEARED (1): `audit_sizing_substrate_diagnostic.py` (implements the gate itself)
-- NOT-PREDICTOR (2): `output/confluence_program/phase0_run.py`, `shadow_htf_mes_europe_flow_long_skip.py`
-- Registry rows 19-27 added to `docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md`
+- NOT-PREDICTOR (1): `output/confluence_program/phase0_run.py`
+- Registry rows 19-27 added; row 27 reclassified `not-predictor → tainted` after real-data audit on MES EUROPE_FLOW O15 E2 IS (N=1719) showed 42.6% trades have `entry_ts < break_ts` → `break_dir='long'` selector is post-entry on those rows
 - Drift check 124 now passes (0 remaining unannotated)
 - Pre-existing test failure `test_pulse_integration::test_text_output_is_scannable` (61>60 lines) confirmed pre-existing
 
 ### Decision gate
 
 Phase D D2/D3/D4 still pending user GO (HANDOFF below).
-`phase_d_d0_backtest.py` is TAINTED — D-0 pre-reg result needs clean re-derivation before D-0 claim can be cited.
+`phase_d_d0_backtest.py` is TAINTED — D-0 pre-reg result needs clean re-derivation before D-0 claim can be cited (high-EV next step: re-derive on `garch_forecast_vol_pct` per Carver Ch 9-10).
+`shadow_htf` ledger continues recording (zero-capital observational); re-pre-register required before any deployment use.
 
 ---
 
