@@ -6566,11 +6566,15 @@ def check_e2_lookahead_research_contamination() -> list[str]:
     # `rel_vol_<UPPER>` matches `rel_vol_NYSE_OPEN` etc but NOT `rel_vol_session_norm`
     # (a script-local clean-replacement name). break_bar / break_delay substrings
     # are unambiguous — no clean features share those substrings.
+    # `orb_\w+_break_dir` added 2026-04-28: break_dir is post-entry on ~42% of E2
+    # fills (range-touch-then-reverse fakeouts) — same class as break_bar_volume.
+    # See backtesting-methodology.md § 6.3 and postmortem 2026-04-21-e2-break-bar-lookahead.md.
     tainted_feature_re = re.compile(
         r"\brel_vol_[A-Z]"  # rel_vol_NYSE_OPEN, rel_vol_TOKYO_OPEN, etc
         r"|break_bar_volume"
         r"|break_bar_continues"
         r"|break_delay_min"
+        r"|orb_\w+_break_dir"  # post-entry on ~42% of E2 fills when used as selector
     )
     marker_prefix = "# e2-lookahead-policy:"
     valid_markers = ("cleared", "late-fill-only", "not-predictor", "tainted")

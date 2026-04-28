@@ -104,6 +104,8 @@ LEDGER_HEADER = """# HTF MES EUROPE_FLOW long skip-rule — Shadow Ledger
 
 **Canonical predicate:** `orb_EUROPE_FLOW_break_dir = 'long' AND prev_week_high IS NOT NULL AND orb_EUROPE_FLOW_high > prev_week_high`
 
+**E2 look-ahead caveat (2026-04-28):** `orb_EUROPE_FLOW_break_dir` is post-entry for ~42.6% of E2 fills (entry_ts < break_ts on those rows — range-touch-then-reverse fakeouts). This ledger is TAINTED per `e2-lookahead-policy`. Re-pre-register with a pre-break direction proxy before any deployment use.
+
 **Fresh OOS window:** `trading_day >= 2026-04-18` (post-v1-scan peek boundary).
 
 **Contract:** Zero capital. Observational only. Idempotent append-only ledger.

@@ -4,6 +4,13 @@ Pre-registered: docs/audit/hypotheses/2026-04-16-carry-encoding-exploration.yaml
 Design: docs/plans/2026-04-16-carry-encoding-exploration-design.md
 Predecessor: W2e (binary gate DEAD, corr=+0.016 orthogonal to garch).
 
+# e2-lookahead-policy: not-predictor
+# orb_{ts}_break_dir is selected as a context/outcome column in the carry feature
+# ledger (lines ~88, ~144-147), not as a WHERE predicate to select trades.
+# Direction-segmentation of already-taken trades is permitted per
+# backtesting-methodology.md § 6.3 ("direction-segmentation of an already-taken
+# trade is fine; using it to decide whether to take the trade is E2-look-ahead").
+
 Tests 3 continuous carry encodings (E1, E2, E3) via quintile monotonicity
 on the validated shelf. K=18 (3 encodings × 2 roles × 3 session groups).
 BH-FDR at encoding level K=3.
