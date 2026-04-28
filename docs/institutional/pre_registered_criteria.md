@@ -906,3 +906,65 @@ GC proxy extends the data horizon back to 2010. However, gold market structure h
 3. **Build GC daily_features** — required for filter application on GC data.
 4. **Add GC to COST_SPECS** — with full-size gold specs ($100/pt, ~$57.40 friction) for GC-native cost analysis; MGC cost model used for proxy discovery.
 5. **Write MGC proxy hypothesis files** — using GC data, relative filters, full 16-year horizon.
+
+---
+
+## Amendment 3.0 — Pathway B (theory-driven K=1 confirmatory) admitted as a non-FDR path
+
+**Date:** 2026-04-18
+**Trigger:** Phase D pre-reg infrastructure formalised in `docs/prompts/prereg-writer-prompt.md`; theory-driven single-cell tests do not require K-family FDR control because there is no hypothesis enumeration. Bailey 2013 MinBTL at K=1 is `2·ln(1)/E[max_N]² = 0` — no minimum backtest length beyond researcher-judged power.
+
+**Rule:** Pre-regs must declare `testing_mode: family` (Pathway A — BH-FDR over enumerated cells) OR `testing_mode: individual` (Pathway B — single theory-cited cell, K=1). Pathway B mandates `theory_citation` per hypothesis and lists C6/C8/C9 as `mandatory_downstream_gates_non_waivable`. Pathway A retains BH-FDR at the declared K. Upstream scan K (provenance only) is recorded in `upstream_discovery_provenance` block, never folded into the current test's K.
+
+---
+
+## Amendment 3.1 — Criterion 8 (2026 OOS) — power-floor gate
+
+**Date:** 2026-04-22 (formalising prior memory practice; canonicalises the "UNVERIFIED ≠ KILL" position).
+**Trigger:** Phase D pilots produced multiple cells with positive IS edge but `N_OOS_on < 30` because the sacred holdout (2026-01-01) has accrued only 3-4 calendar months at writing time.
+
+**Rule:** Criterion 8 is evaluated CONDITIONAL on power. Define `N_OOS_on` = OOS observations in the on-signal cohort. Three states:
+
+- `N_OOS_on ≥ 50` AND `dir_match == True` AND `OOS_ExpR ≥ 0.40 × IS_ExpR`: **C8 PASS**.
+- `N_OOS_on ≥ 50` AND any of the above fails: **C8 FAIL → KILL**.
+- `N_OOS_on < 50`: **C8 GATE_INACTIVE_LOWPOWER → UNVERIFIED**, NOT KILL. Cell parks pending OOS accrual. Pre-reg locks the cell — no post-hoc threshold rescue when accrual completes.
+
+**Source:** Bailey-LdP 2014 (`literature/bailey_lopezdeprado_2014_dsr_sample_selection.md`) — Sharpe ratio confidence intervals require sample-size-dependent confidence; Phase D D-0 pilot (2026-04-18) which surfaced the failure mode.
+
+**Cross-reference:** Memory file `feedback_oos_power_floor.md`.
+
+---
+
+## Amendment 3.2 — MinTRL gate at pre-reg time (added 2026-04-28)
+
+**Date:** 2026-04-28
+**Trigger:** Bloomberg-grade audit of the Phase D D4 cell (`MNQ COMEX_SETTLE O5 E2 CB1 RR1.5 long ORB_G5 + garch_forecast_vol_pct > 70`) — verdict `PARK_PENDING_OOS_POWER` per Amendment 3.1, but explicit MinTRL math (Bailey-LdP 2014, `literature/bailey_lopezdeprado_2014_dsr_sample_selection.md`) shows the cell needs ≈131 OOS-on observations to reach Cohen power 0.80 for confirmatory C8 evaluation. Current cell-specific accrual ≈24 OOS-on observations / year → MinTRL ≈ **5.5 calendar years**, NOT the implicit "Q3-2026" interpretation that the bare PARK label suggested. This converts a "park pending" verdict into an indefinite hold with no honest accrual milestone, which is a process bug.
+
+**Rule:** Every pre-reg under Pathway B (`testing_mode: individual`) MUST compute and report `min_trl_years` at write time. Definition:
+
+```
+required_N_oos_on = ceil( (sd_R / abs(expected_effect_R) * (z_alpha + z_beta)) ** 2 )
+                  with z_alpha = 1.96 (α=0.05 one-sided),
+                       z_beta  = 0.84 (power = 0.80, Cohen),
+                       sd_R    = pooled per-trade R standard deviation from IS,
+                       expected_effect_R = pre-reg's hypothesised mean-R uplift
+required_N_oos_on_above_floor = max(required_N_oos_on, 50)   # cannot go below Amendment 3.1 floor
+expected_oos_on_per_year = (N_IS_on / years_of_IS_data)        # cohort-specific accrual rate
+min_trl_years = required_N_oos_on_above_floor / expected_oos_on_per_year
+```
+
+The pre-reg classifies the cell at write time using `min_trl_years`:
+
+- `min_trl_years ≤ 1.0` — **STANDARD**: park pending OOS accrual is honest (Amendment 3.1 applies as written).
+- `1.0 < min_trl_years ≤ 2.0` — **EXTENDED_PARK**: park, but pre-reg must declare an interim milestone (e.g. "re-evaluate at N_OOS_on = 25 with descriptive-only language, not C8 confirmation").
+- `min_trl_years > 2.0` — **NOT_OOS_CONFIRMABLE**: cell is NOT eligible for `PARK_PENDING_OOS_POWER` verdict. Two honest paths:
+  - `CONDITIONAL_DEPLOY` — admit to live with explicit shadow accrual + paper sizing reduction; OOS evidence accrues forward; deployment is contingent on no breach of C9 era stability and no Shiryaev-Roberts alarm (Criterion 12).
+  - `KEEP_PARKED_INDEFINITELY` — formally park without further capital, and do not re-open the cell for further research without a new theory citation that materially changes `expected_effect_R`.
+
+The pre-reg writer chooses between `CONDITIONAL_DEPLOY` and `KEEP_PARKED_INDEFINITELY` at write time and justifies the choice with cited mechanism evidence. After the pre-reg locks, the classification cannot be moved post-hoc to obtain a more favourable label.
+
+**Why this exists:** Bailey 2013 p.7 (`literature/bailey_et_al_2013_pseudo_mathematics.md`): "A risk we face is of choosing a strategy with a high Sharpe ratio IS, but zero Sharpe ratio OOS." The pre-existing Amendment 3.1 (OOS power floor) prevents false positives at the verdict gate, but does NOT prevent the false-comfort failure mode where every Phase D cell is parked indefinitely under a polite "pending power" label that will never resolve. Amendment 3.2 forces the writer to confront the calendar-time math at pre-reg time, before the verdict. Either the cell is admissible under STANDARD/EXTENDED_PARK with a defined milestone, or it is not OOS-confirmable and the writer must choose the live-shadow or indefinite-park branch.
+
+**Cross-reference:** the D4 cell originally PARKED 2026-04-28 under Amendment 3.1 should be re-classified under Amendment 3.2 in any successor pre-reg (e.g. the D5 conditional-sizing pre-reg landing alongside this amendment). The D4 result file itself is not retroactively edited; the doctrine applies forward.
+
+**Stop conditions for Amendment 3.2 itself:** if a successor cell is classified `CONDITIONAL_DEPLOY` and Shiryaev-Roberts (Criterion 12) flags drift within 60 trading days, the live-shadow branch is closed and the cell reverts to `KEEP_PARKED_INDEFINITELY`. If empirical accrual rate diverges materially (>30%) from the pre-reg estimate after 6 months of live shadow, the writer must re-compute `min_trl_years` and re-classify.

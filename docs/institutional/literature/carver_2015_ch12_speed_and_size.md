@@ -72,3 +72,28 @@ Those are grounded by `bailey_lopezdeprado_2014_dsr_sample_selection.md` and `ch
 - `docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md` — unified backtest/live program doctrine (the strongest direct parallel).
 - `docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md` — the selection-bias frame.
 - `docs/institutional/pre_registered_criteria.md` § Criterion 13 (added Stage 3) — the locked criterion citing this extract.
+
+---
+
+## Addendum 2026-04-28 — Holding-period / horizon / stop-level matching (p.192 verbatim)
+
+**Page 192, "Deciding average holding period by setting stop losses" — verbatim:**
+
+> "I advocate that traders exclusively use a systematic stop loss to exit positions, no matter how they decide to enter them. This means the average holding period will depend mainly on how tight, or loose, your stops are set. You should then ensure that your trading style, and the horizon you are trying to predict price movements for, is in line with your stop levels."
+
+> "If stops are set very tight then you'll have short holding periods and high turnover."
+
+(Carver 2015 Ch 12 p.192, `resources/Robert Carver - Systematic Trading.pdf` PDF page 209.)
+
+### Application to canompx3 (added 2026-04-28 from D4 Pathway B audit)
+
+External reviewer on D4 audit observed that the `garch_forecast_vol_pct > 70` signal works at 5m aperture, weakens at 15m, and inverts at 30m on MNQ COMEX_SETTLE long. Two grounded readings of this:
+
+1. **Aperture-fragility-as-microstructure** (reviewer's framing): if the signal vanishes when zoomed out, the strategy is trading microstructure noise rather than a "real" volatility regime.
+2. **Aperture-as-horizon-stop-match** (Carver p.192 framing): aperture × RR determines holding period. 5m × RR1.0 = small stop, short holding, scalp horizon. 30m × RR1.0 = larger stop, longer holding, swing horizon. A signal whose forecast horizon matches the *small-stop-short-holding* configuration but not the *larger-stop-longer-holding* one is consistent with Carver's doctrine, not a fragility.
+
+**Decision rule for the project:** before declaring a signal "fragile" because of aperture sensitivity, name the holding-period-implied horizon at each aperture and ask whether the signal's mechanism would predict at that horizon. If `garch_forecast_vol_pct` is a *daily* vol forecast (per `pipeline/build_daily_features.py:1468-1497` rolling 252-day prior-only window) and Chan Ch 7 p.155-157 grounds its causal mechanism in the 5-30-minute stop-cascade horizon, then aperture-specificity at 5m is mechanism-consistent, not a defect.
+
+This addendum does NOT promote D4 to deployment. It clarifies that "edge dies at 30m" is not by itself a kill criterion when the cited mechanism operates at <30m.
+
+**Cross-reference:** `chan_2013_ch7_intraday_momentum.md` p.155-157 (stop-cascade mechanism — already verified to exist with verbatim p.155 + p.157 quotes).

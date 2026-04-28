@@ -6,7 +6,48 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session (2026-04-28 — Phase D D-0 v2 clean re-derivation — PARK_ABSOLUTE_FLOOR_FAIL)
+## Last Session (2026-04-28 — Phase D D4 B-MNQ-COX Pathway B K=1 — PARK_PENDING_OOS_POWER)
+
+### What landed this session
+
+**Phase D D4 — B-MNQ-COX Pathway B K=1** (`research/2026-04-28-phase-d-mnq-comex-settle-pathway-b`,
+commits `f7e2c921` pre-reg + `733883ed` runner + this verdict commit)
+- Pre-reg: `docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-pathway-b-v1.yaml`
+- Runner: `research/phase_d_d4_mnq_comex_settle_pathway_b.py`
+- Result: `docs/audit/results/2026-04-28-mnq-comex-settle-pathway-b-v1-result.md`
+- **Verdict: PARK_PENDING_OOS_POWER** — all 7 KILL criteria PASS, all non-conditional
+  C5/C7/C9/Sharpe gates PASS, but C6/C8 are GATE_INACTIVE_LOWPOWER (N_OOS_on=17,
+  power=0.106). Per Amendment 3.2: UNVERIFIED ≠ KILL. Cell parks until N_OOS_on ≥ 50
+  (~Q3-2026).
+- Numbers: N_IS_on=199, ExpR_IS_on=+0.2453, ΔIS=+0.2286, Welch t=3.18, p=0.00161,
+  bootstrap p=0.00190, Sharpe_ann_IS=+1.692, DSR_PB=0.9998, dir_match=True
+  (ΔOOS=+0.2538), 6/6 years positive IS_on.
+- Pre-reg locked → no post-hoc threshold rescue when OOS accrues.
+- **RULE 7 flag preserved:** lane-correlation +0.7733 vs deployed COMEX_SETTLE
+  ORB_G5. CANDIDATE_READY/PARK verdict is necessary, not sufficient, for Phase E
+  admission. Portfolio additivity audit required before any capital deployment.
+
+### Decision gate
+
+D4 (B-MNQ-COX) → PARK_PENDING_OOS_POWER. Real-money exposure remains unchanged
+because (1) OOS is underpowered for C6/C8 verification, AND (2) RULE 7 portfolio
+overlap with deployed COMEX_SETTLE ORB_G5 is +0.773 — additivity unproven.
+
+D2 (B-MES-LON) and D3 (B-MNQ-NYC) still pending user GO. Each candidate carries
+the same likely outcome (PARK_PENDING_OOS_POWER given identical N_OOS power-floor
+situation).
+
+### Verification
+
+- Pre-commit gauntlet (8/8) PASSED on both pre-reg and runner commits.
+- Independent SQL reproduction of Phase B numbers confirmed exact match before
+  pre-reg commit (delta_IS=0.2286 to 4dp).
+- Bootstrap p computed on B=10000, block=5 (Phipson-Smyth correction applied).
+- KILL_BASELINE_SANITY PASSED: |reproduced - expected| = 0.000014 R.
+
+---
+
+## Prior Session (2026-04-28 — Phase D D-0 v2 clean re-derivation — PARK_ABSOLUTE_FLOOR_FAIL)
 
 ### What landed this session
 

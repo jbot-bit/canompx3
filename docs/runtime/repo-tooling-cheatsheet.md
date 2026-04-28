@@ -18,7 +18,7 @@ One page. Read this before you spiral.
   - `patch-package` to persist both fixes across `npm install` (~1 hr setup, ongoing maintenance).
   - Or run inside WSL (may sidestep segfault; buffer bug still needs patch).
   - Or fork + fix upstream (~half day, you own maintenance).
-- **Why we don't bother:** CRG already works, no patches needed, MIT-licensed, honest about its weaknesses.
+- **Why we don't bother:** CRG already works, no patches needed, MIT-licensed, honest about its weaknesses. GitNexus's value-add over CRG was small even when working.
 - Re-open trigger: upstream fixes both bugs, OR CRG starts failing on something GitNexus would solve.
 - Receipt: `docs/eval/2026-04-28-gitnexus-evaluation.md` (on `tooling/gitnexus-eval` worktree).
 
