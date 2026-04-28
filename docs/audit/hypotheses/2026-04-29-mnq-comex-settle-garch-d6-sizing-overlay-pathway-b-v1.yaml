@@ -47,7 +47,7 @@ authority:
 
 reproducibility:
   repo_root: canompx3
-  commit_sha: "TO_FILL_AFTER_COMMIT"   # stamped on first commit; pre-reg locked before any runner executes
+  commit_sha: "54b7b948"   # stamped 2026-04-29 post-initial-commit; pre-reg locked before any runner executes
   committed_required_before_run: true
   branch: main                          # pre-reg only, no harness change in this commit
   base_branch: main
