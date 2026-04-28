@@ -1,3 +1,9 @@
+---
+status: archived
+owner: canompx3-team
+last_reviewed: 2026-04-28
+superseded_by: ""
+---
 Archived plan/design docs for work that is clearly completed or historical.
 
 Rules:

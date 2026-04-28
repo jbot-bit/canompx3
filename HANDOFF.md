@@ -15,6 +15,18 @@
   - `tests/test_trading_app/test_prop_profiles.py`
   - `trading_app/prop_profiles.py`
 
+## Session decisions (2026-04-28 — docs lifecycle hardening)
+
+- Added `docs/INDEX.md` as the daily docs front door with a strict 9-entry entrypoint list (authority, workflow, runtime, active plans).
+- Applied plan lifecycle metadata frontmatter to all `docs/plans/**/*.md` files: `status`, `owner`, `last_reviewed`, `superseded_by`.
+- Restructured plans into date-bounded active/archive topology:
+  - active plans now live under `docs/plans/active/2026-04/` (8 files)
+  - inactive plans moved under `docs/plans/archive/{2026-02,2026-03,2026-04,undated}/`
+  - `*.tasks.json` moved out of root into date-bucketed archive folders
+- Added `scripts/tools/list_stale_active_docs.py` to report stale active plan docs by `last_reviewed` age threshold (default 14 days).
+- Updated `docs/governance/document_authority.md` with a binding lifecycle policy for plan metadata, active/archive placement, and stale-check command.
+- Follow-up refinement: stale-doc scanner now scans only `docs/plans/active/` (not full plan tree) and `docs/INDEX.md` now includes a concise Claude Code daily flow to keep usage project-specific and lightweight.
+
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
 - **Recovered registry hygiene from `codex/control-plane-unify`** (original `9550a668`, 2026-04-24). Manually applied the additive `context/registry.py` subset of the 18-file orphaned commit: registers existing canonical control-plane infrastructure (`docs/runtime/action-queue.yaml`, `pipeline/work_queue.py`, `scripts/tools/work_queue.py`, `pipeline/system_authority.py`, `pipeline/system_context.py`) into FALLBACK_READ_SET + 2 task manifests' canonical_files/doctrine_files; adds `## Control-Plane Truth/Notes/Plane` H2 sections to the 3 markdown render functions. All referenced files VERIFIED present in main. Re-rendered `docs/context/*.md` via `scripts/tools/render_context_catalog.py`. Other 17 files in original commit had heavy CRLF + functional drift; not recovered (separate decision).

@@ -1,3 +1,9 @@
+---
+status: archived
+owner: canompx3-team
+last_reviewed: 2026-04-28
+superseded_by: ""
+---
 # Ship-Ready Hardening Plan
 **Date:** 2026-02-09
 

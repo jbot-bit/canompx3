@@ -1,3 +1,9 @@
+---
+status: archived
+owner: canompx3-team
+last_reviewed: 2026-04-28
+superseded_by: ""
+---
 # E2 Stop-Market Entry Model Design
 
 **Date:** 2026-02-26

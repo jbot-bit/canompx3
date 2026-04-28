@@ -22,7 +22,7 @@ to mean, and what it is not allowed to mean.
 | `docs/governance/system_authority_map.md` | whole-project authority/context map | where major truth surfaces live, how categories relate, what is linked vs derived | live runtime values by itself |
 | `ROADMAP.md` | planning inventory | planned or not-yet-built work only | current implementation truth, live behavior, policy |
 | `HANDOFF.md` | cross-tool baton | current session baton, recent changes, local warnings | durable truth when code or canonical docs disagree |
-| `docs/plans/` | design history and active decisions | durable design decisions and rationale while active and not archived | live runtime truth when code or DB disagree |
+| `docs/plans/` | design history and active decisions | durable design decisions and rationale while active and not archived; lifecycle metadata governance | live runtime truth when code or DB disagree |
 | `docs/ARCHITECTURE.md` | operational reference guide | command reference and orientation when consistent with code | current runtime truth when code/DB disagree |
 | `docs/MONOREPO_ARCHITECTURE.md` | monorepo orientation reference | service inventory and repository navigation | current DB location, canonical runtime policy, live deployment semantics |
 | `docs/context/*.md` | generated task-routing orientation | deterministic task-context views when rendered from `context/registry.py` | live runtime truth by itself; policy beyond the canonical doctrine docs |
@@ -80,3 +80,25 @@ canonical data, generated docs, or stamped snapshots — not unqualified prose.
    until its data tables and bounded runner exist.
 6. If a doc says "current", "live", or "deployed" about dynamic state, it must
    either link to the canonical source or declare itself as a dated snapshot.
+
+## Binding lifecycle policy for `docs/plans/`
+
+The following policy is mandatory for all markdown files under `docs/plans/`.
+
+1. Every plan document must include frontmatter with:
+   - `status` (`active` | `parked` | `archived`)
+   - `owner`
+   - `last_reviewed` (`YYYY-MM-DD`)
+   - `superseded_by` (empty string or canonical replacement path)
+2. Active plan files must live under `docs/plans/active/<YYYY-MM>/` and be
+   kept intentionally small and date-bounded.
+3. Inactive plans (including completed historical plans) must be moved under
+   `docs/plans/archive/` and remain non-authoritative for live behavior.
+4. `docs/plans/archive/` is historical context only. It may explain rationale
+   but cannot override canonical policy docs or code/DB truth.
+5. Staleness checks for active plans must be run with
+   `python3 scripts/tools/list_stale_active_docs.py --threshold-days <N>`
+   (for example, `14` or `30`). The scanner is intentionally scoped to
+   `docs/plans/active/` to stay lightweight and Claude-session friendly.
+6. `docs/INDEX.md` is the daily front door and must continue to list
+   `docs/plans/active/` as the only plan entrypoint for routine work.
