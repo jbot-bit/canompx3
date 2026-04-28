@@ -6,6 +6,19 @@ No derived layers, no metadata trust.
 
 Run: python research/audit_aistudio_claims_d4.py
 """
+# e2-lookahead-policy: tainted
+# Filters every numeric query (claims 5-12) on `d.orb_COMEX_SETTLE_break_dir='long'`.
+# `break_dir` is the close-cross direction at the canonical break bar; on E2 it is
+# post-entry on ~42% of fills (range-touch fakeouts that resolve the other way),
+# same class bug as registry row 27 `shadow_htf_mes_europe_flow_long_skip.py`.
+# Bias direction: excludes the worst trades (fakeout-then-reverse), inflating
+# t-stats and mean-R upward. The 14-claim audit doc at
+# docs/audit/results/2026-04-28-d4-aistudio-claims-audit.md was generated from
+# this script; numerics for claims 4-12 inherit the bias. Verdict (D4 PARK_PENDING_OOS_POWER)
+# is more permissive than a clean re-run would be — direction-of-bias caveat
+# landed in registry 2026-04-29.
+# Zero deployment risk (audit-of-audit, no live consumer; CRG importers_of=0).
+# Re-run with a pre-break direction proxy required before any deployment use.
 from __future__ import annotations
 
 import sys

@@ -2,7 +2,7 @@
 
 v2 replaces contaminated rel_vol_COMEX_SETTLE with garch_forecast_vol_pct (clean pre-break predictor).
 
-# e2-lookahead-policy: clean
+# e2-lookahead-policy: cleared
 # garch_forecast_vol_pct input is prior-day daily closes only; forecast fixed before any ORB on
 # the current trading day. Pure pre-entry. § 6.1 safe whitelist.
 
