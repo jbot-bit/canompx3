@@ -27,6 +27,7 @@ to mean, and what it is not allowed to mean.
 | `docs/MONOREPO_ARCHITECTURE.md` | monorepo orientation reference | service inventory and repository navigation | current DB location, canonical runtime policy, live deployment semantics |
 | `docs/context/*.md` | generated task-routing orientation | deterministic task-context views when rendered from `context/registry.py` | live runtime truth by itself; policy beyond the canonical doctrine docs |
 | `REPO_MAP.md` | generated inventory | file/directory layout snapshot generated from the repo | behavior, policy, runtime state |
+| `code-review-graph` (tool) | navigation/blast-radius surface | finding callers/importers, cheap impact triage, PR-diff risk hints | truth — graph is a frozen snapshot. Verify with `Read`/`Grep`. Calibration: `docs/plans/active/2026-04/code-review-graph-calibration.md` |
 
 ## Document classes
 
