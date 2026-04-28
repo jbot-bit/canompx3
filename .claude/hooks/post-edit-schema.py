@@ -9,6 +9,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _resolve_python() -> str:
+    venv_win = _PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+    if venv_win.exists():
+        return str(venv_win)
+    venv_unix = _PROJECT_ROOT / ".venv" / "bin" / "python"
+    if venv_unix.exists():
+        return str(venv_unix)
+    return sys.executable
+
+
+_HOOK_PYTHON = _resolve_python()
+
 # Known-bad column/table names that have caused past failures
 STALE_PATTERNS = {
     "strategy_fitness": "TABLE DOES NOT EXIST — fitness is in edge_families.robustness_status",
@@ -56,7 +71,7 @@ def main():
     # Run schema tests
     result = subprocess.run(
         [
-            sys.executable,
+            _HOOK_PYTHON,
             "-m",
             "pytest",
             "tests/test_pipeline/test_schema.py",
@@ -67,10 +82,10 @@ def main():
         capture_output=True,
         text=True,
         timeout=30,
-        cwd=str(Path(__file__).parent.parent.parent),
+        cwd=str(_PROJECT_ROOT),
         env={
             **__import__("os").environ,
-            "PYTHONPATH": str(Path(__file__).parent.parent.parent),
+            "PYTHONPATH": str(_PROJECT_ROOT),
         },
     )
     if result.returncode != 0:
