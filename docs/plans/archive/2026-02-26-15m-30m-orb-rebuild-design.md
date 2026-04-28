@@ -1,3 +1,9 @@
+---
+status: archived
+owner: canompx3-team
+last_reviewed: 2026-04-28
+superseded_by: ""
+---
 # 15m/30m ORB Rebuild — Design Document
 
 **Date:** 2026-02-26

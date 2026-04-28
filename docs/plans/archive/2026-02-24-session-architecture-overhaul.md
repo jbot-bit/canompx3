@@ -1,3 +1,9 @@
+---
+status: archived
+owner: canompx3-team
+last_reviewed: 2026-04-28
+superseded_by: ""
+---
 # Session Architecture Overhaul — Event-Based Naming
 
 _2026-02-24. Full rebuild of ORB session definitions._
