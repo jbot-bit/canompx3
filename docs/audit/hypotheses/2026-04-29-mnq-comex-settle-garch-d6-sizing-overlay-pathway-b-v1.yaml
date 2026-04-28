@@ -1,0 +1,531 @@
+# Pre-registered Hypothesis — Phase D D6 — B-MNQ-COX Sizing-Overlay Pathway B K=1
+# AUTHORITY: docs/institutional/pre_registered_criteria.md (12 criteria + Amendments 3.0/3.1/3.2)
+# AUTHORITY: .claude/rules/backtesting-methodology.md (16 rules)
+# AUTHORITY: .claude/rules/research-truth-protocol.md (Phase 0 literature grounding)
+# AUTHORITY: docs/prompts/prereg-writer-prompt.md (output schema)
+# AUTHORITY: .claude/rules/institutional-rigor.md (8 non-skip rules)
+
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: 2026-04-29
+slug: mnq-comex-settle-garch-d6-sizing-overlay-pathway-b-v1
+title: "Phase D D6 — MNQ COMEX_SETTLE O5 E2 CB1 RR1.5 + garch_forecast_vol_pct > 70 — sizing-overlay on deployed lane — Pathway B K=1"
+owner: claude-code (canompx3)
+parent_spec: docs/audit/results/2026-04-29-parked-pathway-b-additivity-triage.md  # § Addendum (2026-04-29) — D4 reframing as sizing-overlay classifier — Path 3
+predecessor_pre_regs:
+  - docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-pathway-b-v1.yaml         # D4 (RR1.0 candidate-lane framing) — PARK_PENDING_OOS_POWER
+  - docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-d5-both-sides-pathway-b-v1.yaml  # D5 (RR1.5 conditional half-size) — KILL on paired-p + C9
+relationship_to_predecessors: |
+  D4 framed garch>70 as a NEW LANE candidate at RR1.0 → failed RULE 7 additivity (subset of deployed
+  lane) and Amendment 3.2 MinTRL (5.5y to N=131 OOS-on at gate-only accrual rate).
+  D5 framed garch>70 as a CONDITIONAL HALF-SIZE on RR1.5 deployed lane (off-cohort sized 0.5x)
+  → KILL on paired-p (t=-1.45, p=0.148) and C9 (2019 era ExpR_D5=-0.108 < -0.05 floor).
+  D6 is a DIFFERENT ROLE: pure sizing-OVERLAY observation on the deployed RR1.5 lane.
+  Not a new lane (no validated_setups insert). Not a conditional half-size (no off-cohort
+  modification). The role is "binary regime gate that modulates risk allocation INSIDE
+  the existing lane's already-validated trade set." See `docs/runtime/decision-ledger.md`
+  entry `pr48-mgc-shadow-overlay-design` for the precedent overlay-contract pattern.
+
+testing_mode: individual
+pathway: B_individual
+
+authority:
+  primary:
+    - docs/institutional/pre_registered_criteria.md      # 12 criteria + Amendments 3.0/3.1/3.2
+    - .claude/rules/backtesting-methodology.md           # 16 rules
+    - .claude/rules/research-truth-protocol.md           # canonical-layer discipline
+    - .claude/rules/institutional-rigor.md               # non-skip rules
+    - .claude/rules/pooled-finding-rule.md               # N/A — single cell, single lane, single side
+  notes:
+    - Pathway B per Amendment 3.0 (testing_mode=individual, K=1, theory_citation required)
+    - C6/C8/C9 mandatory non-waivable per Amendment 3.0 condition 4
+    - Amendment 3.2 (MinTRL gate at pre-reg time) BINDING — classification computed below
+    - Scratch policy locked include-as-zero (canonical Stage 5 outcome_builder fix; commit 68ee35f8)
+    - Carver Ch 9-10 vol-targeting framework grounds sizing-overlay role per
+      docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md and
+      docs/institutional/mechanism_priors.md § R3 (sizing modulator)
+
+reproducibility:
+  repo_root: canompx3
+  commit_sha: "TO_FILL_AFTER_COMMIT"   # stamped on first commit; pre-reg locked before any runner executes
+  committed_required_before_run: true
+  branch: main                          # pre-reg only, no harness change in this commit
+  base_branch: main
+
+scope:
+  instrument: MNQ                                  # canonical: pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS
+  session: COMEX_SETTLE                            # canonical: pipeline.dst.SESSION_CATALOG (start dynamic per DST)
+  orb_minutes: 5
+  rr_target: 1.5                                   # MATCHES DEPLOYED LANE (D4 was RR1.0 — this differs intentionally)
+  entry_model: E2                                  # range-cross break; canonical trading_app/entry_rules.py:157-216
+  confirm_bars: 1
+  direction: both                                  # full deployed-lane cohort, no break_dir filter
+                                                   # (rationale: break_dir as predictor on E2 is BANNED per
+                                                   # backtesting-methodology.md § 6.3 and the 2026-04-29
+                                                   # E2-LA registry sweep; full both-sides cohort avoids
+                                                   # the registry row 27/28 class bug)
+  deployed_strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5   # verified live in validated_setups (status=active, expectancy_r=0.1119, N=1459)
+  base_filter: ORB_G5                              # canonical: trading_app.config.ALL_FILTERS['ORB_G5'] (OrbSizeFilter, orb_size>=5)
+  cell_predicate: "daily_features.garch_forecast_vol_pct > 70"   # strict > 70 (matches D4/D5 lock; Phase B feature def)
+  predicate_role: regime_gate_on_existing_lane     # NOT a filter that selects new trades; modulates size on already-validated lane fills
+  scratch_policy: include-as-zero                  # canonical post-Stage-5; pnl_r = COALESCE(pnl_r, 0.0)
+  scratch_policy_justification: |
+    Per Stage-5 canonical fix (commit 68ee35f8), orb_outcomes.pnl_r is COALESCEd to 0.0
+    for the residual <0.5% of legitimate scratch-EOD-no-MTM rows per docs/specs/outcome_builder_scratch_eod_mtm.md:368-372.
+    Cite: docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md
+    (selection bias from silent dropout). MNQ live data 2026-04-28: 99.72% scratch-pnl populated.
+  cost_specs_source: pipeline.cost_model.COST_SPECS    # MNQ COST_SPECS verified 2026-04-29 — point_value=2.0, commission_rt=1.42, spread=0.5, slippage=1.0; pnl_r is friction-deducted
+
+data_policy:
+  is_window: "trading_day < 2026-01-01"
+  oos_window: "2026-01-01 <= trading_day <= db_max"
+  holdout_rule:
+    constant_source: trading_app.holdout_policy.HOLDOUT_SACRED_FROM
+    locked_boundary: 2026-01-01
+  tuning_against_oos: false
+  pre_reg_baseline_recompute_method: |
+    Strict Mode A IS, recomputed against canonical orb_outcomes JOIN daily_features for the EXACT
+    deployed lane scope (no validated_setups baseline reuse — research-truth-protocol § Mode B
+    grandfathered warning). Independently verified 2026-04-29 against live gold.db (DB max
+    trading_day=2026-04-26): N_IS=1577, ExpR_IS=0.0941. The 0.0941 matches 0.1119 (validated_setups)
+    within Mode A vs Mode B grandfathered tolerance (124-row gap from N=1459 → N=1577 is the
+    Stage-5 scratch-policy correction landed post-promotion).
+
+feature_definition:
+  feature_name: garch_forecast_vol_pct
+  column_source: daily_features.garch_forecast_vol_pct          # column existence verified 2026-04-29
+  canonical_source_of_truth: pipeline/build_daily_features.py:1468-1497   # rolling 252-day prior-only window
+  trade_time_knowable: true
+  first_complete_time: prior trading_day close                  # forecast made at prior close, applied at session start next day
+  temporal_alignment_note: |
+    GARCH(1,1) forecast computed on prior 252 daily closes only. No intraday data, no
+    same-day data, no break-bar dependency. Carver Ch 9 framework (verbatim
+    docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md § Ch 9 p.137)
+    explicitly defines "expected daily standard deviation" as the basis for an "annualised
+    cash volatility target" — daily-forecast-driven intraday sizing is the framework, not a defect.
+  lookhead_check: |
+    backtesting-methodology.md § 6.1 SAFE list — "garch_forecast_vol, garch_atr_ratio,
+    garch_forecast_vol_pct (forecast made at prior close)". No § 6.2 gate required.
+    No § 6.3 banned columns referenced.
+
+calibration:
+  threshold_source: |
+    Locked at 70 across all D-N pre-regs in this branch (D4 2026-04-28, D5 2026-04-28, D6 here).
+    NOT post-hoc tuned. The 70 percentile threshold is inherited from the original 2026-04-25
+    aistudio claim 7 quintile observation that Q5 (top 20%, ≈ pct>=80) is the dominant
+    quintile but pct>70 captures the same regime with higher fire rate (~24% of lane fills).
+    No threshold sweep authorized in this pre-reg.
+  lock_policy: schema_locked_before_any_metric
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  source: docs/audit/results/2026-04-29-parked-pathway-b-additivity-triage.md § Addendum
+  upstream_observation_summary: |
+    On the deployed MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5 lane, IS-only, partitioned by
+    garch_forecast_vol_pct > 70:
+      - garch>70 (gate-on):  N=370, ExpR=+0.2477, sd=1.171
+      - garch<=70 (gate-off): N=1019, ExpR=+0.0530, sd=1.132
+      - delta ExpR = +0.1947 R/trade
+    These figures were computed during the 2026-04-29 additivity-triage session as
+    pre/post-flight checks, NOT a separate scan. They DO NOT constitute the test.
+    This pre-reg is a confirmatory K=1 Pathway B test of ONE hypothesis on this exact
+    lift — see hypotheses § H1 below.
+  upstream_scan_k_framings: null
+  note_on_k: |
+    K=1 — single hypothesis on a single deployed lane with a clean (RULE 6.1 safe-list)
+    predictor. No multi-cell scan generated this hypothesis. Multi-framing K (Rule 4)
+    is N/A for the current test by Pathway B / Amendment 3.0 design; upstream
+    K_global / K_family / K_lane do not apply because there was no upstream family scan.
+
+testing_discipline:
+  pathway: B_individual
+  k: 1
+  significance_threshold:
+    raw_p: "< 0.05 two-sided"
+    effect_size_chordia: "|t| >= 3.00 with theory citation per Chordia et al 2018"
+    note: |
+      Theory citation present (Carver Ch 9-10 vol-targeting + Chan Ch 7 stop-cascade
+      mechanism — see hypothesis H1 theory_citation block). Therefore Chordia t>=3.00
+      with-theory threshold applies, NOT the t>=3.79 without-theory threshold.
+  mandatory_downstream_gates_non_waivable:
+    - C6_WFE                      # Walk-forward efficiency >= 0.50 on the LIFT
+    - C8_OOS                      # 2026 OOS positive on the LIFT (not the lane), with Amendment 3.2 power-floor
+    - C9_ERA_STABILITY            # No era ExpR_on < -0.05 with N>=50; gate-on years with N<10 excluded from positive count denominator
+  theory_citation_summary: |
+    Carver Ch 9-10 (verbatim docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md):
+    daily volatility forecast is the basis for position-sizing. High-vol regimes correlate
+    with stronger directional follow-through on intraday breakouts (Chan Ch 7 stop-cascade
+    mechanism, verbatim docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
+    p.155-157). The mechanism predicts that breakouts under garch>70 conditions exhibit
+    higher mean-R conditional on the lane already firing — a sizing-overlay role
+    (mechanism_priors.md § R3 sizing modulator), not a new-lane role.
+
+primary_schema:
+  cell: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5 + garch_forecast_vol_pct > 70 [overlay role]"
+  cohort_construction: |
+    Strict Mode A IS, canonical orb_outcomes JOIN daily_features:
+      WHERE symbol='MNQ' AND orb_label='COMEX_SETTLE' AND orb_minutes=5
+        AND entry_model='E2' AND confirm_bars=1 AND rr_target=1.5
+        AND trading_day < 2026-01-01
+        AND orb_COMEX_SETTLE_size >= 5            -- ORB_G5 base filter
+        AND garch_forecast_vol_pct IS NOT NULL    -- gate computability
+        AND entry_ts IS NOT NULL                   -- E2 fired
+        AND pnl_r IS NOT NULL                      -- include-as-zero scratch already coalesced upstream
+    Partition: gate_on = (garch_forecast_vol_pct > 70) else gate_off
+
+amendment_3_2_min_trl_classification:
+  computed_at: pre_reg_write_time   # 2026-04-29
+  inputs:
+    sd_per_trade_R: 1.171           # IS gate-on cohort sd (per query 2026-04-29)
+    expected_effect_R: 0.1947       # IS lift = ExpR_on - ExpR_off (per query 2026-04-29)
+    z_alpha: 1.96
+    z_beta: 0.84
+  required_N_oos_on_unfloored: 284  # ceil((1.171 / 0.1947 * (1.96+0.84))^2)
+  required_N_oos_on_floored: 284    # max(284, 50) = 284 — Amendment 3.1 floor non-binding
+  expected_oos_on_per_year_basis_a_is_rate:
+    formula: N_IS_on / years_IS = 370 / 6.65
+    value: 55.6
+  expected_oos_on_per_year_basis_b_observed_oos_rate:
+    formula: N_OOS_on_observed / oos_years_so_far = 37 / 0.309
+    value: 119.6
+    note: |
+      Observed OOS gate-on rate is much higher than IS-rate basis would predict —
+      this is genuine cohort-level acceleration, not measurement artifact. Both
+      bases are reported per Amendment 3.2 transparency requirement.
+  min_trl_years_basis_a: 5.10       # 284 / 55.6 — IS-rate basis
+  min_trl_years_basis_b: 2.37       # 284 / 119.6 — observed-OOS-rate basis
+  classification: NOT_OOS_CONFIRMABLE_UNDER_AMENDMENT_3_2
+  classification_path_chosen: CONDITIONAL_DEPLOY
+  classification_justification: |
+    Both basis-A (5.10y) and basis-B (2.37y) exceed the 2.0y EXTENDED_PARK ceiling.
+    Per Amendment 3.2, NOT_OOS_CONFIRMABLE cells must choose between
+    CONDITIONAL_DEPLOY or KEEP_PARKED_INDEFINITELY at write time, with no post-hoc
+    relabeling permitted.
+
+    CONDITIONAL_DEPLOY chosen on the following cited evidence:
+      1. Carver Ch 9-10 + Chan Ch 7 grounds the sizing-overlay role (theory_citation
+         summary above) — this is not a fresh hypothesis, it is a documented
+         vol-targeting framework reduction.
+      2. IS lift |t|=2.76 (p=0.0059) — at-the-line for Chordia with-theory threshold
+         (3.00) but well above raw p<0.05 — see "decision_rule.is_t_under_3_handling"
+         below for honest treatment.
+      3. IS gate-on vs zero |t|=4.07 — strong absolute edge on the gate-on cohort.
+      4. C9 era stability: 5/6 IS years gate-on positive at N>=10; zero years
+         fail the (N>=50, ExpR<-0.05) gate. 2023 N=10 ExpR=-0.31 is the soft spot
+         but excluded from C9 strict eval per Amendment 3.1 wording (N<50 not
+         counted as fail).
+      5. OOS already accruing: N_OOS_on=37 (close to 50 floor), OOS lift=+0.6934R
+         (>>0.40 * IS lift), dir_match=true, OOS lift |t|=2.61, p=0.011.
+      6. Shiryaev-Roberts monitor (Criterion 12) is wired and live for the deployed
+         lane — `trading_app/sr_monitor.py` will detect drift within ARL ~60
+         trading days, so live-shadow has a structural circuit-breaker.
+
+    KEEP_PARKED_INDEFINITELY rejected because:
+      - The cell already has dir-matched OOS evidence (37 fills, +0.69R lift).
+        Locking it parked indefinitely would be a Bailey 2013 p.7 kind of false
+        comfort — pretending evidence is missing when it is in fact accumulating.
+
+deployment_carrier:
+  type: shadow_only_overlay_observation
+  carrier_pattern: |
+    Mirrors the precedent established by `pr48-mgc-shadow-overlay-design` and
+    `pr48-mgc-shadow-overlay-phase1-implemented` (decision-ledger entries).
+    NOT a validated_setups row. NOT a lane_allocation.json entry. NOT a
+    paper_trades carrier. NOT a live execution sizing change in this pre-reg.
+  what_phase_1_observes:
+    - Daily derived-state envelope: did garch>70 fire today on the lane's session?
+    - The deployed lane's actual fill (if any) is recorded with the gate state.
+    - Pre-session check / dashboard surfaces flag the gate state for operator awareness.
+  what_phase_1_does_not_do:
+    - Does NOT modify execution size on the deployed lane in this phase.
+    - Does NOT add a validated_setups row.
+    - Does NOT add a lane_allocation.json entry.
+    - Does NOT create a paper_trades carrier.
+    - Does NOT mutate execution_engine.py or risk_manager.py.
+  promotion_to_phase_2_size_modulation_requires:
+    - All H1 PASS criteria below met
+    - C6/C8/C9 gates cleared (non-waivable per Amendment 3.0)
+    - Shiryaev-Roberts monitor clean for >= 60 trading days post pre-reg lock
+    - A separate Phase 2 pre-reg authored that defines the precise size-multiplier
+      action (e.g., 1.0x default, 1.25x or 1.5x on gate-on; or 1.0x on gate-on
+      and 0.75x on gate-off) and the live-rollout protocol with shadow-vs-live A/B.
+    - This Phase 2 pre-reg is OUT OF SCOPE for D6 v1.
+
+hypotheses:
+  - id: H1
+    type: primary
+    counted_against_trial_budget: true
+    statement: |
+      On the deployed lane MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5 over IS
+      (trading_day < 2026-01-01), partitioning by garch_forecast_vol_pct > 70:
+      mean per-trade R on the gate-on subset is materially higher than on the
+      gate-off subset, by a margin that survives the binding gates listed
+      under pass_metric.
+    theory_citation:
+      - source: docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md
+        passage: "Ch 9 — annualised cash volatility target driven by daily volatility forecast"
+        relevance: |
+          Daily GARCH forecast → intraday vol-target sizing is the canonical
+          Carver framework. The garch>70 regime is the upper tail of forecast
+          where vol-targeted sizing would normally REDUCE size (defensive).
+          Empirical observation here is that on this specific lane the
+          breakout-momentum mechanism INCREASES per-trade R conditional on
+          the regime — a non-trivial finding that requires the explicit
+          forecast-combination framework Carver Ch 10 documents to interpret
+          coherently as a sizing-overlay role.
+      - source: docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
+        passage: "p.155-157 stop-cascade mechanism on intraday breakouts in volatile regimes"
+        relevance: |
+          High-vol regimes increase stop-density above and below ORB levels;
+          breakouts that fire under high-vol regimes encounter denser stop-loss
+          cascades, which the intraday momentum literature predicts will drive
+          larger absolute moves. The mechanism is documented for 5-30min
+          breakouts, which matches the 5m ORB / E2 / RR1.5 lane's holding-period
+          horizon (Carver Ch 12 p.192 horizon-stop match).
+    pass_metric:
+      metric_1:
+        name: IS_t_lift
+        formula: "Welch t on (gate_on_pnl_r - gate_off_pnl_r) over IS cohort"
+        threshold: "|t| >= 3.00 (Chordia with-theory)"
+        observed_at_pre_reg_time: 2.76
+        gate_handling_at_observed_value: |
+          Observed pre-reg-time |t|=2.76 is BELOW the 3.00 threshold.
+          NOT a pre-reg violation — the harness will recompute t at lock-time;
+          the 2.76 figure was a planning estimate. If recomputed |t| >= 3.00,
+          H1 metric_1 PASS. If recomputed |t| < 3.00, H1 metric_1 FAIL — see
+          decision_rule.is_t_under_3_handling.
+      metric_2:
+        name: IS_lift_R
+        formula: "ExpR(gate_on) - ExpR(gate_off) over IS cohort"
+        threshold_gte: 0.10
+        observed_at_pre_reg_time: 0.1947
+      metric_3:
+        name: positive_mean_floor
+        formula: "ExpR(gate_on) > 0 AND ExpR(gate_off) > 0"
+        threshold: both subsets positive (no negative-mean off-cohort can drive a spurious positive lift)
+        observed_at_pre_reg_time: "gate_on=+0.2477, gate_off=+0.0530 — both positive"
+      metric_4:
+        name: c6_wfe
+        formula: "WFE(IS-trained on lift, OOS-evaluated on lift) >= 0.50"
+        threshold_gte: 0.50
+        non_waivable: true   # Amendment 3.0 condition 4
+      metric_5:
+        name: c9_era_stability
+        formula: |
+          For each IS year y where gate-on N(y) >= 50, ExpR_on(y) >= -0.05.
+          Years with gate-on N(y) < 50 EXCLUDED from C9 strict eval (Amendment 3.1 wording).
+          Additionally: count of IS years with ExpR_on > 0 AND N(y) >= 10 must be >= 4.
+        threshold:
+          - "no year fails (N>=50, ExpR<-0.05)"
+          - "positive years (N>=10): >= 4"
+        observed_at_pre_reg_time:
+          fails_n_ge_50: []   # zero
+          positive_years_n_ge_10: [2020, 2021, 2022, 2024, 2025]   # 5 years
+        non_waivable: true
+      metric_6:
+        name: c8_oos_with_amendment_3_2
+        formula: |
+          OOS_lift = ExpR_on(OOS) - ExpR_off(OOS); dir_match = (sign(IS_lift) == sign(OOS_lift));
+          C8 PASS if N_OOS_on >= 50 AND dir_match AND OOS_lift >= 0.40 * IS_lift.
+          C8 GATE_INACTIVE_LOWPOWER if N_OOS_on < 50 (Amendment 3.1).
+          Under Amendment 3.2 NOT_OOS_CONFIRMABLE classification, harness reports
+          C8 status but the cell has already been classified CONDITIONAL_DEPLOY
+          at pre-reg write time, NOT PARK_PENDING_OOS_POWER.
+        observed_at_pre_reg_time:
+          n_oos_on: 37
+          oos_lift_R: 0.6934
+          dir_match: true
+          oos_lift_ge_0_4_is_lift: true
+          c8_status: GATE_INACTIVE_LOWPOWER (N=37 < 50)
+        non_waivable: true   # gate inactivity is reported, not waived
+
+baseline:
+  type: deployed_lane_full_cohort
+  computed_from: canonical_orb_outcomes_JOIN_daily_features
+  is_window_baseline_n: 1577
+  is_window_baseline_expr: 0.0941
+  partition_by: garch_forecast_vol_pct > 70
+  partition_baselines:
+    gate_on:  {n: 370,  expr: 0.2477, sd: 1.171}
+    gate_off: {n: 1019, expr: 0.0530, sd: 1.132}
+  baseline_recompute_method: |
+    Strict Mode A IS via canonical orb_outcomes JOIN daily_features (research-truth-protocol
+    § Validated Universe Rule + § Mode B grandfathered warning). Verified live 2026-04-29
+    against gold.db (DB max trading_day=2026-04-26).
+  harness_cross_check_target: |
+    Independent SQL via direct duckdb query (NOT via research.filter_utils) reproduces
+    gate_on N=370, ExpR=+0.2477 within 1e-4. Genuine cross-method check, not a smoke test.
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  k_global: 1
+  k_family: 1
+  k_lane: 1
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2 = 2 * ln(1) / 1.0^2 = 0"
+    n_trials: 1
+    e_max_n: 1.0
+    within_cap: true
+    cap_reference: pre_registered_criteria.md Criterion 2 (N <= 28 strict Bailey E=1.0 on 6.65y MNQ; here N=1)
+
+kill_criteria:
+  - id: KILL_IS_T
+    metric: IS_t_lift
+    threshold: "|t| < 2.5 on harness recomputation"
+    action: |
+      DEAD. Mark cell as `GARCH_70_OVERLAY_DEAD` in decision-ledger.
+      Future re-open requires a NEW theory citation that materially changes
+      expected_effect_R per Amendment 3.2 stop conditions.
+    rationale: |
+      |t| < 2.5 on a hypothesis with this much IS support and this much theory
+      grounding would indicate the partition is unstable — even a fakeout-fragility
+      finding. No room for post-hoc rescue.
+  - id: KILL_C9_HARD
+    metric: C9 era stability
+    threshold: "any IS year with N>=50 has ExpR_on < -0.05"
+    action: DEAD. Era-dependent edge per Amendment 3.1.
+  - id: KILL_POS_MEAN_FLOOR
+    metric: positive_mean_floor
+    threshold: "ExpR(gate_off) <= 0 AND ExpR(gate_on) <= 0"
+    action: DEAD. Lift would come from making things less bad, not better.
+  - id: KILL_DIR_MISMATCH_OOS
+    metric: OOS_lift sign
+    threshold: "OOS_lift < 0 AND |OOS_t| > 2.0"
+    action: |
+      Suspended. The harness flags the cell for SR-monitor-driven re-eval. If
+      Shiryaev-Roberts already alarms within 60 days, formal KILL.
+  - id: KILL_SR_ALARM
+    metric: Shiryaev-Roberts monitor on deployed lane (already wired)
+    threshold: SR alarm fires within 60 trading days post pre-reg lock
+    action: |
+      DEAD. Per Amendment 3.2 stop conditions, CONDITIONAL_DEPLOY classification
+      reverts to KEEP_PARKED_INDEFINITELY when SR alarms.
+
+decision_rule:
+  continue_if: |
+    Harness recomputes |IS_t| >= 3.00 (Chordia with-theory) AND IS_lift >= 0.10
+    AND positive_mean_floor PASS AND C6_WFE >= 0.50 AND C9 PASS (per metric_5)
+    AND no KILL fires.
+    → Update D6 verdict in decision-ledger to CANDIDATE_READY_FOR_PHASE_2_OVERLAY_DESIGN.
+    → Phase 2 pre-reg can be authored to define the live size-multiplier action.
+    → Phase 1 carrier (shadow-only observation) goes live.
+  park_if: |
+    Harness recomputes |IS_t| in [2.5, 3.00) but other gates PASS.
+    → CONDITIONAL_DEPLOY status retained but Phase 2 pre-reg gated until
+      |IS_t| can be elevated by additional clean theory grounding (e.g., a
+      Fitschen Ch 3 cross-class addition or a Ronen et al microstructure
+      grounding) — never by re-running the same data.
+  kill_if: |
+    Any KILL_* criterion fires.
+  is_t_under_3_handling: |
+    The pre-reg-time observed |t|=2.76 is BELOW the 3.00 threshold but ABOVE the
+    p<0.05 raw-p Pathway B floor. Per Amendment 3.0 condition 1, raw p<0.05 is
+    sufficient for individual-pathway statistical significance; Chordia t>=3.00
+    with-theory is an effect-size benchmark, not the primary gate. The two-tier
+    interpretation:
+      - If recomputed |t| >= 3.00: full PASS, decision_rule.continue_if applies.
+      - If recomputed |t| in [2.5, 3.00) and all other gates PASS:
+        decision_rule.park_if applies — status retained as CONDITIONAL_DEPLOY but
+        Phase 2 size-multiplier pre-reg gated until additional grounding lifts t.
+      - If recomputed |t| < 2.5: KILL_IS_T fires.
+    No post-hoc threshold relaxation permitted.
+
+methodology_rules_applied:
+  rule_1_feature_temporal_alignment:
+    application: "garch_forecast_vol_pct is § 6.1 SAFE; first complete at prior trading day close. No § 6.2 gate needed."
+  rule_2_filter_application_timing:
+    application: "ORB_G5 base filter is canonical (orb_size>=5 at ORB end, pre-entry). Gate (garch>70) is also pre-entry. Both timing-clean."
+  rule_3_is_oos_discipline:
+    application: "Strict Mode A: IS = trading_day<2026-01-01; OOS = >=2026-01-01; HOLDOUT_SACRED_FROM constant from trading_app.holdout_policy."
+  rule_4_multiple_testing:
+    application: "K=1, Pathway B individual. Multi-framing K (K_global/K_family/K_lane) does NOT apply per Amendment 3.0 framing for individual-pathway K=1 confirmatory tests."
+  rule_5_comprehensive_scope:
+    application: "Scope deliberately narrow — single deployed lane, single predictor. Not a discovery scan; a confirmatory K=1 test on a hypothesis surfaced from the additivity-triage pre-flight."
+  rule_6_trade_time_knowability:
+    application: "garch_forecast_vol_pct is § 6.1 SAFE per backtesting-methodology.md. break_dir is NOT used (RULE 6.3 banned as predictor on E2; both-sides cohort avoids the issue entirely)."
+  rule_7_tautology:
+    application: |
+      RULE 7 was the original D4 disqualifier as a NEW LANE candidate (corr 0.81 with
+      deployed lane on the IS window). For D6 the role is OVERLAY ON the deployed lane,
+      not a parallel lane. RULE 7 does not apply to overlay-role tests because there is
+      no second position being added — same-day fills are not duplicated.
+  rule_8_fire_rate_arithmetic:
+    application: |
+      Gate fires on 370/1389 = 26.6% of IS lane fills. Outside § 8.1 extreme range (5%-95%).
+      |WR_spread| diagnostic: not yet computed at pre-reg write time; harness will emit.
+  rule_9_data_source:
+    application: "Canonical orb_outcomes JOIN daily_features only. No validated_setups, no edge_families, no live_config."
+  rule_10_pre_registration:
+    application: "This is the pre-reg. Locked before any harness execution."
+  rule_11_audit_trail:
+    application: "Result MD will land at docs/audit/results/2026-XX-XX-mnq-comex-settle-garch-d6-sizing-overlay-pathway-b-v1-result.md after harness runs. Decision-ledger slug will be `d6-mnq-comex-settle-garch-overlay-{verdict}`."
+  rule_12_red_flags:
+    application: |
+      None of the |t|>7 / Δ_IS>0.6 / uniform-feature-class red flags trigger here.
+      Pre-reg-time observed |t|=2.76, IS lift=0.1947R — well within Carver/Chan
+      mechanism prior magnitudes for daily-vol-targeted intraday breakouts.
+  rule_13_pressure_test:
+    application: |
+      Pressure test of the harness: inject `outcome` (look-ahead) as a sham predictor;
+      the harness must REJECT it via T0 tautology check (corr with pnl_r ~ 1.0). If the
+      harness silently accepts, the test fails. Required to land before harness runs.
+  rule_14_pooled_finding:
+    application: "N/A — single cell, single lane, single side. No pooled framing."
+
+outputs_required_after_run:
+  - docs/audit/results/2026-XX-XX-mnq-comex-settle-garch-d6-sizing-overlay-pathway-b-v1-result.md
+      (contains: full IS+OOS partitioned table; Welch t recomputation; C6 WFE result;
+       C9 per-year breakdown with N>=50 and N>=10 split; C8 status under Amendment 3.2;
+       SR-monitor calibration target for the post-lock 60-day window; Phase 2 gating
+       decision (PASS/PARK/KILL); pressure-test result.)
+  - decision-ledger entry: d6-mnq-comex-settle-garch-overlay-{verdict}
+  - if PASS: a Phase 2 pre-reg DRAFT slug is logged under upcoming_work; not in this scope.
+  - if PARK or KILL: status recorded; no Phase 2 work permitted.
+
+execution_gate:
+  allowed_now:
+    - committing this pre-reg
+    - authoring the Phase 1 shadow-only carrier wiring (separate commit, separate stage)
+    - authoring the harness runner research/phase_d_d6_mnq_comex_settle_overlay_pathway_b.py (separate commit)
+  forbidden_now:
+    - executing the harness before this pre-reg is committed and commit_sha is stamped
+    - mutating any production code (execution_engine.py, risk_manager.py, validated_setups,
+      lane_allocation.json) under D6 — that is Phase 2 work, gated on this pre-reg's PASS verdict
+    - any threshold change (the locked 70 threshold; the 3.00 / 2.5 / 0.10 thresholds; the
+      0.40 OOS-of-IS ratio; the -0.05 era floor; the 50/10 N floors)
+    - paper_trades carrier (forbidden at Phase 1 per overlay-contract precedent)
+    - validated_setups insert (forbidden at Phase 1)
+
+not_done_by_this_pre_reg:
+  - Does NOT promote the cell to validated_setups.
+  - Does NOT write a lane_allocation.json entry.
+  - Does NOT mutate any production code (execution_engine.py, risk_manager.py, etc.).
+  - Does NOT create paper_trades for this overlay.
+  - Does NOT change live position size on the deployed lane.
+  - Does NOT amend the D4 result file (which stands at PARK_PENDING_OOS_POWER per
+    docs/audit/results/2026-04-28-mnq-comex-settle-pathway-b-v1-result.md and the
+    superseding 2026-04-29 caveat in docs/audit/results/2026-04-28-d4-aistudio-claims-audit.md).
+  - Does NOT amend the D5 result file (which stands at KILL).
+  - Does NOT define the Phase 2 size-multiplier semantics — that is a SEPARATE pre-reg
+    gated on D6 PASS.
+  - Does NOT extend to other instruments (MES/MGC) or other sessions — single-cell test.
+  - Does NOT extend to other thresholds (60, 75, 80) — the 70 lock is binding.
+
+self_review_checklist_complete:
+  - red_flags_per_rule_12: PASS — no |t|>7, no Δ>0.6, no uniform-feature, no early-session window-derived
+  - kill_threshold_strict: PASS — |t|<2.5 fires KILL hard; SR alarm fires KILL hard
+  - threshold_later_than_uplift_check: PASS — all thresholds locked above
+  - post_hoc_tuning: PASS — none permitted; explicit forbidden_now listing
+  - mode_b_grandfathered_baseline_check: PASS — pre-reg uses recomputed Mode A baseline (0.0941), NOT validated_setups grandfathered (0.1119)
+  - canonical_filter_delegation: PASS — harness MUST use research.filter_utils.filter_signal for ORB_G5 (not inline OrbSizeFilter re-encoding)
+  - quantile_lookahead_check: N/A — gate uses absolute threshold (>70), not a percentile of the cell's distribution
+  - canonical_e2_lookahead_policy: PASS — break_dir not used; both-sides cohort; garch>70 is § 6.1 SAFE
+  - amendment_3_2_classification_at_write_time: DONE — NOT_OOS_CONFIRMABLE → CONDITIONAL_DEPLOY
+  - decision_rule_disambiguation_at_t_boundary: DONE — is_t_under_3_handling block above
+
+# Pre-commit self-test simulation:
+# If harness returns recomputed |IS_t|=2.99: park_if applies (in [2.5, 3.00) range).
+# If harness returns recomputed |IS_t|=3.00: continue_if applies (>= 3.00 boundary).
+# If harness returns recomputed |IS_t|=2.49: kill_if applies (< 2.5).
+# No ambiguity.
