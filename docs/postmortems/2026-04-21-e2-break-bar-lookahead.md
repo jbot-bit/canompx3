@@ -205,3 +205,16 @@ The fix here prevents future occurrences. § 5.1 identifies the retro-audit surf
 2. `orb_{s}_break_dir` and `orb_{s}_break_ts` are **look-ahead when used as predictors for E2 trade selection**. Using them as descriptive segmentation of an already-taken trade (e.g., "what was the eventual close-break direction on days when E2 filled long?") is fine as a diagnostic but not as a filter.
 3. `.claude/rules/backtesting-methodology.md` is now aligned with `trading_app/config.py:3540-3568` and `docs/institutional/mechanism_priors.md § 4`.
 4. Research scripts flagged in § 5.1 remain unmodified by this PR. Their retro-audit is a follow-up work item.
+
+---
+
+## 9. 2026-04-28 follow-up — § 5.1 retro-audit completed
+
+The drift check `pipeline/check_drift.py::check_e2_lookahead_research_contamination` (landed 2026-04-28 commit `2c91d9d1`) replaces the proposed § 5.4 static check. On first run it surfaced **9 additional research scripts** beyond the original 18-file registry — these are the § 5.1 retro-audit closure list.
+
+**Two doctrine drifts found and fixed in the closure pass:**
+
+1. § 6.1 of `backtesting-methodology.md` still listed `rel_vol_{s}` as a safe predictor with the description "ORB volume vs session-avg historical — known at ORB end." The canonical computation at `pipeline/build_daily_features.py:1600-1660` is `rel_vol_{label} = break_bar_volume / median(prior 20 bars_1m at same UTC minute-of-day)` — the numerator is `break_bar_volume`, so the same 41.3% post-entry class bug applies. § 6.1 narrowed and § 6.3 extended on 2026-04-28 to cover this gap.
+2. The `late-fill-only` annotation grammar permitted by the drift check is statistically unsafe for any signal-discovery purpose: filtering trades on `entry_ts >= break_ts` conditions the backtest universe on a future-bar timestamp (Chan Ch 1 p.4 — using future information). The grammar still allows the annotation, but per-script application now requires an inline reminder that the late-fill subset is selection-biased and not deployable.
+
+**Closure verdicts** for the 9 candidates are catalogued in `docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md` § "Drift-check sweep additions (2026-04-28)". This closes the § 5.1 deferred audit.

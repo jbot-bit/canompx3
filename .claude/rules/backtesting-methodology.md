@@ -207,7 +207,8 @@ If you can't answer (1)-(3) with certainty, do NOT use the feature. Write a prov
 - `orb_{s}_size`, `orb_{s}_high`, `orb_{s}_low` (known at ORB end, before entry for E2)
 - `orb_{s}_vwap`, `orb_{s}_pre_velocity` (computed over pre-ORB interval)
 - `orb_{s}_compression_z`, `orb_{s}_compression_tier` (computed pre-ORB)
-- `rel_vol_{s}` (ORB volume vs session-avg historical — known at ORB end)
+
+(`rel_vol_{s}` was previously listed here — REMOVED 2026-04-28. Numerator is `break_bar_volume` per `pipeline/build_daily_features.py:1600-1660`, so the same E2 look-ahead applies. See § 6.3.)
 
 ### 6.2 Conditionally valid (use gate)
 
@@ -220,6 +221,7 @@ If you can't answer (1)-(3) with certainty, do NOT use the feature. Write a prov
 - `double_break`, `*_mae_r`, `*_mfe_r`, `*_outcome`, `pnl_r`, any `*_fill_price`-derived feature used as a PREDICTOR
 - **E2-look-ahead break-bar features** (valid for E1/E3 only, banned for E2 regardless of `confirm_bars`):
   - `orb_{s}_break_ts`, `orb_{s}_break_delay_min`, `orb_{s}_break_bar_continues`, `orb_{s}_break_bar_volume`
+  - `rel_vol_{s}` (e.g. `rel_vol_NYSE_OPEN`, `rel_vol_COMEX_SETTLE`) — numerator is `break_bar_volume` per `pipeline/build_daily_features.py:1600-1660`, so the same 41.3% post-entry-data class bug applies on E2. Added 2026-04-28 from drift-check sweep that surfaced 9 additional candidates beyond the original 18-file registry. Doctrine drift root cause: prior § 6.1 wording described `rel_vol_{s}` as "ORB volume vs session-avg historical" which contradicts the canonical computation. Citing Chan Ch 1 p.4 (`docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md:20`) — using future information to make a prediction at the current time.
   - `orb_{s}_break_dir` when used as a *predictor* (direction-segmentation of an already-taken trade is fine; using it to decide whether to take the trade is E2-look-ahead)
   - Why: E2 (stop-market) fires on the first bar whose **range** crosses the ORB boundary (wick-touch counts, including fakeouts). `daily_features` defines the "break bar" by **close-outside-ORB**, which can be a later bar. Real-data measurement on `MNQ EUROPE_FLOW E2 CB1 O5 RR1.5` IS (1,718 trades 2019-2025): `entry_ts < break_ts` on 709 trades = **41.3%** (per-year range 37.4%–48.6%), so break-bar features are post-entry for ~4 in 10 E2 trades, every year.
   - Canonical authority: `trading_app/config.py:3540-3568` (`E2_EXCLUDED_FILTER_PREFIXES` / `E2_EXCLUDED_FILTER_SUBSTRINGS` — registered filters `BRK_FAST*`, `BRK_CONT`, `VOL_RV*`, `ATR70_VOL` are gated via `_e2_look_ahead_reason()` and return `NOT_APPLICABLE_ENTRY_MODEL` on E2).

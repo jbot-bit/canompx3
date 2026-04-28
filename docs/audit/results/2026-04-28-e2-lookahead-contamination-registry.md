@@ -84,6 +84,29 @@ Heuristic: regex-grep for `entry_model.*E2` AND `rel_vol|break_bar_volume|break_
 3. **Re-run plan:** for each TAINTED script that influences live deployment, run a clean replacement using `ovn_range_pct`, `garch_forecast_vol_pct`, `atr_20_pct`, `prev_day_range`, `gap_open_points` (Rule 6.1 safe list) instead of `rel_vol`. Keep the script's hypothesis and pre-reg structure; only swap the predictor.
 4. **Drift check (FUTURE):** add a check that flags any new `research/*.py` script combining `entry_model='E2'` with `rel_vol|break_bar_*|break_delay` references — surface as PASS/WARN at pre-commit.
 
+## Re-derivation dispatch (added 2026-04-28 follow-up commit)
+
+Replaces the generic Action Item §3 wording for the **specifically time-sensitive** items. Action Item §3 still governs the rest.
+
+### Priority 1 — Phase D D-0 clean re-derivation (HARD DEADLINE 2026-05-15)
+
+- **Tainted script:** `research/phase_d_d0_backtest.py` (registry row 19).
+- **Tainted predictor:** `rel_vol_COMEX_SETTLE` as size-scaling bucket variable (P33/P67 splits → 0.5×/1.0×/1.5× size_mult).
+- **External deadline:** 2026-05-15 — the daily-shadow gate eval fires once on this date per `phase_d_volume_sizing_pilot_d1_review.py`. Any deployment decision based on the D-0 verdict will consume the *current* contaminated locks unless re-derivation lands first.
+- **Replacement predictor — pick ONE pre-break candidate from RULE 6.1 safe list** (do not stack — keep the K=1 Pathway B framing intact):
+  - First choice: `garch_forecast_vol_pct` — closest economic match to `rel_vol` (volatility-regime conditioning, made at prior close).
+  - Second choice: `atr_20_pct` (20-day rolling, prior close).
+  - Tertiary: `ovn_range_pct` (overnight 09:00–17:00 Brisbane, valid for COMEX_SETTLE per RULE 1.2 valid-domain table since COMEX_SETTLE starts 04:30 next day).
+- **Pre-reg amendment required.** Original at `docs/audit/hypotheses/2026-04-18-phase-d-d0-rel-vol-sizing-mnq-comex-settle.yaml`. Amendment substitutes the predictor; preserves H1 metric (Sharpe uplift % ≥ 15% CONTINUE / < 10% KILL), kill criteria, K=1 framing. Pre-reg writer prompt at `docs/prompts/prereg-writer-prompt.md` enforces gate.
+- **Inheritance:** the 28-day shadow-append ledger from 2026-04-17 → present is recomputed against the new predictor. The shadow-append script remains valid (it appends qualifying trading days, not bucket-conditional outcomes).
+- **Verdict treatment:** if the contaminated D-0 verdict and the clean re-derivation agree (both PASS or both KILL), the clean re-derivation is the canonical record. If they disagree, the clean re-derivation governs and the D-0 verdict is documented as artifact.
+
+### Priority 2 — historical predictor-tainted scripts (no external deadline)
+
+Registry rows 20–24 and 27: `break_delay_filtered.py`, `break_delay_nuggets.py`, `l1_europe_flow_pre_break_context_scan.py`, `mnq_comex_unfiltered_overlay_v1.py`, `mnq_l1_europe_flow_prebreak_context_v1.py`, `shadow_htf_mes_europe_flow_long_skip.py`.
+
+Re-run only IF the script's prior conclusion is downstream-cited in memory, doctrine, or a deployed-lane decision. Shadow_htf is zero-capital observational (deployment risk = 0); the others have no downstream citation beyond the registry itself (verified via `git grep` 2026-04-28). Status: re-derivation deferred until citation appears or deployment-use is proposed; tainted annotation is sufficient absent that. If shadow_htf moves toward deployment use, re-pre-register with a pre-break direction proxy.
+
 ## Not done by this registry
 
 - Did NOT re-run any of the 18 contaminated scripts on clean features

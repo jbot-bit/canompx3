@@ -6,7 +6,31 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session (2026-04-28 — drift check 124: 9 e2-lookahead-policy annotations)
+## Last Session (2026-04-28 — doctrine fix + Phase D dispatch — branch `triage-e2-lookahead-9-candidates`)
+
+### What landed this session
+
+**Root-cause doctrine fix for the 2026-04-21 postmortem § 5.1 retro-audit:**
+- `.claude/rules/backtesting-methodology.md § 6.1`: removed `rel_vol_{s}` from safe list (the description contradicted `pipeline/build_daily_features.py:1600-1660` which computes numerator as `break_bar_volume`).
+- `.claude/rules/backtesting-methodology.md § 6.3`: added `rel_vol_{s}` to E2 banned list with canonical-source cite + Chan Ch 1 p.4 cite.
+- `docs/postmortems/2026-04-21-e2-break-bar-lookahead.md § 9`: closure note for 2026-04-28 follow-up. Documents two found drifts: rel_vol § 6.1 wording, and `late-fill-only` annotation as statistically unsafe for signal discovery (Chan p.4 selection bias).
+- `docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md`: added "Re-derivation dispatch" section. Priority 1 = Phase D D-0 clean re-derivation with HARD DEADLINE 2026-05-15 (predictor swap: `garch_forecast_vol_pct` first, `atr_20_pct` second). Priority 2 = historical predictor-tainted scripts deferred unless downstream citation appears.
+- Memory: `phase_d_daily_runbook.md` flagged D-0 locks as research-provisional pending clean re-derivation.
+- Stage file: `docs/runtime/stages/triage-e2-lookahead-9-candidates.md`.
+
+### Decision gate
+
+Phase D D2/D3/D4 still pending user GO. **Phase D D-0 clean re-derivation must land before 2026-05-15** to avoid the gate eval consuming contaminated baseline. Recipe is in registry dispatch § Priority 1 — pre-reg amendment + predictor swap, K=1 framing preserved.
+
+### Verification
+
+- `python pipeline/check_drift.py`: 114 passed, 0 skipped, 10 advisory (0 violations on check 124).
+- `pytest tests/test_pipeline/test_check_drift_e2_lookahead.py`: 10/10 pass.
+- No `pipeline/`, `trading_app/`, schema, or canonical-config files touched.
+
+---
+
+## Prior Session (2026-04-28 — drift check 124: 9 e2-lookahead-policy annotations)
 
 ### What landed this session
 
