@@ -172,3 +172,17 @@ The script uses canonical layers only (`bars_1m`, `daily_features`, `orb_outcome
 7. **No live OOS update.** OOS counts and dir-match figures match the D4 result file as of 2026-04-28; no re-pull.
 
 **Falsification battery:** if the Carver p.192 horizon-mechanism reading of Claim 3 is wrong — i.e. if a different signal class also exhibits 5m → 30m sign-flip on MNQ COMEX_SETTLE despite no <30min mechanism — the addendum's decision rule should be revisited. No such counter-example surfaced this session.
+
+---
+
+## Self-correction 2026-04-28 (post-Bloomberg-grade pass)
+
+A follow-up cross-session audit performed later the same day (canonical query, see `research/audit_aistudio_claims_d4.py` extension run 2026-04-28T18:xx Brisbane) revealed that the Carver p.192 horizon-stop reading landed in `docs/institutional/literature/carver_2015_ch12_speed_and_size.md` addendum (commit `25ed6f09`) **overstates universality**. Specifics:
+
+- The same `garch_forecast_vol_pct > 70` gate applied to MNQ E2 CB1 RR1.5 long ORB_G5 across **all 12 active sessions** produces a positive significant effect at **only 1 of 12** sessions (COMEX_SETTLE, raw p=0.033). Under BH-FDR at K=12, **best q = 0.391; nothing survives q < 0.05**. (Phase 0 Criterion 3 + Harvey-Liu 2015.)
+- The MGC sister-instrument coherence I asserted under Claim 5 was a small-sample illusion. Bringing N up from 36 (long-only) to 66 (both directions) on `MGC COMEX_SETTLE O5 E2 CB1 RR1.5 ORB_G5` IS shows the short side flips negative (p=0.327, N=14 short-on, mu=−0.219) and the both-sides D5 SR_ann is +0.094 — noise. **MGC is NOT a coherent sister.** Claim 5's "stable across apertures" reading is withdrawn.
+- The Carver p.192 reading of aperture-as-horizon-stop-match remains a **valid post-hoc mechanism rationalization for the one MNQ COMEX_SETTLE cell**. It is **not a universal mechanism** that explains why GARCH should produce ORB edge in general. The addendum in `carver_2015_ch12_speed_and_size.md` is not retracted, but should be read with this scope qualifier.
+- Two un-tested deployable variants surfaced from the same audit: (a) **D5 conditional half-size** on the no-edge cohort (`1.0x if garch>70 else 0.5x`) at the deployed RR1.5 lane, both directions, IS canonical SR_ann +1.238 → +1.509 (+0.2705 abs, +21.85% rel; passes Phase D D-0 v2 floors); (b) **OOS short side** = +0.437R on N=20 vs OOS short off = −0.220R, corroborating the both-sides framing the original D4 long-only test missed.
+- **MinTRL math (Bailey 2013):** N_OOS_on=17 with sd≈1.0R has power ≈ 0.17 to detect the IS effect. To reach Cohen power 0.80 requires N ≈ 131 OOS-on observations. At current accrual ~24 OOS-on/year for this cell, that is **≈ 5.5 calendar years**, not the implicit "Q3-2026" interpretation of PARK_PENDING_OOS_POWER. This surfaces a doctrine gap for Amendment 3.2 — see the separate MinTRL amendment commit landing alongside this self-correction.
+
+**Net change to D4 verdict:** PARK_PENDING_OOS_POWER stands. The Carver mechanism reading is qualified (cell-specific, not universal). The next bounded test is **D5 BOTH-SIDES conditional sizing pre-reg**, NOT D2/D3 expansion, NOT additional reviewer-claim adjudication.

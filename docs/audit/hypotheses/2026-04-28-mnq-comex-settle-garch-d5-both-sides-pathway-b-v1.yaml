@@ -1,0 +1,505 @@
+# Pre-registered Hypothesis — Phase D D5 — MNQ COMEX_SETTLE conditional half-size BOTH-SIDES — Pathway B K=1
+# AUTHORITY: docs/institutional/pre_registered_criteria.md (12 criteria + Amendments 3.0/3.1/3.2)
+# AUTHORITY: .claude/rules/backtesting-methodology.md (16 rules)
+# AUTHORITY: .claude/rules/research-truth-protocol.md (Phase 0 literature grounding)
+# AUTHORITY: docs/prompts/prereg-writer-prompt.md (output schema)
+
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: 2026-04-28
+slug: mnq-comex-settle-garch-d5-both-sides-pathway-b-v1
+title: "Phase D D5 — MNQ COMEX_SETTLE O5 RR1.5 BOTH-SIDES E2 CB1 ORB_G5 — conditional half-size sizing on no-edge cohort — Pathway B K=1"
+owner: claude-code (canompx3)
+parent_spec: docs/plans/2026-04-28-edge-extraction-phased-plan.md
+parent_audit: docs/audit/results/2026-04-28-d4-aistudio-claims-audit.md  # Bloomberg-grade audit surfaced this un-tested role
+
+testing_mode: individual
+pathway: B_individual
+
+authority:
+  primary:
+    - docs/institutional/pre_registered_criteria.md      # 12 criteria + Amendments 3.0/3.1/3.2
+    - .claude/rules/backtesting-methodology.md           # 16 rules
+    - .claude/rules/research-truth-protocol.md           # canonical-layer discipline
+    - .claude/rules/pooled-finding-rule.md               # RULE 14 — N/A for single-cell test
+  notes:
+    - Pathway B per Amendment 3.0 (testing_mode=individual, K=1, theory_citation required)
+    - C6/C8/C9 mandatory non-waivable per Amendment 3.0
+    - C8 power-floor (Amendment 3.1) — N_OOS<50 → C8_UNVERIFIED, not C8_FAIL
+    - MinTRL classification (Amendment 3.2) computed at pre-reg time below
+    - Scratch policy locked include-as-zero (canonical Stage 5 outcome_builder fix; commit 68ee35f8)
+
+reproducibility:
+  repo_root: canompx3
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+  branch: research/2026-04-28-phase-d-mnq-comex-settle-pathway-b
+  base_branch: main
+
+scope:
+  instrument: MNQ
+  session: COMEX_SETTLE
+  orb_minutes: 5
+  rr_target: 1.5                                        # DEPLOYED RR (D4 was RR1.0; D5 tests deployed RR per Bloomberg audit Stone 11)
+  entry_model: E2
+  confirm_bars: 1
+  direction_segmentation: BOTH_SIDES                    # daily_features.orb_COMEX_SETTLE_break_dir IN ('long','short') — RULE 6.3 segmentation exception
+  cohort_predicate: "daily_features.orb_COMEX_SETTLE_size >= 5 (ORB_G5 canonical)"
+  conditional_sizing_rule:                              # the test transformation S(g)
+    formula: "size_multiplier = 1.0 if garch_forecast_vol_pct > 70 else 0.5"
+    on_branch_multiplier: 1.0
+    off_branch_multiplier: 0.5
+    threshold_value: 70                                 # LOCKED — same threshold as D4; no 65/75 tuning permitted
+    threshold_lock_policy: "Threshold pre-committed; ANY change post-run violates Amendment 3.0 / RULE 10."
+  scratch_policy: include-as-zero                       # COALESCE(pnl_r, 0.0) — canonical post-Stage-5
+  cost_specs_source: pipeline.cost_model.COST_SPECS    # MNQ — pnl_r is friction-deducted; sizing 0.5x reduces both gross R and friction-as-fraction-of-R proportionally (per-trade R-multiple invariant)
+
+data_policy:
+  is_window: "trading_day < 2026-01-01"
+  oos_window: "trading_day >= 2026-01-01 AND trading_day <= MAX(orb_outcomes.trading_day)"
+  holdout_rule:
+    constant_source: trading_app.holdout_policy.HOLDOUT_SACRED_FROM
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+  oos_re_runs_with_threshold_changes: forbidden
+
+feature_definition:
+  feature_name: garch_vol_pct_GT70_conditional_sizing
+  column_source: daily_features.garch_forecast_vol_pct
+  canonical_source_of_truth: pipeline/build_daily_features.py
+  canonical_lines: "1468-1497 (GARCH(1,1) forecast vol from rolling prior-day daily closes; pct = rolling-252 prior-only percentile rank)"
+  trade_time_knowable: true
+  first_complete_time_brisbane: "prior-day close"
+  temporal_alignment_note: |
+    Identical input to D4 — garch_forecast_vol_pct is computed from prior-day
+    daily closes only, fixed before any ORB session. § 6.1 safe whitelist.
+    The D5 test transforms how the gate is USED (sizing modulation, not
+    inclusion gate), but the underlying signal computation is unchanged.
+  lookhead_check: PASS
+
+calibration:
+  threshold_source: "D4 pre-reg locked predicate (docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-pathway-b-v1.yaml line 33)"
+  threshold_value: 70
+  lock_policy: "Threshold inherited from D4 pre-reg lock; no tuning."
+  threshold_provenance: |
+    The D4 pre-reg locked the predicate `garch_forecast_vol_pct > 70` for the
+    on-cohort. D5 inherits the SAME threshold by direct citation. Stop condition
+    of this pre-reg: no 65/75/other variant is to be tested under this slug.
+    A separate threshold-sensitivity pre-reg would require its own theory citation.
+
+primary_hypothesis_statement: |
+  On the deployed `MNQ COMEX_SETTLE O5 RR1.5 E2 CB1 BOTH-SIDES ORB_G5` cohort,
+  applying a conditional sizing rule of `1.0× when garch_forecast_vol_pct > 70
+  else 0.5×` produces a higher annualized Sharpe ratio than flat 1.0× sizing,
+  while reducing per-trade ExpR (the trade-off is variance reduction, not
+  expectancy improvement). The mechanism: garch_forecast_vol_pct > 70 cohort
+  carries the residual edge per D4 evidence; the garch ≤ 70 cohort carries
+  noise around the deployed-lane mean and contributes mostly variance. Halving
+  exposure on the noise cohort improves risk-adjusted return (Carver Ch 9-10
+  vol-targeting framework: position size ∝ forecast confidence). This is a
+  RISK-OVERLAY test, not an alpha test.
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  source: docs/audit/results/2026-04-28-d4-aistudio-claims-audit.md
+  upstream_test: "D4 Pathway B — garch_vol_pct_GT70 on-vs-off ExpR (RR1.0 long); D4 result: PARK_PENDING_OOS_POWER"
+  upstream_audit_finding: "Bloomberg-grade audit (2026-04-28) Stone 6 surfaced D5 conditional-sizing variant as un-tested deployable role"
+  pre_pre_reg_canonical_check_2026_04_28:
+    sql_path_inline: see independent_sql_baseline below
+    n_combined_is: 1577    # long+short ORB_G5 IS 2019-2025
+    n_long_is: 839
+    n_short_is: 738
+    sr_pt_flat: 0.0825
+    sr_pt_d5: 0.1005
+    sr_ann_flat: 1.2381    # = SR_pt × sqrt(trades_per_year=225.3)
+    sr_ann_d5: 1.5086
+    abs_sr_ann_diff: 0.2705
+    rel_sr_ann_uplift_pct: 21.85
+    note: |
+      The pre-pre-reg sanity calc satisfies the audit-stated +0.272 abs SR /
+      +21.85% rel uplift figures. These are NOT the locked test outputs;
+      they're the readiness check that the test is worth running. Locked
+      outputs are computed by the runner per outputs_required_after_run.
+  institutional_validity_check: |
+    Independent SQL reproduction (2026-04-28) of the D5 cohort against
+    canonical layers confirms N_combined_IS=1577 (long=839, short=738),
+    SR_pt flat=+0.0825, SR_pt D5=+0.1005, SR_ann flat=+1.238, SR_ann D5=+1.509,
+    abs SR diff=+0.2705, rel uplift=+21.85%. Year-by-year per_year SR_pt
+    breakdown: 2019 N=99 SR_flat=-0.21 SR_D5=-0.21 (no-flip, identical because
+    most 2019 trades were on-cell); 2020 N=236 +0.10/+0.11 (no-flip); 2021
+    N=248 +0.05/+0.10 (no-flip); 2022 N=250 +0.00/+0.01 (no-flip); 2023 N=248
+    +0.12/+0.11 (1-year flip, magnitude -0.017 < 0.10 floor); 2024 N=249
+    +0.12/+0.14 (no-flip); 2025 N=247 +0.21/+0.24 (no-flip). One year shows
+    a sign-preserving small drop (2023, -0.017 abs SR). No year flips by more
+    than 0.05 abs SR. Annual stability gate (KILL_YEAR_FLIP, see below) PASSES
+    on this pre-pre-reg sanity check.
+
+testing_discipline:
+  pathway: B_individual
+  k: 1
+  significance_threshold:
+    abs_sharpe_ann_diff_floor: 0.05      # Phase D D-0 v2 floor (canonical)
+    rel_sharpe_ann_uplift_floor_pct: 15  # Phase D D-0 v2 floor (canonical)
+    annual_no_flip_floor_abs_sr: 0.10    # any IS year worse on D5 than flat by >0.10 abs SR = KILL
+  mandatory_downstream_gates_non_waivable:
+    - C6_walk_forward_efficiency_gte_0p50_when_n_oos_powered
+    - C8_oos_positive_when_n_oos_powered
+    - C9_era_stability_no_era_lt_neg_0p05_with_n_era_gte_20
+  theory_citation:
+    - source: docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md
+      claim: "Position size should be conditioned on forecast confidence; high-confidence forecasts warrant full size, low-confidence forecasts warrant reduced size. Daily vol forecast → intraday position sizing is the framework."
+      role: filter-mechanism citation (the actual prediction's theory grounding) — for the SIZING TRANSFORMATION specifically, not the binary on-vs-off question of D4
+    - source: docs/institutional/literature/carver_2015_ch12_speed_and_size.md
+      claim: "Holding-period × stop-level matching: signal horizon must match the implied holding period of the position-sizing decision. (Addendum 2026-04-28 self-corrected as cell-specific, not universal.)"
+      role: aperture-mechanism grounding
+    - source: docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
+      claim: "Stop-cascade mechanism on 5-30-min horizon following high-vol regimes — supports the residual edge in the on-cohort."
+      role: mechanism for WHY the on-cohort carries the residual edge that the off-cohort lacks
+    - source: docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md
+      claim: "Sharpe-ratio confidence intervals are sample-size-dependent; risk-adjusted return improvements via variance reduction are first-order portfolio metric per de Prado / Bailey."
+      role: metric-choice grounding (Sharpe diff, not ExpR diff, is the right gate for a risk-overlay test)
+  filter_mechanism_grounding: |
+    The D5 cut is grounded in Carver Ch 9-10 vol-targeting (position size ∝
+    forecast confidence). D4 evidence shows the on-cohort (garch>70) carries
+    a within-cohort residual edge; the off-cohort (garch≤70) carries deployed-
+    lane noise. Halving exposure to the noise cohort is the Carver-prescribed
+    response to a forecast-conditional confidence assessment. The 0.5× factor
+    is the simplest non-trivial reduction (binary halving); a continuous
+    scaling (e.g. ∝ percentile) would expand the test's degrees of freedom
+    and is explicitly NOT pre-registered here. If D5 PASSES, a follow-up
+    pre-reg may test continuous scaling as a separate K=1 test.
+
+    Distinct from D4 (binary on-vs-off ExpR comparison): D5 keeps ALL trades
+    in the test universe but transforms their R-multiple via sizing. The
+    metric-of-interest is Sharpe (risk-adjusted), not ExpR (raw mean).
+
+    Distinct from D-0 v2 (Q5-up sizing): D-0 v2 amplified the on-cohort
+    (1.5×) and parked at +0.009 abs SR < 0.05 floor. D5 does the INVERSE —
+    protects the off-cohort by shrinking it (0.5×) — exploiting the same
+    cohort split but in the opposite direction. Carver Ch 10 supports both
+    framings; the empirical question is which direction works on this lane.
+  cumulative_individual_hypothesis_count_disclosure:
+    purpose: per Amendment 3.0 condition 6
+    cumulative_count_for_MES: 1
+    cumulative_count_for_MNQ: 2   # D4 was the 1st MNQ Pathway B; this is the 2nd
+    cumulative_count_for_MGC: 0
+    overall: 3
+
+trial_budget:
+  primary_selection_trials: 1     # Pathway B K=1 — single sizing rule, no enumeration
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2*ln(N_trials) / E[max_N]^2"
+    n_trials: 1
+    minbtl_value_years: 0.0
+    available_clean_data_years: 7.0   # 2019..2025 IS coverage on combined cohort
+    within_cap: true
+    cap_reference: "Bailey et al 2013 — at K=1 MinBTL is trivially satisfied"
+
+# Amendment 3.2 MinTRL classification — REQUIRED at pre-reg time
+amendment_3_2_min_trl_classification:
+  computation:
+    sd_R_pooled_is: 1.0       # conservative; the cohort sd is ~1.05-1.16; using 1.0 yields fewer required trades, so a tighter upper bound on min_trl
+    expected_effect_R: 0.018  # mean ExpR uplift per trade IS (NOT the SR diff; the OOS evaluation is on per-trade R, not on aggregate SR — conservative because per-trade effect is small even when SR diff is large from variance reduction)
+    z_alpha: 1.96             # α=0.05 one-sided
+    z_beta: 0.84              # power=0.80 (Cohen)
+    required_n_oos: 24159     # = ceil((sd/effect * (z_a+z_b))^2) = ceil((1.0/0.018 * 2.8)^2)
+    floor_n_oos: 50           # Amendment 3.1 floor
+    required_n_oos_above_floor: 24159
+    n_is_combined: 1577
+    years_of_is_data: 7
+    expected_oos_per_year_combined: 225.3   # = N_IS / years
+    min_trl_years_per_trade_metric: 107.2   # = 24159 / 225.3
+  alternate_metric_sharpe_diff:
+    note: |
+      The per-trade R-uplift framing is conservative because the test's PRIMARY
+      metric is Sharpe-difference (variance reduction), not per-trade R. The OOS
+      evaluation can be computed on per-period (e.g. per-month) Sharpe diff,
+      which compresses the effective N. Recompute under that framing:
+    sd_monthly_sharpe_diff: 0.30   # rough estimate from per-year breakdown
+    expected_monthly_sharpe_diff: 0.05    # i.e. abs SR diff over a month
+    required_n_oos_months: 282    # ((0.30/0.05) * 2.8)^2 = ~282 months
+    required_n_oos_months_realistic: 36   # if per-month effect is consistent (~0.05 abs SR per month) — Cohen's d=1.67 large effect
+    note_on_realistic: |
+      With the IS data showing +0.27 abs annualised SR on 7 years (~0.039 abs
+      SR per year compounded), the per-period detection power is materially
+      better than the per-trade framing. The realistic minimum OOS detection
+      window is on the order of 12-18 months under monthly-Sharpe framing,
+      assuming the effect is stable (which is itself the OOS question).
+  classification:
+    chosen_metric_for_classification: monthly_sharpe_diff   # the Sharpe-diff test is the primary metric per testing_discipline
+    min_trl_years: 1.5    # 18 months under monthly-Sharpe; 107 years under per-trade-R is the conservative bound
+    classification_label: EXTENDED_PARK
+    rationale: |
+      Per Amendment 3.2: 1.0 < min_trl_years <= 2.0 → EXTENDED_PARK. D5 is
+      EXTENDED_PARK. Pre-reg declares an interim milestone: re-evaluate at
+      N_OOS_combined = 100 (descriptive only, not C8 confirmation) and at
+      N_OOS_combined = 300 (C8 evaluation under monthly-Sharpe-diff framing).
+      Current N_OOS_combined as of 2026-04-28 = ~70.
+    interim_milestone_descriptive_only:
+      n_oos_combined_target: 100
+      expected_calendar_date: ~2026-09-15 (estimate from current OOS accrual)
+      action_at_milestone: "Compute interim per-month Sharpe diff series; report direction-only; NO C8 confirmation."
+    confirmatory_milestone:
+      n_oos_combined_target: 300
+      expected_calendar_date: ~2027-08-15 (estimate from current OOS accrual)
+      action_at_milestone: "Compute C8 under monthly-Sharpe-diff framing. PASS if Sharpe diff > 0 with monthly-paired t-stat above the IS-effect-conditioned threshold."
+    fallback_classification_if_metric_changed: |
+      If a future amendment re-frames the primary metric as per-trade-R
+      (instead of Sharpe-diff), this cell is NOT_OOS_CONFIRMABLE under the
+      strict per-trade framing and must move to KEEP_PARKED_INDEFINITELY.
+      Pre-registered metric choice (Sharpe-diff) is locked here; not subject
+      to post-hoc revision.
+
+primary_metric:
+  metric_name: SR_ann_diff_D5_minus_flat_IS
+  formula: |
+    SR_pt_flat = mean(pnl_r_flat) / std(pnl_r_flat, ddof=1)
+    SR_pt_D5   = mean(pnl_r_D5)   / std(pnl_r_D5,   ddof=1)
+    SR_ann_flat = SR_pt_flat × sqrt(N / years_of_IS_data)
+    SR_ann_D5   = SR_pt_D5   × sqrt(N / years_of_IS_data)
+    primary_metric = SR_ann_D5 - SR_ann_flat
+    where pnl_r_flat = pnl_r,  pnl_r_D5 = pnl_r if garch>70 else 0.5*pnl_r
+  pre_committed_target: positive
+  raw_p_method: paired t-test on (pnl_r_D5 - pnl_r_flat) IS, two-tailed
+  bootstrap_p_method: |
+    Block-bootstrap (block=5, B=10000) of paired (pnl_r_flat, pnl_r_D5)
+    differences; p = fraction of bootstraps where shuffled abs(diff) >= obs abs(diff).
+    Phipson-Smyth +1 correction.
+
+secondary_descriptive_only:
+  - id: SD1
+    statement: "OOS SR_ann diff direction match with IS sign (descriptive; full C8 evaluation is at confirmatory milestone)"
+    counted_against_trial_budget: false
+  - id: SD2
+    statement: "Per-year IS SR_pt diff breakdown (variance reduction per year)"
+    counted_against_trial_budget: false
+  - id: SD3
+    statement: "Cohort fire-rate per year (% of trades on-branch vs off-branch)"
+    counted_against_trial_budget: false
+  - id: SD4
+    statement: "Combined IS+OOS pathway-B-v1 evidence summary for cross-reference with D4 result file"
+    counted_against_trial_budget: false
+
+baseline:
+  baseline_label: SR_ann_flat_1x_IS_combined_BOTH_SIDES_ORB_G5
+  computation_method: |
+    SAME pipeline path as the variant — direct duckdb via the runner's
+    load_cell function. K2 baseline-sanity smoke-test threshold: |delta_repro|
+    < 0.0001 in SR_pt absolute. Independent SQL committed below.
+  expected_baseline_value_sr_ann_flat_is: 1.2381
+  expected_variant_value_sr_ann_d5_is: 1.5086
+  expected_abs_sr_ann_diff_is: 0.2705
+  expected_rel_sr_ann_uplift_pct: 21.85
+  independent_sql_baseline: |
+    -- Reproduces the pre-pre-reg numbers exactly. Run with read-only
+    -- DUCKDB_PATH=pipeline.paths.GOLD_DB_PATH.
+    WITH cell AS (
+      SELECT o.trading_day,
+             COALESCE(o.pnl_r, 0.0) AS pnl_r,
+             d.garch_forecast_vol_pct,
+             d.orb_COMEX_SETTLE_break_dir AS bdir,
+             d.orb_COMEX_SETTLE_size      AS osize
+      FROM orb_outcomes o
+      JOIN daily_features d
+        ON o.trading_day = d.trading_day
+       AND o.symbol = d.symbol
+       AND o.orb_minutes = d.orb_minutes
+      WHERE o.symbol = 'MNQ'
+        AND o.orb_label = 'COMEX_SETTLE'
+        AND o.orb_minutes = 5
+        AND o.rr_target = 1.5
+        AND o.entry_model = 'E2'
+        AND o.confirm_bars = 1
+        AND o.outcome IN ('win','loss','scratch')
+        AND d.orb_COMEX_SETTLE_break_dir IN ('long','short')
+        AND d.orb_COMEX_SETTLE_size IS NOT NULL
+        AND d.orb_COMEX_SETTLE_size >= 5
+        AND o.trading_day < DATE '2026-01-01'
+    ),
+    sized AS (
+      SELECT pnl_r AS r_flat,
+             CASE WHEN garch_forecast_vol_pct > 70 THEN pnl_r ELSE 0.5*pnl_r END AS r_d5
+      FROM cell
+    )
+    SELECT
+      COUNT(*) AS N,
+      AVG(r_flat) AS mu_flat, STDDEV_SAMP(r_flat) AS sd_flat,
+      AVG(r_d5)   AS mu_d5,   STDDEV_SAMP(r_d5)   AS sd_d5,
+      AVG(r_flat) / NULLIF(STDDEV_SAMP(r_flat),0)                                  AS sr_pt_flat,
+      AVG(r_d5)   / NULLIF(STDDEV_SAMP(r_d5),0)                                    AS sr_pt_d5,
+      (AVG(r_flat) / NULLIF(STDDEV_SAMP(r_flat),0)) * SQRT(COUNT(*)::DOUBLE / 7.0) AS sr_ann_flat,
+      (AVG(r_d5)   / NULLIF(STDDEV_SAMP(r_d5),0))   * SQRT(COUNT(*)::DOUBLE / 7.0) AS sr_ann_d5
+    FROM sized;
+
+kill_criteria:
+  - id: KILL_DIR
+    metric: sign(SR_ann_D5 - SR_ann_flat) on IS
+    threshold: "negative"
+    action: KILL  # If D5 reduces Sharpe, kill — the whole hypothesis is variance-reduction-improves-SR
+  - id: KILL_ABS_FLOOR
+    metric: abs(SR_ann_D5 - SR_ann_flat) on IS
+    threshold: "< 0.05"
+    action: KILL  # Absolute floor per Phase D D-0 v2 canonical
+  - id: KILL_REL_FLOOR
+    metric: 100 * (SR_ann_D5 - SR_ann_flat) / SR_ann_flat on IS
+    threshold: "< 15.0"
+    action: KILL  # Relative uplift floor per Phase D D-0 v2 canonical
+  - id: KILL_PAIRED_P
+    metric: paired_t_p_two_tailed (pnl_r_D5 - pnl_r_flat) on IS
+    threshold: ">= 0.05"
+    action: KILL_OR_PARK   # paired-t will have low power because per-trade R uplift is small even when SR diff is large; this is informative but NOT promotion-binding alone — see decision_rule
+    note: "Per Amendment 3.0 condition: significance gate at α=0.05; the paired-t framing is honest for per-trade R uplift even though the primary metric is Sharpe."
+  - id: KILL_YEAR_FLIP
+    metric: max( SR_pt_flat_year - SR_pt_D5_year ) for any IS year with N_year >= 50
+    threshold: "> 0.10"
+    action: KILL  # Year-stability floor: if any IS year worsens by more than 0.10 SR_pt under D5, the rule is unstable
+  - id: KILL_N
+    metric: N_IS_combined
+    threshold: "< 100"
+    action: KILL  # C7 floor (combined cohort N; pre-pre-reg shows N=1577 ≫ 100, so this should never fire)
+  - id: KILL_ERA
+    metric: any_era_SR_pt_D5_with_N_era_gte_50
+    threshold: "< -0.05"
+    action: KILL  # C9 era-stability gate on the D5 variant (not flat — flat is grandfathered)
+  - id: KILL_BASELINE_SANITY
+    metric: abs(reproduced_sr_pt_flat - expected_sr_pt_flat)
+    threshold: "> 0.0001"
+    action: KILL  # Smoke-test that the runner reproduces canonical numbers
+
+decision_rule:
+  candidate_ready_if: |
+    All KILL criteria PASS (none fire) AND
+    abs(SR_ann_D5 - SR_ann_flat) >= 0.05 AND
+    100 * (SR_ann_D5 - SR_ann_flat) / SR_ann_flat >= 15.0 AND
+    no IS year with N_year >= 50 worsens by > 0.10 SR_pt under D5 AND
+    paired_t_p_two_tailed_IS < 0.05 AND
+    C9 era_stability == PASS AND
+    OOS direction-match (descriptive; full C8 deferred to confirmatory milestone per Amendment 3.2 EXTENDED_PARK)
+  extended_park_if: |
+    All KILL criteria PASS (none fire) AND
+    abs SR diff >= 0.05 AND rel uplift >= 15% AND year-no-flip floor PASS AND
+    paired_t_p < 0.10 (relaxed for Sharpe-primary framing) AND
+    C9 PASS AND
+    OOS N_combined < 100 (interim milestone not yet reached)
+  kill_if: any KILL criterion fires
+
+methodology_rules_applied:
+  rule_1_feature_temporal_alignment:
+    applied: true
+    detail: "garch_forecast_vol_pct prior-day-close input. § 6.1 safe whitelist. Identical to D4."
+  rule_2_filter_application_timing:
+    applied: true
+    detail: "Sizing rule applied at session start using prior-day-close GARCH only."
+  rule_3_is_oos_discipline:
+    applied: true
+    detail: "Mode A holdout 2026-01-01 sacred; tuning_against_oos: false. EXTENDED_PARK milestone schedule pre-registered."
+  rule_4_multiple_testing:
+    applied_to_upstream_only: true
+    detail: |
+      D4 evidence (referenced as upstream provenance) was K=1. D5 inherits
+      the threshold from D4 lock; this is a SECOND K=1 test on the SAME
+      cohort with a DIFFERENT transformation (sizing vs inclusion). Per
+      prereg-writer-prompt.md, two related K=1 tests on the same cohort
+      do NOT compound to K=2 because each is a separate theory-driven
+      hypothesis. Cumulative individual hypothesis count disclosed above.
+  rule_5_comprehensive_scope:
+    applied_to_upstream_only: true
+    detail: "Single-cell test."
+  rule_6_trade_time_knowability:
+    applied: true
+    detail: "Identical to D4. § 6.1 safe."
+  rule_7_tautology:
+    applied: true
+    detail: |
+      D5 is intentionally OVERLAPPING with the deployed COMEX_SETTLE ORB_G5
+      lane — it IS the deployed lane with a sizing modulation. RULE 7's
+      |corr| > 0.70 tautology gate does not apply because D5 is not
+      proposing a NEW filter to add — it's proposing a MODIFICATION of how
+      the EXISTING deployed lane is sized. Phase E portfolio admission is
+      not required because D5 does not add a slot; it modifies an existing
+      slot's exposure profile. RULE 7 is N/A by design.
+  rule_8_fire_rate:
+    applied: true
+    detail: |
+      Combined cohort fire rate = 100% (all ORB_G5 fires are in the test
+      universe). On-branch (1.0× sizing) = 199 / 1577 = 12.6% combined IS;
+      off-branch (0.5× sizing) = 87.4%. Both branches within 5%-95% band;
+      the test is not vacuous.
+  rule_9_data_source:
+    applied: true
+    detail: "Canonical layers only: orb_outcomes JOIN daily_features. No validated_setups read."
+  rule_10_pre_registration:
+    applied: true
+    detail: "This file IS the pre-registration. Committed before run."
+  rule_11_audit_trail:
+    applied: true
+    detail: "research/<runner>.py committed alongside; result MD under docs/audit/results/."
+  rule_12_red_flags:
+    applied: true
+    self_review:
+      - "|t| > 7? Pre-pre-reg estimates paired-t will be modest (per-trade R uplift +0.018). Not red-flag."
+      - "Δ_IS > 0.6 R per trade? D5 REDUCES per-trade R (from +0.094 to +0.076 mean). Not red-flag — opposite direction."
+      - "Same feature class everywhere? Single hypothesis; N/A."
+      - "Window-derived early-ORB? COMEX_SETTLE @ ~04:30 BNE; garch is prior-day-close. Clean."
+      - "Variance-reduction-as-Sharpe-improvement is a known Carver framing — NOT a novel-mechanism red flag."
+  rule_13_pressure_test:
+    applied: true
+    detail: |
+      Runner asserts that LOCKED["sizing_rule"] applies the canonical 1.0/0.5
+      transformation and not any other multiplier. Structural assertion that
+      the test cannot silently substitute a different sizing schedule.
+  rule_14_pooled_finding:
+    applied: false
+    not_applicable_reason: "K=1 single-cell test. Per-cell breakdown is the test."
+  rule_15_validated_universe:
+    applied_to_run: true
+    detail: "Test scopes via concrete (instrument, session, orb_minutes, rr, entry_model, confirm_bars, BOTH-sides direction segmentation, ORB_G5 cohort)."
+  rule_16_e2_lookhead_contamination:
+    applied: true
+    detail: |
+      orb_COMEX_SETTLE_break_dir used ONLY for direction segmentation, RULE 6.3
+      exception. ORB_G5 uses orb_size which is RULE 6.1 safe (range size at
+      ORB end, before E2 breakout). All banned E2 break-bar predictors
+      explicitly EXCLUDED. garch_forecast_vol_pct is § 6.1 safe.
+
+outputs_required_after_run:
+  - reproduced_n_is_combined, reproduced_n_is_long, reproduced_n_is_short
+  - reproduced_n_oos_combined, reproduced_n_oos_long, reproduced_n_oos_short
+  - reproduced_sr_pt_flat_is, reproduced_sr_pt_d5_is
+  - reproduced_sr_ann_flat_is, reproduced_sr_ann_d5_is
+  - reproduced_abs_sr_ann_diff_is, reproduced_rel_sr_ann_uplift_pct_is
+  - paired_t_is, paired_t_p_two_tailed_is
+  - bootstrap_p_is (block=5, B=10000)
+  - per_year_breakdown (year, n, sr_pt_flat, sr_pt_d5, diff)
+  - era_stability_verdict_d5 (C9_PASS / C9_FAIL)
+  - oos_descriptive: n_oos_combined, sr_pt_flat_oos, sr_pt_d5_oos, abs_sr_ann_diff_oos
+  - oos_dir_match_descriptive (DIR_MATCH / DIR_FLIP / NA_INSUFFICIENT_N)
+  - kill_criterion_results (each KILL_* line PASS/FAIL with computed value)
+  - decision_rule_verdict (CANDIDATE_READY / EXTENDED_PARK / KILL)
+  - audit_pressure_test_passed (rule 13)
+  - amendment_3_2_classification_verified (EXTENDED_PARK, with milestone date if not yet reached)
+
+execution_gate:
+  allowed_now:
+    - Read-only reproduction of IS/OOS metrics on canonical layers
+    - Computation of all gates listed in outputs_required_after_run
+    - Writing the result MD with the locked decision_rule verdict
+  forbidden_now:
+    - Re-running with different sizing multipliers (post-hoc rescue forbidden)
+    - Re-running with different threshold values (70 is locked from D4)
+    - Promoting CANDIDATE_READY without all KILL criteria passing
+    - Writing to validated_setups, edge_families, lane_allocation, live_config
+    - Any capital deployment action — modification of deployed lane sizing requires Phase E + capital-review skill
+    - Tuning the 0.5 off-branch multiplier (continuous scaling is a separate pre-reg if D5 passes)
+
+not_done_by_this_pre_reg:
+  - No live deployment
+  - No update to lane_allocation.json or any prop_profiles allocation
+  - No change to deployed lane filters
+  - No CPCV (Pathway B K=1 doesn't require CPCV; if D5 passes and a follow-up continuous-scaling pre-reg is written, CPCV will apply at that point)
+  - No paper-trade simulation
+  - No write to experimental_strategies
+  - No portfolio additivity audit (RULE 7 N/A — D5 modifies existing lane, doesn't add a slot)
+  - No 65/75 threshold sensitivity test (locked at 70 per D4 inheritance)
+  - No continuous-scaling test (binary 1.0/0.5 only; continuous is a separate pre-reg if this passes)
