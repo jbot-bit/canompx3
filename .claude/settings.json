@@ -21,7 +21,10 @@
   "autoUpdatesChannel": "latest",
   "includeGitInstructions": false,
   "worktree": {
-    "symlinkDirectories": [".venv", "node_modules"]
+    "symlinkDirectories": [
+      ".venv",
+      "node_modules"
+    ]
   },
   "attribution": {
     "commit": "Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
@@ -30,9 +33,17 @@
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
-    "excludedCommands": ["git", "uv", "ruff", "gh"],
+    "excludedCommands": [
+      "git",
+      "uv",
+      "ruff",
+      "gh"
+    ],
     "filesystem": {
-      "allowWrite": ["./", "C:\\db"]
+      "allowWrite": [
+        "./",
+        "C:\\db"
+      ]
     }
   },
   "hooks": {
@@ -96,8 +107,28 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/prompt-broker.py",
-            "timeout": 5
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/stage-awareness.py",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/data-first-guard.py",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/risk-tier-guard.py",
+            "timeout": 3
           }
         ]
       }

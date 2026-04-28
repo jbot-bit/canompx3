@@ -9,11 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-04-28
-- **Commit:** 057210fe — chore(streamline): /ship alias + system-streamline audit
-- **Files changed:** 3 files
-  - `.claude/skills/ship/SKILL.md`
-  - `HANDOFF.md`
-  - `docs/audit/results/2026-04-28-claude-system-streamline-audit.md`
+- **Commit:** 55c458d7 — chore(stages): close 2 landed stage files (PR #158 + PR #152)
+- **Files changed:** 2 files
+  - `docs/runtime/stages/nq-mini-execution-stage1-account-profile.md`
+  - `docs/runtime/stages/recover-registry-hygiene.md`
 
 ## Session decisions (2026-04-27 — orphan-branch recovery)
 
@@ -117,3 +116,4 @@
 - `docs/plans/2026-04-25-hwm-persistence-integrity-hardening-design.md` — HWM Stages 1-4 design (landed in #129)
 - `docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md` — O-SR grounding (still pending: cusum_monitor → SR Eq 10)
 - `docs/institutional/literature/fitschen_2013_path_of_least_resistance.md` — ORB premise
+
