@@ -203,6 +203,15 @@ primary_schema:
     low_lt_p33: 0.5
     mid_p33_to_p67: 1.0
     high_ge_p67: 1.5
+  bucket_assignment_rule:
+    spec: "size = 0.5 if x < P33 ; size = 1.0 if P33 <= x < P67 ; size = 1.5 if x >= P67"
+    tie_handling: "ties at P33 boundary go to MID (>= P33). Ties at P67 boundary go to HIGH (>= P67). Both inequalities are inclusive on the upper-bucket side."
+    rationale: >
+      Without explicit tie handling, multiple rows at exactly P33 or P67
+      could be assigned ambiguously across runs (sort-order dependent).
+      Pinning ties to the upper bucket is deterministic and matches the
+      `>=` convention used throughout the project (e.g., OVNRNG_100
+      filter `min_range=100.0` is `>= 100.0`).
   bucket_direction_choice:
     direction: "high garch_forecast_vol_pct → larger size (1.5x); low → smaller (0.5x)"
     rationale: >
@@ -291,10 +300,35 @@ hypotheses:
       metric: "sharpe_uplift_pct"
       formula: "100 * (sharpe_sized - sharpe_baseline) / abs(sharpe_baseline)"
       threshold_gte: 15.0
+      absolute_sharpe_floor:
+        formula: "(sharpe_sized - sharpe_baseline)"
+        threshold_gte: 0.05
+        rationale: >
+          The relative-uplift formula degenerates near sharpe_baseline ≈ 0
+          (e.g., baseline 0.05 → sized 0.06 = +20% uplift but economically
+          meaningless). v2 requires BOTH the relative gate (>=15%) AND the
+          absolute Sharpe-difference gate (>=0.05). Either failing => H1 fails.
+    sharpe_definition:
+      formula: "mean(R) / std(R) where R is the per-trade pnl_r series"
+      annualization: false
+      risk_free_rate: 0.0
+      rationale: "Per-trade-R Sharpe matches predecessor convention (research/phase_d_d0_backtest.py SharpeStats.from_rs at line ~78). Avoids annualization-factor drift across implementations."
     pathway_b_floor:
       raw_p_threshold: 0.05
-      raw_p_method: "two-sided paired bootstrap on Sharpe uplift, B=10000, block=5"
-      note: "Pathway B raw p<0.05 is the significance floor; the 15% effect-size threshold is stricter and is the operative pass gate. BOTH gates required for H1 PASS."
+      raw_p_method:
+        method: "independent paired bootstrap on per-trade (baseline_R, sized_R) pairs"
+        block_size: null
+        block_size_rationale: >
+          Per-trade pairs are not autocorrelated by construction (each trade
+          is independent). Block size is for time-series; not applicable here.
+          If a downstream calendar-day-clustering audit reveals serial
+          correlation in pnl_r within consecutive trading days on this lane,
+          re-run with day-block bootstrap and document in result doc — but
+          the pre-registered method is the simpler independent paired
+          bootstrap.
+        B: 10000
+        statistic: "(sharpe_sized - sharpe_baseline) on the resampled pairs"
+      note: "Pathway B raw p<0.05 is the significance floor; the 15% relative + 0.05 absolute effect-size thresholds are the operative pass gates. ALL THREE gates (raw_p, relative, absolute) required for H1 PASS."
     counted_against_trial_budget: true
 
   - id: H2
@@ -352,18 +386,20 @@ kill_criteria:
     metric: "feature_temporal_integrity"
     fail_if:
       - "any included trade has feature_input_close_ts >= entry_ts (would imply post-entry feature input)"
-      - "garch percentile threshold computed on any window including OOS data"
     action: "HALT_AND_RE_AUDIT — temporal contamination defeats the entire purpose of v2"
+    note: "K3 retained slim post pre_run_correction_2026_04_28: 'garch percentile threshold computed on window including OOS' folded into K2 'P33/P67 calibrated using any trading_day >= HOLDOUT_SACRED_FROM' (semantic duplicate). Only the genuinely-novel temporal-input check stays in K3."
 
 decision_rule:
   continue_to_d1_v2_if:
     - "H1 sharpe_uplift_pct >= 15.0"
+    - "H1 absolute_sharpe_floor (sharpe_sized - sharpe_baseline) >= 0.05"
     - "H1 raw_p < 0.05"
     - "K2 implementation_integrity all PASS"
     - "K3 feature_temporal_integrity all PASS"
   park_if:
-    - "10.0 <= H1 sharpe_uplift_pct < 15.0 (and raw_p < 0.05 and K2/K3 PASS)"
-    - "H1 sharpe_uplift_pct >= 15.0 BUT raw_p >= 0.05 (effect size present but underpowered)"
+    - "10.0 <= H1 sharpe_uplift_pct < 15.0 (and absolute floor met and raw_p < 0.05 and K2/K3 PASS)"
+    - "H1 sharpe_uplift_pct >= 15.0 BUT raw_p >= 0.05 (relative effect present but underpowered)"
+    - "H1 sharpe_uplift_pct >= 15.0 BUT absolute_sharpe_floor < 0.05 (relative gate met on tiny baseline — economically degenerate)"
   kill_if:
     - "H1 sharpe_uplift_pct < 10.0"
     - "K2 fails any item"
@@ -412,7 +448,9 @@ outputs_required_after_run:
   - "K3 feature_temporal_integrity checklist with each item PASS/FAIL"
   - "explicit statement that no OOS was used for calibration"
   - "separate descriptive readout for H2 hard-skip ablation"
-  - "comparison statement: v2 sharpe_uplift_pct vs predecessor v1 +7.33% (descriptive)"
+  - "comparison statement: v2 sharpe_uplift_pct vs predecessor v1 +7.33% — TAGGED DESCRIPTIVE_ONLY_NOT_STATISTICALLY_COMPARABLE because v2 N=468 excludes ~16% NULL-garch rows (concentrated in early history per GARCH_PCT_MIN_PRIOR_VALUES floor) that v1 rel_vol coverage included. Different sample, different scratch policy (v1 pre-Stage-5, v2 realized-eod). Direct ratio is not a valid statistical comparison."
+  - "selection_bias_audit: report N excluded due to garch_forecast_vol_pct IS NULL (per-year breakdown) so reader can assess if early-history exclusion meaningfully shifts the test population"
+  - "absolute Sharpe difference (sharpe_sized - sharpe_baseline) — required for the absolute_sharpe_floor gate"
 
 execution_gate:
   allowed_now:
@@ -425,6 +463,8 @@ execution_gate:
     - "use OOS to rescue or reject the schema"
     - "promote H2 to primary"
     - "stack additional predictors (Carver Ch 8 forecast combination is NOT in scope here — that is a separate pre-reg)"
+    - "reverse bucket direction (low → 1.5x, high → 0.5x as a Carver vol-targeting test) is a SEPARATE pre-reg, not a v2 follow-up. Running it after v2 fails would be K=2-disguised-as-K=1 data snooping."
+    - "swap baseline to anything other than constant_1.0x_size — baseline is the K=1 anchor"
 
 downstream_dependencies:
   d1_v2_gate:
@@ -470,7 +510,10 @@ self_review_checklist_completed:
     - "no validated_setups Mode B baseline reuse (baseline_recompute_required=true)"
     - "scratch_policy declared (realized-eod) with literature justification"
   pre_commit_self_test:
-    - "If backtest returns sharpe_uplift_pct=10.0 exactly: park_if fires (10.0 <= x < 15.0). Unambiguous."
+    - "If backtest returns sharpe_uplift_pct=10.0 exactly with abs_diff>=0.05 and raw_p<0.05: park_if fires (10.0 <= x < 15.0). Unambiguous."
     - "If backtest returns sharpe_uplift_pct=9.99: kill_if fires (< 10.0). Unambiguous."
-    - "If backtest returns sharpe_uplift_pct=15.0 with raw_p=0.06: park_if fires (effect size present, underpowered). Unambiguous."
+    - "If backtest returns sharpe_uplift_pct=15.0 with raw_p=0.06: park_if fires (relative gate met, underpowered). Unambiguous."
+    - "If backtest returns sharpe_uplift_pct=20.0 with sharpe_baseline=0.05 and sharpe_sized=0.06 (abs_diff=0.01<0.05): park_if fires (relative gate met on tiny baseline — economically degenerate). Unambiguous."
+    - "If backtest returns sharpe_uplift_pct=15.0 with abs_diff=0.05 and raw_p=0.04: continue_to_d1_v2_if fires (all three gates met). Unambiguous."
     - "If K3 fails: kill_if fires regardless of H1. Unambiguous."
+    - "If K2 'any trade row included where garch_forecast_vol_pct IS NULL' fails: kill_if fires regardless of H1. Unambiguous."
