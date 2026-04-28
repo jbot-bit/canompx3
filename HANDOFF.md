@@ -35,6 +35,12 @@ D2/D3/D4 pre-regs remain pending user GO (see prior session below).
 
 ---
 
+## Cross-session loss notice (2026-04-28 — crg-calibration session)
+
+**Phase D YAML uncommitted WIP lost.** During calibration session on PR #171 (`crg-calibration` branch), I stashed `docs/audit/hypotheses/2026-04-28-phase-d-d0-v2-garch-clean-rederivation.yaml` (single-char ` M` modification on top of committed `2c8e52ab9889`) with label `phase-d-yaml-WIP-from-other-session-preserved-for-crg-calibration` to switch branches. Stash later disappeared from `git stash list` and from `git reflog stash` — no command in my session removed it. Suspected cause: parallel-session interference or background hook reaping. **Committed version on `prereg-phase-d-d0-v2-garch` is intact (519 lines, blob `2c8e52ab9889`, branch tip `823b0127`).** If the WIP edits were load-bearing, fsck unreachable objects (~5,600) may still contain the blob for ~30 days — search by yaml content. Otherwise re-edit from committed baseline. (Note: PR #170 D-0 v2 work has since landed on main, so the lost WIP may have been superseded by that work.)
+
+---
+
 ## Prior Session (2026-04-28 — doctrine fix + Phase D dispatch — branch `triage-e2-lookahead-9-candidates`)
 
 ### What landed this session
