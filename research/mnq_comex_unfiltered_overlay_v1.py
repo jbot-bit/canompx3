@@ -3,6 +3,13 @@
 Scope is locked by:
   docs/audit/hypotheses/2026-04-21-mnq-comex-unfiltered-overlay-v1.yaml
 
+# e2-lookahead-policy: tainted
+# rel_vol_COMEX_SETTLE is used as a predictor/filter signal on E2 entries. On E2, ~41% of
+# trades have entry_ts < break_ts, making break-bar volume (rel_vol numerator) post-entry on
+# that subset. All findings from this script for E2 lanes are unreliable. Clean re-derivation
+# with ovn_range_pct or atr_20_pct required before any result can be cited or deployed.
+# Registry: docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md
+
 This runner evaluates exactly two pre-registered overlay hypotheses on the
 unfiltered MNQ COMEX_SETTLE O5 E2 CB1 RR1.5 lane using canonical
 orb_outcomes + daily_features joins.

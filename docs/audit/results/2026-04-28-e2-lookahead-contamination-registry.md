@@ -36,6 +36,22 @@ Audit all 73 `research/*.py` scripts that load `orb_outcomes` with `entry_model=
 | 17 | `vwap_comprehensive_family_scan.py` | rel_vol (referenced in narrative; verify if used as predictor) | NEEDS REVIEW | VWAP family |
 | 18 | `research_mgc_e2_microstructure_pilot.py` | break_delay (window-sizing only, not predictor) | LIKELY CLEAN — verify | MGC microstructure pilot |
 
+## Additional candidates (surfaced 2026-04-28 by drift check 124)
+
+9 additional scripts surfaced by `check_e2_lookahead_research_contamination()`. Annotated 2026-04-28.
+
+| # | Script | Features used | Status | Policy annotation |
+|---|---|---|---|---|
+| 19 | `phase_d_d0_backtest.py` | rel_vol as size-scaling predictor | TAINTED | `# e2-lookahead-policy: tainted` |
+| 20 | `break_delay_filtered.py` | break_delay_min as predictor | TAINTED | `# e2-lookahead-policy: tainted` |
+| 21 | `break_delay_nuggets.py` | break_delay_min as predictor | TAINTED | `# e2-lookahead-policy: tainted` |
+| 22 | `l1_europe_flow_pre_break_context_scan.py` | rel_vol as predictor | TAINTED | `# e2-lookahead-policy: tainted` |
+| 23 | `mnq_comex_unfiltered_overlay_v1.py` | rel_vol as predictor | TAINTED | `# e2-lookahead-policy: tainted` |
+| 24 | `mnq_l1_europe_flow_prebreak_context_v1.py` | rel_vol as predictor | TAINTED | `# e2-lookahead-policy: tainted` |
+| 25 | `audit_sizing_substrate_diagnostic.py` | break_bar suffixes in guard list (not predictor) | CLEARED | `# e2-lookahead-policy: cleared` — implements the gate |
+| 26 | `output/confluence_program/phase0_run.py` | rel_vol in eligibility matrix analysis | NOT-PREDICTOR | `# e2-lookahead-policy: not-predictor` — audits the feature |
+| 27 | `shadow_htf_mes_europe_flow_long_skip.py` | break_bar_volume + rel_vol as ledger context | NOT-PREDICTOR | `# e2-lookahead-policy: not-predictor` — observational columns only |
+
 ## Confirmed downstream contamination
 
 **PR #48 cluster (memory note `participation_optimum_universality_apr20.md`):**

@@ -4,6 +4,13 @@
 Pre-registered at:
   docs/audit/hypotheses/2026-04-18-htf-mes-europe-flow-long-skip-rule-shadow.yaml
 
+# e2-lookahead-policy: not-predictor
+# orb_EUROPE_FLOW_break_bar_volume and rel_vol_EUROPE_FLOW are selected as OBSERVATIONAL
+# CONTEXT columns in the ledger table (line ~61-62), not as predictors of pnl_r.
+# The filter predicate is break_dir='long' AND orb_high > prev_week_high — pre-break features.
+# pnl_r is the response variable (outcome), not a predictor. No look-ahead contamination.
+# Registry: docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md
+
 Zero-capital observational contract. Reads canonical tables (daily_features
 + orb_outcomes) and appends one row per HTF fire trading-day to the ledger:
   docs/audit/shadow_ledgers/htf-mes-europe-flow-long-skip-rule-ledger.md

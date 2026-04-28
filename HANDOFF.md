@@ -6,7 +6,26 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session (2026-04-28 — Phase D D1 + cleanup + hardening)
+## Last Session (2026-04-28 — drift check 124: 9 e2-lookahead-policy annotations)
+
+### What landed this session
+
+**Drift check 124 clearance** — 9 scripts surfaced by `check_e2_lookahead_research_contamination()` annotated:
+- TAINTED (6): `phase_d_d0_backtest.py`, `break_delay_filtered.py`, `break_delay_nuggets.py`, `l1_europe_flow_pre_break_context_scan.py`, `mnq_comex_unfiltered_overlay_v1.py`, `mnq_l1_europe_flow_prebreak_context_v1.py`
+- CLEARED (1): `audit_sizing_substrate_diagnostic.py` (implements the gate itself)
+- NOT-PREDICTOR (2): `output/confluence_program/phase0_run.py`, `shadow_htf_mes_europe_flow_long_skip.py`
+- Registry rows 19-27 added to `docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md`
+- Drift check 124 now passes (0 remaining unannotated)
+- Pre-existing test failure `test_pulse_integration::test_text_output_is_scannable` (61>60 lines) confirmed pre-existing
+
+### Decision gate
+
+Phase D D2/D3/D4 still pending user GO (HANDOFF below).
+`phase_d_d0_backtest.py` is TAINTED — D-0 pre-reg result needs clean re-derivation before D-0 claim can be cited.
+
+---
+
+## Prior Session (2026-04-28 — Phase D D1 + cleanup + hardening)
 
 - **Tool:** Claude Code (autonomous)
 - **Date:** 2026-04-28

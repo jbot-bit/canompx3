@@ -5,6 +5,12 @@ Per docs/plans/2026-04-27-sizing-substrate-diagnostic-design.md v0.2 and the
 locked pre-reg YAML at docs/audit/hypotheses/2026-04-27-sizing-substrate-prereg.yaml.
 
 Read-only over gold.db. Raises on any 2026 row.
+
+# e2-lookahead-policy: cleared
+# This script implements the E2 lookahead gate via feature_temporal_validity() at line ~356.
+# Break-bar suffixes (_break_delay_min, _break_bar_volume, _break_bar_continues, _break_ts,
+# _break_dir) are explicitly rejected for E2 lanes in _E2_LOOKAHEAD_BREAK_BAR_SUFFIXES.
+# The script references these suffixes to enforce the ban, not to use them as predictors.
 """
 from __future__ import annotations
 

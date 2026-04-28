@@ -1,5 +1,14 @@
 """Phase D D-0 backtest — rel_vol size-scaling on MNQ COMEX_SETTLE O5 RR1.5 OVNRNG_100.
 
+# e2-lookahead-policy: tainted
+# rel_vol_COMEX_SETTLE is used as a size-scaling predictor on E2 entries. On E2, ~41% of
+# trades have entry_ts < break_ts (range-touch fires before close-outside-ORB), making
+# break-bar volume (the numerator of rel_vol) post-entry on that subset. The D-0 pre-reg
+# and result (docs/audit/results/2026-04-18-phase-d-d0-rel-vol-sizing-result.md) must be
+# treated as TAINTED. Re-derivation with a clean pre-break feature (ovn_range_pct, atr_20)
+# required before this finding can be cited or deployed.
+# Registry: docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md
+
 Pre-registration: docs/audit/hypotheses/2026-04-18-phase-d-d0-rel-vol-sizing-mnq-comex-settle.yaml
 Commit SHA of pre-reg: b6918d8d (locked before this script runs)
 
