@@ -18,6 +18,7 @@
 
 | ID | Iter | Target | Description | Reasoning |
 |----|------|--------|-------------|-----------|
+| WF-08 | 179 | trading_app/hypothesis_loader.py:767-769 | Session names in YAML hypothesis files not validated against SESSION_CATALOG in extract_scope_predicate | Mitigated by strategy_discovery.py:1630-1636 logger.warning("Phase 4 WARNING: scope predicate accepted ZERO combos") when phase_4_accepted_count==0. Operator-visible via logs. Low blast radius — only affects discovery runs with pre-registered hypothesis files, not production trading. |
 | WF-01 | 39 | scoring.py:SC1 | Hardcoded SINGAPORE_OPEN/TOKYO_OPEN in heuristic bonus | Intentional per-session adjustments, not a canonical list. Worst case on rename: bonus silently stops. Not safety/correctness. |
 | WF-02 | 19 | execution_engine.py:EE3 | IB hardcoded 23:00 UTC for TOKYO_OPEN | Correctly documents Brisbane UTC+10 fixed offset. No DST. IB_DURATION_MINUTES from config. |
 | WF-03 | 44 | strategy_fitness.py | Full scan clean — no findings | Audited iter 44, no actionable findings |

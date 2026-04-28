@@ -3,70 +3,134 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 178
+## Last iteration: 179
 
-## RALPH AUDIT — Iteration 178
-## Date: 2026-04-26
-## Infrastructure Gates: drift 93/93 PASS (16 skipped DB unavailable, 4 advisory); 181/181 test_session_orchestrator.py PASS; behavioral audit 7/7 PASS
-## Scope: Adversarial audit of iters 176 (R3) and 177 (C1) per burndown plan v5.2
+## RALPH AUDIT — Iteration 179
+## Date: 2026-04-29
+## Infrastructure Gates: drift 114/114 PASS (0 skip, 10 advisory); behavioral audit 7/7 PASS; ruff PASS on all targets
+## Scope: Priority 1 auto-target — unscanned critical/high files (pipeline/db_config.py, trading_app/holdout_policy.py, trading_app/hypothesis_loader.py)
 
 ---
 
-## Iteration 178 — Adversarial Audit of R3 + C1
+## Iteration 179 — Multi-File Critical Tier Scan
 
-### Audit Target
-- Iter 176 fix: R3 reconnect ceiling (ORCHESTRATOR_MAX_RECONNECTS 5→50 + stable-run reset)
-- Iter 177 fix: C1 kill-switch race in _handle_event ENTRY branch
+### Auto-Targeting
+- Priority 0: No open CRIT/HIGH in deferred-findings.md or HANDOFF.md
+- Priority 1: Three unscanned critical/high-tier files identified:
+  - `pipeline/db_config.py` (41 importers, critical — highest unscanned)
+  - `trading_app/holdout_policy.py` (10 importers, critical)
+  - `trading_app/hypothesis_loader.py` (5 importers, high)
+
+### Infrastructure Gates
+- `check_drift.py`: 114 PASS, 0 skip, 10 advisory — NO DRIFT DETECTED
+- `audit_behavioral.py`: 7/7 PASS
+- `ruff check pipeline/db_config.py`: All checks passed
+
+---
+
+## File 1: pipeline/db_config.py (41 importers, critical)
 
 ### Semi-Formal Reasoning
 
-**R3 (iter 176):**
+**DB-1 (Memory limit hardcoded):**
+PREMISE: `configure_connection` hardcodes `'8GB'` memory limit string.
+TRACE: `db_config.py:14` — `con.execute("SET memory_limit = '8GB'")`.
+EVIDENCE: Not a § 2 canonical sources violation — DuckDB performance parameter, not a trading constant. No correctness impact.
+VERDICT: REFUTE — not a finding.
 
-PREMISE: The stable-run reset correctly converts the monotonic ceiling to a rate-limit ceiling without introducing infinite-reconnect risk in flap-only scenarios.
+**DB-2 (SQL string interpolation):**
+PREMISE: `f"SET temp_directory = '{tmp_dir.as_posix()}'"` uses string interpolation in SQL.
+TRACE: `db_config.py:17` — input is `tempfile.gettempdir()` + hardcoded `"duckdb_tmp"` — no user input.
+EVIDENCE: No injection risk; PRAGMA is a setting, not a query.
+VERDICT: REFUTE — not a finding.
 
-TRACE:
-- `session_orchestrator.py:2899` — `while reconnect_count <= ORCHESTRATOR_MAX_RECONNECTS`
-- `session_orchestrator.py:2949-2958` — stable-run check: if `feed_up_secs >= threshold`, reset `reconnect_count = 0`
-- `session_orchestrator.py:2969` — `if reconnect_count < ORCHESTRATOR_MAX_RECONNECTS: reconnect_count += 1`
-- If NO stable run and reconnect_count=50: `50 < 50 = False` → break → Exhausted message
-- If stable run and reconnect_count=50: reset to 0, then `0 < 50 = True` → increment to 1 → continue
-
-EVIDENCE: Traced code paths. For pure-flap scenario (no stable run): counter accumulates monotonically to 50, loop breaks, session halts. For alternating stable/crash: counter resets after each stable run — by design.
-
-VERDICT: SUPPORT (R3 logic is correct)
-
-**C1 (iter 177):**
-
-PREMISE: The C1 guard at top of ENTRY branch prevents event N+1 broker submission after kill-switch fires for event N; guard is correctly scoped (ENTRY-only, not blanket).
-
-TRACE:
-- `session_orchestrator.py:1684-1685` — sequential `for event in events: await self._handle_event(event)` — no concurrent execution; kill-switch set synchronously by event_a's `_fire_kill_switch()` is visible to event_b's guard check
-- `session_orchestrator.py:2008-2017` — `if event.event_type == "ENTRY": if self._kill_switch_fired: return`
-- `session_orchestrator.py:2362` — `elif event.event_type in ("EXIT", "SCRATCH"):` — structurally after the ENTRY branch; kill-switch guard cannot reach
-
-EVIDENCE: Code trace confirms ENTRY-only guard. Async safety: no `await` between guard check and the broker submit path that fires kill-switch. Sequential event loop guarantees kill-switch visibility.
-
-VERDICT: SUPPORT (C1 guard is correct and ENTRY-only)
+**DB-3 (Async safety):**
+PREMISE: `configure_connection` called inside async functions blocks event loop.
+TRACE: `session_orchestrator.py:1004-1005` — `_build_daily_features_row` is `@staticmethod` (not async).
+EVIDENCE: No `async def` callers identified. `bar_persister.flush_to_db()` is synchronous.
+VERDICT: REFUTE — not a finding.
 
 ### Findings
 
 | ID | Severity | Finding | Verdict |
 |----|----------|---------|---------|
-| R3-A | LOW | "Exhausted N reconnects" message off-by-1 (N+1 feed attempts actually run). Inherited from original range(MAX+1) — not new regression. | ACCEPTABLE — cosmetic, inherited |
-| R3-B | LOW | Stable-run reset allows indefinite reconnects if feed alternates stable/crash | ACCEPTABLE — by design, rate-limit ceiling is the R3 fix intent |
-| R3-C | LOW | `last_connected_at` persisted and loaded but never read for decisions — informational only | ACCEPTABLE — informational persistence; in-memory counter is the mechanism |
-| C1-A | PASS | ENTRY guard correctly scoped; EXIT/SCRATCH structurally cannot reach guard | PASS |
-| C1-B | PASS | T4 patches _handle_event itself; structural ENTRY-branch constraint is stronger | PASS |
-| C1-C | LOW | `_notify` in C1 guard can raise — same pattern at 20+ other sites; not new regression | ACCEPTABLE — same upstream pattern, not new |
+| DB-1 | LOW | `memory_limit = '8GB'` hardcoded | ACCEPTABLE — DuckDB perf setting, not a canonical trading param (Rule 1: no match) |
+| DB-2 | LOW | String interpolation in PRAGMA | ACCEPTABLE — no user input, not injection-exploitable |
+| DB-3 | LOW | Sync I/O in potential async context | REFUTED — all callers are synchronous |
 
-### Overall Verdict: PASS
-No CRITICAL or HIGH findings in adversarial audit of iters 176 and 177.
-R3 and C1 fixes are institutionally sound. Stage 2 (HWM tracker integrity package) is cleared to proceed.
+**Overall: CLEAN** — No HIGH/MEDIUM findings. File is well-structured (20 lines, single responsibility).
+
+---
+
+## File 2: trading_app/holdout_policy.py (10 importers, critical)
+
+### Semi-Formal Reasoning
+
+PREMISE scan: Canonical source for Mode A constants. Checked for: inline stats, missing @research-source, fail-open behavior, downstream hardcoding.
+
+TRACE: 
+- `holdout_policy.py:70` — `HOLDOUT_SACRED_FROM: date = date(2026, 1, 1)` — this IS the canonical value per § 2 table. Appropriate to define here.
+- `holdout_policy.py:108-194` — `enforce_holdout_date()` raises `ValueError` on violation (fail-closed).
+- `holdout_policy.py:170-181` — override path logs `logger.warning` loudly before returning.
+- No inline stats. No `@research-source` needed (these are policy constants, not research-derived thresholds).
+
+EVIDENCE: Authority chain, semantics section, and enforcement helper are all thoroughly documented. No violations found.
+
+### Findings
+
+| ID | Severity | Finding | Verdict |
+|----|----------|---------|---------|
+| HP-1 | — | Full Seven Sins scan: CLEAN | PASS |
+
+**Overall: CLEAN** — Canonical source is correct, fail-closed, well-documented.
+
+---
+
+## File 3: trading_app/hypothesis_loader.py (5 importers, high)
+
+### Semi-Formal Reasoning
+
+**HL-1 (Session name validation gap):**
+PREMISE: `extract_scope_predicate` accepts session names from YAML without validating against `SESSION_CATALOG`. A typo creates a predicate that accepts zero combos.
+TRACE: `hypothesis_loader.py:767-769` → `frozenset(sessions_raw)` → `HypothesisScope.accepts()` line 583-592.
+EVIDENCE: Guard exists downstream: `strategy_discovery.py:1630-1636` — `logger.warning("Phase 4 WARNING: scope predicate accepted ZERO combos.")` fires when `phase_4_accepted_count == 0`. Operator-visible but not fail-closed (discovery completes, writes 0 rows, no error raised).
+VERDICT: LOW — not completely silent. Mitigated by downstream warning.
+
+**HL-2 (_coerce_to_date type annotation drift):**
+PREMISE: `_coerce_to_date` has return type `date | None` but returns `datetime` when input is `datetime` (subclass of `date` — passes isinstance check).
+TRACE: `hypothesis_loader.py:359-373` — `isinstance(value, date)` matches `datetime`; returns `datetime` object.
+EVIDENCE: All callers (`check_mode_a_consistency`, `strategy_discovery.py`) handle `datetime` explicitly. Zero correctness impact.
+VERDICT: ACCEPTABLE — style/annotation difference, no correctness impact (Rule 3).
+
+**HL-3 (MinBTL bool guard):**
+PREMISE: `isinstance(declared_n, bool)` guard at lines 246 and 449 explicitly checks before `isinstance(declared_n, int)`.
+TRACE: `hypothesis_loader.py:246` — `not isinstance(declared_n, int) or isinstance(declared_n, bool) or declared_n < 1`. Pattern is correct (bool-before-int check).
+EVIDENCE: This IS the correct pattern. Both call sites (load_hypothesis_metadata and enforce_minbtl_bound) have the guard.
+VERDICT: REFUTE — this is correct code, not a finding.
+
+### Findings
+
+| ID | Severity | Finding | Verdict |
+|----|----------|---------|---------|
+| HL-1 | LOW | Session names not validated against SESSION_CATALOG in extract_scope_predicate | LOW — mitigated by zero-combos warning at strategy_discovery.py:1630-1636 |
+| HL-2 | LOW | _coerce_to_date return type annotation says `date \| None` but can return `datetime` | ACCEPTABLE — Rule 3 (style/annotation, no correctness impact) |
+
+**Overall: CLEAN** — No HIGH/MEDIUM findings.
+
+---
+
+## Iteration 179 — Overall Summary
+
+All three critical/high files scanned. Zero CRITICAL, zero HIGH, zero MEDIUM findings across all three files. All findings are LOW or ACCEPTABLE.
+
+**Consecutive LOW-only iterations: 1** (was reset by iter 178 HIGH audit verdict on R3/C1)
 
 ### Infrastructure Gate Results
-- check_drift.py: 93 PASS, 16 skip (DB unavailable), 4 advisory — NO DRIFT DETECTED
-- test_session_orchestrator.py: 181/181 PASS
+- check_drift.py: 114 PASS, 0 skip, 10 advisory — NO DRIFT DETECTED
 - audit_behavioral.py: 7/7 PASS
+- ruff: PASS
+
+### Action: audit-only (no production edits)
 
 ---
 
@@ -75,3 +139,12 @@ R3 and C1 fixes are institutionally sound. Stage 2 (HWM tracker integrity packag
 - trading_app/live/session_safety_state.py (iters 176, 178)
 - tests/test_trading_app/test_session_orchestrator.py (iters 173, 174, 175, 176, 177, 178)
 - scripts/infra/telegram_feed.py (iter 173)
+- pipeline/db_config.py (iter 179)
+- trading_app/holdout_policy.py (iter 179)
+- trading_app/hypothesis_loader.py (iter 179)
+
+## Next Iteration Targets
+
+Priority 1 (unscanned critical): `trading_app/lane_allocator.py` (medium centrality, 4 importers — but recently touched), `pipeline/system_context.py` (high, 8 importers, never scanned), `trading_app/lane_correlation.py` (medium).
+
+Priority 1 (critical, unscanned): Check `pipeline/db_config.py` callers for any that don't call `configure_connection` — drift check #87 exists but may have gaps in new files added since last scan. Re-examine `trading_app/execution_engine.py` — last scanned iter 164, modified since.
