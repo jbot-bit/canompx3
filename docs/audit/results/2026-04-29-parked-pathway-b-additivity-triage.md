@@ -164,6 +164,38 @@ overlaying an existing rule, not a competing rule.
 
 ---
 
+## Addendum 2 (2026-04-29) — OOS power-floor accrual ETA correction
+
+The original D2/D4 pre-regs (2026-04-28) and HANDOFF both estimated
+"~Q3-2026" as the OOS power-floor (`N_OOS_on >= 50`) clearance window
+uniformly. Read-only check against canonical `orb_outcomes` (DB max
+`trading_day = 2026-04-26`) shows the two candidates accrue at very
+different rates:
+
+| Candidate | OOS N as of 2026-04-26 | OOS density (trades/cal-day) | Projected ETA to N=50 |
+|---|---:|---:|---|
+| D2 B-MES-EUR  (`OVNRNG_PCT_GT80`)  | 20 / 113 cal days | 0.177 | **2026-10-09** (early Q4-2026, ~163 cal days out) |
+| D4 B-MNQ-COX  (`GARCH_VOL_PCT_GT70`) | 37 / 113 cal days | 0.327 | **2026-06-01** (early Q2-2026, ~36 cal days out) |
+
+Notes:
+- Linear projection assumes the trailing 113-day fire rate holds. Real
+  rate is regime-dependent; this is a planning estimate, not a guarantee.
+- D4's earlier ETA does **not** unblock deployment — RULE 7 additivity
+  failure (this doc, original verdict) still applies. The ETA only
+  changes when the *gate-as-overlay* (Path 3) pre-reg can run with
+  enough OOS data; gate-level OOS power calculation is different from
+  lane-level and would need its own pre-reg-time computation.
+- D2's ETA pushes into Q4-2026, ~6 months further than the original
+  HANDOFF wording suggested. Plan accordingly: D2 cannot satisfy its
+  C8 gate before late Q4-2026 at current accrual rate.
+
+Evidence: read-only invocation of canonical `_load_strategy_outcomes`
+on each candidate's locked filter_type, partitioned at
+`HOLDOUT_SACRED_FROM = 2026-01-01`. No backtest, no re-spec, no
+threshold change.
+
+---
+
 ## Files
 
 - `trading_app/config.py` — `OvernightRangeFilter` + `GARCHForecastVolPctFilter` extended with `strict_gt: bool = False`; `OVNRNG_PCT_GT80` + `GARCH_VOL_PCT_GT70` registered in `_HYPOTHESIS_SCOPED_FILTERS`.

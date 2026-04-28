@@ -23,6 +23,17 @@
 - Both filters NOT in `BASE_GRID_FILTERS`, NOT routed in `get_filters_for_grid()` for any (instrument, session). Reachable only via canonical `ALL_FILTERS` lookup or Phase-4 hypothesis-injection. Verified by 36-cell test sweep in `TestStrictGtVariants`.
 - Default `strict_gt=False` preserves existing `>=` semantics on all 5 prior `OvernightRangeFilter`/`GARCHForecastVolPctFilter`-shaped instances (regression-tested).
 
+### OOS power-floor accrual ETA (read-only check, 2026-04-29)
+
+DB max `trading_day = 2026-04-26`. D2 OOS density is 0.177 trades/cal-day
+(20 trades over 113 cal days), giving a **projected ETA to N_OOS_on=50
+of 2026-10-09 (early Q4-2026)** — ~6 months further than the
+"Q3-2026" wording in the original D2 pre-reg + 2026-04-28 HANDOFF.
+D4 (predicate as written, even though Path-3-reframed) accrues at 0.327
+trades/cal-day and would hit N=50 by ~2026-06-01, but RULE 7 still
+blocks deployment as a new lane regardless of OOS N. See triage doc
+"Addendum 2".
+
 ### Decision gate
 
 D2 stays in PARK queue for OOS accrual (additivity-clean).
