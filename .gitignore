@@ -20,6 +20,9 @@ PROJECT_PULSE.md
 chroma/
 chroma_data/
 
+# code-review-graph eval scratch (CRG eval reports/test_repos)
+evaluate/
+
 # DB parquet exports (generated artifacts)
 db_export/
 

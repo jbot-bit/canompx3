@@ -27,4 +27,10 @@ The pin protects MCP server startup. If a future `pip install -U cryptography` l
 
 ## Stage status
 
-Stage 1 of 1 — single drift check addition, isolated function, no inter-file dependency.
+Stage 1 — drift check + constraints.txt + CLAUDE.md note. LANDED bd48e3d7.
+
+Stage 2 — pin staleness signal + evaluate/ gitignore. IN PROGRESS.
+- Add `revisit-by: YYYY-MM-DD` comment to constraints.txt (180-day window).
+- Extend `check_cryptography_pin_holds` to emit ADVISORY when revisit date < today AND pin still active.
+- Add `evaluate/` to `.gitignore` (CRG scratch dir polluting git status).
+- Verify both stale and fresh paths via mocked date.

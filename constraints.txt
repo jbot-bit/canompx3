@@ -6,6 +6,12 @@
 # `cryptography.hazmat.backends.default_backend`, which was removed in
 # cryptography 47.0.0. fastmcp depends on authlib.jose, so any FastMCP-based
 # MCP server (code-review-graph, gold-db) crashes on startup with cryptography>=47.
-# Revisit when Authlib ships a release that drops the hazmat.backends import.
+# Drift check #17 (`check_cryptography_pin_holds`) fail-closes on regression.
+#
+# revisit-by: 2026-10-29
+# When this date passes, drift check emits ADVISORY. To resolve:
+#   1. Check Authlib release notes — has the hazmat.backends import been removed?
+#   2. If still broken: bump revisit-by forward 180 days.
+#   3. If fixed: remove the cryptography<47 line, re-test MCPs (`/mcp` connects).
 # Detail: memory/feedback_mcp_venv_drift_cryptography47.md
 cryptography<47

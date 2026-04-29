@@ -1103,16 +1103,19 @@ def check_all_imports_resolve() -> list[str]:
 
 
 def check_cryptography_pin_holds() -> list[str]:
-    """Fail-closed when cryptography>=47 is installed alongside fastmcp.
+    """Two-phase guard for the cryptography<47 sidecar pin.
 
-    Authlib 1.7.0 (latest as of 2026-04-29) imports
-    `cryptography.hazmat.backends.default_backend`, which was removed in
-    cryptography 47.0.0. fastmcp depends on `authlib.jose`, so any FastMCP-based
-    MCP server (code-review-graph, gold-db) crashes on startup with cryptography>=47.
+    Phase 1 — fail-closed: if cryptography>=47 is installed alongside fastmcp,
+    every FastMCP MCP server crashes on startup (Authlib 1.7.0 imports
+    `cryptography.hazmat.backends.default_backend`, removed in cryptography 47).
+
+    Phase 2 — advisory staleness: if the pin's `revisit-by:` date in
+    `constraints.txt` has passed, emit a non-blocking advisory prompting a
+    check of Authlib's latest release. Stops the pin from silently blocking
+    security updates after upstream fixes itself.
 
     Pin lives in `constraints.txt` (not pyproject.toml — sidecar pip-installs).
     Detail: memory/feedback_mcp_venv_drift_cryptography47.md
-    Revisit when Authlib drops the hazmat.backends import.
     """
     violations: list[str] = []
 
@@ -1121,34 +1124,79 @@ def check_cryptography_pin_holds() -> list[str]:
     except Exception:
         return violations
 
+    # ---- Phase 1: fail-closed regression check ---------------------------
     try:
         crypto_ver_str = version("cryptography")
     except PackageNotFoundError:
-        return violations
+        crypto_ver_str = None
     except Exception:
-        return violations
+        crypto_ver_str = None
 
-    try:
-        major = int(crypto_ver_str.split(".", 1)[0])
-    except (ValueError, IndexError):
-        return violations
-
-    if major < 47:
-        return violations
-
+    fastmcp_present = False
     try:
         version("fastmcp")
+        fastmcp_present = True
     except PackageNotFoundError:
+        pass
+    except Exception:
+        pass
+
+    if crypto_ver_str is not None and fastmcp_present:
+        try:
+            major = int(crypto_ver_str.split(".", 1)[0])
+        except (ValueError, IndexError):
+            major = 0
+        if major >= 47:
+            violations.append(
+                f"  cryptography=={crypto_ver_str} installed alongside fastmcp; this breaks "
+                f"every FastMCP MCP server (Authlib 1.7.0 imports the removed hazmat.backends). "
+                f"Install with `pip install -c constraints.txt ...` to honor the pin. "
+                f"Detail: memory/feedback_mcp_venv_drift_cryptography47.md"
+            )
+            return violations
+
+    # ---- Phase 2: advisory staleness check -------------------------------
+    constraints_path = PROJECT_ROOT / "constraints.txt"
+    if not constraints_path.exists():
         return violations
+
+    try:
+        text = constraints_path.read_text(encoding="utf-8")
     except Exception:
         return violations
 
-    violations.append(
-        f"  cryptography=={crypto_ver_str} installed alongside fastmcp; this breaks "
-        f"every FastMCP MCP server (Authlib 1.7.0 imports the removed hazmat.backends). "
-        f"Install with `pip install -c constraints.txt ...` to honor the pin. "
-        f"Detail: memory/feedback_mcp_venv_drift_cryptography47.md"
-    )
+    if "cryptography<47" not in text:
+        # Pin already removed — staleness signal moot.
+        return violations
+
+    revisit_iso = None
+    for line in text.splitlines():
+        stripped = line.strip().lstrip("#").strip()
+        if stripped.startswith("revisit-by:"):
+            revisit_iso = stripped.split(":", 1)[1].strip()
+            break
+
+    if revisit_iso is None:
+        return violations
+
+    try:
+        from datetime import date
+
+        revisit_date = date.fromisoformat(revisit_iso)
+    except Exception:
+        return violations
+
+    today = date.today()
+    if today >= revisit_date:
+        days_overdue = (today - revisit_date).days
+        violations.append(
+            f"  ADVISORY: constraints.txt revisit-by:{revisit_iso} has passed "
+            f"({days_overdue} day(s) overdue). Check Authlib release notes — if the "
+            f"hazmat.backends import has been removed upstream, drop the cryptography<47 "
+            f"pin and re-test MCPs. If still broken, bump revisit-by forward 180 days. "
+            f"Detail: memory/feedback_mcp_venv_drift_cryptography47.md"
+        )
+
     return violations
 
 
