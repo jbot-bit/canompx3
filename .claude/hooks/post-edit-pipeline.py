@@ -92,6 +92,28 @@ def normalize_path(p):
     return fwd
 
 
+def _crg_update(file_path: str) -> None:
+    """Run code-review-graph update after edits to canonical paths.
+
+    Timeout 5s; fail-silent. Per spec F3: PostToolUse auto-update.
+    Covers pipeline/, trading_app/, scripts/, research/, tests/.
+    """
+    norm = normalize_path(file_path)
+    _CRG_PREFIXES = ("pipeline/", "trading_app/", "scripts/", "research/", "tests/")
+    if not any(norm.startswith(pfx) for pfx in _CRG_PREFIXES):
+        return
+    try:
+        subprocess.run(
+            ["code-review-graph", "update", "--base", "HEAD~1"],
+            cwd=str(_PROJECT_ROOT),
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        pass  # fail-silent per spec
+
+
 def main():
     input_data = json.load(sys.stdin)
     file_path = input_data.get("tool_input", {}).get("file_path", "")
@@ -240,6 +262,9 @@ def main():
                 sys.exit(2)
         except subprocess.TimeoutExpired:
             pass  # Don't block on timeout
+
+    # --- Phase 4: CRG incremental update (background, fail-silent, ~1-5s) ---
+    _crg_update(file_path)
 
     sys.exit(0)
 

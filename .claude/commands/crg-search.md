@@ -24,10 +24,10 @@ All three were the right files. This is CRG's highest-signal tool for codebases 
 
 ## Implementation
 
-**Preferred — MCP tool** (after merge + Claude Code restart):
+**Preferred — MCP tool** (use when MCP is available / approved):
 - Call `mcp__code-review-graph__semantic_search_nodes_tool` with `query=$ARGUMENTS, limit=10`.
 
-**Fallback — Python one-liner:**
+**Fallback — Python one-liner** (use when MCP is not approved or unavailable):
 
 ```bash
 .venv/Scripts/python.exe -c "

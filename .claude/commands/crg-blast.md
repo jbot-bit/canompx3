@@ -19,10 +19,10 @@ Per official LLM-OPTIMIZED-REFERENCE §usage: "Use detail_level=minimal on all s
 
 ## Implementation
 
-**Preferred — MCP tool** (after merge + Claude Code restart):
+**Preferred — MCP tool** (use when MCP is available / approved):
 - Call `mcp__code-review-graph__get_impact_radius_tool` with `changed_files=[$ARGUMENTS], max_depth=2, detail_level="minimal"`.
 
-**Fallback — Python one-liner** (top-10 file projection, ~30 lines output):
+**Fallback — Python one-liner** (use when MCP is not approved or unavailable; top-10 file projection):
 
 ```bash
 .venv/Scripts/python.exe -c "

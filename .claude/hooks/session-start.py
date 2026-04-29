@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -169,12 +169,7 @@ def _origin_drift_lines() -> list[str]:
     rc_status, status_out = _git(["status", "--porcelain"])
     dirty = rc_status == 0 and bool(status_out)
 
-    can_ff = (
-        branch == "main"
-        and ahead_n == 0
-        and behind_n > 0
-        and not dirty
-    )
+    can_ff = branch == "main" and ahead_n == 0 and behind_n > 0 and not dirty
     if can_ff:
         rc_pull, _ = _git(["pull", "--ff-only", "origin", "main"], timeout=15)
         if rc_pull == 0:
@@ -280,10 +275,7 @@ def _format_ci_line(payload: dict) -> list[str]:
     if conclusion == "failure":
         run_id = payload.get("run_id", "?")
         workflow = payload.get("workflow", "?")
-        return [
-            f"  Main CI: RED on run {run_id} ({workflow}) — verify before PR work; "
-            f"`gh run view {run_id}`"
-        ]
+        return [f"  Main CI: RED on run {run_id} ({workflow}) — verify before PR work; `gh run view {run_id}`"]
     return [f"  Main CI: last completed run = {conclusion}"]
 
 
@@ -318,10 +310,7 @@ def _main_ci_status_lines() -> list[str]:
     # Cache hit path: read cached result if fresh.
     try:
         cached = json.loads(cache_path.read_text(encoding="utf-8"))
-        if (
-            isinstance(cached, dict)
-            and now - int(cached.get("timestamp", 0)) < _MAIN_CI_CACHE_TTL_SECS
-        ):
+        if isinstance(cached, dict) and now - int(cached.get("timestamp", 0)) < _MAIN_CI_CACHE_TTL_SECS:
             return _format_ci_line(cached)
     except (FileNotFoundError, json.JSONDecodeError, ValueError, OSError):
         pass  # fall through to fresh fetch
@@ -330,11 +319,17 @@ def _main_ci_status_lines() -> list[str]:
     try:
         r = subprocess.run(
             [
-                "gh", "run", "list",
-                "--branch", "main",
-                "--limit", "1",
-                "--status", "completed",
-                "--json", "conclusion,databaseId,name",
+                "gh",
+                "run",
+                "list",
+                "--branch",
+                "main",
+                "--limit",
+                "1",
+                "--status",
+                "completed",
+                "--json",
+                "conclusion,databaseId,name",
             ],
             cwd=PROJECT_ROOT,
             capture_output=True,
@@ -413,12 +408,15 @@ def _session_lock_lines() -> tuple[list[str], bool]:
         return [], False  # not in a git repo — skip (no contention possible)
 
     lock_path = git_dir / ".claude.pid"
-    payload = json.dumps({
-        "pid": os.getpid(),
-        "ppid": os.getppid(),
-        "iso_started": datetime.now(timezone.utc).isoformat(),
-        "worktree": str(PROJECT_ROOT),
-    }, indent=2).encode("utf-8")
+    payload = json.dumps(
+        {
+            "pid": os.getpid(),
+            "ppid": os.getppid(),
+            "iso_started": datetime.now(UTC).isoformat(),
+            "worktree": str(PROJECT_ROOT),
+        },
+        indent=2,
+    ).encode("utf-8")
 
     # Atomic create-or-fail. O_EXCL closes the TOCTOU race that a check-then-
     # write pattern would have: two simultaneous startups can't both believe
@@ -451,30 +449,33 @@ def _session_lock_lines() -> tuple[list[str], bool]:
         other_started = "?"
         other_worktree = "?"
 
-    return ([
-        "",
-        "  ====================================================================",
-        "  BLOCKED: Another Claude session is active in this worktree.",
-        "  --------------------------------------------------------------------",
-        f"  Active PID:   {other_pid}",
-        f"  Started:      {other_started}",
-        f"  Worktree:     {other_worktree}",
-        f"  Lock file:    {lock_path}",
-        "  --------------------------------------------------------------------",
-        "  Two Claudes in one worktree corrupt .git/index. See:",
-        "  memory/feedback_shared_worktree_concurrent_commits.md",
-        "",
-        "  Resolutions (pick one):",
-        "    1. Switch to the other session and continue there.",
-        "    2. If that session is dead, run:",
-        f"         rm '{lock_path}'",
-        "       (manual delete — PID liveness is unreliable across Windows",
-        "       process trees, so we don't auto-clean.)",
-        "    3. Spawn a fresh worktree:",
-        "         scripts/tools/new_session.sh",
-        "  ====================================================================",
-        "",
-    ], True)
+    return (
+        [
+            "",
+            "  ====================================================================",
+            "  BLOCKED: Another Claude session is active in this worktree.",
+            "  --------------------------------------------------------------------",
+            f"  Active PID:   {other_pid}",
+            f"  Started:      {other_started}",
+            f"  Worktree:     {other_worktree}",
+            f"  Lock file:    {lock_path}",
+            "  --------------------------------------------------------------------",
+            "  Two Claudes in one worktree corrupt .git/index. See:",
+            "  memory/feedback_shared_worktree_concurrent_commits.md",
+            "",
+            "  Resolutions (pick one):",
+            "    1. Switch to the other session and continue there.",
+            "    2. If that session is dead, run:",
+            f"         rm '{lock_path}'",
+            "       (manual delete — PID liveness is unreliable across Windows",
+            "       process trees, so we don't auto-clean.)",
+            "    3. Spawn a fresh worktree:",
+            "         scripts/tools/new_session.sh",
+            "  ====================================================================",
+            "",
+        ],
+        True,
+    )
 
 
 def _action_queue_ready_lines() -> list[str]:
@@ -534,11 +535,11 @@ def _parallel_session_lines() -> list[str]:
                 worktrees.append(block)
                 block = {}
         elif line.startswith("worktree "):
-            block["path"] = line[len("worktree "):].strip()
+            block["path"] = line[len("worktree ") :].strip()
         elif line.startswith("branch "):
-            block["branch"] = line[len("branch "):].strip().replace("refs/heads/", "")
+            block["branch"] = line[len("branch ") :].strip().replace("refs/heads/", "")
         elif line.startswith("HEAD "):
-            block["head"] = line[len("HEAD "):].strip()[:8]
+            block["head"] = line[len("HEAD ") :].strip()[:8]
     if block:
         worktrees.append(block)
 
@@ -565,14 +566,8 @@ def _parallel_session_lines() -> list[str]:
     self_dirty = rc_self_st == 0 and bool(self_st.strip())
 
     if self_dirty and dirty_count >= 1:
-        lines.append(
-            f"  WARNING: {dirty_count + 1} dirty worktrees active — "
-            "edit collision/CRLF/stash-loss risk."
-        )
-        lines.append(
-            "  Each Claude session should work in its own worktree. "
-            "Spawn one: scripts/tools/new_session.sh"
-        )
+        lines.append(f"  WARNING: {dirty_count + 1} dirty worktrees active — edit collision/CRLF/stash-loss risk.")
+        lines.append("  Each Claude session should work in its own worktree. Spawn one: scripts/tools/new_session.sh")
     return lines
 
 

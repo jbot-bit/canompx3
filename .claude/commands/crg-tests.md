@@ -26,10 +26,10 @@ Verified working: `pipeline/dst.py::orb_utc_window` → 8 hits, all in `tests/te
 
 ## Implementation
 
-**Preferred — MCP tool** (after merge + Claude Code restart):
+**Preferred — MCP tool** (use when MCP is available / approved):
 - Call `mcp__code-review-graph__query_graph_tool` with `pattern="tests_for", target=$ARGUMENTS`.
 
-**Fallback — Python one-liner:**
+**Fallback — Python one-liner** (use when MCP is not approved or unavailable):
 
 ```bash
 .venv/Scripts/python.exe -c "

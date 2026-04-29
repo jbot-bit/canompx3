@@ -27,10 +27,10 @@ Read **`Next:`** — that tells you which tool to call after this one.
 
 ## Implementation
 
-**Preferred — MCP tool** (after this branch merges + Claude Code restart):
+**Preferred — MCP tool** (use when MCP is available / approved):
 - Call `mcp__code-review-graph__get_minimal_context_tool` with `task=$ARGUMENTS`.
 
-**Fallback — Python one-liner** (works now, before MCP wiring is live):
+**Fallback — Python one-liner** (use when MCP is not approved or unavailable):
 
 ```bash
 .venv/Scripts/python.exe -c "

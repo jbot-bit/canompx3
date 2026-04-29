@@ -146,6 +146,21 @@ else
     echo "  PASSED"
 fi
 
+# 3b. CRG incremental update (advisory-only, fail-open, ~1-5s)
+# Keeps the graph DB fresh so drift checks D1-D5 (Phase 2) and slash
+# commands see the committed state. Idempotent on top of the PostToolUse
+# hook (F3); defends against PostToolUse misses on fast edits.
+echo "[3b/8] CRG update..."
+if command -v code-review-graph >/dev/null 2>&1; then
+    if ! code-review-graph update --base origin/main > /dev/null 2>&1; then
+        echo "  ADVISORY: CRG update failed — graph may be stale (non-blocking)"
+    else
+        echo "  PASSED"
+    fi
+else
+    echo "  SKIP: code-review-graph not in PATH"
+fi
+
 # 4. Staged-file-aware FAST tests — pre-commit must finish in <30s.
 #    - pipeline/ changes  → tests/test_pipeline/ (~11s, 636 tests)
 #    - trading_app/ changes → fast subset only (~2s, config/entry/tripwires)
