@@ -1,0 +1,158 @@
+# Parked-cells registry — durable record of every Pathway B / Phase D cell with a
+# locked verdict in {PARK_*, KILL, CANDIDATE_READY_*, NOT_OOS_CONFIRMABLE}.
+#
+# Authority:
+#   - Every entry MUST reference a real pre-reg path (docs/audit/hypotheses/*.yaml)
+#     AND a real result path (docs/audit/results/*-result.md or equivalent backtest doc).
+#   - Verdict text MUST match the result file's "## Decision rule outcome" / "## Verdict"
+#     block verbatim (case-insensitive on the canonical token).
+#   - Drift check `check_parked_cells_registry_completeness` enforces (a) every
+#     Pathway B result file has a matching entry here, (b) the verdict token in
+#     the entry appears in the result file, (c) every referenced path exists.
+#
+# Editing rules:
+#   - Append-only for new cells. Do not remove past entries — replay them with
+#     a `superseded_by:` field pointing at the successor cell when the verdict
+#     is moved by a later pre-reg.
+#   - When a cell's status changes (e.g., SR alarm fires, OOS power floor
+#     clears), append a new dated event line under `events:` rather than
+#     overwriting the verdict.
+#   - Status field uses canonical Amendment 3.1/3.2 vocabulary only:
+#     PARK_PENDING_OOS_POWER (Amendment 3.1)
+#     PARK_CONDITIONAL_DEPLOY_RETAINED (D6 / Amendment 3.2 NOT_OOS_CONFIRMABLE -> CONDITIONAL_DEPLOY)
+#     PARK_ABSOLUTE_FLOOR_FAIL (Phase D D-0 v2 / absolute Sharpe floor not cleared)
+#     KILL (any KILL_* criterion fired)
+#     CANDIDATE_READY_FOR_PHASE_2 (D6 future-state placeholder; not used yet)
+#     KEEP_PARKED_INDEFINITELY (Amendment 3.2 alternate path; not used yet)
+#
+# Drift check authority: pipeline/check_drift.py::check_parked_cells_registry_completeness
+# Schema version: 1
+schema_version: 1
+last_updated: 2026-04-29
+last_updated_by: claude-code (D6 session)
+
+cells:
+  - cell_id: d4-mnq-comex-settle-garch70
+    title: "Phase D D4 — MNQ COMEX_SETTLE O5 E2 CB1 RR1.0 long + garch_forecast_vol_pct > 70 — Pathway B K=1"
+    status: PARK_PENDING_OOS_POWER
+    amendment: "3.1 (PARK gate inactive low power); D6 successor reframes under 3.2"
+    instrument: MNQ
+    session: COMEX_SETTLE
+    orb_minutes: 5
+    rr_target: 1.0
+    entry_model: E2
+    confirm_bars: 1
+    direction: long
+    base_filter: ORB_G5
+    gate_predicate: "garch_forecast_vol_pct > 70"
+    pre_reg: docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-pathway-b-v1.yaml
+    result: docs/audit/results/2026-04-28-mnq-comex-settle-pathway-b-v1-result.md
+    decision_ledger_slug: d4-aistudio-audit
+    successor_cell_id: d6-mnq-comex-settle-garch70-overlay
+    notes: |
+      Verdict file's Decision rule outcome line: "**VERDICT: PARK_PENDING_OOS_POWER**".
+      Successor D6 reframes the same hypothesis as a sizing-overlay (R1-class binary
+      regime gate on RR1.5 deployed lane) rather than a new lane at RR1.0. D4 result
+      file itself stands; doctrine applies forward per Amendment 3.2 cross-reference.
+
+  - cell_id: d2-mes-europe-flow-ovnrng80
+    title: "Phase D D2 — MES EUROPE_FLOW O5 E2 CB1 RR1.5 + ovn_range_pct > 80 — Pathway B K=1"
+    status: PARK_PENDING_OOS_POWER
+    amendment: "3.1 (PARK gate inactive low power)"
+    instrument: MES
+    session: EUROPE_FLOW
+    orb_minutes: 5
+    rr_target: 1.5
+    entry_model: E2
+    confirm_bars: 1
+    direction: long
+    base_filter: OVNRNG_100
+    gate_predicate: "ovn_range_pct > 80"
+    pre_reg: docs/audit/hypotheses/2026-04-28-mes-europe-flow-ovn-range-pathway-b-v1.yaml
+    result: docs/audit/results/2026-04-28-mes-europe-flow-pathway-b-v1-result.md
+    decision_ledger_slug: d2-mes-europe-flow-ovnrng-park
+    successor_cell_id: null
+    notes: |
+      Verdict file's Decision rule outcome line: "**VERDICT: PARK_PENDING_OOS_POWER**".
+      OOS power-floor accrual ETA per addendum 2 (efeaa2fc): D2 reaches N_OOS_on=50
+      around 2026-10-09 at current 0.177 trades/cal-day rate. No Path 3 reframing
+      authored yet for D2; deferred until Phase 1 D6 carrier discipline is proven.
+
+  - cell_id: d5-mnq-comex-settle-garch70-conditional-half-size
+    title: "Phase D D5 — MNQ COMEX_SETTLE O5 E2 CB1 RR1.5 BOTH-SIDES garch>70 conditional half-size — Pathway B K=1"
+    status: KILL
+    amendment: "n/a (KILL via locked decision rule, not park status)"
+    instrument: MNQ
+    session: COMEX_SETTLE
+    orb_minutes: 5
+    rr_target: 1.5
+    entry_model: E2
+    confirm_bars: 1
+    direction: both
+    base_filter: ORB_G5
+    gate_predicate: "garch_forecast_vol_pct > 70 + 0.5x off-cohort sizing"
+    pre_reg: docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-d5-both-sides-pathway-b-v1.yaml
+    result: docs/audit/results/2026-04-28-mnq-comex-settle-d5-both-sides-pathway-b-v1-result.md
+    decision_ledger_slug: d5-conditional-sizing-kill-2026-04-28
+    successor_cell_id: null
+    notes: |
+      Verdict file's Decision rule outcome line: "**VERDICT: KILL**".
+      Two KILL criteria fired: (1) KILL_PAIRED_P (paired t=-1.45, p=0.148);
+      (2) KILL_C9 (2019 era ExpR_D5=-0.108 < -0.05 floor on the D5 variant).
+      Lock-before-run discipline working as designed — verdict survived against
+      headline numbers (+0.2705 abs SR_ann, +21.85% rel uplift, OOS DIR_MATCH).
+
+  - cell_id: phase-d-d0-v2-garch-clean-rederivation
+    title: "Phase D D-0 v2 — MNQ COMEX_SETTLE O5 E2 CB1 RR1.5 + garch>70 rel-vol clean re-derivation — sizing-buckets backtest"
+    status: PARK_ABSOLUTE_FLOOR_FAIL
+    amendment: "Criterion 8 absolute Sharpe floor"
+    instrument: MNQ
+    session: COMEX_SETTLE
+    orb_minutes: 5
+    rr_target: 1.5
+    entry_model: E2
+    confirm_bars: 1
+    direction: long
+    base_filter: ORB_G5
+    gate_predicate: "garch_forecast_vol_pct percentile buckets (low/mid/high) -> 0.5x/1.0x/1.5x size_mult"
+    pre_reg: docs/audit/hypotheses/2026-04-28-phase-d-d0-v2-garch-clean-rederivation.yaml
+    result: docs/audit/results/2026-04-28-phase-d-d0-v2-garch-backtest.md
+    decision_ledger_slug: phase_d_d0_clean_rederivation
+    successor_cell_id: null
+    notes: |
+      Verdict file: "**PARK_ABSOLUTE_FLOOR_FAIL**".
+      Sharpe uplift +16.48% (>=15% relative gate PASS) but absolute Sharpe diff
+      +0.0283 < 0.05 floor and p=0.50 (underpowered). Clean predictor
+      (garch_forecast_vol_pct, RULE 6.1 SAFE) replacing the E2-LA tainted
+      rel_vol predictor from the original D-0 backtest. 2026-05-15 daily
+      shadow-append gate eval has no clean PASS basis; daily accumulation
+      should be parked rather than promoted. Action queue item
+      `phase_d_d0_clean_rederivation` is closed.
+
+  - cell_id: d6-mnq-comex-settle-garch70-overlay
+    title: "Phase D D6 — MNQ COMEX_SETTLE O5 E2 CB1 RR1.5 + garch>70 sizing-overlay — Pathway B K=1"
+    status: PARK_CONDITIONAL_DEPLOY_RETAINED
+    amendment: "3.2 (NOT_OOS_CONFIRMABLE → CONDITIONAL_DEPLOY)"
+    instrument: MNQ
+    session: COMEX_SETTLE
+    orb_minutes: 5
+    rr_target: 1.5
+    entry_model: E2
+    confirm_bars: 1
+    direction: long
+    base_filter: ORB_G5
+    gate_predicate: "garch_forecast_vol_pct > 70 (sizing-overlay on deployed lane)"
+    pre_reg: docs/audit/hypotheses/2026-04-29-mnq-comex-settle-garch-d6-sizing-overlay-pathway-b-v1.yaml
+    result: docs/audit/results/2026-04-29-mnq-comex-settle-garch-d6-sizing-overlay-pathway-b-v1-result.md
+    decision_ledger_slug: d6-garch70-overlay-park-conditional-deploy
+    predecessor_cell_id: d4-mnq-comex-settle-garch70
+    successor_cell_id: null
+    notes: |
+      Verdict file's Decision rule outcome: "**PARK_CONDITIONAL_DEPLOY_RETAINED**".
+      Amendment 3.2 NOT_OOS_CONFIRMABLE classification: MinTRL 5.10y on IS-rate
+      basis (2.37y observed-OOS-rate basis). Decision rule fired `continue_if`:
+      PARK_CONDITIONAL_DEPLOY_RETAINED. Phase 1 shadow-only observation overlay.
+      OOS power-floor N_OOS_on accrual needed before any sizing change considered.
+
+# events: append-only log of state transitions for cells (none yet — registry just created)
+events: []

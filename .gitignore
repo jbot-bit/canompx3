@@ -269,3 +269,4 @@ live_signals_*.jsonl
 
 # Added by code-review-graph
 .code-review-graph/
+.code-review-graph/usage-log.jsonl

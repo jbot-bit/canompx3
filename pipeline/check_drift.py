@@ -6634,6 +6634,170 @@ def check_e2_lookahead_research_contamination() -> list[str]:
     return violations
 
 
+def check_parked_cells_registry_completeness() -> list[str]:
+    """Every Pathway B / Phase D result file must have a matching parked-cells.yaml entry.
+
+    Authored 2026-04-29 to close the structural gap where parked Phase D cells
+    (PARK_PENDING_OOS_POWER, KILL, PARK_CONDITIONAL_DEPLOY_RETAINED, etc.) lived
+    in 4 disjoint surfaces (validated_setups, experimental_strategies,
+    docs/audit/results/, docs/runtime/decision-ledger.md) with no code-enforced
+    invariant binding them. A cell could go missing or drift between surfaces
+    and the only detection was human review.
+
+    The fix: docs/runtime/parked-cells.yaml is the single durable registry of
+    every cell with a locked Pathway B verdict. This drift check enforces three
+    invariants:
+
+      1. Every result file under docs/audit/results/*pathway-b*-result.md or
+         docs/audit/results/*-d0-v2-*backtest.md (Phase D backtest variants) that
+         contains a verdict token in {PARK_PENDING_OOS_POWER,
+         PARK_CONDITIONAL_DEPLOY_RETAINED, PARK_ABSOLUTE_FLOOR_FAIL, KILL,
+         CANDIDATE_READY_FOR_PHASE_2, KEEP_PARKED_INDEFINITELY} MUST have a
+         corresponding cell entry in parked-cells.yaml with `result:` pointing
+         at it.
+
+      2. Every cell entry's `pre_reg:` and `result:` paths MUST exist on disk.
+         Catches the failure mode where a result is renamed or moved and the
+         registry goes stale silently.
+
+      3. Every cell entry's `status:` token MUST appear in its result file.
+         Catches the failure mode where the registry says PARK but the result
+         file says KILL (e.g., a successor pre-reg moved the verdict and the
+         registry was not updated).
+
+    Authority: `docs/runtime/parked-cells.yaml` schema_version=1.
+    Origin: 2026-04-29 D6 session — user asked "do we have an automatic
+    system that keeps track of the parked trades, so we don't lose them
+    randomly over the repo and shit." This check is the answer.
+
+    BLOCKING (not advisory): registry drift is a real correctness issue.
+    """
+    issues: list[str] = []
+
+    registry_path = PROJECT_ROOT / "docs" / "runtime" / "parked-cells.yaml"
+    results_dir = PROJECT_ROOT / "docs" / "audit" / "results"
+    if not registry_path.exists():
+        issues.append(f"  parked-cells registry missing: {registry_path.relative_to(PROJECT_ROOT)}")
+        return issues
+    if not results_dir.is_dir():
+        return issues  # nothing to check
+
+    # Permissive YAML parse (avoid pyyaml dep — minimal flat-block reader).
+    # We only need the `cells:` list of dicts with `cell_id`, `status`,
+    # `pre_reg`, `result` keys.
+    try:
+        registry_text = registry_path.read_text(encoding="utf-8")
+    except OSError as e:
+        issues.append(f"  parked-cells registry unreadable: {e}")
+        return issues
+
+    # Parse `cells:` block — each entry begins with "  - cell_id:" at 2-space indent.
+    # Extract the four fields we care about per entry.
+    valid_status_tokens = {
+        "PARK_PENDING_OOS_POWER",
+        "PARK_CONDITIONAL_DEPLOY_RETAINED",
+        "PARK_ABSOLUTE_FLOOR_FAIL",
+        "KILL",
+        "CANDIDATE_READY_FOR_PHASE_2",
+        "KEEP_PARKED_INDEFINITELY",
+    }
+    cells: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    in_cells_block = False
+    for raw_line in registry_text.splitlines():
+        if raw_line.startswith("cells:"):
+            in_cells_block = True
+            continue
+        if not in_cells_block:
+            continue
+        if raw_line.startswith("events:") or (
+            raw_line and not raw_line.startswith(" ") and not raw_line.startswith("#")
+        ):
+            # Left the cells block
+            if current:
+                cells.append(current)
+                current = {}
+            in_cells_block = False
+            continue
+        stripped = raw_line.strip()
+        if stripped.startswith("- cell_id:"):
+            if current:
+                cells.append(current)
+            current = {"cell_id": stripped.partition(":")[2].strip().strip('"').strip("'")}
+            continue
+        for field in ("status", "pre_reg", "result"):
+            prefix = f"{field}:"
+            if stripped.startswith(prefix) and field not in current:
+                value = stripped[len(prefix) :].strip().strip('"').strip("'")
+                if value and value not in ("|", ">", "null", "None"):
+                    current[field] = value
+    if current:
+        cells.append(current)
+
+    # Build {result_path -> cell} map for invariant 1 reverse lookup
+    result_to_cell: dict[str, dict] = {}
+    for cell in cells:
+        cell_id = cell.get("cell_id", "<unknown>")
+        # Invariant 2: paths must exist
+        for path_field in ("pre_reg", "result"):
+            rel = cell.get(path_field, "")
+            if not rel:
+                issues.append(f"  parked-cells: cell {cell_id!r} missing required field {path_field!r}")
+                continue
+            full = PROJECT_ROOT / rel
+            if not full.exists():
+                issues.append(f"  parked-cells: cell {cell_id!r} {path_field}={rel!r} does NOT exist on disk")
+        result = cell.get("result")
+        if result:
+            result_to_cell[result] = cell
+        # Invariant 3: status token must appear in result file
+        status = cell.get("status", "")
+        if status and result:
+            full_result = PROJECT_ROOT / result
+            if full_result.exists():
+                try:
+                    body = full_result.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    body = ""
+                if status not in body:
+                    issues.append(
+                        f"  parked-cells: cell {cell_id!r} status={status!r} does NOT appear in {result!r} "
+                        f"(registry-result divergence — verdict moved or registry stale)"
+                    )
+        if status and status not in valid_status_tokens:
+            issues.append(
+                f"  parked-cells: cell {cell_id!r} status={status!r} not in canonical set {sorted(valid_status_tokens)}"
+            )
+
+    # Invariant 1: every result file with a verdict token must have a registry entry
+    surfaced_patterns = [
+        "*pathway-b*-result.md",
+        "*-d0-v2-*backtest.md",
+    ]
+    surfaced_files: set[Path] = set()
+    for pat in surfaced_patterns:
+        for path in results_dir.glob(pat):
+            surfaced_files.add(path)
+    for result_path in sorted(surfaced_files):
+        try:
+            text = result_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        # Verdict token must be present (otherwise file is not a result-doc; skip)
+        verdict_present = any(tok in text for tok in valid_status_tokens)
+        if not verdict_present:
+            continue
+        rel_path = result_path.relative_to(PROJECT_ROOT).as_posix()
+        if rel_path not in result_to_cell:
+            issues.append(
+                f"  parked-cells: result file {rel_path!r} contains a Pathway B verdict but has "
+                f"NO matching cell entry in parked-cells.yaml. Add an entry referencing this "
+                f"result + its pre_reg path."
+            )
+
+    return issues
+
+
 def check_stage_file_landed_drift() -> list[str]:
     """ADVISORY: stage files claiming work-in-progress while git log shows landings.
 
@@ -7180,6 +7344,12 @@ CHECKS = [
         "Stage-file staleness vs landed commits (advisory; prevents re-litigation)",
         check_stage_file_landed_drift,
         True,
+        False,
+    ),
+    (
+        "Parked-cells registry completeness (every Pathway B result has matching docs/runtime/parked-cells.yaml entry)",
+        check_parked_cells_registry_completeness,
+        False,  # BLOCKING — registry drift is a real correctness issue
         False,
     ),
     (
