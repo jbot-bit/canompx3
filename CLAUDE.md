@@ -88,6 +88,8 @@ If not explicitly stated, assume this mode.
 
 Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift detection (`pipeline/check_drift.py` — count self-reported at runtime), Claude Code hooks (auto-run drift/tests on file edits), GitHub Actions CI, and built-in pipeline validation gates. Setup: `git config core.hooksPath .githooks`
 
+**Branch-flip protection:** `.claude/hooks/branch-flip-guard.py` (PostToolUse/Bash) + pre-commit step 0c block mid-session branch switches. If BLOCKED: `git checkout <original-branch>` or `rm .git/.claude.pid` + restart. → `.claude/rules/branch-flip-protection.md`
+
 ### Project Truth Protocol
 Discovery uses ONLY canonical layers (`bars_1m`, `daily_features`, `orb_outcomes`). Derived layers (`validated_setups`, `edge_families`, `live_config`, docs) are **banned for truth-finding**. → `RESEARCH_RULES.md` § Discovery Layer Discipline; enforcement in `.claude/rules/research-truth-protocol.md`.
 

@@ -408,12 +408,14 @@ def _session_lock_lines() -> tuple[list[str], bool]:
         return [], False  # not in a git repo — skip (no contention possible)
 
     lock_path = git_dir / ".claude.pid"
+    _, current_branch = _git(["branch", "--show-current"])
     payload = json.dumps(
         {
             "pid": os.getpid(),
             "ppid": os.getppid(),
             "iso_started": datetime.now(UTC).isoformat(),
             "worktree": str(PROJECT_ROOT),
+            "branch_at_start": current_branch.strip(),
         },
         indent=2,
     ).encode("utf-8")

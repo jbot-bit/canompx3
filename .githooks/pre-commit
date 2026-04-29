@@ -27,6 +27,30 @@ export PATH="$PATH:$_SAVED_PATH"
 echo "=== PRE-COMMIT CHECKS ==="
 echo ""
 
+# 0c. Branch-flip guard — abort if HEAD branch != branch_at_start in session lock.
+# A mid-session `git checkout <other-branch>` would deposit this commit on the
+# wrong branch. Catch it here before any work is staged.
+GIT_DIR_PATH=$(git rev-parse --git-dir 2>/dev/null || true)
+if [ -n "$GIT_DIR_PATH" ] && [ -f "$GIT_DIR_PATH/.claude.pid" ]; then
+    BRANCH_AT_START=$(python -c "
+import json, sys
+try:
+    d = json.load(open('$GIT_DIR_PATH/.claude.pid'))
+    print(d.get('branch_at_start', ''))
+except Exception:
+    pass
+" 2>/dev/null || true)
+    CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || true)
+    if [ -n "$BRANCH_AT_START" ] && [ -n "$CURRENT_BRANCH" ] && [ "$BRANCH_AT_START" != "$CURRENT_BRANCH" ]; then
+        echo "BLOCKED: Branch changed mid-session."
+        echo "  Session started on: $BRANCH_AT_START"
+        echo "  Current branch:     $CURRENT_BRANCH"
+        echo "  This commit would land on the wrong branch."
+        echo "  Fix: git checkout $BRANCH_AT_START  OR  rm '$GIT_DIR_PATH/.claude.pid' and restart"
+        exit 1
+    fi
+fi
+
 # Quick venv health — catches dev deps wiped by interrupted uv sync
 if ! "$SCRIPT_DIR/.venv/Scripts/python.exe" -c "import pytest, httpx" 2>/dev/null && \
    ! "$SCRIPT_DIR/.venv/bin/python" -c "import pytest, httpx" 2>/dev/null; then
