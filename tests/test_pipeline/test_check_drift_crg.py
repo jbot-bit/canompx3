@@ -511,4 +511,65 @@ class TestCrgHelpersSentinel:
 
         fresh = importlib.reload(helpers)
         monkeypatch.setattr(fresh, "_PROJECT_ROOT", tmp_path)
+        # Also clear CRG_REPO_ROOT so find_project_root doesn't escape tmp_path
+        monkeypatch.delenv("CRG_REPO_ROOT", raising=False)
         assert not fresh.crg_is_available()
+
+
+class TestCrgRepoRootResolution:
+    """The helper passes ``repo_root=None`` to CRG so CRG's official
+    ``find_project_root`` (which honors ``CRG_REPO_ROOT`` env var) controls
+    resolution. This is the doc-grounded multi-worktree pattern: worktrees
+    set ``CRG_REPO_ROOT`` to the canonical project so they query the full
+    graph, not a 4-file pre-commit fragment.
+    """
+
+    def test_env_override_routes_helper_to_canonical(self, monkeypatch):
+        """When CRG_REPO_ROOT is set, find_large_functions returns results
+        from THAT graph rather than the worktree's local one. Validates the
+        fix for the worktree-graph-fragmentation bug (2026-04-30 incident)."""
+        import importlib
+
+        fresh = importlib.reload(helpers)
+        canonical = Path("C:/Users/joshd/canompx3")
+        if not (canonical / ".code-review-graph" / "graph.db").exists():
+            pytest.skip("canonical graph not built locally — skipping integration test")
+
+        monkeypatch.setenv("CRG_REPO_ROOT", str(canonical))
+        result = fresh.find_large_functions(min_lines=200)
+        # Canonical graph has many 200+ line functions; worktree fragment has 0-2.
+        assert isinstance(result, list)
+        assert len(result) >= 10, (
+            f"expected canonical graph to expose ≥10 large functions, got {len(result)}. "
+            f"CRG_REPO_ROOT may not be wired into the helper anymore."
+        )
+
+    def test_no_env_falls_back_to_git_autodetect(self, monkeypatch):
+        """Without CRG_REPO_ROOT, CRG's find_project_root walks up to .git.
+        For tests running inside the worktree, that's the worktree root —
+        which has its own (possibly tiny) graph. This test only checks
+        crg_is_available is True since that proves the resolution works."""
+        import importlib
+
+        fresh = importlib.reload(helpers)
+        monkeypatch.delenv("CRG_REPO_ROOT", raising=False)
+        # crg_is_available depends on .code-review-graph/graph.db existing at
+        # the resolved root. The worktree always has at least a fragment from
+        # the pre-commit incremental update.
+        assert fresh.crg_is_available() is True
+
+    def test_helper_does_not_hardcode_repo_root_anymore(self):
+        """Regression guard for the 2026-04-30 fix: the helper used to pass
+        ``repo_root=str(_PROJECT_ROOT)`` to CRG, bypassing the official
+        env-var resolution. After the fix it should pass ``repo_root=None``
+        (or omit the kwarg) so CRG's find_project_root fires."""
+        import inspect
+
+        src = inspect.getsource(helpers)
+        # Helper should not pass repo_root=str(...) anywhere — that would
+        # re-introduce the bug.
+        assert "repo_root=str(_PROJECT_ROOT)" not in src, (
+            "Helper hardcodes _PROJECT_ROOT for repo_root; this bypasses "
+            "CRG's official find_project_root and breaks CRG_REPO_ROOT support. "
+            "Pass repo_root=None instead."
+        )

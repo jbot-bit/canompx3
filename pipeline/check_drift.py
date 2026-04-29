@@ -1200,6 +1200,59 @@ def check_cryptography_pin_holds() -> list[str]:
     return violations
 
 
+def check_garch_dependency_importable() -> list[str]:
+    """Fail-closed if `arch` is not importable.
+
+    `arch>=8.0.0` is a hard pyproject.toml dep used by
+    `pipeline.build_daily_features.compute_garch_forecast`. The function
+    swallows ImportError and returns None (now WARN-level), so a venv that
+    drifts away from pyproject silently NULLs `garch_forecast_vol` /
+    `garch_forecast_vol_pct` on every daily build until Check 65 surfaces
+    the late-history NULLs.
+
+    This drift check fails up-front so the regression is caught before any
+    daily-build NULLs accumulate.
+
+    Detail: 2026-04-29 incident — `arch` missing from canonical
+    `C:\\Users\\joshd\\canompx3\\.venv` produced 1 day of NULL GARCH on
+    MES/MGC/MNQ across O5/O15/O30 before Check 65 caught it.
+    """
+    violations: list[str] = []
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+    except Exception:
+        return violations
+
+    try:
+        version("arch")
+    except PackageNotFoundError:
+        violations.append(
+            "  arch package not installed in active venv but is a hard pyproject.toml "
+            "dep (>=8.0.0). Daily builds will silently NULL garch_forecast_vol on every "
+            "new row. Run: pip install 'arch>=8.0.0'  (or `uv sync --frozen`)."
+        )
+        return violations
+    except Exception as exc:
+        violations.append(
+            f"  arch package metadata lookup failed: {type(exc).__name__}: {exc}. "
+            f"Likely venv corruption — re-run `uv sync --frozen`."
+        )
+        return violations
+
+    # Belt-and-suspenders: actually try to import, in case version() succeeds
+    # but the package is unimportable (broken install, partial wheel).
+    try:
+        import arch  # noqa: F401
+    except ImportError as exc:
+        violations.append(
+            f"  arch importable check failed: ImportError: {exc}. Run: pip install --force-reinstall 'arch>=8.0.0'."
+        )
+    except Exception as exc:
+        violations.append(f"  arch import raised {type(exc).__name__}: {exc}. Investigate before next daily build.")
+
+    return violations
+
+
 def check_market_state_readonly() -> list[str]:
     """Check that market_state.py, scoring.py, cascade_table.py never write to DB.
 
@@ -7448,6 +7501,7 @@ CHECKS = [
     ("Nested subpackage isolation", check_nested_isolation, False, False),
     ("All imports resolve", check_all_imports_resolve, False, False),
     ("Cryptography pin holds (FastMCP/Authlib compat)", check_cryptography_pin_holds, False, False),
+    ("GARCH dependency importable (`arch` package present)", check_garch_dependency_importable, False, False),
     ("Nested production table write guard", check_nested_production_writes, False, False),
     (
         "Trading app schema-query consistency",

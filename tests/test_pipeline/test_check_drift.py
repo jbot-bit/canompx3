@@ -340,6 +340,61 @@ class TestClaudeMdSizeCap:
         assert len(violations) == 0
 
 
+class TestGarchDependencyImportable:
+    """Tests for check_garch_dependency_importable.
+
+    Guards against the 2026-04-29 incident where `arch` went missing from
+    the canonical venv and every daily build silently NULLed
+    `garch_forecast_vol` until Check 65 surfaced the late-history NULLs.
+    """
+
+    def test_passes_when_arch_installed(self):
+        """Live venv must have arch installed (it's a hard pyproject dep)."""
+        from pipeline.check_drift import check_garch_dependency_importable
+
+        violations = check_garch_dependency_importable()
+        assert violations == [], f"arch package missing from venv: {violations}. Run: pip install 'arch>=8.0.0'"
+
+    def test_catches_missing_arch_package(self, monkeypatch):
+        """If importlib.metadata.version('arch') raises PackageNotFoundError, fail loudly."""
+        from importlib.metadata import PackageNotFoundError
+
+        from pipeline import check_drift
+
+        def fake_version(name):
+            if name == "arch":
+                raise PackageNotFoundError("arch")
+            from importlib.metadata import version as real_version
+
+            return real_version(name)
+
+        monkeypatch.setattr("importlib.metadata.version", fake_version)
+        violations = check_drift.check_garch_dependency_importable()
+        assert len(violations) == 1
+        assert "arch package not installed" in violations[0]
+        assert "pyproject.toml" in violations[0]
+        assert "uv sync" in violations[0]
+
+    def test_catches_broken_install(self, monkeypatch):
+        """version() succeeds but import fails (partial wheel / corruption)."""
+        import builtins
+
+        from pipeline import check_drift
+
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "arch":
+                raise ImportError("DLL load failed: arch broken install")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        violations = check_drift.check_garch_dependency_importable()
+        assert len(violations) == 1
+        assert "arch importable check failed" in violations[0]
+        assert "force-reinstall" in violations[0]
+
+
 class TestDiscoverySessionAwareFilters:
     """Tests for check 28: discovery scripts must use get_filters_for_grid, not ALL_FILTERS."""
 

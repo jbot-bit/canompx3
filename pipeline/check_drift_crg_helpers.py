@@ -28,11 +28,38 @@ from typing import Any
 # or runtime error). Callers check ``is CRG_UNAVAILABLE``.
 CRG_UNAVAILABLE: object = object()
 
+# Default project root — the worktree this file lives in. Tests patch this
+# directly (`test_crg_is_available_false_without_graph_db` monkeypatches
+# `_PROJECT_ROOT`) so it MUST remain a module attribute.
+#
+# Resolution chain for CRG queries (matches CRG's documented behavior in
+# `code_review_graph.incremental.find_project_root`):
+# 1. `CRG_REPO_ROOT` env var (highest precedence — official override).
+# 2. CRG's git-walking auto-detection (finds the worktree's .git).
+# 3. This module's `_PROJECT_ROOT` (fallback when both above are absent).
+#
+# Worktrees in this project share the canonical graph at
+# `C:/Users/joshd/canompx3/.code-review-graph/`. Set
+# `CRG_REPO_ROOT=C:/Users/joshd/canompx3` (done by `.githooks/pre-commit`)
+# so worktree drift checks see the full 1052-file graph, not the 4-file
+# pre-commit fragment from the worktree's own incremental update.
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _graph_db_exists() -> bool:
-    return (_PROJECT_ROOT / ".code-review-graph" / "graph.db").exists()
+    """True iff the project root has a CRG graph DB on disk.
+
+    Resolves the project root via CRG's official `find_project_root`
+    (which honors `CRG_REPO_ROOT`); falls back to `_PROJECT_ROOT` if the
+    CRG package is unavailable.
+    """
+    try:
+        from code_review_graph.incremental import find_project_root
+
+        root = find_project_root(_PROJECT_ROOT)
+    except ImportError:
+        root = _PROJECT_ROOT
+    return (root / ".code-review-graph" / "graph.db").exists()
 
 
 def crg_is_available() -> bool:
@@ -47,10 +74,16 @@ def crg_is_available() -> bool:
 
 
 def _open_store():
-    """Open CRG's graph store. Raises on failure; callers wrap in try/except."""
+    """Open CRG's graph store. Raises on failure; callers wrap in try/except.
+
+    Passes ``repo_root=None`` so CRG's official ``find_project_root`` resolves
+    the path (honors ``CRG_REPO_ROOT`` env var). This is the documented
+    pattern — see ``code_review_graph.tools.query.find_large_functions``
+    docstring: "repo_root: Repository root path. Auto-detected if omitted."
+    """
     from code_review_graph.tools._common import _get_store
 
-    store, _root = _get_store(str(_PROJECT_ROOT))
+    store, _root = _get_store(None)
     return store
 
 
@@ -104,7 +137,7 @@ def query_tests_for(qualified_target: str) -> dict[str, Any] | object:
         result = query_graph(
             pattern="tests_for",
             target=qualified_target,
-            repo_root=str(_PROJECT_ROOT),
+            repo_root=None,
             detail_level="minimal",
         )
     except Exception:
@@ -141,7 +174,7 @@ def find_large_functions(min_lines: int = 200, limit: int = 100) -> list[dict[st
             kind="Function",
             file_path_pattern=None,
             limit=limit,
-            repo_root=str(_PROJECT_ROOT),
+            repo_root=None,
         )
     except Exception:
         return CRG_UNAVAILABLE
@@ -186,7 +219,7 @@ def get_affected_flows(
         result = get_affected_flows_func(
             changed_files=changed_files,
             base=base,
-            repo_root=str(_PROJECT_ROOT),
+            repo_root=None,
         )
     except Exception:
         return CRG_UNAVAILABLE
