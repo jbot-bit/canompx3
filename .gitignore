@@ -270,3 +270,6 @@ live_signals_*.jsonl
 # Added by code-review-graph
 .code-review-graph/
 .code-review-graph/usage-log.jsonl
+
+# CRG eval baseline output (Phase 1.5 M2 — regenerable via code-review-graph eval)
+evaluate/

@@ -155,16 +155,21 @@ Tier ordering = EV ÷ implementation cost. ✅ items ship in this spec.
 ### Tier 2 — Drift checks built on CRG (Phase 2)
 
 - ✅ **D1. Drift check #125 — cross-layer surprising connections.** Uses `get_surprising_connections_tool`. Rejects new edges between `pipeline/` and `trading_app/` that bypass published canonical surfaces (`pipeline.dst.SESSION_CATALOG`, `pipeline.cost_model.COST_SPECS`, `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS`, etc.). Catches Project Truth Protocol violations.
-- ✅ **D2. Drift check #126 — canonical-source import enforcement.** Uses `query_graph_tool(pattern="imports_from")`. Flags any research script that re-implements `parse_strategy_id`, `orb_utc_window`, `_load_strategy_outcomes`, `reprice_e2_entry`, or `detect_break_touch` instead of importing the canonical. Memory: `feedback_aperture_overlay_canonical_parser.md`, `feedback_canonical_value_unit_verification.md`.
-- ✅ **D3. Drift check #127 — canonical functions must have `TESTED_BY` edges.** Uses `query_graph_tool(pattern="tests_for")`. Hard list:
-  - `pipeline.dst.orb_utc_window`, `pipeline.dst.SESSION_CATALOG`
-  - `pipeline.cost_model.COST_SPECS`, `pipeline.cost_model.reprice_e2_entry`
-  - `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS`
-  - `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`
+- ✅ **D2. Drift check #126 — canonical-source import enforcement.** **AST-based fallback** (CRG v2.1.0 has no reliable `imports_from` graph pattern at the qualified-name granularity required; pivoted in implementation). Walks `research/` ASTs and flags any module that defines local symbols named after a canonical callable without an `import` from the canonical module. Hard list (verified at implementation):
+  - `parse_strategy_id` ← `trading_app.eligibility.builder`
+  - `orb_utc_window` ← `pipeline.dst`
+  - `detect_break_touch` ← `trading_app.entry_rules`
+  - `_load_strategy_outcomes` ← `trading_app.strategy_fitness` (added 2026-04-29 post-audit; 27 callers across repo, 0 redefinitions in research/ today)
+
+  Spec-vs-impl audit-trail (2026-04-29): original spec listed 5 symbols including `reprice_e2_entry`. Excluded because canonical lives in `research/databento_microstructure.py` (not yet promoted to `pipeline.cost_model`); flagging research/ for "re-implementing" itself would be a false positive. Re-add when promoted. Memory: `feedback_aperture_overlay_canonical_parser.md`, `feedback_canonical_value_unit_verification.md`. Currently 3 real findings on landing day.
+- ✅ **D3. Drift check #127 — canonical functions must have at least one import-and-call test.** **AST-based fallback** (CRG v2.1.0 `tests_for` graph proven incomplete during implementation: returns 0 edges for canonical functions that have verified tests). **Scope: callables only.** For each canonical callable below, walks `tests/` ASTs looking for `from <canonical_module> import <symbol>` plus a Call site referencing it. Hard list:
+  - `pipeline.dst.orb_utc_window`
   - `trading_app.eligibility.builder.parse_strategy_id`
   - `trading_app.entry_rules.detect_break_touch`
-- ✅ **D4. Drift check #128 — canonical-path function size cap.** Uses `find_large_functions_tool(min_lines=200, file_path_pattern="pipeline/|trading_app/")`. Catches monster-function class. Closes G7.
-- ✅ **D5. Drift check #129 — bridge-node test coverage.** Uses `get_bridge_nodes_tool`. The top-10 betweenness-centrality nodes (architectural chokepoints) MUST each have a `TESTED_BY` edge. Catches the "everything depends on this and nothing tests it" class.
+
+  **Constants are out of scope** (audit-trail 2026-04-29). The original spec listed `SESSION_CATALOG`, `COST_SPECS`, `ACTIVE_ORB_INSTRUMENTS`, `HOLDOUT_SACRED_FROM`, and `reprice_e2_entry` too. AST cannot detect `Call` nodes against constants — they are referenced, not called — so a test that imports `SESSION_CATALOG` and asserts on it would not register under this mechanism. **D1 also does NOT cover constants** (D1 explicitly skips edges that pass through canonical surfaces — that's its design, not a gap to lean on). Constant test-coverage is a separate, currently-unbuilt drift check (planned: presence of `from <canonical_module> import <CONSTANT>` in any `tests/` file). Tracked as open follow-up below. `reprice_e2_entry` excluded for the same reason as D2.
+- ✅ **D4. Drift check #128 — canonical-path function size cap.** Uses CRG `analysis.find_large_functions` directly (bypasses CRG `analysis_tools._func` wrapper bug — see helpers module). `min_lines=200`, file-path filter `pipeline/` or `trading_app/`. Catches monster-function class. Closes G7. Currently 29 findings.
+- ✅ **D5. Drift check #129 — bridge-node test coverage.** Uses CRG `analysis.find_bridge_nodes` + `analysis.query_tests_for`. Filters bridge nodes (top betweenness-centrality) to canonical paths, then asks for tests. Catches the "everything depends on this and nothing tests it" class. Currently 8 findings — **likely shares D3's incomplete-graph false-positive class** (CRG `tests_for` graph still consulted here; AST rebuild is a known follow-up before raising D5 from advisory to blocking).
 - ✅ **D6. Predicate-lineage auditor (`/crg-lineage`).** Uses `get_affected_flows_tool` + `query_graph_tool(pattern="callers_of")`. Enumerates every research script that consumes a given `daily_features.<column>`. Replaces hand-grep that built the 29-entry E2 LA registry. Closes the next contamination class before it bites.
 
 ### Tier 3 — Agent / workflow upgrades (Phase 3)
@@ -275,7 +280,17 @@ This isolation is why fail-open is safe.
   - Delete a test for `orb_utc_window` → check #127 catches it.
 - `/crg-lineage daily_features.rel_vol_NYSE_OPEN` enumerates ≥3 research files (E2 LA registry already documents this).
 - Each check fails-open with `ADVISORY: CRG unavailable` when graph DB is moved/locked; never blocks commits when CRG itself is broken.
-- `python pipeline/check_drift.py` reports 129 checks (124 existing + 5 new), all passing.
+- `python pipeline/check_drift.py` reports all checks passing, with 5 new advisory entries (D1-D5) under headings 125-129.
+
+### Open follow-ups (Phase 2.x — non-blocking, advisory-only carry-forwards)
+
+Recorded 2026-04-29 from the institutional-rigor audit on f4d3cab5 (HIGH/MEDIUM findings 1-5):
+
+1. **D5 AST rebuild.** D5 still consults CRG `tests_for` (via `query_tests_for` helper). CRG v2.1.0's `tests_for` graph is the same incomplete graph that forced D3 to pivot to AST; D5 likely shares the false-positive class. Recommended: rebuild D5's per-bridge-node test query as an AST scan (parity with D3) before raising D5 from advisory to blocking.
+2. **D3 constants extension (currently-unbuilt check).** Cover canonical constants (`SESSION_CATALOG`, `COST_SPECS`, `ACTIVE_ORB_INSTRUMENTS`, `HOLDOUT_SACRED_FROM`) via a new AST mechanism: presence of `from <canonical_module> import <CONSTANT>` in any `tests/` file. Today no check covers this class — D1 explicitly skips canonical surfaces, D3 only counts `Call` nodes.
+3. **D3 attribute-access detection.** `import X as Y; Y.parse_strategy_id(...)` is currently flagged as untested even when it exercises the canonical via attribute access. Mechanically detectable but requires module-aliasing tracking. Documented as a known limitation in `tests/test_pipeline/test_check_drift_crg.py`.
+4. **`reprice_e2_entry` re-add when promoted.** When `research/databento_microstructure.py::reprice_e2_entry` is promoted to `pipeline.cost_model`, add it back to D2's canonical dict and D3's `canonical_callable` dict.
+5. **Live-graph integration test.** All 33 D1-D5 unit tests use mocks. CRG API regression (e.g., `find_bridge_nodes` signature change) would silently degrade D1/D4/D5 from advisory-with-findings to advisory-skip without test failure. Add a smoke test that runs the helpers against the real graph DB if present, skips otherwise.
 
 ## Phase 3 — Agent / workflow upgrades (~2 days)
 
