@@ -835,7 +835,19 @@ def compute_garch_forecast(daily_closes: list[float], min_obs: int = GARCH_MIN_P
         annual_vol = daily_vol * (252**0.5)
         return round(float(annual_vol), 6)
     except ImportError:
-        return None  # arch not installed — optional dependency
+        # arch is a hard pyproject.toml dep (>=8.0.0). If it goes missing, every
+        # daily build silently NULLs GARCH columns; the canonical venv has
+        # drifted from pyproject. Loud-warn so log scrapers and operators see
+        # the regression. `pipeline.check_drift.check_garch_dependency_importable`
+        # backs this up at gate-check time. 2026-04-29 incident: arch missing
+        # from canonical venv produced 1 day of NULL GARCH on MES/MGC/MNQ
+        # before Check 65 surfaced it.
+        logger.warning(
+            "GARCH forecast skipped: 'arch' not installed. "
+            "Run: pip install 'arch>=8.0.0'  (or `uv sync --frozen`). "
+            "See pyproject.toml. Returning None."
+        )
+        return None
     except Exception as exc:
         logger.debug("GARCH forecast failed: %s", exc)
         return None

@@ -51,19 +51,55 @@ except Exception:
     fi
 fi
 
-# Quick venv health — catches dev deps wiped by interrupted uv sync
-if ! "$SCRIPT_DIR/.venv/Scripts/python.exe" -c "import pytest, httpx" 2>/dev/null && \
-   ! "$SCRIPT_DIR/.venv/bin/python" -c "import pytest, httpx" 2>/dev/null; then
-    echo "BLOCKED: Dev deps missing (pytest/httpx). Run: uv pip install pytest pytest-asyncio pytest-cov httpx ruff pyright pip-audit"
+# Quick venv health — catches dev deps wiped by interrupted uv sync.
+# Worktrees commonly have NO local .venv and instead share the canonical
+# venv at the project root (e.g. ../canompx3/.venv). Probe SCRIPT_DIR
+# first (normal case), then the canonical sibling (worktree case), then
+# fall back to PATH `python` (last resort — only if dev deps are
+# importable there).
+_dev_dep_check() {
+    local py="$1"
+    [ -x "$py" ] || return 1
+    "$py" -c "import pytest, httpx" 2>/dev/null
+}
+
+CANONICAL_VENV_PY=""
+# Try candidate siblings: any sibling repo with a .venv. Prefer .../canompx3/.venv
+# (the canonical project) but accept any sibling matching $SCRIPT_DIR's basename
+# stripped of the worktree suffix (e.g. canompx3-data-drift-restamp -> canompx3).
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+WORKTREE_BASENAME="$(basename "$SCRIPT_DIR")"
+CANONICAL_BASENAME="${WORKTREE_BASENAME%%-*}"
+for candidate in \
+    "$PARENT_DIR/$CANONICAL_BASENAME/.venv/Scripts/python.exe" \
+    "$PARENT_DIR/$CANONICAL_BASENAME/.venv/bin/python" ; do
+    if [ -f "$candidate" ]; then
+        CANONICAL_VENV_PY="$candidate"
+        break
+    fi
+done
+
+if _dev_dep_check "$SCRIPT_DIR/.venv/Scripts/python.exe" || \
+   _dev_dep_check "$SCRIPT_DIR/.venv/bin/python" || \
+   _dev_dep_check "$CANONICAL_VENV_PY" || \
+   _dev_dep_check "$(command -v python)"; then
+    : # at least one python has the dev deps — proceed
+else
+    echo "BLOCKED: Dev deps missing (pytest/httpx) in worktree venv ($SCRIPT_DIR/.venv),"
+    echo "         canonical venv ($CANONICAL_VENV_PY), and active python ($(command -v python))."
+    echo "         Run: uv pip install pytest pytest-asyncio pytest-cov httpx ruff pyright pip-audit"
     exit 1
 fi
 
-# Resolve python — prefer .venv/ (uv-managed), fall back to venv/ (legacy)
+# Resolve python — prefer SCRIPT_DIR/.venv (uv-managed), then canonical sibling
+# venv (worktree case), then legacy SCRIPT_DIR/venv, then PATH python.
 PYTHON="python"
 if [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
     PYTHON="$SCRIPT_DIR/.venv/Scripts/python.exe"
 elif [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
     PYTHON="$SCRIPT_DIR/.venv/bin/python"
+elif [ -n "$CANONICAL_VENV_PY" ] && [ -f "$CANONICAL_VENV_PY" ]; then
+    PYTHON="$CANONICAL_VENV_PY"
 elif [ -f "$SCRIPT_DIR/venv/Scripts/python.exe" ]; then
     PYTHON="$SCRIPT_DIR/venv/Scripts/python.exe"
 elif [ -f "$SCRIPT_DIR/venv/bin/python" ]; then
