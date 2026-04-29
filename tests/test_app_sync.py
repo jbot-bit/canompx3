@@ -234,6 +234,17 @@ class TestAllFiltersSync:
         # daily_features.garch_forecast_vol_pct — regime-adaptive, handles
         # cross-instrument distribution variance.
         "GARCH_VOL_PCT_LT20",
+        # GARCH high-vol gate counterpart (Apr 2026 D6 sizing-overlay research,
+        # Pathway B K=1, NOT_OOS_CONFIRMABLE → CONDITIONAL_DEPLOY): MNQ
+        # COMEX_SETTLE GARCH>70 sizing overlay. Same canonical
+        # GARCHForecastVolPctFilter class as GARCH_VOL_PCT_LT20.
+        "GARCH_VOL_PCT_GT70",
+        # Overnight-range rolling percentile filter (commit 4da0f47f, Apr 2026
+        # D2/D4 Pathway-B parked-candidate RULE 7 additivity triage). Distinct
+        # class (OvernightRangeFilter) from the absolute-points OVNRNG_*
+        # series above (OvernightRangeAbsFilter); registered for hypothesis-
+        # file injection / DB compat.
+        "OVNRNG_PCT_GT80",
         # VWAP break-direction filters (Apr 2026 hypothesis-scoped validation).
         # Registered in ALL_FILTERS for hypothesis-file injection / DB compat,
         # then routed selectively by get_filters_for_grid().
@@ -289,6 +300,7 @@ class TestAllFiltersSync:
             GARCHForecastVolPctFilter,
             OrbVolumeFilter,
             OvernightRangeAbsFilter,
+            OvernightRangeFilter,
             OwnATRPercentileFilter,
             PitRangeFilter,
             PrevDayGeometryFilter,
@@ -306,6 +318,7 @@ class TestAllFiltersSync:
                     CostRatioFilter,
                     OrbVolumeFilter,
                     OvernightRangeAbsFilter,
+                    OvernightRangeFilter,
                     OwnATRPercentileFilter,
                     PrevDayRangeNormFilter,
                     PrevDayGeometryFilter,
