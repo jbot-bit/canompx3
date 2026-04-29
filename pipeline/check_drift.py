@@ -1102,6 +1102,56 @@ def check_all_imports_resolve() -> list[str]:
     return violations
 
 
+def check_cryptography_pin_holds() -> list[str]:
+    """Fail-closed when cryptography>=47 is installed alongside fastmcp.
+
+    Authlib 1.7.0 (latest as of 2026-04-29) imports
+    `cryptography.hazmat.backends.default_backend`, which was removed in
+    cryptography 47.0.0. fastmcp depends on `authlib.jose`, so any FastMCP-based
+    MCP server (code-review-graph, gold-db) crashes on startup with cryptography>=47.
+
+    Pin lives in `constraints.txt` (not pyproject.toml — sidecar pip-installs).
+    Detail: memory/feedback_mcp_venv_drift_cryptography47.md
+    Revisit when Authlib drops the hazmat.backends import.
+    """
+    violations: list[str] = []
+
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+    except Exception:
+        return violations
+
+    try:
+        crypto_ver_str = version("cryptography")
+    except PackageNotFoundError:
+        return violations
+    except Exception:
+        return violations
+
+    try:
+        major = int(crypto_ver_str.split(".", 1)[0])
+    except (ValueError, IndexError):
+        return violations
+
+    if major < 47:
+        return violations
+
+    try:
+        version("fastmcp")
+    except PackageNotFoundError:
+        return violations
+    except Exception:
+        return violations
+
+    violations.append(
+        f"  cryptography=={crypto_ver_str} installed alongside fastmcp; this breaks "
+        f"every FastMCP MCP server (Authlib 1.7.0 imports the removed hazmat.backends). "
+        f"Install with `pip install -c constraints.txt ...` to honor the pin. "
+        f"Detail: memory/feedback_mcp_venv_drift_cryptography47.md"
+    )
+    return violations
+
+
 def check_market_state_readonly() -> list[str]:
     """Check that market_state.py, scoring.py, cascade_table.py never write to DB.
 
@@ -7349,6 +7399,7 @@ CHECKS = [
     ("Entry price sanity", check_entry_price_sanity, False, False),
     ("Nested subpackage isolation", check_nested_isolation, False, False),
     ("All imports resolve", check_all_imports_resolve, False, False),
+    ("Cryptography pin holds (FastMCP/Authlib compat)", check_cryptography_pin_holds, False, False),
     ("Nested production table write guard", check_nested_production_writes, False, False),
     (
         "Trading app schema-query consistency",

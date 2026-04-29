@@ -1,0 +1,11 @@
+# Pip install constraints for sidecar deps not managed by uv.lock.
+#
+# Use:  pip install -c constraints.txt <package>
+#
+# cryptography<47 — Authlib 1.7.0 (latest as of 2026-04-29) still imports
+# `cryptography.hazmat.backends.default_backend`, which was removed in
+# cryptography 47.0.0. fastmcp depends on authlib.jose, so any FastMCP-based
+# MCP server (code-review-graph, gold-db) crashes on startup with cryptography>=47.
+# Revisit when Authlib ships a release that drops the hazmat.backends import.
+# Detail: memory/feedback_mcp_venv_drift_cryptography47.md
+cryptography<47

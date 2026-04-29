@@ -82,6 +82,8 @@ If not explicitly stated, assume this mode.
 
 `gold-db` MCP server (`trading_app/mcp_server.py`) — 4 read-only tools. **ALWAYS prefer over raw SQL.** Tools: `list_available_queries`, `query_trading_db` (18 templates, row cap 5000), `get_strategy_fitness` (always `summary_only=True` for portfolio-wide), `get_canonical_context`. See `.claude/rules/mcp-usage.md` for intent→tool mapping.
 
+**Sidecar pip-installs (constraints):** `code-review-graph` is not in `uv.lock`. Install via `pip install -c constraints.txt code-review-graph` so the `cryptography<47` pin holds (Authlib 1.7.0 still imports `cryptography.hazmat.backends`, removed in cryptography 47 — breaks every FastMCP server). See `constraints.txt` and `memory/feedback_mcp_venv_drift_cryptography47.md`.
+
 ---
 
 ## Guardrails
