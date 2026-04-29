@@ -390,4 +390,19 @@ These are committed, not aspirational:
 | 2026-04-29 | Per-prompt MCP perm approval (no settings.json allowlist) | User reverted prior allowlist edit; respect that signal |
 | 2026-04-29 | Linked worktrees consume read-only graph from main checkout | Avoids per-worktree DB build; documented staleness contract |
 | 2026-04-29 | Branch-context hook block decision uses git only (CRG only narrows scope) | Keeps hook working when CRG is down |
+| 2026-04-29 | F2 prefix narrowed to `scripts/tools/` (drop bare `scripts/`) | `scripts/research/` (33 files) is legitimate research-branch work; only canonical tooling under `scripts/tools/` is blocked |
+| 2026-04-29 | F3 `_crg_update()` hoisted above pipeline/trading_app early-exit | Spec declares `pipeline/`, `trading_app/`, `scripts/`, `research/`, `tests/` prefix set; original placement only fired for the first two — rest were dead code |
+| 2026-04-29 | F2 wiring deferred from settings.json | Activation is a separate user-approved step so user observes one session before toggling |
+| 2026-04-29 | Each worktree owns its own `.code-review-graph/graph.db` | `find_repo_root` walks to nearest `.git` (file in linked worktrees still resolves) — staleness contract is per-worktree, not "linked worktrees consume from main" |
+
+## Implementation Audit — 2026-04-29
+
+Phase 1 audit findings before code changes (institutional rigor pass):
+
+- **F2 false-positive scope:** original `_CANONICAL_PREFIXES` included bare `scripts/`, which would have blocked legitimate `scripts/research/` edits from `research/*` branches. Narrowed to `scripts/tools/` (canonical tooling only). 33 research-script files unblocked; 129 tooling files protected.
+- **F3 dead-code reachability bug:** `_crg_update()` was placed AFTER the `pipeline|trading_app` early-exit in `post-edit-pipeline.py`, so edits to `scripts/`, `research/`, `tests/` (all declared by `_crg_update`'s own prefix list) never triggered the update. Hoisted above the early-exit. CRG now updates on the full declared prefix set.
+- **F4 already implemented:** `.githooks/pre-commit` step 3b uses `code-review-graph update --base origin/main` (matches spec line 145). Idempotent on top of F3.
+- **Worktree freshness contract correction:** earlier ledger row implied "linked worktrees consume from main checkout" — incorrect. CRG's `find_repo_root` walks to nearest `.git` regardless of file/dir. Each worktree owns its DB.
+- **Pre-existing data drift (resolved by PR #179, commit `5a4b4450`):** Check 48 (10 stale `validated_setups` trade-window dates) and Check 65 (9 NULL GARCH rows on 2026-04-28) baseline-failed on `origin/main` during this PR's authoring window. Fixed independently on `chore/data-drift-restamp-...`; this PR rebased on top after the merge. Drift now clean (98 checks pass, 0 fail).
+- **Gap vs PR #177:** PR #177's commit message advertised F1 (`_crg_context_lines()` in session-start.py) but the actual diff only restructured session-start.py without adding the function. This PR adds the missing F1 implementation. Also fixes F2 false-positive scope and F3 dead-code reachability bug present in PR #177's merged state.
 

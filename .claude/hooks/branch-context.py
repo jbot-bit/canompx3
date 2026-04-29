@@ -27,11 +27,13 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# Canonical production paths — edits from research/session branches are blocked
+# Canonical production paths — edits from research/session branches are blocked.
+# NOTE: bare "scripts/" is NOT included. scripts/research/ (33 files) is legitimate
+# research-branch work; only scripts/tools/ (canonical tooling) is blocked.
 _CANONICAL_PREFIXES = (
     "pipeline/",
     "trading_app/",
-    "scripts/",
+    "scripts/tools/",
 )
 
 # Branches whose edits to canonical paths are blocked
@@ -106,8 +108,8 @@ def main() -> None:
         f"  Branch:  {branch}\n"
         f"  File:    {short_path}\n"
         f"  ─────────────────────────────────────────────\n"
-        f"  Editing canonical production paths ({', '.join(_CANONICAL_PREFIXES[:-1])}, "
-        f"{_CANONICAL_PREFIXES[-1]}) from a research/* or session/* branch is blocked.\n"
+        f"  Editing canonical production paths ({', '.join(_CANONICAL_PREFIXES)}) "
+        f"from a research/* or session/* branch is blocked.\n"
         f"\n"
         f"  This guard prevents accidental production changes during research sessions.\n"
         f"\n"
