@@ -16,15 +16,121 @@ predecessor_pre_regs:
   - docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-pathway-b-v1.yaml         # D4 (RR1.0 candidate-lane framing) — PARK_PENDING_OOS_POWER
   - docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-d5-both-sides-pathway-b-v1.yaml  # D5 (RR1.5 conditional half-size) — KILL on paired-p + C9
 relationship_to_predecessors: |
-  D4 framed garch>70 as a NEW LANE candidate at RR1.0 → failed RULE 7 additivity (subset of deployed
+  D4 framed garch>70 as a NEW LANE candidate at RR1.0 -> failed RULE 7 additivity (subset of deployed
   lane) and Amendment 3.2 MinTRL (5.5y to N=131 OOS-on at gate-only accrual rate).
   D5 framed garch>70 as a CONDITIONAL HALF-SIZE on RR1.5 deployed lane (off-cohort sized 0.5x)
-  → KILL on paired-p (t=-1.45, p=0.148) and C9 (2019 era ExpR_D5=-0.108 < -0.05 floor).
+  -> KILL on paired-p (t=-1.45, p=0.148) and C9 (2019 era ExpR_D5=-0.108 < -0.05 floor).
   D6 is a DIFFERENT ROLE: pure sizing-OVERLAY observation on the deployed RR1.5 lane.
   Not a new lane (no validated_setups insert). Not a conditional half-size (no off-cohort
   modification). The role is "binary regime gate that modulates risk allocation INSIDE
   the existing lane's already-validated trade set." See `docs/runtime/decision-ledger.md`
   entry `pr48-mgc-shadow-overlay-design` for the precedent overlay-contract pattern.
+
+relationship_to_parked_r3_continuous_sizing:
+  context_note: |
+    docs/institutional/mechanism_priors.md § 7 line 145 PARKED the R3 continuous-sizing
+    role 2026-04-27. Stage-1 sizing-substrate diagnostic (K=48, 6 deployed lanes x 8
+    features; pre-reg docs/audit/hypotheses/2026-04-27-sizing-substrate-prereg.yaml,
+    result docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md) returned
+    SUBSTRATE_WEAK across all 18 deployed-filter substrate cells (ORB_G5 / ATR_P50 /
+    COST_LT12 across raw / vol_norm / rank_252d). Reopen of the continuous R3 role
+    requires "AFML Ch.19 sigmoid bet-sizer recipe (NOT in resources/) AND fresh
+    per-lane mechanism citation AND new pre-reg."
+  why_d6_does_not_collide_with_the_parked_status: |
+    D6 is NOT a continuous-sizing substrate test. The parked R3 hypothesis was: "do
+    deployed binary filters (ORB_G5, ATR_P50, COST_LT12) carry a CONTINUOUS predictive
+    gradient on the same column they already select on?" Answer 2026-04-27: no.
+
+    D6 is a different and orthogonal hypothesis: "does a SEPARATE binary regime
+    predicate (garch>70) stratify per-trade R on top of the deployed binary filter
+    (ORB_G5)?" The 2026-04-27 diagnostic did NOT test this. It tested CONTINUOUS
+    feature gradients on the same feature class as the deployed filter.
+
+    Mechanism distinction:
+      - R3 continuous sizing (parked): expects monotonic per-trade R lift with
+        feature percentile of the SAME feature class as the deployed filter; tests
+        by IS-only quantile bin regression. FAILED.
+      - D6 binary regime overlay (this pre-reg): expects two-mean separation under
+        a single literature-grounded threshold on a DIFFERENT feature class
+        (garch_forecast_vol_pct, not orb_size); tests via Welch t on lift between
+        gate-on / gate-off subsets. UNRESOLVED until this pre-reg's harness runs.
+
+    These are different role classes per mechanism_priors.md § R1-R8: R3 is the
+    POSITION-SIZE modifier role at continuous granularity on the same-class feature;
+    the D6 hypothesis is structurally R1-class (binary FILTER role with a regime
+    gate from a separate feature class).
+  reopen_conditions_check_defensive: |
+    Per § 7 line 145, R3 reopen requires three things. Documenting compliance even
+    though D6 is NOT the R3 hypothesis, to be defensive:
+    (1) AFML Ch.19 sigmoid bet-sizer recipe -- NOT in resources/. D6 does NOT
+        invoke a sigmoid bet-sizer; D6 is binary, not continuous. Condition 1
+        N/A under D6 framing.
+    (2) Fresh per-lane mechanism citation. D6 cites Carver Ch 9-10 vol-targeting
+        + Chan Ch 7 p.155-157 stop-cascade verbatim -- both pre-existing in
+        docs/institutional/literature/. SATISFIED.
+    (3) New pre-reg. This file. SATISFIED.
+
+phase_1_carrier_concrete_path:
+  pattern_precedent: |
+    Phase 1 mirrors the structure landed under decision-ledger entries
+    `pr48-mgc-shadow-overlay-design` and `pr48-mgc-shadow-overlay-phase1-implemented`.
+    Existing infrastructure for shadow-only overlays already lives at:
+      - trading_app/conditional_overlays.py:444 RoleResolver -- native
+        execution-engine interface for resolving conditional-role decisions
+      - trading_app/conditional_overlays.py read_overlay_states() -- daily
+        derived-state envelope reader
+      - trading_app/execution_engine.py:235 -- shadow context recording (no size mutation)
+      - trading_app/live/session_orchestrator.py:502-504 -- profile-portfolio wiring
+  d6_phase_1_carrier_artifacts:
+    overlay_spec_to_be_authored_in_phase_1_implementation: |
+      A new entry in `trading_app.conditional_overlays.CONDITIONAL_OVERLAYS` keyed
+      "d6_garch70_comex_settle_overlay" with role="shadow_only", per the existing
+      `pr48-mgc-shadow-overlay-phase1-implemented` precedent. NOT a deliverable
+      of this pre-reg; it lands in the Phase 1 implementation commit, gated on
+      this pre-reg's harness PASS.
+    daily_state_envelope: derived from existing read_overlay_states() machinery (no schema change)
+    pre_session_check_surface: scripts/pre_session_check.py shows gate state for operator awareness
+    dashboard_surface: trading_app/live/bot_dashboard.py reports current gate state
+    paper_trades_carrier: NOT USED (forbidden per overlay-contract precedent)
+    validated_setups_insert: NOT USED (forbidden)
+    lane_allocation_json_entry: NOT USED (forbidden)
+    execution_engine_size_mutation: NOT USED in Phase 1 (gated to Phase 2)
+  what_phase_1_records: |
+    Per-trade-day:
+      - did garch_forecast_vol_pct > 70 fire today on the COMEX_SETTLE session for MNQ?
+      - did the deployed ORB_G5 lane fire today (orb_COMEX_SETTLE_size >= 5)?
+      - did the lane actually take a fill?
+      - if yes, what was the realized pnl_r and the gate state when the fill happened?
+
+shiryaev_roberts_alarm_operationalization:
+  monitor_file_path: trading_app/sr_monitor.py     # verified live 2026-04-29
+  underlying_core: trading_app/live/sr_monitor.py ShiryaevRobertsMonitor + calibrate_sr_threshold
+  arl_calibration: TARGET_ARL_DAYS = 60     # verified 2026-04-29 at trading_app/sr_monitor.py:40
+  alarm_action: trading_app.lane_ctl.pause_strategy_id     # canonical pause; verified at trading_app/sr_monitor.py:209
+  alarm_target_strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5     # the deployed lane this overlay observes
+  what_the_alarm_means_for_d6: |
+    The deployed MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5 lane is monitored TODAY by
+    sr_monitor.py for distributional drift vs its 50-trade pre-change baseline
+    (Pepelyshev-Polunchenko 2015 / Criterion 12). If the SR statistic exceeds the
+    calibrated threshold (TARGET_ARL=60 trading days) at any point in the 60
+    trading days following pre-reg lock, KILL_SR_ALARM fires. This terminates
+    Phase 1 observation and reverts the cell classification from CONDITIONAL_DEPLOY
+    to KEEP_PARKED_INDEFINITELY per Amendment 3.2 stop conditions.
+  alarm_independence_from_overlay: |
+    The SR monitor is wired to the deployed lane's overall fills, NOT to the
+    overlay's gate-on subset. This is correct: an alarm fired by the overall
+    lane drifting is sufficient evidence to kill the overlay theory, because
+    the overlay's edge is conditional on the lane being statistically intact.
+    A separate per-overlay SR monitor is OUT OF SCOPE for D6 and would be a
+    Phase 2 design item.
+  if_sr_alarm_fires_during_phase_1: |
+    Action sequence (deterministic, locked at write time):
+      1. pause_strategy_id is invoked by sr_monitor.py (existing wiring)
+      2. D6 verdict in decision-ledger updates to GARCH_70_OVERLAY_DEAD_VIA_SR
+      3. Amendment 3.2 path reverts: CONDITIONAL_DEPLOY -> KEEP_PARKED_INDEFINITELY
+      4. Phase 2 (if not yet authored) is permanently barred for this cell
+      5. Reopen requires NEW theory citation that materially changes
+         expected_effect_R per Amendment 3.2 stop conditions.
 
 testing_mode: individual
 pathway: B_individual
