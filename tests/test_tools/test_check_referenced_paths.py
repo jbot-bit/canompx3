@@ -35,6 +35,72 @@ class TestLooksLikePath:
         assert crp._looks_like_path("") is False
 
 
+class TestNormalize:
+    def test_strips_cli_prefix(self) -> None:
+        assert crp._normalize("python pipeline/check_drift.py") == "pipeline/check_drift.py"
+
+    def test_strips_cli_args(self) -> None:
+        assert crp._normalize("research/foo.py --quantile-method is_only") == "research/foo.py"
+
+    def test_strips_qualified_name(self) -> None:
+        assert crp._normalize("pipeline/check_drift.py::check_x") == "pipeline/check_drift.py"
+
+    def test_strips_qualified_name_with_parens(self) -> None:
+        assert crp._normalize("research/foo.py::test_cell()") == "research/foo.py"
+
+    def test_strips_line_number(self) -> None:
+        assert crp._normalize("pipeline/foo.py:510") == "pipeline/foo.py"
+
+    def test_strips_line_range(self) -> None:
+        assert crp._normalize("pipeline/foo.py:1600-1660") == "pipeline/foo.py"
+
+    def test_strips_multi_line_ranges(self) -> None:
+        assert crp._normalize("pipeline/foo.py:586-594, :612-616, :357-381") == "pipeline/foo.py"
+
+    def test_strips_trailing_comma(self) -> None:
+        assert crp._normalize("pipeline/foo.py:586-594,") == "pipeline/foo.py"
+
+    def test_combined_cli_qualified_line(self) -> None:
+        # Order: CLI split, then qualified split, then line strip
+        assert crp._normalize("python pipeline/foo.py::bar:42") == "pipeline/foo.py"
+
+    def test_no_normalization_when_clean(self) -> None:
+        assert crp._normalize("pipeline/foo.py") == "pipeline/foo.py"
+
+
+class TestSkipRules:
+    def test_anti_pattern_skipped(self) -> None:
+        # /tmp/gold.db is cited as anti-pattern, never validated
+        refs = crp._extract_refs("Never use `/tmp/gold.db` as default.")
+        assert refs == []
+
+    def test_anti_pattern_windows_skipped(self) -> None:
+        refs = crp._extract_refs("Avoid `C:\\db\\gold.db` scratch copy.")
+        assert refs == []
+
+    def test_memory_path_skipped(self) -> None:
+        # memory/ files live in user dir, not repo
+        refs = crp._extract_refs("See `memory/feedback_foo.md` for details.")
+        assert refs == []
+
+    def test_stages_relative_path_skipped(self) -> None:
+        # stages/ is relative to docs/runtime/, not project root
+        refs = crp._extract_refs("Auto-creates `stages/auto_trivial.md`.")
+        assert refs == []
+
+    def test_template_with_angle_brackets_skipped(self) -> None:
+        refs = crp._extract_refs("Write `docs/audit/hypotheses/<slug>.md`.")
+        assert refs == []
+
+    def test_template_with_yyyy_skipped(self) -> None:
+        refs = crp._extract_refs("Path: `docs/audit/YYYY-MM-DD-foo.md`.")
+        assert refs == []
+
+    def test_template_with_pipe_skipped(self) -> None:
+        refs = crp._extract_refs("`docs/audit/hypotheses/foo.yaml|.md` template.")
+        assert refs == []
+
+
 class TestExtractRefs:
     def test_extracts_backtick_path(self) -> None:
         refs = crp._extract_refs("See `pipeline/check_drift.py` for details.")
@@ -47,6 +113,11 @@ class TestExtractRefs:
     def test_extracts_multiple(self) -> None:
         refs = crp._extract_refs("`pipeline/dst.py` and `.claude/rules/foo.md`")
         assert len(refs) == 2
+
+    def test_extracts_normalized_form(self) -> None:
+        # Verify normalization is applied during extraction, not just file-existence check
+        refs = crp._extract_refs("Run `python pipeline/check_drift.py --fast`.")
+        assert refs == ["pipeline/check_drift.py"]
 
 
 class TestMainFunction:

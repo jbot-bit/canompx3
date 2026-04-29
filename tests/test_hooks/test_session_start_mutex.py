@@ -65,6 +65,37 @@ class TestSessionLockMutex:
         assert payload["worktree"] == str(tmp_path)
         assert "iso_started" in payload
 
+    def test_stale_pre_phase1_lock_warns_guard_inactive(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A lock for THIS worktree without branch_at_start = pre-Phase-1 stale.
+        The branch-flip-guard would silently exit 0 — surface the warning so
+        the user knows to rm the lock and restart.
+        """
+        _init_git(tmp_path)
+        lock = tmp_path / ".git" / ".claude.pid"
+        # Pre-Phase-1 lock: no branch_at_start field, but THIS worktree.
+        lock.write_text(
+            json.dumps(
+                {
+                    "pid": 12345,
+                    "ppid": 1,
+                    "iso_started": "2026-04-26T00:00:00+00:00",
+                    "worktree": str(tmp_path),
+                }
+            ),
+            encoding="utf-8",
+        )
+        hook = _load_hook(monkeypatch, tmp_path)
+
+        lines, should_block = hook._session_lock_lines()
+
+        # Warning, not block — user can keep working but must restart to enable guard.
+        assert should_block is False
+        joined = "\n".join(lines)
+        assert "branch-flip-guard inactive" in joined
+        assert f"rm '{lock}'" in joined
+        # Stale lock unchanged — must not overwrite.
+        assert "12345" in lock.read_text(encoding="utf-8")
+
     def test_held_lock_blocks_with_diagnostic(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _init_git(tmp_path)
         # Pre-write a lock as if another live session held it.

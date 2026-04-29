@@ -1,7 +1,7 @@
 ---
 paths:
   - "trading_app/live/**"
-  - "trading_app/risk/**"
+  - "trading_app/risk_manager.py"
   - "pipeline/**"
 ---
 
@@ -26,7 +26,7 @@ Without an audit gate, the race would have sat in production until it triggered 
 Dispatch the audit when a commit meets ALL of the following:
 
 - Classification is `[judgment]` (not `[mechanical]` and not ledger-only).
-- The commit touches at least one file in `trading_app/live/`, `trading_app/risk/`, or `pipeline/` (truth-layer).
+- The commit touches at least one file in `trading_app/live/`, `trading_app/risk_manager.py`, or `pipeline/` (truth-layer).
 - The commit's severity tag is CRITICAL or HIGH, OR the commit closes a finding in `docs/ralph-loop/deferred-findings.md`.
 
 Mechanical commits, ledger updates, test-only refactors, and doc-only commits are exempt.

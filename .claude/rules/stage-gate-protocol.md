@@ -14,7 +14,7 @@ paths:
 ## Stage files live in `docs/runtime/stages/<slug>.md`
 
 Each task gets its own file. Multiple terminals can have concurrent stages without collision.
-`docs/runtime/STAGE_STATE.md` is **deprecated** — hooks still read it, but nothing new writes there.
+The legacy `STAGE_STATE.md` file at `docs/runtime/` is **deprecated** — hooks still tolerate the legacy path for backwards-compat, but the file itself is gone and nothing new writes there.
 
 ## On every user message, you receive stage context via hook output:
 - `stage: none` → no active stage

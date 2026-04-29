@@ -44,6 +44,16 @@ Then restart the Claude session. The new session will record the current branch 
 
 Both layers are fail-open: if the lock file is missing, unreadable, or corrupted — or if git commands fail — the guard exits 0 and does not block. The guard can never prevent a session that it can't read.
 
+## Why PostToolUse, not PreToolUse
+
+The Bash hook fires AFTER the command executes (PostToolUse). This is intentional:
+
+- **Self-recovery:** if the user corrects the flip with `git checkout <original-branch>`, the hook re-runs after that command, sees current == branch_at_start, and exits 0. The user can fix the situation.
+- **PreToolUse would self-DOS:** the corrective `git checkout <original>` contains the keyword `checkout`. A PreToolUse hook would block it before it ran (the hook can't reliably parse Bash syntax to extract the target branch and compare to branch_at_start across all forms: `git checkout`, `git checkout -b`, `git switch`, `git -C path checkout`, env-prefixed invocations, etc.). The user would be unable to undo.
+- **Pre-commit hook is the backstop:** even if PostToolUse misses an edge case, step 0c in `.githooks/pre-commit` blocks the commit before it lands.
+
+If a future audit suggests "move to PreToolUse for race protection" — read this section first. The race is theoretical (Claude waits for each tool to complete before the next); the self-DOS is real.
+
 ---
 
 ## Related

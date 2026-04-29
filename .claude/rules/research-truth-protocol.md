@@ -31,7 +31,7 @@ against strict Mode A IS from canonical `orb_outcomes`.**
 
 Background: the project transitioned from Mode B (grandfathered holdout) to
 Mode A (strict 2026-01-01 holdout) via Amendment 2.7 on 2026-04-08
-(`docs/plans/2026-04-07-holdout-policy-decision.md`). `validated_setups`
+(`docs/plans/archive/2026-04/2026-04-07-holdout-policy-decision.md`). `validated_setups`
 rows with `last_trade_day` in the window `[2026-01-01, 2026-04-08]` were
 computed under Mode B — their `expectancy_r` reflects an IS window that
 includes 2026 Q1 data which is now sacred OOS under Mode A.

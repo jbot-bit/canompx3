@@ -431,7 +431,29 @@ def _session_lock_lines() -> tuple[list[str], bool]:
             os.close(fd)
         return [], False  # we own the lock
     except FileExistsError:
-        pass  # conflict — fall through to BLOCK message
+        # Lock exists. Could be: (a) another live session, (b) stale lock from a
+        # crashed session, or (c) THIS session's own lock from a previous start
+        # (e.g. after /clear). Read it and check.
+        try:
+            existing = json.loads(lock_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, ValueError):
+            existing = {}
+        # Guard health check: if the existing lock is for THIS worktree but has
+        # no branch_at_start (pre-Phase-1 lock or corrupted write), the branch-
+        # flip-guard exits 0 silently — silence #2 from the gap audit. Surface
+        # that the guard is inactive and tell the user how to restore it.
+        # Worktree match (not PID) is the right comparator: PID liveness is
+        # unreliable across Windows process trees per the existing comments.
+        if existing.get("worktree") == str(PROJECT_ROOT) and not existing.get("branch_at_start"):
+            return (
+                [
+                    "  WARNING: branch-flip-guard inactive — session lock predates the",
+                    f"    branch_at_start field. Run:  rm '{lock_path}'  then restart",
+                    "    this session to enable mid-session branch-flip detection.",
+                ],
+                False,
+            )
+        pass  # genuine conflict — fall through to BLOCK message
     except OSError as e:
         # Transient FS issue (perms, disk full, etc.). Warn loudly but don't
         # block: a write-side failure here would otherwise lock out every
