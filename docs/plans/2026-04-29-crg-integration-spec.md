@@ -394,6 +394,7 @@ These are committed, not aspirational:
 | 2026-04-29 | F3 `_crg_update()` hoisted above pipeline/trading_app early-exit | Spec declares `pipeline/`, `trading_app/`, `scripts/`, `research/`, `tests/` prefix set; original placement only fired for the first two — rest were dead code |
 | 2026-04-29 | F2 wiring deferred from settings.json | Activation is a separate user-approved step so user observes one session before toggling |
 | 2026-04-29 | Each worktree owns its own `.code-review-graph/graph.db` | `find_repo_root` walks to nearest `.git` (file in linked worktrees still resolves) — staleness contract is per-worktree, not "linked worktrees consume from main" |
+| 2026-04-29 | F1 reads sqlite directly, not via `get_minimal_context`/`list_graph_stats` MCP tools | Subprocess + MCP roundtrip on every session start violates the cosmetic-line latency budget; sqlite read is sub-millisecond and preserves the strict fail-silent guarantee. Trade-off: drops the "risk low" annotation from spec line 244. Acceptable. |
 
 ## Implementation Audit — 2026-04-29
 

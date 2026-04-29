@@ -651,6 +651,8 @@ def _crg_context_lines() -> list[str]:
 
         return [f"  Graph: {node_count} nodes / {file_count} files — {freshness}"]
     except BaseException:  # pragma: no cover - hook fallback path
+        # BaseException (incl. KeyboardInterrupt/SystemExit) intentional —
+        # this is a cosmetic startup line and must NEVER abort session start.
         return []
 
 
