@@ -548,14 +548,22 @@ class TestCrgRepoRootResolution:
         """Without CRG_REPO_ROOT, CRG's find_project_root walks up to .git.
         For tests running inside the worktree, that's the worktree root —
         which has its own (possibly tiny) graph. This test only checks
-        crg_is_available is True since that proves the resolution works."""
+        crg_is_available is True since that proves the resolution works.
+
+        Skipped on CI runners which never run pre-commit and so have no
+        ``.code-review-graph/graph.db`` fragment — the assumption that the
+        worktree always has a graph fragment holds locally but not in CI.
+        """
         import importlib
 
         fresh = importlib.reload(helpers)
         monkeypatch.delenv("CRG_REPO_ROOT", raising=False)
-        # crg_is_available depends on .code-review-graph/graph.db existing at
-        # the resolved root. The worktree always has at least a fragment from
-        # the pre-commit incremental update.
+        # Skip when no graph DB exists at the resolved root — the test's
+        # premise (pre-commit always built a fragment) doesn't hold in CI.
+        from pipeline.check_drift_crg_helpers import _PROJECT_ROOT
+
+        if not (_PROJECT_ROOT / ".code-review-graph" / "graph.db").exists():
+            pytest.skip("no graph DB at worktree root — pre-commit hasn't run (typical on CI)")
         assert fresh.crg_is_available() is True
 
     def test_helper_does_not_hardcode_repo_root_anymore(self):
