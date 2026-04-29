@@ -6895,6 +6895,422 @@ def check_stage_file_landed_drift() -> list[str]:
     return issues
 
 
+# ── CRG-backed drift checks (D1-D5) ──────────────────────────────────────
+# All checks are ADVISORY (is_advisory=True): when CRG is unavailable they
+# print "ADVISORY: CRG unavailable" and return without blocking commits.
+# Authority: docs/plans/2026-04-29-crg-integration-spec.md Phase 2.
+
+
+def check_crg_cross_layer_surprising_connections() -> list[str]:
+    """D1: Catch surprising cross-layer edges between pipeline/ and trading_app/.
+
+    Uses ``code_review_graph.tools.analysis_tools.get_surprising_connections_func``
+    to fetch CRG's full surprise list, then filters to edges where one endpoint
+    is in pipeline/ and the other in trading_app/ AND neither endpoint is a
+    canonical surface (SESSION_CATALOG, COST_SPECS, ACTIVE_ORB_INSTRUMENTS, etc.).
+
+    ADVISORY: emits warnings; never blocks when CRG is unavailable.
+    """
+    from pipeline.check_drift_crg_helpers import (
+        CRG_UNAVAILABLE,
+        crg_is_available,
+        get_surprising_connections,
+    )
+
+    if not crg_is_available():
+        print("  ADVISORY: CRG unavailable — run `code-review-graph build` to enable cross-layer check")
+        return []
+
+    result = get_surprising_connections(top_n=50)
+    if result is CRG_UNAVAILABLE:
+        print("  ADVISORY: CRG query failed — cross-layer check skipped")
+        return []
+
+    # Canonical surfaces — when an edge passes through one of these, it's an
+    # expected cross-layer link, not a Project Truth Protocol violation.
+    canonical_surfaces = (
+        "/pipeline/dst.py",
+        "/pipeline/cost_model.py",
+        "/pipeline/asset_configs.py",
+        "/pipeline/paths.py",
+        "/trading_app/holdout_policy.py",
+        "/trading_app/eligibility/builder.py",
+    )
+
+    def _norm(qn: str) -> str:
+        return str(qn).replace("\\", "/")
+
+    surprises = []
+    for conn in result:
+        # CRG returns flat dicts with source_qualified / target_qualified holding
+        # absolute "file::symbol" paths.  Older formats may use source/target as
+        # nested dicts — we tolerate both for forward compatibility.
+        src_q = _norm(conn.get("source_qualified", ""))
+        tgt_q = _norm(conn.get("target_qualified", ""))
+        if not src_q or not tgt_q:
+            src_field, tgt_field = conn.get("source"), conn.get("target")
+            if isinstance(src_field, dict):
+                src_q = _norm(src_field.get("file_path", src_field.get("path", "")))
+            if isinstance(tgt_field, dict):
+                tgt_q = _norm(tgt_field.get("file_path", tgt_field.get("path", "")))
+
+        # Only flag pipeline <-> trading_app crossings
+        is_cross = ("/pipeline/" in src_q and "/trading_app/" in tgt_q) or (
+            "/trading_app/" in src_q and "/pipeline/" in tgt_q
+        )
+        if not is_cross:
+            continue
+
+        # Skip if either endpoint is a known canonical surface
+        if any(surf in src_q or surf in tgt_q for surf in canonical_surfaces):
+            continue
+
+        score = conn.get("surprise_score", conn.get("score", "?"))
+
+        # Trim absolute project-root prefix for readability. Derived from
+        # PROJECT_ROOT (not a hardcoded directory name) so it works in any
+        # worktree or alternate checkout location.
+        root_prefix = str(PROJECT_ROOT).replace("\\", "/").rstrip("/") + "/"
+
+        def _rel(qn: str, _prefix: str = root_prefix) -> str:
+            return qn[len(_prefix) :] if qn.startswith(_prefix) else qn
+
+        surprises.append(f"  Surprising cross-layer edge: {_rel(src_q)} -> {_rel(tgt_q)} (score={score})")
+
+    if surprises:
+        print(f"  ADVISORY: {len(surprises)} surprising pipeline/trading_app edge(s) found")
+        for s in surprises[:10]:  # cap output
+            print(s)
+    return []  # advisory — never blocks
+
+
+def check_crg_canonical_import_enforcement() -> list[str]:
+    """D2: Research scripts must import canonical functions, not re-implement them.
+
+    AST-based check: walks research/ scripts, finds any that DEFINE a function
+    whose name matches a canonical-source name (parse_strategy_id, orb_utc_window,
+    etc.) AND do not import the canonical version. CRG can't express this purely
+    as a graph query (no IMPORTS_FROM-with-name-collision pattern), so we use
+    Python's ast module directly.  This check has no CRG dependency and runs
+    even when CRG is unavailable.
+
+    ADVISORY: emits warnings; never blocks.
+    """
+    # Functions whose canonical module is verified to actually contain the
+    # definition. Audit trail vs spec original list of 5:
+    #   * ``reprice_e2_entry`` — lives in ``research/databento_microstructure.py``,
+    #     not yet promoted to pipeline.cost_model. Flagging research/ as
+    #     "re-implementing" itself would be a false positive. Excluded.
+    #   * ``_load_strategy_outcomes`` — canonical in
+    #     ``trading_app.strategy_fitness``; consumed by 27 files including 4
+    #     research scripts that all import correctly today. Included for
+    #     forward coverage.
+    canonical: dict[str, str] = {
+        "parse_strategy_id": "trading_app.eligibility.builder",
+        "orb_utc_window": "pipeline.dst",
+        "detect_break_touch": "trading_app.entry_rules",
+        "_load_strategy_outcomes": "trading_app.strategy_fitness",
+    }
+
+    if not RESEARCH_DIR.is_dir():
+        return []
+
+    violations: list[str] = []
+    for py_file in RESEARCH_DIR.rglob("*.py"):
+        # Skip archive — frozen, exempt
+        if "archive" in py_file.parts:
+            continue
+        try:
+            source = py_file.read_text(encoding="utf-8")
+            tree = ast.parse(source)
+        except (OSError, SyntaxError, UnicodeDecodeError):
+            continue
+
+        defined: set[str] = set()
+        imported_from: dict[str, str] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                if node.name in canonical:
+                    defined.add(node.name)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                for alias in node.names:
+                    imported_from[alias.name] = node.module
+
+        for func, canon_module in canonical.items():
+            if func in defined:
+                src_of_import = imported_from.get(func)
+                if src_of_import != canon_module:
+                    rel = py_file.relative_to(PROJECT_ROOT).as_posix()
+                    violations.append(f"  {rel}: locally defines `{func}` (canonical: import from {canon_module})")
+
+    if violations:
+        print(f"  ADVISORY: {len(violations)} canonical-import violation(s) in research/")
+        for v in violations[:20]:
+            print(v)
+    return []  # advisory
+
+
+def check_crg_canonical_functions_have_tests() -> list[str]:
+    """D3: Canonical functions must each have at least one test that imports them.
+
+    AST-based check: walks tests/ tree and records every (module, symbol)
+    imported via ``from <module> import <symbol>`` (or ``import <module>``)
+    AND actually called somewhere in the file.  A canonical function is
+    flagged if NO test file imports-and-calls it.
+
+    Replaces an earlier graph-based version that called
+    ``query_graph(pattern="tests_for")`` directly. CRG v2.1.0's ``tests_for``
+    pattern is incomplete: it returns 0 results for functions that ARE tested
+    (verified 2026-04-29: ``reprice_e2_entry``, ``parse_strategy_id``,
+    ``detect_break_touch`` all have unit tests but graph reports 0 edges).
+    AST scan is the correctness-first alternative.
+
+    SCOPE — callables only.
+    The Phase 2 spec originally listed canonical CONSTANTS too
+    (SESSION_CATALOG, COST_SPECS, ACTIVE_ORB_INSTRUMENTS, HOLDOUT_SACRED_FROM).
+    AST cannot detect ``Call`` nodes against constants — they are referenced,
+    not called — so this check covers callables only. Constant test-coverage
+    is a separate, currently-unbuilt drift-check class; tracked as
+    follow-up in spec §"Open follow-ups". D1 (surprising connections)
+    intentionally SKIPS canonical surfaces, so it does not cover constants
+    either; do not assume D1 fills the gap.
+
+    ADVISORY: emits warnings; never blocks. No CRG dependency — runs even
+    when CRG is uninstalled.
+    """
+    # symbol → canonical module (only entries whose canonical module is
+    # verified to contain the definition — see D2 docstring for the
+    # reprice_e2_entry exclusion rationale).
+    canonical_callable: dict[str, str] = {
+        "orb_utc_window": "pipeline.dst",
+        "parse_strategy_id": "trading_app.eligibility.builder",
+        "detect_break_touch": "trading_app.entry_rules",
+    }
+
+    tests_dir = PROJECT_ROOT / "tests"
+    if not tests_dir.is_dir():
+        return []
+
+    # Map canonical symbol -> set of test files that import-and-call it
+    coverage: dict[str, set[str]] = {sym: set() for sym in canonical_callable}
+
+    for py_file in tests_dir.rglob("test_*.py"):
+        try:
+            source = py_file.read_text(encoding="utf-8")
+            tree = ast.parse(source)
+        except (OSError, SyntaxError, UnicodeDecodeError):
+            continue
+
+        # Track which canonical symbols this test imports from canonical modules
+        imported_canonical: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                for alias in node.names:
+                    name = alias.name
+                    if name in canonical_callable and node.module == canonical_callable[name]:
+                        imported_canonical.add(name)
+
+        if not imported_canonical:
+            continue
+
+        # Verify at least one Call node references the imported symbol.  This
+        # filters out import-only files (e.g., re-exports) that don't actually
+        # exercise the function.
+        called: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                if isinstance(func, ast.Name) and func.id in imported_canonical:
+                    called.add(func.id)
+
+        rel = py_file.relative_to(PROJECT_ROOT).as_posix()
+        for sym in called:
+            coverage[sym].add(rel)
+
+    untested: list[str] = []
+    for sym, canon_module in canonical_callable.items():
+        if not coverage[sym]:
+            untested.append(f"  No test imports-and-calls `{canon_module}.{sym}`")
+
+    if untested:
+        print(f"  ADVISORY: {len(untested)} canonical function(s) lack import-and-call test coverage")
+        for u in untested:
+            print(u)
+    return []  # advisory
+
+
+def check_crg_canonical_path_function_size() -> list[str]:
+    """D4: Canonical-path functions must not exceed 200 lines (monster-function cap).
+
+    Fetches all functions exceeding 200 lines (no path filter — CRG's
+    ``file_path_pattern`` is a substring match against the stored path, which
+    is brittle on Windows where paths use backslashes), then filters
+    client-side via ``Path.parts`` to ``pipeline/`` and ``trading_app/`` only.
+
+    ADVISORY: emits warnings; never blocks when CRG is unavailable.
+    """
+    from pipeline.check_drift_crg_helpers import (
+        CRG_UNAVAILABLE,
+        crg_is_available,
+        find_large_functions,
+    )
+
+    if not crg_is_available():
+        print("  ADVISORY: CRG unavailable — function-size cap check skipped")
+        return []
+
+    result = find_large_functions(min_lines=200, limit=200)
+    if result is CRG_UNAVAILABLE:
+        print("  ADVISORY: CRG query failed — function-size cap check skipped")
+        return []
+
+    canonical_prefixes = ("pipeline", "trading_app")
+    flagged: list[dict] = []
+    for fn in result:
+        rel_path = fn.get("relative_path", "")
+        # Normalize to forward-slash for cross-platform Path.parts behaviour
+        norm = rel_path.replace("\\", "/")
+        first_part = norm.split("/", 1)[0] if norm else ""
+        if first_part in canonical_prefixes:
+            flagged.append(fn)
+
+    if flagged:
+        print(f"  ADVISORY: {len(flagged)} function(s) exceed 200 lines in canonical paths")
+        for fn in flagged[:10]:
+            name = fn.get("name", fn.get("qualified_name", "?"))
+            fpath = fn.get("relative_path", "?")
+            lines = fn.get("line_count", "?")
+            print(f"    {fpath}:{name} ({lines} lines)")
+    return []  # advisory
+
+
+def check_crg_bridge_node_test_coverage() -> list[str]:
+    """D5: Top-10 production-code bridge nodes must each have a TESTED_BY edge.
+
+    Bridge nodes are architectural chokepoints — if they break, the whole
+    pipeline breaks. Fetches a wider sample (top_n=50) and filters to
+    ``pipeline/`` and ``trading_app/`` files only (test files dominate raw
+    betweenness rankings, but their lack of TESTED_BY edges is by design,
+    not a finding).
+
+    ADVISORY: emits warnings; never blocks when CRG is unavailable.
+    """
+    from pipeline.check_drift_crg_helpers import (
+        CRG_UNAVAILABLE,
+        crg_is_available,
+        get_bridge_nodes,
+        query_tests_for,
+    )
+
+    if not crg_is_available():
+        print("  ADVISORY: CRG unavailable — bridge-node coverage check skipped")
+        return []
+
+    raw_bridges = get_bridge_nodes(top_n=50)
+    if raw_bridges is CRG_UNAVAILABLE:
+        print("  ADVISORY: CRG query failed — bridge-node coverage check skipped")
+        return []
+
+    # Filter to production-code bridges only.  ``file`` is absolute path on the
+    # indexing host; we test for "pipeline/" / "trading_app/" substring after
+    # forward-slash normalization, which works on both Windows and POSIX.
+    canonical_markers = ("/pipeline/", "/trading_app/")
+    canonical_bridges: list[dict] = []
+    for node in raw_bridges:
+        fpath = str(node.get("file", "")).replace("\\", "/")
+        if any(marker in fpath for marker in canonical_markers):
+            canonical_bridges.append(node)
+        if len(canonical_bridges) >= 10:
+            break
+
+    untested: list[str] = []
+    crg_errored: list[str] = []
+    for node in canonical_bridges:
+        node_name = node.get("qualified_name", node.get("name", ""))
+        if not node_name:
+            continue
+        result = query_tests_for(node_name)
+        if result is CRG_UNAVAILABLE:
+            continue
+        # Tagged status (post-audit 2026-04-29): distinguish "CRG returned
+        # cleanly but found no tests" from "CRG response was malformed /
+        # not_found / ambiguous". The first is a real D5 finding; the second
+        # is a CRG-graph completeness issue and is reported separately so
+        # readers don't conflate the two false-positive classes.
+        if not isinstance(result, dict):
+            continue
+        status = result.get("status")
+        fpath = str(node.get("file", "")).replace("\\", "/")
+        root_prefix = str(PROJECT_ROOT).replace("\\", "/").rstrip("/") + "/"
+        if fpath.startswith(root_prefix):
+            fpath = fpath[len(root_prefix) :]
+        betweenness = node.get("betweenness", "?")
+        sym_only = node_name.split("::", 1)[-1]
+        if status == "error":
+            crg_errored.append(
+                f"  CRG-uncertain: {sym_only} (betweenness={betweenness}, file={fpath}, raw={result.get('raw_status')!r})"
+            )
+        elif status == "empty":
+            untested.append(f"  No TESTED_BY edge: {sym_only} (betweenness={betweenness}, file={fpath})")
+
+    if untested:
+        print(f"  ADVISORY: {len(untested)} bridge node(s) in top-10 lack TESTED_BY edges")
+        for u in untested:
+            print(u)
+    if crg_errored:
+        print(
+            f"  ADVISORY: {len(crg_errored)} bridge node(s) had non-ok CRG response (graph-completeness issue, not a missing-test finding)"
+        )
+        for u in crg_errored:
+            print(u)
+    return []  # advisory
+
+
+def check_referenced_paths_in_rules() -> list[str]:
+    """Validate backtick-quoted path references in CLAUDE.md and .claude/rules/*.md.
+
+    Delegates to scripts.tools.check_referenced_paths.main() — the canonical
+    implementation. Treats the tool's stdout (one broken ref per line) as
+    advisory diagnostics.
+
+    ADVISORY: emits warnings but never blocks. Refs may transiently break
+    during refactors or worktree-specific work; blocking would create
+    cross-worktree friction.
+
+    Why this check exists: 2026-04-29 audit found 3 real broken refs in
+    canonical guardrail rules (integrity-guardian, research-truth-protocol,
+    adversarial-audit-gate) — pointers to renamed/archived files that
+    silently invalidate the rule's authority. Drift check surfaces these.
+    """
+    try:
+        import contextlib
+        import io
+
+        from scripts.tools import check_referenced_paths
+    except ImportError:
+        print("  ADVISORY: check_referenced_paths unavailable — referenced-paths check skipped")
+        return []
+
+    # Capture the tool's stdout (one broken ref per line in non-verbose mode).
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            check_referenced_paths.main(verbose=False)
+    except Exception as e:  # pragma: no cover — defensive
+        print(f"  ADVISORY: referenced-paths check raised {type(e).__name__}: {e}")
+        return []
+
+    broken = [line.strip() for line in buf.getvalue().splitlines() if line.strip()]
+    if not broken:
+        return []
+
+    print(f"  ADVISORY: {len(broken)} broken reference(s) in rule docs:")
+    for ref in broken:
+        print(f"    - {ref}")
+    print("    Run: python scripts/tools/check_referenced_paths.py --verbose")
+    return []  # advisory — surface but do not block
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -7358,6 +7774,43 @@ CHECKS = [
         True,  # advisory — surfaces new contamination without blocking commits
         False,
     ),
+    # ── CRG-backed checks (D1-D5) — all ADVISORY; fail-open when CRG unavailable ──
+    (
+        "CRG D1: Surprising cross-layer connections between pipeline/ and trading_app/ (bypassing canonical surfaces)",
+        check_crg_cross_layer_surprising_connections,
+        True,  # advisory — CRG may be unavailable; never blocks commits
+        False,
+    ),
+    (
+        "CRG D2: Canonical-import enforcement — research scripts must not re-implement canonical functions",
+        check_crg_canonical_import_enforcement,
+        True,
+        False,
+    ),
+    (
+        "CRG D3: Canonical functions must have at least one import-and-call test (AST-based; CRG tests_for graph proven incomplete)",
+        check_crg_canonical_functions_have_tests,
+        True,
+        False,
+    ),
+    (
+        "CRG D4: Canonical-path function size cap (>200 lines = monster-function class)",
+        check_crg_canonical_path_function_size,
+        True,
+        False,
+    ),
+    (
+        "CRG D5: Top-10 bridge nodes (betweenness-centrality chokepoints) must have TESTED_BY edges",
+        check_crg_bridge_node_test_coverage,
+        True,
+        False,
+    ),
+    (
+        "Referenced paths in CLAUDE.md / .claude/rules/ must exist (canonical-rule pointer integrity)",
+        check_referenced_paths_in_rules,
+        True,  # advisory — refs may transiently break during refactors
+        False,
+    ),
 ]  # end CHECKS
 
 
@@ -7386,6 +7839,12 @@ SLOW_CHECK_LABELS = frozenset(
         "No old fixed-clock session names in Python source",
         "Trading app schema-query consistency",
         "No CRLF in tracked text blobs (defense-in-depth for pre-commit [0b] auto-renormalize)",
+        # CRG D1/D2/D5 traverse the graph DB (~14k nodes, 150k edges) and exceed
+        # 0.3s — measured 2026-04-29: D1=0.98s, D2=1.03s, D5=9.76s. Pre-commit
+        # and CI run the full set; only the post-edit hook's --fast path skips.
+        "CRG D1: Surprising cross-layer connections between pipeline/ and trading_app/ (bypassing canonical surfaces)",
+        "CRG D2: Canonical-import enforcement — research scripts must not re-implement canonical functions",
+        "CRG D5: Top-10 bridge nodes (betweenness-centrality chokepoints) must have TESTED_BY edges",
     }
 )
 
