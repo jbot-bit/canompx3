@@ -611,7 +611,21 @@ def _crg_context_lines() -> list[str]:
         import sqlite3
         from datetime import datetime as _dt
 
-        db_path = PROJECT_ROOT / ".code-review-graph" / "graph.db"
+        # Resolve canonical CRG root: if this is a sibling worktree
+        # (`canompx3-<descriptor>`) and the canonical `canompx3/` exists with
+        # a `.code-review-graph/` dir, use the canonical sibling so all
+        # worktrees report ONE shared graph rather than per-worktree
+        # fragments. Mirrors `.githooks/pre-commit` step 3b sibling-detection
+        # and `_crg_canonical_root()` in `.claude/hooks/post-edit-pipeline.py`.
+        # Source-of-truth: `.githooks/pre-commit` lines 222–225. If that
+        # logic changes, update both hook sites.
+        crg_root = PROJECT_ROOT
+        if PROJECT_ROOT.name.startswith("canompx3-"):
+            sibling = PROJECT_ROOT.parent / "canompx3"
+            if (sibling / ".code-review-graph").exists():
+                crg_root = sibling
+
+        db_path = crg_root / ".code-review-graph" / "graph.db"
         if not db_path.exists():
             return ["  Graph: missing — run `code-review-graph build`"]
 

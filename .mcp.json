@@ -14,7 +14,11 @@
         "code-review-graph",
         "serve"
       ],
-      "type": "stdio"
+      "type": "stdio",
+      "env": {
+        "CRG_REPO_ROOT": "C:/Users/joshd/canompx3",
+        "CRG_DATA_DIR": "C:/Users/joshd/canompx3/.code-review-graph"
+      }
     }
   }
 }

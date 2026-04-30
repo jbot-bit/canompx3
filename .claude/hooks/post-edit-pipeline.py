@@ -92,23 +92,50 @@ def normalize_path(p):
     return fwd
 
 
+def _crg_canonical_root() -> Path:
+    """Resolve the canonical CRG repo root for this worktree.
+
+    Mirrors `.githooks/pre-commit` lines 222–225 (sibling-detection):
+    if this worktree is `<parent>/canompx3-<descriptor>` and the canonical
+    sibling `<parent>/canompx3` exists with a `.code-review-graph/` dir,
+    return the sibling so all worktrees share ONE full graph rather than
+    fragmenting into per-worktree partials. Otherwise return _PROJECT_ROOT
+    (this worktree).
+
+    Source-of-truth: `.githooks/pre-commit` step 3b. If that logic changes,
+    update both sites.
+    """
+    name = _PROJECT_ROOT.name
+    if name.startswith("canompx3-"):
+        sibling = _PROJECT_ROOT.parent / "canompx3"
+        if (sibling / ".code-review-graph").exists():
+            return sibling
+    return _PROJECT_ROOT
+
+
 def _crg_update(file_path: str) -> None:
     """Run code-review-graph update after edits to canonical paths.
 
     Timeout 5s; fail-silent. Per spec F3: PostToolUse auto-update.
     Covers pipeline/, trading_app/, scripts/, research/, tests/.
+
+    Pins CRG_REPO_ROOT to the canonical sibling so worktree edits refresh
+    the single shared 1052-file graph instead of a 4-file fragment.
     """
     norm = normalize_path(file_path)
     _CRG_PREFIXES = ("pipeline/", "trading_app/", "scripts/", "research/", "tests/")
     if not any(norm.startswith(pfx) for pfx in _CRG_PREFIXES):
         return
+    canonical_root = _crg_canonical_root()
+    env = {**os.environ, "CRG_REPO_ROOT": str(canonical_root)}
     try:
         subprocess.run(
-            ["code-review-graph", "update", "--base", "HEAD~1"],
-            cwd=str(_PROJECT_ROOT),
+            ["code-review-graph", "update", "--skip-flows"],
+            cwd=str(canonical_root),
             capture_output=True,
             timeout=5,
             check=False,
+            env=env,
         )
     except (subprocess.SubprocessError, FileNotFoundError, OSError):
         pass  # fail-silent per spec
