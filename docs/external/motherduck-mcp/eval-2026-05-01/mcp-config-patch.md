@@ -22,13 +22,11 @@ Add this block under the top-level `mcpServers` key in `.mcp.json`:
       "args": [
         "--constraints", "C:/Users/joshd/canompx3/constraints.txt",
         "mcp-server-motherduck",
-        "--db-path", "C:/Users/joshd/canompx3/gold.db.eval",
-        "--read-only"
+        "--db-path", "C:/Users/joshd/canompx3/gold.db.eval"
       ],
       "env": {
         "HOME": "C:/Users/joshd",
-        "MOTHERDUCK_TOKEN": "",
-        "DUCKDB_READ_ONLY": "1"
+        "MOTHERDUCK_TOKEN": ""
       }
     }
   }
@@ -46,12 +44,15 @@ Add this block under the top-level `mcpServers` key in `.mcp.json`:
 - **`--db-path C:/Users/joshd/canompx3/gold.db.eval`**: SNAPSHOT path, never the live
   `gold.db`. Per `pipeline.paths.GOLD_DB_PATH` discipline + drift check #62, the live
   DB stays untouched.
-- **`--read-only`**: server-level enforcement of read-only. DuckDB will reject any
-  `INSERT` / `UPDATE` / `CREATE` / `DROP` at the connection layer.
+- **No `--read-only` flag**: read-only is the DEFAULT in upstream
+  `mcp-server-motherduck`. The inverse flag `--read-write` defaults to `False`. We
+  deliberately do NOT pass `--read-write`. Verify by `uvx mcp-server-motherduck --help`.
 - **`MOTHERDUCK_TOKEN=""`**: explicitly empty — we are NOT using the cloud product. The
-  server falls back to local-file mode when the token is empty.
-- **`DUCKDB_READ_ONLY=1`**: belt-and-braces; some versions of the server honour this
-  env var as a secondary read-only check.
+  server falls back to local-file mode when the token is empty. Documented upstream env
+  vars are `MOTHERDUCK_TOKEN`, `HOME`, and the AWS credential set; nothing else is
+  guaranteed honored. (`DUCKDB_READ_ONLY` was previously listed here as
+  belt-and-braces; it is NOT a documented upstream env var and has been removed to
+  avoid implying enforcement that does not exist.)
 
 ---
 
@@ -76,6 +77,10 @@ Add this block under the top-level `mcpServers` key in `.mcp.json`:
    `claude mcp remove motherduck-eval -s local` first.
 4. Restart Claude Code (`.mcp.json` env edits don't hot-reload — see
    `feedback_mcp_env_requires_restart.md`).
-5. Rebuild snapshot from latest `gold.db` if more than 7 days old at activation time.
+5. Rebuild snapshot from latest `gold.db` if more than 7 days old at activation time:
+   ```powershell
+   Copy-Item C:/Users/joshd/canompx3/gold.db C:/Users/joshd/canompx3/gold.db.eval -Force
+   ```
+   (POSIX equivalent: `cp C:/Users/joshd/canompx3/gold.db C:/Users/joshd/canompx3/gold.db.eval`.)
 6. Smoke test: ask the server to run `SELECT COUNT(*) FROM bars_1m`. Expect
    `20,513,435` (snapshot row count as of 2026-05-01) or higher if re-snapshotted.

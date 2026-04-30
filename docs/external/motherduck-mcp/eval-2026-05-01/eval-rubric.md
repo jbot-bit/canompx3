@@ -9,49 +9,103 @@ execute ad-hoc SQL inline, reducing both.
 **Snapshot under test:** `C:/Users/joshd/canompx3/gold.db.eval` (read-only copy of
 `gold.db` taken 2026-05-01, `bars_1m` row count = 20,513,435 verified).
 
-**Verdict thresholds (see `discipline-checklist.md`):** GO requires ≥30% token reduction
-on ≥3 of 5 questions, no correctness regressions, and all four discipline checks pass.
+**Verdict thresholds (see `discipline-checklist.md`):** GO requires >=30% token reduction
+on >=3 of 5 questions, no correctness regressions, and all four discipline checks pass.
 
 ---
 
-## Q1 (2026-04-27 finding) — Stage-1 substrate-weak diagnostic
+## Preflight schema check (run BEFORE any rubric SQL)
+
+The rubric below cites only columns verified to exist in the snapshot as of
+2026-05-01. To guard against schema drift between snapshot rebuilds, run this
+fail-closed probe before executing any of Q1-Q5:
+
+```python
+import duckdb
+con = duckdb.connect("C:/Users/joshd/canompx3/gold.db.eval", read_only=True)
+# orb_outcomes identifies trades by (symbol, orb_label, orb_minutes, rr_target,
+# confirm_bars, entry_model, filter_type) -- it does NOT carry a strategy_id column.
+# Canonical strategy_id is reconstructed via trading_app.eligibility.builder.parse_strategy_id.
+required = {
+    "validated_setups": ["strategy_id", "instrument", "c8_oos_status",
+                          "deployment_scope", "oos_exp_r", "expectancy_r",
+                          "sample_size", "validation_pathway"],
+    "deployable_validated_setups": ["strategy_id", "instrument", "c8_oos_status",
+                                     "deployment_scope", "oos_exp_r"],
+    "experimental_strategies": ["strategy_id", "validation_status",
+                                 "validation_pathway", "created_at",
+                                 "rr_target", "instrument"],
+    "paper_trades": ["strategy_id", "instrument", "trading_day",
+                     "entry_time", "pnl_r"],
+    "orb_outcomes": ["symbol", "orb_label", "orb_minutes", "rr_target",
+                     "confirm_bars", "entry_model", "trading_day",
+                     "entry_ts", "pnl_r"],
+}
+
+for tbl, cols in required.items():
+    actual = {r[0] for r in con.execute(f"DESCRIBE {tbl}").fetchall()}
+    missing = [c for c in cols if c not in actual]
+    if missing:
+        raise SystemExit(f"{tbl} missing: {missing}")
+print("Schema OK")
+```
+
+Expected output: `Schema OK`. Any `SystemExit` -> abort the eval and refresh the
+snapshot before retrying.
+
+---
+
+## Q1 (2026-04-27 finding) — Stage-1 substrate diagnostic context for deployed lanes
 
 **Question (as asked):**
-> "Of the 6 deployed lanes, which had Stage-1 substrate-weak pass results vs fail in the
-> sizing-substrate K=48 diagnostic? Show lane name, feature_set tier (a/b), and pass/fail
-> status."
+> "Of the 6 deployed lanes, what canonical-DB info do we have on each — lane name,
+> `c8_oos_status`, `deployment_scope`, and `oos_exp_r` — alongside the Stage-1
+> substrate-weak K=48 verdict from `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md`?"
 
-**Current path:** raw Python — no curated template covers Stage-1 substrate diagnostics.
-Operator opens `gold.db` via `pipeline.paths.GOLD_DB_PATH`, reads
-`docs/audit/results/2026-04-27-*.md` to recall column names, then runs an ad-hoc query
-joining `validated_setups` (or the diagnostic results table — operator must scan schema)
-against the lane allocator JSON. Typical 4–6 turn loop.
+**Reframing note:** the original question presumed Stage-1 substrate K=48 verdicts lived
+in `validated_setups`. They do NOT. Substrate-weak / substrate-pass status is
+research-doc output, not a canonical column (verified by `DESCRIBE validated_setups`
+2026-05-01 — no `feature_set_tier`, `substrate_stage1_status`, `substrate_k`,
+`substrate_p_value`, `diagnostic_run` columns exist). The canonical-DB question we CAN
+answer is the surrounding context: deployment scope and OOS expectancy of those 6
+lanes. The substrate verdict itself stays in the result doc.
+
+**Current path:** raw Python — operator opens `gold.db` via `pipeline.paths.GOLD_DB_PATH`,
+reads `docs/audit/results/2026-04-27-sizing-substrate-diagnostic.md` for the substrate
+verdicts, then runs an ad-hoc query joining `validated_setups` against the 6 deployed
+strategy_ids from `docs/runtime/lane_allocation.json`. No curated MCP template covers
+"deployment_scope + oos_exp_r joined to a hardcoded id list." Typical 4-6 turn loop.
 
 **MotherDuck MCP path (SQL):**
 ```sql
--- Resolve deployed lane strategy_ids from lane_allocation.json (passed inline by Claude).
+-- 6 deployed strategy_ids sourced from C:/Users/joshd/canompx3/docs/runtime/lane_allocation.json
+-- (rebalance_date 2026-04-18, profile topstep_50k_mnq_auto, status='DEPLOY' lanes only).
 WITH deployed AS (
   SELECT unnest([
-    /* 6 strategy_ids from trading_app/lane_allocation.json */
-    'MNQ_NYSE_OPEN_15_E2_C1_F_OVNRNG_50_FAST10_RR2',
-    'MNQ_NYSE_OPEN_15_E2_C1_F_BULLDAY_RR2',
-    'MNQ_LONDON_15_E2_C1_F_NONE_RR2',
-    'MNQ_ASIA_15_E2_C1_F_NONE_RR2',
-    'MNQ_SYDNEY_15_E2_C1_F_NONE_RR2',
-    'MNQ_CME_REOPEN_15_E2_C1_F_NONE_RR2'
+    'MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5',
+    'MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15',
+    'MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5',
+    'MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12',
+    'MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12',
+    'MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15'
   ]) AS strategy_id
 )
 SELECT
   d.strategy_id,
-  vs.feature_set_tier,         -- 'a' or 'b'
-  vs.substrate_stage1_status,  -- 'PASS' / 'FAIL' / 'WEAK'
-  vs.substrate_k,
-  vs.substrate_p_value
+  vs.deployment_scope,
+  vs.c8_oos_status,
+  vs.oos_exp_r,
+  vs.expectancy_r,
+  vs.sample_size,
+  vs.validation_pathway
 FROM deployed d
 LEFT JOIN validated_setups vs USING (strategy_id)
-WHERE vs.diagnostic_run = 'sizing_substrate_k48_2026_04_27'
-ORDER BY vs.substrate_stage1_status, d.strategy_id;
+ORDER BY d.strategy_id;
 ```
+
+The Stage-1 substrate K=48 verdict (PASS / WEAK / FAIL) is then cross-referenced from
+the result doc, not the DB. This is exactly the cross-cut where a curated template
+doesn't exist and raw SQL helps.
 
 **Eval metrics:**
 - `tokens_current`: TBD
@@ -68,98 +122,143 @@ ORDER BY vs.substrate_stage1_status, d.strategy_id;
 > "What's the per-instrument paired-t result for PR #48 sizer rule on MES, MGC, MNQ?
 > Show delta_R_per_trade, t_stat, p_value, and verdict (SIZER_ALIVE / SIZER_WEAK / DEAD)."
 
-**Current path:** raw Python. No curated template. Operator typically opens
-`docs/audit/results/2026-04-21-pr48-*.md`, finds the result table, transcribes the
-numbers. Or re-runs the analysis script `research/sizer_paired_t.py` if the doc is
-stale. 3–4 turn loop, longer if re-running.
+**Reframing note:** the actual paired-t output is NOT in `paper_trades`. PR #48 was a
+sizer A/B comparison computed offline; the result table lives in
+`docs/audit/results/2026-04-21-pr48-sizer-rule-skeptical-reaudit-v1.md`. `paper_trades`
+schema (verified 2026-05-01) has 22 columns: `trading_day, orb_label, entry_time,
+direction, entry_price, stop_price, target_price, exit_price, exit_time, exit_reason,
+pnl_r, slippage_ticks, strategy_id, lane_name, instrument, orb_minutes, rr_target,
+filter_type, entry_model, execution_source, pnl_dollar, notes`. There is no
+`pnl_r_pr48_sized` column and no `trade_id` column. The paired-t cannot be computed
+inline against `paper_trades`.
 
-**MotherDuck MCP path (SQL):**
+The closest canonical-data analog the MCP path can deliver is a per-instrument
+descriptive R distribution over the relevant window. The actual paired-t comes from the
+result doc; this MCP query is the closest canonical-data analog, not a re-derivation.
+
+**Current path:** read `docs/audit/results/2026-04-21-pr48-sizer-rule-skeptical-reaudit-v1.md`
+for the paired-t table; transcribe numbers. Or re-run
+`research/sizer_paired_t.py` if the doc is stale. 3-4 turn loop, longer if re-running.
+
+**MotherDuck MCP path (SQL — descriptive analog only):**
 ```sql
--- Paired-t per instrument: baseline R vs PR#48-sized R per trade, joined by trade_id.
-WITH paired AS (
-  SELECT
-    pt.instrument,
-    pt.trade_id,
-    pt.pnl_r            AS r_baseline,
-    pt.pnl_r_pr48_sized AS r_sized,
-    pt.pnl_r_pr48_sized - pt.pnl_r AS delta_r
-  FROM paper_trades pt
-  WHERE pt.entry_ts >= '2020-01-01'  -- pre-holdout sample for PR #48 lock
-    AND pt.entry_ts <  '2026-01-01'
-    AND pt.pnl_r_pr48_sized IS NOT NULL
-)
+-- Per-instrument R distribution on canonical paper_trades. paper_trades is
+-- signal-only deployment output: in the 2026-05-01 snapshot it covers MNQ 2026
+-- forward-only, so this is a sanity check of available distributional data, not
+-- a back-fill of PR #48's pre-holdout sample. The paired-t lives in the result
+-- doc above.
 SELECT
   instrument,
-  COUNT(*)                          AS n_trades,
-  AVG(delta_r)                      AS delta_r_per_trade,
-  AVG(delta_r) / (STDDEV(delta_r) / SQRT(COUNT(*))) AS t_stat,
-  -- p_value computed in client; SQL exposes degrees of freedom
-  COUNT(*) - 1                      AS df,
-  CASE
-    WHEN AVG(delta_r) > 0 AND ABS(AVG(delta_r) / (STDDEV(delta_r)/SQRT(COUNT(*)))) > 2.0 THEN 'SIZER_ALIVE'
-    WHEN AVG(delta_r) > 0 THEN 'SIZER_WEAK'
-    ELSE 'DEAD'
-  END AS verdict
-FROM paired
+  COUNT(*)               AS n_trades,
+  AVG(pnl_r)             AS mean_r,
+  STDDEV(pnl_r)          AS std_r,
+  MEDIAN(pnl_r)          AS median_r,
+  COUNT(*) FILTER (WHERE pnl_r > 0)::DOUBLE / COUNT(*) AS win_rate
+FROM paper_trades
+WHERE pnl_r IS NOT NULL
 GROUP BY instrument
 ORDER BY instrument;
 ```
 
 **Eval metrics:** `tokens_current` / `tokens_motherduck` / `time_current_s` /
-`time_motherduck_s` / `correctness` (PASS/FAIL/PARTIAL) — TBD.
+`time_motherduck_s` / `correctness` (PASS/FAIL/PARTIAL) — TBD. Correctness scoring
+should account for the fact that the MCP path returns descriptive stats, not the
+paired-t verdict; PARTIAL is the expected best case if the MCP path is treated as a
+data-fetch step prior to a separate paired-t computation.
 
 ---
 
-## Q3 (2026-04-21 finding) — MES+MGC filter-overlay family scan cell breakdown
+## Q3 (2026-04-21 finding) — experimental_strategies validation breakdown
 
 **Question (as asked):**
-> "How many cells of the MES+MGC filter-overlay family scan (PR-something post-#53) hit
-> CANDIDATE_READY vs RESEARCH_SURVIVOR vs KILL_IS, broken down by RR target?"
+> "Of the experimental strategies created in the 2026-04-21..2026-04-24 filter-overlay
+> scan window, how many are at each `validation_status` (PASSED / REJECTED / SKIPPED)?"
 
-**Current path:** raw Python. Operator reads the scan output parquet/CSV under
-`research/scratch/` or queries `experimental_strategies` if landed. ~5 turns including
+**Reframing note:** the original question referenced a `scan_run` column in
+`experimental_strategies`. That column does NOT exist (verified 2026-05-01:
+`experimental_strategies` has 54 columns; canonical run identifier is `created_at` and
+`validation_pathway`). The canonical filter for "the 2026-04-21+ filter-overlay scan
+window" is `created_at` (the snapshot's max `created_at` is 2026-04-24, so the window
+captures the bulk of post-PR #53 experimental rows).
+
+**Current path:** raw Python — operator reads scan-output parquet/CSV under
+`research/scratch/` or queries `experimental_strategies` and has to discover that
+`scan_run` does not exist before falling back to `created_at`. ~5 turns including
 schema discovery.
 
 **MotherDuck MCP path (SQL):**
 ```sql
 SELECT
-  regexp_extract(strategy_id, '_RR([0-9]+)$', 1)::INT AS rr_target,
-  fitness_status,
+  validation_status,
+  validation_pathway,
   COUNT(*) AS n_cells
 FROM experimental_strategies
-WHERE scan_run = 'mes_mgc_filter_overlay_post_pr53_2026_04_21'
-  AND instrument IN ('MES', 'MGC')
-  AND fitness_status IN ('CANDIDATE_READY', 'RESEARCH_SURVIVOR', 'KILL_IS')
-GROUP BY rr_target, fitness_status
-ORDER BY rr_target, fitness_status;
+WHERE created_at >= TIMESTAMP '2026-04-21'
+  AND created_at <  TIMESTAMP '2026-04-25'
+GROUP BY validation_status, validation_pathway
+ORDER BY n_cells DESC;
 ```
 
-**Eval metrics:** TBD (see Q1 schema).
+Optional RR breakdown (uses canonical `rr_target` column):
+```sql
+SELECT
+  rr_target,
+  validation_status,
+  COUNT(*) AS n_cells
+FROM experimental_strategies
+WHERE created_at >= TIMESTAMP '2026-04-21'
+  AND created_at <  TIMESTAMP '2026-04-25'
+  AND instrument IN ('MES', 'MGC')
+GROUP BY rr_target, validation_status
+ORDER BY rr_target, validation_status;
+```
+
+**Eval metrics:** TBD.
 
 ---
 
-## Q4 (2026-04-20 finding) — Deployed MNQ lanes 2026 OOS dir_match + power
+## Q4 (2026-04-20 finding) — Deployed MNQ lanes canonical OOS context
 
 **Question (as asked):**
-> "List the 6 currently-deployed MNQ lanes with their 2026 OOS dir_match status and OOS
-> power. Sort by power ascending."
+> "List the 6 currently-deployed MNQ lanes with their canonical OOS status
+> (`c8_oos_status`) and OOS expectancy (`oos_exp_r`)."
 
-**Current path:** curated template `get_strategy_fitness` partially covers this, BUT the
-template returns FIT/WATCH/DECAY/STALE per strategy — it does NOT expose
-`dir_match_status` and `oos_power` columns directly. So operator falls back to raw Python
-to read `validated_setups` or `deployable_validated_setups`, ~3 turns.
+**Reframing note:** the original question asked for `dir_match_status_2026`,
+`oos_power_2026`, `oos_n_trades_2026`, and a `deployed=TRUE` flag. None of those
+columns exist in `deployable_validated_setups` (verified 2026-05-01). The canonical OOS
+fields that DO exist are `c8_oos_status` and `oos_exp_r`. Deployment is identified by
+`deployment_scope IS NOT NULL` (specifically `'deployable'`), cross-referenced against
+`docs/runtime/lane_allocation.json` for the active 6-lane subset.
+
+**Current path:** curated template `get_strategy_fitness` returns FIT/WATCH/DECAY/STALE
+per strategy — it does NOT expose `c8_oos_status` and `oos_exp_r` directly. Operator
+falls back to raw Python to read `validated_setups` and join lane allocation, ~3 turns.
 
 **MotherDuck MCP path (SQL):**
 ```sql
+-- 6 deployed MNQ lanes from docs/runtime/lane_allocation.json (rebalance_date 2026-04-18).
+WITH deployed AS (
+  SELECT unnest([
+    'MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5',
+    'MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15',
+    'MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5',
+    'MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12',
+    'MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12',
+    'MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15'
+  ]) AS strategy_id
+)
 SELECT
-  strategy_id,
-  dir_match_status_2026,    -- e.g. 'CONFIRMED' / 'UNVERIFIED' / 'FLIPPED'
-  oos_power_2026,           -- e.g. 0.12, 0.08
-  oos_n_trades_2026
-FROM deployable_validated_setups
-WHERE instrument = 'MNQ'
-  AND deployed = TRUE
-ORDER BY oos_power_2026 ASC;
+  d.strategy_id,
+  vs.instrument,
+  vs.deployment_scope,
+  vs.c8_oos_status,
+  vs.oos_exp_r,
+  vs.expectancy_r,
+  vs.sample_size
+FROM deployed d
+LEFT JOIN validated_setups vs USING (strategy_id)
+WHERE vs.instrument = 'MNQ'
+ORDER BY vs.oos_exp_r ASC NULLS FIRST;
 ```
 
 **Eval metrics:** TBD.
@@ -170,24 +269,29 @@ ORDER BY oos_power_2026 ASC;
 
 **Question (as asked):**
 > "What's the average pairwise trade-return correlation across the 6 deployed MNQ lanes,
-> and what was the max pairwise correlation? Compute from `paper_trades` if it exists,
-> else from `orb_outcomes` filtered to those lanes' strategy_ids."
+> and what was the max pairwise correlation? Compute from `paper_trades`."
 
-**Current path:** raw Python — pivots returns by trading_day × strategy_id, runs
-`pandas.DataFrame.corr()`, extracts upper triangle. ~6–8 turns, often requires a second
+**Reframing note:** original SQL referenced `paper_trades.entry_ts` and
+`paper_trades.trade_id`. Verified column names (2026-05-01): `paper_trades` has
+`entry_time` (NOT `entry_ts`) and does NOT have `trade_id`. The CTE structure stands;
+the column names are corrected below. `pnl_r` does exist on `paper_trades` and is the
+correct return column.
+
+**Current path:** raw Python — pivots returns by trading_day x strategy_id, runs
+`pandas.DataFrame.corr()`, extracts upper triangle. ~6-8 turns, often requires a second
 turn to clean NaNs.
 
 **MotherDuck MCP path (SQL):**
 ```sql
--- Daily-aggregated R per lane, pivoted, then corr() pairwise via DuckDB.
+-- Daily-aggregated R per lane, pairwise corr() via DuckDB.
 WITH deployed_ids AS (
   SELECT unnest([
-    'MNQ_NYSE_OPEN_15_E2_C1_F_OVNRNG_50_FAST10_RR2',
-    'MNQ_NYSE_OPEN_15_E2_C1_F_BULLDAY_RR2',
-    'MNQ_LONDON_15_E2_C1_F_NONE_RR2',
-    'MNQ_ASIA_15_E2_C1_F_NONE_RR2',
-    'MNQ_SYDNEY_15_E2_C1_F_NONE_RR2',
-    'MNQ_CME_REOPEN_15_E2_C1_F_NONE_RR2'
+    'MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5',
+    'MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15',
+    'MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5',
+    'MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12',
+    'MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12',
+    'MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15'
   ]) AS strategy_id
 ),
 daily_r AS (
@@ -197,14 +301,16 @@ daily_r AS (
     SUM(pt.pnl_r) AS daily_r
   FROM paper_trades pt
   JOIN deployed_ids USING (strategy_id)
-  WHERE pt.entry_ts >= '2020-01-01'
+  WHERE pt.entry_time >= TIMESTAMP '2020-01-01'
+    AND pt.pnl_r IS NOT NULL
   GROUP BY pt.trading_day, pt.strategy_id
 ),
 pairs AS (
   SELECT
     a.strategy_id AS lane_a,
     b.strategy_id AS lane_b,
-    corr(a.daily_r, b.daily_r) AS rho
+    corr(a.daily_r, b.daily_r) AS rho,
+    COUNT(*)                   AS n_overlap_days
   FROM daily_r a
   JOIN daily_r b
     ON a.trading_day = b.trading_day
@@ -214,12 +320,16 @@ pairs AS (
 SELECT
   AVG(rho) AS avg_pairwise_corr,
   MAX(rho) AS max_pairwise_corr,
-  COUNT(*) AS n_pairs
+  MIN(rho) AS min_pairwise_corr,
+  COUNT(*) AS n_pairs,
+  AVG(n_overlap_days) AS avg_overlap_days
 FROM pairs;
 ```
 
 If `paper_trades.pnl_r` is sparse for these lanes, the fallback substitutes
-`orb_outcomes` filtered to the 6 strategy_ids — same shape, swap the source CTE.
+`orb_outcomes` (filter via the canonical strategy_id components: `symbol`, `orb_label`,
+`orb_minutes`, `rr_target`, `confirm_bars`, `entry_model`, `filter_type` — `orb_outcomes`
+identifies trades by those columns + `entry_ts`, not `strategy_id` directly).
 
 **Eval metrics:** TBD.
 
@@ -235,5 +345,5 @@ If `paper_trades.pnl_r` is sparse for these lanes, the fallback substitutes
 | Q4 | TBD            | TBD               | TBD         | TBD         |
 | Q5 | TBD            | TBD               | TBD         | TBD         |
 
-**GO criteria:** ≥30% token reduction on ≥3 of 5 questions AND zero correctness
+**GO criteria:** >=30% token reduction on >=3 of 5 questions AND zero correctness
 regressions AND all four `discipline-checklist.md` checks PASS.
