@@ -1,4 +1,4 @@
-# CRG Eval Baseline — Status: MEASURED 2026-04-30
+# CRG Eval Baseline — Status: MEASURED 2026-04-30 (CORRECTED 2026-04-30)
 
 **Date measured:** 2026-04-30
 **Spec reference:** `docs/plans/2026-04-29-crg-integration-spec.md` § Phase 1.5 M2
@@ -7,16 +7,56 @@
 **Wrapper:** `scripts/tools/run_crg_eval.py` (re-run any time)
 **Config:** `configs/canompx3-crg-eval.yaml` (3 test commits, 10 search queries, 5 entry points)
 
-## Headline (measured, NOT vendor-cited)
+## Correction notice (2026-04-30, post-merge audit)
 
-| Metric                         | Value | Halt threshold (v2 plan)        | Verdict |
-|--------------------------------|-------|---------------------------------|---------|
-| Median naive→graph token ratio | **4.300** (76.7% savings) | < 1.111 (10% savings) | **PASS** |
-| Search MRR                     | 0.325 | (no halt threshold)             | mixed   |
+The first-published headline `4.300 (76.7% savings) → PASS` was **arithmetically wrong**.
+Independent `evidence-auditor` review caught two bugs in `_summarize` at
+`scripts/tools/run_crg_eval.py:135-136`:
+
+1. `if r.get("naive_to_graph_ratio")` filtered out the third commit (ratio 0.0 is falsy
+   in Python), reducing the sample from 3 to 2.
+2. `sorted(xs)[len(xs)//2]` returns the *upper* element on n=2, so the reported "median"
+   was actually the maximum (`4.3`).
+
+Under correct math (filter `is not None`, use `statistics.median`):
+- True median ratio over the 3 commits is **0.2** (not 4.3)
+- Implied savings is **−400%** (CRG inflates context ~5× on the median commit)
+- `halt_pr4a` flips to **True** under the v2 plan's literal "<10% savings → halt" rule
+
+Fix landed in commit `<filled-on-commit>` along with this correction notice and a
+regression test (`tests/test_tools/test_run_crg_eval.py::test_summarize_median_with_zero_ratio`).
+
+## Headline (corrected)
+
+| Metric                          | Value | Halt threshold (v2 plan)        | Verdict |
+|---------------------------------|-------|---------------------------------|---------|
+| Median naive→graph token ratio  | **0.200** (−400% savings) | < 1.111 (10% savings) | **HALT-FIRES** |
+| Best-shape ratio (docs commits) | 4.300 (76.7% savings)     | (per-shape, advisory) | strong on docs-shape |
+| Worst-shape ratio (utility/refactor) | 0.0–0.2              | (per-shape, advisory) | net-loss |
+| Search MRR                      | 0.325 | (no halt threshold)             | mixed   |
 | Impact accuracy precision (avg) | 1.000 | (no halt threshold)             | trivial-case strong |
 | Impact accuracy recall (avg)    | 1.000 | (no halt threshold)             | trivial-case strong |
 
-PR-4a (strategy lineage AST scanner) is unblocked.
+## Reconciliation with PR-4a (which had already merged under the wrong number)
+
+PR-4a (`trading_app/strategy_lineage_ast.py`) is a **pure AST scanner with no CRG runtime
+dependency** — it does not consume the graph at query time. The plan's halt heuristic
+("if CRG itself isn't pulling weight, a CRG-style lineage tool likely won't either") was
+a reasonable prior, but as built, PR-4a's value is independent of CRG's token-efficiency.
+The leaf module ships clean tests, zero callers, no DB writes; verified post-merge by
+the same auditor pass. **No PR-4a rollback recommended.**
+
+What this DOES gate, honestly:
+
+- **PR-4b** (post-MVP — `strategy_lineage` builder + MCP tool + slash command) materially
+  depends on CRG-graph quality. Under corrected halt math, PR-4b should NOT proceed on
+  the current eval result without one of: (a) tightening the halt definition to "best-shape"
+  per Limitation 2 below and re-running, (b) re-curating the test commits so the median
+  reflects the work-shape distribution agents actually face, or (c) accepting that
+  CRG-graph-derived tools should ship only for doc/rule-shape edits and frame PR-4b
+  accordingly.
+
+The halt condition's job was to surface this question. It did, just an iteration late.
 
 ## Per-commit token efficiency (the headline number broken open)
 

@@ -4,10 +4,10 @@
   "summary": {
     "token_efficiency": {
       "n_commits": 3,
-      "median_naive_to_graph_ratio": 4.3,
-      "median_savings_pct": 76.7,
+      "median_naive_to_graph_ratio": 0.2,
+      "median_savings_pct": -400.0,
       "halt_threshold_ratio": 1.111,
-      "halt_pr4a": false
+      "halt_pr4a": true
     },
     "search_quality": {
       "n_queries": 10,
@@ -159,5 +159,6 @@
         "f1": 1.0
       }
     ]
-  }
+  },
+  "correction_notice": "Headline corrected 2026-04-30 post-audit; see EVAL-BASELINE-2026-04-30.md § Correction notice"
 }

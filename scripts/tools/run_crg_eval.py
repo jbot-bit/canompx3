@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import statistics
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -132,8 +133,13 @@ def _run_benchmarks_local(config: dict) -> dict[str, list[dict]]:
 def _summarize(results: dict[str, list[dict]]) -> dict:
     """Compute summary stats used by the halt-condition gate."""
     te_rows = results.get("token_efficiency", [])
-    ratios = [r["naive_to_graph_ratio"] for r in te_rows if r.get("naive_to_graph_ratio")]
-    median_ratio = sorted(ratios)[len(ratios) // 2] if ratios else 0.0
+    # Filter on `is not None` (NOT truthy) so a real 0.0 ratio — meaning CRG
+    # blew up context vs naive grep — is kept in the median calculation rather
+    # than silently dropped. Then use statistics.median for correctness on any
+    # n (the prior `sorted(xs)[n//2]` returned the upper element on even n,
+    # which on n=2 is the max, not the median).
+    ratios = [r["naive_to_graph_ratio"] for r in te_rows if r.get("naive_to_graph_ratio") is not None]
+    median_ratio = statistics.median(ratios) if ratios else 0.0
     savings_pct = (1.0 - 1.0 / median_ratio) * 100 if median_ratio > 0 else 0.0
 
     sq_rows = results.get("search_quality", [])
