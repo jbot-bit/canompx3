@@ -58,6 +58,12 @@ unavailable (MCP server down, tool not surfaced), skip silently and proceed to G
 This is the diff-aware companion to Gate 6's `detect-changes` CLI — both fail-open per
 spec § Phase 3.
 
+After any CRG call (Gate 0 prompt, Gate 6 CLI, ad-hoc CRG MCP tools), log it via:
+```bash
+python .claude/hooks/_crg_usage_log.py --agent verify-complete --tool <tool_name> [--query <short>] [--tokens <n>]
+```
+Fail-silent shim — never blocks. Used for adoption telemetry only.
+
 **Gate 1: Drift Detection**
 ```bash
 python pipeline/check_drift.py

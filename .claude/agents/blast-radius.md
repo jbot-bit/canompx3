@@ -48,6 +48,7 @@ code-review-graph impact-radius --target <file>::<symbol> --max-depth 2 --repo C
 - If CRG returns a structured impact list: use it as the seed. **Still grep** to verify and to catch what CRG missed (the graph is a frozen snapshot per the Volatile Data Rule; v2.1.0 has known incomplete coverage on tests_for, qualified-name format quirks, and Windows path matching).
 - If CRG is unavailable / binary missing / errors out: SKIP, fall through to grep-only as before.
 - **Never substitute CRG output for grep.** CRG is the seed; grep is the truth.
+- **Log the call:** `python .claude/hooks/_crg_usage_log.py --agent blast-radius --tool impact_radius --query "<target>"` (fail-silent telemetry).
 
 1. **Callers** — Use the Grep tool to find all call sites (pattern: `function_name`, file type: `*.py`).
    If zero results, do NOT assume "no callers." Try alternative patterns (partial name, class method, aliased import). Zero results may mean bad search pattern, not absence of dependencies.

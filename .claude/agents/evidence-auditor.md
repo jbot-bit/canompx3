@@ -94,6 +94,12 @@ For each claimed finding or decision:
 
    Refs: `docs/plans/2026-04-29-crg-integration-spec.md` § A3, `.claude/rules/adversarial-audit-gate.md` "independent context" requirement.
 
+   - **Log every CRG call** (MCP prompt or CLI):
+     ```bash
+     python .claude/hooks/_crg_usage_log.py --agent evidence-auditor --tool <tool_name> [--query <short>]
+     ```
+     Fail-silent telemetry shim. Never blocks the audit.
+
 ## OUTPUT FORMAT
 
 ```

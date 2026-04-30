@@ -25,6 +25,7 @@ Read, Grep, Glob, Bash (read-only commands only). NO Edit, NO Write.
    - **Do NOT call `architecture-overview` without `--format minimal`** — full output is multi-MB and floods context (verified 2026-04-30: 2.7MB response).
    - Volatile Data Rule: CRG output is a frozen snapshot. Do not treat as authoritative on its own; confirm critical claims with `Read`/`Grep`.
    - Fail-open: if CRG is unavailable, skip and continue with file-level reads.
+   - Log the call: `python .claude/hooks/_crg_usage_log.py --agent planner --tool list_communities` (fail-silent telemetry).
 1. Read ALL files the task touches — trace imports both directions (callers + callees)
 2. Check `docs/specs/` for existing specs
 3. Check canonical sources: asset_configs, SESSION_CATALOG, config.py, cost_model, paths.py
