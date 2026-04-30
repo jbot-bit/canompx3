@@ -10,6 +10,15 @@ Multi-instrument futures data pipeline — builds clean, replayable local datase
 **For research methodology, statistical standards, and market structure knowledge → see `RESEARCH_RULES.md`.**
 **For strategy research routing, test sequences, variable space, and NO-GO registry → see `docs/STRATEGY_BLUEPRINT.md`.**
 
+## Quick Commands
+
+```bash
+python pipeline/check_drift.py                                         # all guardrails (must pass pre-commit)
+python scripts/tools/context_resolver.py --task "<x>" --format markdown  # task front-door
+python scripts/trade_book.py                                           # trade book HTML (opens in browser)
+```
+One-time setup: `git config core.hooksPath .githooks`
+
 ---
 
 ## Document Authority
@@ -28,16 +37,11 @@ Non-trivial repo tasks: resolve the task first via the deterministic front door 
 
 Fallback if unavailable or ambiguous: `AGENTS.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`, `scripts/tools/system_context.py`, `scripts/tools/project_pulse.py`.
 
-## Default Thinking Mode
+**Auto-loaded path-scoped rules** in `.claude/rules/` (load on matching edits per file frontmatter). Reference, don't restate. High-traffic: `auto-skill-routing.md`, `workflow-preferences.md`, `backtesting-methodology.md`, `institutional-rigor.md`, `mcp-usage.md`, `branch-flip-protection.md`, `research-truth-protocol.md`.
 
-All research, analysis, and decisions must:
-- pass institutional audit loop
-- avoid tunnel vision
-- verify against canonical layers
-- include alternate framing before conclusion
-- produce a final EV-based decision
+## Default Mode
 
-If not explicitly stated, assume this mode.
+Institutional rigor: cite literature, query live, falsify before validating. Detail → `.claude/rules/institutional-rigor.md`.
 
 ## Workflow Mandates
 - When running audits/code reviews, ALWAYS implement fixes in the same session — do not just present findings. User has explicitly demanded 'GROUND IN TRUTH AND CONTEXT AND YES IMPLEMENT FIXES PHASES'.
@@ -80,7 +84,7 @@ If not explicitly stated, assume this mode.
 
 ## MCP Server (gold-db)
 
-`gold-db` MCP server (`trading_app/mcp_server.py`) — 4 read-only tools. **ALWAYS prefer over raw SQL.** Tools: `list_available_queries`, `query_trading_db` (18 templates, row cap 5000), `get_strategy_fitness` (always `summary_only=True` for portfolio-wide), `get_canonical_context`. See `.claude/rules/mcp-usage.md` for intent→tool mapping.
+`gold-db` MCP server (`trading_app/mcp_server.py`) — read-only. **ALWAYS prefer over raw SQL.** Discover tools via `list_available_queries`; pass `summary_only=True` to `get_strategy_fitness` for portfolio-wide. Tool/template counts are volatile — query live, never cite from memory. Routing → `.claude/rules/mcp-usage.md`.
 
 **Sidecar pip-installs (constraints):** `code-review-graph` is not in `uv.lock`. Install via `pip install -c constraints.txt code-review-graph` so the `cryptography<47` pin holds (Authlib 1.7.0 still imports `cryptography.hazmat.backends`, removed in cryptography 47 — breaks every FastMCP server). See `constraints.txt` and `memory/feedback_mcp_venv_drift_cryptography47.md`.
 
