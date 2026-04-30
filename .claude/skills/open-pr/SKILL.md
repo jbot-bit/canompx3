@@ -10,6 +10,15 @@ Open a PR for the current branch via `scripts/tools/pr_open.sh`: $ARGUMENTS
 
 The user invoked /open-pr. Run the helper and surface a concise result.
 
+### 0.5. CRG `pre_merge_check` MCP prompt (advisory, fail-open)
+
+Before invoking the helper, if `mcp__code-review-graph__pre_merge_check` is available, call it
+once with the current branch's diff. It returns a pre-merge structural-risk summary (stale
+tests, untested high-fan-in changes, contamination-class signals). If risk is `high` or any
+finding lands in a hard-block path category, surface it to the user verbatim and ask whether
+to proceed. Fail-open: if the MCP prompt is unavailable, skip silently and proceed to step 1.
+The helper's own preflight gates remain authoritative — this is advisory context, not a gate.
+
 ### 1. Decide invocation
 
 Pass `$ARGUMENTS` straight through. Common forms:

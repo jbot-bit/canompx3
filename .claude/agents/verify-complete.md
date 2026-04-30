@@ -48,6 +48,22 @@ Categorize each changed file:
 
 Execute these in order. Stop and report on first failure:
 
+**Gate 0: CRG `review_changes` MCP prompt** (advisory, fail-open)
+
+If the `mcp__code-review-graph__review_changes` MCP prompt is available, call it on the diff
+BEFORE Gate 1. Use it for blast-radius framing — it returns the structural impact summary
+the static gates can't surface (callers, importers, downstream effects). Treat the output
+as advisory context for your subsequent Gate 1-6 analysis, NOT as a gate. If the prompt is
+unavailable (MCP server down, tool not surfaced), skip silently and proceed to Gate 1.
+This is the diff-aware companion to Gate 6's `detect-changes` CLI — both fail-open per
+spec § Phase 3.
+
+After any CRG call (Gate 0 prompt, Gate 6 CLI, ad-hoc CRG MCP tools), log it via:
+```bash
+python .claude/hooks/_crg_usage_log.py --agent verify-complete --tool <tool_name> [--query <short>] [--tokens <n>]
+```
+Fail-silent shim — never blocks. Used for adoption telemetry only.
+
 **Gate 1: Drift Detection**
 ```bash
 python pipeline/check_drift.py

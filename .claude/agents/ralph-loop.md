@@ -133,6 +133,7 @@ code-review-graph knowledge-gaps --repo C:/Users/joshd/canompx3 --top-n 10 2>/de
 - `knowledge-gaps` lists files/functions with low test coverage relative to centrality. These are exactly the kind of finding Ralph should burn down — bridge-node-style code with no tests is a textbook silent-failure surface.
 - **Do NOT use CRG output as ground truth.** It's a frozen snapshot per the Volatile Data Rule. Confirm any CRG-flagged finding with `Read`/`Grep` before reporting. CRG's job here is to point Ralph at the right neighborhood; the audit itself still uses canonical-source verification.
 - **Fail-open:** if `code-review-graph` is not on PATH or returns non-zero, continue without it. Spec § Phase 3 keeps CRG advisory only.
+- **Log the calls:** after each CRG invocation, append `python .claude/hooks/_crg_usage_log.py --agent ralph-loop --tool <minimal_context|knowledge_gaps>` (fail-silent telemetry; never blocks).
 
 ## Step 1: AUDIT
 

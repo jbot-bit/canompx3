@@ -71,7 +71,12 @@ For each claimed finding or decision:
    - If not, label the threshold use `UNSUPPORTED`.
 
 6. **Structural ground-truth check** (Phase 3 / A3, advisory, fail-open)
-   - Pull independent structural context from CRG to disconfirm the author's narrative:
+   - **First, if available, call the `mcp__code-review-graph__review_changes` MCP prompt** on
+     the diff or files under scrutiny. The prompt returns structural blast-radius framing
+     the bare CLI calls below don't synthesize. Use the prompt's output to seed your
+     disconfirming-evidence search; do NOT treat it as conclusion. Fail-open: if the MCP
+     prompt is unavailable, proceed to the CLI calls below.
+   - Then pull independent structural context from CRG to disconfirm the author's narrative:
    ```bash
    # Affected flows for the canonical functions in the claim
    code-review-graph affected-flows --target <canonical_module>::<symbol> --repo C:/Users/joshd/canompx3 2>/dev/null | head -30
@@ -88,6 +93,12 @@ For each claimed finding or decision:
    - **Volatile Data Rule applies.** Treat CRG output as a frozen snapshot. Confirm with `Read`/`Grep` before downgrading a claim.
 
    Refs: `docs/plans/2026-04-29-crg-integration-spec.md` § A3, `.claude/rules/adversarial-audit-gate.md` "independent context" requirement.
+
+   - **Log every CRG call** (MCP prompt or CLI):
+     ```bash
+     python .claude/hooks/_crg_usage_log.py --agent evidence-auditor --tool <tool_name> [--query <short>]
+     ```
+     Fail-silent telemetry shim. Never blocks the audit.
 
 ## OUTPUT FORMAT
 
