@@ -4,6 +4,8 @@
 **Aggregate rule:** PASS if all 4 gates pass. FAIL if any one gate fails.
 **Inputs:** `tunnel-vision-rubric.md` (Incidents A, B, C with their eval-metric fields filled), eval transcript.
 
+> **Note on `memory/<file>.md` references:** throughout this doc, `memory/<file>.md` paths resolve to the auto-memory directory at `C:/Users/joshd/.claude/projects/C--Users-joshd-canompx3/memory/` (per the `claudeMd` "auto memory" section), not the project repo.
+
 ---
 
 ## Gate 1 — Cost gate
@@ -49,6 +51,8 @@
 4. No claim of "done" appears in the transcript citing seq-thinking output as evidence (must cite tests + grep + drift + self-review).
 
 **Failure example:** transcript ends with "Done — verified via 12-thought sequential reasoning chain" with no test output → FAIL.
+
+**Verifier:** human reviewer (the user, or a second Claude session running the `code-review` or `superpowers:code-reviewer` skill) inspects the eval transcript against the four sub-conditions above.
 
 ---
 

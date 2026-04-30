@@ -4,6 +4,8 @@
 **Status:** **UNCOMMITTED** — DO NOT merge into `.mcp.json` until eval completes and `discipline-checklist.md` reports PASS.
 **Scope:** propose-only.
 
+> **Note on `memory/<file>.md` references:** throughout this doc, `memory/<file>.md` paths resolve to the auto-memory directory at `C:/Users/joshd/.claude/projects/C--Users-joshd-canompx3/memory/` (per the `claudeMd` "auto memory" section), not the project repo.
+
 ---
 
 ## Proposed `.mcp.json` block
