@@ -19,6 +19,15 @@ Before anything else, reproduce the problem:
 
 "Reading code is NOT verifying code." You must EXECUTE and read output.
 
+### Step 0.5: CRG `debug_issue` MCP prompt (advisory, fail-open)
+
+If the `mcp__code-review-graph__debug_issue` MCP prompt is available, call it ONCE with the
+error excerpt + the path of the failing file. The prompt returns structural call-graph context
+(callers, importers, related symbols) that narrows where to look in Step 2.
+
+Treat its output as a search starter, not a diagnosis. If the prompt is unavailable, skip silently
+and proceed to Step 1. Never let CRG output override an executed reproduction in Step 0.
+
 ### Step 1: Classify the Bug
 
 Which category? This determines your checklist:

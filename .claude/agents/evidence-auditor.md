@@ -71,7 +71,12 @@ For each claimed finding or decision:
    - If not, label the threshold use `UNSUPPORTED`.
 
 6. **Structural ground-truth check** (Phase 3 / A3, advisory, fail-open)
-   - Pull independent structural context from CRG to disconfirm the author's narrative:
+   - **First, if available, call the `mcp__code-review-graph__review_changes` MCP prompt** on
+     the diff or files under scrutiny. The prompt returns structural blast-radius framing
+     the bare CLI calls below don't synthesize. Use the prompt's output to seed your
+     disconfirming-evidence search; do NOT treat it as conclusion. Fail-open: if the MCP
+     prompt is unavailable, proceed to the CLI calls below.
+   - Then pull independent structural context from CRG to disconfirm the author's narrative:
    ```bash
    # Affected flows for the canonical functions in the claim
    code-review-graph affected-flows --target <canonical_module>::<symbol> --repo C:/Users/joshd/canompx3 2>/dev/null | head -30
