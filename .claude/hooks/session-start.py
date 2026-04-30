@@ -595,6 +595,67 @@ def _parallel_session_lines() -> list[str]:
     return lines
 
 
+def _crg_context_lines() -> list[str]:
+    """One-line CRG graph status: nodes, files, and freshness vs the working tree.
+
+    Returns either:
+      - "  Graph: <N> nodes / <F> files — fresh"   (last_updated within 7 days)
+      - "  Graph: <N> nodes / <F> files — stale (<D>d old)"
+      - "  Graph: missing — run `code-review-graph build`"
+      - []                                          on any failure (fail-silent)
+
+    Reads `.code-review-graph/graph.db` directly via the same find_repo_root
+    semantics CRG uses, so worktree-local DBs are reported correctly.
+    """
+    try:
+        import sqlite3
+        from datetime import datetime as _dt
+
+        db_path = PROJECT_ROOT / ".code-review-graph" / "graph.db"
+        if not db_path.exists():
+            return ["  Graph: missing — run `code-review-graph build`"]
+
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2.0)
+        try:
+            cur = conn.cursor()
+            try:
+                node_count = cur.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
+            except sqlite3.Error:
+                node_count = 0
+            try:
+                file_count = cur.execute(
+                    "SELECT COUNT(*) FROM nodes WHERE type='file'"
+                ).fetchone()[0]
+            except sqlite3.Error:
+                file_count = 0
+            last_updated = None
+            try:
+                row = cur.execute(
+                    "SELECT value FROM metadata WHERE key='last_updated'"
+                ).fetchone()
+                if row and row[0]:
+                    last_updated = row[0]
+            except sqlite3.Error:
+                last_updated = None
+        finally:
+            conn.close()
+
+        freshness = "unknown"
+        if last_updated:
+            try:
+                ts = _dt.fromisoformat(last_updated.replace("Z", ""))
+                age_days = (_dt.now() - ts).days
+                freshness = "fresh" if age_days <= 7 else f"stale ({age_days}d old)"
+            except (ValueError, TypeError):
+                freshness = "unknown"
+
+        return [f"  Graph: {node_count} nodes / {file_count} files — {freshness}"]
+    except BaseException:  # pragma: no cover - hook fallback path
+        # BaseException (incl. KeyboardInterrupt/SystemExit) intentional —
+        # this is a cosmetic startup line and must NEVER abort session start.
+        return []
+
+
 def main() -> None:
     try:
         event = json.load(sys.stdin)
@@ -640,6 +701,7 @@ def main() -> None:
         lines.extend(_env_drift_lines())
         lines.extend(_action_queue_ready_lines())
         lines.extend(_parallel_session_lines())
+        lines.extend(_crg_context_lines())
         lines.extend(_main_ci_status_lines())
         print("\n".join(lines), file=sys.stderr)
 

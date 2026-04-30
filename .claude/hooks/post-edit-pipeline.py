@@ -118,7 +118,13 @@ def main():
     input_data = json.load(sys.stdin)
     file_path = input_data.get("tool_input", {}).get("file_path", "")
 
-    # Only run for pipeline or trading_app Python files
+    # CRG incremental update fires for the broader prefix set (pipeline/, trading_app/,
+    # scripts/, research/, tests/) per spec F3. Must run BEFORE the pipeline|trading_app
+    # early-exit below — otherwise edits to scripts/research/tests/ silently skip CRG
+    # updates despite _crg_update declaring those prefixes. Fail-silent; <5s cost.
+    _crg_update(file_path)
+
+    # Only run drift/tests/behavioral-audit for pipeline or trading_app Python files
     if not (("pipeline" in file_path or "trading_app" in file_path) and file_path.endswith(".py")):
         sys.exit(0)
 
