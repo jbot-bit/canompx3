@@ -3,7 +3,7 @@
 **Date:** 2026-05-01
 **Purpose:** replay three real project incidents with seq-thinking enabled and score whether the tool would have surfaced the alternate framing in time. Each incident has eval-metric placeholders to be filled by the future eval session.
 
-**Source-of-truth note:** memory files named in the task spec (`memory/phase_2_9_xmes_reaudit_tunnel_lesson.md`, `memory/feedback_token_efficient_audit_loop.md`, `memory/feedback_d4_aistudio_audit_lessons.md`) are not present at those paths in the current worktree (`memory/` contains 10 dated files, none matching). The task prompt provided the authoritative gist for each incident; that gist is reproduced verbatim below in italics, and treated as the canonical incident description for this rubric. The future eval session SHOULD attempt to locate the originals (e.g. via `MEMORY.md` index references) before rerunning the rubric, and amend if the originals carry additional facts.
+**Source provenance:** the three incidents quoted below are sourced from auto-memory files at `C:/Users/joshd/.claude/projects/C--Users-joshd-canompx3/memory/` (the user's auto-memory directory, accessible via the `Read` tool but not part of the project repository — see CLAUDE.md "auto memory" section). The full canonical files are: `phase_2_9_xmes_reaudit_tunnel_lesson.md`, `feedback_token_efficient_audit_loop.md`, `feedback_d4_aistudio_audit_lessons.md`. The task prompt supplied the authoritative gist for each incident, reproduced verbatim below in italics and treated as the canonical incident description for this rubric. Future eval sessions SHOULD `Read` the auto-memory files for full context and amend the rubric if the originals carry additional facts.
 
 ---
 
