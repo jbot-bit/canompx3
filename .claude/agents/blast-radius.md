@@ -40,11 +40,22 @@ If the description is ambiguous, ask for clarification rather than guessing.
 
 For each target file/function:
 
+**Step 2.0 (Phase 3 / A4): CRG impact-radius first call (advisory, fail-open).**
+Before grepping, ask the graph. CRG has the call/import graph pre-computed:
+```bash
+code-review-graph impact-radius --target <file>::<symbol> --max-depth 2 --repo C:/Users/joshd/canompx3 2>/dev/null | head -40
+```
+- If CRG returns a structured impact list: use it as the seed. **Still grep** to verify and to catch what CRG missed (the graph is a frozen snapshot per the Volatile Data Rule; v2.1.0 has known incomplete coverage on tests_for, qualified-name format quirks, and Windows path matching).
+- If CRG is unavailable / binary missing / errors out: SKIP, fall through to grep-only as before.
+- **Never substitute CRG output for grep.** CRG is the seed; grep is the truth.
+
 1. **Callers** — Use the Grep tool to find all call sites (pattern: `function_name`, file type: `*.py`).
    If zero results, do NOT assume "no callers." Try alternative patterns (partial name, class method, aliased import). Zero results may mean bad search pattern, not absence of dependencies.
 2. **Importers** — Use the Grep tool to find all importers (pattern: `from module import` or `import module`, file type: `*.py`).
    Same rule: zero results requires a second search with alternative patterns before concluding "no importers."
 3. **One-way dependency check** — Verify the change respects `pipeline/ → trading_app/` direction. NEVER the reverse. If the proposed change would violate this, flag it as CRITICAL.
+
+Refs: `docs/plans/2026-04-29-crg-integration-spec.md` § Phase 3 / A4.
 
 ### Step 3: Map Canonical Source Impact
 

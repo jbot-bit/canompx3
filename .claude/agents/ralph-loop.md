@@ -119,6 +119,21 @@ cat .claude/rules/institutional-rigor.md     # 8 non-negotiable working rules (~
 
 **Authority:** If `integrity-guardian.md` § 2 lists a canonical source (e.g., `pipeline.dst.orb_utc_window`, `trading_app.holdout_policy`), it IS canonical. Do not substitute memory. Any finding that claims "X is canonical" must cite the row in § 2.
 
+### CRG context preamble (advisory, fail-open) — Phase 3 / A6
+
+After the doctrine load, run the CRG preamble to orient the iteration's audit:
+
+```bash
+# Both calls are advisory-only. If CRG is unavailable, continue without them — never block.
+code-review-graph minimal-context --task "ralph-loop iteration audit" --repo C:/Users/joshd/canompx3 2>/dev/null | head -30
+code-review-graph knowledge-gaps --repo C:/Users/joshd/canompx3 --top-n 10 2>/dev/null | head -40
+```
+
+- `minimal-context` returns ~80-token summary: risk, communities, suggested next tools. Use it to bias target selection toward high-coupling areas the graph is currently flagging.
+- `knowledge-gaps` lists files/functions with low test coverage relative to centrality. These are exactly the kind of finding Ralph should burn down — bridge-node-style code with no tests is a textbook silent-failure surface.
+- **Do NOT use CRG output as ground truth.** It's a frozen snapshot per the Volatile Data Rule. Confirm any CRG-flagged finding with `Read`/`Grep` before reporting. CRG's job here is to point Ralph at the right neighborhood; the audit itself still uses canonical-source verification.
+- **Fail-open:** if `code-review-graph` is not on PATH or returns non-zero, continue without it. Spec § Phase 3 keeps CRG advisory only.
+
 ## Step 1: AUDIT
 
 Run ALL infrastructure gates in ONE bash call:

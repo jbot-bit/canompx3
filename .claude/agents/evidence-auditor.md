@@ -70,6 +70,25 @@ For each claimed finding or decision:
      primary source?
    - If not, label the threshold use `UNSUPPORTED`.
 
+6. **Structural ground-truth check** (Phase 3 / A3, advisory, fail-open)
+   - Pull independent structural context from CRG to disconfirm the author's narrative:
+   ```bash
+   # Affected flows for the canonical functions in the claim
+   code-review-graph affected-flows --target <canonical_module>::<symbol> --repo C:/Users/joshd/canompx3 2>/dev/null | head -30
+
+   # Test coverage map for the claim's load-bearing function
+   code-review-graph query --pattern tests_for --target <canonical_path>::<symbol> --repo C:/Users/joshd/canompx3 2>/dev/null | head -20
+
+   # Review-context for the diff or files under scrutiny
+   code-review-graph review-context --files <comma-separated-files> --repo C:/Users/joshd/canompx3 2>/dev/null | head -40
+   ```
+   - **Use:** if the claim says "X is well-tested" and `tests_for` returns 0 edges, that's evidence the claim is `UNSUPPORTED` — even if the author cites a single test file. (Note CRG v2.1.0 `tests_for` is known-incomplete per `feedback_crg_v2_1_0_bugs.md`; absence is suggestive, not proof. AST cross-check before downgrading.)
+   - **Use:** if `affected-flows` shows the claim's function is on a critical-path flow no test exercises end-to-end, flag that as a missing-evidence pattern.
+   - **Fail-open.** CRG unavailable / binary missing → SKIP this check, note SKIPPED in the report. Do NOT block on CRG.
+   - **Volatile Data Rule applies.** Treat CRG output as a frozen snapshot. Confirm with `Read`/`Grep` before downgrading a claim.
+
+   Refs: `docs/plans/2026-04-29-crg-integration-spec.md` § A3, `.claude/rules/adversarial-audit-gate.md` "independent context" requirement.
+
 ## OUTPUT FORMAT
 
 ```
