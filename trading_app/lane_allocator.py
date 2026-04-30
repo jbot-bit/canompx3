@@ -56,6 +56,7 @@ class LaneScore:
     strategy_id: str
     instrument: str
     orb_label: str
+    orb_minutes: int
     rr_target: float
     filter_type: str
     confirm_bars: int
@@ -91,6 +92,7 @@ def _per_month_expr(
     con: duckdb.DuckDBPyConnection,
     instrument: str,
     orb_label: str,
+    orb_minutes: int,
     entry_model: str,
     rr_target: float,
     confirm_bars: int,
@@ -113,12 +115,12 @@ def _per_month_expr(
                o.entry_price, o.stop_price
         FROM orb_outcomes o
         WHERE o.symbol = ? AND o.orb_label = ? AND o.entry_model = ?
-          AND o.rr_target = ? AND o.confirm_bars = ? AND o.orb_minutes = 5
+          AND o.rr_target = ? AND o.confirm_bars = ? AND o.orb_minutes = ?
           AND o.outcome IN ('win', 'loss')
           AND o.trading_day >= ? AND o.trading_day < ?
         ORDER BY o.trading_day
         """,
-        [instrument, orb_label, entry_model, rr_target, confirm_bars, start, end],
+        [instrument, orb_label, entry_model, rr_target, confirm_bars, orb_minutes, start, end],
     ).fetchall()
 
     if not outcomes:
@@ -128,11 +130,11 @@ def _per_month_expr(
     features = con.execute(
         """
         SELECT * FROM daily_features
-        WHERE symbol = ? AND orb_minutes = 5
+        WHERE symbol = ? AND orb_minutes = ?
           AND trading_day >= ? AND trading_day < ?
         ORDER BY trading_day
         """,
-        [instrument, start, end],
+        [instrument, orb_minutes, start, end],
     ).fetchall()
 
     if not features:
@@ -229,21 +231,22 @@ def compute_lane_scores(
         shelf_relation = deployable_validated_relation(con, alias="vs")
         strategies = con.execute(
             f"""
-            SELECT strategy_id, instrument, orb_label, entry_model,
+            SELECT strategy_id, instrument, orb_label, orb_minutes, entry_model,
                    rr_target, confirm_bars, filter_type, stop_multiplier,
                    sample_size
             FROM {shelf_relation}
-            ORDER BY instrument, orb_label
+            ORDER BY instrument, orb_label, orb_minutes
             """
         ).fetchall()
 
         scores = []
-        for sid, inst, orb, em, rr, cb, ft, sm, _total_n in strategies:
+        for sid, inst, orb, om, em, rr, cb, ft, sm, _total_n in strategies:
             # Per-month ExpR for trailing window
             monthly, total_wins, total_trades = _per_month_expr(
                 con,
                 inst,
                 orb,
+                om,
                 em,
                 rr,
                 cb,
@@ -259,6 +262,7 @@ def compute_lane_scores(
                         strategy_id=sid,
                         instrument=inst,
                         orb_label=orb,
+                        orb_minutes=om,
                         rr_target=rr,
                         filter_type=ft,
                         confirm_bars=cb,
@@ -345,6 +349,7 @@ def compute_lane_scores(
                     strategy_id=sid,
                     instrument=inst,
                     orb_label=orb,
+                    orb_minutes=om,
                     rr_target=rr,
                     filter_type=ft,
                     confirm_bars=cb,
@@ -378,6 +383,16 @@ def _compute_session_regime(
 
     Used as regime gate for thin-data strategies.
     Window: REGIME_WINDOW_MONTHS (6 months).
+
+    NOTE: orb_minutes=5 is a deliberate fixed reference aperture for the
+    session-health regime signal — NOT the strategy's own aperture. Every
+    strategy in a given session sees the same regime number; it acts as a
+    shared "is this session structurally hot or cold right now?" gate.
+    O5 is the canonical reference because it's the densest cohort and
+    most stable signal across instruments. Do not parameterize this on
+    strategy.orb_minutes — that would make the regime gate per-strategy,
+    breaking the cross-aperture comparison and the original 2025 backtest
+    design (+630R regime-only vs -799R per-strategy pause).
     """
     start, end = _month_range(rebalance_date, REGIME_WINDOW_MONTHS)
     r = con.execute(
@@ -522,7 +537,7 @@ def compute_pairwise_correlation(
             lane = {
                 "instrument": s.instrument,
                 "orb_label": s.orb_label,
-                "orb_minutes": 5,
+                "orb_minutes": s.orb_minutes,
                 "entry_model": "E2",
                 "rr_target": s.rr_target,
                 "confirm_bars": s.confirm_bars,
@@ -558,7 +573,7 @@ def build_allocation(
     allowed_sessions: frozenset[str] | None = None,
     stop_multiplier: float = 0.75,
     prior_allocation: list[str] | None = None,
-    orb_size_stats: dict[tuple[str, str], tuple[float, float]] | None = None,
+    orb_size_stats: dict[tuple[str, str, int], tuple[float, float]] | None = None,
     correlation_matrix: dict[tuple[str, str], float] | None = None,
 ) -> list[LaneScore]:
     """Select top lanes for a profile, respecting constraints.
@@ -633,8 +648,8 @@ def build_allocation(
         if cost is None:
             continue
         if orb_size_stats:
-            key = (lane.instrument, lane.orb_label)
-            _, p90_orb = orb_size_stats.get(key, (100.0, 100.0))
+            orb_key = (lane.instrument, lane.orb_label, lane.orb_minutes)
+            _, p90_orb = orb_size_stats.get(orb_key, (100.0, 100.0))
         else:
             from trading_app.prop_profiles import _P90_ORB_PTS
 
@@ -766,12 +781,16 @@ def generate_report(
 def compute_orb_size_stats(
     rebalance_date: date,
     db_path: str | Path | None = None,
-) -> dict[tuple[str, str], tuple[float, float]]:
-    """Compute trailing ORB size stats per (instrument, session).
+) -> dict[tuple[str, str, int], tuple[float, float]]:
+    """Compute trailing ORB size stats per (instrument, session, aperture).
 
-    Returns {(instrument, orb_label): (avg_orb_pts, p90_orb_pts)}.
+    Returns {(instrument, orb_label, orb_minutes): (avg_orb_pts, p90_orb_pts)}.
     Uses 12-month trailing window with zero look-ahead.
     ORB size = risk_dollars / point_value (at SM=1.0, this equals the ORB range).
+
+    Per-aperture grouping: O5 / O15 / O30 ORB ranges differ materially
+    (O15 is ~50-60% larger than O5 in MNQ). DD budgets must use the
+    strategy's actual aperture, not a fixed reference.
     """
     db = db_path or GOLD_DB_PATH
     con = duckdb.connect(str(db), read_only=True)
@@ -779,23 +798,23 @@ def compute_orb_size_stats(
         start, end = _month_range(rebalance_date, DEPLOY_WINDOW_MONTHS)
         rows = con.execute(
             """
-            SELECT symbol, orb_label,
+            SELECT symbol, orb_label, orb_minutes,
                    AVG(risk_dollars) as avg_risk_d,
                    PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY risk_dollars) as p90_risk_d
             FROM orb_outcomes
-            WHERE orb_minutes = 5 AND entry_model = 'E2'
+            WHERE entry_model = 'E2'
               AND rr_target = 1.0 AND confirm_bars = 1
               AND outcome IN ('win', 'loss')
               AND trading_day >= ? AND trading_day < ?
-            GROUP BY symbol, orb_label
+            GROUP BY symbol, orb_label, orb_minutes
             """,
             [start, end],
         ).fetchall()
 
-        result: dict[tuple[str, str], tuple[float, float]] = {}
-        for sym, orb, avg_d, p90_d in rows:
+        result: dict[tuple[str, str, int], tuple[float, float]] = {}
+        for sym, orb, om, avg_d, p90_d in rows:
             pv = COST_SPECS[sym].point_value if sym in COST_SPECS else 1.0
-            result[(sym, orb)] = (round(avg_d / pv, 1), round(p90_d / pv, 1))
+            result[(sym, orb, om)] = (round(avg_d / pv, 1), round(p90_d / pv, 1))
         return result
     finally:
         con.close()
@@ -807,11 +826,11 @@ def save_allocation(
     rebalance_date: date,
     profile_id: str,
     output_path: str | Path | None = None,
-    orb_size_stats: dict[tuple[str, str], tuple[float, float]] | None = None,
+    orb_size_stats: dict[tuple[str, str, int], tuple[float, float]] | None = None,
 ) -> Path:
     """Save allocation to JSON file.
 
-    orb_size_stats: {(instrument, orb_label): (avg_orb_pts, p90_orb_pts)}.
+    orb_size_stats: {(instrument, orb_label, orb_minutes): (avg_orb_pts, p90_orb_pts)}.
     If None, ORB size fields are omitted from the output.
     """
     path = (
@@ -826,6 +845,7 @@ def save_allocation(
             "strategy_id": s.strategy_id,
             "instrument": s.instrument,
             "orb_label": s.orb_label,
+            "orb_minutes": s.orb_minutes,
             "rr_target": s.rr_target,
             "filter_type": s.filter_type,
             "annual_r": s.annual_r_estimate,
@@ -844,9 +864,9 @@ def save_allocation(
             "status_reason": s.status_reason,
         }
         if orb_size_stats:
-            key = (s.instrument, s.orb_label)
-            if key in orb_size_stats:
-                avg_pts, p90_pts = orb_size_stats[key]
+            orb_key = (s.instrument, s.orb_label, s.orb_minutes)
+            if orb_key in orb_size_stats:
+                avg_pts, p90_pts = orb_size_stats[orb_key]
                 lane["avg_orb_pts"] = avg_pts
                 lane["p90_orb_pts"] = p90_pts
         lanes_data.append(lane)

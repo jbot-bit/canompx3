@@ -6,7 +6,31 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session (2026-04-29 — PARKed Pathway-B Additivity Triage)
+## Last Session (2026-05-01 — Allocator orb_minutes Hardcode Fix)
+
+### What landed this session
+
+**Capital-class structural fix** for `trading_app/lane_allocator.py`. Allocator
+hardcoded `orb_minutes = 5` at 5 query sites; O15 strategies in the live
+`topstep_50k_mnq_auto` profile were scored against O5 aperture data, not their
+validated O15 aperture. Trailing ExpR / trailing_n / months_negative / DD-budget
+P90 ORB sizes were wrong for these lanes.
+
+- Audit (fresh-context): agents `a1e76860ea5635815` + `ab19fcc9e39814af2`
+- Audit doc: `docs/audit/results/2026-04-30-allocator-orb-minutes-hardcode-audit.md`
+- Interim mitigation: PR #188 (paused 2 O15 lanes pending structural fix)
+- Allocator rerun on 2026-04-18: 6 → 7 lanes, aperture mix 4 O5 / 2 O15 / 1 O30
+- SINGAPORE_OPEN_O15 ExpR corrected: 0.2407 → 0.1332 (-45%); p90 37.8 → 60.1pts (+59%)
+- Tests: 47/47 pass, drift 117/117 PASS
+- One hardcode kept by design: `_compute_session_regime` (rationale comment in code)
+
+**Operator decision pending after merge:** new lane composition includes 3 lane
+swaps (NYSE_OPEN COST_LT12 → ORB_G5; TOKYO_OPEN COST_LT12 → COST_LT08; US_DATA_1000
+ORB_G5_O15 → VWAP_MID_ALIGNED_O15) plus a new O30 lane (SINGAPORE_OPEN_ATR_P50_O30)
+that fits budget under correct DD math. Glance at validation history before
+flipping live JSON.
+
+## Prior Session (2026-04-29 — PARKed Pathway-B Additivity Triage)
 
 ### What landed this session
 

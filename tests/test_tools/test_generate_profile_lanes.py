@@ -35,10 +35,24 @@ def test_split_current_lanes_separates_valid_and_ghosts() -> None:
 
 
 def test_lane_cap_for_prefers_session_specific_stat_then_falls_back() -> None:
-    orb_stats = {("MNQ", "TOKYO_OPEN"): (30.0, 45.6)}
+    orb_stats = {("MNQ", "TOKYO_OPEN", 5): (30.0, 45.6)}
 
-    assert generate_profile_lanes.lane_cap_for("MNQ", "TOKYO_OPEN", orb_stats) == 45.6
-    assert generate_profile_lanes.lane_cap_for("MNQ", "COMEX_SETTLE", orb_stats) == 120.0
+    assert generate_profile_lanes.lane_cap_for("MNQ", "TOKYO_OPEN", 5, orb_stats) == 45.6
+    assert generate_profile_lanes.lane_cap_for("MNQ", "COMEX_SETTLE", 5, orb_stats) == 120.0
+
+
+def test_lane_cap_for_distinguishes_apertures() -> None:
+    """O15 apertures must look up O15-keyed stats, not fall back to O5."""
+    orb_stats = {
+        ("MNQ", "US_DATA_1000", 5): (56.2, 94.9),
+        ("MNQ", "US_DATA_1000", 15): (86.7, 146.5),
+    }
+    # O5 strategy gets O5 stat
+    assert generate_profile_lanes.lane_cap_for("MNQ", "US_DATA_1000", 5, orb_stats) == 94.9
+    # O15 strategy gets O15 stat (the bug being fixed)
+    assert generate_profile_lanes.lane_cap_for("MNQ", "US_DATA_1000", 15, orb_stats) == 146.5
+    # Missing aperture falls back to instrument default, not the wrong-aperture stat
+    assert generate_profile_lanes.lane_cap_for("MNQ", "US_DATA_1000", 30, orb_stats) == 120.0
 
 
 def test_summarize_lane_delta_reports_kept_dropped_and_added() -> None:
@@ -51,6 +65,7 @@ def test_summarize_lane_delta_reports_kept_dropped_and_added() -> None:
             strategy_id="KEEP_ME",
             instrument="MNQ",
             orb_label="TOKYO_OPEN",
+            orb_minutes=5,
             rr_target=1.5,
             filter_type="COST_LT12",
             confirm_bars=1,
@@ -70,6 +85,7 @@ def test_summarize_lane_delta_reports_kept_dropped_and_added() -> None:
             strategy_id="ADD_ME",
             instrument="MNQ",
             orb_label="US_DATA_1000",
+            orb_minutes=15,
             rr_target=1.5,
             filter_type="ORB_G5_O15",
             confirm_bars=1,
@@ -113,6 +129,7 @@ def test_print_profile_report_surfaces_dropped_valid_lane(
         strategy_id="REPLACEMENT",
         instrument="MNQ",
         orb_label="US_DATA_1000",
+        orb_minutes=15,
         rr_target=1.5,
         filter_type="ORB_G5_O15",
         confirm_bars=1,
@@ -132,6 +149,7 @@ def test_print_profile_report_surfaces_dropped_valid_lane(
         strategy_id="INCUMBENT",
         instrument="MNQ",
         orb_label="TOKYO_OPEN",
+        orb_minutes=5,
         rr_target=1.5,
         filter_type="COST_LT12",
         confirm_bars=1,
@@ -165,7 +183,7 @@ def test_print_profile_report_surfaces_dropped_valid_lane(
         profile,
         {"INCUMBENT", "REPLACEMENT"},
         [incumbent, recommended],
-        {("MNQ", "US_DATA_1000"): (50.0, 94.9)},
+        {("MNQ", "US_DATA_1000", 15): (50.0, 94.9)},
     )
 
     output = capsys.readouterr().out
