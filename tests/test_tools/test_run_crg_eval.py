@@ -140,6 +140,53 @@ class TestSummarize:
         summary = script._summarize(results)
         assert summary["token_efficiency"]["halt_pr4a"] is True
 
+    def test_summarize_keeps_zero_ratio_in_median(self, script: ModuleType) -> None:
+        """Regression: a real 0.0 ratio (CRG net-loss) must NOT be filtered out.
+
+        Bug history (caught 2026-04-30 by evidence-auditor on PR #185 post-merge):
+        the prior `if r.get("naive_to_graph_ratio")` truthy-filter dropped 0.0 from
+        the sample, reducing 3 commits to 2, and `sorted(xs)[len(xs)//2]` then
+        returned the upper element (4.3) which was reported as the median. This
+        flipped halt_pr4a from True to False on the 2026-04-30 measured run.
+
+        Correct behavior: keep 0.0, return statistics.median([0.0, 0.2, 4.3]) = 0.2.
+        """
+        results = {
+            "token_efficiency": [
+                {"naive_to_graph_ratio": 4.3},
+                {"naive_to_graph_ratio": 0.2},
+                {"naive_to_graph_ratio": 0.0},  # CRG inflated context vs naive
+            ],
+            "search_quality": [],
+            "impact_accuracy": [],
+        }
+        summary = script._summarize(results)
+        assert summary["token_efficiency"]["n_commits"] == 3, "0.0 ratio must not be dropped"
+        assert summary["token_efficiency"]["median_naive_to_graph_ratio"] == 0.2, (
+            "true median of [0.0, 0.2, 4.3] is 0.2 — not 4.3 (max) or 0.1 (mean)"
+        )
+        assert summary["token_efficiency"]["halt_pr4a"] is True
+
+    def test_summarize_median_correct_on_even_n(self, script: ModuleType) -> None:
+        """Regression: on even n, median is the average of the two middle values
+        per statistics.median, NOT the upper element from sorted[n//2].
+
+        Prior `sorted(xs)[len(xs)//2]` returned `xs[1]` for n=2 (the max), which
+        is part of why the v2 plan run misreported its headline.
+        """
+        results = {
+            "token_efficiency": [
+                {"naive_to_graph_ratio": 1.0},
+                {"naive_to_graph_ratio": 3.0},
+            ],
+            "search_quality": [],
+            "impact_accuracy": [],
+        }
+        summary = script._summarize(results)
+        assert summary["token_efficiency"]["median_naive_to_graph_ratio"] == 2.0, (
+            "median of [1.0, 3.0] is 2.0 — not 3.0 (the upper element)"
+        )
+
     def test_summarize_empty_results(self, script: ModuleType) -> None:
         """All benchmarks failed → no halt (no signal), no division-by-zero."""
         results: dict = {
