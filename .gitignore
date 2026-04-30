@@ -234,8 +234,17 @@ scripts/tools/.pinecone_sync_state.json
 ..venv*
 
 # Temp path artifacts (mangled Windows paths)
-C*/
-Users*
+# Original pattern `C*/` matched ANY path starting with C/c on case-insensitive
+# Windows filesystems — caught docs/external/code-review-graph/ unintentionally
+# (verified 2026-04-30 via `git check-ignore -vv`). Narrowed to literal mangled-
+# path forms only.
+C\:*
+Users\\*
+# Defensive re-includes for legit dirs that begin with C
+!CodePilot/
+!CodePilot/**
+!configs/
+!configs/**
 !.codex/skills/
 !.codex/skills/**
 !context/

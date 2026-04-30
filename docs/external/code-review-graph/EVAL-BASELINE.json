@@ -1,0 +1,163 @@
+{
+  "config": "canompx3",
+  "ran_at": "2026-04-30T07:50:31+00:00",
+  "summary": {
+    "token_efficiency": {
+      "n_commits": 3,
+      "median_naive_to_graph_ratio": 4.3,
+      "median_savings_pct": 76.7,
+      "halt_threshold_ratio": 1.111,
+      "halt_pr4a": false
+    },
+    "search_quality": {
+      "n_queries": 10,
+      "mean_reciprocal_rank": 0.325
+    },
+    "impact_accuracy": {
+      "n_commits": 3,
+      "avg_precision": 1.0,
+      "avg_recall": 1.0
+    }
+  },
+  "results": {
+    "token_efficiency": [
+      {
+        "repo": "canompx3",
+        "commit": "91516e1038ac4af6c6cc08d12ad2b610c25ea4f0",
+        "description": "docs(rule): narrow backtesting-methodology § RULE 6.1 — break-bar columns are E2-look-ahead",
+        "changed_files": 3,
+        "naive_tokens": 8006,
+        "standard_tokens": 5995,
+        "graph_tokens": 1877,
+        "naive_to_graph_ratio": 4.3,
+        "standard_to_graph_ratio": 3.2
+      },
+      {
+        "repo": "canompx3",
+        "commit": "9b16c4ebbeb72820592302a89d1bc9cbb1909968",
+        "description": "[mechanical] fix: Ralph Loop iter 170 — dead parameter break_ts in _compute_outcomes_all_rr (RI-05)",
+        "changed_files": 3,
+        "naive_tokens": 34434,
+        "standard_tokens": 52670,
+        "graph_tokens": 184086,
+        "naive_to_graph_ratio": 0.2,
+        "standard_to_graph_ratio": 0.3
+      },
+      {
+        "repo": "canompx3",
+        "commit": "1a0a4a24bd5df916216161b58752e81f7e9528bf",
+        "description": "fix(check-45): canonical refresh tool for stale validated_setups trade windows",
+        "changed_files": 2,
+        "naive_tokens": 3113,
+        "standard_tokens": 3323,
+        "graph_tokens": 126807,
+        "naive_to_graph_ratio": 0.0,
+        "standard_to_graph_ratio": 0.0
+      }
+    ],
+    "search_quality": [
+      {
+        "repo": "canompx3",
+        "query": "ORB window UTC resolution",
+        "expected": "pipeline/dst.py::orb_utc_window",
+        "rank": 2,
+        "reciprocal_rank": 0.5
+      },
+      {
+        "repo": "canompx3",
+        "query": "Mode A holdout sacred date enforcement",
+        "expected": "trading_app/holdout_policy.py::enforce_holdout_date",
+        "rank": 4,
+        "reciprocal_rank": 0.25
+      },
+      {
+        "repo": "canompx3",
+        "query": "drift check entry point",
+        "expected": "pipeline/check_drift.py::main",
+        "rank": 0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "repo": "canompx3",
+        "query": "strategy discovery main",
+        "expected": "trading_app/strategy_discovery.py::main",
+        "rank": 0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "repo": "canompx3",
+        "query": "parse strategy id eligibility",
+        "expected": "trading_app/eligibility/builder.py::parse_strategy_id",
+        "rank": 1,
+        "reciprocal_rank": 1.0
+      },
+      {
+        "repo": "canompx3",
+        "query": "outcome builder per-trade computation",
+        "expected": "trading_app/outcome_builder.py::_compute_outcomes_all_rr",
+        "rank": 0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "repo": "canompx3",
+        "query": "cost specs canonical source",
+        "expected": "pipeline/cost_model.py::COST_SPECS",
+        "rank": 0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "repo": "canompx3",
+        "query": "DST session catalog",
+        "expected": "pipeline/dst.py::SESSION_CATALOG",
+        "rank": 0,
+        "reciprocal_rank": 0.0
+      },
+      {
+        "repo": "canompx3",
+        "query": "deployable validated relation",
+        "expected": "pipeline/db_contracts.py::deployable_validated_relation",
+        "rank": 1,
+        "reciprocal_rank": 1.0
+      },
+      {
+        "repo": "canompx3",
+        "query": "portfolio fitness aggregator",
+        "expected": "trading_app/strategy_fitness.py::compute_portfolio_fitness",
+        "rank": 2,
+        "reciprocal_rank": 0.5
+      }
+    ],
+    "impact_accuracy": [
+      {
+        "repo": "canompx3",
+        "commit": "91516e1038ac4af6c6cc08d12ad2b610c25ea4f0",
+        "predicted_files": 3,
+        "actual_files": 3,
+        "true_positives": 3,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      {
+        "repo": "canompx3",
+        "commit": "9b16c4ebbeb72820592302a89d1bc9cbb1909968",
+        "predicted_files": 3,
+        "actual_files": 3,
+        "true_positives": 3,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      {
+        "repo": "canompx3",
+        "commit": "1a0a4a24bd5df916216161b58752e81f7e9528bf",
+        "predicted_files": 2,
+        "actual_files": 2,
+        "true_positives": 2,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    ]
+  }
+}
