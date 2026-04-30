@@ -31,9 +31,20 @@ All three were the right files. This is CRG's highest-signal tool for codebases 
 
 ```bash
 .venv/Scripts/python.exe -c "
-from code_review_graph.tools.query import semantic_search_nodes
 import os, sys
-out = semantic_search_nodes(query=sys.argv[1], limit=10, repo_root='.')
+from pathlib import Path
+_p = Path('.').resolve()
+_sibling = _p.parent / 'canompx3'
+if _p.name.startswith('canompx3-') and (_sibling / '.code-review-graph').exists():
+    _root = str(_sibling)
+else:
+    try:
+        from code_review_graph.incremental import find_project_root
+        _root = str(find_project_root(_p))
+    except Exception:
+        _root = '.'
+from code_review_graph.tools.query import semantic_search_nodes
+out = semantic_search_nodes(query=sys.argv[1], limit=10, repo_root=_root)
 print('Summary:', out.get('summary',''))
 print('Mode   :', out.get('search_mode','?'))
 print()

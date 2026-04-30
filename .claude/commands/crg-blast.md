@@ -26,9 +26,20 @@ Per official LLM-OPTIMIZED-REFERENCE §usage: "Use detail_level=minimal on all s
 
 ```bash
 .venv/Scripts/python.exe -c "
-from code_review_graph.tools.query import get_impact_radius
 import os, sys
-out = get_impact_radius(changed_files=[sys.argv[1]], max_depth=2, repo_root='.')
+from pathlib import Path
+_p = Path('.').resolve()
+_sibling = _p.parent / 'canompx3'
+if _p.name.startswith('canompx3-') and (_sibling / '.code-review-graph').exists():
+    _root = str(_sibling)
+else:
+    try:
+        from code_review_graph.incremental import find_project_root
+        _root = str(find_project_root(_p))
+    except Exception:
+        _root = '.'
+from code_review_graph.tools.query import get_impact_radius
+out = get_impact_radius(changed_files=[sys.argv[1]], max_depth=2, repo_root=_root)
 imp = out.get('impacted_nodes') or []
 chg = out.get('changed_nodes') or []
 files = sorted({n['file_path'] for n in imp})

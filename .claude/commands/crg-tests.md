@@ -33,9 +33,20 @@ Verified working: `pipeline/dst.py::orb_utc_window` → 8 hits, all in `tests/te
 
 ```bash
 .venv/Scripts/python.exe -c "
-from code_review_graph.tools.query import query_graph
 import os, sys
-out = query_graph(pattern='tests_for', target=sys.argv[1], repo_root='.')
+from pathlib import Path
+_p = Path('.').resolve()
+_sibling = _p.parent / 'canompx3'
+if _p.name.startswith('canompx3-') and (_sibling / '.code-review-graph').exists():
+    _root = str(_sibling)
+else:
+    try:
+        from code_review_graph.incremental import find_project_root
+        _root = str(find_project_root(_p))
+    except Exception:
+        _root = '.'
+from code_review_graph.tools.query import query_graph
+out = query_graph(pattern='tests_for', target=sys.argv[1], repo_root=_root)
 repo = os.path.abspath('.').replace(chr(92), '/').rstrip('/') + '/'
 def short(p):
     s = (p or '').replace(chr(92), '/')

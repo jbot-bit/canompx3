@@ -34,9 +34,20 @@ Read **`Next:`** — that tells you which tool to call after this one.
 
 ```bash
 .venv/Scripts/python.exe -c "
-from code_review_graph.tools.context import get_minimal_context
+from pathlib import Path
 import sys
-out = get_minimal_context(task=sys.argv[1], repo_root='.')
+_p = Path('.').resolve()
+_sibling = _p.parent / 'canompx3'
+if _p.name.startswith('canompx3-') and (_sibling / '.code-review-graph').exists():
+    _root = str(_sibling)
+else:
+    try:
+        from code_review_graph.incremental import find_project_root
+        _root = str(find_project_root(_p))
+    except Exception:
+        _root = '.'
+from code_review_graph.tools.context import get_minimal_context
+out = get_minimal_context(task=sys.argv[1], repo_root=_root)
 print('Risk    :', out.get('risk'))
 print('Summary :', out.get('summary'))
 print('Comms   :', ', '.join((out.get('communities') or [])[:3]))
