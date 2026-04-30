@@ -111,6 +111,17 @@ Read each modified file and scan for the seven sins. This is a CODE REVIEW gate,
 If ANY sin is detected, flag it in the report EVEN IF all other gates pass. A sin is worse than
 a test failure — tests can miss sins, but sins always corrupt results.
 
+**Gate 6: CRG Risk-Scored Change Report** (advisory, fail-open)
+```bash
+# Run AFTER Gates 1-5 pass. Surfaces stale-test and missing-coverage classes
+# the static drift checks (#125-#129) don't catch — those are static lists,
+# this is diff-aware. Per CRG integration spec § Phase 3 / A2.
+code-review-graph detect-changes --base HEAD~1 --repo C:/Users/joshd/canompx3 --format minimal 2>/dev/null | head -40
+```
+- **Fail-open.** If CRG is unavailable (binary missing, graph DB stale/missing, timeout): report "CRG advisory: SKIPPED — graph unavailable" and continue. Never block on CRG.
+- If risk is `high` or any "stale-test" finding surfaces: include the finding verbatim in the report under a CRG ADVISORY section. Do NOT escalate it to a gate failure — Phase 1 of the spec keeps CRG advisory only.
+- If `code-review-graph` binary is not on PATH: that is normal in a fresh worktree; report SKIPPED. Spec § Freshness contract.
+
 ### Step 3: Check Completeness
 
 After tests pass, check for common incompleteness:
@@ -178,6 +189,10 @@ GATE 3 — Targeted Tests: [PASS / FAIL / NO COVERAGE]
 GATE 4 — Full Suite: [PASS / FAIL / SKIPPED]
   [If failed: first failure details]
   [If skipped: "Skipped — earlier gate failed"]
+
+GATE 6 — CRG Advisory: [PASS / FINDINGS / SKIPPED]
+  [If FINDINGS: include risk score and stale-test/coverage findings verbatim]
+  [If SKIPPED: reason — graph unavailable, binary missing, timeout]
 
 COMPLETENESS:
   [List any orphaned imports, docstring drift, config gaps, schema gaps]
