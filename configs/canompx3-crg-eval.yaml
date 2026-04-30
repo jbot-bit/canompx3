@@ -1,0 +1,69 @@
+# CRG eval baseline config for canompx3.
+#
+# Schema (matches code-review-graph upstream eval/configs/*.yaml):
+#   name, url, commit, language, size_category, test_commits[], entry_points[], search_queries[]
+#
+# Wrapper at scripts/tools/run_crg_eval.py bypasses the upstream `run_eval`
+# orchestrator (which would `git clone` the repo into evaluate/test_repos/)
+# and calls the benchmark functions directly against canompx3's existing
+# graph at .code-review-graph/. Therefore `url` and `commit` are advisory
+# only — they document where the repo lives, but no clone happens.
+#
+# Plan: docs/plans/2026-04-30-crg-maximization-v2.md PR-3.
+# Halt condition (from plan): if (1 - 1/naive_to_graph_ratio) < 0.10 across
+# the 3 test_commits, stop PR-4a — CRG isn't pulling its weight.
+
+name: canompx3
+url: file://C:/Users/joshd/canompx3
+commit: HEAD
+language: python
+size_category: medium
+
+# Three commits chosen to exercise different change shapes. Verified live
+# 2026-04-30 against `git show --stat <sha>`.
+test_commits:
+  - sha: 91516e1038ac4af6c6cc08d12ad2b610c25ea4f0
+    description: "docs(rule): narrow backtesting-methodology § RULE 6.1 — break-bar columns are E2-look-ahead"
+    changed_files: 3
+    shape: doctrine
+  - sha: 9b16c4ebbeb72820592302a89d1bc9cbb1909968
+    description: "[mechanical] fix: Ralph Loop iter 170 — dead parameter break_ts in _compute_outcomes_all_rr (RI-05)"
+    changed_files: 3
+    shape: canonical_param_removal
+  - sha: 1a0a4a24bd5df916216161b58752e81f7e9528bf
+    description: "fix(check-45): canonical refresh tool for stale validated_setups trade windows"
+    changed_files: 2
+    shape: net_new_utility
+
+# Canonical entry points consumers should always be able to reach via the graph.
+entry_points:
+  - "pipeline/check_drift.py::main"
+  - "trading_app/strategy_discovery.py::main"
+  - "trading_app/eligibility/builder.py::parse_strategy_id"
+  - "pipeline/dst.py::orb_utc_window"
+  - "trading_app/outcome_builder.py::main"
+
+# Ground-truth search pairs. `expected` is the qualified name CRG should rank
+# top-3 for the given free-text query. Forms accepted: "<file>::<symbol>" or
+# bare symbol. Verified live 2026-04-30 — every expected target exists.
+search_queries:
+  - query: "ORB window UTC resolution"
+    expected: "pipeline/dst.py::orb_utc_window"
+  - query: "Mode A holdout sacred date enforcement"
+    expected: "trading_app/holdout_policy.py::enforce_holdout_date"
+  - query: "drift check entry point"
+    expected: "pipeline/check_drift.py::main"
+  - query: "strategy discovery main"
+    expected: "trading_app/strategy_discovery.py::main"
+  - query: "parse strategy id eligibility"
+    expected: "trading_app/eligibility/builder.py::parse_strategy_id"
+  - query: "outcome builder per-trade computation"
+    expected: "trading_app/outcome_builder.py::_compute_outcomes_all_rr"
+  - query: "cost specs canonical source"
+    expected: "pipeline/cost_model.py::COST_SPECS"
+  - query: "DST session catalog"
+    expected: "pipeline/dst.py::SESSION_CATALOG"
+  - query: "deployable validated relation"
+    expected: "pipeline/db_contracts.py::deployable_validated_relation"
+  - query: "portfolio fitness aggregator"
+    expected: "trading_app/strategy_fitness.py::compute_portfolio_fitness"

@@ -16,6 +16,30 @@ paths:
 Each task gets its own file. Multiple terminals can have concurrent stages without collision.
 The legacy `STAGE_STATE.md` file at `docs/runtime/` is **deprecated** — hooks still tolerate the legacy path for backwards-compat, but the file itself is gone and nothing new writes there.
 
+## Stage file format (parser-tolerant — use these to pass `stage-gate-guard.py` first try)
+
+Required fields: `task`, `mode`, `scope_lock`, `blast_radius`. The hook (`.claude/hooks/stage-gate-guard.py`) parses three formats — pick the one that matches your content shape:
+
+**`scope_lock`** — YAML list under the key, OR `## Scope Lock` markdown section with `- path` bullets. Inline `[a.py, b.py]` also works.
+
+**`blast_radius`** — must be ≥30 chars of joined text. Three accepted shapes:
+1. **`## Blast Radius` markdown section** (preferred — most tolerant; parser checks this first):
+   ```markdown
+   ## Blast Radius
+   - foo.py — new file, zero callers
+   - bar.py — modifies write path; 3 callsites
+   - Reads: gold.db (read-only); Writes: none
+   ```
+2. **Single-line YAML string**: `blast_radius: "foo.py (new), bar.py (3 callsites). Reads gold.db read-only."`
+3. **YAML list** — first non-blank line after `blast_radius:` MUST start with `- `:
+   ```yaml
+   blast_radius:
+     - foo.py — new file
+     - bar.py — modifies write path
+   ```
+
+**FAILS the parser** (silently → BLOCK): nested mapping under `blast_radius:` (`reads:` / `writes:` / `affects:` children). The parser sees the first child key as "next YAML key" and bails. If you want structured content, use the markdown section format instead.
+
 ## On every user message, you receive stage context via hook output:
 - `stage: none` → no active stage
 - `stage: TRIVIAL | [slug] | task description` → quick fix in progress
