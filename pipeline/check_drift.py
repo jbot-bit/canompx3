@@ -1741,7 +1741,10 @@ def check_doc_stats_consistency(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_doc_stats_consistency SKIPPED: gold.db not found "
+                    "— cannot verify validated/FDR-significant counts vs docs"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
         validated_active = con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone()[0]
@@ -2270,7 +2273,10 @@ def check_no_active_e3(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_no_active_e3 SKIPPED: gold.db not found "
+                    "— cannot verify E3 entry-model deactivation on active shelf"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
         count = con.execute(
@@ -2307,7 +2313,10 @@ def check_no_active_e2_lookahead_filters(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_no_active_e2_lookahead_filters SKIPPED: gold.db not found "
+                    "— cannot verify E2 look-ahead filter contamination on active shelf"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -2366,7 +2375,10 @@ def check_active_validated_filters_routable(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_active_validated_filters_routable SKIPPED: gold.db not found "
+                    "— cannot verify session-aware filter routing on active shelf"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -2435,7 +2447,10 @@ def check_active_micro_only_filters_on_real_micros(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_active_micro_only_filters_on_real_micros SKIPPED: gold.db not found "
+                    "— cannot verify MICRO-only filter routing"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -2510,7 +2525,10 @@ def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_active_micro_only_filters_after_micro_launch SKIPPED: gold.db not found "
+                    "— cannot verify MICRO-only filters' validation windows"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -3036,7 +3054,10 @@ def check_orphaned_validated_strategies(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_orphaned_validated_strategies SKIPPED: gold.db not found "
+                    "— cannot verify validated strategies have orb_outcomes coverage"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
         rows = con.execute(
@@ -7516,16 +7537,33 @@ def check_lane_allocation_chordia_gate() -> list[str]:
 
     lanes = data.get("lanes", []) or []
     if not lanes:
-        return []
+        # An empty lanes[] is NOT a legitimate state — `rebalance_lanes.py`
+        # always writes at least one lane in normal operation. Empty array
+        # indicates either (a) producer crashed mid-write, (b) every
+        # strategy got demoted by the gate (hand-edit) and the file was
+        # left in place, or (c) test fixture leaked. Fail-closed: file
+        # exists -> must contain real lanes. Operators wanting "no lanes"
+        # should delete the file rather than empty its contents.
+        return [
+            "  lane_allocation.json has empty lanes[] — no active lanes to audit; "
+            "if intentional, delete the file rather than leaving it empty"
+        ]
 
     # Source freshness threshold from the doctrine YAML so they cannot drift.
+    # Fail-closed: if the doctrine module cannot be loaded or returns an
+    # unexpected shape, we cannot verify the audit threshold and must NOT
+    # silently fall back to a hardcoded 90 — that hides doctrine corruption
+    # behind a passing-looking check.
     try:
         from trading_app.chordia import load_chordia_audit_log
 
         freshness = load_chordia_audit_log().audit_freshness_days
-    except Exception:
-        # Fail-closed default matches the institutional prior.
-        freshness = 90
+    except Exception as exc:
+        return [
+            f"  Cannot load chordia freshness threshold from doctrine "
+            f"(trading_app.chordia.load_chordia_audit_log raised {type(exc).__name__}: {exc}) — "
+            f"audit threshold unverified; fix the import / YAML before this check can run"
+        ]
 
     allow = ("PASS_CHORDIA", "PASS_PROTOCOL_A")
     violations: list[str] = []
