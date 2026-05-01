@@ -29,7 +29,13 @@ from trading_app.lane_correlation import RHO_REJECT_THRESHOLD
 
 
 def _make_score(**overrides) -> LaneScore:
-    """Build a LaneScore with sane defaults (DEPLOY-ready)."""
+    """Build a LaneScore with sane defaults (DEPLOY-ready, chordia-clean).
+
+    Chordia defaults: PASS_PROTOCOL_A verdict + audit_age 0d. This keeps
+    every existing test passing under the new chordia gate without
+    forcing each call site to specify chordia kwargs. Tests that exercise
+    the gate explicitly override these fields.
+    """
     defaults = dict(
         strategy_id="MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER",
         instrument="MNQ",
@@ -49,6 +55,8 @@ def _make_score(**overrides) -> LaneScore:
         months_positive_since_last_neg_streak=0,
         status="DEPLOY",
         status_reason="Test default",
+        chordia_verdict="PASS_PROTOCOL_A",
+        chordia_audit_age_days=0,
     )
     defaults.update(overrides)
     return LaneScore(**defaults)
@@ -75,6 +83,7 @@ def test_db(tmp_path):
             filter_type VARCHAR,
             stop_multiplier DOUBLE,
             sample_size INTEGER,
+            sharpe_ratio DOUBLE,
             status VARCHAR
         )
     """)
@@ -123,12 +132,13 @@ def _seed_strategy(
     filter_type="NO_FILTER",
     stop_multiplier=1.0,
     sample_size=100,
+    sharpe_ratio=0.10,  # default; t = 0.10 * sqrt(100) = 1.0 -> FAIL_BOTH unless overridden
     status="active",
 ):
     """Insert a validated strategy into test DB."""
     con = duckdb.connect(str(db_path))
     con.execute(
-        "INSERT INTO validated_setups VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO validated_setups VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             strategy_id,
             instrument,
@@ -140,6 +150,7 @@ def _seed_strategy(
             filter_type,
             stop_multiplier,
             sample_size,
+            sharpe_ratio,
             status,
         ],
     )
@@ -957,3 +968,181 @@ class TestCorrelationAwareSelection:
         corr = {}  # empty matrix — all pairs default to 0
         result = build_allocation([a, b], max_slots=5, correlation_matrix=corr)
         assert len(result) == 2
+
+
+class TestChordiaGate:
+    """Allocator Chordia gate — refuse DEPLOY for FAIL/MISSING/stale audits.
+
+    Stage: docs/runtime/stages/allocator-chordia-gate.md.
+    Verdict policy lives in trading_app.chordia.chordia_verdict_label and
+    chordia_verdict_allows_deploy. The gate sits in
+    lane_allocator.apply_chordia_gate, which build_allocation invokes inline.
+    """
+
+    def test_pass_protocol_a_unchanged(self):
+        """A PASS_PROTOCOL_A score with fresh audit is left at DEPLOY."""
+        from trading_app.lane_allocator import apply_chordia_gate
+
+        s = _make_score(
+            strategy_id="A",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=10,
+        )
+        result = apply_chordia_gate([s])
+        assert len(result) == 1
+        assert result[0].status == "DEPLOY"
+        assert result[0].chordia_verdict == "PASS_PROTOCOL_A"
+
+    def test_pass_chordia_unchanged(self):
+        """A PASS_CHORDIA score with fresh audit is left at DEPLOY."""
+        from trading_app.lane_allocator import apply_chordia_gate
+
+        s = _make_score(
+            strategy_id="A",
+            chordia_verdict="PASS_CHORDIA",
+            chordia_audit_age_days=0,
+        )
+        result = apply_chordia_gate([s])
+        assert result[0].status == "DEPLOY"
+
+    def test_fail_both_demoted_to_pause(self):
+        """A FAIL_BOTH score is demoted to PAUSE with chordia reason."""
+        from trading_app.lane_allocator import apply_chordia_gate
+
+        s = _make_score(
+            strategy_id="A",
+            chordia_verdict="FAIL_BOTH",
+            chordia_audit_age_days=0,
+        )
+        result = apply_chordia_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "FAIL_BOTH" in result[0].status_reason
+        assert result[0].chordia_verdict == "FAIL_BOTH"  # field preserved for traceability
+
+    def test_fail_chordia_demoted_to_pause(self):
+        """A FAIL_CHORDIA score (3.00<=t<3.79, no theory) is demoted to PAUSE."""
+        from trading_app.lane_allocator import apply_chordia_gate
+
+        s = _make_score(
+            strategy_id="A",
+            chordia_verdict="FAIL_CHORDIA",
+            chordia_audit_age_days=0,
+        )
+        result = apply_chordia_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "FAIL_CHORDIA" in result[0].status_reason
+
+    def test_missing_verdict_demoted_to_pause(self):
+        """A score with chordia_verdict=None is demoted to PAUSE."""
+        from trading_app.lane_allocator import apply_chordia_gate
+
+        s = _make_score(
+            strategy_id="A",
+            chordia_verdict=None,
+            chordia_audit_age_days=0,
+        )
+        result = apply_chordia_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "missing audit" in result[0].status_reason.lower()
+
+    def test_missing_audit_age_demoted_to_pause(self):
+        """A PASS verdict with chordia_audit_age_days=None is still demoted to PAUSE."""
+        from trading_app.lane_allocator import apply_chordia_gate
+
+        s = _make_score(
+            strategy_id="A",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=None,
+        )
+        result = apply_chordia_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "audit_date" in result[0].status_reason.lower()
+
+    def test_stale_audit_demoted_to_pause(self):
+        """audit_age_days=91 is stale (>90 default freshness) — PAUSE."""
+        from trading_app.lane_allocator import apply_chordia_gate
+        from trading_app.chordia import ChordiaAuditLog
+
+        # Construct an empty doctrine log with default freshness=90.
+        log = ChordiaAuditLog(default_has_theory=False, audit_freshness_days=90, entries={})
+        s = _make_score(
+            strategy_id="A",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=91,
+        )
+        result = apply_chordia_gate([s], audit_log=log)
+        assert result[0].status == "PAUSE"
+        assert "stale" in result[0].status_reason.lower()
+
+    def test_audit_age_at_freshness_boundary_passes(self):
+        """audit_age_days=90 exactly equals freshness — still passes (>, not >=)."""
+        from trading_app.lane_allocator import apply_chordia_gate
+        from trading_app.chordia import ChordiaAuditLog
+
+        log = ChordiaAuditLog(default_has_theory=False, audit_freshness_days=90, entries={})
+        s = _make_score(
+            strategy_id="A",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=90,
+        )
+        result = apply_chordia_gate([s], audit_log=log)
+        assert result[0].status == "DEPLOY"
+
+    def test_existing_pause_not_overridden(self):
+        """An already-PAUSED score keeps its original reason; gate is additive."""
+        from trading_app.lane_allocator import apply_chordia_gate
+
+        s = _make_score(
+            strategy_id="A",
+            status="PAUSE",
+            status_reason="Recovering — need 3+ positive months",
+            chordia_verdict="FAIL_BOTH",
+        )
+        result = apply_chordia_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "Recovering" in result[0].status_reason  # original reason preserved
+        assert "chordia gate" not in result[0].status_reason
+
+    def test_build_allocation_invokes_gate(self):
+        """build_allocation refuses FAIL_BOTH lanes even if caller forgot the gate."""
+        deploy_clean = _make_score(
+            strategy_id="CLEAN",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=10,
+            annual_r_estimate=50.0,
+        )
+        deploy_failed = _make_score(
+            strategy_id="FAILED",
+            orb_label="EUROPE_FLOW",
+            chordia_verdict="FAIL_BOTH",
+            chordia_audit_age_days=10,
+            annual_r_estimate=99.0,  # would beat CLEAN if gate weren't enforced
+        )
+        result = build_allocation([deploy_clean, deploy_failed], max_slots=5)
+        sids = {s.strategy_id for s in result}
+        assert "CLEAN" in sids
+        assert "FAILED" not in sids
+
+    def test_save_allocation_emits_chordia_fields(self, tmp_path):
+        """save_allocation writes chordia_verdict + chordia_audit_age_days into the JSON."""
+        import json
+        from datetime import date as _date
+        from trading_app.lane_allocator import save_allocation
+
+        s = _make_score(
+            strategy_id="A",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=15,
+        )
+        path = save_allocation(
+            scores=[s],
+            allocation=[s],
+            rebalance_date=_date(2026, 5, 1),
+            profile_id="test_profile",
+            output_path=tmp_path / "test_alloc.json",
+        )
+        data = json.loads(path.read_text())
+        assert len(data["lanes"]) == 1
+        lane = data["lanes"][0]
+        assert lane["chordia_verdict"] == "PASS_PROTOCOL_A"
+        assert lane["chordia_audit_age_days"] == 15

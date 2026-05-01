@@ -1,94 +1,94 @@
 {
-  "rebalance_date": "2026-04-18",
+  "rebalance_date": "2026-05-01",
   "trailing_window_months": 12,
   "profile_id": "topstep_50k_mnq_auto",
   "lanes": [
     {
-      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5",
-      "instrument": "MNQ",
-      "orb_label": "EUROPE_FLOW",
-      "rr_target": 1.5,
-      "filter_type": "ORB_G5",
-      "annual_r": 46.1,
-      "trailing_expr": 0.1892,
-      "trailing_n": 264,
-      "trailing_wr": 0.515,
-      "months_negative": 0,
-      "session_regime": "HOT",
-      "status": "DEPLOY",
-      "status_reason": "Session HOT (+0.1534), ExpR=+0.1892, N=264",
-      "avg_orb_pts": 24.6,
-      "p90_orb_pts": 39.0
-    },
-    {
-      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5",
-      "instrument": "MNQ",
-      "orb_label": "COMEX_SETTLE",
-      "rr_target": 1.5,
-      "filter_type": "ORB_G5",
-      "annual_r": 41.0,
-      "trailing_expr": 0.1756,
-      "trailing_n": 253,
-      "trailing_wr": 0.502,
-      "months_negative": 1,
-      "session_regime": "HOT",
-      "status": "DEPLOY",
-      "status_reason": "Session HOT (+0.0418), ExpR=+0.1756, N=253",
-      "avg_orb_pts": 32.3,
-      "p90_orb_pts": 52.8
-    },
-    {
       "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
       "instrument": "MNQ",
       "orb_label": "NYSE_OPEN",
+      "orb_minutes": 5,
       "rr_target": 1.0,
       "filter_type": "COST_LT12",
-      "annual_r": 29.0,
-      "trailing_expr": 0.12,
-      "trailing_n": 262,
-      "trailing_wr": 0.573,
+      "annual_r": 26.8,
+      "trailing_expr": 0.1095,
+      "trailing_n": 245,
+      "trailing_wr": 0.567,
       "months_negative": 0,
       "session_regime": "HOT",
       "status": "DEPLOY",
-      "status_reason": "Session HOT (+0.1071), ExpR=+0.1200, N=262",
-      "avg_orb_pts": 76.5,
-      "p90_orb_pts": 117.8
-    },
-    {
-      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12",
-      "instrument": "MNQ",
-      "orb_label": "TOKYO_OPEN",
-      "rr_target": 1.5,
-      "filter_type": "COST_LT12",
-      "annual_r": 20.3,
-      "trailing_expr": 0.0934,
-      "trailing_n": 236,
-      "trailing_wr": 0.466,
-      "months_negative": 0,
-      "session_regime": "HOT",
-      "status": "DEPLOY",
-      "status_reason": "Session HOT (+0.0897), ExpR=+0.0934, N=236",
-      "avg_orb_pts": 27.3,
-      "p90_orb_pts": 45.6
+      "status_reason": "Session HOT (+0.1548), ExpR=+0.1095, N=245",
+      "chordia_verdict": "PASS_PROTOCOL_A",
+      "chordia_audit_age_days": 0,
+      "avg_orb_pts": 75.1,
+      "p90_orb_pts": 115.6
     }
   ],
   "paused": [
     {
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_VOL_16K_S075",
+      "reason": "Session regime COLD (-0.0899)"
+    },
+    {
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_VOL_16K",
+      "reason": "Session regime COLD (-0.0899)"
+    },
+    {
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8_S075",
+      "reason": "Session regime COLD (-0.0899)"
+    },
+    {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8",
-      "reason": "Session regime COLD (-0.0917)"
+      "reason": "Session regime COLD (-0.0899)"
+    },
+    {
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G6_S075",
+      "reason": "Session regime COLD (-0.0899)"
+    },
+    {
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G4_S075",
+      "reason": "Session regime COLD (-0.0899)"
+    },
+    {
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT15_S075",
+      "reason": "Session regime COLD (-0.0899)"
+    },
+    {
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT15",
+      "reason": "Session regime COLD (-0.0899)"
+    },
+    {
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10_S075",
+      "reason": "Session regime COLD (-0.0899)"
+    },
+    {
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08_S075",
+      "reason": "Session regime COLD (-0.0899)"
     },
     {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
-      "reason": "Session regime COLD (-0.0917)"
+      "reason": "Session regime COLD (-0.0899)"
     },
     {
-      "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15",
-      "reason": "INTERIM AUDIT PAUSE 2026-04-30: allocator hardcodes orb_minutes=5; this O15 lane was scored against O5 data. Trailing ExpR 0.2407 is from O5 (~0.09 unfiltered under correct O15); p90 ORB 37.8pts from O5 vs ~60.1pts under O15 (DD budget understated 59%). Resume after fix/allocator-orb-minutes-hardcode lands and rerun."
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ATR_P50",
+      "reason": "Session regime COLD (-0.0899)"
     },
     {
-      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15",
-      "reason": "INTERIM AUDIT PAUSE 2026-04-30: allocator hardcodes orb_minutes=5; this O15 lane was scored against O5 data. Trailing ExpR 0.0792 from O5 (~0.0708 unfiltered under correct O15); p90 ORB 94.9pts vs ~146.5pts under O15 (DD budget understated 54%). Resume after fix/allocator-orb-minutes-hardcode lands and rerun."
+      "strategy_id": "MES_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT10_S075",
+      "reason": "Session regime COLD (-0.0157)"
+    },
+    {
+      "strategy_id": "MES_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT10",
+      "reason": "Session regime COLD (-0.0157)"
+    },
+    {
+      "strategy_id": "MES_SINGAPORE_OPEN_E2_RR1.5_CB1_COST_LT10_S075",
+      "reason": "Session regime COLD (-0.0339)"
+    },
+    {
+      "strategy_id": "MES_US_DATA_830_E2_RR1.0_CB1_OVNRNG_50_S075",
+      "reason": "Session regime COLD (-0.0966)"
     }
   ],
-  "all_scores_count": 38
+  "all_scores_count": 59
 }

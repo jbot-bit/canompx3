@@ -1,0 +1,125 @@
+# Chordia Audit Log — read by allocator's Chordia gate.
+#
+# Maps strategy_id -> { audit_date, verdict, has_theory, theory_ref }
+#
+# Doctrine:
+#   - Default for any strategy_id NOT in this file: has_theory=False, no audit
+#     entry. The allocator then either treats audit as missing (PAUSED) or
+#     recomputes the t-stat live and applies the strict T=3.79 hurdle, depending
+#     on what data is available. Strict default is the institutional prior:
+#     burden-of-proof on theory grounding, not on its absence.
+#   - has_theory=True requires explicit citation in `theory_ref` to a file
+#     under `docs/institutional/literature/` with a pre-registered economic
+#     mechanism. Adding has_theory=True without theory_ref is a doctrine
+#     violation; the gate treats it as has_theory=False.
+#   - audit_age_days is computed by the allocator as today - audit_date.
+#     Audits older than 90 days are treated as STALE -> PAUSED. Re-audit
+#     refreshes audit_date.
+#
+# Verdict values (must match `trading_app/chordia.py` semantics):
+#   - PASS_PROTOCOL_A : t >= 3.00 with has_theory=True (or t >= 3.79 with
+#                       has_theory=False; in that case the allocator may also
+#                       label PASS_CHORDIA — see policy below).
+#   - PASS_CHORDIA    : t >= 3.79 (strict Chordia 2018 hurdle, regardless of
+#                       theory). Used for sizing-up eligibility.
+#   - FAIL_BOTH       : t < 3.00. Strategy fails both Harvey-Liu and Chordia
+#                       hurdles. Allocator MUST refuse DEPLOY.
+#   - FAIL_CHORDIA    : 3.00 <= t < 3.79 with has_theory=True. Allocator may
+#                       allow DEPLOY (PASS_PROTOCOL_A) but NOT size up.
+#
+# Source of truth for verdict computation: `trading_app/chordia.py`
+# (`chordia_gate(sharpe_ratio, sample_size, has_theory)`).
+# Source for sharpe_ratio + sample_size: `validated_setups` table.
+#
+# IMPORTANT — YAML `verdict` field vs live recomputed verdict:
+#   The `verdict` recorded under each `audits[]` entry is an IS-only
+#   snapshot from the 2026-05-01 revalidation (Pathway-A adversarial
+#   split sample sizes). The allocator's live `compute_lane_scores` reads
+#   `validated_setups.sharpe_ratio` + `sample_size` — which reflect the
+#   full validated dataset — and computes a fresh verdict via
+#   `chordia_verdict_label`. These can differ. Examples (2026-05-01):
+#     H2 COMEX_SETTLE: YAML verdict=FAIL_BOTH (IS only); live=FAIL_CHORDIA
+#     H4 TOKYO_OPEN:   YAML verdict=FAIL_BOTH (IS only); live=FAIL_CHORDIA
+#   In both cases the live label still routes to PAUSE (FAIL_CHORDIA does
+#   not satisfy `chordia_verdict_allows_deploy`). Capital impact is zero.
+#   The YAML `verdict` field is a HUMAN AUDIT LEDGER, not the gate input.
+#
+# @research-source: docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
+# @canonical-source: trading_app/chordia.py + validated_setups
+# @revalidated-for: allocator_chordia_gate stage 2026-05-01
+
+version: 1
+default_has_theory: false
+audit_freshness_days: 90
+
+theory_grants:
+  # Strategies whose hypothesis family has a pre-registered economic mechanism
+  # citation in docs/institutional/literature/. has_theory=True for these.
+  # All others default to has_theory=False (strict T=3.79 hurdle).
+
+  - strategy_id: MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5
+    has_theory: true
+    theory_ref: docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
+    rationale: |
+      Same Chan Ch 7 intraday-momentum mechanism as H3 NYSE_OPEN; consistency
+      grant. Verdict on raw t-stat is FAIL_BOTH but theory grant means hurdle
+      is T=3.00, not T=3.79.
+
+  - strategy_id: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12
+    has_theory: true
+    theory_ref: docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
+    rationale: |
+      Chan Ch 7 intraday-momentum at NYSE open; canonical theoretical grounding
+      for the "first-hour-of-cash-session" momentum class.
+
+  # Strategies WITHOUT theory grant (has_theory=False, T=3.79):
+  #   - MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5  (settlement-window pattern; no
+  #     pre-registered mechanism)
+  #   - MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12  (Asian-open momentum lacks the
+  #     same depth of literature citation as NYSE/Europe flow)
+
+audits:
+  # Per-strategy audit entries. audit_date is when the t-stat was computed
+  # against this verdict; verdict is the canonical revalidation result.
+
+  - strategy_id: MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5
+    audit_date: 2026-05-01
+    verdict: FAIL_BOTH
+    t_stat: 2.276
+    threshold: 3.00
+    sample_size: 1718
+    note: |
+      Pre-registered hypothesis family had theory grounding but raw t-stat fell
+      below the 3.00 hurdle. Live signal-only continuation per
+      failure_policy.on_FAIL_BOTH. Allocator MUST refuse DEPLOY.
+
+  - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5
+    audit_date: 2026-05-01
+    verdict: FAIL_BOTH
+    t_stat: 3.276
+    threshold: 3.79
+    sample_size: 1658
+    note: |
+      Would pass at the theory-grant hurdle (3.00) but no pre-registered theory
+      citation exists for the COMEX settlement-flow mechanism. Strict 3.79
+      hurdle applies. FAIL_BOTH.
+
+  - strategy_id: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12
+    audit_date: 2026-05-01
+    verdict: PASS_PROTOCOL_A
+    t_stat: 3.412
+    threshold: 3.00
+    sample_size: 1719
+    note: |
+      Cleanest of the four candidates. Theory-granted (Chan Ch 7) so hurdle is
+      3.00. Allocator MAY DEPLOY. Does NOT qualify for PASS_CHORDIA (sizing-up)
+      since t < 3.79.
+
+  - strategy_id: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12
+    audit_date: 2026-05-01
+    verdict: FAIL_BOTH
+    t_stat: 3.268
+    threshold: 3.79
+    sample_size: 1722
+    note: |
+      No theory grant; strict 3.79 applies. FAIL_BOTH.
