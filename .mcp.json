@@ -16,6 +16,14 @@
       ],
       "env": {}
     },
+    "strategy-lab": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "scripts/tools/strategy_lab_mcp_server.py"
+      ],
+      "env": {}
+    },
     "gold-db": {
       "type": "stdio",
       "command": "python",
