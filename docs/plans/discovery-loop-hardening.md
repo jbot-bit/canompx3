@@ -1,6 +1,6 @@
 # Discovery-Loop Hardening — Tiered Forcing-Function Design
 
-**Status:** Tier 1 SHIPPED (PR #198). Tier 2 SHIPPED (this PR). Tiers 3–4 PLANNED, staged below.
+**Status:** Tier 1 SHIPPED (PR #198). Tier 2 SHIPPED (PR #199). Tier 3 SHIPPED (this PR). Tier 4 PLANNED, staged below.
 **Owner:** Josh + Claude
 **Created:** 2026-05-01
 **Trigger:** 2026-05-01 session — pasted Codex status ("I'm reading the remaining adapter files before I patch them") raised the question: what protects us when an agent — Claude, Codex, or another — slips into infinite-discovery mode?
@@ -79,26 +79,32 @@ The three artifacts that satisfy any tier:
 
 ---
 
-## Tier 3 — Context-Budget Hardening (PLANNED)
+## Tier 3 — Context-Budget Hardening (SHIPPED)
 
-**Goal:** observable read-budget; warn at soft cap, force a checkpoint at hard cap.
+`.claude/hooks/read-budget-guard.py` — multi-mode hook (`increment` / `reset-on-edit` / `inject` / `reset-session`) wired across PostToolUse(Read), PostToolUse(Edit|Write), UserPromptSubmit, PostCompact, and SessionStart.
 
-**Hook:** new `.claude/hooks/read-budget-guard.py` (PostToolUse(Read), increments a session counter; UserPromptSubmit reads it).
+**Counter behavior:**
+- `reads` increments on every `Read` tool use (PostToolUse).
+- Resets to 0 on any `Edit`/`Write` to `pipeline/` or `trading_app/`.
+- Doc/test/script edits do NOT reset (they count as in-discovery).
+- Cleared to 0 on SessionStart and PostCompact (state file persists; reset is intentional).
 
-**Logic:**
-- Increment counter on every `Read` tool use.
-- Decrement / reset on `Edit`/`Write` to a non-test, non-doc file.
-- Soft cap (warn): >15 reads with zero edits. Inject "Discovery has read N files without an edit — is this converging?"
-- Hard cap (force checkpoint): >25 reads. Inject "Hard cap reached. Either commit a `TRIVIAL:` declaration with the diff plan, or run `context_resolver.py`, or declare exploration complete and abort."
-- Resets on session start.
+**Warning thresholds:**
+- **Soft cap** at 16 reads (no production edit yet) → injects soft warning, 5-minute cooldown to avoid spam.
+- **Hard cap** at 26 reads → injects hard checkpoint message every prompt (no cooldown — it must keep firing until the agent acts).
 
-**Acceptance criteria:**
-- Counter increments on `Read`, decrements on `Edit` to `pipeline/`/`trading_app/`.
-- Soft warning fires at 16 reads / 0 edits.
-- Hard message fires at 26.
-- No double-counting across PostCompact / SessionStart.
+**Soft message:** "Discovery may be drifting — is the read set converging on a falsifiable change? If yes, write the diff. If no, narrow with `context_resolver.py`."
 
-**Risk:** counter drift across compaction. Mitigation: PostCompact hook resets counter to 0 (loss of state is safe — it just delays the next warning).
+**Hard message:** Stop and pick one of (a) `TRIVIAL:` declaration with diff plan, (b) `context_resolver.py` run, (c) declare exploration complete and abort.
+
+**State file:** `.claude/hooks/state/read-budget.json` (`{"reads", "edits_to_prod", "last_warned_at"}`).
+
+**Fail-open:** every command catches all exceptions, exits 0. Corrupted state file → fresh state.
+
+**Acceptance criteria — met:**
+- 14/14 pytest cases pass: increment-from-zero, increment-accumulates, reset-on-prod-edit, reset-on-trading-app-edit, no-reset-on-doc, no-reset-on-test, reset-session-clears, silent-below-soft, soft-fires-at-16, hard-fires-at-26, soft-cooldown-silences, hard-ignores-cooldown, after-reset-silent, unknown-command-silent.
+- Drift check passes.
+- Hook lands on `harden-discovery-loop-tier3` branch off `origin/main`.
 
 ---
 
@@ -125,8 +131,8 @@ The three artifacts that satisfy any tier:
 | Stage | Scope | Acceptance | Risk |
 |-------|-------|------------|------|
 | **S1 (PR #198)** | Tier 1 hook + design doc | Hook fires/silences correctly on 6 test cases; drift clean | Low — additive UserPromptSubmit, fail-open ✅ |
-| **S2 (this PR)** | Tier 2 edit-boundary marker | 11 transcript fixtures pass; trivial paths excluded; fail-open on transcript errors | Medium — transcript format coupling ✅ |
-| **S3** | Tier 3 read-budget counter | Counter behavior verified across compact + session-start; warnings fire at thresholds | Low — additive PostToolUse |
+| **S2 (PR #199)** | Tier 2 edit-boundary marker | 11 transcript fixtures pass; trivial paths excluded; fail-open on transcript errors | Medium — transcript format coupling ✅ |
+| **S3 (this PR)** | Tier 3 read-budget counter | 14 pytest cases pass; reset on prod edit + session-start + post-compact; soft @16 / hard @26 | Low — additive PostToolUse ✅ |
 | **S4** | Tier 4 rule docs + memory entry | Rule files updated; memory entry written | None — docs only |
 
 Each subsequent stage opens its own branch off `origin/main`, lands its own PR, and is independently revertable.
