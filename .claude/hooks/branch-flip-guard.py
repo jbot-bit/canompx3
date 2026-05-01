@@ -12,56 +12,50 @@ Why this exists: a mid-session `git checkout <other-branch>` followed by file
 edits deposits commits on the wrong branch. The pre-commit hook has the same
 check, but catching it early (after every Bash call) gives the user a chance
 to course-correct before work accumulates.
+
+Helpers (`_git_dir`, `_current_branch`, `_branch_at_start`) live in
+`_branch_state.py` so this hook and `mcp-git-guard.py` share one canonical
+implementation per `.claude/rules/institutional-rigor.md` rule 4.
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
+# Import shared helpers via spec_from_file_location because the dotted hooks
+# directory is not a package (`.claude/hooks/` is a flat script tree, not
+# importable as `claude.hooks`). spec_from_file_location is the
+# stdlib-sanctioned way to import a sibling .py without packaging it.
+import importlib.util as _importlib_util
 
-def _git_dir() -> Path | None:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return None
-        git_dir = Path(result.stdout.strip())
-        return git_dir if git_dir.is_absolute() else Path.cwd() / git_dir
-    except Exception:
-        return None
+_HOOKS_DIR = Path(__file__).resolve().parent
+_SPEC = _importlib_util.spec_from_file_location(
+    "_branch_state", _HOOKS_DIR / "_branch_state.py"
+)
+assert _SPEC is not None and _SPEC.loader is not None
+_branch_state = _importlib_util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_branch_state)
 
 
-def _current_branch() -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "branch", "--show-current"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return None
-        return result.stdout.strip() or None
-    except Exception:
-        return None
+# Test-friendly re-exports: tests/test_hooks/test_branch_flip_guard.py
+# monkeypatches `hook._git_dir` and `hook._current_branch`. Keeping these
+# module-level names preserves the test contract while delegating the
+# implementation to the shared canonical source.
+_git_dir = _branch_state.git_dir
+_current_branch = _branch_state.current_branch
 
 
 def main() -> None:
     try:
         event = json.load(sys.stdin)
     except Exception:
-        sys.exit(0)
+        sys.exit(0)  # fail-safe: malformed event from harness -> pass
 
     tool_name = event.get("tool_name", "")
     if tool_name != "Bash":
-        sys.exit(0)
+        sys.exit(0)  # fail-safe: matcher misfire -> pass
 
     # Only inspect commands that touch git branch state
     command = event.get("tool_input", {}).get("command", "")
@@ -71,24 +65,19 @@ def main() -> None:
 
     git_dir = _git_dir()
     if git_dir is None:
-        sys.exit(0)
+        sys.exit(0)  # fail-safe: not in a git repo -> pass
 
     lock_path = git_dir / ".claude.pid"
     if not lock_path.exists():
-        sys.exit(0)
+        sys.exit(0)  # fail-safe: no session lock -> pass
 
-    try:
-        lock_data = json.loads(lock_path.read_text(encoding="utf-8"))
-        branch_at_start = lock_data.get("branch_at_start", "")
-    except Exception:
-        sys.exit(0)
-
+    branch_at_start = _branch_state.branch_at_start(git_dir)
     if not branch_at_start:
-        sys.exit(0)
+        sys.exit(0)  # fail-safe: corrupted/empty lock -> pass
 
     current = _current_branch()
     if current is None:
-        sys.exit(0)
+        sys.exit(0)  # fail-safe: detached HEAD / git failure -> pass
 
     if current == branch_at_start:
         sys.exit(0)

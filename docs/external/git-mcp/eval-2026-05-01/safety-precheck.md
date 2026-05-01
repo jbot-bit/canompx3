@@ -6,10 +6,13 @@
 https://github.com/modelcontextprotocol/servers/tree/main/src/git) into `.mcp.json` regress
 the project's existing branch-flip protection stack?
 
-**Verdict (TL;DR):** **GO-WITH-MITIGATION.** Both layers of branch-flip protection are
-**bypassed** by MCP git tool calls in their current form. A new PostToolUse hook keyed on
-the matcher `mcp__git__.*` is required before adoption. Without that mitigation, this is a
-NO-GO.
+**Verdict (TL;DR):** **GO-WITH-MITIGATION** — **MITIGATION IMPLEMENTED 2026-05-01.**
+Both layers of branch-flip protection are **bypassed** by MCP git tool calls in their
+current form. A new PostToolUse hook keyed on the matcher `mcp__git__.*` is required
+before adoption — that hook (`mcp-git-guard.py`) plus a shared canonical-helper module
+(`_branch_state.py`) landed alongside this doc; see Q4 § "Mitigation status" and
+[`mitigation-hook-impl.md`](mitigation-hook-impl.md). Verdict flips to full **GO** once
+the documented `settings.json` patch is applied to the canonical worktree.
 
 Project rule reminders:
 - `.claude/rules/branch-flip-protection.md` — guard is intentionally PostToolUse(Bash) +
@@ -195,7 +198,8 @@ The new guard would:
 
 ## Q4 — Final verdict
 
-**GO-WITH-MITIGATION.**
+**GO-WITH-MITIGATION** — **MITIGATION IMPLEMENTED**, see
+`mitigation-hook-impl.md` and the commit landing this doc edit.
 
 Adoption is acceptable IF AND ONLY IF, in the same change-set as the `.mcp.json` edit:
 
@@ -216,6 +220,29 @@ no pre-commit backstop.
 the merge on a manual test that proves a deliberately-flipped branch + `mcp__git__git_commit`
 is BLOCKED. If the project elects the read-only restriction, write the `.mcp.json` with
 an explicit `disabled` list and a CHANGELOG note pointing here.
+
+### Mitigation status (2026-05-01)
+
+- **(1) PostToolUse hook implemented**: `.claude/hooks/mcp-git-guard.py`
+  with matcher `mcp__git__.*`. Companion shared module
+  `.claude/hooks/_branch_state.py` extracted; `branch-flip-guard.py`
+  refactored to consume it (both guards now share one canonical
+  implementation per `.claude/rules/institutional-rigor.md` rule 4).
+- **(2) `mcp__git__git_commit` blocked on drift**: verified by
+  `tests/test_hooks/test_mcp_git_guard.py::TestBlockOnDrift::test_write_tool_blocks[mcp__git__git_commit]`
+  (parametrised across all six write tools). Pre-commit-bypass class
+  closed for the MCP path.
+- **Tests**: 35/35 passing across `test_branch_state.py`,
+  `test_mcp_git_guard.py`, and the original `test_branch_flip_guard.py`
+  (refactor preserved original behaviour).
+- **(3) settings.json patch**: documented inline in
+  `mitigation-hook-impl.md` § "settings.json patch — TO APPLY
+  MANUALLY". **Not applied in this commit** (per the eval-doc-only
+  pattern shared with the other two evals); user applies the patch
+  separately. Until then, verdict remains GO-WITH-MITIGATION rather
+  than full GO.
+
+**Cross-reference:** [`mitigation-hook-impl.md`](mitigation-hook-impl.md).
 
 ---
 
