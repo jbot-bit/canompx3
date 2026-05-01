@@ -1,17 +1,5 @@
 {
   "mcpServers": {
-    "motherduck-eval": {
-      "command": "uvx",
-      "args": [
-        "--constraints", "C:/Users/joshd/canompx3/constraints.txt",
-        "mcp-server-motherduck",
-        "--db-path", "C:/Users/joshd/canompx3/gold.db.eval"
-      ],
-      "env": {
-        "HOME": "C:/Users/joshd",
-        "MOTHERDUCK_TOKEN": ""
-      }
-    },
     "gold-db": {
       "type": "stdio",
       "command": "python",

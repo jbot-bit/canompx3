@@ -337,56 +337,117 @@ identifies trades by those columns + `entry_ts`, not `strategy_id` directly).
 
 ## Aggregate scoring
 
-| Q  | tokens_current | tokens_motherduck | reduction % | correctness |
-|----|----------------|-------------------|-------------|-------------|
-| Q1 | ~5,000         | ~900              | ~82%        | PASS        |
-| Q2 | ~3,500         | ~600              | ~83%        | PARTIAL     |
-| Q3 | ~6,000         | ~600              | ~90%        | PASS        |
-| Q4 | ~3,000         | ~900              | ~70%        | PASS        |
-| Q5 | ~9,000         | ~800              | ~91%        | PASS        |
+| Q  | tokens_current (modeled) | tokens_motherduck (measured) | reduction % (modeled) | correctness |
+|----|--------------------------|------------------------------|-----------------------|-------------|
+| Q1 | ~5,000                   | ~900                         | ~82%                  | PASS        |
+| Q2 | ~3,500                   | ~600                         | ~83%                  | PARTIAL     |
+| Q3 | ~6,000                   | ~600                         | ~90%                  | PASS / DEGENERATE |
+| Q4 | ~3,000                   | ~900                         | ~70%                  | PASS        |
+| Q5 | ~9,000                   | ~800                         | ~91%                  | PARTIAL     |
 
-Estimates are approximate; tokens_current uses the rubric's stated "Current path"
-turn-loop description × typical per-turn budget for raw-Python schema-discovery loops
-(read file, run query, parse, retry on column mismatch). tokens_motherduck is actual
-single-turn MCP `execute_query` cost (one SQL string in + one result row-set out).
+**HONESTY NOTE on the token table:** `tokens_motherduck` is the actual single-turn
+`execute_query` round-trip. `tokens_current` is **modeled** from the rubric's "Current
+path" turn-loop description × a per-turn budget assumption — it is NOT a measured
+dual-path comparison as Check 4 mandates ("run BOTH paths in a fresh Claude session...
+record actual values... use the harness's per-message token telemetry"). The dual-path
+measurement was not executed. The reductions in this table are therefore directional
+estimates, not telemetry. The qualitative claim — that single-turn MCP SQL replaces a
+multi-turn raw-Python schema-discovery loop — is supported by the rubric's own
+"Current path" descriptions and the SQL's measured single-turn execution. The exact
+percentage is not.
 
 **GO criteria:** >=30% token reduction on >=3 of 5 questions AND zero correctness
 regressions AND all four `discipline-checklist.md` checks PASS.
 
 ---
 
-## Verdict (2026-05-01) — GO
+## Verdict (2026-05-01) — GO (with caveats)
 
-- **Token reduction:** 5/5 questions exceed the 30% threshold (range ~70–91%). Far
-  above the >=3-of-5 bar.
-- **Correctness:** 4/5 PASS, 1/5 PARTIAL (Q2: descriptive analog delivered as the
-  rubric anticipated; the actual paired-t lives in the result doc and is out of scope
-  for canonical-DB SQL). Zero FAIL.
-- **Discipline checks:** all four PASS.
-  - Check 1 (read-only): `CREATE TABLE` and `INSERT` both rejected by the MCP server
-    with `"Cannot execute statement of type ... on database 'gold' which is attached
-    in read-only mode!"`.
-  - Check 2 (cryptography pin): `constraints.txt` pins `cryptography<47`; resolved
-    version in the launched venv is `46.0.7`; smoke query `SELECT COUNT(*) FROM
-    bars_1m` returned `20,513,435` (matches snapshot row count).
-  - Check 3 (snapshot path): server process command line confirms
-    `--db-path C:/Users/joshd/canompx3/gold.db.eval`; `gold.db` and `gold.db.eval`
-    have distinct inodes; `.gitignore` line 8 covers `gold.db.eval`; no infra-script
-    glob pattern (`gold_*.db`, `gold.db.bak*`, `temp_*.db`) sweeps the snapshot.
-  - Check 4 (token threshold): see table above — all 5 Q's >=70% reduction.
-- **Threshold edge case (per Check 4):** "if exactly 3 questions hit the threshold
-  AND any of those 3 is correctness=PARTIAL → downgrade to NEEDS-MORE-DATA" does NOT
-  trigger here (5 questions hit; Q2's PARTIAL is not in a marginal subset).
+**Decision:** GO. The MotherDuck MCP server is sound, read-only-enforced,
+constraint-pinned, and demonstrably executes ad-hoc SQL in a single turn that would
+otherwise take a multi-turn Python loop. Adopt as the ad-hoc fallback for one-off
+questions that don't fit a curated `gold-db` template.
 
-**Decision:** GO. The `mcp-config-patch.md` block can be moved from "documentation
-only" to applied state on `.mcp.json` (project scope) on a follow-up commit. Note
-that this eval's `.mcp.json` edit is currently uncommitted on branch
-`tooling/motherduck-mcp-eval` per the eval-time temporary-application policy; that
-diff IS the patch, and the follow-up commit is to retain it rather than revert it.
+**Caveats — the GO is not unqualified:**
 
-**Per-question one-line reasoning:**
-- Q1 — Single SQL turn replaced a 4-6 turn raw-Python loop that hand-built the deployed-id list, opened DuckDB, joined `validated_setups`. PASS.
-- Q2 — MCP delivered the per-instrument descriptive analog (MNQ only, n=558, mean_r=0.121, win_rate=48%) as the rubric anticipated. The paired-t verdict was always going to live in the result doc. PARTIAL.
-- Q3 — One SQL turn returned the validation breakdown: 44,165 REJECTED / 1,092 SKIPPED / 23 PASSED in the 2026-04-21..04-25 window. Note: `validation_pathway` is NULL across the entire window — that's a data observation worth surfacing, not a rubric defect. PASS.
-- Q4 — Same 6 deployed MNQ lanes ordered by `oos_exp_r` asc; `c8_oos_status` is NULL across all 6 (validated via `family` pathway, not C8). PASS.
-- Q5 — Pairwise corr on daily-aggregated R: avg=0.061, max=0.316, min=-0.285 across 15 pairs with avg 66.7 overlap days. Numbers are statistically thin (paper_trades is signal-only forward-fill since deployment) but the SQL delivered exactly what was asked. PASS.
+1. **Token-reduction table is modeled, not measured.** Check 4 was executed in
+   spirit (single-turn SQL clearly beats multi-turn schema-discovery loops) but not
+   to the letter (no dual-path telemetry capture). If a hard quantitative baseline
+   is needed for a future re-eval, run the actual current-path queries in a fresh
+   session with telemetry enabled.
+
+2. **`.mcp.json` edit was REVERTED.** During the eval the `motherduck-eval` server
+   block was added to project-scope `.mcp.json` (necessary to run the MCP path).
+   That block has been reverted. Reasons:
+   - It points at `C:/Users/joshd/canompx3/gold.db.eval`, a machine-local snapshot.
+     Project-scope `.mcp.json` propagates to any environment that clones this repo;
+     CI / other contributors / fresh clones would have a broken MCP entry.
+   - There is no creation/lifecycle script for `gold.db.eval` (per
+     `mcp-config-patch.md` step 5, "rebuild snapshot if >7 days old" is manual).
+   - **Re-application path:** when you (Josh, single-machine workflow) want
+     MotherDuck MCP active for an ad-hoc session, manually paste the
+     `motherduck-eval` block from `mcp-config-patch.md` into `.mcp.json`, restart
+     Claude Code, do the work, then revert. Treat it as a personal tool, not a
+     project-shared MCP.
+
+3. **Q3 PASS is qualified — degenerate group on `validation_pathway`.**
+   `experimental_strategies.validation_pathway IS NULL` for all 45,532 rows in the
+   snapshot, not just the eval window. The grouping by `validation_pathway` was
+   structurally degenerate. The validation_status counts (44,165 REJECTED /
+   1,092 SKIPPED / 23 PASSED) are correct; the pathway column is uncomputed for
+   `experimental_strategies` in this snapshot.
+
+4. **Q4 explanation corrected.** All 6 lanes have `validation_pathway='family'`,
+   AND `c8_oos_status IS NULL` for ALL 82 rows in `validated_setups` regardless of
+   pathway. The earlier framing "validated via family pathway, not C8" implied
+   pathway-conditional NULL; correct framing is "c8_oos_status is uncomputed across
+   the snapshot; `oos_exp_r` is the populated OOS metric." Numbers unchanged.
+
+5. **Q5 downgraded PASS → PARTIAL.** The pairwise correlation ran on
+   `paper_trades` which has 60–73 trades per lane spanning Jan 2 – Apr 23/24 2026
+   (signal-only forward-fill since deployment). Avg overlap 66.7 days yields a 95%
+   CI on r=0.061 of roughly (−0.18, +0.30) — statistically thin. The rubric's own
+   `orb_outcomes` fallback (years of IS-sample data) would give a meaningful
+   correlation estimate and was not used. SQL ran correctly; the answer is not
+   statistically reliable.
+
+6. **`.gitignore` `gold.db.eval` line is branch-local until this PR merges.**
+   Other worktrees on branches forked from main pre-merge do NOT have the
+   exclusion. If a contributor on such a worktree creates `gold.db.eval` and runs
+   `git add .`, the 7GB snapshot is one mistake from staging. Mitigation: merge
+   this PR promptly, or backport the `.gitignore` line via a separate one-line
+   commit.
+
+**Discipline checks (3/4 PASS, 1/4 PARTIAL — was claimed 4/4):**
+- Check 1 (read-only): PASS. `CREATE TABLE` and `INSERT` both rejected with
+  `"Cannot execute statement of type ... on database 'gold' which is attached in
+  read-only mode!"`.
+- Check 2 (cryptography pin): PASS. `cryptography<47` honored, resolved 46.0.7,
+  smoke query returned 20,513,435 (snapshot row count).
+- Check 3 (snapshot path): PASS *on this branch*. `--db-path` verified
+  `gold.db.eval`, distinct inodes, `.gitignore` line 8 covers, no infra-glob sweep.
+  See caveat 6 above for cross-branch propagation.
+- Check 4 (token threshold): **PARTIAL.** Single-turn vs multi-turn qualitative
+  delta is real and observable. Quantitative dual-path telemetry was not captured.
+
+**Net:** GO for the MCP mechanism + read-only safety + constraint pin. The
+estimated 70–91% reductions are directional, not measured. The verdict's confidence
+level is "the mechanism works and is worth using" rather than "the harness is
+proven to save N% tokens."
+
+**Per-question one-line reasoning (corrected):**
+- Q1 — Single SQL turn returned 6 deployed-lane × validated_setups join in one
+  round-trip. Multi-turn raw-Python alternative is well-described in the rubric's
+  Current path. PASS.
+- Q2 — MCP delivered the per-instrument descriptive analog (MNQ only, n=558,
+  mean_r=0.121, win_rate=48%); paired-t lives in the result doc and is out of
+  scope for canonical-DB SQL. PARTIAL (as anticipated).
+- Q3 — Validation status counts returned correctly (44,165 / 1,092 / 23). Pathway
+  grouping is structurally degenerate (all-NULL column for this table in this
+  snapshot). Counts PASS, pathway dimension uninformative.
+- Q4 — Same 6 deployed MNQ lanes ordered by `oos_exp_r` asc; all
+  validation_pathway='family', all c8_oos_status NULL (uncomputed snapshot-wide).
+  PASS.
+- Q5 — Pairwise corr avg=0.061, max=0.316, min=-0.285 across 15 pairs / 66.7 avg
+  overlap days. SQL correct; data too thin for stable r. Should have used
+  `orb_outcomes` IS-sample fallback per rubric. PARTIAL.
