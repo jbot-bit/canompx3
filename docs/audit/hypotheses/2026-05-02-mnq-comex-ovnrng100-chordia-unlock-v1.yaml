@@ -1,13 +1,18 @@
-version: 1
-status: LOCKED
-date: 2026-05-02
-slug: mnq-comex-ovnrng100-chordia-unlock-v1
-title: "MNQ COMEX_SETTLE O5 RR1.0 OVNRNG_100 strict Chordia unlock v1"
-owner: codex
-parent_spec: "docs/runtime/action-queue.yaml#chordia_audit_unlock_pass_chordia_strategies"
+metadata:
+  name: "mnq_comex_ovnrng100_chordia_unlock_v1"
+  purpose: "Bounded exact-lane Chordia unlock audit for MNQ COMEX_SETTLE O5 RR1.0 OVNRNG_100. No theory grant is claimed."
+  date_locked: "2026-05-02T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "family"
+  research_question_type: "conditional_role"
 
-testing_mode: family
-pathway: A_fixed_family
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+  default_args:
+    - "--hypothesis-file"
+    - "docs/audit/hypotheses/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.yaml"
 
 authority:
   primary:
@@ -15,6 +20,8 @@ authority:
     - ".claude/rules/backtesting-methodology.md"
     - ".claude/rules/research-truth-protocol.md"
     - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/conditional-edge-framework.md"
+    - "docs/institutional/research_pipeline_contract.md"
     - "docs/runtime/chordia_audit_log.yaml"
     - "docs/audit/results/2026-05-01-chordia-audit-unlock-triage.md"
     - "docs/audit/results/2026-05-02-chordia-theory-feasibility-scan.md"
@@ -23,11 +30,6 @@ authority:
     - "No theory grant is claimed for OVNRNG_100 in this file."
     - "Criterion 4 strict threshold t >= 3.79 applies."
     - "Mode A holdout remains sacred from 2026-01-01."
-
-reproducibility:
-  repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "7c8ab425b830"
-  committed_required_before_run: true
 
 scope:
   instrument: MNQ
@@ -40,8 +42,7 @@ scope:
   direction: pooled
   filter_type: OVNRNG_100
   filter_source: "trading_app.config.ALL_FILTERS['OVNRNG_100']"
-  role: R1_binary_overlay
-  baseline: "same geometry, unfiltered parent lane"
+  baseline: "same geometry, exact canonical lane replay"
   out_of_scope:
     - "RR1.5 sibling strategy"
     - "theory-grant attempt for OVNRNG_100"
@@ -56,9 +57,6 @@ data_policy:
   oos_window:
     description: "trading_day >= HOLDOUT_SACRED_FROM"
     policy: "read-only descriptive corroboration only; never used to rescue or kill the IS verdict."
-  holdout_rule:
-    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
-    locked_boundary: "2026-01-01"
   tuning_against_oos: false
   canonical_layers_only: true
 
@@ -70,7 +68,7 @@ feature_definition:
   first_complete_time: "pre-session overnight window close"
   temporal_alignment_note: >
     Overnight range is fully determined before COMEX_SETTLE begins, so the
-    filter is trade-time-knowable. This prereg does NOT claim the specific
+    filter is trade-time-knowable. This prereg does not claim the specific
     100-point threshold has resource-backed theory status.
   lookahead_check: "Required PASS before execution."
 
@@ -90,11 +88,11 @@ grounding:
       The 2026-05-02 feasibility scan found class-level local support for
       volatility/context filters, but no local resource-backed citation that
       specifically grounds the exact OVNRNG_100 threshold as a mechanism.
-      Therefore `has_theory: true` is banned in this prereg and the strict
-      Chordia threshold applies.
+      Therefore this prereg must remain no-theory and the strict Chordia
+      threshold applies.
 
 upstream_discovery_provenance:
-  role: PROVENANCE_ONLY
+  role: "PROVENANCE_ONLY"
   sources:
     - "docs/audit/results/2026-05-01-chordia-audit-unlock-triage.md"
   note: >
@@ -120,23 +118,48 @@ primary_schema:
   promotion_gate: "PASS_CHORDIA only; PASS_PROTOCOL_A is not available in this prereg"
 
 hypotheses:
-  - id: H1_STRICT_CHORDIA_UNLOCK
-    type: primary
-    theory_citation: |
-      Core ORB premise only:
-      `resources/Building_Reliable_Trading_Systems.pdf` and
-      `resources/Algorithmic_Trading_Chan.pdf`, via the local extract files
-      listed in `grounding.core_orb_premise`. No direct OVNRNG_100 theory
-      claim is made or implied.
-    statement: |
+  - id: 1
+    name: "MNQ COMEX_SETTLE O5 RR1.0 OVNRNG_100 exact-lane strict unlock"
+    economic_basis: >
+      This is a bounded exact-lane replay of a pre-existing validated family
+      survivor. The honest question is whether the complete configured lane
+      still clears the strict no-theory Chordia hurdle under canonical Mode A
+      replay. The overnight-range filter class receives no theory grant here.
+    role:
+      kind: "standalone"
+      parent: "Exact MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100 canonical lane replay on orb_outcomes x daily_features."
+      comparator: "Replay-selected trades versus the strict Chordia threshold and descriptive OOS sign monitor; no sibling rescue or parameter variation."
+      primary_metric: "selected_trade_mean_r"
+      promotion_target: "chordia_audit_unlock_only"
+    filter:
+      type: "OVNRNG_100"
+      column: "overnight_range_abs"
+      thresholds:
+        - "fire_vs_off"
+    scope:
+      instruments: [MNQ]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [5]
+    expected_trial_count: 1
+    kill_criteria:
+      - "IS t-stat < 3.79"
+      - "IS ExpR <= 0.0"
+      - "N_IS_on < 100"
+      - "If OOS N >= 30, OOS sign opposes IS sign"
+      - "Canonical filter delegation diverges from trading_app.config"
+      - "Scratch/null handling is not explicit in the measured trade stream"
+    statement: >
       On the fixed MNQ COMEX_SETTLE O5 E2 CB1 RR1.0 lane using the canonical
       OVNRNG_100 filter, the IS sample remains positive and strong enough to
-      clear the strict no-theory Chordia severity gate (t >= 3.79) when
-      recomputed honestly on canonical Mode-A data with adversarial split
-      reporting.
+      clear the strict no-theory Chordia severity gate when recomputed honestly
+      on canonical Mode-A data with adversarial split reporting.
     pass_metric:
       metric: "t_IS"
-      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical IS trades after canonical filter delegation"
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical IS fired trades after canonical filter delegation"
       threshold_gte:
         t_is: 3.79
         n_is_on: 100
@@ -150,35 +173,13 @@ hypotheses:
 trial_budget:
   primary_selection_trials: 1
   schema_locked_before_any_metric: true
-  minbtl_bound:
-    formula: "2*ln(N_trials)/(E[max_N]^2)"
-    n_trials: 1
-    expected_max_n: 1.2
-    value: 0.0
-    within_cap: true
-    cap_reference: "docs/institutional/pre_registered_criteria.md Criterion 2"
 
-kill_criteria:
-  - id: K1
-    metric: "t_IS"
-    threshold: "< 3.79"
-    action: FAIL_STRICT_CHORDIA
-  - id: K2
-    metric: "ExpR_IS"
-    threshold: "<= 0.0"
-    action: FAIL_STRICT_CHORDIA
-  - id: K3
-    metric: "dir_match_oos"
-    threshold: "false when OOS N is sufficient for a descriptive read"
-    action: PARK
-  - id: K4
-    metric: "canonical harness parity"
-    threshold: "filter delegation or join implementation diverges from canonical code"
-    action: SCAN_ABORT
-  - id: K5
-    metric: "scratch handling"
-    threshold: "scratch rows exist and are silently dropped instead of explicitly handled"
-    action: SCAN_ABORT
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
 
 decision_rule:
   continue_if: "H1 clears strict t >= 3.79 with positive IS ExpR and no harness failure"
@@ -199,16 +200,13 @@ methodology_rules_applied:
 
 outputs_required_after_run:
   - "result markdown at docs/audit/results/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.md"
-  - "row-level CSV or equivalent artifact with IS/OOS split, filter fire flag, pnl_r, and scratch treatment"
+  - "row-level CSV with IS/OOS split, raw/effective pnl_r, and scratch/null handling"
   - "single-cell summary table with N_IS_on, ExpR_IS, Sharpe_IS, t_IS, OOS sign check, and verdict"
   - "explicit statement that no theory grant was used"
 
 execution_gate:
   allowed_now: true
-  blocked_here_reason: >
-    This checkout currently lacks `.venv-wsl`, and system `python3` is missing
-    `duckdb`, `pandas`, `numpy`, and `pydantic`, so execution is environment-
-    blocked in this session even though the prereg itself is valid.
+  execution_surface: "WSL with .venv-wsl"
   forbidden_now:
     - "theory-grant upgrade without new /resources-backed citation"
     - "sibling-cell rescue"

@@ -82,6 +82,63 @@ audits:
   # Per-strategy audit entries. audit_date is when the t-stat was computed
   # against this verdict; verdict is the canonical revalidation result.
 
+  - strategy_id: MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15
+    audit_date: 2026-05-02
+    verdict: PASS_CHORDIA
+    t_stat: 5.547
+    threshold: 3.79
+    sample_size: 889
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg
+      `docs/audit/hypotheses/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.yaml`.
+      No theory grant claimed. Scratch-inclusive replay on canonical
+      `orb_outcomes` + `daily_features` cleared the strict hurdle with
+      positive OOS sign on N_OOS=47.
+
+  - strategy_id: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60
+    audit_date: 2026-05-02
+    verdict: FAIL_BOTH
+    t_stat: 3.716
+    threshold: 3.79
+    sample_size: 596
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg
+      `docs/audit/hypotheses/2026-05-02-mnq-cmepreclose-xmesatr60-chordia-unlock-v1.yaml`.
+      No theory grant claimed. Canonical replay required cross-asset ATR
+      enrichment (`cross_atr_MES_pct`) before filter delegation; after fixing
+      that harness parity gap, the lane measured t=3.716 and failed the strict
+      3.79 hurdle.
+
+  - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100
+    audit_date: 2026-05-02
+    verdict: PASS_CHORDIA
+    t_stat: 4.414
+    threshold: 3.79
+    sample_size: 529
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg
+      `docs/audit/hypotheses/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.yaml`.
+      No theory grant claimed. Scratch-inclusive replay on canonical
+      `orb_outcomes` + `daily_features` cleared the strict hurdle with
+      positive OOS sign on N_OOS=66.
+
+  - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12
+    audit_date: 2026-05-02
+    verdict: PASS_CHORDIA
+    t_stat: 4.202
+    threshold: 3.79
+    sample_size: 1281
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg
+      `docs/audit/hypotheses/2026-05-02-mnq-comex-costlt12-chordia-unlock-v1.yaml`.
+      No theory grant claimed. Scratch-inclusive replay on canonical
+      `orb_outcomes` + `daily_features` cleared the strict hurdle with
+      positive OOS sign on N_OOS=70.
+
   - strategy_id: MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5
     audit_date: 2026-05-01
     verdict: FAIL_BOTH

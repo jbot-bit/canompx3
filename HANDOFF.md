@@ -22,6 +22,36 @@
   - `docs/audit/hypotheses/2026-05-02-mnq-cmepreclose-xmesatr60-chordia-unlock-v1.yaml`
   - `docs/audit/hypotheses/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.yaml`
   - `docs/audit/hypotheses/2026-05-02-mnq-comex-costlt12-chordia-unlock-v1.yaml`
+- Those four preregs were then normalized to the repo's active
+  `metadata`/`execution`/`conditional_role` schema so the prereg front door
+  can execute them without ad hoc routing.
+- Generic bounded runner added:
+  `research/chordia_strict_unlock_v1.py`
+  - canonical `orb_outcomes` + `daily_features` replay
+  - strict no-theory threshold via `trading_app.chordia.chordia_threshold`
+  - explicit scratch-inclusive accounting (`pnl_r NULL -> 0.0`)
+  - explicit `cross_atr_MES_pct` enrichment for `CrossAssetATRFilter` parity
+  - writes result `.md` + `.csv` only; no writes to `validated_setups` /
+    `experimental_strategies`
+- Executed all 4 strict unlock preregs through
+  `scripts/tools/prereg_front_door.py --execute`
+  with measured outcomes:
+  - `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`
+    -> `PASS_CHORDIA`, `t=5.547`, `N_IS=889`
+  - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`
+    -> `PASS_CHORDIA`, `t=4.414`, `N_IS=529`
+  - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12`
+    -> `PASS_CHORDIA`, `t=4.202`, `N_IS=1281`
+  - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`
+    -> `FAIL_BOTH` under strict doctrine, `t=3.716`, `N_IS=596`
+- Result artifacts written:
+  - `docs/audit/results/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.{md,csv}`
+  - `docs/audit/results/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.{md,csv}`
+  - `docs/audit/results/2026-05-02-mnq-comex-costlt12-chordia-unlock-v1.{md,csv}`
+  - `docs/audit/results/2026-05-02-mnq-cmepreclose-xmesatr60-chordia-unlock-v1.{md,csv}`
+- `docs/runtime/chordia_audit_log.yaml` updated with 2026-05-02 audit rows for
+  those four strategies. Default `has_theory=False` remains unchanged; no new
+  theory grants were added.
 - Reconciled stale plan split:
   `docs/runtime/handoff-2026-05-02.md` says "7-lane book / Stage 3 next",
   but live truth in `docs/runtime/lane_allocation.json` is already post-Chordia
@@ -53,13 +83,14 @@
 - MCP work remains off the critical path for "more high-quality deployed
   trades" in this checkout.
 
-### Execution blocker still true here
+### Execution surface now working here
 
-- This `/mnt/c/...` checkout still has no `.venv-wsl`.
-- System `python3` is missing `duckdb`, `pandas`, `numpy`, and `pydantic`.
-- Result: prereg authoring is unblocked; actual runner execution is
-  environment-blocked in this session unless resumed from a proper WSL-home
-  clone / env.
+- User built `.venv-wsl` in this checkout and executed the prereg front door
+  successfully from WSL.
+- Important harness lesson captured by code, not chat:
+  `X_MES_ATR60` is NOT a plain `daily_features` filter. It requires
+  `cross_atr_MES_pct` enrichment before canonical delegation. Without that,
+  replay fail-closes to zero-fire and yields a false `SCAN_ABORT`.
 
 ---
 
