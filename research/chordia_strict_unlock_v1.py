@@ -31,7 +31,7 @@ import yaml
 
 from pipeline.paths import GOLD_DB_PATH
 from research.filter_utils import filter_signal
-from trading_app.config import ALL_FILTERS, CrossAssetATRFilter
+from trading_app.config import ALL_FILTERS, WF_START_OVERRIDE, CrossAssetATRFilter
 from trading_app.chordia import (
     CHORDIA_T_WITHOUT_THEORY,
     chordia_threshold,
@@ -114,6 +114,12 @@ def _load_cell(hypothesis_path: Path) -> Cell:
 
 def _load_universe(con: duckdb.DuckDBPyConnection, cell: Cell, *, is_only: bool) -> pd.DataFrame:
     op = "<" if is_only else ">="
+    # Match canonical promoter cohort: strategy_discovery._load_outcomes_bulk applies
+    # WF_START_OVERRIDE per instrument (e.g. MNQ/MES = 2020-01-01 micro-launch exclusion;
+    # MGC = 2022-01-01 low-ATR regime). Without this, audit fires on pre-cutoff trades
+    # that the promoter never saw, and audit N != validated_setups.sample_size.
+    start = WF_START_OVERRIDE.get(cell.instrument)
+    start_clause = "AND o.trading_day >= ?" if start is not None else ""
     sql = f"""
         SELECT
             o.trading_day,
@@ -145,19 +151,20 @@ def _load_universe(con: duckdb.DuckDBPyConnection, cell: Cell, *, is_only: bool)
           AND o.confirm_bars = ?
           AND o.rr_target = ?
           AND o.trading_day {op} ?
+          {start_clause}
     """
-    return con.execute(
-        sql,
-        [
-            cell.instrument,
-            cell.orb_label,
-            cell.orb_minutes,
-            cell.entry_model,
-            cell.confirm_bars,
-            cell.rr_target,
-            HOLDOUT_SACRED_FROM,
-        ],
-    ).df()
+    params: list[Any] = [
+        cell.instrument,
+        cell.orb_label,
+        cell.orb_minutes,
+        cell.entry_model,
+        cell.confirm_bars,
+        cell.rr_target,
+        HOLDOUT_SACRED_FROM,
+    ]
+    if start is not None:
+        params.append(start)
+    return con.execute(sql, params).df()
 
 
 def _inject_cross_asset_atr(
@@ -392,12 +399,21 @@ def _write_markdown(
     oos_result: dict[str, Any],
 ) -> None:
     cell.result_md.parent.mkdir(parents=True, exist_ok=True)
+    wf_start = WF_START_OVERRIDE.get(cell.instrument)
     lines = [
         f"# Chordia strict unlock audit — {cell.strategy_id}",
         "",
         f"**Prereq file:** `{cell.hypothesis_file.relative_to(ROOT)}`",
         f"**Result CSV:** `{cell.result_csv.relative_to(ROOT)}`",
         f"**Canonical DB:** `{GOLD_DB_PATH}`",
+        "",
+        "## Scope",
+        "",
+        f"Strict-Chordia unlock audit for the exact lane `{cell.strategy_id}`. "
+        f"Tests whether the bounded canonical replay clears Chordia's strict t-stat hurdle "
+        f"({threshold:.2f}, has_theory={cell.has_theory}) on canonical IS data, with "
+        "descriptive OOS sign-match as a secondary gate. Single-lane K=1 confirmatory replay; "
+        "no parameter sweeps, no filter variants, no instrument extensions.",
         "",
         "## Verdict",
         "",
@@ -433,9 +449,42 @@ def _write_markdown(
         "",
         "- Canonical source only: `orb_outcomes` joined to `daily_features` on `(trading_day, symbol, orb_minutes)`.",
         f"- Sacred holdout boundary: `trading_day < {HOLDOUT_SACRED_FROM}` for IS, `>=` for descriptive OOS.",
+        (
+            f"- Cohort lower bound: `WF_START_OVERRIDE['{cell.instrument}']={wf_start}` applied "
+            "to match canonical promoter (`trading_app/strategy_discovery._load_outcomes_bulk`)."
+            if wf_start is not None
+            else f"- Cohort lower bound: none (no `WF_START_OVERRIDE` entry for `{cell.instrument}`)."
+        ),
         f"- Canonical filter delegation: `filter_signal(..., '{cell.filter_key}', '{cell.orb_label}')`.",
         "- Scratch handling: `pnl_r NULL -> 0.0` in the measured trade stream; scratch and null-non-scratch counts are reported separately.",
         "- No writes to `experimental_strategies`, `validated_setups`, or `docs/runtime/chordia_audit_log.yaml`.",
+        "",
+        "## Reproduction",
+        "",
+        "```",
+        f"python research/chordia_strict_unlock_v1.py --hypothesis-file {cell.hypothesis_file.relative_to(ROOT)}",
+        "```",
+        "",
+        "Outputs (overwritten in place):",
+        "",
+        f"- `{cell.result_md.relative_to(ROOT)}`",
+        f"- `{cell.result_csv.relative_to(ROOT)}`",
+        "",
+        "## Caveats",
+        "",
+        "- Single-lane K=1 confirmatory replay; the strict t-stat hurdle does not include a "
+        "search-family multiple-comparison correction. Survivorship/multiple-testing risk is "
+        "carried by the upstream pre-registration, not this replay.",
+        "- IS sample size in this audit reports `N_fired` (wins+losses+scratches with R=0). "
+        "`validated_setups.sample_size` reports wins+losses only. Comparing the two t-stats "
+        "directly is not like-for-like; reconcile via the scratch count reported above.",
+        "- OOS window is descriptive only. Sign-match at `N_OOS >= 30` is a confirmatory gate, "
+        "not a deployment criterion. PARK on OOS sign-flip means insufficient confirmation, "
+        "not falsification.",
+        "- Cross-asset enrichment (e.g., `cross_atr_MES_pct` for `X_MES_ATR60`) is computed "
+        "in this runner from `daily_features.atr_20_pct` of the source instrument; verify "
+        "the canonical promoter's enrichment path agrees before treating verdicts as "
+        "directly comparable.",
         "",
     ]
     cell.result_md.write_text("\n".join(lines), encoding="utf-8")

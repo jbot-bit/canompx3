@@ -34,16 +34,29 @@
   - writes result `.md` + `.csv` only; no writes to `validated_setups` /
     `experimental_strategies`
 - Executed all 4 strict unlock preregs through
-  `scripts/tools/prereg_front_door.py --execute`
-  with measured outcomes:
+  `scripts/tools/prereg_front_door.py --execute` (initial run), then
+  re-ran with `WF_START_OVERRIDE` cohort fix in
+  `research/chordia_strict_unlock_v1.py::_load_universe`. The initial
+  cohort included pre-2020-01-01 MNQ trades that the canonical promoter
+  excludes via `WF_START_OVERRIDE['MNQ']=2020-01-01`
+  (`trading_app/config.py:354`, micro-launch microstructure exclusion).
+  After fix, audit `N_fired - scratch` reconciles to
+  `validated_setups.sample_size` exactly on all 4 strategies.
+  Corrected outcomes:
   - `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`
-    -> `PASS_CHORDIA`, `t=5.547`, `N_IS=889`
+    -> `PASS_CHORDIA`, `t=5.158`, `N_IS=806` (was 889, t=5.547)
   - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`
-    -> `PASS_CHORDIA`, `t=4.414`, `N_IS=529`
+    -> `PASS_CHORDIA`, `t=4.363`, `N_IS=522` (was 529, t=4.414)
   - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12`
-    -> `PASS_CHORDIA`, `t=4.202`, `N_IS=1281`
+    -> `PASS_CHORDIA`, `t=4.294`, `N_IS=1252` (was 1281, t=4.202)
   - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`
-    -> `FAIL_BOTH` under strict doctrine, `t=3.716`, `N_IS=596`
+    -> `PARK`, `IS t=4.211`, `N_IS=669` (was `FAIL_BOTH` t=3.716, N=700).
+    Material reverdict: IS now clears strict 3.79, but OOS sign opposes
+    IS at `N_OOS=49 >= 30` → PARK (IS-clean, no OOS confirmation).
+  Note: `OVNRNG_100` and `COST_LT12` were already promoted into
+  `lane_allocation.json` rebalance_date 2026-05-02 by the parallel
+  rebalance — DEPLOY eligibility unchanged (still PASS_CHORDIA after
+  cohort correction, only sizes revised in the audit ledger).
 - Result artifacts written:
   - `docs/audit/results/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.{md,csv}`
   - `docs/audit/results/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.{md,csv}`

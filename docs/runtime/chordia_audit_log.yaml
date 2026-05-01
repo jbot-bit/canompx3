@@ -73,59 +73,65 @@ audits:
   - strategy_id: MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15
     audit_date: 2026-05-02
     verdict: PASS_CHORDIA
-    t_stat: 5.547
+    t_stat: 5.158
     threshold: 3.79
-    sample_size: 889
+    sample_size: 806
     note: |
       Bounded exact-lane strict unlock replay via
       `research/chordia_strict_unlock_v1.py` and prereg
       `docs/audit/hypotheses/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.yaml`.
-      No theory grant claimed. Scratch-inclusive replay on canonical
-      `orb_outcomes` + `daily_features` cleared the strict hurdle with
-      positive OOS sign on N_OOS=47.
+      No theory grant claimed. Scratch-inclusive replay (N_fired=806; 105
+      scratches counted as R=0) on canonical `orb_outcomes` + `daily_features`
+      with `WF_START_OVERRIDE['MNQ']=2020-01-01` applied (cohort matches
+      `validated_setups.sample_size`=701 win+loss). Cleared strict hurdle
+      with positive OOS sign on N_OOS=47.
 
   - strategy_id: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60
     audit_date: 2026-05-02
-    verdict: FAIL_BOTH
-    t_stat: 3.716
+    verdict: PARK
+    t_stat: 4.211
     threshold: 3.79
-    sample_size: 596
+    sample_size: 669
     note: |
       Bounded exact-lane strict unlock replay via
       `research/chordia_strict_unlock_v1.py` and prereg
       `docs/audit/hypotheses/2026-05-02-mnq-cmepreclose-xmesatr60-chordia-unlock-v1.yaml`.
-      No theory grant claimed. Canonical replay required cross-asset ATR
-      enrichment (`cross_atr_MES_pct`) before filter delegation; after fixing
-      that harness parity gap, the lane measured t=3.716 and failed the strict
-      3.79 hurdle.
+      No theory grant claimed. Required cross-asset ATR enrichment
+      (`cross_atr_MES_pct`) before filter delegation. With
+      `WF_START_OVERRIDE['MNQ']=2020-01-01` applied (cohort matches
+      `validated_setups.sample_size`=596 win+loss), IS gates clear strict
+      hurdle (t=4.211, ExpR=0.142) but OOS sign opposes IS at N_OOS=49.
+      Verdict PARK: IS-clean but no OOS confirmation.
 
   - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100
     audit_date: 2026-05-02
     verdict: PASS_CHORDIA
-    t_stat: 4.414
+    t_stat: 4.363
     threshold: 3.79
-    sample_size: 529
+    sample_size: 522
     note: |
       Bounded exact-lane strict unlock replay via
       `research/chordia_strict_unlock_v1.py` and prereg
       `docs/audit/hypotheses/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.yaml`.
-      No theory grant claimed. Scratch-inclusive replay on canonical
-      `orb_outcomes` + `daily_features` cleared the strict hurdle with
-      positive OOS sign on N_OOS=66.
+      No theory grant claimed. Scratch-inclusive replay (N_fired=522; 2
+      scratches counted as R=0) with `WF_START_OVERRIDE['MNQ']=2020-01-01`
+      applied (cohort matches `validated_setups.sample_size`=520 win+loss).
+      Cleared strict hurdle with positive OOS sign on N_OOS=66.
 
   - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12
     audit_date: 2026-05-02
     verdict: PASS_CHORDIA
-    t_stat: 4.202
+    t_stat: 4.294
     threshold: 3.79
-    sample_size: 1281
+    sample_size: 1252
     note: |
       Bounded exact-lane strict unlock replay via
       `research/chordia_strict_unlock_v1.py` and prereg
       `docs/audit/hypotheses/2026-05-02-mnq-comex-costlt12-chordia-unlock-v1.yaml`.
-      No theory grant claimed. Scratch-inclusive replay on canonical
-      `orb_outcomes` + `daily_features` cleared the strict hurdle with
-      positive OOS sign on N_OOS=70.
+      No theory grant claimed. Scratch-inclusive replay (N_fired=1252; 5
+      scratches counted as R=0) with `WF_START_OVERRIDE['MNQ']=2020-01-01`
+      applied (cohort matches `validated_setups.sample_size`=1247 win+loss).
+      Cleared strict hurdle with positive OOS sign on N_OOS=70.
 
   - strategy_id: MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5
     audit_date: 2026-05-01
