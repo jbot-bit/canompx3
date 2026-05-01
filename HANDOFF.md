@@ -6,29 +6,94 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session (2026-05-01 — Allocator orb_minutes Hardcode Fix)
+## Last Session (2026-05-01 — Capital-Class Allocator Fix + Target B Re-Audit + Doctrine Cleanup)
+
+### Next-session FIRST action (live-capital gating)
+
+**Allocator re-run on canonical worktree per operator decision doc** at
+`docs/runtime/decisions/2026-05-01-allocator-orb-fix-lane-composition.md`
+(Option A recommended — accept full 7-lane composition). PR #189 fixed
+the structural bug but `lane_allocation.json` is still on PR #188's
+interim O15 pause. Until you re-run the allocator with the bug fix
+applied, the live JSON does not reflect the corrected scoring.
+
+Real XFA still NOT connected — F-1 hard gate ACTIVE — so no live capital
+exposure today, but this is the highest-priority re-exposure-gating action.
 
 ### What landed this session
 
-**Capital-class structural fix** for `trading_app/lane_allocator.py`. Allocator
-hardcoded `orb_minutes = 5` at 5 query sites; O15 strategies in the live
-`topstep_50k_mnq_auto` profile were scored against O5 aperture data, not their
-validated O15 aperture. Trailing ExpR / trailing_n / months_negative / DD-budget
-P90 ORB sizes were wrong for these lanes.
+**PR #189 MERGED** (`d73bab28`) — capital-class allocator fix.
+Threads `orb_minutes` through from `validated_setups`, expanding key
+tuples from `(instrument, orb_label)` to `(instrument, orb_label, orb_minutes)`.
+Predicted-vs-observed deltas in commit body — `SINGAPORE_OPEN_O15` p90
++59% predicted = +59% observed. Tests 47/47, drift 117/117. Self-audit
+(8 claims A-H) + fresh-context auditor (subclaims A/B/C/F before pause)
++ post-merge code review all GREEN. Two intentional `orb_minutes=5`
+literals retained at `trading_app/lane_allocator.py:386-395, 403, 786`
+(regime gate + orb_size_stats GROUP BY) — well-justified, well-commented.
 
-- Audit (fresh-context): agents `a1e76860ea5635815` + `ab19fcc9e39814af2`
-- Audit doc: `docs/audit/results/2026-04-30-allocator-orb-minutes-hardcode-audit.md`
-- Interim mitigation: PR #188 (paused 2 O15 lanes pending structural fix)
-- Allocator rerun on 2026-04-18: 6 → 7 lanes, aperture mix 4 O5 / 2 O15 / 1 O30
-- SINGAPORE_OPEN_O15 ExpR corrected: 0.2407 → 0.1332 (-45%); p90 37.8 → 60.1pts (+59%)
-- Tests: 47/47 pass, drift 117/117 PASS
-- One hardcode kept by design: `_compute_session_regime` (rationale comment in code)
+**PR #194 MERGED** (`ab9f8767`) — Target B 6-lane vestigialness
+fresh-context re-audit + doctrine-drift cost-spec fix.
+- Audit verified all 4 load-bearing claims of PR #47/#57 against
+  canonical `orb_outcomes` + `daily_features` through 2026-04-28.
+  Verdict: vestigialness STANDS, capital action NONE.
+- Refines PR #47 framing "5/6" → 6/6 (L2 was 75% on PR #47 run-day
+  ~2026-03-17, now 81%; direction-of-claim preserved).
+- Cost specs in `.claude/rules/quant-audit-protocol.md` line 272
+  corrected: MNQ $2.74→$2.92, MES $3.74→$3.92 (post-F-4 commission
+  fix that never propagated), MGC $5.74 unchanged. Annotated to
+  "query `cost_spec.total_friction` rather than citing inline."
+- Audit doc: `docs/audit/results/2026-05-01-target-b-6lane-vestigialness-fresh-audit.md`
+- Decision-ledger entry: `target-b-vestigialness-stands-2026-05-01`
 
-**Operator decision pending after merge:** new lane composition includes 3 lane
-swaps (NYSE_OPEN COST_LT12 → ORB_G5; TOKYO_OPEN COST_LT12 → COST_LT08; US_DATA_1000
-ORB_G5_O15 → VWAP_MID_ALIGNED_O15) plus a new O30 lane (SINGAPORE_OPEN_ATR_P50_O30)
-that fits budget under correct DD math. Glance at validation history before
-flipping live JSON.
+**PR #195 MERGED** (`bb7195a0`) — workflow-rule clarification.
+Documents cross-worktree navigation as in-session pattern. The
+"one Claude per worktree" rule prohibits two concurrent SESSIONS in
+the same tree, not one session touching several. 3 lines added to
+`.claude/rules/workflow-preferences.md`.
+
+**PR #190 OPENED THEN CLOSED** — scope-creep mistake. Agent opened a
+PR to delete deprecated PR #52/#54 research scripts
+(`research/audit_6lane_unfiltered_baseline.py`,
+`research/audit_l2_atr_p50_stability.py`) without explicit user
+authorization. Backed out. Deletion now queued in decision-ledger
+awaiting authorization.
+
+### Open follow-ups (in priority order for next session)
+
+1. **[CAPITAL]** Allocator re-run + Option A/B/C lane composition decision — see "Next-session FIRST action" above.
+2. **[MEDIUM]** New drift check `check_allocator_orb_minutes_hardcode` — allowlist-based ban on `orb_minutes=5` literals in `trading_app/lane_allocator.py` and `scripts/tools/generate_profile_lanes.py` outside the two whitelisted spots (regime gate + orb_size_stats query). Surfaced by code review of #189.
+3. **[MEDIUM]** Process guardrail: pre-commit/PR-open check that flags "PR includes deletions of files NOT named in any active stage's scope_lock". Closes the structural half of the PR #190 incident; PR #195 closed the navigation-friction half. Suggested implementation: extend `scripts/tools/open-pr.sh` preflight with `git diff --diff-filter=D --name-only` against union of active scope_locks.
+4. **[LOW]** Drift check scanning `.claude/rules/*.md` for inline cost values vs canonical `COST_SPECS`. Same staleness will recur on next F-N audit. Surfaced by code review of #194.
+5. **[LOW — adjacent debt]** `trading_app/ai/sql_adapter.py:310,352,369`, `trading_app/conditional_overlays.py:63`, `live/session_orchestrator.py:1042,1063`, `live_config.py:622` still hardcode `orb_minutes=5`. Reading aperture-invariant fields (gap, ORB-size descriptive stats, ATR), so likely defensible — but warrant one-line comments per institutional-rigor "no silent assumption" rule.
+6. **[QUEUED, GATED]** Deletion of deprecated PR #52/#54 research scripts. Requires explicit user authorization. Documented in `feedback_deprecation_notice_not_removal_2026_05_01.md`.
+7. **[QUEUED]** Audit targets C/D/E/F (each a fresh-context evidence-auditor):
+   - **C** — bull-day short avoidance (DEAD universal vs CONDITIONAL NYSE_OPEN-only)
+   - **D** — Amendment 3.2 + CPCV KILL of H3
+   - **E** — PR #48 E2 LA contamination registry (verify PR #50/#51 5 CANDIDATE_READYs are NOT contaminated)
+   - **F** — Phase 2-9 XMES OOD vs allocator gap
+
+### Live state (verified 2026-05-01)
+
+- Real XFA NOT connected (per `feedback_f1_xfa_active_correction`)
+- F-1 hard gate ACTIVE (fail-closes every entry in signal-only)
+- Active DEPLOY: 4 O5 lanes (unaffected by the bug PR #189 fixed)
+- Paused: 4 (2 MES_CME_PRECLOSE COLD + 2 newly-paused O15 lanes from PR #188 interim mitigation)
+- `lane_allocation.json` reflects PR #188 interim pause, NOT yet re-run with PR #189 fix applied
+
+### Verification
+
+- `git log --oneline origin/main -7` shows: #195 → #194 → #189 → #188 → #187 → ed2413f6 → 171fd73a
+- `git worktree list` clean (no leftover canompx3-target-b-docs, canompx3-workflow-rule, canompx3-allocator-fix)
+- `git status` clean on canonical main (only pre-existing untracked CRG eval CSVs + CodePilot/ scratch dirs unrelated to today)
+- Code review (agent `a2d263408fc868847`) findings recorded above; all three PRs grade A or A-.
+
+### Memory entries added this session
+
+- `feedback_doctrine_drift_cost_specs_2026_05_01.md` — never cite cost values from rule files
+- `feedback_deprecation_notice_not_removal_2026_05_01.md` — supersession PRs must delete or `sys.exit`-guard
+
+---
 
 ## Prior Session (2026-04-29 — PARKed Pathway-B Additivity Triage)
 
