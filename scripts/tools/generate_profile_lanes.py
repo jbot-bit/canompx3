@@ -83,10 +83,11 @@ def split_current_lanes(
 def lane_cap_for(
     instrument: str,
     orb_label: str,
-    orb_size_stats: dict[tuple[str, str], tuple[float, float]],
+    orb_minutes: int,
+    orb_size_stats: dict[tuple[str, str, int], tuple[float, float]],
 ) -> float:
-    """Return session-specific P90 ORB cap, with instrument fallback."""
-    stats = orb_size_stats.get((instrument, orb_label))
+    """Return session×aperture-specific P90 ORB cap, with instrument fallback."""
+    stats = orb_size_stats.get((instrument, orb_label, orb_minutes))
     if stats is not None:
         _avg_pts, p90_pts = stats
         return p90_pts
@@ -122,7 +123,7 @@ def eligible_candidates_for_profile(
 def compute_profile_allocation(
     profile: AccountProfile,
     scores,
-    orb_size_stats: dict[tuple[str, str], tuple[float, float]],
+    orb_size_stats: dict[tuple[str, str, int], tuple[float, float]],
 ):
     """Build the current allocator-backed recommendation for one profile."""
     tier = ACCOUNT_TIERS.get((profile.firm, profile.account_size))
@@ -146,7 +147,7 @@ def print_profile_report(
     profile: AccountProfile,
     deployable_ids: set[str],
     scores,
-    orb_size_stats: dict[tuple[str, str], tuple[float, float]],
+    orb_size_stats: dict[tuple[str, str, int], tuple[float, float]],
 ) -> None:
     """Emit a human-readable dormant-profile rebuild report."""
     tier = ACCOUNT_TIERS.get((profile.firm, profile.account_size))
@@ -201,7 +202,7 @@ def print_profile_report(
     print(f"  # --- Generated DailyLaneSpec entries for {profile_id} ---")
     print("  daily_lanes=(")
     for lane in allocation:
-        max_orb = lane_cap_for(lane.instrument, lane.orb_label, orb_size_stats)
+        max_orb = lane_cap_for(lane.instrument, lane.orb_label, lane.orb_minutes, orb_size_stats)
         if lane.strategy_id not in deployable_ids:
             raise RuntimeError(f"Allocator returned non-deployable lane: {lane.strategy_id}")
         print(

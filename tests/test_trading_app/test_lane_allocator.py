@@ -34,6 +34,7 @@ def _make_score(**overrides) -> LaneScore:
         strategy_id="MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER",
         instrument="MNQ",
         orb_label="COMEX_SETTLE",
+        orb_minutes=5,
         rr_target=1.0,
         filter_type="NO_FILTER",
         confirm_bars=1,
@@ -67,6 +68,7 @@ def test_db(tmp_path):
             strategy_id VARCHAR,
             instrument VARCHAR,
             orb_label VARCHAR,
+            orb_minutes INTEGER,
             entry_model VARCHAR,
             rr_target DOUBLE,
             confirm_bars INTEGER,
@@ -114,6 +116,7 @@ def _seed_strategy(
     strategy_id="MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER",
     instrument="MNQ",
     orb_label="COMEX_SETTLE",
+    orb_minutes=5,
     entry_model="E2",
     rr_target=1.0,
     confirm_bars=1,
@@ -125,11 +128,12 @@ def _seed_strategy(
     """Insert a validated strategy into test DB."""
     con = duckdb.connect(str(db_path))
     con.execute(
-        "INSERT INTO validated_setups VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO validated_setups VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             strategy_id,
             instrument,
             orb_label,
+            orb_minutes,
             entry_model,
             rr_target,
             confirm_bars,
@@ -801,8 +805,8 @@ class TestLivenessScoring:
         # At SM=0.75, PV=$2: SING DD=$57, NYSE DD=$175.50
         # Total: $232.50 — fits in $300 budget
         orb_stats = {
-            ("MNQ", "SINGAPORE_OPEN"): (20.0, 38.0),
-            ("MNQ", "NYSE_OPEN"): (76.0, 117.0),
+            ("MNQ", "SINGAPORE_OPEN", 5): (20.0, 38.0),
+            ("MNQ", "NYSE_OPEN", 5): (76.0, 117.0),
         }
         result = build_allocation(
             [cheap, expensive],
@@ -821,7 +825,7 @@ class TestLivenessScoring:
             orb_label="NYSE_OPEN",
             annual_r_estimate=30.0,
         )
-        orb_stats = {("MNQ", "NYSE_OPEN"): (76.0, 117.0)}
+        orb_stats = {("MNQ", "NYSE_OPEN", 5): (76.0, 117.0)}
         # DD = 117 * 0.75 * 2.0 = $175.50, budget = $100 → should NOT fit
         result = build_allocation(
             [expensive],
@@ -831,6 +835,54 @@ class TestLivenessScoring:
             orb_size_stats=orb_stats,
         )
         assert len(result) == 0
+
+    def test_orb_size_stats_dd_uses_correct_aperture_not_o5(self):
+        """Regression for 2026-04-30 audit: O15 lane DD must use O15 P90, not O5 P90.
+
+        Prior bug: allocator hardcoded orb_minutes=5 in compute_orb_size_stats,
+        so O15 lanes got O5 ORB sizes (~60% understated DD budget). This test
+        proves the lookup now distinguishes apertures. If the bug returns,
+        the O15 lane below would get the (much smaller) O5 P90 and pass the
+        budget check incorrectly.
+        """
+        o15_lane = _make_score(
+            strategy_id="MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15",
+            orb_label="US_DATA_1000",
+            orb_minutes=15,
+            annual_r_estimate=40.0,
+        )
+        # Both apertures present. O15 P90 is the real one (147pts);
+        # O5 P90 (95pts) would understate the DD budget if used.
+        # At SM=0.75, PV=$2: O15 DD = 147*0.75*2 = $220.50; O5 DD = $142.50.
+        orb_stats = {
+            ("MNQ", "US_DATA_1000", 5): (56.0, 95.0),
+            ("MNQ", "US_DATA_1000", 15): (87.0, 147.0),
+        }
+        # Budget $200: O15 DD ($220.50) does NOT fit → result must be empty.
+        # If bug returns (uses O5 P90): O5 DD ($142.50) fits → result has 1 lane.
+        result_correct = build_allocation(
+            [o15_lane],
+            max_slots=5,
+            max_dd=200.0,
+            stop_multiplier=0.75,
+            orb_size_stats=orb_stats,
+        )
+        assert len(result_correct) == 0, (
+            "O15 lane fit a $200 DD budget, but at the correct O15 P90 (147pts) "
+            "its DD is $220.50 — does not fit. If this asserts, the allocator "
+            "is using O5 P90 (95pts → $142.50 DD) for an O15 lane, regressing "
+            "the 2026-04-30 fix."
+        )
+
+        # Sanity check: with budget $250, O15 DD ($220.50) DOES fit.
+        result_loose = build_allocation(
+            [o15_lane],
+            max_slots=5,
+            max_dd=250.0,
+            stop_multiplier=0.75,
+            orb_size_stats=orb_stats,
+        )
+        assert len(result_loose) == 1
 
 
 class TestCorrelationAwareSelection:
