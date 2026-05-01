@@ -1854,3 +1854,56 @@ class TestLaneAllocationChordiaGate:
             "fail-opens whenever invoked from a non-root directory."
         )
         assert "BAD_LANE" in violations[0]
+
+    def test_fails_on_empty_lanes(self, tmp_path, monkeypatch):
+        """Regression: empty lanes[] must NOT silently pass.
+
+        Pre-fix the check returned [] when lanes was empty — meaning a
+        producer crash mid-write or a hand-edit that emptied the array
+        certified the broken state as healthy. Post-fix the check fails
+        loud: file-exists + empty-lanes is not a legitimate state.
+        """
+        from pipeline.check_drift import check_lane_allocation_chordia_gate
+
+        self._write_alloc(tmp_path, [])  # explicit empty lanes
+        self._patch_root(monkeypatch, tmp_path)
+        violations = check_lane_allocation_chordia_gate()
+        assert len(violations) == 1
+        assert "empty lanes[]" in violations[0]
+
+    def test_fails_when_chordia_doctrine_load_raises(self, tmp_path, monkeypatch):
+        """Regression: if load_chordia_audit_log raises, the check must
+        emit a violation rather than silently fall back to freshness=90.
+
+        Pre-fix the broad except swallowed any error and continued the
+        audit with a hardcoded threshold — hiding doctrine corruption
+        behind a passing-looking check.
+        """
+        from pipeline import check_drift
+        from pipeline.check_drift import check_lane_allocation_chordia_gate
+
+        # Real lane (one that would otherwise pass) so we test the load
+        # path specifically, not other validations.
+        self._write_alloc(
+            tmp_path,
+            [
+                {
+                    "strategy_id": "WOULD_PASS",
+                    "chordia_verdict": "PASS_PROTOCOL_A",
+                    "chordia_audit_age_days": 10,
+                }
+            ],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+
+        # Force the doctrine import to fail. Patching the module's import
+        # cache means `from trading_app.chordia import ...` inside the
+        # check raises ImportError.
+        import sys
+
+        monkeypatch.setitem(sys.modules, "trading_app.chordia", None)
+
+        violations = check_lane_allocation_chordia_gate()
+        assert len(violations) == 1
+        assert "Cannot load chordia freshness threshold" in violations[0]
+        assert "audit threshold unverified" in violations[0]
