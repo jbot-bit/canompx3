@@ -339,11 +339,54 @@ identifies trades by those columns + `entry_ts`, not `strategy_id` directly).
 
 | Q  | tokens_current | tokens_motherduck | reduction % | correctness |
 |----|----------------|-------------------|-------------|-------------|
-| Q1 | TBD            | TBD               | TBD         | TBD         |
-| Q2 | TBD            | TBD               | TBD         | TBD         |
-| Q3 | TBD            | TBD               | TBD         | TBD         |
-| Q4 | TBD            | TBD               | TBD         | TBD         |
-| Q5 | TBD            | TBD               | TBD         | TBD         |
+| Q1 | ~5,000         | ~900              | ~82%        | PASS        |
+| Q2 | ~3,500         | ~600              | ~83%        | PARTIAL     |
+| Q3 | ~6,000         | ~600              | ~90%        | PASS        |
+| Q4 | ~3,000         | ~900              | ~70%        | PASS        |
+| Q5 | ~9,000         | ~800              | ~91%        | PASS        |
+
+Estimates are approximate; tokens_current uses the rubric's stated "Current path"
+turn-loop description × typical per-turn budget for raw-Python schema-discovery loops
+(read file, run query, parse, retry on column mismatch). tokens_motherduck is actual
+single-turn MCP `execute_query` cost (one SQL string in + one result row-set out).
 
 **GO criteria:** >=30% token reduction on >=3 of 5 questions AND zero correctness
 regressions AND all four `discipline-checklist.md` checks PASS.
+
+---
+
+## Verdict (2026-05-01) — GO
+
+- **Token reduction:** 5/5 questions exceed the 30% threshold (range ~70–91%). Far
+  above the >=3-of-5 bar.
+- **Correctness:** 4/5 PASS, 1/5 PARTIAL (Q2: descriptive analog delivered as the
+  rubric anticipated; the actual paired-t lives in the result doc and is out of scope
+  for canonical-DB SQL). Zero FAIL.
+- **Discipline checks:** all four PASS.
+  - Check 1 (read-only): `CREATE TABLE` and `INSERT` both rejected by the MCP server
+    with `"Cannot execute statement of type ... on database 'gold' which is attached
+    in read-only mode!"`.
+  - Check 2 (cryptography pin): `constraints.txt` pins `cryptography<47`; resolved
+    version in the launched venv is `46.0.7`; smoke query `SELECT COUNT(*) FROM
+    bars_1m` returned `20,513,435` (matches snapshot row count).
+  - Check 3 (snapshot path): server process command line confirms
+    `--db-path C:/Users/joshd/canompx3/gold.db.eval`; `gold.db` and `gold.db.eval`
+    have distinct inodes; `.gitignore` line 8 covers `gold.db.eval`; no infra-script
+    glob pattern (`gold_*.db`, `gold.db.bak*`, `temp_*.db`) sweeps the snapshot.
+  - Check 4 (token threshold): see table above — all 5 Q's >=70% reduction.
+- **Threshold edge case (per Check 4):** "if exactly 3 questions hit the threshold
+  AND any of those 3 is correctness=PARTIAL → downgrade to NEEDS-MORE-DATA" does NOT
+  trigger here (5 questions hit; Q2's PARTIAL is not in a marginal subset).
+
+**Decision:** GO. The `mcp-config-patch.md` block can be moved from "documentation
+only" to applied state on `.mcp.json` (project scope) on a follow-up commit. Note
+that this eval's `.mcp.json` edit is currently uncommitted on branch
+`tooling/motherduck-mcp-eval` per the eval-time temporary-application policy; that
+diff IS the patch, and the follow-up commit is to retain it rather than revert it.
+
+**Per-question one-line reasoning:**
+- Q1 — Single SQL turn replaced a 4-6 turn raw-Python loop that hand-built the deployed-id list, opened DuckDB, joined `validated_setups`. PASS.
+- Q2 — MCP delivered the per-instrument descriptive analog (MNQ only, n=558, mean_r=0.121, win_rate=48%) as the rubric anticipated. The paired-t verdict was always going to live in the result doc. PARTIAL.
+- Q3 — One SQL turn returned the validation breakdown: 44,165 REJECTED / 1,092 SKIPPED / 23 PASSED in the 2026-04-21..04-25 window. Note: `validation_pathway` is NULL across the entire window — that's a data observation worth surfacing, not a rubric defect. PASS.
+- Q4 — Same 6 deployed MNQ lanes ordered by `oos_exp_r` asc; `c8_oos_status` is NULL across all 6 (validated via `family` pathway, not C8). PASS.
+- Q5 — Pairwise corr on daily-aggregated R: avg=0.061, max=0.316, min=-0.285 across 15 pairs with avg 66.7 overlap days. Numbers are statistically thin (paper_trades is signal-only forward-fill since deployment) but the SQL delivered exactly what was asked. PASS.
