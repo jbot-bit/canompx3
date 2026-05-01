@@ -28,6 +28,11 @@ Declared in `.mcp.json`:
   - Codex launchers attach the same server via `bash scripts/infra/run-research-catalog-mcp.sh` for WSL profiles
   - Read-only research-grounding surface for local literature extracts, prereg hypotheses, audit results, and bounded catalog search
   - Appropriate as a default research-grounding MCP because it reads committed repo evidence instead of inventing a second state layer
+- `strategy-lab`
+  - Shared repo MCP declaration via `python scripts/tools/strategy_lab_mcp_server.py` (matches the canonical `gold-db` python-direct pattern)
+  - Codex launchers attach the same server via `bash scripts/infra/run-strategy-lab-mcp.sh` for WSL profiles
+  - Read-only deployment-readiness surface joining `validated_setups`, `compute_fitness`, and `docs/runtime/lane_allocation.json`
+  - Overlaps `gold-db.get_strategy_fitness` intentionally so single-strategy readiness can be answered from one server without stitching three MCPs together
 - `gold-db`
   - Shared repo MCP declaration
   - Optional project integration, not required for Codex to work in this repo
@@ -43,6 +48,8 @@ Project-scoped Codex MCP declarations also exist in `.codex/config.toml`:
   - this is the default self-understanding surface for Codex sessions in this repo
 - `research-catalog` is attached by the Codex project/review launchers by default
   - this is the default local grounding surface for literature, prereg, and audit-result work
+- `strategy-lab` is attached by the Codex project/review launchers by default
+  - this is the default deployment-readiness surface for single-strategy and lane-allocation lookups
 - `gold-db` is deliberately not attached by default
   - use `scripts/infra/codex-project-gold-db.sh` or
     `scripts/infra/codex-project-search-gold-db.sh` when a task actually needs
@@ -105,6 +112,7 @@ Current intended split:
 
 - default self-understanding: `repo-state`
 - default research grounding: `research-catalog`
+- default deployment-readiness: `strategy-lab`
 - explicit trading-data truth: `gold-db`
 - explicit structural code navigation: `code-review-graph`
 - explicit official-doc lookup: `openaiDeveloperDocs`
