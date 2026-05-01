@@ -269,7 +269,7 @@ Read that file when logging a new confirmed failure pattern or when a specific p
 ## PROJECT-SPECIFIC ANCHORS
 
 - DB: `gold.db` at project root. Connect: `duckdb.connect('gold.db', read_only=True, config={'access_mode': 'READ_ONLY'})`
-- Cost model: `from pipeline.cost_model import COST_SPECS` — MNQ $2.74 RT, MGC $5.74, MES $3.74
+- Cost model: `from pipeline.cost_model import COST_SPECS` — MNQ $2.92 RT, MGC $5.74, MES $3.92 (post-F-4 commission fix; query `cost_spec.total_friction` rather than citing inline — values change when F-N audits land)
 - Friction: `total_friction / risk_dollars * 100` — mathematically = `constant / orb_size_pts` (tautology with G-filters)
 - Break timing: `daily_features.orb_{SESSION}_break_delay_min` (minutes from ORB end to first break)
 - Lookahead (BANNED): `double_break`
