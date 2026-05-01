@@ -25,10 +25,37 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Legacy stage file — Claude Code now uses stages/*.md, but this is still read for backwards compat
+# Default (CWD-relative) stage paths — used as fail-safe fallback when the
+# worktree of the edited file cannot be resolved. Real reads go through
+# resolve_stage_paths(file_path) which walks up to find the worktree root.
 STAGE_STATE = Path("docs/runtime/STAGE_STATE.md")
-# Directory for additional agent stage files (Codex, worktrees, etc.)
 STAGES_DIR = Path("docs/runtime/stages")
+
+
+def resolve_stage_paths(file_path):
+    """Resolve STAGE_STATE / STAGES_DIR for the worktree containing file_path.
+
+    Walks up from file_path's directory looking for a `.git` entry (a directory
+    in main checkouts, a file in linked worktrees). Returns paths anchored at
+    the worktree root, or the CWD-relative defaults if no .git is found.
+
+    Why: the hook is invoked with a single shared command (main's copy of the
+    script), but edits can land in sibling worktrees. Reading stage files via
+    CWD picks up main's stages/, missing the editing worktree's stage spec.
+    """
+    if not file_path:
+        return STAGE_STATE, STAGES_DIR
+    try:
+        start = Path(file_path).resolve().parent
+    except (OSError, ValueError):
+        return STAGE_STATE, STAGES_DIR
+    for candidate in (start, *start.parents):
+        if (candidate / ".git").exists():
+            return (
+                candidate / "docs" / "runtime" / "STAGE_STATE.md",
+                candidate / "docs" / "runtime" / "stages",
+            )
+    return STAGE_STATE, STAGES_DIR
 
 # ── Explicitly safe DIRECTORIES (path substring match) ────────────────
 SAFE_DIRS = (
@@ -252,21 +279,23 @@ def matches_scope(file_path, scope_paths):
     return False
 
 
-def load_all_stages():
-    """Load all stage files: primary STAGE_STATE.md + stages/*.md.
+def load_all_stages(file_path=""):
+    """Load all stage files for the worktree containing file_path.
 
     Returns list of (path, content, mode, scope_lock, blast_radius) tuples.
+    Reads from worktree-of-edited-file, not CWD — see resolve_stage_paths().
     """
+    stage_state, stages_dir = resolve_stage_paths(file_path)
     stages = []
 
     # Primary file (Claude Code convention)
-    if STAGE_STATE.exists():
+    if stage_state.exists():
         try:
-            content = STAGE_STATE.read_text(encoding="utf-8")
+            content = stage_state.read_text(encoding="utf-8")
             mode = parse_field(content, "mode") or parse_field(content, "stage")
             if mode:
                 stages.append((
-                    str(STAGE_STATE),
+                    str(stage_state),
                     content,
                     mode,
                     parse_scope_lock(content),
@@ -276,8 +305,8 @@ def load_all_stages():
             pass
 
     # Additional stage files (Codex, worktrees, auto-trivial, etc.)
-    if STAGES_DIR.is_dir():
-        for f in sorted(STAGES_DIR.glob("*.md")):
+    if stages_dir.is_dir():
+        for f in sorted(stages_dir.glob("*.md")):
             try:
                 content = f.read_text(encoding="utf-8")
                 mode = parse_field(content, "mode")
@@ -297,7 +326,8 @@ def load_all_stages():
 
 def main():
     event = json.load(sys.stdin)
-    file_path = normalize(event.get("tool_input", {}).get("file_path", ""))
+    raw_file_path = event.get("tool_input", {}).get("file_path", "")
+    file_path = normalize(raw_file_path)
 
     # ── Layer 1: Explicitly safe files ────────────────────────────────
     if is_always_allowed(file_path):
@@ -309,15 +339,16 @@ def main():
 
     # ── Layer 3: Production code — enforce stage gate (multi-agent) ───
 
-    stages = load_all_stages()
+    stages = load_all_stages(raw_file_path)
+    _, stages_dir = resolve_stage_paths(raw_file_path)
 
     if not stages:
         # No stage files at all — auto-create TRIVIAL for non-core
         is_core = any(marker in file_path for marker in NEVER_TRIVIAL)
         if not is_core:
-            STAGES_DIR.mkdir(parents=True, exist_ok=True)
+            stages_dir.mkdir(parents=True, exist_ok=True)
             now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-            auto_file = STAGES_DIR / "auto_trivial.md"
+            auto_file = stages_dir / "auto_trivial.md"
             auto_file.write_text(
                 f"---\ntask: auto-trivial edit of {file_path}\n"
                 f"mode: TRIVIAL\nscope: [{file_path}]\n"
@@ -326,7 +357,7 @@ def main():
             )
             print(
                 f"STAGE-GATE: Auto-created TRIVIAL state for {file_path}.\n"
-                f"  Non-core file — proceeding. Delete docs/runtime/stages/auto_trivial.md when done.",
+                f"  Non-core file — proceeding. Delete {auto_file} when done.",
                 file=sys.stderr,
             )
             sys.exit(0)
