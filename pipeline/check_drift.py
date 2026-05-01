@@ -1189,7 +1189,13 @@ def check_cryptography_pin_holds() -> list[str]:
     today = date.today()
     if today >= revisit_date:
         days_overdue = (today - revisit_date).days
-        violations.append(
+        # NOTE: print() + don't append. This check is registered with
+        # is_advisory=False so Phase 1 (cryptography>=47 regression) can
+        # fail-closed. If we appended to violations here, the staleness
+        # signal would also block — directly contradicting the
+        # "ADVISORY" wording. Surfacing via stdout matches how the
+        # CRG D1-D5 checks already emit advisories.
+        print(
             f"  ADVISORY: constraints.txt revisit-by:{revisit_iso} has passed "
             f"({days_overdue} day(s) overdue). Check Authlib release notes — if the "
             f"hazmat.backends import has been removed upstream, drop the cryptography<47 "
@@ -8095,11 +8101,14 @@ SLOW_CHECK_LABELS = frozenset(
         "No old fixed-clock session names in Python source",
         "Trading app schema-query consistency",
         "No CRLF in tracked text blobs (defense-in-depth for pre-commit [0b] auto-renormalize)",
-        # CRG D1/D2/D5 traverse the graph DB (~14k nodes, 150k edges) and exceed
-        # 0.3s — measured 2026-04-29: D1=0.98s, D2=1.03s, D5=9.76s. Pre-commit
-        # and CI run the full set; only the post-edit hook's --fast path skips.
+        # CRG D1/D2/D3/D5 exceed 0.3s — measured 2026-04-29: D1=0.98s, D2=1.20s,
+        # D3=0.49s, D5=9.76s. D2/D3 are AST-only (no graph DB traversal) but the
+        # tree-walks over research/ and tests/ still cross the threshold. D4
+        # ran <0.3s and stays in the fast path. Pre-commit and CI run the full
+        # set; only the post-edit hook's --fast path skips.
         "CRG D1: Surprising cross-layer connections between pipeline/ and trading_app/ (bypassing canonical surfaces)",
         "CRG D2: Canonical-import enforcement — research scripts must not re-implement canonical functions",
+        "CRG D3: Canonical functions must have at least one import-and-call test (AST-based; CRG tests_for graph proven incomplete)",
         "CRG D5: Top-10 bridge nodes (betweenness-centrality chokepoints) must have TESTED_BY edges",
     }
 )
