@@ -121,25 +121,36 @@ Expected payoff:
 - less dependence on stale summaries
 - faster truth-check loops for research/readiness work
 
-### BUILD: `strategy-lab` MCP
+### BUILD: `strategy-lab` MCP — SHIPPED 2026-05-02
 
 Expose read-only strategy-validation and deployment-readiness summaries from the
 canonical code and DB.
 
 Primary backing surfaces:
 
-- `trading_app/strategy_validator.py`
-- `trading_app/strategy_fitness.py`
-- `trading_app/lane_allocator.py`
+- `trading_app/strategy_validator.py` (via `validated_setups` shelf)
+- `trading_app/strategy_fitness.py` (`compute_fitness`)
+- `trading_app/lane_allocator.py` (`check_allocation_staleness`)
 - `docs/runtime/lane_allocation.json`
 - `gold-db` as the underlying truth query surface
 
-Initial tool set:
+Initial tool set (delivered):
 
-- `get_strategy_readiness(strategy_id)`
-- `get_lane_allocation_summary(profile_name)`
-- `get_recent_fitness(instrument, rolling_months)`
-- `list_promotable_candidates()`
+- `get_strategy_readiness(strategy_id, rolling_months=18)` — joins validator,
+  fitness, and allocator into one readiness verdict
+  (`NOT_VALIDATED`/`DEPLOYED`/`PAUSED`/`PROMOTABLE`/`VALIDATED_BUT_<STATUS>`)
+- `get_lane_allocation_summary(profile_name=None)` — active + paused lanes,
+  staleness verdict, profile-mismatch fail-closed
+- `get_recent_fitness(strategy_id, rolling_months=18)` — thin pass-through over
+  `compute_fitness`
+- `list_promotable_candidates(instrument=None, rolling_months=18, limit=50)` —
+  validated and currently FIT but not in the active allocation, sorted by
+  rolling ExpR
+
+Overlap with `gold-db.get_strategy_fitness` is intentional: that tool stays
+the canonical raw single-or-portfolio fitness query; `strategy-lab` answers
+the deployment-readiness compound question without forcing callers to stitch
+three MCPs together.
 
 Expected payoff:
 
@@ -217,7 +228,8 @@ Reason:
 2. Keep the current minimal-by-default MCP stance: `repo-state` for default
    self-understanding, `research-catalog` for default local grounding,
    `openaiDeveloperDocs` for official docs, `gold-db` and CRG by task.
-3. Build `strategy-lab` MCP next, using `gold-db` as its truth substrate.
+3. ~~Build `strategy-lab` MCP next, using `gold-db` as its truth substrate.~~
+   SHIPPED 2026-05-02 — see `scripts/tools/strategy_lab_mcp_server.py`.
 4. Package the resulting repo-owned layer as a local Codex plugin.
 5. Pilot Context7 only after the local MCPs above are stable.
 
