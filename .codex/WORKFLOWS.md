@@ -147,4 +147,4 @@ Defined in `.codex/config.toml`:
 
 - `canompx3`: default project profile
 - `canompx3_search`: live-search variant
-- `canompx3_max`: heavier coding/review profile using `gpt-5.1-codex-max`
+- `canompx3_max`: heavier coding/review profile using `gpt-5.3-codex`

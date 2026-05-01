@@ -26,9 +26,11 @@ These launchers already run `scripts/tools/session_preflight.py`.
 
 If Codex was opened any other way, run:
 
-- `.venv-wsl/bin/python scripts/tools/session_preflight.py --context codex-wsl`
+- `python3 scripts/infra/codex_local_env.py doctor --platform wsl`
 
-Use `python3` only if `.venv-wsl` does not exist yet.
+If `.venv-wsl` is missing or doctor fails on environment setup, run:
+
+- `python3 scripts/infra/codex_local_env.py setup --platform wsl`
 
 ## Thin-Default Loading
 
@@ -40,6 +42,9 @@ Normal session:
 4. `CODEX.md`
 
 Only then load extra Codex docs if needed.
+
+If `.session/task-route.md` exists, read it before widening the repo read set.
+Launchers generate it automatically for task-scoped sessions.
 
 Private personal context should not depend on gitignored repo-root files that
 disappear in new worktrees. Prefer `~/.claude/CLAUDE.md` for user-level
@@ -57,6 +62,9 @@ Typical deepen rules:
 - Codex-layer maintenance:
   - `.codex/OPENAI_CODEX_STANDARDS.md`
   - `.codex/CODEX_IMPROVEMENT_PLAN.md`
+- Repo-local skill discovery:
+  - `.agents/skills/README.md`
+  - `.codex/skills/README.md`
 - Token or context hygiene:
   - `docs/reference/claude-token-hygiene.md`
   - `python3 scripts/tools/token_hygiene_report.py`
@@ -66,6 +74,14 @@ Typical deepen rules:
   - `.codex/WORKFLOWS.md`
 
 Do not auto-load all of `.codex/` every session.
+
+Repo-local WSL hooks in `.codex/hooks/` keep startup thin by injecting route
+and grounding hints only when the session or prompt actually needs them.
+
+Normal Codex launcher sessions now include the read-only `repo-state` and
+`research-catalog` MCPs by default. Use `repo-state` for route discovery,
+startup packets, pulse, and system context; use `research-catalog` for bounded
+literature, prereg, and audit-result lookup before widening reads manually.
 
 ## Intent-First Routing
 

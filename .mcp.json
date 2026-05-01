@@ -1,5 +1,21 @@
 {
   "mcpServers": {
+    "repo-state": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "scripts/tools/repo_state_mcp_server.py"
+      ],
+      "env": {}
+    },
+    "research-catalog": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "scripts/tools/research_catalog_mcp_server.py"
+      ],
+      "env": {}
+    },
     "gold-db": {
       "type": "stdio",
       "command": "python",

@@ -83,10 +83,20 @@ The `doctor` action is the fast health check. It verifies:
 - session preflight success
 - git worktree visibility
 
+If `.venv-wsl` is missing or preflight fails during doctor, the normal remedy
+is:
+
+- `python3 scripts/infra/codex_local_env.py setup --platform wsl`
+
+Repo-local Codex skill discovery lives in `.agents/skills/`, with canonical
+skill sources kept in `.codex/skills/`.
+
 ## Maintenance
 
-- Keep MCP minimal. `openaiDeveloperDocs` stays on by default; `gold-db`
-  remains opt-in.
+- Keep MCP minimal. `repo-state` is the default local self-understanding MCP;
+  `research-catalog` is the default local research-grounding MCP;
+  `openaiDeveloperDocs` stays on by default; `gold-db` remains opt-in for live
+  trading-data sessions.
 - Keep repeatable Codex workflows in skills, scripts, or thin docs rather than
   repeated prompts.
 - Use the report-only automation templates in `.codex/AUTOMATIONS.md` for

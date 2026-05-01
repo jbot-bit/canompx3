@@ -31,9 +31,11 @@ If the session was not opened via:
 
 run:
 
-- `.venv-wsl/bin/python scripts/tools/session_preflight.py --context codex-wsl`
+- `python3 scripts/infra/codex_local_env.py doctor --platform wsl`
 
-Use `python3` only if `.venv-wsl` does not exist yet.
+If `.venv-wsl` is missing or doctor fails on environment setup, run:
+
+- `python3 scripts/infra/codex_local_env.py setup --platform wsl`
 
 Default read set:
 
@@ -55,10 +57,14 @@ If `.session/task-route.md` exists, read it next before loading any broader
 repo docs. It is the generated startup packet for the current task/session and
 should replace broad cold-start wandering when present.
 
+Repo-local Codex skills are discovered through `.agents/skills/` wrappers.
+Canonical skill sources stay in `.codex/skills/` so there is still only one
+maintained Codex rule layer.
+
 Then, for any non-trivial repo task, resolve task context before loading extra
 docs:
 
-- `./.venv-wsl/bin/python scripts/tools/context_resolver.py --task "<user request>" --format markdown`
+- `python3 scripts/tools/context_resolver.py --task "<user request>" --format markdown`
 
 Then load only the smallest extra `.claude/` or `.codex/` docs the route calls
 for.
@@ -182,6 +188,13 @@ Codex app local-environment support lives in:
 
 Default stance: Codex should start minimal. Repo MCPs such as `gold-db` are
 opt-in for sessions that actually need live trading-data queries.
+
+Default Codex launcher sessions now attach the local `repo-state` MCP for task
+routing, startup briefing, system context, pulse, and generated context views.
+That surface is read-only and is the preferred default repo-understanding loop.
+Default launcher sessions also attach the local `research-catalog` MCP for
+bounded literature, prereg, and audit-result lookup grounded in committed repo
+evidence.
 
 ## Supporting Docs
 
