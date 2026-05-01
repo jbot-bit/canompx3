@@ -6,7 +6,50 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session (2026-05-01 PM — Allocator Chordia Gate)
+## Current Session (2026-05-01 PM — Codex Layer Alignment + Supercharge Roadmap)
+
+### What landed
+
+- Codex repo-skill discovery now matches official Codex behavior:
+  `.agents/skills/` contains thin wrappers that forward to the canonical
+  `.codex/skills/` sources.
+- `.codex/config.toml` now enables small repo-local Codex hooks:
+  - `SessionStart` adds startup hints for `/mnt/...` fallback sessions,
+    missing `.venv-wsl`, and `.session/task-route.md`
+  - `UserPromptSubmit` adds research/review grounding only when the prompt
+    actually needs it
+- Direct-session startup guidance was hardened around
+  `python3 scripts/infra/codex_local_env.py doctor --platform wsl` and
+  `setup --platform wsl` instead of brittle raw preflight commands.
+- `canompx3_max` now points to `gpt-5.3-codex` instead of the older
+  `gpt-5.1-codex-max`.
+- `.codex/INTEGRATIONS.md` corrected: live repo MCP map is `gold-db` +
+  `code-review-graph`, not `notebooklm`.
+- Shared roadmap written:
+  `docs/plans/2026-05-01-codex-supercharge-roadmap.md`
+
+### Measured blockers still true
+
+- This checkout is still a `/mnt/c/...` fallback surface.
+- `python3 scripts/infra/codex_local_env.py doctor --platform wsl` reports:
+  - WSL mount guard FAIL (`.git` write probe read-only)
+  - `.venv-wsl` missing
+  - preflight FAIL because uv cannot fetch Python/build deps from the current
+    network-restricted state
+
+### Next build order
+
+1. Use a WSL-home clone such as `~/canompx3` for real Codex work.
+2. Build `repo-state` MCP from:
+   `context_resolver.py`, `task_route_packet.py`, `project_pulse.py`,
+   `system_context.py`, `context_views.py`.
+3. Build `research-catalog` MCP over `docs/institutional/`,
+   `docs/audit/hypotheses/`, `docs/audit/results/`, and existing context
+   catalog tooling.
+4. Build `strategy-lab` MCP only after those two, using `gold-db` as the truth
+   substrate instead of inventing a second state layer.
+
+## Prior Session (2026-05-01 PM — Allocator Chordia Gate)
 
 ### Current state at handoff
 
@@ -519,5 +562,3 @@ Phase B (verification) returned **4 of 4 candidates as PATHWAY_B_ELIGIBLE** — 
 - `docs/plans/2026-04-25-hwm-persistence-integrity-hardening-design.md` — HWM Stages 1-4 design (landed in #129)
 - `docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md` — O-SR grounding (still pending: cusum_monitor → SR Eq 10)
 - `docs/institutional/literature/fitschen_2013_path_of_least_resistance.md` — ORB premise
-
-
