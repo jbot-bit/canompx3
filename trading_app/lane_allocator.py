@@ -30,6 +30,14 @@ import duckdb
 from pipeline.cost_model import COST_SPECS
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.chordia import (
+    CHORDIA_T_WITH_THEORY,
+    CHORDIA_T_WITHOUT_THEORY,
+    ChordiaAuditLog,
+    chordia_verdict_allows_deploy,
+    chordia_verdict_label,
+    load_chordia_audit_log,
+)
 from trading_app.config import ALL_FILTERS
 from trading_app.lane_correlation import RHO_REJECT_THRESHOLD, _load_lane_daily_pnl, _pearson
 from trading_app.validated_shelf import deployable_validated_relation
@@ -74,6 +82,11 @@ class LaneScore:
     # Liveness fields (populated post-scoring)
     recent_3mo_expr: float | None = None  # 3-month trailing ExpR (decay signal)
     sr_status: str = "UNKNOWN"  # ALARM / CONTINUE / NO_DATA / UNKNOWN
+    # Chordia gate fields (populated by compute_lane_scores from validated_setups
+    # + chordia_audit_log.yaml). Defaults are None so existing _make_score()
+    # test factories with 20+ call sites do not need updating.
+    chordia_verdict: str | None = None  # PASS_CHORDIA/PASS_PROTOCOL_A/FAIL_CHORDIA/FAIL_BOTH/MISSING
+    chordia_audit_age_days: int | None = None  # days since audit_date in doctrine YAML
 
 
 def _month_range(rebalance_date: date, months_back: int) -> tuple[date, date]:
@@ -215,32 +228,48 @@ def compute_lane_scores(
     rebalance_date: date,
     trailing_months: int = DEPLOY_WINDOW_MONTHS,
     db_path: str | Path | None = None,
+    audit_log: ChordiaAuditLog | None = None,
 ) -> list[LaneScore]:
     """Compute trailing performance for all validated strategies.
 
     Zero look-ahead: all queries use trading_day < rebalance_date.
     SM-adjusted: applies tight-stop via mae_r.
     Filter-applied: uses matches_row on daily_features.
+
+    Each LaneScore is populated with chordia_verdict + chordia_audit_age_days
+    from validated_setups (sharpe_ratio, sample_size) and the doctrine YAML
+    (has_theory grant + audit_date). The build_allocation() gate refuses
+    DEPLOY for verdicts other than PASS_CHORDIA / PASS_PROTOCOL_A and for
+    audits older than the doctrine's freshness threshold.
     """
     db = db_path or GOLD_DB_PATH
     con = duckdb.connect(str(db), read_only=True)
     configure_connection(con)
 
+    if audit_log is None:
+        audit_log = load_chordia_audit_log()
+    assert audit_log is not None  # for type narrowing inside the try block
+
     try:
-        # Load all active validated strategies
+        # Load all active validated strategies. sharpe_ratio + sample_size
+        # feed the live chordia verdict; promoted_at is informational only —
+        # the staleness gate uses doctrine audit_date, not promotion date,
+        # because promoted_at predates the chordia revalidation regime.
         shelf_relation = deployable_validated_relation(con, alias="vs")
         strategies = con.execute(
             f"""
             SELECT strategy_id, instrument, orb_label, orb_minutes, entry_model,
                    rr_target, confirm_bars, filter_type, stop_multiplier,
-                   sample_size
+                   sample_size, sharpe_ratio
             FROM {shelf_relation}
             ORDER BY instrument, orb_label, orb_minutes
             """
         ).fetchall()
 
         scores = []
-        for sid, inst, orb, om, em, rr, cb, ft, sm, _total_n in strategies:
+        for sid, inst, orb, om, em, rr, cb, ft, sm, total_n, sharpe in strategies:
+            chordia_verdict_value = chordia_verdict_label(sharpe, total_n, audit_log.has_theory(sid))
+            chordia_age = audit_log.audit_age_days(sid, rebalance_date)
             # Per-month ExpR for trailing window
             monthly, total_wins, total_trades = _per_month_expr(
                 con,
@@ -277,6 +306,8 @@ def compute_lane_scores(
                         months_positive_since_last_neg_streak=0,
                         status="STALE",
                         status_reason="No trades in trailing window",
+                        chordia_verdict=chordia_verdict_value,
+                        chordia_audit_age_days=chordia_age,
                     )
                 )
                 continue
@@ -365,6 +396,8 @@ def compute_lane_scores(
                     status=status,
                     status_reason=reason,
                     recent_3mo_expr=recent_3mo,
+                    chordia_verdict=chordia_verdict_value,
+                    chordia_audit_age_days=chordia_age,
                 )
             )
 
@@ -564,6 +597,90 @@ def compute_pairwise_correlation(
         con.close()
 
 
+def apply_chordia_gate(
+    scores: list[LaneScore],
+    *,
+    audit_log: ChordiaAuditLog | None = None,
+) -> list[LaneScore]:
+    """Refuse DEPLOY for strategies failing the Chordia criterion.
+
+    For each input score, returns a new LaneScore with status mutated to
+    "PAUSE" and status_reason describing the chordia failure when:
+      - chordia_verdict is None or in (FAIL_BOTH, FAIL_CHORDIA, MISSING)
+      - chordia_audit_age_days is None (no doctrine audit) — treated as MISSING
+      - chordia_audit_age_days > audit_log.audit_freshness_days (default 90)
+
+    Strategies that already have status STALE or PAUSE are left unchanged
+    (chordia gate does not "rescue" a stale strategy or change an existing
+    PAUSE reason). Strategies passing the gate are returned unchanged.
+
+    The gate runs BEFORE build_allocation's ranking. This keeps chordia
+    logic out of the DD/correlation/hysteresis machinery — build_allocation's
+    existing filter `status in ("DEPLOY","RESUME","PROVISIONAL")` then
+    naturally excludes refused strategies.
+    """
+    log = audit_log if audit_log is not None else load_chordia_audit_log()
+    freshness = log.audit_freshness_days
+
+    out: list[LaneScore] = []
+    for s in scores:
+        # Don't override an existing PAUSE/STALE — chordia gate is additive.
+        if s.status in ("PAUSE", "STALE"):
+            out.append(s)
+            continue
+
+        verdict = s.chordia_verdict
+        age = s.chordia_audit_age_days
+
+        reason: str | None = None
+        if verdict is None or verdict == "MISSING":
+            reason = "chordia gate: missing audit (recompute returned MISSING)"
+        elif verdict == "FAIL_BOTH":
+            reason = f"chordia gate: FAIL_BOTH (t<{CHORDIA_T_WITH_THEORY})"
+        elif verdict == "FAIL_CHORDIA":
+            reason = f"chordia gate: FAIL_CHORDIA (t<{CHORDIA_T_WITHOUT_THEORY}, no theory grant)"
+        elif age is None:
+            reason = "chordia gate: no audit_date in doctrine YAML"
+        elif age > freshness:
+            reason = f"chordia gate: audit stale ({age}d > {freshness}d)"
+        elif not chordia_verdict_allows_deploy(verdict):
+            # Defensive: any future verdict label not in the deploy-allow set.
+            reason = f"chordia gate: verdict {verdict} does not permit DEPLOY"
+
+        if reason is None:
+            out.append(s)
+            continue
+
+        # Demote to PAUSE with structured reason.
+        out.append(
+            LaneScore(
+                strategy_id=s.strategy_id,
+                instrument=s.instrument,
+                orb_label=s.orb_label,
+                orb_minutes=s.orb_minutes,
+                rr_target=s.rr_target,
+                filter_type=s.filter_type,
+                confirm_bars=s.confirm_bars,
+                stop_multiplier=s.stop_multiplier,
+                trailing_expr=s.trailing_expr,
+                trailing_n=s.trailing_n,
+                trailing_months=s.trailing_months,
+                annual_r_estimate=s.annual_r_estimate,
+                trailing_wr=s.trailing_wr,
+                session_regime_expr=s.session_regime_expr,
+                months_negative=s.months_negative,
+                months_positive_since_last_neg_streak=s.months_positive_since_last_neg_streak,
+                status="PAUSE",
+                status_reason=reason,
+                recent_3mo_expr=s.recent_3mo_expr,
+                sr_status=s.sr_status,
+                chordia_verdict=verdict,
+                chordia_audit_age_days=age,
+            )
+        )
+    return out
+
+
 def build_allocation(
     scores: list[LaneScore],
     *,
@@ -589,7 +706,16 @@ def build_allocation(
 
     DD estimation uses per-session P90 from orb_size_stats when available.
     Hysteresis: only replace a lane if new candidate >20% better.
+
+    Chordia gate is applied in-line: any score whose chordia_verdict / age
+    fails policy is demoted to PAUSE before the deployable filter, so the
+    refused strategy cannot leak into the JSON. Callers may also call
+    apply_chordia_gate() upstream — running the gate twice is idempotent.
     """
+    # Apply Chordia gate first — refuse FAIL_BOTH / FAIL_CHORDIA / MISSING /
+    # stale-audit strategies before any ranking. Idempotent.
+    scores = apply_chordia_gate(scores)
+
     # Filter to deployable
     candidates = [s for s in scores if s.status in ("DEPLOY", "RESUME", "PROVISIONAL")]
 
@@ -862,6 +988,11 @@ def save_allocation(
             ),
             "status": s.status,
             "status_reason": s.status_reason,
+            # Chordia gate state — read by drift check and downstream auditors.
+            # Drift check refuses lanes[] whose verdict is not PASS_* or whose
+            # audit_age_days exceeds the doctrine freshness threshold.
+            "chordia_verdict": s.chordia_verdict,
+            "chordia_audit_age_days": s.chordia_audit_age_days,
         }
         if orb_size_stats:
             orb_key = (s.instrument, s.orb_label, s.orb_minutes)

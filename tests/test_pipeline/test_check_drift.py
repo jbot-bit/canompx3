@@ -1703,3 +1703,154 @@ class TestCanonicalClaudeClientSource:
         assert any("rogue_ai.py" in v and "anthropic.Anthropic(" in v for v in violations), (
             f"Missing direct-construction violation: {violations}"
         )
+
+
+class TestLaneAllocationChordiaGate:
+    """check_lane_allocation_chordia_gate refuses lanes failing the gate.
+
+    The check reads ``PROJECT_ROOT / "docs/runtime/lane_allocation.json"``
+    (absolute path via the module's PROJECT_ROOT constant — explicitly NOT
+    CWD-relative). Each test monkeypatches PROJECT_ROOT to point at tmp_path
+    and writes a controlled fixture file there.
+
+    Stage: docs/runtime/stages/allocator-chordia-gate.md.
+    Companion to trading_app.lane_allocator.apply_chordia_gate.
+    """
+
+    def _write_alloc(self, tmp_path: Path, lanes: list[dict]) -> None:
+        import json
+
+        runtime = tmp_path / "docs" / "runtime"
+        runtime.mkdir(parents=True)
+        (runtime / "lane_allocation.json").write_text(
+            json.dumps(
+                {
+                    "rebalance_date": "2026-05-01",
+                    "trailing_window_months": 12,
+                    "profile_id": "test_profile",
+                    "lanes": lanes,
+                    "paused": [],
+                    "all_scores_count": len(lanes),
+                }
+            )
+        )
+
+    def _patch_root(self, monkeypatch, tmp_path: Path) -> None:
+        from pipeline import check_drift
+
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+
+    def test_passes_when_file_absent(self, tmp_path, monkeypatch):
+        """Missing lane_allocation.json returns no violations (allowed in fresh worktrees)."""
+        from pipeline.check_drift import check_lane_allocation_chordia_gate
+
+        self._patch_root(monkeypatch, tmp_path)
+        assert check_lane_allocation_chordia_gate() == []
+
+    def test_passes_with_clean_lane(self, tmp_path, monkeypatch):
+        """A lane with PASS_PROTOCOL_A + fresh audit passes the check."""
+        from pipeline.check_drift import check_lane_allocation_chordia_gate
+
+        self._write_alloc(
+            tmp_path,
+            [
+                {
+                    "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+                    "chordia_verdict": "PASS_PROTOCOL_A",
+                    "chordia_audit_age_days": 10,
+                }
+            ],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        assert check_lane_allocation_chordia_gate() == []
+
+    def test_fails_on_fail_both(self, tmp_path, monkeypatch):
+        """A FAIL_BOTH lane in lane_allocation.json triggers a violation."""
+        from pipeline.check_drift import check_lane_allocation_chordia_gate
+
+        self._write_alloc(
+            tmp_path,
+            [
+                {
+                    "strategy_id": "BAD_LANE",
+                    "chordia_verdict": "FAIL_BOTH",
+                    "chordia_audit_age_days": 5,
+                }
+            ],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        violations = check_lane_allocation_chordia_gate()
+        assert len(violations) == 1
+        assert "BAD_LANE" in violations[0]
+        assert "FAIL_BOTH" in violations[0]
+
+    def test_fails_on_missing_verdict(self, tmp_path, monkeypatch):
+        """A lane with chordia_verdict missing entirely is rejected."""
+        from pipeline.check_drift import check_lane_allocation_chordia_gate
+
+        self._write_alloc(
+            tmp_path,
+            [
+                {
+                    "strategy_id": "OLD_LANE",
+                    # no chordia_verdict, no chordia_audit_age_days
+                }
+            ],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        violations = check_lane_allocation_chordia_gate()
+        assert len(violations) == 1
+        assert "OLD_LANE" in violations[0]
+        assert "missing chordia_verdict" in violations[0]
+
+    def test_fails_on_stale_audit(self, tmp_path, monkeypatch):
+        """A PASS_PROTOCOL_A lane with audit_age > 90d is rejected as stale."""
+        from pipeline.check_drift import check_lane_allocation_chordia_gate
+
+        self._write_alloc(
+            tmp_path,
+            [
+                {
+                    "strategy_id": "STALE_LANE",
+                    "chordia_verdict": "PASS_PROTOCOL_A",
+                    "chordia_audit_age_days": 91,
+                }
+            ],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        violations = check_lane_allocation_chordia_gate()
+        assert len(violations) == 1
+        assert "STALE_LANE" in violations[0]
+        assert "stale" in violations[0].lower()
+
+    def test_robust_to_non_root_cwd(self, tmp_path, monkeypatch):
+        """Regression: check must not silently pass from a non-root cwd.
+
+        Pre-fix the check used a CWD-relative path; this test would have
+        passed with the bug because tmp_path / 'subdir' has no
+        lane_allocation.json under it. Post-fix we patch PROJECT_ROOT at
+        tmp_path AND chdir into a subdir — the check must still find the
+        file at the patched root.
+        """
+        from pipeline.check_drift import check_lane_allocation_chordia_gate
+
+        self._write_alloc(
+            tmp_path,
+            [
+                {
+                    "strategy_id": "BAD_LANE",
+                    "chordia_verdict": "FAIL_BOTH",
+                    "chordia_audit_age_days": 0,
+                }
+            ],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+        violations = check_lane_allocation_chordia_gate()
+        assert len(violations) == 1, (
+            "Drift check must resolve via PROJECT_ROOT, not CWD — otherwise it "
+            "fail-opens whenever invoked from a non-root directory."
+        )
+        assert "BAD_LANE" in violations[0]
