@@ -976,6 +976,15 @@ def save_allocation(
     path = Path(output_path) if output_path else DEFAULT_LANE_ALLOCATION_PATH
     path = _normalize_writable_path(path)
 
+    def _blocked_entry(s: LaneScore) -> dict[str, object]:
+        return {
+            "strategy_id": s.strategy_id,
+            "status": s.status,
+            "reason": s.status_reason,
+            "chordia_verdict": s.chordia_verdict,
+            "chordia_audit_age_days": s.chordia_audit_age_days,
+        }
+
     lanes_data = []
     for s in allocation:
         lane = {
@@ -1018,7 +1027,8 @@ def save_allocation(
         "trailing_window_months": DEPLOY_WINDOW_MONTHS,
         "profile_id": profile_id,
         "lanes": lanes_data,
-        "paused": [{"strategy_id": s.strategy_id, "reason": s.status_reason} for s in gated_scores if s.status == "PAUSE"],
+        "paused": [_blocked_entry(s) for s in gated_scores if s.status == "PAUSE"],
+        "stale": [_blocked_entry(s) for s in gated_scores if s.status == "STALE"],
         "all_scores_count": len(gated_scores),
     }
 

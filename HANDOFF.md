@@ -118,6 +118,10 @@
     3 audited lanes, but the saved/report surfaces now reflect the gate:
     4 deployable, 49 paused, 6 stale; 33 pauses are explicitly
     `chordia gate:*`.
+  - `docs/runtime/lane_allocation.json` now serializes structured `paused[]`
+    and `stale[]` entries with `status`, `reason`, `chordia_verdict`, and
+    `chordia_audit_age_days`, so stale-but-audit-failed lanes remain visible
+    in the saved runtime state.
 - Phantom-stat retraction:
   the originally cited `t=4.565` for
   `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60` is UNSUPPORTED. Repo grep on

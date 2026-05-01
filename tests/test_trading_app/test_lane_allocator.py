@@ -1242,3 +1242,39 @@ class TestChordiaGate:
         paused = {row["strategy_id"]: row["reason"] for row in data["paused"]}
         assert "BLOCKED" in paused
         assert "strict replay audit" in paused["BLOCKED"]
+        blocked_row = next(row for row in data["paused"] if row["strategy_id"] == "BLOCKED")
+        assert blocked_row["status"] == "PAUSE"
+        assert blocked_row["chordia_verdict"] == "MISSING"
+
+    def test_save_allocation_stale_retains_chordia_traceability(self, tmp_path):
+        """stale[] preserves strict-audit state for non-selected blocked lanes."""
+        import json
+        from datetime import date as _date
+        from trading_app.lane_allocator import save_allocation
+
+        selected = _make_score(
+            strategy_id="CLEAN",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=5,
+        )
+        stale_failed = _make_score(
+            strategy_id="STALE_FAIL",
+            status="STALE",
+            status_reason="No trades in trailing window",
+            chordia_verdict="FAIL_BOTH",
+            chordia_audit_age_days=0,
+        )
+
+        path = save_allocation(
+            scores=[selected, stale_failed],
+            allocation=[selected],
+            rebalance_date=_date(2026, 5, 2),
+            profile_id="test_profile",
+            output_path=tmp_path / "test_alloc.json",
+        )
+        data = json.loads(path.read_text())
+
+        stale = {row["strategy_id"]: row for row in data["stale"]}
+        assert "STALE_FAIL" in stale
+        assert stale["STALE_FAIL"]["status"] == "STALE"
+        assert stale["STALE_FAIL"]["chordia_verdict"] == "FAIL_BOTH"
