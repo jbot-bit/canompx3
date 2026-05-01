@@ -42,6 +42,17 @@ from trading_app.config import ALL_FILTERS
 from trading_app.lane_correlation import RHO_REJECT_THRESHOLD, _load_lane_daily_pnl, _pearson
 from trading_app.validated_shelf import deployable_validated_relation
 
+
+def _normalize_writable_path(path: Path) -> Path:
+    text = str(path)
+    if text.startswith("/mnt/c/Users/"):
+        return Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
+    return path
+
+
+_REPO_ROOT = _normalize_writable_path(Path(__file__).resolve().parents[1])
+DEFAULT_LANE_ALLOCATION_PATH = _REPO_ROOT / "docs" / "runtime" / "lane_allocation.json"
+
 # ---------------------------------------------------------------------------
 # Literature-grounded constants (do NOT tune on backtest — see spec §Parameter Source)
 # ---------------------------------------------------------------------------
@@ -962,8 +973,9 @@ def save_allocation(
     path = (
         Path(output_path)
         if output_path
-        else Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+        else DEFAULT_LANE_ALLOCATION_PATH
     )
+    path = _normalize_writable_path(path)
 
     lanes_data = []
     for s in allocation:
@@ -1036,10 +1048,9 @@ def check_allocation_staleness(
     days_old = -1 if file not found.
     """
     if allocation_path:
-        path = Path(allocation_path)
+        path = _normalize_writable_path(Path(allocation_path))
     else:
-        # Source-file-relative path (consistent regardless of CWD)
-        path = Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+        path = DEFAULT_LANE_ALLOCATION_PATH
     if not path.exists():
         return "BLOCK", -1
 

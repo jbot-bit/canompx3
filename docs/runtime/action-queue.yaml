@@ -85,25 +85,48 @@ items:
     override_note: Closed 2026-05-01 via PR #197. PASS_CHORDIA-strategies-need-audits unlock tracked as separate queue entry.
 
   - id: chordia_audit_unlock_pass_chordia_strategies
-    title: Doctrine-audit the 8 PASS_CHORDIA strategies blocked by missing audit_date
+    title: Doctrine-audit the remaining PASS_CHORDIA strategies blocked by missing audit_date
     class: research
     status: open
     priority: P1
     close_before_new_work: false
     owner_hint: claude-or-codex
-    last_verified_at: 2026-05-01
+    last_verified_at: 2026-05-02
     freshness_sla_days: 14
     next_action: |
-      Allocator Chordia gate (PR #197) demotes any strategy with
-      `chordia_audit_age_days is None` to PAUSE. Live recompute against
-      validated_setups identifies 8 strategies whose live t-stat clears
-      Chordia 2018 hurdle (t >= 3.79, PASS_CHORDIA) but which have NO
-      doctrine audit entry in `docs/runtime/chordia_audit_log.yaml`. They
-      are the concrete expansion path for allocation -- and the ONLY path
-      consistent with institutional rigor.
+      2026-05-02 progress:
+      - 4/8 previously blocked PASS_CHORDIA names now have doctrine audit rows
+        in `docs/runtime/chordia_audit_log.yaml`
+      - Measured outcomes:
+        - PASS_CHORDIA:
+          `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`
+          `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`
+          `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12`
+        - FAIL_BOTH on bounded strict replay:
+          `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`
+      - Canonical rebalance rerun for `topstep_50k_mnq_auto` now writes a
+        3-lane live book in `docs/runtime/lane_allocation.json`:
+        `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`,
+        `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`,
+        `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12`
+
+      Remaining live PASS_CHORDIA-without-audit names:
+      - `MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10_S075`
+      - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`
+      - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60`
+      - `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15`
+
+      Important doctrine note:
+      - The allocator live gate still recomputes from `validated_setups`
+        `sharpe_ratio * sqrt(sample_size)`. Therefore
+        `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60` can still appear as live
+        `PASS_CHORDIA` in `compute_lane_scores()` even though the new bounded
+        strict replay audit row records `FAIL_BOTH`. That mismatch is now
+        documented and should be treated as a separate controls/provenance
+        follow-up, not resolved ad hoc inside this queue item.
 
       Per stage:
-      (1) Enumerate PASS_CHORDIA-without-audit:
+      (1) Enumerate remaining PASS_CHORDIA-without-audit:
           ```python
           from datetime import date
           from trading_app.lane_allocator import compute_lane_scores
@@ -112,10 +135,11 @@ items:
                      if s.chordia_verdict == "PASS_CHORDIA"
                      and s.chordia_audit_age_days is None]
           ```
-      (2) For EACH strategy, run Pathway-A revalidation per RESEARCH_RULES.md
+      (2) For EACH remaining strategy, run Pathway-A revalidation per RESEARCH_RULES.md
           + pre_registered_criteria.md Criterion 4. NOT a sweep -- a per-strategy
           adversarial-split audit with theory grant decision. Pre-reg required.
-      (3) On PASS, append an entry to `chordia_audit_log.yaml` under `audits:`
+      (3) On PASS or explicit strict fail, append an entry to
+          `chordia_audit_log.yaml` under `audits:`
           with `audit_date`, `verdict`, `t_stat`, `threshold`, `sample_size`.
           Theory-granted strategies also get a `theory_grants:` row with
           required `theory_ref` to `docs/institutional/literature/<file>`.
@@ -129,7 +153,7 @@ items:
 
       Bailey-LdP MinBTL: < 300 trials per audit. No brute force.
     exit_criteria: |
-      All 8 PASS_CHORDIA-without-audit strategies have either (a) a doctrine
+      All 8 originally identified PASS_CHORDIA-without-audit strategies have either (a) a doctrine
       audit row in chordia_audit_log.yaml producing a fresh `chordia_audit_age_days`
       and a clear PASS_CHORDIA / PASS_PROTOCOL_A verdict on rebalance, OR
       (b) an explicit FAIL with a one-line note in the YAML explaining why
@@ -146,7 +170,7 @@ items:
       - trading_app/chordia.py
       - trading_app/lane_allocator.py
     notes_ref: HANDOFF.md (Item A under "What's NOT done -- ranked by EV")
-    override_note: Direct expansion path for capital allocation post-chordia-gate. Per-strategy Pathway-A audit, NOT a sweep. Pre-reg required.
+    override_note: Half complete as of 2026-05-02. Continue per-strategy Pathway-A audits on the 4 remaining names; do not reopen theory grants ad hoc.
 
   - id: phase_d_d0_clean_rederivation
     title: Phase D D-0 clean re-derivation (E2 LA contamination — rel_vol → safe predictor)

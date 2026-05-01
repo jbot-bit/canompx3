@@ -1106,10 +1106,16 @@ def load_allocation_lanes(
     """
     import json
 
+    def _normalize_writable_path(path: Path) -> Path:
+        text = str(path)
+        if text.startswith("/mnt/c/Users/"):
+            return Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
+        return path
+
     if allocation_path:
-        path = Path(allocation_path)
+        path = _normalize_writable_path(Path(allocation_path))
     else:
-        path = Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+        path = _normalize_writable_path(Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json")
 
     if not path.exists():
         return ()

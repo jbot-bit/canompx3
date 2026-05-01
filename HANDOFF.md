@@ -52,6 +52,19 @@
 - `docs/runtime/chordia_audit_log.yaml` updated with 2026-05-02 audit rows for
   those four strategies. Default `has_theory=False` remains unchanged; no new
   theory grants were added.
+- Canonical rebalance write for `topstep_50k_mnq_auto` completed successfully
+  after path hardening in `trading_app/lane_allocator.py`:
+  - new live `docs/runtime/lane_allocation.json` rebalance_date `2026-05-02`
+  - live book now expands from 1 lane to 3 lanes:
+    - `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`
+    - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`
+    - `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12`
+- Read/write hardening landed around `lane_allocation.json` path resolution:
+  - `trading_app/lane_allocator.py`
+  - `trading_app/prop_profiles.py`
+  - `trading_app/pre_session_check.py`
+  The bug was WSL mount-path casing (`/mnt/c/Users/...` vs writable
+  `/mnt/c/users/...`) causing rebalance write failure at the final save step.
 - Reconciled stale plan split:
   `docs/runtime/handoff-2026-05-02.md` says "7-lane book / Stage 3 next",
   but live truth in `docs/runtime/lane_allocation.json` is already post-Chordia
@@ -71,13 +84,14 @@
 
 ### Recommended next step
 
-- Execute or extend the new prereg first:
-  `2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.yaml`
-- Then execute or extend the already-written follow-on preregs for the next
-  correlation-pruned distinct candidates:
-  `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`,
-  `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`,
-  `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12`.
+- The next concrete audit targets are now the 4 remaining live
+  `PASS_CHORDIA` names without doctrine audit rows:
+  - `MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10_S075`
+  - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`
+  - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60`
+  - `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15`
+- Continue using the same front-door + bounded-runner flow established by
+  `research/chordia_strict_unlock_v1.py`; do not invent a second harness.
 - Only do more literature extraction if it could honestly upgrade
   `VWAP_MID_ALIGNED` or `OVNRNG_100` into `has_theory: true`.
 - MCP work remains off the critical path for "more high-quality deployed
@@ -91,6 +105,13 @@
   `X_MES_ATR60` is NOT a plain `daily_features` filter. It requires
   `cross_atr_MES_pct` enrichment before canonical delegation. Without that,
   replay fail-closes to zero-fire and yields a false `SCAN_ABORT`.
+- Important doctrine mismatch now known:
+  `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60` has a new bounded strict audit
+  row at `FAIL_BOTH`, but the allocator live gate still recomputes from
+  `validated_setups` and can surface it as `PASS_CHORDIA` in
+  `compute_lane_scores()`. This is a real controls/provenance gap, but it is
+  separate from the lane-allocation refresh and should not be patched ad hoc
+  without an explicit doctrine decision.
 
 ---
 
