@@ -67,6 +67,20 @@ Main worktree (`C:/Users/joshd/canompx3`) at session-end has uncommitted Codex-s
   `code-review-graph`, not `notebooklm`.
 - Shared roadmap written:
   `docs/plans/2026-05-01-codex-supercharge-roadmap.md`
+- `repo-state` MCP landed:
+  - server: `scripts/tools/repo_state_mcp_server.py`
+  - launcher: `scripts/infra/run-repo-state-mcp.sh`
+  - shared declaration: `.mcp.json`
+  - Codex launcher wiring: `scripts/infra/codex-project*.sh`,
+    `scripts/infra/codex-review.sh`, `scripts/infra/codex-capital-review.sh`
+  - tests: `tests/test_tools/test_repo_state_mcp_server.py`
+- `research-catalog` MCP landed:
+  - server: `scripts/tools/research_catalog_mcp_server.py`
+  - launcher: `scripts/infra/run-research-catalog-mcp.sh`
+  - shared declaration: `.mcp.json`
+  - Codex launcher wiring: `scripts/infra/codex-project*.sh`,
+    `scripts/infra/codex-review.sh`, `scripts/infra/codex-capital-review.sh`
+  - tests: `tests/test_tools/test_research_catalog_mcp_server.py`
 
 ### Measured blockers still true
 
@@ -80,13 +94,7 @@ Main worktree (`C:/Users/joshd/canompx3`) at session-end has uncommitted Codex-s
 ### Next build order
 
 1. Use a WSL-home clone such as `~/canompx3` for real Codex work.
-2. Build `repo-state` MCP from:
-   `context_resolver.py`, `task_route_packet.py`, `project_pulse.py`,
-   `system_context.py`, `context_views.py`.
-3. Build `research-catalog` MCP over `docs/institutional/`,
-   `docs/audit/hypotheses/`, `docs/audit/results/`, and existing context
-   catalog tooling.
-4. Build `strategy-lab` MCP only after those two, using `gold-db` as the truth
+2. Build `strategy-lab` MCP using `gold-db` as the truth
    substrate instead of inventing a second state layer.
 
 ## Prior Session (2026-05-01 PM — Allocator Chordia Gate)
