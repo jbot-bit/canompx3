@@ -6,7 +6,123 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session (2026-05-01 — Allocator orb_minutes Hardcode Fix)
+## Last Session (2026-05-01 PM — Allocator Chordia Gate)
+
+### Current state at handoff
+
+**PR #197** open: `fix/allocator-chordia-gate` → `main`. 3 commits:
+```
+a37bf7df  fix(test): test_lane_ctl picks first available lane
+67129d04  fix(chordia-gate): code-review findings — drift path, malformed yaml, deprecation
+49688f05  feat(allocator): Chordia gate prevents silent rebalance-bypass class
+```
+
+**First action on resume**: `gh pr view 197 --json state,mergeable,statusCheckRollup`.
+- Green → merge (squash fine).
+- Red → read `gh run view <id> --log-failed` before any edit.
+
+### What this PR does
+
+Stage `allocator_chordia_gate` (P1 from `action-queue.yaml`). Refuses DEPLOY for
+any strategy failing Chordia 2018 t-stat. Two-layer defense:
+1. `apply_chordia_gate(scores)` inline at top of `build_allocation()` —
+   demotes FAIL_BOTH / FAIL_CHORDIA / MISSING / stale-audit (>90d) to PAUSE.
+2. Drift check #134 `check_lane_allocation_chordia_gate` — refuses any FAIL_*
+   lane in `lane_allocation.json` (catches hand-edits / code reverts).
+
+**Verdict taxonomy** (`trading_app.chordia.chordia_verdict_label`):
+- PASS_CHORDIA (t≥3.79, sizing-up eligible) | PASS_PROTOCOL_A (3.00≤t<3.79 + theory)
+- FAIL_CHORDIA (3.00≤t<3.79 no theory) | FAIL_BOTH (t<3.00) | MISSING (no data)
+- Only PASS_* permits DEPLOY (`chordia_verdict_allows_deploy`).
+
+**Architectural decision**: no new gold.db table. `validated_setups.sharpe_ratio` +
+`sample_size` recompute the t-stat live every rebalance. Persisted artifact:
+`docs/runtime/chordia_audit_log.yaml` — per-strategy `has_theory` doctrine grant +
+`audit_date` (for staleness). YAML's `verdict` field is a HUMAN LEDGER ONLY; the
+allocator ALWAYS recomputes from `validated_setups`.
+
+**Live impact** (verified 2026-05-01 against gold.db):
+- Pre-gate `topstep_50k_mnq_auto`: 4 lanes (EUROPE_FLOW / COMEX_SETTLE /
+  NYSE_OPEN / TOKYO_OPEN, all DEPLOY).
+- Post-gate: **1 lane** — `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` (PASS_PROTOCOL_A,
+  t=3.412 IS / 3.511 live recompute).
+- 8 strategies sit at PASS_CHORDIA but are blocked by missing-audit gate. ← UNLOCK PATH
+
+### Reviews completed
+
+- `evidence-auditor` (capital-class grounding) — YELLOW; YAML-vs-live verdict
+  discrepancy on H2/H4 (both still block DEPLOY identically). Addressed inline.
+- `general-purpose` engineering review (agentId af59919cf2bf3c285) — caught 3
+  ship-blockers, all fixed in `67129d04`:
+  - H1 fail-open class: drift check used CWD-relative path. Now `PROJECT_ROOT`.
+  - H2 docstring lie: malformed YAML actually raised. Now catches + WARNs.
+  - M1 dead API: `chordia_gate()` deprecated (kept for legacy test_chordia.py).
+
+### What's NOT done — ranked by EV
+
+**A. 8 PASS_CHORDIA strategies need doctrine audits  ← highest EV**
+
+The user's stated aim this session: "+0.4R+", "sky is the limit, can't get there
+if you don't aim". Honest framing: H3 NYSE_OPEN ExpR ≈ +0.079R; +0.4R is 5×.
+Not reachable by tuning the same setup harder.
+
+The 8 PASS_CHORDIA strategies are statistically eligible (t≥3.79) but blocked
+by missing audit. **Auditing each = the concrete unlock**. Pathway-A revalidation
+is the institutional method (see `RESEARCH_RULES.md`); do NOT auto-write audit
+rows without running the actual audit. Pre-reg per Phase 0 grounding required.
+
+Enumerate:
+```python
+from datetime import date
+from trading_app.lane_allocator import compute_lane_scores
+scores = compute_lane_scores(date.today())
+[s.strategy_id for s in scores
+ if s.chordia_verdict == "PASS_CHORDIA" and s.chordia_audit_age_days is None]
+```
+
+**B. `WorkQueue` pydantic schema drift** (~10 min, infra hygiene)
+
+`scripts/tools/project_pulse.py` blows up on schema validation. `pipeline/work_queue.py:165`
+rejects `class=audit`, `class=stage`, `status=open` in `action-queue.yaml`. Symptom:
+`/orient` skill fails its pulse step. Fix: extend Literal enums in
+`pipeline/work_queue.py` OR canonicalize YAML to existing values. Check recent
+queue commits for direction.
+
+**C. `stage-gate-guard.py` worktree-awareness**
+
+Hook reads `Path("docs/runtime/stages")` from main worktree's cwd, ignoring the
+worktree of the edited file. Same class as `feedback_crg_worktree_repo_root_resolution.md`.
+Workaround used this session: mirror stage file into main's `stages/` dir. Real
+fix: resolve `STAGES_DIR` via the worktree-of-edited-file's git root. Causes
+friction every multi-worktree session.
+
+**D. Code-review polish (M2/M3/M4 from review af59919cf2bf3c285)** — ship-OK
+- M2: `apply_chordia_gate` 23-kwarg LaneScore rebuild → use `dataclasses.replace`
+- M3: integration test compute → save → drift round-trip (catches schema-name typos)
+- M4: `Literal` typing on verdict; shared `CHORDIA_DEPLOY_VERDICTS` constant
+  (currently `("PASS_CHORDIA", "PASS_PROTOCOL_A")` is duplicated across files)
+
+**E. Action-queue housekeeping** (post-merge)
+
+Flip `allocator_chordia_gate` entry status from `open` to `closed`. Set `notes_ref`
+to PR #197 URL + `docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md`.
+
+### Don't pigeon-hole
+
+User explicitly flagged this. On resume: `/orient` first (after fixing B above
+if blocking), check live `action-queue.yaml`, two-track decide. Do NOT auto-route
+to "next adjacent task" — pick by EV.
+
+### Friction noted (not fixed this session)
+
+- Cross-worktree stage-file mirror dance (Item C above).
+- `claude` interactive launch from sandboxed Bash detaches and the child window
+  dies → can't reliably spawn fresh Claude sessions in sibling worktrees from
+  inside Claude. User opens the terminal manually.
+
+---
+
+## Prior Session (2026-05-01 — Allocator orb_minutes Hardcode Fix)
 
 ### What landed this session
 
