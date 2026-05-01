@@ -105,7 +105,7 @@ def _risk_r_supply_dollars(
         cost = COST_SPECS.get(s.instrument)
         if cost is None:
             continue
-        _, p90 = orb_stats.get((s.instrument, s.orb_label), (100.0, 100.0))
+        _, p90 = orb_stats.get((s.instrument, s.orb_label, s.orb_minutes), (100.0, 100.0))
         total += p90 * FIXED_STOP_MULTIPLIER * cost.point_value
     return total
 
