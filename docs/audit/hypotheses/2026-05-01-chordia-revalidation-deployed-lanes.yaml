@@ -1,0 +1,259 @@
+# Pre-Registration: Chordia revalidation of currently-deployed lanes
+#
+# Authority: docs/institutional/pre_registered_criteria.md (Criterion 4 — Chordia t-statistic)
+# Methodology: .claude/rules/backtesting-methodology.md
+# Pooled-finding rule: .claude/rules/pooled-finding-rule.md (per-cell mandatory; no pooled headline)
+# Per-lane breakdown rule: memory/feedback_per_lane_breakdown_required.md
+# Lane source: docs/runtime/lane_allocation.json (rebalance_date 2026-04-18, profile topstep_50k_mnq_auto)
+
+pre_reg_id: 2026-05-01-chordia-revalidation-deployed-lanes
+locked_at: 2026-05-01
+status: DESIGN_LOCKED_AWAITING_GO
+classification: defensive-honesty-gate
+testing_mode: individual                # Pathway B per Criterion 3 (theory-grounded mechanism)
+pathway: B
+K_budget: 4                             # ONE per deployed lane; no fishing
+holdout_date: 2026-01-01                # Mode A (sacred). IS-only Chordia per criterion definition.
+literature_ref:
+  - docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md
+  - docs/institutional/literature/harvey_liu_2015_backtesting.md
+  - docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md  # MinBTL bound
+canonical_source_delegation:
+  threshold_constants: trading_app/chordia.py (CHORDIA_T_WITH_THEORY=3.00, CHORDIA_T_WITHOUT_THEORY=3.79)
+  t_stat_compute: trading_app.chordia.compute_chordia_t(sharpe_ratio, sample_size)
+  filter_apply: trading_app.config.StrategyFilter.matches_row()
+  holdout_constant: pipeline.holdout_policy.HOLDOUT_SACRED_FROM
+  cost_specs: pipeline.cost_model.COST_SPECS
+  session_catalog: pipeline.dst.SESSION_CATALOG
+
+# ---------------------------------------------------------------------------
+# Why this pre-reg exists (the honest framing)
+# ---------------------------------------------------------------------------
+context: |
+  4 lanes are currently DEPLOY in lane_allocation.json (signal-only against
+  topstep 20092334). They were validated under a mix of Pathway A BH-FDR and
+  Amendment 2.7 grandfathering as research-provisional. This pre-reg asks
+  the most basic honesty question per Criterion 4:
+
+      What is each deployed lane's Chordia t-statistic (per-trade Sharpe x
+      sqrt(N)) on its IS slice (trading_day < 2026-01-01), and where does
+      it land vs the locked thresholds?
+
+  The pre-reg is purposely defensive. It does NOT discover new edge. It
+  audits whether the deployed portfolio is statistically defensible before
+  any new offensive work (Fitschen O15/O30, Carver Stage-2 sizing,
+  GARCH cross-session companion) is done on top of it. Without this gate,
+  offensive work risks compounding noise.
+
+# ---------------------------------------------------------------------------
+# The 4 hypotheses (one per deployed lane)
+# ---------------------------------------------------------------------------
+# Note: the plan that originally framed this work cited 5 lanes from a stale
+# read of trading_app/prop_profiles.py:431-849. Live truth from
+# docs/runtime/lane_allocation.json (rebalance 2026-04-18) shows 4 DEPLOY
+# lanes only; the 5th (MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G4_CONT_S075) is not
+# in the live allocator and was NOT pre-regged here. Volatile-data rule
+# applied: lane set queried live, never cited from memory.
+
+hypotheses:
+  - id: H1
+    lane: MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5
+    instrument: MNQ
+    session: EUROPE_FLOW
+    orb_minutes: 5
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.5
+    filter_type: ORB_G5
+    economic_theory: |
+      Fitschen Ch 5-7 — institutional-flow concentration on European morning
+      ORB; ORB_G5 captures min-size-pts gate that filters compression-day
+      false breaks. Mechanism: liquidity-driven momentum on session opens
+      with size-confirmed ranges.
+    economic_theory_citation: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+    has_theory: true                    # → Criterion 4 threshold = 3.00
+    null_hypothesis: mean per-trade R = 0
+    test_statistic: t = sharpe_ratio * sqrt(N)
+    expected_N_IS: ~210                 # trailing_n=264 includes 2026 OOS; IS subset ~80%
+    kill_criteria:
+      - t < 3.00 → FAIL_BOTH (raw Chordia fail; lane downgrades to research-provisional)
+      - 3.00 <= t < 3.79 → PASS_PROTOCOL_A (theory-grounded; lane retained as deployed)
+      - t >= 3.79 → PASS_CHORDIA (clears strict no-theory bar)
+
+  - id: H2
+    lane: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5
+    instrument: MNQ
+    session: COMEX_SETTLE
+    orb_minutes: 5
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.5
+    filter_type: ORB_G5
+    economic_theory: |
+      Fitschen Ch 5-7 — late-session institutional repositioning around
+      COMEX close; ORB_G5 again gates compression. D6 GARCH overlay
+      pre-reg builds on this lane (locked 54b7b948); honest Chordia
+      baseline is a prerequisite for any sizing overlay claim.
+    economic_theory_citation: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+    has_theory: true
+    null_hypothesis: mean per-trade R = 0
+    test_statistic: t = sharpe_ratio * sqrt(N)
+    expected_N_IS: ~200
+    kill_criteria:
+      - t < 3.00 → FAIL_BOTH
+      - 3.00 <= t < 3.79 → PASS_PROTOCOL_A
+      - t >= 3.79 → PASS_CHORDIA
+
+  - id: H3
+    lane: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12
+    instrument: MNQ
+    session: NYSE_OPEN
+    orb_minutes: 5
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.0
+    filter_type: COST_LT12
+    economic_theory: |
+      Fitschen Ch 5-7 + Chan 2013 Ch7 (intraday momentum, equity opens) —
+      NYSE-open volatility burst with COST_LT12 cost-gate to filter days
+      where friction-as-%-of-range exceeds 12 bps. Cost-gate is mechanistic
+      (friction floor), not data-mined.
+    economic_theory_citation: |
+      docs/institutional/literature/fitschen_2013_path_of_least_resistance.md ;
+      docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
+    has_theory: true
+    null_hypothesis: mean per-trade R = 0
+    test_statistic: t = sharpe_ratio * sqrt(N)
+    expected_N_IS: ~210                 # trailing_n=262
+    kill_criteria:
+      - t < 3.00 → FAIL_BOTH
+      - 3.00 <= t < 3.79 → PASS_PROTOCOL_A
+      - t >= 3.79 → PASS_CHORDIA
+
+  - id: H4
+    lane: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12
+    instrument: MNQ
+    session: TOKYO_OPEN
+    orb_minutes: 5
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.5
+    filter_type: COST_LT12
+    economic_theory: |
+      Fitschen Ch 5-7 + Chan 2009 Ch1 (intraday session handling, Asia
+      open) — TOKYO_OPEN is the Asia liquidity transition; COST_LT12
+      gates friction. Lane has lowest IS ExpR of the four (0.0934) so
+      this lane is the highest a-priori risk of failing Chordia.
+    economic_theory_citation: |
+      docs/institutional/literature/fitschen_2013_path_of_least_resistance.md ;
+      docs/institutional/literature/chan_2009_ch1_intraday_session_handling.md
+    has_theory: true
+    null_hypothesis: mean per-trade R = 0
+    test_statistic: t = sharpe_ratio * sqrt(N)
+    expected_N_IS: ~190                 # trailing_n=236
+    kill_criteria:
+      - t < 3.00 → FAIL_BOTH
+      - 3.00 <= t < 3.79 → PASS_PROTOCOL_A
+      - t >= 3.79 → PASS_CHORDIA
+
+# ---------------------------------------------------------------------------
+# Methodology
+# ---------------------------------------------------------------------------
+data_sources:
+  bars: bars_1m                         # canonical layer per Rule 9
+  daily_features: daily_features        # triple-join (trading_day, symbol, orb_minutes) per .claude/rules/daily-features-joins.md
+  outcomes: orb_outcomes                # canonical
+banned_data_sources:
+  - validated_setups                    # derived; banned for truth-finding
+  - edge_families                       # derived
+  - live_config                         # derived
+filter_application: |
+  Apply each lane's deployed filter via
+  trading_app.config.StrategyFilter.matches_row() — never re-encode.
+  StrategyFilter resolves ORB_G5, COST_LT12, etc. from canonical config.
+holdout_discipline: |
+  IS-only: trading_day < pipeline.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01).
+  No 2026 data in scope.
+  Sharpe + N computed on IS slice; t = sharpe * sqrt(N) via
+  trading_app.chordia.compute_chordia_t.
+multiple_testing: |
+  Pathway B individual hypothesis testing (Criterion 3, Amendment 3.0).
+  K_budget = 4; one hypothesis per lane. Per-lane verdicts only.
+  NO POOLED HEADLINE per .claude/rules/pooled-finding-rule.md —
+  the result doc will report 4 separate verdicts and explicitly state
+  "pooled_finding: false" in front-matter.
+power_analysis: |
+  N >= 100 expected on every lane (trailing_n on each is 236-264 with
+  ~80% IS subset). MinBTL bound (Bailey 2013): K=4 trials at expected
+  per-lane Sharpe ~0.18-0.30 → MinBTL well within budget.
+
+# ---------------------------------------------------------------------------
+# Result-doc requirements (what the runner output MUST contain)
+# ---------------------------------------------------------------------------
+result_doc_requirements:
+  path: docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
+  frontmatter:
+    pooled_finding: false               # explicitly false; per-lane only
+  required_sections:
+    - "Per-lane verdict table — one row per H1..H4 with: t, p (two-sided),
+       BHY-haircut t (Harvey-Liu), N_IS, IS Sharpe, verdict (FAIL_BOTH /
+       PASS_PROTOCOL_A / PASS_CHORDIA), and provenance link to runner."
+    - "Doctrine action — for each FAIL_BOTH lane, declare downgrade to
+       research-provisional + signal-only per Amendment 2.7. Live OOS
+       accrual continues; no real-money exposure change. Allocator code
+       NOT touched in this session — doctrine-only ledger entry."
+    - "What this gate does NOT do — does NOT promote new lanes, does NOT
+       relax thresholds, does NOT pool. Per-lane only."
+
+# ---------------------------------------------------------------------------
+# Runner spec (deferred to next session unless user GO sooner)
+# ---------------------------------------------------------------------------
+runner_spec:
+  path: research/chordia_revalidation_deployed_2026_05_01.py
+  inputs: gold.db (read-only via DUCKDB_PATH env var; NEVER hardcode)
+  outputs:
+    - stdout: per-lane verdict table
+    - file: result_doc_requirements.path
+  delegations_mandatory:
+    - "trading_app.chordia.compute_chordia_t — never re-derive sqrt(N) math"
+    - "trading_app.config.StrategyFilter.matches_row — never re-encode filter logic"
+    - "pipeline.holdout_policy.HOLDOUT_SACRED_FROM — never inline date(2026,1,1)"
+    - "pipeline.paths.GOLD_DB_PATH — never hardcode db path"
+    - "pipeline.cost_model.COST_SPECS — already inside per-trade R if outcomes
+       carry net pnl_r; verify cost_model column choice before computing"
+  estimate_runtime: <60 seconds (4 lanes, each ~1500 candidate days, IS-only)
+
+# ---------------------------------------------------------------------------
+# Failure policy (locked 2026-05-01 by user)
+# ---------------------------------------------------------------------------
+failure_policy:
+  on_FAIL_BOTH: |
+    Lane downgrades to research-provisional + signal-only per Amendment 2.7.
+    Lane stays in allocator; live OOS accrual continues; NO real-money exposure
+    change until clean re-derivation lands. Result doc gets a "Doctrine Action"
+    section enumerating the downgrades. An allocator_lane_status doctrine note
+    (not a code change) records the provisional flag. Allocator-code edits
+    requested only if user gives a separate GO after seeing the numbers.
+  on_PASS_PROTOCOL_A: lane retained as deployed; no action.
+  on_PASS_CHORDIA: lane retained as deployed; flag for inclusion in Carver Stage-2 sizing pre-reg.
+
+# ---------------------------------------------------------------------------
+# Cross-pre-reg dependencies (gates downstream offensive work)
+# ---------------------------------------------------------------------------
+gates_for:
+  - 2026-05-01-carver-stage2-vol-targeted-sizing.yaml  # only sizes lanes that PASS
+  - 2026-05-01-mnq-garch-p70-cross-session-companion.yaml  # informs whether D6's home lane is a viable carrier
+
+# ---------------------------------------------------------------------------
+# Anti-pigeon-hole disclosure
+# ---------------------------------------------------------------------------
+why_this_is_in_the_session: |
+  This pre-reg is defensive — it does not produce HQ trades on its own.
+  It exists because the user's session goal is "no money on the table"
+  and "banger trades", which require knowing the existing portfolio is
+  not noise before adding new edge. If 3+ of 4 lanes return FAIL_BOTH,
+  Carver Stage-2 sizing pre-reg becomes moot (cannot size-up failing
+  lanes), and Fitschen O15/O30 + GARCH cross-session become the only
+  HQ-trade plays. The re-rank is explicit; pigeon-holing would be
+  letting Chordia outcome quietly inform later decisions without
+  re-prioritising.

@@ -89,7 +89,7 @@ phase_1_carrier_concrete_path:
       of this pre-reg; it lands in the Phase 1 implementation commit, gated on
       this pre-reg's harness PASS.
     daily_state_envelope: derived from existing read_overlay_states() machinery (no schema change)
-    pre_session_check_surface: scripts/pre_session_check.py shows gate state for operator awareness
+    pre_session_check_surface: trading_app/pre_session_check.py shows gate state for operator awareness
     dashboard_surface: trading_app/live/bot_dashboard.py reports current gate state
     paper_trades_carrier: NOT USED (forbidden per overlay-contract precedent)
     validated_setups_insert: NOT USED (forbidden)

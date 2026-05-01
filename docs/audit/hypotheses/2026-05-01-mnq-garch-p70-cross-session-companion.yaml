@@ -1,0 +1,309 @@
+# Pre-Registration: GARCH > p70 cross-session companion (TOKYO_OPEN + EUROPE_FLOW)
+#
+# AUTHORITY: docs/institutional/pre_registered_criteria.md
+# AUTHORITY: .claude/rules/backtesting-methodology.md (16 rules)
+# AUTHORITY: .claude/rules/research-truth-protocol.md
+# AUTHORITY: .claude/rules/pooled-finding-rule.md
+# Companion to: docs/audit/hypotheses/2026-04-29-mnq-comex-settle-garch-d6-sizing-overlay-pathway-b-v1.yaml
+
+pre_reg_id: 2026-05-01-mnq-garch-p70-cross-session-companion
+locked_at: 2026-05-01
+status: DESIGN_LOCKED_AWAITING_GO
+classification: offensive-mechanism-generalisation
+testing_mode: individual                # Pathway B per Criterion 3
+pathway: B
+K_budget: 2                             # 2 sessions only; mechanism-justified per § 5.3
+holdout_date: 2026-01-01                # Mode A
+literature_ref:
+  - docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md
+  - docs/institutional/literature/chan_2008_ch7_regime_switching.md
+  - docs/institutional/literature/chan_2009_ch1_intraday_session_handling.md
+  - docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+  - docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md  # for Rule 6.1 safety classification
+canonical_source_delegation:
+  garch_feature: pipeline.build_daily_features.compute_garch_forecast (line 805 — canonical)
+  garch_drift_check: pipeline.check_drift.check_garch_dependency_importable
+  filter_apply: trading_app.config.StrategyFilter.matches_row()
+  cost_specs: pipeline.cost_model.COST_SPECS
+  holdout_constant: pipeline.holdout_policy.HOLDOUT_SACRED_FROM
+  ORB_window: pipeline.dst.orb_utc_window
+
+# ---------------------------------------------------------------------------
+# Why this pre-reg exists (mechanism generalisation, not data-dredge)
+# ---------------------------------------------------------------------------
+context: |
+  D6 (docs/audit/hypotheses/2026-04-29-mnq-comex-settle-garch-d6-sizing-overlay-pathway-b-v1.yaml)
+  pre-registered + ran a single-lane sizing-overlay test on
+  MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5 + garch_forecast_vol_pct > 70.
+  Verdict 2026-04-29: PARK_CONDITIONAL_DEPLOY_RETAINED. OOS lift +0.69R,
+  IS Welch t passing, dir_match TRUE (per docs/runtime/parked-cells.yaml D6 entry).
+
+  D6 framed the mechanism as: "binary regime gate (high-vol-forecast)
+  modulates risk allocation INSIDE the existing lane's already-validated
+  trade set." The mechanism prior (Carver Ch 9-10 vol-targeting + Chan
+  Ch 7 stop-cascade) is NOT MNQ-COMEX_SETTLE-specific. It's a regime-
+  amplification claim about high-vol-forecast days creating wider
+  intraday ranges and longer follow-through after a successful break.
+
+  IF the mechanism is real, it should generalise to other deployed-
+  with-Chordia-passing-or-PASS_PROTOCOL_A MNQ lanes, not be
+  COMEX_SETTLE-specific. Per memory/feedback_pooled_not_lane_specific.md,
+  generalisation is established LANE-BY-LANE under Pathway-B individual
+  testing — not pooled.
+
+  This pre-reg tests TWO additional MNQ sessions that are deployed:
+  TOKYO_OPEN and EUROPE_FLOW. K=2.
+
+# ---------------------------------------------------------------------------
+# Narrow-scope justification (Rule 5.3 explicit)
+# ---------------------------------------------------------------------------
+narrow_scope_justification: |
+  Default Rule 5 scope = 12 sessions × 3 instruments × 3 apertures × 3 RRs
+  = 324 lane combos. This pre-reg restricts to 2 cells. Reasons:
+
+  1. **Mechanism-companion scope.** Per memory/feedback_default_cross_session_scope.md,
+     adjacency scans default ~9,500 cells; narrowing requires explicit
+     pre-reg justification. This is a 2-cell mechanism-companion test
+     of a single literature-grounded hypothesis (vol-regime amplification
+     INSIDE deployed lanes). It is NOT a discovery scan.
+
+  2. **Anchored to currently-deployed MNQ lanes.** lane_allocation.json
+     (rebalance_date 2026-04-18) deploys MNQ on EUROPE_FLOW (G5),
+     COMEX_SETTLE (G5; D6's home), NYSE_OPEN (COST_LT12), TOKYO_OPEN
+     (COST_LT12). Excluding D6's home (COMEX_SETTLE — already tested)
+     and NYSE_OPEN (different filter class — COST_LT12 changes the
+     interaction with vol-regime; would be a separate hypothesis), the
+     test set is exactly TWO cells: TOKYO_OPEN and EUROPE_FLOW.
+
+  3. **MGC excluded.** D6's mechanism hinges on intraday range expansion;
+     MGC has 2.7 clean years (Amendment 2.8) with smaller per-lane N,
+     and MGC's deployed lanes use ORB_G4 not G5. Different baseline.
+     Out of scope for this companion.
+
+  4. **K=2 budget; MinBTL trivially satisfied.** Bailey 2013 MinBTL bound
+     at MNQ IS horizon (1,951 days) admits K=2 without inflation worry.
+
+# ---------------------------------------------------------------------------
+# Hypotheses
+# ---------------------------------------------------------------------------
+hypotheses:
+  - id: H1
+    lane: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12
+    instrument: MNQ
+    session: TOKYO_OPEN
+    orb_minutes: 5
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.5
+    deployed_filter: COST_LT12
+    overlay_predicate: garch_forecast_vol_pct > 70
+    economic_theory: |
+      Carver p 137-138 vol-targeting framework: ranges scale with realized-
+      and-forecast vol; positions sized to vol target should perform best
+      when forecast vol is in the upper tail (Carver Table 25 maps
+      realistic SR to recommended vol target).
+      Chan 2008 Ch 7 regime-switching: returns differ across HMM-detected
+      vol regimes; high-vol-forecast days form a defensible binary regime.
+      Chan 2009 Ch 1: TOKYO_OPEN is the Asia liquidity-transition session;
+      regime effects can be more pronounced when liquidity is thinner
+      pre-Europe.
+    economic_theory_citation: |
+      docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md ;
+      docs/institutional/literature/chan_2008_ch7_regime_switching.md ;
+      docs/institutional/literature/chan_2009_ch1_intraday_session_handling.md
+    has_theory: true
+    null_hypothesis: |
+      mean_R[overlay_on] = mean_R[overlay_off]
+      i.e. no differential per-trade R between high-vol-forecast and
+      low-vol-forecast subsets within the deployed-filter cohort.
+    test_statistic: |
+      Welch t-test on per-trade pnl_r between (overlay_on) and (overlay_off)
+      subsets; secondary IS Sharpe lift; secondary OOS dir_match.
+    expected_N_IS: |
+      ~190 trades pre-cohort (trailing_n=236 on this lane includes 2026
+      OOS). Overlay_on subset expected ~30% of cohort by definition of
+      p70 percentile, so N_overlay_on ~ 57 IS, N_overlay_off ~ 133 IS.
+      Acceptable for individual hypothesis testing under Pathway B.
+    feature_temporal_validity: |
+      garch_forecast_vol_pct is computed at prior daily close from prior
+      closes (compute_garch_forecast at pipeline/build_daily_features.py:805).
+      Per Rule 6.1 SAFE list: "garch_forecast_vol_pct (forecast made at
+      prior close)." No look-ahead exposure. NO break_bar_* / rel_vol_*
+      features used (Rule 6.3 BANNED on E2).
+    kill_criteria:
+      - Welch p > 0.05 → KILL: mechanism does not generalise to TOKYO_OPEN
+      - 0.01 < Welch p ≤ 0.05 AND dir_match TRUE → PASS_PROTOCOL_A
+      - Welch p ≤ 0.01 AND dir_match TRUE → PASS_CHORDIA-equivalent
+      - Sign flip vs D6 (i.e., overlay_on UNDERPERFORMS overlay_off) →
+        VETO regardless of significance — mechanism inverts on this
+        session, indicating the hypothesis is misspecified
+      - N_overlay_on < 30 IS → DEFER (insufficient power)
+      - max_DD inside overlay_on > 1.5x max_DD overlay_off → VETO
+        (regime amplifies losses too; mechanism is symmetric not
+        asymmetric)
+
+  - id: H2
+    lane: MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5
+    instrument: MNQ
+    session: EUROPE_FLOW
+    orb_minutes: 5
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.5
+    deployed_filter: ORB_G5
+    overlay_predicate: garch_forecast_vol_pct > 70
+    economic_theory: |
+      Same Carver + Chan 2008 grounding as H1. EUROPE_FLOW is the European
+      morning institutional session (per mechanism_priors.md § 1).
+      Fitschen Ch 3 grounds the underlying intraday-trend mechanism on
+      stock indices (MNQ proxy). Vol-regime overlay tests whether the
+      D6 finding generalises to the MOST CLOSELY RELATED deployed lane
+      (same ORB_G5 filter, same RR, different session).
+    economic_theory_citation: |
+      docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md ;
+      docs/institutional/literature/chan_2008_ch7_regime_switching.md ;
+      docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+    has_theory: true
+    null_hypothesis: same as H1
+    test_statistic: same as H1
+    expected_N_IS: |
+      ~210 trades pre-cohort (trailing_n=264 on this lane includes 2026 OOS).
+      Overlay_on subset ~30% by p70 definition; N_overlay_on ~63 IS,
+      N_overlay_off ~147 IS.
+    feature_temporal_validity: same as H1
+    kill_criteria: same as H1
+
+# ---------------------------------------------------------------------------
+# Methodology
+# ---------------------------------------------------------------------------
+methodology:
+  data_sources:
+    bars: bars_1m
+    daily_features: daily_features (TRIPLE-JOIN on trading_day, symbol, orb_minutes
+      per .claude/rules/daily-features-joins.md; CTE guard: WHERE orb_minutes=5)
+    outcomes: orb_outcomes
+  banned_data_sources:
+    - validated_setups
+    - edge_families
+    - live_config
+  filter_application: |
+    Apply COST_LT12 (H1) and ORB_G5 (H2) via canonical
+    StrategyFilter.matches_row(); never re-encode.
+  garch_value_compute: |
+    READ daily_features.garch_forecast_vol_pct directly. Never recompute
+    in research script. Verify drift check
+    pipeline.check_drift.check_garch_dependency_importable passes
+    pre-run (silent-NULL bug per memory/feedback_garch_arch_silent_null_drift_check.md).
+  IS_OOS_discipline: |
+    IS-only Welch test (trading_day < 2026-01-01). OOS dir_match
+    secondary check on full 2026 accumulating window. Per Rule 3.2:
+    if N_OOS_overlay_on < 30, treat OOS dir_match as directional evidence
+    only.
+  multiple_testing: |
+    K_budget = 2. Per-cell Welch p reported. K_lane=1 framing as primary
+    cut. K_session=1, K_filter_class=1 as secondary framings. All three
+    framings reported in result doc per Rule 4.1 + 4.2.
+  power_analysis: |
+    N_overlay_on minimum N=30 (Rule 3.2 power floor). At expected
+    p70 fire-rate ~30% of cohort N=190-210, expected N_overlay_on
+    57-63 IS.
+  tautology_check: |
+    Per Rule 7: |corr(garch_forecast_vol_pct > 70 fire, deployed-filter
+    fire)| > 0.70 → flag TAUTOLOGY. COST_LT12 and ORB_G5 are
+    cost/range-based; GARCH is vol-forecast-based. Mechanistically
+    independent; expected correlation low. Reported in result doc.
+  fire_rate_check: |
+    By design garch>p70 fires ~30% of days. NOT extreme-fire (5-95% band).
+    PASS Rule 8.1.
+  pressure_test: |
+    Per Rule 13: inject pnl_r as the predictor in a debug run; expect
+    perfect tautology flag. Document outcome in result doc.
+
+# ---------------------------------------------------------------------------
+# Result-doc requirements
+# ---------------------------------------------------------------------------
+result_doc_requirements:
+  path: docs/audit/results/2026-05-01-mnq-garch-p70-cross-session-companion.md
+  frontmatter:
+    pooled_finding: false                # 2 individual hypotheses; no pooled headline
+  required_sections:
+    - "Per-cell verdict table — H1, H2 each with: N_overlay_on, N_overlay_off,
+       mean_R diff, Welch t, Welch p, IS Sharpe lift, OOS dir_match,
+       max_DD ratio, verdict (KILL / DEFER / VETO / PASS_PROTOCOL_A /
+       PASS_CHORDIA-equivalent)."
+    - "Sign-flip audit vs D6 — explicit table comparing per-cell sign of
+       (mean_R_overlay_on - mean_R_overlay_off) against D6's positive
+       sign on COMEX_SETTLE. Any cell with opposite sign is a VETO
+       regardless of significance."
+    - "Doctrine action — for each PASS cell, note whether it unlocks a
+       Phase 1 carrier-wiring stage spec (analogous to D6 Phase 1).
+       Default for PASS_PROTOCOL_A: monitor + accumulate OOS. Default
+       for PASS_CHORDIA-equivalent: write Phase 1 carrier-wiring spec."
+    - "Tautology table — pairwise correlation between overlay_on and
+       deployed-filter fire indicators per cell. Both flagged or both
+       cleared."
+    - "What this scan does NOT do — does NOT modify execution_engine.py,
+       does NOT modify lane_allocation.json, does NOT promote to
+       validated_setups. Pure observational claim only."
+
+# ---------------------------------------------------------------------------
+# Runner spec (deferred)
+# ---------------------------------------------------------------------------
+runner_spec:
+  path: research/mnq_garch_p70_cross_session_companion_2026_05_01.py
+  inputs: gold.db (read-only via DUCKDB_PATH env var)
+  outputs:
+    - stdout: per-cell verdict table
+    - file: result_doc_requirements.path
+  delegations_mandatory:
+    - "trading_app.config.StrategyFilter.matches_row — never re-encode filter"
+    - "pipeline.holdout_policy.HOLDOUT_SACRED_FROM — never inline date"
+    - "pipeline.paths.GOLD_DB_PATH — never hardcode db path"
+    - "pipeline.dst.orb_utc_window — never recompute window timing"
+    - "Triple-join (trading_day, symbol, orb_minutes) per daily-features-joins.md"
+    - "compute_chordia_t for secondary t-stat reporting"
+  pre_run_check: |
+    Run pipeline/check_drift.py --fast and confirm
+    check_garch_dependency_importable passes. If FAIL, abort scan;
+    GARCH NULLs would silently inflate sample sizes and skew Welch t.
+  estimate_runtime: <90 seconds (2 cells, IS Welch + OOS dir-match)
+
+# ---------------------------------------------------------------------------
+# Failure / promotion policy
+# ---------------------------------------------------------------------------
+on_KILL: |
+  Cell rejected. Mechanism does NOT generalise to that session. Memory
+  entry written: this session × filter is GARCH-overlay NO-GO.
+on_VETO: |
+  Cell rejected with prejudice. Sign flip vs D6 means the hypothesis is
+  misspecified. Park ALL further GARCH overlay generalisation work
+  pending mechanism revision.
+on_DEFER: |
+  Insufficient power. Continue OOS accrual; revisit when N_overlay_on
+  reaches 30 OOS.
+on_PASS_PROTOCOL_A: |
+  Lane added to monitoring; no immediate deployment. Stage 2 sizing
+  consideration reactivates if Carver Stage-2 pre-reg PASSES on the
+  same lane.
+on_PASS_CHORDIA_equivalent: |
+  Lane unlocks Phase 1 carrier-wiring stage spec. Spec name pattern
+  d6_garch70_<session>_overlay (mirrors d6_garch70_comex_settle_overlay).
+  NEVER auto-promotes; user GO required on stage spec.
+
+# ---------------------------------------------------------------------------
+# Cross-pre-reg dependencies
+# ---------------------------------------------------------------------------
+gates_for: []
+gated_by: []                            # logically independent of Chordia revalidation;
+                                        # tests OVERLAY on existing lanes regardless of
+                                        # their Chordia outcome (overlay_off subset
+                                        # carries the unsized baseline as control)
+notes: |
+  This pre-reg is the most direct generalisation test of D6's existing
+  positive finding. If both H1 and H2 PASS, the mechanism is established
+  cross-session for MNQ + ORB_G5/COST_LT12 deployed lanes; D6 + this
+  pre-reg's two cells become a 3-lane portfolio of vol-regime overlays
+  with a coherent prior. If both KILL, D6's finding stays COMEX-specific
+  (legitimate; some session effects ARE session-specific). If signs
+  flip (H1 or H2 VETO), the mechanism is misspecified and the D6 deploy
+  retention should be re-examined.

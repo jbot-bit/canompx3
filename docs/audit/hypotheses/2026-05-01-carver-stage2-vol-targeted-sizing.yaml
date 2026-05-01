@@ -1,0 +1,217 @@
+# Pre-Registration: Carver Stage-2 vol-targeted sizing (gated on Chordia outcome)
+#
+# Authority: docs/institutional/pre_registered_criteria.md (Criterion 3 Pathway B)
+# Methodology: .claude/rules/backtesting-methodology.md
+# Mechanism priors: docs/institutional/mechanism_priors.md (Stage 2 sizing role)
+# Pooled-finding rule: .claude/rules/pooled-finding-rule.md
+# Honesty note: see § literature_grounding_correction below
+
+pre_reg_id: 2026-05-01-carver-stage2-vol-targeted-sizing
+locked_at: 2026-05-01
+status: DESIGN_LOCKED_AWAITING_GO_AND_CHORDIA_PASS
+classification: offensive-sizing-overlay
+testing_mode: individual                # Pathway B per Criterion 3
+pathway: B
+K_budget: 3                             # max 3 lanes (whichever pass Chordia); pre-committed
+holdout_date: 2026-01-01                # Mode A
+literature_ref:
+  - docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md
+  - docs/institutional/literature/carver_2015_ch11_portfolios.md
+  - docs/institutional/literature/carver_2015_ch12_speed_and_size.md
+canonical_source_delegation:
+  cost_specs: pipeline.cost_model.COST_SPECS
+  filter_apply: trading_app.config.StrategyFilter.matches_row()
+  holdout_constant: pipeline.holdout_policy.HOLDOUT_SACRED_FROM
+  account_profile: trading_app.prop_profiles.ACCOUNT_PROFILES
+  account_constants: |
+    topstep_50k_mnq_auto profile from prop_profiles.py:484+ — capital $50K,
+    trailing DD $2.5K (verify live before runner). DO NOT inline constants.
+
+# ---------------------------------------------------------------------------
+# Literature-grounding correction (honesty before mechanism)
+# ---------------------------------------------------------------------------
+literature_grounding_correction: |
+  EARLIER FRAMING (rejected): the v2 plan cited "λ = Sharpe^2 / (1 + Sharpe^2)
+  Kelly fraction with 25-37% annualized vol target." The Kelly-fraction
+  formula was from training memory, NOT from local extract.
+
+  CORRECTED FRAMING per local extract
+  (docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md):
+
+  - Carver p 143-144 (citing Kelly 1956): optimal full-Kelly % vol target
+    = expected (realistic) Sharpe ratio expressed as a percentage.
+  - Carver p 146: full Kelly is too aggressive — explicit recommendation is
+    HALF-KELLY for positive-skew systems, halve AGAIN for negative-skew.
+  - Carver p 138: realistic SR = backtest SR × 0.75 (OOS degradation factor).
+  - Carver Table 25 p 147 maps realistic SR → recommended vol target:
+      SR 0.25 → 12% (pos-skew) / 6% (neg-skew)
+      SR 0.50 → 25% / 12%
+      SR 0.75 → 37% / 19%
+      SR 1.0+ → 50% / 25%
+  - Carver Table 23 p 142 + § "Implication for prop firms": TopStep-style
+    accounts with $2.5K trailing DD on $50K capital force vol target
+    ≤ 25% (else worst daily loss/month exceeds DD).
+  - Carver p 149: with vol target > 15%, daily recalculation required
+    (current capital, not initial).
+
+  Net: the actual formula is a TABLE (Carver Table 25), not a closed-form
+  Kelly fraction, and the binding constraint for our prop-firm context is
+  the trailing-DD floor, not pure Kelly.
+
+# ---------------------------------------------------------------------------
+# Why this gates on Chordia revalidation
+# ---------------------------------------------------------------------------
+gating_rationale: |
+  This pre-reg sizes UP successful lanes via vol-targeting. Sizing-up a
+  lane that fails Chordia (FAIL_BOTH at t < 3.00) amplifies noise — exactly
+  the failure mode the rebalanced sizing was supposed to avoid. So this
+  pre-reg only RUNS on lanes that PASS the 2026-05-01 Chordia revalidation
+  (PASS_PROTOCOL_A or PASS_CHORDIA from H1..H4 of that pre-reg).
+
+  If 0 lanes PASS Chordia: this pre-reg is MOOT and parks. The session's
+  HQ-trade prospects fall back on the aperture-extension and GARCH
+  cross-session pre-regs.
+
+  If 1-3 lanes PASS Chordia: K_budget ≤ 3, exactly one cell per passing
+  lane.
+
+# ---------------------------------------------------------------------------
+# Hypotheses (conditional — populated based on Chordia outcome)
+# ---------------------------------------------------------------------------
+hypotheses_template: |
+  Each passing-Chordia lane gets ONE hypothesis of this shape:
+
+  - id: H<N>
+    lane: <strategy_id>
+    instrument: <inst>
+    session: <session>
+    orb_minutes: <m>
+    sizing_overlay:
+      method: carver_half_kelly_vol_target
+      realistic_sharpe: backtest_IS_sharpe * 0.75   # Carver p 138
+      vol_target_pct: lookup(realistic_sharpe, table=carver_table_25_pos_skew)
+      vol_target_cap: min(vol_target_pct, 0.25)     # TopStep DD floor cap; Carver p 142
+      recalc_cadence: daily                         # vol_target > 15% per Carver p 149
+      capital_basis: account_equity_minus_lockable_buffer  # Carver p 149 trailing-DD aware
+    null_hypothesis: |
+      sized portfolio Sharpe = unsized portfolio Sharpe
+      (i.e., the vol-targeting overlay adds zero edge beyond binary sizing)
+    test_statistic: |
+      Newey-West HAC paired-t test on per-trade log-returns:
+      sized_log_return - unsized_log_return ~ N(0, sigma)
+      H0: mean_diff = 0
+    expected_N_IS: same as Chordia revalidation N for that lane
+    feature_temporal_validity: |
+      Vol-target lookup uses prior-close 20-day realized vol (atr_20). All
+      inputs known at session start. Per Rule 6.1 atr_20 is SAFE.
+    kill_criteria:
+      - paired-t < 0 (sized underperforms) → KILL: vol-targeting destroys edge
+      - paired-t < 1.96 (no significant uplift) → DEFER: insufficient evidence
+        to deploy overlay; signal-only continued
+      - paired-t >= 1.96 AND |return_diff| > 5% (relative) → PASS: sizing
+        adds verifiable edge
+      - max_drawdown_sized > 1.5 * max_drawdown_unsized → VETO regardless
+        of paired-t (Carver Table 23 risk floor; trailing-DD violation risk)
+
+# ---------------------------------------------------------------------------
+# Methodology (the things that have to land precisely)
+# ---------------------------------------------------------------------------
+methodology:
+  vol_estimator: |
+    20-day rolling realized volatility from atr_20 (canonical, per Rule 6.1
+    SAFE). Annualized via sqrt(256). DO NOT use intraday vol estimators
+    that would re-introduce break-bar look-ahead.
+  position_size_calc: |
+    daily_cash_vol_target = (account_equity * vol_target_pct) / 16
+    contract_size_R = atr_20 * dollar_per_point  # R-unit value
+    contracts = round(daily_cash_vol_target / contract_size_R)
+    contracts = max(1, min(contracts, max_contracts_for_lane))
+    NEVER float contract counts; lane allocator handles integer rounding.
+  paired_test: |
+    Newey-West HAC SE on paired log-returns (sized minus unsized) per trade.
+    Lag = sqrt(N) per Carver Ch 11. Two-sided t at alpha=0.05.
+  risk_check: |
+    Worst rolling 30-day drawdown comparison. Sized must not exceed
+    1.5x unsized. Reported in result doc explicitly.
+  prop_firm_overlay: |
+    Cap vol_target at 25% per Carver Table 23 + TopStep $2.5K trailing DD.
+    If vol_target_pct from Carver Table 25 exceeds 25%, hard-cap at 25%
+    and report the implied "Sharpe ceiling" the cap implies.
+
+# ---------------------------------------------------------------------------
+# Result-doc requirements
+# ---------------------------------------------------------------------------
+result_doc_requirements:
+  path: docs/audit/results/2026-05-01-carver-stage2-vol-targeted-sizing.md
+  frontmatter:
+    pooled_finding: false
+  required_sections:
+    - "Per-lane verdict table — for each Chordia-PASS lane: realistic SR,
+       Carver Table 25 vol target, hard-cap applied (Y/N), N, paired-t,
+       paired-t p-value, return_diff %, max_DD ratio (sized/unsized),
+       verdict (KILL / DEFER / PASS)."
+    - "Doctrine action — what each PASS verdict authorises. Default for
+       PASS: write a stage spec for live sizing wiring (analogous to
+       D6 Phase 1 carrier wiring). NEVER auto-promotes; requires user GO
+       on stage spec before any execution_engine.py edit."
+    - "Risk floor explicit — per-lane max-DD ratio reported alongside
+       paired-t. ANY lane with sized max_DD > 1.5x unsized is VETOed
+       regardless of Sharpe uplift, per Carver Table 23 prop-firm
+       constraint."
+    - "What this scan does NOT do — does NOT modify execution_engine.py,
+       does NOT modify lane_allocation.json, does NOT flip any signal-only
+       to live. Pure backtest claim only."
+
+# ---------------------------------------------------------------------------
+# Runner spec (deferred — gated on Chordia)
+# ---------------------------------------------------------------------------
+runner_spec:
+  path: research/carver_stage2_vol_targeted_sizing_2026_05_01.py
+  inputs: gold.db (read-only via DUCKDB_PATH env var)
+  pre_run_check: |
+    Read 2026-05-01-chordia-revalidation-deployed-lanes result-doc front
+    matter or summary table. Populate hypotheses ONLY for lanes with
+    PASS_PROTOCOL_A or PASS_CHORDIA verdict. If empty: exit with a
+    documented "no candidates" status; NO scan executes.
+  outputs:
+    - stdout: per-lane verdict table
+    - file: result_doc_requirements.path
+  delegations_mandatory:
+    - "pipeline.holdout_policy.HOLDOUT_SACRED_FROM — never inline date"
+    - "pipeline.paths.GOLD_DB_PATH — never hardcode db path"
+    - "pipeline.cost_model.COST_SPECS — vol-target sizing must include
+       per-trade friction; net pnl_r is the basis"
+    - "trading_app.prop_profiles.ACCOUNT_PROFILES — never inline $50K /
+       $2.5K constants"
+    - "trading_app.config.StrategyFilter.matches_row — for the unsized
+       baseline, use the canonical filter same as Chordia revalidation"
+  estimate_runtime: <2 minutes (3 lanes max, IS only, HAC-paired-t)
+
+# ---------------------------------------------------------------------------
+# Failure / promotion policy
+# ---------------------------------------------------------------------------
+on_KILL: |
+  Lane vol-targeting overlay rejected. Lane stays at binary sizing in
+  allocator. Memory entry written: vol-targeting NO-GO for this lane
+  unless mechanism changes.
+on_DEFER: |
+  Insufficient evidence (paired-t between 0 and 1.96). Continue OOS
+  accrual; revisit after 2026 OOS doubles in N.
+on_PASS: |
+  Lane unlocks Stage 2 sizing wiring. Stage spec required at
+  docs/runtime/stages/<slug>.md before any execution_engine.py edit.
+  D6 Phase 1 spec is the canonical precedent.
+
+# ---------------------------------------------------------------------------
+# Cross-pre-reg dependencies
+# ---------------------------------------------------------------------------
+gates_for: []
+gated_by:
+  - 2026-05-01-chordia-revalidation-deployed-lanes
+notes: |
+  Carver Stage-2 sizing is the DIRECT trade-quality multiplier in v2 plan
+  framing. It does NOT add new entries; it amplifies size on existing
+  high-Sharpe entries during their high-Sharpe regimes. Net: same N,
+  different R per trade, mathematically larger ExpR with strictly bounded
+  drawdown floor (per Table 23 prop-firm cap). This is the most direct
+  HQ-trade leverage in the session — IF lanes survive Chordia.

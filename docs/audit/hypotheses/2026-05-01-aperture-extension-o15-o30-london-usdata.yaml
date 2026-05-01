@@ -1,0 +1,280 @@
+# Pre-Registration: Aperture extension (O15/O30) on under-explored sessions
+#
+# Authority: docs/institutional/pre_registered_criteria.md (Criterion 3 — Pathway B individual)
+# Methodology: .claude/rules/backtesting-methodology.md (esp. Rules 1, 5.3, 6, 10)
+# Pooled-finding rule: .claude/rules/pooled-finding-rule.md (per-cell mandatory)
+# Mechanism priors: docs/institutional/mechanism_priors.md
+# Failure log: .claude/rules/backtesting-methodology-failure-log.md
+# Honesty note: see § literature_grounding_correction below
+
+pre_reg_id: 2026-05-01-aperture-extension-o15-o30-london-usdata
+locked_at: 2026-05-01
+status: DESIGN_LOCKED_AWAITING_GO
+classification: offensive-discovery-narrow-scope
+testing_mode: individual                # Pathway B per Criterion 3
+pathway: B
+K_budget: 4                             # 2 sessions x 2 apertures = 4 cells
+holdout_date: 2026-01-01                # Mode A sacred holdout
+literature_ref:
+  - docs/institutional/literature/fitschen_2013_path_of_least_resistance.md  # Ch 3 ONLY (local extract)
+canonical_source_delegation:
+  outcomes_layer: orb_outcomes (canonical, per Rule 9)
+  features_layer: daily_features (triple-join required per .claude/rules/daily-features-joins.md)
+  bars_layer: bars_1m (canonical)
+  filter_apply: trading_app.config.StrategyFilter.matches_row()
+  cost_specs: pipeline.cost_model.COST_SPECS
+  session_catalog: pipeline.dst.SESSION_CATALOG
+  ORB_window: pipeline.dst.orb_utc_window(trading_day, orb_label, orb_minutes)
+  holdout_constant: pipeline.holdout_policy.HOLDOUT_SACRED_FROM
+
+# ---------------------------------------------------------------------------
+# Literature-grounding correction (honesty before mechanism)
+# ---------------------------------------------------------------------------
+literature_grounding_correction: |
+  EARLIER FRAMING (rejected): the v2 plan cited Fitschen Ch 5-7 as grounding
+  "institutional-entry timing on O15/O30." Per local extract at
+  docs/institutional/literature/fitschen_2013_path_of_least_resistance.md,
+  the resources/ extract covers Ch 3 (intraday trend tendencies) only. No
+  Ch 5-7 extract exists locally. Per .claude/rules/institutional-rigor.md
+  § 7 (Extract-Before-Cite) and pre_registered_criteria.md Criterion 1,
+  the original framing was UNSUPPORTED.
+
+  CORRECTED FRAMING: this pre-reg tests aperture extension on the
+  intraday-trend mechanism that Ch 3 EXPLICITLY grounds. Ch 3 p.40-42
+  reports trend-follow on hourly bars beats baseline by +70% on stocks
+  (intraday) and +40% on commodities (intraday). The mechanism — "intraday
+  trend persistence is robust across multiple sub-daily timescales" —
+  directly supports testing 15min and 30min ORB apertures alongside the
+  default 5min, on instruments where intraday trend is grounded
+  (MGC commodities, MNQ stock indices).
+
+# ---------------------------------------------------------------------------
+# Why these specific sessions (Rule 5.3 narrow-scope justification)
+# ---------------------------------------------------------------------------
+narrow_scope_justification: |
+  Per Rule 5.3 (.claude/rules/backtesting-methodology.md), narrowing scope
+  below the default 324 lane combos requires explicit justification. This
+  pre-reg restricts to TWO sessions on TWO instruments at TWO apertures
+  (4 cells, not 324) for these reasons:
+
+  1. **MGC clean-data horizon.** Per Amendment 2.8, MGC has 2.7 clean years
+     vs MNQ/MES 6.65. MGC sessions OUTSIDE the LONDON_METALS / COMEX_SETTLE
+     pair have insufficient power for O15/O30 testing (N would fall below
+     Criterion 4 N>=100 floor at split aperture). LONDON_METALS is the
+     canonical MGC liquidity pool.
+
+  2. **MNQ session selection.** Of currently-deployed MNQ sessions
+     (EUROPE_FLOW, COMEX_SETTLE, NYSE_OPEN, TOKYO_OPEN — see lane_allocation.json
+     2026-04-18), all are O5. Aperture extension on EUROPE_FLOW or
+     COMEX_SETTLE would overlap with the D6 GARCH overlay pre-reg (already
+     locked 54b7b948); avoiding overlap so claims stay separable. NYSE_OPEN
+     uses COST_LT12 cost-gate that breaks at O15/O30 (cost-as-%-of-range
+     denominator changes). US_DATA_830 is the cleanest MNQ session NOT
+     currently allocator-deployed at any aperture; it's the under-tested
+     direct comparison cell.
+
+  3. **K=4 budget.** Bailey 2013 MinBTL bound at our IS horizon (1,951 days
+     MNQ, 671 days MGC) trivially admits K=4. Per-cell tests will be
+     individually significant or fail; no FDR inflation worry at K=4.
+
+# ---------------------------------------------------------------------------
+# Hypotheses (4 cells)
+# ---------------------------------------------------------------------------
+hypotheses:
+  - id: H1
+    instrument: MGC
+    session: LONDON_METALS
+    orb_minutes: 15
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.5
+    filter_type: NONE                   # baseline aperture extension; filter overlay deferred
+    direction: BOTH                     # report per-direction breakdown per pooled-finding-rule
+    economic_theory: |
+      Fitschen Ch 3 — commodities trend on intraday bars (+40% trend-follow
+      vs baseline on hourly horizon). 15min ORB aperture sits between 5min
+      (existing default) and 60min (Fitschen-tested). LONDON_METALS is the
+      canonical MGC liquidity session.
+    economic_theory_citation: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+    has_theory: true                    # Criterion 4 threshold = 3.00
+    null_hypothesis: mean per-trade R = 0
+    test_statistic: t = sharpe * sqrt(N)
+    expected_N_IS: ~250                 # 671 days MGC IS x ~38% session fire-rate (estimate)
+    feature_temporal_validity: |
+      No window-derived features used (filter_type=NONE). Pure aperture
+      extension. ORB window timing computed via orb_utc_window() canonical.
+      No look-ahead exposure per Rule 1.
+    kill_criteria:
+      - t < 3.00 → KILL
+      - 3.00 <= t < 3.79 → PASS_PROTOCOL_A (keep as candidate)
+      - t >= 3.79 AND |t| not in red-flag range (Rule 12) → PASS_CHORDIA
+      - dir_match between IS and OOS REQUIRED on any PASS verdict
+      - per-direction (LONG, SHORT) breakdown REQUIRED in result doc
+        (per memory/feedback_per_lane_breakdown_required.md)
+
+  - id: H2
+    instrument: MGC
+    session: LONDON_METALS
+    orb_minutes: 30
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.5
+    filter_type: NONE
+    direction: BOTH
+    economic_theory: |
+      Same Fitschen Ch 3 grounding as H1; 30min aperture is the upper bound
+      tested before Fitschen's hourly result (where the +40% trend-follow
+      effect is measured).
+    economic_theory_citation: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+    has_theory: true
+    null_hypothesis: mean per-trade R = 0
+    test_statistic: t = sharpe * sqrt(N)
+    expected_N_IS: ~250
+    feature_temporal_validity: same as H1
+    kill_criteria: same as H1
+
+  - id: H3
+    instrument: MNQ
+    session: US_DATA_830
+    orb_minutes: 15
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.5
+    filter_type: NONE
+    direction: BOTH
+    economic_theory: |
+      Fitschen Ch 3 — stock indices (NASDAQ proxy MNQ) trend on intraday
+      bars (+70% trend-follow vs baseline on hourly horizon). US_DATA_830
+      session is currently NOT in lane_allocation.json at any aperture —
+      it's the cleanest MNQ session for direct aperture-effect measurement
+      without overlapping any deployed lane.
+    economic_theory_citation: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+    has_theory: true
+    null_hypothesis: mean per-trade R = 0
+    test_statistic: t = sharpe * sqrt(N)
+    expected_N_IS: ~280                 # 1951 days MNQ IS x ~14% fire-rate (US_DATA_830 narrow window)
+    feature_temporal_validity: |
+      Per Rule 1.2 valid-domain table: US_DATA_830 starts 23:30 Brisbane.
+      session_london_* (window closes 23:00) is valid as predictor IF later
+      added; not used in this pre-reg (filter_type=NONE).
+    kill_criteria: same as H1
+
+  - id: H4
+    instrument: MNQ
+    session: US_DATA_830
+    orb_minutes: 30
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.5
+    filter_type: NONE
+    direction: BOTH
+    economic_theory: same as H3
+    economic_theory_citation: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+    has_theory: true
+    null_hypothesis: mean per-trade R = 0
+    test_statistic: t = sharpe * sqrt(N)
+    expected_N_IS: ~280
+    feature_temporal_validity: same as H3
+    kill_criteria: same as H1
+
+# ---------------------------------------------------------------------------
+# Methodology guards (the easy-to-skip, hard-won ones)
+# ---------------------------------------------------------------------------
+methodology_guards:
+  feature_temporal_alignment: |
+    No window-derived features used. If a future overlay pre-reg adds
+    overnight_* or session_london_* on these cells, Rule 1.2 valid-domain
+    gates apply.
+  filter_application: |
+    No filter overlay on this pre-reg — pure aperture extension. Future
+    overlay tests must be SEPARATE pre-regs and use the canonical
+    StrategyFilter.matches_row() per Rule 2.
+  IS_OOS_discipline: |
+    IS-only Pathway B test. OOS dir_match check on full 2026-01-01 → present
+    accumulating window. Per Rule 3.2: if N_OOS < 30, treat as
+    directional-only evidence not confirmatory.
+  multiple_testing: |
+    K_budget = 4 cells. Per Criterion 3 Pathway B individual; per-cell raw
+    p<0.05 + Chordia t-gate. K_lane=1 (most natural cut). K_session=2 per
+    session, K_instrument=2 per instrument. All four framings reported in
+    result doc per Rule 4.
+  comprehensive_scope: |
+    Rule 5 narrow-scope per § narrow_scope_justification above. Not
+    hand-picked — explicit pre-reg justification with literature
+    grounding for each restriction.
+  trade_time_knowability: |
+    Default ORB E2 entry uses bar-range-cross detection per
+    trading_app.entry_rules.detect_break_touch(); no break_bar_* or
+    rel_vol_* features (Rule 6.3 BANNED on E2). filter_type=NONE means
+    no feature predicate at all. Only the entry rule itself fires.
+  tautology_check: |
+    Tautology check N/A on filter_type=NONE — no overlay correlation to
+    measure. T0 reactivates if/when overlay pre-reg is written.
+  fire_rate_check: |
+    Fire-rate ~100% by definition (no filter). Extreme-fire flag does NOT
+    apply — this is the unfiltered baseline aperture test, not an overlay.
+  data_source: orb_outcomes + bars_1m only; no validated_setups read.
+
+# ---------------------------------------------------------------------------
+# Result-doc requirements
+# ---------------------------------------------------------------------------
+result_doc_requirements:
+  path: docs/audit/results/2026-05-01-aperture-extension-o15-o30-london-usdata.md
+  frontmatter:
+    pooled_finding: false               # 4 individual hypotheses; per-cell only
+  required_sections:
+    - "Per-cell verdict table — H1..H4 each with: t, p, BHY-haircut t, N_IS,
+       IS Sharpe, IS ExpR, OOS dir_match, per-direction breakdown,
+       verdict (KILL / PASS_PROTOCOL_A / PASS_CHORDIA)."
+    - "Sign-flip audit — for any cell with PASS verdict, report fraction of
+       years where per-year sign flips vs IS pooled sign. >25% flip = NOT
+       deployable per memory/feedback_per_lane_breakdown_required.md."
+    - "Doctrine action — what each PASS cell unlocks. Default action on
+       any PASS_CHORDIA: write Phase-2 overlay pre-reg (filter overlay on
+       cleared aperture-extended lane). Default action on PASS_PROTOCOL_A:
+       monitor for additional confirmatory data, no immediate deployment."
+    - "What this scan does NOT do — does NOT promote to validated_setups,
+       does NOT touch lane_allocation.json, does NOT pool across cells."
+
+# ---------------------------------------------------------------------------
+# Runner spec (deferred to next session)
+# ---------------------------------------------------------------------------
+runner_spec:
+  path: research/aperture_extension_o15_o30_london_usdata_2026_05_01.py
+  inputs: gold.db (read-only via DUCKDB_PATH env var)
+  outputs:
+    - stdout: per-cell verdict table
+    - file: result_doc_requirements.path
+  delegations_mandatory:
+    - "trading_app.chordia.compute_chordia_t — never re-derive"
+    - "pipeline.dst.orb_utc_window — never recompute window timing"
+    - "pipeline.holdout_policy.HOLDOUT_SACRED_FROM — never inline date"
+    - "pipeline.paths.GOLD_DB_PATH — never hardcode db path"
+    - "Triple-join (trading_day, symbol, orb_minutes) per daily-features-joins.md"
+  estimate_runtime: <5 minutes (4 cells; orb_outcomes already pre-computed at O5/O15/O30)
+
+# ---------------------------------------------------------------------------
+# Failure / promotion policy
+# ---------------------------------------------------------------------------
+on_KILL: |
+  Cell flagged DEAD-FOR-ORB at this aperture. Memory entry written.
+  No retest without new mechanism (memory rule per ml_v3_dead.md pattern).
+on_PASS_PROTOCOL_A: |
+  Cell becomes a CANDIDATE for Phase-2 overlay pre-reg writing. Not
+  promoted to deployable. OOS accumulation continues.
+on_PASS_CHORDIA: |
+  Cell becomes a strong candidate for allocator-rebalance consideration
+  via the standard rebalance flow (scripts/tools/rebalance_lanes.py).
+  NEVER auto-promotes — the allocator's session-regime + cost gates apply.
+
+# ---------------------------------------------------------------------------
+# Cross-pre-reg dependencies
+# ---------------------------------------------------------------------------
+gates_for: []
+gated_by: []                            # independent of Chordia revalidation
+notes: |
+  This pre-reg is logically independent of the Chordia revalidation pre-reg.
+  Chordia revalidation tests EXISTING deployed lanes; this pre-reg explores
+  NEW aperture cells on under-tested sessions. They should be run in
+  parallel; results are not coupled. The session goal of "no money on the
+  table" needs both — defense + offense.
