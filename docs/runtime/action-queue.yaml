@@ -1,6 +1,44 @@
 schema_version: 1
-updated_at: 2026-05-01T00:00:00+00:00
+updated_at: 2026-05-01T13:50:00+00:00
 items:
+  - id: chordia_revalidation_2026_05_01_v3_finalized
+    title: Chordia revalidation v3 honest-grounding (3 FAIL_BOTH / 1 PASS_PROTOCOL_A)
+    class: audit
+    status: open
+    priority: P1
+    close_before_new_work: true
+    owner_hint: user
+    last_verified_at: 2026-05-01
+    freshness_sla_days: 7
+    next_action: |
+      User decision required on TWO open items:
+      (1) lane_allocation.json revert vs keep -- the file was unintentionally
+          modified earlier (4-lane -> 7-lane DEPLOY for topstep_50k_mnq_auto)
+          via rebalance_lanes.py run. The file IS the live deployment per
+          prop_profiles.py:1097-1157, NOT a recommendation. Backup of
+          pre-rebalance state at /tmp/lane_alloc_before.json. File deliberately
+          excluded from the v3 audit-correction commit pending user GO.
+      (2) Doctrine action on the 3 FAIL_BOTH lanes (H1 EUROPE_FLOW, H2
+          COMEX_SETTLE, H4 TOKYO_OPEN) -- pre-reg failure_policy locks
+          research-provisional + signal-only continuation; no real-money
+          exposure change required, but user may want different escalation.
+      H3 NYSE_OPEN PASS_PROTOCOL_A retained as deployed (no action).
+    exit_criteria: Both decisions resolved (revert/keep on lane_allocation.json + accept/escalate on doctrine action); commit closes the loop.
+    blocked_by: []
+    decision_refs:
+      - docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
+      - docs/runtime/chordia-revalidation-decision-audit-2026-05-01.md
+      - docs/runtime/chordia-revalidation-honest-grounding-design-2026-05-01.md
+    evidence_refs:
+      - research/chordia_revalidation_deployed_2026_05_01.py
+      - docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+      - docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
+      - trading_app/chordia.py
+      - trading_app/live/session_orchestrator.py
+    notes_ref: docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
+    override_note: lane_allocation.json modified-on-disk represents an unintentional deployment change. Sandbox correctly blocked the auto-revert. Decision belongs to user.
+
+
   - id: phase_d_d0_clean_rederivation
     title: Phase D D-0 clean re-derivation (E2 LA contamination — rel_vol → safe predictor)
     class: research
