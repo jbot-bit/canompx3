@@ -285,7 +285,7 @@ def _dd_contribution(lane: LaneScore, state: dict) -> float:
     if cost is None:
         return float("inf")
     orb_stats = state["orb_stats"]
-    key = (lane.instrument, lane.orb_label)
+    key = (lane.instrument, lane.orb_label, lane.orb_minutes)
     _, p90 = orb_stats.get(key, (100.0, 100.0))
     return p90 * state["profile"].stop_multiplier * cost.point_value
 
