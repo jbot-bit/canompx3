@@ -43,6 +43,50 @@ items:
   - id: allocator_chordia_gate
     title: Allocator Chordia gate -- prevent silent rebalance-bypass class
     class: stage
+    status: closed
+    priority: P1
+    close_before_new_work: false
+    owner_hint: claude-or-codex
+    last_verified_at: 2026-05-01
+    freshness_sla_days: 14
+    next_action: |
+      Closed 2026-05-01 via PR #197 (squash-merged commit 2a983022 on main).
+
+      Two-layer defense landed:
+      (1) `apply_chordia_gate(scores)` invoked inline at top of
+          `build_allocation()` -- demotes FAIL_BOTH / FAIL_CHORDIA / MISSING /
+          stale-audit (>90d) to PAUSE before ranking. Idempotent.
+      (2) Drift check #134 `check_lane_allocation_chordia_gate` -- refuses
+          any FAIL_* / missing / stale lane in `lane_allocation.json`.
+          Resolves via PROJECT_ROOT (not CWD) -- no fail-open class.
+
+      Doctrine artifact: `docs/runtime/chordia_audit_log.yaml`. YAML's
+      `verdict` field is a HUMAN LEDGER ONLY; the allocator ALWAYS recomputes
+      from `validated_setups.sharpe_ratio` + `sample_size` via
+      `chordia_verdict_label()`.
+
+      Live impact post-merge: 4-lane DEPLOY collapses to 1 lane
+      (MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12 PASS_PROTOCOL_A). 8 strategies
+      sit at PASS_CHORDIA but blocked on missing audit_date -- doctrine
+      audit each = the unlock path for expanded allocation. Tracked
+      separately as new entry below.
+    exit_criteria: Closed. PR #197 merged 2026-05-01T06:44:16Z. CI green. Drift check #134 enforces the JSON contract. 56 stage tests + 118 drift checks pass on the merged code.
+    blocked_by: []
+    decision_refs:
+      - docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
+      - docs/runtime/chordia-revalidation-decision-audit-2026-05-01.md
+    evidence_refs:
+      - trading_app/lane_allocator.py
+      - trading_app/chordia.py
+      - pipeline/check_drift.py
+      - docs/runtime/chordia_audit_log.yaml
+      - docs/runtime/stages/allocator-chordia-gate.md
+    notes_ref: docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
+    override_note: Closed 2026-05-01 via PR #197. PASS_CHORDIA-strategies-need-audits unlock tracked as separate queue entry.
+
+  - id: chordia_audit_unlock_pass_chordia_strategies
+    title: Doctrine-audit the 8 PASS_CHORDIA strategies blocked by missing audit_date
+    class: research
     status: open
     priority: P1
     close_before_new_work: false
@@ -50,42 +94,59 @@ items:
     last_verified_at: 2026-05-01
     freshness_sla_days: 14
     next_action: |
-      Architectural fix surfaced by chordia_revalidation_2026_05_01 audit.
-      Today: rebalance_lanes.py + lane_allocator.build_allocation() emit a
-      DEPLOY-ranked JSON with NO Chordia awareness. Next monthly rebalance
-      will silently re-promote unaudited lanes (same class as 2026-05-01
-      where 6 of 7 candidates had never seen Chordia). Hand-editing JSON
-      is a band-aid; the gate belongs in the allocator.
-      Stage scope (single stage, narrow):
-      (1) Add `chordia_audit_log` table or doctrine-file readable by
-          allocator listing (strategy_id, audit_date, verdict, has_theory).
-      (2) lane_allocator.compute_lane_scores enriches each LaneScore with
-          `chordia_verdict` + `chordia_audit_age_days`.
-      (3) build_allocation() refuses to set status=DEPLOY for any
-          candidate whose verdict is FAIL_BOTH or whose audit is missing
-          or stale (>90d). Demote to PAUSED with structured reason.
-      (4) Drift check: lane_allocation.json lanes[] cannot contain a
-          strategy_id with FAIL_BOTH or missing chordia state.
-      (5) Tests: unit-test the gate with synthetic FAIL_BOTH/PASS rows.
+      Allocator Chordia gate (PR #197) demotes any strategy with
+      `chordia_audit_age_days is None` to PAUSE. Live recompute against
+      validated_setups identifies 8 strategies whose live t-stat clears
+      Chordia 2018 hurdle (t >= 3.79, PASS_CHORDIA) but which have NO
+      doctrine audit entry in `docs/runtime/chordia_audit_log.yaml`. They
+      are the concrete expansion path for allocation -- and the ONLY path
+      consistent with institutional rigor.
+
+      Per stage:
+      (1) Enumerate PASS_CHORDIA-without-audit:
+          ```python
+          from datetime import date
+          from trading_app.lane_allocator import compute_lane_scores
+          scores = compute_lane_scores(date.today())
+          targets = [s.strategy_id for s in scores
+                     if s.chordia_verdict == "PASS_CHORDIA"
+                     and s.chordia_audit_age_days is None]
+          ```
+      (2) For EACH strategy, run Pathway-A revalidation per RESEARCH_RULES.md
+          + pre_registered_criteria.md Criterion 4. NOT a sweep -- a per-strategy
+          adversarial-split audit with theory grant decision. Pre-reg required.
+      (3) On PASS, append an entry to `chordia_audit_log.yaml` under `audits:`
+          with `audit_date`, `verdict`, `t_stat`, `threshold`, `sample_size`.
+          Theory-granted strategies also get a `theory_grants:` row with
+          required `theory_ref` to `docs/institutional/literature/<file>`.
+      (4) Re-run rebalance; verify the JSON now includes the cleared lanes
+          with `chordia_audit_age_days = 0`.
+
+      User aim cited at handoff: "+0.4R+", "sky is the limit". Honest framing:
+      H3 ExpR ~ +0.079R; +0.4R is 5x. Not reachable by tuning the same setup
+      harder. This audit unlock is the institutional path; treat it as the
+      portfolio-EV anchor for the next research session.
+
+      Bailey-LdP MinBTL: < 300 trials per audit. No brute force.
     exit_criteria: |
-      Allocator has a working Chordia gate; running
-      `python scripts/tools/rebalance_lanes.py --profile topstep_50k_mnq_auto`
-      against the current state produces a JSON whose lanes[] contains only
-      PASS_PROTOCOL_A or PASS_CHORDIA strategies (i.e. just H3 NYSE_OPEN
-      until further audits land). Drift check enforces it. New stage file
-      lands in docs/runtime/stages/.
+      All 8 PASS_CHORDIA-without-audit strategies have either (a) a doctrine
+      audit row in chordia_audit_log.yaml producing a fresh `chordia_audit_age_days`
+      and a clear PASS_CHORDIA / PASS_PROTOCOL_A verdict on rebalance, OR
+      (b) an explicit FAIL with a one-line note in the YAML explaining why
+      audit failed at Pathway-A even though raw t passed (e.g. selection bias,
+      contamination, regime instability). Drift check #134 still passes.
+      Live `lane_allocation.json` post-rebalance shows the cleared lanes.
     blocked_by: []
     decision_refs:
       - docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
-      - docs/runtime/chordia-revalidation-decision-audit-2026-05-01.md
+      - docs/institutional/pre_registered_criteria.md
+      - docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md
     evidence_refs:
-      - trading_app/lane_allocator.py
-      - scripts/tools/rebalance_lanes.py
+      - docs/runtime/chordia_audit_log.yaml
       - trading_app/chordia.py
-      - trading_app/prop_profiles.py
-    notes_ref: docs/runtime/chordia-revalidation-decision-audit-2026-05-01.md
-    override_note: Class-fix for the silent-rebalance-bypass bug found 2026-05-01. Until this lands, every monthly rebalance recreates the same class problem.
-
+      - trading_app/lane_allocator.py
+    notes_ref: HANDOFF.md (Item A under "What's NOT done -- ranked by EV")
+    override_note: Direct expansion path for capital allocation post-chordia-gate. Per-strategy Pathway-A audit, NOT a sweep. Pre-reg required.
 
   - id: phase_d_d0_clean_rederivation
     title: Phase D D-0 clean re-derivation (E2 LA contamination — rel_vol → safe predictor)

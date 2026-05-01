@@ -6,7 +6,90 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Last Session (2026-05-01 PM — Allocator Chordia Gate)
+## Current Session (2026-05-01 EVE — Discovery-Loop Hardening + Chordia P1 Pivot)
+
+### What landed
+
+- **PR #198 MERGED** (Tier 1 discovery-loop): UserPromptSubmit hook detecting pasted agent narration + open-ended hardening verbs.
+- **PR #199 MERGED** (Tier 2 discovery-loop): PreToolUse(Edit|Write) marker requirement before edits to `pipeline/`/`trading_app/`. Walks session JSONL transcript for REPRO / context_resolver.py / TRIVIAL artifact.
+- **PR #200 CLOSED unmerged** (Tier 3 read-budget counter): closed on self-audit. n=1 trigger incident, arbitrary 16/26 thresholds, hard-cap-no-cooldown alert-fatigue risk, 1,100 lines of meta-tooling against ONE open money P1. Lesson captured in `memory/feedback_meta_tooling_n1_tunnel_2026_05_01.md`.
+- **Tier 4 (rule docs only) DEFERRED** — small follow-up if the discovery-loop class actually recurs.
+
+### Pivot to open P1: chordia_audit_unlock_pass_chordia_strategies
+
+**ORIENT step done. NO audits run. NO pre-regs written.**
+
+Live ground truth (queried via `compute_lane_scores` + `validated_setups`):
+- 8/59 strategies are PASS_CHORDIA-without-audit
+- t-stat range: 3.82 (MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10_S075) → 4.58 (MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15)
+- OOS ExpR range: +0.103R → +0.207R
+- All `validation_pathway = family` → BHY FDR per Criterion 3
+- OOS ≈ IS for all 8 (no obvious decay)
+
+Triage doc: `docs/audit/results/2026-05-01-chordia-audit-unlock-triage.md` (full 8-row table + tier A/B/C correlation pruning + theory-grant matrix + honest +0.4R framing).
+
+### Recommended next step (NOT executed)
+
+Theory-grant feasibility scan: read Fitschen Ch 3 + Carver Ch 9-10 extracts in `docs/institutional/literature/` to determine which of the 4 filter classes (VWAP_MID, OVNRNG, X_MES_ATR, COST_LT) have citable theory grounds. One read pass, one memo, no code, no commits. Decides which strategies are PASS_PROTOCOL_A-eligible vs need-strict-t≥3.79.
+
+Honest framing: highest single OOS ExpR is +0.207R, not +0.4R. Blended portfolio of 4-6 plausibly +0.10-0.18R after costs/correlation drag. +0.4R needs structurally new mechanism, not tuning these.
+
+### Worktrees touched / cleaned
+
+- `canompx3-tier2-edit-marker` — created, PR #199 shipped, REMOVED
+- `canompx3-tier3-read-budget` — created, PR #200 closed, REMOVED, branch deleted local + remote
+- `canompx3-handoff` — current worktree (this commit lands triage doc + memory entries + HANDOFF append)
+
+### Parallel-session conflict warning
+
+Main worktree (`C:/Users/joshd/canompx3`) at session-end has uncommitted Codex-session work touching `.codex/`, `HANDOFF.md`, `context/institutional.py`, `scripts/infra/codex-*.sh`, plus untracked `.agents/`, `CodePilot/`, `docs/external/code-review-graph/eval-2026-04-29/*.csv`, `scripts/tools/{repo_state,research_catalog}_mcp_server.py`. Per parallel-session-awareness rule, NOT touched. Fresh session must NOT git-add those without confirming ownership with the other terminal first.
+
+---
+
+## Prior Session (2026-05-01 PM — Codex Layer Alignment + Supercharge Roadmap)
+
+### What landed
+
+- Codex repo-skill discovery now matches official Codex behavior:
+  `.agents/skills/` contains thin wrappers that forward to the canonical
+  `.codex/skills/` sources.
+- `.codex/config.toml` now enables small repo-local Codex hooks:
+  - `SessionStart` adds startup hints for `/mnt/...` fallback sessions,
+    missing `.venv-wsl`, and `.session/task-route.md`
+  - `UserPromptSubmit` adds research/review grounding only when the prompt
+    actually needs it
+- Direct-session startup guidance was hardened around
+  `python3 scripts/infra/codex_local_env.py doctor --platform wsl` and
+  `setup --platform wsl` instead of brittle raw preflight commands.
+- `canompx3_max` now points to `gpt-5.3-codex` instead of the older
+  `gpt-5.1-codex-max`.
+- `.codex/INTEGRATIONS.md` corrected: live repo MCP map is `gold-db` +
+  `code-review-graph`, not `notebooklm`.
+- Shared roadmap written:
+  `docs/plans/2026-05-01-codex-supercharge-roadmap.md`
+
+### Measured blockers still true
+
+- This checkout is still a `/mnt/c/...` fallback surface.
+- `python3 scripts/infra/codex_local_env.py doctor --platform wsl` reports:
+  - WSL mount guard FAIL (`.git` write probe read-only)
+  - `.venv-wsl` missing
+  - preflight FAIL because uv cannot fetch Python/build deps from the current
+    network-restricted state
+
+### Next build order
+
+1. Use a WSL-home clone such as `~/canompx3` for real Codex work.
+2. Build `repo-state` MCP from:
+   `context_resolver.py`, `task_route_packet.py`, `project_pulse.py`,
+   `system_context.py`, `context_views.py`.
+3. Build `research-catalog` MCP over `docs/institutional/`,
+   `docs/audit/hypotheses/`, `docs/audit/results/`, and existing context
+   catalog tooling.
+4. Build `strategy-lab` MCP only after those two, using `gold-db` as the truth
+   substrate instead of inventing a second state layer.
+
+## Prior Session (2026-05-01 PM — Allocator Chordia Gate)
 
 ### Current state at handoff
 
@@ -519,5 +602,3 @@ Phase B (verification) returned **4 of 4 candidates as PATHWAY_B_ELIGIBLE** — 
 - `docs/plans/2026-04-25-hwm-persistence-integrity-hardening-design.md` — HWM Stages 1-4 design (landed in #129)
 - `docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md` — O-SR grounding (still pending: cusum_monitor → SR Eq 10)
 - `docs/institutional/literature/fitschen_2013_path_of_least_resistance.md` — ORB premise
-
-
