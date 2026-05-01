@@ -1115,7 +1115,9 @@ def load_allocation_lanes(
     if allocation_path:
         path = _normalize_writable_path(Path(allocation_path))
     else:
-        path = _normalize_writable_path(Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json")
+        path = _normalize_writable_path(
+            Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+        )
 
     if not path.exists():
         return ()

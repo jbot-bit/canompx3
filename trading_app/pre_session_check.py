@@ -567,13 +567,16 @@ def check_lane_mismatch(session: str, lane: dict) -> tuple[bool, str]:
     for this session+instrument to the allocator's recommended strategy_id.
     Non-blocking (warning only) — user decides whether to follow recommendation.
     """
+
     def _normalize_writable_path(path: Path) -> Path:
         text = str(path)
         if text.startswith("/mnt/c/Users/"):
             return Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
         return path
 
-    alloc_path = _normalize_writable_path(Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json")
+    alloc_path = _normalize_writable_path(
+        Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+    )
     if not alloc_path.exists():
         return True, "No allocation file — cannot compare"
 
