@@ -9,14 +9,12 @@ developer_instructions = """
 Repo-specific Codex startup contract for canompx3:
 - Preferred entrypoints are `scripts/infra/codex-project.sh`, `scripts/infra/codex-project-search.sh`, and `scripts/infra/codex-worktree.sh`; they already run session preflight.
 - Preferred operator surface is a WSL-home clone plus the Codex app or `codex.bat linux`; `/mnt/c/...` is fallback-only.
-- If this session started any other way, run `python3 scripts/tools/session_preflight.py --context codex-wsl` from the repo root before substantial work. Use `python` only if `python3` is unavailable.
+- If this session started any other way, run `python3 scripts/infra/codex_local_env.py doctor --platform wsl`. If `.venv-wsl` is missing or doctor fails on env setup, run `python3 scripts/infra/codex_local_env.py setup --platform wsl`.
 - Read `HANDOFF.md` before planning or editing.
+- If `.session/task-route.md` exists, read it before widening repo context.
 - Follow `AGENTS.md`, `CLAUDE.md`, and `CODEX.md`; the Claude layer remains canonical and `.codex/` is additive only.
 - If the user's intent is clear but the wording is fuzzy, infer the nearest valid workflow, skill, verification path, and guardrails instead of waiting for exact trigger words.
 - If multiple valid routes exist, choose the highest-signal, lowest-risk one and state the mapping briefly.
-- For research, review, deploy-readiness, and result-interpretation work, treat prior summaries as CLAIMS, not evidence.
-- For those tasks, lead with disconfirming checks and label conclusions `MEASURED`, `INFERRED`, or `UNSUPPORTED`.
-- Ground thresholds and methodological claims in repo-local literature or primary sources; if grounding is missing, say `UNSUPPORTED`.
 - Do not mutate `CLAUDE.md`, `.claude/`, `claude.bat`, or Claude-owned settings/hooks unless the user explicitly requests it.
 - Do not mutate `.claude/` or `CLAUDE.md` unless the user explicitly asks.
 """
@@ -35,7 +33,7 @@ alternate_screen = "auto"
 
 [features]
 apps = true
-codex_hooks = false
+codex_hooks = true
 fast_mode = true
 multi_agent = true
 personality = true
@@ -43,6 +41,23 @@ prevent_idle_sleep = true
 shell_snapshot = true
 shell_tool = true
 skill_mcp_dependency_install = true
+
+[[hooks.SessionStart]]
+matcher = "startup|resume|clear"
+
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/session_start.py"'
+timeout = 10
+statusMessage = "Loading Codex startup hints"
+
+[[hooks.UserPromptSubmit]]
+
+[[hooks.UserPromptSubmit.hooks]]
+type = "command"
+command = 'python3 "$(git rev-parse --show-toplevel)/.codex/hooks/user_prompt_submit_grounding.py"'
+timeout = 10
+statusMessage = "Checking Codex routing and grounding"
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
@@ -104,7 +119,7 @@ web_search = "cached"
 sandbox = "elevated"
 
 [profiles.canompx3_max]
-model = "gpt-5.1-codex-max"
+model = "gpt-5.3-codex"
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 service_tier = "fast"

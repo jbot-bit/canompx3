@@ -18,20 +18,37 @@ Codex uses the same project as Claude Code and defers to Claude's project rules.
 
 Declared in `.mcp.json`:
 
+- `repo-state`
+  - Shared repo MCP declaration via `python scripts/tools/repo_state_mcp_server.py` (matches the canonical `gold-db` python-direct pattern for Windows/macOS/Linux portability)
+  - Codex launchers attach the same server via `bash scripts/infra/run-repo-state-mcp.sh` for WSL profiles
+  - Read-only control-plane surface for task routing, startup packets, system context, pulse, and generated context views
+  - Appropriate as a default repo-understanding MCP because it does not create a second truth layer
+- `research-catalog`
+  - Shared repo MCP declaration via `python scripts/tools/research_catalog_mcp_server.py` (matches the canonical `gold-db` python-direct pattern for Windows/macOS/Linux portability)
+  - Codex launchers attach the same server via `bash scripts/infra/run-research-catalog-mcp.sh` for WSL profiles
+  - Read-only research-grounding surface for local literature extracts, prereg hypotheses, audit results, and bounded catalog search
+  - Appropriate as a default research-grounding MCP because it reads committed repo evidence instead of inventing a second state layer
 - `gold-db`
   - Shared repo MCP declaration
   - Optional project integration, not required for Codex to work in this repo
-- `notebooklm`
-  - Declared in `.mcp.json` but not enabled in `.claude/settings.local.json`
-  - Repo rule state: retired for this workspace; use local PDFs instead
+- `code-review-graph`
+  - Shared repo MCP declaration via `uvx code-review-graph serve`
+  - Structural navigation and review aid only, not a project-truth layer
+  - Use minimal-detail flows; canonical code and `gold.db` still win on truth
 
 Project-scoped Codex MCP declarations also exist in `.codex/config.toml`:
 
 - `openaiDeveloperDocs`
+- `repo-state` is attached by the Codex project/review launchers by default
+  - this is the default self-understanding surface for Codex sessions in this repo
+- `research-catalog` is attached by the Codex project/review launchers by default
+  - this is the default local grounding surface for literature, prereg, and audit-result work
 - `gold-db` is deliberately not attached by default
   - use `scripts/infra/codex-project-gold-db.sh` or
     `scripts/infra/codex-project-search-gold-db.sh` when a task actually needs
     the trading DB via MCP
+- `code-review-graph` stays repo-scoped in `.mcp.json`
+  - keep it opt-in for structural code navigation and review, not routine truth-finding
 
 ## Claude Runtime Surfaces Worth Reusing
 
@@ -47,6 +64,8 @@ Project-scoped Codex MCP declarations also exist in `.codex/config.toml`:
 - Current default model: `gpt-5.4`
 - Project trust is already set for this repo
 - `codex mcp list` now includes `openaiDeveloperDocs`
+- Enabled curated plugin in the current local config: `GitHub`
+- Disabled curated plugins in the current local config: `gmail`, `google-calendar`, `build-web-apps`
 
 ## Current Codex CLI Capabilities Confirmed Locally
 
@@ -80,5 +99,14 @@ Claude and Codex do not share MCP registration automatically.
 If Claude already has a working integration surface for this repo, Codex should point at it rather than creating a competing layer.
 
 Minimal-by-default beats clever-by-default. Optional repo MCPs should be
-attached only for sessions that need them. Do not mutate Claude integration
-surfaces unless the user explicitly asks.
+attached only for sessions that need them.
+
+Current intended split:
+
+- default self-understanding: `repo-state`
+- default research grounding: `research-catalog`
+- explicit trading-data truth: `gold-db`
+- explicit structural code navigation: `code-review-graph`
+- explicit official-doc lookup: `openaiDeveloperDocs`
+
+Do not mutate Claude integration surfaces unless the user explicitly asks.

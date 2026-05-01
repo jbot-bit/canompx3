@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from trading_app.ai.sql_adapter import QueryTemplate
-
 
 @dataclass(frozen=True)
 class Concept:
@@ -353,6 +351,8 @@ BRIEFING_CONTRACTS: dict[str, BriefingContract] = {
 
 def validate_institutional_contracts() -> list[str]:
     """Validate internal referential integrity for the institutional contracts."""
+    from trading_app.ai.sql_adapter import QueryTemplate
+
     violations: list[str] = []
     valid_templates = {item.value for item in QueryTemplate}
 
