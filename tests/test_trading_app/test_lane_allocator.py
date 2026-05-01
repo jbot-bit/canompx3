@@ -23,6 +23,7 @@ from trading_app.lane_allocator import (
     load_sr_state,
 )
 from trading_app.lane_correlation import RHO_REJECT_THRESHOLD
+from trading_app.chordia import ChordiaAuditEntry, ChordiaAuditLog
 
 
 # ── Factories ──────────────────────────────────────────────────────
@@ -717,6 +718,68 @@ class TestIntegration:
         # ORB_G6: only 5 trades on large-ORB days counted
         assert orb_g6.trailing_n == 5
 
+    def test_compute_lane_scores_uses_audit_log_verdict_not_validated_shelf_t(self, test_db):
+        """Strict audit verdict wins over a DB-derived pass-looking t-stat.
+
+        The live allocator must not recompute Chordia truth from
+        validated_setups.sharpe_ratio * sqrt(N). If strict replay recorded
+        FAIL_BOTH, that is the live gate input even when the shelf row would
+        imply a pass under the derived-layer formula.
+        """
+        rebalance = date(2025, 7, 1)
+        sid = "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER"
+        _seed_strategy(
+            test_db,
+            strategy_id=sid,
+            sample_size=100,
+            sharpe_ratio=0.45,  # 0.45 * sqrt(100) = 4.5 -> would PASS if recomputed
+        )
+        audit_log = ChordiaAuditLog(
+            default_has_theory=False,
+            audit_freshness_days=90,
+            entries={
+                sid: ChordiaAuditEntry(
+                    strategy_id=sid,
+                    has_theory=False,
+                    audit_date=date(2025, 6, 30),
+                    verdict="FAIL_BOTH",
+                    theory_ref=None,
+                )
+            },
+        )
+
+        scores = compute_lane_scores(rebalance_date=rebalance, db_path=test_db, audit_log=audit_log)
+
+        assert len(scores) == 1
+        assert scores[0].chordia_verdict == "FAIL_BOTH"
+        assert scores[0].chordia_audit_age_days == 1
+
+    def test_compute_lane_scores_missing_audit_row_fails_closed(self, test_db):
+        """No audit row means MISSING, even if validated_setups would pass.
+
+        This blocks pre-Phase-0 / unaudited strategies from silently passing
+        through the live gate on derived-layer metrics alone.
+        """
+        rebalance = date(2025, 7, 1)
+        sid = "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER"
+        _seed_strategy(
+            test_db,
+            strategy_id=sid,
+            sample_size=100,
+            sharpe_ratio=0.45,  # would PASS if derived from validated_setups
+        )
+        audit_log = ChordiaAuditLog(
+            default_has_theory=False,
+            audit_freshness_days=90,
+            entries={},
+        )
+
+        scores = compute_lane_scores(rebalance_date=rebalance, db_path=test_db, audit_log=audit_log)
+
+        assert len(scores) == 1
+        assert scores[0].chordia_verdict == "MISSING"
+        assert scores[0].chordia_audit_age_days is None
+
 
 class TestLivenessScoring:
     """Tests for SR alarm + 3mo decay ranking adjustments."""
@@ -1043,7 +1106,7 @@ class TestChordiaGate:
         )
         result = apply_chordia_gate([s])
         assert result[0].status == "PAUSE"
-        assert "missing audit" in result[0].status_reason.lower()
+        assert "strict replay audit" in result[0].status_reason.lower()
 
     def test_missing_audit_age_demoted_to_pause(self):
         """A PASS verdict with chordia_audit_age_days=None is still demoted to PAUSE."""
@@ -1146,3 +1209,36 @@ class TestChordiaGate:
         lane = data["lanes"][0]
         assert lane["chordia_verdict"] == "PASS_PROTOCOL_A"
         assert lane["chordia_audit_age_days"] == 15
+
+    def test_save_allocation_paused_includes_gate_demotions(self, tmp_path):
+        """save_allocation serializes Chordia-gated pauses into paused[]."""
+        import json
+        from datetime import date as _date
+        from trading_app.lane_allocator import save_allocation
+
+        selected = _make_score(
+            strategy_id="CLEAN",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=5,
+        )
+        blocked = _make_score(
+            strategy_id="BLOCKED",
+            orb_label="EUROPE_FLOW",
+            chordia_verdict="MISSING",
+            chordia_audit_age_days=None,
+            status="DEPLOY",
+            status_reason="Session HOT (+0.1000), ExpR=+0.2000, N=120",
+        )
+
+        path = save_allocation(
+            scores=[selected, blocked],
+            allocation=[selected],
+            rebalance_date=_date(2026, 5, 2),
+            profile_id="test_profile",
+            output_path=tmp_path / "test_alloc.json",
+        )
+        data = json.loads(path.read_text())
+
+        paused = {row["strategy_id"]: row["reason"] for row in data["paused"]}
+        assert "BLOCKED" in paused
+        assert "strict replay audit" in paused["BLOCKED"]

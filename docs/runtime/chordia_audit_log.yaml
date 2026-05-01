@@ -4,10 +4,9 @@
 #
 # Doctrine:
 #   - Default for any strategy_id NOT in this file: has_theory=False, no audit
-#     entry. The allocator then either treats audit as missing (PAUSED) or
-#     recomputes the t-stat live and applies the strict T=3.79 hurdle, depending
-#     on what data is available. Strict default is the institutional prior:
-#     burden-of-proof on theory grounding, not on its absence.
+#     entry. The allocator then treats audit as missing (PAUSED). Strict
+#     default is the institutional prior: burden-of-proof on theory grounding
+#     and strict replay evidence, not on their absence.
 #   - has_theory=True requires explicit citation in `theory_ref` to a file
 #     under `docs/institutional/literature/` with a pre-registered economic
 #     mechanism. Adding has_theory=True without theory_ref is a doctrine
@@ -17,35 +16,24 @@
 #     refreshes audit_date.
 #
 # Verdict values (must match `trading_app/chordia.py` semantics):
-#   - PASS_PROTOCOL_A : t >= 3.00 with has_theory=True (or t >= 3.79 with
-#                       has_theory=False; in that case the allocator may also
-#                       label PASS_CHORDIA — see policy below).
+#   - PASS_PROTOCOL_A : 3.00 <= t < 3.79 with has_theory=True. Strategy clears
+#                       the theory-backed deployment hurdle but not the strict
+#                       Chordia sizing-up hurdle.
 #   - PASS_CHORDIA    : t >= 3.79 (strict Chordia 2018 hurdle, regardless of
 #                       theory). Used for sizing-up eligibility.
 #   - FAIL_BOTH       : t < 3.00. Strategy fails both Harvey-Liu and Chordia
 #                       hurdles. Allocator MUST refuse DEPLOY.
-#   - FAIL_CHORDIA    : 3.00 <= t < 3.79 with has_theory=True. Allocator may
-#                       allow DEPLOY (PASS_PROTOCOL_A) but NOT size up.
+#   - FAIL_CHORDIA    : 3.00 <= t < 3.79 with has_theory=False. Strategy clears
+#                       the theory-backed hurdle but fails the strict no-theory
+#                       Chordia hurdle. Allocator MUST refuse DEPLOY.
 #
-# Source of truth for verdict computation: `trading_app/chordia.py`
-# (`chordia_gate(sharpe_ratio, sample_size, has_theory)`).
-# Source for sharpe_ratio + sample_size: `validated_setups` table.
-#
-# IMPORTANT — YAML `verdict` field vs live recomputed verdict:
-#   The `verdict` recorded under each `audits[]` entry is an IS-only
-#   snapshot from the 2026-05-01 revalidation (Pathway-A adversarial
-#   split sample sizes). The allocator's live `compute_lane_scores` reads
-#   `validated_setups.sharpe_ratio` + `sample_size` — which reflect the
-#   full validated dataset — and computes a fresh verdict via
-#   `chordia_verdict_label`. These can differ. Examples (2026-05-01):
-#     H2 COMEX_SETTLE: YAML verdict=FAIL_BOTH (IS only); live=FAIL_CHORDIA
-#     H4 TOKYO_OPEN:   YAML verdict=FAIL_BOTH (IS only); live=FAIL_CHORDIA
-#   In both cases the live label still routes to PAUSE (FAIL_CHORDIA does
-#   not satisfy `chordia_verdict_allows_deploy`). Capital impact is zero.
-#   The YAML `verdict` field is a HUMAN AUDIT LEDGER, not the gate input.
+# Source of truth for verdict computation: the strict replay that produced the
+# recorded audit row. `trading_app/chordia.py` defines the verdict taxonomy and
+# thresholds, but the live allocator reads the stored audit-row verdict here.
+# `validated_setups` is NOT an admissible replacement source for gate truth.
 #
 # @research-source: docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
-# @canonical-source: trading_app/chordia.py + validated_setups
+# @canonical-source: trading_app/chordia.py + docs/runtime/chordia_audit_log.yaml
 # @revalidated-for: allocator_chordia_gate stage 2026-05-01
 
 version: 1

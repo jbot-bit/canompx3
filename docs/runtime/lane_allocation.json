@@ -128,6 +128,138 @@
     {
       "strategy_id": "MES_US_DATA_830_E2_RR1.0_CB1_OVNRNG_50_S075",
       "reason": "Session regime COLD (-0.0966)"
+    },
+    {
+      "strategy_id": "MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G5",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_PD_CLEAR_LONG",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5",
+      "reason": "chordia gate: FAIL_BOTH (t<3.0)"
+    },
+    {
+      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_G5",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_CROSS_SGP_MOMENTUM",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G5",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.0_CB1_CROSS_SGP_MOMENTUM",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_CROSS_SGP_MOMENTUM",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G5",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_OVNRNG_100",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5",
+      "reason": "chordia gate: FAIL_BOTH (t<3.0)"
+    },
+    {
+      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT12",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.0_CB1_OVNRNG_100",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.0_CB1_COST_LT12",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G5",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_G5",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O30",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G5",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G5",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12",
+      "reason": "chordia gate: FAIL_BOTH (t<3.0)"
+    },
+    {
+      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.0_CB1_COST_LT12",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_PD_GO_LONG",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_GO_LONG",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_CLEAR_LONG",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_DISPLACE_LONG",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_US_DATA_1000_E2_RR2.0_CB1_VWAP_MID_ALIGNED_O15",
+      "reason": "chordia gate: missing strict replay audit verdict"
+    },
+    {
+      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15",
+      "reason": "chordia gate: missing strict replay audit verdict"
     }
   ],
   "all_scores_count": 59

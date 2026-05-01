@@ -105,13 +105,24 @@
   `X_MES_ATR60` is NOT a plain `daily_features` filter. It requires
   `cross_atr_MES_pct` enrichment before canonical delegation. Without that,
   replay fail-closes to zero-fire and yields a false `SCAN_ABORT`.
-- Important doctrine mismatch now known:
-  `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60` has a new bounded strict audit
-  row at `FAIL_BOTH`, but the allocator live gate still recomputes from
-  `validated_setups` and can surface it as `PASS_CHORDIA` in
-  `compute_lane_scores()`. This is a real controls/provenance gap, but it is
-  separate from the lane-allocation refresh and should not be patched ad hoc
-  without an explicit doctrine decision.
+- Important doctrine fix landed:
+  the allocator live gate now reads strict-replay verdicts from
+  `docs/runtime/chordia_audit_log.yaml` directly and fails closed to
+  `MISSING` when no audit row exists. It no longer derives Chordia deploy
+  truth from `validated_setups.sharpe_ratio * sqrt(sample_size)`.
+- Post-fix measured behavior on 2026-05-02:
+  - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60` now resolves to
+    `FAIL_BOTH` from the audit row, not a live recomputed pass.
+  - Remaining unaudited siblings resolve to `MISSING`, not `PASS_CHORDIA`.
+  - Canonical rebalance for `topstep_50k_mnq_auto` still selects the same
+    3 audited lanes, but the saved/report surfaces now reflect the gate:
+    4 deployable, 49 paused, 6 stale; 33 pauses are explicitly
+    `chordia gate:*`.
+- Phantom-stat retraction:
+  the originally cited `t=4.565` for
+  `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60` is UNSUPPORTED. Repo grep on
+  2026-05-02 found zero committed matches. Do not cite it in future pre-regs
+  or H3 controls.
 
 ---
 

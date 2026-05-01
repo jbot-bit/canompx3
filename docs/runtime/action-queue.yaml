@@ -117,24 +117,22 @@ items:
       - `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15`
 
       Important doctrine note:
-      - The allocator live gate still recomputes from `validated_setups`
-        `sharpe_ratio * sqrt(sample_size)`. Therefore
-        `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60` can still appear as live
-        `PASS_CHORDIA` in `compute_lane_scores()` even though the new bounded
-        strict replay audit row records `FAIL_BOTH`. That mismatch is now
-        documented and should be treated as a separate controls/provenance
-        follow-up, not resolved ad hoc inside this queue item.
+      - Live allocator Chordia gating now reads
+        `docs/runtime/chordia_audit_log.yaml` verdicts directly and fails
+        closed to `MISSING` when no strict replay audit row exists. It no
+        longer recomputes deployment truth from
+        `validated_setups.sharpe_ratio * sqrt(sample_size)`.
+      - Result: `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60` now resolves to
+        `FAIL_BOTH` from the audit row, and the remaining unaudited siblings
+        resolve to `MISSING`, not shelf-derived `PASS_CHORDIA`.
+      - The originally cited `t=4.565` for `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`
+        is UNSUPPORTED. Repo grep on 2026-05-02 found zero committed matches.
+        Do not cite that number in future pre-regs or H3 controls.
 
       Per stage:
-      (1) Enumerate remaining PASS_CHORDIA-without-audit:
-          ```python
-          from datetime import date
-          from trading_app.lane_allocator import compute_lane_scores
-          scores = compute_lane_scores(date.today())
-          targets = [s.strategy_id for s in scores
-                     if s.chordia_verdict == "PASS_CHORDIA"
-                     and s.chordia_audit_age_days is None]
-          ```
+      (1) Audit the 4 explicitly listed remaining targets. Do NOT infer the
+          queue from live `compute_lane_scores()` verdict labels anymore,
+          because missing audits now fail closed to `MISSING` by design.
       (2) For EACH remaining strategy, run Pathway-A revalidation per RESEARCH_RULES.md
           + pre_registered_criteria.md Criterion 4. NOT a sweep -- a per-strategy
           adversarial-split audit with theory grant decision. Pre-reg required.
