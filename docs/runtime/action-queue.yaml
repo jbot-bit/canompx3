@@ -4,26 +4,28 @@ items:
   - id: chordia_revalidation_2026_05_01_v3_finalized
     title: Chordia revalidation v3 honest-grounding (3 FAIL_BOTH / 1 PASS_PROTOCOL_A)
     class: audit
-    status: open
+    status: closed
     priority: P1
-    close_before_new_work: true
+    close_before_new_work: false
     owner_hint: user
     last_verified_at: 2026-05-01
     freshness_sla_days: 7
     next_action: |
-      User decision required on TWO open items:
-      (1) lane_allocation.json revert vs keep -- the file was unintentionally
-          modified earlier (4-lane -> 7-lane DEPLOY for topstep_50k_mnq_auto)
-          via rebalance_lanes.py run. The file IS the live deployment per
-          prop_profiles.py:1097-1157, NOT a recommendation. Backup of
-          pre-rebalance state at /tmp/lane_alloc_before.json. File deliberately
-          excluded from the v3 audit-correction commit pending user GO.
-      (2) Doctrine action on the 3 FAIL_BOTH lanes (H1 EUROPE_FLOW, H2
-          COMEX_SETTLE, H4 TOKYO_OPEN) -- pre-reg failure_policy locks
-          research-provisional + signal-only continuation; no real-money
-          exposure change required, but user may want different escalation.
-      H3 NYSE_OPEN PASS_PROTOCOL_A retained as deployed (no action).
-    exit_criteria: Both decisions resolved (revert/keep on lane_allocation.json + accept/escalate on doctrine action); commit closes the loop.
+      Closed 2026-05-01. Both open decisions resolved:
+      (1) lane_allocation.json reverted to 2026-04-18 4-lane HEAD state via
+          `git checkout --` -- removes the unaudited 7-lane rebalance from
+          live deployment. 6 new candidates remain unaudited; their
+          re-promotion is gated on the next-stage allocator Chordia hook.
+      (2) Doctrine action: research-provisional + signal-only continuation
+          per pre-reg failure_policy.on_FAIL_BOTH. F-1 hard gate enforces
+          position cap in signal-only; live OOS accrual continues to
+          live_signals.jsonl. No real-money exposure change. H3
+          PASS_PROTOCOL_A retained as deployed; H1/H2/H4 stay in allocator
+          as research-provisional per pre-reg.
+      Architectural follow-up opened as separate P1: fix-allocator-chordia-gate
+      (allocator currently has NO Chordia awareness; next monthly rebalance
+      will re-introduce the same class of silent bypass without it).
+    exit_criteria: Closed. Doctrine ledger lives in result-doc + decision-audit + this entry. Live state == 4-lane HEAD == audited state.
     blocked_by: []
     decision_refs:
       - docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
@@ -36,7 +38,53 @@ items:
       - trading_app/chordia.py
       - trading_app/live/session_orchestrator.py
     notes_ref: docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
-    override_note: lane_allocation.json modified-on-disk represents an unintentional deployment change. Sandbox correctly blocked the auto-revert. Decision belongs to user.
+    override_note: Closed 2026-05-01 via revert-to-HEAD. Architectural class-fix tracked in allocator_chordia_gate entry below.
+
+  - id: allocator_chordia_gate
+    title: Allocator Chordia gate -- prevent silent rebalance-bypass class
+    class: stage
+    status: open
+    priority: P1
+    close_before_new_work: false
+    owner_hint: claude-or-codex
+    last_verified_at: 2026-05-01
+    freshness_sla_days: 14
+    next_action: |
+      Architectural fix surfaced by chordia_revalidation_2026_05_01 audit.
+      Today: rebalance_lanes.py + lane_allocator.build_allocation() emit a
+      DEPLOY-ranked JSON with NO Chordia awareness. Next monthly rebalance
+      will silently re-promote unaudited lanes (same class as 2026-05-01
+      where 6 of 7 candidates had never seen Chordia). Hand-editing JSON
+      is a band-aid; the gate belongs in the allocator.
+      Stage scope (single stage, narrow):
+      (1) Add `chordia_audit_log` table or doctrine-file readable by
+          allocator listing (strategy_id, audit_date, verdict, has_theory).
+      (2) lane_allocator.compute_lane_scores enriches each LaneScore with
+          `chordia_verdict` + `chordia_audit_age_days`.
+      (3) build_allocation() refuses to set status=DEPLOY for any
+          candidate whose verdict is FAIL_BOTH or whose audit is missing
+          or stale (>90d). Demote to PAUSED with structured reason.
+      (4) Drift check: lane_allocation.json lanes[] cannot contain a
+          strategy_id with FAIL_BOTH or missing chordia state.
+      (5) Tests: unit-test the gate with synthetic FAIL_BOTH/PASS rows.
+    exit_criteria: |
+      Allocator has a working Chordia gate; running
+      `python scripts/tools/rebalance_lanes.py --profile topstep_50k_mnq_auto`
+      against the current state produces a JSON whose lanes[] contains only
+      PASS_PROTOCOL_A or PASS_CHORDIA strategies (i.e. just H3 NYSE_OPEN
+      until further audits land). Drift check enforces it. New stage file
+      lands in docs/runtime/stages/.
+    blocked_by: []
+    decision_refs:
+      - docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
+      - docs/runtime/chordia-revalidation-decision-audit-2026-05-01.md
+    evidence_refs:
+      - trading_app/lane_allocator.py
+      - scripts/tools/rebalance_lanes.py
+      - trading_app/chordia.py
+      - trading_app/prop_profiles.py
+    notes_ref: docs/runtime/chordia-revalidation-decision-audit-2026-05-01.md
+    override_note: Class-fix for the silent-rebalance-bypass bug found 2026-05-01. Until this lands, every monthly rebalance recreates the same class problem.
 
 
   - id: phase_d_d0_clean_rederivation
