@@ -81,6 +81,18 @@ Main worktree (`C:/Users/joshd/canompx3`) at session-end has uncommitted Codex-s
   - Codex launcher wiring: `scripts/infra/codex-project*.sh`,
     `scripts/infra/codex-review.sh`, `scripts/infra/codex-capital-review.sh`
   - tests: `tests/test_tools/test_research_catalog_mcp_server.py`
+- `strategy-lab` MCP landed (2026-05-02, branch `ship/strategy-lab-mcp`):
+  - server: `scripts/tools/strategy_lab_mcp_server.py`
+  - launcher: `scripts/infra/run-strategy-lab-mcp.sh`
+  - shared declaration: `.mcp.json`
+  - Codex launcher wiring: `scripts/infra/codex-project*.sh`,
+    `scripts/infra/codex-review.sh`, `scripts/infra/codex-capital-review.sh`
+  - tests: `tests/test_tools/test_strategy_lab_mcp_server.py`
+  - Tools: `get_strategy_readiness`, `get_lane_allocation_summary`,
+    `get_recent_fitness`, `list_promotable_candidates`. Joins
+    `validated_setups` + `compute_fitness` + `lane_allocation.json` into one
+    deployment-readiness verdict; intentional overlap with
+    `gold-db.get_strategy_fitness` is documented in the server instructions.
 
 ### Measured blockers still true
 
@@ -94,8 +106,11 @@ Main worktree (`C:/Users/joshd/canompx3`) at session-end has uncommitted Codex-s
 ### Next build order
 
 1. Use a WSL-home clone such as `~/canompx3` for real Codex work.
-2. Build `strategy-lab` MCP using `gold-db` as the truth
-   substrate instead of inventing a second state layer.
+2. ~~Build `strategy-lab` MCP using `gold-db` as the truth substrate
+   instead of inventing a second state layer.~~ DONE 2026-05-02
+   (`ship/strategy-lab-mcp`).
+3. Package the resulting repo-owned Codex layer (skills + hooks + the three
+   new MCPs) as a single local Codex plugin per the roadmap.
 
 ## Prior Session (2026-05-01 PM — Allocator Chordia Gate)
 
