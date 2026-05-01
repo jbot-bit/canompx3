@@ -11,6 +11,9 @@ Do NOT write code until the user explicitly says to implement.
 ## Git Operations — Just Execute
 "commit", "push", and "merge" mean execute, not discuss. Warn only for real risk like secrets or destructive scope.
 
+## Cross-Worktree Navigation — Allowed In-Session
+One Claude session may operate in multiple worktrees. Use absolute paths (`git -C <path>`, `ls <path>/...`) — Bash cwd resets between calls and `cd` does not persist. Do NOT tell the user to "open a new terminal" just because the target is a sibling worktree; just run the command there. The "one Claude per worktree" rule prohibits two concurrent sessions in the SAME tree, not one session touching several. Handle git ops (status, add, commit, push, PR) in the target worktree directly via `git -C <path>` and absolute paths — that is the expected pattern, not an escalation.
+
 ## Trivial-Change Tier — Skip Ceremony
 Trivial means all of:
 - no `pipeline/` or `trading_app/` production logic touched
