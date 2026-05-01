@@ -150,6 +150,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/discovery-loop-guard.py",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "Notification": [
