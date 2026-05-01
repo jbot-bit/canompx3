@@ -72,6 +72,16 @@ Examples of this rule in action:
 - "It should work" is not acceptable. Run it.
 - "The test passes" is not acceptable. Confirm the test exercises the new code path.
 
+### 9. Discovery-Loop Tells — produce an artifact before editing
+
+"Reading remaining files before patching" / "let me check more" / "isolating weak spots" are discovery-loop tells. Stop. Produce ONE of three artifacts before editing `pipeline/` or `trading_app/`:
+
+  (a) `REPRO:` failing command + actual vs expected
+  (b) `python scripts/tools/context_resolver.py --task "<x>" --format markdown` output
+  (c) `TRIVIAL:` declaration with file list and diff <100 lines
+
+Enforced by `.claude/hooks/pre-edit-discovery-marker.py` (PreToolUse, fail-open). Manual escape: `.claude/scratch/discovery-marker.json` with `{"valid_until": "<ISO timestamp>"}`. See `docs/plans/discovery-loop-hardening.md` for the full forcing-function design.
+
 ## The Treadmill Signal
 
 If you find yourself saying "oh and also fix X" more than twice in a session, stop. The architecture is wrong. Propose a refactor. Do not keep patching.

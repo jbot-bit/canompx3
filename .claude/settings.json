@@ -76,6 +76,16 @@
         ]
       },
       {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/pre-edit-discovery-marker.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "Read|Bash",
         "hooks": [
           {
