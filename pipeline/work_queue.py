@@ -18,8 +18,35 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 QUEUE_SCHEMA_VERSION = 1
 LEASE_SCHEMA_VERSION = 1
 
-QueueClass = Literal["research", "runtime", "deploy", "ops", "tooling", "docs", "debt"]
-QueueStatus = Literal["ready", "active", "blocked", "waiting_observation", "parked", "closed", "superseded"]
+QueueClass = Literal[
+    "research",
+    "runtime",
+    "deploy",
+    "ops",
+    "tooling",
+    "docs",
+    "debt",
+    # 2026-05-01: extended to match action-queue.yaml usage. `audit` is the
+    # natural class for revalidation/grounding entries (e.g. chordia
+    # revalidation 2026-05-01); `stage` is a multi-step implementation task
+    # tracked alongside its docs/runtime/stages/<slug>.md file.
+    "audit",
+    "stage",
+]
+QueueStatus = Literal[
+    "ready",
+    "active",
+    "blocked",
+    "waiting_observation",
+    "parked",
+    "closed",
+    "superseded",
+    # 2026-05-01: `open` is the human convention for "queue entry exists,
+    # not yet started" — distinct from `ready` (next-up) and `active`
+    # (in flight). Adding rather than canonicalising the YAML preserves
+    # the existing entry semantics.
+    "open",
+]
 QueuePriority = Literal["P1", "P2", "P3"]
 
 OPEN_STATUSES: set[QueueStatus] = {"ready", "active", "blocked", "waiting_observation"}
