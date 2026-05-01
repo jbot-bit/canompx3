@@ -35,18 +35,31 @@ def mock_state(state_dir):
 
 
 PROFILE = "topstep_50k_mnq_auto"
-TEST_SESSION = "COMEX_SETTLE"
 
 
-def _strategy_id_for_session(profile_id: str, session_name: str) -> str:
+def _first_lane(profile_id: str):
+    """Return the first deployed lane for the profile.
+
+    Picks dynamically rather than hardcoding a session: which sessions are
+    in the profile depends on the live `lane_allocation.json` post-gate
+    (e.g. the chordia gate, allocator_chordia_gate stage 2026-05-01,
+    refuses lanes failing Chordia 2018 t-stat — so the surviving lane set
+    can shrink between rebalances). This test only needs any valid lane
+    to exercise the lane_ctl CRUD paths; pin to the first lane present.
+    """
     profile = ACCOUNT_PROFILES[profile_id]
-    for lane in effective_daily_lanes(profile):
-        if lane.orb_label == session_name:
-            return lane.strategy_id
-    raise AssertionError(f"No lane for {session_name} in profile {profile_id}")
+    lanes = list(effective_daily_lanes(profile))
+    if not lanes:
+        raise AssertionError(
+            f"Profile {profile_id} has no deployed lanes — "
+            f"check docs/runtime/lane_allocation.json and the chordia gate output."
+        )
+    return lanes[0]
 
 
-TEST_SID = _strategy_id_for_session(PROFILE, TEST_SESSION)
+_FIRST_LANE = _first_lane(PROFILE)
+TEST_SID = _FIRST_LANE.strategy_id
+TEST_SESSION = _FIRST_LANE.orb_label
 
 
 class TestLoadSaveOverrides:
