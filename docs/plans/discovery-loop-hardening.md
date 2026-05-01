@@ -1,6 +1,6 @@
 # Discovery-Loop Hardening — Tiered Forcing-Function Design
 
-**Status:** Tier 1 SHIPPED (this PR). Tiers 2–4 PLANNED, staged below.
+**Status:** Tier 1 SHIPPED (PR #198). Tier 2 SHIPPED (this PR). Tiers 3–4 PLANNED, staged below.
 **Owner:** Josh + Claude
 **Created:** 2026-05-01
 **Trigger:** 2026-05-01 session — pasted Codex status ("I'm reading the remaining adapter files before I patch them") raised the question: what protects us when an agent — Claude, Codex, or another — slips into infinite-discovery mode?
@@ -48,38 +48,34 @@ The three artifacts that satisfy any tier:
 
 ---
 
-## Tier 2 — Edit-Boundary Hardening (PLANNED)
+## Tier 2 — Edit-Boundary Hardening (SHIPPED)
 
-**Goal:** before any `Edit`/`Write` to `pipeline/` or `trading_app/`, require a session marker proving discovery converged.
+`.claude/hooks/pre-edit-discovery-marker.py` (PreToolUse(Edit|Write), fail-open on any error).
 
-**Hook:** extend `pre-edit-guard.py` (or a sibling `pre-edit-discovery-marker.py`).
+**Detects:** edits to `pipeline/` or `trading_app/` when the session transcript contains no discovery-convergence artifact. Walks the last 200 transcript records (≈one full turn block) extracting user-text and assistant `tool_use` Bash commands.
 
-**Logic:**
-- Read the last N user messages and tool results from the session transcript (location: `~/.claude/projects/<slug>/transcripts/`).
-- Pass conditions (any one):
-  - `REPRO:` line in user prompt within last 10 turns.
-  - `context_resolver.py` invocation in last 20 turns with non-empty output.
-  - `TRIVIAL:` declaration in last 5 turns AND staged change diff <100 net lines.
-- Fail-closed message: lists the three options, names the file the agent was about to edit, and includes the exit code escape (`echo "TRIVIAL: <reason>"` to a recognized marker file).
+**Pass conditions (any one):**
+- `REPRO:` substring in any user message
+- `context_resolver.py` substring in any tool_use Bash command
+- `TRIVIAL:` substring AND `git diff --cached --shortstat` reports <100 net lines
 
-**Files to touch:**
-- `.claude/hooks/pre-edit-guard.py` (extend) OR new `.claude/hooks/pre-edit-discovery-marker.py`
-- `.claude/settings.json` (one PreToolUse(Edit|Write) entry — already wired to `pre-edit-guard.py`, so prefer extension)
-- `.claude/rules/institutional-rigor.md` (document the marker requirement)
+**Trivial-path exclusions:** `docs/`, `tests/`, `scripts/tools/`, `.claude/`, `.github/`, `.codex/`, `memory/`, plus any `.md`/`.yaml`/`.json`/`.toml`/`.txt` file.
 
-**Blast radius:**
-- All `Edit`/`Write` to production paths gated. False positives possible on legitimate small fixes — escape hatch via `TRIVIAL:` declaration or a marker file `.claude/scratch/discovery-marker.json`.
-- Trivial paths (docs, tests, scripts/tools) excluded from the gate.
+**Manual escape hatch:** `.claude/scratch/discovery-marker.json` with `{"valid_until": "<ISO timestamp>"}`. Skips the gate while valid.
 
-**Acceptance criteria:**
-- Fires on a session that hasn't produced any of the three artifacts.
-- Silent when `REPRO:` was stated.
-- Silent when `context_resolver.py` ran successfully.
-- Silent for trivial paths.
-- Fail-open on transcript read errors.
-- Test: synthetic transcript fixtures for each branch.
+**Fail-open paths (all return exit 0, no block):**
+- transcript file missing
+- transcript has <5 records (session just started)
+- session_id missing from PreToolUse stdin
+- JSON parse error on transcript line
+- any unhandled exception
 
-**Risk:** transcript path / format may change across Claude Code versions. Mitigation: feature-detect, fall back to the marker-file-only path.
+**Sibling-hook design (vs extending `pre-edit-guard.py`):** kept separate so the existing CRG advisory and the new blocking gate fail-open independently and have isolated unit tests.
+
+**Acceptance criteria — met:**
+- 11/11 synthetic-transcript pytest cases pass (REPRO/context_resolver/TRIVIAL pass paths, no-marker block, large-diff block, trivial path skip, missing transcript fail-open, missing session_id fail-open, active marker pass, expired marker block, short transcript fail-open).
+- Drift check passes.
+- Hook lands on `harden-discovery-loop-tier2` branch off `origin/main`.
 
 ---
 
@@ -128,8 +124,8 @@ The three artifacts that satisfy any tier:
 
 | Stage | Scope | Acceptance | Risk |
 |-------|-------|------------|------|
-| **S1 (this PR)** | Tier 1 hook + design doc | Hook fires/silences correctly on 6 test cases; drift clean | Low — additive UserPromptSubmit, fail-open |
-| **S2** | Tier 2 edit-boundary marker | All branches covered by transcript fixtures; trivial paths excluded; fail-open on transcript errors | Medium — transcript format coupling |
+| **S1 (PR #198)** | Tier 1 hook + design doc | Hook fires/silences correctly on 6 test cases; drift clean | Low — additive UserPromptSubmit, fail-open ✅ |
+| **S2 (this PR)** | Tier 2 edit-boundary marker | 11 transcript fixtures pass; trivial paths excluded; fail-open on transcript errors | Medium — transcript format coupling ✅ |
 | **S3** | Tier 3 read-budget counter | Counter behavior verified across compact + session-start; warnings fire at thresholds | Low — additive PostToolUse |
 | **S4** | Tier 4 rule docs + memory entry | Rule files updated; memory entry written | None — docs only |
 
