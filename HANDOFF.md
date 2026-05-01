@@ -6,7 +6,64 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Current Session (2026-05-01 EVE — Discovery-Loop Hardening + Chordia P1 Pivot)
+## Current Session (2026-05-02 — Chordia Theory Feasibility + Stale-Plan Reconciliation)
+
+### What landed
+
+- Read-only memo added:
+  `docs/audit/results/2026-05-02-chordia-theory-feasibility-scan.md`
+- First strict-threshold prereg added:
+  `docs/audit/hypotheses/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.yaml`
+  targeting `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`
+  as a **no-theory** Chordia unlock audit (`testing_mode: family`,
+  `pathway: A_fixed_family`, `K=1`, strict `t >= 3.79`).
+- Three follow-on strict-threshold preregs added with the same no-theory
+  pattern:
+  - `docs/audit/hypotheses/2026-05-02-mnq-cmepreclose-xmesatr60-chordia-unlock-v1.yaml`
+  - `docs/audit/hypotheses/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.yaml`
+  - `docs/audit/hypotheses/2026-05-02-mnq-comex-costlt12-chordia-unlock-v1.yaml`
+- Reconciled stale plan split:
+  `docs/runtime/handoff-2026-05-02.md` says "7-lane book / Stage 3 next",
+  but live truth in `docs/runtime/lane_allocation.json` is already post-Chordia
+  gate and now shows **1 DEPLOY lane** + 16 paused on rebalance_date
+  `2026-05-01`.
+- Result: do NOT resume the stale "audit the corrected 7-lane book" branch as
+  if it were current. The active capital-EV thread is still
+  `chordia_audit_unlock_pass_chordia_strategies`.
+
+### Feasibility verdict from local literature only
+
+- `COST_LT*` -> no theory grant; strict `t >= 3.79` only
+- `X_MES_ATR60` -> UNSUPPORTED for theory grant from current local extracts
+- `OVNRNG_100` -> class-grounded only, not enough for `has_theory: true`
+- `VWAP_MID_ALIGNED` -> plausible, but not yet locally grounded enough for a
+  doctrine grant
+
+### Recommended next step
+
+- Execute or extend the new prereg first:
+  `2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.yaml`
+- Then execute or extend the already-written follow-on preregs for the next
+  correlation-pruned distinct candidates:
+  `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`,
+  `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`,
+  `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12`.
+- Only do more literature extraction if it could honestly upgrade
+  `VWAP_MID_ALIGNED` or `OVNRNG_100` into `has_theory: true`.
+- MCP work remains off the critical path for "more high-quality deployed
+  trades" in this checkout.
+
+### Execution blocker still true here
+
+- This `/mnt/c/...` checkout still has no `.venv-wsl`.
+- System `python3` is missing `duckdb`, `pandas`, `numpy`, and `pydantic`.
+- Result: prereg authoring is unblocked; actual runner execution is
+  environment-blocked in this session unless resumed from a proper WSL-home
+  clone / env.
+
+---
+
+## Prior Session (2026-05-01 EVE — Discovery-Loop Hardening + Chordia P1 Pivot)
 
 ### What landed
 
