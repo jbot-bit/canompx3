@@ -1708,9 +1708,10 @@ class TestCanonicalClaudeClientSource:
 class TestLaneAllocationChordiaGate:
     """check_lane_allocation_chordia_gate refuses lanes failing the gate.
 
-    The check reads ``docs/runtime/lane_allocation.json`` relative to CWD.
-    Each test chdirs into a tmp_path with a controlled fixture file and
-    asserts the violation set.
+    The check reads ``PROJECT_ROOT / "docs/runtime/lane_allocation.json"``
+    (absolute path via the module's PROJECT_ROOT constant — explicitly NOT
+    CWD-relative). Each test monkeypatches PROJECT_ROOT to point at tmp_path
+    and writes a controlled fixture file there.
 
     Stage: docs/runtime/stages/allocator-chordia-gate.md.
     Companion to trading_app.lane_allocator.apply_chordia_gate.
@@ -1734,11 +1735,16 @@ class TestLaneAllocationChordiaGate:
             )
         )
 
+    def _patch_root(self, monkeypatch, tmp_path: Path) -> None:
+        from pipeline import check_drift
+
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+
     def test_passes_when_file_absent(self, tmp_path, monkeypatch):
         """Missing lane_allocation.json returns no violations (allowed in fresh worktrees)."""
         from pipeline.check_drift import check_lane_allocation_chordia_gate
 
-        monkeypatch.chdir(tmp_path)
+        self._patch_root(monkeypatch, tmp_path)
         assert check_lane_allocation_chordia_gate() == []
 
     def test_passes_with_clean_lane(self, tmp_path, monkeypatch):
@@ -1755,7 +1761,7 @@ class TestLaneAllocationChordiaGate:
                 }
             ],
         )
-        monkeypatch.chdir(tmp_path)
+        self._patch_root(monkeypatch, tmp_path)
         assert check_lane_allocation_chordia_gate() == []
 
     def test_fails_on_fail_both(self, tmp_path, monkeypatch):
@@ -1772,7 +1778,7 @@ class TestLaneAllocationChordiaGate:
                 }
             ],
         )
-        monkeypatch.chdir(tmp_path)
+        self._patch_root(monkeypatch, tmp_path)
         violations = check_lane_allocation_chordia_gate()
         assert len(violations) == 1
         assert "BAD_LANE" in violations[0]
@@ -1791,7 +1797,7 @@ class TestLaneAllocationChordiaGate:
                 }
             ],
         )
-        monkeypatch.chdir(tmp_path)
+        self._patch_root(monkeypatch, tmp_path)
         violations = check_lane_allocation_chordia_gate()
         assert len(violations) == 1
         assert "OLD_LANE" in violations[0]
@@ -1811,8 +1817,40 @@ class TestLaneAllocationChordiaGate:
                 }
             ],
         )
-        monkeypatch.chdir(tmp_path)
+        self._patch_root(monkeypatch, tmp_path)
         violations = check_lane_allocation_chordia_gate()
         assert len(violations) == 1
         assert "STALE_LANE" in violations[0]
         assert "stale" in violations[0].lower()
+
+    def test_robust_to_non_root_cwd(self, tmp_path, monkeypatch):
+        """Regression: check must not silently pass from a non-root cwd.
+
+        Pre-fix the check used a CWD-relative path; this test would have
+        passed with the bug because tmp_path / 'subdir' has no
+        lane_allocation.json under it. Post-fix we patch PROJECT_ROOT at
+        tmp_path AND chdir into a subdir — the check must still find the
+        file at the patched root.
+        """
+        from pipeline.check_drift import check_lane_allocation_chordia_gate
+
+        self._write_alloc(
+            tmp_path,
+            [
+                {
+                    "strategy_id": "BAD_LANE",
+                    "chordia_verdict": "FAIL_BOTH",
+                    "chordia_audit_age_days": 0,
+                }
+            ],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+        violations = check_lane_allocation_chordia_gate()
+        assert len(violations) == 1, (
+            "Drift check must resolve via PROJECT_ROOT, not CWD — otherwise it "
+            "fail-opens whenever invoked from a non-root directory."
+        )
+        assert "BAD_LANE" in violations[0]

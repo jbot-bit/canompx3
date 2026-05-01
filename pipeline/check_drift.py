@@ -7492,9 +7492,14 @@ def check_lane_allocation_chordia_gate() -> list[str]:
     @canonical-source: docs/runtime/chordia_audit_log.yaml
     """
     import json
-    from pathlib import Path
 
-    allocation_path = Path("docs/runtime/lane_allocation.json")
+    # Resolve via PROJECT_ROOT (module-top constant) — never CWD-relative.
+    # A CWD-relative path would silently fail-open from any non-root cwd
+    # (worktree subdir, CI step that cd's into pipeline/, editor "run check"
+    # action). This drift check is the second-layer defense for a
+    # capital-class gate; it must match the path-resolution discipline of
+    # every other check in this file.
+    allocation_path = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
     if not allocation_path.exists():
         return []
 

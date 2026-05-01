@@ -33,12 +33,15 @@ research-provisional, not to lower the threshold.
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 import yaml
+
+_LOG = logging.getLogger(__name__)
 
 # Locked thresholds — sourced from docs/institutional/literature/.
 # Modifying these requires an amendment to pre_registered_criteria.md
@@ -107,7 +110,17 @@ def chordia_gate(
     sample_size: int,
     has_theory: bool,
 ) -> tuple[bool, float, float]:
-    """Apply the Chordia t-statistic gate to a strategy.
+    """DEPRECATED — use ``chordia_verdict_label`` and ``chordia_verdict_allows_deploy``.
+
+    The 5-state taxonomy (PASS_CHORDIA / PASS_PROTOCOL_A / FAIL_CHORDIA /
+    FAIL_BOTH / MISSING) is the canonical interface as of the
+    allocator_chordia_gate stage (2026-05-01). This 3-tuple boolean form
+    is retained only for the existing ``test_chordia.py`` boundary tests.
+    Production code MUST NOT call this function; the allocator gate refuses
+    DEPLOY for FAIL_CHORDIA which the boolean form cannot distinguish from
+    PASS_PROTOCOL_A. New callers will get the wrong policy.
+
+    Apply the Chordia t-statistic gate to a strategy.
 
     Parameters
     ----------
@@ -199,10 +212,14 @@ class ChordiaAuditLog:
 def load_chordia_audit_log(path: str | Path | None = None) -> ChordiaAuditLog:
     """Read and parse the chordia audit-log YAML.
 
-    Fail-closed: if the file is missing or malformed, returns an empty log
-    with default_has_theory=False and audit_freshness_days set to the
+    Fail-closed: if the file is missing OR malformed (YAML parse error,
+    not a mapping at the root), returns an empty log with
+    default_has_theory=False and audit_freshness_days set to the
     institutional default (90). The allocator gate then treats every
     strategy as 'missing audit' -> PAUSED, which is the strict prior.
+
+    Malformed YAML is logged at WARNING — silent fail-closed without a
+    log line would mask doctrine corruption from the operator.
     """
     p = Path(path) if path is not None else CHORDIA_AUDIT_LOG_PATH
     if not p.exists():
@@ -212,7 +229,33 @@ def load_chordia_audit_log(path: str | Path | None = None) -> ChordiaAuditLog:
             entries={},
         )
 
-    raw = yaml.safe_load(p.read_text()) or {}
+    try:
+        parsed = yaml.safe_load(p.read_text())
+    except yaml.YAMLError as exc:
+        _LOG.warning(
+            "chordia audit log %s could not be parsed (%s) — "
+            "fail-closed: every strategy will be PAUSED until the YAML is fixed",
+            p,
+            exc,
+        )
+        return ChordiaAuditLog(
+            default_has_theory=False,
+            audit_freshness_days=CHORDIA_AUDIT_FRESHNESS_DAYS_DEFAULT,
+            entries={},
+        )
+    if not isinstance(parsed, dict):
+        _LOG.warning(
+            "chordia audit log %s did not parse to a mapping (got %s) — "
+            "fail-closed: every strategy will be PAUSED until the YAML is fixed",
+            p,
+            type(parsed).__name__,
+        )
+        return ChordiaAuditLog(
+            default_has_theory=False,
+            audit_freshness_days=CHORDIA_AUDIT_FRESHNESS_DAYS_DEFAULT,
+            entries={},
+        )
+    raw = parsed
     default_has_theory = bool(raw.get("default_has_theory", False))
     freshness = int(raw.get("audit_freshness_days", CHORDIA_AUDIT_FRESHNESS_DAYS_DEFAULT))
 
