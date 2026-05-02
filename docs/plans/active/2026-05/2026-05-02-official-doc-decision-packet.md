@@ -148,9 +148,22 @@ Implication:
   custom indicators.
   Source:
   <https://help.topstep.com/en/articles/14434175-topstepx>
+- `VERIFIED` Topstep says TopstepX accounts cannot be connected to other
+  trading platforms because TopstepX uses its own isolated market data feed.
+  Source:
+  <https://help.topstep.com/en/articles/8284138-list-of-supported-platforms>
+- `VERIFIED` Topstep still lists Quantower as a supported platform generally,
+  but in the same supported-platforms article it distinguishes platform choice
+  from TopstepX account connectivity.
+  Source:
+  <https://help.topstep.com/en/articles/8284138-list-of-supported-platforms>
 - `VERIFIED` Topstep permits Micro Gold (`MGC`).
   Source:
   <https://help.topstep.com/en/articles/8284224-permitted-products-per-exchange>
+- `VERIFIED` Topstep supports Quantower copy trading generally, but Live Funded
+  Accounts cannot use the Trade Copier.
+  Source:
+  <https://help.topstep.com/en/articles/8284140-what-is-a-trade-copier>
 
 ### Quantower
 
@@ -186,19 +199,33 @@ Implication:
   automation, real-time data, and trade management.
   Source:
   <https://www.projectx.com/api>
+- `VERIFIED` ProjectX official docs expose real-time account, order, and
+  position updates via WebSocket/SignalR plus REST polling for accounts,
+  positions, orders, and related state.
+  Sources:
+  <https://gateway.docs.projectx.com/docs/realtime/>
+  <https://admin.docs.projectx.com/docs/real-time-data/signalR-websocket/account-updates/>
+  <https://admin.docs.projectx.com/docs/real-time-data/signalR-websocket/order-updates/>
+  <https://gateway.docs.projectx.com/docs/api-reference/positions/search-open-positions>
 
 ## Operational Constraints From Official Docs
 
 - `VERIFIED` Any TopstepX API-assisted path must run from the trader's own
   device. Cloud-hosted sidecars, VPS-based relays, or remote-server automation
   are dead on arrival under current Topstep policy.
+- `VERIFIED` TopstepX API marketing does not equal native external-platform
+  interoperability. Topstep separately says a TopstepX account cannot be
+  connected to other trading platforms.
 - `VERIFIED` A Quantower path does not remove Topstep policy dependence. It
   only changes the operator shell and, in some cases, the licensing burden.
 - `VERIFIED` Quantower Topstep accounts do not include replay or local order
   strategies for free. That weakens the naive "Quantower gives everything"
   assumption materially.
+- `VERIFIED` ProjectX exposes enough official real-time account/order/position
+  surfaces to support a local read-only consumer in principle.
 - `INFERRED` A read-only sidecar remains the cleanest architecture only if it
-  can stay local-device, non-executing, and state-consumer-only.
+  stays local-device, non-executing, state-consumer-only, and does not drift
+  into trade-copy or order-routing behavior in `Live Funded`.
 
 ## Stage-Split Policy Matrix
 
@@ -206,8 +233,9 @@ Implication:
 |---|---|---|---|---|
 | TopstepX native manual | `VERIFIED` allowed | `VERIFIED` allowed | `VERIFIED` allowed | clean baseline |
 | TopstepX API full automation | `VERIFIED` allowed in product docs | `VERIFIED` allowed in product docs | `VERIFIED` prohibited via ProjectX API | blocked as end-state |
-| TopstepX read-only / assistive sidecar | `INFERRED` plausible | `INFERRED` plausible | `NEEDS VERIFICATION` no explicit read-only carve-out found | not cleared yet |
-| Quantower manual shell to Topstep/ProjectX | `VERIFIED` documented connection exists | `VERIFIED` documented connection exists | `NEEDS VERIFICATION` no Topstep source explicitly blesses this lifecycle path | challenger only |
+| TopstepX read-only / assistive sidecar | `INFERRED` strongly supported by API docs and data surfaces | `INFERRED` strongly supported by API docs and data surfaces | `NEEDS VERIFICATION` no explicit Live read-only carve-out found, but generic connected-tool support exists | lead candidate, still gated |
+| Quantower manual shell to same TopstepX account | `VERIFIED` blocked by TopstepX account-isolation rule | `VERIFIED` blocked by TopstepX account-isolation rule | `VERIFIED` blocked by TopstepX account-isolation rule | dead for direct continuity |
+| Quantower manual shell to non-TopstepX / legacy path | `VERIFIED` documented connection exists | `VERIFIED` documented connection exists | `NEEDS VERIFICATION` lifecycle continuity breaks for new TopstepX-first flow | challenger only if continuity is abandoned |
 | Quantower Algo / platform-native automation | `NEEDS VERIFICATION` docs show tooling exists | `NEEDS VERIFICATION` docs show tooling exists | `NEEDS VERIFICATION` likely collides with Live policy if routed through ProjectX API | blocked pending proof |
 
 ## Candidate Assessment
@@ -219,24 +247,27 @@ Implication:
 - `VERIFIED` Avoids platform scripting lock-in if kept read-only/assistive.
 - `VERIFIED` Must remain local-device only if it touches TopstepX API or any
   linked ProjectX account tooling.
+- `VERIFIED` Official ProjectX docs provide the account/order/position data
+  surfaces needed for a passive local consumer.
 - `NEEDS VERIFICATION` No official Topstep article found in this pass that
   explicitly says passive read-only overlays/tools are allowed in `Live Funded`
   when using TopstepX API / ProjectX-linked tooling.
-- `INFERRED` Still the best-looking path, but not yet policy-cleared.
+- `INFERRED` Still the best-looking path, and now materially better grounded
+  than before, but not yet policy-cleared.
 
 ### Candidate B — TopstepX + Quantower shell
 
-- `VERIFIED` Quantower clearly supports connection and operator tooling.
+- `VERIFIED` As a direct same-account path, this conflicts with Topstep's own
+  statement that TopstepX accounts cannot be connected to other trading
+  platforms.
 - `VERIFIED` Quantower Topstep feature access is tiered; replay and local order
   strategies are not included free for Topstep accounts.
 - `VERIFIED` Quantower does not inherit repo-native order authority. If the
   human executes there directly, `ProjectXOrderRouter` is bypassed unless an
   explicit feedback bridge is built.
-- `NEEDS VERIFICATION` No official Topstep source found here that says this is a
-  first-class, future-proof `Combine -> XFA -> Live` path under current TopstepX
-  platform policy.
-- `INFERRED` Strong challenger for operator UX, weaker on lifecycle clarity and
-  lock-in risk.
+- `INFERRED` This candidate only survives by changing the problem into a
+  non-TopstepX or grandfathered path, which fails the user's desired
+  TopstepX-first lifecycle continuity.
 
 ### Candidate C — API-driven Live automation through ProjectX
 
@@ -246,8 +277,6 @@ Implication:
 ## Unsupported Assumptions Register
 
 - `NEEDS VERIFICATION` "Read-only sidecar is policy-neutral in Live Funded."
-- `NEEDS VERIFICATION` "Quantower manual shell is explicitly acceptable for the
-  exact TopstepX-era lifecycle the user wants."
 - `NEEDS VERIFICATION` "External passive overlays do not count as prohibited
   connected tools in Live Funded when coupled to account/order data."
 - `NEEDS VERIFICATION` "Quantower execution can feed back enough canonical
@@ -269,7 +298,7 @@ Implication:
 | Candidate | Connection reality | Operator fit | Overlay path | Failure handling | Lock-in risk | Current read |
 |---|---|---|---|---|---|---|
 | TopstepX-core + read-only/assist sidecar | `VERIFIED` TopstepX-first lifecycle fit; `NEEDS VERIFICATION` for explicit Live read-only allowance | `INFERRED` strong for manual-assist workflows | `VERIFIED` best match for repo contract shape | `VERIFIED` can consume canonical stale/degraded signals directly | `VERIFIED` low if non-executing | **lead candidate, still gated** |
-| TopstepX + Quantower shell | `VERIFIED` connection docs exist; `NEEDS VERIFICATION` for full Topstep lifecycle acceptance | `INFERRED` strong shell ergonomics, weaker policy clarity | `INFERRED` viable only if it stays render-only | `INFERRED` adds second failure domain and potential split-brain | `INFERRED` medium-high | **challenger only** |
+| TopstepX + Quantower shell | `VERIFIED` blocked for same-account continuity by TopstepX account isolation | `INFERRED` attractive ergonomically, but wrong shape for the actual lifecycle | `INFERRED` no longer the right target even if technically possible elsewhere | `INFERRED` would add split-brain and second failure domain | `INFERRED` medium-high | **demoted; likely dead for this use case** |
 | ProjectX API-driven Live automation | `VERIFIED` technically marketed by ProjectX | `INFERRED` could be powerful in non-Live stages | `VERIFIED` not needed for current repo shape | `VERIFIED` blocked by Live policy regardless | `INFERRED` high | **dead as end-state** |
 
 ## Next Verification Tasks
@@ -280,9 +309,9 @@ implementation:
 1. `NEEDS VERIFICATION` Ask or find official written guidance on whether a
    passive read-only tool that consumes TopstepX/ProjectX-linked account and
    order data, but never places/cancels orders, is permitted in `Live Funded`.
-2. `NEEDS VERIFICATION` Confirm whether Topstep treats Quantower as a supported
-   long-run shell for new TopstepX-era traders all the way through `Live`, or
-   only as a documented connection path.
+2. `NEEDS VERIFICATION` Confirm whether a passive TopstepX API consumer that
+   builds dashboards, alerts, and monitoring only is treated differently from
+   prohibited Live ProjectX-API automation.
 3. `NEEDS VERIFICATION` Confirm whether any candidate shell can feed back enough
    order/account truth to avoid bypassing `ProjectXOrderRouter` as the
    canonical live-order authority.
@@ -290,7 +319,8 @@ implementation:
 ## Provisional Ranking
 
 1. `INFERRED` TopstepX-core + read-only/assist sidecar
-2. `INFERRED` TopstepX + Quantower shell
+2. `VERIFIED` TopstepX + Quantower shell is not a clean same-account path for
+   this lifecycle
 3. `VERIFIED` ProjectX API-driven Live automation path is blocked
 
 ## Current Verdict

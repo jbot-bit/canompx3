@@ -43,7 +43,10 @@ Build the stage-split evidence packet:
 
 - Implementation is still blocked at the external-platform layer.
 - Cleared: repo-local canonical export contract and operator-state projection.
+- New hard disconfirmation from official Topstep docs:
+  - TopstepX accounts cannot be connected to other trading platforms.
+  - This materially weakens `TopstepX + Quantower shell` as a same-account
+    lifecycle candidate.
 - Not cleared:
   - explicit Live allowance for a read-only/assist sidecar
-  - explicit lifecycle blessing for Quantower as a TopstepX-era shell
   - proof that any shell can avoid split-brain order/account authority
