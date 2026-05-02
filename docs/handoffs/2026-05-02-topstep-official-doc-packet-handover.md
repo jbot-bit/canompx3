@@ -43,12 +43,29 @@ Build the stage-split evidence packet:
 
 ## Current Verdict
 
+- Status: blocked on policy clarification.
 - Implementation is still blocked at the external-platform layer.
 - Cleared: repo-local canonical export contract and operator-state projection.
 - New hard disconfirmation from official Topstep docs:
   - TopstepX accounts cannot be connected to other trading platforms.
   - This materially weakens `TopstepX + Quantower shell` as a same-account
     lifecycle candidate.
+- New artifacts prepared on the implementation branch:
+  - branch: `codex/passive-sidecar-skeleton`
+  - `docs/support-requests/draft-live-readonly-sidecar-policy-clarification.md`
+  - `trading_app/live/passive_sidecar/`
+  - `docs/operator/passive-sidecar-enforcement.md`
+  - `docs/operator/deprecated-paths.md`
 - Not cleared:
   - explicit Live allowance for a read-only/assist sidecar
   - proof that any shell can avoid split-brain order/account authority
+
+## Next Step
+
+1. Get human approval to send the Topstep support-request draft.
+2. Obtain written policy clarification on Q1-Q3 from the verification questions doc.
+3. Only after written clarification, consider flipping
+   `LIVE_PASSIVE_SIDECAR_ALLOWED=true` for controlled non-live testing.
+
+`docs/plans/active/2026-05/2026-05-02-topstep-verification-questions.md`
+remains the single source of truth for unresolved policy items.

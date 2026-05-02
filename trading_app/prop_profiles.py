@@ -255,6 +255,9 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         platform="topstepx",
         min_hold_seconds=None,
         banned_instruments=frozenset(),
+        # DEPRECATED – blocked by Topstep policy as of 2026-05-02 for
+        # Live Funded automation through the ProjectX API. Keep this as a
+        # generic/non-Live capability marker only.
         auto_trading="full",
         notes="MGC morning lane. 5 Express + 1 Live (stay Express). ProjectX API. Copier on Express only.",
     ),
@@ -478,7 +481,10 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
     ),
     # =========================================================================
-    # Phase 2b: TopStep MNQ automation (ProjectX API)
+    # Phase 2b: TopStep MNQ automation (ProjectX API).
+    # DEPRECATED – blocked by Topstep policy as of 2026-05-02 for
+    # Live Funded automation interpretation. Keep this profile scoped to
+    # Express/XFA planning unless written policy changes.
     # First automated trade — single lane, prove the loop works, then scale.
     # =========================================================================
     "topstep_50k_mnq_auto": AccountProfile(

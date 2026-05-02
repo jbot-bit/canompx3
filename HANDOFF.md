@@ -8,6 +8,14 @@
 
 ## Pickup pointer (2026-05-02 PM — read this first)
 
+- Fresh isolated passive-sidecar implementation worktree:
+  `docs/handoffs/2026-05-02-topstep-official-doc-packet-handover.md`
+  Branch: `codex/passive-sidecar-skeleton`
+  This branch is implementation-only for the policy-gated passive sidecar.
+  Prepare only the non-executing local-device sidecar and do not send the
+  support request or flip `LIVE_PASSIVE_SIDECAR_ALLOWED` without written
+  Topstep clarification.
+
 - Fresh isolated official-doc packet worktree:
   `docs/handoffs/2026-05-02-topstep-official-doc-packet-handover.md`
   Branch: `codex/topstep-official-doc-packet`

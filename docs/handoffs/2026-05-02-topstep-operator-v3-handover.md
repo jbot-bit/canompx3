@@ -63,7 +63,8 @@ account stage.
 ## Candidate Order
 
 1. TopstepX-core + read-only/assist sidecar
-2. TopstepX + Quantower shell as challenger
+2. DEPRECATED — blocked by Topstep policy as of 2026-05-02:
+   TopstepX + Quantower shell as challenger
 3. MotiveWave/Sierra only if Quantower fails and only with a thin overlay path
 
 ## Kill Rules

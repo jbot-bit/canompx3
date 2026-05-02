@@ -540,7 +540,10 @@ class SessionOrchestrator:
                 tick_size=self.cost_spec.tick_size,
             )
 
-            # Multi-account copy trading: wrap primary + shadows in CopyOrderRouter
+            # Multi-account copy trading: wrap primary + shadows in CopyOrderRouter.
+            # DEPRECATED – blocked by Topstep policy as of 2026-05-02 for
+            # Topstep Live Funded interpretation. This generic router fan-out is
+            # not policy approval for Topstep Live Funded trade-copy behavior.
             if shadow_account_ids:
                 from trading_app.live.copy_order_router import CopyOrderRouter
 
@@ -1214,7 +1217,10 @@ class SessionOrchestrator:
                 router_status=self._router_status_payload(),
                 broker_status=self._broker_status_payload(),
             )
-            # Add copy trading info if CopyOrderRouter is active
+            # Add copy trading info if CopyOrderRouter is active.
+            # DEPRECATED – blocked by Topstep policy as of 2026-05-02 for
+            # Topstep Live Funded interpretation. This remains generic
+            # monitoring metadata, not approval for Live Funded copy use.
             from trading_app.live.copy_order_router import CopyOrderRouter
 
             if isinstance(self.order_router, CopyOrderRouter):
