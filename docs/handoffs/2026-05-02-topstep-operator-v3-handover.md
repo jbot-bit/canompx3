@@ -55,6 +55,11 @@ operator export contract** from the live brain:
 
 Only after that contract exists should any external shell be tested.
 
+Do not treat the contract work as approval for external platform integration.
+That next stage requires an official-doc decision packet covering Topstep,
+ProjectX, and the candidate platform's documented connection/policy surface by
+account stage.
+
 ## Candidate Order
 
 1. TopstepX-core + read-only/assist sidecar

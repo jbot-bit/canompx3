@@ -30,6 +30,25 @@ Out of scope:
 - moving core logic into any external platform scripting layer
 - changing live entry/exit semantics in `projectx/order_router.py`
 
+## Documentation Gate
+
+External platform work is blocked until it is grounded in:
+
+1. **Repo-canonical code and docs**
+   - live execution surfaces in `trading_app/live/*`
+   - repo doctrine and active design docs
+2. **Official vendor / broker documentation**
+   - Topstep / TopstepX account-stage rules
+   - ProjectX API documentation
+   - external platform connection / replay / SDK docs
+3. **Stage-specific policy evidence**
+   - `Combine`
+   - `XFA`
+   - `Live Funded`
+
+The current branch only implements the repo-local export contract. It does
+**not** authorize external platform integration by implication.
+
 ## Canonical Sources
 
 - `ExecutionEngine` owns trade lifecycle, ORB completion, entry/stop/target
@@ -129,6 +148,18 @@ Out of scope:
 
 - Add focused regression coverage for the richer snapshot contract.
 - Do not start platform-specific work until the contract is stable and tested.
+
+### Phase 4 — Official-doc decision packet
+
+Before any platform-specific implementation:
+
+- collect and cite the official docs for each candidate path
+- map each candidate by account stage (`Combine`, `XFA`, `Live Funded`)
+- mark every unsupported assumption as `[NEEDS VERIFICATION]`
+- explicitly verify that the candidate does not require moving core brain logic
+  into platform scripting
+
+Only after that packet exists may platform-specific spike work begin.
 
 ## Kill Criteria
 
