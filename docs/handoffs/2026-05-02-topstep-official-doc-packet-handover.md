@@ -10,13 +10,14 @@ Fresh isolated worktree for the official-documentation decision packet:
 ## Read First
 
 1. `docs/plans/active/2026-05/2026-05-02-official-doc-decision-packet.md`
-2. `docs/plans/active/2026-05/2026-05-02-operator-export-contract.md`
-3. `docs/handoffs/2026-05-02-topstep-operator-v3-handover.md`
-4. `trading_app/live/bot_state.py`
-5. `trading_app/live/session_orchestrator.py`
-6. `trading_app/live/projectx/data_feed.py`
-7. `trading_app/live/projectx/order_router.py`
-8. `trading_app/live/copy_order_router.py`
+2. `docs/plans/active/2026-05/2026-05-02-topstep-verification-questions.md`
+3. `docs/plans/active/2026-05/2026-05-02-operator-export-contract.md`
+4. `docs/handoffs/2026-05-02-topstep-operator-v3-handover.md`
+5. `trading_app/live/bot_state.py`
+6. `trading_app/live/session_orchestrator.py`
+7. `trading_app/live/projectx/data_feed.py`
+8. `trading_app/live/projectx/order_router.py`
+9. `trading_app/live/copy_order_router.py`
 
 ## Purpose
 
@@ -38,6 +39,7 @@ Build the stage-split evidence packet:
 - ProjectX API constraints
 - candidate platform connection / SDK / replay docs
 - candidate-by-candidate unsupported assumptions register
+- use the saved verification-questions doc for any outbound support request
 
 ## Current Verdict
 
