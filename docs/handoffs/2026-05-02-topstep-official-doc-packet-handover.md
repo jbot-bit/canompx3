@@ -38,3 +38,12 @@ Build the stage-split evidence packet:
 - ProjectX API constraints
 - candidate platform connection / SDK / replay docs
 - candidate-by-candidate unsupported assumptions register
+
+## Current Verdict
+
+- Implementation is still blocked at the external-platform layer.
+- Cleared: repo-local canonical export contract and operator-state projection.
+- Not cleared:
+  - explicit Live allowance for a read-only/assist sidecar
+  - explicit lifecycle blessing for Quantower as a TopstepX-era shell
+  - proof that any shell can avoid split-brain order/account authority
