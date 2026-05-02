@@ -6064,6 +6064,12 @@ def check_no_crlf_in_tracked_text_blobs() -> list[str]:
     after multiple sessions hit the recurring `pre-rebase CRLF noise` pattern
     (stash@{6-10} in repo). This check exists so that debt class never returns.
     """
+    # Perf-tuned 2026-05-02: previous implementation spawned 2 subprocesses per
+    # tracked file (git check-attr + git show), ~20k spawns on this repo, ~70s
+    # on Windows + Git Bash. New shape: O(1) subprocess calls via batched stdin
+    # for check-attr and a single `git grep` against HEAD's tree. Verdict
+    # semantics are identical — same set of files (text=set/auto per
+    # .gitattributes) is examined for CRLF in their HEAD-committed blobs.
     violations: list[str] = []
     try:
         ls_files = subprocess.run(
@@ -6077,23 +6083,76 @@ def check_no_crlf_in_tracked_text_blobs() -> list[str]:
         return []  # not a git repo / git unavailable — skip silently
 
     tracked = [p for p in ls_files.stdout.decode("utf-8", "replace").split("\x00") if p]
+    if not tracked:
+        return []
 
-    for rel_path in tracked:
-        # Determine if file is text per .gitattributes
-        try:
-            attr = subprocess.run(
-                ["git", "check-attr", "text", "--", rel_path],
-                cwd=PROJECT_ROOT,
-                capture_output=True,
-                check=False,
-                timeout=5,
-            ).stdout.decode("utf-8", "replace")
-        except (subprocess.SubprocessError, FileNotFoundError):
-            continue
-        if not (": text: set" in attr or ": text: auto" in attr):
-            continue
+    # 1. Batched check-attr: feed every path on stdin in NUL-separated form.
+    # `git check-attr --stdin -z text` returns one record per path:
+    # "<path>\0text\0<value>\0".
+    try:
+        attr_input = b"\x00".join(p.encode("utf-8", "replace") for p in tracked)
+        attr_proc = subprocess.run(
+            ["git", "check-attr", "--stdin", "-z", "text"],
+            cwd=PROJECT_ROOT,
+            input=attr_input,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return []  # git unavailable mid-run — skip silently per pre-existing fail-open
 
-        # Read blob bytes from HEAD (raw, no filters)
+    # Parse: stream is path\0attr\0value\0path\0attr\0value\0…
+    text_paths: set[str] = set()
+    fields = attr_proc.stdout.split(b"\x00")
+    # Drop trailing empty produced by the final \0
+    if fields and fields[-1] == b"":
+        fields.pop()
+    for i in range(0, len(fields), 3):
+        if i + 2 >= len(fields):
+            break
+        path = fields[i].decode("utf-8", "replace")
+        value = fields[i + 2].decode("utf-8", "replace")
+        if value in ("set", "auto"):
+            text_paths.add(path)
+
+    if not text_paths:
+        return []
+
+    # 2. Single `git grep` over HEAD's tree for CRLF. -l = list matching files,
+    # -I = skip binary, -P = PCRE (needed for \r), --cached vs treeish: use
+    # HEAD directly so we get COMMITTED blobs (the contract this check enforces).
+    # Output is NUL-terminated paths via -z.
+    try:
+        grep_proc = subprocess.run(
+            ["git", "grep", "-lI", "-z", "-P", r"\r$", "HEAD", "--"] + sorted(text_paths),
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            check=False,
+            timeout=60,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return []
+
+    # `git grep <treeish>` prefixes each match with "<treeish>:". -z stays NUL-
+    # separated. Strip the "HEAD:" prefix for reporting.
+    matches = [m for m in grep_proc.stdout.split(b"\x00") if m]
+    crlf_paths: list[str] = []
+    head_prefix = b"HEAD:"
+    for raw in matches:
+        if raw.startswith(head_prefix):
+            crlf_paths.append(raw[len(head_prefix) :].decode("utf-8", "replace"))
+        else:
+            # Defensive: should not happen with `git grep HEAD --`, but if a
+            # different output shape ever appears, surface it as a finding so
+            # silent fail-open never masks a real CRLF blob.
+            crlf_paths.append(raw.decode("utf-8", "replace"))
+
+    # 3. For each CRLF-in-HEAD path, count CRLF lines for the violation message.
+    # We only `git show` the offenders — typically zero, never more than a
+    # handful. This is the only per-file subprocess and bounded by the
+    # offender count, not the tree size.
+    for rel_path in crlf_paths:
         try:
             blob = subprocess.run(
                 ["git", "show", f"HEAD:{rel_path}"],
@@ -6104,14 +6163,16 @@ def check_no_crlf_in_tracked_text_blobs() -> list[str]:
             ).stdout
         except (subprocess.SubprocessError, FileNotFoundError):
             continue
-
-        if b"\r\n" in blob:
-            crlf_lines = blob.count(b"\r\n")
-            violations.append(
-                f"  {rel_path} — committed blob has {crlf_lines} CRLF line(s). "
-                f"Per .gitattributes eol=lf, must be LF. "
-                f"Fix: `git add --renormalize -- {rel_path} && git commit`."
-            )
+        crlf_lines = blob.count(b"\r\n")
+        if crlf_lines == 0:
+            # Should not happen if grep matched, but be defensive about
+            # cross-tool encoding/normalization edge cases.
+            continue
+        violations.append(
+            f"  {rel_path} — committed blob has {crlf_lines} CRLF line(s). "
+            f"Per .gitattributes eol=lf, must be LF. "
+            f"Fix: `git add --renormalize -- {rel_path} && git commit`."
+        )
 
     return violations
 
