@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import replace
-from datetime import date
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -86,6 +86,72 @@ def test_build_state_snapshot_uses_explicit_trading_day_for_session_times():
 
     assert snapshot["trading_day"] == "2026-04-03"
     assert snapshot["lane_cards"][0]["session_time_brisbane"] == "23:30"
+
+
+def test_build_state_snapshot_exports_orb_trade_and_runtime_contract_fields():
+    strategy = SimpleNamespace(
+        strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL",
+        instrument="MNQ",
+        orb_label="NYSE_OPEN",
+        filter_type="ATR70_VOL",
+        rr_target=1.0,
+        orb_minutes=5,
+        entry_model="E2",
+        confirm_bars=1,
+    )
+    orb = SimpleNamespace(
+        high=21510.0,
+        low=21490.0,
+        complete=True,
+        break_dir="long",
+        break_ts=datetime(2026, 4, 3, 13, 31, tzinfo=UTC),
+        complete_ts=datetime(2026, 4, 3, 13, 30, tzinfo=UTC),
+    )
+    active_trade = SimpleNamespace(
+        strategy_id=strategy.strategy_id,
+        state=SimpleNamespace(value="ENTERED"),
+        direction="long",
+        entry_price=21511.0,
+        stop_price=21490.0,
+        target_price=21532.0,
+        entry_ts=datetime(2026, 4, 3, 13, 31, tzinfo=UTC),
+        pnl_r=0.4,
+    )
+
+    snapshot = build_state_snapshot(
+        mode="LIVE",
+        instrument="MNQ",
+        contract="MNQM6",
+        trading_day=date(2026, 4, 3),
+        account_id=123,
+        account_name="profile_topstep_50k_mnq_auto",
+        daily_pnl_r=0.4,
+        daily_loss_limit_r=-5.0,
+        max_equity_dd_r=-8.0,
+        bars_received=44,
+        strategies=[strategy],
+        active_trades=[active_trade],
+        completed_trades=[],
+        orbs={("NYSE_OPEN", 5): orb},
+        feed_status={"status": "healthy", "bars_received": 44},
+        router_status={"degraded": False},
+        broker_status={"broker_name": "projectx"},
+    )
+
+    lane = snapshot["lane_cards"][0]
+    assert lane["orb_high"] == 21510.0
+    assert lane["orb_low"] == 21490.0
+    assert lane["orb_size"] == 20.0
+    assert lane["orb_break_direction"] == "long"
+    assert lane["status"] == "IN_TRADE"
+    assert lane["status_detail"] == "ENTERED"
+    assert lane["stop_price"] == 21490.0
+    assert lane["target_price"] == 21532.0
+    assert lane["risk_points"] == 21.0
+    assert lane["signal_time_utc"] == "2026-04-03T13:31:00+00:00"
+    assert snapshot["feed_status"]["status"] == "healthy"
+    assert snapshot["router_status"]["degraded"] is False
+    assert snapshot["broker_status"]["broker_name"] == "projectx"
 
 
 def test_strategy_meta_extracts_human_readable_lane_fields():

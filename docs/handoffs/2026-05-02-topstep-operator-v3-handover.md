@@ -14,6 +14,8 @@ thread cold without dragging in unrelated allocator/chordia work.
 ## Read First
 
 1. `docs/plans/active/2026-05/2026-05-02-topstep-operator-architecture-v2.md`
+   If absent on this branch, use:
+   `docs/plans/active/2026-05/2026-05-02-operator-export-contract.md`
 2. `trading_app/live/bot_state.py`
 3. `trading_app/live/broker_connections.py`
 4. `trading_app/live/projectx/data_feed.py`
