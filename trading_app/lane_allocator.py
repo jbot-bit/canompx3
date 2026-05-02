@@ -644,6 +644,8 @@ def apply_chordia_gate(
         reason: str | None = None
         if verdict is None or verdict == "MISSING":
             reason = "chordia gate: missing strict replay audit verdict"
+        elif verdict == "PARK":
+            reason = "chordia gate: PARK (strict replay not deployment-cleared)"
         elif verdict == "FAIL_BOTH":
             reason = f"chordia gate: FAIL_BOTH (t<{CHORDIA_T_WITH_THEORY})"
         elif verdict == "FAIL_CHORDIA":

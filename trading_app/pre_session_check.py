@@ -589,6 +589,7 @@ def check_lane_mismatch(session: str, lane: dict) -> tuple[bool, str]:
             (entry["instrument"], entry["orb_label"]): entry["strategy_id"] for entry in data.get("lanes", [])
         }
         paused_ids = {entry["strategy_id"] for entry in data.get("paused", [])}
+        stale_ids = {entry["strategy_id"] for entry in data.get("stale", [])}
     except (KeyError, _json.JSONDecodeError):
         return True, "Cannot parse allocation file"
 
@@ -600,6 +601,8 @@ def check_lane_mismatch(session: str, lane: dict) -> tuple[bool, str]:
         # Check if this session is actively paused
         if deployed_sid in paused_ids:
             return True, f"WARN: {deployed_sid} is PAUSED by allocator"
+        if deployed_sid in stale_ids:
+            return True, f"WARN: {deployed_sid} is STALE in allocator output"
         return True, f"WARN: {session} not in allocator recommendation"
     if deployed_sid == rec_sid:
         return True, f"Matches recommendation: {rec_sid}"

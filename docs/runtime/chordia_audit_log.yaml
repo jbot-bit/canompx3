@@ -26,6 +26,10 @@
 #   - FAIL_CHORDIA    : 3.00 <= t < 3.79 with has_theory=False. Strategy clears
 #                       the theory-backed hurdle but fails the strict no-theory
 #                       Chordia hurdle. Allocator MUST refuse DEPLOY.
+#   - PARK            : strict replay did not justify DEPLOY despite clearing
+#                       the raw t-hurdle, usually because downstream evidence
+#                       (for example OOS sign/power) was not strong enough.
+#                       Allocator MUST refuse DEPLOY.
 #
 # Source of truth for verdict computation: the strict replay that produced the
 # recorded audit row. `trading_app/chordia.py` defines the verdict taxonomy and

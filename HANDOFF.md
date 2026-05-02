@@ -25,6 +25,12 @@
   rebalance is older than the audit log; a fresh rebalance is safe to run
   but produces no book change per dry-run evidence in the survey.)
 - `docs/runtime/chordia_audit_log.yaml`: 5 audited rows (4 PASS_CHORDIA, 1 PARK).
+- Downstream consumers now treat allocator `stale[]` rows as blocked alongside
+  `paused[]`:
+  - `trading_app/live/session_orchestrator.py` loads both buckets into the
+    runtime block set.
+  - `trading_app/pre_session_check.py` warns on deployed lanes that are stale
+    in allocator output, not just paused.
 
 **Tooling state:**
 
@@ -129,6 +135,11 @@ restore them via `git checkout -- docs/runtime/stages/`.
 - `docs/runtime/chordia_audit_log.yaml` updated with 2026-05-02 audit rows for
   those four strategies. Default `has_theory=False` remains unchanged; no new
   theory grants were added.
+- Live-path follow-through hardening landed after the allocator truth swap:
+  consumers that load blocked strategies from `lane_allocation.json` now treat
+  `stale[]` the same as `paused[]` for entry blocking / warnings. This closes a
+  downstream gap where stale-but-blocked lanes were visible in JSON but not
+  consistently treated as blocked by every consumer.
 - Canonical rebalance write for `topstep_50k_mnq_auto` completed successfully
   after path hardening in `trading_app/lane_allocator.py`:
   - new live `docs/runtime/lane_allocation.json` rebalance_date `2026-05-02`

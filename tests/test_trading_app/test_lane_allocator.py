@@ -1095,6 +1095,19 @@ class TestChordiaGate:
         assert result[0].status == "PAUSE"
         assert "FAIL_CHORDIA" in result[0].status_reason
 
+    def test_park_verdict_demoted_to_pause(self):
+        """A PARK audit verdict is non-deployable until separately cleared."""
+        from trading_app.lane_allocator import apply_chordia_gate
+
+        s = _make_score(
+            strategy_id="A",
+            chordia_verdict="PARK",
+            chordia_audit_age_days=0,
+        )
+        result = apply_chordia_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "PARK" in result[0].status_reason
+
     def test_missing_verdict_demoted_to_pause(self):
         """A score with chordia_verdict=None is demoted to PAUSE."""
         from trading_app.lane_allocator import apply_chordia_gate

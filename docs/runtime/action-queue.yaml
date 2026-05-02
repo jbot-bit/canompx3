@@ -85,7 +85,7 @@ items:
     override_note: Closed 2026-05-01 via PR #197. PASS_CHORDIA-strategies-need-audits unlock tracked as separate queue entry.
 
   - id: chordia_audit_unlock_pass_chordia_strategies
-    title: Doctrine-audit the remaining PASS_CHORDIA strategies blocked by missing audit_date
+    title: Doctrine-audit the remaining high-EV Chordia blockers
     class: research
     status: open
     priority: P1
@@ -95,14 +95,15 @@ items:
     freshness_sla_days: 14
     next_action: |
       2026-05-02 progress:
-      - 4/8 previously blocked PASS_CHORDIA names now have doctrine audit rows
+      - 5/8 previously blocked PASS_CHORDIA names now have doctrine audit rows
         in `docs/runtime/chordia_audit_log.yaml`
       - Measured outcomes:
         - PASS_CHORDIA:
           `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`
+          `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15`
           `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`
           `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12`
-        - FAIL_BOTH on bounded strict replay:
+        - PARK on bounded strict replay:
           `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`
       - Canonical rebalance rerun for `topstep_50k_mnq_auto` now writes a
         3-lane live book in `docs/runtime/lane_allocation.json`:
@@ -110,11 +111,11 @@ items:
         `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`,
         `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12`
 
-      Remaining live PASS_CHORDIA-without-audit names:
+      Remaining unaudited / unresolved names:
       - `MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10_S075`
       - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`
-      - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60`
-      - `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15`
+      - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60` sibling disposition
+        already parked, not deploy-cleared
 
       Important doctrine note:
       - Live allocator Chordia gating now reads
@@ -123,16 +124,20 @@ items:
         longer recomputes deployment truth from
         `validated_setups.sharpe_ratio * sqrt(sample_size)`.
       - Result: `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60` now resolves to
-        `FAIL_BOTH` from the audit row, and the remaining unaudited siblings
+        `PARK` from the audit row, and the remaining unaudited siblings
         resolve to `MISSING`, not shelf-derived `PASS_CHORDIA`.
       - The originally cited `t=4.565` for `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`
         is UNSUPPORTED. Repo grep on 2026-05-02 found zero committed matches.
         Do not cite that number in future pre-regs or H3 controls.
+      - Highest-EV next thread is no longer "finish the queue blindly".
+        Read-only survey `docs/audit/results/2026-05-02-deployable-pool-edge-survey.md`
+        shows the better next move is prior-day-context theory-grant
+        feasibility; the remaining 3 queue items are lower-EV.
 
       Per stage:
-      (1) Audit the 4 explicitly listed remaining targets. Do NOT infer the
-          queue from live `compute_lane_scores()` verdict labels anymore,
-          because missing audits now fail closed to `MISSING` by design.
+      (1) Do NOT infer the queue from live `compute_lane_scores()` verdict
+          labels anymore, because missing audits now fail closed to `MISSING`
+          by design.
       (2) For EACH remaining strategy, run Pathway-A revalidation per RESEARCH_RULES.md
           + pre_registered_criteria.md Criterion 4. NOT a sweep -- a per-strategy
           adversarial-split audit with theory grant decision. Pre-reg required.
@@ -145,9 +150,9 @@ items:
           with `chordia_audit_age_days = 0`.
 
       User aim cited at handoff: "+0.4R+", "sky is the limit". Honest framing:
-      H3 ExpR ~ +0.079R; +0.4R is 5x. Not reachable by tuning the same setup
-      harder. This audit unlock is the institutional path; treat it as the
-      portfolio-EV anchor for the next research session.
+      remaining queue completion is mostly doctrine cleanup. The best honest
+      EV path is the prior-day-context theory-grant track identified in the
+      deployable-pool survey, not mechanical completion of all 3 leftovers.
 
       Bailey-LdP MinBTL: < 300 trials per audit. No brute force.
     exit_criteria: |
