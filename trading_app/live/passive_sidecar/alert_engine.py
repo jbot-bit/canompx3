@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 
 from trading_app.live.alert_engine import record_operator_alert
 
@@ -138,8 +139,7 @@ def evaluate_projection(
             if size > cfg.max_position_size:
                 alert = _emit_alert(
                     message=(
-                        f"PASSIVE SIDECAR POSITION THRESHOLD: key={key} size={size} "
-                        f"limit={cfg.max_position_size}"
+                        f"PASSIVE SIDECAR POSITION THRESHOLD: key={key} size={size} limit={cfg.max_position_size}"
                     ),
                     config=cfg,
                     notifier=notifier,

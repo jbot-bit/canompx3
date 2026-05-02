@@ -8,9 +8,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from .policy_gate import policy_gate_status
 

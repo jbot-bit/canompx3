@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Callable, Iterable
+from typing import Any
 
-from trading_app.live.projectx.auth import ProjectXAuth, USER_HUB_URL
+from trading_app.live.projectx.auth import USER_HUB_URL, ProjectXAuth
 
 from .policy_gate import assert_passive_sidecar_allowed
 
