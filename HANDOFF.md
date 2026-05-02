@@ -8,6 +8,12 @@
 
 ## Pickup pointer (2026-05-02 PM — read this first)
 
+- Fresh isolated official-doc packet worktree:
+  `docs/handoffs/2026-05-02-topstep-official-doc-packet-handover.md`
+  Branch: `codex/topstep-official-doc-packet`
+  This branch is doc-only: verify policy, platform docs, and lifecycle
+  continuity before any external-platform implementation proceeds.
+
 - Fresh isolated operator-architecture worktree:
   `docs/handoffs/2026-05-02-topstep-operator-v3-handover.md`
   Branch: `codex/topstep-operator-v3`
