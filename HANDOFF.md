@@ -6,6 +6,70 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Pickup pointer (2026-05-02 PM — read this first)
+
+**Where to start next session:**
+
+1. Read the survey: `docs/audit/results/2026-05-02-deployable-pool-edge-survey.md`.
+   It is the operative truth for "what's the next high-EV thread."
+2. The chordia_audit_unlock thread is half-done (5/8) and the remaining 3 are
+   low-EV under current allocator + profile state — see survey § Decision.
+3. **The high-EV next thread is NOT more chordia audits.** It is theory-grant
+   feasibility for the prior-day-context filter family — see survey
+   § "Higher-EV next threads (ranked)".
+
+**Live capital state (verify before acting):**
+
+- `docs/runtime/lane_allocation.json`: 3 DEPLOY lanes for `topstep_50k_mnq_auto`,
+  rebalance_date 2026-05-02 06:07. (Audit log was updated at 11:23 — last
+  rebalance is older than the audit log; a fresh rebalance is safe to run
+  but produces no book change per dry-run evidence in the survey.)
+- `docs/runtime/chordia_audit_log.yaml`: 5 audited rows (4 PASS_CHORDIA, 1 PARK).
+
+**Tooling state:**
+
+- `research/chordia_strict_unlock_v1.py`: hardened with `WF_START_OVERRIDE`
+  cohort lower bound and stop_multiplier fail-closed guard.
+  Pressure-tested. Auditing any default-stop strategy_id is one command:
+  `python research/chordia_strict_unlock_v1.py --hypothesis-file <prereg>`.
+- S-suffixed strategies (e.g. `*_S075`) require an `outcome_builder` rebuild
+  at the target stop and a different runner — not yet built.
+
+**Top-of-list candidates if you want to actually expand the book:**
+
+- `MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_VOL_16K` (OOS=0.357, all_yrs_pos=T) —
+  blocked by MES profile filter, not by stats. Fix: open a MES profile.
+- `MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_GO_LONG` (OOS=0.218, derT=3.74) —
+  needs prior-day-context theory grant to drop hurdle from 3.79 to 3.00.
+  Literature path: Chan Ch7 + Carver Ch9-10 extracts in
+  `docs/institutional/literature/`.
+- `MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4` (OOS=0.230, all_yrs_pos=T, DSR=0.50) —
+  blocked by MGC profile filter. Same fix as MES.
+
+**What NOT to do (already disproved this session):**
+
+- Don't audit `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100` or
+  `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60` next — both correlation-pruned
+  vs deployed RR1.0 OVNRNG_100 sibling (rho > 0.7) and ranking-pruned even
+  before correlation gate per the dry-run rebalance. Doctrine completionism,
+  near-zero portfolio EV.
+- Don't trust `validated_setups.oos_exp_r` for any pre-2026-04-08 row
+  without recomputing under Mode A — `research-truth-protocol.md` Mode B
+  warning applies.
+
+**Session commits (newest first):**
+
+- (this commit) `audit(survey): deployable-pool edge map`
+- `f25cc2fe` audit(chordia): MNQ_US_DATA_1000 RR1.0 VWAP_MID_ALIGNED → PASS_CHORDIA
+- `5ea34d99` fix(chordia-audit): apply WF_START_OVERRIDE so audit cohorts match canonical promoter
+
+**Working-tree note for next session:**
+
+5 stage-marker files in `docs/runtime/stages/` show as deleted in working
+tree (left over from prior closed-stage cleanup). They are NOT mine to
+commit. Either commit them in a separate cleanup commit if intended, or
+restore them via `git checkout -- docs/runtime/stages/`.
+
 ## Current Session (2026-05-02 — Chordia Theory Feasibility + Stale-Plan Reconciliation)
 
 ### What landed
