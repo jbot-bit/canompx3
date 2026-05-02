@@ -15,3 +15,15 @@
 #   3. If fixed: remove the cryptography<47 line, re-test MCPs (`/mcp` connects).
 # Detail: memory/feedback_mcp_venv_drift_cryptography47.md
 cryptography<47
+
+# fastmcp — runtime dep of trading_app/mcp_server.py (the gold-db MCP server).
+# Deliberately NOT in pyproject.toml / uv.lock: pulling fastmcp into the locked
+# dep tree drags cryptography + authlib + ~30 transitive deps into every uv sync,
+# polluting the production runtime for a sidecar tool. Treated as sidecar infra,
+# same pattern as code-review-graph (per CLAUDE.md § MCP Server).
+#
+# If gold-db MCP fails to connect with `ModuleNotFoundError: No module named 'fastmcp'`:
+#   .venv/Scripts/python.exe -m pip install -c constraints.txt fastmcp
+# Then `/mcp` (Claude Code) → confirm "gold-db: ✓ Connected".
+# Detail: memory/feedback_mcp_partial_install_state_2026_05_01.md
+fastmcp

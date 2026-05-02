@@ -2,7 +2,7 @@
   "mcpServers": {
     "gold-db": {
       "type": "stdio",
-      "command": "python",
+      "command": "C:/Users/joshd/canompx3/.venv/Scripts/python.exe",
       "args": [
         "trading_app/mcp_server.py"
       ],
