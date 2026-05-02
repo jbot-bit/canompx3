@@ -4,6 +4,26 @@
   "profile_id": "topstep_50k_mnq_auto",
   "lanes": [
     {
+      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+      "instrument": "MNQ",
+      "orb_label": "COMEX_SETTLE",
+      "orb_minutes": 5,
+      "rr_target": 1.5,
+      "filter_type": "OVNRNG_100",
+      "annual_r": 36.2,
+      "trailing_expr": 0.2412,
+      "trailing_n": 150,
+      "trailing_wr": 0.527,
+      "months_negative": 0,
+      "session_regime": "HOT",
+      "status": "DEPLOY",
+      "status_reason": "Session HOT (+0.0625), ExpR=+0.2412, N=150",
+      "chordia_verdict": "PASS_CHORDIA",
+      "chordia_audit_age_days": 0,
+      "avg_orb_pts": 28.7,
+      "p90_orb_pts": 48.5
+    },
+    {
       "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15",
       "instrument": "MNQ",
       "orb_label": "US_DATA_1000",
@@ -22,26 +42,6 @@
       "chordia_audit_age_days": 0,
       "avg_orb_pts": 78.6,
       "p90_orb_pts": 142.3
-    },
-    {
-      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100",
-      "instrument": "MNQ",
-      "orb_label": "COMEX_SETTLE",
-      "orb_minutes": 5,
-      "rr_target": 1.0,
-      "filter_type": "OVNRNG_100",
-      "annual_r": 27.0,
-      "trailing_expr": 0.1779,
-      "trailing_n": 152,
-      "trailing_wr": 0.625,
-      "months_negative": 0,
-      "session_regime": "HOT",
-      "status": "DEPLOY",
-      "status_reason": "Session HOT (+0.0625), ExpR=+0.1779, N=152",
-      "chordia_verdict": "PASS_CHORDIA",
-      "chordia_audit_age_days": 0,
-      "avg_orb_pts": 28.7,
-      "p90_orb_pts": 48.5
     },
     {
       "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
@@ -207,13 +207,6 @@
     },
     {
       "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_X_MES_ATR60",
-      "status": "PAUSE",
-      "reason": "chordia gate: missing strict replay audit verdict",
-      "chordia_verdict": "MISSING",
-      "chordia_audit_age_days": null
-    },
-    {
-      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
       "status": "PAUSE",
       "reason": "chordia gate: missing strict replay audit verdict",
       "chordia_verdict": "MISSING",

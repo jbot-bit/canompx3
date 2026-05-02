@@ -145,6 +145,22 @@ audits:
       applied (cohort matches `validated_setups.sample_size`=520 win+loss).
       Cleared strict hurdle with positive OOS sign on N_OOS=66.
 
+  - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100
+    audit_date: 2026-05-02
+    verdict: PASS_CHORDIA
+    t_stat: 4.256
+    threshold: 3.79
+    sample_size: 522
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg
+      `docs/audit/hypotheses/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.yaml`.
+      No theory grant claimed. Scratch-inclusive replay (N_fired=522; 9
+      scratches counted as R=0) with `WF_START_OVERRIDE['MNQ']=2020-01-01`
+      applied. This reconciles to `validated_setups.sample_size`=513
+      win+loss plus the reported scratch count. Cleared strict hurdle with
+      positive OOS sign on N_OOS=66.
+
   - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12
     audit_date: 2026-05-02
     verdict: PASS_CHORDIA

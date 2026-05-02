@@ -24,7 +24,12 @@
   rebalance_date 2026-05-02 06:07. (Audit log was updated at 11:23 — last
   rebalance is older than the audit log; a fresh rebalance is safe to run
   but produces no book change per dry-run evidence in the survey.)
-- `docs/runtime/chordia_audit_log.yaml`: 5 audited rows (4 PASS_CHORDIA, 1 PARK).
+- `docs/runtime/chordia_audit_log.yaml`: 6 audited rows (5 PASS_CHORDIA, 1 PARK).
+  2026-05-02 added `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100` PASS_CHORDIA at
+  t=4.256 N=522 (canonical replay reproduced before commit). Result MD:
+  `docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md`.
+  Allocator effect: this lane enters `lanes[]` and demotes the RR1.0 sibling to
+  paused via correlation gate.
 - Downstream consumers now treat allocator `stale[]` rows as blocked alongside
   `paused[]`:
   - `trading_app/live/session_orchestrator.py` loads both buckets into the
