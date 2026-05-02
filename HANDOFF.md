@@ -8,6 +8,12 @@
 
 ## Pickup pointer (2026-05-02 PM — read this first)
 
+- Fresh isolated operator-architecture worktree:
+  `docs/handoffs/2026-05-02-topstep-operator-v3-handover.md`
+  Branch: `codex/topstep-operator-v3`
+  Use this for the Topstep/canompx3 external operator-platform spike instead of
+  reusing the broader main-branch baton.
+
 **Where to start next session:**
 
 1. Read the survey: `docs/audit/results/2026-05-02-deployable-pool-edge-survey.md`.
