@@ -163,6 +163,24 @@ def _run_git(root: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
         return None
 
 
+def _path_identity(path: Path) -> str:
+    """Return a stable directory identity across case-variant mount paths."""
+    try:
+        stat = path.stat()
+        return f"{stat.st_dev}:{stat.st_ino}"
+    except OSError:
+        return path.resolve().as_posix()
+
+
+def _paths_same_location(left: Path | str, right: Path | str) -> bool:
+    left_path = Path(left)
+    right_path = Path(right)
+    try:
+        return left_path.samefile(right_path)
+    except OSError:
+        return left_path.resolve().as_posix() == right_path.resolve().as_posix()
+
+
 def branch_name(root: Path) -> str:
     result = _run_git(root, "branch", "--show-current")
     if result is None or result.returncode != 0:
@@ -228,7 +246,7 @@ def _extract_handoff_snapshot(handoff_path: Path) -> HandoffSnapshot:
 
 
 def _active_claim_key(root: Path, tool: str) -> str:
-    payload = f"{tool}|{root.resolve()}"
+    payload = f"{tool}|{_path_identity(root.resolve())}"
     digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
     safe_tool = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in tool)
     return f"{safe_tool}-{digest}.json"
@@ -339,8 +357,8 @@ def verify_claim(
     if claim.head_sha != current_head:
         warnings.append(f"HEAD mismatch: claim={claim.head_sha} current={current_head}")
         ok = False
-    current_root = str(root.resolve())
-    if claim.root and claim.root != current_root:
+    current_root = root.resolve()
+    if claim.root and not _paths_same_location(claim.root, current_root):
         warnings.append(f"Root mismatch: claim={claim.root} current={current_root}")
         ok = False
 
@@ -623,7 +641,12 @@ def _parallel_claim_issues(snapshot: SystemContext) -> tuple[list[PolicyIssue], 
     peer_claims = [
         claim
         for claim in same_branch
-        if not (active_tool is not None and claim.tool == active_tool and claim.root == current_root)
+        if not (
+            active_tool is not None
+            and claim.tool == active_tool
+            and claim.root
+            and _paths_same_location(claim.root, current_root)
+        )
     ]
     mutating_peers = [claim for claim in peer_claims if claim.mode == "mutating"]
     if mutating_peers:
@@ -797,7 +820,12 @@ def evaluate_system_policy(snapshot: SystemContext, action: PolicyAction) -> Pol
             claim
             for claim in snapshot.claims
             if claim.branch == branch
-            and not (active_tool is not None and claim.tool == active_tool and claim.root == current_root)
+            and not (
+                active_tool is not None
+                and claim.tool == active_tool
+                and claim.root
+                and _paths_same_location(claim.root, current_root)
+            )
         ]
         if peer_claims:
             detail = ", ".join(f"{claim.tool}({claim.mode})@{claim.branch}" for claim in peer_claims)

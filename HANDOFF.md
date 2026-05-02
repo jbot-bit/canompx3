@@ -8,6 +8,11 @@
 
 ## Pickup pointer (2026-05-02 PM — read this first)
 
+- Active decision memo added on branch `codex/topstep-operator-arch-v2`:
+  `docs/plans/active/2026-05/2026-05-02-topstep-operator-architecture-v2.md`
+  This is a Topstep/canompx3 operator-architecture V2 memo with explicit
+  regime-split scoring, unknowns register, null candidate, and kill criteria.
+
 **Where to start next session:**
 
 1. Read the survey: `docs/audit/results/2026-05-02-deployable-pool-edge-survey.md`.
@@ -98,6 +103,22 @@ restore them via `git checkout -- docs/runtime/stages/`.
 
 ### What landed
 
+- Follow-up fix for the session-router regression review:
+  `scripts/tools/session_router.py` once again treats fresh mutating claims
+  from the same checkout as routing conflicts. The case-variant
+  same-checkout/self allowance remains in `pipeline/system_context.py`
+  preflight/claim verification only. This restores the intended
+  `codex-project.sh` behavior where a second mutating launch from the main
+  checkout auto-routes into a managed worktree instead of staying in the
+  shared root.
+- Session-launcher self-block fix landed for WSL `/mnt/c` case drift:
+  `pipeline/system_context.py` now treats case-variant mount paths that point
+  to the same checkout as the same location when verifying/excluding fresh
+  claims, and active-claim file keys now derive from directory identity rather
+  than raw path casing. That location hardening remains in place for
+  preflight/claim verification; the router-side same-checkout exclusion was
+  reverted after review because it masked real same-checkout mutating
+  conflicts.
 - Read-only memo added:
   `docs/audit/results/2026-05-02-chordia-theory-feasibility-scan.md`
 - First strict-threshold prereg added:
