@@ -31,6 +31,19 @@
     runtime block set.
   - `trading_app/pre_session_check.py` warns on deployed lanes that are stale
     in allocator output, not just paused.
+- Allocator scoring path (`trading_app/lane_allocator.py:_per_month_expr`) now
+  injects `cross_atr_{source}_pct` via canonical
+  `trading_app.strategy_discovery._inject_cross_asset_atrs` before applying
+  filters (2026-05-02). Without this, every `CrossAssetATRFilter` lane silently
+  fail-closed and surfaced as STALE despite an active validated_setups cohort.
+  Post-fix `lane_allocation.json` 2026-05-02 rebalance: stale[] 6 -> 0; the 6
+  X_MES_ATR60 lanes correctly moved into Chordia gate paused (no strict-replay
+  audit row exists yet). Same lane composition as before for deployed lanes.
+  Audit-log row for `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` corrected:
+  sample_size 1719 -> 1695 (was N_universe; the t-stat-bearing N_fired is
+  1695, per `docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md`
+  line 49). Validated_setups N=1508 is from a different cohort definition
+  (win+loss only at promote-time 2026-04-11) and is not directly comparable.
 
 **Tooling state:**
 

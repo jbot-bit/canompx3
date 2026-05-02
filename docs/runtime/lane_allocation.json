@@ -185,6 +185,13 @@
       "chordia_audit_age_days": null
     },
     {
+      "strategy_id": "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60",
+      "status": "PAUSE",
+      "reason": "chordia gate: PARK (strict replay not deployment-cleared)",
+      "chordia_verdict": "PARK",
+      "chordia_audit_age_days": 0
+    },
+    {
       "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G5",
       "status": "PAUSE",
       "reason": "chordia gate: missing strict replay audit verdict",
@@ -193,6 +200,13 @@
     },
     {
       "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_PD_CLEAR_LONG",
+      "status": "PAUSE",
+      "reason": "chordia gate: missing strict replay audit verdict",
+      "chordia_verdict": "MISSING",
+      "chordia_audit_age_days": null
+    },
+    {
+      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_X_MES_ATR60",
       "status": "PAUSE",
       "reason": "chordia gate: missing strict replay audit verdict",
       "chordia_verdict": "MISSING",
@@ -214,6 +228,13 @@
     },
     {
       "strategy_id": "MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_G5",
+      "status": "PAUSE",
+      "reason": "chordia gate: missing strict replay audit verdict",
+      "chordia_verdict": "MISSING",
+      "chordia_audit_age_days": null
+    },
+    {
+      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60",
       "status": "PAUSE",
       "reason": "chordia gate: missing strict replay audit verdict",
       "chordia_verdict": "MISSING",
@@ -297,6 +318,13 @@
       "chordia_audit_age_days": null
     },
     {
+      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_X_MES_ATR60",
+      "status": "PAUSE",
+      "reason": "chordia gate: missing strict replay audit verdict",
+      "chordia_verdict": "MISSING",
+      "chordia_audit_age_days": null
+    },
+    {
       "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12",
       "status": "PAUSE",
       "reason": "chordia gate: missing strict replay audit verdict",
@@ -305,6 +333,13 @@
     },
     {
       "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_G5",
+      "status": "PAUSE",
+      "reason": "chordia gate: missing strict replay audit verdict",
+      "chordia_verdict": "MISSING",
+      "chordia_audit_age_days": null
+    },
+    {
+      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
       "status": "PAUSE",
       "reason": "chordia gate: missing strict replay audit verdict",
       "chordia_verdict": "MISSING",
@@ -388,7 +423,7 @@
       "chordia_audit_age_days": null
     },
     {
-      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15",
+      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60",
       "status": "PAUSE",
       "reason": "chordia gate: missing strict replay audit verdict",
       "chordia_verdict": "MISSING",
@@ -409,49 +444,6 @@
       "chordia_audit_age_days": null
     }
   ],
-  "stale": [
-    {
-      "strategy_id": "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60",
-      "status": "STALE",
-      "reason": "No trades in trailing window",
-      "chordia_verdict": "FAIL_BOTH",
-      "chordia_audit_age_days": 0
-    },
-    {
-      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_X_MES_ATR60",
-      "status": "STALE",
-      "reason": "No trades in trailing window",
-      "chordia_verdict": "MISSING",
-      "chordia_audit_age_days": null
-    },
-    {
-      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60",
-      "status": "STALE",
-      "reason": "No trades in trailing window",
-      "chordia_verdict": "MISSING",
-      "chordia_audit_age_days": null
-    },
-    {
-      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_X_MES_ATR60",
-      "status": "STALE",
-      "reason": "No trades in trailing window",
-      "chordia_verdict": "MISSING",
-      "chordia_audit_age_days": null
-    },
-    {
-      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
-      "status": "STALE",
-      "reason": "No trades in trailing window",
-      "chordia_verdict": "MISSING",
-      "chordia_audit_age_days": null
-    },
-    {
-      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60",
-      "status": "STALE",
-      "reason": "No trades in trailing window",
-      "chordia_verdict": "MISSING",
-      "chordia_audit_age_days": null
-    }
-  ],
+  "stale": [],
   "all_scores_count": 59
 }

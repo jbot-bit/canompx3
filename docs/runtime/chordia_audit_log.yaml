@@ -187,11 +187,28 @@ audits:
     verdict: PASS_PROTOCOL_A
     t_stat: 3.412
     threshold: 3.00
-    sample_size: 1719
+    sample_size: 1695
     note: |
       Cleanest of the four candidates. Theory-granted (Chan Ch 7) so hurdle is
       3.00. Allocator MAY DEPLOY. Does NOT qualify for PASS_CHORDIA (sizing-up)
       since t < 3.79.
+
+      N reconciliation (2026-05-02):
+      - 1695 = N_fired in
+        `docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md`
+        line 49 (the value entering the t-stat).
+      - Prior log entry recorded 1719 which is N_universe (pre-filter day count)
+        from the same audit; corrected on 2026-05-02 to the t-stat-bearing
+        N_fired count to match the convention used by every other row in this
+        log and by `chordia_strict_unlock_v1.py`.
+      - `validated_setups.sample_size`=1508 (win+loss only at promote-time
+        2026-04-11) is NOT directly comparable: this audit counts scratch
+        rows as R=0 trades, the older runner (revalidation_2026_05_01.py)
+        does NOT apply `WF_START_OVERRIDE['MNQ']=2020-01-01`, and an
+        independent canonical replay on 2026-05-02 with WF override applied
+        produced N_fired=1539 (win+loss=1396). All three numbers are valid
+        against their own cohort definition; only 1695 belongs in this audit
+        row.
 
   - strategy_id: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12
     audit_date: 2026-05-01

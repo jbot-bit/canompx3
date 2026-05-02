@@ -39,6 +39,7 @@ from trading_app.chordia import (
 )
 from trading_app.config import ALL_FILTERS
 from trading_app.lane_correlation import RHO_REJECT_THRESHOLD, _load_lane_daily_pnl, _pearson
+from trading_app.strategy_discovery import _inject_cross_asset_atrs
 from trading_app.validated_shelf import deployable_validated_relation
 
 
@@ -169,6 +170,14 @@ def _per_month_expr(
     for row in features:
         d = dict(zip(feat_cols, row, strict=False))
         feat_by_day[d["trading_day"]] = d
+
+    # Inject cross-asset ATR enrichment (cross_atr_{source}_pct) for any
+    # CrossAssetATRFilter in ALL_FILTERS. Without this the filter fails-closed
+    # on every day and the lane shows STALE ("No trades in trailing window")
+    # despite an active validated_setups cohort. Canonical helper from
+    # strategy_discovery; live entry path injects identically. See
+    # trading_app/config.py:982-984 for the schema-not-stored doctrine note.
+    _inject_cross_asset_atrs(con, list(feat_by_day.values()), instrument, ALL_FILTERS)
 
     # Apply filter
     strat_filter = ALL_FILTERS.get(filter_type)

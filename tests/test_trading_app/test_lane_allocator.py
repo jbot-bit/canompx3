@@ -106,13 +106,19 @@ def test_db(tmp_path):
         )
     """)
 
+    # `atr_20_pct` is canonical (read by _inject_cross_asset_atrs). Fixture
+    # leaves the column nullable / unfilled — fixture lanes use NO_FILTER /
+    # COST_LT12, never CrossAssetATRFilter, so injection is a no-op. The
+    # column must exist on the schema or the helper's source-instrument
+    # query raises BinderError on every compute_lane_scores call.
     con.execute("""
         CREATE TABLE daily_features (
             trading_day DATE,
             symbol VARCHAR,
             orb_minutes INTEGER,
             orb_COMEX_SETTLE_break_dir VARCHAR,
-            orb_COMEX_SETTLE_size DOUBLE
+            orb_COMEX_SETTLE_size DOUBLE,
+            atr_20_pct DOUBLE
         )
     """)
 
@@ -172,11 +178,14 @@ def _seed_outcomes(
 
 
 def _seed_features(db_path, days, *, symbol="MNQ", break_dir="long", orb_size=10.0):
-    """Insert daily_features for given days (all same break_dir/orb_size)."""
+    """Insert daily_features for given days (all same break_dir/orb_size).
+
+    `atr_20_pct` is left NULL — fixture lanes never use cross-asset filters.
+    """
     con = duckdb.connect(str(db_path))
     for td in days:
         con.execute(
-            "INSERT INTO daily_features VALUES (?, ?, 5, ?, ?)",
+            "INSERT INTO daily_features VALUES (?, ?, 5, ?, ?, NULL)",
             [td, symbol, break_dir, orb_size],
         )
     con.close()
@@ -187,7 +196,7 @@ def _seed_features_mixed(db_path, day_sizes, *, symbol="MNQ", break_dir="long"):
     con = duckdb.connect(str(db_path))
     for td, orb_size in day_sizes:
         con.execute(
-            "INSERT INTO daily_features VALUES (?, ?, 5, ?, ?)",
+            "INSERT INTO daily_features VALUES (?, ?, 5, ?, ?, NULL)",
             [td, symbol, break_dir, orb_size],
         )
     con.close()
@@ -1291,3 +1300,51 @@ class TestChordiaGate:
         assert "STALE_FAIL" in stale
         assert stale["STALE_FAIL"]["status"] == "STALE"
         assert stale["STALE_FAIL"]["chordia_verdict"] == "FAIL_BOTH"
+
+
+class TestCrossAssetATRInjection:
+    """Regression: lane allocator must inject cross_atr_{source}_pct before
+    applying CrossAssetATRFilter, otherwise X_MES_ATR* lanes silently fail-close
+    every day and surface as STALE despite an active validated_setups cohort.
+
+    Root cause: trading_app/config.py:982-984 documents that cross_atr_*_pct
+    is injected at runtime, not stored in daily_features schema. Live entry
+    paths (session_orchestrator, paper_trader, paper_trade_logger,
+    strategy_fitness, strategy_discovery) all inject. Allocator scoring path
+    did not until 2026-05-02.
+    """
+
+    def test_per_month_expr_x_mes_atr60_non_empty_on_canonical_db(self):
+        """Real-DB regression: an X_MES_ATR60 lane with an active validated_setups
+        cohort and ~100 trades/yr must produce non-empty trailing data when scored."""
+        import duckdb
+        from datetime import date
+
+        from pipeline.paths import GOLD_DB_PATH
+        from trading_app.lane_allocator import _per_month_expr
+
+        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+        try:
+            monthly, total_wins, total_trades = _per_month_expr(
+                con,
+                instrument="MNQ",
+                orb_label="NYSE_OPEN",
+                orb_minutes=15,
+                entry_model="E2",
+                rr_target=1.0,
+                confirm_bars=1,
+                filter_type="X_MES_ATR60",
+                stop_multiplier=1.0,
+                rebalance_date=date(2026, 5, 1),
+                n_months=12,
+            )
+        finally:
+            con.close()
+
+        assert total_trades > 0, (
+            "X_MES_ATR60 trailing window returned 0 trades — likely the "
+            "cross_atr_MES_pct injection regressed. Live path injects via "
+            "_inject_cross_asset_atrs; allocator must do the same."
+        )
+        assert len(monthly) > 0
+        assert total_wins >= 0 and total_wins <= total_trades
