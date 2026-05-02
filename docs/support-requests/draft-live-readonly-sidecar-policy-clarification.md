@@ -6,21 +6,21 @@ Topstep Live Funded policy clarification for local read-only monitoring tool
 
 Hello Topstep Support,
 
-I am seeking policy clarification for a **local-device, non-executing** tool
-used with a TopstepX / ProjectX-linked account.
+I want to confirm whether a **local, read-only monitoring tool** is allowed
+for a TopstepX / ProjectX-linked `Live Funded` account.
 
-This tool would:
+The tool would:
 
-- run only on my own local device
-- consume API data for dashboards, alerts, and monitoring only
+- run only on my own computer
+- use API data for dashboards, alerts, and monitoring only
 - **not** place, cancel, or modify orders
 - **not** automate execution
 
-Please answer the following with **Yes/No + any restrictions**:
+Please answer the following with **Yes/No + any restrictions**.
 
 **Q1 — Live read-only assistive tooling**
 
-Is a local-device tool permitted in `Live Funded` if it:
+Is a local tool permitted in `Live Funded` if it:
 
 - connects through the official TopstepX / ProjectX API
 - consumes account / order / position / market-data updates
