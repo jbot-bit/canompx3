@@ -52,20 +52,38 @@ def test_does_not_nest_when_already_in_linked_worktree(monkeypatch, tmp_path: Pa
 
 
 def test_conflicting_mutating_claims_filters_to_same_branch(monkeypatch, tmp_path: Path) -> None:
+    other_root = tmp_path / "other"
     monkeypatch.setattr(
         session_router,
         "_same_repo_claims",
         lambda root: [
             SimpleNamespace(tool="codex", branch="main", mode="mutating", root=str(tmp_path)),
             SimpleNamespace(tool="claude", branch="main", mode="read-only", root=str(tmp_path)),
-            SimpleNamespace(tool="codex", branch="wt-codex-other", mode="mutating", root=str(tmp_path)),
+            SimpleNamespace(tool="codex", branch="main", mode="mutating", root=str(other_root)),
+            SimpleNamespace(tool="codex", branch="wt-codex-other", mode="mutating", root=str(other_root)),
         ],
     )
 
     claims = session_router.conflicting_mutating_claims(tmp_path, "main")
 
-    assert len(claims) == 1
-    assert claims[0].tool == "codex"
+    assert len(claims) == 2
+    assert [claim.tool for claim in claims] == ["codex", "codex"]
+
+
+def test_conflicting_mutating_claims_keeps_same_checkout_case_variant_as_conflict(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        session_router,
+        "_same_repo_claims",
+        lambda root: [
+            SimpleNamespace(tool="codex", branch="main", mode="mutating", root="/mnt/c/Users/joshd/canompx3"),
+            SimpleNamespace(tool="claude", branch="main", mode="mutating", root="/mnt/c/users/joshd/canompx3-wt"),
+        ],
+    )
+
+    claims = session_router.conflicting_mutating_claims(tmp_path, "main")
+
+    assert len(claims) == 2
+    assert [claim.tool for claim in claims] == ["codex", "claude"]
 
 
 def test_derive_workstream_name_falls_back_to_timestamp(monkeypatch) -> None:

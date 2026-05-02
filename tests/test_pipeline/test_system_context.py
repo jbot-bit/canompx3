@@ -255,6 +255,43 @@ class TestEvaluateSystemPolicy:
         assert decision.allowed is True
         assert any(issue.code == "active_stage_files" for issue in decision.warnings)
 
+    def test_mutating_session_ignores_same_checkout_claim_when_mount_path_casing_differs(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")
+        claim = SessionClaim(
+            tool="codex",
+            branch="main",
+            head_sha="abc123",
+            started_at="2026-04-12T00:00:00+00:00",
+            pid=1,
+            mode="mutating",
+            root="/mnt/c/Users/joshd/canompx3",
+            fresh=True,
+        )
+
+        with (
+            patch.object(system_context, "_canonical_repo_root", return_value=(tmp_path, tmp_path / ".git")),
+            patch.object(system_context, "branch_name", return_value="main"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+            patch.object(system_context, "git_status_details", return_value=([], True, None)),
+            patch.object(system_context, "list_claims", return_value=[claim]),
+            patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
+            patch.object(
+                system_context,
+                "_paths_same_location",
+                side_effect=lambda left, right: Path(str(left)).name == "canompx3" and Path(str(right)) == tmp_path,
+            ),
+            patch.object(system_context.sys, "executable", str((tmp_path / ".venv-wsl" / "bin" / "python").resolve())),
+            patch.object(system_context.sys, "prefix", str((tmp_path / ".venv-wsl").resolve())),
+        ):
+            _mkfile(tmp_path / ".venv-wsl" / "bin" / "python", "")
+            snapshot = build_system_context(
+                tmp_path, context_name="codex-wsl", active_tool="codex", active_mode="mutating"
+            )
+            decision = evaluate_system_policy(snapshot, "session_start_mutating")
+
+        assert decision.allowed is True
+        assert not any(issue.code == "parallel_mutating_claim" for issue in decision.blockers)
+
     def test_orientation_warns_when_handoff_drifted_from_queue(self, tmp_path: Path) -> None:
         _mkfile(tmp_path / "HANDOFF.md", "# stale\n")
         _mkfile(
@@ -334,6 +371,34 @@ class TestVerifyClaim:
 
         assert ok is False
         assert any("HEAD mismatch" in warning for warning in warnings)
+
+    def test_verify_claim_allows_same_checkout_when_mount_path_casing_differs(self, tmp_path: Path) -> None:
+        claim_path = tmp_path / ".git" / "claim.json"
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+        write_claim(
+            claim_path,
+            tool="codex",
+            branch="main",
+            head="abc123",
+            mode="mutating",
+            root="/mnt/c/Users/joshd/canompx3",
+        )
+
+        with (
+            patch.object(system_context, "branch_name", return_value="main"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+            patch.object(
+                system_context,
+                "_paths_same_location",
+                side_effect=lambda left, right: (
+                    Path(str(left)).name == "canompx3" and Path(str(right)).name == "canompx3"
+                ),
+            ),
+        ):
+            ok, warnings = verify_claim(Path("/mnt/c/users/joshd/canompx3"), active_tool="codex", claim_path=claim_path)
+
+        assert ok is True
+        assert not any("Root mismatch" in warning for warning in warnings)
 
 
 class TestCliBootstrap:
