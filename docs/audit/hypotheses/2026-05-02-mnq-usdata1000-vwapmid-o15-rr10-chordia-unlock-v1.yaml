@@ -1,0 +1,232 @@
+metadata:
+  name: "mnq_usdata1000_vwapmid_o15_rr10_chordia_unlock_v1"
+  purpose: "Bounded exact-lane Chordia unlock audit for MNQ US_DATA_1000 O15 RR1.0 VWAP_MID_ALIGNED. No theory grant is claimed."
+  date_locked: "2026-05-02T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "family"
+  research_question_type: "conditional_role"
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+  default_args:
+    - "--hypothesis-file"
+    - "docs/audit/hypotheses/2026-05-02-mnq-usdata1000-vwapmid-o15-rr10-chordia-unlock-v1.yaml"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/conditional-edge-framework.md"
+    - "docs/institutional/research_pipeline_contract.md"
+    - "docs/runtime/chordia_audit_log.yaml"
+    - "docs/audit/results/2026-05-01-chordia-audit-unlock-triage.md"
+    - "docs/audit/results/2026-05-02-chordia-theory-feasibility-scan.md"
+    - "docs/audit/results/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.md"
+  notes:
+    - "This prereg is an unlock audit for one already-validated family survivor, not a fresh discovery scan."
+    - "No theory grant is claimed for VWAP_MID_ALIGNED in this file."
+    - "Criterion 4 strict threshold t >= 3.79 applies."
+    - "Mode A holdout remains sacred from 2026-01-01."
+    - "RR1.0 sibling of the just-passed RR1.5 audit; portfolio-EV motivation is RR-diversification within the same VWAP_MID_ALIGNED filter family."
+
+scope:
+  instrument: MNQ
+  strategy_id: "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15"
+  session: US_DATA_1000
+  orb_minutes: 15
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  direction: pooled
+  filter_type: VWAP_MID_ALIGNED
+  filter_source: "trading_app.config.ALL_FILTERS['VWAP_MID_ALIGNED']"
+  baseline: "same geometry, exact canonical lane replay"
+  out_of_scope:
+    - "RR1.5 sibling strategy (audited separately on 2026-05-02)"
+    - "RR2.0 sibling strategy"
+    - "VWAP_BP_ALIGNED or any other VWAP variant"
+    - "theory-grant attempt for VWAP_MID_ALIGNED"
+    - "cross-instrument mirrors"
+    - "allocator, sizing, or deployment changes"
+    - "writes to validated_setups before execution evidence exists"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only descriptive corroboration only; never used to rescue or kill the IS verdict."
+  cohort_lower_bound:
+    description: "trading_day >= WF_START_OVERRIDE['MNQ']"
+    constant_source: "trading_app.config.WF_START_OVERRIDE"
+    locked_boundary: "2020-01-01"
+    rationale: "Match canonical promoter cohort (strategy_discovery._load_outcomes_bulk). Without this, audit fires on pre-2020 micro-launch trades the promoter excludes."
+  tuning_against_oos: false
+  canonical_layers_only: true
+
+feature_definition:
+  feature_name: VWAP_MID_ALIGNED
+  canonical_source_of_truth: "trading_app.config.VWAPBreakDirectionFilter"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, 'VWAP_MID_ALIGNED', 'US_DATA_1000')"
+  trade_time_knowable: true
+  first_complete_time: "ORB end (O15)"
+  temporal_alignment_note: >
+    Pre-session VWAP plus ORB-level geometry are known by ORB close, so the
+    filter is trade-time-knowable. This prereg does not claim the filter has
+    a Pathway-B-quality theory basis.
+  lookahead_check: "Required PASS before execution."
+
+grounding:
+  core_orb_premise:
+    - source_file: "resources/Building_Reliable_Trading_Systems.pdf"
+      extract_proxy: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "grounds intraday trend-follow / breakout continuation on equity-index class"
+      with_theory_claim: false
+    - source_file: "resources/Algorithmic_Trading_Chan.pdf"
+      extract_proxy: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      use: "grounds stop-cascade / intraday momentum base for ORB breakout entries"
+      with_theory_claim: false
+  filter_grounding_status:
+    verdict: "NO_THEORY_GRANT"
+    basis: >
+      The 2026-05-02 feasibility scan found no local resource-backed citation
+      that specifically grounds VWAP-mid alignment as a causal mechanism for
+      this lane. Therefore this prereg must remain no-theory and the strict
+      Chordia threshold applies.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - "docs/audit/results/2026-05-01-chordia-audit-unlock-triage.md"
+    - "docs/runtime/action-queue.yaml#chordia_audit_unlock_pass_chordia_strategies"
+  note: >
+    The triage doc identified this exact strategy as one of 4 remaining
+    PASS_CHORDIA-without-audit names. Live recompute on validated_setups
+    shows derived t = 4.266 (sharpe=0.1564, N=744). Those statistics
+    motivate this audit but are not the evidence for this prereg's verdict.
+    Fresh execution against canonical layers is required.
+
+primary_schema:
+  family_cells:
+    - id: "MNQ_US_DATA_1000_O15_RR1.0_VWAP_MID_ALIGNED"
+      strategy_id: "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15"
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 15
+      rr_target: 1.0
+      filter: VWAP_MID_ALIGNED
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  chordia_threshold_basis: "Criterion 4 no-theory strict threshold (t >= 3.79)"
+  promotion_gate: "PASS_CHORDIA only; PASS_PROTOCOL_A is not available in this prereg"
+
+hypotheses:
+  - id: 1
+    name: "MNQ US_DATA_1000 O15 RR1.0 VWAP_MID_ALIGNED exact-lane strict unlock"
+    economic_basis: >
+      This is a bounded exact-lane replay of a pre-existing validated family
+      survivor. The honest question is whether the complete configured lane
+      still clears the strict no-theory Chordia hurdle under canonical Mode A
+      replay. The filter class receives no theory grant here. Portfolio-EV
+      motivation: RR1.0 may add complementary geometry to the just-promoted
+      RR1.5 sibling within the same filter family at the same session.
+    role:
+      kind: "standalone"
+      parent: "Exact MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15 canonical lane replay on orb_outcomes x daily_features."
+      comparator: "Replay-selected trades versus the strict Chordia threshold and descriptive OOS sign monitor; no sibling rescue or parameter variation."
+      primary_metric: "selected_trade_mean_r"
+      promotion_target: "chordia_audit_unlock_only"
+    filter:
+      type: "VWAP_MID_ALIGNED"
+      column: "orb_US_DATA_1000_vwap, orb_US_DATA_1000_break_dir"
+      thresholds:
+        - "fire_vs_off"
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [15]
+    expected_trial_count: 1
+    kill_criteria:
+      - "IS t-stat < 3.79"
+      - "IS ExpR <= 0.0"
+      - "N_IS_on < 100"
+      - "If OOS N >= 30, OOS sign opposes IS sign"
+      - "Canonical filter delegation diverges from trading_app.config"
+      - "Scratch/null handling is not explicit in the measured trade stream"
+    statement: >
+      On the fixed MNQ US_DATA_1000 O15 E2 CB1 RR1.0 lane using the canonical
+      VWAP_MID_ALIGNED filter, the IS sample remains positive and strong enough
+      to clear the strict no-theory Chordia severity gate when recomputed
+      honestly on canonical Mode-A data with adversarial split reporting.
+    pass_metric:
+      metric: "t_IS"
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical IS fired trades after canonical filter delegation"
+      threshold_gte:
+        t_is: 3.79
+        n_is_on: 100
+        expr_is: 0.0
+      extra_gates:
+        - "dir_match_oos = true when OOS N is sufficient for a descriptive read"
+        - "adversarial split table emitted; no hidden subgroup collapse"
+        - "scratch-inclusive accounting required if scratch rows exist"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+
+decision_rule:
+  continue_if: "H1 clears strict t >= 3.79 with positive IS ExpR and no harness failure"
+  park_if: "H1 clears strict IS gates but OOS directional corroboration is ambiguous"
+  kill_if: "H1 fails t or ExpR gates, or execution integrity fails"
+
+methodology_rules_applied:
+  - rule: "RULE 3 sacred holdout"
+    application: "IS and OOS are partitioned by HOLDOUT_SACRED_FROM only."
+  - rule: "RULE 4 multiple testing"
+    application: "Current family K is exactly 1."
+  - rule: "RULE 6 trade-time knowability"
+    application: "VWAP_MID_ALIGNED must be shown trade-time-knowable at O15 ORB close."
+  - rule: "RULE 9 canonical data source"
+    application: "Reads only canonical layers; no derived-layer proof."
+  - rule: "research-truth-protocol canon filter delegation"
+    application: "Filter fire mask must come from canonical delegation, never inline re-implementation."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-02-mnq-usdata1000-vwapmid-o15-rr10-chordia-unlock-v1.md"
+  - "row-level CSV with IS/OOS split, raw/effective pnl_r, and scratch/null handling"
+  - "single-cell summary table with N_IS_on, ExpR_IS, Sharpe_IS, t_IS, OOS sign check, and verdict"
+  - "explicit statement that no theory grant was used"
+
+execution_gate:
+  allowed_now: true
+  execution_surface: "WSL with .venv-wsl"
+  forbidden_now:
+    - "theory-grant upgrade without new /resources-backed citation"
+    - "RR widening or sibling-cell rescue"
+    - "auto-writing PASS rows into chordia_audit_log.yaml without execution evidence"
+
+not_done_by_this_pre_reg:
+  - "Does not audit the RR1.5 or RR2.0 siblings."
+  - "Does not settle the broader VWAP_MID filter class."
+  - "Does not change live deployment or allocator state."
+  - "Does not address correlation between RR1.0 and the deployed RR1.5 lane (allocator's correlation gate handles that downstream)."

@@ -97,12 +97,32 @@
 
 ### Recommended next step
 
-- The next concrete audit targets are now the 4 remaining live
-  `PASS_CHORDIA` names without doctrine audit rows:
-  - `MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10_S075`
-  - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`
-  - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60`
+- One of the 4 remaining `PASS_CHORDIA`-without-audit names is now closed:
   - `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15`
+    -> `PASS_CHORDIA`, `t=4.362`, `N_IS=806` (744 win+loss, matches
+    `validated_setups.sample_size`). OOS sign matches at `N_OOS=47`,
+    `OOS_t=2.143`, `p=0.032`. Direction asymmetric: Long_t=2.390 vs
+    Short_t=3.902; pooled gate clears strict, long-only would not.
+- 3 remain:
+  - `MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10_S075` -- BLOCKED on
+    runner architecture: `chordia_strict_unlock_v1.py` now fails-closed
+    on any non-default `stop_multiplier` because `orb_outcomes` is built
+    at the default 1.0 stop. Auditing S-suffixed strategies requires an
+    `outcome_builder` rebuild at the target stop and a different runner.
+    Tracked separately as a deferred runner extension.
+  - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100` -- same-session sibling
+    of already-deployed `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`;
+    portfolio-EV question (correlation gate) is downstream of audit.
+  - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60` -- same-session sibling
+    of already-deployed `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`;
+    same correlation question.
+- Runner hardening landed this session:
+  - `WF_START_OVERRIDE` cohort lower bound applied so audit replays
+    reconcile to canonical promoter cohorts within the documented
+    scratch-policy delta.
+  - Fail-closed guard on non-default `stop_multiplier`. Pressure-tested
+    with a fake `*_S075` prereg; runner refuses with exit code 2 and
+    writes no result MD/CSV.
 - Continue using the same front-door + bounded-runner flow established by
   `research/chordia_strict_unlock_v1.py`; do not invent a second harness.
 - Only do more literature extraction if it could honestly upgrade

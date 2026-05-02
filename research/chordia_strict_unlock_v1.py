@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -39,9 +40,11 @@ from trading_app.chordia import (
 )
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.hypothesis_loader import check_mode_a_consistency, load_hypothesis_metadata
+from trading_app.strategy_discovery import parse_stop_multiplier
 
 
 OOS_DESCRIPTIVE_MIN_N = 30
+DEFAULT_STOP_MULTIPLIER = 1.0
 
 
 def _normalize_writable_path(path: Path) -> Path:
@@ -91,6 +94,30 @@ def _load_cell(hypothesis_path: Path) -> Cell:
         raise SystemExit("Prereg top-level 'scope' must be a mapping for this bounded runner.")
     if not isinstance(hypotheses, list) or len(hypotheses) != 1:
         raise SystemExit("This bounded runner requires exactly one hypothesis entry.")
+
+    # Fail-closed on non-default stop_multiplier. orb_outcomes does not store a
+    # stop_multiplier column — its trade stream is built at the default 1.0 stop.
+    # An S-suffixed strategy_id (e.g. *_S075) refers to a different physical
+    # trade stream that requires outcome_builder rebuild at the target stop.
+    # This runner has no such pathway; silently auditing the default-stop trades
+    # under an S-suffixed id would compute a t-stat against the wrong cohort.
+    sid = str(scope["strategy_id"])
+    sid_stop = parse_stop_multiplier(sid)
+    if sid_stop != DEFAULT_STOP_MULTIPLIER:
+        sys.stderr.write(
+            f"REFUSE: strategy {sid!r} has stop_multiplier={sid_stop} != {DEFAULT_STOP_MULTIPLIER}. "
+            "This runner audits canonical orb_outcomes which is built at the default stop. "
+            "Non-default stops require an outcome_builder rebuild at the target stop and a "
+            "different runner. Refusing to run rather than audit the wrong trade stream.\n"
+        )
+        raise SystemExit(2)
+    scope_stop = scope.get("stop_multiplier")
+    if scope_stop is not None and float(scope_stop) != DEFAULT_STOP_MULTIPLIER:
+        sys.stderr.write(
+            f"REFUSE: prereg scope.stop_multiplier={scope_stop} != {DEFAULT_STOP_MULTIPLIER}. "
+            "Same fail-closed reason as above.\n"
+        )
+        raise SystemExit(2)
 
     filter_status = grounding.get("filter_grounding_status", {}) if isinstance(grounding, dict) else {}
     result_md, result_csv = _resolve_output_paths(hypothesis_path)

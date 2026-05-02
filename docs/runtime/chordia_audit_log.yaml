@@ -86,6 +86,29 @@ audits:
       `validated_setups.sample_size`=701 win+loss). Cleared strict hurdle
       with positive OOS sign on N_OOS=47.
 
+  - strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15
+    audit_date: 2026-05-02
+    verdict: PASS_CHORDIA
+    t_stat: 4.362
+    threshold: 3.79
+    sample_size: 806
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg
+      `docs/audit/hypotheses/2026-05-02-mnq-usdata1000-vwapmid-o15-rr10-chordia-unlock-v1.yaml`.
+      No theory grant claimed. Scratch-inclusive replay (N_fired=806; 62
+      scratches counted as R=0) on canonical `orb_outcomes` + `daily_features`
+      with `WF_START_OVERRIDE['MNQ']=2020-01-01` applied (cohort matches
+      `validated_setups.sample_size`=744 win+loss). Cleared strict hurdle
+      with positive OOS sign on N_OOS=47 (OOS t=2.143, p=0.032).
+      Same fire mask as RR1.5 sibling (lines 73-87): identical trade days,
+      different geometry. Allocator correlation gate (RHO_REJECT_THRESHOLD)
+      will determine whether RR1.0 + RR1.5 deploy together or one is
+      demoted; that decision is downstream of this audit.
+      Direction breakdown: Long_t=2.390 (n=452), Short_t=3.902 (n=354).
+      Pooled gate clears strict; long-only would not. This is documented
+      asymmetry, not a kill.
+
   - strategy_id: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60
     audit_date: 2026-05-02
     verdict: PARK
