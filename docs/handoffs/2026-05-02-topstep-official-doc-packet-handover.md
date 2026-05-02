@@ -53,9 +53,11 @@ Build the stage-split evidence packet:
 - New artifacts prepared on the implementation branch:
   - branch: `codex/passive-sidecar-skeleton`
   - `docs/support-requests/draft-live-readonly-sidecar-policy-clarification.md`
+  - `docs/support-requests/topstep-live-readonly-sidecar-send-runbook.md`
   - `trading_app/live/passive_sidecar/`
   - `docs/operator/passive-sidecar-enforcement.md`
   - `docs/operator/deprecated-paths.md`
+  - `docs/operator/policy-clearance-checklist.md`
 - Not cleared:
   - explicit Live allowance for a read-only/assist sidecar
   - proof that any shell can avoid split-brain order/account authority
