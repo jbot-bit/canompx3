@@ -242,8 +242,7 @@ scripts/tools/.pinecone_sync_state.json
 C\:*
 Users\\*
 # Defensive re-includes for legit dirs that begin with C
-!CodePilot/
-!CodePilot/**
+# (CodePilot intentionally NOT re-included — it's a vendored external repo, see line 169)
 !configs/
 !configs/**
 !.codex/skills/
