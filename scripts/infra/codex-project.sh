@@ -47,7 +47,8 @@ if [[ -d "$HOME/.nvm/versions/node" ]]; then
 fi
 
 if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
-  "$VENV/bin/python" "$PREFLIGHT" --quiet --context codex-wsl --claim codex --mode mutating
+  CANOMPX3_SESSION_OWNER="pid:$$" \
+    "$VENV/bin/python" "$PREFLIGHT" --quiet --context codex-wsl --claim codex --mode mutating
 fi
 
 if [[ -f "$TASK_ROUTE_PACKET" ]]; then

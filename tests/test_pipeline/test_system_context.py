@@ -358,6 +358,88 @@ class TestEvaluateSystemPolicy:
 
 
 class TestVerifyClaim:
+    def test_write_claim_uses_session_owner_pid_when_present(self, tmp_path: Path, monkeypatch) -> None:
+        claim_path = tmp_path / ".git" / "claim.json"
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("CANOMPX3_SESSION_OWNER", "pid:4242")
+
+        claim = write_claim(claim_path, tool="codex", branch="main", head="abc123", mode="mutating", root=str(tmp_path))
+
+        assert claim.pid == 4242
+
+    def test_read_claim_marks_dead_same_runtime_owner_stale(self, tmp_path: Path) -> None:
+        claim_path = tmp_path / ".git" / "claim.json"
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(system_context, "_current_runtime_tag", return_value="wsl"):
+            write_claim(claim_path, tool="codex", branch="main", head="abc123", mode="mutating", root=str(tmp_path))
+
+        with (
+            patch.object(system_context, "_current_runtime_tag", return_value="wsl"),
+            patch.object(system_context, "_pid_is_live", return_value=False),
+        ):
+            claim = system_context.read_claim(claim_path)
+
+        assert claim is not None
+        assert claim.runtime == "wsl"
+        assert claim.fresh is False
+
+    def test_read_claim_marks_legacy_dead_wsl_owner_stale(self, tmp_path: Path) -> None:
+        claim_path = tmp_path / ".git" / "claim.json"
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+        claim_path.write_text(
+            json.dumps(
+                {
+                    "tool": "codex",
+                    "branch": "main",
+                    "head_sha": "abc123",
+                    "started_at": "2099-04-12T00:00:00+00:00",
+                    "pid": 815,
+                    "mode": "mutating",
+                    "root": "/mnt/c/Users/joshd/canompx3",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with (
+            patch.object(system_context, "_current_runtime_tag", return_value="wsl"),
+            patch.object(system_context, "_pid_is_live", return_value=False),
+        ):
+            claim = system_context.read_claim(claim_path)
+
+        assert claim is not None
+        assert claim.runtime == ""
+        assert claim.fresh is False
+
+    def test_read_claim_keeps_cross_runtime_owner_fresh(self, tmp_path: Path) -> None:
+        claim_path = tmp_path / ".git" / "claim.json"
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+        claim_path.write_text(
+            json.dumps(
+                {
+                    "tool": "claude",
+                    "branch": "main",
+                    "head_sha": "abc123",
+                    "started_at": "2099-04-12T00:00:00+00:00",
+                    "pid": 77,
+                    "mode": "mutating",
+                    "root": r"C:\repo",
+                    "runtime": "windows",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with (
+            patch.object(system_context, "_current_runtime_tag", return_value="wsl"),
+            patch.object(system_context, "_pid_is_live", return_value=False),
+        ):
+            claim = system_context.read_claim(claim_path)
+
+        assert claim is not None
+        assert claim.fresh is True
+
     def test_verify_claim_detects_head_mismatch(self, tmp_path: Path) -> None:
         claim_path = tmp_path / ".git" / "claim.json"
         claim_path.parent.mkdir(parents=True, exist_ok=True)
@@ -371,6 +453,24 @@ class TestVerifyClaim:
 
         assert ok is False
         assert any("HEAD mismatch" in warning for warning in warnings)
+
+    def test_verify_claim_fails_when_owner_process_is_dead(self, tmp_path: Path) -> None:
+        claim_path = tmp_path / ".git" / "claim.json"
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(system_context, "_current_runtime_tag", return_value="wsl"):
+            write_claim(claim_path, tool="codex", branch="main", head="abc123", mode="mutating", root=str(tmp_path))
+
+        with (
+            patch.object(system_context, "_current_runtime_tag", return_value="wsl"),
+            patch.object(system_context, "_pid_is_live", return_value=False),
+            patch.object(system_context, "branch_name", return_value="main"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+        ):
+            ok, warnings = verify_claim(tmp_path, active_tool="codex", claim_path=claim_path)
+
+        assert ok is False
+        assert any("owner process is no longer running" in warning for warning in warnings)
 
     def test_verify_claim_allows_same_checkout_when_mount_path_casing_differs(self, tmp_path: Path) -> None:
         claim_path = tmp_path / ".git" / "claim.json"

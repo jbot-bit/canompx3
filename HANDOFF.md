@@ -8,12 +8,29 @@
 
 ## Pickup pointer (2026-05-02 PM — read this first)
 
+- Fresh memo added on branch `codex/topstep-operator-arch-v2`:
+  `docs/plans/active/2026-05/2026-05-03-prop-firm-automation-compatibility-memo.md`
+  This answers the live user question directly:
+  prop-firm auto execution is allowed by some firms, and the repo's best-fit
+  current path is `TopstepX / ProjectX`, not self-funded-only. Tradeify/MFFU
+  are policy-allowed but operationally less ready in this repo; Bulenox/Rithmic
+  is adapter-present but still marked inactive pending conformance/validation.
+
 - Active decision memo added on branch `codex/topstep-operator-arch-v2`:
   `docs/plans/active/2026-05/2026-05-02-topstep-operator-architecture-v2.md`
   This is a Topstep/canompx3 operator-architecture V2 memo with explicit
   regime-split scoring, unknowns register, null candidate, and kill criteria.
 
 ## Current Session Update (2026-05-03 — Codex)
+
+- Fixed a `codex.bat` launcher-table drift that broke
+  `codex.bat search-gold-db`: `scripts/infra/windows-agent-launch.ps1`
+  was missing `codex-project-linux-search-gold-db` even though
+  `codex.bat` and `scripts/infra/windows_agent_launch.py` exposed it.
+  Added focused regression coverage in
+  `tests/test_tools/test_codex_launcher_scripts.py` so every
+  `codex.bat`-advertised mode must be accepted by both Windows launchers.
+- Verification run: `./.venv-wsl/bin/python -m pytest tests/test_tools/test_codex_launcher_scripts.py -q` passed (`2 passed`).
 
 - Resumed after Codex app segfault during the Topstep operator export merge.
   Preserved the five staged Topstep doc-packet additions.
@@ -35,6 +52,27 @@
   prefer `.venv-wsl`/POSIX venvs and explicitly block `.venv/Scripts`; Windows
   shells prefer `.venv/Scripts` and block `.venv-wsl`. Regression coverage:
   `tests/test_tools/test_git_hooks_env.py`.
+- Crash-recovery follow-up for the `codex.bat` path:
+  `scripts/infra/windows-agent-launch.ps1` now accepts
+  `codex-project-linux-search-gold-db`, matching `codex.bat` and
+  `scripts/infra/windows_agent_launch.py`. Regression guard:
+  `tests/test_tools/test_codex_launcher_scripts.py`.
+- Session-claim hardening landed in `pipeline/system_context.py`:
+  claims now record runtime, honor an explicit long-lived owner PID from
+  `CANOMPX3_SESSION_OWNER`, and treat dead same-runtime owners as stale instead
+  of blocking for the full freshness window. WSL Codex launchers now pass
+  `CANOMPX3_SESSION_OWNER="pid:$$"` before preflight in
+  `scripts/infra/codex-project.sh`,
+  `scripts/infra/codex-project-search.sh`,
+  `scripts/infra/codex-review.sh`, and
+  `scripts/infra/codex-capital-review.sh`.
+- Verification for the crash-recovery patch set:
+  focused suite passed (`71 passed`);
+  Python-targeted `ruff check` passed;
+  `pipeline/check_drift.py` passed with advisories only.
+  A repo-wide `pytest -q` run progressed through the touched launcher /
+  session-preflight areas and later surfaced at least one failure outside the
+  verified slice; not triaged in this recovery pass.
 
 **Where to start next session:**
 
