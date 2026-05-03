@@ -103,6 +103,12 @@ restore them via `git checkout -- docs/runtime/stages/`.
 
 ### What landed
 
+- Codex app WSL setup now hard-blocks `/mnt/...` repo roots in
+  `scripts/infra/codex_local_env.py` with a clear recovery message pointing
+  to `codex.bat linux` / `CANOMPX3_CODEX_WSL_ROOT`. This is meant to stop the
+  unsupported `/mnt/c` daily-driver path before Codex gets far enough to
+  crash/segfault in the app session. Targeted coverage lives in
+  `tests/test_tools/test_codex_local_env.py`.
 - Follow-up fix for the session-router regression review:
   `scripts/tools/session_router.py` once again treats fresh mutating claims
   from the same checkout as routing conflicts. The case-variant

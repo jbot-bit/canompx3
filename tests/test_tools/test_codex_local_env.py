@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scripts.infra import codex_local_env
 
 
@@ -43,3 +45,10 @@ def test_parse_args_accepts_doctor_command() -> None:
 def test_is_wsl_native_root_detects_wsl_home_paths() -> None:
     assert codex_local_env.is_wsl_native_root(Path("/home/joshd/canompx3"))
     assert not codex_local_env.is_wsl_native_root(Path("/mnt/c/Users/joshd/canompx3"))
+
+
+def test_run_setup_blocks_wsl_mount_repo_roots(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(codex_local_env, "ROOT", Path("/mnt/c/Users/joshd/canompx3"))
+
+    with pytest.raises(SystemExit, match="Codex WSL setup is blocked for non-native repo root"):
+        codex_local_env.run_setup("wsl")
