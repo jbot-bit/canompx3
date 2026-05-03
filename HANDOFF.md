@@ -13,6 +13,24 @@
   This is a Topstep/canompx3 operator-architecture V2 memo with explicit
   regime-split scoring, unknowns register, null candidate, and kill criteria.
 
+## Current Session Update (2026-05-03 — Codex)
+
+- Resumed after Codex app segfault during the Topstep operator export merge.
+  Preserved the five staged Topstep doc-packet additions.
+- Moved stale crashed Codex claim
+  `/tmp/canompx3-active-sessions/codex-734ad7ccb05c.json` to
+  `/tmp/canompx3-active-sessions/stale/codex-734ad7ccb05c.crashed-20260503.json`;
+  preflight then cleared blockers.
+- Patched only the operator export-state slice from `codex/topstep-operator-v3`:
+  `trading_app/live/session_orchestrator.py`,
+  `trading_app/live/bot_state.py`, and focused tests in
+  `tests/test_trading_app/test_session_orchestrator.py`.
+- Verification run:
+  targeted operator/export + existing companion classes passed (`18 passed`);
+  production `ruff check` passed; `ruff format --check` passed; `py_compile`
+  passed; `pipeline/check_drift.py` passed with advisories only; behavioral and
+  integrity audits passed.
+
 **Where to start next session:**
 
 1. Read the survey: `docs/audit/results/2026-05-02-deployable-pool-edge-survey.md`.
