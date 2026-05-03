@@ -351,7 +351,7 @@ def open_codex_project_linux_home(search_mode: bool = False, enable_gold_db: boo
             root,
             search_mode=search_mode,
             enable_gold_db=enable_gold_db,
-            use_linux_home=True,
+            use_linux_home=False,
         )
     )
 
@@ -361,7 +361,7 @@ def open_codex_project_linux_home_power() -> int:
     return run_wsl(
         build_codex_project_wsl_command(
             root,
-            use_linux_home=True,
+            use_linux_home=False,
             profile="canompx3_power",
         )
     )
