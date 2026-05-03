@@ -30,7 +30,12 @@ def test_build_linux_home_project_command_uses_linux_root() -> None:
 
     command = module.build_codex_project_wsl_command("/mnt/c/repo", use_linux_home=True)
 
-    assert 'ROOT="${CANOMPX3_CODEX_WSL_ROOT:-$HOME/canompx3}"' in command
+    assert 'ROOT_INPUT="${CANOMPX3_CODEX_WSL_ROOT:-}"' in command
+    assert '[[ -z "$ROOT_INPUT" || "$ROOT_INPUT" == "." || "$ROOT_INPUT" == "./" ]]' in command
+    assert 'ROOT="$HOME/canompx3"' in command
+    assert 'ROOT="$HOME/${ROOT_INPUT#~/}"' in command
+    assert 'ROOT="$ROOT_INPUT"' in command
+    assert "CANOMPX3_CODEX_WSL_ROOT must be an absolute WSL path" in command
     assert 'bash /mnt/c/repo/scripts/infra/codex-wsl-sync.sh --source /mnt/c/repo --target "$ROOT"' in command
     assert 'cd "$ROOT"' in command
     assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
@@ -57,7 +62,7 @@ def test_open_codex_project_linux_home_uses_linux_home_builder() -> None:
 
     assert exit_code == 0
     command = run_wsl_mock.call_args.args[0]
-    assert 'ROOT="${CANOMPX3_CODEX_WSL_ROOT:-$HOME/canompx3}"' in command
+    assert 'ROOT="$HOME/canompx3"' in command
 
 
 def test_linux_project_batches_target_linux_modes() -> None:

@@ -210,7 +210,20 @@ def build_codex_project_wsl_command(
     if use_linux_home:
         lines.extend(
             [
-                'ROOT="${CANOMPX3_CODEX_WSL_ROOT:-$HOME/canompx3}"',
+                'ROOT_INPUT="${CANOMPX3_CODEX_WSL_ROOT:-}"',
+                'if [[ -z "$ROOT_INPUT" || "$ROOT_INPUT" == "." || "$ROOT_INPUT" == "./" ]]; then',
+                '  ROOT="$HOME/canompx3"',
+                'elif [[ "$ROOT_INPUT" == "~" ]]; then',
+                '  ROOT="$HOME"',
+                'elif [[ "$ROOT_INPUT" == "~/"* ]]; then',
+                '  ROOT="$HOME/${ROOT_INPUT#~/}"',
+                'elif [[ "$ROOT_INPUT" == /* ]]; then',
+                '  ROOT="$ROOT_INPUT"',
+                "else",
+                '  echo "ERROR: CANOMPX3_CODEX_WSL_ROOT must be an absolute WSL path, not: $ROOT_INPUT" >&2',
+                '  echo "Unset it to use ~/canompx3, or set it to a path like /home/joshd/canompx3." >&2',
+                "  exit 1",
+                "fi",
                 'if [[ ! -d "$ROOT" ]]; then',
                 '  echo "ERROR: WSL Codex repo not found at $ROOT." >&2',
                 '  echo "Set CANOMPX3_CODEX_WSL_ROOT or clone canompx3 into ~/canompx3." >&2',
