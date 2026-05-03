@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Codex
 - **Date:** 2026-05-03
-- **Summary:** Queue-backed baton refreshed; added phased repo hygiene tidy plan (docs/plans/2026-05-03-repo-hygiene-tidy-plan.md).
+- **Summary:** Queue-backed baton refreshed; repo hygiene plan now includes Sonnet-executable runbook.
 
 ## Next Steps — Active
 1. PR48 MES q45_exec bridge — Define the honest bridge from the alive MES q45_exec research branch into a bounded runtime surface.

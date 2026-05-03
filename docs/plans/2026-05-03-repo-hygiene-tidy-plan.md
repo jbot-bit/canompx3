@@ -141,6 +141,52 @@ This plan is **operational hygiene only** (not strategy logic changes).
 
 ---
 
+
+## Sonnet-Executable Mode (Low-Context Runbook)
+
+Yes — this cleanup can be executed by Sonnet safely if we keep it deterministic and command-driven.
+
+### Guardrails for Sonnet runs
+
+- Use queue-backed state only (`docs/runtime/action-queue.yaml` + `work_queue.py`).
+- Prefer generated baton output over hand-edited baton text.
+- Keep each phase in its own commit (one phase = one atomic diff).
+- Never close/supersede queue items without adding a measured note.
+
+### Minimal operator prompt (copy/paste)
+
+```text
+Run Phase <N> of docs/plans/2026-05-03-repo-hygiene-tidy-plan.md exactly as written.
+Use only canonical queue-backed surfaces.
+Show command output before mutating files.
+Commit only files required for that phase.
+```
+
+### Deterministic command set per phase
+
+```bash
+# Baseline snapshot
+python3 scripts/tools/work_queue.py status
+python3 scripts/tools/system_brief.py --format text
+python3 scripts/tools/project_pulse.py --fast --format markdown || true
+
+# Baton alignment
+python3 scripts/tools/work_queue.py render-handoff --write
+python3 scripts/tools/work_queue.py status
+
+# Verification pass
+python3 scripts/tools/system_brief.py --format text
+python3 scripts/tools/project_pulse.py --fast --format markdown || true
+```
+
+### Done definition for Sonnet execution
+
+- Phase artifact committed.
+- Queue state and baton state are consistent.
+- Any remaining warnings are explicitly classified as intentional or blocked.
+
+---
+
 ## Implementation Order (Recommended)
 
 1. **Phase 1 first** (alignment) — highest risk reducer.
