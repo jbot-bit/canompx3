@@ -6,6 +6,24 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Session update (2026-05-02 UTC — external benchmark added)
+
+- Added external competitive benchmark report:
+  `docs/audit/results/2026-05-02-competitive-landscape-canompx3.md`.
+- Scope: compared canompx3 with LEAN, NautilusTrader, Freqtrade, VectorBT, and
+  Backtrader using fetched primary sources plus repo-local doctrine.
+- Output includes explicit `MEASURED` vs `INFERRED` vs `UNSUPPORTED` labeling,
+  strengths/weaknesses assessment, and prioritized gaps.
+- 2026-05-03 follow-up sharpened the report with explicit outcome language,
+  "continue vs quit" gates, top-3 EV actions, and a 30-day kill-switch
+  checkpoint.
+- 2026-05-03 follow-up #2 added accelerated day-3/day-7/day-14 gates plus an
+  anti-bias, silence-filling protocol explicitly grounded in institutional
+  literature resources in-repo.
+- 2026-05-03 follow-up #3 added a "one-row" 48-hour sequential execution plan
+  so EV-1/EV-2/EV-3 can be done in one concentrated sprint (not wait-heavy),
+  with doctrine-aligned anti-bias and disconfirming checks.
+
 ## Pickup pointer (2026-05-02 PM — read this first)
 
 **Where to start next session:**
