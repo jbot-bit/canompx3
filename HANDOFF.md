@@ -23,6 +23,9 @@
 - 2026-05-03 follow-up #3 added a "one-row" 48-hour sequential execution plan
   so EV-1/EV-2/EV-3 can be done in one concentrated sprint (not wait-heavy),
   with doctrine-aligned anti-bias and disconfirming checks.
+- 2026-05-03 follow-up #4 added an institutional-grade 4-cycle iteration
+  program (research expansion -> design synthesis -> bounded implementation ->
+  adversarial audit) plus a mandatory no-gaps/no-silences reporting contract.
 
 ## Pickup pointer (2026-05-02 PM — read this first)
 

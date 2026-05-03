@@ -249,6 +249,54 @@ To avoid self-deception and "silent gaps," force every EV item through these con
 - `docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md`
 - `RESEARCH_RULES.md` (operating doctrine + anti-bias constraints)
 
+## Institutional-grade iteration program (more planning + research + design)
+
+If you want deeper iteration (your latest request), run this as 4 tight cycles:
+
+### Cycle A — Research expansion (fetch + disconfirm first)
+
+- Expand peer set to include one additional research engine and one production
+  execution stack.
+- For each peer: capture architecture, verification model, live controls,
+  and known failure modes from primary docs.
+- Start with disconfirming questions:
+  - "Where is canompx3 weaker than this peer?"
+  - "What claim in our current report fails under their model?"
+
+### Cycle B — Design synthesis
+
+- Translate findings into 3 concrete design proposals:
+  1. bootstrap contract design,
+  2. live-readiness bundle contract,
+  3. benchmark harness contract.
+- Each design proposal must include blast radius, dependencies, failure modes,
+  and rollback path.
+
+### Cycle C — Bounded implementation pass
+
+- Implement only the smallest version of EV-1/EV-2/EV-3 that can produce
+  measurable artifacts.
+- No "big rewrite" allowed; every pass must end with a measurable report.
+
+### Cycle D — Adversarial audit pass
+
+- For every claimed improvement, run an explicit adversarial review:
+  - what evidence would falsify this claim?
+  - did we test that evidence?
+  - if not tested, mark `UNSUPPORTED`.
+
+## No-gaps / no-silences reporting contract
+
+To avoid hidden bias or silent omissions, every cycle artifact must include:
+
+1. **What was tested**
+2. **What was not tested (and why)**
+3. **What failed**
+4. **What remains unsupported**
+5. **What would change the decision**
+
+If any section is missing, the artifact is incomplete.
+
 ## Sources used (external primary sources)
 
 - QuantConnect LEAN repo: https://github.com/QuantConnect/Lean
