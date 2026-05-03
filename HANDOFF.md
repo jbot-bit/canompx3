@@ -46,6 +46,16 @@
   session, and `pipeline/check_drift.py` also failed to produce a terminal
   result before handoff. Treat those as unresolved harness/runtime follow-up,
   not as proven passes.
+- WSL lag/root-cause follow-up:
+  `.githooks/pre-commit` was making commit startup look hung because
+  `_dev_dep_check` did a full `import pytest, httpx` under the activated
+  `.venv-wsl` shell. Replaced that probe with a package-presence check via
+  `importlib.util.find_spec(...)`, which preserves the guardrail but removes
+  the cold-import stall. Verified the new probe returns in under 1s. Direct
+  measurement then showed `pipeline/check_drift.py` was slow-but-progressing
+  on this `/mnt/c` checkout rather than hard-hung, so the hook now streams
+  drift progress live (while suppressing the noisy `python-dotenv` parse spam)
+  instead of redirecting all drift output to `/dev/null`.
 
 - Fixed a `codex.bat` launcher-table drift that broke
   `codex.bat search-gold-db`: `scripts/infra/windows-agent-launch.ps1`

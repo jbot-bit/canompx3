@@ -68,7 +68,9 @@ fi
 _dev_dep_check() {
     local py="$1"
     [ -x "$py" ] || return 1
-    "$py" -c "import pytest, httpx" 2>/dev/null
+    # Full httpx import is expensive under cold WSL startup and can make the
+    # hook look wedged. We only need to confirm the packages are installed.
+    "$py" -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('pytest') and importlib.util.find_spec('httpx') else 1)" 2>/dev/null
 }
 
 CANONICAL_VENV_PY=""
@@ -244,19 +246,21 @@ echo "  PASSED"
 # never suppress the full commit-time gate, or slow-check regressions can slip
 # through unnoticed.
 echo "[3/8] Drift check..."
-if ! "$PYTHON" pipeline/check_drift.py > /dev/null 2>&1; then
+DRIFT_TMPFILE=$(mktemp)
+set +e
+"$PYTHON" pipeline/check_drift.py 2>&1 | tee "$DRIFT_TMPFILE" | awk '
+    /^python-dotenv could not parse statement starting at line / { next }
+    /^Check [0-9]+:/ || /^  FAILED:/ || /^  WARNING:/ || /^  SKIPPED/ || /^DRIFT / || /^NO DRIFT/ || /^====/ { print }
+'
+DRIFT_EXIT=${PIPESTATUS[0]}
+set -e
+if [ "$DRIFT_EXIT" -ne 0 ]; then
     echo "BLOCKED: Drift detected."
-    "$PYTHON" pipeline/check_drift.py 2>&1 | awk '
-        /^Check .*\.\.\.$/ { header=$0; next }
-        /^  FAILED:/ { if (header) { print header; header="" } print; infail=1; next }
-        infail && NF==0 { infail=0; next }
-        infail { print; next }
-        /^====/ || /^DRIFT / || /^NO DRIFT/ { print }
-    '
+    rm -f "$DRIFT_TMPFILE"
     exit 1
-else
-    echo "  PASSED"
 fi
+rm -f "$DRIFT_TMPFILE"
+echo "  PASSED"
 
 # 3b. CRG incremental update (advisory-only, fail-open, ~1-5s)
 # Keeps the graph DB fresh so drift checks D1-D5 (Phase 2) and slash
