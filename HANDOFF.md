@@ -30,6 +30,11 @@
   production `ruff check` passed; `ruff format --check` passed; `py_compile`
   passed; `pipeline/check_drift.py` passed with advisories only; behavioral and
   integrity audits passed.
+- Follow-up hook hardening after commit hang: `.githooks/pre-commit` and
+  `.githooks/post-commit` now resolve Python/Ruff by shell family. WSL/Linux
+  prefer `.venv-wsl`/POSIX venvs and explicitly block `.venv/Scripts`; Windows
+  shells prefer `.venv/Scripts` and block `.venv-wsl`. Regression coverage:
+  `tests/test_tools/test_git_hooks_env.py`.
 
 **Where to start next session:**
 
