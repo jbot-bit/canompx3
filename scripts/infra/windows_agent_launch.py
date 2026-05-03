@@ -154,7 +154,35 @@ def get_workstream_metadata(tool_name: str, workstream_name: str) -> dict[str, A
 
 
 def run_wsl(command_text: str) -> int:
-    return subprocess.call(["wsl.exe", "bash", "-lc", command_text])
+    import tempfile
+
+    # Multi-line bash scripts passed via `wsl.exe bash -lc <text>` lose
+    # variable assignments at the Win32→WSL argv boundary (lines execute,
+    # `set -x` echoes them, but assignments don't stick). Write the script
+    # to a temp file inside the repo and run it as a real file via its
+    # /mnt/c WSL path. LF newlines preserved explicitly.
+    scratch_dir = repo_root() / ".claude" / "scratch"
+    tmp_dir = str(scratch_dir) if scratch_dir.exists() else str(repo_root())
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".sh",
+        prefix="codex_launch_",
+        dir=tmp_dir,
+        delete=False,
+        newline="\n",
+        encoding="utf-8",
+    ) as tmp:
+        tmp.write(command_text)
+        tmp_name = tmp.name
+    try:
+        wsl_path = windows_to_wsl(Path(tmp_name))
+        return subprocess.call(["wsl.exe", "bash", "-lc", f"bash {wsl_path}; rm -f {wsl_path}"])
+    finally:
+        # Best-effort cleanup if WSL never ran (e.g., wsl.exe missing)
+        try:
+            Path(tmp_name).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def build_codex_wsl_command(
