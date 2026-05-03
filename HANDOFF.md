@@ -26,6 +26,9 @@
 - 2026-05-03 follow-up #4 added an institutional-grade 4-cycle iteration
   program (research expansion -> design synthesis -> bounded implementation ->
   adversarial audit) plus a mandatory no-gaps/no-silences reporting contract.
+- 2026-05-03 follow-up #5 converted the framework into an agent-owned concrete
+  execution plan (research deliverable, implementation specs, build+verify,
+  adversarial closeout, go/no-go memo) so execution burden is not on the user.
 
 ## Pickup pointer (2026-05-02 PM — read this first)
 

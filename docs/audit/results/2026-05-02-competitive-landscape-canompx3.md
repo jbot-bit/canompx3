@@ -297,6 +297,62 @@ To avoid hidden bias or silent omissions, every cycle artifact must include:
 
 If any section is missing, the artifact is incomplete.
 
+## Concrete execution plan (agent-owned, not user-owned)
+
+You asked for **us** to do the research and drive execution. This is the
+operator plan to run now, in order.
+
+### Phase 1 — Research capture (same day)
+
+1. Fetch and pin primary-source evidence from peers (LEAN, NautilusTrader,
+   Freqtrade, VectorBT, Backtrader) into one comparison appendix.
+2. Add a "capability parity map" table: what they have vs what canompx3 lacks,
+   with impact score and implementation complexity.
+3. Write explicit disconfirming notes: where canompx3 is worse and why.
+
+**Deliverable:** `docs/audit/results/2026-05-03-peer-capability-parity-map.md`
+
+### Phase 2 — Design package (same day)
+
+4. Draft three implementation specs (not just ideas):
+   - bootstrap reliability contract (EV-1),
+   - live-readiness bundle contract (EV-2),
+   - bounded benchmark harness contract (EV-3).
+5. Each spec must include:
+   - inputs/outputs,
+   - source-of-truth files,
+   - failure modes,
+   - verification commands,
+   - rollback plan.
+
+**Deliverable:** `docs/plans/2026-05-03-ev1-ev2-ev3-implementation-specs.md`
+
+### Phase 3 — Build + verify (next 1-2 days)
+
+6. Implement EV-1 minimal slice and verify with `session_preflight` +
+   `project_pulse --fast`.
+7. Implement EV-2 one-command bundle and generate first profile artifact.
+8. Implement EV-3 bounded benchmark harness and generate first benchmark report.
+
+**Deliverables:** code + artifacts in `docs/audit/results/` with pass/fail.
+
+### Phase 4 — Adversarial closeout (same day as build completion)
+
+9. Run anti-bias review across all three deliverables (pre-reg/FDR/holdout/
+   mechanism/sensitivity/disconfirming evidence).
+10. Produce one go/no-go memo with unresolved risks labeled `UNSUPPORTED`.
+
+**Deliverable:** `docs/audit/results/2026-05-0X-ev-program-go-no-go.md`
+
+## Immediate next command set (agent runbook)
+
+1. Research pull + parity map
+2. Spec writing for EV-1/2/3
+3. EV-1 implementation + verification
+4. EV-2 implementation + verification
+5. EV-3 implementation + verification
+6. Adversarial memo + decision cut
+
 ## Sources used (external primary sources)
 
 - QuantConnect LEAN repo: https://github.com/QuantConnect/Lean
