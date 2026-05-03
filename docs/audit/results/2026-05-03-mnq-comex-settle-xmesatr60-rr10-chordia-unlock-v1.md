@@ -58,3 +58,13 @@ Outputs (overwritten in place):
 - IS sample size in this audit reports `N_fired` (wins+losses+scratches with R=0). `validated_setups.sample_size` reports wins+losses only. Comparing the two t-stats directly is not like-for-like; reconcile via the scratch count reported above.
 - OOS window is descriptive only. Sign-match at `N_OOS >= 30` is a confirmatory gate, not a deployment criterion. PARK on OOS sign-flip means insufficient confirmation, not falsification.
 - Cross-asset enrichment (e.g., `cross_atr_MES_pct` for `X_MES_ATR60`) is computed in this runner from `daily_features.atr_20_pct` of the source instrument; verify the canonical promoter's enrichment path agrees before treating verdicts as directly comparable.
+
+## Post-merge addenda (2026-05-04)
+
+Added by `chordia/post-audit-addendum` after independent evidence-auditor review of the merged audit. Verdict (PASS_CHORDIA) unchanged; both qualifications below are audit-trail hygiene, not evidence revisions.
+
+**Reproducibility note — IS t-statistic.** The cited `t=4.361` was computed in-memory by `chordia_strict_unlock_v1.py` from the pandas dataframe with full float64 precision. Independent recompute from the committed CSV (which serializes `pnl_r_effective` at 4 decimal places) yields `t=4.323`. Delta=0.038 is a CSV rounding artefact, not an evidence discrepancy — both clear the strict 3.79 hurdle (gap=0.57 vs gap=0.53). Anyone re-deriving the t-stat from this CSV alone should expect the lower value.
+
+**OOS power floor — descriptive value of OOS sign-match.** Power to detect the IS-sized effect (`ExpR=+0.1506R`, `std=0.94`) at `N_OOS=49` is ≈0.30 (1-tailed, alpha=0.05). Per `memory/feedback_oos_power_floor.md`: at OOS power < 50%, a positive sign-match is uninformative — it neither confirms nor falsifies. The OOS gate as designed is a kill-on-sign-flip veto only; this lane does not trigger the veto, so the verdict stands on IS evidence alone. The original `## Verdict` and `## Split summary` framing implied OOS sign-match was a confirmatory data point — that framing overstated the OOS evidence and should be read together with this addendum.
+
+**E2 look-ahead exposure (CLEARED, see registry row #30).** `X_MES_ATR60` was independently verified against `docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md` and `trading_app/config.py:3904-3912` (`E2_EXCLUDED_FILTER_PREFIXES` / `E2_EXCLUDED_FILTER_SUBSTRINGS`). The filter sources `daily_features.atr_20_pct` (rolling, prior-close, `resolves_at="STARTUP"`) on MES — not break-bar state. Not subject to the E2 break-bar contamination class. Recorded as registry row #30 `CLEARED`.

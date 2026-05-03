@@ -255,8 +255,12 @@ audits:
     audit_date: 2026-05-03
     verdict: PASS_CHORDIA
     t_stat: 4.361
+    t_stat_source: in-memory float64
+    t_stat_csv_recompute: 4.323
     threshold: 3.79
     sample_size: 676
+    oos_n: 49
+    oos_power: 0.30
     note: |
       Bounded exact-lane strict unlock replay via
       `research/chordia_strict_unlock_v1.py` and prereg
@@ -267,13 +271,26 @@ audits:
       replay (N_fired=676; 3 scratches counted as R=0) on canonical
       `orb_outcomes` + `daily_features` with
       `WF_START_OVERRIDE['MNQ']=2020-01-01` applied. Cleared strict hurdle
-      (IS t=4.361, ExpR=+0.1519) with positive pooled OOS sign on N_OOS=49
-      (OOS ExpR=+0.1537).
-      Direction-mix asymmetry documented: IS Long_t=4.332 (n=371), IS
+      (IS t=4.361, ExpR=+0.1519).
+      Reproducibility note: t_stat=4.361 was computed in-memory from the
+      pandas dataframe with full float64 precision. Independent recompute
+      from the committed CSV (`pnl_r_effective` rounded to 4dp) yields
+      t=4.323. Delta=0.038 is a CSV-serialization rounding artefact, not
+      an evidence discrepancy; both clear the 3.79 hurdle (post-2026-05-04
+      addendum, `chordia/post-audit-addendum`).
+      OOS context (descriptive only, not a confirmatory data point):
+      OOS sign positive on N_OOS=49 (ExpR=+0.1537), but power to detect
+      the IS-sized effect at N=49 is ≈0.30 (1-tailed). At this power, a
+      positive OOS sign-match is uninformative — it neither confirms nor
+      falsifies. Listed here for completeness, not as supporting evidence.
+      The OOS gate is a kill-on-sign-flip veto only; this lane does not
+      trigger the veto.
+      Direction-mix asymmetry: IS Long_t=4.332 (n=371), IS
       Short_t=1.761 (n=305); OOS Long_ExpR=-0.041 (n=25), OOS
       Short_ExpR=+0.357 (n=24). Pooled gate clears strict; per-direction
-      OOS is unstable. Documented asymmetry, not a kill — same pattern as
-      MNQ_US_DATA_1000 VWAP_MID_ALIGNED RR1.0 sibling (audited 2026-05-02).
+      OOS is unstable. Documented asymmetry, not a kill. Prior comparison
+      to MNQ_US_DATA_1000 VWAP_MID_ALIGNED RR1.0 sibling (audited
+      2026-05-02) is informal — no numeric magnitude comparison committed.
       Allocator correlation gate vs already-deployed
       MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 will likely demote this
       lane regardless; that decision is downstream of this audit.
