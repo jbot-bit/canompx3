@@ -1323,6 +1323,9 @@ class TestCrossAssetATRInjection:
         from pipeline.paths import GOLD_DB_PATH
         from trading_app.lane_allocator import _per_month_expr
 
+        if not GOLD_DB_PATH.exists():
+            pytest.skip(f"Canonical gold.db unavailable at {GOLD_DB_PATH}")
+
         con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
         try:
             monthly, total_wins, total_trades = _per_month_expr(
