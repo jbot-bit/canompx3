@@ -23,6 +23,30 @@
 
 ## Current Session Update (2026-05-03 — Codex)
 
+- Added a design-scoped operator report for the PR #209 EV-2 thread:
+  `scripts/tools/live_readiness_report.py` plus active design note
+  `docs/plans/active/2026-05/2026-05-03-live-readiness-report-design.md`
+  and focused tests in
+  `tests/test_tools/test_live_readiness_report.py`.
+- Report sources are canonical only: `trading_app/lifecycle_state.py`,
+  `trading_app/prop_profiles.py`, `deployable_validated_setups`, and
+  `docs/runtime/lane_allocation.json`. No new truth layer or write path.
+- Real-checkout JSON run surfaced current blockers instead of fake-green:
+  Criterion 11 invalid (`profile fingerprint mismatch`), Criterion 12 invalid
+  (`profile fingerprint mismatch`), and
+  `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` is lifecycle-blocked by an SR pause
+  even though it still appears in allocator `lanes[]`.
+- Verification so far:
+  `ruff check` passed;
+  `ruff format --check` passed;
+  real `live_readiness_report.py --format json` ran successfully and exposed
+  useful state.
+- Verification gap:
+  targeted `pytest` for the new test file did not return cleanly in this
+  session, and `pipeline/check_drift.py` also failed to produce a terminal
+  result before handoff. Treat those as unresolved harness/runtime follow-up,
+  not as proven passes.
+
 - Fixed a `codex.bat` launcher-table drift that broke
   `codex.bat search-gold-db`: `scripts/infra/windows-agent-launch.ps1`
   was missing `codex-project-linux-search-gold-db` even though
