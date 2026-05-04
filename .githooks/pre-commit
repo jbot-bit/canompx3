@@ -280,10 +280,20 @@ if command -v code-review-graph >/dev/null 2>&1; then
         # to get the canonical project root (.../canompx3).
         CRG_TARGET_ROOT="$(dirname "$(dirname "$(dirname "$CANONICAL_VENV_PY")")")"
     fi
-    if ! CRG_REPO_ROOT="$CRG_TARGET_ROOT" code-review-graph update --base origin/main > /dev/null 2>&1; then
-        echo "  ADVISORY: CRG update failed — graph may be stale (non-blocking)"
+    # Use the graph's actual built-at commit as base so update detects ALL drift,
+    # not just the last commit. status output includes "Built at commit: <sha>".
+    CRG_BUILT_SHA="$(CRG_REPO_ROOT="$CRG_TARGET_ROOT" code-review-graph status 2>/dev/null | awk '/^Built at commit:/ {print $4}')"
+    CRG_BASE="${CRG_BUILT_SHA:-origin/main}"
+    CRG_OUT="$(CRG_REPO_ROOT="$CRG_TARGET_ROOT" code-review-graph update --base "$CRG_BASE" 2>&1)"
+    CRG_RC=$?
+    if [ $CRG_RC -ne 0 ]; then
+        echo "  ADVISORY: CRG update failed (rc=$CRG_RC) — graph may be stale (non-blocking)"
+        echo "$CRG_OUT" | tail -3 | sed 's/^/    /'
     else
-        echo "  PASSED (graph: $CRG_TARGET_ROOT)"
+        # Surface the incremental summary line (e.g. "Incremental: 5 files updated, ...")
+        CRG_SUMMARY="$(echo "$CRG_OUT" | grep -E '^Incremental:' | tail -1)"
+        echo "  PASSED (graph: $CRG_TARGET_ROOT, base: $CRG_BASE)"
+        [ -n "$CRG_SUMMARY" ] && echo "    $CRG_SUMMARY"
     fi
 else
     echo "  SKIP: code-review-graph not in PATH"
