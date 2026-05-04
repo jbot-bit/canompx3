@@ -534,7 +534,7 @@ def _build_ranked_allocation(
     ranking_values: dict[str, float | None],
     max_slots: int,
     max_dd: float,
-    orb_size_stats: dict[tuple[str, str], tuple[float, float]],
+    orb_size_stats: dict[tuple[str, str, int], tuple[float, float]],
     correlation_matrix: dict[tuple[str, str], float],
     prior_allocation: list[str] | None,
     exclude_none_ranks: bool,
@@ -571,7 +571,7 @@ def _build_ranked_allocation(
         if corr_reject:
             continue
 
-        _, p90_orb = orb_size_stats.get((lane.instrument, lane.orb_label), (100.0, 100.0))
+        _, p90_orb = orb_size_stats.get((lane.instrument, lane.orb_label, lane.orb_minutes), (100.0, 100.0))
         cost = COST_SPECS.get(lane.instrument)
         if cost is None:
             continue
