@@ -36,9 +36,25 @@
 # thresholds, but the live allocator reads the stored audit-row verdict here.
 # `validated_setups` is NOT an admissible replacement source for gate truth.
 #
+# Schema consumed by `trading_app.chordia.load_chordia_audit_log()` (verified
+# against source 2026-05-04):
+#   - version, default_has_theory, audit_freshness_days  (top-level scalars)
+#   - theory_grants:   (list — read; bare has_theory:true without theory_ref
+#                      is demoted to False per loader line 276)
+#   - audits:          (list — read; missing strategies fail-closed to MISSING)
+#
+# Top-level keys NOT in the above list (e.g. `non_auditable_notes`) are
+# silently ignored by the loader. Such keys are INFORMATIONAL ONLY — they
+# document operator-facing dispositions (e.g. strategies the strict-unlock
+# runner refuses by design) but DO NOT participate in the allocator gate.
+# A strategy listed only under `non_auditable_notes` resolves to MISSING
+# under the live gate and is PAUSED. To change a live deployment decision,
+# add to `audits:` or `theory_grants:` — never `non_auditable_notes:`.
+#
 # @research-source: docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
+# @research-source: docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md (t≥3.79 verbatim p.5)
 # @canonical-source: trading_app/chordia.py + docs/runtime/chordia_audit_log.yaml
-# @revalidated-for: allocator_chordia_gate stage 2026-05-01
+# @revalidated-for: allocator_chordia_gate stage 2026-05-01; queue closeout 2026-05-03
 
 version: 1
 default_has_theory: false
@@ -234,3 +250,71 @@ audits:
     sample_size: 1722
     note: |
       No theory grant; strict 3.79 applies. FAIL_BOTH.
+
+  - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60
+    audit_date: 2026-05-03
+    verdict: PASS_CHORDIA
+    t_stat: 4.361
+    t_stat_source: in-memory float64
+    t_stat_csv_recompute: 4.323
+    threshold: 3.79
+    sample_size: 676
+    oos_n: 49
+    oos_power: 0.30
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg
+      `docs/audit/hypotheses/2026-05-03-mnq-comex-settle-xmesatr60-rr10-chordia-unlock-v1.yaml`.
+      No theory grant claimed (filter-grounding-status UNSUPPORTED per
+      2026-05-02 feasibility scan). Required cross-asset ATR enrichment
+      (`cross_atr_MES_pct`) before filter delegation. Scratch-inclusive
+      replay (N_fired=676; 3 scratches counted as R=0) on canonical
+      `orb_outcomes` + `daily_features` with
+      `WF_START_OVERRIDE['MNQ']=2020-01-01` applied. Cleared strict hurdle
+      (IS t=4.361, ExpR=+0.1519).
+      Reproducibility note: t_stat=4.361 was computed in-memory from the
+      pandas dataframe with full float64 precision. Independent recompute
+      from the committed CSV (`pnl_r_effective` rounded to 4dp) yields
+      t=4.323. Delta=0.038 is a CSV-serialization rounding artefact, not
+      an evidence discrepancy; both clear the 3.79 hurdle (post-2026-05-04
+      addendum, `chordia/post-audit-addendum`).
+      OOS context (descriptive only, not a confirmatory data point):
+      OOS sign positive on N_OOS=49 (ExpR=+0.1537), but power to detect
+      the IS-sized effect at N=49 is ≈0.30 (1-tailed). At this power, a
+      positive OOS sign-match is uninformative — it neither confirms nor
+      falsifies. Listed here for completeness, not as supporting evidence.
+      The OOS gate is a kill-on-sign-flip veto only; this lane does not
+      trigger the veto.
+      Direction-mix asymmetry: IS Long_t=4.332 (n=371), IS
+      Short_t=1.761 (n=305); OOS Long_ExpR=-0.041 (n=25), OOS
+      Short_ExpR=+0.357 (n=24). Pooled gate clears strict; per-direction
+      OOS is unstable. Documented asymmetry, not a kill. Prior comparison
+      to MNQ_US_DATA_1000 VWAP_MID_ALIGNED RR1.0 sibling (audited
+      2026-05-02) is informal — no numeric magnitude comparison committed.
+      Allocator correlation gate vs already-deployed
+      MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 will likely demote this
+      lane regardless; that decision is downstream of this audit.
+
+non_auditable_notes:
+  # Strategies the strict-unlock runner refuses to audit by design.
+  # Documented here so the closeout ledger reflects an honest disposition,
+  # not a "missing audit" gap.
+  - strategy_id: MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10_S075
+    note_date: 2026-05-03
+    runner_refuses_reason: |
+      `research/chordia_strict_unlock_v1.py` (lines 105-120) refuses any
+      strategy whose ID parses to a non-default stop_multiplier. The `_S075`
+      suffix encodes a 0.75x stop, which is a different physical trade
+      stream than the canonical 1.0x stop the runner audits via
+      `orb_outcomes`. Auditing the default-stop trades under an S-suffixed
+      id would compute a t-stat against the wrong cohort.
+    canonical_path_to_audit: |
+      Requires an `outcome_builder` rebuild at stop_multiplier=0.75 to
+      produce a parallel `orb_outcomes_s075` (or equivalent) trade stream,
+      then a separate runner. Out of scope for the
+      chordia_audit_unlock_pass_chordia_strategies queue closeout.
+    queue_closeout_disposition: |
+      Counts as exit-criteria (b): "explicit FAIL with a one-line note in
+      the YAML explaining why audit failed at Pathway-A even though raw t
+      passed." Failure mode here is structural (wrong-cohort runner), not
+      statistical. Re-open if/when an S-suffix runner exists.
