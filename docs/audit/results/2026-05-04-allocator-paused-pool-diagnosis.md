@@ -71,7 +71,7 @@ Sampled via `random.seed(42)` over the 53 paused rows, plus all 3 FAIL_BOTH expl
 | `MES_CME_PRECLOSE_E2_RR1.0_CB1_ATR_P50` | Session regime COLD (-0.0899) | (no row) | — | — | regime gate fires before chordia gate; chordia=MISSING is moot ✓ |
 | `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G5` | chordia gate: missing strict replay audit verdict | (no row) | — | — | no audit row → MISSING → PAUSE ✓ |
 
-**§1 verdict: gate is internally consistent.** Every sampled row's status is what the gate code would compute given its YAML state. The reason there are 33 MISSING-audit rows isn't gate buggery — it's that strict-replay audits have only been performed on 11 strategy_ids to date (per `chordia_audit_log.yaml`), and those audits dispatched in two batches: 2026-05-01 (deployed-lane revalidation) and 2026-05-02 (chordia_strict_unlock_v1.py runs).
+**§1 verdict: gate is internally consistent.** Every sampled row's status is what the gate code would compute given its YAML state. The reason there are 33 MISSING-audit rows isn't gate buggery — it's that strict-replay audits have only been performed on 10 strategy_ids to date (per `chordia_audit_log.yaml::audits:` section; 2 additional rows live in `theory_grants:` which is a distinct construct, not an audit), and those audits dispatched in two batches: 2026-05-01 (deployed-lane revalidation) and 2026-05-02 (chordia_strict_unlock_v1.py runs).
 
 The only minor wrinkle: 1 of the 3 FAIL_BOTH rows above (EUROPE_FLOW ORB_G5, t=2.276) failed even WITH the theory grant. The wording `chordia gate: FAIL_BOTH (t<3.0)` is correct because 2.276 < 3.00, but the gate-reason string is technically the fallback path; for the no-theory FAIL_BOTH cases (COMEX_SETTLE, TOKYO_OPEN), the `(t<3.0)` substring is misleading — the actual hurdle they failed is 3.79. Cosmetic, not behavioral. Filed as a possible future readability improvement; not a bug.
 
@@ -151,7 +151,7 @@ Ranked by implied raw t-statistic from `validated_setups.p_value` (two-sided, la
 
 ### PRIORITY classification with MinBTL discipline
 
-Per `pre_registered_criteria.md` Amendment 2.8 (Bailey 2013 MinBTL): operational cap **≤300 trials**. Each chordia replay is one trial. The 11 audits already run consume 11 of 300. If we propose 33 new audits, we move to 44/300 — well within budget BUT proposing them WITHOUT EV-ranking would be K-stuffing, violating Chordia 2018's adaptive-MHT spirit.
+Per `pre_registered_criteria.md` Amendment 2.8 (Bailey 2013 MinBTL): operational cap **≤300 trials**. Each chordia replay is one trial. The 10 audits already run consume 10 of 300. If we propose 33 new audits, we move to 43/300 — well within budget BUT proposing them WITHOUT EV-ranking would be K-stuffing, violating Chordia 2018's adaptive-MHT spirit.
 
 **Hard cap: PRIORITY_A ≤ 5.** This is a deliberate institutional choice, not an arbitrary limit. The reasoning:
 - Per Bailey 2013, optimal selection-power decays with each additional uncorrelated trial
@@ -229,7 +229,7 @@ This diagnosis produces decision-grade input for follow-up design. **It does not
 
 ### What a follow-up commissioning pass should consider
 
-1. **Run PRIORITY_A audit batch** (5 strategies) under bounded `chordia_strict_unlock_v1.py` framework. Pre-reg each; report t-stats with 95% CI; honor MinBTL at N=11 prior + 5 new = 16 total trials (well within 300 cap).
+1. **Run PRIORITY_A audit batch** (5 strategies) under bounded `chordia_strict_unlock_v1.py` framework. Pre-reg each; report t-stats with 95% CI; honor MinBTL at N=10 prior + 5 new = 15 total trials (well within 300 cap).
 2. **Theory-grant feasibility scan for PRIORITY_B** if PRIORITY_A yields <3 PASS_CHORDIA. Literature pass against `mechanism_priors.md` + Carver Ch9-10 + Fitschen Ch3.
 3. **Family-correlation audit of PRIORITY_A** before deploying any PASS. Per `feedback_per_lane_breakdown_required.md` and Carver Ch11: lanes that share family_hash structure dilute portfolio EV. A1+A4 share `X_MES_ATR60` mechanism; A3+A5 share PD_* mechanism. Deploy at most ONE per mechanism class without explicit additivity evidence.
 4. **Regime-warming watch for MES_CME_PRECLOSE.** 12 lanes correlated; if regime turns positive, propose a single representative chordia audit (highest-t variant) before unpausing the cluster.
