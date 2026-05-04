@@ -68,11 +68,23 @@ def _sort_time_key(time_text: str) -> tuple[int, int]:
 
 
 def _iso_utc(value: Any) -> str | None:
-    """Best-effort ISO formatter for datetimes held on runtime objects."""
+    """Best-effort ISO formatter for datetimes held on runtime objects.
+
+    None passes through silently. datetime is normalized to UTC ISO8601.
+    Any other non-None type returns None with a logger warning — operator-
+    visible fields must never silently drop type-mismatched values per
+    institutional-rigor.md sec 6 (no silent failures). Upstream callers
+    that route non-datetime timestamps (e.g. pandas Timestamp from
+    execution_engine.py:978/1099/1374 — see follow-up F6) should coerce
+    at the assignment site, not here.
+    """
+    if value is None:
+        return None
     if isinstance(value, datetime):
         if value.tzinfo is None:
             value = value.replace(tzinfo=UTC)
         return value.astimezone(UTC).isoformat()
+    log.warning("_iso_utc: unsupported type %s — returning None", type(value).__name__)
     return None
 
 

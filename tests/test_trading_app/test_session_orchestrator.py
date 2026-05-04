@@ -388,6 +388,48 @@ class TestOperatorStateExport:
         assert lane["orb_complete_time_utc"] == complete_ts.isoformat()
         assert lane["signal_time_utc"] == entry_ts.isoformat()
 
+    def test_iso_utc_datetime_passes_through(self):
+        from trading_app.live.bot_state import _iso_utc
+
+        ts = datetime(2026, 3, 7, 22, 15, tzinfo=UTC)
+        assert _iso_utc(ts) == ts.isoformat()
+
+    def test_iso_utc_naive_datetime_assumed_utc(self):
+        from trading_app.live.bot_state import _iso_utc
+
+        naive = datetime(2026, 3, 7, 22, 15)
+        result = _iso_utc(naive)
+        assert result == datetime(2026, 3, 7, 22, 15, tzinfo=UTC).isoformat()
+
+    def test_iso_utc_none_returns_none_silently(self, caplog):
+        from trading_app.live.bot_state import _iso_utc
+
+        with caplog.at_level("WARNING"):
+            assert _iso_utc(None) is None
+        assert "unsupported type" not in caplog.text
+
+    def test_iso_utc_unsupported_type_warns_and_returns_none(self, caplog):
+        """Per institutional-rigor.md sec 6: operator-visible timestamp fields
+        must never silently drop type-mismatched values. _iso_utc returns None
+        but emits a warning so the type drift is visible in logs.
+
+        Upstream sites that route non-datetime timestamps (e.g. raw pd.Timestamp
+        from execution_engine.py:978/1099/1374 trade.entry_ts assignments)
+        should coerce at the assignment site, not rely on this defensive path.
+        """
+        import logging
+
+        from trading_app.live.bot_state import _iso_utc
+
+        with caplog.at_level(logging.WARNING, logger="trading_app.live.bot_state"):
+            assert _iso_utc("2026-03-07T22:15:00+00:00") is None
+        assert "_iso_utc: unsupported type str" in caplog.text
+
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger="trading_app.live.bot_state"):
+            assert _iso_utc(1234567890) is None
+        assert "_iso_utc: unsupported type int" in caplog.text
+
     def test_orchestrator_status_payloads_are_json_safe_and_best_effort(self, orch):
         orch._feed_status.update(
             {
