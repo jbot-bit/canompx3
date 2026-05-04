@@ -10,6 +10,14 @@
 
 **Where to start next session:**
 
+0. Prior-day-context blocker memo now exists:
+   `docs/audit/results/2026-05-02-prior-day-context-blocker-memo.md`.
+   It records the smallest safe conclusion after a grounded proposal audit:
+   under current local `resources/`, `PD_*` prior-day geometry does NOT have an
+   honest theory grant for the `t >= 3.00` path; treat the branch as
+   conditioner/confluence-first, do NOT reopen the consumed bridge cells, and
+   do NOT make live-route claims while same-session half-size remains
+   unexpressible on 1-contract lanes.
 1. Read the survey: `docs/audit/results/2026-05-02-deployable-pool-edge-survey.md`.
    It is the operative truth for "what's the next high-EV thread."
 2. The chordia_audit_unlock thread is half-done (5/8) and the remaining 3 are
