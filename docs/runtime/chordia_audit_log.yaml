@@ -234,3 +234,34 @@ audits:
     sample_size: 1722
     note: |
       No theory grant; strict 3.79 applies. FAIL_BOTH.
+
+  - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60
+    audit_date: 2026-05-04
+    verdict: PASS_CHORDIA
+    t_stat: 4.361
+    threshold: 3.79
+    sample_size: 676
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg
+      `docs/audit/hypotheses/2026-05-04-mnq-comexsettle-xmesatr60-chordia-unlock-v1.yaml`.
+      No theory grant claimed. Required cross-asset ATR enrichment
+      (`cross_atr_MES_pct`) before filter delegation. With
+      `WF_START_OVERRIDE['MNQ']=2020-01-01` applied (cohort N_fired=676 vs
+      `validated_setups.sample_size`=673 win+loss; reconciled by 3 scratch
+      rows), IS clears strict (t=4.361, ExpR=0.1519) and OOS sign matches
+      pooled at N_OOS=49 (OOS ExpR=+0.1537, pooled t=+1.150). Verdict
+      PASS_CHORDIA: IS strict-clean and OOS pooled-sign matches.
+
+      Caveat for downstream review: OOS directional split shows
+      long N=25 ExpR=-0.0410 (sign-flip vs IS long +0.2005) and short N=24
+      ExpR=+0.3565. Pooled OOS sign-match driven mainly by the short side.
+      Per prereg `pass_metric.extra_gates`, dir_match is satisfied at the
+      pooled level for descriptive-only OOS; this caveat does not invalidate
+      PASS_CHORDIA but should be revisited if directional rebalancing is
+      considered in a future doctrine pass.
+
+      Differs from sibling `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`
+      (audited 2026-05-02, verdict PARK on OOS pooled sign-flip): the two
+      strategies share filter class but produce different OOS behavior, so
+      the PRECLOSE PARK does not transfer to COMEX_SETTLE.

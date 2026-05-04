@@ -87,14 +87,55 @@ items:
   - id: chordia_audit_unlock_pass_chordia_strategies
     title: Doctrine-audit the remaining high-EV Chordia blockers
     class: research
-    status: open
+    status: closed
     priority: P1
     close_before_new_work: false
     owner_hint: claude-or-codex
-    last_verified_at: 2026-05-02
+    last_verified_at: 2026-05-04
     freshness_sla_days: 14
     next_action: |
-      2026-05-02 progress:
+      Closed 2026-05-04. Final disposition of all 8 originally identified
+      PASS_CHORDIA-without-audit strategies:
+
+      PASS_CHORDIA (deployable per gate):
+      - `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15` (audit 2026-05-02)
+      - `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15` (audit 2026-05-02)
+      - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`           (audit 2026-05-02)
+      - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`           (audit 2026-05-02)
+      - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12`            (audit 2026-05-02)
+      - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60`          (audit 2026-05-04, this stage)
+
+      PARK on bounded strict replay (IS-clean, OOS sign-flip):
+      - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`          (audit 2026-05-02)
+
+      Implicit close (no longer in `validated_setups` after pipeline rebuild;
+      still present in `experimental_strategies` only):
+      - `MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10_S075` — failed promotion
+        criteria in latest validated_setups rebuild; not a current deploy
+        candidate. If it returns to `validated_setups` in a future pipeline
+        rebuild, re-open as a fresh audit candidate (do not assume prior
+        triage standing).
+
+      Rebalance verification (2026-05-04):
+      - Drift check #134 (`check_lane_allocation_chordia_gate`) PASSES.
+      - `compute_lane_scores()` returns the new COMEX_SETTLE X_MES_ATR60 row
+        with `chordia_verdict=PASS_CHORDIA`, `chordia_audit_age_days=0`.
+      - No allocator code change. Allocation update flows naturally at the
+        next monthly rebalance via PR #197 gate logic.
+
+      Caveat carried forward from the COMEX_SETTLE X_MES_ATR60 audit row:
+      OOS directional split shows long sign-flip and short rescue at
+      N_OOS=49. Pooled OOS sign matches IS so PASS_CHORDIA stands per prereg
+      gate, but a directional rebalance pass on this strategy is a candidate
+      future doctrine action.
+
+      Higher-EV next thread (per `docs/audit/results/2026-05-02-deployable-pool-edge-survey.md`):
+      prior-day-context theory-grant feasibility, not mechanical audit
+      grinding. Tracked separately if/when opened.
+
+      Bailey-LdP MinBTL: < 300 trials per audit. No brute force.
+
+      Historical progress notes (2026-05-02):
       - 5/8 previously blocked PASS_CHORDIA names now have doctrine audit rows
         in `docs/runtime/chordia_audit_log.yaml`
       - Measured outcomes:
@@ -173,7 +214,13 @@ items:
       - trading_app/chordia.py
       - trading_app/lane_allocator.py
     notes_ref: HANDOFF.md (Item A under "What's NOT done -- ranked by EV")
-    override_note: Half complete as of 2026-05-02. Continue per-strategy Pathway-A audits on the 4 remaining names; do not reopen theory grants ad hoc.
+    override_note: |
+      Closed 2026-05-04 with 7/8 audited (6 PASS_CHORDIA + 1 PARK) + 1 implicit
+      close via pipeline rebuild. Final audit row added 2026-05-04 for
+      MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60 (PASS_CHORDIA, t=4.361, N=676).
+      Drift check #134 still passes. The COMEX_SETTLE X_MES_ATR60 result
+      DIFFERS from its CME_PRECLOSE sibling (PARK): independent measurement
+      avoided a copy-paste-by-symmetry doctrine error.
 
   - id: phase_d_d0_clean_rederivation
     title: Phase D D-0 clean re-derivation (E2 LA contamination — rel_vol → safe predictor)
