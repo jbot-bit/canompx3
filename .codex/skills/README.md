@@ -2,6 +2,11 @@
 
 This folder stores repo-local Codex skill sources.
 
+Official Codex repo-skill discovery currently scans `.agents/skills/`.
+This repo keeps the canonical skill sources here and exposes thin wrappers from
+`.agents/skills/` so the discovery path works without forking the real
+instructions.
+
 - `canompx3-workspace/` - Codex's own workspace-routing skill for this repo
 - `canompx3-audit/` - repo audit wrapper around canonical Claude audit flows
 - `canompx3-research/` - research and claim-scrutiny wrapper

@@ -42,4 +42,9 @@ Decision: BLOCK, FIX_REQUIRED, VERIFY_MORE, ACCEPT_WITH_RISK, or CLEAR.
 EOF
 )
 
-exec codex -p canompx3_max review --uncommitted "$PROMPT" "$@"
+exec codex \
+  -c 'mcp_servers.repo-state.command="bash"' \
+  -c 'mcp_servers.repo-state.args=["scripts/infra/run-repo-state-mcp.sh"]' \
+  -c 'mcp_servers.research-catalog.command="bash"' \
+  -c 'mcp_servers.research-catalog.args=["scripts/infra/run-research-catalog-mcp.sh"]' \
+  -p canompx3_max review --uncommitted "$PROMPT" "$@"

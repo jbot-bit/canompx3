@@ -51,6 +51,10 @@ CODEX_ARGS=(
   --sandbox workspace-write
   --ask-for-approval on-request
   --search
+  -c 'mcp_servers.repo-state.command="bash"'
+  -c 'mcp_servers.repo-state.args=["scripts/infra/run-repo-state-mcp.sh"]'
+  -c 'mcp_servers.research-catalog.command="bash"'
+  -c 'mcp_servers.research-catalog.args=["scripts/infra/run-research-catalog-mcp.sh"]'
 )
 
 if [[ "${CANOMPX3_CODEX_ENABLE_GOLD_DB:-0}" == "1" ]]; then
