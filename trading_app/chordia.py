@@ -154,13 +154,13 @@ def chordia_gate(
 # ---------------------------------------------------------------------------
 # Doctrine YAML lives at `docs/runtime/chordia_audit_log.yaml`. It carries
 # (a) per-strategy `has_theory` grants with literature citations, and
-# (b) per-strategy audit entries with verdict + audit_date.
+# (b) per-strategy strict-replay audit entries with verdict + audit_date.
 #
-# The allocator does NOT trust the YAML's verdict field for gate decisions —
-# the verdict is recomputed live from `validated_setups.sharpe_ratio` +
-# `sample_size` via chordia_verdict_label. The YAML is the source of truth
-# ONLY for the `has_theory` flag (a doctrine choice, not a computation) and
-# for the `audit_date` (when a human revalidated; needed for staleness).
+# The allocator MUST trust the YAML's verdict field for live deployment
+# decisions. Using `validated_setups.sharpe_ratio` + `sample_size` as a live
+# proxy would reintroduce the exact Mode B / derived-layer doctrine violation
+# that Phase 0 research truth protocol forbids. `validated_setups` remains
+# a parameter shelf and trailing-performance source, not Chordia gate truth.
 
 CHORDIA_AUDIT_LOG_PATH = Path(__file__).resolve().parents[1] / "docs" / "runtime" / "chordia_audit_log.yaml"
 CHORDIA_AUDIT_FRESHNESS_DAYS_DEFAULT = 90
@@ -172,9 +172,9 @@ class ChordiaAuditEntry:
 
     ``has_theory`` is a doctrine flag that selects the t-stat hurdle.
     ``audit_date`` is when the strategy was last revalidated (drives the
-    staleness check). ``verdict`` is the verdict recorded at that audit; the
-    live gate recomputes the verdict from current ``validated_setups`` data
-    and ignores this field for selection — retained for traceability.
+    staleness check). ``verdict`` is the strict-replay verdict recorded at
+    that audit; the live allocator uses this field directly and fails closed
+    to ``MISSING`` when no audit verdict exists.
     """
 
     strategy_id: str
@@ -201,6 +201,10 @@ class ChordiaAuditLog:
     def audit_date(self, strategy_id: str) -> date | None:
         entry = self.entries.get(strategy_id)
         return entry.audit_date if entry is not None else None
+
+    def verdict(self, strategy_id: str) -> str | None:
+        entry = self.entries.get(strategy_id)
+        return entry.verdict if entry is not None else None
 
     def audit_age_days(self, strategy_id: str, today: date) -> int | None:
         d = self.audit_date(strategy_id)
@@ -294,8 +298,8 @@ def load_chordia_audit_log(path: str | Path | None = None) -> ChordiaAuditLog:
 
     # Strategies with a theory grant but no audit row still appear in
     # entries so has_theory() returns the granted value rather than the
-    # default. The gate will mark them missing-audit -> PAUSED, but any
-    # live recomputation uses the correct hurdle (3.00) for them.
+    # default. The live gate still treats them as missing-audit -> PAUSED
+    # until a strict replay verdict exists.
     for sid, (has_theory, theory_ref) in theory_map.items():
         if sid in entries:
             continue

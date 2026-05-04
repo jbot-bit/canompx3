@@ -567,7 +567,16 @@ def check_lane_mismatch(session: str, lane: dict) -> tuple[bool, str]:
     for this session+instrument to the allocator's recommended strategy_id.
     Non-blocking (warning only) — user decides whether to follow recommendation.
     """
-    alloc_path = Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+
+    def _normalize_writable_path(path: Path) -> Path:
+        text = str(path)
+        if text.startswith("/mnt/c/Users/"):
+            return Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
+        return path
+
+    alloc_path = _normalize_writable_path(
+        Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+    )
     if not alloc_path.exists():
         return True, "No allocation file — cannot compare"
 
@@ -580,6 +589,7 @@ def check_lane_mismatch(session: str, lane: dict) -> tuple[bool, str]:
             (entry["instrument"], entry["orb_label"]): entry["strategy_id"] for entry in data.get("lanes", [])
         }
         paused_ids = {entry["strategy_id"] for entry in data.get("paused", [])}
+        stale_ids = {entry["strategy_id"] for entry in data.get("stale", [])}
     except (KeyError, _json.JSONDecodeError):
         return True, "Cannot parse allocation file"
 
@@ -591,6 +601,8 @@ def check_lane_mismatch(session: str, lane: dict) -> tuple[bool, str]:
         # Check if this session is actively paused
         if deployed_sid in paused_ids:
             return True, f"WARN: {deployed_sid} is PAUSED by allocator"
+        if deployed_sid in stale_ids:
+            return True, f"WARN: {deployed_sid} is STALE in allocator output"
         return True, f"WARN: {session} not in allocator recommendation"
     if deployed_sid == rec_sid:
         return True, f"Matches recommendation: {rec_sid}"

@@ -6,7 +6,265 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Current Session (2026-05-01 EVE — Discovery-Loop Hardening + Chordia P1 Pivot)
+## Pickup pointer (2026-05-02 PM — read this first)
+
+**Where to start next session:**
+
+0. Prior-day-context blocker memo now exists:
+   `docs/audit/results/2026-05-02-prior-day-context-blocker-memo.md`.
+   It records the smallest safe conclusion after a grounded proposal audit:
+   under current local `resources/`, `PD_*` prior-day geometry does NOT have an
+   honest theory grant for the `t >= 3.00` path; treat the branch as
+   conditioner/confluence-first, do NOT reopen the consumed bridge cells, and
+   do NOT make live-route claims while same-session half-size remains
+   unexpressible on 1-contract lanes.
+1. Read the survey: `docs/audit/results/2026-05-02-deployable-pool-edge-survey.md`.
+   It is the operative truth for "what's the next high-EV thread."
+2. The chordia_audit_unlock thread is half-done (5/8) and the remaining 3 are
+   low-EV under current allocator + profile state — see survey § Decision.
+3. **The high-EV next thread is NOT more chordia audits.** It is theory-grant
+   feasibility for the prior-day-context filter family — see survey
+   § "Higher-EV next threads (ranked)".
+
+**Live capital state (verify before acting):**
+
+- `docs/runtime/lane_allocation.json`: 3 DEPLOY lanes for `topstep_50k_mnq_auto`,
+  rebalance_date 2026-05-02 06:07. (Audit log was updated at 11:23 — last
+  rebalance is older than the audit log; a fresh rebalance is safe to run
+  but produces no book change per dry-run evidence in the survey.)
+- `docs/runtime/chordia_audit_log.yaml`: 6 audited rows (5 PASS_CHORDIA, 1 PARK).
+  2026-05-02 added `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100` PASS_CHORDIA at
+  t=4.256 N=522 (canonical replay reproduced before commit). Result MD:
+  `docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md`.
+  Allocator effect: this lane enters `lanes[]` and demotes the RR1.0 sibling to
+  paused via correlation gate.
+- Downstream consumers now treat allocator `stale[]` rows as blocked alongside
+  `paused[]`:
+  - `trading_app/live/session_orchestrator.py` loads both buckets into the
+    runtime block set.
+  - `trading_app/pre_session_check.py` warns on deployed lanes that are stale
+    in allocator output, not just paused.
+- Allocator scoring path (`trading_app/lane_allocator.py:_per_month_expr`) now
+  injects `cross_atr_{source}_pct` via canonical
+  `trading_app.strategy_discovery._inject_cross_asset_atrs` before applying
+  filters (2026-05-02). Without this, every `CrossAssetATRFilter` lane silently
+  fail-closed and surfaced as STALE despite an active validated_setups cohort.
+  Post-fix `lane_allocation.json` 2026-05-02 rebalance: stale[] 6 -> 0; the 6
+  X_MES_ATR60 lanes correctly moved into Chordia gate paused (no strict-replay
+  audit row exists yet). Same lane composition as before for deployed lanes.
+  Audit-log row for `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` corrected:
+  sample_size 1719 -> 1695 (was N_universe; the t-stat-bearing N_fired is
+  1695, per `docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md`
+  line 49). Validated_setups N=1508 is from a different cohort definition
+  (win+loss only at promote-time 2026-04-11) and is not directly comparable.
+
+**Tooling state:**
+
+- `research/chordia_strict_unlock_v1.py`: hardened with `WF_START_OVERRIDE`
+  cohort lower bound and stop_multiplier fail-closed guard.
+  Pressure-tested. Auditing any default-stop strategy_id is one command:
+  `python research/chordia_strict_unlock_v1.py --hypothesis-file <prereg>`.
+- S-suffixed strategies (e.g. `*_S075`) require an `outcome_builder` rebuild
+  at the target stop and a different runner — not yet built.
+
+**Top-of-list candidates if you want to actually expand the book:**
+
+- `MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_VOL_16K` (OOS=0.357, all_yrs_pos=T) —
+  blocked by MES profile filter, not by stats. Fix: open a MES profile.
+- `MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_GO_LONG` (OOS=0.218, derT=3.74) —
+  needs prior-day-context theory grant to drop hurdle from 3.79 to 3.00.
+  Literature path: Chan Ch7 + Carver Ch9-10 extracts in
+  `docs/institutional/literature/`.
+- `MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4` (OOS=0.230, all_yrs_pos=T, DSR=0.50) —
+  blocked by MGC profile filter. Same fix as MES.
+
+**What NOT to do (already disproved this session):**
+
+- Don't audit `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100` or
+  `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60` next — both correlation-pruned
+  vs deployed RR1.0 OVNRNG_100 sibling (rho > 0.7) and ranking-pruned even
+  before correlation gate per the dry-run rebalance. Doctrine completionism,
+  near-zero portfolio EV.
+- Don't trust `validated_setups.oos_exp_r` for any pre-2026-04-08 row
+  without recomputing under Mode A — `research-truth-protocol.md` Mode B
+  warning applies.
+
+**Session commits (newest first):**
+
+- (this commit) `audit(survey): deployable-pool edge map`
+- `f25cc2fe` audit(chordia): MNQ_US_DATA_1000 RR1.0 VWAP_MID_ALIGNED → PASS_CHORDIA
+- `5ea34d99` fix(chordia-audit): apply WF_START_OVERRIDE so audit cohorts match canonical promoter
+
+**Working-tree note for next session:**
+
+5 stage-marker files in `docs/runtime/stages/` show as deleted in working
+tree (left over from prior closed-stage cleanup). They are NOT mine to
+commit. Either commit them in a separate cleanup commit if intended, or
+restore them via `git checkout -- docs/runtime/stages/`.
+
+## Current Session (2026-05-02 — Chordia Theory Feasibility + Stale-Plan Reconciliation)
+
+### What landed
+
+- Read-only memo added:
+  `docs/audit/results/2026-05-02-chordia-theory-feasibility-scan.md`
+- First strict-threshold prereg added:
+  `docs/audit/hypotheses/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.yaml`
+  targeting `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`
+  as a **no-theory** Chordia unlock audit (`testing_mode: family`,
+  `pathway: A_fixed_family`, `K=1`, strict `t >= 3.79`).
+- Three follow-on strict-threshold preregs added with the same no-theory
+  pattern:
+  - `docs/audit/hypotheses/2026-05-02-mnq-cmepreclose-xmesatr60-chordia-unlock-v1.yaml`
+  - `docs/audit/hypotheses/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.yaml`
+  - `docs/audit/hypotheses/2026-05-02-mnq-comex-costlt12-chordia-unlock-v1.yaml`
+- Those four preregs were then normalized to the repo's active
+  `metadata`/`execution`/`conditional_role` schema so the prereg front door
+  can execute them without ad hoc routing.
+- Generic bounded runner added:
+  `research/chordia_strict_unlock_v1.py`
+  - canonical `orb_outcomes` + `daily_features` replay
+  - strict no-theory threshold via `trading_app.chordia.chordia_threshold`
+  - explicit scratch-inclusive accounting (`pnl_r NULL -> 0.0`)
+  - explicit `cross_atr_MES_pct` enrichment for `CrossAssetATRFilter` parity
+  - writes result `.md` + `.csv` only; no writes to `validated_setups` /
+    `experimental_strategies`
+- Executed all 4 strict unlock preregs through
+  `scripts/tools/prereg_front_door.py --execute` (initial run), then
+  re-ran with `WF_START_OVERRIDE` cohort fix in
+  `research/chordia_strict_unlock_v1.py::_load_universe`. The initial
+  cohort included pre-2020-01-01 MNQ trades that the canonical promoter
+  excludes via `WF_START_OVERRIDE['MNQ']=2020-01-01`
+  (`trading_app/config.py:354`, micro-launch microstructure exclusion).
+  After fix, audit `N_fired - scratch` reconciles to
+  `validated_setups.sample_size` exactly on all 4 strategies.
+  Corrected outcomes:
+  - `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`
+    -> `PASS_CHORDIA`, `t=5.158`, `N_IS=806` (was 889, t=5.547)
+  - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`
+    -> `PASS_CHORDIA`, `t=4.363`, `N_IS=522` (was 529, t=4.414)
+  - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12`
+    -> `PASS_CHORDIA`, `t=4.294`, `N_IS=1252` (was 1281, t=4.202)
+  - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`
+    -> `PARK`, `IS t=4.211`, `N_IS=669` (was `FAIL_BOTH` t=3.716, N=700).
+    Material reverdict: IS now clears strict 3.79, but OOS sign opposes
+    IS at `N_OOS=49 >= 30` → PARK (IS-clean, no OOS confirmation).
+  Note: `OVNRNG_100` and `COST_LT12` were already promoted into
+  `lane_allocation.json` rebalance_date 2026-05-02 by the parallel
+  rebalance — DEPLOY eligibility unchanged (still PASS_CHORDIA after
+  cohort correction, only sizes revised in the audit ledger).
+- Result artifacts written:
+  - `docs/audit/results/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.{md,csv}`
+  - `docs/audit/results/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.{md,csv}`
+  - `docs/audit/results/2026-05-02-mnq-comex-costlt12-chordia-unlock-v1.{md,csv}`
+  - `docs/audit/results/2026-05-02-mnq-cmepreclose-xmesatr60-chordia-unlock-v1.{md,csv}`
+- `docs/runtime/chordia_audit_log.yaml` updated with 2026-05-02 audit rows for
+  those four strategies. Default `has_theory=False` remains unchanged; no new
+  theory grants were added.
+- Live-path follow-through hardening landed after the allocator truth swap:
+  consumers that load blocked strategies from `lane_allocation.json` now treat
+  `stale[]` the same as `paused[]` for entry blocking / warnings. This closes a
+  downstream gap where stale-but-blocked lanes were visible in JSON but not
+  consistently treated as blocked by every consumer.
+- Canonical rebalance write for `topstep_50k_mnq_auto` completed successfully
+  after path hardening in `trading_app/lane_allocator.py`:
+  - new live `docs/runtime/lane_allocation.json` rebalance_date `2026-05-02`
+  - live book now expands from 1 lane to 3 lanes:
+    - `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`
+    - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`
+    - `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12`
+- Read/write hardening landed around `lane_allocation.json` path resolution:
+  - `trading_app/lane_allocator.py`
+  - `trading_app/prop_profiles.py`
+  - `trading_app/pre_session_check.py`
+  The bug was WSL mount-path casing (`/mnt/c/Users/...` vs writable
+  `/mnt/c/users/...`) causing rebalance write failure at the final save step.
+- Reconciled stale plan split:
+  `docs/runtime/handoff-2026-05-02.md` says "7-lane book / Stage 3 next",
+  but live truth in `docs/runtime/lane_allocation.json` is already post-Chordia
+  gate and now shows **1 DEPLOY lane** + 16 paused on rebalance_date
+  `2026-05-01`.
+- Result: do NOT resume the stale "audit the corrected 7-lane book" branch as
+  if it were current. The active capital-EV thread is still
+  `chordia_audit_unlock_pass_chordia_strategies`.
+
+### Feasibility verdict from local literature only
+
+- `COST_LT*` -> no theory grant; strict `t >= 3.79` only
+- `X_MES_ATR60` -> UNSUPPORTED for theory grant from current local extracts
+- `OVNRNG_100` -> class-grounded only, not enough for `has_theory: true`
+- `VWAP_MID_ALIGNED` -> plausible, but not yet locally grounded enough for a
+  doctrine grant
+
+### Recommended next step
+
+- One of the 4 remaining `PASS_CHORDIA`-without-audit names is now closed:
+  - `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15`
+    -> `PASS_CHORDIA`, `t=4.362`, `N_IS=806` (744 win+loss, matches
+    `validated_setups.sample_size`). OOS sign matches at `N_OOS=47`,
+    `OOS_t=2.143`, `p=0.032`. Direction asymmetric: Long_t=2.390 vs
+    Short_t=3.902; pooled gate clears strict, long-only would not.
+- 3 remain:
+  - `MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10_S075` -- BLOCKED on
+    runner architecture: `chordia_strict_unlock_v1.py` now fails-closed
+    on any non-default `stop_multiplier` because `orb_outcomes` is built
+    at the default 1.0 stop. Auditing S-suffixed strategies requires an
+    `outcome_builder` rebuild at the target stop and a different runner.
+    Tracked separately as a deferred runner extension.
+  - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100` -- same-session sibling
+    of already-deployed `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`;
+    portfolio-EV question (correlation gate) is downstream of audit.
+  - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60` -- same-session sibling
+    of already-deployed `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`;
+    same correlation question.
+- Runner hardening landed this session:
+  - `WF_START_OVERRIDE` cohort lower bound applied so audit replays
+    reconcile to canonical promoter cohorts within the documented
+    scratch-policy delta.
+  - Fail-closed guard on non-default `stop_multiplier`. Pressure-tested
+    with a fake `*_S075` prereg; runner refuses with exit code 2 and
+    writes no result MD/CSV.
+- Continue using the same front-door + bounded-runner flow established by
+  `research/chordia_strict_unlock_v1.py`; do not invent a second harness.
+- Only do more literature extraction if it could honestly upgrade
+  `VWAP_MID_ALIGNED` or `OVNRNG_100` into `has_theory: true`.
+- MCP work remains off the critical path for "more high-quality deployed
+  trades" in this checkout.
+
+### Execution surface now working here
+
+- User built `.venv-wsl` in this checkout and executed the prereg front door
+  successfully from WSL.
+- Important harness lesson captured by code, not chat:
+  `X_MES_ATR60` is NOT a plain `daily_features` filter. It requires
+  `cross_atr_MES_pct` enrichment before canonical delegation. Without that,
+  replay fail-closes to zero-fire and yields a false `SCAN_ABORT`.
+- Important doctrine fix landed:
+  the allocator live gate now reads strict-replay verdicts from
+  `docs/runtime/chordia_audit_log.yaml` directly and fails closed to
+  `MISSING` when no audit row exists. It no longer derives Chordia deploy
+  truth from `validated_setups.sharpe_ratio * sqrt(sample_size)`.
+- Post-fix measured behavior on 2026-05-02:
+  - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60` now resolves to
+    `FAIL_BOTH` from the audit row, not a live recomputed pass.
+  - Remaining unaudited siblings resolve to `MISSING`, not `PASS_CHORDIA`.
+  - Canonical rebalance for `topstep_50k_mnq_auto` still selects the same
+    3 audited lanes, but the saved/report surfaces now reflect the gate:
+    4 deployable, 49 paused, 6 stale; 33 pauses are explicitly
+    `chordia gate:*`.
+  - `docs/runtime/lane_allocation.json` now serializes structured `paused[]`
+    and `stale[]` entries with `status`, `reason`, `chordia_verdict`, and
+    `chordia_audit_age_days`, so stale-but-audit-failed lanes remain visible
+    in the saved runtime state.
+- Phantom-stat retraction:
+  the originally cited `t=4.565` for
+  `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60` is UNSUPPORTED. Repo grep on
+  2026-05-02 found zero committed matches. Do not cite it in future pre-regs
+  or H3 controls.
+
+---
+
+## Prior Session (2026-05-01 EVE — Discovery-Loop Hardening + Chordia P1 Pivot)
 
 ### What landed
 
@@ -67,6 +325,20 @@ Main worktree (`C:/Users/joshd/canompx3`) at session-end has uncommitted Codex-s
   `code-review-graph`, not `notebooklm`.
 - Shared roadmap written:
   `docs/plans/2026-05-01-codex-supercharge-roadmap.md`
+- `repo-state` MCP landed:
+  - server: `scripts/tools/repo_state_mcp_server.py`
+  - launcher: `scripts/infra/run-repo-state-mcp.sh`
+  - shared declaration: `.mcp.json`
+  - Codex launcher wiring: `scripts/infra/codex-project*.sh`,
+    `scripts/infra/codex-review.sh`, `scripts/infra/codex-capital-review.sh`
+  - tests: `tests/test_tools/test_repo_state_mcp_server.py`
+- `research-catalog` MCP landed:
+  - server: `scripts/tools/research_catalog_mcp_server.py`
+  - launcher: `scripts/infra/run-research-catalog-mcp.sh`
+  - shared declaration: `.mcp.json`
+  - Codex launcher wiring: `scripts/infra/codex-project*.sh`,
+    `scripts/infra/codex-review.sh`, `scripts/infra/codex-capital-review.sh`
+  - tests: `tests/test_tools/test_research_catalog_mcp_server.py`
 
 ### Measured blockers still true
 
@@ -80,13 +352,7 @@ Main worktree (`C:/Users/joshd/canompx3`) at session-end has uncommitted Codex-s
 ### Next build order
 
 1. Use a WSL-home clone such as `~/canompx3` for real Codex work.
-2. Build `repo-state` MCP from:
-   `context_resolver.py`, `task_route_packet.py`, `project_pulse.py`,
-   `system_context.py`, `context_views.py`.
-3. Build `research-catalog` MCP over `docs/institutional/`,
-   `docs/audit/hypotheses/`, `docs/audit/results/`, and existing context
-   catalog tooling.
-4. Build `strategy-lab` MCP only after those two, using `gold-db` as the truth
+2. Build `strategy-lab` MCP using `gold-db` as the truth
    substrate instead of inventing a second state layer.
 
 ## Prior Session (2026-05-01 PM — Allocator Chordia Gate)

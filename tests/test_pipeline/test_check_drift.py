@@ -18,6 +18,7 @@ from pipeline.check_drift import (
     check_holdout_policy_declaration_consistency,
     check_non_bars1m_writes,
     check_pipeline_never_imports_trading_app,
+    check_prereg_present_for_recent_runs,
     check_pyright_config_exists,
     check_python_version_file,
     check_ruff_rules_minimum,
@@ -1306,6 +1307,98 @@ class TestHoldoutPolicyDeclarationConsistency:
         assert any("HOLDOUT_SACRED_FROM drifted" in v for v in violations)
         assert any("pre_registered_criteria.md" in v for v in violations)
         assert any("RESEARCH_RULES.md" in v for v in violations)
+
+
+class TestPreregPresentForRecentRuns:
+    """Tests for ``check_prereg_present_for_recent_runs`` (Criterion 1 advisory).
+
+    The check scans ``experimental_strategies`` for rows created after
+    ``HOLDOUT_GRANDFATHER_CUTOFF`` and reports any (instrument, discovery_date)
+    that has no matching prereg yaml at
+    ``docs/audit/hypotheses/<date>-<instrument>-*.yaml``.
+
+    These tests inject a fake DuckDB-like connection (``execute`` returning a
+    pre-canned fetchall) and monkeypatch ``PROJECT_ROOT`` so the prereg
+    glob hits a temp dir.
+    """
+
+    class _FakeCursor:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def fetchall(self):
+            return self._rows
+
+    class _FakeCon:
+        def __init__(self, rows_by_instrument):
+            self._rows_by_instrument = rows_by_instrument
+
+        def execute(self, _sql, params):
+            instrument = params[0]
+            return TestPreregPresentForRecentRuns._FakeCursor(self._rows_by_instrument.get(instrument, []))
+
+        def close(self):
+            pass
+
+    def _patch_project_root(self, monkeypatch, fake_root: Path) -> None:
+        import pipeline.check_drift as cd
+
+        monkeypatch.setattr(cd, "PROJECT_ROOT", fake_root)
+
+    def test_no_post_grandfather_rows_passes(self, monkeypatch, tmp_path):
+        """If experimental_strategies has no rows past the grandfather cutoff
+        for the active instruments, the check returns no violations."""
+        fake_root = tmp_path / "fake_repo"
+        (fake_root / "docs" / "audit" / "hypotheses").mkdir(parents=True)
+        self._patch_project_root(monkeypatch, fake_root)
+
+        con = self._FakeCon(rows_by_instrument={})  # all instruments empty
+        violations = check_prereg_present_for_recent_runs(con=con)
+        assert violations == [], f"unexpected violations: {violations}"
+
+    def test_missing_prereg_yields_violation(self, monkeypatch, tmp_path):
+        """A post-grandfather discovery date with no matching yaml is reported."""
+        fake_root = tmp_path / "fake_repo"
+        (fake_root / "docs" / "audit" / "hypotheses").mkdir(parents=True)
+        self._patch_project_root(monkeypatch, fake_root)
+
+        con = self._FakeCon(rows_by_instrument={"MGC": [(date(2026, 5, 4),)]})
+        violations = check_prereg_present_for_recent_runs(con=con)
+        assert any("PREREG MISSING" in v and "MGC" in v and "2026-05-04" in v for v in violations), (
+            f"expected PREREG MISSING for MGC 2026-05-04, got: {violations}"
+        )
+
+    def test_present_prereg_passes(self, monkeypatch, tmp_path):
+        """If a matching yaml exists, no violation for that (instrument, date)."""
+        fake_root = tmp_path / "fake_repo"
+        hyp_dir = fake_root / "docs" / "audit" / "hypotheses"
+        hyp_dir.mkdir(parents=True)
+        (hyp_dir / "2026-05-04-mgc-cme-reopen-v1.yaml").write_text(
+            "hypotheses:\n  - id: 1\n",
+            encoding="utf-8",
+        )
+        self._patch_project_root(monkeypatch, fake_root)
+
+        con = self._FakeCon(rows_by_instrument={"MGC": [(date(2026, 5, 4),)]})
+        violations = check_prereg_present_for_recent_runs(con=con)
+        # No violation specifically for MGC 2026-05-04
+        assert not any("MGC" in v and "2026-05-04" in v for v in violations), (
+            f"expected no MGC 2026-05-04 violation, got: {violations}"
+        )
+
+    def test_missing_hypotheses_dir_returns_violation(self, monkeypatch, tmp_path):
+        """A repo with no docs/audit/hypotheses/ directory cannot enforce
+        Criterion 1 -- the check must surface that as a violation rather than
+        silently passing (fail-closed)."""
+        fake_root = tmp_path / "fake_repo"
+        fake_root.mkdir()  # no hypotheses subdir
+        self._patch_project_root(monkeypatch, fake_root)
+
+        con = self._FakeCon(rows_by_instrument={})
+        violations = check_prereg_present_for_recent_runs(con=con)
+        assert any("hypotheses dir missing" in v for v in violations), (
+            f"expected missing-dir violation, got: {violations}"
+        )
 
 
 # ─── Check 92: @canonical-source annotation integrity (F-1..F-9 stage 8) ──

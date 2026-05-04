@@ -93,6 +93,11 @@ Good candidates here:
 - rebuild / verification routines
 - research-output review against `RESEARCH_RULES.md`
 
+Official Codex skill discovery is repo-rooted at `.agents/skills/`. For this
+repo, keep the canonical Codex skill source in `.codex/skills/`, then expose
+thin discovery wrappers in `.agents/skills/` so the app can find them without
+duplicating the real instructions.
+
 ### 5. Use MCP only for real external loops
 
 Official guidance says MCP should be used when context lives outside the repo or changes frequently.
@@ -131,6 +136,9 @@ For this repo:
 - do not replace `AGENTS.md` with `model_instructions_file`
 
 This is the right place to harden "run preflight and read handoff first" behavior for direct Codex entry without touching the Claude layer.
+
+Repo-local hooks belong here too when they make startup or grounding more
+conditional and cheaper. Keep them small, deterministic, and WSL-first.
 
 ### 8. Plan and verify, especially in large repos
 

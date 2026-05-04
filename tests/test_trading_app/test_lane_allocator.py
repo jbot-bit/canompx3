@@ -23,6 +23,7 @@ from trading_app.lane_allocator import (
     load_sr_state,
 )
 from trading_app.lane_correlation import RHO_REJECT_THRESHOLD
+from trading_app.chordia import ChordiaAuditEntry, ChordiaAuditLog
 
 
 # ── Factories ──────────────────────────────────────────────────────
@@ -105,13 +106,19 @@ def test_db(tmp_path):
         )
     """)
 
+    # `atr_20_pct` is canonical (read by _inject_cross_asset_atrs). Fixture
+    # leaves the column nullable / unfilled — fixture lanes use NO_FILTER /
+    # COST_LT12, never CrossAssetATRFilter, so injection is a no-op. The
+    # column must exist on the schema or the helper's source-instrument
+    # query raises BinderError on every compute_lane_scores call.
     con.execute("""
         CREATE TABLE daily_features (
             trading_day DATE,
             symbol VARCHAR,
             orb_minutes INTEGER,
             orb_COMEX_SETTLE_break_dir VARCHAR,
-            orb_COMEX_SETTLE_size DOUBLE
+            orb_COMEX_SETTLE_size DOUBLE,
+            atr_20_pct DOUBLE
         )
     """)
 
@@ -171,11 +178,14 @@ def _seed_outcomes(
 
 
 def _seed_features(db_path, days, *, symbol="MNQ", break_dir="long", orb_size=10.0):
-    """Insert daily_features for given days (all same break_dir/orb_size)."""
+    """Insert daily_features for given days (all same break_dir/orb_size).
+
+    `atr_20_pct` is left NULL — fixture lanes never use cross-asset filters.
+    """
     con = duckdb.connect(str(db_path))
     for td in days:
         con.execute(
-            "INSERT INTO daily_features VALUES (?, ?, 5, ?, ?)",
+            "INSERT INTO daily_features VALUES (?, ?, 5, ?, ?, NULL)",
             [td, symbol, break_dir, orb_size],
         )
     con.close()
@@ -186,7 +196,7 @@ def _seed_features_mixed(db_path, day_sizes, *, symbol="MNQ", break_dir="long"):
     con = duckdb.connect(str(db_path))
     for td, orb_size in day_sizes:
         con.execute(
-            "INSERT INTO daily_features VALUES (?, ?, 5, ?, ?)",
+            "INSERT INTO daily_features VALUES (?, ?, 5, ?, ?, NULL)",
             [td, symbol, break_dir, orb_size],
         )
     con.close()
@@ -717,6 +727,68 @@ class TestIntegration:
         # ORB_G6: only 5 trades on large-ORB days counted
         assert orb_g6.trailing_n == 5
 
+    def test_compute_lane_scores_uses_audit_log_verdict_not_validated_shelf_t(self, test_db):
+        """Strict audit verdict wins over a DB-derived pass-looking t-stat.
+
+        The live allocator must not recompute Chordia truth from
+        validated_setups.sharpe_ratio * sqrt(N). If strict replay recorded
+        FAIL_BOTH, that is the live gate input even when the shelf row would
+        imply a pass under the derived-layer formula.
+        """
+        rebalance = date(2025, 7, 1)
+        sid = "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER"
+        _seed_strategy(
+            test_db,
+            strategy_id=sid,
+            sample_size=100,
+            sharpe_ratio=0.45,  # 0.45 * sqrt(100) = 4.5 -> would PASS if recomputed
+        )
+        audit_log = ChordiaAuditLog(
+            default_has_theory=False,
+            audit_freshness_days=90,
+            entries={
+                sid: ChordiaAuditEntry(
+                    strategy_id=sid,
+                    has_theory=False,
+                    audit_date=date(2025, 6, 30),
+                    verdict="FAIL_BOTH",
+                    theory_ref=None,
+                )
+            },
+        )
+
+        scores = compute_lane_scores(rebalance_date=rebalance, db_path=test_db, audit_log=audit_log)
+
+        assert len(scores) == 1
+        assert scores[0].chordia_verdict == "FAIL_BOTH"
+        assert scores[0].chordia_audit_age_days == 1
+
+    def test_compute_lane_scores_missing_audit_row_fails_closed(self, test_db):
+        """No audit row means MISSING, even if validated_setups would pass.
+
+        This blocks pre-Phase-0 / unaudited strategies from silently passing
+        through the live gate on derived-layer metrics alone.
+        """
+        rebalance = date(2025, 7, 1)
+        sid = "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER"
+        _seed_strategy(
+            test_db,
+            strategy_id=sid,
+            sample_size=100,
+            sharpe_ratio=0.45,  # would PASS if derived from validated_setups
+        )
+        audit_log = ChordiaAuditLog(
+            default_has_theory=False,
+            audit_freshness_days=90,
+            entries={},
+        )
+
+        scores = compute_lane_scores(rebalance_date=rebalance, db_path=test_db, audit_log=audit_log)
+
+        assert len(scores) == 1
+        assert scores[0].chordia_verdict == "MISSING"
+        assert scores[0].chordia_audit_age_days is None
+
 
 class TestLivenessScoring:
     """Tests for SR alarm + 3mo decay ranking adjustments."""
@@ -1032,6 +1104,19 @@ class TestChordiaGate:
         assert result[0].status == "PAUSE"
         assert "FAIL_CHORDIA" in result[0].status_reason
 
+    def test_park_verdict_demoted_to_pause(self):
+        """A PARK audit verdict is non-deployable until separately cleared."""
+        from trading_app.lane_allocator import apply_chordia_gate
+
+        s = _make_score(
+            strategy_id="A",
+            chordia_verdict="PARK",
+            chordia_audit_age_days=0,
+        )
+        result = apply_chordia_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "PARK" in result[0].status_reason
+
     def test_missing_verdict_demoted_to_pause(self):
         """A score with chordia_verdict=None is demoted to PAUSE."""
         from trading_app.lane_allocator import apply_chordia_gate
@@ -1043,7 +1128,7 @@ class TestChordiaGate:
         )
         result = apply_chordia_gate([s])
         assert result[0].status == "PAUSE"
-        assert "missing audit" in result[0].status_reason.lower()
+        assert "strict replay audit" in result[0].status_reason.lower()
 
     def test_missing_audit_age_demoted_to_pause(self):
         """A PASS verdict with chordia_audit_age_days=None is still demoted to PAUSE."""
@@ -1146,3 +1231,127 @@ class TestChordiaGate:
         lane = data["lanes"][0]
         assert lane["chordia_verdict"] == "PASS_PROTOCOL_A"
         assert lane["chordia_audit_age_days"] == 15
+
+    def test_save_allocation_paused_includes_gate_demotions(self, tmp_path):
+        """save_allocation serializes Chordia-gated pauses into paused[]."""
+        import json
+        from datetime import date as _date
+        from trading_app.lane_allocator import save_allocation
+
+        selected = _make_score(
+            strategy_id="CLEAN",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=5,
+        )
+        blocked = _make_score(
+            strategy_id="BLOCKED",
+            orb_label="EUROPE_FLOW",
+            chordia_verdict="MISSING",
+            chordia_audit_age_days=None,
+            status="DEPLOY",
+            status_reason="Session HOT (+0.1000), ExpR=+0.2000, N=120",
+        )
+
+        path = save_allocation(
+            scores=[selected, blocked],
+            allocation=[selected],
+            rebalance_date=_date(2026, 5, 2),
+            profile_id="test_profile",
+            output_path=tmp_path / "test_alloc.json",
+        )
+        data = json.loads(path.read_text())
+
+        paused = {row["strategy_id"]: row["reason"] for row in data["paused"]}
+        assert "BLOCKED" in paused
+        assert "strict replay audit" in paused["BLOCKED"]
+        blocked_row = next(row for row in data["paused"] if row["strategy_id"] == "BLOCKED")
+        assert blocked_row["status"] == "PAUSE"
+        assert blocked_row["chordia_verdict"] == "MISSING"
+
+    def test_save_allocation_stale_retains_chordia_traceability(self, tmp_path):
+        """stale[] preserves strict-audit state for non-selected blocked lanes."""
+        import json
+        from datetime import date as _date
+        from trading_app.lane_allocator import save_allocation
+
+        selected = _make_score(
+            strategy_id="CLEAN",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=5,
+        )
+        stale_failed = _make_score(
+            strategy_id="STALE_FAIL",
+            status="STALE",
+            status_reason="No trades in trailing window",
+            chordia_verdict="FAIL_BOTH",
+            chordia_audit_age_days=0,
+        )
+
+        path = save_allocation(
+            scores=[selected, stale_failed],
+            allocation=[selected],
+            rebalance_date=_date(2026, 5, 2),
+            profile_id="test_profile",
+            output_path=tmp_path / "test_alloc.json",
+        )
+        data = json.loads(path.read_text())
+
+        stale = {row["strategy_id"]: row for row in data["stale"]}
+        assert "STALE_FAIL" in stale
+        assert stale["STALE_FAIL"]["status"] == "STALE"
+        assert stale["STALE_FAIL"]["chordia_verdict"] == "FAIL_BOTH"
+
+
+class TestCrossAssetATRInjection:
+    """Regression: lane allocator must inject cross_atr_{source}_pct before
+    applying CrossAssetATRFilter, otherwise X_MES_ATR* lanes silently fail-close
+    every day and surface as STALE despite an active validated_setups cohort.
+
+    Root cause: trading_app/config.py:982-984 documents that cross_atr_*_pct
+    is injected at runtime, not stored in daily_features schema. Live entry
+    paths (session_orchestrator, paper_trader, paper_trade_logger,
+    strategy_fitness, strategy_discovery) all inject. Allocator scoring path
+    did not until 2026-05-02.
+    """
+
+    def test_per_month_expr_x_mes_atr60_non_empty_on_canonical_db(self):
+        """Real-DB regression: an X_MES_ATR60 lane with an active validated_setups
+        cohort and ~100 trades/yr must produce non-empty trailing data when scored."""
+        import duckdb
+        from datetime import date
+
+        from pipeline.paths import GOLD_DB_PATH
+        from trading_app.lane_allocator import _per_month_expr
+
+        if not GOLD_DB_PATH.exists():
+            pytest.skip(
+                f"gold.db not available at {GOLD_DB_PATH} — real-DB regression "
+                "test requires the canonical DB and is intended for local + "
+                "self-hosted runners only"
+            )
+
+        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+        try:
+            monthly, total_wins, total_trades = _per_month_expr(
+                con,
+                instrument="MNQ",
+                orb_label="NYSE_OPEN",
+                orb_minutes=15,
+                entry_model="E2",
+                rr_target=1.0,
+                confirm_bars=1,
+                filter_type="X_MES_ATR60",
+                stop_multiplier=1.0,
+                rebalance_date=date(2026, 5, 1),
+                n_months=12,
+            )
+        finally:
+            con.close()
+
+        assert total_trades > 0, (
+            "X_MES_ATR60 trailing window returned 0 trades — likely the "
+            "cross_atr_MES_pct injection regressed. Live path injects via "
+            "_inject_cross_asset_atrs; allocator must do the same."
+        )
+        assert len(monthly) > 0
+        assert total_wins >= 0 and total_wins <= total_trades

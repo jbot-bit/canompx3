@@ -4635,6 +4635,157 @@ def check_holdout_policy_declaration_consistency() -> list[str]:
     return violations
 
 
+def check_prereg_present_for_recent_runs(con=None) -> list[str]:
+    """Pre-registration file presence for post-Phase-0 discovery runs.
+
+    Authority: docs/institutional/pre_registered_criteria.md Criterion 1
+    (line 42-53). Every discovery run that writes to validated_setups must
+    have a corresponding pre-registered hypothesis file at
+    ``docs/audit/hypotheses/YYYY-MM-DD-<instrument>-*.yaml``.
+
+    Definition of "recent run" for this check:
+      * an experimental_strategies row with ``created_at >
+        HOLDOUT_GRANDFATHER_CUTOFF`` exists,
+      * its ``CAST(created_at AS DATE)`` has no matching prereg yaml on disk.
+
+    Legacy carve-out: rows created at or before the Amendment 2.7 grandfather
+    cutoff (currently 2026-04-08 UTC) are exempt -- they pre-date the
+    prereg-discipline regime.
+
+    Reports per (instrument, discovery_date) combinations missing a prereg
+    file. Fail-closed: missing DB returns SKIPPED (not silent pass).
+    """
+    violations: list[str] = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return _skip_db_check_for_ci(
+                    "  PREREG CHECK SKIPPED: gold.db not found -- cannot verify Criterion 1 compliance"
+                )
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from trading_app.holdout_policy import HOLDOUT_GRANDFATHER_CUTOFF
+
+        hyp_dir = PROJECT_ROOT / "docs" / "audit" / "hypotheses"
+        if not hyp_dir.exists():
+            violations.append(
+                f"  PREREG: hypotheses dir missing at {hyp_dir.relative_to(PROJECT_ROOT)} -- "
+                "Criterion 1 cannot be enforced. Authority: pre_registered_criteria.md."
+            )
+            return violations
+
+        for instrument in ACTIVE_ORB_INSTRUMENTS:
+            instr_lower = instrument.lower()
+            rows = con.execute(
+                """SELECT DISTINCT CAST(created_at AS DATE) AS d
+                   FROM experimental_strategies
+                   WHERE instrument = ?
+                   AND created_at > ?
+                   ORDER BY d""",
+                [instrument, HOLDOUT_GRANDFATHER_CUTOFF],
+            ).fetchall()
+
+            for (d,) in rows:
+                if d is None:
+                    continue
+                ds = d.isoformat() if hasattr(d, "isoformat") else str(d)
+                if not list(hyp_dir.glob(f"{ds}-{instr_lower}-*.yaml")):
+                    violations.append(
+                        f"  PREREG MISSING: {instrument} discovery on {ds} has no "
+                        f"prereg yaml at docs/audit/hypotheses/{ds}-{instr_lower}-*.yaml. "
+                        f"Authority: pre_registered_criteria.md Criterion 1."
+                    )
+    except (ImportError, OSError) as e:
+        violations.append(f"  PREREG CHECK FAILED: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+
+    return violations
+
+
+def check_validator_pool_freshness(con=None, drift_threshold: float = 0.10) -> list[str]:
+    """Report drift between a row's frozen ``discovery_k`` and live per-session pool.
+
+    Authority chain:
+    - ``trading_app/strategy_validator.py:2216-2219`` -- ``discovery_k`` is
+      written ONLY on first promotion (UPDATE...CASE WHEN discovery_k IS NULL).
+    - ``docs/institutional/pre_registered_criteria.md`` Criterion 3 (BH-FDR
+      stratified per session). The frozen K is the audit-trail anchor; live
+      pool size shifts as MNQ/MES/MGC discovery rewrites peer rows.
+
+    Behavior: for every promoted row in ``validated_setups`` written in the
+    last 7 days, recompute the live per-session pool size from
+    ``experimental_strategies`` and compare to the frozen ``discovery_k``.
+    Report (advisory, do not fail) any drift > ``drift_threshold`` (default
+    10%). Surfaces silent K mutation across instrument-discovery cross-runs.
+
+    Fail-closed: missing DB returns SKIPPED.
+    """
+    violations: list[str] = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return _skip_db_check_for_ci("  POOL-FRESHNESS CHECK SKIPPED: gold.db not found")
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        # Recent promotions (last 7 days) with frozen discovery_k.
+        rows = con.execute(
+            """SELECT strategy_id, instrument, orb_label, discovery_k
+               FROM validated_setups
+               WHERE discovery_k IS NOT NULL
+               AND promoted_at IS NOT NULL
+               AND promoted_at >= now() - INTERVAL 7 DAY
+               ORDER BY promoted_at DESC"""
+        ).fetchall()
+
+        if not rows:
+            return violations
+
+        # Live per-session pool sizes for the instruments present.
+        instrument_pools: dict[tuple[str, str], int] = {}
+        live_query = con.execute(
+            """SELECT instrument, orb_label, COUNT(*) AS k
+               FROM experimental_strategies
+               WHERE is_canonical = TRUE
+               AND p_value IS NOT NULL
+               GROUP BY instrument, orb_label"""
+        ).fetchall()
+        for instr_, orb_, k_ in live_query:
+            instrument_pools[(instr_, orb_)] = int(k_)
+
+        for sid, instr, orb, frozen_k in rows:
+            live_k = instrument_pools.get((instr, orb))
+            if live_k is None or frozen_k is None or frozen_k <= 0:
+                continue
+            drift = abs(live_k - frozen_k) / float(frozen_k)
+            if drift > drift_threshold:
+                violations.append(
+                    f"  POOL-FRESHNESS: {sid} frozen discovery_k={frozen_k}, "
+                    f"live K={live_k} (drift {drift:.1%}). Frozen K is the "
+                    "audit-trail anchor; live drift is informational. "
+                    "Authority: pre_registered_criteria.md Criterion 3."
+                )
+    except (ImportError, OSError) as e:
+        violations.append(f"  POOL-FRESHNESS CHECK FAILED: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+
+    return violations
+
+
 def check_no_raw_orb_active_reads() -> list[str]:
     """No direct orb_active flag reads outside pipeline/asset_configs.py.
 
@@ -6085,6 +6236,12 @@ def check_no_crlf_in_tracked_text_blobs() -> list[str]:
     after multiple sessions hit the recurring `pre-rebase CRLF noise` pattern
     (stash@{6-10} in repo). This check exists so that debt class never returns.
     """
+    # Perf-tuned 2026-05-02: previous implementation spawned 2 subprocesses per
+    # tracked file (git check-attr + git show), ~20k spawns on this repo, ~70s
+    # on Windows + Git Bash. New shape: O(1) subprocess calls via batched stdin
+    # for check-attr and a single `git grep` against HEAD's tree. Verdict
+    # semantics are identical — same set of files (text=set/auto per
+    # .gitattributes) is examined for CRLF in their HEAD-committed blobs.
     violations: list[str] = []
     try:
         ls_files = subprocess.run(
@@ -6098,23 +6255,76 @@ def check_no_crlf_in_tracked_text_blobs() -> list[str]:
         return []  # not a git repo / git unavailable — skip silently
 
     tracked = [p for p in ls_files.stdout.decode("utf-8", "replace").split("\x00") if p]
+    if not tracked:
+        return []
 
-    for rel_path in tracked:
-        # Determine if file is text per .gitattributes
-        try:
-            attr = subprocess.run(
-                ["git", "check-attr", "text", "--", rel_path],
-                cwd=PROJECT_ROOT,
-                capture_output=True,
-                check=False,
-                timeout=5,
-            ).stdout.decode("utf-8", "replace")
-        except (subprocess.SubprocessError, FileNotFoundError):
-            continue
-        if not (": text: set" in attr or ": text: auto" in attr):
-            continue
+    # 1. Batched check-attr: feed every path on stdin in NUL-separated form.
+    # `git check-attr --stdin -z text` returns one record per path:
+    # "<path>\0text\0<value>\0".
+    try:
+        attr_input = b"\x00".join(p.encode("utf-8", "replace") for p in tracked)
+        attr_proc = subprocess.run(
+            ["git", "check-attr", "--stdin", "-z", "text"],
+            cwd=PROJECT_ROOT,
+            input=attr_input,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return []  # git unavailable mid-run — skip silently per pre-existing fail-open
 
-        # Read blob bytes from HEAD (raw, no filters)
+    # Parse: stream is path\0attr\0value\0path\0attr\0value\0…
+    text_paths: set[str] = set()
+    fields = attr_proc.stdout.split(b"\x00")
+    # Drop trailing empty produced by the final \0
+    if fields and fields[-1] == b"":
+        fields.pop()
+    for i in range(0, len(fields), 3):
+        if i + 2 >= len(fields):
+            break
+        path = fields[i].decode("utf-8", "replace")
+        value = fields[i + 2].decode("utf-8", "replace")
+        if value in ("set", "auto"):
+            text_paths.add(path)
+
+    if not text_paths:
+        return []
+
+    # 2. Single `git grep` over HEAD's tree for CRLF. -l = list matching files,
+    # -I = skip binary, -P = PCRE (needed for \r), --cached vs treeish: use
+    # HEAD directly so we get COMMITTED blobs (the contract this check enforces).
+    # Output is NUL-terminated paths via -z.
+    try:
+        grep_proc = subprocess.run(
+            ["git", "grep", "-lI", "-z", "-P", r"\r$", "HEAD", "--"] + sorted(text_paths),
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            check=False,
+            timeout=60,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return []
+
+    # `git grep <treeish>` prefixes each match with "<treeish>:". -z stays NUL-
+    # separated. Strip the "HEAD:" prefix for reporting.
+    matches = [m for m in grep_proc.stdout.split(b"\x00") if m]
+    crlf_paths: list[str] = []
+    head_prefix = b"HEAD:"
+    for raw in matches:
+        if raw.startswith(head_prefix):
+            crlf_paths.append(raw[len(head_prefix) :].decode("utf-8", "replace"))
+        else:
+            # Defensive: should not happen with `git grep HEAD --`, but if a
+            # different output shape ever appears, surface it as a finding so
+            # silent fail-open never masks a real CRLF blob.
+            crlf_paths.append(raw.decode("utf-8", "replace"))
+
+    # 3. For each CRLF-in-HEAD path, count CRLF lines for the violation message.
+    # We only `git show` the offenders — typically zero, never more than a
+    # handful. This is the only per-file subprocess and bounded by the
+    # offender count, not the tree size.
+    for rel_path in crlf_paths:
         try:
             blob = subprocess.run(
                 ["git", "show", f"HEAD:{rel_path}"],
@@ -6125,14 +6335,16 @@ def check_no_crlf_in_tracked_text_blobs() -> list[str]:
             ).stdout
         except (subprocess.SubprocessError, FileNotFoundError):
             continue
-
-        if b"\r\n" in blob:
-            crlf_lines = blob.count(b"\r\n")
-            violations.append(
-                f"  {rel_path} — committed blob has {crlf_lines} CRLF line(s). "
-                f"Per .gitattributes eol=lf, must be LF. "
-                f"Fix: `git add --renormalize -- {rel_path} && git commit`."
-            )
+        crlf_lines = blob.count(b"\r\n")
+        if crlf_lines == 0:
+            # Should not happen if grep matched, but be defensive about
+            # cross-tool encoding/normalization edge cases.
+            continue
+        violations.append(
+            f"  {rel_path} — committed blob has {crlf_lines} CRLF line(s). "
+            f"Per .gitattributes eol=lf, must be LF. "
+            f"Fix: `git add --renormalize -- {rel_path} && git commit`."
+        )
 
     return violations
 
@@ -7871,6 +8083,18 @@ CHECKS = [
         check_holdout_policy_declaration_consistency,
         False,
         False,
+    ),
+    (
+        "Pre-registration file present for post-Phase-0 discovery runs (Criterion 1)",
+        check_prereg_present_for_recent_runs,
+        True,  # advisory: many already-promoted rows lack prereg files; report, do not block
+        True,  # requires_db
+    ),
+    (
+        "Validator pool freshness (frozen discovery_k vs live per-session pool)",
+        check_validator_pool_freshness,
+        True,  # advisory: drift surfaces silent K mutation, does not block
+        True,  # requires_db
     ),
     ("No raw orb_active reads outside asset_configs.py", check_no_raw_orb_active_reads, False, False),
     ("No deprecated C:/db/gold.db in docstring usage examples", check_no_scratch_db_in_docstrings, False, False),

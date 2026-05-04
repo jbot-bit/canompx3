@@ -35,12 +35,23 @@ from trading_app.chordia import (
     CHORDIA_T_WITHOUT_THEORY,
     ChordiaAuditLog,
     chordia_verdict_allows_deploy,
-    chordia_verdict_label,
     load_chordia_audit_log,
 )
 from trading_app.config import ALL_FILTERS
 from trading_app.lane_correlation import RHO_REJECT_THRESHOLD, _load_lane_daily_pnl, _pearson
+from trading_app.strategy_discovery import _inject_cross_asset_atrs
 from trading_app.validated_shelf import deployable_validated_relation
+
+
+def _normalize_writable_path(path: Path) -> Path:
+    text = str(path)
+    if text.startswith("/mnt/c/Users/"):
+        return Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
+    return path
+
+
+_REPO_ROOT = _normalize_writable_path(Path(__file__).resolve().parents[1])
+DEFAULT_LANE_ALLOCATION_PATH = _REPO_ROOT / "docs" / "runtime" / "lane_allocation.json"
 
 # ---------------------------------------------------------------------------
 # Literature-grounded constants (do NOT tune on backtest — see spec §Parameter Source)
@@ -82,9 +93,10 @@ class LaneScore:
     # Liveness fields (populated post-scoring)
     recent_3mo_expr: float | None = None  # 3-month trailing ExpR (decay signal)
     sr_status: str = "UNKNOWN"  # ALARM / CONTINUE / NO_DATA / UNKNOWN
-    # Chordia gate fields (populated by compute_lane_scores from validated_setups
-    # + chordia_audit_log.yaml). Defaults are None so existing _make_score()
-    # test factories with 20+ call sites do not need updating.
+    # Chordia gate fields (populated by compute_lane_scores from
+    # chordia_audit_log.yaml strict-replay rows). Defaults are None so
+    # existing _make_score() test factories with 20+ call sites do not need
+    # updating.
     chordia_verdict: str | None = None  # PASS_CHORDIA/PASS_PROTOCOL_A/FAIL_CHORDIA/FAIL_BOTH/MISSING
     chordia_audit_age_days: int | None = None  # days since audit_date in doctrine YAML
 
@@ -158,6 +170,14 @@ def _per_month_expr(
     for row in features:
         d = dict(zip(feat_cols, row, strict=False))
         feat_by_day[d["trading_day"]] = d
+
+    # Inject cross-asset ATR enrichment (cross_atr_{source}_pct) for any
+    # CrossAssetATRFilter in ALL_FILTERS. Without this the filter fails-closed
+    # on every day and the lane shows STALE ("No trades in trailing window")
+    # despite an active validated_setups cohort. Canonical helper from
+    # strategy_discovery; live entry path injects identically. See
+    # trading_app/config.py:982-984 for the schema-not-stored doctrine note.
+    _inject_cross_asset_atrs(con, list(feat_by_day.values()), instrument, ALL_FILTERS)
 
     # Apply filter
     strat_filter = ALL_FILTERS.get(filter_type)
@@ -237,10 +257,10 @@ def compute_lane_scores(
     Filter-applied: uses matches_row on daily_features.
 
     Each LaneScore is populated with chordia_verdict + chordia_audit_age_days
-    from validated_setups (sharpe_ratio, sample_size) and the doctrine YAML
-    (has_theory grant + audit_date). The build_allocation() gate refuses
-    DEPLOY for verdicts other than PASS_CHORDIA / PASS_PROTOCOL_A and for
-    audits older than the doctrine's freshness threshold.
+    from doctrine audit YAML only. The build_allocation() gate refuses DEPLOY
+    for verdicts other than PASS_CHORDIA / PASS_PROTOCOL_A, for missing strict
+    replay audit rows, and for audits older than the doctrine's freshness
+    threshold.
     """
     db = db_path or GOLD_DB_PATH
     con = duckdb.connect(str(db), read_only=True)
@@ -251,24 +271,22 @@ def compute_lane_scores(
     assert audit_log is not None  # for type narrowing inside the try block
 
     try:
-        # Load all active validated strategies. sharpe_ratio + sample_size
-        # feed the live chordia verdict; promoted_at is informational only —
-        # the staleness gate uses doctrine audit_date, not promotion date,
-        # because promoted_at predates the chordia revalidation regime.
+        # Load all active validated strategies. The live Chordia gate does NOT
+        # derive verdicts from validated_setups; strict replay audit rows in
+        # docs/runtime/chordia_audit_log.yaml are the gate truth.
         shelf_relation = deployable_validated_relation(con, alias="vs")
         strategies = con.execute(
             f"""
             SELECT strategy_id, instrument, orb_label, orb_minutes, entry_model,
-                   rr_target, confirm_bars, filter_type, stop_multiplier,
-                   sample_size, sharpe_ratio
+                   rr_target, confirm_bars, filter_type, stop_multiplier
             FROM {shelf_relation}
             ORDER BY instrument, orb_label, orb_minutes
             """
         ).fetchall()
 
         scores = []
-        for sid, inst, orb, om, em, rr, cb, ft, sm, total_n, sharpe in strategies:
-            chordia_verdict_value = chordia_verdict_label(sharpe, total_n, audit_log.has_theory(sid))
+        for sid, inst, orb, om, em, rr, cb, ft, sm in strategies:
+            chordia_verdict_value = audit_log.verdict(sid) or "MISSING"
             chordia_age = audit_log.audit_age_days(sid, rebalance_date)
             # Per-month ExpR for trailing window
             monthly, total_wins, total_trades = _per_month_expr(
@@ -634,7 +652,9 @@ def apply_chordia_gate(
 
         reason: str | None = None
         if verdict is None or verdict == "MISSING":
-            reason = "chordia gate: missing audit (recompute returned MISSING)"
+            reason = "chordia gate: missing strict replay audit verdict"
+        elif verdict == "PARK":
+            reason = "chordia gate: PARK (strict replay not deployment-cleared)"
         elif verdict == "FAIL_BOTH":
             reason = f"chordia gate: FAIL_BOTH (t<{CHORDIA_T_WITH_THEORY})"
         elif verdict == "FAIL_CHORDIA":
@@ -816,13 +836,15 @@ def generate_report(
     """Generate human-readable rebalance report with diff and collapsed paused list."""
     from collections import Counter
 
+    gated_scores = apply_chordia_gate(scores)
+
     lines = [
         f"# Lane Allocation Report — {rebalance_date}",
         f"Profile: {profile_id}",
-        f"Total candidates: {len(scores)}",
-        f"Deployable: {sum(1 for s in scores if s.status in ('DEPLOY', 'RESUME', 'PROVISIONAL'))}",
-        f"Paused: {sum(1 for s in scores if s.status == 'PAUSE')}",
-        f"Stale: {sum(1 for s in scores if s.status == 'STALE')}",
+        f"Total candidates: {len(gated_scores)}",
+        f"Deployable: {sum(1 for s in gated_scores if s.status in ('DEPLOY', 'RESUME', 'PROVISIONAL'))}",
+        f"Paused: {sum(1 for s in gated_scores if s.status == 'PAUSE')}",
+        f"Stale: {sum(1 for s in gated_scores if s.status == 'STALE')}",
         "",
         "## Selected Lanes",
         f"{'#':<3} {'Strategy':<55} {'AnnR':>6} {'ExpR':>8} {'N':>5} {'Status':<12}",
@@ -859,7 +881,7 @@ def generate_report(
                     ann = f" (annual_r={s_obj.annual_r_estimate:.1f})" if s_obj else ""
                     lines.append(f"  [NEW]    {sid}{ann}")
                 for sid in sorted(removed):
-                    s_obj = next((x for x in scores if x.strategy_id == sid), None)
+                    s_obj = next((x for x in gated_scores if x.strategy_id == sid), None)
                     reason = f" ({s_obj.status}: {s_obj.status_reason})" if s_obj else ""
                     lines.append(f"  [DROP]   {sid}{reason}")
                 lines.extend(
@@ -872,12 +894,14 @@ def generate_report(
         lines.append(f"\n  [WARNING] Could not load prop_profiles for diff: {e}")
 
     # Paused lanes — collapsed by reason category (not 115 individual lines)
-    paused = [s for s in scores if s.status == "PAUSE"]
+    paused = [s for s in gated_scores if s.status == "PAUSE"]
     if paused:
         reason_groups: dict[str, int] = Counter()
         for s in paused:
             if "Recovering" in s.status_reason:
                 reason_groups["Recovering (need 3+ positive months)"] += 1
+            elif "chordia gate:" in s.status_reason:
+                reason_groups["Chordia gate"] += 1
             elif "Magnitude override" in s.status_reason:
                 reason_groups["Magnitude override (3mo avg < -0.10)"] += 1
             elif "consecutive months negative" in s.status_reason:
@@ -891,7 +915,7 @@ def generate_report(
     # Session regimes
     lines.extend(["", "## Session Regimes (6mo trailing, unfiltered E2 RR1.0)"])
     seen_sessions: set[tuple[str, str]] = set()
-    for s in scores:
+    for s in gated_scores:
         key = (s.instrument, s.orb_label)
         if key in seen_sessions:
             continue
@@ -959,11 +983,18 @@ def save_allocation(
     orb_size_stats: {(instrument, orb_label, orb_minutes): (avg_orb_pts, p90_orb_pts)}.
     If None, ORB size fields are omitted from the output.
     """
-    path = (
-        Path(output_path)
-        if output_path
-        else Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
-    )
+    gated_scores = apply_chordia_gate(scores)
+    path = Path(output_path) if output_path else DEFAULT_LANE_ALLOCATION_PATH
+    path = _normalize_writable_path(path)
+
+    def _blocked_entry(s: LaneScore) -> dict[str, object]:
+        return {
+            "strategy_id": s.strategy_id,
+            "status": s.status,
+            "reason": s.status_reason,
+            "chordia_verdict": s.chordia_verdict,
+            "chordia_audit_age_days": s.chordia_audit_age_days,
+        }
 
     lanes_data = []
     for s in allocation:
@@ -1007,8 +1038,9 @@ def save_allocation(
         "trailing_window_months": DEPLOY_WINDOW_MONTHS,
         "profile_id": profile_id,
         "lanes": lanes_data,
-        "paused": [{"strategy_id": s.strategy_id, "reason": s.status_reason} for s in scores if s.status == "PAUSE"],
-        "all_scores_count": len(scores),
+        "paused": [_blocked_entry(s) for s in gated_scores if s.status == "PAUSE"],
+        "stale": [_blocked_entry(s) for s in gated_scores if s.status == "STALE"],
+        "all_scores_count": len(gated_scores),
     }
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1036,10 +1068,9 @@ def check_allocation_staleness(
     days_old = -1 if file not found.
     """
     if allocation_path:
-        path = Path(allocation_path)
+        path = _normalize_writable_path(Path(allocation_path))
     else:
-        # Source-file-relative path (consistent regardless of CWD)
-        path = Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+        path = DEFAULT_LANE_ALLOCATION_PATH
     if not path.exists():
         return "BLOCK", -1
 

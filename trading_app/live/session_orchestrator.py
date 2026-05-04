@@ -382,9 +382,10 @@ class SessionOrchestrator:
             except Exception:
                 raise  # Fail-closed: profile accounts MUST have working risk cap loading
 
-        # Regime gate: load paused strategies from allocator output.
-        # Strategies PAUSED by the allocator (session regime COLD) are blocked
-        # at entry time. Fail-closed for profile accounts, fail-open for paper/signal.
+        # Allocator block gate: load non-deployable strategies from allocator output.
+        # Strategies blocked by the allocator (session regime COLD, stale, or
+        # Chordia gate) are blocked at entry time. Fail-closed for profile
+        # accounts, fail-open for paper/signal.
         self._regime_paused: set[str] = set()
         try:
             _alloc_path = Path(__file__).resolve().parents[2] / "docs" / "runtime" / "lane_allocation.json"
@@ -392,10 +393,11 @@ class SessionOrchestrator:
                 import json as _json
 
                 _alloc_data = _json.loads(_alloc_path.read_text())
-                self._regime_paused = {e["strategy_id"] for e in _alloc_data.get("paused", [])}
+                blocked_entries = list(_alloc_data.get("paused", [])) + list(_alloc_data.get("stale", []))
+                self._regime_paused = {e["strategy_id"] for e in blocked_entries}
                 if self._regime_paused:
                     log.warning(
-                        "REGIME GATE: %d strategies PAUSED — entries will be blocked",
+                        "ALLOCATOR GATE: %d blocked strategies — entries will be blocked",
                         len(self._regime_paused),
                     )
             else:
@@ -2137,12 +2139,12 @@ class SessionOrchestrator:
                     self._write_signal_record({"type": "ENTRY_BLOCKED_DD_HALT", "strategy_id": event.strategy_id})
                     return
 
-            # Regime gate — block entries for strategies paused by allocator.
-            # Session regime COLD = negative 6mo trailing ExpR. Loaded from
-            # lane_allocation.json at init. Fail-open if file missing.
+            # Allocator block gate — block entries for strategies marked
+            # non-deployable by lane_allocation.json at init. Fail-open if the
+            # file is missing.
             if event.strategy_id in self._regime_paused:
                 log.info(
-                    "REGIME_PAUSED: %s — session COLD per allocator. Entry blocked.",
+                    "ALLOCATOR_BLOCKED: %s — allocator marked strategy non-deployable. Entry blocked.",
                     event.strategy_id,
                 )
                 self._write_signal_record({"type": "REGIME_PAUSED", "strategy_id": event.strategy_id})

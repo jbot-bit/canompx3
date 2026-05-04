@@ -534,6 +534,14 @@ class TestCrgRepoRootResolution:
         canonical = Path("C:/Users/joshd/canompx3")
         if not (canonical / ".code-review-graph" / "graph.db").exists():
             pytest.skip("canonical graph not built locally — skipping integration test")
+        # CRG is a side-car install (pip install -c constraints.txt
+        # code-review-graph), not a declared project dep. If the package
+        # isn't importable in this interpreter the helper correctly returns
+        # CRG_UNAVAILABLE; the integration test's premise doesn't hold.
+        try:
+            import code_review_graph  # noqa: F401
+        except ImportError:
+            pytest.skip("code_review_graph not installed in this interpreter")
 
         monkeypatch.setenv("CRG_REPO_ROOT", str(canonical))
         result = fresh.find_large_functions(min_lines=200)
@@ -564,6 +572,13 @@ class TestCrgRepoRootResolution:
 
         if not (_PROJECT_ROOT / ".code-review-graph" / "graph.db").exists():
             pytest.skip("no graph DB at worktree root — pre-commit hasn't run (typical on CI)")
+        # CRG package is a side-car install (see constraints.txt). If it's
+        # not importable the helper correctly returns False; the test's
+        # availability premise doesn't hold.
+        try:
+            import code_review_graph  # noqa: F401
+        except ImportError:
+            pytest.skip("code_review_graph not installed in this interpreter")
         assert fresh.crg_is_available() is True
 
     def test_helper_does_not_hardcode_repo_root_anymore(self):
