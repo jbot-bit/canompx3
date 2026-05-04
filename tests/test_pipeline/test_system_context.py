@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -505,12 +506,27 @@ class TestCliBootstrap:
     def test_system_context_script_help_runs_via_direct_path(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
 
+        # Strip pytest-cov env vars so the subprocess does not try to attach
+        # coverage instrumentation. With --cov on the parent pytest run, the
+        # COV_CORE_* env vars cause the child Python interpreter to import
+        # pytest_cov and the coverage tracer at startup; on Windows GH Actions
+        # runners this can deadlock pytest's signal handling and surface as
+        # `KeyboardInterrupt` at threading.py:359 the moment this test enters
+        # (1537 prior tests pass, this one dies before its body runs). Local
+        # repro is unreliable; CI repro is deterministic. Stripping the env
+        # is the canonical pytest-cov-safe-subprocess pattern documented at
+        # https://pytest-cov.readthedocs.io/en/latest/subprocess-support.html
+        # Bug surfaced on PR #221 CI runs 25321117722 / 25322573439.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("COV_CORE_")}
+
         result = subprocess.run(
             [sys.executable, "scripts/tools/system_context.py", "--help"],
             cwd=repo_root,
             capture_output=True,
             text=True,
             check=False,
+            env=env,
+            timeout=30,
         )
 
         assert result.returncode == 0
