@@ -96,6 +96,24 @@ def run_setup(platform: str) -> None:
     python_cmd = platform_python(platform)
 
     if platform == "wsl":
+        if not is_wsl_native_root(ROOT):
+            raise SystemExit(
+                "\n".join(
+                    [
+                        f"ERROR: Codex WSL setup is blocked for non-native repo root: {ROOT}",
+                        "",
+                        "Why launch is blocked:",
+                        "  - Codex app sessions on /mnt/... are fallback-only in this repo.",
+                        "  - The supported daily-driver path is a WSL-home clone such as ~/canompx3.",
+                        "  - This avoids /mnt/c mount instability, slow I/O, and Codex session crashes.",
+                        "",
+                        "Recovery:",
+                        "  1. Launch the WSL-home clone instead, for example with `codex.bat linux`.",
+                        "  2. Or set CANOMPX3_CODEX_WSL_ROOT to your WSL-side clone path.",
+                        "  3. Keep /mnt/c launches for compatibility only, not Codex app daily use.",
+                    ]
+                )
+            )
         run_checked(python_cmd + ["scripts/tools/wsl_mount_guard.py", "--root", str(ROOT)], env=env)
 
     run_checked(["uv", "sync", "--frozen", "--python", "3.13", "--group", "dev"], env=env)

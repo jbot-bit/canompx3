@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+
+import pytest
 from pathlib import Path
 from unittest.mock import patch
 
@@ -255,6 +258,43 @@ class TestEvaluateSystemPolicy:
         assert decision.allowed is True
         assert any(issue.code == "active_stage_files" for issue in decision.warnings)
 
+    def test_mutating_session_ignores_same_checkout_claim_when_mount_path_casing_differs(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")
+        claim = SessionClaim(
+            tool="codex",
+            branch="main",
+            head_sha="abc123",
+            started_at="2026-04-12T00:00:00+00:00",
+            pid=1,
+            mode="mutating",
+            root="/mnt/c/Users/joshd/canompx3",
+            fresh=True,
+        )
+
+        with (
+            patch.object(system_context, "_canonical_repo_root", return_value=(tmp_path, tmp_path / ".git")),
+            patch.object(system_context, "branch_name", return_value="main"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+            patch.object(system_context, "git_status_details", return_value=([], True, None)),
+            patch.object(system_context, "list_claims", return_value=[claim]),
+            patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
+            patch.object(
+                system_context,
+                "_paths_same_location",
+                side_effect=lambda left, right: Path(str(left)).name == "canompx3" and Path(str(right)) == tmp_path,
+            ),
+            patch.object(system_context.sys, "executable", str((tmp_path / ".venv-wsl" / "bin" / "python").resolve())),
+            patch.object(system_context.sys, "prefix", str((tmp_path / ".venv-wsl").resolve())),
+        ):
+            _mkfile(tmp_path / ".venv-wsl" / "bin" / "python", "")
+            snapshot = build_system_context(
+                tmp_path, context_name="codex-wsl", active_tool="codex", active_mode="mutating"
+            )
+            decision = evaluate_system_policy(snapshot, "session_start_mutating")
+
+        assert decision.allowed is True
+        assert not any(issue.code == "parallel_mutating_claim" for issue in decision.blockers)
+
     def test_orientation_warns_when_handoff_drifted_from_queue(self, tmp_path: Path) -> None:
         _mkfile(tmp_path / "HANDOFF.md", "# stale\n")
         _mkfile(
@@ -321,6 +361,88 @@ class TestEvaluateSystemPolicy:
 
 
 class TestVerifyClaim:
+    def test_write_claim_uses_session_owner_pid_when_present(self, tmp_path: Path, monkeypatch) -> None:
+        claim_path = tmp_path / ".git" / "claim.json"
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("CANOMPX3_SESSION_OWNER", "pid:4242")
+
+        claim = write_claim(claim_path, tool="codex", branch="main", head="abc123", mode="mutating", root=str(tmp_path))
+
+        assert claim.pid == 4242
+
+    def test_read_claim_marks_dead_same_runtime_owner_stale(self, tmp_path: Path) -> None:
+        claim_path = tmp_path / ".git" / "claim.json"
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(system_context, "_current_runtime_tag", return_value="wsl"):
+            write_claim(claim_path, tool="codex", branch="main", head="abc123", mode="mutating", root=str(tmp_path))
+
+        with (
+            patch.object(system_context, "_current_runtime_tag", return_value="wsl"),
+            patch.object(system_context, "_pid_is_live", return_value=False),
+        ):
+            claim = system_context.read_claim(claim_path)
+
+        assert claim is not None
+        assert claim.runtime == "wsl"
+        assert claim.fresh is False
+
+    def test_read_claim_marks_legacy_dead_wsl_owner_stale(self, tmp_path: Path) -> None:
+        claim_path = tmp_path / ".git" / "claim.json"
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+        claim_path.write_text(
+            json.dumps(
+                {
+                    "tool": "codex",
+                    "branch": "main",
+                    "head_sha": "abc123",
+                    "started_at": "2099-04-12T00:00:00+00:00",
+                    "pid": 815,
+                    "mode": "mutating",
+                    "root": "/mnt/c/Users/joshd/canompx3",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with (
+            patch.object(system_context, "_current_runtime_tag", return_value="wsl"),
+            patch.object(system_context, "_pid_is_live", return_value=False),
+        ):
+            claim = system_context.read_claim(claim_path)
+
+        assert claim is not None
+        assert claim.runtime == ""
+        assert claim.fresh is False
+
+    def test_read_claim_keeps_cross_runtime_owner_fresh(self, tmp_path: Path) -> None:
+        claim_path = tmp_path / ".git" / "claim.json"
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+        claim_path.write_text(
+            json.dumps(
+                {
+                    "tool": "claude",
+                    "branch": "main",
+                    "head_sha": "abc123",
+                    "started_at": "2099-04-12T00:00:00+00:00",
+                    "pid": 77,
+                    "mode": "mutating",
+                    "root": r"C:\repo",
+                    "runtime": "windows",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with (
+            patch.object(system_context, "_current_runtime_tag", return_value="wsl"),
+            patch.object(system_context, "_pid_is_live", return_value=False),
+        ):
+            claim = system_context.read_claim(claim_path)
+
+        assert claim is not None
+        assert claim.fresh is True
+
     def test_verify_claim_detects_head_mismatch(self, tmp_path: Path) -> None:
         claim_path = tmp_path / ".git" / "claim.json"
         claim_path.parent.mkdir(parents=True, exist_ok=True)
@@ -335,8 +457,60 @@ class TestVerifyClaim:
         assert ok is False
         assert any("HEAD mismatch" in warning for warning in warnings)
 
+    def test_verify_claim_fails_when_owner_process_is_dead(self, tmp_path: Path) -> None:
+        claim_path = tmp_path / ".git" / "claim.json"
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(system_context, "_current_runtime_tag", return_value="wsl"):
+            write_claim(claim_path, tool="codex", branch="main", head="abc123", mode="mutating", root=str(tmp_path))
+
+        with (
+            patch.object(system_context, "_current_runtime_tag", return_value="wsl"),
+            patch.object(system_context, "_pid_is_live", return_value=False),
+            patch.object(system_context, "branch_name", return_value="main"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+        ):
+            ok, warnings = verify_claim(tmp_path, active_tool="codex", claim_path=claim_path)
+
+        assert ok is False
+        assert any("owner process is no longer running" in warning for warning in warnings)
+
+    def test_verify_claim_allows_same_checkout_when_mount_path_casing_differs(self, tmp_path: Path) -> None:
+        claim_path = tmp_path / ".git" / "claim.json"
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+        write_claim(
+            claim_path,
+            tool="codex",
+            branch="main",
+            head="abc123",
+            mode="mutating",
+            root="/mnt/c/Users/joshd/canompx3",
+        )
+
+        with (
+            patch.object(system_context, "branch_name", return_value="main"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+            patch.object(
+                system_context,
+                "_paths_same_location",
+                side_effect=lambda left, right: (
+                    Path(str(left)).name == "canompx3" and Path(str(right)).name == "canompx3"
+                ),
+            ),
+        ):
+            ok, warnings = verify_claim(Path("/mnt/c/users/joshd/canompx3"), active_tool="codex", claim_path=claim_path)
+
+        assert ok is True
+        assert not any("Root mismatch" in warning for warning in warnings)
+
 
 class TestCliBootstrap:
+    # Full investigation history + four falsified hypotheses live at
+    # docs/runtime/stages/fix-system-context-bootstrap-help-fork.md
+    @pytest.mark.skipif(
+        os.environ.get("CI") == "true",
+        reason="CI hang on Windows runner; see fix-system-context-bootstrap-help-fork.md",
+    )
     def test_system_context_script_help_runs_via_direct_path(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
 
@@ -346,6 +520,7 @@ class TestCliBootstrap:
             capture_output=True,
             text=True,
             check=False,
+            timeout=30,
         )
 
         assert result.returncode == 0

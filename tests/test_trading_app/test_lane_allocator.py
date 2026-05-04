@@ -1325,7 +1325,7 @@ class TestCrossAssetATRInjection:
 
         if not GOLD_DB_PATH.exists():
             pytest.skip(
-                f"gold.db not available at {GOLD_DB_PATH} — real-DB regression "
+                f"gold.db not available at {GOLD_DB_PATH} - real-DB regression "
                 "test requires the canonical DB and is intended for local + "
                 "self-hosted runners only"
             )

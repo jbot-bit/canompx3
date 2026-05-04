@@ -26,6 +26,8 @@ def _preferred_repo_prefix(expected_python: Path) -> Path:
 
 
 def _ensure_repo_python() -> None:
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        return
     expected_python = _preferred_repo_python()
     if expected_python is None:
         return

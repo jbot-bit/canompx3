@@ -49,10 +49,22 @@ NEW_SESSION="## Last Session
 
 # Use python for reliable cross-platform multiline replacement
 PYTHON="python"
-if [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
-    PYTHON="$SCRIPT_DIR/.venv/Scripts/python.exe"
-elif [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
+case "$(uname -s 2>/dev/null || echo unknown)" in
+    MINGW*|MSYS*|CYGWIN*) IS_WINDOWS_SHELL=1 ;;
+    *) IS_WINDOWS_SHELL=0 ;;
+esac
+if [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/.venv-wsl/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/.venv-wsl/bin/python"
+elif [ "$IS_WINDOWS_SHELL" -eq 0 ] && [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
     PYTHON="$SCRIPT_DIR/.venv/bin/python"
+elif [ "$IS_WINDOWS_SHELL" -eq 1 ] && [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/Scripts/python.exe"
+fi
+if [ "$IS_WINDOWS_SHELL" -eq 0 ] && [[ "$PYTHON" == *"/Scripts/"* || "$PYTHON" == *.exe ]]; then
+    exit 0
+fi
+if [ "$IS_WINDOWS_SHELL" -eq 1 ] && [[ "$PYTHON" == *"/.venv-wsl/"* ]]; then
+    exit 0
 fi
 
 "$PYTHON" -c "

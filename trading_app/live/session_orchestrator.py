@@ -786,6 +786,14 @@ class SessionOrchestrator:
             except Exception as e:
                 log.warning("Failed to load firm close time: %s", e)
         self._stats = SessionStats()  # observability counters
+        self._feed_status: dict[str, object] = {
+            "status": "idle",
+            "last_bar_utc": None,
+            "last_stale_utc": None,
+            "gap_seconds": None,
+            "stale_count": 0,
+            "dead": False,
+        }
         self._poller_active = False  # set True once fill poller runs a cycle
         # F7/R3: generation counter incremented on each broker reconnect so the
         # fill poller can detect reconnects and reset its per-order timeout anchors.
@@ -1095,7 +1103,12 @@ class SessionOrchestrator:
         emergency flatten. The watchdog may never fire if _last_bar_at is None
         (no bars received before death), so this is the only flatten trigger.
         """
+        self._feed_status["last_stale_utc"] = datetime.now(UTC).isoformat()
+        self._feed_status["gap_seconds"] = gap_seconds
+        self._feed_status["stale_count"] = stale_count
         if stale_count == -1:
+            self._feed_status["status"] = "dead"
+            self._feed_status["dead"] = True
             msg = f"FEED DEAD: all reconnect attempts exhausted for {self.instrument}"
             log.critical(msg)
             self._notify(msg)
@@ -1109,6 +1122,8 @@ class SessionOrchestrator:
                     # No running event loop (post_session context) — cannot schedule
                     log.critical("FEED DEAD: cannot schedule flatten (no event loop) — MANUAL CLOSE REQUIRED")
         else:
+            self._feed_status["status"] = "stale"
+            self._feed_status["dead"] = False
             msg = f"FEED STALE: {gap_seconds:.0f}s no data (check {stale_count})"
             log.critical(msg)
             self._notify(msg)
@@ -1194,6 +1209,10 @@ class SessionOrchestrator:
                 strategies=self.portfolio.strategies,
                 active_trades=self.engine.active_trades,
                 completed_trades=self.engine.completed_trades,
+                orbs=self.engine.orbs,
+                feed_status=self._feed_status_payload(),
+                router_status=self._router_status_payload(),
+                broker_status=self._broker_status_payload(),
             )
             # Add copy trading info if CopyOrderRouter is active
             from trading_app.live.copy_order_router import CopyOrderRouter
@@ -1204,6 +1223,36 @@ class SessionOrchestrator:
             write_state(snapshot)
         except Exception:
             pass  # Dashboard state is best-effort — never kill the trading loop
+
+    def _feed_status_payload(self) -> dict[str, object]:
+        payload = dict(self._feed_status)
+        payload["bars_received"] = self._stats.bars_received
+        payload["reconnect_attempts"] = self._stats.reconnect_attempts
+        payload["last_connected_at"] = self._safety_state.last_connected_at or None
+        return payload
+
+    def _router_status_payload(self) -> dict[str, object]:
+        degraded = self.order_router.is_degraded() if self.order_router is not None else False
+        degraded_accounts = self.order_router.degraded_accounts() if self.order_router is not None else {}
+        return {
+            "degraded": degraded,
+            "degraded_accounts": degraded_accounts,
+            "supports_native_brackets": self.order_router.supports_native_brackets()
+            if self.order_router is not None
+            else False,
+            "has_queryable_bracket_legs": self.order_router.has_queryable_bracket_legs()
+            if self.order_router is not None
+            else False,
+        }
+
+    def _broker_status_payload(self) -> dict[str, object]:
+        return {
+            "broker_name": self._broker_name,
+            "contract_symbol": self.contract_symbol,
+            "signal_only": self.signal_only,
+            "demo": self.demo,
+            "account_name": getattr(self, "_account_name", ""),
+        }
 
     def _notify(self, message: str) -> None:
         """Send Telegram notification. Never raises — notifications must not kill the trading loop.
@@ -1575,6 +1624,11 @@ class SessionOrchestrator:
         self._last_bar_at = now
         self._bar_count += 1
         self._stats.bars_received += 1
+        self._feed_status["status"] = "healthy"
+        self._feed_status["last_bar_utc"] = bar.ts_utc.isoformat() if bar.ts_utc is not None else None
+        self._feed_status["gap_seconds"] = 0.0
+        self._feed_status["stale_count"] = 0
+        self._feed_status["dead"] = False
 
         # Persist bar for Databento-free daily pipeline
         self._bar_persister.append(bar)
@@ -3205,6 +3259,8 @@ class SessionOrchestrator:
                     on_stale=self._on_feed_stale,
                     demo=self.demo,
                 )
+                self._feed_status["status"] = "connecting" if reconnect_count == 0 else "reconnecting"
+                self._feed_status["dead"] = False
                 log.info(
                     "Starting feed (attempt %d, reconnects_used=%d/%d): %s (broker: %s)",
                     reconnect_count + 1,
@@ -3284,6 +3340,8 @@ class SessionOrchestrator:
 
                     reconnect_count += 1
                     self._stats.reconnect_attempts += 1
+                    self._feed_status["status"] = "reconnecting"
+                    self._feed_status["dead"] = False
                     # F7/R3: signal fill poller to reset timeout anchors — broker state
                     # may have changed during the disconnect; re-query before applying timeout.
                     self._fill_reconnect_gen += 1

@@ -10,6 +10,7 @@ When SessionOrchestrator.__init__ gains new attributes, add them here once.
 import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -162,6 +163,15 @@ class FakeRouter:
     def supports_native_brackets(self) -> bool:
         return False
 
+    def has_queryable_bracket_legs(self) -> bool:
+        return False
+
+    def is_degraded(self) -> bool:
+        return False
+
+    def degraded_accounts(self) -> dict:
+        return {}
+
     def cancel(self, order_id: int) -> None:
         pass
 
@@ -235,6 +245,14 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     from trading_app.live.session_orchestrator import SessionStats
 
     orch._stats = SessionStats()
+    orch._feed_status = {
+        "status": "idle",
+        "last_bar_utc": None,
+        "last_stale_utc": None,
+        "gap_seconds": None,
+        "stale_count": 0,
+        "dead": False,
+    }
     orch._poller_active = False
     orch._fill_reconnect_gen = 0  # F7/R3: reconnect generation counter
     orch.contract_symbol = "MGCJ6"
@@ -301,6 +319,176 @@ def _exit_event(price: float = 2355.0, pnl_r: float | None = 1.5) -> FakeTradeEv
         contracts=1,
         pnl_r=pnl_r,
     )
+
+
+class TestOperatorStateExport:
+    def test_build_state_snapshot_exports_orb_trade_and_runtime_contract_fields(self):
+        from trading_app.live.bot_state import build_state_snapshot
+
+        strategy = _test_strategy()
+        entry_ts = datetime(2026, 3, 7, 22, 15, tzinfo=UTC)
+        break_ts = datetime(2026, 3, 7, 22, 10, tzinfo=UTC)
+        complete_ts = datetime(2026, 3, 7, 22, 5, tzinfo=UTC)
+        trade = SimpleNamespace(
+            strategy_id=STRATEGY_ID,
+            state=SimpleNamespace(value="ENTERED"),
+            direction="long",
+            entry_price="2350.50",
+            stop_price=2347.0,
+            target_price=2357.5,
+            entry_ts=entry_ts,
+            pnl_r="0.75",
+        )
+        orb = SimpleNamespace(
+            high="2352.0",
+            low=2347.0,
+            complete=True,
+            break_dir="long",
+            break_ts=break_ts,
+            complete_ts=complete_ts,
+        )
+
+        snapshot = build_state_snapshot(
+            mode="DEMO",
+            instrument="MGC",
+            contract="MGCJ6",
+            trading_day=date(2026, 3, 7),
+            account_id=12345,
+            account_name="profile_topstep_50k_mnq_auto",
+            daily_pnl_r=1.23456,
+            daily_loss_limit_r=5.0,
+            max_equity_dd_r=10.0,
+            bars_received=42,
+            strategies=[strategy],
+            active_trades=[trade],
+            completed_trades=[],
+            orbs={(strategy.orb_label, strategy.orb_minutes): orb},
+            feed_status={"status": "healthy"},
+            router_status={"degraded": False},
+            broker_status={"broker_name": "projectx"},
+        )
+
+        lane = snapshot["lanes"][STRATEGY_ID]
+        assert snapshot["daily_pnl_r"] == 1.2346
+        assert snapshot["feed_status"] == {"status": "healthy"}
+        assert snapshot["router_status"] == {"degraded": False}
+        assert snapshot["broker_status"] == {"broker_name": "projectx"}
+        assert lane["status"] == "IN_TRADE"
+        assert lane["status_detail"] == "ENTERED"
+        assert lane["entry_price"] == 2350.5
+        assert lane["stop_price"] == 2347.0
+        assert lane["target_price"] == 2357.5
+        assert lane["risk_points"] == pytest.approx(3.5)
+        assert lane["current_pnl_r"] == 0.75
+        assert lane["orb_high"] == 2352.0
+        assert lane["orb_low"] == 2347.0
+        assert lane["orb_size"] == 5.0
+        assert lane["orb_break_direction"] == "long"
+        assert lane["orb_break_time_utc"] == break_ts.isoformat()
+        assert lane["orb_complete_time_utc"] == complete_ts.isoformat()
+        assert lane["signal_time_utc"] == entry_ts.isoformat()
+
+    def test_iso_utc_datetime_passes_through(self):
+        from trading_app.live.bot_state import _iso_utc
+
+        ts = datetime(2026, 3, 7, 22, 15, tzinfo=UTC)
+        assert _iso_utc(ts) == ts.isoformat()
+
+    def test_iso_utc_naive_datetime_assumed_utc(self):
+        from trading_app.live.bot_state import _iso_utc
+
+        naive = datetime(2026, 3, 7, 22, 15)
+        result = _iso_utc(naive)
+        assert result == datetime(2026, 3, 7, 22, 15, tzinfo=UTC).isoformat()
+
+    def test_iso_utc_none_returns_none_silently(self, caplog):
+        from trading_app.live.bot_state import _iso_utc
+
+        with caplog.at_level("WARNING"):
+            assert _iso_utc(None) is None
+        assert "unsupported type" not in caplog.text
+
+    def test_iso_utc_unsupported_type_warns_and_returns_none(self, caplog):
+        """Per institutional-rigor.md sec 6: operator-visible timestamp fields
+        must never silently drop type-mismatched values. _iso_utc returns None
+        but emits a warning so the type drift is visible in logs.
+
+        Upstream sites that route non-datetime timestamps (e.g. raw pd.Timestamp
+        from execution_engine.py:978/1099/1374 trade.entry_ts assignments)
+        should coerce at the assignment site, not rely on this defensive path.
+        """
+        import logging
+
+        from trading_app.live.bot_state import _iso_utc
+
+        with caplog.at_level(logging.WARNING, logger="trading_app.live.bot_state"):
+            assert _iso_utc("2026-03-07T22:15:00+00:00") is None
+        assert "_iso_utc: unsupported type str" in caplog.text
+
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger="trading_app.live.bot_state"):
+            assert _iso_utc(1234567890) is None
+        assert "_iso_utc: unsupported type int" in caplog.text
+
+    def test_orchestrator_status_payloads_are_json_safe_and_best_effort(self, orch):
+        orch._feed_status.update(
+            {
+                "status": "stale",
+                "last_bar_utc": "2026-03-07T22:15:00+00:00",
+                "gap_seconds": 90.0,
+                "stale_count": 2,
+                "dead": False,
+            }
+        )
+        orch._stats.bars_received = 42
+        orch._stats.reconnect_attempts = 3
+        orch._safety_state.last_connected_at = "2026-03-07T22:10:00+00:00"
+        orch._broker_name = "projectx"
+        orch._account_name = "profile_test"
+
+        assert orch._feed_status_payload() == {
+            "status": "stale",
+            "last_bar_utc": "2026-03-07T22:15:00+00:00",
+            "last_stale_utc": None,
+            "gap_seconds": 90.0,
+            "stale_count": 2,
+            "dead": False,
+            "bars_received": 42,
+            "reconnect_attempts": 3,
+            "last_connected_at": "2026-03-07T22:10:00+00:00",
+        }
+        assert orch._router_status_payload() == {
+            "degraded": False,
+            "degraded_accounts": {},
+            "supports_native_brackets": False,
+            "has_queryable_bracket_legs": False,
+        }
+        assert orch._broker_status_payload() == {
+            "broker_name": "projectx",
+            "contract_symbol": "MGCJ6",
+            "signal_only": False,
+            "demo": True,
+            "account_name": "profile_test",
+        }
+
+    def test_publish_state_passes_operator_payloads(self, orch):
+        orch.engine.daily_pnl_r = 0.5
+        orch.engine.active_trades = []
+        orch.engine.completed_trades = []
+        orch.engine.orbs = {}
+        orch.risk_mgr.limits = SimpleNamespace(max_daily_loss_r=5.0, max_equity_drawdown_r=10.0)
+        orch._feed_status["status"] = "healthy"
+        orch._stats.bars_received = 7
+        orch._safety_state.last_connected_at = None
+
+        with patch("trading_app.live.bot_state.write_state") as write_state:
+            orch._publish_state()
+
+        snapshot = write_state.call_args.args[0]
+        assert snapshot["feed_status"]["status"] == "healthy"
+        assert snapshot["feed_status"]["bars_received"] == 7
+        assert snapshot["router_status"]["degraded"] is False
+        assert snapshot["broker_status"]["contract_symbol"] == "MGCJ6"
 
 
 # ---------------------------------------------------------------------------
