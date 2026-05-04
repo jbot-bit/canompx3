@@ -8,6 +8,26 @@
 
 ## Pickup pointer (2026-05-02 PM — read this first)
 
+- Fresh isolated passive-sidecar implementation worktree:
+  `docs/handoffs/2026-05-02-topstep-official-doc-packet-handover.md`
+  Branch: `codex/passive-sidecar-skeleton`
+  This branch is implementation-only for the policy-gated passive sidecar.
+  Prepare only the non-executing local-device sidecar and do not send the
+  support request or flip `LIVE_PASSIVE_SIDECAR_ALLOWED` without written
+  Topstep clarification.
+
+- Fresh isolated official-doc packet worktree:
+  `docs/handoffs/2026-05-02-topstep-official-doc-packet-handover.md`
+  Branch: `codex/topstep-official-doc-packet`
+  This branch is doc-only: verify policy, platform docs, and lifecycle
+  continuity before any external-platform implementation proceeds.
+
+- Fresh isolated operator-architecture worktree:
+  `docs/handoffs/2026-05-02-topstep-operator-v3-handover.md`
+  Branch: `codex/topstep-operator-v3`
+  Use this for the Topstep/canompx3 external operator-platform spike instead of
+  reusing the broader main-branch baton.
+
 **Where to start next session:**
 
 0. Prior-day-context blocker memo now exists:

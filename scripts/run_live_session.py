@@ -564,7 +564,10 @@ def main() -> None:
     except Exception as e:
         log.warning("Dashboard launch failed (non-fatal): %s", e)
 
-    # Multi-account copy trading: discover shadow accounts
+    # Multi-account copy trading: discover shadow accounts.
+    # DEPRECATED – blocked by Topstep policy as of 2026-05-02 for Topstep
+    # Live Funded interpretation. This path remains generic broker infra and is
+    # not policy approval for Topstep Live Funded trade-copy or passive-sidecar use.
     shadow_account_ids = None
     n_copies = args.copies
     if n_copies == 0 and args.profile:

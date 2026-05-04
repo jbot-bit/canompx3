@@ -206,6 +206,17 @@ else
     echo "  PASSED"
 fi
 
+# 3c. Passive sidecar non-execution guard (~<1s)
+if [ -d "$SCRIPT_DIR/trading_app/live/passive_sidecar" ]; then
+    echo "[3c/8] Passive sidecar non-exec guard..."
+    if ! "$PYTHON" "$SCRIPT_DIR/scripts/check_passive_sidecar_non_exec.py" > /dev/null 2>&1; then
+        echo "BLOCKED: passive sidecar drifted into execution markers."
+        "$PYTHON" "$SCRIPT_DIR/scripts/check_passive_sidecar_non_exec.py"
+        exit 1
+    fi
+    echo "  PASSED"
+fi
+
 # 3b. CRG incremental update (advisory-only, fail-open, ~1-5s)
 # Keeps the graph DB fresh so drift checks D1-D5 (Phase 2) and slash
 # commands see the committed state. Idempotent on top of the PostToolUse
