@@ -1,0 +1,186 @@
+{
+  "orb_outcomes_e2_by_inst_aperture": [
+    {
+      "symbol": "M2K",
+      "entry_model": "E2",
+      "orb_minutes": 5,
+      "n": 91080
+    },
+    {
+      "symbol": "M2K",
+      "entry_model": "E2",
+      "orb_minutes": 15,
+      "n": 85668
+    },
+    {
+      "symbol": "M2K",
+      "entry_model": "E2",
+      "orb_minutes": 30,
+      "n": 80670
+    },
+    {
+      "symbol": "M6E",
+      "entry_model": "E2",
+      "orb_minutes": 5,
+      "n": 46410
+    },
+    {
+      "symbol": "MBT",
+      "entry_model": "E2",
+      "orb_minutes": 5,
+      "n": 75732
+    },
+    {
+      "symbol": "MES",
+      "entry_model": "E2",
+      "orb_minutes": 5,
+      "n": 258114
+    },
+    {
+      "symbol": "MES",
+      "entry_model": "E2",
+      "orb_minutes": 15,
+      "n": 108798
+    },
+    {
+      "symbol": "MES",
+      "entry_model": "E2",
+      "orb_minutes": 30,
+      "n": 101502
+    },
+    {
+      "symbol": "MGC",
+      "entry_model": "E2",
+      "orb_minutes": 5,
+      "n": 215850
+    },
+    {
+      "symbol": "MGC",
+      "entry_model": "E2",
+      "orb_minutes": 15,
+      "n": 136368
+    },
+    {
+      "symbol": "MGC",
+      "entry_model": "E2",
+      "orb_minutes": 30,
+      "n": 131718
+    },
+    {
+      "symbol": "MNQ",
+      "entry_model": "E2",
+      "orb_minutes": 5,
+      "n": 283596
+    },
+    {
+      "symbol": "MNQ",
+      "entry_model": "E2",
+      "orb_minutes": 15,
+      "n": 171744
+    },
+    {
+      "symbol": "MNQ",
+      "entry_model": "E2",
+      "orb_minutes": 30,
+      "n": 161250
+    },
+    {
+      "symbol": "SIL",
+      "entry_model": "E2",
+      "orb_minutes": 5,
+      "n": 12360
+    }
+  ],
+  "validated_setups_active": [
+    {
+      "instrument": "MES",
+      "entry_model": "E1",
+      "n": 2
+    },
+    {
+      "instrument": "MES",
+      "entry_model": "E2",
+      "n": 12
+    },
+    {
+      "instrument": "MGC",
+      "entry_model": "E1",
+      "n": 1
+    },
+    {
+      "instrument": "MGC",
+      "entry_model": "E2",
+      "n": 8
+    },
+    {
+      "instrument": "MNQ",
+      "entry_model": "E2",
+      "n": 101
+    }
+  ],
+  "deployed_lanes": [
+    {
+      "strategy_id": "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
+      "instrument": "MGC",
+      "orb_label": "CME_REOPEN",
+      "sample_size": 88,
+      "win_rate": 0.4318,
+      "expectancy_r": 0.4401,
+      "sharpe_ann": 0.6431,
+      "all_years_positive": false,
+      "years_tested": 10
+    },
+    {
+      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+      "instrument": "MNQ",
+      "orb_label": "COMEX_SETTLE",
+      "sample_size": 591,
+      "win_rate": 0.5076,
+      "expectancy_r": 0.1938,
+      "sharpe_ann": 1.2278,
+      "all_years_positive": false,
+      "years_tested": 11
+    },
+    {
+      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
+      "instrument": "MNQ",
+      "orb_label": "EUROPE_FLOW",
+      "sample_size": 978,
+      "win_rate": 0.3047,
+      "expectancy_r": 0.1382,
+      "sharpe_ann": 0.6561,
+      "all_years_positive": false,
+      "years_tested": 13
+    },
+    {
+      "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
+      "instrument": "MNQ",
+      "orb_label": "SINGAPORE_OPEN",
+      "sample_size": 766,
+      "win_rate": 0.4125,
+      "expectancy_r": 0.1439,
+      "sharpe_ann": 0.7996,
+      "all_years_positive": false,
+      "years_tested": 12
+    },
+    {
+      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10",
+      "instrument": "MNQ",
+      "orb_label": "TOKYO_OPEN",
+      "sample_size": 849,
+      "win_rate": 0.3993,
+      "expectancy_r": 0.1186,
+      "sharpe_ann": 0.7727,
+      "all_years_positive": false,
+      "years_tested": 11
+    }
+  ],
+  "table_sizes": {
+    "orb_outcomes": 11899662,
+    "validated_setups": 124,
+    "experimental_strategies": 73980,
+    "edge_families": 61,
+    "daily_features": 56415,
+    "paper_trades": 161
+  }
+}

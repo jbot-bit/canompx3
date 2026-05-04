@@ -1,0 +1,163 @@
+# Hypothesis Registry — 2026-04-23 mnq parent structure shadow buckets v1
+#
+# Locked: 2026-04-23T16:45:00+10:00
+# Author: Codex session
+# Committing commit hash: 50fabff3777a54e39e0f4006890907c644c01c12
+# Data horizon: 6.65yr clean MNQ
+# Intended discovery holdout: 2026-01-01
+
+metadata:
+  name: "mnq_parent_structure_shadow_buckets_v1"
+  purpose: "Bounded conditional-role study for exact MNQ deployed-parent structure/context shadow buckets. Score buckets only; no live sizing or routing claims."
+  date_locked: "2026-04-23T16:45:00+10:00"
+  commit_sha: "50fabff3777a54e39e0f4006890907c644c01c12"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 6
+  testing_mode: "family"
+  research_question_type: "conditional_role"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - "TRADING_RULES.md"
+    - "docs/institutional/conditional-edge-framework.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/audit/results/2026-04-23-prior-day-bridge-closure-audit.md"
+    - "docs/audit/results/2026-04-23-prior-day-geometry-execution-translation-audit.md"
+    - "docs/audit/results/2026-04-20-mnq-live-context-overlays-v1.md"
+  notes:
+    - "This file is a role-translation prereg, not a broad confluence reboot."
+    - "Discovery truth remains canonical: bars_1m, daily_features, orb_outcomes."
+    - "Exact live parent identities are operational context only; policy claims still require canonical replay."
+
+scope_contract:
+  deployed_parent_ids:
+    - "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+    - "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15"
+  lane_side_rule: |
+    Direction is part of the parent definition for this family. Structure/context
+    predicates here are direction-bound, so the honest parent is the exact live
+    lane split to the eligible side rather than the pooled two-sided lane.
+  feature_timing_rule: |
+    All features must be startup-safe or ORB-end / pre-entry-safe. Nothing
+    post-break-bar close, post-entry, or retrospective is allowed in this
+    family.
+  explicitly_out_of_scope:
+    - "Any rel_vol or raw participation feature"
+    - "Any calendar overlay"
+    - "Any exact rerun of H01_NYO_SHORT_PREV_BEAR or H04_CMX_SHORT_RELVOL_Q3_AND_F6"
+    - "Any prev_week_* or prev_month_* feature"
+    - "Any same-session coexistence / routing / fractional size translation claim"
+    - "Any live deployment, allocator weighting, or size-up recommendation"
+    - "Any short-side US_DATA_1000 test"
+    - "Any COMEX short-side structure-only reinterpretation of H04"
+
+calibration:
+  score_policy: |
+    No learned weights. All score buckets are frozen ex ante from canonical
+    boolean predicates with unit weights only.
+  pass_discipline: |
+    Every hypothesis must report:
+      Pass 1 = exact lane-side parent on the unfiltered canonical parent
+      Pass 2 = the same lane-side parent within the currently deployed parent
+               filter only
+    A signal that looks good only on Pass 1 and disappears on Pass 2 does not
+    qualify as a live-parent shadow bucket.
+
+hypotheses:
+  - id: 1
+    name: "MNQ COMEX_SETTLE RR1.5 long PD_CLEAR_LONG shadow bucket"
+    theory_citation: |
+      Repo-local grounding:
+      - docs/institutional/mechanism_priors.md
+      - docs/institutional/conditional-edge-framework.md
+      - docs/audit/results/2026-04-23-prior-day-bridge-closure-audit.md
+      - docs/audit/results/2026-04-23-htf-prior-structure-confluence-repo-audit.md
+      - docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+    economic_basis: |
+      Prior-day congestion is a plausible breakout headwind in this repo's
+      mechanism map. The exact COMEX prior-day bridge already found
+      PD_CLEAR_LONG alive on the same session as a shelf survivor at O5 RR1.0.
+      The honest next question is narrower: on the exact deployed
+      COMEX_SETTLE O5 RR1.5 live parent, does the same clear-of-congestion
+      state improve the long-side parent as a shadow-only conditioner, not as a
+      replacement lane?
+    role:
+      kind: "conditioner"
+      parent: "Exact MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5 parent, long-side rows only. Pass 1 uses the unfiltered canonical long-side parent. Pass 2 restricts to the deployed ORB_G5 subset only."
+      comparator: "PD_CLEAR_LONG fire vs complement on the exact long-side parent, reported on both passes."
+      primary_metric: "policy_ev_per_opportunity_r"
+      promotion_target: "shadow_only"
+    filter:
+      type: "PD_CLEAR_LONG"
+      column: "prev_day_high, prev_day_low, prev_day_close, atr_20, orb_COMEX_SETTLE_mid"
+      thresholds:
+        - "fire_vs_off"
+    scope:
+      instruments: [MNQ]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      orb_minutes: [5]
+      directions: [long]
+      stop_multipliers: [1.0]
+    expected_trial_count: 2
+    kill_criteria:
+      - "No positive policy_ev_per_opportunity_r uplift on either pass"
+      - "Filtered-pass selected_trade_mean_r improves but filtered-pass policy_ev_per_opportunity_r does not"
+      - "Filtered-pass on-signal IS expectancy is non-positive"
+      - "2026 OOS filtered-pass on-signal subset flips negative once N_on_OOS >= 10"
+
+  - id: 2
+    name: "MNQ US_DATA_1000 O15 RR1.5 long prior-day structure score buckets"
+    theory_citation: |
+      Repo-local grounding:
+      - docs/institutional/mechanism_priors.md
+      - docs/institutional/conditional-edge-framework.md
+      - docs/audit/results/2026-04-23-prior-day-bridge-closure-audit.md
+      - docs/audit/results/2026-04-23-prior-day-geometry-execution-translation-audit.md
+      - docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+    economic_basis: |
+      The strongest surviving prior-day geometry family on this branch is not a
+      mystical one-off: downside displacement and clear-of-congestion are two
+      distinct structure states in the repo's own mechanism map. The prior O5
+      branch proved the family is alive, but the coexistence route into the live
+      O15 lane is architecture-gated. The honest current-stack question is
+      different: on the exact live US_DATA_1000 O15 parent itself, do fixed
+      structure buckets built from those two predicates improve the long-side
+      parent as a shadow-only conditioner / confluence score?
+    role:
+      kind: "confluence"
+      parent: "Exact MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15 parent, long-side rows only. Pass 1 uses the unfiltered canonical O15 long-side parent. Pass 2 restricts to the deployed ORB_G5 O15 subset only."
+      comparator: "Fixed structure score on the exact O15 long-side parent. One point each for PD_DISPLACE_LONG and PD_CLEAR_LONG. Evaluate score>=1 vs score=0 and score=2 vs score<2 on both passes."
+      primary_metric: "policy_ev_per_opportunity_r"
+      promotion_target: "shadow_only"
+    filter:
+      type: "STRUCTURE_SCORE"
+      column: "PD_DISPLACE_LONG + PD_CLEAR_LONG"
+      thresholds:
+        - "score_ge_1"
+        - "score_eq_2"
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      orb_minutes: [15]
+      directions: [long]
+      stop_multipliers: [1.0]
+    expected_trial_count: 4
+    kill_criteria:
+      - "Neither score>=1 nor score=2 improves filtered-pass policy_ev_per_opportunity_r versus the exact parent"
+      - "Apparent uplift exists on Pass 1 but disappears on Pass 2"
+      - "Top bucket (score=2) filtered-pass IS on-signal expectancy is non-positive"
+      - "2026 OOS filtered-pass sign is negative for score>=1 once N_on_OOS >= 10"
+
+total_hypothesis_count: 2
+total_expected_trials: 6
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"

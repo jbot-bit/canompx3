@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "gold-db": {
+      "type": "stdio",
+      "command": "C:/Users/joshd/canompx3/.venv/Scripts/python.exe",
+      "args": [
+        "trading_app/mcp_server.py"
+      ],
+      "env": {}
+    },
+    "code-review-graph": {
+      "command": "uvx",
+      "args": [
+        "code-review-graph",
+        "serve"
+      ],
+      "type": "stdio",
+      "env": {
+        "CRG_REPO_ROOT": "C:/Users/joshd/canompx3",
+        "CRG_DATA_DIR": "C:/Users/joshd/canompx3/.code-review-graph"
+      }
+    }
+  }
+}

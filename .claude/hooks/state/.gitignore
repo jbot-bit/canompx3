@@ -1,0 +1,5 @@
+# Per-guard runtime state — ephemeral, do not track.
+# Directory itself is tracked (via this .gitignore) so the broker
+# doesn't have to mkdir at startup in fresh checkouts.
+*
+!.gitignore

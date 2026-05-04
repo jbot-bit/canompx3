@@ -1,0 +1,144 @@
+# Hypothesis Registry — 2026-04-16 garch-regime-family-audit
+#
+# Locked: 2026-04-16T19:30:00+10:00
+# Author: Codex main session
+# Purpose: exploratory-but-pre-committed family audit of garch as a volatility regime variable
+# Holdout: 2026-01-01 (Mode A)
+
+metadata:
+  name: "garch-regime-family-audit"
+  purpose: "Audit whether garch behaves as a structured market-state variable under natural session-side families rather than a universal binary overlay."
+  date_locked: "2026-04-16T19:30:00+10:00"
+  data_horizon_years_clean: 6.65
+  holdout_date: "2026-01-01"
+  testing_mode: "family"
+  total_expected_trials: 52
+  theory_summary: |
+    Chan 2008 Ch 7 explicitly identifies high- vs. low-volatility regimes as
+    a canonical trading-state problem and notes that GARCH is a suitable tool
+    for volatility regime tracking. Carver 2015 Ch 9-10 grounds continuous
+    forecast-driven sizing when a signal behaves coherently as a forecast rather
+    than as a brittle binary trigger. This audit tests whether
+    garch_forecast_vol_pct behaves like such a regime-family variable.
+
+hypotheses:
+  - id: 1
+    name: "Session-side directional families at fixed tails"
+    theory_citation: >
+      Chan 2008 Ch 7 § Regime Switching
+      (docs/institutional/literature/chan_2008_ch7_regime_switching.md);
+      Harvey-Liu 2015 BH family control
+      (docs/institutional/literature/harvey_liu_2015_backtesting.md)
+    economic_basis: |
+      If garch is a genuine volatility-regime variable, then under exact
+      tradeable populations the sign of the effect should cluster by natural
+      session-side family instead of appearing as isolated random cell wins.
+      High-volatility regimes should repeatedly favor some session families,
+      while low-volatility regimes should repeatedly damage or invert others.
+    scope:
+      families:
+        - "CME_REOPEN high"
+        - "CME_REOPEN low"
+        - "TOKYO_OPEN high"
+        - "TOKYO_OPEN low"
+        - "SINGAPORE_OPEN high"
+        - "SINGAPORE_OPEN low"
+        - "LONDON_METALS high"
+        - "LONDON_METALS low"
+        - "EUROPE_FLOW high"
+        - "EUROPE_FLOW low"
+        - "US_DATA_830 high"
+        - "US_DATA_830 low"
+        - "NYSE_OPEN high"
+        - "NYSE_OPEN low"
+        - "US_DATA_1000 high"
+        - "US_DATA_1000 low"
+        - "COMEX_SETTLE high"
+        - "COMEX_SETTLE low"
+        - "CME_PRECLOSE high"
+        - "CME_PRECLOSE low"
+        - "NYSE_CLOSE high"
+        - "NYSE_CLOSE low"
+        - "BRISBANE_1025 high"
+        - "BRISBANE_1025 low"
+      fixed_thresholds:
+        high: 70
+        low: 30
+      population_source: "Broad exact-filter tradeable cells from canonical orb_outcomes + daily_features"
+    expected_trial_count: 24
+    kill_criteria:
+      - "No session-side family survives BH on the directional sign test."
+      - "Strong raw sign asymmetry is reproduced by shuffle-null controls."
+      - "Effect appears only in one isolated family."
+
+  - id: 2
+    name: "Session-family monotonicity"
+    theory_citation: >
+      Chan 2008 Ch 7 § Regime Switching;
+      Carver 2015 Ch 9-10 volatility targeting / sizing
+      (docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md)
+    economic_basis: |
+      A signal suitable for R3/R7 sizing should show coherent upper-tail or
+      lower-tail behavior, not a noisy mid-bucket bump. Session families with
+      true regime structure should show consistent tail-bias signs across exact
+      cells.
+    scope:
+      families:
+        - "CME_REOPEN high"
+        - "CME_REOPEN low"
+        - "TOKYO_OPEN high"
+        - "TOKYO_OPEN low"
+        - "SINGAPORE_OPEN high"
+        - "SINGAPORE_OPEN low"
+        - "LONDON_METALS high"
+        - "LONDON_METALS low"
+        - "EUROPE_FLOW high"
+        - "EUROPE_FLOW low"
+        - "US_DATA_830 high"
+        - "US_DATA_830 low"
+        - "NYSE_OPEN high"
+        - "NYSE_OPEN low"
+        - "US_DATA_1000 high"
+        - "US_DATA_1000 low"
+        - "COMEX_SETTLE high"
+        - "COMEX_SETTLE low"
+        - "CME_PRECLOSE high"
+        - "CME_PRECLOSE low"
+        - "NYSE_CLOSE high"
+        - "NYSE_CLOSE low"
+        - "BRISBANE_1025 high"
+        - "BRISBANE_1025 low"
+      metric: "NTILE(5) tail bias sign from exact cell-level garch distributions"
+    expected_trial_count: 24
+    kill_criteria:
+      - "No family survives BH on tail-bias sign."
+      - "Best buckets cluster in the middle rather than in the expected tail."
+
+  - id: 3
+    name: "Global asymmetry and destruction controls"
+    theory_citation: >
+      Lopez de Prado 2020 theory-first / anti-backtest-tweak
+      (docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md);
+      Chan 2008 regime-state classification;
+      Harvey-Liu 2015 multiple-testing discipline
+    economic_basis: |
+      If the observed asymmetry is real, the broad exact universe should show
+      high-tail favorable / low-tail hostile structure at fixed thresholds, and
+      that structure should weaken materially under shuffled garch labels.
+    scope:
+      tests:
+        - "Global high-side sign asymmetry @70"
+        - "Global low-side sign asymmetry @30"
+        - "Global shuffle-null for high-side @70"
+        - "Global shuffle-null for low-side @30"
+      shuffles: 100
+    expected_trial_count: 4
+    kill_criteria:
+      - "Real high-side positive fraction is not better than shuffle-null."
+      - "Real low-side negative fraction is not better than shuffle-null."
+
+total_hypothesis_count: 3
+total_expected_trials: 52
+budget_check:
+  max_allowed_clean: 300
+  status: "under budget"

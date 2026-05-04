@@ -1,0 +1,130 @@
+date: 2026-04-16
+title: Garch partner-state provenance audit
+status: active
+purpose: >
+  Validate whether the current W2 partner-state encodings are principled local
+  mechanism representations on the validated shelf, or merely convenient
+  cutoffs that should be widened, tightened, replaced, or demoted.
+
+authority_chain:
+  - CLAUDE.md
+  - RESEARCH_RULES.md
+  - TRADING_RULES.md
+  - docs/institutional/pre_registered_criteria.md
+  - docs/institutional/mechanism_priors.md
+  - docs/plans/2026-04-16-garch-program-audit.md
+  - docs/plans/2026-04-16-garch-state-distinctness-design.md
+  - docs/plans/2026-04-16-garch-w2-mechanism-pairing-design.md
+  - docs/plans/2026-04-16-garch-partner-state-provenance-design.md
+  - docs/audit/results/2026-04-16-garch-w2-mechanism-pairing-audit.md
+  - pipeline/build_daily_features.py
+
+universe:
+  source: validated_setups_only
+  truth_layers:
+    - orb_outcomes
+    - daily_features
+  status: research_provisional_not_production_truth
+
+time_boundary:
+  is_logic: pre_2026_only
+  oos_2026: descriptive_only
+  oos_2026_may_choose_verdict: false
+
+locked_families:
+  - COMEX_SETTLE_high
+  - EUROPE_FLOW_high
+  - TOKYO_OPEN_high
+  - SINGAPORE_OPEN_high
+  - LONDON_METALS_high
+
+garch_anchor:
+  name: garch_high
+  definition: "garch_forecast_vol_pct >= 70"
+
+representations:
+  M1_latent_expansion:
+    question: >
+      Is the overnight partner better represented by a not-high cutoff, a
+      tighter neighboring cutoff, or a mid-only state?
+    candidates:
+      - name: OVN_NOT_HIGH_60
+        favorable: "overnight_range_pct < 60"
+      - name: OVN_NOT_HIGH_70
+        favorable: "overnight_range_pct < 70"
+      - name: OVN_NOT_HIGH_80
+        favorable: "overnight_range_pct < 80"
+        current_w2: true
+      - name: OVN_MID_ONLY
+        favorable: "20 < overnight_range_pct < 80"
+
+  M2_active_transition:
+    question: >
+      Is the ATR partner better represented as expanding transition or as a
+      static high-ATR level state?
+    candidates:
+      - name: ATRVEL_EXPANDING
+        favorable: "atr_vel_regime == 'Expanding'"
+        current_w2: true
+      - name: ATRVEL_GE_100
+        favorable: "atr_vel_ratio >= 1.00"
+      - name: ATRVEL_GE_105
+        favorable: "atr_vel_ratio >= 1.05"
+      - name: ATRVEL_GE_110
+        favorable: "atr_vel_ratio >= 1.10"
+      - name: ATR_PCT_GE_70
+        favorable: "atr_20_pct >= 70"
+      - name: ATR_PCT_GE_80
+        favorable: "atr_20_pct >= 80"
+
+required_metrics:
+  - cells
+  - N_total
+  - N_conj
+  - base_exp
+  - conj_exp
+  - conj_exp_minus_base
+  - support_cells_partner_inside_garch
+  - valid_cells_partner_inside_garch
+  - support_cells_garch_inside_partner
+  - valid_cells_garch_inside_partner
+  - support_share_partner_inside_garch
+  - support_share_garch_inside_partner
+
+support_rules:
+  cell_inclusion:
+    n_total_min: 50
+  comparison_min_side: 10
+  conjunction_min_non_thin: 30
+  non_unclear_requires:
+    - one_valid_conditional_comparison
+    - conjunction_n_at_least_30
+    - no_2026_dependency
+
+allowed_representation_verdicts:
+  - supported_current
+  - neighbor_stable
+  - alternate_better
+  - weak_mechanism
+  - unclear
+
+forbidden_drift:
+  - No new families
+  - No new deployment or allocator claims
+  - No random threshold sweep outside the locked candidates
+  - No use of prior report summaries as authority
+  - No mixing prior-level or prior-session carry into this stage
+
+queue_items_not_in_scope:
+  - prior_day_levels
+  - prior_day_range_norm
+  - prior_session_carry
+
+promotion_gate: >
+  Advance only if at least one family shows that the current representation is
+  supported, locally stable across neighboring states, or honestly superseded
+  by a locked alternate representation without thin-cell dependence.
+
+kill_gate: >
+  Demote the mechanism if the current representation collapses, neighboring
+  states do not support it, and no locked alternate representation survives.

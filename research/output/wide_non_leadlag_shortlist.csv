@@ -1,0 +1,2 @@
+symbol,session,entry_model,confirm_bars,rr_target,filter,n_base,n_on,signals_per_year,avg_on,avg_off,uplift,wr_on,wr_off,years_pos,years_total,years_pos_ratio,train_uplift,test_uplift,n_test_on,n_test_off
+MES,1000,E0,1,2.5,fast_le_15,1767,1311,163.875,0.011141952707856591,-0.11339210526315789,0.12453405797101448,0.3707093821510298,0.3355263157894737,4,6,0.6666666666666666,0.0935766822327817,0.3414273754152824,210,43

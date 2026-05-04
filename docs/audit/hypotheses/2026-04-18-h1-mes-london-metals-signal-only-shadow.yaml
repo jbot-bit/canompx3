@@ -1,0 +1,388 @@
+metadata:
+  name: h1-mes-london-metals-signal-only-shadow
+  owner: claude
+  created_at: 2026-04-18
+  testing_mode: research_only_signal_shadow
+  supersedes: none
+  depends_on:
+    - docs/audit/results/2026-04-15-t0-t8-audit-horizon-non-volume.md
+    - docs/audit/results/2026-04-18-h1-is-drift-check.md
+    - docs/plans/2026-04-18-post-a4c-ev-queue-reset.md
+  authority:
+    - docs/institutional/pre_registered_criteria.md
+    - .claude/rules/backtesting-methodology.md
+    - trading_app/holdout_policy.py
+  scope_note: >
+    Signal-only shadow contract for H1 (MES LONDON_METALS O30 RR1.5 long
+    `overnight_range_pct >= 80`). Implements the T0-T8 audit's explicit
+    directive at `docs/audit/results/2026-04-15-t0-t8-audit-horizon-non-volume.md:30`:
+    "H1 -- pre-reg shadow. OOS N=11 needs 3-6 months more data before
+    LEAKAGE_SUSPECT can be ruled out." This is an observational contract,
+    not a discovery scan. No capital at risk. No sizing deployed. No
+    parameter re-tuning after observation. Gates are evaluated ONCE at
+    review_date on the combined 2026-01-01 to review_date window per Mode A
+    single-use-OOS discipline.
+
+edge_claim_summary: >
+  MES LONDON_METALS O30 RR1.5 long breakouts in the top-20% overnight-
+  range regime (`overnight_range_pct >= 80`) continued profitably over
+  2019-2025 IS (N=189 fires, ExpR=+0.2158R, WR=0.524, bootstrap
+  p=0.0010 per T0-T8 audit). T0-T8 audit returned 7 PASS / 1 FAIL,
+  where the single FAIL was T3 WFE=1.33 on thin N_OOS=11 — flagged
+  LEAKAGE_SUSPECT per `.claude/rules/backtesting-methodology.md` Rule 12.
+  This shadow exists SPECIFICALLY to accumulate enough OOS fires to
+  either rule out LEAKAGE_SUSPECT or kill the candidate.
+
+mechanism:
+  summary: >
+    Overnight-range-expansion regime (Asia session 09:00-17:00 Brisbane
+    in top-20% percentile vs 252-day historical rolling distribution) as
+    a volatility-regime signal for intraday continuation on the first
+    LONDON_METALS ORB break. Consistent with Fitschen (2013) "Path of
+    Least Resistance" intraday trend-follow framework for equity-index
+    futures: elevated prior-session range signals stretched price action
+    that often resolves directionally during the next liquid session.
+  tier_1_literature_support:
+    - file: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+      relevance: CORE ORB premise (intraday trend-follow for equity index / commodity futures)
+      with_theory_claim: false
+      note: >
+        Supports intraday breakout-continuation in general. Does NOT
+        explicitly address overnight-range-percentile as a volatility
+        regime filter; that linkage is one step adjacent. Criterion 4
+        with-theory carve-out (t >= 3.00) NOT invoked. Without-theory
+        threshold (t >= 3.79) applies if this ever promotes to capital.
+  project_evidence:
+    - file: docs/audit/results/2026-04-15-t0-t8-audit-horizon-non-volume.md
+      lines: "48-67 (H1 section); line 30 (directive to shadow)"
+    - file: docs/audit/results/2026-04-18-h1-is-drift-check.md
+      lines: "entire doc (MATCH verdict on IS re-query)"
+
+sacred_boundary_discipline:
+  mode: A (per trading_app.holdout_policy.HOLDOUT_SACRED_FROM)
+  mode_a_citation: >
+    docs/institutional/pre_registered_criteria.md Amendment 2.7 locks the
+    2026-01-01 sacred-window policy. Mode A permits exactly ONE
+    pre-registered observational or decision read of the post-2026-01-01
+    window per hypothesis. Re-reading, re-tuning, or re-running with
+    different thresholds after observing the result is a pre-reg violation.
+  this_is_the_one_shot_read: true
+  re_tuning_after_observation: forbidden
+  capital_at_risk_during_window: none (signal-only shadow, not paper trade)
+  post_review_actions_permitted:
+    - proceed to D-2-equivalent capital-deployment pre-reg if gates PASS
+    - declare H1 DEAD (LEAKAGE_SUSPECT confirmed) if gates FAIL
+    - write postmortem
+  post_review_actions_forbidden:
+    - re-run with different overnight_range_pct threshold (was 80; locked 80)
+    - re-run with different RR
+    - re-run with different aperture
+    - extend the observation window after reviewing the result
+    - split into sub-windows and pick the favorable one
+
+rules:
+  no_sizing_deployment: true
+  no_capital_at_risk: true
+  signal_only: true
+  no_threshold_retuning: true
+  no_window_extension_after_first_result: true
+  no_new_lanes_added_to_shadow: true
+  no_threshold_redefinition: true
+  no_rescue_if_shadow_fails: true
+
+locked_inputs:
+  source_audit_commit: "T0-T8 audit committed prior to 2026-04-15"
+  source_audit_doc: docs/audit/results/2026-04-15-t0-t8-audit-horizon-non-volume.md
+  source_drift_check_commit: "32e23059 (2026-04-18)"
+  universe:
+    instrument: MES
+    session: LONDON_METALS
+    aperture_minutes: 30
+    rr_target: 1.5
+    entry_model: E2
+    confirm_bars: 1
+    filter: overnight_range_pct_GE_80
+    direction: long (target_price > entry_price)
+    stop_multiplier: 1.0 (default)
+  contract_handling:
+    front_month_policy: canonical via pipeline.asset_configs (same as every other MES strategy)
+    roll_methodology: canonical (no special handling)
+
+observation_windows:
+  retrospective_read:
+    label: locked_descriptive_oos_read
+    from: 2026-01-01
+    to: 2026-04-18 (lock_date)
+    purpose: >
+      One-shot descriptive read of the H1 filter on already-elapsed 2026
+      OOS data. Computed ONCE in commit C of the 3-commit H1 shadow
+      sequence (see scope_lock_files) and written to the retrospective
+      output md. Never re-run. Counts as part of the Mode A single-shot
+      consumption.
+    computed_at: 2026-04-18 (commit C of shadow sequence)
+    feeds_final_verdict: true
+  live_shadow:
+    label: shadow_continuation
+    from: 2026-04-18
+    to: 2026-12-15
+    purpose: >
+      Approximately 8 months forward observation. Each new on-signal fire
+      (overnight_range_pct >= 80 AND MES LONDON_METALS O30 RR1.5 long
+      E2 fires) is logged to shadow_log_csv. No position changes. No
+      capital deployed. Forward rate projection: IS produced 28.4 on-
+      signal fires/year (189 fires over 6.65 IS years). 8-month forward
+      window projects ~19 additional fires; combined with 11 elapsed
+      fires as of audit date (per T0-T8 audit), review universe should
+      reach N_OOS ~30.
+    cadence: as fires occur (not daily — LONDON_METALS session-specific)
+    feeds_final_verdict: true
+  combined_verdict_window:
+    label: combined_one_shot_review_universe
+    from: 2026-01-01
+    to: 2026-12-15
+    purpose: >
+      Full H1 shadow OOS universe. Gates are evaluated ONCE on this
+      combined window at review_date. Retrospective + forward are both
+      load-bearing and both counted toward the final one-shot read;
+      neither is optional and neither can be evaluated on its own to
+      rescue a combined fail.
+
+review_date: 2026-12-15
+review_date_note: >
+  Saturday - markets closed in Brisbane. Effective review executes on
+  2026-12-16 (Monday) close using 2026-12-15 data cutoff. 8 months
+  forward chosen over 4 months (original plan 2026-08-15) after
+  adversarial audit finding PA-3: IS rate is 28.4 fires/year = 2.37/mo,
+  not 13/mo as originally guessed. 8 months at 2.37/mo = 19 forward
+  fires + 11 elapsed = 30 at review. Conservative padding vs 2026
+  observed rate of 3.14/mo.
+review_rule: >
+  Gates are evaluated ONCE at review_date on the combined 2026-01-01 to
+  2026-12-15 universe. Evaluation is final. No second look.
+
+look_ahead_clearance:
+  status: AUDIT_CLEARED (not re-verified at percentile-computation level)
+  audit_citation:
+    file: docs/audit/results/2026-04-15-t0-t8-audit-horizon-non-volume.md
+    lines: "38-41"
+    verbatim: >
+      "overnight_* features require ORB start >= 17:00 Brisbane --
+      LONDON_METALS (17:00), COMEX_SETTLE (04:30 next day) both clear."
+  rule_citation:
+    file: .claude/rules/backtesting-methodology.md
+    section: Rule 1.2 look-ahead validity-domain gate table
+    cell_validity: "overnight_high/low/range/range_pct valid for ORB starting >= 17:00 (LONDON_METALS and later)"
+  session_catalog_citation:
+    file: pipeline/dst.py
+    lines: "158, 201, 457"
+    note: LONDON_METALS start = 17:00 Brisbane exactly
+  pipeline_citation:
+    file: pipeline/build_daily_features.py
+    lines: "457-475 (overnight computation); 1206 (percentile rank)"
+  re_verification_required_if: >
+    Shadow passes gates and a D-2-equivalent capital deployment is
+    proposed. Before capital deploy, re-verify that overnight_range_pct
+    percentile ranking at line 1206 uses only prior-day distribution
+    (not full-sample). Audit-cleared for shadow-observation purposes but
+    pre-capital due diligence warranted.
+
+metrics_tracked_per_trade:
+  - trading_day
+  - window_label (retrospective | forward_shadow)
+  - overnight_range_pct_value
+  - on_signal (boolean; overnight_range_pct >= 80)
+  - entry_price
+  - stop_price
+  - target_price
+  - direction (derived: long if target_price > entry_price)
+  - pnl_r
+  - outcome (win | loss | break_even | other)
+  - is_correct_direction_for_strategy (direction == 'long')
+
+aggregate_metrics_at_review:
+  n_on_signal_oos: integer (combined retrospective + forward)
+  n_on_signal_retrospective: integer
+  n_on_signal_forward: integer
+  on_signal_is:
+    expR: 0.2158 (IS-locked, verbatim from drift check)
+    sd: 1.1629
+    wr: 0.5243
+  on_signal_oos:
+    expR: float
+    sd: float
+    wr: float
+    bootstrap_p_vs_zero: float (B=10000, block=5 for autocorrelation)
+    parametric_t: float
+  off_signal_oos:
+    expR: float
+    wr: float
+  direction_match:
+    sign_is: positive
+    sign_oos: derived
+    match: boolean
+  eff_ratio:
+    rule: expR_on_signal_oos / expR_on_signal_is
+    value: float
+  wfe:
+    rule: sharpe_oos_on / sharpe_is_on
+    value: float
+
+pass_fail_gates:
+  all_required: true
+  primary_oos_expR_positive:
+    rule: expR_on_signal_oos >= 0
+    rationale: Criterion 8 (Amendment 2.7) floor. OOS cannot be negative.
+    citation: docs/institutional/pre_registered_criteria.md Amendment 2.7
+    on_fail: halt H1, declare DEAD, postmortem, no capital-deploy pre-reg
+  primary_oos_eff_ratio:
+    rule: eff_ratio >= 0.40
+    concrete: expR_on_signal_oos >= 0.0864 (= 0.40 * 0.2158)
+    rationale: Criterion 8 (Amendment 2.7) verbatim. 40% of IS effect minimum.
+    citation: docs/institutional/pre_registered_criteria.md Amendment 2.7 row 8
+    on_fail: halt H1, declare DEAD, postmortem, no capital-deploy pre-reg
+  primary_direction_match:
+    rule: sign(expR_on_signal_oos) == sign(expR_on_signal_is)
+    concrete: expR_on_signal_oos > 0 given expR_on_signal_is = +0.2158
+    rationale: direction flip is a structural reversal, not a thin-sample artifact
+    on_fail: halt H1, declare DEAD
+  primary_two_year_streak_kill:
+    rule: NOT (expR_on_signal_oos < 0 AND yr2025_expR < 0)
+    concrete: yr2025_IS ExpR was -0.0674 per T0-T8 audit line 63
+    rationale: >
+      If 2026 OOS also flips negative, that is TWO consecutive years in
+      disagreement with the 2019-2024 edge. That is structural, not
+      thin-sample noise. Hard kill independent of N.
+    citation: docs/audit/results/2026-04-15-t0-t8-audit-horizon-non-volume.md:63
+    on_fail: halt H1, declare DEAD independent of N_OOS power
+  secondary_minimum_N_oos:
+    rule: n_on_signal_oos >= 30
+    concrete: Criterion 8 CLT heuristic floor
+    citation: trading_app/strategy_validator.py:1052 `_OOS_MIN_TRADES_CLT_HEURISTIC = 30`
+    on_fail: >
+      shadow result is UNDERPOWERED, not PASS or FAIL. Window does not
+      extend (would violate one-shot). User decides: accept directional-
+      only read, or abandon H1, or pre-register V2 with longer window.
+  secondary_bootstrap_p:
+    rule: bootstrap_p_vs_zero_oos < 0.10
+    rationale: >
+      Soft gate. OOS bootstrap at B=10000, block=5 for autocorrelation
+      robustness per `.claude/rules/backtesting-methodology.md` Rule 4.
+    on_fail: >
+      flag as statistically weak at OOS, review_note appended. Does not
+      automatically halt but requires capital-deploy pre-reg to justify.
+  informational_only:
+    - chordia_t_on_oos (t >= 3.79 without-theory bar per pre_registered_criteria.md Criterion 4 line 114; informational at shadow stage, binding at capital-deploy stage)
+    - wfe_oos_vs_is
+    - dsr_across_k_framings (deferred to capital-deploy pre-reg)
+
+kill_rules:
+  any_primary_fails: halt H1; declare DEAD; postmortem; no capital-deploy pre-reg
+  two_year_direction_streak: halt H1; declare DEAD independent of N_OOS
+  retune_attempt: >
+    forbidden; any attempt to change overnight_range_pct threshold (80),
+    RR (1.5), aperture (O30), direction (long), or session (LONDON_METALS)
+    after observing results is a pre-reg violation and voids this document.
+  capital_deployment_during_shadow: >
+    forbidden; capital gates on a future D-2-equivalent pre-reg, not this
+    document.
+  shadow_infrastructure_failure: >
+    If the shadow-log append script fails for >2 consecutive weeks,
+    document the gap in the shadow log csv, resume on fix. Missing fires
+    during infrastructure-failure gaps are recorded as 'INFRASTRUCTURE_GAP'
+    rows, not imputed, not counted toward N_OOS if they cannot be
+    reconstructed from canonical orb_outcomes post-fact.
+
+tautology_and_look_ahead_guards:
+  overnight_range_pct_feature_provenance: >
+    pipeline/build_daily_features.py:457-475 computes overnight_high / low /
+    range from asia-session bars (09:00-17:00 Brisbane exclusive of 17:00).
+    Line 1206 computes the percentile rank. Audit at
+    `2026-04-15-t0-t8-audit-horizon-non-volume.md:38-41` cleared
+    LONDON_METALS (17:00 ORB start) as valid. Shadow reads the column as
+    stored; does not re-compute.
+  tautology_check_at_review:
+    rule: abs_corr_overnight_range_pct_fire_vs_deployed_filters_on_same_lane < 0.70
+    rationale: >
+      T0 guard per `.claude/rules/backtesting-methodology.md` Rule 7.
+      H1 T0 at audit time: max |corr| = 0.186 (pdr_r105_fire). Re-verify
+      at review_date against whatever is deployed on MES LONDON_METALS at
+      that time (may include new lanes added between lock and review).
+    on_fail: >
+      result flagged; review_note appended. Does not automatically void
+      the gate but warrants a Rule 7 distinctness re-audit.
+
+scope_lock_files:
+  pre_reg: docs/audit/hypotheses/2026-04-18-h1-mes-london-metals-signal-only-shadow.yaml
+  is_drift_check: docs/audit/results/2026-04-18-h1-is-drift-check.md
+  retrospective_script: research/h1_mes_london_metals_signal_only_shadow_retrospective.py (NEW in commit C)
+  retrospective_output: docs/audit/results/2026-04-18-h1-retrospective-one-shot.md (NEW in commit C)
+  shadow_log_csv: docs/audit/results/h1-mes-london-metals-shadow-log.csv (accumulates from commit C forward)
+  review_writer_script: research/h1_mes_london_metals_signal_only_shadow_review.py (NEW at review date)
+  final_result: docs/audit/results/2026-12-15-h1-mes-london-metals-shadow-verdict.md (NEW at review date)
+
+explicitly_out_of_scope:
+  - pipeline/ modifications (none)
+  - trading_app/ modifications (none)
+  - any changes to currently-deployed lanes
+  - any lane other than MES LONDON_METALS O30 RR1.5 long E2 CB1
+  - any aperture other than O30
+  - any RR other than 1.5
+  - any entry model other than E2
+  - any direction other than long
+  - any overnight_range_pct threshold other than 80
+  - any other horizon candidate (H3 / H4 / H5 excluded; run separate shadows)
+  - composite signals (this is single-factor shadow only)
+  - DSR at multi-K framings (deferred to capital-deploy pre-reg)
+  - Shiryaev-Roberts monitor wiring (deferred to capital-deploy pre-reg)
+  - HLZ-2015 with-theory Chordia threshold invocation (blocked by audit IMP-1 until HLZ PDF arrives)
+
+verification_requirements:
+  at_commit_b_2026_04_18:
+    - pre-reg yaml parses as valid yaml (pyyaml strict load)
+    - all cited file paths exist (Glob check: audit result, drift check, backtesting-methodology, pre_registered_criteria, holdout_policy)
+    - Mode A discipline block present and matches Phase D D-1 template
+    - no 2026 OOS data read during commit-B drafting
+    - review_date > lock_date + 6 months
+    - kill_rules block present with all 4 kills (primary_fails, two_year_streak, retune, capital_deploy)
+  at_commit_c_2026_04_18:
+    - retrospective script py_compile + ruff clean
+    - retrospective reads 2026-01-01 to 2026-04-18 once, writes output md once
+    - shadow log csv initialized with column headers
+    - no 2026-04-19+ data accessed (window upper bound respected)
+    - retrospective output md produces ONE verdict row per observed on-signal fire
+  daily_during_shadow:
+    - append rows per new on-signal fire to shadow log csv
+    - no pass/fail evaluation during shadow - observation only
+    - no re-tuning, no window extension
+  at_review_2026_12_15:
+    - review script runs once, produces verdict MD
+    - all gates evaluated on locked rules above
+    - PASS -> user decides on capital-deploy pre-reg drafting
+    - FAIL (any primary fail OR two-year streak) -> H1 declared DEAD, postmortem
+    - UNDERPOWERED (N_OOS < 30 but primaries pass) -> user decides
+
+deliverables:
+  - docs/audit/hypotheses/2026-04-18-h1-mes-london-metals-signal-only-shadow.yaml (commit B, this file)
+  - research/h1_mes_london_metals_signal_only_shadow_retrospective.py (commit C)
+  - docs/audit/results/2026-04-18-h1-retrospective-one-shot.md (commit C)
+  - docs/audit/results/h1-mes-london-metals-shadow-log.csv (commit C init; appends through 2026-12-15)
+  - research/h1_mes_london_metals_signal_only_shadow_review.py (at review)
+  - docs/audit/results/2026-12-15-h1-mes-london-metals-shadow-verdict.md (at review)
+
+minbtl_budget_note: >
+  This shadow contract tests K=1 locked hypothesis. Trivially within
+  Bailey et al 2013 MinBTL bound (5-year data supports ~45 independent
+  configs; MES has 6.98 years). See
+  docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md:43,49
+  for the formula and the 5-year/45-trials rule.
+
+do_not_re_open_unless:
+  - brand-new H1 V2 pre-registration is filed
+  - V2 must not reuse 2026-01-01 to 2026-12-15 as its observation window
+    (that window will have been consumed by this shadow)
+  - V2 must cite an economic / mechanistic reason for reopening, not a
+    statistical rescue argument (per Mode A doctrine in
+    pre_registered_criteria.md Amendment 2.7)
+  - If shadow declares DEAD, reopen requires a fundamentally new
+    mechanism claim explaining why the OOS reversal happened, not a
+    retrospective threshold tweak.

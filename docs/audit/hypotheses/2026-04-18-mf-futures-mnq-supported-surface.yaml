@@ -1,0 +1,196 @@
+metadata:
+  name: mf-futures-mnq-supported-surface
+  owner: codex
+  created_at: 2026-04-18
+  testing_mode: research_only_surface_audit
+  supersedes: none
+  depends_on:
+    - docs/audit/results/2026-04-18-mf-futures-phase4-supported-surface-readout.md
+    - docs/plans/2026-04-18-medium-frequency-futures-kernel-prd.md
+  authority:
+    - docs/institutional/pre_registered_criteria.md
+    - RESEARCH_RULES.md
+    - docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md
+    - docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md
+  scope_note: >
+    Narrow formal research pass for the supported `mf_futures` surface on MNQ
+    only. This contract exists because the Phase 4 supported-surface readout
+    identified MNQ as the cleanest candidate among MES/MNQ/MGC, but the current
+    harness still uses research_close_to_close rather than full tradable-chain
+    realized PnL across rolls. This is a bounded research audit, not a
+    deployment contract and not a license to widen the universe.
+
+edge_claim_summary: >
+  On the Phase 4 supported-surface readout, MNQ showed the strongest walk-forward
+  shape among the currently supported symbols: 14/23 positive non-overlapping
+  windows (60.87%), aggregate net PnL +$14,366.96 after fixed friction, and
+  extremely low turnover (12 contracts across 1,761 simulated rows). However,
+  only 14 simulation days had carry_available=true, so the current signal is
+  effectively trend-dominated. The question for this formal pass is not whether
+  the strategy is deployable; it is whether MNQ merits continued research under
+  the current supported-surface limitations.
+
+mechanism:
+  summary: >
+    Daily time-series momentum on MNQ with bounded same-day futures-carry input
+    and Carver-style volatility targeting. The mechanism claim is modest:
+    persistent index-futures trend may survive on a daily horizon even under
+    fixed friction, and the current harness can detect whether that signal is
+    stable enough across anchored windows to justify deeper tradable-chain work.
+    Carry is treated as an auxiliary component only because current carry
+    coverage for MNQ is sparse.
+  tier_1_literature_support:
+    - file: docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md
+      relevance: CORE for bounded forecast combination and volatility-targeted sizing
+      with_theory_claim: true
+      note: >
+        Supports volatility-targeted, bounded systematic futures positioning.
+    - file: docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md
+      relevance: CORE for theory-first / anti-backtest-overclaim discipline
+      with_theory_claim: false
+      note: >
+        Grounds the requirement to treat the current run as falsification /
+        triage evidence, not proof of edge.
+  project_evidence:
+    - file: docs/audit/results/2026-04-18-mf-futures-phase4-supported-surface-readout.md
+      lines: entire_doc
+
+sacred_boundary_discipline:
+  mode: A
+  holdout_date: 2026-01-01
+  mode_a_citation: >
+    docs/institutional/pre_registered_criteria.md Criterion 8 and Amendment 2.7
+    lock the 2026-01-01 sacred holdout boundary.
+  this_is_not_a_new_discovery_scan: true
+  this_is_not_a_deployment_preg: true
+  oos_re_tuning_forbidden: true
+  post_hoc_universe_broadening_forbidden: true
+  carry_story_upgrading_forbidden: true
+
+rules:
+  supported_surface_only: true
+  instrument_locked: true
+  no_live_wiring: true
+  no_orb_integration: true
+  no_extra_carry_math: true
+  no_parameter_search: true
+  no_universe_expansion: true
+  no_synthetic_roll_pnl: true
+  no_proxying_missing_raw_stats: true
+
+locked_inputs:
+  instrument: MNQ
+  research_symbol: NQ
+  live_symbol: MNQ
+  stats_symbol: MNQ
+  return_basis: research_close_to_close
+  annualized_vol_lookback: 63
+  min_history: 260
+  walk_forward:
+    train_days: 252
+    test_days: 63
+    window_style: anchored_non_overlapping
+  capital_usd: 100000.0
+  cost_source: pipeline.cost_model.COST_SPECS["MNQ"].total_friction
+  cost_value_locked_from_phase4_readout: 2.92
+  trend_sleeves:
+    - [16, 64]
+    - [32, 128]
+    - [64, 256]
+  portfolio_policy_source: mf_futures.config.DEFAULT_PORTFOLIO_POLICY
+  combiner_source: mf_futures.config.DEFAULT_COMBINER
+  supported_surface_contract:
+    carry_surface_must_be_current_phase3_only: true
+    nearest_later_contract_rule_locked: true
+    unsupported_symbols_remain_blocked: true
+
+trial_budget:
+  primary_selection_trials: 1
+  minbtl_bound:
+    formula: "2 * ln(N_trials) / E[max_N]^2"
+    N_trials: 1
+    within_cap: true
+    cap_reference: docs/institutional/pre_registered_criteria.md
+    note: >
+      This is a single-instrument supported-surface audit, not a broad discovery
+      family. No optimizer or threshold sweep is permitted under this contract.
+
+hypotheses:
+  - id: H1
+    type: primary
+    theory_citation: docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md
+    statement: >
+      Under the currently supported MNQ surface, the fixed-rule medium-frequency
+      harness remains positive after fixed friction and produces a majority of
+      positive anchored non-overlapping walk-forward windows, justifying a
+      stricter tradable-chain accounting pass.
+    pass_metrics:
+      aggregate_net_pnl_usd_gt: 0.0
+      pct_positive_windows_gte: 0.55
+      total_turnover_contracts_lte: 50
+    rationale_note: >
+      The positive-window threshold is intentionally modest because this is a
+      triage gate, not a deployment gate. The turnover cap is meant to catch a
+      silent deterioration from the Phase 4 readout, where MNQ turnover was 12.
+
+  - id: H2
+    type: secondary_diagnostic_only
+    statement: >
+      Carry remains sparse enough on MNQ that the current signal is still
+      trend-dominated. This is a diagnostic, not a promotion criterion.
+    diagnostic_metrics:
+      carry_available_days_reported: true
+      carry_available_days_lt: 100
+    counted_against_trial_budget: false
+
+kill_criteria:
+  - id: K1
+    metric: aggregate_net_pnl_usd
+    threshold_lte: 0.0
+    action: PARK_MNQ_SUPPORTED_SURFACE
+  - id: K2
+    metric: pct_positive_windows
+    threshold_lt: 0.55
+    action: PARK_MNQ_SUPPORTED_SURFACE
+  - id: K3
+    metric: methodology_integrity
+    fail_if:
+      - any symbol other than MNQ is included in the formal pass output
+      - any parameter differs from locked_inputs without a new pre-reg file
+      - any result is described as deployable or promotion-ready
+      - any tradable-chain PnL claim is inferred from research_close_to_close output
+    action: HALT_AND_RE_AUDIT
+
+decision_rule:
+  continue_if:
+    - H1.aggregate_net_pnl_usd_gt passes
+    - H1.pct_positive_windows_gte passes
+    - H1.total_turnover_contracts_lte passes
+    - K3 integrity passes
+  park_if:
+    - K1 or K2 fires
+  forbidden_follow_on_without_new_pre_reg:
+    - adding MES into the same formal pass
+    - adding MGC into the same formal pass
+    - changing train/test window sizes
+    - changing the cost model
+    - reinterpreting sparse carry days as a full trend+carry validation
+
+deliverables_locked:
+  - docs/audit/results/2026-04-18-mf-futures-phase4-supported-surface-readout.md
+  - one MNQ-only formal result note or update citing this pre-reg
+  - no code changes required to satisfy this contract unless a separate build task is explicitly opened
+
+methodology_rules_applied:
+  - rule: theory_first
+    application: >
+      Current pass is a constrained evaluation of an existing fixed-rule harness,
+      not a parameter-mined discovery scan.
+  - rule: no_lookahead
+    application: >
+      The locked harness uses backward-looking realized volatility and same-day
+      carry inputs only.
+  - rule: fail_closed_boundary
+    application: >
+      Missing rates/FX raw stats and sparse MNQ carry coverage remain explicit
+      limitations, not hidden assumptions.

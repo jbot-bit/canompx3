@@ -1,0 +1,13 @@
+{
+  "planPath": "docs/plans/2026-02-28-pipeline-ingest-audit-fixes.md",
+  "tasks": [
+    {"id": 3, "subject": "Task 1: Fix MGC outright_pattern and prefix_len in asset_configs.py", "status": "completed", "commit": "fa85768"},
+    {"id": 4, "subject": "Task 2: Add ES config entry for MES pre-2024 data", "status": "completed", "commit": "0bf9aa1"},
+    {"id": 5, "subject": "Task 3: Remove MGC hardcoded override from ingest_dbn_daily.py", "status": "completed", "blockedBy": [3], "commit": "8b2e71f"},
+    {"id": 6, "subject": "Task 4: Scope check_merge_integrity with symbol filter", "status": "completed", "commit": "7e484e2"},
+    {"id": 7, "subject": "Task 5: Add configure_connection to ingest_dbn_mgc.py", "status": "completed", "commit": "6eecf22"},
+    {"id": 8, "subject": "Task 6: Correct VECTORIZED claims in docstrings", "status": "completed", "commit": "213a1b5"}
+  ],
+  "lastUpdated": "2026-02-28T14:30:00Z",
+  "reviewStatus": "APPROVED"
+}

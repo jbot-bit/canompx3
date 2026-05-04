@@ -1,0 +1,50 @@
+# Hypothesis Registry — 2026-04-16 garch-self-funded-production-replay
+#
+# Locked: 2026-04-17T00:10:00+10:00
+# Author: Codex main session
+# Purpose: self-funded deployment replay for the same regime maps
+
+metadata:
+  name: "garch-self-funded-production-replay"
+  purpose: "Compare the surviving regime maps under the canonical self-funded profile so prop-firm constraints are not mistaken for market truth."
+  date_locked: "2026-04-17T00:10:00+10:00"
+  holdout_date: "2026-01-01"
+  testing_mode: "profile-replay"
+  total_expected_trials: 3
+  theory_summary: |
+    A regime map can be economically useful on own funds even if prop-firm
+    scaling or DD rules distort the realized ranking. This replay keeps the
+    regime logic fixed and changes only the account-constraint surface by using
+    the canonical self-funded profile.
+
+hypotheses:
+  - id: 1
+    name: "Self-funded production replay"
+    theory_citation: >
+      Carver 2015 forecast-to-size translation;
+      Criterion 11 style account-survival realism;
+      self-funded profile constraints in trading_app/prop_profiles.py
+    economic_basis: |
+      If a regime map is structurally useful rather than only prop-compatible,
+      it should remain economically attractive under the self-funded profile's
+      own DD and risk-cap rules.
+    scope:
+      profile_id: "self_funded_tradovate"
+      maps:
+        - "GARCH_NATIVE_DISCRETE"
+        - "OVN_NATIVE_DISCRETE"
+        - "GARCH_OVN_NATIVE_DISCRETE"
+      actions:
+        low_state: "0 contracts"
+        neutral_state: "1 contract"
+        high_state: "2 contracts"
+    expected_trial_count: 3
+    kill_criteria:
+      - "Map only looks good because of prop-specific constraints."
+      - "Map fails once own-funds DD/risk rules replace prop rules."
+
+total_hypothesis_count: 1
+total_expected_trials: 3
+budget_check:
+  max_allowed_clean: 100
+  status: "under budget"

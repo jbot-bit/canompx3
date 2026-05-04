@@ -1,0 +1,1 @@
+{"iteration": 0, "timestamp": "2026-04-04T16:30:00", "pass_rate": 0.667, "total": 15, "passed": 10, "change": "baseline — 5 failures are transcript-quality issues (wrong script names in test transcript, not skill defects). Skill already has correct script names.", "kept": true}

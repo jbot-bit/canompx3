@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# Full rebuild chain for all 4 instruments
+# Run from project root: bash scripts/tools/full_rebuild.sh
+# NOTE: Pinecone sync is NOT included here. Use run_rebuild_with_sync.sh
+# for single-instrument rebuilds with Pinecone knowledge sync.
+set -e
+
+cd "$(dirname "$0")/../.."
+
+echo "============================================"
+echo "FULL REBUILD — ALL 4 INSTRUMENTS"
+echo "Started: $(date)"
+echo "============================================"
+
+# Instrument configs: name, start, end
+# Walk-forward enabled for all instruments (Mar 2026).
+# All 4 have 5+ years — sufficient for WF. MGC uses WF_START_OVERRIDE in config.py.
+declare -A STARTS ENDS
+STARTS[MGC]="2016-02-01"; ENDS[MGC]="2026-02-04"
+STARTS[MNQ]="2021-02-04"; ENDS[MNQ]="2026-02-03"
+STARTS[MES]="2019-02-12"; ENDS[MES]="2026-02-11"
+STARTS[M2K]="2021-02-22"; ENDS[M2K]="2026-02-20"
+
+for INST in MGC MNQ MES M2K; do
+    echo ""
+    echo "============================================"
+    echo "[$INST] Starting full chain (${STARTS[$INST]} to ${ENDS[$INST]})"
+    echo "============================================"
+
+    # NOTE: daily_features must already be built for each aperture.
+    # If stale, run first: python pipeline/build_daily_features.py --instrument X --orb-minutes Y
+    echo ""
+    echo "--- [$INST] Step 1/5: Outcome Builder --force (O5 + O15 + O30) ---"
+    for OM in 5 15 30; do
+        echo "  -- outcome_builder --orb-minutes $OM --"
+        python trading_app/outcome_builder.py \
+            --instrument "$INST" --force \
+            --start "${STARTS[$INST]}" --end "${ENDS[$INST]}" \
+            --orb-minutes "$OM" 2>&1 | tail -5
+    done
+    echo "[$INST] Outcomes done: $(date)"
+
+    echo ""
+    echo "--- [$INST] Step 2/5: Strategy Discovery (O5 + O15 + O30) ---"
+    for OM in 5 15 30; do
+        echo "  -- strategy_discovery --orb-minutes $OM --"
+        python trading_app/strategy_discovery.py --instrument "$INST" --orb-minutes "$OM" 2>&1 | tail -5
+    done
+    echo "[$INST] Discovery done: $(date)"
+
+    echo ""
+    echo "--- [$INST] Step 3/5: Strategy Validator ---"
+    python trading_app/strategy_validator.py \
+        --instrument "$INST" --min-sample 30 \
+        --no-regime-waivers --min-years-positive-pct 0.75 \
+        2>&1 | tail -10
+    echo "[$INST] Validation done: $(date)"
+
+    echo ""
+    echo "--- [$INST] Step 4/5: Retire E3 strategies ---"
+    python scripts/migrations/retire_e3_strategies.py 2>&1 | tail -3
+    echo "[$INST] E3 retirement done: $(date)"
+
+    echo ""
+    echo "--- [$INST] Step 5/5: Edge Families ---"
+    python scripts/tools/build_edge_families.py --instrument "$INST" 2>&1 | tail -5
+    echo "[$INST] Edge families done: $(date)"
+
+    echo ""
+    echo "============================================"
+    echo "[$INST] COMPLETE"
+    echo "============================================"
+done
+
+echo ""
+echo "============================================"
+echo "ALL INSTRUMENTS COMPLETE"
+echo "Finished: $(date)"
+echo "============================================"
+
+# Post-rebuild summary
+echo ""
+echo "--- Post-rebuild: validated_setups count ---"
+python -c "
+import duckdb
+con = duckdb.connect('gold.db', read_only=True)
+total = con.execute(\"SELECT COUNT(*) FROM validated_setups WHERE status = 'active'\").fetchone()[0]
+print(f'Total active validated: {total}')
+for inst in ['MGC', 'MNQ', 'MES', 'M2K']:
+    n = con.execute(f\"SELECT COUNT(*) FROM validated_setups WHERE status = 'active' AND instrument = '{inst}'\").fetchone()[0]
+    fdr = con.execute(f\"SELECT COUNT(*) FROM validated_setups WHERE status = 'active' AND instrument = '{inst}' AND fdr_significant = true\").fetchone()[0]
+    print(f'  {inst}: {n} total, {fdr} FDR-pass')
+con.close()
+"
+
+# Post-rebuild: Lock family RR targets
+echo ""
+echo "--- Post-rebuild: Locking family RR targets ---"
+python scripts/tools/select_family_rr.py
+
+# Post-rebuild: Regenerate REPO_MAP
+echo ""
+echo "--- Post-rebuild: Regenerating REPO_MAP.md ---"
+python scripts/tools/gen_repo_map.py
+
+# Post-rebuild: Pinecone sync (skip if SDK not installed)
+echo ""
+echo "--- Post-rebuild: Pinecone sync ---"
+python scripts/tools/sync_pinecone.py 2>&1 || echo "  WARNING: Pinecone sync failed (SDK missing or auth error) — run manually"
+
+# Post-rebuild: Full health check
+echo ""
+echo "--- Post-rebuild: Health check ---"
+python pipeline/health_check.py

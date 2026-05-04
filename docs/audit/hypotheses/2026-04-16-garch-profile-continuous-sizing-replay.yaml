@@ -1,0 +1,82 @@
+date: 2026-04-16
+title: Garch profile continuous sizing replay
+status: active
+purpose: >
+  Test A2 bounded continuous sizing for garch under the same replayable lane
+  sets and profile/account rules as A1 discrete replay, without making any
+  session-level claim from unreconciled attribution.
+
+authority_chain:
+  - CLAUDE.md
+  - RESEARCH_RULES.md
+  - TRADING_RULES.md
+  - docs/plans/2026-04-16-garch-deployment-map-proof-plan-reset.md
+  - docs/plans/2026-04-17-garch-deployment-allocator-architecture.md
+
+profiles:
+  - topstep_50k_mnq_auto
+  - self_funded_tradovate
+
+evidence_tier: deployment_replay_allocator_translation
+
+constraints:
+  - Headline replay totals may be used if independently recomputed from raw trade paths.
+  - Session attribution is not authoritative evidence and is excluded from this stage.
+  - No edge-proof claim is allowed from this replay.
+  - Same replayable lane sets and profile rules as A1.
+  - Same holdout discipline as existing garch replay work.
+
+maps:
+  - LOW_CUT_ONLY
+  - HIGH_BOOST_ONLY
+  - SESSION_CLIPPED
+  - SESSION_LINEAR
+  - GLOBAL_LINEAR
+
+weight_construction:
+  source_score: garch_forecast_vol_pct
+  session_support: fixed from regime-family audit via session_profiles(cells)
+  normalization: >
+    Compute raw desired weights on replayable trades, then scale by the inverse
+    of the in-sample mean raw weight so average desired weight is 1.0 on IS.
+
+translation_rule:
+  description: >
+    Translate normalized desired weight into a live-feasible integer contract
+    count for a base 1-contract profile:
+      weight < 0.75 -> 0 contracts
+      0.75 <= weight < 1.50 -> 1 contract
+      weight >= 1.50 -> 2 contracts
+  rationale: >
+    This is a bounded, explicit contract-rounding surface. If A2 collapses back
+    into an A1-like policy under this translation, that is a result, not a bug.
+
+required_outputs:
+  - per-account total dollars
+  - copied-account total dollars
+  - annualized Sharpe on daily dollars
+  - max drawdown dollars
+  - worst day dollars
+  - worst 5-day dollars
+  - max open lots
+  - 90-day survival probability
+  - operational pass probability
+  - mean desired weight
+  - mean translated contracts
+  - pct_trades_changed
+  - pct_trades_zero
+  - pct_trades_double
+
+verification_requirements:
+  - Compile the replay script before execution.
+  - Independently recompute at least one A2 headline result per profile from raw trade paths.
+  - If headline replay totals fail independent recomputation, demote the entire A2 stage.
+
+success_condition: >
+  A2 survives only if at least one bounded continuous map improves the profile
+  objective hierarchy versus BASE_1X and remains interpretable after contract
+  translation.
+
+kill_condition: >
+  Kill or demote A2 if the gains disappear after translation, if the maps
+  materially worsen survival, or if they collapse into A1 without adding value.

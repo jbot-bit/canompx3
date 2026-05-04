@@ -1,0 +1,72 @@
+{
+  "skill": "resume-rebase",
+  "description": "Evals for resume-rebase skill — checks that the skill correctly gathers state, detects staleness, checks for conflicts, and routes to continue or reclassify.",
+  "tests": [
+    {
+      "id": "where-was-i",
+      "prompt": "where was I",
+      "assertions": [
+        {
+          "id": "checks-stage-state",
+          "description": "Reads or references STAGE_STATE.md",
+          "type": "text_contains",
+          "value": "STAGE_STATE"
+        },
+        {
+          "id": "checks-handoff",
+          "description": "Reads or references HANDOFF.md",
+          "type": "text_contains",
+          "value": "HANDOFF.md"
+        },
+        {
+          "id": "runs-git-log",
+          "description": "Runs git log to see recent commits",
+          "type": "command_ran",
+          "pattern": "git log"
+        },
+        {
+          "id": "checks-git-status",
+          "description": "Runs git status to check working tree",
+          "type": "command_ran",
+          "pattern": "git status"
+        },
+        {
+          "id": "stale-detection-output",
+          "description": "Produces a STALE CHECK section or staleness verdict",
+          "type": "regex_match",
+          "pattern": "STALE|stale|staleness|FRESH|DRIFT"
+        },
+        {
+          "id": "runs-drift-check",
+          "description": "Runs check_drift.py or references drift check",
+          "type": "regex_match",
+          "pattern": "check_drift\\.py|drift check"
+        },
+        {
+          "id": "conflict-check-output",
+          "description": "Produces a CONFLICT CHECK section or conflict verdict",
+          "type": "regex_match",
+          "pattern": "CONFLICT|conflict|CLEAN|cross.terminal"
+        },
+        {
+          "id": "restate-position",
+          "description": "Restates TASK, STAGE, or current position",
+          "type": "regex_match",
+          "pattern": "TASK:|STAGE:|position|current state|where we are"
+        },
+        {
+          "id": "decision-to-continue-or-reclassify",
+          "description": "Outputs a decision — safe to continue, rebase required, or reclassify",
+          "type": "regex_match",
+          "pattern": "continue|reclassify|Cannot resume|Safe to|Rebase required|stage.gate"
+        },
+        {
+          "id": "updates-stage-state",
+          "description": "Updates or writes STAGE_STATE.md with refreshed state",
+          "type": "regex_match",
+          "pattern": "updat.*STAGE_STATE|STAGE_STATE.*updat|refresh.*state|writing.*STAGE_STATE"
+        }
+      ]
+    }
+  ]
+}

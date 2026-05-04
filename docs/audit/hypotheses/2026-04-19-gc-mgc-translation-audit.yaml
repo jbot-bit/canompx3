@@ -1,0 +1,108 @@
+version: 1
+name: gc_mgc_translation_audit
+date: 2026-04-19
+status: locked
+
+metadata:
+  intent: >
+    Audit the unresolved GC -> MGC translation gap using canonical overlap-era
+    truth only. This is an audit/diagnostic pass, not a discovery run, not a
+    deployment memo, and not a new proxy-expansion justification.
+  testing_mode: individual
+  total_expected_trials: 4
+  minbtl_mode: clean_micro
+  holdout_boundary: 2026-01-01
+  overlap_start: 2022-06-13
+  overlap_end_exclusive: 2026-01-01
+  source_truth:
+    canonical:
+      - gold.db::orb_outcomes
+      - gold.db::daily_features
+      - pipeline.cost_model
+    orientation_only:
+      - validated_setups
+      - docs/plans/2026-04-10-mgc-proxy-hypothesis-design.md
+      - docs/handoffs/2026-04-10-gc-proxy-discovery-handover.md
+      - docs/institutional/pre_registered_criteria.md
+  locked_surface:
+    symbols:
+      - GC
+      - MGC
+    entry_model: E2
+    confirm_bars: 1
+    overlap_orb_minutes:
+      gc:
+        - 5
+      mgc:
+        - 5
+        - 15
+        - 30
+    baseline_rr_targets:
+      - 1.0
+      - 1.5
+      - 2.0
+    transfer_filter_types:
+      - ATR_P50
+      - ATR_P70
+      - OVNRNG_10
+      - OVNRNG_50
+      - PDR_R080
+      - ORB_G5
+
+hypotheses:
+  - id: H1
+    claim: >
+      GC broad ORB strength remains positive in the MGC overlap era, so the gold
+      edge is not merely a pre-2022 history artifact.
+    falsifier: >
+      GC overlap-era baseline is flat/negative across the main gold sessions,
+      implying the old GC strength was mostly a non-overlap artifact.
+
+  - id: H2
+    claim: >
+      Price-safe filter triggers transfer cleanly from GC to MGC in the overlap
+      era; if translation fails, it is not primarily because the filters stop
+      firing.
+    falsifier: >
+      Pass counts or pass-rate ratios diverge materially between GC and MGC on
+      the same price-safe filters in the overlap era.
+
+  - id: H3
+    claim: >
+      The main translation break is payoff compression on MGC, not a pure hit-rate
+      collapse or a cost-ratio artifact.
+    falsifier: >
+      MGC and GC have similar win/loss payoff shape once aligned on overlap-era
+      trades, or the observed gap can be explained by different modeled friction.
+
+  - id: H4
+    claim: >
+      Transfer, if present at all, is concentrated in 5-minute RR1.0 families and
+      does not justify reviving the full GC proxy shelf.
+    falsifier: >
+      A broad share of retired GC validated rows keep the same-sign positive edge
+      on MGC overlap across multiple RR targets, implying the retirement story was
+      overstated.
+
+rules:
+  - No 2026 holdout selection or rescue.
+  - No use of docs, handoffs, or summaries as proof when canonical queries exist.
+  - No claim about 15m/30m GC proxy transfer because canonical GC proxy rows are 5m only.
+  - No promotion/deployment recommendation from this audit alone.
+  - No new discovery families or hypothesis widening inside this pass.
+
+deliverables:
+  - research/research_gc_mgc_translation_audit.py
+  - docs/audit/results/2026-04-19-gc-mgc-translation-audit.md
+  - HANDOFF.md update
+
+kill_criteria:
+  - >
+    If overlap-era GC is not broadly positive, stop calling GC->MGC a translation
+    problem and treat it as a stale-history problem instead.
+  - >
+    If price-safe pass rates differ materially, treat trigger mismatch as a real
+    driver and do not claim payoff compression is the main mechanism.
+  - >
+    If RR > 1.0 transfer is broadly preserved, do not keep repeating the "edge
+    does not transfer" shorthand without qualification.

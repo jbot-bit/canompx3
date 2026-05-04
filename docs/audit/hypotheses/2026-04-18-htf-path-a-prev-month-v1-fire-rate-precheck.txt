@@ -1,0 +1,35 @@
+HTF Path A prev-MONTH v1 — fire-rate pre-check
+==============================================
+
+Canonical DB: C:/Users/joshd/canompx3/gold.db
+Query date:   2026-04-18
+Window:       pre-holdout only (trading_day < 2026-01-01)
+Orb minutes:  15
+Pre-registration: docs/audit/hypotheses/2026-04-18-htf-path-a-prev-month-v1.yaml
+
+Predicate long  (pmh_break_long):   orb_{session}_break_dir='long'  AND prev_month_high IS NOT NULL AND orb_{session}_high > prev_month_high
+Predicate short (pml_break_short):  orb_{session}_break_dir='short' AND prev_month_low  IS NOT NULL AND orb_{session}_low  < prev_month_low
+
+cell                                base  fires   rate%   band
+---------------------------------------------------------------------
+MNQ TOKYO_OPEN    long              870    304    34.9   OK
+MNQ TOKYO_OPEN    short             851     82     9.6   OK
+MNQ EUROPE_FLOW   long              876    312    35.6   OK
+MNQ EUROPE_FLOW   short             843     82     9.7   OK
+MNQ NYSE_OPEN     long              880    323    36.7   OK
+MNQ NYSE_OPEN     short             835     91    10.9   OK
+MES TOKYO_OPEN    long              856    309    36.1   OK
+MES TOKYO_OPEN    short             863     83     9.6   OK
+MES EUROPE_FLOW   long              888    344    38.7   OK
+MES EUROPE_FLOW   short             831     81     9.7   OK
+MES NYSE_OPEN     long              878    344    39.2   OK
+MES NYSE_OPEN     short             840     96    11.4   OK
+
+Summary
+-------
+All 12 (instrument x session x direction) cells fire in [5%, 95%] per RULE 8.1.
+No cells excluded from scope on fire-rate grounds.
+Long-side rate band: 34.9% to 39.2% (high; equity-index upward drift biases pmh touches).
+Short-side rate band:  9.6% to 11.4% (lower; pml less often touched).
+
+Family is pre-reg-ready for lock after self-audit per research-truth-protocol §2a.

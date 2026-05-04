@@ -1,0 +1,174 @@
+{
+  "skill": "trade-book",
+  "version": 1,
+  "tests": [
+    {
+      "id": "tb-01",
+      "prompt": "what do I trade tonight",
+      "assertions": [
+        {
+          "id": "tb-01-a1",
+          "type": "command_ran",
+          "pattern": "generate_trade_sheet",
+          "description": "Must run generate_trade_sheet.py first"
+        },
+        {
+          "id": "tb-01-a2",
+          "type": "text_contains",
+          "value": "rr_target",
+          "description": "Output includes RR target field"
+        },
+        {
+          "id": "tb-01-a3",
+          "type": "text_not_contains",
+          "value": "PURGED",
+          "description": "No PURGED strategies shown"
+        },
+        {
+          "id": "tb-01-a4",
+          "type": "text_not_contains",
+          "value": "DECAY",
+          "description": "No DECAY strategies shown"
+        },
+        {
+          "id": "tb-01-a5",
+          "type": "text_contains",
+          "value": "Brisbane",
+          "description": "Session times shown in Brisbane timezone"
+        },
+        {
+          "id": "tb-01-a6",
+          "type": "text_contains",
+          "value": "filter_type",
+          "description": "Filter type field included"
+        },
+        {
+          "id": "tb-01-a7",
+          "type": "text_contains",
+          "value": "entry_model",
+          "description": "Entry model field included"
+        },
+        {
+          "id": "tb-01-a8",
+          "type": "text_contains",
+          "value": "orb_minutes",
+          "description": "ORB aperture field included"
+        },
+        {
+          "id": "tb-01-a9",
+          "type": "text_contains",
+          "value": "confirm_bars",
+          "description": "Confirm bars field included"
+        },
+        {
+          "id": "tb-01-a10",
+          "type": "text_contains",
+          "value": "win_rate",
+          "description": "Win rate field included"
+        },
+        {
+          "id": "tb-01-a11",
+          "type": "regex_not_match",
+          "pattern": "strategy_fitness",
+          "description": "Does NOT reference non-existent strategy_fitness table"
+        },
+        {
+          "id": "tb-01-a12",
+          "type": "regex_match",
+          "pattern": "(ExpR|expectancy_r|expectancy)",
+          "description": "Expectancy field included"
+        },
+        {
+          "id": "tb-01-a13",
+          "type": "regex_match",
+          "pattern": "(Sharpe|sharpe_ann|sharpe)",
+          "description": "Sharpe ratio included"
+        }
+      ]
+    },
+    {
+      "id": "tb-02",
+      "prompt": "show me MGC strategies",
+      "assertions": [
+        {
+          "id": "tb-02-a1",
+          "type": "command_ran",
+          "pattern": "generate_trade_sheet",
+          "description": "Must run generate_trade_sheet.py even for filtered queries"
+        },
+        {
+          "id": "tb-02-a2",
+          "type": "text_contains",
+          "value": "MGC",
+          "description": "Output includes MGC instrument"
+        },
+        {
+          "id": "tb-02-a3",
+          "type": "text_contains",
+          "value": "rr_target",
+          "description": "RR target always included"
+        },
+        {
+          "id": "tb-02-a4",
+          "type": "text_not_contains",
+          "value": "PURGED",
+          "description": "No PURGED strategies"
+        }
+      ]
+    },
+    {
+      "id": "tb-03",
+      "prompt": "what sessions are trading tonight",
+      "assertions": [
+        {
+          "id": "tb-03-a1",
+          "type": "command_ran",
+          "pattern": "generate_trade_sheet",
+          "description": "Uses trade sheet generator for session times"
+        },
+        {
+          "id": "tb-03-a2",
+          "type": "regex_not_match",
+          "pattern": "UTC[+-]\\d+.*manually|hardcode|assume",
+          "description": "Does not manually compute timezone offsets"
+        },
+        {
+          "id": "tb-03-a3",
+          "type": "text_contains",
+          "value": "Brisbane",
+          "description": "Brisbane timezone reference"
+        }
+      ]
+    },
+    {
+      "id": "tb-04",
+      "prompt": "what's FIT right now",
+      "assertions": [
+        {
+          "id": "tb-04-a1",
+          "type": "text_not_contains",
+          "value": "PURGED",
+          "description": "FIT query must not include PURGED"
+        },
+        {
+          "id": "tb-04-a2",
+          "type": "text_not_contains",
+          "value": "DECAY",
+          "description": "FIT query must not include DECAY"
+        },
+        {
+          "id": "tb-04-a3",
+          "type": "regex_match",
+          "pattern": "(FIT|WATCH|DEPLOYED)",
+          "description": "Shows fitness status categories"
+        },
+        {
+          "id": "tb-04-a4",
+          "type": "text_contains",
+          "value": "rr_target",
+          "description": "RR target always present"
+        }
+      ]
+    }
+  ]
+}

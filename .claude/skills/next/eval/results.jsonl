@@ -1,0 +1,1 @@
+{"iteration": 0, "timestamp": "2026-04-04T16:30:00", "pass_rate": 0.833, "total": 6, "passed": 5, "change": "baseline — 1 failure is transcript issue (listed action queue items). Skill already says 'Do NOT list action queue items' at line 134. No skill change needed.", "kept": true}

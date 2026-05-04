@@ -1,0 +1,250 @@
+==========================================================================
+  1800 WORKHORSE STRATEGY STRESS TEST
+  Mandate: Honesty over outcome
+==========================================================================
+
+--- EXECUTIVE SUMMARY ---
+
+  Your bread-and-butter: W1 (E3 CB4 RR2.0 G5+) when vol regime active
+  Conditional upgrade:   W4 (+ 15m AGREE) when timeframes align
+  Regime-only overlay:   W5 (G6+) for outsized moves
+  Honest reality:        1800 is a regime session, not a daily session
+
+--- VARIANT COMPARISON ---
+
+  ID   Strategy                       N      WR     ExpR   Sharpe    MaxDD     PF    BE   Class
+  ---- -------------------------- ----- ------- -------- -------- -------- ------ ----- -------
+  W1   E3 CB4 RR2.0 G5+              75   48.0%   +0.30R     0.22   +5.67R   1.58  4.33  REGIME
+  W2   E3 CB5 RR2.0 G5+              73   49.3%   +0.34R     0.25   +5.67R   1.67  4.73  REGIME
+  W3   E3 CB4 RR2.0 G4+             123   43.1%   +0.14R     0.11   +8.67R   1.25  2.26    CORE
+  W4   E3 CB4 RR2.0 G5+ AGREE        63   54.0%   +0.46R     0.34   +4.00R   2.01  6.18  REGIME
+  W5   E3 CB4 RR2.0 G6+              48   54.2%   +0.49R     0.36   +3.31R   2.08  7.60  REGIME
+
+--- STRESS TESTS ---
+
+  W1: E3 CB4 RR2.0 G5+
+    1.0x friction: N=75, ExpR=+0.30R, Sharpe=0.22, MaxDD=+5.67R
+    1.5x friction: N=75, ExpR=+0.24R, Sharpe=0.19, MaxDD=+5.96R
+    2.0x friction: N=75, ExpR=+0.19R, Sharpe=0.15, MaxDD=+6.21R
+    Breakeven multiplier: 4.33x
+
+  W2: E3 CB5 RR2.0 G5+
+    1.0x friction: N=73, ExpR=+0.34R, Sharpe=0.25, MaxDD=+5.67R
+    1.5x friction: N=73, ExpR=+0.28R, Sharpe=0.21, MaxDD=+5.96R
+    2.0x friction: N=73, ExpR=+0.22R, Sharpe=0.18, MaxDD=+6.21R
+    Breakeven multiplier: 4.73x
+
+  W3: E3 CB4 RR2.0 G4+
+    1.0x friction: N=123, ExpR=+0.14R, Sharpe=0.11, MaxDD=+8.67R
+    1.5x friction: N=123, ExpR=+0.08R, Sharpe=0.06, MaxDD=+8.96R
+    2.0x friction: N=123, ExpR=+0.03R, Sharpe=0.02, MaxDD=+9.59R
+    Breakeven multiplier: 2.26x
+
+  W4: E3 CB4 RR2.0 G5+ AGREE
+    1.0x friction: N=63, ExpR=+0.46R, Sharpe=0.34, MaxDD=+4.00R
+    1.5x friction: N=63, ExpR=+0.40R, Sharpe=0.30, MaxDD=+4.00R
+    2.0x friction: N=63, ExpR=+0.34R, Sharpe=0.27, MaxDD=+4.00R
+    Breakeven multiplier: 6.18x
+
+  W5: E3 CB4 RR2.0 G6+
+    1.0x friction: N=48, ExpR=+0.49R, Sharpe=0.36, MaxDD=+3.31R
+    1.5x friction: N=48, ExpR=+0.44R, Sharpe=0.33, MaxDD=+3.45R
+    2.0x friction: N=48, ExpR=+0.39R, Sharpe=0.30, MaxDD=+3.57R
+    Breakeven multiplier: 7.60x
+
+--- WALK-FORWARD (Expanding Window) ---
+
+  W1: E3 CB4 RR2.0 G5+
+    Train [2022, 2023] -> Test 2024:
+      IS:  N=5, ExpR=+0.08R, Sharpe=0.05
+      OOS: N=5, ExpR=+0.10R, Sharpe=0.07
+    Train [2022, 2023, 2024] -> Test 2025:
+      IS:  N=10, ExpR=+0.09R, Sharpe=0.06
+      OOS: N=49, ExpR=+0.43R, Sharpe=0.31
+    Train [2022, 2023, 2024, 2025] -> Test 2026:
+      IS:  N=59, ExpR=+0.37R, Sharpe=0.27
+      OOS: N=16, ExpR=+0.06R, Sharpe=0.04
+
+  W2: E3 CB5 RR2.0 G5+
+    Train [2022, 2023] -> Test 2024:
+      IS:  N=5, ExpR=+0.08R, Sharpe=0.05
+      OOS: N=5, ExpR=+0.10R, Sharpe=0.07
+    Train [2022, 2023, 2024] -> Test 2025:
+      IS:  N=10, ExpR=+0.09R, Sharpe=0.06
+      OOS: N=47, ExpR=+0.49R, Sharpe=0.36
+    Train [2022, 2023, 2024, 2025] -> Test 2026:
+      IS:  N=57, ExpR=+0.42R, Sharpe=0.31
+      OOS: N=16, ExpR=+0.06R, Sharpe=0.04
+
+  W3: E3 CB4 RR2.0 G4+
+    Train [2022, 2023] -> Test 2024:
+      IS:  N=11, ExpR=-0.28R, Sharpe=-0.23
+      OOS: N=10, ExpR=+0.30R, Sharpe=0.22
+    Train [2022, 2023, 2024] -> Test 2025:
+      IS:  N=21, ExpR=-0.01R, Sharpe=-0.00
+      OOS: N=81, ExpR=+0.20R, Sharpe=0.15
+    Train [2022, 2023, 2024, 2025] -> Test 2026:
+      IS:  N=102, ExpR=+0.16R, Sharpe=0.12
+      OOS: N=21, ExpR=+0.05R, Sharpe=0.03
+
+  W4: E3 CB4 RR2.0 G5+ AGREE
+    Train [2022, 2023] -> Test 2024:
+      IS:  N=4, ExpR=+0.35R, Sharpe=0.22
+      OOS: N=4, ExpR=+0.37R, Sharpe=0.24
+    Train [2022, 2023, 2024] -> Test 2025:
+      IS:  N=8, ExpR=+0.36R, Sharpe=0.25
+      OOS: N=43, ExpR=+0.50R, Sharpe=0.37
+    Train [2022, 2023, 2024, 2025] -> Test 2026:
+      IS:  N=51, ExpR=+0.48R, Sharpe=0.35
+      OOS: N=12, ExpR=+0.41R, Sharpe=0.28
+
+  W5: E3 CB4 RR2.0 G6+
+    Train [2022, 2023] -> Test 2024:
+      IS:  N=3, ExpR=+0.80R, Sharpe=0.51
+      OOS: N=3, ExpR=+0.83R, Sharpe=0.52
+    Train [2022, 2023, 2024] -> Test 2025:
+      IS:  N=6, ExpR=+0.82R, Sharpe=0.58
+      OOS: N=30, ExpR=+0.46R, Sharpe=0.33
+    Train [2022, 2023, 2024, 2025] -> Test 2026:
+      IS:  N=36, ExpR=+0.52R, Sharpe=0.38
+      OOS: N=12, ExpR=+0.41R, Sharpe=0.28
+
+--- LEAVE-ONE-YEAR-OUT ---
+
+  W1: E3 CB4 RR2.0 G5+
+    Leave out 2022: IS N=71, ExpR=+0.30R | OOS N=4, ExpR=+0.35R
+    Leave out 2023: IS N=74, ExpR=+0.32R | OOS N=1, ExpR=-1.00R
+    Leave out 2024: IS N=70, ExpR=+0.32R | OOS N=5, ExpR=+0.10R
+    Leave out 2025: IS N=26, ExpR=+0.07R | OOS N=49, ExpR=+0.43R
+
+  W2: E3 CB5 RR2.0 G5+
+    Leave out 2022: IS N=69, ExpR=+0.34R | OOS N=4, ExpR=+0.35R
+    Leave out 2023: IS N=72, ExpR=+0.36R | OOS N=1, ExpR=-1.00R
+    Leave out 2024: IS N=68, ExpR=+0.36R | OOS N=5, ExpR=+0.10R
+    Leave out 2025: IS N=26, ExpR=+0.07R | OOS N=47, ExpR=+0.49R
+
+  W3: E3 CB4 RR2.0 G4+
+    Leave out 2022: IS N=117, ExpR=+0.13R | OOS N=6, ExpR=+0.32R
+    Leave out 2023: IS N=118, ExpR=+0.19R | OOS N=5, ExpR=-1.00R
+    Leave out 2024: IS N=113, ExpR=+0.13R | OOS N=10, ExpR=+0.30R
+    Leave out 2025: IS N=42, ExpR=+0.02R | OOS N=81, ExpR=+0.20R
+
+  W4: E3 CB4 RR2.0 G5+ AGREE
+    Leave out 2022: IS N=60, ExpR=+0.45R | OOS N=3, ExpR=+0.80R
+    Leave out 2023: IS N=62, ExpR=+0.49R | OOS N=1, ExpR=-1.00R
+    Leave out 2024: IS N=59, ExpR=+0.47R | OOS N=4, ExpR=+0.37R
+    Leave out 2025: IS N=20, ExpR=+0.39R | OOS N=43, ExpR=+0.50R
+
+  W5: E3 CB4 RR2.0 G6+
+    Leave out 2022: IS N=46, ExpR=+0.44R | OOS N=2, ExpR=+1.70R
+    Leave out 2023: IS N=47, ExpR=+0.53R | OOS N=1, ExpR=-1.00R
+    Leave out 2024: IS N=45, ExpR=+0.47R | OOS N=3, ExpR=+0.83R
+    Leave out 2025: IS N=18, ExpR=+0.54R | OOS N=30, ExpR=+0.46R
+
+--- REGIME REALITY CHECK ---
+
+  Trades/year by variant:
+  ID   Strategy                     2022   2023   2024   2025   2026  Total
+  ---- -------------------------- ------ ------ ------ ------ ------ ------
+  W1   E3 CB4 RR2.0 G5+                4      1      5     49     16     75
+  W2   E3 CB5 RR2.0 G5+                4      1      5     47     16     73
+  W3   E3 CB4 RR2.0 G4+                6      5     10     81     21    123
+  W4   E3 CB4 RR2.0 G5+ AGREE          3      1      4     43     12     63
+  W5   E3 CB4 RR2.0 G6+                2      1      3     30     12     48
+
+  PnL/year by variant:
+  ID   Strategy                       2022     2023     2024     2025     2026    Total
+  ---- -------------------------- -------- -------- -------- -------- -------- --------
+  W1   E3 CB4 RR2.0 G5+              +1.39    -1.00    +0.50   +20.84    +0.91   +22.64
+  W2   E3 CB5 RR2.0 G5+              +1.39    -1.00    +0.50   +22.84    +0.91   +24.64
+  W3   E3 CB4 RR2.0 G4+              +1.89    -5.00    +2.98   +16.59    +0.95   +17.41
+  W4   E3 CB4 RR2.0 G5+ AGREE        +2.39    -1.00    +1.50   +21.38    +4.91   +29.18
+  W5   E3 CB4 RR2.0 G6+              +3.39    -1.00    +2.50   +13.91    +4.91   +23.71
+
+  % PnL from 2025-2026:
+    W1: 96.1%
+    W2: 96.4%
+    W3: 100.7%
+    W4: 90.1%
+    W5: 79.4%
+
+--- 2025+ REGIME ADAPTATION ---
+  Gold changed. ORB sizes exploded from 2025. Here's what the new regime looks like.
+
+  Pre-2025 vs 2025+ (per variant):
+  ID   Strategy                    Pre N   Pre ExpR  25+ N   25+ ExpR  25+ WR  25+ Sharpe  25+ MaxDD
+  ---- -------------------------- ------ ---------- ------ ---------- ------- ----------- ----------
+  W1   E3 CB4 RR2.0 G5+               10     +0.09R     65     +0.33R   49.2%        0.24     +5.67R
+  W2   E3 CB5 RR2.0 G5+               10     +0.09R     63     +0.38R   50.8%        0.28     +5.67R
+  W3   E3 CB4 RR2.0 G4+               21     -0.01R    102     +0.17R   44.1%        0.13     +8.67R
+  W4   E3 CB4 RR2.0 G5+ AGREE          8     +0.36R     55     +0.48R   54.5%        0.35     +4.00R
+  W5   E3 CB4 RR2.0 G6+                6     +0.82R     42     +0.45R   52.4%        0.32     +3.00R
+
+  Key takeaway: If gold stays in the 2025+ volatility regime, 1800 becomes
+  a WEEKLY+ session. The edge is real in this regime. The question is whether
+  this regime persists or reverts to 2022-2024 levels (2-5 trades/year).
+
+  Adaptation strategy:
+    - Current regime (2025+): W1 is your workhorse, W4 your upgrade
+    - If vol compresses back to 2022-2024: W1 goes dormant, W5 fires rarely
+    - W3 (G4+) catches more trades in low-vol but with thinner edge
+    - Monitor orb_1800_size weekly. If median drops below 5.0 for 4 weeks,
+      consider stepping down to G4+ or pausing the session entirely.
+
+--- DIRECTION SPLIT ---
+
+  ID   Strategy                     L_N   L_ExpR   S_N   S_ExpR  %Long PnL
+  ---- -------------------------- ----- -------- ----- -------- ----------
+  W1   E3 CB4 RR2.0 G5+              42   +0.35R    33   +0.24R      64.7%
+  W2   E3 CB5 RR2.0 G5+              40   +0.42R    33   +0.24R      67.6%
+  W3   E3 CB4 RR2.0 G4+              73   +0.26R    50   -0.03R     108.5%
+  W4   E3 CB4 RR2.0 G5+ AGREE        35   +0.54R    28   +0.37R      64.7%
+  W5   E3 CB4 RR2.0 G6+              29   +0.51R    19   +0.48R      61.9%
+
+--- HONESTY FLAGS ---
+
+  W1: 3 flag(s)
+    [!] REGIME CONCENTRATION: 96% PnL from 2025-2026
+    [!] OOS DEGRADATION: 2026 OOS ExpR < 50% of IS
+    [!] PRE-2025 THIN: 3.3 trades/year before 2025
+  W2: 3 flag(s)
+    [!] REGIME CONCENTRATION: 96% PnL from 2025-2026
+    [!] OOS DEGRADATION: 2026 OOS ExpR < 50% of IS
+    [!] PRE-2025 THIN: 3.3 trades/year before 2025
+  W3: 3 flag(s)
+    [!] REGIME CONCENTRATION: 101% PnL from 2025-2026
+    [!] OOS DEGRADATION: 2026 OOS ExpR < 50% of IS
+    [!] DIRECTION SKEW: LONG dominated
+  W4: 2 flag(s)
+    [!] REGIME CONCENTRATION: 90% PnL from 2025-2026
+    [!] PRE-2025 THIN: 2.7 trades/year before 2025
+  W5: 3 flag(s)
+    [!] SMALL SAMPLE: N=48 (< 50)
+    [!] REGIME CONCENTRATION: 79% PnL from 2025-2026
+    [!] PRE-2025 THIN: 2.0 trades/year before 2025
+
+--- HONEST VERDICT ---
+
+  1800 is NOT a daily session. It is a volatility-regime session.
+  In the current 2025+ gold regime, it fires weekly+. In 2022-2024 it was monthly at best.
+
+  RECOMMENDATION (current regime):
+    1. W1 (G5+ CB4 RR2.0) is your bread-and-butter WHEN CONDITIONS EXIST
+    2. W4 (+ 15m AGREE) is your conditional upgrade -- fewer trades, potentially cleaner
+    3. W5 (G6+) is a regime overlay, NOT standalone -- save for outsized ORBs
+    4. W3 (G4+) is your fallback if you want more frequency at cost of sharpe
+
+  WHAT TO EXPECT:
+    - 2025+ regime: ~1-3 trades/week on W1, strong expectancy
+    - If vol normalizes: ~1-2 trades/month, expect dormant stretches
+    - The edge lives in ORB SIZE. When gold isn't moving 5+ points by 1810, sit on hands.
+
+  RISKS:
+    - Regime concentration: most PnL is from the recent vol explosion
+    - Pre-2025 sample sizes are thin for all variants
+    - Fill-bar exit (R1) not yet applied to orb_outcomes
+    - 2016-2020 outcomes not yet built (would extend backtest)
+
+==========================================================================
+  END OF WORKHORSE VALIDATION REPORT
+==========================================================================

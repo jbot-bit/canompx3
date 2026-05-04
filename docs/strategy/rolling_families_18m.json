@@ -1,0 +1,1214 @@
+[
+  {
+    "family_id": "1000_E2_ORB_G2",
+    "orb_label": "1000",
+    "entry_model": "E2",
+    "filter_type": "ORB_G2",
+    "windows_total": 19,
+    "windows_passed": 16,
+    "weighted_stability": 0.834,
+    "classification": "STABLE",
+    "avg_expectancy_r": 0.2211,
+    "avg_sharpe": 0.1259,
+    "total_sample_size": 1676,
+    "oos_cumulative_r": 341.54,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Fri": {
+        "sample_size": 1689,
+        "win_rate": 0.308,
+        "exp_r": -0.241,
+        "total_r": -407.08
+      },
+      "Mon": {
+        "sample_size": 2616,
+        "win_rate": 0.385,
+        "exp_r": 0.0299,
+        "total_r": 78.2
+      },
+      "Wed": {
+        "sample_size": 1486,
+        "win_rate": 0.421,
+        "exp_r": 0.1333,
+        "total_r": 198.12
+      },
+      "Thu": {
+        "sample_size": 1811,
+        "win_rate": 0.297,
+        "exp_r": -0.2251,
+        "total_r": -407.66
+      },
+      "Tue": {
+        "sample_size": 1496,
+        "win_rate": 0.37,
+        "exp_r": -0.0494,
+        "total_r": -73.85
+      }
+    },
+    "day_of_week_concentration": 0.35
+  },
+  {
+    "family_id": "1000_E1_ORB_G2",
+    "orb_label": "1000",
+    "entry_model": "E1",
+    "filter_type": "ORB_G2",
+    "windows_total": 19,
+    "windows_passed": 13,
+    "weighted_stability": 0.679,
+    "classification": "STABLE",
+    "avg_expectancy_r": 0.22,
+    "avg_sharpe": 0.1166,
+    "total_sample_size": 1538,
+    "oos_cumulative_r": 299.32,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Fri": {
+        "sample_size": 1689,
+        "win_rate": 0.307,
+        "exp_r": -0.2446,
+        "total_r": -413.21
+      },
+      "Mon": {
+        "sample_size": 2616,
+        "win_rate": 0.388,
+        "exp_r": 0.0389,
+        "total_r": 101.77
+      },
+      "Wed": {
+        "sample_size": 1486,
+        "win_rate": 0.42,
+        "exp_r": 0.13,
+        "total_r": 193.19
+      },
+      "Thu": {
+        "sample_size": 1811,
+        "win_rate": 0.297,
+        "exp_r": -0.2252,
+        "total_r": -407.85
+      },
+      "Tue": {
+        "sample_size": 1496,
+        "win_rate": 0.37,
+        "exp_r": -0.052,
+        "total_r": -77.78
+      }
+    },
+    "day_of_week_concentration": 0.346
+  },
+  {
+    "family_id": "0900_E2_ORB_G3",
+    "orb_label": "0900",
+    "entry_model": "E2",
+    "filter_type": "ORB_G3",
+    "windows_total": 19,
+    "windows_passed": 11,
+    "weighted_stability": 0.536,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.2836,
+    "avg_sharpe": 0.1555,
+    "total_sample_size": 578,
+    "oos_cumulative_r": 147.12,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Mon": {
+        "sample_size": 1605,
+        "win_rate": 0.362,
+        "exp_r": -0.0155,
+        "total_r": -24.82
+      },
+      "Tue": {
+        "sample_size": 766,
+        "win_rate": 0.376,
+        "exp_r": 0.0672,
+        "total_r": 51.44
+      },
+      "Fri": {
+        "sample_size": 668,
+        "win_rate": 0.412,
+        "exp_r": 0.1374,
+        "total_r": 91.77
+      },
+      "Wed": {
+        "sample_size": 672,
+        "win_rate": 0.368,
+        "exp_r": 0.0218,
+        "total_r": 14.67
+      },
+      "Thu": {
+        "sample_size": 724,
+        "win_rate": 0.294,
+        "exp_r": -0.2637,
+        "total_r": -190.92
+      }
+    },
+    "day_of_week_concentration": 0.511
+  },
+  {
+    "family_id": "0900_E1_ORB_G3",
+    "orb_label": "0900",
+    "entry_model": "E1",
+    "filter_type": "ORB_G3",
+    "windows_total": 19,
+    "windows_passed": 11,
+    "weighted_stability": 0.535,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.2922,
+    "avg_sharpe": 0.1779,
+    "total_sample_size": 571,
+    "oos_cumulative_r": 148.76,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Mon": {
+        "sample_size": 1607,
+        "win_rate": 0.363,
+        "exp_r": -0.0127,
+        "total_r": -20.42
+      },
+      "Tue": {
+        "sample_size": 767,
+        "win_rate": 0.379,
+        "exp_r": 0.0762,
+        "total_r": 58.44
+      },
+      "Fri": {
+        "sample_size": 668,
+        "win_rate": 0.413,
+        "exp_r": 0.1407,
+        "total_r": 93.98
+      },
+      "Wed": {
+        "sample_size": 672,
+        "win_rate": 0.369,
+        "exp_r": 0.0236,
+        "total_r": 15.84
+      },
+      "Thu": {
+        "sample_size": 724,
+        "win_rate": 0.291,
+        "exp_r": -0.2718,
+        "total_r": -196.79
+      }
+    },
+    "day_of_week_concentration": 0.511
+  },
+  {
+    "family_id": "1000_E3_ORB_G2",
+    "orb_label": "1000",
+    "entry_model": "E3",
+    "filter_type": "ORB_G2",
+    "windows_total": 19,
+    "windows_passed": 10,
+    "weighted_stability": 0.518,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.2449,
+    "avg_sharpe": 0.132,
+    "total_sample_size": 838,
+    "oos_cumulative_r": 192.28,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Fri": {
+        "sample_size": 1677,
+        "win_rate": 0.316,
+        "exp_r": -0.2548,
+        "total_r": -427.36
+      },
+      "Mon": {
+        "sample_size": 2463,
+        "win_rate": 0.377,
+        "exp_r": -0.0554,
+        "total_r": -136.51
+      },
+      "Wed": {
+        "sample_size": 1446,
+        "win_rate": 0.457,
+        "exp_r": 0.1784,
+        "total_r": 257.97
+      },
+      "Thu": {
+        "sample_size": 1770,
+        "win_rate": 0.268,
+        "exp_r": -0.3501,
+        "total_r": -619.7
+      },
+      "Tue": {
+        "sample_size": 1386,
+        "win_rate": 0.374,
+        "exp_r": -0.0582,
+        "total_r": -80.7
+      }
+    },
+    "day_of_week_concentration": 0.407
+  },
+  {
+    "family_id": "1000_E2_ORB_G3",
+    "orb_label": "1000",
+    "entry_model": "E2",
+    "filter_type": "ORB_G3",
+    "windows_total": 19,
+    "windows_passed": 10,
+    "weighted_stability": 0.504,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.4065,
+    "avg_sharpe": 0.2118,
+    "total_sample_size": 786,
+    "oos_cumulative_r": 246.23,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Fri": {
+        "sample_size": 819,
+        "win_rate": 0.217,
+        "exp_r": -0.4408,
+        "total_r": -360.98
+      },
+      "Wed": {
+        "sample_size": 976,
+        "win_rate": 0.475,
+        "exp_r": 0.3316,
+        "total_r": 323.6
+      },
+      "Mon": {
+        "sample_size": 1668,
+        "win_rate": 0.405,
+        "exp_r": 0.1302,
+        "total_r": 217.15
+      },
+      "Thu": {
+        "sample_size": 1002,
+        "win_rate": 0.275,
+        "exp_r": -0.2602,
+        "total_r": -260.73
+      },
+      "Tue": {
+        "sample_size": 884,
+        "win_rate": 0.44,
+        "exp_r": 0.1913,
+        "total_r": 169.09
+      }
+    },
+    "day_of_week_concentration": 0.271
+  },
+  {
+    "family_id": "1000_E1_ORB_G3",
+    "orb_label": "1000",
+    "entry_model": "E1",
+    "filter_type": "ORB_G3",
+    "windows_total": 19,
+    "windows_passed": 10,
+    "weighted_stability": 0.502,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.4035,
+    "avg_sharpe": 0.2034,
+    "total_sample_size": 796,
+    "oos_cumulative_r": 244.63,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Fri": {
+        "sample_size": 819,
+        "win_rate": 0.22,
+        "exp_r": -0.4345,
+        "total_r": -355.82
+      },
+      "Wed": {
+        "sample_size": 976,
+        "win_rate": 0.475,
+        "exp_r": 0.3298,
+        "total_r": 321.89
+      },
+      "Mon": {
+        "sample_size": 1668,
+        "win_rate": 0.407,
+        "exp_r": 0.136,
+        "total_r": 226.92
+      },
+      "Thu": {
+        "sample_size": 1002,
+        "win_rate": 0.274,
+        "exp_r": -0.2626,
+        "total_r": -263.11
+      },
+      "Tue": {
+        "sample_size": 884,
+        "win_rate": 0.44,
+        "exp_r": 0.1906,
+        "total_r": 168.5
+      }
+    },
+    "day_of_week_concentration": 0.266
+  },
+  {
+    "family_id": "0900_E3_ORB_G3",
+    "orb_label": "0900",
+    "entry_model": "E3",
+    "filter_type": "ORB_G3",
+    "windows_total": 19,
+    "windows_passed": 9,
+    "weighted_stability": 0.458,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.2151,
+    "avg_sharpe": 0.1239,
+    "total_sample_size": 536,
+    "oos_cumulative_r": 108.6,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Mon": {
+        "sample_size": 1515,
+        "win_rate": 0.327,
+        "exp_r": -0.1486,
+        "total_r": -225.18
+      },
+      "Tue": {
+        "sample_size": 710,
+        "win_rate": 0.356,
+        "exp_r": -0.0268,
+        "total_r": -19.03
+      },
+      "Fri": {
+        "sample_size": 636,
+        "win_rate": 0.42,
+        "exp_r": 0.1447,
+        "total_r": 92.0
+      },
+      "Wed": {
+        "sample_size": 642,
+        "win_rate": 0.321,
+        "exp_r": -0.1519,
+        "total_r": -97.52
+      },
+      "Thu": {
+        "sample_size": 740,
+        "win_rate": 0.282,
+        "exp_r": -0.2677,
+        "total_r": -198.13
+      }
+    },
+    "day_of_week_concentration": 0.356
+  },
+  {
+    "family_id": "1000_E3_ORB_G3",
+    "orb_label": "1000",
+    "entry_model": "E3",
+    "filter_type": "ORB_G3",
+    "windows_total": 19,
+    "windows_passed": 9,
+    "weighted_stability": 0.444,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.4524,
+    "avg_sharpe": 0.2215,
+    "total_sample_size": 652,
+    "oos_cumulative_r": 212.52,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Fri": {
+        "sample_size": 837,
+        "win_rate": 0.271,
+        "exp_r": -0.336,
+        "total_r": -281.2
+      },
+      "Wed": {
+        "sample_size": 948,
+        "win_rate": 0.508,
+        "exp_r": 0.367,
+        "total_r": 347.93
+      },
+      "Mon": {
+        "sample_size": 1545,
+        "win_rate": 0.413,
+        "exp_r": 0.0974,
+        "total_r": 150.41
+      },
+      "Thu": {
+        "sample_size": 1002,
+        "win_rate": 0.281,
+        "exp_r": -0.3019,
+        "total_r": -302.5
+      },
+      "Tue": {
+        "sample_size": 822,
+        "win_rate": 0.437,
+        "exp_r": 0.1518,
+        "total_r": 124.75
+      }
+    },
+    "day_of_week_concentration": 0.288
+  },
+  {
+    "family_id": "1000_E1_ORB_G4",
+    "orb_label": "1000",
+    "entry_model": "E1",
+    "filter_type": "ORB_G4",
+    "windows_total": 19,
+    "windows_passed": 9,
+    "weighted_stability": 0.432,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.4025,
+    "avg_sharpe": 0.1894,
+    "total_sample_size": 494,
+    "oos_cumulative_r": 163.84,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Wed": {
+        "sample_size": 736,
+        "win_rate": 0.44,
+        "exp_r": 0.257,
+        "total_r": 189.19
+      },
+      "Mon": {
+        "sample_size": 1092,
+        "win_rate": 0.482,
+        "exp_r": 0.3794,
+        "total_r": 414.3
+      },
+      "Thu": {
+        "sample_size": 642,
+        "win_rate": 0.252,
+        "exp_r": -0.3148,
+        "total_r": -202.13
+      },
+      "Fri": {
+        "sample_size": 564,
+        "win_rate": 0.195,
+        "exp_r": -0.4922,
+        "total_r": -277.6
+      },
+      "Tue": {
+        "sample_size": 614,
+        "win_rate": 0.404,
+        "exp_r": 0.0966,
+        "total_r": 59.29
+      }
+    },
+    "day_of_week_concentration": 0.363
+  },
+  {
+    "family_id": "1000_E2_ORB_G4",
+    "orb_label": "1000",
+    "entry_model": "E2",
+    "filter_type": "ORB_G4",
+    "windows_total": 19,
+    "windows_passed": 9,
+    "weighted_stability": 0.432,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.4456,
+    "avg_sharpe": 0.2157,
+    "total_sample_size": 491,
+    "oos_cumulative_r": 184.02,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Wed": {
+        "sample_size": 736,
+        "win_rate": 0.44,
+        "exp_r": 0.2579,
+        "total_r": 189.78
+      },
+      "Mon": {
+        "sample_size": 1092,
+        "win_rate": 0.478,
+        "exp_r": 0.3693,
+        "total_r": 403.22
+      },
+      "Thu": {
+        "sample_size": 642,
+        "win_rate": 0.251,
+        "exp_r": -0.3174,
+        "total_r": -203.76
+      },
+      "Fri": {
+        "sample_size": 564,
+        "win_rate": 0.191,
+        "exp_r": -0.5023,
+        "total_r": -283.29
+      },
+      "Tue": {
+        "sample_size": 614,
+        "win_rate": 0.407,
+        "exp_r": 0.1084,
+        "total_r": 66.56
+      }
+    },
+    "day_of_week_concentration": 0.352
+  },
+  {
+    "family_id": "0900_E1_ORB_G4",
+    "orb_label": "0900",
+    "entry_model": "E1",
+    "filter_type": "ORB_G4",
+    "windows_total": 19,
+    "windows_passed": 9,
+    "weighted_stability": 0.428,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.5443,
+    "avg_sharpe": 0.2779,
+    "total_sample_size": 425,
+    "oos_cumulative_r": 210.03,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Mon": {
+        "sample_size": 1338,
+        "win_rate": 0.38,
+        "exp_r": 0.0591,
+        "total_r": 79.12
+      },
+      "Tue": {
+        "sample_size": 557,
+        "win_rate": 0.467,
+        "exp_r": 0.3391,
+        "total_r": 188.86
+      },
+      "Fri": {
+        "sample_size": 518,
+        "win_rate": 0.498,
+        "exp_r": 0.3939,
+        "total_r": 204.03
+      },
+      "Thu": {
+        "sample_size": 568,
+        "win_rate": 0.352,
+        "exp_r": -0.1074,
+        "total_r": -61.0
+      },
+      "Wed": {
+        "sample_size": 492,
+        "win_rate": 0.343,
+        "exp_r": -0.0357,
+        "total_r": -17.58
+      }
+    },
+    "day_of_week_concentration": 0.371
+  },
+  {
+    "family_id": "0900_E2_ORB_G4",
+    "orb_label": "0900",
+    "entry_model": "E2",
+    "filter_type": "ORB_G4",
+    "windows_total": 19,
+    "windows_passed": 9,
+    "weighted_stability": 0.428,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.5874,
+    "avg_sharpe": 0.3061,
+    "total_sample_size": 425,
+    "oos_cumulative_r": 229.1,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Mon": {
+        "sample_size": 1336,
+        "win_rate": 0.38,
+        "exp_r": 0.0565,
+        "total_r": 75.52
+      },
+      "Tue": {
+        "sample_size": 556,
+        "win_rate": 0.464,
+        "exp_r": 0.334,
+        "total_r": 185.72
+      },
+      "Fri": {
+        "sample_size": 518,
+        "win_rate": 0.496,
+        "exp_r": 0.3895,
+        "total_r": 201.78
+      },
+      "Thu": {
+        "sample_size": 568,
+        "win_rate": 0.356,
+        "exp_r": -0.098,
+        "total_r": -55.67
+      },
+      "Wed": {
+        "sample_size": 492,
+        "win_rate": 0.343,
+        "exp_r": -0.0358,
+        "total_r": -17.63
+      }
+    },
+    "day_of_week_concentration": 0.376
+  },
+  {
+    "family_id": "0900_E3_ORB_G4",
+    "orb_label": "0900",
+    "entry_model": "E3",
+    "filter_type": "ORB_G4",
+    "windows_total": 19,
+    "windows_passed": 9,
+    "weighted_stability": 0.428,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.5107,
+    "avg_sharpe": 0.2763,
+    "total_sample_size": 421,
+    "oos_cumulative_r": 204.8,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Mon": {
+        "sample_size": 1251,
+        "win_rate": 0.333,
+        "exp_r": -0.1063,
+        "total_r": -132.98
+      },
+      "Tue": {
+        "sample_size": 518,
+        "win_rate": 0.436,
+        "exp_r": 0.2228,
+        "total_r": 115.4
+      },
+      "Fri": {
+        "sample_size": 486,
+        "win_rate": 0.498,
+        "exp_r": 0.3765,
+        "total_r": 182.99
+      },
+      "Thu": {
+        "sample_size": 584,
+        "win_rate": 0.346,
+        "exp_r": -0.0973,
+        "total_r": -56.84
+      },
+      "Wed": {
+        "sample_size": 462,
+        "win_rate": 0.275,
+        "exp_r": -0.2595,
+        "total_r": -119.87
+      }
+    },
+    "day_of_week_concentration": 0.301
+  },
+  {
+    "family_id": "0900_E1_ORB_G5",
+    "orb_label": "0900",
+    "entry_model": "E1",
+    "filter_type": "ORB_G5",
+    "windows_total": 19,
+    "windows_passed": 9,
+    "weighted_stability": 0.389,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.7222,
+    "avg_sharpe": 0.3455,
+    "total_sample_size": 345,
+    "oos_cumulative_r": 218.93,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Mon": {
+        "sample_size": 1158,
+        "win_rate": 0.364,
+        "exp_r": 0.0301,
+        "total_r": 34.86
+      },
+      "Tue": {
+        "sample_size": 497,
+        "win_rate": 0.463,
+        "exp_r": 0.3284,
+        "total_r": 163.2
+      },
+      "Thu": {
+        "sample_size": 339,
+        "win_rate": 0.363,
+        "exp_r": -0.0912,
+        "total_r": -30.91
+      },
+      "Wed": {
+        "sample_size": 432,
+        "win_rate": 0.391,
+        "exp_r": 0.0982,
+        "total_r": 42.42
+      },
+      "Fri": {
+        "sample_size": 402,
+        "win_rate": 0.575,
+        "exp_r": 0.6421,
+        "total_r": 258.12
+      }
+    },
+    "day_of_week_concentration": 0.487
+  },
+  {
+    "family_id": "0900_E2_ORB_G5",
+    "orb_label": "0900",
+    "entry_model": "E2",
+    "filter_type": "ORB_G5",
+    "windows_total": 19,
+    "windows_passed": 9,
+    "weighted_stability": 0.389,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.7867,
+    "avg_sharpe": 0.4019,
+    "total_sample_size": 345,
+    "oos_cumulative_r": 241.81,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Mon": {
+        "sample_size": 1157,
+        "win_rate": 0.366,
+        "exp_r": 0.0325,
+        "total_r": 37.64
+      },
+      "Tue": {
+        "sample_size": 496,
+        "win_rate": 0.46,
+        "exp_r": 0.3224,
+        "total_r": 159.89
+      },
+      "Thu": {
+        "sample_size": 339,
+        "win_rate": 0.363,
+        "exp_r": -0.0925,
+        "total_r": -31.37
+      },
+      "Wed": {
+        "sample_size": 432,
+        "win_rate": 0.391,
+        "exp_r": 0.0981,
+        "total_r": 42.37
+      },
+      "Fri": {
+        "sample_size": 402,
+        "win_rate": 0.575,
+        "exp_r": 0.643,
+        "total_r": 258.47
+      }
+    },
+    "day_of_week_concentration": 0.488
+  },
+  {
+    "family_id": "0900_E3_ORB_G5",
+    "orb_label": "0900",
+    "entry_model": "E3",
+    "filter_type": "ORB_G5",
+    "windows_total": 19,
+    "windows_passed": 9,
+    "weighted_stability": 0.389,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.6941,
+    "avg_sharpe": 0.3665,
+    "total_sample_size": 341,
+    "oos_cumulative_r": 219.27,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Mon": {
+        "sample_size": 1087,
+        "win_rate": 0.318,
+        "exp_r": -0.1359,
+        "total_r": -147.74
+      },
+      "Tue": {
+        "sample_size": 458,
+        "win_rate": 0.428,
+        "exp_r": 0.2025,
+        "total_r": 92.76
+      },
+      "Thu": {
+        "sample_size": 349,
+        "win_rate": 0.284,
+        "exp_r": -0.2394,
+        "total_r": -83.54
+      },
+      "Wed": {
+        "sample_size": 402,
+        "win_rate": 0.316,
+        "exp_r": -0.1489,
+        "total_r": -59.87
+      },
+      "Fri": {
+        "sample_size": 372,
+        "win_rate": 0.524,
+        "exp_r": 0.4926,
+        "total_r": 183.24
+      }
+    },
+    "day_of_week_concentration": 0.323
+  },
+  {
+    "family_id": "1000_E3_ORB_G4",
+    "orb_label": "1000",
+    "entry_model": "E3",
+    "filter_type": "ORB_G4",
+    "windows_total": 19,
+    "windows_passed": 8,
+    "weighted_stability": 0.371,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.4503,
+    "avg_sharpe": 0.2114,
+    "total_sample_size": 399,
+    "oos_cumulative_r": 134.57,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Wed": {
+        "sample_size": 726,
+        "win_rate": 0.444,
+        "exp_r": 0.2244,
+        "total_r": 162.91
+      },
+      "Mon": {
+        "sample_size": 987,
+        "win_rate": 0.463,
+        "exp_r": 0.2889,
+        "total_r": 285.11
+      },
+      "Thu": {
+        "sample_size": 642,
+        "win_rate": 0.232,
+        "exp_r": -0.409,
+        "total_r": -262.61
+      },
+      "Fri": {
+        "sample_size": 578,
+        "win_rate": 0.265,
+        "exp_r": -0.3568,
+        "total_r": -206.22
+      },
+      "Tue": {
+        "sample_size": 582,
+        "win_rate": 0.428,
+        "exp_r": 0.1512,
+        "total_r": 88.02
+      }
+    },
+    "day_of_week_concentration": 0.284
+  },
+  {
+    "family_id": "1000_E1_ORB_G5",
+    "orb_label": "1000",
+    "entry_model": "E1",
+    "filter_type": "ORB_G5",
+    "windows_total": 19,
+    "windows_passed": 8,
+    "weighted_stability": 0.339,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.4598,
+    "avg_sharpe": 0.2402,
+    "total_sample_size": 311,
+    "oos_cumulative_r": 120.77,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Mon": {
+        "sample_size": 732,
+        "win_rate": 0.451,
+        "exp_r": 0.3009,
+        "total_r": 220.27
+      },
+      "Fri": {
+        "sample_size": 336,
+        "win_rate": 0.238,
+        "exp_r": -0.3999,
+        "total_r": -134.35
+      },
+      "Tue": {
+        "sample_size": 488,
+        "win_rate": 0.402,
+        "exp_r": 0.0852,
+        "total_r": 41.58
+      },
+      "Wed": {
+        "sample_size": 586,
+        "win_rate": 0.491,
+        "exp_r": 0.4578,
+        "total_r": 268.27
+      },
+      "Thu": {
+        "sample_size": 420,
+        "win_rate": 0.343,
+        "exp_r": -0.0377,
+        "total_r": -15.84
+      }
+    },
+    "day_of_week_concentration": 0.394
+  },
+  {
+    "family_id": "1000_E2_ORB_G5",
+    "orb_label": "1000",
+    "entry_model": "E2",
+    "filter_type": "ORB_G5",
+    "windows_total": 19,
+    "windows_passed": 8,
+    "weighted_stability": 0.339,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.4768,
+    "avg_sharpe": 0.2384,
+    "total_sample_size": 311,
+    "oos_cumulative_r": 128.94,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Mon": {
+        "sample_size": 732,
+        "win_rate": 0.449,
+        "exp_r": 0.299,
+        "total_r": 218.85
+      },
+      "Fri": {
+        "sample_size": 336,
+        "win_rate": 0.235,
+        "exp_r": -0.405,
+        "total_r": -136.07
+      },
+      "Tue": {
+        "sample_size": 488,
+        "win_rate": 0.406,
+        "exp_r": 0.0975,
+        "total_r": 47.59
+      },
+      "Wed": {
+        "sample_size": 586,
+        "win_rate": 0.491,
+        "exp_r": 0.4587,
+        "total_r": 268.79
+      },
+      "Thu": {
+        "sample_size": 420,
+        "win_rate": 0.34,
+        "exp_r": -0.0418,
+        "total_r": -17.56
+      }
+    },
+    "day_of_week_concentration": 0.39
+  },
+  {
+    "family_id": "1000_E3_ORB_G5",
+    "orb_label": "1000",
+    "entry_model": "E3",
+    "filter_type": "ORB_G5",
+    "windows_total": 19,
+    "windows_passed": 8,
+    "weighted_stability": 0.339,
+    "classification": "TRANSITIONING",
+    "avg_expectancy_r": 0.4647,
+    "avg_sharpe": 0.2532,
+    "total_sample_size": 305,
+    "oos_cumulative_r": 117.03,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": {
+      "Mon": {
+        "sample_size": 675,
+        "win_rate": 0.468,
+        "exp_r": 0.3167,
+        "total_r": 213.78
+      },
+      "Fri": {
+        "sample_size": 350,
+        "win_rate": 0.346,
+        "exp_r": -0.1844,
+        "total_r": -64.54
+      },
+      "Tue": {
+        "sample_size": 492,
+        "win_rate": 0.494,
+        "exp_r": 0.3271,
+        "total_r": 160.95
+      },
+      "Wed": {
+        "sample_size": 576,
+        "win_rate": 0.481,
+        "exp_r": 0.3775,
+        "total_r": 217.45
+      },
+      "Thu": {
+        "sample_size": 420,
+        "win_rate": 0.262,
+        "exp_r": -0.3062,
+        "total_r": -128.6
+      }
+    },
+    "day_of_week_concentration": 0.277
+  },
+  {
+    "family_id": "0900_E1_ORB_G6",
+    "orb_label": "0900",
+    "entry_model": "E1",
+    "filter_type": "ORB_G6",
+    "windows_total": 19,
+    "windows_passed": 8,
+    "weighted_stability": 0.294,
+    "classification": "DEGRADED",
+    "avg_expectancy_r": 0.6902,
+    "avg_sharpe": 0.3139,
+    "total_sample_size": 229,
+    "oos_cumulative_r": 143.05,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": null,
+    "day_of_week_concentration": null
+  },
+  {
+    "family_id": "0900_E2_ORB_G6",
+    "orb_label": "0900",
+    "entry_model": "E2",
+    "filter_type": "ORB_G6",
+    "windows_total": 19,
+    "windows_passed": 8,
+    "weighted_stability": 0.294,
+    "classification": "DEGRADED",
+    "avg_expectancy_r": 0.715,
+    "avg_sharpe": 0.3262,
+    "total_sample_size": 229,
+    "oos_cumulative_r": 151.42,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": null,
+    "day_of_week_concentration": null
+  },
+  {
+    "family_id": "0900_E3_ORB_G6",
+    "orb_label": "0900",
+    "entry_model": "E3",
+    "filter_type": "ORB_G6",
+    "windows_total": 19,
+    "windows_passed": 8,
+    "weighted_stability": 0.292,
+    "classification": "DEGRADED",
+    "avg_expectancy_r": 0.5118,
+    "avg_sharpe": 0.2593,
+    "total_sample_size": 227,
+    "oos_cumulative_r": 109.62,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": null,
+    "day_of_week_concentration": null
+  },
+  {
+    "family_id": "1000_E3_ORB_G6",
+    "orb_label": "1000",
+    "entry_model": "E3",
+    "filter_type": "ORB_G6",
+    "windows_total": 19,
+    "windows_passed": 5,
+    "weighted_stability": 0.191,
+    "classification": "DEGRADED",
+    "avg_expectancy_r": 0.2133,
+    "avg_sharpe": 0.1176,
+    "total_sample_size": 165,
+    "oos_cumulative_r": 27.13,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": null,
+    "day_of_week_concentration": null
+  },
+  {
+    "family_id": "0900_E1_ORB_G8",
+    "orb_label": "0900",
+    "entry_model": "E1",
+    "filter_type": "ORB_G8",
+    "windows_total": 19,
+    "windows_passed": 2,
+    "weighted_stability": 0.051,
+    "classification": "DEGRADED",
+    "avg_expectancy_r": 0.4787,
+    "avg_sharpe": 0.2151,
+    "total_sample_size": 46,
+    "oos_cumulative_r": 22.31,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": null,
+    "day_of_week_concentration": null
+  },
+  {
+    "family_id": "0900_E2_ORB_G8",
+    "orb_label": "0900",
+    "entry_model": "E2",
+    "filter_type": "ORB_G8",
+    "windows_total": 19,
+    "windows_passed": 2,
+    "weighted_stability": 0.051,
+    "classification": "DEGRADED",
+    "avg_expectancy_r": 0.479,
+    "avg_sharpe": 0.2152,
+    "total_sample_size": 46,
+    "oos_cumulative_r": 22.32,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": null,
+    "day_of_week_concentration": null
+  },
+  {
+    "family_id": "0900_E3_ORB_G8",
+    "orb_label": "0900",
+    "entry_model": "E3",
+    "filter_type": "ORB_G8",
+    "windows_total": 19,
+    "windows_passed": 2,
+    "weighted_stability": 0.051,
+    "classification": "DEGRADED",
+    "avg_expectancy_r": 0.5044,
+    "avg_sharpe": 0.272,
+    "total_sample_size": 46,
+    "oos_cumulative_r": 23.33,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": null,
+    "day_of_week_concentration": null
+  },
+  {
+    "family_id": "1000_E1_ORB_G8",
+    "orb_label": "1000",
+    "entry_model": "E1",
+    "filter_type": "ORB_G8",
+    "windows_total": 19,
+    "windows_passed": 2,
+    "weighted_stability": 0.048,
+    "classification": "DEGRADED",
+    "avg_expectancy_r": 0.1281,
+    "avg_sharpe": 0.137,
+    "total_sample_size": 43,
+    "oos_cumulative_r": 5.54,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": null,
+    "day_of_week_concentration": null
+  },
+  {
+    "family_id": "1000_E2_ORB_G8",
+    "orb_label": "1000",
+    "entry_model": "E2",
+    "filter_type": "ORB_G8",
+    "windows_total": 19,
+    "windows_passed": 2,
+    "weighted_stability": 0.048,
+    "classification": "DEGRADED",
+    "avg_expectancy_r": 0.128,
+    "avg_sharpe": 0.137,
+    "total_sample_size": 43,
+    "oos_cumulative_r": 5.54,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": null,
+    "day_of_week_concentration": null
+  },
+  {
+    "family_id": "1000_E3_ORB_G8",
+    "orb_label": "1000",
+    "entry_model": "E3",
+    "filter_type": "ORB_G8",
+    "windows_total": 19,
+    "windows_passed": 2,
+    "weighted_stability": 0.048,
+    "classification": "DEGRADED",
+    "avg_expectancy_r": 0.286,
+    "avg_sharpe": 0.1679,
+    "total_sample_size": 43,
+    "oos_cumulative_r": 12.29,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": null,
+    "day_of_week_concentration": null
+  },
+  {
+    "family_id": "1000_E1_ORB_G6",
+    "orb_label": "1000",
+    "entry_model": "E1",
+    "filter_type": "ORB_G6",
+    "windows_total": 19,
+    "windows_passed": 2,
+    "weighted_stability": 0.047,
+    "classification": "DEGRADED",
+    "avg_expectancy_r": 0.3965,
+    "avg_sharpe": 0.2173,
+    "total_sample_size": 42,
+    "oos_cumulative_r": 16.65,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": null,
+    "day_of_week_concentration": null
+  },
+  {
+    "family_id": "1000_E2_ORB_G6",
+    "orb_label": "1000",
+    "entry_model": "E2",
+    "filter_type": "ORB_G6",
+    "windows_total": 19,
+    "windows_passed": 2,
+    "weighted_stability": 0.047,
+    "classification": "DEGRADED",
+    "avg_expectancy_r": 0.3973,
+    "avg_sharpe": 0.2176,
+    "total_sample_size": 42,
+    "oos_cumulative_r": 16.69,
+    "double_break_degraded_windows": 0,
+    "day_of_week_stats": null,
+    "day_of_week_concentration": null
+  }
+]

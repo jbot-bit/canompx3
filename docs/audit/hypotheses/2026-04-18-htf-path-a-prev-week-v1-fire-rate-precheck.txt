@@ -1,0 +1,12 @@
+Canonical DB: C:\Users\joshd\canompx3\gold.db
+
+symbol session        base  pwh_long  rate%   band         pwl_short rate%   band
+--------------------------------------------------------------------------------------------------------------
+MNQ    TOKYO_OPEN      1716      216   12.59 OK                  97    5.65 OK
+MNQ    EUROPE_FLOW     1714      242   14.12 OK                 101    5.89 OK
+MNQ    NYSE_OPEN       1710      286   16.73 OK                 139    8.13 OK
+MES    TOKYO_OPEN      1714      181   10.56 OK                  92    5.37 OK
+MES    EUROPE_FLOW     1714      215   12.54 OK                  95    5.54 OK
+MES    NYSE_OPEN       1713      265   15.47 OK                 135    7.88 OK
+
+All cells within band. Family is pre-reg-ready for validation pass.

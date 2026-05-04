@@ -1,0 +1,20 @@
+All done. 
+
+`★ Insight ─────────────────────────────────────`
+The `pipeline/stats.py` fix illustrates a subtle docstring drift risk: when a module is refactored (meta_label.py inlined its own Sharpe computation instead of importing the shared utility), the module's "Used by..." docstring wasn't updated. This is exactly the *volatile data* sin applied to documentation — module-level docstrings listing callers will drift as the codebase evolves unless they're mechanically verified (like this audit loop does). The fix is cheap; the detection requires the grep-based verification pattern Ralph uses.
+`─────────────────────────────────────────────────`
+
+```
+=== RALPH LOOP ITER [134] COMPLETE ===
+Scope: pipeline/stats.py
+Audit: 1 finding (0 CRIT, 0 HIGH, 0 MED, 1 LOW)
+Classification: [mechanical]
+Action: fix
+Target: pipeline/stats.py:3-5 (module docstring)
+Blast radius: 0 production callers affected (docstring-only change)
+Verdict: ACCEPT
+Commit: a514218
+Deferred debt: 1 open item (DF-04: rolling_portfolio.py dormant orb_minutes=5)
+Next: pipeline/audit_log.py — MEDIUM tier, unscanned audit logging (2 importers)
+================================
+```

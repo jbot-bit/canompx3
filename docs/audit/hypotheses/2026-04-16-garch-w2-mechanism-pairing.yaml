@@ -1,0 +1,133 @@
+date: 2026-04-16
+title: Garch W2 validated-shelf mechanism pairing audit
+status: active
+purpose: >
+  Test whether two locked garch-anchored mechanism pairings improve validated
+  setup quality on the validated shelf only, without drifting into new search
+  or premature deployment doctrine.
+
+authority_chain:
+  - CLAUDE.md
+  - RESEARCH_RULES.md
+  - TRADING_RULES.md
+  - docs/institutional/pre_registered_criteria.md
+  - docs/institutional/mechanism_priors.md
+  - docs/institutional/regime-and-rr-handling-framework.md
+  - docs/plans/2026-04-16-garch-institutional-attack-plan.md
+  - docs/plans/2026-04-16-garch-program-audit.md
+  - docs/plans/2026-04-16-garch-w2-mechanism-pairing-design.md
+  - docs/audit/results/2026-04-16-garch-state-distinctness-audit.md
+
+universe:
+  source: validated_setups_only
+  truth_layers:
+    - orb_outcomes
+    - daily_features
+  status: research_provisional_not_production_truth
+
+scope_boundary: >
+  This is a validated-shelf mechanism test on a locked family set. It is not a
+  global feature ranking, not a deployment-map test, and not a new discovery
+  sweep.
+
+locked_families:
+  - COMEX_SETTLE_high
+  - EUROPE_FLOW_high
+  - TOKYO_OPEN_high
+  - SINGAPORE_OPEN_high
+  - LONDON_METALS_high
+
+excluded_families:
+  - NYSE_OPEN_low
+
+mechanisms:
+  M1_latent_expansion:
+    statement: >
+      High garch with lower or moderate overnight realized expansion may mark
+      latent expansion not yet expressed overnight.
+    garch_high: "garch_forecast_vol_pct >= 70"
+    partner_favorable: "overnight_range_pct < 80"
+    partner_unfavorable: "overnight_range_pct >= 80"
+    descriptive_partner_buckets:
+      overnight_low: "overnight_range_pct <= 20"
+      overnight_mid: "20 < overnight_range_pct < 80"
+      overnight_high: "overnight_range_pct >= 80"
+  M2_active_transition:
+    statement: >
+      High garch with expanding atr velocity may mark active transition into
+      session rather than merely latent volatility.
+    garch_high: "garch_forecast_vol_pct >= 70"
+    partner_favorable: "atr_vel_regime == Expanding"
+    partner_unfavorable: "atr_vel_regime != Expanding"
+    descriptive_partner_buckets:
+      - Expanding
+      - Stable
+      - Contracting
+
+questions:
+  - Does garch_high improve quality versus the rest of the validated family?
+  - Does the partner-favorable state improve quality versus the rest of the validated family?
+  - Inside garch_high, does the partner-favorable state improve quality?
+  - Inside partner-favorable, does garch_high improve quality?
+  - Is the best read garch_distinct, complementary_pair, partner_dominant, or unclear?
+
+required_metrics:
+  - N_total
+  - ExpR_base
+  - N_garch_high
+  - ExpR_garch_high
+  - N_partner_favorable
+  - ExpR_partner_favorable
+  - N_conjunction
+  - ExpR_conjunction
+  - SR_conjunction
+  - conjunction_fire_pct
+  - marginal_garch_lift
+  - marginal_partner_lift
+  - conditional_partner_lift_inside_garch
+  - conditional_garch_lift_inside_partner
+
+support_rules:
+  cell_inclusion:
+    n_total_min: 50
+  comparison_min_side: 10
+  conjunction_min_non_thin: 30
+  non_unclear_verdict_requires:
+    - one_valid_marginal_comparison
+    - one_valid_conditional_comparison
+    - conjunction_n_at_least_30
+
+oos_rule: >
+  2026 forward/OOS readouts are descriptive only in this stage and may not be
+  used to choose mechanism, family, or final verdict.
+
+allowed_outcomes:
+  - mechanism_survives
+  - both_mechanisms_survive_in_different_families
+  - garch_mostly_standalone
+  - partner_dominant
+  - unclear
+
+fairness_rules:
+  - No new family discovery.
+  - No profile or allocator translation.
+  - No confluence search beyond the two locked mechanisms.
+  - No use of live_config as research truth.
+  - Verdicts must come from raw joined trade paths, not prior report summaries.
+
+outputs_required:
+  - family_by_mechanism baseline table
+  - family_by_mechanism marginal and conditional comparison table
+  - family_by_mechanism descriptive OOS context table
+  - verdict table with one of: garch_distinct/complementary_pair/partner_dominant/unclear
+  - role implication table with no deployment promotion
+
+promotion_gate: >
+  A mechanism may advance to the next validated utility note only if at least
+  one family returns a non-thin complementary_pair or strong garch_distinct
+  read without one-cell concentration and without relying on 2026 OOS.
+
+kill_gate: >
+  Demote the mechanism if conjunctions stay thin, if partner_dominant or
+  unclear dominates, or if the stage drifts into search instead of testing the
+  locked mechanisms.

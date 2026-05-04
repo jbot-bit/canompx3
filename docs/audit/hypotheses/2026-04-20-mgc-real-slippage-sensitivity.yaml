@@ -1,0 +1,138 @@
+version: 1
+status: LOCKED
+date: 2026-04-20
+slug: mgc-real-slippage-sensitivity
+title: "MGC real-slippage sensitivity curve on native-low-R v1 killed cells (H0 in adversarial re-exam)"
+owner: claude-opus-4-7
+parent_doc: "docs/audit/results/2026-04-20-mgc-adversarial-reexamination.md"
+
+testing_mode: confirmatory_audit  # NOT discovery; tests whether modeled-vs-real friction gap flips any prior KILL
+pathway: audit_sensitivity
+deployment: NONE
+
+authority:
+  primary:
+    - ".claude/rules/institutional-rigor.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - "docs/institutional/pre_registered_criteria.md"
+  notes:
+    - "Not a discovery — replays existing killed cells under a grid of friction assumptions. Trial cost from MinBTL budget: ZERO (audit of prior decisions, not new enumeration)."
+    - "Replaces simpler 'single-point at 6.75 ticks' design because pilot adversarial audit (2026-04-20) found n=40 with skewed distribution (median 0, mean 6.75, max 263). Single-point is methodologically wrong; sensitivity curve is honest."
+    - "If any cell remains ExpR > +0.05R across slippage values 1-6.75 ticks, it's a 'slippage-robust' candidate worth shadow-track. If all cells drop below 0 by mid-range, closure is confirmed stronger."
+
+pilot_methodology_caveats_logged:
+  - "MGC TBBO pilot n=40 trades — underpowered for point estimation"
+  - "Distribution heavily skewed: median 0, mean 6.75, std 41.57, p95 2.05"
+  - "Long vs short asymmetric: longs mean 11.08, shorts 0.25 — direction effect not modeled here"
+  - "Pilot's own caveat: BBO at trigger is optimistic lower bound; real fills likely worse"
+  - "GC pilot (n=40) shows similar skewed distribution (mean 5.3) — likely commodity-class microstructure, not MGC-specific"
+  - "MNQ/MES TBBO pilots NOT RUN. Cross-book comparison is model-vs-model for index lanes."
+
+motivation: |
+  The 2026-04-19 MGC thread closure used `orb_outcomes.pnl_r` computed
+  with MGC modeled slippage = $2 round-trip ≈ 2 ticks. Pipeline audit
+  2026-04-20 found the underlying TBBO pilot measured mean 6.75 ticks
+  — 3.4× modeled. Caveat: pilot is underpowered (n=40, skewed).
+
+  The adversarial question: does the closure hold under a reasonable
+  range of slippage assumptions, or is the conclusion an artifact of
+  one specific (under-modeled) friction choice?
+
+  This test recomputes per-cell IS ExpR across a grid of slippage values
+  and reports which (if any) cells change classification.
+
+theory_citation:
+  - "Lopez de Prado (2020) ML for Asset Managers — sensitivity analysis is a required component of any backtest reporting framework (Ch 1 extract: docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md)."
+  - "Bailey et al 2013 pseudo-mathematics — single-parameter backtest conclusions are backtest-overfitting-vulnerable; sensitivity curves are the required honest presentation."
+  - "pipeline/cost_model.py:228-232 already acknowledges: 'Backtest uses FLAT slippage per instrument. Real slippage likely correlates with ORB size and session liquidity.'"
+
+hypothesis: |
+  H0a: The 5 cells killed in `research_mgc_native_low_r_v1.py` remain
+  ExpR ≤ +0.05R under every tested slippage value in the realism range
+  [2, 4, 6.75, 10] ticks round-trip.
+
+  Null: at least one cell produces ExpR > +0.05R at or below the pilot
+  mean (6.75 ticks), indicating the closure was sensitive to the
+  specific under-modeled slippage choice. Such a cell is not "alive"
+  (still fails original BH at K=5) but belongs in the shadow-track
+  registry pending re-evaluation with more data.
+
+scope:
+  instruments: [MGC]
+  aperture: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_targets: [0.5, 0.75, 1.0]  # from native_low_r_v1 cells
+  sessions: "5 cells from native_low_r_v1; read cell identity from its result doc / pre-reg"
+  direction: "inherit from native_low_r_v1"
+  filter_handling: "inherit from native_low_r_v1; no new filter selection"
+  data_range_is: "2022-06-13 to 2026-01-01"  # Mode A strict
+  slippage_grid_ticks_round_trip: [2, 4, 6.75, 10]
+  slippage_interpretation: "single scalar per trade; real asymmetry (long vs short, session-dependent) not modeled here — deferred to larger pilot"
+
+canonical_sources_required:
+  - "gold.db::orb_outcomes (symbol='MGC', exact cells from native_low_r_v1)"
+  - "gold.db::daily_features (for filter row joins)"
+  - "pipeline/cost_model.py::to_r_multiple (canonical R computation)"
+  - "research/research_mgc_native_low_r_v1.py and its result doc (cell identity)"
+
+prohibited:
+  - "No new discovery. No new cell identification. Only replays existing killed cells."
+  - "No post-hoc cell selection based on which ones survive. Kill classification must be declared pre-run."
+  - "No filter adjustment."
+  - "No RR adjustment beyond native_low_r_v1 grid (0.5, 0.75, 1.0)."
+  - "No re-running of statistical tests (BH, bootstrap) at any non-modeled slippage — those are locked at the audit's original values; only ExpR is recomputed."
+
+statistical_plan:
+  primary_test: |
+    For each of 5 cells × 4 slippage values (20 cells):
+    - Recompute per-trade pnl_r using pipeline.cost_model.to_r_multiple
+      with slippage parameter adjusted
+    - Aggregate to IS ExpR per cell per slippage
+    - Report Δ_IS = ExpR_native_low_r_v1 − ExpR_slippage_adjusted
+  secondary_test: "per-cell survival: ExpR > +0.05R at any slippage ≤ 6.75 ticks = SHADOW candidate; below 0 at 4 ticks = robust closure"
+  n_trials: 0  # audit, not discovery — per backtesting-methodology.md RULE 4
+  k_framing: "Not applicable — confirmatory sensitivity analysis"
+
+kill_criteria_applied_to_the_audit_conclusion:
+  A_closure_confirmed_strong: "all 5 cells drop below +0.05R by slippage ≥ 4 ticks → closure robust to friction assumptions"
+  A_closure_soft_at_pilot_mean: "any cell stays above +0.05R at slippage = 6.75 ticks → closure specific to under-modeled friction; cell joins shadow-track registry"
+  A_pilot_methodology_flip: "cell stays above +0.05R across all slippage values including 10 ticks → slippage realism is not the binding constraint; cell's ExpR gap to threshold is mechanism-driven not friction-driven"
+
+  interpretation:
+    strong_closure: "No operational change needed; closure stands confirmed"
+    soft_closure_with_shadow_addition: "Update docs/audit/hypotheses/2026-04-19-mgc-orbg5-long-signal-only-shadow-v1.yaml to add the surviving cell(s); no deployment claim"
+    pilot_not_binding: "Sensitivity curve shows cell survives even at extreme slippage — independent reason to investigate (mechanism? outlier pattern?) — opens H3"
+
+testing_discipline:
+  mandatory_diagnostic_reports:
+    - "Per-cell, per-slippage table: (cell_id, slippage_ticks, N_trades, ExpR, win_rate, avg_win_r, avg_loss_r)"
+    - "Δ_ExpR curve per cell (how ExpR moves as slippage rises from 2 → 10 ticks)"
+    - "Year-by-year breakdown per cell at 6.75-tick slippage (2022-H2, 2023, 2024, 2025)"
+    - "Sanity: at slippage=2 (modeled), reproduce the native_low_r_v1 reported ExpR exactly"
+
+baseline_cross_check:
+  - "Cell ExpR at slippage=2 ticks MUST match native_low_r_v1 reported values within ±0.002R (floating-point tolerance). If mismatch, recomputation path is wrong — halt before drawing any audit conclusion."
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  notes:
+    - "native_low_r_v1 is the source of cells; path_accurate_subr_v1 killed them; this is neither discovery nor re-discovery but audit of the killed verdict under an alternative friction assumption."
+
+out_of_scope:
+  - "MGC slippage pilot re-run (deferred to a separate larger-N pilot)"
+  - "Direction-asymmetric slippage modeling (long 11 ticks vs short 0.25 ticks) — deferred"
+  - "Session-asymmetric slippage modeling — deferred"
+  - "MNQ / MES slippage sensitivity — separate audit, separate trial budget"
+  - "Path-accurate reconstruction under real slippage — a different question (path_accurate_subr_v1 already KILLED under modeled slippage; re-running path-accurate under real slippage increases complexity without changing the closure direction)"
+
+expected_effort_hours: 2-3
+
+execution_environment:
+  DUCKDB_PATH: "C:/Users/joshd/canompx3/gold.db"
+  python_interpreter: ".venv-wsl/bin/python OR system python with duckdb"
+  output_dir: "research/output/"
+  result_doc: "docs/audit/results/2026-04-20-mgc-real-slippage-sensitivity-v1.md"
+  supporting_script: "research/research_mgc_real_slippage_sensitivity_v1.py (to be written)"
+
+commit_sha: "TO_FILL_AFTER_COMMIT"

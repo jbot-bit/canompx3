@@ -1,0 +1,95 @@
+# MES Comprehensive Discovery — 8 positive sessions
+# Locked: 2026-04-09T18:00:00+10:00 | Holdout: 2026-01-01 | Mode: A
+# Bailey: N=8, MinBTL=4.16yr < 6.66yr -> PASS (60% headroom)
+# E2 CB1 O5. Mixed RR per mechanism type.
+#
+# Sessions excluded (genuinely negative at all G-thresholds):
+# US_DATA_830, EUROPE_FLOW, CME_REOPEN
+#
+# MES/MNQ correlation note: ~87% correlated when trading same session
+# simultaneously. Different sessions have lower effective correlation.
+# Portfolio construction must account for session-level overlap.
+
+metadata:
+  name: "mes-comprehensive"
+  date_locked: "2026-04-09T18:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 8
+  testing_mode: "family"
+  data_horizon_years_clean: 6.66
+
+hypotheses:
+  - id: 1
+    name: "MES SINGAPORE_OPEN G8 RR2.0"
+    theory_citation: "Hamao, Masulis, Ng (1990) RFS"
+    economic_basis: "SGX/HKEX cross-market flow into S&P futures. Strongest MES ExpR."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MES], sessions: [SINGAPORE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=8 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 2
+    name: "MES TOKYO_OPEN G8 RR1.0"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: "Asian session S&P momentum. G8 filter fixes cost-kill. N=90 below deployment threshold — noted."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MES], sessions: [TOKYO_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=8 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05", "N < 100 deployment gate"]
+
+  - id: 3
+    name: "MES CME_PRECLOSE G8 RR1.0"
+    theory_citation: "Pre-close rebalancing microstructure"
+    economic_basis: "Forced S&P rebalancing before close. TRADING_RULES unfiltered delta -0.264; G8 creates +0.178 via ORB Size = The Edge."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=8 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 4
+    name: "MES COMEX_SETTLE G8 RR2.0"
+    theory_citation: "O'Hara (1995) Market Microstructure Theory"
+    economic_basis: "Cross-product settlement flow on S&P futures. Rebalancing creates directional imbalance."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MES], sessions: [COMEX_SETTLE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=8 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 5
+    name: "MES NYSE_CLOSE G6 RR1.0"
+    theory_citation: "Closing auction flow"
+    economic_basis: "NYSE closing auction on benchmark S&P 500. Spike-settle favors RR1.0."
+    filter: {type: ORB_G6, column: orb_size_points}
+    scope: {instruments: [MES], sessions: [NYSE_CLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=8 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 6
+    name: "MES NYSE_OPEN G8 RR2.0"
+    theory_citation: "Crabel (1990) ch. 3"
+    economic_basis: "Crabel commitment on THE S&P 500 benchmark. G8 = $40 committed capital per contract."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=8 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 7
+    name: "MES LONDON_METALS G8 RR1.0"
+    theory_citation: "London pricing window"
+    economic_basis: "London session cross-asset flow. Smaller sample, conservative RR1.0."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MES], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=8 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 8
+    name: "MES US_DATA_1000 G5 RR2.0"
+    theory_citation: "Andersen et al (2003) AER"
+    economic_basis: "10:00 AM ET post-equity macro releases. Gradual incorporation favors RR2.0."
+    filter: {type: ORB_G5, column: orb_size_points}
+    scope: {instruments: [MES], sessions: [US_DATA_1000], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=8 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05"]
+
+total_hypothesis_count: 8
+total_expected_trials: 8

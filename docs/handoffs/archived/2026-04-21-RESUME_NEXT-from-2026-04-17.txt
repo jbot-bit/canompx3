@@ -1,0 +1,3 @@
+HEAD: c085da97
+Current thought: do NOT invent FX-specific tweak first; test cloned live-book best transferable cost-gated E2 specs on 6J/6B/6A against exact live analogues.
+Need next: identify exact live analogue specs and pre-register comparison.

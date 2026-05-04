@@ -1,0 +1,183 @@
+version: 1
+status: LOCKED
+date: 2026-04-22
+slug: mgc-us-data-830-to-mnq-nyse-open-context-v1
+title: "MGC US_DATA_830 size context on MNQ NYSE_OPEN quality v1"
+owner: codex
+parent_spec: "docs/plans/2026-04-22-cross-asset-chronology-lock.md"
+
+testing_mode: individual
+pathway: B_individual
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/plans/2026-04-21-post-stale-lock-action-queue.md"
+    - "docs/plans/2026-03-22-live-config-redesign.md"
+  notes:
+    - "This is a single paired-session transmission path, not a cross-asset family sweep."
+    - "The claim is volatility/energy transmission, not direction prediction."
+    - "Target lane is unfiltered by design to avoid stacking a new context test on an already-selected filter."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "264bbda6"
+  committed_required_before_run: true
+
+scope:
+  source_instrument: MGC
+  source_session: US_DATA_830
+  source_orb_minutes: 5
+  target_instrument: MNQ
+  target_session: NYSE_OPEN
+  target_orb_minutes: 5
+  target_entry_model: E2
+  target_confirm_bars: 1
+  target_rr_target: 1.0
+  target_baseline_filter: none
+  role: R1_binary_overlay
+  expected_feature_family_k: 1
+
+data_policy:
+  is_window:
+    description: "target trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "target trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only; descriptive only"
+  holdout_rule:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+temporal_alignment:
+  join_key: "same trading_day across source instrument and target instrument"
+  source_completion_time: "source ORB close only"
+  target_trade_eligibility_time: "target ORB close only"
+  safe_ordering_claim: |
+    The source state must be fully known before the target trade is even eligible.
+    No target-trade feature may read target-resolution or post-entry information from
+    the source session. The older repo prose that called this a '90-minute gap' is
+    treated as non-binding shorthand; the binding rule is event ordering from
+    pipeline/dst.py.
+  banned_inputs:
+    - "source break direction as directional forecast"
+    - "source outcome, pnl_r, mae_r, mfe_r, or any post-resolution field"
+    - "target break_* fields as predictors"
+
+feature_definitions:
+  - feature_name: source_orb_size_norm
+    column_source: "source daily_features.atr_20 and source daily_features.orb_US_DATA_830_size"
+    canonical_source_of_truth: "daily_features on the MGC row for the same trading_day and orb_minutes=5"
+    formula: "orb_US_DATA_830_size / atr_20"
+    trade_time_knowable: true
+    first_complete_time: "source ORB end"
+    temporal_alignment_note: "known before target NYSE_OPEN ORB begins"
+    lookahead_check: "PASS"
+
+calibration:
+  threshold_source:
+    source_orb_size_norm: "IS-only Q3 split on the source feature"
+  lock_policy: "One source feature only, one IS-derived threshold only, no sibling features in this prereg."
+
+hypotheses:
+  - id: H01_SOURCE_ORB_SIZE_NORM_HIGH_Q3
+    type: primary
+    theory_citation: |
+      RESEARCH_RULES.md states that MGC US_DATA_830 size should be interpreted as
+      a volatility-transmission state for later equity-index ORBs, not as a
+      directional predictor.
+    statement: |
+      On the unfiltered MNQ NYSE_OPEN O5 E2 RR1.0 CB1 lane, days when same-day
+      MGC US_DATA_830 source_orb_size_norm is in the IS-derived upper quartile
+      have higher target-lane ExpR than off-signal days.
+    pass_metric:
+      metric: "delta_IS = ExpR_on_signal - ExpR_off_signal"
+      formula: "compare target pnl_r means on source_orb_size_norm_HIGH_Q3 vs off-signal within the locked target lane"
+      threshold_gte:
+        delta_is: 0.10
+        expr_on_is: 0.00
+        chordia_t: 3.0
+        n_on_is: 100
+        years_positive_is: 4
+      threshold_lt:
+        raw_p: 0.05
+      extra_gate: "dir_match_oos = true when N_on_OOS >= 5"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "2*ln(N_trials)/(E[max_N]^2)"
+    n_trials: 1
+    expected_max_n: 1.2
+    value: 0.0
+    within_cap: true
+    cap_reference: "docs/institutional/pre_registered_criteria.md Criterion 2"
+
+baseline:
+  descriptive_anchor:
+    source: "No new baseline numbers are claimed in this prereg."
+    note: "Target-lane and source-feature counts must be emitted by the runner from canonical data."
+
+kill_criteria:
+  - id: K1
+    metric: "raw_p"
+    threshold: ">= 0.05"
+    action: KILL
+  - id: K2
+    metric: "chordia_t"
+    threshold: "< 3.0"
+    action: KILL
+  - id: K3
+    metric: "delta_IS"
+    threshold: "< 0.10"
+    action: KILL
+  - id: K4
+    metric: "dir_match_oos"
+    threshold: "false when N_on_OOS >= 5"
+    action: PARK
+  - id: K5
+    metric: "N_on_OOS"
+    threshold: "< 10"
+    action: PARK
+
+decision_rule:
+  continue_if: "H01 passes the IS gates and chronology audit"
+  park_if: "H01 passes IS gates but OOS remains too thin for a hard continuation decision"
+  kill_if: "H01 fails any IS gate or shows an OOS sign flip when OOS N is usable"
+
+methodology_rules_applied:
+  - rule: "RULE 3 sacred holdout"
+    application: "Holdout untouched except for descriptive validation."
+  - rule: "RULE 4 multiple testing"
+    application: "Current study is K=1."
+  - rule: "RULE 6 trade-time knowability"
+    application: "Source feature must be complete before target trade eligibility."
+  - rule: "RULE 7 tautology"
+    application: "Source-session volatility context must be tested against target-lane proxy redundancy in the runner."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-04-22-mgc-us-data-830-to-mnq-nyse-open-context-v1.md"
+  - "row-level CSV with source feature fire, target pnl_r, IS/OOS split, and per-year breakdown"
+  - "explicit chronology audit section proving source completion precedes target trade eligibility"
+
+execution_gate:
+  allowed_now: true
+  forbidden_now:
+    - "adding MES as a sibling target in the same study"
+    - "adding direction-conditioned source predicates"
+    - "widening to US_DATA_1000 or other target sessions"
+    - "replacing the source session feature with generic cross_atr_MGC_pct"
+
+not_done_by_this_pre_reg:
+  - "Does not test MES."
+  - "Does not test target direction asymmetry."
+  - "Does not claim deployment readiness."
+  - "Does not reopen HTF work."

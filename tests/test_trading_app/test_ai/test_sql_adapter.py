@@ -1,0 +1,370 @@
+"""Tests for trading_app.ai.sql_adapter."""
+
+import pandas as pd
+import pytest
+
+from trading_app.ai.sql_adapter import (
+    _DST_SESSION_MAP,
+    _TEMPLATES,
+    MAX_RESULT_ROWS,
+    VALID_CONFIRM_BARS,
+    VALID_ENTRY_MODELS,
+    VALID_ORB_LABELS,
+    VALID_RR_TARGETS,
+    QueryIntent,
+    QueryTemplate,
+    SQLAdapter,
+    _compute_group_stats,
+    _orb_size_filter_sql,
+    _validate_confirm_bars,
+    _validate_entry_model,
+    _validate_filter_type,
+    _validate_orb_label,
+    _validate_rr_target,
+)
+
+
+class TestQueryTemplate:
+    """Test template enum."""
+
+    def test_all_templates_have_sql(self):
+        for t in QueryTemplate:
+            assert t in _TEMPLATES, f"Template {t} missing SQL"
+
+    def test_no_write_keywords_in_templates(self):
+        """CRITICAL: No INSERT/UPDATE/DELETE/DROP in any template."""
+        write_keywords = ["INSERT", "UPDATE", "DELETE", "DROP"]
+        for t, sql in _TEMPLATES.items():
+            sql_upper = sql.upper()
+            for kw in write_keywords:
+                assert kw not in sql_upper, f"Template {t.value} contains forbidden keyword: {kw}"
+
+    def test_all_templates_are_select(self):
+        """All templates must be SELECT queries."""
+        for t, sql in _TEMPLATES.items():
+            # TABLE_COUNTS uses a different pattern
+            if t == QueryTemplate.TABLE_COUNTS:
+                assert "COUNT(*)" in sql
+                continue
+            assert "SELECT" in sql.upper(), f"Template {t.value} is not a SELECT"
+
+    def test_template_count(self):
+        assert len(QueryTemplate) == 18
+
+
+class TestParameterValidation:
+    """Test parameter validation functions."""
+
+    def test_valid_orb_labels(self):
+        for label in VALID_ORB_LABELS:
+            assert _validate_orb_label(label) == label
+
+    def test_invalid_orb_label_raises(self):
+        with pytest.raises(ValueError, match="Invalid ORB label"):
+            _validate_orb_label("0800")
+
+    def test_valid_entry_models(self):
+        for em in VALID_ENTRY_MODELS:
+            assert _validate_entry_model(em) == em
+
+    def test_invalid_entry_model_raises(self):
+        with pytest.raises(ValueError, match="Invalid entry model"):
+            _validate_entry_model("E4")
+
+    def test_valid_filter_type(self):
+        assert _validate_filter_type("ORB_G4") == "ORB_G4"
+        assert _validate_filter_type("NO_FILTER") == "NO_FILTER"
+        assert _validate_filter_type("VOL_RV12_N20") == "VOL_RV12_N20"
+
+    def test_invalid_filter_type_raises(self):
+        with pytest.raises(ValueError, match="Invalid filter_type"):
+            _validate_filter_type("HACKED_FILTER")
+
+    def test_sql_injection_in_orb_label_blocked(self):
+        """Injection via orb_label is blocked by allowlist."""
+        with pytest.raises(ValueError):
+            _validate_orb_label("0900; DROP TABLE --")
+
+    def test_sql_injection_in_entry_model_blocked(self):
+        with pytest.raises(ValueError):
+            _validate_entry_model("E1' OR '1'='1")
+
+    def test_sql_injection_in_filter_type_blocked(self):
+        with pytest.raises(ValueError):
+            _validate_filter_type("'; DROP TABLE validated_setups; --")
+
+
+class TestSQLAdapterBuildQuery:
+    """Test query building without DB access."""
+
+    def test_build_query_strategy_lookup(self):
+        adapter = SQLAdapter.__new__(SQLAdapter)
+        adapter.db_path = "dummy.db"
+        sql, params = adapter._build_query(
+            QueryTemplate.STRATEGY_LOOKUP,
+            {"orb_label": "CME_REOPEN", "limit": 10},
+        )
+        assert "SELECT" in sql
+        assert "validated_setups" in sql
+        assert params == ["CME_REOPEN", 10]
+
+    def test_build_query_with_multiple_params(self):
+        adapter = SQLAdapter.__new__(SQLAdapter)
+        adapter.db_path = "dummy.db"
+        sql, params = adapter._build_query(
+            QueryTemplate.STRATEGY_LOOKUP,
+            {"orb_label": "LONDON_METALS", "entry_model": "E3", "filter_type": "ORB_G4", "limit": 20},
+        )
+        assert "CME_REOPEN" not in str(params)
+        assert "LONDON_METALS" in params
+        assert "E3" in params
+        assert "ORB_G4" in params
+
+    def test_limit_capped_at_max(self):
+        adapter = SQLAdapter.__new__(SQLAdapter)
+        adapter.db_path = "dummy.db"
+        _, params = adapter._build_query(
+            QueryTemplate.STRATEGY_LOOKUP,
+            {"limit": 9999},
+        )
+        assert params[-1] == MAX_RESULT_ROWS
+
+    def test_default_limit(self):
+        adapter = SQLAdapter.__new__(SQLAdapter)
+        adapter.db_path = "dummy.db"
+        _, params = adapter._build_query(
+            QueryTemplate.STRATEGY_LOOKUP,
+            {},
+        )
+        assert params[-1] == 50
+
+
+class TestAvailableTemplates:
+    def test_returns_all(self):
+        templates = SQLAdapter.available_templates()
+        assert len(templates) == len(QueryTemplate)
+        for t in templates:
+            assert "template" in t
+            assert "description" in t
+
+
+class TestNewParameterValidation:
+    """Test rr_target and confirm_bars validation."""
+
+    def test_valid_rr_targets(self):
+        for rr in VALID_RR_TARGETS:
+            assert _validate_rr_target(rr) == rr
+
+    def test_rr_target_from_string(self):
+        assert _validate_rr_target("2.0") == 2.0
+
+    def test_invalid_rr_target_raises(self):
+        with pytest.raises(ValueError, match="Invalid rr_target"):
+            _validate_rr_target(0.5)
+
+    def test_valid_confirm_bars(self):
+        for cb in VALID_CONFIRM_BARS:
+            assert _validate_confirm_bars(cb) == cb
+
+    def test_confirm_bars_from_string(self):
+        assert _validate_confirm_bars("2") == 2
+
+    def test_invalid_confirm_bars_raises(self):
+        with pytest.raises(ValueError, match="Invalid confirm_bars"):
+            _validate_confirm_bars(6)
+
+
+class TestOrbSizeFilterSQL:
+    """Test ORB size filter SQL generation."""
+
+    def test_no_filter_returns_none(self):
+        assert _orb_size_filter_sql("NO_FILTER", "CME_REOPEN") is None
+
+    def test_none_returns_none(self):
+        assert _orb_size_filter_sql(None, "CME_REOPEN") is None
+
+    def test_orb_g4(self):
+        result = _orb_size_filter_sql("ORB_G4", "TOKYO_OPEN")
+        assert result == "d.orb_TOKYO_OPEN_size >= 4"
+
+    def test_orb_g6(self):
+        result = _orb_size_filter_sql("ORB_G6", "CME_REOPEN")
+        assert result == "d.orb_CME_REOPEN_size >= 6"
+
+    def test_orb_l8(self):
+        result = _orb_size_filter_sql("ORB_L8", "TOKYO_OPEN")
+        assert result == "d.orb_TOKYO_OPEN_size < 8"
+
+    def test_band_filter_g4_l12(self):
+        """Band filter ORB_G4_L12 produces >= AND < clause."""
+        result = _orb_size_filter_sql("ORB_G4_L12", "TOKYO_OPEN")
+        assert "d.orb_TOKYO_OPEN_size >= 4" in result
+        assert "d.orb_TOKYO_OPEN_size < 12" in result
+
+    def test_band_filter_g5_l12(self):
+        result = _orb_size_filter_sql("ORB_G5_L12", "CME_REOPEN")
+        assert "d.orb_CME_REOPEN_size >= 5" in result
+        assert "d.orb_CME_REOPEN_size < 12" in result
+
+    def test_cost_filter_lt10(self):
+        result = _orb_size_filter_sql("COST_LT10", "TOKYO_OPEN")
+        assert "100.0 * (CASE d.symbol" in result
+        assert "d.orb_TOKYO_OPEN_size" in result
+        assert "< 10" in result
+
+    def test_vol_filter_raises(self):
+        """VOL_ filters can't be applied in SQL — must fail-closed."""
+        with pytest.raises(ValueError, match="requires Python-side evaluation"):
+            _orb_size_filter_sql("VOL_RV12_N20", "CME_REOPEN")
+
+    def test_dir_filter_raises(self):
+        """DIR_ filters can't be applied in SQL — must fail-closed."""
+        with pytest.raises(ValueError, match="requires Python-side evaluation"):
+            _orb_size_filter_sql("DIR_LONG", "CME_REOPEN")
+
+    def test_composite_filter_raises(self):
+        """Composite ORB+DOW filters can't be applied in SQL — must fail-closed."""
+        with pytest.raises(ValueError, match="non-ORB component"):
+            _orb_size_filter_sql("ORB_G4_NOFRI", "CME_REOPEN")
+
+    def test_invalid_prefix_raises(self):
+        with pytest.raises(ValueError, match="Invalid filter_type"):
+            _orb_size_filter_sql("HACKED", "CME_REOPEN")
+
+
+class TestComputeGroupStats:
+    """Test stats computation helper."""
+
+    def test_empty_dataframe(self):
+        df = pd.DataFrame(columns=["pnl_r", "outcome"])
+        stats = _compute_group_stats(df)
+        assert stats["N"] == 0
+        assert stats["win_rate"] is None
+
+    def test_all_wins(self):
+        df = pd.DataFrame(
+            {
+                "pnl_r": [1.0, 1.0, 1.0],
+                "outcome": ["win", "win", "win"],
+            }
+        )
+        stats = _compute_group_stats(df)
+        assert stats["N"] == 3
+        assert stats["win_rate"] == 100.0
+        assert stats["avg_pnl_r"] == 1.0
+
+    def test_mixed_outcomes(self):
+        df = pd.DataFrame(
+            {
+                "pnl_r": [2.0, -1.0, 2.0, -1.0],
+                "outcome": ["win", "loss", "win", "loss"],
+            }
+        )
+        stats = _compute_group_stats(df)
+        assert stats["N"] == 4
+        assert stats["win_rate"] == 50.0
+        assert stats["avg_pnl_r"] == 0.5
+        assert stats["sharpe"] is not None
+
+    def test_constant_pnl_sharpe_none(self):
+        """Zero std dev → sharpe is None."""
+        df = pd.DataFrame(
+            {
+                "pnl_r": [1.0, 1.0, 1.0],
+                "outcome": ["win", "win", "win"],
+            }
+        )
+        stats = _compute_group_stats(df)
+        # std of constant series is 0 → sharpe None
+        assert stats["sharpe"] is None
+
+
+class TestDSTSessionMap:
+    """Test DST session mapping."""
+
+    def test_dst_map_empty(self):
+        """All sessions are now dynamic — DST map should be empty."""
+        assert len(_DST_SESSION_MAP) == 0
+
+    def test_all_sessions_absent_from_dst_map(self):
+        """No session should be in DST map since all are dynamic."""
+        assert "CME_REOPEN" not in _DST_SESSION_MAP
+        assert "TOKYO_OPEN" not in _DST_SESSION_MAP
+        assert "LONDON_METALS" not in _DST_SESSION_MAP
+
+
+class TestBuildOutcomesBase:
+    """Test SAFE_JOIN query builder (no DB needed)."""
+
+    def _make_adapter(self):
+        adapter = SQLAdapter.__new__(SQLAdapter)
+        adapter.db_path = "dummy.db"
+        return adapter
+
+    def test_basic_query(self):
+        adapter = self._make_adapter()
+        sql, bind = adapter._build_outcomes_base({"instrument": "MGC", "orb_label": "CME_REOPEN"})
+        assert "orb_outcomes o" in sql
+        assert "daily_features d" in sql
+        assert "o.orb_minutes = d.orb_minutes" in sql
+        assert bind == ["MGC", "CME_REOPEN"]
+
+    def test_all_params(self):
+        adapter = self._make_adapter()
+        sql, bind = adapter._build_outcomes_base(
+            {
+                "instrument": "MNQ",
+                "orb_label": "TOKYO_OPEN",
+                "entry_model": "E2",
+                "rr_target": 2.0,
+                "confirm_bars": 1,
+                "filter_type": "ORB_G4",
+            }
+        )
+        assert "o.entry_model = ?" in sql
+        assert "o.rr_target = ?" in sql
+        assert "o.confirm_bars = ?" in sql
+        assert "d.orb_TOKYO_OPEN_size >= 4" in sql
+        assert bind == ["MNQ", "TOKYO_OPEN", "E2", 2.0, 1]
+
+    def test_band_filter_in_outcomes(self):
+        """Band filter ORB_G4_L12 should work in _build_outcomes_base."""
+        adapter = self._make_adapter()
+        sql, bind = adapter._build_outcomes_base(
+            {
+                "instrument": "MGC",
+                "orb_label": "TOKYO_OPEN",
+                "filter_type": "ORB_G4_L12",
+            }
+        )
+        assert "d.orb_TOKYO_OPEN_size >= 4" in sql
+        assert "d.orb_TOKYO_OPEN_size < 12" in sql
+
+    def test_missing_orb_label_raises(self):
+        adapter = self._make_adapter()
+        with pytest.raises(ValueError, match="orb_label is required"):
+            adapter._build_outcomes_base({"instrument": "MGC"})
+
+    def test_extra_cols(self):
+        adapter = self._make_adapter()
+        sql, _ = adapter._build_outcomes_base({"orb_label": "CME_REOPEN"}, extra_cols="o.entry_model")
+        assert "o.entry_model" in sql
+
+
+class TestNewTemplatesSafeJoin:
+    """Verify all new templates use the SAFE_JOIN pattern."""
+
+    def test_outcomes_templates_have_safe_join(self):
+        """All 5 new templates must join on trading_day + symbol + orb_minutes."""
+        new_templates = [
+            QueryTemplate.OUTCOMES_STATS,
+            QueryTemplate.ENTRY_MODEL_COMPARE,
+            QueryTemplate.DOW_BREAKDOWN,
+            QueryTemplate.DST_SPLIT,
+            QueryTemplate.FILTER_COMPARE,
+        ]
+        for t in new_templates:
+            sql = _TEMPLATES[t]
+            assert "o.trading_day = d.trading_day" in sql, f"{t.value}: missing trading_day join"
+            assert "o.symbol = d.symbol" in sql, f"{t.value}: missing symbol join"
+            assert "o.orb_minutes = d.orb_minutes" in sql, f"{t.value}: missing orb_minutes join"

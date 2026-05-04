@@ -1,0 +1,139 @@
+You are Claude Code operating in the MPX3 repo.
+
+SELF-IDENTIFY (MANDATORY FIRST)
+1) Print: git branch, git status, HEAD commit hash
+2) Print: which DB file you are using (path)
+3) Print: the exact file(s) you will touch (paths)
+4) Print (≤7 bullets): what “walk-forward” means in THIS repo + where it is currently missing
+
+FAIL-CLOSED RULES
+- PASS 1 = AUDIT ONLY (no edits)
+- PASS 2 = MINIMAL IMPLEMENTATION ONLY (no refactors)
+- NO DB/schema changes
+- NO trading logic changes in outcome_builder / entry_rules / validator
+- Walk-forward must be implemented as an evaluation layer on top of existing outcomes + discovery + validation.
+- If anything is ambiguous, STOP and ask.
+
+GOAL
+Implement REAL walk-forward evaluation so strategies are assessed out-of-sample:
+- Train window: N years (default 3)Based on the "Forecast-to-Fill" methodology and rigorous backtesting standards found in the sources, you should strictly keep the Nested ORB implementation as a Parallel Research Track, not a replacement.
+Here is the justification and the architectural plan to execute this without breaking your existing valid baseline.
+1. The Decision: Parallel Track
+Verdict: Do not replace the current system. Run Nested ORB alongside the 5-minute ORB.
+Why?
+• The "Control Group" Necessity: To prove that the Nested ORB (15m/30m range + 5m confirmation) is superior, you must benchmark it against your existing 5m/1m system. If you replace the system, you lose the ability to calculate the "Structural Premium"—the specific Sharpe ratio improvement gained by filtering microstructure noise [Source 633, 634].
+• Regime Sensitivity: It is highly probable that the 5-minute/1-minute system performs better in high-volatility regimes (fast breakouts), while the Nested system performs better in "grinding" trends. Running them in parallel allows your portfolio optimizer to eventually allocate to both based on the market regime [Source 727, 728].
+• Granularity Risks: Moving from 1-minute to 5-minute confirmation bars reduces signal frequency. You need to verify if the reduction in trade count (sample size) threatens statistical significance (dropping below ~200 trades) [Source 837, 840].
+2. Architectural Implementation
+You correctly identified that the data flow changes. Here is how to implement the parallel track with minimal friction.
+A. Database Schema Update (orb_outcomes)
+You do not need a new table. You need to expand the Primary Key (PK) of orb_outcomes to include the decision resolution.
+• Current PK: (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars, entry_model)
+• New PK: (..., entry_resolution)
+Values:
+• '1m': Legacy system (Current).
+• '5m': Nested system (New).
+B. The outcome_builder Logic
+You need to modify compute_single_outcome to accept a resample_interval parameter.
+• Logic Flow:
+    1. Load Data: Load 1-minute OHLCV data (as usual).
+    2. ORB Calculation: Calculate the ORB levels (High/Low) using 1-minute data for the first 15 or 30 minutes. This remains 1-minute precision to capture the exact wick.
+    3. Resampling (The New Step):
+        ▪ If entry_resolution == '5m': Resample the post-ORB session data into 5-minute bars.
+        ▪ Crucial Detail: Ensure the timestamp alignment is correct (e.g., the 09:30-09:35 bar closes at 09:35:00).
+    4. Confirmation Logic:
+        ▪ Standard (1m): confirm_bars=5 means 5 consecutive 1-min closes.
+        ▪ Nested (5m): confirm_bars=1 means 1 consecutive 5-min close.
+    5. Entry Execution:
+        ▪ E1 (Market): Enter at Open of the next 5-min bar.
+        ▪ E3 (Limit): Use the 1-minute data inside the 5-minute bar to check for fill accuracy (checking low/high of the underlying 1m bars against the limit price). This maintains "Forecast-to-Fill" precision even on higher timeframe signals [Source 666].
+3. Immediate Action Plan
+To execute this parallel track efficiently:
+1. Migration: Add entry_resolution column to orb_outcomes (default to '1m' for existing rows).
+2. Refactor: Update outcome_builder.py to handle the resampling step after ORB calculation but before signal detection.
+3. Execution: Run the builder for:
+    ◦ orb_minutes:
+    ◦ entry_resolution: ['5m']
+    ◦ confirm_bars: (Since 1 bar = 5 mins, 2 bars = 10 mins).
+This approach treats the "Nested ORB" as a regime filter overlay on your existing architecture, rather than a rewrite, aligning with the "Selective Classification" approach of retaining multiple valid models [Source 1, 3].
+- Test window: M years (default 1)
+- Slide forward by M years and repeat
+- Output: per-fold metrics + aggregated OOS metrics per strategy
+- Must be callable from CLI (paper_trader or a new script) using flags already mentioned in docstring:
+  --walk-forward --train-years 3 --test-years 1
+
+CONSTRAINTS
+- Must reuse existing strategy definitions and existing outcomes tables (orb_outcomes + daily_features eligibility)
+- Must not “peek” across folds:
+  - any thresholds/filters that require historical baselines (e.g., relative volume baselines) must be computed using TRAIN data only for that fold
+  - if that is too large to implement now, then explicitly disable volume filter in walk-forward or implement fold-safe baseline calc (choose one and justify)
+
+PASS 1 — AUDIT (NO EDITS)
+1) Find where CLI flags are documented (paper_trader docstring etc).
+2) Search repo for:
+   - walk-forward
+   - train-years / test-years
+   - out-of-sample / OOS
+   Report findings with file+line.
+3) Identify the minimal insertion point:
+   - Where strategies are enumerated (experimental_strategies / validated_setups)
+   - Where per-day outcomes are assembled per strategy (strategy_discovery / portfolio series builder)
+4) Decide minimal architecture:
+   Option A (preferred): Add new module trading_app/walk_forward.py with pure functions:
+     - build_fold_splits(trading_days, train_years, test_years)
+     - compute_strategy_metrics(strategy_id, days_subset)
+     - walk_forward_eval(strategy_id, folds) -> per_fold + aggregate
+   Option B: implement inside paper_trader.py
+   You must justify choice based on existing structure.
+5) Define EXACT invariants you will enforce:
+   - OOS days never used in training fold metrics
+   - Strategy eligibility filtering applied identically in train/test
+   - Sample size threshold applied per test fold and/or across combined OOS (state it)
+6) Produce PASS 1 report:
+   - “What exists”
+   - “What’s missing”
+   - “Implementation plan”
+   - “Files to change”
+STOP after PASS 1.
+
+PASS 2 — IMPLEMENT (MINIMAL)
+1) Implement fold splitter:
+   - Use trading_day (Brisbane date) as fold axis
+   - Fold example:
+     Train: 2019-2021, Test: 2022
+     Train: 2020-2022, Test: 2023
+     ...
+2) Implement fold-safe evaluation:
+   For each strategy_id:
+   - Build daily series for the fold’s TEST days:
+     - eligible but no trade = 0.0
+     - ineligible = NaN
+     - overlay pnl_r only if eligible (reuse the fixed logic)
+   - Compute metrics on TEST days:
+     - trade_count
+     - ExpR (mean pnl_r on trade days or daily series mean—state which and keep consistent)
+     - MaxDD (on cumulative daily series, ignoring NaNs)
+     - Sharpe (daily) if available, else keep simple mean/std and state
+3) Aggregation:
+   - Provide combined OOS metrics across all test folds
+   - Provide per-fold table
+4) Wire CLI:
+   - Add flags to chosen entrypoint:
+     --walk-forward
+     --train-years
+     --test-years
+     --min-oos-trades (default 100)  (fail-closed)
+5) Output artifacts:
+   - Write CSV/JSON to a deterministic path (no DB writes), e.g.:
+     artifacts/walk_forward/{run_id}/walk_forward_summary.csv
+6) Tests (must add):
+   - test_fold_splitter_no_leakage (no overlap between train and test)
+   - test_metrics_on_subset_days (changing subset changes result deterministically)
+7) Run gates and paste outputs:
+   - pytest -q
+   - any repo drift checks
+8) Commit:
+   - “Add walk-forward OOS evaluation (train-years/test-years)”
+   - Print commit hash + diffstat
+
+STOP.

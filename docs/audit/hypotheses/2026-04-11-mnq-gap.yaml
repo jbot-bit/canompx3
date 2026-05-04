@@ -1,0 +1,276 @@
+# Hypothesis Registry — MNQ Opening Gap Gate
+#
+# Locked:        2026-04-11T01:00:00+10:00
+# Author:        Claude Code session (wave 4 lit-grounded discovery)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  6.65 calendar years (MNQ real micro 2019-05-06 to 2025-12-31)
+# Testing mode:  family (Pathway A, BH FDR at K=24)
+#
+# AUDIT NOTE: GAP_R015 requires abs(gap)/atr >= 0.015.
+# Passes ~25% of MNQ trading days — meaningful selectivity.
+# Large opening gaps signal overnight information arrival that
+# produces stronger directional conviction at breakout.
+
+metadata:
+  name: "mnq-gap"
+  purpose: |
+    Test whether large opening gaps (abs(gap)/atr >= 0.015) predict
+    stronger ORB breakout edge on MNQ. Opening gaps reflect overnight
+    information arrival and institutional positioning that should
+    produce stronger directional conviction during subsequent breakouts.
+  date_locked: "2026-04-11T01:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.65
+  data_source: "real CME Micro E-mini Nasdaq-100 futures 2019-05-06 onwards"
+  testing_mode: "family"
+  bailey_compliance:
+    trials: 24
+    horizon_years: 6.65
+    e_max_n: 1.0
+    min_btl_required_years: 6.36
+    headroom_pct: 4.4
+    status: "PASS"
+  total_expected_trials: 24
+
+hypotheses:
+  - id: 1
+    name: "MNQ TOKYO_OPEN GAP_R015 RR1.0"
+    theory_citation: "Bessembinder & Seguin (1993) JF price volatility and information; French & Roll (1986) JFE"
+    economic_basis: |
+      Large opening gap (abs(gap)/atr >= 1.5%) signals overnight information
+      arrival. Bessembinder & Seguin (1993) show volume-volatility relationship
+      driven by information flow. Overnight gaps concentrate this information,
+      producing stronger directional conviction at ORB breakout.
+    filter:
+      type: GAP_R015
+      column: gap_atr_ratio
+      thresholds: [0.015]
+    scope:
+      instruments: [MNQ]
+      sessions: [TOKYO_OPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=24"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 2
+    name: "MNQ SINGAPORE_OPEN GAP_R015 RR1.0"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Same gap-information mechanism. All sessions tested for honesty."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 3
+    name: "MNQ LONDON_METALS GAP_R015 RR1.0"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Same gap-information mechanism."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 4
+    name: "MNQ EUROPE_FLOW GAP_R015 RR1.0"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Same gap-information mechanism."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 5
+    name: "MNQ CME_REOPEN GAP_R015 RR1.0"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Same gap-information mechanism."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 6
+    name: "MNQ US_DATA_830 GAP_R015 RR1.0"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Same gap-information mechanism."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 7
+    name: "MNQ NYSE_OPEN GAP_R015 RR1.0"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Same gap-information mechanism."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 8
+    name: "MNQ US_DATA_1000 GAP_R015 RR1.0"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Same gap-information mechanism."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 9
+    name: "MNQ COMEX_SETTLE GAP_R015 RR1.0"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Same gap-information mechanism."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 10
+    name: "MNQ NYSE_CLOSE GAP_R015 RR1.0"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Same gap-information mechanism."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [NYSE_CLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 11
+    name: "MNQ CME_PRECLOSE GAP_R015 RR1.0"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Same gap-information mechanism."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 12
+    name: "MNQ BRISBANE_1025 GAP_R015 RR1.0"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Same gap-information mechanism."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [BRISBANE_1025], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 13
+    name: "MNQ TOKYO_OPEN GAP_R015 RR1.5"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Gap-information mechanism + higher RR for continuation."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 14
+    name: "MNQ SINGAPORE_OPEN GAP_R015 RR1.5"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Gap-information mechanism + higher RR."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 15
+    name: "MNQ LONDON_METALS GAP_R015 RR1.5"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Gap-information mechanism + higher RR."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 16
+    name: "MNQ EUROPE_FLOW GAP_R015 RR1.5"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Gap-information mechanism + higher RR."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 17
+    name: "MNQ CME_REOPEN GAP_R015 RR1.5"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Gap-information mechanism + higher RR."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 18
+    name: "MNQ US_DATA_830 GAP_R015 RR1.5"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Gap-information mechanism + higher RR."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 19
+    name: "MNQ NYSE_OPEN GAP_R015 RR1.5"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Gap-information mechanism + higher RR."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 20
+    name: "MNQ US_DATA_1000 GAP_R015 RR1.5"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Gap-information mechanism + higher RR."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 21
+    name: "MNQ COMEX_SETTLE GAP_R015 RR1.5"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Gap-information mechanism + higher RR."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 22
+    name: "MNQ NYSE_CLOSE GAP_R015 RR1.5"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Gap-information mechanism + higher RR."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [NYSE_CLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 23
+    name: "MNQ CME_PRECLOSE GAP_R015 RR1.5"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Gap-information mechanism + higher RR."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 24
+    name: "MNQ BRISBANE_1025 GAP_R015 RR1.5"
+    theory_citation: "Bessembinder & Seguin (1993) JF"
+    economic_basis: "Gap-information mechanism + higher RR."
+    filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
+    scope: { instruments: [MNQ], sessions: [BRISBANE_1025], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+total_hypothesis_count: 24
+total_expected_trials: 24
+budget_check:
+  mode: "clean"
+  max_allowed_clean: 300
+  strict_bailey_e_1_0_max_n: 27
+  data_horizon_years_available: 6.65
+  status: "under budget"

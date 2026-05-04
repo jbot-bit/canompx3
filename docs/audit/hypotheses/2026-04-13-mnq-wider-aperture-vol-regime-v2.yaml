@@ -1,0 +1,252 @@
+# Hypothesis Registry -- MNQ Wider Aperture (Vol-Regime Mechanism, v2)
+#
+# Locked:        2026-04-13T09:45:00+10:00
+# Author:        Claude Code session (redesigned from v1 after adversarial review)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  5.99 calendar years (MNQ real micro, WF_START_OVERRIDE 2020-01-01 to 2025-12-31)
+# Testing mode:  family (BH FDR at K=8)
+#
+# SUPERSEDES: 2026-04-13-mnq-wider-aperture-session-structure.yaml (SHA d1b9c9cb78d2)
+#   v1 had 4 flaws: (1) MinBTL miscalculated at 6.65yr (ignored WF_START_OVERRIDE,
+#   actual=5.99yr, K=24 FAILS), (2) ORB_G5 is vacuous at wider apertures (96% pass
+#   rate at 15m), (3) COST_LT12 also vacuous (99-100% pass at 15m/30m), (4) 12
+#   sessions included 4 dead ones (CME_PRECLOSE WR=7.9% at 15m). v1 produced 0/12
+#   BH survivors -- correct result given flawed filter.
+#
+# BLUEPRINT NO-GO AUDIT:
+#   Blueprint SS5 entry: "O15/O30 ORB aperture (as portfolio) | ARITHMETIC_ONLY |
+#   Friction artifact -- O5 gross R > O15 by 0.031R/trade on 24K matched pairs"
+#   Reopening criterion: "New mechanism hypothesis (not friction/size related)"
+#
+#   THIS HYPOTHESIS IS MECHANISM-DISTINCT: vol-regime conditional filtering
+#   (ATR_P50/P70/X_MES_ATR60) is not friction-related. These filters select
+#   HIGH-VOLATILITY DAYS where directional information aggregates into a
+#   meaningful 15-30m range. On low-vol days, wider apertures capture noise
+#   (the NO-GO friction finding). On high-vol days, they capture directional
+#   commitment. SINGAPORE_OPEN sign-flip (5m=-0.0003, 30m=+0.086) proves
+#   the mechanism is structural, not arithmetic.
+#
+# CUMULATIVE K ACCOUNTING:
+#   v1 tested K=12 (15m x 12 sessions x ORB_G5). This v2 tests K=8
+#   (different filters, different sessions, different economic rationale).
+#   Treating as separate families because: (a) different filters (vol-regime
+#   vs size-gate), (b) different sessions (3 vs 12), (c) different mechanism
+#   hypothesis. v1 answered "Does ORB_G5 work at 15m?" (No). v2 asks
+#   "Do vol-regime filters work at wider apertures?" (different question).
+#   If an auditor disagrees, cumulative K=20 at 5.99yr yields MinBTL=5.99yr
+#   (exact boundary) -- marginal but not violated.
+#
+# FILTER SELECTION RATIONALE (aperture-invariance required):
+#   ORB_G5: 96% pass at 15m/30m --> VACUOUS. Rejected.
+#   ORB_G8: 80% pass --> too permissive. Rejected.
+#   COST_LT12: 99%/100% pass at 15m/30m --> VACUOUS (wider ORB = bigger risk$). Rejected.
+#   OVNRNG_100: 3% pass --> N~45 per session, too few for significance. Rejected.
+#   ATR_P50: 55% pass, IDENTICAL across O5/O15/O30 (0 mismatches). SELECTED.
+#   ATR_P70: 38% pass, IDENTICAL across apertures. SELECTED (stricter vol gate).
+#   X_MES_ATR60: ~40% pass, aperture-independent (cross-asset). SELECTED (US sessions).
+#
+# BIAS PREVENTION:
+#   - Unfiltered baselines observed before filter selection, but NO filtered
+#     results were seen for ATR_P50/P70/X_MES_ATR60 at any aperture
+#   - Filter types chosen on aperture-invariance math, not signal peeking
+#   - Sessions chosen on: (a) sign-flip (SINGAPORE_OPEN), (b) TRADING_RULES
+#     validated premium (TOKYO_OPEN line 277), (c) matched 5m performance
+#     (US_DATA_1000). NOT on seeing filtered results.
+#   - LONDON_METALS dropped after adversarial review (correlated duplicate risk)
+#   - Kill criteria defined BEFORE any filtered results seen
+#   - RR fixed at 1.5 (pre-committed, not optimized)
+#
+# LOOK-AHEAD CHECK:
+#   - daily_features at orb_minutes=15/30 contain orb_{SESSION}_size, break_dir,
+#     break_ts -- all computed from bars WITHIN the aperture window (t < entry_time)
+#   - ATR_P50/P70 use atr_20_pct (trailing 20-day ATR percentile) -- strictly past
+#   - X_MES_ATR60 uses cross-asset ATR percentile -- strictly past, different instrument
+#   - No cross-aperture leakage in outcome_builder
+#
+# LITERATURE GROUNDING:
+#   - Chan (2009) "Quantitative Trading" Ch 1-2: regime-conditional signal
+#     behavior. @canonical-source resources/Quantitative_Trading_Chan_2008.pdf
+#   - Ito, Engle, Lin (1992) JIE: intraday volatility patterns differ by
+#     timezone/session due to institutional trading flows. FROM TRAINING MEMORY.
+#   - TRADING_RULES.md line 277: "TOKYO_OPEN is the ONLY session where 15m
+#     ORB beats 5m (+0.208R premium, 90% of pairs improve)." @canonical-source.
+
+metadata:
+  name: "mnq-wider-aperture-vol-regime-v2"
+  purpose: |
+    Test whether vol-regime filters (ATR_P50, ATR_P70, X_MES_ATR60) produce
+    tradeable edges at wider apertures (15m/30m) for sessions where:
+    (a) 5m has no edge (SINGAPORE_OPEN sign-flip -- NEW ACCESS), or
+    (b) 15m is validated as stronger than 5m (TOKYO_OPEN -- ADDITIVE), or
+    (c) 15m matches 5m with different trade-day coverage (US_DATA_1000 -- ADDITIVE).
+    Vol-regime filters are aperture-invariant (identical pass rates at O5/O15/O30)
+    and select high-volatility days where wider apertures capture directional
+    commitment rather than noise. This is mechanism-distinct from the NO-GO
+    friction finding.
+  date_locked: "2026-04-13T09:45:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 5.99
+  data_source: "real CME Micro E-mini Nasdaq-100 futures, WF_START_OVERRIDE=2020-01-01"
+  testing_mode: "family"
+  bailey_compliance:
+    trials: 8
+    horizon_years: 5.99
+    e_max_n: 1.0
+    min_btl_required_years: 4.16
+    headroom_pct: 30.6
+    status: "PASS"
+  total_expected_trials: 8
+
+hypotheses:
+  # --- SINGAPORE_OPEN: NEW ACCESS (sign flip) ---
+  # 5m unfiltered ExpR = -0.0003 (zero). 15m = +0.054. 30m = +0.086.
+  # The ONLY session with a genuine sign flip at wider apertures.
+
+  - id: 1
+    name: "MNQ SINGAPORE_OPEN 15m ATR_P50 RR1.5"
+    theory_citation: "Ito, Engle, Lin (1992) JIE; sign-flip evidence from unfiltered baselines"
+    economic_basis: |
+      Singapore session has near-zero 5m edge (-0.0003) but positive 15m (+0.054).
+      Slow information aggregation from staggered Asian institutional flow needs
+      >5 minutes to establish directional commitment. ATR_P50 selects days with
+      sufficient volatility for the wider range to be meaningful.
+    claim_type: "NEW_ACCESS"
+    filter: { type: ATR_P50, column: atr_20_pct, thresholds: [50] }
+    scope:
+      instruments: [MNQ]
+      sessions: [SINGAPORE_OPEN]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [15]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=8"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+      - "T1 WR monotonicity: WR flat + payoff rising = ARITHMETIC_ONLY"
+      - "Correlation rho > 0.70 against deployed 5m portfolio"
+
+  - id: 2
+    name: "MNQ SINGAPORE_OPEN 15m ATR_P70 RR1.5"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: "Same mechanism as ID 1, stricter vol gate (38% pass rate vs 55%)."
+    claim_type: "NEW_ACCESS"
+    filter: { type: ATR_P70, column: atr_20_pct, thresholds: [70] }
+    scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 at K=8", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY", "Correlation > 0.70"]
+
+  - id: 3
+    name: "MNQ SINGAPORE_OPEN 30m ATR_P50 RR1.5"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: |
+      30m SINGAPORE_OPEN has the strongest wider-aperture baseline (+0.086,
+      significant). Extended Asian price discovery -- 30m captures full
+      equilibrium on vol-conditioned days.
+    claim_type: "NEW_ACCESS"
+    filter: { type: ATR_P50, column: atr_20_pct, thresholds: [50] }
+    scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 at K=8", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY", "Correlation > 0.70"]
+
+  - id: 4
+    name: "MNQ SINGAPORE_OPEN 30m ATR_P70 RR1.5"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: "Same as ID 3, stricter vol gate."
+    claim_type: "NEW_ACCESS"
+    filter: { type: ATR_P70, column: atr_20_pct, thresholds: [70] }
+    scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 at K=8", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY", "Correlation > 0.70"]
+
+  # --- TOKYO_OPEN: ADDITIVE (TRADING_RULES validated 15m premium) ---
+  # 5m = +0.083. 15m = +0.066. 5m is stronger per-trade, but TRADING_RULES
+  # line 277 validates +0.208R premium at 15m with 90% pair improvement.
+  # The 15m adds diversification (different trade-day coverage).
+
+  - id: 5
+    name: "MNQ TOKYO_OPEN 15m ATR_P50 RR1.5"
+    theory_citation: "TRADING_RULES.md line 277; Ito, Engle, Lin (1992)"
+    economic_basis: |
+      TOKYO_OPEN has a validated 15m premium (+0.208R, 90% pairs improve per
+      TRADING_RULES). Asian session price discovery takes 10-15 minutes due to
+      lower liquidity. ATR_P50 selects vol-regime days where the 15m range is
+      directional rather than noise.
+    claim_type: "ADDITIVE"
+    filter: { type: ATR_P50, column: atr_20_pct, thresholds: [50] }
+    scope: { instruments: [MNQ], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 at K=8", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY", "Correlation > 0.70"]
+
+  - id: 6
+    name: "MNQ TOKYO_OPEN 15m ATR_P70 RR1.5"
+    theory_citation: "TRADING_RULES.md line 277; Ito, Engle, Lin (1992)"
+    economic_basis: "Same as ID 5, stricter vol gate."
+    claim_type: "ADDITIVE"
+    filter: { type: ATR_P70, column: atr_20_pct, thresholds: [70] }
+    scope: { instruments: [MNQ], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 at K=8", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY", "Correlation > 0.70"]
+
+  # --- US_DATA_1000: ADDITIVE (matched 5m, trade-day diversification) ---
+  # 5m = +0.095. 15m = +0.094. Nearly identical per-trade. But 15m trades
+  # on different days (wider aperture filters differently), adding portfolio
+  # diversification without replacing 5m.
+
+  - id: 7
+    name: "MNQ US_DATA_1000 15m ATR_P50 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: |
+      10:00 AM data release (ISM, consumer confidence) -- full market reaction
+      takes 10-15 minutes as algorithms parse and institutional desks reposition.
+      ATR_P50 selects high-vol days where the data reaction is stronger.
+      15m matches 5m ExpR (+0.094 vs +0.095), adding trade-day diversification.
+    claim_type: "ADDITIVE"
+    filter: { type: ATR_P50, column: atr_20_pct, thresholds: [50] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 at K=8", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY", "Correlation > 0.70"]
+
+  - id: 8
+    name: "MNQ US_DATA_1000 15m X_MES_ATR60 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: |
+      Same data-release mechanism as ID 7. X_MES_ATR60 uses cross-asset
+      (MES) vol regime instead of own-instrument ATR. This is the strongest
+      filter type among 5m validated MNQ strategies (avg ExpR=+0.142 across
+      6 validated strategies). In-grid for US_DATA_1000.
+    claim_type: "ADDITIVE"
+    filter: { type: X_MES_ATR60, column: cross_atr_MES_pct, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 at K=8", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY", "Correlation > 0.70"]
+
+total_hypothesis_count: 8
+total_expected_trials: 8
+budget_check:
+  mode: "clean"
+  max_allowed_clean: 300
+  strict_bailey_e_1_0_max_n: 20
+  data_horizon_years_available: 5.99
+  status: "under budget"
+
+# ADDITIONAL CONTROLS:
+#
+# 1. T1 WR MONOTONICITY: every survivor must show WR spread > 5% across
+#    ATR quintiles. If WR is flat + only payoff rising, classify as
+#    ARITHMETIC_ONLY and do NOT deploy (NO-GO still applies for friction).
+#
+# 2. CORRELATION GATE: every survivor must pass the trade-level
+#    correlation gate (trading_app/lane_correlation.py) against the
+#    deployed 5m portfolio before deployment. rho > 0.70 = reject.
+#
+# 3. SIGN-FLIP VERIFICATION: SINGAPORE_OPEN survivors must confirm
+#    5m edge is negative/zero for that session. If 5m is positive,
+#    the wider aperture is not opening a new session.
+#
+# 4. PORTFOLIO SHARPE TEST: after individual screening, build a
+#    combined 5m+survivor portfolio and verify Sharpe improves vs
+#    5m-only. If portfolio Sharpe DECREASES, survivors add noise.

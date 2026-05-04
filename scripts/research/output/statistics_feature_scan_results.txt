@@ -1,0 +1,62 @@
+======================================================================
+EXCHANGE STATISTICS FEATURE SCAN
+Settlement price + cleared volume as ORB predictors
+======================================================================
+
+--- PHASE 1: EXTRACTING STATISTICS ---
+  MES... 4723 days
+  MGC... 4788 days
+  MNQ... 4792 days
+
+Total: 14303 instrument-days of statistics
+
+--- PHASE 2: JOIN WITH DAILY_FEATURES ---
+Merged rows: 13400, valid (non-null): 13313
+
+======================================================================
+T0: TAUTOLOGY CHECK
+======================================================================
+
+  H1 tautology: corr(prev_settlement, prev_day_close) = 0.999987
+  H1 tautology: corr(settle_gap/atr, close_gap/atr) = 0.408635
+  Mean |settle - close|: 8.5385
+
+  >>> H1: PASSES T0 (r=0.4086 < 0.70)
+
+  H2 tautology: corr(cleared_vol_ratio, atr_20) = -0.0071
+  H2 tautology: corr(cleared_vol_ratio, overnight_range) = 0.0551
+
+  >>> H2: PASSES T0 (r=-0.0071 < 0.70)
+
+======================================================================
+T1: WIN RATE MONOTONICITY
+======================================================================
+
+  Total tests: K=64
+  BH FDR significant: 0
+
+  Top 10 by p-value:
+  Feature              Inst  Session           WR_spread      N    p-value BH
+  --------------------------------------------------------------------------------
+  H2_CLEARED_VOL       MES   US_DATA_830          -6.3%   3817     0.0141 
+  H1_SETTLE_GAP        MGC   EUROPE_FLOW          +6.0%   3944     0.0179 
+  H2_CLEARED_VOL       MNQ   COMEX_SETTLE         -4.7%   3865     0.0669 
+  H1_SETTLE_GAP        MNQ   US_DATA_1000         +4.6%   3894     0.0681 
+  H2_CLEARED_VOL       MNQ   US_DATA_830          -4.6%   3881     0.0715 
+  H1_SETTLE_GAP        MES   LONDON_METALS        +4.4%   3891     0.0803 
+  H1_SETTLE_GAP        MNQ   TOKYO_OPEN           +3.9%   3938     0.1178 
+  H1_SETTLE_GAP        MGC   SINGAPORE_OPEN       +3.9%   3939     0.1183 
+  H1_SETTLE_GAP        MGC   TOKYO_OPEN           -3.8%   3948     0.1309 
+  H2_CLEARED_VOL       MNQ   NYSE_OPEN            -3.6%   3864     0.1542 
+
+  NO BH-significant results.
+
+======================================================================
+VERDICT
+======================================================================
+  KILL: 0 BH-significant results at K=64
+  Statistics data adds NO novel WR prediction beyond daily_features.
+
+  Summary:
+    H1 (settlement gap): 0 BH sig
+    H2 (cleared volume): 0 BH sig

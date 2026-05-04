@@ -1,0 +1,139 @@
+version: 1
+status: LOCKED
+date: 2026-04-23
+slug: pr48-mes-mgc-sizer-rule-backtest-v1
+title: "PR48 MES/MGC frozen rel-vol sizer-rule backtest v1"
+owner: codex
+
+parent_docs:
+  - "docs/audit/results/2026-04-20-participation-shape-cross-instrument-v1.md"
+  - "docs/audit/results/2026-04-21-pr48-participation-shape-oos-replication-v1.md"
+  - "docs/audit/results/2026-04-21-recent-claims-skeptical-reaudit-v1.md"
+  - "docs/plans/2026-04-22-recent-pr-followthrough-queue.md"
+  - "docs/runtime/stages/pr48-mes-mgc-sizer-rule-backtest.md"
+
+testing_mode: confirmatory_audit
+pathway: frozen_rule_replay
+deployment: NONE
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - "TRADING_RULES.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+  notes:
+    - "This is not a new feature scan. It is the bounded rule-derivation step explicitly left open by the PR48 OOS replication."
+    - "Train/OOS split is binding: 2026-01-01 is sacred for threshold freeze."
+    - "Only one monotonic sizing map is permitted. No optimizer, no grid, no best-rule selection."
+    - "Per-lane thresholds are required because the parent PR48 mechanism was rank-within-lane rather than pooled raw-level thresholds."
+
+motivation: |
+  PR48's current state is clear:
+
+  - IS monotonic-up is real on MES and MGC.
+  - OOS slope replication is also real on MES and MGC.
+  - But no concrete IS-trained sizing rule has yet been frozen and replayed.
+
+  The skeptical re-audit correctly objected that a regression coefficient is
+  not itself a deployable rule. This pre-reg converts that objection into the
+  narrowest honest next move: freeze one monotonic rel-vol size map on IS,
+  replay it on fresh OOS, and report whether the resulting overlay is merely
+  descriptive, alive-but-not-ready, or a genuine deploy candidate.
+
+theory_citations:
+  - path: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+    use: "Higher breakout participation should correspond to stronger stop-cascade continuation, supporting monotonic forecast strength."
+  - path: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    use: "Signal strength should scale position size monotonically rather than act only as a binary filter."
+  - path: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+    use: "Grounds the underlying intraday trend-follow breakout class being sized."
+
+scope:
+  instruments: ["MES", "MGC"]
+  orb_minutes: 5
+  entry_model: "E2"
+  confirm_bars: 1
+  rr_target: 1.5
+  universe: "unfiltered baseline only"
+  sessions_source: "SELECT DISTINCT orb_label FROM orb_outcomes per instrument at the locked geometry"
+  directions: ["long", "short"]
+  threshold_level: "per-lane (session x direction)"
+  is_window:
+    rule: "trading_day < HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    rule: "trading_day >= HOLDOUT_SACRED_FROM"
+  tuning_against_oos: false
+
+frozen_rule:
+  name: "lane_local_rel_vol_quintile_map_v1"
+  rationale: |
+    A five-bucket monotonic map is the smallest honest translation of the
+    PR48 monotonic-up claim into a live-feasible sizing overlay. It uses
+    the same per-lane ranking logic as the parent result but freezes the
+    boundaries in raw rel_vol units so the replay is operationally real.
+  breakpoints:
+    source: "IS-only per lane"
+    quantiles: [0.20, 0.40, 0.60, 0.80]
+    export_required: true
+  size_map:
+    q1: 0.0
+    q2: 0.5
+    q3: 1.0
+    q4: 1.5
+    q5: 2.0
+  fairness_note: |
+    Under equal-count quintiles this map averages 1.0x size, so it is not
+    a hidden gross-leverage increase in-sample. OOS mean size may drift and
+    must be reported explicitly.
+
+integrity_gates:
+  - "Canonical triple-join orb_outcomes x daily_features on (trading_day, symbol, orb_minutes)"
+  - "daily_features CTE filtered to orb_minutes=5 to avoid row inflation"
+  - "Each tested lane must have >= 50 IS rows before breakpoints are frozen"
+  - "Per instrument pooled IS N >= 5000 and pooled OOS N >= 500"
+  - "rel_vol non-null coverage >= 90% on IS and OOS"
+  - "No OOS values may influence breakpoint freeze"
+
+primary_outputs:
+  - "Per-lane frozen breakpoint table"
+  - "Per instrument IS and OOS bucket table (Q1-Q5)"
+  - "Baseline vs sized replay metrics for IS and OOS"
+  - "Actual take-home uplift: mean(size * pnl_r)"
+  - "Normalized per-risk uplift: sum(size * pnl_r) / sum(size)"
+
+decision_rules:
+  SIZER_DEPLOY_CANDIDATE:
+    criteria:
+      - "OOS full_expr > OOS baseline_expr"
+      - "OOS normalized_expr > OOS baseline_expr"
+      - "OOS normalized_expr > 0"
+      - "OOS Q5 expr > OOS Q1 expr"
+  SIZER_ALIVE_NOT_READY:
+    criteria:
+      - "OOS full_expr > OOS baseline_expr"
+      - "OOS Q5 expr > OOS Q1 expr"
+      - "At least one DEPLOY_CANDIDATE gate fails"
+  SIZER_NO_GO:
+    criteria:
+      - "OOS full_expr <= OOS baseline_expr"
+      - "OR OOS Q5 expr <= OOS Q1 expr"
+  SCAN_ABORT:
+    criteria:
+      - "Any integrity gate fails"
+
+out_of_scope:
+  - "No session selection changes"
+  - "No filtered-lane variants"
+  - "No optimizer over alternate size maps"
+  - "No allocator or account-budget integration"
+  - "No live profile edits"
+
+execution_environment:
+  result_doc: "docs/audit/results/2026-04-23-pr48-mes-mgc-sizer-rule-backtest-v1.md"
+  supporting_script: "research/pr48_mes_mgc_sizer_rule_backtest_v1.py"
+  breakpoint_artifact: "research/output/pr48_mes_mgc_sizer_rule_breakpoints_v1.csv"
+  metrics_artifact: "research/output/pr48_mes_mgc_sizer_rule_metrics_v1.csv"
+
+commit_sha: "c4eab807"

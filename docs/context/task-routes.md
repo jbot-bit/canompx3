@@ -1,0 +1,90 @@
+# Task Routes
+
+Generated from `context/registry.py` and `context/institutional.py`. Do not edit by hand.
+
+Generated canonical task routes for cold-start orientation.
+
+## `completion_claim`
+
+- Purpose: Verify whether a change is actually done before closing it.
+- Verification profile: `done`
+- Briefing contract: `mutating_briefing`
+- Packs: `coding_runtime_pack`
+- Doctrine: `CLAUDE.md`, `docs/governance/system_authority_map.md`
+- Canonical owners: `pipeline/check_drift.py`, `scripts/tools/session_preflight.py`, `scripts/tools/project_pulse.py`
+- Live views: `verification_context`, `system_brief`
+
+## `docs_drift_audit`
+
+- Purpose: Audit whether docs and generated context contracts are stale against code-backed truth.
+- Verification profile: `investigation`
+- Briefing contract: `orientation_briefing`
+- Packs: `coding_runtime_pack`, `project_orientation_pack`
+- Doctrine: `CLAUDE.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`
+- Canonical owners: `pipeline/system_authority.py`, `scripts/tools/render_context_catalog.py`, `pipeline/check_drift.py`
+- Live views: `verification_context`, `system_brief`
+
+## `live_trading_status`
+
+- Purpose: Understand the current runtime/deployment state without loading research doctrine.
+- Verification profile: `runtime_status`
+- Briefing contract: `orientation_briefing`
+- Packs: `coding_runtime_pack`, `trading_runtime_pack`
+- Doctrine: `TRADING_RULES.md`, `CLAUDE.md`
+- Canonical owners: `trading_app/prop_profiles.py`, `trading_app/lifecycle_state.py`, `pipeline/db_contracts.py`
+- Live views: `trading_context`, `system_brief`
+
+## `repo_workflow_audit`
+
+- Purpose: Audit startup, routing, launcher, or hook workflow surfaces for rigor, token efficiency, and operator clarity.
+- Verification profile: `investigation`
+- Briefing contract: `orientation_briefing`
+- Packs: `coding_runtime_pack`, `project_orientation_pack`
+- Doctrine: `AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`
+- Canonical owners: `context/registry.py`, `pipeline/system_authority.py`, `pipeline/system_context.py`, `pipeline/system_brief.py`, `pipeline/work_queue.py`, `scripts/tools/context_resolver.py`, `scripts/tools/work_queue.py`, `scripts/tools/session_preflight.py`, `scripts/tools/task_route_packet.py`, `scripts/infra/windows_agent_launch.py`, `scripts/infra/claude-worktree.sh`, `scripts/infra/codex-project.sh`, `scripts/infra/codex-worktree.sh`
+- Live views: `verification_context`, `system_brief`
+
+## `research_discovery`
+
+- Purpose: Triage new edge ideas, discovery questions, and hypothesis-shaping work using the institutional discovery front door.
+- Verification profile: `investigation`
+- Briefing contract: `investigation_briefing`
+- Packs: `coding_runtime_pack`, `trading_runtime_pack`, `research_methodology_pack`
+- Doctrine: `RESEARCH_RULES.md`, `TRADING_RULES.md`, `docs/STRATEGY_BLUEPRINT.md`, `docs/institutional/research_pipeline_contract.md`, `docs/institutional/pre_registered_criteria.md`, `docs/institutional/mechanism_priors.md`, `docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md`
+- Canonical owners: `trading_app/holdout_policy.py`, `pipeline/build_daily_features.py`, `pipeline/asset_configs.py`, `pipeline/cost_model.py`, `pipeline/dst.py`, `scripts/tools/prereg_front_door.py`, `scripts/infra/prereg-loop.sh`, `trading_app/strategy_discovery.py`, `pipeline/db_contracts.py`
+- Live views: `gold_db_mcp`, `research_context`, `system_brief`
+
+## `research_investigation`
+
+- Purpose: Investigate performance changes, edge behavior, or discovery questions using canonical research truth.
+- Verification profile: `investigation`
+- Briefing contract: `investigation_briefing`
+- Packs: `coding_runtime_pack`, `trading_runtime_pack`, `research_methodology_pack`
+- Doctrine: `RESEARCH_RULES.md`, `TRADING_RULES.md`, `docs/STRATEGY_BLUEPRINT.md`, `docs/institutional/pre_registered_criteria.md`
+- Canonical owners: `trading_app/holdout_policy.py`, `pipeline/asset_configs.py`, `pipeline/cost_model.py`, `pipeline/dst.py`, `trading_app/strategy_fitness.py`, `pipeline/db_contracts.py`
+- Live views: `gold_db_mcp`, `research_context`, `recent_performance_context`, `system_brief`
+
+## `system_orientation`
+
+- Purpose: Return the smallest complete startup model for the repo or current workstream.
+- Verification profile: `orientation`
+- Briefing contract: `orientation_briefing`
+- Packs: `coding_runtime_pack`, `trading_runtime_pack`, `project_orientation_pack`
+- Doctrine: `AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`, `docs/runtime/action-queue.yaml`, `HANDOFF.md`
+- Canonical owners: `pipeline/system_authority.py`, `pipeline/system_context.py`, `pipeline/work_capsule.py`, `pipeline/system_brief.py`, `pipeline/work_queue.py`, `context/registry.py`, `context/institutional.py`
+- Live views: `system_brief`
+
+## Fallback Read Set
+
+- `AGENTS.md`
+- `CLAUDE.md`
+- `CODEX.md`
+- `docs/governance/document_authority.md`
+- `docs/governance/system_authority_map.md`
+- `docs/runtime/action-queue.yaml`
+- `HANDOFF.md`
+
+## Control-Plane Notes
+
+- `docs/runtime/action-queue.yaml` is the canonical active-work registry when present.
+- `HANDOFF.md` is baton context only and should be rendered from the queue, not maintained as a parallel backlog.

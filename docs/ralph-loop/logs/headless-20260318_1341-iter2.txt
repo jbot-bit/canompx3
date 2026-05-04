@@ -1,0 +1,18 @@
+`★ Insight ─────────────────────────────────────`
+The `elif stop_multiplier != 1.0:` pattern is the idiomatic Python way to distinguish "feature disabled" (`== 1.0`) from "feature misconfigured" (`!= 1.0` but precondition missing). Without it, a misconfigured call is indistinguishable from a no-op in logs — both produce the same output (nothing). The warning converts a future debugging mystery into an immediate signal.
+`─────────────────────────────────────────────────`
+
+```
+=== RALPH LOOP ITER [132] COMPLETE ===
+Scope: trading_app/walkforward.py
+Audit: 1 finding (0 CRIT, 0 HIGH, 1 MED, 1 LOW)
+Classification: [judgment]
+Action: fix
+Target: trading_app/walkforward.py:134-136
+Blast radius: 1 file changed, 2 importers (strategy_validator.py [no-touch, read-only], test_walkforward.py [32/32 pass])
+Verdict: ACCEPT
+Commit: 1b2ac93
+Deferred debt: 1 open item (DF-04 rolling_portfolio.py:304 dormant orb_minutes=5)
+Next: trading_app/ml/evaluate.py — unscanned ML evaluation path (LOW tier, 1 importer)
+================================
+```

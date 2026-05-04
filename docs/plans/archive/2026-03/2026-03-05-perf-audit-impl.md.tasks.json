@@ -1,0 +1,15 @@
+{
+  "planPath": "docs/plans/2026-03-05-perf-audit-impl.md",
+  "tasks": [
+    {"id": 0, "subject": "Task 0: Fix DB connection-per-query anti-pattern in ui/db_reader.py", "status": "pending"},
+    {"id": 1, "subject": "Task 1: Scope rglob in check_old_session_names (#38) — saves 1,800ms", "status": "pending"},
+    {"id": 2, "subject": "Task 2: Skip already-imported modules in check_all_imports_resolve (#16) — saves 1,300ms", "status": "pending"},
+    {"id": 3, "subject": "Task 3: Shared DB connection for requires_db drift checks — saves 400ms", "status": "pending"},
+    {"id": 4, "subject": "Task 4: Phase 1 checkpoint — verify drift check savings", "status": "pending", "blockedBy": [0, 1, 2, 3]},
+    {"id": 5, "subject": "Task 5: Debounce post-edit hook — saves ~16s per rapid-edit batch", "status": "pending", "blockedBy": [4]},
+    {"id": 6, "subject": "Task 6: Parallel health check phases via ThreadPoolExecutor — saves ~5min", "status": "pending", "blockedBy": [4]},
+    {"id": 7, "subject": "Task 7: File content cache in check_drift.py (bonus) — saves ~100ms", "status": "pending", "blockedBy": [4]},
+    {"id": 8, "subject": "Task 8: Final verification and timing benchmark", "status": "pending", "blockedBy": [5, 6, 7]}
+  ],
+  "lastUpdated": "2026-03-05T22:00:00+10:00"
+}

@@ -1,0 +1,519 @@
+#!/usr/bin/env python3
+"""Behavioral anti-pattern scanner — catches common AI/human coding mistakes.
+
+Each check returns list[str] violations. Exit code 0 = all passed, 1 = failures.
+Self-reports check count dynamically.
+"""
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+sys.stdout.reconfigure(encoding="utf-8")
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+SELF_PATH = Path(__file__).resolve()
+
+# Directories to scan for each check
+PIPELINE_DIRS = [PROJECT_ROOT / "pipeline", PROJECT_ROOT / "trading_app", PROJECT_ROOT / "scripts" / "tools"]
+INSTRUMENT_SCAN_DIRS = [PROJECT_ROOT / "pipeline", PROJECT_ROOT / "scripts" / "tools"]
+CI_DIRS = [PROJECT_ROOT / ".github" / "workflows"]
+
+# Files allowed to contain hardcoded instrument lists (they ARE config/definition sources
+# or one-off analysis scripts not part of the production pipeline)
+INSTRUMENT_ALLOWLIST = {
+    "check_drift.py",
+    "config.py",
+    "asset_configs.py",
+    "cost_model.py",
+    "hypothesis_test.py",
+    "audit_15m30m.py",
+    "ml_hybrid_experiment.py",
+    "gen_playbook.py",  # display order must match table header; asserts against canonical set
+}
+# Directories whose files are always allowed
+INSTRUMENT_ALLOWLIST_DIRS = {"tests", "docs", "research"}
+
+
+def _python_files(dirs: list[Path]) -> list[Path]:
+    """Collect .py files from given directories."""
+    files = []
+    for d in dirs:
+        if d.exists():
+            files.extend(d.rglob("*.py"))
+    return sorted(files)
+
+
+def _text_files(dirs: list[Path], exts: tuple[str, ...] = (".py", ".yml", ".yaml", ".md")) -> list[Path]:
+    """Collect text files from given directories."""
+    files = []
+    for d in dirs:
+        if d.exists():
+            for ext in exts:
+                files.extend(d.rglob(f"*{ext}"))
+    return sorted(set(files))
+
+
+# ── Check 1: Hardcoded check counts ──────────────────────────────────
+
+# Pattern: "all <number> checks" — counts should be computed at runtime
+HARDCODED_COUNT_PATTERN = re.compile(r"\ball\s+\d+\s+checks\b", re.IGNORECASE)
+
+
+def check_hardcoded_check_counts() -> list[str]:
+    """Detect hardcoded check counts — these should be computed dynamically."""
+    violations = []
+    scan_dirs = PIPELINE_DIRS + CI_DIRS
+    for f in _text_files(scan_dirs):
+        if f.resolve() == SELF_PATH:
+            continue
+        try:
+            text = f.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, PermissionError):
+            continue
+        for i, line in enumerate(text.splitlines(), 1):
+            if HARDCODED_COUNT_PATTERN.search(line):
+                rel = f.relative_to(PROJECT_ROOT)
+                violations.append(f"  {rel}:{i}: hardcoded check count: {line.strip()[:80]}")
+    return violations
+
+
+# ── Check 2: Hardcoded instrument lists ──────────────────────────────
+
+# Detects 3+ instrument symbols in a Python list literal or SQL IN clause.
+# These should import from pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS instead.
+# Build regex from canonical source — covers active + dead instruments.
+from pipeline.asset_configs import ASSET_CONFIGS as _ASSET_CONFIGS
+
+_ALL_SYMBOLS = sorted({k for k, v in _ASSET_CONFIGS.items() if v["symbol"] == k})
+_INST = r"(?:" + "|".join(_ALL_SYMBOLS) + ")"
+PY_INSTRUMENT_LIST = re.compile(
+    rf"""\[[\s'"]*{_INST}['"][\s,'"]*{_INST}['"][\s,'"]*{_INST}""",
+    re.IGNORECASE,
+)
+SQL_INSTRUMENT_IN = re.compile(
+    rf"""IN\s*\(\s*'{_INST}'\s*,\s*'{_INST}'""",
+    re.IGNORECASE,
+)
+
+
+def _is_allowlisted(filepath: Path) -> bool:
+    """Check if file is in the allowlist for instrument lists."""
+    if filepath.name in INSTRUMENT_ALLOWLIST:
+        return True
+    # Check if any path component matches an allowlisted directory name
+    # (handles nested dirs like research/archive/)
+    parts = filepath.parts
+    for d in INSTRUMENT_ALLOWLIST_DIRS:
+        if d in parts:
+            return True
+    return False
+
+
+def check_hardcoded_instrument_lists() -> list[str]:
+    """Detect hardcoded instrument lists in non-allowlisted files."""
+    violations = []
+    for f in _python_files(INSTRUMENT_SCAN_DIRS):
+        if f.resolve() == SELF_PATH or _is_allowlisted(f):
+            continue
+        try:
+            text = f.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, PermissionError):
+            continue
+        for i, line in enumerate(text.splitlines(), 1):
+            if PY_INSTRUMENT_LIST.search(line) or SQL_INSTRUMENT_IN.search(line):
+                rel = f.relative_to(PROJECT_ROOT)
+                violations.append(f"  {rel}:{i}: hardcoded instrument list: {line.strip()[:80]}")
+    return violations
+
+
+# ── Check 3: Broad except returning success ──────────────────────────
+
+BROAD_EXCEPT_PATTERN = re.compile(r"except\s+(?:Exception|BaseException)\b")
+# Only True/0 are "success" returns — None is "unknown/couldn't compute" (not success masking)
+SUCCESS_RETURN_PATTERN = re.compile(r"return\s+(?:True|0)\b")
+
+# Only check health/integrity/audit paths where swallowing exceptions is dangerous
+EXCEPT_SCAN_GLOBS = [
+    "pipeline/health_check.py",
+    "pipeline/*.py",
+    "trading_app/*.py",
+    "trading_app/**/*.py",
+    "scripts/tools/audit_*.py",
+]
+# Files allowed to use broad except + success return (documented intentional fail-open)
+BROAD_EXCEPT_ALLOWLIST = {
+    "live_config.py",  # Dollar gate intentionally fails open for live trading safety
+    "session_orchestrator.py",  # _verify_fill_poller: 404/auth errors mean endpoint exists
+}
+
+
+def check_broad_except_success() -> list[str]:
+    """Detect 'except Exception' followed by 'return True/0' in health/audit code."""
+    violations = []
+    files = []
+    for pattern in EXCEPT_SCAN_GLOBS:
+        files.extend(PROJECT_ROOT.glob(pattern))
+
+    for f in sorted(set(files)):
+        if f.name in BROAD_EXCEPT_ALLOWLIST:
+            continue
+        try:
+            lines = f.read_text(encoding="utf-8").splitlines()
+        except (UnicodeDecodeError, PermissionError):
+            continue
+        for i, line in enumerate(lines):
+            if BROAD_EXCEPT_PATTERN.search(line):
+                # Check next 3 lines for success return
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    if SUCCESS_RETURN_PATTERN.search(lines[j]):
+                        rel = f.relative_to(PROJECT_ROOT)
+                        violations.append(
+                            f"  {rel}:{i + 1}: broad except + success return: "
+                            f"{line.strip()[:40]} ... {lines[j].strip()[:40]}"
+                        )
+                        break
+    return violations
+
+
+# ── Check 4: CLI arg drift (WARNING only) ────────────────────────────
+
+# ── Check 5: Triple-join guard (orb_minutes in daily_features JOIN) ──
+
+# Scan directories for SQL blocks
+TRIPLE_JOIN_SCAN_DIRS = [PROJECT_ROOT / "research", PROJECT_ROOT / "scripts" / "tools", PROJECT_ROOT / "trading_app"]
+
+# Files allowed to contain JOIN daily_features without literal orb_minutes
+# (they define SAFE_JOIN or use it via variable substitution)
+TRIPLE_JOIN_ALLOWLIST_FILES = {
+    "audit_behavioral.py",  # self
+    "query.py",  # defines SAFE_JOIN
+    "edge_hunter.py",  # defines SAFE_JOIN
+    "discover.py",  # uses SAFE_JOIN
+    "multi_instrument_scan.py",  # uses SAFE_JOIN
+    "regime_scan_0900.py",  # uses SAFE_JOIN
+    "research_break_quality_deep.py",  # intentional broken JOIN in audit function
+    "sql_adapter.py",  # docstring mentions JOIN; actual SQL is correct
+}
+TRIPLE_JOIN_ALLOWLIST_DIRS = {"archive", "tests"}
+
+# Regex to extract triple-quoted strings (""" or ''')
+TRIPLE_QUOTE_PATTERN = re.compile(r'(?:"""(.*?)"""|\'\'\'(.*?)\'\'\')', re.DOTALL)
+
+# Regex to detect SQL blocks (contain SQL keywords)
+# Real SQL contains both a verb (SELECT/INSERT) AND a source clause (FROM/JOIN/USING).
+# A docstring narrative usually has only one ("see the SELECT", "we JOIN against X")
+# and would false-positive the triple-join check. Require both groups to match.
+_SQL_VERB_PATTERN = re.compile(r"\b(?:SELECT|INSERT|UPDATE|DELETE|WITH)\b", re.IGNORECASE)
+_SQL_SOURCE_PATTERN = re.compile(r"\b(?:FROM|JOIN|USING)\b", re.IGNORECASE)
+
+
+def _looks_like_sql(block: str) -> bool:
+    """Heuristic: real SQL has a verb AND a source clause. Docstrings usually have one."""
+    return bool(_SQL_VERB_PATTERN.search(block) and _SQL_SOURCE_PATTERN.search(block))
+
+
+# Regex to detect JOIN daily_features
+JOIN_DF_PATTERN = re.compile(r"\bJOIN\s+daily_features\b", re.IGNORECASE)
+
+# Regex to detect DataFrame merge calls
+MERGE_CALL_PATTERN = re.compile(r"\.merge\(|pd\.merge\(")
+
+
+def _is_triple_join_allowlisted(filepath: Path) -> bool:
+    """Check if file is allowlisted for triple-join guard."""
+    if filepath.name in TRIPLE_JOIN_ALLOWLIST_FILES:
+        return True
+    # Check if any path component matches an allowlisted directory name
+    # (handles nested dirs like research/archive/)
+    parts = filepath.parts
+    for d in TRIPLE_JOIN_ALLOWLIST_DIRS:
+        if d in parts:
+            return True
+    return False
+
+
+def check_triple_join_guard() -> list[str]:
+    """Detect JOIN/merge with daily_features without orb_minutes.
+
+    Two passes:
+    1. SQL: Extracts triple-quoted strings, filters to SQL blocks, checks
+       that JOIN daily_features also contains orb_minutes.
+    2. DataFrame: In files that reference daily_features AND have .merge() calls,
+       checks that orb_minutes appears on the merge line or within 5 lines below it.
+
+    Missing orb_minutes triples row count (3 rows per trading_day × symbol)
+    and creates fake correlations.
+    """
+    violations = []
+    for f in _python_files(TRIPLE_JOIN_SCAN_DIRS):
+        if f.resolve() == SELF_PATH or _is_triple_join_allowlisted(f):
+            continue
+        try:
+            text = f.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, PermissionError):
+            continue
+
+        # --- Pass 1: SQL JOINs in triple-quoted strings ---
+        for match in TRIPLE_QUOTE_PATTERN.finditer(text):
+            block = match.group(1) or match.group(2)
+            if not block:
+                continue
+            # Only check blocks that look like real SQL (verb + source clause)
+            if not _looks_like_sql(block):
+                continue
+            # Check for JOIN daily_features without orb_minutes
+            join_match = JOIN_DF_PATTERN.search(block)
+            if join_match and "orb_minutes" not in block:
+                # Find approximate line number
+                line_num = text[: match.start()].count("\n") + 1
+                rel = f.relative_to(PROJECT_ROOT)
+                # Extract a short snippet of the JOIN for context
+                snippet = block[max(0, join_match.start() - 20) : join_match.end() + 30].strip()
+                snippet = " ".join(snippet.split())[:80]
+                violations.append(f"  {rel}:{line_num}: JOIN daily_features without orb_minutes: {snippet}")
+
+        # --- Pass 2: DataFrame merges referencing daily_features ---
+        # Only check files that reference 'daily_features' (table or variable name)
+        if "daily_features" not in text:
+            continue
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            if not MERGE_CALL_PATTERN.search(line):
+                continue
+            # Check if 'daily_features' or 'daily_feat' appears on this line
+            # or within 3 lines before (common pattern: df = daily_features; df.merge(...))
+            context_start = max(0, i - 3)
+            context_lines = lines[context_start : i + 1]
+            context = " ".join(context_lines)
+            if "daily_features" not in context and "daily_feat" not in context:
+                continue
+            # Found a merge near a daily_features reference — check for orb_minutes
+            # Look at the merge call + next 5 lines for orb_minutes
+            merge_context = " ".join(lines[i : min(i + 6, len(lines))])
+            if "orb_minutes" not in merge_context:
+                rel = f.relative_to(PROJECT_ROOT)
+                violations.append(
+                    f"  {rel}:{i + 1}: DataFrame merge with daily_features without orb_minutes: {line.strip()[:80]}"
+                )
+    return violations
+
+
+def check_cli_arg_drift() -> list[str]:
+    """Detect new CLI args in recent diff with no matching docs/test reference.
+
+    WARNING only — best-effort heuristic that fails open.
+    Returns warnings (not violations) so it never blocks.
+    """
+    warnings = []
+    try:
+        # Get recent changes (staged + unstaged)
+        result = subprocess.run(
+            ["git", "diff", "HEAD", "--unified=0"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=str(PROJECT_ROOT),
+            encoding="utf-8",
+            errors="replace",
+        )
+        if result.returncode != 0:
+            return []
+
+        diff_text = result.stdout or ""
+        # Find added add_argument lines
+        new_args = []
+        current_file = None
+        for line in diff_text.splitlines():
+            if line.startswith("+++ b/"):
+                current_file = line[6:]
+            elif line.startswith("+") and not line.startswith("+++"):
+                if "add_argument(" in line and current_file:
+                    # Extract arg name
+                    match = re.search(r'["\'](-[-\w]+)["\']', line)
+                    if match:
+                        new_args.append((current_file, match.group(1)))
+
+        if not new_args:
+            return []
+
+        # Check if matching docs or test reference exists in diff
+        for filepath, arg_name in new_args:
+            arg_base = arg_name.lstrip("-").replace("-", "_")
+            if arg_base not in diff_text.replace(filepath, ""):
+                warnings.append(f"  WARNING: {filepath}: new arg '{arg_name}' — no doc/test reference in diff")
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass  # Fails open
+    return warnings
+
+
+# Allowlist for double_break scanner: files that REFERENCE double_break for
+# analysis/reporting, not as pre-trade filters
+DOUBLE_BREAK_ALLOWLIST = {
+    "test_",
+    "conftest.py",
+    "audit_behavioral.py",
+    ".md",
+    "__pycache__",
+    ".pytest_cache",
+    "archive",  # Archived research scripts (dead code)
+    "rolling_portfolio.py",  # Reports double_break degradation metrics (post-hoc)
+    "sql_adapter.py",  # Routes DOUBLE_BREAK_STATS template (query exposure)
+    "audit_ib_single_break.py",  # Audit script analyzing double_break classification
+    "research_session_event_analysis.py",  # Historical double_break analysis (pre-NODBL removal)
+    "research_london_adjacent.py",  # Post-hoc double-break rate analysis (diagnostic, not filter)
+}
+
+# Scan directories for double_break scanner
+DOUBLE_BREAK_SCAN_DIRS_SUFFIXES = ["pipeline", "trading_app", ("scripts", "tools"), "research"]
+
+
+def check_double_break_lookahead() -> list[str]:
+    """Detect double_break used as filter/predictor (look-ahead bias).
+
+    double_break is computed AFTER trade entry (session end). Cannot be used
+    as a real-time filter. Flags: WHERE double_break, if.*double_break,
+    df[.*double_break.*] in filter context.
+    """
+    violations = []
+
+    # Build scan dirs from PROJECT_ROOT
+    scan_dirs = []
+    for suffix in DOUBLE_BREAK_SCAN_DIRS_SUFFIXES:
+        if isinstance(suffix, tuple):
+            scan_dirs.append(PROJECT_ROOT.joinpath(*suffix))
+        else:
+            scan_dirs.append(PROJECT_ROOT / suffix)
+
+    # Patterns that indicate double_break used as filter/predictor
+    filter_patterns = [
+        re.compile(r"\bWHERE\b.*double_break", re.IGNORECASE),
+        re.compile(r"\bif\s+.*double_break", re.IGNORECASE),
+        re.compile(r"df\[.*double_break.*\]"),
+        re.compile(r"\.query\(.*double_break", re.IGNORECASE),
+        re.compile(r"\.loc\[.*double_break"),
+        re.compile(r"\.filter\(.*double_break", re.IGNORECASE),
+    ]
+
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for fpath in scan_dir.rglob("*.py"):
+            # Skip allowlisted files
+            if any(allow in str(fpath) for allow in DOUBLE_BREAK_ALLOWLIST):
+                continue
+
+            try:
+                content = fpath.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, PermissionError):
+                continue
+
+            # Check each filter pattern
+            for pattern in filter_patterns:
+                for _i, match in enumerate(pattern.finditer(content)):
+                    line_num = content[: match.start()].count("\n") + 1
+                    rel_path = fpath.relative_to(PROJECT_ROOT)
+                    violations.append(
+                        f"  {rel_path}:{line_num}: double_break used as filter "
+                        f"(look-ahead bias — resolved AFTER trade entry)"
+                    )
+
+    return violations
+
+
+def check_lag_without_orb_minutes() -> list[str]:
+    """Detect LAG()/LEAD() window functions on daily_features without orb_minutes filter.
+
+    daily_features has 3 rows per (trading_day, symbol) — one per orb_minutes (5, 15, 30).
+    LAG() without WHERE orb_minutes = N causes cross-aperture contamination.
+    Same class of bug as the triple-join trap but in CTEs/subqueries.
+    """
+    violations = []
+    lag_pattern = re.compile(r"\b(LAG|LEAD)\s*\(", re.IGNORECASE)
+    orb_filter = re.compile(r"orb_minutes\s*=", re.IGNORECASE)
+
+    for scan_dir in PIPELINE_DIRS:
+        if not scan_dir.exists():
+            continue
+        for fpath in scan_dir.rglob("*.py"):
+            try:
+                content = fpath.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, PermissionError):
+                continue
+
+            if "daily_features" not in content:
+                continue
+
+            # Find triple-quoted SQL blocks containing LAG/LEAD.
+            # Use greedy match to capture full SQL strings, skip docstrings.
+            for match in re.finditer(r'(?:f|r|b)?("""|\'\'\')\s*(.*?)\1', content, re.DOTALL):
+                sql_block = match.group(2)
+                # Skip docstrings — they start right after def/class or at module top
+                pre = content[max(0, match.start() - 30) : match.start()].strip()
+                if pre.endswith(":") or match.start() < 5:
+                    continue  # likely a docstring
+                if not lag_pattern.search(sql_block):
+                    continue
+                if "daily_features" not in sql_block:
+                    continue
+                if orb_filter.search(sql_block):
+                    continue
+                # LAG on daily_features without orb_minutes filter
+                line_num = content[: match.start()].count("\n") + 1
+                rel_path = fpath.relative_to(PROJECT_ROOT)
+                violations.append(
+                    f"  {rel_path}:{line_num}: LAG/LEAD on daily_features without "
+                    f"orb_minutes filter (cross-aperture contamination risk)"
+                )
+
+    return violations
+
+
+# ── Check registry ───────────────────────────────────────────────────
+
+CHECKS = [
+    ("1. Hardcoded check counts", check_hardcoded_check_counts, False),
+    ("2. Hardcoded instrument lists", check_hardcoded_instrument_lists, False),
+    ("3. Broad except returning success", check_broad_except_success, False),
+    ("4. CLI arg drift (warning only)", check_cli_arg_drift, True),  # warning_only
+    ("5. Triple-join guard (orb_minutes in daily_features JOIN)", check_triple_join_guard, False),
+    ("6. Double-break look-ahead scanner (resolved AFTER trade entry)", check_double_break_lookahead, False),
+    ("7. LAG/LEAD without orb_minutes on daily_features", check_lag_without_orb_minutes, False),
+]
+
+
+def main():
+    print("=" * 70)
+    print("BEHAVIORAL AUDIT — ANTI-PATTERN SCANNER")
+    print("=" * 70)
+
+    all_violations = []
+
+    for label, check_fn, warning_only in CHECKS:
+        print(f"\n--- {label} ---")
+        results = check_fn()
+        if results:
+            tag = "WARNING" if warning_only else "FAILED"
+            print(f"  {tag}:")
+            for line in results:
+                print(line)
+            if not warning_only:
+                all_violations.extend(results)
+        else:
+            print("  OK")
+
+    print("\n" + "=" * 70)
+    if all_violations:
+        print(f"BEHAVIORAL AUDIT FAILED: {len(all_violations)} violation(s)")
+        print("=" * 70)
+        sys.exit(1)
+    else:
+        print(f"BEHAVIORAL AUDIT PASSED: all {len(CHECKS)} checks clean")
+        print("=" * 70)
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

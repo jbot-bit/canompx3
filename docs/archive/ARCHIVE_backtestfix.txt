@@ -1,0 +1,67 @@
+Bar timestamp convention (MUST be explicit)
+
+Decide: ts_utc = bar open or bar close.
+
+Enforce it consistently across all files.
+
+Rationale: avoids off-by-1 minute entries/exits.
+
+Trading-day definition (for “highest-volume contract per day”)
+
+Define what “day” means for futures.
+
+Your existing audit uses Brisbane trading day = 09:00 local → 09:00 next day (see audit_dbn_file() logic). 
+
+backfill_audit1
+
+So: contract selection by “day” should match that, or you’ll pick the wrong front month on boundary hours.
+
+Sorting + strict monotonicity
+
+Require df = df.sort_values(["ts_utc"]) before insert.
+
+Validate: per source_symbol, timestamps are strictly increasing (or at least non-decreasing after dedupe).
+
+Duplicate policy (hard rule)
+
+Define the unique key: (symbol, source_symbol, ts_utc) (or whatever your DB already assumes).
+
+If duplicates exist: keep the last/first deterministically + log counts.
+
+Idempotent write semantics (more specific)
+
+Specify exactly how reruns avoid duplicates:
+
+“delete+insert by (trading_day, chosen_contract)” or
+
+upsert/merge by key.
+
+Not both. Pick one.
+
+Price/volume typing + validation
+
+Enforce numeric coercion + reject nonsense:
+
+high >= max(open, close), low <= min(open, close), high >= low
+
+volume >= 0 and integer-castable
+
+Log number of rejected rows.
+
+Spread/strategy symbol filtering (stronger than “- or _”)
+
+Your current rule is heuristic.
+
+Add: allowlist outright symbols pattern for CME metals (e.g., ^MGC[A-Z]\d{2}$ or your dataset’s actual format), else drop.
+
+(Keeps you from accidentally ingesting weird composite symbols.)
+
+Step 2 — One thing to watch: your audit script converts to Brisbane time for grouping
+
+That’s fine for reporting, but ingestion must store UTC only (your spec already says that).
+
+Just ensure your “contract-by-day” selection uses the same trading-day boundary as audit, otherwise audits will keep flagging “gaps” that are just boundary mismatches. 
+
+backfill_audit1
+
+Check-in (one line)

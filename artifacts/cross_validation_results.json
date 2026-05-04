@@ -1,0 +1,50 @@
+{
+  "orb_baseline": {
+    "n": 376,
+    "wr": 0.3324468085106383,
+    "expr": NaN,
+    "sharpe": 0.0,
+    "maxdd": NaN,
+    "total": NaN,
+    "sharpe_ann": null
+  },
+  "alt_strategies": {
+    "gap_fade": {
+      "strategy": "gap_fade",
+      "status": "NO_DATA"
+    },
+    "vwap_pullback": {
+      "strategy": "vwap_pullback",
+      "status": "OK",
+      "oos_n": 642,
+      "oos_expr": -0.012460138403984444,
+      "oos_sharpe": -0.015912699142729424,
+      "oos_sharpe_ann": -0.3288670070242892,
+      "oos_wr": 0.4735202492211838,
+      "oos_maxdd": -21.204782730676047,
+      "oos_total": -7.999408855358013
+    },
+    "value_area": {
+      "strategy": "value_area",
+      "status": "OK",
+      "oos_n": 365,
+      "oos_expr": 0.08541671514368629,
+      "oos_sharpe": 0.09041803332387496,
+      "oos_sharpe_ann": 1.4089981691864597,
+      "oos_wr": 0.4876712328767123,
+      "oos_maxdd": -13.18764199365164,
+      "oos_total": 31.177101027445495
+    },
+    "concretum_bands": {
+      "strategy": "concretum_bands",
+      "status": "OK",
+      "oos_n": 338,
+      "oos_expr": 0.08445558275882108,
+      "oos_sharpe": 0.07567152771339593,
+      "oos_sharpe_ann": 1.1347489567382179,
+      "oos_wr": 0.44970414201183434,
+      "oos_maxdd": -15.211726363952973,
+      "oos_total": 28.545986972481526
+    }
+  }
+}

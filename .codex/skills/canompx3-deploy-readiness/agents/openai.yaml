@@ -1,0 +1,7 @@
+interface:
+  display_name: "Canompx3 Deploy Readiness"
+  short_description: "Judge whether something is actually ready to promote or deploy"
+  default_prompt: "Use the canompx3-deploy-readiness skill to decide whether the target is truly ready to promote or deploy, and list the blockers if not."
+
+policy:
+  allow_implicit_invocation: true

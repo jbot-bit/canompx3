@@ -1,0 +1,16 @@
+All done. Final report:
+
+```
+=== RALPH LOOP ITER [130] COMPLETE ===
+Scope: trading_app/ml/meta_label.py
+Audit: 1 finding (0 CRIT, 0 HIGH, 1 MED, 0 LOW)
+Classification: [mechanical]
+Action: fix
+Target: trading_app/ml/meta_label.py:386
+Blast radius: 1 file, no callers affected
+Verdict: ACCEPT
+Commit: c7b0774
+Deferred debt: 1 open item (DF-04)
+Next: trading_app/ml/predict_live.py (HIGH tier, live prediction path, unscanned)
+================================
+```

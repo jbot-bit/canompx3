@@ -1,0 +1,141 @@
+metadata:
+  name: garch-w2d-prior-level-conditioning
+  owner: codex
+  created_at: 2026-04-16
+  testing_mode: family
+  holdout_date: 2026-01-01
+  scope_note: >
+    Validated-shelf local-family conditioning test. This stage asks whether
+    garch_high adds distinct or complementary value to already-supported
+    prior-day level contexts. It is not a full prior-day feature sweep and it
+    is not a deployment study.
+  status: demoted_after_validated_overlap_check
+
+rules:
+  canonical_truth_only: true
+  validated_shelf_only: true
+  deployment_inference_forbidden: true
+  descriptive_oos_only: true
+  no_full_prior_day_menu_search: true
+  no_prior_session_context_mix: true
+  raw_recompute_required: true
+
+admissible_inputs:
+  - garch_forecast_vol_pct
+  - prev_day_high
+  - prev_day_low
+  - prev_day_close
+  - atr_20
+  - gap_type
+  - orb_session_midpoint
+
+banned_inputs:
+  - break_dir
+  - break_ts
+  - break_delay_min
+  - double_break
+  - took_pdh_before_1000
+  - took_pdl_before_1000
+  - overnight_took_pdh
+  - overnight_took_pdl
+  - overnight_range_pct
+  - prior_session_outcome
+
+family_candidates:
+  - id: w2d_h1
+    name: us-data-1000-below-pdl-long-conditioned-by-garch
+    description: >
+      On validated US_DATA_1000 long breakout families, BELOW_PDL may become a
+      stronger favorable context when garch_high indicates elevated expected
+      volatility.
+    level_context:
+      type: BELOW_PDL
+    garch_state:
+      type: GARCH_HIGH
+      threshold_pct: 70
+    scope:
+      sessions: [US_DATA_1000]
+      directions: [long]
+      instruments: [MNQ, MES, MGC]
+
+  - id: w2d_h2
+    name: us-data-1000-inside-pdr-conditioned-by-garch
+    description: >
+      On validated US_DATA_1000 families, INSIDE_PDR may become more clearly
+      hostile or more clearly weak once elevated expected volatility is
+      present; the direction of the interaction must be read empirically.
+    level_context:
+      type: INSIDE_PDR
+    garch_state:
+      type: GARCH_HIGH
+      threshold_pct: 70
+    scope:
+      sessions: [US_DATA_1000]
+      directions: [long, short]
+      instruments: [MNQ, MES, MGC]
+
+  - id: w2d_h3
+    name: nyse-close-near-pdh-short-conditioned-by-garch
+    description: >
+      On validated NYSE_CLOSE short breakout families, NEAR_PDH may become a
+      stronger hostile context when garch_high is present because expected
+      volatility and nearby liquidity can increase squeeze / failure risk.
+    level_context:
+      type: NEAR_PDH
+      theta_atr: 0.15
+    garch_state:
+      type: GARCH_HIGH
+      threshold_pct: 70
+    scope:
+      sessions: [NYSE_CLOSE]
+      directions: [short]
+      instruments: [MNQ, MES, MGC]
+
+  - id: w2d_h4
+    name: near-pivot-long-conditioned-by-garch
+    description: >
+      On validated long breakout families with existing prior evidence for
+      NEAR_PIVOT friction, garch_high may amplify the penalty from trading into
+      pivot defense rather than improve the setup.
+    level_context:
+      type: NEAR_PIVOT
+      theta_atr: 0.15
+    garch_state:
+      type: GARCH_HIGH
+      threshold_pct: 70
+    scope:
+      sessions: [NYSE_CLOSE, EUROPE_FLOW, LONDON_METALS]
+      directions: [long]
+      instruments: [MNQ, MES, MGC]
+
+sample_rules:
+  min_total_per_validated_row: 50
+  min_conjunction_per_family: 30
+  if_no_supported_rows: not_testable_here
+
+comparisons:
+  - conjunction_vs_base
+  - conjunction_vs_garch_only
+  - conjunction_vs_level_only
+
+verdicts:
+  - complementary_pair
+  - garch_only
+  - level_only
+  - unclear
+  - not_testable_here
+
+promotion_gates:
+  - conjunction_beats_base
+  - conjunction_beats_garch_only
+  - conjunction_beats_level_only
+  - local_family_support_non_thin
+  - raw_recompute_matches_report
+
+kill_criteria:
+  - full_prior_day_feature_search_reopened
+  - banned_input_used
+  - descriptive_oos_used_for_promotion
+  - scope_widened_due_to_thin_rows
+  - deployment_claim_made
+  - insufficient_validated_overlap_for_named_sessions

@@ -1,0 +1,150 @@
+{
+  "skill": "regime-check",
+  "version": 1,
+  "tests": [
+    {
+      "id": "rc-01",
+      "prompt": "how's the portfolio looking",
+      "assertions": [
+        {
+          "id": "rc-01-a1",
+          "type": "command_ran",
+          "pattern": "duckdb|GOLD_DB_PATH",
+          "description": "Must query gold.db — never cite counts from memory"
+        },
+        {
+          "id": "rc-01-a2",
+          "type": "regex_match",
+          "pattern": "(CORE|REGIME|HEALTHY|CONCERN|CRITICAL)",
+          "description": "Must show robustness_status or health summary per instrument"
+        },
+        {
+          "id": "rc-01-a3",
+          "type": "regex_match",
+          "pattern": "(MGC|MNQ|MES)",
+          "description": "Must cover active instruments"
+        },
+        {
+          "id": "rc-01-a4",
+          "type": "regex_not_match",
+          "pattern": "(from memory|I recall|I believe|last time I checked)",
+          "description": "Must not cite counts from memory"
+        }
+      ]
+    },
+    {
+      "id": "rc-02",
+      "prompt": "check regime health",
+      "assertions": [
+        {
+          "id": "rc-02-a1",
+          "type": "command_ran",
+          "pattern": "duckdb|GOLD_DB_PATH",
+          "description": "Must query live DB for fitness data"
+        },
+        {
+          "id": "rc-02-a2",
+          "type": "regex_match",
+          "pattern": "(edge_families|validated_setups)",
+          "description": "Must query edge_families or validated_setups tables"
+        },
+        {
+          "id": "rc-02-a3",
+          "type": "regex_match",
+          "pattern": "\\d+",
+          "description": "Must report actual numbers — not vague descriptions"
+        },
+        {
+          "id": "rc-02-a4",
+          "type": "regex_match",
+          "pattern": "(CORE|REGIME|NO_FAMILY|robustness_status|trade_tier)",
+          "description": "Must surface fitness classifications from edge_families"
+        }
+      ]
+    },
+    {
+      "id": "rc-03",
+      "prompt": "is anything decaying",
+      "assertions": [
+        {
+          "id": "rc-03-a1",
+          "type": "command_ran",
+          "pattern": "duckdb|GOLD_DB_PATH",
+          "description": "Decay check requires live DB query, not memory"
+        },
+        {
+          "id": "rc-03-a2",
+          "type": "regex_match",
+          "pattern": "(edge_families|robustness_status|DECAY|WATCH|FIT)",
+          "description": "Must check edge family robustness status"
+        },
+        {
+          "id": "rc-03-a3",
+          "type": "regex_not_match",
+          "pattern": "(M2K|MCL|SIL|M6E|MBT).*(active|trading|deployed)",
+          "description": "Must not show dead instruments as active"
+        }
+      ]
+    },
+    {
+      "id": "rc-04",
+      "prompt": "show portfolio fitness",
+      "assertions": [
+        {
+          "id": "rc-04-a1",
+          "type": "command_ran",
+          "pattern": "duckdb|GOLD_DB_PATH",
+          "description": "Must query gold.db directly"
+        },
+        {
+          "id": "rc-04-a2",
+          "type": "regex_match",
+          "pattern": "(edge_families|validated_setups)",
+          "description": "Must query canonical tables for fitness"
+        },
+        {
+          "id": "rc-04-a3",
+          "type": "regex_match",
+          "pattern": "(instrument|MGC|MNQ|MES)",
+          "description": "Must break down by instrument"
+        },
+        {
+          "id": "rc-04-a4",
+          "type": "regex_match",
+          "pattern": "\\d+.*famil|famil.*\\d+",
+          "description": "Must report family counts with actual numbers"
+        },
+        {
+          "id": "rc-04-a5",
+          "type": "regex_match",
+          "pattern": "(last built|created_at|stale|days old|MAX)",
+          "description": "Must check when edge families were last built"
+        }
+      ]
+    },
+    {
+      "id": "rc-05",
+      "prompt": "strategy health for MNQ",
+      "assertions": [
+        {
+          "id": "rc-05-a1",
+          "type": "command_ran",
+          "pattern": "duckdb|GOLD_DB_PATH",
+          "description": "Must query DB for MNQ-specific data"
+        },
+        {
+          "id": "rc-05-a2",
+          "type": "text_contains",
+          "value": "MNQ",
+          "description": "Output must reference MNQ"
+        },
+        {
+          "id": "rc-05-a3",
+          "type": "regex_match",
+          "pattern": "(CORE|REGIME|NO_FAMILY|count|families)",
+          "description": "Must show regime classification or family counts"
+        }
+      ]
+    }
+  ]
+}

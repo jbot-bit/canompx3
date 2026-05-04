@@ -1,0 +1,53 @@
+# Hypothesis Registry — 2026-04-16 garch-profile-production-replay
+#
+# Locked: 2026-04-16T23:45:00+10:00
+# Author: Codex main session
+# Purpose: production-style replay for the active Topstep profile
+
+metadata:
+  name: "garch-profile-production-replay"
+  purpose: "Translate the best regime maps into discrete live actions on the active execution profile under real account rules."
+  date_locked: "2026-04-16T23:45:00+10:00"
+  holdout_date: "2026-01-01"
+  testing_mode: "profile-replay"
+  total_expected_trials: 3
+  theory_summary: |
+    Carver 2015 supports position-sizing as a forecast translation problem
+    rather than an on/off toy. Chan 2008 frames GARCH as regime state, not
+    entry alpha. This replay converts validated regime maps into discrete live
+    actions on the actual active profile: skip hostile low state, keep base size
+    in neutral state, and request 2x in favorable high state, subject to real
+    firm rules.
+
+hypotheses:
+  - id: 1
+    name: "Active Topstep profile production replay"
+    theory_citation: >
+      Carver 2015 Ch 9-10 forecast-to-size translation;
+      Chan 2008 Ch 7 regime state;
+      Topstep scaling-plan rules and Criterion 11 account-survival discipline
+    economic_basis: |
+      A regime variable is only worth production attention if its edge survives
+      discrete contract rounding, the active profile's stop policy, the active
+      lane set, Topstep scaling constraints, and 90-day survival replay.
+    scope:
+      profile_id: "topstep_50k_mnq_auto"
+      copies: 2
+      maps:
+        - "GARCH_NATIVE_DISCRETE"
+        - "OVN_NATIVE_DISCRETE"
+        - "GARCH_OVN_NATIVE_DISCRETE"
+      actions:
+        low_state: "0 contracts"
+        neutral_state: "1 contract"
+        high_state: "2 contracts"
+    expected_trial_count: 3
+    kill_criteria:
+      - "A map improves research-weight utility but fails under discrete profile replay."
+      - "A map improves take-home while breaking survival or scaling feasibility."
+
+total_hypothesis_count: 1
+total_expected_trials: 3
+budget_check:
+  max_allowed_clean: 100
+  status: "under budget"

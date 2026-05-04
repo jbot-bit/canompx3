@@ -1,0 +1,519 @@
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: "2026-04-28"
+slug: phase-d-d0-v2-garch-clean-rederivation
+title: "Phase D D-0 v2 — clean re-derivation of size-scaling on MNQ COMEX_SETTLE O5 RR1.5 OVNRNG_100, garch_forecast_vol_pct replaces contaminated rel_vol_COMEX_SETTLE"
+owner: "josh / claude-code (Opus, pre-reg authoring) + sonnet (execution)"
+parent_spec: "docs/audit/hypotheses/2026-04-15-phase-d-volume-pilot-spec.md"
+predecessor_pre_reg: "docs/audit/hypotheses/2026-04-18-phase-d-d0-rel-vol-sizing-mnq-comex-settle.yaml"
+predecessor_verdict: "KILL (df05b861) — sharpe_uplift_pct +7.33% < 10% threshold"
+testing_mode: individual
+pathway: B_individual_falsification
+pathway_source: "docs/institutional/pre_registered_criteria.md Amendment 3.0 (2026-04-09)"
+pathway_note: >
+  v2 is exploratory-at-K=1, not confirmatory. The predecessor mechanism
+  (rel_vol regime-amplification on this lane) was KILLED at +7.33%; v2
+  retests the same mechanism with a clean predictor. C6/C8/C9 downstream
+  gates remain non-waivable (Amendment 3.0 framework) but the framing is
+  honest: a PASS here is a fresh signal requiring its own confirmatory
+  follow-up, not a confirmation of a prior validated edge.
+
+pre_run_correction_2026_04_28:
+  corrected: true
+  correction_scope: "TIGHTENING_PRE_RUN — gates strengthened, no thresholds relaxed; declared before any backtest run"
+  substantive_rules_modified: partial_tightening_only
+  triggered_by: "Opus self-review against pre-reg writer prompt § D — 9 gaps identified before model swap"
+  reviewer: "claude-opus pre-execution"
+  what_changed:
+    - "pathway label: B_individual -> B_individual_falsification (honest framing)"
+    - "H1 pass_metric: added absolute Sharpe-difference floor (>= 0.05) to prevent tiny-baseline degeneracy"
+    - "raw_p_method: paired bootstrap method tightened — independent paired bootstrap on per-trade pairs (no block) is canonical; if calendar-day clustering exists, document and rerun with day-block"
+    - "execution_gate.forbidden_now: added 'reverse bucket direction is a separate pre-reg, not a v2 follow-up' to prevent K=2-disguised-as-K=1"
+    - "expectations: declared honest prior — v2 is EXPECTED TO KILL (predecessor +7.33% < 10% threshold; Wave 5 G5 found opposite direction on a different lane); a PASS verdict triggers extra audit"
+    - "K3 retained but slimmed — only the genuinely-novel temporal-input check (feature_input_close_ts vs entry_ts) stays in K3; redundant items folded into K2"
+    - "sharpe_definition: per-trade-R Sharpe = mean(R)/std(R), no annualization, no rf — explicit"
+    - "tied-percentile bucket assignment: low if x < P33; mid if P33 <= x < P67; high if x >= P67. Ties at boundaries go HIGH (>= rule applied)."
+    - "comparison-to-v1: tagged DESCRIPTIVE_ONLY_NOT_STATISTICALLY_COMPARABLE — v2 N=468 excludes ~16% NULL-garch rows that v1 included via rel_vol coverage; samples are not the same."
+  what_did_NOT_change:
+    - "H1 pass threshold (Sharpe uplift >= 15%)"
+    - "K1 kill threshold (< 10%)"
+    - "K2 implementation_integrity items"
+    - "predictor choice (garch_forecast_vol_pct)"
+    - "bucket schema 0.5x / 1.0x / 1.5x"
+    - "bucket direction (high garch -> 1.5x)"
+    - "lane scope"
+    - "IS-only quantile rule"
+    - "scratch_policy: realized-eod"
+    - "any threshold the backtest will use to compute its verdict"
+  rationale_for_in_place_amendment: >
+    All 9 fixes are pre-run clarifications/tightenings of an unrun pre-reg.
+    None relax kill criteria. None redirect the test. Per predecessor's
+    `post_run_correction_2026_04_18` precedent (substantive_rules_modified:
+    false) on similar pre-run/post-run framing corrections. v2 file remains
+    DRAFT until commit_sha re-stamp post-amendment.
+
+expectation_of_failure:
+  honest_prior: KILL_LIKELY
+  reasoning:
+    - "Predecessor v1 KILLED at +7.33% < 10% threshold on the contaminated rel_vol predictor"
+    - "Wave 5 G5 (2026-04-11, MNQ NYSE_OPEN RR1.5) found LOW garch -> BETTER outcomes; v2 tests the OPPOSITE direction (high garch -> upsize) on a DIFFERENT lane (COMEX_SETTLE)"
+    - "If predecessor's rel_vol uplift was driven by the ~41% post-entry-data leak, the clean garch proxy should produce a smaller uplift, not a larger one"
+  pass_triggers_extra_audit: >
+    A v2 PASS (>=15% AND raw_p<0.05 AND K2/K3 PASS) is contrary to the
+    honest prior. If observed, the result doc must include:
+      - Sensitivity check on bucket boundaries (re-run with P30/P70 and P25/P75)
+      - Per-year breakdown of sized vs baseline Sharpe
+      - Cross-instrument check: same direction on MGC and MES?
+      - Investigate if any K2/K3 item is borderline (PASSes but close)
+    A PASS contrary to the prior is a possible discovery; it is also
+    a possible undetected methodology error. Treat with elevated audit
+    standard, not premature celebration.
+  kill_does_not_require_extra_audit: >
+    A KILL is consistent with the prior. Standard result doc suffices.
+
+amendment_rationale:
+  trigger: "2026-04-28 E2 look-ahead contamination registry catalogued rel_vol_<SESSION> as post-entry on E2"
+  mechanism: >
+    rel_vol_COMEX_SETTLE numerator = break_bar_volume per
+    pipeline/build_daily_features.py:1600-1660. On E2 entries, ~41.3% of
+    fills have entry_ts < break_ts (range-touch fires before close-outside-ORB).
+    The original D-0 H1 was therefore tested on data where the size-scaling
+    feature reflected post-entry information on ~4 in 10 trades, every year.
+  scope: >
+    SUBSTANTIVE re-test, not documentation correction. Predecessor verdict
+    remains KILL on its own scope (rel_vol_COMEX_SETTLE on this lane);
+    this v2 is an independent K=1 test of whether the vol-regime
+    amplification mechanism survives when the contaminated proxy is replaced
+    by a pre-break clean proxy (garch_forecast_vol_pct).
+  v1_immutability:
+    predecessor_kill_stands: true
+    explanation: >
+      The 2026-04-18 rel_vol-on-E2 D-0 result is the canonical record of
+      that exact test. v2 does NOT supersede or rescue v1. v2 is a NEW K=1
+      test on a different feature.
+  registry_reference: "docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md § Re-derivation dispatch — Priority 1"
+  external_deadline_ref: "docs/runtime/action-queue.yaml id=phase_d_d0_clean_rederivation deadline 2026-05-15"
+
+authority:
+  primary:
+    - "docs/institutional/pre_registered_criteria.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/STRATEGY_BLUEPRINT.md"
+    - "trading_app/holdout_policy.py"
+    - "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    - "docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md"
+    - "docs/postmortems/2026-04-21-e2-break-bar-lookahead.md"
+  notes:
+    - "No backtest may run until this file is committed."
+    - "2026-01-01 onward is sacred holdout (Mode A)."
+    - "Pre-registration is binding per RESEARCH_RULES Phase 0 Literature Grounding."
+    - "Predecessor pre-reg b6918d8d remains the canonical record for the rel_vol test."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "6a6561d6"
+  committed_required_before_run: true
+  commit_sha_note: "Stamp the SHA of the commit that first writes this file. Append-only — any edit requires a new dated slug."
+
+scope:
+  instrument: "MNQ"
+  orb_label: "COMEX_SETTLE"
+  orb_minutes: 5
+  rr_target: 1.5
+  entry_model: "E2"
+  confirm_bars: 1
+  filter_type: "OVNRNG_100"
+  strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+  direction: "lane_native"
+  universe_restriction: "single-lane D-0 v2 pilot only — same lane as predecessor"
+  scope_verification:
+    instrument_source: "pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS contains 'MNQ'"
+    session_source: "pipeline.dst.SESSION_CATALOG['COMEX_SETTLE']"
+    filter_source: "trading_app.config.ALL_FILTERS['OVNRNG_100'].min_range == 100.0 (verified 2026-04-28)"
+    feature_column_source: "daily_features.garch_forecast_vol_pct exists; verified 1639/1951 IS rows non-null on MNQ O5"
+
+data_policy:
+  is_window:
+    rule: "trading_day < HOLDOUT_SACRED_FROM"
+  oos_window:
+    rule: "trading_day >= HOLDOUT_SACRED_FROM"
+  holdout_rule:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+    grandfather_cutoff_source: "trading_app.holdout_policy.HOLDOUT_GRANDFATHER_CUTOFF"
+  tuning_against_oos: false
+  oos_role_in_d0_v2: "not consulted; D-0 v2 is IS-only. OOS work belongs to D-1 v2."
+
+scratch_policy:
+  policy: "realized-eod"
+  justification: >
+    Default policy after 2026-04-27 Stage 5 outcome_builder fix per
+    `pre_registered_criteria.md` Criterion 13. Including realized-eod scratch
+    rows prevents the 10–45% ExpR inflation class bug (2026-04-27 discovery —
+    `memory/feedback_scratch_pnl_null_class_bug.md`). Carver-Ch-10-style
+    size-scaling tests are particularly sensitive because size differences
+    interact with full trade distribution including scratches.
+  forbidden_in_runner: "WHERE pnl_r IS NOT NULL or any equivalent that excludes outcome='scratch'"
+  required_in_runner: "Use canonical pipeline.cost_model.pnl_points_to_r for any scratch trade R-conversion."
+
+feature_definition:
+  feature_name: "garch_forecast_vol_pct"
+  column_source: "daily_features.garch_forecast_vol_pct"
+  canonical_source_of_truth: "pipeline/build_daily_features.py:1482-1497 (post-pass GARCH(1,1) percentile rank)"
+  trade_time_knowable: true
+  first_complete_time: "prior trading day close (input is prior daily closes only)"
+  category: "§ 6.1 safe whitelist (RULE 6.1 lists garch_forecast_vol, garch_forecast_vol_pct as forecast made at prior close)"
+  temporal_alignment_note: >
+    GARCH(1,1) forecast computed from prior-day daily_close values only;
+    rolling 252-day percentile rank with min_prior=GARCH_PCT_MIN_PRIOR_VALUES.
+    Forecast is fixed at prior-day close, before any ORB session of the
+    current trading day. Pure pre-entry. Cited in build_daily_features.py
+    docstring comment line 1469: "no look-ahead". Cross-confirmed against
+    backtesting-methodology.md § 6.1 entry.
+  lookahead_check: "PASSES — input data (prior daily closes) closes one trading day before any ORB on this trading day; rolling 252d percentile rank uses prior_only window [i-252:i]"
+  contrast_with_predecessor: >
+    Predecessor used rel_vol_COMEX_SETTLE whose numerator is break_bar_volume
+    (post-entry on ~41% of E2 fills). garch_forecast_vol_pct's input is
+    fully prior-day, so look-ahead is structurally impossible for any
+    entry model on any session.
+
+calibration:
+  quantile_source:
+    population: "IS-only MNQ COMEX_SETTLE O5 OVNRNG_100-firing trades with garch_forecast_vol_pct non-null"
+    filter_clause: "trading_day < HOLDOUT_SACRED_FROM AND d.overnight_range >= 100.0 AND d.garch_forecast_vol_pct IS NOT NULL AND o.entry_model='E2' AND o.confirm_bars=1 AND o.rr_target=1.5 AND o.orb_minutes=5 AND o.orb_label='COMEX_SETTLE' AND o.symbol='MNQ'"
+    expected_n_floor: 400
+    expected_n_observed_2026_04_28: 468
+  quantile_lookhead_check:
+    is_only_quantile: true
+    full_sample_quantile_used: false
+    note: "Per pre-reg writer prompt § QUANTILE LOOK-AHEAD CHECK. P33/P67 derived from IS rows only; OOS rows never enter the threshold computation. Sensitivity check (IS-only vs full-sample percentile) is a downstream diagnostic, not a calibration alternative."
+  thresholds:
+    p33: "DERIVE_FROM_IS_ONLY"
+    p67: "DERIVE_FROM_IS_ONLY"
+  lock_policy:
+    - "P33 and P67 values must be computed and written into the results artifact BEFORE any sized Sharpe calculation runs."
+    - "Once computed, thresholds are frozen. No post-hoc adjustment permitted."
+    - "Lock values stamped in results doc with commit SHA at lock time."
+
+primary_schema:
+  name: "discrete_garch_pct_size_scaling_v1"
+  locked_before_backtest: true
+  buckets:
+    low_lt_p33: 0.5
+    mid_p33_to_p67: 1.0
+    high_ge_p67: 1.5
+  bucket_assignment_rule:
+    spec: "size = 0.5 if x < P33 ; size = 1.0 if P33 <= x < P67 ; size = 1.5 if x >= P67"
+    tie_handling: "ties at P33 boundary go to MID (>= P33). Ties at P67 boundary go to HIGH (>= P67). Both inequalities are inclusive on the upper-bucket side."
+    rationale: >
+      Without explicit tie handling, multiple rows at exactly P33 or P67
+      could be assigned ambiguously across runs (sort-order dependent).
+      Pinning ties to the upper bucket is deterministic and matches the
+      `>=` convention used throughout the project (e.g., OVNRNG_100
+      filter `min_range=100.0` is `>= 100.0`).
+  bucket_direction_choice:
+    direction: "high garch_forecast_vol_pct → larger size (1.5x); low → smaller (0.5x)"
+    rationale: >
+      Preserves the predecessor's MOMENTUM-CONTINUATION direction so the
+      v2 test isolates the predictor swap, not a direction reversal.
+      The predecessor hypothesis is "high vol-regime → continuation
+      conviction → upsize." This v2 tests whether that mechanism survives
+      when the regime indicator is pre-break (garch forecast) rather than
+      contaminated post-break (rel_vol = break_bar_volume / median).
+    direction_NOT_aligned_with_carver: >
+      Carver Ch 9 vol-targeting prescribes the OPPOSITE direction (high
+      forecast vol → smaller position to keep cash vol target constant).
+      This v2 is NOT a Carver vol-targeting test. It is a falsification
+      test of the regime-amplification thesis embedded in the predecessor.
+      The Carver-direction test is a separate hypothesis not in scope here.
+  execution_rule: "Size applied at entry, never retroactively."
+  mechanism_grounding:
+    - source: "Carver 2015 Ch 10 (Position Sizing framework — Position = forecast/10 × cash_vol_target / (Price × Instrument_vol × ...))"
+      role: "FRAMEWORK_ONLY — grounds the principle of vol-regime-conditional position sizing. Direction in this v2 is opposite Carver's own prescription; v2 tests amplification not dampening."
+    - source: "Predecessor pre-reg 2026-04-18 d0 H1 (rel_vol regime-amplification hypothesis, KILL verdict df05b861)"
+      role: "PROVENANCE — defines the hypothesis being clean-tested here. v2 is the falsification version of the same mechanism with a clean proxy."
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY — defines why D-0 v2 exists; NOT D-0 v2's own multiple-testing K"
+  source: "docs/audit/results/2026-04-15-comprehensive-deployed-lane-scan.md (rel_vol upstream, now contaminated and superseded by 2026-04-28 registry)"
+  note: >
+    The rel_vol upstream "discovery" that motivated predecessor D-0 is now
+    classified TAINTED per docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md
+    rows 19, 23, 24. v2 does not inherit upstream survivors as evidence.
+    v2 is a fresh K=1 confirmatory test of the regime-amplification mechanism
+    on a clean feature.
+  upstream_provenance_for_garch_forecast_vol_pct:
+    research_source: "scripts/research/wave4_presession_t2t8.py (2026-04-11)"
+    finding: "Phase B MNQ NYSE_OPEN RR1.5 LOW garch_forecast_vol in_ExpR +0.240 WFE 1.00 p=0.042"
+    note: >
+      Wave 5 G5 research found LOW garch_forecast_vol regime → BETTER
+      outcomes on MNQ NYSE_OPEN RR1.5. The DIRECTION of that finding is
+      OPPOSITE this v2's high → upsize buckets. v2 is therefore not a
+      replication of Wave 5 G5; it is a fresh test of the predecessor's
+      amplification direction. If v2 passes, the regime-amplification
+      story is supported on the COMEX_SETTLE lane in the opposite
+      direction Wave 5 G5 reported on NYSE_OPEN — that would itself be
+      a finding requiring follow-up audit.
+
+d0_v2_testing_discipline:
+  pathway: "B_individual"
+  k: 1
+  rationale: >
+    v2 tests ONE pre-registered prediction (H1: 0.5x/1.0x/1.5x
+    garch_forecast_vol_pct size-scaling beats constant 1.0x by Sharpe
+    >= 15% on this lane). One feature, one direction, one bucket schema,
+    one lane. K=1 per Pathway B Amendment 3.0.
+  significance_threshold:
+    raw_p: "p < 0.05 (Pathway B raw — significance floor)"
+    effect_size: "Sharpe uplift >= 15% (operative pass gate, stricter than raw p)"
+    note: "The effect-size threshold is the operative bar; raw p is Pathway B floor. Either gate failing => not promoted."
+  mandatory_downstream_gates_non_waivable:
+    - "C6 WFE >= 0.50 (applied at D-1 v2 before shadow promotion)"
+    - "C8 OOS ExpR positive (applied at D-1 v2 after shadow accumulates OOS)"
+    - "C9 era stability (no era ExpR < -0.05 at N >= 50) (applied at D-1 v2)"
+  theory_citation: >
+    Carver 2015 Ch 10 (Position Sizing framework grounds vol-regime-conditional
+    sizing as a principle). v2 direction (high vol regime → upsize) is NOT
+    Carver-prescribed; it tests the regime-AMPLIFICATION thesis embedded in
+    the predecessor's rel_vol H1, now retested on a clean predictor.
+
+hypotheses:
+  - id: H1
+    type: primary
+    theory_citation: >
+      Carver 2015 Ch 10 (vol-regime-conditional position sizing as a principle;
+      `docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md`)
+      + predecessor 2026-04-18 D-0 H1 as the falsifiable mechanism statement.
+      v2 direction explicitly opposite to Carver vol-targeting; v2 IS a
+      falsification test of regime-amplification, not a confirmation of
+      Carver dampening.
+    statement: >
+      Applying the locked 0.5x / 1.0x / 1.5x garch_forecast_vol_pct
+      size-scaling schema (low<P33 / mid / high>=P67) to the
+      MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 lane improves IS Sharpe by
+      at least 15% versus the same lane at constant 1.0x sizing over the
+      identical IS date range and trade set. P33 and P67 are the 33rd and
+      67th percentiles of garch_forecast_vol_pct on the IS-only OVNRNG_100
+      firing population.
+    pass_metric:
+      metric: "sharpe_uplift_pct"
+      formula: "100 * (sharpe_sized - sharpe_baseline) / abs(sharpe_baseline)"
+      threshold_gte: 15.0
+      absolute_sharpe_floor:
+        formula: "(sharpe_sized - sharpe_baseline)"
+        threshold_gte: 0.05
+        rationale: >
+          The relative-uplift formula degenerates near sharpe_baseline ≈ 0
+          (e.g., baseline 0.05 → sized 0.06 = +20% uplift but economically
+          meaningless). v2 requires BOTH the relative gate (>=15%) AND the
+          absolute Sharpe-difference gate (>=0.05). Either failing => H1 fails.
+    sharpe_definition:
+      formula: "mean(R) / std(R) where R is the per-trade pnl_r series"
+      annualization: false
+      risk_free_rate: 0.0
+      rationale: "Per-trade-R Sharpe matches predecessor convention (research/phase_d_d0_backtest.py SharpeStats.from_rs at line ~78). Avoids annualization-factor drift across implementations."
+    pathway_b_floor:
+      raw_p_threshold: 0.05
+      raw_p_method:
+        method: "independent paired bootstrap on per-trade (baseline_R, sized_R) pairs"
+        block_size: null
+        block_size_rationale: >
+          Per-trade pairs are not autocorrelated by construction (each trade
+          is independent). Block size is for time-series; not applicable here.
+          If a downstream calendar-day-clustering audit reveals serial
+          correlation in pnl_r within consecutive trading days on this lane,
+          re-run with day-block bootstrap and document in result doc — but
+          the pre-registered method is the simpler independent paired
+          bootstrap.
+        B: 10000
+        statistic: "(sharpe_sized - sharpe_baseline) on the resampled pairs"
+      note: "Pathway B raw p<0.05 is the significance floor; the 15% relative + 0.05 absolute effect-size thresholds are the operative pass gates. ALL THREE gates (raw_p, relative, absolute) required for H1 PASS."
+    counted_against_trial_budget: true
+
+  - id: H2
+    type: secondary_descriptive_only
+    statement: >
+      Hard-skip of low_lt_p33 bucket (size=0) is recorded as an ablation
+      for downstream D-1 v2 informational use. H2 cannot replace H1 post-hoc.
+    ablation:
+      low_q1_size_override: 0.0
+      mid_bucket: 1.0
+      high_bucket: 1.5
+    selection_rule: "descriptive_only; not primary selector; not counted against trial budget"
+    counted_against_trial_budget: false
+
+baseline:
+  name: "constant_1.0x_size"
+  comparison_sample: "identical IS date range and lane definition as sized variant"
+  assertion: "Baseline and sized variants must operate on the exact same trade set; only size differs."
+  baseline_recompute_required: true
+  baseline_recompute_note: >
+    Baseline Sharpe MUST be recomputed from canonical orb_outcomes JOIN
+    daily_features under the realized-eod scratch policy declared above.
+    Do NOT cite predecessor's baseline value — predecessor used a
+    different scratch policy (pre-Stage-5 outcome_builder).
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "2 * ln(N_trials) / E[max_N]^2"
+    N_trials: 1
+    within_cap: true
+    cap_reference: "docs/institutional/pre_registered_criteria.md Criterion 2 (N <= 300)"
+    note: "1 lane × 1 primary schema × 1 predictor = 1 primary trial. H2 descriptive-only per § hypotheses.H2."
+
+kill_criteria:
+  - id: K1
+    metric: "sharpe_uplift_pct"
+    threshold_lt: 10.0
+    action: "ABANDON_PHASE_D_D0_V2_ON_THIS_LANE"
+    rationale: "<10% uplift = clean predictor does not rescue the regime-amplification thesis on this lane. Combined with predecessor KILL, the size-scaling story is closed for MNQ COMEX_SETTLE OVNRNG_100 E2 RR1.5."
+  - id: K2
+    metric: "implementation_integrity"
+    fail_if:
+      - "P33 or P67 calibrated using any trading_day >= HOLDOUT_SACRED_FROM"
+      - "bucket boundaries changed after first Sharpe calculation"
+      - "size applied retrospectively (any calculation that uses realized outcome to influence size)"
+      - "OOS data consulted during D-0 v2 (read or written)"
+      - "feature column garch_forecast_vol_pct sourced from anywhere other than canonical daily_features"
+      - "any trade row included where garch_forecast_vol_pct IS NULL"
+      - "scratch policy diverges from declared 'realized-eod'"
+      - "trade count differs between baseline and sized variants (only size should differ)"
+    action: "HALT_AND_RE_AUDIT"
+  - id: K3
+    metric: "feature_temporal_integrity"
+    fail_if:
+      - "any included trade has feature_input_close_ts >= entry_ts (would imply post-entry feature input)"
+    action: "HALT_AND_RE_AUDIT — temporal contamination defeats the entire purpose of v2"
+    note: "K3 retained slim post pre_run_correction_2026_04_28: 'garch percentile threshold computed on window including OOS' folded into K2 'P33/P67 calibrated using any trading_day >= HOLDOUT_SACRED_FROM' (semantic duplicate). Only the genuinely-novel temporal-input check stays in K3."
+
+decision_rule:
+  continue_to_d1_v2_if:
+    - "H1 sharpe_uplift_pct >= 15.0"
+    - "H1 absolute_sharpe_floor (sharpe_sized - sharpe_baseline) >= 0.05"
+    - "H1 raw_p < 0.05"
+    - "K2 implementation_integrity all PASS"
+    - "K3 feature_temporal_integrity all PASS"
+  park_if:
+    - "10.0 <= H1 sharpe_uplift_pct < 15.0 (and absolute floor met and raw_p < 0.05 and K2/K3 PASS)"
+    - "H1 sharpe_uplift_pct >= 15.0 BUT raw_p >= 0.05 (relative effect present but underpowered)"
+    - "H1 sharpe_uplift_pct >= 15.0 BUT absolute_sharpe_floor < 0.05 (relative gate met on tiny baseline — economically degenerate)"
+  kill_if:
+    - "H1 sharpe_uplift_pct < 10.0"
+    - "K2 fails any item"
+    - "K3 fails any item"
+
+methodology_rules_applied:
+  - rule: "RULE 1 feature temporal alignment"
+    application: "garch_forecast_vol_pct is on § 6.1 safe whitelist; trade-time-knowable at prior-day close. K3 enforces."
+  - rule: "RULE 2 filter application timing"
+    application: "Size decision made at prior-day close (when garch is fixed); applied at entry bar; never retroactively."
+  - rule: "RULE 3 sacred holdout"
+    application: "IS-only for D-0 v2 per Mode A (HOLDOUT_SACRED_FROM=2026-01-01). K2 enforces."
+  - rule: "RULE 4 multi-framing BH-FDR"
+    application: >
+      Does NOT apply to D-0 v2. v2 is Pathway B individual K=1 per Amendment 3.0.
+      No K_global / K_family / K_lane framing — single hypothesis against
+      pre-committed effect-size threshold and raw-p floor.
+  - rule: "RULE 6 feature audit"
+    application: "first_complete_time=prior-day close; pure prior-only computation; no post-entry data. K3 enforces."
+  - rule: "RULE 8.2 arithmetic-only guard"
+    application: >
+      D-0 v2 must measure both Sharpe AND win-rate effect. If WR flat
+      (<3% spread) AND only payoff changes, classify as ARITHMETIC_ONLY
+      per § 8.2 and reclassify as cost-screen not edge. Not a default
+      kill (size-scaling can legitimately move payoff without WR by
+      design), but must be reported and labeled.
+  - rule: "RULE 10 pre-registration"
+    application: "This file is the v2 pre-registration. Commit before run; predecessor remains canonical for v1 scope."
+  - rule: "Pre-reg writer prompt § QUANTILE LOOK-AHEAD CHECK"
+    application: "P33/P67 derived from IS-only population; explicitly declared in calibration.quantile_lookhead_check."
+  - rule: "Pre-reg writer prompt § FORBIDDEN scratch_policy"
+    application: "Top-level scratch_policy: realized-eod declared with literature justification."
+
+outputs_required_after_run:
+  - "Predictor swap statement: 'rel_vol_COMEX_SETTLE → garch_forecast_vol_pct'"
+  - "P33 and P67 of garch_forecast_vol_pct on IS-only population (with N counted)"
+  - "IS sample span (first_trade_day, last_trade_day) and N (target ≥ 400, observed 468 at pre-reg authoring time)"
+  - "baseline Sharpe and sized Sharpe (both recomputed under realized-eod scratch policy)"
+  - "Sharpe uplift % (H1 metric)"
+  - "raw p of Sharpe uplift (paired bootstrap, B=10000, block=5)"
+  - "expectancy impact (R per trade, baseline vs sized)"
+  - "win-rate impact (baseline vs sized) — Rule 8.2 arithmetic-only check"
+  - "trade count check (baseline vs sized — must be IDENTICAL)"
+  - "scratch trade count and realized-eod R-conversion confirmation"
+  - "K2 implementation_integrity checklist with each item PASS/FAIL"
+  - "K3 feature_temporal_integrity checklist with each item PASS/FAIL"
+  - "explicit statement that no OOS was used for calibration"
+  - "separate descriptive readout for H2 hard-skip ablation"
+  - "comparison statement: v2 sharpe_uplift_pct vs predecessor v1 +7.33% — TAGGED DESCRIPTIVE_ONLY_NOT_STATISTICALLY_COMPARABLE because v2 N=468 excludes ~16% NULL-garch rows (concentrated in early history per GARCH_PCT_MIN_PRIOR_VALUES floor) that v1 rel_vol coverage included. Different sample, different scratch policy (v1 pre-Stage-5, v2 realized-eod). Direct ratio is not a valid statistical comparison."
+  - "selection_bias_audit: report N excluded due to garch_forecast_vol_pct IS NULL (per-year breakdown) so reader can assess if early-history exclusion meaningfully shifts the test population"
+  - "absolute Sharpe difference (sharpe_sized - sharpe_baseline) — required for the absolute_sharpe_floor gate"
+
+execution_gate:
+  allowed_now:
+    - "write this file"
+    - "commit this file (fills commit_sha)"
+    - "amend (next commit) to fill commit_sha placeholder with the SHA of the writing commit"
+  forbidden_now:
+    - "run backtest before commit_sha is stamped"
+    - "edit thresholds / buckets / kill criteria after first result"
+    - "use OOS to rescue or reject the schema"
+    - "promote H2 to primary"
+    - "stack additional predictors (Carver Ch 8 forecast combination is NOT in scope here — that is a separate pre-reg)"
+    - "reverse bucket direction (low → 1.5x, high → 0.5x as a Carver vol-targeting test) is a SEPARATE pre-reg, not a v2 follow-up. Running it after v2 fails would be K=2-disguised-as-K=1 data snooping."
+    - "swap baseline to anything other than constant_1.0x_size — baseline is the K=1 anchor"
+
+downstream_dependencies:
+  d1_v2_gate:
+    - "D-0 v2 H1 PASS (sharpe_uplift_pct >= 15% AND raw_p < 0.05)"
+    - "K2 + K3 all PASS"
+  note: >
+    D-0 v2 is IS-only and does not require live-lane health (L3 C12 etc.).
+    D-1 v2 (signal-only shadow on live lane with garch-based sizing)
+    requires its own pre-reg if D-0 v2 passes. The 2026-05-15 hard
+    deadline applies to D-0 v2 landing IF D-1 the original (rel_vol
+    shadow) is going to consume the gate eval. If D-0 v2 KILLS, the
+    2026-05-15 gate eval has no clean basis and the daily shadow
+    accumulation should be parked rather than promoted.
+
+provenance_tags:
+  research_source: "docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md (Re-derivation dispatch Priority 1)"
+  entry_models: "E2 canonical (pipeline.dst.orb_utc_window + outcome_builder)"
+  revalidated_for: "Phase D D-0 v2 2026-04-28"
+  doctrine_basis: ".claude/rules/backtesting-methodology.md § 6.1 (post 2026-04-28 narrowing) + § 6.3 (post 2026-04-28 rel_vol addition)"
+
+not_done_by_this_pre_reg:
+  - "No claim about portfolio-level Sharpe uplift; D-0 v2 is lane-only."
+  - "No claim about live broker P&L; D-0 v2 is backtest-only."
+  - "No authorization for capital change; deploy decision deferred to D-2 v2 pre-reg if both D-0 v2 and D-1 v2 pass."
+  - "No claim about Carver vol-targeting (Carver-direction would have opposite buckets)."
+  - "No replication of Wave 5 G5 NYSE_OPEN LOW-garch finding (different lane, opposite direction)."
+  - "No reopening of v1 (rel_vol) verdict — v1 KILL stands as canonical for that scope."
+
+self_review_checklist_completed:
+  pre_reg_writer_prompt_section_d:
+    - "RED FLAGS check (|t|>7, Δ_IS>0.6, uniform-feature survivors): none triggered — single-lane single-feature K=1 test"
+    - "KILL threshold strict enough to actually kill: yes, < 10% Sharpe uplift kills; predecessor was +7.33% (would kill again on this metric)"
+    - "Threshold ordering: park (10-15) is BETWEEN kill (<10) and continue (>=15) — no trivial pass loophole"
+    - "Post-hoc schema tuning: forbidden by execution_gate.forbidden_now"
+  forbidden_check:
+    - "no 'reconsider/investigate' verbs in kill criteria"
+    - "no OOS-dependent thresholds"
+    - "no secondary hypotheses against primary budget"
+    - "feature column exists in daily_features (verified 2026-04-28)"
+    - "no derived-layer evidence (validated_setups / edge_families)"
+    - "no post-hoc tuning permission"
+    - "no K_global-only claims (K=1 framework)"
+    - "no validated_setups Mode B baseline reuse (baseline_recompute_required=true)"
+    - "scratch_policy declared (realized-eod) with literature justification"
+  pre_commit_self_test:
+    - "If backtest returns sharpe_uplift_pct=10.0 exactly with abs_diff>=0.05 and raw_p<0.05: park_if fires (10.0 <= x < 15.0). Unambiguous."
+    - "If backtest returns sharpe_uplift_pct=9.99: kill_if fires (< 10.0). Unambiguous."
+    - "If backtest returns sharpe_uplift_pct=15.0 with raw_p=0.06: park_if fires (relative gate met, underpowered). Unambiguous."
+    - "If backtest returns sharpe_uplift_pct=20.0 with sharpe_baseline=0.05 and sharpe_sized=0.06 (abs_diff=0.01<0.05): park_if fires (relative gate met on tiny baseline — economically degenerate). Unambiguous."
+    - "If backtest returns sharpe_uplift_pct=15.0 with abs_diff=0.05 and raw_p=0.04: continue_to_d1_v2_if fires (all three gates met). Unambiguous."
+    - "If K3 fails: kill_if fires regardless of H1. Unambiguous."
+    - "If K2 'any trade row included where garch_forecast_vol_pct IS NULL' fails: kill_if fires regardless of H1. Unambiguous."

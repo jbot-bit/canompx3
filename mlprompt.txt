@@ -1,0 +1,195 @@
+Yes. Biggest issue:
+
+* your system understands **ML as a model**
+* but not enough as a **controlled production decision function**
+
+## What you’re missing
+
+### 1. Formal model mandate
+
+Lock this in:
+
+* **ML purpose = meta-label / trade selection only**
+* not signal discovery
+* not execution override
+* not exit logic override
+* not “make bad edges good”
+
+That fits your repo and current architecture: raw baseline exists, ML sits on top, and replay validation already showed uplift on top of raw, not instead of raw.  
+
+### 2. Proper institutional acceptance standard
+
+Your research rules are already strong:
+
+* sample classes
+* BH/FDR
+* walk-forward
+* mechanism-first
+* no fake validation
+* no post-resolution cheating 
+
+But for ML you need **extra gates**:
+
+* **development**
+* **independent validation**
+* **production controls**
+* **monitoring + rollback**
+
+That is the real SR 11-7 mindset: model purpose, limitations, validation, governance, and ongoing monitoring. ([Federal Reserve][1])
+
+## Exact doctrine for CANOMPX3
+
+### Candidate baselines
+
+Use ML only on:
+
+* raw deterministic setups with real structure
+* enough sample
+* pre-entry feature availability
+* honest fills/costs
+
+Best candidate zone:
+
+* raw ExpR **0.00 to +0.05R**
+* slightly negative raw only if separability hypothesis is strong
+
+Not valid:
+
+* dead/no-go ideas
+* tiny-N curiosities
+* structurally wrong sessions
+* indicator soup
+
+That matches your own rules: no sample-fixing, no in-sample masquerading, mechanism required, and many overlay ideas already marked no-go.  
+
+### Feature standard
+
+Allowed:
+
+* ORB size / normalized size
+* break speed
+* session context
+* pre-entry direction/concordance
+* pre-entry vol state
+* calendar flags
+* live-available cross-asset context
+
+Forbidden:
+
+* anything after entry
+* full-session outcome tags
+* future double-break
+* future MFE/MAE
+* any transform fit on full dataset
+
+### Validation standard
+
+Minimum:
+
+* purged/embargoed CPCV
+* final untouched chrono holdout
+* threshold tuning only inside CV
+* accepted vs rejected bucket comparison
+* post-cost and slippage stress
+* calibration check
+* permutation / bootstrap for survivors
+
+Your repo already has CPCV, meta-label, evaluation, live prediction, and recent ML replay validation.  
+
+## Biggest gaps right now
+
+### Gap A — model inventory / governance card
+
+Every ML model needs:
+
+* purpose
+* owner
+* training span
+* feature schema hash
+* target definition
+* threshold rule
+* costs used
+* validation pack
+* live fallback
+* kill conditions
+
+### Gap B — feature contract
+
+You need one canonical schema:
+
+* exact column list
+* dtype
+* null policy
+* source table
+* decision-time availability
+* live parity check
+
+### Gap C — threshold governance
+
+Do **not** let threshold float ad hoc.
+Threshold must be:
+
+* versioned
+* chosen on CV only
+* justified by EV / utility
+* re-approved if data/model changes
+
+### Gap D — production controls
+
+SEC-style market access mindset:
+
+* hard risk caps
+* price/size sanity
+* stale-feature rejection
+* model mismatch rejection
+* kill switch
+* full decision logging ([SEC][2])
+
+### Gap E — monitoring
+
+Need 4 drift monitors:
+
+* feature drift
+* score distribution drift
+* calibration drift
+* realized PnL drift
+
+NIST AI RMF framing is basically: govern, map, measure, manage. Your stack has pieces, but not the full loop. ([NIST Publications][3])
+
+## Where to focus first
+
+In order:
+
+1. **Model doctrine doc**
+2. **Feature contract + leakage audit**
+3. **Threshold governance**
+4. **Champion/challenger framework**
+5. **Live decision logging**
+6. **Drift + rollback monitors**
+7. **2026 preregistered holdout**
+
+## Hard truth
+
+Your edge engine is already good. The weak point is not “more ML sophistication.”
+
+It’s:
+
+* governance
+* decision control
+* production parity
+* proving uplift survives after all the above
+
+That’s the Bloomberg-grade jump.
+
+If you want, next I’ll give you the **exact rewrite spec for your ML stack**:
+
+* `ml/config.py`
+* `ml/features.py`
+* `ml/meta_label.py`
+* `ml/predict_live.py`
+* monitoring / audit files
+* promotion checklist.
+
+[1]: https://www.federalreserve.gov/supervisionreg/srletters/sr1107.htm?utm_source=chatgpt.com "SR 11-7 on guidance on Model Risk Management"
+[2]: https://www.sec.gov/rules-regulations/2011/06/risk-management-controls-brokers-or-dealers-market-access?utm_source=chatgpt.com "Risk Management Controls for Brokers or Dealers With ..."
+[3]: https://nvlpubs.nist.gov/nistpubs/ai/nist.ai.100-1.pdf?utm_source=chatgpt.com "Artificial Intelligence Risk Management Framework (AI RMF 1.0)"

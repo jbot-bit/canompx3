@@ -1,0 +1,8 @@
+{
+  "planPath": "docs/plans/2026-03-06-bloomey-audit-fixes.md",
+  "tasks": [
+    {"id": 16, "subject": "Task 1: Bump health check test timeout 300s → 600s", "status": "pending"},
+    {"id": 17, "subject": "Task 2: Regenerate dashboard HTML", "status": "pending", "blockedBy": [16]}
+  ],
+  "lastUpdated": "2026-03-06T18:00:00+10:00"
+}

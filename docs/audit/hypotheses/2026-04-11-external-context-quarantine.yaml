@@ -1,0 +1,104 @@
+# Hypothesis Registry — 2026-04-11 external-context-quarantine
+#
+# Locked: 2026-04-11T10:45:00+10:00
+# Author: Codex worktree research-ml-bot-review
+# Purpose: read-only quarantine audit of pre-trade context filters using canonical
+# daily_features + orb_outcomes only. This file is for local audit discipline in
+# the isolated worktree and is NOT being used for a mutating discovery run.
+
+metadata:
+  name: "external-context-quarantine"
+  purpose: "Read-only audit of timestamp-safe external-context analogues already present in canonical data"
+  date_locked: "2026-04-11T10:45:00+10:00"
+  data_horizon_years_clean: 6.65
+  data_horizon_years_proxy: 0.0
+  holdout_date: "2026-01-01"
+  total_expected_trials: 12
+  testing_mode: "family"
+
+hypotheses:
+  - id: 1
+    name: "Gap severity improves CME_REOPEN follow-through"
+    theory_citation: "Crabel 1990 opening range breakout class; Ito, Engle, and Lin 1992 meteor-shower information spillover"
+    economic_basis: |
+      Overnight price displacement into the trading-day open is a pre-session
+      signal of accumulated information and inventory imbalance. If the open
+      gap is large relative to ATR, the first session's ORB should have a
+      higher chance of directional resolution than quiet-gap opens.
+    filter:
+      type: GAP_R015
+      column: gap_open_points / atr_20
+      thresholds: [0.015]
+    scope:
+      instruments: [MGC, MES, MNQ]
+      sessions: [CME_REOPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 3
+    kill_criteria:
+      - "BH FDR q=0.05 fails across the 3 CME_REOPEN gap trials"
+      - "2026 OOS lift <= 0 for the filtered subset"
+      - "Filtered IS sample size < 30 trades"
+      - "Year-stability positive in fewer than 60% of evaluable IS years"
+
+  - id: 2
+    name: "Large prior-day range improves Europe-session follow-through"
+    theory_citation: "Crabel 1990 opening range breakout class; Bollerslev 1986 volatility clustering"
+    economic_basis: |
+      Prior-day range is fully known before the next trading day begins. A
+      large prior-day range relative to ATR indicates an elevated volatility
+      state likely to persist into the next European information-transfer
+      windows. If that state matters, Europe-session ORBs should outperform on
+      large-range days versus quiet prior-day regimes.
+    filter:
+      type: PDR_R105
+      column: prev_day_range / atr_20
+      thresholds: [1.05]
+    scope:
+      instruments: [MGC, MES, MNQ]
+      sessions: [LONDON_METALS, EUROPE_FLOW]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 6
+    kill_criteria:
+      - "BH FDR q=0.05 fails across the 6 prior-day-range Europe-session trials"
+      - "2026 OOS lift <= 0 for the filtered subset"
+      - "Filtered IS sample size < 30 trades"
+      - "Year-stability positive in fewer than 60% of evaluable IS years"
+
+  - id: 3
+    name: "ATR velocity expansion improves US_DATA_1000 follow-through"
+    theory_citation: "Crabel 1990 opening range breakout class; Bollerslev 1986 volatility clustering"
+    economic_basis: |
+      ATR velocity is a pre-session volatility-state measure derived from prior
+      data only. If volatility is actively expanding into the day, the 10:00
+      ET macro/post-open window should show stronger continuation than
+      contracting or neutral volatility states.
+    filter:
+      type: ATR_VEL_GE105
+      column: atr_vel_ratio
+      thresholds: [1.05]
+    scope:
+      instruments: [MGC, MES, MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 3
+    kill_criteria:
+      - "BH FDR q=0.05 fails across the 3 ATR-velocity US_DATA_1000 trials"
+      - "2026 OOS lift <= 0 for the filtered subset"
+      - "Filtered IS sample size < 30 trades"
+      - "Year-stability positive in fewer than 60% of evaluable IS years"
+
+total_hypothesis_count: 3
+total_expected_trials: 12
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"

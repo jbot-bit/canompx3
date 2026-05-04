@@ -1,0 +1,102 @@
+{
+  "skill": "post-rebuild",
+  "version": 1,
+  "tests": [
+    {
+      "id": "pr-01",
+      "prompt": "post-rebuild check for MGC",
+      "assertions": [
+        {
+          "id": "pr-01-a1",
+          "type": "command_ran",
+          "pattern": "retire_e3_strategies\\.py",
+          "description": "Step 1: must retire E3 strategies"
+        },
+        {
+          "id": "pr-01-a2",
+          "type": "command_ran",
+          "pattern": "build_edge_families\\.py",
+          "description": "Step 2: must build edge families"
+        },
+        {
+          "id": "pr-01-a3",
+          "type": "command_ran",
+          "pattern": "gen_repo_map\\.py",
+          "description": "Step 3: must regenerate repo map"
+        },
+        {
+          "id": "pr-01-a4",
+          "type": "command_ran",
+          "pattern": "audit_integrity\\.py",
+          "description": "Step 4: must run integrity audit"
+        },
+        {
+          "id": "pr-01-a5",
+          "type": "command_ran",
+          "pattern": "check_drift\\.py",
+          "description": "Step 4: must run drift checks"
+        },
+        {
+          "id": "pr-01-a6",
+          "type": "command_ran",
+          "pattern": "audit_behavioral\\.py",
+          "description": "Step 4: must run behavioral audit"
+        },
+        {
+          "id": "pr-01-a7",
+          "type": "command_ran",
+          "pattern": "pytest",
+          "description": "Step 4: must run test suite"
+        },
+        {
+          "id": "pr-01-a8",
+          "type": "command_ran",
+          "pattern": "generate_promotion_candidates\\.py",
+          "description": "Step 5: must surface promotion candidates"
+        },
+        {
+          "id": "pr-01-a9",
+          "type": "command_ran",
+          "pattern": "sync_pinecone\\.py",
+          "description": "Step 6: must sync Pinecone knowledge base"
+        },
+        {
+          "id": "pr-01-a10",
+          "type": "text_contains",
+          "value": "POST-REBUILD COMPLETE",
+          "description": "Step 7: must output structured report header"
+        },
+        {
+          "id": "pr-01-a11",
+          "type": "regex_match",
+          "pattern": "E3 retire:\\s*(PASS|FAIL)",
+          "description": "Step 7: report must include E3 retire status"
+        },
+        {
+          "id": "pr-01-a12",
+          "type": "regex_match",
+          "pattern": "Drift:\\s*(PASS|FAIL)",
+          "description": "Step 7: report must include drift status"
+        },
+        {
+          "id": "pr-01-a13",
+          "type": "regex_match",
+          "pattern": "Candidates:\\s*\\d+",
+          "description": "Step 7: report must include candidate count"
+        },
+        {
+          "id": "pr-01-a14",
+          "type": "text_not_contains",
+          "value": "should pass",
+          "description": "No hedging — must report actual results"
+        },
+        {
+          "id": "pr-01-a15",
+          "type": "regex_match",
+          "pattern": "Instrument:\\s*MGC",
+          "description": "Report must reference the instrument from arguments"
+        }
+      ]
+    }
+  ]
+}

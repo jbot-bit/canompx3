@@ -1,0 +1,193 @@
+metadata:
+  name: sweep-reclaim-v1
+  owner: codex
+  created_at: 2026-04-19
+  testing_mode: research_investigation
+  supersedes: none
+  depends_on:
+    - docs/specs/level_interaction_v1.md
+    - docs/institutional/mechanism_priors.md
+  authority:
+    - RESEARCH_RULES.md
+    - docs/STRATEGY_BLUEPRINT.md
+    - docs/institutional/pre_registered_criteria.md
+    - docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+  scope_note: >
+    Narrow canonical re-test of prior-day high/low swept close-through events
+    that subsequently reclaim within a short bar lookahead. This is an event
+    study only. It does not reopen the older non-ORB strategy work as a
+    strategy backtest and does not broaden the level family beyond PDH/PDL.
+
+edge_claim_summary: >
+  Swept close-through events that reclaim back through prior-day high/low may
+  contain stronger short-horizon reversal information than generic pass/fail
+  events. The claim is modest: at least one locked instrument-session-level
+  cell may show positive signed next-2-bar expectancy after reclaim, measured
+  from the reclaim bar close and selected on pre-2026 data only.
+
+mechanism:
+  summary: >
+    This contract tests the cleaner mechanical form of the repo's trapped-side
+    prior: a prior-day liquidity level is breached, the breach closes through,
+    and then price reclaims back to the original side within a short lookahead.
+    The reclaimed side is interpreted as the trapped-break direction failing.
+    Fitschen grounds the broader intraday trend-following premise, while the
+    exact sweep-reclaim reversal mechanism remains a project prior rather than
+    separately literature-grounded. Protocol B skepticism applies.
+  tier_1_literature_support:
+    - file: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+      relevance: CORE for intraday trend-follow premise
+      with_theory_claim: false
+      note: >
+        Grounds intraday trending as plausible baseline market behavior, but
+        does not directly validate reclaimed failed-break logic at prior-day
+        levels.
+  project_evidence:
+    - file: docs/institutional/mechanism_priors.md
+      lines: entire_doc
+    - file: research/research_v3_mechanism.py
+      relevance: orientation_only
+      note: >
+        Older mechanism-first non-ORB research mentioned PDH/PDL sweep
+        rejection as the only directional signal with some promise, but it was
+        not pre-registered under the current canonical level-interaction helper
+        and is not proof here.
+
+sacred_boundary_discipline:
+  mode: A
+  holdout_date: 2026-01-01
+  mode_a_citation: >
+    docs/institutional/pre_registered_criteria.md Criterion 8 and Amendment 2.7
+    lock the 2026-01-01 sacred holdout boundary.
+  pre_2026_selection_only: true
+  2026_diagnostic_only: true
+  no_oos_re_tuning: true
+
+rules:
+  research_only: true
+  no_live_wiring: true
+  no_pipeline_schema_changes: true
+  no_extra_session_expansion: true
+  no_extra_level_expansion: true
+  no_generic_non_orb_strategy_reopen: true
+  no_parameter_search_beyond_locked_scope: true
+
+locked_inputs:
+  instruments:
+    - MES
+    - MGC
+    - MNQ
+  sessions:
+    - CME_PRECLOSE
+    - COMEX_SETTLE
+    - EUROPE_FLOW
+    - NYSE_OPEN
+    - TOKYO_OPEN
+    - US_DATA_1000
+  levels:
+    - prev_day_high
+    - prev_day_low
+  reference_sides:
+    prev_day_high: below
+    prev_day_low: above
+  interaction_requirements:
+    interaction_kind: close_through
+    swept: true
+    reclaimed: true
+  event_window_minutes: 30
+  reclaim_lookahead_bars: 2
+  response_horizon_bars: 2
+  orb_minutes_context: 5
+  common_start_date: 2019-05-06
+  common_end_date_is: 2025-12-31
+  oos_start_date: 2026-01-01
+  oos_end_date: 2026-04-19
+  response_normalization: atr_20
+  response_anchor: reclaim_bar_close
+  one_event_per_level_per_session_per_day: true
+
+trial_budget:
+  primary_selection_trials: 36
+  construction:
+    instruments: 3
+    sessions: 6
+    levels: 2
+    event_family: 1
+    response_horizons: 1
+  within_clean_cap: true
+  cap_reference: docs/institutional/pre_registered_criteria.md
+
+hypotheses:
+  - id: H1
+    type: family_primary
+    theory_citation: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+    statement: >
+      At least one locked sweep-reclaim cell shows positive pre-2026 signed
+      next-2-bar expectancy from the reclaim close, with N >= 50 and BH-FDR
+      survival at q <= 0.05 across the locked K=36 family.
+    pass_metrics:
+      min_n_is: 50
+      p_bh_q_max: 0.05
+      avg_signed_return_gt: 0.0
+    rationale_note: >
+      Sweep-reclaim events are rarer than generic pass/fail interactions, so
+      the minimum sample threshold is lowered from 100 to 50 but still treated
+      as a discovery gate only.
+
+  - id: H2
+    type: diagnostic_only
+    statement: >
+      Any surviving pre-2026 cell should preserve direction in the sacred 2026
+      window if OOS N >= 20.
+    counted_against_trial_budget: false
+
+kill_criteria:
+  - id: K1
+    metric: methodology_integrity
+    fail_if:
+      - any level outside prev_day_high/prev_day_low is included
+      - any session outside the locked six-session set is included
+      - any reclaim lookahead other than 2 bars is used
+      - any response horizon other than next 2 bars is used
+      - any 2026 data is used for cell selection
+      - any result is described as validated edge or deployable strategy
+    action: HALT_AND_RE_AUDIT
+  - id: K2
+    metric: family_signal
+    fail_if:
+      - zero cells satisfy H1
+    action: FAMILY_NULL
+
+decision_rule:
+  continue_if:
+    - H1 passes on at least one cell
+    - K1 integrity passes
+  park_if:
+    - K2 fires
+  forbidden_follow_on_without_new_pre_reg:
+    - widening reclaim_lookahead_bars
+    - widening event_window_minutes
+    - translating sweep-reclaim cells into trade backtests
+    - reopening the full non-ORB v3 strategy set
+
+deliverables_locked:
+  - research/research_sweep_reclaim_v1.py
+  - research/output/sweep_reclaim_v1_cells.csv
+  - docs/audit/results/2026-04-19-sweep-reclaim-v1.md
+
+methodology_rules_applied:
+  - rule: protocol_b_skepticism
+    application: >
+      Exact sweep-reclaim reversal theory is not separately literature-grounded
+      in local resources, so results must clear standard statistical bars
+      without theory-path relaxation.
+  - rule: no_lookahead
+    application: >
+      Level resolution and session timing are constrained by
+      pipeline.session_guard and pipeline.dst.orb_utc_window; the response is
+      anchored only after the reclaim close.
+  - rule: overlap_control
+    application: >
+      This study is explicitly not a rebrand of the older non-ORB sweep script.
+      It uses the new canonical helper, narrower scope, honest K accounting,
+      and event-study outputs only.

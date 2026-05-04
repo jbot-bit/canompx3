@@ -1,0 +1,192 @@
+You are Claude Code operating inside my trading research application.
+
+This repo already has:
+- ORB-based strategy discovery
+- Multiple entry models (E1/E2/E3)
+- Filtered strategies (NO_FILTER, G4, G5, G6, G8)
+- A fixed cost model
+- A validated outcome_builder + strategy_validator
+- A corrected portfolio correlation layer with eligibility padding
+
+Your task is to AUDIT, then CONDITIONALLY ADD volume logic
+according to Selective Classification and Forecast-to-Fill principles.
+
+────────────────────────────────────────
+MANDATORY SELF-IDENTIFICATION (FIRST)
+────────────────────────────────────────
+Before doing anything else, print:
+1. Current git branch + HEAD commit
+2. DB sources used (which symbols exist: GC, MGC, etc.)
+3. Files you will inspect (paths)
+4. Whether volume is already used anywhere (YES/NO, with file+line)
+
+If anything is unclear → STOP and ask.
+
+────────────────────────────────────────
+FAIL-CLOSED RULES
+────────────────────────────────────────
+- PASS 1 = AUDIT ONLY (no code edits)
+- PASS 2 = MINIMAL IMPLEMENTATION ONLY
+- No schema changes unless explicitly justified
+- No refactors
+- No new “signals” — volume is NOT alpha
+- Volume may only be used for:
+  (a) abstention / filtering
+  (b) execution realism
+  (c) cost modeling
+
+If an idea increases trade count artificially → REJECT IT.
+
+────────────────────────────────────────
+CONCEPT YOU MUST INTERNALIZE
+────────────────────────────────────────
+Volume is NOT a signal.
+Volume is a TRUTH FILTER.
+
+Use it for:
+- Selective Classification (abstain when confidence is low)
+- Execution realism
+- Liquidity-aware costs
+
+Never use raw volume.
+Never use Micro volume for decision-making.
+
+GC volume = source of truth.
+MGC volume = shadow / noise.
+
+────────────────────────────────────────
+PASS 1 — AUDIT (NO EDITS)
+────────────────────────────────────────
+Check the project for ALL of the following:
+
+A) DATA AVAILABILITY
+- Do we ingest GC volume? (Databento dbn)
+- Is GC volume accessible at 1m resolution?
+- Is volume already stored or derived anywhere?
+
+B) EXISTING USAGE
+Search for:
+- “volume”
+- “vol”
+- “liquidity”
+- “slippage scaling”
+Report:
+- File
+- Line
+- Purpose (if any)
+
+C) CURRENT BEHAVIOR
+Confirm:
+- No current strategy uses volume as a signal
+- Cost model uses fixed slippage
+- E3 fills are price-only, not liquidity-aware
+
+Summarize PASS 1 findings clearly.
+
+STOP after PASS 1 and ask:
+“Volume is currently used / not used. Proceed to PASS 2?”
+
+────────────────────────────────────────
+PASS 2 — CONDITIONAL IMPLEMENTATION
+(ONLY IF VOLUME IS NOT ALREADY USED CORRECTLY)
+────────────────────────────────────────
+
+Implement volume ONLY in these THREE approved locations.
+
+────────────
+1) SELECTIVE CLASSIFICATION FILTER
+────────────
+Purpose: abstain from low-confidence breakouts
+
+Where:
+- strategy_discovery OR entry_rules (NOT outcome_builder)
+
+Logic:
+- Compute relative volume using GC:
+  relative_volume = breakout_bar_volume / rolling_mean_volume
+- Rolling mean must be:
+  - same session
+  - same minute-of-day
+  - 10–20 prior days
+
+Rule:
+- If relative_volume < threshold (e.g. 1.0–1.2):
+  → ABSTAIN (no trade)
+- This reduces sample size intentionally.
+
+Implementation rules:
+- Parameterized (min_relative_volume)
+- Default OFF (so existing strategies remain valid)
+- Treated like other filters (NO_FILTER vs VOL_FILTER)
+
+────────────
+2) IMPACT-AWARE COST MODEL
+────────────
+Purpose: realism under low liquidity
+
+Where:
+- cost_model.py (or equivalent)
+
+Logic:
+- Slippage multiplier based on GC volume:
+  slippage_adj ∝ sqrt(reference_volume / current_volume)
+
+Rules:
+- High volume → lower effective slippage
+- Low volume → higher effective slippage
+- Hard cap to prevent explosions
+
+DO NOT:
+- Change expectancy formula
+- Change R accounting
+- Change stop/target logic
+
+────────────
+3) E3 LIMIT FILL VALIDATION (OPTIONAL BUT RECOMMENDED)
+────────────
+Purpose: prevent fake fills in illiquid minutes
+
+Where:
+- entry_rules.py OR outcome_builder.py (fill logic only)
+
+Rule:
+- If price touches limit but GC volume < min_fill_volume:
+  → mark NO FILL (NULL outcome)
+
+This applies ONLY to E3.
+Do NOT affect E1 / E2.
+
+────────────
+VALIDATION & SAFETY CHECKS
+────────────
+After implementation:
+- Show before/after trade counts for:
+  - NO_FILTER
+  - G4
+  - G8
+- Expect:
+  - NO_FILTER: slight reduction
+  - G8: heavy reduction (this is GOOD)
+
+Run:
+- Full test suite
+- Drift checks
+
+────────────
+FINAL COMMIT RULES
+────────────
+- One commit per logical change
+- Clear message:
+  “Add GC volume selective classification + liquidity-aware cost adjustment”
+- Print diff summary and commit hash
+
+────────────────────────────────────────
+BEHAVIORAL RULES FOR FUTURE REASONING
+────────────────────────────────────────
+- Low volume ≠ bearish
+- Low volume = LOW CONFIDENCE
+- Rare strategies are not bugs
+- Abstention is alpha
+- GC tells the truth, MGC follows
+
+Confirm understanding before making changes.

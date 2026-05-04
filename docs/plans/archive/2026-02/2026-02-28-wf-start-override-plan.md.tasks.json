@@ -1,0 +1,11 @@
+{
+  "planPath": "docs/plans/2026-02-28-wf-start-override-plan.md",
+  "tasks": [
+    {"id": 10, "subject": "Task 0: Add WF_START_OVERRIDE to config.py", "status": "pending"},
+    {"id": 11, "subject": "Task 1: Add wf_start_date param to walkforward.py", "status": "pending", "blockedBy": [10]},
+    {"id": 12, "subject": "Task 2: Thread override through strategy_validator.py", "status": "pending", "blockedBy": [10, 11]},
+    {"id": 13, "subject": "Task 3: Write tests for WF start-date override", "status": "pending", "blockedBy": [11]},
+    {"id": 14, "subject": "Task 4: Commit, rebuild MGC validation + edge families", "status": "pending", "blockedBy": [10, 11, 12, 13]}
+  ],
+  "lastUpdated": "2026-02-28T19:30:00+10:00"
+}

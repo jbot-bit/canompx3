@@ -1,0 +1,42 @@
+metadata:
+  name: "mnq-usdata1000-clear-of-congestion-take-v1"
+  purpose: "Exact bridge prereg for MNQ US_DATA_1000 O5 E2 RR1.0 long non-congestion family as a take overlay"
+  date_locked: "2026-04-22T23:58:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "individual"
+
+hypotheses:
+  - id: 1
+    name: "MNQ US_DATA_1000 long clear-of-congestion family"
+    theory_citation: |
+      Crabel, Toby. Day Trading with Short Term Price Patterns and Opening Range Breakout.
+      Repo-local mechanism grounding: docs/institutional/mechanism_priors.md,
+      RESEARCH_RULES.md mechanism-first doctrine, and
+      docs/audit/results/2026-04-22-mnq-prior-day-family-board-v1.md.
+    economic_basis: |
+      On MNQ US_DATA_1000, long breakouts whose ORB midpoint is outside the
+      prior-day congestion regime should outperform the congested state. The
+      exact research claim is that the positive side of the bounded congestion
+      family is the non-congested complement: ORB midpoint neither strictly
+      inside the prior-day range nor within 0.50 ATR-20 of the prior-day
+      pivot. The long-direction restriction is owned by the filter itself so
+      discovery does not widen to short breaks.
+    filter:
+      type: "PD_CLEAR_LONG"
+      column: "orb_mid vs prior-day congestion regime"
+      thresholds:
+        - "NOT (prev_day_low < orb_mid < prev_day_high)"
+        - "NOT (|orb_mid - pivot| / atr_20 < 0.50)"
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Experimental row does not match the exact audited strategy surface"
+      - "IS expectancy on-signal is non-positive after canonical discovery write"
+      - "Validator rejects the row for lifecycle illegality, Phase 4 gates, walk-forward insufficiency, or era instability"

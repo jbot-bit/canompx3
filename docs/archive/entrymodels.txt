@@ -1,0 +1,164 @@
+E1 — Market-On-Confirm
+
+When the trade is triggered
+
+Confirm occurs at confirm_ts.
+
+Entry
+
+entry_ts = next bar after confirm
+
+E.g., if confirm is on a 1m bar at 10:05:00 → entry next bar at 10:06:00
+
+entry_px = next bar OPEN
+
+Stop
+
+Stop remains at original orb_low (long) or orb_high (short).
+
+Target
+
+Based on RR (e.g., 1R/2R levels from stop risk).
+
+Notes
+
+Entry price always worse or equal than confirm close.
+
+No fill ambiguity.
+
+E2 — Market-On-Confirm-Close
+
+Entry
+
+Trade executes at confirm bar’s close.
+
+entry_ts = confirm_ts
+
+entry_px = confirm bar CLOSE
+
+Stop
+
+Stop stays at orb_low/orb_high.
+
+Target
+
+Same RR logic.
+
+Notes
+
+This is more “honest” about entry than E1.
+
+Slippage still needs to be added separately.
+
+E3 — Limit-At-ORB
+
+Signal
+
+Confirm bar identified.
+
+Limit placement
+
+After confirm, place limit at:
+
+orb_high for long
+
+orb_low for short
+
+Fill condition
+
+Trade is filled if any subsequent bar (after confirm) has:
+
+High ≥ orb_high (for longs), OR
+
+Low ≤ orb_low (for shorts)
+
+Entry
+
+entry_ts = timestamp of first bar that touches limit
+
+entry_px = orb_high/orb_low
+
+Stop
+
+As normal (opposite ORB level).
+
+Target
+
+Standard RR.
+
+No fill
+
+If price never touches the limit before session end, this trade is canceled.
+
+Notes
+
+This models real limit execution.
+
+Need to define session end or timeout (e.g., next ORB window).
+
+E4 — Limit-At-ORB-With-Timeout
+
+Same as E3 up to fill.
+
+Timeout rule
+
+Define a timeout period: e.g. X minutes after confirm.
+
+After timeout
+Two options (pick one):
+
+A) Cancel everything
+
+If limit not hit within X minutes → dead signal (no trade)
+
+B) Fallback to market
+
+After timeout:
+
+entry_ts = bar after timeout
+
+entry_px = that bar OPEN
+
+Stop/Target
+
+Same as normal.
+
+Notes
+
+This hybrid is more realistic when you don’t want to miss moves.
+
+Consistency Rules (for all variants)
+Bars used
+
+Use strictly future bars:
+
+bars_df["ts_utc"] > signal_ts
+
+
+(never include confirm bar itself except for E2)
+
+Slippage/Costs
+
+Apply consistently after entry:
+
+Commissions + spread
+
+If modeling slippage, add at entry and exit
+
+Stop/Target checks
+
+If stop & target hit in same bar:
+
+Conservative choice: count as stop hit (loss)
+
+Decision Rules You Should Check
+
+Compare this to your current logic:
+
+Rule	In your current code?	Notes
+Entry uses next bar open	☐ / ☑	E1
+Entry uses confirm bar close	☐ / ☑	E2
+Limit fill logic at ORB level exists	☐ / ☑	E3/E4
+Timeout for limit orders	☐ / ☑	E4
+Session end cancels limit	☐ / ☑	E3/E4
+Actual risk recalculated from real entry px	☐ / ☑	critical for E1/E2

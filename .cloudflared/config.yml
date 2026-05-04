@@ -1,0 +1,22 @@
+# Cloudflare Tunnel config for ORB webhook server
+# Account: e0ae568cfee53e713d82c58061d62750
+#
+# SETUP (one-time, do this once):
+#   1. Download cloudflared: https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
+#      Rename to cloudflared.exe, place in C:\cloudflared\ or add to PATH
+#   2. Login: cloudflared tunnel login
+#      (opens browser — log into your Cloudflare account)
+#   3. Create tunnel: cloudflared tunnel create orb-webhook
+#      (saves credentials JSON to %USERPROFILE%\.cloudflared\<tunnel-id>.json)
+#   4. Copy the tunnel ID (UUID) from the output and paste below as `tunnel:`
+#   5. Run: cloudflared tunnel run orb-webhook
+#      (gives you a stable URL like https://orb-webhook.<your-domain>.com or UUID.cfargotunnel.com)
+#
+# DAILY USE (run in a terminal alongside the webhook server):
+#   cloudflared tunnel --config C:\Users\joshd\canompx3\.cloudflared\config.yml run
+
+tunnel: PASTE-TUNNEL-ID-HERE
+credentials-file: C:\Users\joshd\.cloudflared\PASTE-TUNNEL-ID-HERE.json
+
+ingress:
+  - service: http://localhost:8765

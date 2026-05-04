@@ -1,0 +1,93 @@
+date: 2026-04-16
+title: Garch W2c M2 validated utility audit
+status: active
+purpose: >
+  Test whether the surviving M2 active-transition mechanism still improves
+  validated-shelf utility when each family uses the conservative local partner
+  representation chosen by the completed provenance rule.
+
+authority_chain:
+  - CLAUDE.md
+  - RESEARCH_RULES.md
+  - TRADING_RULES.md
+  - docs/plans/2026-04-16-garch-institutional-attack-plan.md
+  - docs/plans/2026-04-16-garch-w2c-m2-validated-utility-design.md
+  - docs/audit/results/2026-04-16-garch-w2-mechanism-pairing-audit.md
+  - docs/audit/results/2026-04-16-garch-partner-state-provenance-audit.md
+
+universe:
+  source: validated_setups_only
+  truth_layers:
+    - orb_outcomes
+    - daily_features
+  status: research_provisional_not_production_truth
+
+time_boundary:
+  is_logic: pre_2026_only
+  oos_2026: descriptive_only
+  oos_2026_may_choose_verdict: false
+
+mechanism:
+  id: M2
+  name: active_transition
+  garch_anchor: "garch_forecast_vol_pct >= 70"
+
+family_representation_rule:
+  neighbor_stable: keep_current_canonical_representation
+  supported_current: keep_current_canonical_representation
+  alternate_better: switch_to_named_locked_alternate
+  weak_or_unclear: exclude_family
+
+carried_families:
+  - family: COMEX_SETTLE_high
+    representation: ATRVEL_EXPANDING
+  - family: EUROPE_FLOW_high
+    representation: ATRVEL_EXPANDING
+  - family: TOKYO_OPEN_high
+    representation: ATRVEL_EXPANDING
+  - family: SINGAPORE_OPEN_high
+    representation: ATRVEL_GE_110
+
+excluded_families:
+  - family: LONDON_METALS_high
+    reason: no_supported_validated_family_w2_claim
+
+required_metrics:
+  - cells
+  - N_total
+  - N_garch
+  - N_conj
+  - base_exp
+  - garch_exp
+  - conj_exp
+  - delta_garch_vs_base
+  - delta_conj_vs_base
+  - delta_conj_vs_garch
+  - support_share_partner_inside_garch
+  - support_share_garch_inside_partner
+  - max_conj_cell_share
+  - N_conj_oos
+  - conj_exp_oos
+
+support_rules:
+  family_conjunction_min: 30
+  comparison_min_side: 10
+  concentration_risk_threshold: 0.50
+
+allowed_family_verdicts:
+  - carry_local_m2
+  - partial_local_m2
+  - demote_local_m2
+  - unclear
+
+allowed_stage_verdicts:
+  - M2_carry
+  - M2_partial
+  - M2_demote
+
+forbidden_drift:
+  - No new representation search
+  - No M1 reopening
+  - No deployment/profile conclusions
+  - No prior-day or prior-session carry in this stage
+  - No use of prior report summaries as authority

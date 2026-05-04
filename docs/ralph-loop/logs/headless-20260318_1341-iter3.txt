@@ -1,0 +1,32 @@
+Documentation updates match expectations — no production code changes (audit-only). Iteration complete.
+
+---
+
+```
+=== RALPH LOOP ITER [3] COMPLETE ===
+Scope: pipeline/calendar_filters.py (medium centrality, 3 importers, previously unscanned)
+Audit: 2 findings (0 CRIT, 0 HIGH, 0 MED, 2 LOW)
+Classification: audit-only
+Action: audit-only (no code changes)
+Target: pipeline/calendar_filters.py
+Blast radius: 3 callers (build_daily_features.py, calendar_overlay.py, session_orchestrator.py), 1 test file
+Verdict: SKIPPED (no actionable findings — both LOW findings ACCEPTABLE)
+
+Finding 1 — LOW/ACCEPTABLE (Orphan risk):
+  is_month_end, is_month_start, is_quarter_end are dormant exports with
+  zero callers. calendar_overlay.py explicitly documents the re-enablement
+  path at line 89-90. ACCEPTABLE per rule 2 (dormant infrastructure with
+  documented re-enablement).
+
+Finding 2 — LOW/ACCEPTABLE (Volatile data):
+  CPI list stale since 2026-03-12 (last entry 2026-02-11); FOMC list
+  missing 2026-05+ future dates. Runtime impact = zero because
+  CALENDAR_RULES is empty (0 rules in calendar_cascade_rules.json;
+  calendar cascade research found zero BH FDR survivors). ACCEPTABLE:
+  guarded by if not CALENDAR_RULES: return NEUTRAL at calendar_overlay.py:139.
+
+Commit: NONE
+Deferred debt: 1 open item (DF-04: rolling_portfolio.py dormant orb_minutes=5 — pre-existing)
+Next: pipeline/stats.py (MEDIUM tier, 3 importers, unscanned — next highest-centrality unscanned file)
+================================
+```

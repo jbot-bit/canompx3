@@ -1,0 +1,73 @@
+{
+  "timestamp": "2026-03-22T03:00:00+10:00",
+  "live_strategies": [
+    {
+      "strategy_id": "MGC_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G4_S075",
+      "instrument": "MGC",
+      "exp_r": 0.2556,
+      "wfe": 0.8328,
+      "wf_windows": 3,
+      "status": "active",
+      "sample_size": 167,
+      "sharpe_ann": 1.2691,
+      "wf_passed": true
+    },
+    {
+      "strategy_id": "MGC_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G4_CONT_S075",
+      "instrument": "MGC",
+      "exp_r": 0.255,
+      "wfe": 0.8328,
+      "wf_windows": 3,
+      "status": "active",
+      "sample_size": 165,
+      "sharpe_ann": 1.2589,
+      "wf_passed": true
+    },
+    {
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ATR70_VOL_S075",
+      "instrument": "MES",
+      "exp_r": 0.2865,
+      "wfe": 1.0655,
+      "wf_windows": 6,
+      "status": "active",
+      "sample_size": 268,
+      "sharpe_ann": 2.4325,
+      "wf_passed": true
+    },
+    {
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5_O15",
+      "instrument": "MES",
+      "exp_r": 0.2381,
+      "wfe": 0.5813,
+      "wf_windows": 5,
+      "status": "active",
+      "sample_size": 155,
+      "sharpe_ann": 1.2847,
+      "wf_passed": true
+    },
+    {
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G4_O15",
+      "instrument": "MES",
+      "exp_r": 0.2312,
+      "wfe": 0.6486,
+      "wf_windows": 5,
+      "status": "active",
+      "sample_size": 174,
+      "sharpe_ann": 1.3354,
+      "wf_passed": true
+    },
+    {
+      "strategy_id": "MES_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G6_O15",
+      "instrument": "MES",
+      "exp_r": 0.2268,
+      "wfe": 0.6105,
+      "wf_windows": 4,
+      "status": "active",
+      "sample_size": 127,
+      "sharpe_ann": 1.131,
+      "wf_passed": true
+    }
+  ],
+  "mnq_count": 731,
+  "mnq_hash": "a62d8ab011ffa8ba3b469471f8daf04e"
+}

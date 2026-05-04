@@ -1,0 +1,10 @@
+{
+  "tool": "claude",
+  "name": "First workstream test",
+  "branch": "wt-claude-first-workstream-test",
+  "base_ref": "HEAD",
+  "created_at": "2026-03-17T07:12:06.624999+00:00",
+  "last_opened_at": "2026-03-17T07:12:06.624999+00:00",
+  "purpose": "Review / verify",
+  "repo_root": "C:\\Users\\joshd\\canompx3"
+}

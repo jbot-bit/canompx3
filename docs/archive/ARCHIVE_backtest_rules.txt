@@ -1,0 +1,115 @@
+Based on our established "Primitives-First" architecture and the database best practices found in the literature, here is the exact data extraction specification you should give Claude Code for your 1-minute OHLCV files.
+1. The Target Schema (bars_1m)
+You must extract only the atomic market physics. Do not calculate indicators or derive features during this ingestion step.
+Columns to Extract:
+1. ts_utc: The timestamp of the bar open or close (be consistent). Ensure it is converted to UTC immediately. Do not store local timezones.
+2. symbol: The logical continuous symbol. Hardcode this to 'MGC' for your Micro Gold setups.
+3. source_symbol: The specific contract ticker from the file (e.g., MGCG24). This is required for auditability and identifying roll gaps.
+4. open: Open price (Float).
+5. high: High price (Float).
+6. low: Low price (Float).
+7. close: Close price (Float).
+8. volume: Total volume for that minute (Integer).
+2. Instructions for Claude Code
+When prompting Claude Code to write your extraction script, enforce these specific rules to maintain the integrity of your Single Source of Truth (SSOT):
+Prompt Constraints:
+• Naming Convention: Rename source columns to strictly snake_case (e.g., Bid Price becomes bid_price, though you only need OHLCV). This prevents SQL injection risks and keyword conflicts later.
+• Time Standardization: If the source file has separate date and time columns, merge them into a single datetime object and convert to UTC immediately.
+• No Back-Adjustment: Explicitly instruct Claude NOT to smooth prices across contract rolls. You want the raw, unadjusted price to prevent look-ahead bias.
+• Contract Stitching Logic: If your source files contain multiple contracts for the same date, instruct Claude to filter for the highest volume outright contract for that specific trading day. Exclude spread contracts (often denoted with a - or _ between tickers).
+3. What to Ignore (Filter Out)
+To keep your bars_1m table as a pure primitive layer, instruct Claude to drop the following data points if they exist in your source files:
+• Bid/Ask prices: As agreed in your SSOT, you will model spread costs dynamically in the execution_engine, not hard-code them in the database.
+• Open Interest: For an ORB strategy on MGC, volume is sufficient for liquidity checks; Open Interest adds unnecessary bloat [SSOT Step 7].
+• Zero-Volume Rows: Depending on your preference, you may want to filter out minutes with zero volume to save space, though keeping them ensures a continuous time series for time-based indicators later.
+4. Code Snippet Logic (Python/Pandas)
+Claude should generate code that looks logically like this (pseudocode based on):
+import pandas as pd
+
+def ingest_data(file_path):
+    # Load data
+    df = pd.read_csv(file_path)
+    
+    # 1. Standardize Names [4]
+    df.columns = [c.lower().replace(' ', '_') for c in df.columns]
+    
+    # 2. Time Physics [6]
+    df['ts_utc'] = pd.to_datetime(df['timestamp_col']).dt.tz_convert('UTC')
+    
+    # 3. Contract Logic (No back-adjusting) [7]
+    df['symbol'] = 'MGC' 
+    df['source_symbol'] = df['original_ticker_col']
+    
+    # 4. Filter for Primitives
+    required_cols = ['ts_utc', 'symbol', 'source_symbol', 'open', 'high', 'low', 'close', 'volume']
+    return df[required_cols]
+Summary Checklist for Claude
+• [ ] Schema: Does it match bars_1m exactly?
+• [ ] Time: Is it UTC?
+• [ ] Cleanliness: Are columns snake_case?
+• [ ] Honesty: Are prices raw (unadjusted)?
+
+---
+
+## Step 3 — Trace data flow (read-only lineage)
+
+### Where MAE/MFE are first computed
+- **ORB structural pipeline:**  
+- `pipeline/build_daily_features.py` — `calculate_orb_1m_exec` computes ORB-anchored MAE/MFE (normalized by ORB-anchored R) and injects into `orb_XXXX_mae/mfe` columns.  
+- **Validated trade pipeline:**  
+- `pipeline/populate_validated_trades.py` and `pipeline/populate_validated_trades_with_filter.py` compute entry-anchored MAE/MFE in R for `validated_trades` records.  
+- **Canonical execution engine:**  
+- `strategies/execution_engine.py` computes `mae_r/mfe_r` from intra-trade price path.
+
+### Where MAE/MFE are stored
+- **`daily_features` table:** `orb_XXXX_mae/mfe` columns in `schema.sql` and `pipeline/build_daily_features.py` table creation.  
+- **`validated_trades` table:** `mae/mfe` columns in `pipeline/schema_validated_trades.sql` and insert in `pipeline/populate_validated_trades*.py`.  
+- **`trade_journal` memory table:** `mae/mfe` in `pipeline/init_memory_tables.py` and insert in `trading_app/memory.py`.  
+- **`edge_candidates.metrics_json`** (indirect): `mae_avg/mfe_avg` stored via `trading_app/research_runner.py`.
+
+### Where MAE/MFE are read/used
+- **Research/metrics aggregation:**  
+- `trading_app/edge_utils.py` aggregates `mae_r/mfe_r` into averages.  
+- `trading_app/research_runner.py` computes and stores `mae_avg/mfe_avg`.  
+- `trading_app/app_research_lab.py` displays MAE/MFE in UI.
+- **Outcome recomputation:**  
+- `strategies/populate_realized_metrics.py` reads `orb_{orb_time}_mfe` to determine target hits for RR>1.0 and recompute realized_rr (comment: “Use MFE to check if target was hit”).
+- **Time-decay exit logic:**  
+- `trading_app/time_decay_engine.py` computes `current_mfe` and uses it in exit decisions.
+
+### Explicit answers (usage)
+- **Execution logic:**  
+- **Yes.** `strategies/execution_engine.py` computes `mae_r/mfe_r` as part of canonical execution results; `trading_app/time_decay_engine.py` uses MFE in exit decision logic.  
+- **Validation gates:**  
+- **Not evident in code as a gate.** `strategies/populate_realized_metrics.py` uses MFE to recompute outcome/realized_rr for different RR targets (derivation/analysis).  
+- **UI only:**  
+- **No.** UI (`trading_app/app_research_lab.py`) displays averages, but calculations happen upstream.  
+- **Not used at all:**  
+- **No.** MAE/MFE are used in calculations, storage, and metrics.
+
+---
+
+## Step 4 — Canonical check vs authority docs
+- **CLAUDE.md:** **Yes** — MAE/MFE explicitly included in canonical `daily_features` schema.  
+- Evidence: `CLAUDE.md` lines 537–544 show `mae, mfe` as part of canonical daily_features ORB columns.  
+- **CANONICAL_LOGIC.txt:** **No mention** (no `mae`/`mfe` occurrences).  
+- **APP_COMPLETE_SURVEY.md:** **Not found in repo** (file missing).
+
+**Are MAE/MFE mentioned as canonical metrics?** **Yes** (in `CLAUDE.md` canonical daily_features schema).  
+**If absent elsewhere:** Not applicable; they are present in CLAUDE.md.
+
+---
+
+## Step 5 — Verdict
+**MAE/MFE are canonical and required.**
+
+**Justification (file + line evidence):**
+- `CLAUDE.md` states canonical `daily_features` includes MAE/MFE (`mae, mfe`) as part of each ORB’s stored columns (lines 537–544).  
+- `pipeline/build_daily_features.py` computes MAE/MFE and stores in `daily_features` (lines 324–493, 961–1038).  
+- `schema.sql` defines `orb_XXXX_mae/mfe` columns in daily_features (lines 125–193 and 239–244).  
+- `strategies/execution_engine.py` is canonical execution logic and includes MAE/MFE tracking in results (lines 5–11 and 551–597).
+
+---
+
+## Testing
+Not run (audit-only).

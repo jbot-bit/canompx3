@@ -1,0 +1,294 @@
+metadata:
+  name: carry-encoding-exploration
+  owner: claude-code
+  created_at: 2026-04-16
+  testing_mode: feature_encoding_study
+  holdout_date: 2026-01-01
+  scope_note: >
+    Portfolio-context / confluence feature study exploring continuous carry
+    encodings. Binary carry gating is DEAD (W2e). Carry and garch are
+    orthogonal (corr=+0.016). The failure was encoding degeneracy, not lack
+    of information. This study tests whether continuous carry encodings can
+    access the independent information that binary gating could not.
+  predecessor: garch-w2e-prior-session-carry
+  predecessor_verdict: binary_gate_dead_degeneracy_not_collinearity
+
+rules:
+  canonical_truth_only: true
+  validated_shelf_only: true
+  deployment_inference_forbidden: true
+  descriptive_oos_only: true
+  dynamic_chronology_required: true
+  prior_trade_must_be_fully_resolved: true
+  binary_carry_gates_banned: true
+  raw_recompute_required: true
+  metadata_must_not_be_trusted_blindly: true
+
+k_budget:
+  total_variants: 18
+  breakdown: 3 encodings x 2 roles x 3 target session groups
+  note: >
+    K=18 is well within MinBTL for the validated shelf (6+ years, N>1000
+    per session group). This is a feature-encoding study, not a signal
+    sweep — the hypothesis is pre-registered before any execution.
+  bh_fdr_applied_at: encoding_level (K=3)
+
+prior_evidence:
+  w2e_binary_gate_result: dead
+  w2e_collinearity: corr=+0.016
+  w2e_degeneracy_finding: >
+    any_prior_win fires 96-100% on late-day sessions, 8% on early sessions.
+    Binary encoding is degenerate at both tails of the session clock.
+  data_shape: >
+    MNQ has 1793 days with 2+ resolved sessions (mean 10.7 per day).
+    pnl_r is continuous [-1, +1], mean +0.042, std 0.895. Enough
+    variance for continuous features.
+  mechanism_prior: >
+    Carry belongs to the "momentum cascade" family in mechanism_priors.md:
+    when a prior session's breakout resolves as a win, the market is in a
+    trending state that may carry forward. The information is in the DEGREE
+    of the prior win (not just its existence), and in WHICH prior session
+    resolved most recently (not all priors equally).
+
+# ============================================================
+# STAGE 1: WHY BINARY CARRY FAILED
+# ============================================================
+#
+# Binary carry (prior_win = yes/no) failed because:
+# 1. Late-day sessions have 96-100% prior-win rate → constant → no signal
+# 2. Early-day sessions have 0-8% prior-win rate → absent → no signal
+# 3. The feature is degenerate at BOTH tails of the session clock
+# 4. It was NOT collinear with garch (corr = +0.016)
+#
+# ORTHOGONALITY IS NECESSARY BUT NOT SUFFICIENT:
+# Two signals can be fully independent and both still useless if one is
+# degenerate. The carry-garch correlation is zero precisely BECAUSE carry
+# is constant on late sessions (random w.r.t. garch) and absent on early
+# ones (undefined). Independence of noise is not valuable.
+#
+# The question is whether CONTINUOUS carry encodings recover the
+# information that binary gating could not access.
+
+# ============================================================
+# STAGE 2: CANDIDATE ENCODINGS (ranked)
+# ============================================================
+
+encodings:
+  - id: E1
+    name: most_recent_prior_pnl_r
+    rank: 1
+    definition: >
+      pnl_r of the single most-recently-resolved prior session trade on
+      the same (trading_day, symbol). "Most recently resolved" = latest
+      exit_ts that is strictly before the target session's orb_utc_window
+      start. Continuous, bounded [-1, +1].
+    degeneracy_defence: >
+      Unlike binary carry, this feature varies continuously even on
+      late-day sessions where many priors exist. The MOST RECENT prior
+      changes with each new session resolution, so the feature is never
+      constant. On early-day sessions (TOKYO_OPEN), it is NULL when no
+      prior exists — honestly missing, not degenerate.
+    canonical_source: >
+      orb_outcomes.pnl_r for the prior session, joined on (trading_day,
+      symbol) with orb_label != target_session and exit_ts < target_start.
+      Timing from pipeline.dst.orb_utc_window.
+    timing_safety: >
+      The prior trade's pnl_r is known at its exit_ts, which is strictly
+      before the target session starts (enforced per row). No look-ahead.
+    role_classification: >
+      Primary: R7 confluence input (continuous score component).
+      Secondary: R3 sizing modifier (scale position by prior momentum).
+      Tertiary: R8 portfolio context (inform daily allocation).
+    null_hypothesis: >
+      E[target_pnl_r | most_recent_prior_pnl_r > 0] = E[target_pnl_r | most_recent_prior_pnl_r <= 0]
+      i.e. the sign and magnitude of the most recent prior session's
+      outcome has no predictive value for the target session's outcome.
+    minimum_viable_test: >
+      Quintile split of most_recent_prior_pnl_r within each validated
+      target cell. Report ExpR per quintile. If monotonic (>5% WR spread
+      or >0.05R ExpR spread across quintiles), pass to full audit.
+    failure_modes:
+      - monotonicity is driven by a single session or instrument (not universal)
+      - feature is NULL on >40% of rows (early-day sessions dominate)
+      - WR flat but ExpR moves (ARITHMETIC_ONLY — cost screen not signal)
+      - feature is >0.70 correlated with garch_forecast_vol_pct
+    anti_overfit_risks:
+      - quintile boundaries are data-derived — pre-commit to equal-count quintiles
+      - no threshold tuning after seeing results
+      - K=1 for this encoding — BH-FDR not needed within, but K=3 at encoding level
+
+  - id: E2
+    name: recency_weighted_carry_score
+    rank: 2
+    definition: >
+      Weighted sum of pnl_r across all resolved prior sessions on the same
+      (trading_day, symbol), with exponential time-decay weight based on
+      the gap between each prior's exit_ts and the target session start.
+      weight_i = exp(-lambda * hours_gap_i), where lambda = ln(2) / 2
+      (half-life of 2 hours). Normalized by sum of weights.
+      Continuous, bounded [-1, +1].
+    degeneracy_defence: >
+      Time-weighting solves the accumulation problem: on late-day sessions
+      with 10+ priors, recent priors dominate. On early-day sessions with
+      0-1 priors, the score is either NULL or equal to E1. The feature
+      varies naturally across days because the prior-session pnl_r sequence
+      is different every day.
+    canonical_source: >
+      orb_outcomes.{pnl_r, exit_ts} for all prior sessions, joined on
+      (trading_day, symbol) with exit_ts < target_start. Time gap computed
+      from target_start - prior.exit_ts.
+    timing_safety: >
+      All inputs are from resolved trades with exit_ts < target_start.
+      The lambda parameter (half-life = 2 hours) is pre-committed and not
+      data-derived.
+    role_classification: >
+      Primary: R7 confluence input (continuous score component).
+      Secondary: R8 portfolio context (aggregate day-state).
+    null_hypothesis: >
+      E[target_pnl_r | recency_weighted_carry > 0] = E[target_pnl_r | recency_weighted_carry <= 0]
+    minimum_viable_test: >
+      Same quintile split as E1. Additionally: compare E2 vs E1 on the
+      same population — if E2 adds no information beyond E1, the
+      time-weighting is wasted complexity.
+    failure_modes:
+      - time-decay parameter sensitivity — test at lambda = ln(2)/1 and ln(2)/4
+      - feature collapses to E1 on early-day sessions (expected — not a failure per se)
+      - WR flat (ARITHMETIC_ONLY)
+    anti_overfit_risks:
+      - lambda is a free parameter despite being pre-committed — sensitivity check
+        is mandatory (RULE 4 equivalent: +-50% on lambda)
+      - K=1 for this encoding
+
+  - id: E3
+    name: direction_aware_carry_intensity
+    rank: 3
+    definition: >
+      most_recent_prior_pnl_r * direction_sign, where direction_sign =
+      +1 if the prior session's break_dir matches the target session's
+      break_dir, -1 otherwise. Continuous, bounded [-1, +1].
+      When prior direction ALIGNS with target direction and prior won,
+      this is positive (continuation momentum). When opposed and prior won,
+      this is negative (counter-momentum headwind).
+    degeneracy_defence: >
+      Same as E1 (continuous, never constant). Additionally, the direction
+      conditioning makes the feature double-signed: the same prior pnl_r
+      can be positive-carry or negative-carry depending on direction
+      alignment, which doubles the effective variance.
+    canonical_source: >
+      orb_outcomes.pnl_r + daily_features.orb_{prior_session}_break_dir
+      + daily_features.orb_{target_session}_break_dir. All known at the
+      respective session's ORB close, which precedes the target session
+      start.
+    timing_safety: >
+      Prior break_dir is known at the prior session's ORB close (before
+      entry). Target break_dir is known at the target session's ORB close
+      (also before E2 entry). No look-ahead.
+    role_classification: >
+      Primary: R7 confluence input (directional context).
+      Secondary: R3 sizing modifier (reduce size on headwind days).
+    null_hypothesis: >
+      E[target_pnl_r | direction_aware_carry > 0] = E[target_pnl_r | direction_aware_carry <= 0]
+    minimum_viable_test: >
+      Quintile split. Additionally: compare E3 vs E1 — if direction
+      conditioning adds no monotonicity beyond unsigned E1, the direction
+      component is noise.
+    failure_modes:
+      - direction conditioning inverts the W2e finding (veto should be dead —
+        if E3 shows strong negative-carry signal, that contradicts W2e)
+      - feature is mostly 0 on early sessions where no prior exists
+      - E3 ≈ E1 after direction conditioning (direction adds nothing)
+    anti_overfit_risks:
+      - direction_sign is a binary conditioning — keep it fixed, do not
+        threshold-tune the alignment definition
+      - K=1 for this encoding
+
+# ============================================================
+# ENCODINGS CONSIDERED AND REJECTED
+# ============================================================
+
+rejected_encodings:
+  - name: prior_session_win_count_ratio
+    reason: >
+      wins / total_resolved_priors. Still semi-degenerate: on late-day
+      sessions it converges to the session-average win rate (~0.55) with
+      low variance. On early sessions it's 0 or 1 (binary again). Does
+      not solve the core degeneracy problem.
+
+  - name: signed_prior_session_outcome_magnitude
+    reason: >
+      |pnl_r| * sign(outcome). Equivalent to E1 (pnl_r already encodes
+      both sign and magnitude). Redundant.
+
+  - name: normalized_carry_relative_to_ORB_size
+    reason: >
+      prior_pnl_r / orb_size_pts. Dividing by ORB size introduces a
+      tautology risk with ORB_G-filters (which already gate on orb_size).
+      See `.claude/rules/backtesting-methodology.md` RULE 7. Would need
+      explicit T0 tautology check against every deployed filter.
+
+# ============================================================
+# TEST DESIGN
+# ============================================================
+
+test_design:
+  surface: validated shelf (same as W2e)
+  chronology: per-row dynamic via orb_utc_window
+  holdout: 2026-01-01 sacred boundary — IS only for monotonicity, OOS descriptive
+  target_session_groups:
+    - late_day: [COMEX_SETTLE]
+    - mid_day: [EUROPE_FLOW, SINGAPORE_OPEN]
+    - early_day: [TOKYO_OPEN]
+  note: >
+    Session groups reflect the degeneracy gradient. Late-day has many
+    resolved priors; early-day has few. If a continuous encoding works,
+    it must work DIFFERENTLY across these groups — not uniformly.
+    TOKYO_OPEN will have many NULLs (no resolved prior) — report
+    coverage honestly, do not impute.
+
+  per_encoding_test:
+    - step_1_coverage: fraction of target rows where the encoding is non-NULL
+    - step_2_quintile_split: equal-count quintiles within IS, report ExpR + WR per quintile
+    - step_3_monotonicity: Spearman rank-corr between quintile rank and ExpR
+    - step_4_garch_interaction: repeat quintile split within garch_high and garch_low subsets
+    - step_5_oos_direction: does the sign of the monotonicity hold in 2026 OOS?
+    - step_6_sensitivity: for E2 only, repeat at lambda = ln(2)/1 and ln(2)/4
+
+  promotion_gates:
+    - Spearman |rho| >= 0.80 across quintiles (4/5 or 5/5 monotonic)
+    - WR spread >= 5% OR ExpR spread >= 0.10R across extreme quintiles
+    - coverage >= 50% of target rows (encoding is not mostly NULL)
+    - garch_high subset monotonicity matches full-population direction
+    - not ARITHMETIC_ONLY (WR must move, not just payoff)
+    - BH-FDR at K=3 (encoding level) on the quintile-extreme p-value
+
+  kill_criteria:
+    - coverage < 30% (encoding is too sparse to evaluate)
+    - E3 direction conditioning reverses W2e veto finding
+    - all 3 encodings fail monotonicity
+    - sensitivity check on E2 flips the sign at +-50% lambda
+    - quintile extremes driven by <20 trades (power too low)
+
+verdicts:
+  - encoding_monotonic: passes quintile monotonicity + coverage + not ARITHMETIC_ONLY
+  - encoding_interacts_with_garch: monotonicity strengthens within garch_high subset
+  - encoding_flat: no quintile monotonicity
+  - encoding_sparse: coverage too low to evaluate
+  - encoding_arithmetic_only: payoff moves but WR flat
+
+output:
+  results_file: docs/audit/results/2026-04-16-carry-encoding-exploration.md
+  script_file: research/carry_encoding_exploration.py
+
+recommended_first_implementation:
+  if_any_encoding_passes: >
+    Pre-register a dedicated R7 confluence input study using the passing
+    encoding(s) as one component of a Carver-style forecast combiner,
+    alongside garch_forecast_vol_pct and deployed filter state. Scope:
+    single validated family (highest-N), K<=10. This is the safest
+    implementation path because R7 confluence does not change trade
+    selection (every trade still taken), only the score attached to it.
+  if_all_encodings_fail: >
+    Park the carry family entirely. The information channel does not
+    survive any encoding we tested. Revisit only if a structurally
+    different carry definition (e.g., cross-instrument carry, or carry
+    from a different data source like order flow) becomes available.

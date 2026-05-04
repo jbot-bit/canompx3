@@ -1,0 +1,100 @@
+version: 1
+name: mgc_payoff_compression_audit
+date: 2026-04-19
+status: locked
+
+metadata:
+  intent: >
+    Diagnose whether the remaining GC->MGC translation gap on the warm 5-minute
+    MGC families is recoverable via narrower exit handling, or whether the
+    payoff compression is still too structural to justify further rescue on this
+    path.
+  testing_mode: diagnostic
+  total_expected_trials: 3
+  minbtl_mode: clean_micro
+  holdout_boundary: 2026-01-01
+  overlap_start: 2022-06-13
+  overlap_end_exclusive: 2026-01-01
+  source_truth:
+    canonical:
+      - gold.db::orb_outcomes
+      - gold.db::daily_features
+      - pipeline.cost_model
+    orientation_only:
+      - docs/audit/results/2026-04-19-gc-mgc-translation-audit.md
+      - docs/plans/2026-04-19-gc-mgc-handling-note.md
+  locked_surface:
+    symbol: MGC
+    orb_minutes: 5
+    entry_model: E2
+    confirm_bars: 1
+    sessions:
+      - EUROPE_FLOW
+      - NYSE_OPEN
+      - US_DATA_1000
+    broad_comparator:
+      - no_filter_rr1
+    warm_translated_families:
+      - EUROPE_FLOW_OVNRNG_50_RR1
+      - NYSE_OPEN_OVNRNG_50_RR1
+      - US_DATA_1000_ATR_P70_RR1
+      - US_DATA_1000_ORB_G5_RR1
+      - US_DATA_1000_OVNRNG_10_RR1
+    exit_lenses:
+      - raw_rr1
+      - canonical_t80_time_stop
+      - conservative_lower_target_0_5r
+      - conservative_lower_target_0_75r
+
+hypotheses:
+  - id: H1
+    claim: >
+      Canonical T80 time-stop improves some warm MGC RR1.0 families, but does
+      not broadly erase the payoff-compression gap by itself.
+    falsifier: >
+      T80 provides no material improvement even on the warm families, or it
+      broadly rescues the broad no-filter comparator as well.
+
+  - id: H2
+    claim: >
+      Conservative lower-target rewrites at 0.5R/0.75R improve warm translated
+      MGC families more than the broad no-filter comparator, implying any
+      remaining opportunity is narrow exit-shape handling rather than broad
+      proxy revival.
+    falsifier: >
+      Lower-target rewrites do not materially improve the warm families, or they
+      improve broad no-filter families equally, implying no narrow translated
+      salvage path.
+
+  - id: H3
+    claim: >
+      Even if some warm MGC families become positive under lower-R handling, the
+      result remains too narrow to justify reopening broad GC proxy discovery or
+      reviving the retired GC shelf.
+    falsifier: >
+      Lower-R handling rescues a broad share of the warm and broad families,
+      implying the prior "translation does not transfer" conclusion was still
+      overstated.
+
+rules:
+  - No 2026 holdout selection or rescue.
+  - No new sessions, filters, or instruments inside this pass.
+  - No broad proxy rediscovery.
+  - No claim that lower-R rewrites are deployable as-is; this is a diagnostic audit.
+  - Conservative lower-target handling must fail closed on ambiguous bars.
+  - Do not use this audit to declare MGC dead overall; this is about translated warm 5-minute families only.
+
+deliverables:
+  - research/research_mgc_payoff_compression_audit.py
+  - docs/audit/results/2026-04-19-mgc-payoff-compression-audit.md
+  - tests/test_research/test_mgc_payoff_compression_audit.py
+  - HANDOFF.md update
+
+kill_criteria:
+  - >
+    If broad and warm families remain negative under raw, T80, and lower-R
+    diagnostics, stop rescuing this translation path and treat the compression
+    as structurally unresolved.
+  - >
+    If only one tiny family improves and the rest stay flat/negative, do not
+    escalate the result into a broad gold conclusion.

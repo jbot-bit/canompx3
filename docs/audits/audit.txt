@@ -1,0 +1,150 @@
+Project Audit — canompx3
+Date: February 2026
+Scope: Architecture, structure, code quality, and best practices review
+
+Overall Verdict
+This is remarkably well-built for a vibe-coded project. Seriously — most professional data engineering teams don't have this level of discipline around validation gates, idempotency, and drift detection. The architecture is sound, the separation of concerns is clean, and the guardrails are genuinely impressive. What follows is mostly refinement, not rescue.
+Score: 8/10 — Production-quality data pipeline with a few organizational rough edges.
+
+What You're Doing Right (Keep These)
+1. Fail-Closed Validation Gates
+Every pipeline stage has hard validation checks that abort on failure rather than silently corrupting data. The 7-gate ingestion process (schema check, UTC proof, outright filter, OHLCV sanity, PK safety, merge integrity, honesty gates) is textbook data engineering. Most projects skip this entirely.
+2. Idempotent Operations
+All operations use INSERT OR REPLACE or DELETE-then-INSERT patterns. This means you can safely re-run any step without fear of corrupting your data. This is a best practice that many professional teams get wrong.
+3. Checkpoint/Resume System
+The JSONL append-only checkpoint system with --resume and --retry-failed is exactly how production ETL pipelines handle long-running jobs. Very smart.
+4. Drift Detection (check_drift.py)
+Static analysis that catches hardcoded symbols, performance anti-patterns, import direction violations, and more — this is effectively a custom linter for your domain. Most projects don't have anything like this.
+5. Pre-Computed Outcomes
+Building 689K outcome rows once and reusing them for all strategy discovery is the correct architecture. The alternative (computing on-the-fly for each strategy variant) would be orders of magnitude slower and harder to debug.
+6. Clean Dependency Direction
+pipeline/ → trading_app/ (never reversed). This one-way dependency means your data layer is independent of your trading logic. Exactly right.
+7. Thorough Testing
+~50+ test files covering pipeline, trading app, integration, edge cases, timezone transitions, DST handling. The test-to-code ratio is healthy.
+8. Pinned Dependencies
+requirements.txt with exact versions. Reproducible environments prevent mysterious "it worked yesterday" failures.
+9. Documentation System
+The CLAUDE.md / TRADING_RULES.md / ROADMAP.md / REPO_MAP.md split with explicit conflict resolution rules is unusually thoughtful. The "document authority" table with "wins for" rules is something I rarely see even in enterprise projects.
+
+Issues to Fix (Ranked by Impact)
+HIGH: scripts/ is a Dumping Ground (56 files)
+This is the biggest structural problem. The scripts/ directory has 56 Python files mixing together very different things:
+
+One-off analysis (analyze_1100_conditional.py, analyze_mfe_distribution.py, etc.)
+Data migration (migrate_add_dynamic_columns.py, backfill_atr20.py)
+Production tooling (build_edge_families.py, report_edge_portfolio.py)
+Infrastructure (run_parallel_ingest.py, backup_db.py)
+
+Why it matters: When you can't tell what's production vs. throwaway, you risk accidentally breaking something that matters while cleaning up, or keeping dead code that confuses future work.
+Recommendation: Reorganize into:
+scripts/
+  analysis/          ← one-off research scripts (OK to be messy)
+  migrations/        ← data backfills (run once, keep for audit trail)
+  reports/           ← report generators (production tooling)
+  infra/             ← backup, parallel ingest, hygiene checks
+Or alternatively, move analysis scripts entirely into research/ (which already exists with 18 similar files).
+HIGH: Duplicated Code Between scripts/ and research/
+You have scripts/analyze_*.py (24 files) and research/analyze_*.py (18 files) doing similar things. The split feels accidental rather than intentional.
+Recommendation: Pick one location for research/analysis. The research/ folder is the natural home. Move everything analytical there and keep scripts/ for operational tooling only.
+HIGH: No Logging Framework
+The entire project uses print() for all output. This works for a solo project, but has real costs:
+
+Can't filter by severity (you have to read ALL output to find errors)
+Can't redirect pipeline logs to files while keeping errors on screen
+Can't add timestamps to long-running jobs automatically
+Hard to debug when something fails overnight
+
+Recommendation: Switch to Python's built-in logging module. Minimal change — replace print() with logger.info() / logger.error() / logger.warning(). You can configure it to still print to console exactly as before, but gain the ability to also write to files and filter by level.
+pythonimport logging
+logger = logging.getLogger(__name__)
+
+# Instead of:
+print(f"FATAL: Schema verification failed")
+
+# Use:
+logger.error("Schema verification failed: expected %s, got %s", expected, actual)
+MEDIUM: sys.path.insert Everywhere
+Almost every file starts with:
+pythonsys.path.insert(0, str(Path(__file__).parent.parent))
+This is a common pattern in projects that grew organically, but it's fragile and can cause subtle import bugs.
+Recommendation: Make the project properly installable. You already have pyproject.toml — just add:
+toml[project]
+name = "canompx3"
+version = "0.1.0"
+requires-python = ">=3.13"
+
+[tool.setuptools.packages.find]
+include = ["pipeline*", "trading_app*"]
+Then pip install -e . (editable install) and all the sys.path hacks become unnecessary. Every module can just do from pipeline.paths import GOLD_DB_PATH without path manipulation.
+MEDIUM: Connection Management Could Be Safer
+Several files open DuckDB connections manually and rely on careful con.close() calls or atexit hooks. The ingestion script does have an atexit handler (good), but other files may not.
+Recommendation: Use context managers consistently:
+python# Instead of:
+con = duckdb.connect(str(GOLD_DB_PATH))
+# ... many lines of code ...
+con.close()
+
+# Use:
+with duckdb.connect(str(GOLD_DB_PATH)) as con:
+    # ... code ...
+    # automatically closed even if an exception occurs
+MEDIUM: .ENV File Casing
+Your .ENV file (uppercase) is in the root directory and appears to be tracked or at least present. Your .gitignore lists .env (lowercase). On Linux, these are different files. On Windows (your dev machine), they're the same.
+Recommendation: Rename to .env (lowercase, the universal convention) and verify it's actually gitignored. Run git ls-files .ENV .env to check if it's tracked — if it is, you may have committed your API key.
+MEDIUM: __pycache__ Directories in Repo Root
+There's a __pycache__/ directory at the project root. While .gitignore should exclude it from commits, its presence suggests Python files are being run from the root in ways that create cache artifacts.
+Recommendation: Add __pycache__/ to .gitignore (you likely already have it — just verify it's actually working). The deeper issue is that running scripts from root creates these; the editable install fix (above) would resolve this too.
+LOW: Large Files in Repo
+You have GOLD_DB_FULLSIZE.zip (114MB) and gold.db (949MB) in the repo directory. The .gitignore excludes gold.db and *.zip, so they're probably not tracked, but worth double-checking. If they were ever committed, your git history carries them forever.
+Recommendation: Run git ls-files --others --ignored --exclude-standard | head -20 to verify these are actually excluded. Consider adding to .gitignore explicitly: GOLD_DB_FULLSIZE.zip.
+LOW: Two Virtual Environments
+You have both .venv/ and venv/ directories. This is confusing — one is probably stale.
+Recommendation: Pick one (the Python convention is .venv/), delete the other, and update the pre-commit hook to only look for the chosen one.
+LOW: Stale/Orphan Files at Root
+Files like nul (Windows artifact), portfolio_report.json, dashboard.html, pipeline-explorer.html sit at the project root. The HTML files are gitignored, but they add clutter.
+Recommendation: Generated outputs should go to a build/ or output/ directory. Add nul to .gitignore (it's a Windows quirk from redirecting output to NUL).
+
+Architecture Assessment
+Data Flow: Excellent ✓
+Raw DBN → bars_1m → bars_5m → daily_features → orb_outcomes → strategies → validation
+This is a clean, linear pipeline with each stage fully validated before the next can run. The one-way dependency direction is maintained. This is textbook good design.
+Database Design: Very Good ✓
+Single DuckDB file, clear schema, composite primary keys, no ORM overhead. DuckDB is an excellent choice for this workload (analytical queries on local data). The schema generation for daily_features (programmatically building 99+ ORB columns) is clever and maintainable.
+One suggestion: Consider adding schema migration versioning. Right now, init_db.py --force drops everything. If you ever need to add a column to a table without losing data, you'd need a migration system. Even a simple schema_version table with ALTER TABLE scripts would help.
+Configuration System: Good ✓
+trading_app/config.py as the single source of truth for strategy parameters, with frozen dataclasses for immutability, is clean. The filter hierarchy (base class → specific filters) is well-designed.
+pipeline/asset_configs.py for per-instrument config is also good — fail-closed validation on missing/invalid configs is exactly right.
+Test Architecture: Good ✓
+Tests are well-organized by module (test_pipeline/, test_trading_app/), use pytest fixtures properly, and include both unit and integration tests. The CI pipeline runs drift checks + tests on every push. Pre-commit hooks enforce quality locally.
+One suggestion: You have pytest-cov installed but I only see coverage in the CI config (--cov=pipeline --cov=trading_app). Consider adding a coverage threshold (e.g., --cov-fail-under=70) to prevent regression.
+
+Things That Surprised Me (Positively)
+
+The drift detection system is genuinely novel. Custom static analysis that catches domain-specific bugs (hardcoded symbols, wrong table writes, import direction violations) is something most projects would never think to build.
+The document authority table with explicit conflict resolution rules. This is the kind of process discipline that prevents the "which doc do I trust?" problem.
+CANONICAL COMPLIANT annotations in code comments. Marking code as adhering to specific documented rules creates a clear contract between documentation and implementation.
+The pre-commit hook runs actual tests, not just linting. Many projects only lint in pre-commit; yours runs the full fast-test suite, which catches real bugs before they're committed.
+The checkpoint system with JSONL append-only logs. This gives you a complete audit trail of every ingestion operation, including failures, which is invaluable for debugging data issues.
+
+
+What's Missing (Nice-to-Haves)
+1. No Type Checking
+You use type hints in some places (like config.py's dict[str, int]) but there's no mypy or pyright in the CI pipeline. For a solo project this is fine, but type checking catches a whole class of bugs that tests miss.
+If you add it: pyproject.toml → [tool.mypy] section, add mypy pipeline/ trading_app/ to CI.
+2. No Data Validation Library
+You've hand-rolled all your validation gates (which work well), but a library like pandera could express schema expectations more declaratively:
+python# Instead of manual checks scattered through code:
+schema = pa.DataFrameSchema({
+    "open": pa.Column(float, pa.Check.gt(0)),
+    "high": pa.Column(float, pa.Check.ge(pa.Column("open"))),
+    ...
+})
+This is a "nice to have" — your current approach works. But as the schema grows, declarative validation scales better.
+3. No Database Backup Automation
+You have scripts/backup_db.py but no automated schedule. For a 949MB database that takes hours to rebuild, losing it to a disk failure would hurt.
+Recommendation: Even a simple cron job or scheduled task doing cp gold.db backups/gold_$(date +%Y%m%d).db would help.
+
+Summary of Recommendations (Priority Order)
+#IssueEffortImpact1Reorganize scripts/ into subfolders30 minHigh — clarity2Merge scripts/analyze_* into research/20 minHigh — no confusion3Make project pip-installable (remove sys.path hacks)1 hourMedium — cleaner imports4Add Python logging2 hoursMedium — debuggability5Fix .ENV casing, verify not tracked5 minMedium — security6Use context managers for DB connections1 hourMedium — safety7Clean up root directory clutter15 minLow — aesthetics8Remove duplicate venv5 minLow — clarity9Add schema migration versioning2 hoursLow — future-proofing10Add mypy to CI1 hourLow — bug prevention
+
+Bottom line: You've built something that's structurally sound and unusually well-guarded for a solo project. The core architecture (linear pipeline, fail-closed gates, pre-computed outcomes, one-way dependencies) is correct and doesn't need changing. The improvements above are about organization and polish, not fundamental redesign.

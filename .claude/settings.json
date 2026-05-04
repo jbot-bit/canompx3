@@ -1,0 +1,235 @@
+{
+  "env": {
+    "VIRTUAL_ENV": ".venv",
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline.sh",
+    "padding": 2
+  },
+  "permissions": {
+    "allow": [
+      "WebFetch",
+      "WebSearch",
+      "mcp__claude_ai_Slack__slack_search_public",
+      "mcp__claude_ai_Slack__slack_read_channel"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Bash(curl * | sh*)",
+      "Bash(curl * | bash*)"
+    ]
+  },
+  "effortLevel": "medium",
+  "alwaysThinkingEnabled": false,
+  "autoUpdatesChannel": "latest",
+  "includeGitInstructions": false,
+  "worktree": {
+    "symlinkDirectories": [
+      ".venv",
+      "node_modules"
+    ]
+  },
+  "attribution": {
+    "commit": "Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
+    "pr": "Generated with [Claude Code](https://claude.com/claude-code)"
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "excludedCommands": [
+      "git",
+      "uv",
+      "ruff",
+      "gh"
+    ],
+    "filesystem": {
+      "allowWrite": [
+        "./",
+        "C:\\db"
+      ]
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/stage-gate-guard.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/pre-edit-guard.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/pre-edit-discovery-marker.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/data-first-guard.py",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/branch-flip-guard.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/post-edit-pipeline.py",
+            "timeout": 90,
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/post-edit-schema.py",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/stage-awareness.py",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/data-first-guard.py",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/risk-tier-guard.py",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/discovery-loop-guard.py",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/completion-notify.py",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/completion-notify.py",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/post-compact-reinject.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/session-start.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "context7@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": false,
+    "commit-commands@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": false,
+    "pr-review-toolkit@claude-plugins-official": false,
+    "feature-dev@claude-plugins-official": false,
+    "explanatory-output-style@claude-plugins-official": true,
+    "greptile@claude-plugins-official": false,
+    "firecrawl@claude-plugins-official": true
+  }
+}

@@ -1,0 +1,71 @@
+metadata:
+  name: adjacent-cross-session-state-matrix
+  owner: codex
+  created_at: 2026-04-11
+  testing_mode: family
+  holdout_date: 2026-01-01
+  total_expected_trials: 160
+  scope_note: >
+    Broad read-only matrix for adjacent prior->later session handoffs. Grounded
+    in intraday momentum/reversal and session-spillover literature, but uses
+    only internal canonical ORB state: prior session outcome (win/loss) and
+    prior session direction relative to the later breakout (aligned/opposed).
+    No external/vendor data. No imported thresholds. No look-ahead.
+  literature:
+    - title: Market intraday momentum
+      url: https://www.sciencedirect.com/science/article/pii/S0304405X18301351
+      note: early-session returns can predict later-session returns
+    - title: Does intraday time-series momentum exist in Chinese stock index futures market?
+      url: https://www.sciencedirect.com/science/article/pii/S1544612319304337
+      note: first trading-session return predicts later trading-session return in futures
+    - title: Intraday momentum in the VIX futures market
+      url: https://www.sciencedirect.com/science/article/pii/S0378426622003260
+      note: momentum can persist across different trading sessions and spill over between daytime and overnight sessions
+    - title: Intraday momentum and reversal in Chinese stock market
+      url: https://www.sciencedirect.com/science/article/pii/S1544612318307414
+      note: continuation and reversal can coexist depending on intraday state
+    - title: Is there an intraday reversal effect in commodity futures and options? Evidence from the Chinese market
+      url: https://www.sciencedirect.com/science/article/pii/S0927538X24002865
+      note: reversal and cross-predictive effects can coexist in derivatives markets
+
+groups:
+  - MGC
+  - MES
+  - MNQ
+  - MES+MNQ
+
+state_family:
+  - mode: TAKE
+    state: PRIOR_WIN_ALIGN
+    rationale: continuation after successful aligned prior session
+  - mode: VETO
+    state: PRIOR_WIN_OPPOSED
+    rationale: avoid fading a successful aligned prior session
+  - mode: VETO
+    state: PRIOR_LOSS_ALIGN
+    rationale: avoid repeating a failed directional continuation
+  - mode: TAKE
+    state: PRIOR_LOSS_OPPOSED
+    rationale: reversal after failed prior direction
+
+pairs:
+  - prior_session: CME_REOPEN
+    later_session: TOKYO_OPEN
+  - prior_session: TOKYO_OPEN
+    later_session: SINGAPORE_OPEN
+  - prior_session: SINGAPORE_OPEN
+    later_session: LONDON_METALS
+  - prior_session: LONDON_METALS
+    later_session: EUROPE_FLOW
+  - prior_session: EUROPE_FLOW
+    later_session: US_DATA_830
+  - prior_session: US_DATA_830
+    later_session: NYSE_OPEN
+  - prior_session: NYSE_OPEN
+    later_session: US_DATA_1000
+  - prior_session: US_DATA_1000
+    later_session: COMEX_SETTLE
+  - prior_session: COMEX_SETTLE
+    later_session: CME_PRECLOSE
+  - prior_session: CME_PRECLOSE
+    later_session: NYSE_CLOSE

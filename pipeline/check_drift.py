@@ -1,0 +1,8300 @@
+#!/usr/bin/env python3
+"""
+Drift detection for the multi-instrument pipeline.
+
+Fails if anyone reintroduces:
+1. Hardcoded 'MGC' SQL literals in generic pipeline code (ingest_dbn.py, run_pipeline.py)
+2. .apply() or .iterrows() usage in ingest scripts (performance anti-pattern)
+3. Any writes to tables other than bars_1m in ingest scripts
+   (covers: ingest_dbn.py, ingest_dbn_mgc.py, ingest_dbn_daily.py,
+    scripts/infra/run_parallel_ingest.py)
+
+FAIL-CLOSED: Any violation exits with code 1.
+
+Usage:
+    python pipeline/check_drift.py
+"""
+
+import ast
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PIPELINE_DIR = PROJECT_ROOT / "pipeline"
+TRADING_APP_DIR = PROJECT_ROOT / "trading_app"
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+RESEARCH_DIR = PROJECT_ROOT / "research"
+
+# Ensure PROJECT_ROOT is first on sys.path so `pipeline.X` and `trading_app.X`
+# imports resolve before sys.path[0] (which Python sets to the script's parent
+# dir, i.e. `pipeline/`, when invoked as `python pipeline/check_drift.py`).
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+# Module-level override for tests; production uses GOLD_DB_PATH from pipeline.paths
+GOLD_DB_PATH_FOR_CHECKS = None  # Set by tests; production uses GOLD_DB_PATH
+
+ACTIVE_DB_PATH_SCAN_DIRS = [
+    RESEARCH_DIR,
+    SCRIPTS_DIR / "research",
+]
+
+ACTIVE_DB_PATH_SKIP_FILES = {
+    "pipeline/paths.py",
+    "research/research_alt_stops.py",
+    "research/research_false_breakout_bqs_tests.py",
+    "research/research_gold_compass.py",
+    "research/research_mnq_singapore_avoid.py",
+    "research/research_shinies_bqs_overlay_tests.py",
+    "research/research_shinies_universal_overlays.py",
+    "research/research_universal_hypothesis_pool.py",
+    "research/research_v3_mechanism.py",
+}
+
+
+def _import_duckdb_or_exit():
+    """Import duckdb with a fail-closed environment hint."""
+    try:
+        import duckdb  # type: ignore
+    except ModuleNotFoundError:
+        print("FATAL: duckdb is not installed for the current interpreter.", file=sys.stderr)
+        print(f"Interpreter: {Path(sys.executable).resolve()}", file=sys.stderr)
+        venv_python = PROJECT_ROOT / ".venv-wsl" / "bin" / "python"
+        if venv_python.exists():
+            print("Use the repo-managed WSL environment instead:", file=sys.stderr)
+            print(f"  {venv_python} pipeline/check_drift.py", file=sys.stderr)
+            print("  uv run python pipeline/check_drift.py", file=sys.stderr)
+            print("  scripts/infra/codex-project.sh", file=sys.stderr)
+        else:
+            print(
+                "Create the WSL environment first with: "
+                "UV_PROJECT_ENVIRONMENT=.venv-wsl uv sync --frozen --python 3.13 --group dev",
+                file=sys.stderr,
+            )
+        sys.exit(2)
+    return duckdb
+
+
+def _get_db_path() -> Path:
+    """Resolve DB path: test override > pipeline.paths default."""
+    if GOLD_DB_PATH_FOR_CHECKS is not None:
+        return Path(GOLD_DB_PATH_FOR_CHECKS)
+    from pipeline.paths import GOLD_DB_PATH
+
+    return GOLD_DB_PATH
+
+
+def _skip_db_check_for_ci(skip_msg: str) -> list[str]:
+    """When CI=true (set automatically by GitHub Actions) or SKIP_DB_CHECKS=1
+    is set, return [] (silent skip — runner counts it as skip_count).
+    Otherwise return [skip_msg] as a violation (preserves local fail-closed
+    behavior — missing DB locally indicates broken setup).
+
+    Per CLAUDE.md "Database Location & Workflow": gold.db lives on local
+    disk only ("no cloud sync"). CI runners legitimately have no DB; local
+    devs are expected to. Same check, two contexts, env-controlled response.
+    No `continue-on-error` band-aid — drift stays a hard gate everywhere;
+    only the missing-DB case is treated correctly per context.
+    """
+    import os
+
+    if os.environ.get("CI", "").lower() == "true" or os.environ.get("SKIP_DB_CHECKS", "") == "1":
+        # Print so CI logs show WHICH check skipped and WHY — avoids the
+        # misleading "PASSED" label when nothing was actually verified.
+        print(f"  SKIPPED (CI/SKIP_DB_CHECKS env set): {skip_msg.strip()}")
+        return []
+    return [skip_msg]
+
+
+def _table_exists(con, table_name: str) -> bool:
+    """Return True if the table exists in the connected DuckDB database."""
+    row = con.execute(
+        """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = ?
+        LIMIT 1
+        """,
+        [table_name],
+    ).fetchone()
+    return row is not None
+
+
+def _missing_table_columns(con, table_name: str, required: list[str]) -> list[str]:
+    """Return sorted required columns missing from a table."""
+    rows = con.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = ?
+        """,
+        [table_name],
+    ).fetchall()
+    present = {row[0] for row in rows}
+    return sorted(col for col in required if col not in present)
+
+
+def _looks_like_sql_block(text: str) -> bool:
+    """Return True only for real SQL statement blocks, not prose/docstrings."""
+    statement_patterns = (
+        re.compile(r"\bSELECT\b[\s\S]*\bFROM\s+\w+\b", re.IGNORECASE),
+        re.compile(r"\bINSERT\s+INTO\s+\w+\b", re.IGNORECASE),
+        re.compile(r"\bDELETE\s+FROM\s+\w+\b", re.IGNORECASE),
+        re.compile(r"^\s*UPDATE\s+\w+\s+SET\b", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^\s*CREATE\s+(TABLE|VIEW|INDEX|SCHEMA)\b", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^\s*WITH\s+\w+\s+AS\s*\(", re.IGNORECASE | re.MULTILINE),
+    )
+    return any(pattern.search(text) for pattern in statement_patterns)
+
+
+def _has_sql_literal_context(content: str, match_start: int) -> bool:
+    """Return True when a triple-quoted string is used as a SQL literal."""
+    prefix = content[max(0, match_start - 160) : match_start]
+    execute_call = re.search(r"(?:\.|^)\s*(execute|executemany|sql)\s*\(\s*$", prefix, re.IGNORECASE)
+    sql_assignment = re.search(r"[\w_]*(sql|query|schema)[\w_]*\s*=\s*$", prefix, re.IGNORECASE)
+    return bool(execute_call or sql_assignment)
+
+
+# =============================================================================
+# FILES TO CHECK
+# =============================================================================
+
+# Generic pipeline files: must NOT contain hardcoded 'MGC' SQL literals
+GENERIC_FILES = [
+    PIPELINE_DIR / "ingest_dbn.py",
+    PIPELINE_DIR / "run_pipeline.py",
+    PIPELINE_DIR / "asset_configs.py",
+]
+
+# Ingest files: must NOT use .apply()/.iterrows() on large data
+# (outright_mask uses .apply on symbol column — that's the ONE allowed exception,
+#  it's on the symbol column only, not OHLCV data)
+INGEST_FILES = [
+    PIPELINE_DIR / "ingest_dbn.py",
+    PIPELINE_DIR / "ingest_dbn_mgc.py",
+    PIPELINE_DIR / "ingest_dbn_daily.py",
+]
+
+# Ingest files: must NOT write to any table other than bars_1m
+INGEST_WRITE_FILES = [
+    PIPELINE_DIR / "ingest_dbn.py",
+    PIPELINE_DIR / "ingest_dbn_mgc.py",
+    PIPELINE_DIR / "ingest_dbn_daily.py",
+    SCRIPTS_DIR / "infra" / "run_parallel_ingest.py",
+]
+
+
+def check_hardcoded_mgc_sql(files: list[Path]) -> list[str]:
+    """Check for hardcoded 'MGC' in SQL statements in generic files."""
+    violations = []
+
+    # Patterns that indicate hardcoded MGC in SQL context
+    # Matches: 'MGC' in SQL (VALUES, WHERE, INSERT contexts)
+    sql_mgc_patterns = [
+        re.compile(r"VALUES\s*\([^)]*'MGC'"),
+        re.compile(r"WHERE\s+.*symbol\s*=\s*'MGC'"),
+        re.compile(r"symbol\s*=\s*'MGC'"),
+    ]
+
+    for fpath in files:
+        if not fpath.exists():
+            continue
+
+        content = fpath.read_text(encoding="utf-8")
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            # Skip comments and docstrings
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+
+            for pattern in sql_mgc_patterns:
+                if pattern.search(line):
+                    violations.append(f"  {fpath.name}:{line_num}: Hardcoded 'MGC' in SQL: {stripped[:80]}")
+
+    return violations
+
+
+def check_apply_iterrows(files: list[Path]) -> list[str]:
+    """Check for .apply() or .iterrows() on data frames (perf anti-pattern)."""
+    violations = []
+
+    # Allowed exception: .apply() on symbol column for outright filtering
+    # Pattern: chunk_df['symbol'].apply(...)  — this is acceptable
+    allowed_apply_pattern = re.compile(r"\['symbol'\]\.apply\(")
+
+    for fpath in files:
+        if not fpath.exists():
+            continue
+
+        content = fpath.read_text(encoding="utf-8")
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+
+            # Check .iterrows() — always forbidden in ingest hot path
+            # Exception: the per-day row accumulation loop (front_df.iterrows())
+            # This is on already-filtered single-contract single-day data, not bulk
+            if ".iterrows()" in line:
+                # Allow the known pattern: buffering single-day front-contract rows
+                if "front_df.iterrows()" in line:
+                    continue
+                violations.append(f"  {fpath.name}:{line_num}: .iterrows() usage: {stripped[:80]}")
+
+            # Check .apply() — forbidden except on symbol column
+            if ".apply(" in line:
+                if allowed_apply_pattern.search(line):
+                    continue
+                # Also allow lambda in trading_days mask (compute_trading_days)
+                if "trading_days[mask].apply(" in line or "trading_days[mask]" in stripped:
+                    continue
+                violations.append(f"  {fpath.name}:{line_num}: .apply() usage: {stripped[:80]}")
+
+    return violations
+
+
+def check_non_bars1m_writes(files: list[Path]) -> list[str]:
+    """Check that ingest scripts only write to bars_1m."""
+    violations = []
+
+    # Patterns for SQL writes to tables other than bars_1m
+    write_patterns = [
+        re.compile(r"INSERT\s+(?:OR\s+REPLACE\s+)?INTO\s+(?!bars_1m\b)(\w+)", re.IGNORECASE),
+        re.compile(r"DELETE\s+FROM\s+(?!bars_1m\b)(\w+)", re.IGNORECASE),
+        re.compile(r"UPDATE\s+(?!bars_1m\b)(\w+)", re.IGNORECASE),
+        re.compile(r"DROP\s+TABLE\s+(?!bars_1m\b)(\w+)", re.IGNORECASE),
+    ]
+
+    for fpath in files:
+        if not fpath.exists():
+            continue
+
+        content = fpath.read_text(encoding="utf-8")
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+
+            for pattern in write_patterns:
+                match = pattern.search(line)
+                if match:
+                    table = match.group(1)
+                    violations.append(
+                        f"  {fpath.name}:{line_num}: Write to non-bars_1m table '{table}': {stripped[:80]}"
+                    )
+
+    return violations
+
+
+def check_schema_query_consistency(pipeline_dir: Path) -> list[str]:
+    """Check that SQL table references in triple-quoted strings match init_db.py schema.
+
+    Only scans inside triple-quoted SQL strings (containing SELECT/INSERT/DELETE/UPDATE)
+    to avoid false positives from Python import statements and comments.
+    """
+    violations = []
+
+    # Gather tables from all schema files (pipeline + trading_app)
+    create_tables = set()
+    schema_files = [
+        pipeline_dir / "init_db.py",
+        pipeline_dir.parent / "trading_app" / "db_manager.py",
+        pipeline_dir.parent / "trading_app" / "nested" / "schema.py",
+    ]
+    for sf in schema_files:
+        if sf.exists():
+            sf_content = sf.read_text(encoding="utf-8")
+            create_tables.update(
+                re.findall(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)", sf_content, re.IGNORECASE)
+            )
+
+    if not create_tables:
+        return violations
+
+    # SQL keywords and known non-table identifiers to skip
+    sql_keywords = {
+        "SELECT",
+        "WHERE",
+        "AND",
+        "OR",
+        "NOT",
+        "NULL",
+        "SET",
+        "VALUES",
+        "ORDER",
+        "GROUP",
+        "BY",
+        "AS",
+        "HAVING",
+        "LIMIT",
+        "OFFSET",
+        "DISTINCT",
+        "ON",
+        "TRANSACTION",
+        "TABLE",
+        "REPLACE",
+        "EXISTS",
+        "SCHEMA",
+        "COLUMNS",
+        "INFORMATION_SCHEMA",
+        "MAIN",
+        "INDEX",
+        "VIEW",
+        "TYPE",
+        "INTERVAL",
+        "ZONE",
+        "CAST",
+        "COUNT",
+        "MIN",
+        "MAX",
+        "SUM",
+        "AVG",
+        "FIRST",
+        "LAST",
+        "EXTRACT",
+        "EPOCH",
+        "BEGIN",
+        "COMMIT",
+        "ROLLBACK",
+        "DROP",
+        "CREATE",
+        "IF",
+    }
+
+    # Extract CTE names: WITH x AS (...), y AS (...), z AS (...)
+    # Matches both the first CTE (after WITH) and subsequent ones (after comma)
+    cte_pattern = re.compile(r"(?:WITH|,)\s+(\w+)\s+AS\s*\(", re.IGNORECASE)
+
+    # Pattern for table references in SQL
+    table_ref_pattern = re.compile(r"(?:FROM|INTO|UPDATE|JOIN)\s+(\w+)", re.IGNORECASE)
+
+    # Extract triple-quoted strings that contain SQL
+    sql_string_pattern = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.DOTALL)
+
+    for fpath in pipeline_dir.glob("*.py"):
+        if fpath.name in ("init_db.py", "check_drift.py"):
+            continue
+
+        content = fpath.read_text(encoding="utf-8")
+
+        for match in sql_string_pattern.finditer(content):
+            sql_text = match.group(1) or match.group(2)
+
+            if not _has_sql_literal_context(content, match.start()):
+                continue
+            # Only check strings that actually start like SQL. This avoids
+            # prose false positives such as "update the baton", which would
+            # otherwise be parsed as UPDATE <table>.
+            if not _looks_like_sql_block(sql_text):
+                continue
+
+            # Extract CTE names from this SQL block
+            cte_names = {m.group(1) for m in cte_pattern.finditer(sql_text)}
+
+            # Find line number of the match start
+            line_num = content[: match.start()].count("\n") + 1
+
+            for ref_match in table_ref_pattern.finditer(sql_text):
+                table = ref_match.group(1)
+                if table.upper() in sql_keywords:
+                    continue
+                if "information_schema" in sql_text.lower():
+                    continue
+                # Skip CTE names and known DataFrame variable patterns
+                if table in cte_names:
+                    continue
+                if table.endswith("_df") or table.endswith("_frame"):
+                    continue
+                # Skip column names used after EXTRACT(... FROM col)
+                extract_ctx = sql_text[max(0, ref_match.start() - 30) : ref_match.start()]
+                if "EXTRACT" in extract_ctx.upper() or "EPOCH" in extract_ctx.upper():
+                    continue
+                if table not in create_tables:
+                    violations.append(
+                        f"  {fpath.name}:~{line_num}: SQL references table '{table}' not in init_db.py schema"
+                    )
+
+    return violations
+
+
+def check_import_cycles(pipeline_dir: Path) -> list[str]:
+    """Check for import cycles between pipeline modules."""
+    violations = []
+
+    # ingest_dbn_mgc.py must NOT import from ingest_dbn.py (reverse dependency)
+    mgc_path = pipeline_dir / "ingest_dbn_mgc.py"
+    if not mgc_path.exists():
+        return violations
+
+    content = mgc_path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+
+    for line_num, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if "from pipeline.ingest_dbn import" in line or "import pipeline.ingest_dbn" in line:
+            violations.append(f"  ingest_dbn_mgc.py:{line_num}: Imports from ingest_dbn.py (circular dependency risk)")
+        if "from .ingest_dbn import" in line or "from . import ingest_dbn" in line:
+            violations.append(
+                f"  ingest_dbn_mgc.py:{line_num}: Relative import from ingest_dbn (circular dependency risk)"
+            )
+
+    return violations
+
+
+def check_hardcoded_paths(pipeline_dir: Path) -> list[str]:
+    """Check for hardcoded absolute Windows paths in pipeline code."""
+    violations = []
+
+    path_patterns = [
+        re.compile(r'["\']C:\\Users', re.IGNORECASE),
+        re.compile(r'["\']C:/Users', re.IGNORECASE),
+        re.compile(r'["\']D:\\', re.IGNORECASE),
+        re.compile(r'["\']D:/', re.IGNORECASE),
+    ]
+
+    for fpath in pipeline_dir.glob("*.py"):
+        if fpath.name == "check_drift.py":
+            continue
+
+        content = fpath.read_text(encoding="utf-8")
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+
+            for pattern in path_patterns:
+                if pattern.search(line):
+                    violations.append(f"  {fpath.name}:{line_num}: Hardcoded absolute path: {stripped[:80]}")
+
+    return violations
+
+
+def check_connection_leaks(pipeline_dir: Path) -> list[str]:
+    """Check that duckdb.connect() calls have proper cleanup.
+
+    Improved: counts connect() vs close() calls. If connect > close
+    AND no finally/atexit/with-statement, flags it.
+    """
+    violations = []
+
+    for fpath in pipeline_dir.glob("*.py"):
+        if fpath.name in ("check_drift.py", "check_db.py", "dashboard.py", "health_check.py", "__init__.py"):
+            continue
+
+        content = fpath.read_text(encoding="utf-8")
+
+        connect_count = len(re.findall(r"duckdb\.connect\(", content))
+        if connect_count == 0:
+            continue
+
+        close_count = len(re.findall(r"\.close\(\)", content))
+        has_finally = "finally:" in content
+        has_atexit = "atexit" in content
+        # Also recognise wrapper helpers that return duckdb.connect() and are
+        # called via ``with _connect(...) as con:``
+        has_with = "with duckdb" in content or (
+            bool(re.search(r"return\s+duckdb\.connect\(", content)) and bool(re.search(r"\bwith\s+\w+\(", content))
+        )
+
+        if has_finally or has_atexit or has_with:
+            continue
+
+        if close_count < connect_count:
+            violations.append(
+                f"  {fpath.name}: {connect_count} duckdb.connect() calls but only "
+                f"{close_count} .close() calls and no finally/atexit/with"
+            )
+
+    return violations
+
+
+def check_pipeline_never_imports_trading_app(pipeline_dir: Path) -> list[str]:
+    """Check that pipeline/ modules NEVER import from trading_app/.
+
+    One-way dependency rule:
+      trading_app CAN import from pipeline (cost_model, paths, init_db)
+      pipeline NEVER imports from trading_app
+    """
+    violations = []
+
+    import_patterns = [
+        re.compile(r"from\s+trading_app"),
+        re.compile(r"import\s+trading_app"),
+    ]
+
+    for fpath in pipeline_dir.glob("*.py"):
+        if fpath.name == "check_drift.py":
+            continue
+
+        content = fpath.read_text(encoding="utf-8")
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+
+            for pattern in import_patterns:
+                if pattern.search(line):
+                    violations.append(
+                        f"  {fpath.name}:{line_num}: Imports from trading_app "
+                        f"(one-way dependency violation): {stripped[:80]}"
+                    )
+
+    return violations
+
+
+def check_trading_app_connection_leaks(trading_app_dir: Path) -> list[str]:
+    """Check that duckdb.connect() calls in trading_app/ have proper cleanup.
+
+    Improved: counts connect() vs close() calls. If connect > close
+    AND no finally/atexit/with-statement, flags it.
+    """
+    violations = []
+
+    if not trading_app_dir.exists():
+        return violations
+
+    for fpath in trading_app_dir.rglob("*.py"):
+        if fpath.name == "__init__.py":
+            continue
+
+        content = fpath.read_text(encoding="utf-8")
+
+        connect_count = len(re.findall(r"duckdb\.connect\(", content))
+        if connect_count == 0:
+            continue
+
+        close_count = len(re.findall(r"\.close\(\)", content))
+        has_finally = "finally:" in content
+        has_atexit = "atexit" in content
+        # Also recognise wrapper helpers that return duckdb.connect() and are
+        # called via ``with _connect(...) as con:``
+        has_with = "with duckdb" in content or (
+            bool(re.search(r"return\s+duckdb\.connect\(", content)) and bool(re.search(r"\bwith\s+\w+\(", content))
+        )
+
+        if has_finally or has_atexit or has_with:
+            continue
+
+        if close_count < connect_count:
+            violations.append(
+                f"  {fpath.name}: {connect_count} duckdb.connect() calls but only "
+                f"{close_count} .close() calls and no finally/atexit/with"
+            )
+
+    return violations
+
+
+def check_trading_app_hardcoded_paths(trading_app_dir: Path) -> list[str]:
+    """Check for hardcoded absolute Windows paths in trading_app code."""
+    violations = []
+
+    if not trading_app_dir.exists():
+        return violations
+
+    path_patterns = [
+        re.compile(r'["\']C:\\Users', re.IGNORECASE),
+        re.compile(r'["\']C:/Users', re.IGNORECASE),
+        re.compile(r'["\']D:\\', re.IGNORECASE),
+        re.compile(r'["\']D:/', re.IGNORECASE),
+    ]
+
+    for fpath in trading_app_dir.rglob("*.py"):
+        content = fpath.read_text(encoding="utf-8")
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+
+            for pattern in path_patterns:
+                if pattern.search(line):
+                    violations.append(f"  {fpath.name}:{line_num}: Hardcoded absolute path: {stripped[:80]}")
+
+    return violations
+
+
+def check_dashboard_readonly(pipeline_dir: Path) -> list[str]:
+    """Check that dashboard.py only reads from the database (no writes)."""
+    violations = []
+
+    dash_path = pipeline_dir / "dashboard.py"
+    if not dash_path.exists():
+        return violations
+
+    content = dash_path.read_text(encoding="utf-8")
+
+    write_patterns = [
+        re.compile(r"INSERT\s+", re.IGNORECASE),
+        re.compile(r"DELETE\s+FROM", re.IGNORECASE),
+        re.compile(r"UPDATE\s+\w+\s+SET", re.IGNORECASE),
+        re.compile(r"DROP\s+TABLE", re.IGNORECASE),
+        re.compile(r"CREATE\s+TABLE", re.IGNORECASE),
+    ]
+
+    lines = content.splitlines()
+    for line_num, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        for pattern in write_patterns:
+            if pattern.search(line):
+                violations.append(f"  dashboard.py:{line_num}: DB write detected (must be read-only): {stripped[:80]}")
+
+    # Also verify read_only=True is used
+    if "duckdb.connect(" in content and "read_only=True" not in content:
+        violations.append("  dashboard.py: duckdb.connect() without read_only=True")
+
+    return violations
+
+
+def check_config_filter_sync() -> list[str]:
+    """Check that ALL_FILTERS keys match filter_type inside each filter."""
+    violations = []
+
+    # Ensure project root is on sys.path so trading_app is importable
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+    try:
+        from trading_app.config import ALL_FILTERS
+
+        for key, filt in ALL_FILTERS.items():
+            if filt.filter_type != key:
+                violations.append(f"  ALL_FILTERS['{key}'].filter_type = '{filt.filter_type}' (mismatch)")
+    except ImportError as e:
+        violations.append(f"  Cannot import trading_app.config.ALL_FILTERS: {e}")
+
+    return violations
+
+
+def check_entry_models_sync() -> list[str]:
+    """Check that ENTRY_MODELS in config is consistent with VALID_ENTRY_MODELS in sql_adapter.
+
+    Cross-system sync: trading_app.config.ENTRY_MODELS is the canonical definition;
+    trading_app.ai.sql_adapter.VALID_ENTRY_MODELS gates which entry models the AI CLI
+    accepts. If they diverge, legitimate queries get rejected or invalid models get queried.
+    """
+    violations = []
+
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+    try:
+        from trading_app.ai.sql_adapter import VALID_ENTRY_MODELS
+        from trading_app.config import ENTRY_MODELS
+
+        config_set = set(ENTRY_MODELS)
+        if config_set != VALID_ENTRY_MODELS:
+            diff = config_set.symmetric_difference(VALID_ENTRY_MODELS)
+            violations.append(
+                f"  sql_adapter.VALID_ENTRY_MODELS {sorted(VALID_ENTRY_MODELS)} "
+                f"!= config.ENTRY_MODELS {sorted(config_set)} (diff: {sorted(diff)})"
+            )
+    except ImportError as e:
+        violations.append(f"  Cannot import ENTRY_MODELS or VALID_ENTRY_MODELS: {e}")
+
+    return violations
+
+
+def check_nested_isolation() -> list[str]:
+    """Check that trading_app/nested/ and trading_app/regime/ never import from production modules.
+
+    One-way dependency rule for nested/regime subpackages:
+      CAN import from: pipeline/, trading_app/config.py, trading_app/entry_rules.py,
+        trading_app/outcome_builder.py (for compute_single_outcome, RR_TARGETS, etc.),
+        trading_app/strategy_discovery.py (for compute_metrics, _load_daily_features, etc.),
+        trading_app/strategy_validator.py (for validate_strategy)
+      NEVER imports from: trading_app/db_manager.py (production schema)
+    """
+    violations = []
+
+    # Forbidden: importing init_trading_app_schema or verify_trading_app_schema
+    # (nested/regime have their own schema modules)
+    forbidden_patterns = [
+        re.compile(r"from\s+trading_app\.db_manager\s+import"),
+        re.compile(r"import\s+trading_app\.db_manager"),
+    ]
+
+    for subdir_name in ["nested", "regime"]:
+        subdir = TRADING_APP_DIR / subdir_name
+        if not subdir.exists():
+            continue
+
+        for fpath in subdir.glob("*.py"):
+            if fpath.name == "__init__.py":
+                continue
+
+            content = fpath.read_text(encoding="utf-8")
+            lines = content.splitlines()
+
+            for line_num, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                for pattern in forbidden_patterns:
+                    if pattern.search(line):
+                        violations.append(
+                            f"  {subdir_name}/{fpath.name}:{line_num}: Imports from db_manager "
+                            f"({subdir_name} must use own schema): {stripped[:80]}"
+                        )
+
+    return violations
+
+
+def check_entry_price_sanity() -> list[str]:
+    """Flag entry_price = orb_high/orb_low in outcome code without E3 guard.
+
+    Catches regression to the broken behavior where entry_price was set to
+    the ORB level regardless of entry model.
+    """
+    violations = []
+
+    outcome_path = TRADING_APP_DIR / "outcome_builder.py"
+    if not outcome_path.exists():
+        return violations
+
+    content = outcome_path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+
+    # Pattern: entry_price = orb_high or entry_price = orb_low
+    # This should only appear inside E3 logic in entry_rules.py, never in outcome_builder
+    dangerous_patterns = [
+        re.compile(r"entry_price\s*=\s*orb_high"),
+        re.compile(r"entry_price\s*=\s*orb_low"),
+    ]
+
+    for line_num, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        for pattern in dangerous_patterns:
+            if pattern.search(line):
+                violations.append(
+                    f"  outcome_builder.py:{line_num}: Direct entry_price = ORB level "
+                    f"(must be set by entry model, not hardcoded): {stripped[:80]}"
+                )
+
+    return violations
+
+
+def check_nested_production_writes() -> list[str]:
+    """Check that nested/*.py and regime/*.py never write to production tables.
+
+    Production tables: orb_outcomes, experimental_strategies, validated_setups.
+    Nested/regime code must only write to their own tables.
+    """
+    violations = []
+
+    production_tables = ["orb_outcomes", "experimental_strategies", "validated_setups"]
+    write_keywords = ["INSERT", "DELETE", "UPDATE", "DROP"]
+
+    for subdir_name in ["nested", "regime"]:
+        subdir = TRADING_APP_DIR / subdir_name
+        if not subdir.exists():
+            continue
+
+        for fpath in subdir.glob("*.py"):
+            if fpath.name == "__init__.py":
+                continue
+
+            content = fpath.read_text(encoding="utf-8")
+            lines = content.splitlines()
+
+            for line_num, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+
+                for table in production_tables:
+                    for keyword in write_keywords:
+                        pattern = re.compile(
+                            rf"{keyword}\s+(?:OR\s+REPLACE\s+)?(?:INTO\s+|FROM\s+)?{table}\b",
+                            re.IGNORECASE,
+                        )
+                        if pattern.search(line):
+                            violations.append(
+                                f"  {subdir_name}/{fpath.name}:{line_num}: SQL write to production table "
+                                f"'{table}': {stripped[:80]}"
+                            )
+
+    return violations
+
+
+def check_schema_query_consistency_trading_app(trading_app_dir: Path) -> list[str]:
+    """Extend Check 4 to scan trading_app/ for SQL table reference consistency."""
+    violations = []
+
+    # Gather ALL known tables from all schema files
+    create_tables = set()
+    schema_files = [
+        PIPELINE_DIR / "init_db.py",
+        trading_app_dir / "db_manager.py",
+        trading_app_dir / "live" / "trade_journal.py",
+        trading_app_dir / "nested" / "schema.py",
+        trading_app_dir / "regime" / "schema.py",
+    ]
+    for sf in schema_files:
+        if sf.exists():
+            sf_content = sf.read_text(encoding="utf-8")
+            create_tables.update(
+                re.findall(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)", sf_content, re.IGNORECASE)
+            )
+
+    if not create_tables:
+        return violations
+
+    sql_keywords = {
+        "SELECT",
+        "WHERE",
+        "AND",
+        "OR",
+        "NOT",
+        "NULL",
+        "SET",
+        "VALUES",
+        "ORDER",
+        "GROUP",
+        "BY",
+        "AS",
+        "HAVING",
+        "LIMIT",
+        "OFFSET",
+        "DISTINCT",
+        "ON",
+        "TRANSACTION",
+        "TABLE",
+        "REPLACE",
+        "EXISTS",
+        "SCHEMA",
+        "COLUMNS",
+        "INFORMATION_SCHEMA",
+        "MAIN",
+        "INDEX",
+        "VIEW",
+        "TYPE",
+        "INTERVAL",
+        "ZONE",
+        "CAST",
+        "COUNT",
+        "MIN",
+        "MAX",
+        "SUM",
+        "AVG",
+        "FIRST",
+        "LAST",
+        "EXTRACT",
+        "EPOCH",
+        "BEGIN",
+        "COMMIT",
+        "ROLLBACK",
+        "DROP",
+        "CREATE",
+        "IF",
+        "TEXT",
+        "INTEGER",
+        "DOUBLE",
+        "BOOLEAN",
+        "DATE",
+        "TIMESTAMP",
+        "TIMESTAMPTZ",
+        "VARCHAR",
+        "BIGINT",
+        "REAL",
+        "FLOAT",
+        "FROM",
+        "IS",
+        "IN",
+        "INTO",
+        "DELETE",
+        "INSERT",
+        "JOIN",
+        "INNER",
+        "LEFT",
+        "RIGHT",
+        "OUTER",
+        "UNION",
+        "ALL",
+        "CASE",
+        "WHEN",
+        "THEN",
+        "ELSE",
+        "END",
+        "LIKE",
+        "BETWEEN",
+        "TRUE",
+        "FALSE",
+        "DEFAULT",
+        "PRIMARY",
+        "KEY",
+        "FOREIGN",
+        "REFERENCES",
+        "CASCADE",
+        "CHECK",
+        "UNIQUE",
+        "ALTER",
+        "ADD",
+        "COLUMN",
+        "WITH",
+    }
+
+    cte_pattern = re.compile(r"(?:WITH|,)\s+(\w+)\s+AS\s*\(", re.IGNORECASE)
+    table_ref_pattern = re.compile(r"(?:FROM|INTO|UPDATE|JOIN)\s+(\w+)", re.IGNORECASE)
+    sql_string_pattern = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.DOTALL)
+
+    if not trading_app_dir.exists():
+        return violations
+
+    for fpath in trading_app_dir.rglob("*.py"):
+        if fpath.name in ("__init__.py", "schema.py", "db_manager.py"):
+            continue
+
+        content = fpath.read_text(encoding="utf-8")
+
+        for match in sql_string_pattern.finditer(content):
+            sql_text = match.group(1) or match.group(2)
+
+            if not _has_sql_literal_context(content, match.start()):
+                continue
+            if not _looks_like_sql_block(sql_text):
+                continue
+
+            cte_names = {m.group(1) for m in cte_pattern.finditer(sql_text)}
+            line_num = content[: match.start()].count("\n") + 1
+
+            for ref_match in table_ref_pattern.finditer(sql_text):
+                table = ref_match.group(1)
+                if table.upper() in sql_keywords:
+                    continue
+                if "information_schema" in sql_text.lower():
+                    continue
+                if table in cte_names:
+                    continue
+                if table.endswith("_df") or table.endswith("_frame"):
+                    continue
+                extract_ctx = sql_text[max(0, ref_match.start() - 30) : ref_match.start()]
+                if "EXTRACT" in extract_ctx.upper() or "EPOCH" in extract_ctx.upper():
+                    continue
+                if table not in create_tables:
+                    violations.append(f"  {fpath.name}:~{line_num}: SQL references table '{table}' not in schema")
+
+    return violations
+
+
+def check_timezone_hygiene() -> list[str]:
+    """Block pytz imports and hardcoded timedelta(hours=10) patterns.
+
+    Known footguns:
+      - pytz has surprising DST normalization behavior
+      - timedelta(hours=10) is a hardcoded Brisbane offset instead of using zoneinfo
+      - pd.Timedelta(hours=10) added to DuckDB timestamps double-converts
+        (DuckDB fetchdf() returns Brisbane-localized timestamps, not naive UTC)
+    """
+    violations = []
+
+    pytz_pattern = re.compile(r"import\s+pytz|from\s+pytz\s+import")
+    # Match timedelta(hours=10) with optional spaces — both stdlib and pandas
+    hardcoded_tz_pattern = re.compile(r"timedelta\s*\(\s*hours\s*=\s*10\s*\)")
+    # Match pd.Timedelta(hours=10) — the double-conversion footgun in research scripts
+    pd_timedelta_pattern = re.compile(r"pd\.Timedelta\s*\(\s*hours\s*=\s*10\s*\)")
+
+    for base_dir in [PIPELINE_DIR, TRADING_APP_DIR, RESEARCH_DIR]:
+        if not base_dir.exists():
+            continue
+
+        for fpath in base_dir.rglob("*.py"):
+            if fpath.name in ("__init__.py", "check_drift.py"):
+                continue
+
+            content = fpath.read_text(encoding="utf-8")
+            lines = content.splitlines()
+
+            for line_num, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+
+                if pytz_pattern.search(line):
+                    violations.append(f"  {fpath.name}:{line_num}: pytz import (use zoneinfo instead): {stripped[:80]}")
+                if hardcoded_tz_pattern.search(line):
+                    violations.append(
+                        f"  {fpath.name}:{line_num}: Hardcoded timedelta(hours=10) "
+                        f"(use timezone.utc or zoneinfo): {stripped[:80]}"
+                    )
+                if pd_timedelta_pattern.search(line):
+                    violations.append(
+                        f"  {fpath.name}:{line_num}: pd.Timedelta(hours=10) "
+                        f"double-converts DuckDB Brisbane timestamps: {stripped[:80]}"
+                    )
+
+    return violations
+
+
+# Modules with optional dependencies (feature-gated, not broken)
+_OPTIONAL_DEP_MODULES = {
+    "trading_app.live.data_feed",  # websockets
+    "trading_app.live.session_orchestrator",  # websockets
+    "trading_app.live.webhook_server",  # fastapi
+    # ML subsystem (trading_app.ml.*) removed 2026-04-11 (V1/V2/V3 DEAD)
+}
+
+
+def check_all_imports_resolve() -> list[str]:
+    """Verify that all .py files in pipeline/ and trading_app/ can be imported.
+
+    Catches typos in import statements, missing dependencies, and broken
+    module references BEFORE runtime.
+    """
+    import importlib
+
+    violations = []
+
+    # Ensure project root is on sys.path (modules use sys.path.insert)
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+    for base_dir in [PIPELINE_DIR, TRADING_APP_DIR]:
+        if not base_dir.exists():
+            continue
+
+        for fpath in base_dir.rglob("*.py"):
+            if fpath.name.startswith("_") and fpath.name != "__init__.py":
+                continue
+            if fpath.name == "__init__.py":
+                continue
+            # Skip check_drift itself (circular)
+            if fpath.name == "check_drift.py":
+                continue
+
+            # Convert file path to module path
+            rel = fpath.relative_to(PROJECT_ROOT)
+            module = str(rel).replace("\\", "/").replace("/", ".").removesuffix(".py")
+
+            # Skip modules already loaded — their imports resolved successfully
+            if module in sys.modules:
+                continue
+            # Skip modules with optional dependencies (feature-gated, not broken)
+            if module in _OPTIONAL_DEP_MODULES:
+                continue
+            try:
+                importlib.import_module(module)
+            except Exception as e:
+                err_type = type(e).__name__
+                violations.append(f"  {module}: {err_type}: {str(e)[:100]}")
+
+    return violations
+
+
+def check_cryptography_pin_holds() -> list[str]:
+    """Two-phase guard for the cryptography<47 sidecar pin.
+
+    Phase 1 — fail-closed: if cryptography>=47 is installed alongside fastmcp,
+    every FastMCP MCP server crashes on startup (Authlib 1.7.0 imports
+    `cryptography.hazmat.backends.default_backend`, removed in cryptography 47).
+
+    Phase 2 — advisory staleness: if the pin's `revisit-by:` date in
+    `constraints.txt` has passed, emit a non-blocking advisory prompting a
+    check of Authlib's latest release. Stops the pin from silently blocking
+    security updates after upstream fixes itself.
+
+    Pin lives in `constraints.txt` (not pyproject.toml — sidecar pip-installs).
+    Detail: memory/feedback_mcp_venv_drift_cryptography47.md
+    """
+    violations: list[str] = []
+
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+    except Exception:
+        return violations
+
+    # ---- Phase 1: fail-closed regression check ---------------------------
+    try:
+        crypto_ver_str = version("cryptography")
+    except PackageNotFoundError:
+        crypto_ver_str = None
+    except Exception:
+        crypto_ver_str = None
+
+    fastmcp_present = False
+    try:
+        version("fastmcp")
+        fastmcp_present = True
+    except PackageNotFoundError:
+        pass
+    except Exception:
+        pass
+
+    if crypto_ver_str is not None and fastmcp_present:
+        try:
+            major = int(crypto_ver_str.split(".", 1)[0])
+        except (ValueError, IndexError):
+            major = 0
+        if major >= 47:
+            violations.append(
+                f"  cryptography=={crypto_ver_str} installed alongside fastmcp; this breaks "
+                f"every FastMCP MCP server (Authlib 1.7.0 imports the removed hazmat.backends). "
+                f"Install with `pip install -c constraints.txt ...` to honor the pin. "
+                f"Detail: memory/feedback_mcp_venv_drift_cryptography47.md"
+            )
+            return violations
+
+    # ---- Phase 2: advisory staleness check -------------------------------
+    constraints_path = PROJECT_ROOT / "constraints.txt"
+    if not constraints_path.exists():
+        return violations
+
+    try:
+        text = constraints_path.read_text(encoding="utf-8")
+    except Exception:
+        return violations
+
+    if "cryptography<47" not in text:
+        # Pin already removed — staleness signal moot.
+        return violations
+
+    revisit_iso = None
+    for line in text.splitlines():
+        stripped = line.strip().lstrip("#").strip()
+        if stripped.startswith("revisit-by:"):
+            revisit_iso = stripped.split(":", 1)[1].strip()
+            break
+
+    if revisit_iso is None:
+        return violations
+
+    try:
+        from datetime import date
+
+        revisit_date = date.fromisoformat(revisit_iso)
+    except Exception:
+        return violations
+
+    today = date.today()
+    if today >= revisit_date:
+        days_overdue = (today - revisit_date).days
+        # NOTE: print() + don't append. This check is registered with
+        # is_advisory=False so Phase 1 (cryptography>=47 regression) can
+        # fail-closed. If we appended to violations here, the staleness
+        # signal would also block — directly contradicting the
+        # "ADVISORY" wording. Surfacing via stdout matches how the
+        # CRG D1-D5 checks already emit advisories.
+        print(
+            f"  ADVISORY: constraints.txt revisit-by:{revisit_iso} has passed "
+            f"({days_overdue} day(s) overdue). Check Authlib release notes — if the "
+            f"hazmat.backends import has been removed upstream, drop the cryptography<47 "
+            f"pin and re-test MCPs. If still broken, bump revisit-by forward 180 days. "
+            f"Detail: memory/feedback_mcp_venv_drift_cryptography47.md"
+        )
+
+    return violations
+
+
+def check_garch_dependency_importable() -> list[str]:
+    """Fail-closed if `arch` is not importable.
+
+    `arch>=8.0.0` is a hard pyproject.toml dep used by
+    `pipeline.build_daily_features.compute_garch_forecast`. The function
+    swallows ImportError and returns None (now WARN-level), so a venv that
+    drifts away from pyproject silently NULLs `garch_forecast_vol` /
+    `garch_forecast_vol_pct` on every daily build until Check 65 surfaces
+    the late-history NULLs.
+
+    This drift check fails up-front so the regression is caught before any
+    daily-build NULLs accumulate.
+
+    Detail: 2026-04-29 incident — `arch` missing from canonical
+    `C:\\Users\\joshd\\canompx3\\.venv` produced 1 day of NULL GARCH on
+    MES/MGC/MNQ across O5/O15/O30 before Check 65 caught it.
+    """
+    violations: list[str] = []
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+    except Exception:
+        return violations
+
+    try:
+        version("arch")
+    except PackageNotFoundError:
+        violations.append(
+            "  arch package not installed in active venv but is a hard pyproject.toml "
+            "dep (>=8.0.0). Daily builds will silently NULL garch_forecast_vol on every "
+            "new row. Run: pip install 'arch>=8.0.0'  (or `uv sync --frozen`)."
+        )
+        return violations
+    except Exception as exc:
+        violations.append(
+            f"  arch package metadata lookup failed: {type(exc).__name__}: {exc}. "
+            f"Likely venv corruption — re-run `uv sync --frozen`."
+        )
+        return violations
+
+    # Belt-and-suspenders: actually try to import, in case version() succeeds
+    # but the package is unimportable (broken install, partial wheel).
+    try:
+        import arch  # noqa: F401
+    except ImportError as exc:
+        violations.append(
+            f"  arch importable check failed: ImportError: {exc}. Run: pip install --force-reinstall 'arch>=8.0.0'."
+        )
+    except Exception as exc:
+        violations.append(f"  arch import raised {type(exc).__name__}: {exc}. Investigate before next daily build.")
+
+    return violations
+
+
+def check_market_state_readonly() -> list[str]:
+    """Check that market_state.py, scoring.py, cascade_table.py never write to DB.
+
+    These modules are read-only consumers. Any SQL write keyword is a violation.
+    """
+    violations = []
+    write_keywords = ["INSERT", "UPDATE", "DELETE", "DROP", "CREATE"]
+
+    readonly_files = [
+        TRADING_APP_DIR / "market_state.py",
+        TRADING_APP_DIR / "scoring.py",
+        TRADING_APP_DIR / "cascade_table.py",
+    ]
+
+    for fpath in readonly_files:
+        if not fpath.exists():
+            continue
+
+        content = fpath.read_text(encoding="utf-8")
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            # Skip string-only lines (docstrings, comments in strings)
+            if stripped.startswith(('"""', "'''", '"', "'")):
+                continue
+
+            for keyword in write_keywords:
+                # Match SQL write keywords followed by whitespace (avoids
+                # matching variable names like 'update_signals')
+                pattern = re.compile(
+                    rf"\b{keyword}\s+(?:OR\s+REPLACE\s+)?(?:INTO|FROM|TABLE|INDEX)\b",
+                    re.IGNORECASE,
+                )
+                if pattern.search(line):
+                    violations.append(f"  {fpath.name}:{line_num}: SQL write keyword '{keyword}': {stripped[:80]}")
+
+    return violations
+
+
+def check_sharpe_ann_presence() -> list[str]:
+    """Check that sharpe_ann is computed in discovery and shown in view_strategies.
+
+    Prevents regression where someone removes annualized Sharpe from the
+    pipeline, leaving only per-trade Sharpe (which is meaningless without
+    trade frequency context).
+    """
+    violations = []
+
+    # Check 1: strategy_discovery.py must compute sharpe_ann in return dict
+    discovery_path = TRADING_APP_DIR / "strategy_discovery.py"
+    if discovery_path.exists():
+        content = discovery_path.read_text(encoding="utf-8")
+        if '"sharpe_ann"' not in content:
+            violations.append("  strategy_discovery.py: Missing 'sharpe_ann' in compute_metrics return dict")
+        if '"trades_per_year"' not in content:
+            violations.append("  strategy_discovery.py: Missing 'trades_per_year' in compute_metrics return dict")
+
+    # Check 2: view_strategies.py must show sharpe_ann in user-facing output
+    view_path = TRADING_APP_DIR / "view_strategies.py"
+    if view_path.exists():
+        content = view_path.read_text(encoding="utf-8")
+        if "sharpe_ann" not in content:
+            violations.append("  view_strategies.py: Missing 'sharpe_ann' in user-facing output")
+
+    return violations
+
+
+def check_ingest_authority_notice() -> list[str]:
+    """Check #22: ingest_dbn_mgc.py must have deprecation notice in __main__ block."""
+    path = PIPELINE_DIR / "ingest_dbn_mgc.py"
+    if not path.exists():
+        return []
+    text = path.read_text(encoding="utf-8", errors="replace")
+
+    main_idx = text.find('if __name__ == "__main__"')
+    if main_idx == -1:
+        main_idx = text.find("if __name__ == '__main__'")
+    if main_idx == -1:
+        return []  # No __main__ block — library-only, fine
+
+    main_block = text[main_idx:]
+    # Accept either print() or logger.info() for the deprecation notice
+    required_pairs = [
+        (
+            'print("NOTE: For multi-instrument support, prefer:")',
+            'logger.info("NOTE: For multi-instrument support, prefer:")',
+        ),
+        (
+            'print("  python pipeline/ingest_dbn.py --instrument MGC")',
+            'logger.info("  python pipeline/ingest_dbn.py --instrument MGC")',
+        ),
+    ]
+    missing = [p for p, lg in required_pairs if p not in main_block and lg not in main_block]
+    if missing:
+        return [f"  {path.name}: Missing deprecation notice in __main__: {missing}"]
+    return []
+
+
+def check_validation_gate_existence() -> list[str]:
+    """Check #24: Verify critical validation gate functions still exist.
+
+    If someone deletes a gate function, this fires. Simple static grep per file.
+    """
+    violations = []
+
+    gate_map = {
+        PIPELINE_DIR / "ingest_dbn_mgc.py": [
+            "def validate_chunk(",
+            "def validate_timestamp_utc(",
+            "def check_pk_safety(",
+            "def check_merge_integrity(",
+            "def run_final_gates(",
+        ],
+        PIPELINE_DIR / "build_bars_5m.py": [
+            "def verify_5m_integrity(",
+        ],
+        PIPELINE_DIR / "ingest_dbn.py": [
+            "FAIL-CLOSED",
+        ],
+    }
+
+    for fpath, required_strings in gate_map.items():
+        if not fpath.exists():
+            violations.append(f"  {fpath.name}: File not found (gate source missing)")
+            continue
+
+        content = fpath.read_text(encoding="utf-8")
+        for gate in required_strings:
+            if gate not in content:
+                violations.append(f"  {fpath.name}: Missing gate '{gate}'")
+
+    return violations
+
+
+def check_naive_datetime() -> list[str]:
+    """Check #25: Block deprecated naive datetime constructors.
+
+    Catches:
+    - datetime.utcnow() (deprecated in 3.12, returns naive UTC)
+    - datetime.utcfromtimestamp() (same issue)
+
+    NOTE: datetime.now() is NOT flagged — it's used legitimately for
+    wall-clock elapsed timing throughout the codebase. The dangerous
+    pattern is utcnow() which implies UTC intent but returns naive.
+    """
+    violations = []
+
+    dangerous_patterns = [
+        (re.compile(r"datetime\.utcnow\(\)"), "datetime.utcnow()"),
+        (re.compile(r"datetime\.utcfromtimestamp\("), "datetime.utcfromtimestamp()"),
+    ]
+
+    for base_dir in [PIPELINE_DIR, TRADING_APP_DIR]:
+        if not base_dir.exists():
+            continue
+
+        for fpath in base_dir.rglob("*.py"):
+            if fpath.name in ("__init__.py", "check_drift.py"):
+                continue
+
+            content = fpath.read_text(encoding="utf-8")
+            lines = content.splitlines()
+
+            for line_num, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+
+                for pattern, label in dangerous_patterns:
+                    if pattern.search(line):
+                        violations.append(
+                            f"  {fpath.name}:{line_num}: {label} is deprecated "
+                            f"(use datetime.now(timezone.utc)): {stripped[:80]}"
+                        )
+
+    return violations
+
+
+def check_dst_session_coverage() -> list[str]:
+    """Check that all non-alias sessions are classified as DST-affected or DST-clean.
+
+    A developer could add a session to SESSION_CATALOG and forget to classify it,
+    causing silent DST contamination. This check catches that at pre-commit time.
+    """
+    violations = []
+
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+    try:
+        from pipeline.dst import DST_AFFECTED_SESSIONS, DST_CLEAN_SESSIONS, SESSION_CATALOG
+
+        non_alias = {label for label, entry in SESSION_CATALOG.items() if entry["type"] != "alias"}
+        classified = set(DST_AFFECTED_SESSIONS.keys()) | DST_CLEAN_SESSIONS
+        unclassified = non_alias - classified
+
+        if unclassified:
+            violations.append(
+                f"  Sessions in SESSION_CATALOG but not in DST_AFFECTED_SESSIONS or "
+                f"DST_CLEAN_SESSIONS: {sorted(unclassified)}"
+            )
+
+        # Also check for stale entries (in DST sets but not in catalog)
+        stale = classified - non_alias
+        if stale:
+            violations.append(f"  Sessions in DST sets but not in SESSION_CATALOG: {sorted(stale)}")
+
+    except ImportError as e:
+        violations.append(f"  Cannot import pipeline.dst: {e}")
+
+    return violations
+
+
+def check_db_config_usage() -> list[str]:
+    """Check that every file calling duckdb.connect() also calls configure_connection().
+
+    Any DuckDB consumer that connects without configuring gets default PRAGMAs,
+    which means no memory cap, no temp directory, and slower inserts.
+    """
+    violations = []
+
+    # Files that are allowed to connect without configure_connection:
+    # - Infrastructure/utilities: check_drift, db_config, init_db, dashboard, health_check
+    # - Deprecated: ingest_dbn_mgc.py
+    # - Read-only consumers: market_state, cascade_table, view_strategies, etc.
+    # - Nested subpackages: trading_app/nested/, trading_app/regime/
+    # The 7 main write-path files are enforced (ingest_dbn, ingest_dbn_daily,
+    # build_bars_5m, build_daily_features, outcome_builder, strategy_discovery,
+    # strategy_validator).
+    EXEMPT = {
+        "check_drift.py",
+        "db_config.py",
+        "check_db.py",
+        "init_db.py",
+        "dashboard.py",
+        "health_check.py",
+        "__init__.py",
+        # Deprecated
+        "ingest_dbn_mgc.py",
+        # Pipeline utilities (read-only)
+        "audit_bars_coverage.py",
+        "export_parquet.py",
+        # Trading app read-only consumers
+        "cascade_table.py",
+        "db_manager.py",
+        "live_config.py",
+        "market_state.py",
+        "paper_trader.py",
+        "portfolio.py",
+        "rolling_correlation.py",
+        "rolling_portfolio.py",
+        "strategy_fitness.py",
+        "view_strategies.py",
+        "dsr.py",  # read-only DSR estimation utilities
+        # validate_1800_*.py moved to research/archive/ (I12 audit cleanup)
+        # Nested subpackages
+        "corpus.py",
+        "sql_adapter.py",
+        "strategy_matcher.py",
+        "asia_session_analyzer.py",
+        "audit_outcomes.py",
+        "builder.py",
+        "compare.py",
+        "discovery.py",
+        "schema.py",
+        "validator.py",
+    }
+
+    for base_dir in [PIPELINE_DIR, TRADING_APP_DIR]:
+        if not base_dir.exists():
+            continue
+
+        for fpath in base_dir.rglob("*.py"):
+            if fpath.name in EXEMPT:
+                continue
+
+            content = fpath.read_text(encoding="utf-8")
+
+            if "duckdb.connect(" not in content:
+                continue
+
+            if "configure_connection" not in content:
+                violations.append(
+                    f"  {fpath.name}: calls duckdb.connect() but never calls "
+                    f"configure_connection() (import from pipeline.db_config)"
+                )
+
+    return violations
+
+
+def check_claude_md_size_cap() -> list[str]:
+    """Check #23: CLAUDE.md must stay under 12KB."""
+    path = PROJECT_ROOT / "CLAUDE.md"
+    if not path.exists():
+        return [f"  CLAUDE.md not found at {path}"]
+    size = path.stat().st_size
+    if size > 12288:
+        return [f"  CLAUDE.md exceeds 12KB size cap ({size / 1024:.1f}KB). Compact before committing."]
+    return []
+
+
+def check_discovery_session_aware_filters() -> list[str]:
+    """Check #28: Discovery scripts must use get_filters_for_grid(), not iterate ALL_FILTERS.
+
+    Grid-search files (strategy_discovery.py, nested/discovery.py, regime/discovery.py)
+    must use the session-aware get_filters_for_grid() instead of iterating ALL_FILTERS
+    directly. Iterating ALL_FILTERS applies DOW composites to sessions that lack
+    research justification.
+
+    Allowed: ALL_FILTERS lookups by key (e.g., ALL_FILTERS.get(filter_type))
+    Forbidden: ALL_FILTERS.items() or len(ALL_FILTERS) in discovery grid loops
+    """
+    violations = []
+    discovery_files = [
+        TRADING_APP_DIR / "strategy_discovery.py",
+        TRADING_APP_DIR / "nested" / "discovery.py",
+        TRADING_APP_DIR / "regime" / "discovery.py",
+    ]
+
+    # Pattern: iterating or sizing ALL_FILTERS (grid misuse)
+    iter_pattern = re.compile(r"\bALL_FILTERS\.(items|values|keys)\(\)")
+    len_pattern = re.compile(r"\blen\(ALL_FILTERS\)")
+
+    for fpath in discovery_files:
+        if not fpath.exists():
+            continue
+        content = fpath.read_text(encoding="utf-8")
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            for pat, desc in [(iter_pattern, "iterates ALL_FILTERS"), (len_pattern, "uses len(ALL_FILTERS)")]:
+                if pat.search(line):
+                    violations.append(
+                        f"  {fpath.relative_to(PROJECT_ROOT)}:{line_num}: "
+                        f"{desc} — use get_filters_for_grid() instead: "
+                        f"{stripped[:80]}"
+                    )
+
+    return violations
+
+
+def check_validated_filters_registered(con=None) -> list[str]:
+    """Check #29: Every filter_type in validated_setups must exist in ALL_FILTERS.
+
+    ALL_FILTERS is the single source of truth for filter definitions.
+    No script should ever reconstruct filters from naming conventions.
+    """
+    violations = []
+    try:
+        from trading_app.config import ALL_FILTERS
+    except ImportError as e:
+        violations.append(f"  Cannot import ALL_FILTERS: {e}")
+        return violations
+
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        rows = con.execute("SELECT DISTINCT filter_type FROM validated_setups ORDER BY filter_type").fetchall()
+
+        db_filter_types = {r[0] for r in rows}
+        missing = db_filter_types - set(ALL_FILTERS.keys())
+        if missing:
+            for ft in sorted(missing):
+                violations.append(f"  filter_type '{ft}' in validated_setups but NOT in ALL_FILTERS")
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_validated_filters_registered: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+
+    return violations
+
+
+def check_e2_e3_cb1_only() -> list[str]:
+    """Check #30: E2 and E3 entry models must be restricted to CB1 only.
+
+    E2 (stop-market) has no confirm bars concept — always CB1.
+    E3 (limit-at-ORB) always uses CB1 (higher CBs produce identical outcomes).
+    outcome_builder.py must restrict E2/E3 to cb_options=[1].
+    Discovery scripts must skip E2+CB2+ and E3+CB2+ in the grid iteration.
+    """
+    violations = []
+    ob_file = TRADING_APP_DIR / "outcome_builder.py"
+    if not ob_file.exists():
+        return violations
+
+    content = ob_file.read_text(encoding="utf-8")
+
+    # Verify E3 has cb_options = [1] in outcome_builder
+    if 'em == "E3"' not in content:
+        violations.append("  outcome_builder.py: E3 must be restricted to cb_options=[1].")
+
+    # Also verify discovery grid scripts skip E2+CB2+ and E3+CB2+
+    discovery_files = [
+        TRADING_APP_DIR / "strategy_discovery.py",
+        TRADING_APP_DIR / "nested" / "discovery.py",
+        TRADING_APP_DIR / "regime" / "discovery.py",
+    ]
+    e2_skip_patterns = [
+        'em in ("E2", "E3") and cb > 1',
+        'em in {"E2", "E3"} and cb > 1',
+        'em in ("E3", "E2") and cb > 1',
+        'em in {"E3", "E2"} and cb > 1',
+    ]
+    for f in discovery_files:
+        if not f.exists():
+            continue
+        fc = f.read_text(encoding="utf-8")
+        # Only check files that iterate confirm_bars (have a grid loop)
+        if "CONFIRM_BARS" not in fc:
+            continue
+        if not any(p in fc for p in e2_skip_patterns):
+            violations.append(
+                f"  {f.relative_to(PROJECT_ROOT)}: Grid iteration must skip E2+CB2+ "
+                "(em in ('E2', 'E3') and cb > 1: continue)"
+            )
+
+    return violations
+
+
+def check_no_e0_in_db(con=None) -> list[str]:
+    """Check #35: No E0 rows should exist in any trading table.
+
+    E0 (limit-on-confirm) was purged Feb 2026. Replaced by E2 (stop-market).
+    NOTE: This check will fail until Phase C DB purge is complete. Commented
+    out in the main() runner until then.
+    """
+    violations = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        for table in ["orb_outcomes", "experimental_strategies", "validated_setups"]:
+            count = con.execute(f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0'").fetchone()[0]
+            if count > 0:
+                violations.append(f"  {table}: {count} rows with entry_model='E0' (purged Feb 2026)")
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_no_e0_in_db: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_doc_stats_consistency(con=None) -> list[str]:
+    """Check #36: Doc files must match ground-truth DB counts.
+
+    Parses key stats (validated active, FDR significant, edge families,
+    drift check count) from documentation and compares to gold.db.
+    Prevents narrative-math divergence after rebuilds.
+    """
+    violations = []
+
+    # Ground-truth from DB
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        validated_active = con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone()[0]
+        fdr_significant = con.execute(
+            "SELECT COUNT(*) FROM validated_setups WHERE status = 'active' AND fdr_significant"
+        ).fetchone()[0]
+        edge_families_count = con.execute("SELECT COUNT(*) FROM edge_families").fetchone()[0]
+        # Per-aperture validated counts
+        aperture_rows = con.execute(
+            "SELECT orb_minutes, COUNT(*) FROM validated_setups WHERE status = 'active' GROUP BY orb_minutes"
+        ).fetchall()
+        aperture_counts = {int(r[0]): r[1] for r in aperture_rows}
+        # Edge family robustness tiers
+        tier_rows = con.execute(
+            "SELECT robustness_status, COUNT(*) FROM edge_families "
+            "WHERE robustness_status IN ('ROBUST','WHITELISTED') "
+            "GROUP BY robustness_status"
+        ).fetchall()
+        tier_counts = {r[0]: r[1] for r in tier_rows}
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_doc_stats_consistency: {type(e).__name__}: {e}")
+        return violations
+    finally:
+        if _own_con and con is not None:
+            con.close()
+
+    # Count drift checks from the CHECKS registry (single source of truth)
+    drift_check_count = len(CHECKS)
+
+    # Doc files to check: (file, regex, expected_key)
+    DOC_STATS_CHECKS = [
+        # TRADING_RULES.md no longer hardcodes aggregate counts — query DB via MCP.
+        # Only guard against someone re-adding a "Post-rebuild results" line with counts.
+        # Guard fires only if someone re-adds a hardcoded count to these files
+        ("ROADMAP.md", r"([\d,]+)\s+validated\s+active", "validated_active"),
+        ("CLAUDE.md", r"(\d+)\s+(?:drift|static)\s+checks", "drift_check_count"),
+    ]
+
+    ground_truth = {
+        "validated_active": validated_active,
+        "fdr_significant": fdr_significant,
+        "edge_families": edge_families_count,
+        "drift_check_count": drift_check_count,
+        "aperture_5m": aperture_counts.get(5, 0),
+        "aperture_15m": aperture_counts.get(15, 0),
+        "aperture_30m": aperture_counts.get(30, 0),
+        "tier_robust": tier_counts.get("ROBUST", 0),
+        "tier_whitelisted": tier_counts.get("WHITELISTED", 0),
+    }
+
+    for filename, pattern, key in DOC_STATS_CHECKS:
+        filepath = PROJECT_ROOT / filename
+        if not filepath.exists():
+            continue
+        content = filepath.read_text(encoding="utf-8")
+        matches = re.findall(pattern, content)
+        if not matches:
+            continue  # No match — don't flag (doc may not mention this stat)
+        # Check first match only (headline/summary number).  Docs also
+        # mention per-session counts (e.g. "4 validated strategies") which
+        # are correct but not the total — checking all matches would
+        # false-positive on those.
+        doc_value = int(matches[0].replace(",", ""))
+        expected = ground_truth[key]
+        if doc_value != expected:
+            violations.append(f"  {filename}: says {doc_value} {key} but DB has {expected}")
+
+    return violations
+
+
+def _doc_hygiene_rel(path: Path) -> str:
+    return str(path.relative_to(PROJECT_ROOT)).replace("\\", "/")
+
+
+def _read_yaml_doc(path: Path):
+    try:
+        import yaml
+    except ImportError as exc:
+        return None, f"PyYAML unavailable: {exc}"
+
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}, None
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def _looks_like_python_entrypoint(value: str) -> bool:
+    return value.endswith(".py") or ".py " in value
+
+
+def _entrypoint_path(value: str) -> Path | None:
+    entry = value.strip()
+    if not _looks_like_python_entrypoint(entry):
+        return None
+    first_token = entry.split()[0]
+    path = Path(first_token)
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+def check_doc_hygiene_contracts() -> list[str]:
+    """Enforce doc truth hygiene for preregs/results and generated docs.
+
+    This intentionally targets high-signal failure modes instead of linting all
+    prose. Broad historical-doc scanning belongs in scripts/tools/stale_doc_scanner.py.
+    """
+    violations: list[str] = []
+
+    # 1. Preregs/results must not carry placeholder provenance stamps.
+    # Bare-word markers (always violations).
+    stamp_dirs = [
+        PROJECT_ROOT / "docs" / "audit" / "hypotheses",
+        PROJECT_ROOT / "docs" / "audit" / "results",
+    ]
+    stamp_patterns = ("UNSTAMPED", "TO_BE_STAMPED")
+    # commit_sha placeholder regex. Per .claude/rules/research-truth-protocol.md
+    # § 2a, `commit_sha: TO_FILL_AFTER_COMMIT` is legitimate (chicken-and-egg
+    # before first commit). Any OTHER placeholder value on commit_sha is rot.
+    commit_sha_placeholder = re.compile(
+        r"""commit_sha\s*:\s*["']?(PENDING|TO_FILL_(?!AFTER_COMMIT\b)[A-Z_]+|UNSTAMPED|TO_BE_STAMPED)["']?""",
+        re.IGNORECASE,
+    )
+    for directory in stamp_dirs:
+        if not directory.exists():
+            continue
+        for path in sorted((*directory.glob("*.md"), *directory.glob("*.yaml"), *directory.glob("*.yml"))):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for line_num, line in enumerate(text.splitlines(), 1):
+                hits = [marker for marker in stamp_patterns if marker in line]
+                sha_match = commit_sha_placeholder.search(line)
+                if sha_match:
+                    hits.append(f"commit_sha={sha_match.group(1)}")
+                if hits:
+                    violations.append(
+                        f"  {_doc_hygiene_rel(path)}:{line_num}: placeholder provenance marker ({', '.join(hits)})"
+                    )
+
+    # 2. Execution metadata must not imply an unavailable or fake runner.
+    hyp_dir = PROJECT_ROOT / "docs" / "audit" / "hypotheses"
+    if hyp_dir.exists():
+        for path in sorted((*hyp_dir.glob("*.yaml"), *hyp_dir.glob("*.yml"))):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if "execution:" not in text:
+                # Many older hypothesis files are prose-heavy YAML-ish archives.
+                # Only enforce executable/design-only contracts once a prereg
+                # declares the execution block this check owns.
+                continue
+            body, error = _read_yaml_doc(path)
+            if error:
+                violations.append(f"  {_doc_hygiene_rel(path)}: YAML parse failed in doc hygiene check: {error}")
+                continue
+            if not isinstance(body, dict):
+                continue
+            execution = body.get("execution")
+            if not isinstance(execution, dict):
+                continue
+            mode = str(execution.get("mode", "")).strip().lower()
+            entrypoint = execution.get("entrypoint")
+            rel = _doc_hygiene_rel(path)
+            if mode == "design_only":
+                if entrypoint not in (None, "", "null"):
+                    violations.append(
+                        f"  {rel}: execution.mode=design_only but execution.entrypoint is populated ({entrypoint!r})"
+                    )
+                continue
+            if entrypoint in (None, "", "null"):
+                violations.append(f"  {rel}: executable prereg missing execution.entrypoint")
+                continue
+            if not isinstance(entrypoint, str):
+                violations.append(f"  {rel}: execution.entrypoint must be a string or null")
+                continue
+            entry_path = _entrypoint_path(entrypoint)
+            if entry_path is not None and not entry_path.exists():
+                violations.append(
+                    f"  {rel}: execution.entrypoint references missing path "
+                    f"{_doc_hygiene_rel(entry_path) if entry_path.is_relative_to(PROJECT_ROOT) else entry_path}"
+                )
+
+    # 3. Generated docs must name their source and block hand edits.
+    generated_docs = [
+        PROJECT_ROOT / "docs" / "governance" / "system_authority_map.md",
+        PROJECT_ROOT / "docs" / "context" / "README.md",
+        PROJECT_ROOT / "docs" / "context" / "source-catalog.md",
+        PROJECT_ROOT / "docs" / "context" / "task-routes.md",
+        PROJECT_ROOT / "docs" / "context" / "institutional-contracts.md",
+    ]
+    for path in generated_docs:
+        if not path.exists():
+            violations.append(f"  {_doc_hygiene_rel(path)} missing")
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if "Generated from" not in text and "Auto-generated from" not in text:
+            violations.append(f"  {_doc_hygiene_rel(path)} missing generated-source marker")
+        if "Do not edit by hand" not in text and "do not edit by hand" not in text:
+            violations.append(f"  {_doc_hygiene_rel(path)} missing do-not-edit marker")
+
+    return violations
+
+
+def check_stale_scratch_db() -> list[str]:
+    """Check #37: Canonical gold.db must exist where pipeline.paths points.
+
+    Resolves the canonical DB location via _get_db_path(), which honors:
+      1. GOLD_DB_PATH_FOR_CHECKS module-level test override (set by tests)
+      2. pipeline.paths.GOLD_DB_PATH (production), which honors:
+         - DUCKDB_PATH env var (worktree / override scenario)
+         - PROJECT_ROOT/gold.db (default canonical location)
+
+    Per integrity-guardian.md rule 2 (canonical-source delegation), this
+    check delegates to the canonical resolver rather than recomputing
+    the path independently. Worktree scenario: f5 worktree has no local
+    gold.db; DUCKDB_PATH points to canonical canompx3/gold.db.
+
+    C:/db/gold.db scratch copy is DEPRECATED (Mar 24 2026) — caused stale-data
+    decisions across terminals. No auto-sync. Use canonical only.
+    """
+    violations = []
+    canonical_db = _get_db_path()
+    if not canonical_db.exists():
+        return _skip_db_check_for_ci(f"  Canonical DB not found at {canonical_db}. Run pipeline to create it.")
+    scratch_db = Path("C:/db/gold.db")
+    if scratch_db.exists():
+        violations.append(
+            "  DEPRECATED scratch DB still exists at C:/db/gold.db. "
+            "Delete it to prevent stale-data bugs: del C:\\db\\gold.db"
+        )
+    return violations
+
+
+def check_active_code_uses_canonical_db_path() -> list[str]:
+    """Check: active research code must delegate DB selection to pipeline.paths."""
+    violations = []
+    patterns = [
+        (
+            re.compile(r"""\bDB_PATH\s*=\s*["']gold\.db["']"""),
+            "direct DB_PATH literal",
+        ),
+        (
+            re.compile(r"""\b(?:DB_PATH|GOLD_DB_PATH)\s*=\s*(?:ROOT|PROJECT_ROOT|REPO_ROOT)\s*/\s*["']gold\.db["']"""),
+            "repo-root gold.db join",
+        ),
+        (
+            re.compile(
+                r"""os\.environ\.get\(\s*["']DUCKDB_PATH["']\s*,\s*str\((?:ROOT|PROJECT_ROOT|REPO_ROOT)\s*/\s*["']gold\.db["']\)\s*\)"""
+            ),
+            "manual DUCKDB_PATH fallback",
+        ),
+        (
+            re.compile(
+                r"""parser\.add_argument\(["']--db-path["'][^)]*default\s*=\s*(?:ROOT|PROJECT_ROOT|REPO_ROOT)\s*/\s*["']gold\.db["']"""
+            ),
+            "parser default bypasses pipeline.paths",
+        ),
+    ]
+
+    for scan_dir in ACTIVE_DB_PATH_SCAN_DIRS:
+        if not scan_dir.exists():
+            continue
+        for py_file in sorted(scan_dir.rglob("*.py")):
+            rel = py_file.relative_to(PROJECT_ROOT).as_posix()
+            if rel in ACTIVE_DB_PATH_SKIP_FILES:
+                continue
+            if rel.startswith("research/archive/") or rel.startswith("scripts/archive/"):
+                continue
+
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, PermissionError):
+                continue
+
+            for i, line in enumerate(content.splitlines(), 1):
+                stripped = line.lstrip()
+                if stripped.startswith("#"):
+                    continue
+                for pattern, reason in patterns:
+                    if pattern.search(line):
+                        violations.append(f"  {rel}:{i}: {reason} — delegate to pipeline.paths.GOLD_DB_PATH")
+                        break
+    return violations
+
+
+def check_old_session_names() -> list[str]:
+    """Check #38: No old fixed-clock session names in active code.
+
+    Old names (0900, 1000, 1100, 1800, 2300, 0030) were replaced by
+    dynamic event-based names (CME_REOPEN, TOKYO_OPEN, etc.) in Feb 2026.
+    Active code must use the new names from pipeline/dst.py SESSION_CATALOG.
+
+    Frozen historical files are excluded — they document what was tested
+    at runtime and serve as immutable experimental records.
+    """
+    violations = []
+    # Old session name literals that should not appear in active code
+    old_names = {"0900", "1000", "1100", "1800", "2300", "0030"}
+    # Pattern: quoted string literals containing old session names
+    # Matches "0900", '0900', etc. as standalone values
+    pattern = re.compile(r"""(?:["'])({names})(?:["'])""".format(names="|".join(old_names)))
+
+    frozen_files = {
+        "scripts/tools/migrate_session_names.py",
+        "scripts/tools/volume_session_analysis.py",
+        "scripts/tools/audit_ib_single_break.py",
+        "scripts/tools/audit_integrity.py",
+        "scripts/tools/backtest_1100_early_exit.py",
+        "scripts/tools/explore.py",
+        "scripts/tools/profile_1000_runners.py",
+        "pipeline/check_drift.py",  # this file defines the old names
+        "scripts/audits/phase_3_docs.py",  # detects old names in rule files
+        "scripts/audits/phase_8_test_suite.py",  # detects old names in tests
+        "scripts/audits/phase_9_research.py",  # detects old names in research scripts
+    }
+    # Active research scripts that were fixed — NOT frozen
+    active_research = {
+        "research/cross_validate_strategies.py",
+        "research/analyze_double_break.py",
+    }
+
+    # Scan only production directories (not venv/.git/.auto-claude)
+    _scan_dirs = [PIPELINE_DIR, TRADING_APP_DIR, SCRIPTS_DIR]
+    all_py_files = []
+    for scan_dir in _scan_dirs:
+        if scan_dir.exists():
+            all_py_files.extend(scan_dir.rglob("*.py"))
+    # Also include active research scripts explicitly
+    for ar in active_research:
+        ar_path = PROJECT_ROOT / ar
+        if ar_path.exists():
+            all_py_files.append(ar_path)
+
+    # Frozen subdirectories within scanned dirs
+    frozen_subdirs = {
+        "scripts/walkforward",
+    }
+
+    for py_file in sorted(all_py_files):
+        rel = py_file.relative_to(PROJECT_ROOT).as_posix()
+
+        # Skip frozen subdirectories
+        if any(rel.startswith(d + "/") for d in frozen_subdirs):
+            continue
+        # Skip explicitly frozen files
+        if rel in frozen_files:
+            continue
+
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, PermissionError):
+            continue
+
+        for i, line in enumerate(content.splitlines(), 1):
+            # Skip comments
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                continue
+            matches = pattern.findall(line)
+            for m in matches:
+                violations.append(f"  {rel}:{i}: old session name '{m}' — replace with new name from SESSION_CATALOG")
+
+    return violations
+
+
+def check_orb_minutes_in_strategy_id() -> list[str]:
+    """Check #31: Non-5m strategies must have _O{minutes} suffix in strategy_id.
+
+    make_strategy_id() appends _O15 or _O30 when orb_minutes != 5.
+    This prevents PK collisions between 5m and 15m/30m strategies in
+    experimental_strategies (strategy_id is PK).
+    """
+    violations = []
+    discovery_file = TRADING_APP_DIR / "strategy_discovery.py"
+    if not discovery_file.exists():
+        return violations
+
+    content = discovery_file.read_text(encoding="utf-8")
+
+    # Verify make_strategy_id accepts orb_minutes parameter
+    if "orb_minutes" not in content.split("def make_strategy_id")[1].split("def ")[0]:
+        violations.append("  strategy_discovery.py: make_strategy_id() must accept orb_minutes parameter")
+
+    # Verify the call site passes orb_minutes
+    # Look for make_strategy_id call that includes orb_minutes=
+    call_section = content.split("strategy_id = make_strategy_id(")
+    if len(call_section) >= 2:
+        # Check the main discovery loop call (not all calls need it — 5m callers use default)
+        main_call = call_section[1].split(")")[0]
+        if "orb_minutes=" not in main_call and "orb_minutes =" not in main_call:
+            violations.append(
+                "  strategy_discovery.py: main discovery call to make_strategy_id() "
+                "must pass orb_minutes= to prevent PK collisions"
+            )
+
+    return violations
+
+
+def check_orb_labels_session_catalog_sync() -> list[str]:
+    """Check #32: ORB_LABELS must match SESSION_CATALOG dynamic entries.
+
+    ORB_LABELS (init_db.py) drives schema generation (column names).
+    SESSION_CATALOG (dst.py) drives time resolution (per-day resolvers).
+    If a session exists in one but not the other:
+      - In ORB_LABELS only: schema has columns but build_daily_features raises ValueError
+      - In SESSION_CATALOG only: time resolved but no columns to store results (silent data loss)
+    """
+    violations = []
+
+    init_db_file = PIPELINE_DIR / "init_db.py"
+    dst_file = PIPELINE_DIR / "dst.py"
+
+    if not init_db_file.exists() or not dst_file.exists():
+        return violations
+
+    # Import both sources
+    try:
+        from pipeline.dst import SESSION_CATALOG
+        from pipeline.init_db import ORB_LABELS
+    except ImportError as e:
+        violations.append(f"  Cannot import for sync check: {e}")
+        return violations
+
+    orb_set = set(ORB_LABELS)
+    catalog_dynamic = {k for k, v in SESSION_CATALOG.items() if v.get("type") == "dynamic"}
+
+    in_orb_only = orb_set - catalog_dynamic
+    in_catalog_only = catalog_dynamic - orb_set
+
+    if in_orb_only:
+        violations.append(f"  ORB_LABELS has sessions not in SESSION_CATALOG: {sorted(in_orb_only)}")
+    if in_catalog_only:
+        violations.append(f"  SESSION_CATALOG has dynamic sessions not in ORB_LABELS: {sorted(in_catalog_only)}")
+
+    return violations
+
+
+def check_stale_session_names_in_code() -> list[str]:
+    """Check #33: No old fixed-clock session names in Python source code.
+
+    Old names (0900, 1000, 1100, 1130, 1800, 2300, 0030) were replaced with
+    event-based names (CME_REOPEN, TOKYO_OPEN, etc.) in Feb 2026. Stale
+    references in code (not comments) could cause silent bugs.
+    Checks pipeline/ and trading_app/ Python files.
+    """
+    violations = []
+    # Patterns that indicate old session names used as identifiers/strings
+    # (not in comments — we check quoted strings and f-strings)
+    old_names_pattern = re.compile(r"""['"](?:0900|1000|1100|1130|1800|2300|0030)['"]""")
+    # Directories to check
+    dirs = [PIPELINE_DIR, TRADING_APP_DIR]
+    # Files to skip (historical references are OK in these)
+    skip_files = {
+        "check_drift.py",  # This file (contains the pattern itself)
+    }
+    for d in dirs:
+        for py_file in sorted(d.rglob("*.py")):
+            if py_file.name in skip_files:
+                continue
+            content = py_file.read_text(encoding="utf-8")
+            for i, line in enumerate(content.splitlines(), 1):
+                stripped = line.lstrip()
+                # Skip comment-only lines
+                if stripped.startswith("#"):
+                    continue
+                if old_names_pattern.search(line):
+                    violations.append(
+                        f"  {py_file.relative_to(PROJECT_ROOT)}:{i}: stale session name in code: {line.strip()[:80]}"
+                    )
+    return violations
+
+
+def check_sql_adapter_validation_sync() -> list[str]:
+    """Check #34: sql_adapter.py VALID_* sets must match outcome_builder.py grids.
+
+    VALID_RR_TARGETS and VALID_CONFIRM_BARS in sql_adapter.py gate which
+    queries the AI CLI accepts. If outcome_builder.py adds new grid values,
+    sql_adapter.py must be updated or legitimate queries get rejected.
+    """
+    violations = []
+    adapter_file = TRADING_APP_DIR / "ai" / "sql_adapter.py"
+    builder_file = TRADING_APP_DIR / "outcome_builder.py"
+    if not adapter_file.exists() or not builder_file.exists():
+        return violations
+
+    adapter_content = adapter_file.read_text(encoding="utf-8")
+    builder_content = builder_file.read_text(encoding="utf-8")
+
+    # Extract RR_TARGETS from outcome_builder.py
+    rr_match = re.search(r"RR_TARGETS\s*=\s*\[([\d.,\s]+)\]", builder_content)
+    cb_match = re.search(r"CONFIRM_BARS_OPTIONS\s*=\s*\[([\d,\s]+)\]", builder_content)
+
+    if rr_match:
+        builder_rr = {float(x.strip()) for x in rr_match.group(1).split(",") if x.strip()}
+        adapter_rr_match = re.search(r"VALID_RR_TARGETS\s*=\s*\{([^}]+)\}", adapter_content)
+        if adapter_rr_match:
+            adapter_rr = {float(x.strip()) for x in adapter_rr_match.group(1).split(",") if x.strip()}
+            missing = builder_rr - adapter_rr
+            if missing:
+                violations.append(
+                    f"  sql_adapter.py VALID_RR_TARGETS missing: {sorted(missing)} "
+                    f"(present in outcome_builder.py RR_TARGETS)"
+                )
+
+    if cb_match:
+        builder_cb = {int(x.strip()) for x in cb_match.group(1).split(",") if x.strip()}
+        adapter_cb_match = re.search(r"VALID_CONFIRM_BARS\s*=\s*\{([^}]+)\}", adapter_content)
+        if adapter_cb_match:
+            adapter_cb = {int(x.strip()) for x in adapter_cb_match.group(1).split(",") if x.strip()}
+            missing = builder_cb - adapter_cb
+            if missing:
+                violations.append(
+                    f"  sql_adapter.py VALID_CONFIRM_BARS missing: {sorted(missing)} "
+                    f"(present in outcome_builder.py CONFIRM_BARS_OPTIONS)"
+                )
+
+    return violations
+
+
+def check_no_active_e3(con=None) -> list[str]:
+    """Check #39: No active E3 strategies in validated_setups.
+
+    E3 (retrace limit entry) was soft-retired Feb 2026: 0/50 FDR-significant,
+    no timeout mechanism (100% fill rate = late garbage included).
+    """
+    violations = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        count = con.execute(
+            "SELECT COUNT(*) FROM validated_setups WHERE entry_model = 'E3' AND status = 'active'"
+        ).fetchone()[0]
+        if count > 0:
+            violations.append(f"  validated_setups: {count} active E3 strategies (soft-retired Feb 2026)")
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_no_active_e3: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_no_active_e2_lookahead_filters(con=None) -> list[str]:
+    """Check that active E2 strategies never use break-bar-derived filters.
+
+    E2 stop-market entries fire on first touch after ORB completion, before the
+    break bar closes. Any filter that depends on break-bar properties therefore
+    becomes look-ahead for E2 and must not survive into active
+    ``validated_setups``.
+
+    This check delegates to the same canonical exclusion constants used by
+    discovery and execution so the shelf audit cannot drift from runtime policy.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from trading_app.config import is_e2_lookahead_filter
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        rows = con.execute(
+            """
+            SELECT strategy_id, instrument, orb_label, filter_type
+            FROM validated_setups
+            WHERE entry_model = 'E2'
+              AND status = 'active'
+            ORDER BY instrument, orb_label, filter_type, strategy_id
+            """
+        ).fetchall()
+
+        contaminated = []
+        for strategy_id, instrument, orb_label, filter_type in rows:
+            if is_e2_lookahead_filter(filter_type):
+                contaminated.append((strategy_id, instrument, orb_label, filter_type))
+
+        for strategy_id, instrument, orb_label, filter_type in contaminated:
+            violations.append(
+                "  validated_setups: active E2 strategy "
+                f"{strategy_id} uses look-ahead filter_type {filter_type!r} "
+                f"({instrument} {orb_label}). Break-bar-derived filters are "
+                "invalid for E2 and must not survive on the active shelf."
+            )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_no_active_e2_lookahead_filters: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_active_validated_filters_routable(con=None) -> list[str]:
+    """Check active shelf rows still belong to the canonical session grid.
+
+    The session-aware discovery universe is defined exclusively by
+    ``trading_app.config.get_filters_for_grid(instrument, session)``. An active
+    ``validated_setups`` row whose ``filter_type`` is no longer present in that
+    canonical grid for its `(instrument, orb_label)` lane indicates one of:
+
+    - session-dependent look-ahead contamination, such as OVNRNG on Asian lanes
+    - DOW/session misalignment that escaped routing discipline
+    - stale active rows using filters intentionally removed from the lane
+
+    This delegates to the same canonical router used by discovery instead of
+    re-encoding per-family allowlists in drift.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from trading_app.config import get_filters_for_grid
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        rows = con.execute(
+            """
+            SELECT strategy_id, instrument, orb_label, filter_type
+            FROM validated_setups
+            WHERE status = 'active'
+            ORDER BY instrument, orb_label, filter_type, strategy_id
+            """
+        ).fetchall()
+
+        lane_cache: dict[tuple[str, str], set[str]] = {}
+        for strategy_id, instrument, orb_label, filter_type in rows:
+            lane = (instrument, orb_label)
+            if lane not in lane_cache:
+                try:
+                    lane_cache[lane] = set(get_filters_for_grid(instrument, orb_label).keys())
+                except Exception as exc:  # noqa: BLE001 - drift boundary, fail-closed
+                    violations.append(
+                        "  validated_setups: could not resolve canonical grid for "
+                        f"{instrument} {orb_label}: {type(exc).__name__}: {exc}"
+                    )
+                    lane_cache[lane] = set()
+                    continue
+            if filter_type not in lane_cache[lane]:
+                violations.append(
+                    "  validated_setups: active strategy "
+                    f"{strategy_id} uses filter_type {filter_type!r} which is not "
+                    f"routable for canonical lane ({instrument}, {orb_label}). "
+                    "Active shelf must remain a subset of get_filters_for_grid()."
+                )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_active_validated_filters_routable: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_active_micro_only_filters_on_real_micros(con=None) -> list[str]:
+    """Check active shelf rows never use micro-only filters on proxy lanes.
+
+    ``StrategyFilter.requires_micro_data`` is the canonical declaration that a
+    filter's signal is only meaningful on REAL micro contract data. An active
+    ``validated_setups`` row using such a filter must therefore target an
+    instrument where ``pipeline.data_era.is_micro(instrument)`` is True.
+
+    This catches the class of future contamination where a volume-based filter
+    (e.g. rel-vol or ORB-volume) is promoted on GC/NQ/ES parent lanes or dead
+    proxy micros whose bars_1m still come from the parent contract.
+
+    Important limit: this check enforces instrument-level era compatibility
+    only. Precise pre-launch date enforcement still needs per-strategy trading
+    date provenance on the shelf; drift must not pretend that metadata exists
+    when it does not.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.data_era import is_micro
+        from trading_app.config import ALL_FILTERS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        rows = con.execute(
+            """
+            SELECT strategy_id, instrument, orb_label, filter_type
+            FROM validated_setups
+            WHERE status = 'active'
+            ORDER BY instrument, orb_label, filter_type, strategy_id
+            """
+        ).fetchall()
+
+        micro_cache: dict[str, bool] = {}
+        for strategy_id, instrument, orb_label, filter_type in rows:
+            filter_obj = ALL_FILTERS.get(filter_type)
+            if filter_obj is None:
+                # Registered-filter drift is handled by check_validated_filters_registered().
+                continue
+            if not filter_obj.requires_micro_data:
+                continue
+
+            if instrument not in micro_cache:
+                try:
+                    micro_cache[instrument] = is_micro(instrument)
+                except Exception as exc:  # noqa: BLE001 - drift boundary, fail-closed
+                    violations.append(
+                        "  validated_setups: could not resolve micro-era status for "
+                        f"{instrument} on strategy {strategy_id}: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                    micro_cache[instrument] = False
+
+            if not micro_cache[instrument]:
+                violations.append(
+                    "  validated_setups: active strategy "
+                    f"{strategy_id} uses micro-only filter_type {filter_type!r} "
+                    f"on non-micro instrument {instrument!r} ({orb_label}). "
+                    "requires_micro_data filters are invalid on parent/proxy lanes."
+                )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_active_micro_only_filters_on_real_micros: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
+    """Recompute first trade day for active micro-only filters from canonical facts.
+
+    This is the precise Stage 3d-style honesty gate that the active shelf can
+    actually support without trusting stale metadata tables. For every active
+    ``validated_setups`` row whose filter declares ``requires_micro_data=True``:
+
+    1. Load the lane's canonical ``daily_features`` rows.
+    2. Recompute filter-eligible trade days using canonical filter logic.
+    3. Intersect with canonical ``orb_outcomes`` for the exact lane.
+    4. Verify the first traded day is on/after ``micro_launch_day(instrument)``.
+
+    The check deliberately ignores ``strategy_trade_days`` because that table is
+    known to be stale and is not authoritative for active-shelf audit work.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.data_era import is_micro, micro_launch_day
+        from trading_app.config import ALL_FILTERS
+        from trading_app.validation_provenance import StrategyTradeWindowResolver
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        rows = con.execute(
+            """
+            SELECT strategy_id, instrument, orb_label, orb_minutes,
+                   entry_model, rr_target, confirm_bars, filter_type
+            FROM validated_setups
+            WHERE status = 'active'
+            ORDER BY instrument, orb_minutes, orb_label, filter_type, strategy_id
+            """
+        ).fetchall()
+
+        micro_rows = []
+        for row in rows:
+            filter_obj = ALL_FILTERS.get(row[7])
+            if filter_obj is None or not filter_obj.requires_micro_data:
+                continue
+            # Non-micro instruments are handled by the instrument-level gate.
+            try:
+                if not is_micro(row[1]):
+                    continue
+            except Exception:
+                continue
+            micro_rows.append(row)
+
+        if not micro_rows:
+            return violations
+
+        resolver = StrategyTradeWindowResolver(con)
+        for (
+            strategy_id,
+            instrument,
+            orb_label,
+            orb_minutes,
+            entry_model,
+            rr_target,
+            confirm_bars,
+            filter_type,
+        ) in micro_rows:
+            trade_window = resolver.resolve(
+                instrument=instrument,
+                orb_label=orb_label,
+                orb_minutes=orb_minutes,
+                entry_model=entry_model,
+                rr_target=rr_target,
+                confirm_bars=confirm_bars,
+                filter_type=filter_type,
+            )
+
+            if trade_window.trade_day_count <= 0 or trade_window.first_trade_day is None:
+                violations.append(
+                    "  validated_setups: active micro-only strategy "
+                    f"{strategy_id} has no recomputable traded days from canonical "
+                    "daily_features/orb_outcomes. Era discipline cannot be proven."
+                )
+                continue
+
+            first_day = trade_window.first_trade_day
+            launch_day = micro_launch_day(instrument)
+            if first_day < launch_day:
+                violations.append(
+                    "  validated_setups: active micro-only strategy "
+                    f"{strategy_id} first trades on {first_day} before "
+                    f"{instrument} micro launch {launch_day}. Pre-launch "
+                    "parent/proxy data is invalid for requires_micro_data filters."
+                )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_active_micro_only_filters_after_micro_launch: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_active_native_promotion_provenance_populated(con=None) -> list[str]:
+    """Native promotion provenance fields must be populated and linkable."""
+    violations = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        missing_validated_cols = _missing_table_columns(
+            con,
+            "validated_setups",
+            [
+                "status",
+                "promotion_provenance",
+                "validation_run_id",
+                "promotion_git_sha",
+                "first_trade_day",
+                "last_trade_day",
+                "trade_day_count",
+            ],
+        )
+        if missing_validated_cols:
+            violations.append(
+                "  validated_setups: missing native promotion provenance columns "
+                f"{missing_validated_cols}. Run init_trading_app_schema() migration "
+                "before enforcing native provenance drift checks."
+            )
+            return violations
+
+        if not _table_exists(con, "validation_run_log"):
+            violations.append(
+                "  validation_run_log: missing table required for native promotion provenance linkage checks."
+            )
+            return violations
+
+        rows = con.execute(
+            """
+            SELECT strategy_id, validation_run_id, promotion_git_sha,
+                   promotion_provenance, first_trade_day, last_trade_day,
+                   trade_day_count
+            FROM validated_setups
+            WHERE status = 'active'
+              AND promotion_provenance = 'VALIDATOR_NATIVE'
+            ORDER BY strategy_id
+            """
+        ).fetchall()
+
+        for sid, run_id, git_sha, provenance, first_day, last_day, trade_day_count in rows:
+            missing = []
+            if run_id in (None, ""):
+                missing.append("validation_run_id")
+            if git_sha in (None, ""):
+                missing.append("promotion_git_sha")
+            if provenance != "VALIDATOR_NATIVE":
+                missing.append("promotion_provenance")
+            if first_day is None:
+                missing.append("first_trade_day")
+            if last_day is None:
+                missing.append("last_trade_day")
+            if trade_day_count is None or trade_day_count <= 0:
+                missing.append("trade_day_count")
+            if missing:
+                violations.append(
+                    f"  validated_setups: active native row {sid} missing promotion provenance fields: {missing}"
+                )
+                continue
+
+            run_row = con.execute(
+                "SELECT 1 FROM validation_run_log WHERE run_id = ?",
+                [run_id],
+            ).fetchone()
+            if run_row is None:
+                violations.append(
+                    f"  validated_setups: active native row {sid} references "
+                    f"missing validation_run_log.run_id {run_id!r}"
+                )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_active_native_promotion_provenance_populated: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_active_native_trade_windows_match_provenance(con=None) -> list[str]:
+    """Stored native trade-window provenance must match canonical recomputation."""
+    violations = []
+    _own_con = False
+    try:
+        from trading_app.validation_provenance import StrategyTradeWindowResolver
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        missing_validated_cols = _missing_table_columns(
+            con,
+            "validated_setups",
+            [
+                "strategy_id",
+                "instrument",
+                "orb_label",
+                "orb_minutes",
+                "entry_model",
+                "rr_target",
+                "confirm_bars",
+                "filter_type",
+                "status",
+                "promotion_provenance",
+                "first_trade_day",
+                "last_trade_day",
+                "trade_day_count",
+            ],
+        )
+        if missing_validated_cols:
+            violations.append(
+                "  validated_setups: missing native trade-window provenance columns "
+                f"{missing_validated_cols}. Run init_trading_app_schema() migration "
+                "before enforcing canonical provenance drift checks."
+            )
+            return violations
+
+        rows = con.execute(
+            """
+            SELECT strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                   rr_target, confirm_bars, filter_type,
+                   first_trade_day, last_trade_day, trade_day_count
+            FROM validated_setups
+            WHERE status = 'active'
+              AND promotion_provenance = 'VALIDATOR_NATIVE'
+            ORDER BY strategy_id
+            """
+        ).fetchall()
+        if not rows:
+            return violations
+
+        resolver = StrategyTradeWindowResolver(con)
+        for (
+            sid,
+            instrument,
+            orb_label,
+            orb_minutes,
+            entry_model,
+            rr_target,
+            confirm_bars,
+            filter_type,
+            first_day,
+            last_day,
+            trade_day_count,
+        ) in rows:
+            canonical = resolver.resolve(
+                instrument=instrument,
+                orb_label=orb_label,
+                orb_minutes=orb_minutes,
+                entry_model=entry_model,
+                rr_target=rr_target,
+                confirm_bars=confirm_bars,
+                filter_type=filter_type,
+            )
+            if (
+                canonical.first_trade_day != first_day
+                or canonical.last_trade_day != last_day
+                or canonical.trade_day_count != trade_day_count
+            ):
+                violations.append(
+                    "  validated_setups: active native row "
+                    f"{sid} has stored trade window "
+                    f"({first_day}, {last_day}, N={trade_day_count}) but "
+                    f"canonical recompute is "
+                    f"({canonical.first_trade_day}, {canonical.last_trade_day}, "
+                    f"N={canonical.trade_day_count})"
+                )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_active_native_trade_windows_match_provenance: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_wf_coverage(con=None) -> list[str]:
+    """Check #40: WF coverage for MGC/MES (soft gate — WARNING ONLY, never blocks).
+
+    MGC and MES have enough data years for walk-forward testing.
+    MNQ/M2K do not (~2-5 years), so they are skipped.
+    Prints warnings if any active strategy in MGC/MES lacks wf_tested=TRUE,
+    but returns empty violations so it never blocks commits.
+    """
+    WF_REQUIRED_INSTRUMENTS = {"MGC", "MES"}
+    warnings = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return []  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        for inst in sorted(WF_REQUIRED_INSTRUMENTS):
+            row = con.execute(
+                "SELECT COUNT(*) AS total, "
+                "SUM(CASE WHEN wf_tested = TRUE THEN 1 ELSE 0 END) AS tested "
+                "FROM validated_setups "
+                "WHERE instrument = ? AND status = 'active'",
+                [inst],
+            ).fetchone()
+            total, tested = row[0], row[1]
+            if total > 0 and tested < total:
+                warnings.append(f"  {inst}: {total - tested}/{total} active strategies missing WF test (soft gate)")
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_wf_coverage: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+
+    # Print warnings but never block — this is a soft gate
+    if warnings:
+        for w in warnings:
+            print(f"  WARNING (non-blocking): {w.strip()}")
+    return []  # Always pass — soft gate only warns
+
+
+def check_data_years_disclosure() -> list[str]:
+    """Check #41: Warn on instruments with years_tested < 7 (WARNING ONLY, never blocks).
+
+    MNQ (~5yr) and M2K (~5yr) have shorter histories than MGC (10yr)
+    and MES (7yr). Strategies validated on shorter data may not survive
+    regime changes. Advisory warning only — prints but doesn't block.
+    """
+    MIN_YEARS = 7
+    warnings = []
+    try:
+        import duckdb
+
+        db_path = GOLD_DB_PATH_FOR_CHECKS
+        if db_path is None:
+            from pipeline.paths import GOLD_DB_PATH
+
+            db_path = GOLD_DB_PATH
+        if not Path(db_path).exists():
+            return []
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            rows = con.execute(
+                """SELECT instrument, MIN(years_tested) as min_years,
+                          COUNT(*) as n_strategies
+                   FROM validated_setups
+                   WHERE status = 'active'
+                   GROUP BY instrument
+                   HAVING MIN(years_tested) < ?""",
+                [MIN_YEARS],
+            ).fetchall()
+            for inst, min_years, n_strats in rows:
+                warnings.append(
+                    f"  {inst}: {n_strats} active strategies with "
+                    f"min years_tested={min_years} (< {MIN_YEARS}). "
+                    f"Short data history — monitor for regime fragility"
+                )
+        finally:
+            con.close()
+    except Exception as e:
+        # duckdb.IOException (DB locked) is not a subclass of OSError — catch all
+        msg = str(e)
+        if "being used by another process" in msg or "Cannot open file" in msg:
+            print("    SKIP: DB busy — another process holds the lock")
+        else:
+            print(f"    SKIP check_data_years_disclosure: {type(e).__name__}: {e}")
+
+    if warnings:
+        for w in warnings:
+            print(f"  WARNING (non-blocking): {w.strip()}")
+    return []  # Always pass — soft gate only warns
+
+
+def check_uncovered_fdr_strategies(con=None) -> list[str]:
+    """Check #43: Warn on FDR+WF strategies with no live_config spec (WARNING ONLY, never blocks).
+
+    Detects strategies that passed full validation (fdr_significant=True, wf_passed=True,
+    expectancy_r >= LIVE_MIN_EXPECTANCY_R) but are not covered by any spec in LIVE_PORTFOLIO.
+
+    A strategy is "covered" if LIVE_PORTFOLIO has a spec matching its
+    (orb_label, entry_model, filter_type) combination.
+
+    Advisory only — the portfolio is intentionally curated, not exhaustive.
+    Run after every validator rebuild to catch new FDR+WF winners not yet in the portfolio.
+    """
+    _own_con = False
+    try:
+        from trading_app.live_config import LIVE_MIN_EXPECTANCY_R, LIVE_PORTFOLIO
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return []
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        covered = {(spec.orb_label, spec.entry_model, spec.filter_type) for spec in LIVE_PORTFOLIO}
+
+        rows = con.execute(
+            """SELECT DISTINCT orb_label, entry_model, filter_type,
+                      COUNT(*) OVER (PARTITION BY orb_label, entry_model, filter_type) AS combo_count,
+                      MAX(expectancy_r) OVER (PARTITION BY orb_label, entry_model, filter_type) AS best_exp_r
+               FROM validated_setups
+               WHERE status = 'active'
+               AND fdr_significant = TRUE
+               AND wf_passed = TRUE
+               AND expectancy_r >= ?
+               ORDER BY best_exp_r DESC, orb_label, entry_model, filter_type""",
+            [LIVE_MIN_EXPECTANCY_R],
+        ).fetchall()
+
+        seen_combos: set[tuple] = set()
+        warnings = []
+        for orb_label, entry_model, filter_type, combo_count, best_exp_r in rows:
+            combo = (orb_label, entry_model, filter_type)
+            if combo in seen_combos:
+                continue
+            seen_combos.add(combo)
+            if combo not in covered:
+                warnings.append(
+                    f"{orb_label} {entry_model} {filter_type}: "
+                    f"{combo_count} FDR+WF strategy(ies) (best ExpR={best_exp_r:.3f}) "
+                    f"— consider adding LiveStrategySpec to live_config.py"
+                )
+
+        if warnings:
+            for w in warnings:
+                print(f"  WARNING (non-blocking): {w}")
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_uncovered_fdr_strategies: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return []  # Always pass — advisory only
+
+
+def check_variant_selection_metric() -> list[str]:
+    """Check #44: All variant selection ORDER BY clauses must use expectancy_r.
+
+    Prevents regression where one code path sorts by sharpe_ratio while another
+    sorts by expectancy_r. Within a family, all variants share the same trade
+    days, so ExpR = (WR*RR)-(1-WR) is the correct metric. Sharpe mechanically
+    favors RR 1.0 (lower variance).
+
+    Scans: live_config.py, rolling_portfolio.py
+    """
+    violations = []
+    files_to_check = [
+        TRADING_APP_DIR / "live_config.py",
+        TRADING_APP_DIR / "rolling_portfolio.py",
+    ]
+
+    # Allowed: ORDER BY ... expectancy_r DESC
+    # Forbidden: ORDER BY ... sharpe_ratio DESC (in variant selection contexts)
+    forbidden = re.compile(r"ORDER\s+BY\s+\S*sharpe_ratio\s+DESC", re.IGNORECASE)
+
+    for fpath in files_to_check:
+        if not fpath.exists():
+            continue
+        content = fpath.read_text(encoding="utf-8")
+        for i, line in enumerate(content.splitlines(), 1):
+            if forbidden.search(line):
+                violations.append(
+                    f"  {fpath.name}:{i}: ORDER BY sharpe_ratio in variant "
+                    f"selection — must use expectancy_r (Sharpe favors RR 1.0)"
+                )
+
+    return violations
+
+
+def check_research_provenance_annotations() -> list[str]:
+    """Check #45: Research-derived config values must have provenance annotations.
+
+    Config constants derived from research need structured comments documenting
+    which entry models were in the dataset. When entry models change (e.g.
+    E0→E2), stale thresholds silently drive live execution if not re-validated.
+
+    Scans config.py for @research-source blocks and verifies they include
+    @entry-models and @revalidated-for annotations.
+    """
+    violations = []
+    config_path = TRADING_APP_DIR / "config.py"
+    if not config_path.exists():
+        return violations
+
+    content = config_path.read_text(encoding="utf-8")
+
+    # Find all @research-source annotations
+    source_pattern = re.compile(r"#\s*@research-source:\s*(.+)")
+    entry_model_pattern = re.compile(r"#\s*@entry-models:\s*(.+)")
+
+    sources = source_pattern.findall(content)
+    entry_models = entry_model_pattern.findall(content)
+
+    # Every @research-source must have a corresponding @entry-models
+    if sources and not entry_models:
+        violations.append(
+            "  config.py: Found @research-source annotations but no @entry-models tags — add entry model provenance"
+        )
+
+    # Check that active entry models (E1, E2) appear in annotations
+    for em_line in entry_models:
+        models = [m.strip() for m in em_line.split(",")]
+        if "E2" not in models:
+            violations.append(
+                f"  config.py: @entry-models '{em_line}' does not include E2 "
+                f"— research may be stale for current entry model"
+            )
+
+    return violations
+
+
+def check_orphaned_validated_strategies(con=None) -> list[str]:
+    """Check #42: Validated strategies must have corresponding outcome data.
+
+    Detects orphaned validated strategies — strategies in validated_setups for
+    (instrument, orb_minutes) with no matching rows in orb_outcomes.
+
+    This happens when outcome_builder is run for a subset of apertures (e.g.
+    5m only) but older 15m/30m validated strategies survive the validator's
+    per-aperture DELETE because the validator only removes the apertures it
+    actually processed (derived from experimental_strategies).
+
+    Fix: run outcome_builder --instrument <inst> --orb-minutes <n> --force
+    then rerun strategy_discovery, strategy_validator, build_edge_families.
+    """
+    violations = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        rows = con.execute(
+            """SELECT v.instrument, v.orb_minutes, COUNT(*) AS n_strategies
+               FROM validated_setups v
+               WHERE v.status = 'active'
+               AND NOT EXISTS (
+                   SELECT 1 FROM orb_outcomes o
+                   WHERE o.symbol = v.instrument
+                   AND o.orb_minutes = v.orb_minutes
+               )
+               GROUP BY v.instrument, v.orb_minutes
+               ORDER BY v.instrument, v.orb_minutes"""
+        ).fetchall()
+        for inst, orb_min, n in rows:
+            violations.append(
+                f"  {inst} {orb_min}m: {n} active strategies with no "
+                f"orb_outcomes rows — rebuild: outcome_builder "
+                f"--instrument {inst} --orb-minutes {orb_min} --force"
+            )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_orb_outcomes_coverage: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_cost_model_completeness() -> list[str]:
+    """Check that COST_SPECS covers all tradeable instruments and has valid values."""
+    violations = []
+
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.cost_model import COST_SPECS, SESSION_SLIPPAGE_MULT
+
+        # 1. Every active instrument must have a CostSpec
+        for inst in ACTIVE_ORB_INSTRUMENTS:
+            if inst not in COST_SPECS:
+                violations.append(f"  {inst} is in ACTIVE_ORB_INSTRUMENTS but missing from COST_SPECS")
+
+        # 2. Every CostSpec must have positive friction values
+        for inst, spec in COST_SPECS.items():
+            if spec.total_friction <= 0:
+                violations.append(f"  {inst}: total_friction = {spec.total_friction} (must be > 0)")
+            if spec.point_value <= 0:
+                violations.append(f"  {inst}: point_value = {spec.point_value} (must be > 0)")
+            if spec.instrument != inst:
+                violations.append(f"  COST_SPECS['{inst}'].instrument = '{spec.instrument}' (key mismatch)")
+
+        # 3. SESSION_SLIPPAGE_MULT keys must be subset of COST_SPECS keys
+        for inst in SESSION_SLIPPAGE_MULT:
+            if inst not in COST_SPECS:
+                violations.append(f"  SESSION_SLIPPAGE_MULT has '{inst}' but COST_SPECS does not")
+
+    except ImportError as e:
+        violations.append(f"  Cannot import cost_model or asset_configs: {e}")
+
+    return violations
+
+
+def check_trading_rules_authority() -> list[str]:
+    """Check that TRADING_RULES.md canonical values match code.
+
+    Validates critical trading constants that, if diverged, would cause
+    incorrect trades, portfolio misconfiguration, or logical inconsistency.
+    """
+    violations = []
+
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+    try:
+        from pipeline.cost_model import COST_SPECS
+        from pipeline.dst import SESSION_CATALOG
+        from trading_app.config import (
+            E2_SLIPPAGE_TICKS,
+            EARLY_EXIT_MINUTES,
+            ENTRY_MODELS,
+            TRADEABLE_INSTRUMENTS,
+        )
+        from trading_app.outcome_builder import RR_TARGETS
+
+        # 1. Session catalog must have all 12 dynamic sessions
+        expected_sessions = {
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "EUROPE_FLOW",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
+            "BRISBANE_1025",
+        }
+        catalog_sessions = {k for k, v in SESSION_CATALOG.items() if v.get("type") == "dynamic"}
+        missing = expected_sessions - catalog_sessions
+        if missing:
+            violations.append(f"  SESSION_CATALOG missing dynamic sessions: {sorted(missing)}")
+        extra = catalog_sessions - expected_sessions
+        if extra:
+            violations.append(f"  SESSION_CATALOG has unexpected dynamic sessions: {sorted(extra)}")
+
+        # 2. Entry models
+        if list(ENTRY_MODELS) != ["E1", "E2", "E3"]:
+            violations.append(f"  ENTRY_MODELS = {list(ENTRY_MODELS)}, expected ['E1', 'E2', 'E3']")
+
+        # 3. RR targets
+        expected_rr = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0]
+        if list(RR_TARGETS) != expected_rr:
+            violations.append(f"  RR_TARGETS = {list(RR_TARGETS)}, expected {expected_rr}")
+
+        # 4. Tradeable instruments — canonical source is ACTIVE_ORB_INSTRUMENTS
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        if sorted(TRADEABLE_INSTRUMENTS) != sorted(ACTIVE_ORB_INSTRUMENTS):
+            violations.append(
+                f"  TRADEABLE_INSTRUMENTS = {sorted(TRADEABLE_INSTRUMENTS)}, "
+                f"expected {sorted(ACTIVE_ORB_INSTRUMENTS)} (from ACTIVE_ORB_INSTRUMENTS)"
+            )
+
+        # 5. E2 slippage ticks
+        if E2_SLIPPAGE_TICKS != 1:
+            violations.append(f"  E2_SLIPPAGE_TICKS = {E2_SLIPPAGE_TICKS}, expected 1")
+
+        # 6. MGC cost model total friction (TRADING_RULES: $5.74/RT)
+        if "MGC" in COST_SPECS:
+            mgc_friction = COST_SPECS["MGC"].total_friction
+            if abs(mgc_friction - 5.74) > 0.01:
+                violations.append(f"  MGC total_friction = {mgc_friction}, TRADING_RULES says $5.74")
+
+        # 7. Early exit thresholds: values must be None or positive int.
+        # T80 disabled 2026-03-18 (OOS validation NO-GO). All values are None.
+        for session, t80 in EARLY_EXIT_MINUTES.items():
+            if t80 is not None and t80 <= 0:
+                violations.append(f"  EARLY_EXIT_MINUTES['{session}'] = {t80}, must be None or positive")
+
+        # 8. All EARLY_EXIT_MINUTES keys must be valid sessions
+        for session in EARLY_EXIT_MINUTES:
+            if session not in catalog_sessions:
+                violations.append(f"  EARLY_EXIT_MINUTES key '{session}' not in SESSION_CATALOG")
+
+    except ImportError as e:
+        violations.append(f"  Cannot import required modules: {e}")
+
+    return violations
+
+
+def check_audit_columns_populated(con=None) -> list[str]:
+    """Check #50: Audit columns (n_trials, fst_hurdle, DSR) must be populated.
+
+    Verifies that strategy_discovery has been run with the new audit code
+    for each active instrument. Old rows from prior runs (E0/E3, old combos)
+    legitimately have NULLs — we only fail if ZERO rows are populated,
+    meaning discovery was never re-run after the schema change.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        for inst in ACTIVE_ORB_INSTRUMENTS:
+            total = con.execute(
+                "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ?",
+                [inst],
+            ).fetchone()[0]
+            if total == 0:
+                continue
+            # At least some rows must have audit columns populated
+            for col in ["n_trials_at_discovery", "fst_hurdle"]:
+                populated = con.execute(
+                    f"SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ? AND {col} IS NOT NULL",
+                    [inst],
+                ).fetchone()[0]
+                if populated == 0:
+                    violations.append(f"  {inst}: 0/{total} rows have {col} (re-run strategy_discovery)")
+            # sharpe_haircut: at least some rows with sample_size>=30
+            # should have DSR computed
+            eligible = con.execute(
+                "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ? AND sample_size >= 30",
+                [inst],
+            ).fetchone()[0]
+            populated_dsr = con.execute(
+                "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ? AND sharpe_haircut IS NOT NULL",
+                [inst],
+            ).fetchone()[0]
+            if eligible > 0 and populated_dsr == 0:
+                violations.append(
+                    f"  {inst}: 0/{eligible} eligible rows have sharpe_haircut (re-run strategy_discovery)"
+                )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_experimental_strategies_audit: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+# =============================================================================
+# Check 54+: New checks added by deep audit (Mar 2026)
+# =============================================================================
+
+
+def check_live_config_spec_validity() -> list[str]:
+    """Validate that every LiveStrategySpec references real sessions, entry models,
+    filter types, and valid tiers. A misspelled orb_label silently produces
+    an empty portfolio with zero error."""
+    violations = []
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+    try:
+        from pipeline.dst import SESSION_CATALOG
+        from trading_app.config import ALL_FILTERS, ENTRY_MODELS
+        from trading_app.live_config import LIVE_PORTFOLIO
+
+        valid_sessions = {k for k, v in SESSION_CATALOG.items() if v.get("type") == "dynamic"}
+        valid_entry_models = set(ENTRY_MODELS)
+        valid_filters = set(ALL_FILTERS.keys()) | {"NO_FILTER"}
+        valid_tiers = {"core", "regime", "hot"}
+
+        for spec in LIVE_PORTFOLIO:
+            if spec.orb_label not in valid_sessions:
+                violations.append(
+                    f"  LiveStrategySpec '{spec.family_id}': orb_label '{spec.orb_label}' not in SESSION_CATALOG"
+                )
+            if spec.entry_model not in valid_entry_models:
+                violations.append(
+                    f"  LiveStrategySpec '{spec.family_id}': entry_model '{spec.entry_model}' not in ENTRY_MODELS"
+                )
+            if spec.filter_type and spec.filter_type not in valid_filters:
+                # filter_type can be composite — check base name
+                base = spec.filter_type.split("_O")[0]  # strip aperture suffix
+                if base not in valid_filters:
+                    violations.append(
+                        f"  LiveStrategySpec '{spec.family_id}': filter_type '{spec.filter_type}' not in ALL_FILTERS"
+                    )
+            if spec.tier not in valid_tiers:
+                violations.append(f"  LiveStrategySpec '{spec.family_id}': tier '{spec.tier}' not in {valid_tiers}")
+    except ImportError as e:
+        violations.append(f"  Cannot import live_config: {e}")
+    return violations
+
+
+def check_cost_model_field_ranges() -> list[str]:
+    """Validate cost model fields are within sane ranges.
+
+    A typo like slippage=20.0 instead of 2.0 would silently make
+    every strategy look unprofitable. No check previously guarded this.
+    """
+    violations = []
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.cost_model import COST_SPECS, SESSION_SLIPPAGE_MULT
+
+        for inst, spec in COST_SPECS.items():
+            if inst not in ACTIVE_ORB_INSTRUMENTS:
+                continue  # Skip proxy-only instruments (e.g. GC for MGC discovery)
+            # Commission: $0.50 - $10.00 per RT is the sane range for micro futures
+            if not (0.50 <= spec.commission_rt <= 10.0):
+                violations.append(f"  {inst}: commission_rt={spec.commission_rt} outside [0.50, 10.00]")
+            # Spread (doubled): $0.50 - $20.00
+            if not (0.50 <= spec.spread_doubled <= 20.0):
+                violations.append(f"  {inst}: spread_doubled={spec.spread_doubled} outside [0.50, 20.00]")
+            # Slippage: $0.50 - $20.00
+            if not (0.50 <= spec.slippage <= 20.0):
+                violations.append(f"  {inst}: slippage={spec.slippage} outside [0.50, 20.00]")
+            # Total friction: $2.00 - $50.00 for micro futures
+            if not (2.0 <= spec.total_friction <= 50.0):
+                violations.append(f"  {inst}: total_friction={spec.total_friction} outside [2.00, 50.00]")
+
+        # Session slippage multipliers: must be in [0.5, 3.0]
+        for inst, sessions in SESSION_SLIPPAGE_MULT.items():
+            for session, mult in sessions.items():
+                if not (0.5 <= mult <= 3.0):
+                    violations.append(f"  SESSION_SLIPPAGE_MULT[{inst}][{session}]={mult} outside [0.5, 3.0]")
+    except ImportError as e:
+        violations.append(f"  Cannot import cost_model: {e}")
+    return violations
+
+
+def check_session_resolver_sanity() -> list[str]:
+    """Call every session resolver for a winter and summer date and verify
+    the output is a valid (hour, minute) tuple. A broken resolver would
+    crash the pipeline at runtime with no pre-commit detection."""
+    violations = []
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+    try:
+        from datetime import date as dt_date
+
+        from pipeline.dst import SESSION_CATALOG
+
+        test_dates = [
+            dt_date(2025, 1, 15),
+            dt_date(2025, 7, 15),
+            dt_date(2025, 3, 9),
+            dt_date(2025, 11, 2),
+        ]  # + DST transition days
+
+        for label, entry in SESSION_CATALOG.items():
+            if entry.get("type") != "dynamic":
+                continue
+            resolver = entry.get("resolver")
+            if resolver is None:
+                violations.append(f"  {label}: type=dynamic but no resolver function")
+                continue
+            for td in test_dates:
+                try:
+                    result = resolver(td)
+                    if not isinstance(result, tuple) or len(result) != 2:
+                        violations.append(f"  {label}: resolver({td}) returned {result}, expected (hour, minute)")
+                        continue
+                    h, m = result
+                    if not (0 <= h <= 23 and 0 <= m <= 59):
+                        violations.append(f"  {label}: resolver({td}) returned ({h}, {m}) — invalid time")
+                except Exception as e:
+                    violations.append(f"  {label}: resolver({td}) raised {type(e).__name__}: {e}")
+    except ImportError as e:
+        violations.append(f"  Cannot import dst: {e}")
+    return violations
+
+
+def check_daily_features_row_integrity(con=None) -> list[str]:
+    """Verify daily_features has exactly N rows per (trading_day, symbol).
+
+    N = len(VALID_ORB_MINUTES) — one row per aperture. A partial rebuild
+    can leave days with fewer rows, causing strategy discovery to silently
+    compute on wrong N.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.build_daily_features import VALID_ORB_MINUTES
+
+        expected_rows = len(VALID_ORB_MINUTES)
+        # Only check active instruments — proxy-only symbols (e.g. GC for MGC
+        # discovery) may legitimately have fewer apertures.
+        active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        # Find (trading_day, symbol) pairs with != expected_rows rows
+        bad = con.execute(f"""
+            SELECT symbol, COUNT(*) as n_bad_days
+            FROM (
+                SELECT trading_day, symbol, COUNT(*) as row_count
+                FROM daily_features
+                WHERE symbol IN ({active_syms})
+                GROUP BY trading_day, symbol
+                HAVING COUNT(*) != {expected_rows}
+            )
+            GROUP BY symbol
+        """).fetchall()
+        for symbol, n_bad in bad:
+            violations.append(f"  {symbol}: {n_bad} trading day(s) with != {expected_rows} rows in daily_features")
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_daily_features_row_integrity: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_htf_levels_integrity(con=None) -> list[str]:
+    """Verify all 12 prev_week_* / prev_month_* fields agree with canonical SQL.
+
+    Canonical semantics: Monday-anchor week via DuckDB DATE_TRUNC('week', ...),
+    calendar-month anchor via DATE_TRUNC('month', ...). Prior period only.
+
+    For every row, confirms against the canonical per-period aggregate:
+      prev_week_high   == MAX(daily_high)                      over prior Mon-Sun week
+      prev_week_low    == MIN(daily_low)                       over prior Mon-Sun week
+      prev_week_open   == arg_min(daily_open, trading_day)     over prior week
+      prev_week_close  == arg_max(daily_close, trading_day)    over prior week
+      prev_week_range  == ROUND(high - low, 4)
+      prev_week_mid    == ROUND((high + low) / 2.0, 4)
+      (same six for prev_month_*)
+
+    Divergence classes flagged:
+      - symmetric  : stored != canonical (both non-NULL)
+      - phantom    : stored non-NULL but canonical IS NULL
+      - stale miss : stored IS NULL but canonical non-NULL
+
+    Rounds to 4dp for floating-point comparisons (matches Python post-pass).
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
+
+        # Per-field check SQL fragment: flags symmetric, phantom, and stale-miss
+        # classes. NULL-safety handled explicitly (DuckDB "a != b" is NULL when
+        # either side is NULL, so symmetric case needs both-non-NULL guard).
+        def _diff_case(stored_col: str, canonical_col: str, label: str, round_to: int = 4) -> str:
+            return (
+                f"CASE "
+                f"WHEN df.{stored_col} IS NOT NULL AND {canonical_col} IS NOT NULL "
+                f"     AND ROUND(df.{stored_col}, {round_to}) != ROUND({canonical_col}, {round_to}) "
+                f"THEN '{label}(diff)' "
+                f"WHEN df.{stored_col} IS NOT NULL AND {canonical_col} IS NULL "
+                f"THEN '{label}(phantom)' "
+                f"WHEN df.{stored_col} IS NULL AND {canonical_col} IS NOT NULL "
+                f"THEN '{label}(stale_miss)' "
+                f"END AS {stored_col}"
+            )
+
+        week_fields = [
+            ("prev_week_high", "w.wh"),
+            ("prev_week_low", "w.wl"),
+            ("prev_week_open", "w.wo"),
+            ("prev_week_close", "w.wc"),
+            ("prev_week_range", "w.wr"),
+            ("prev_week_mid", "w.wm"),
+        ]
+        month_fields = [
+            ("prev_month_high", "m.mh"),
+            ("prev_month_low", "m.ml"),
+            ("prev_month_open", "m.mo"),
+            ("prev_month_close", "m.mc"),
+            ("prev_month_range", "m.mr"),
+            ("prev_month_mid", "m.mm"),
+        ]
+
+        diff_cases = [_diff_case(s, c, s) for s, c in week_fields + month_fields]
+        diff_concat = ",\n                       ".join(diff_cases)
+
+        # Explicit CASE-per-field SQL: each field yields a string token when
+        # divergent (symmetric diff, phantom, or stale miss) or NULL when OK.
+        # Python filters out the OK columns when formatting the violation line.
+        explicit_sql = f"""
+            WITH df AS (
+                SELECT symbol,
+                       trading_day,
+                       daily_open, daily_high, daily_low, daily_close,
+                       DATE_TRUNC('week', trading_day)::DATE  AS week_key,
+                       DATE_TRUNC('month', trading_day)::DATE AS month_key,
+                       prev_week_high, prev_week_low, prev_week_open,
+                       prev_week_close, prev_week_range, prev_week_mid,
+                       prev_month_high, prev_month_low, prev_month_open,
+                       prev_month_close, prev_month_range, prev_month_mid
+                FROM daily_features
+                WHERE symbol IN ({active_syms})
+                  AND orb_minutes = 5
+            ),
+            week_aggs AS (
+                SELECT symbol,
+                       week_key,
+                       MAX(daily_high)                     AS wh,
+                       MIN(daily_low)                      AS wl,
+                       arg_min(daily_open, trading_day)    AS wo,
+                       arg_max(daily_close, trading_day)   AS wc,
+                       ROUND(MAX(daily_high) - MIN(daily_low), 4) AS wr,
+                       ROUND((MAX(daily_high) + MIN(daily_low)) / 2.0, 4) AS wm
+                FROM df
+                WHERE daily_high IS NOT NULL AND daily_low IS NOT NULL
+                GROUP BY symbol, week_key
+            ),
+            month_aggs AS (
+                SELECT symbol,
+                       month_key,
+                       MAX(daily_high)                     AS mh,
+                       MIN(daily_low)                      AS ml,
+                       arg_min(daily_open, trading_day)    AS mo,
+                       arg_max(daily_close, trading_day)   AS mc,
+                       ROUND(MAX(daily_high) - MIN(daily_low), 4) AS mr,
+                       ROUND((MAX(daily_high) + MIN(daily_low)) / 2.0, 4) AS mm
+                FROM df
+                WHERE daily_high IS NOT NULL AND daily_low IS NOT NULL
+                GROUP BY symbol, month_key
+            ),
+            joined AS (
+                SELECT df.symbol,
+                       df.trading_day,
+                       {diff_concat}
+                FROM df
+                LEFT JOIN week_aggs w
+                       ON w.symbol = df.symbol
+                      AND w.week_key = df.week_key - INTERVAL '7 days'
+                LEFT JOIN month_aggs m
+                       ON m.symbol = df.symbol
+                      AND m.month_key = CASE
+                            WHEN EXTRACT(MONTH FROM df.month_key) = 1
+                                THEN MAKE_DATE(CAST(EXTRACT(YEAR FROM df.month_key) AS INT) - 1, 12, 1)
+                            ELSE MAKE_DATE(CAST(EXTRACT(YEAR FROM df.month_key) AS INT),
+                                           CAST(EXTRACT(MONTH FROM df.month_key) AS INT) - 1, 1)
+                      END
+            )
+            SELECT symbol, trading_day,
+                   COALESCE(prev_week_high, '')   AS e1,
+                   COALESCE(prev_week_low, '')    AS e2,
+                   COALESCE(prev_week_open, '')   AS e3,
+                   COALESCE(prev_week_close, '')  AS e4,
+                   COALESCE(prev_week_range, '')  AS e5,
+                   COALESCE(prev_week_mid, '')    AS e6,
+                   COALESCE(prev_month_high, '')  AS e7,
+                   COALESCE(prev_month_low, '')   AS e8,
+                   COALESCE(prev_month_open, '')  AS e9,
+                   COALESCE(prev_month_close, '') AS e10,
+                   COALESCE(prev_month_range, '') AS e11,
+                   COALESCE(prev_month_mid, '')   AS e12
+            FROM joined
+            WHERE prev_week_high  IS NOT NULL
+               OR prev_week_low   IS NOT NULL
+               OR prev_week_open  IS NOT NULL
+               OR prev_week_close IS NOT NULL
+               OR prev_week_range IS NOT NULL
+               OR prev_week_mid   IS NOT NULL
+               OR prev_month_high IS NOT NULL
+               OR prev_month_low  IS NOT NULL
+               OR prev_month_open IS NOT NULL
+               OR prev_month_close IS NOT NULL
+               OR prev_month_range IS NOT NULL
+               OR prev_month_mid   IS NOT NULL
+            LIMIT 20
+        """
+        bad = con.execute(explicit_sql).fetchall()
+        for row in bad:
+            sym, td = row[0], row[1]
+            diverged = [msg for msg in row[2:] if msg and msg != ""]
+            violations.append(f"  {sym} {td}: HTF level divergence → {'; '.join(diverged)}")
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_htf_levels_integrity: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_htf_aperture_consistency(con=None) -> list[str]:
+    """Verify HTF fields are identical across apertures for each day/symbol.
+
+    ``prev_week_*`` / ``prev_month_*`` are derived from completed higher-timeframe
+    daily OHLC aggregates. They are orb-agnostic by definition, so a single
+    ``(symbol, trading_day)`` must never carry different HTF values across the
+    O5/O15/O30 duplicate rows. This catches partial stale-miss / partial repair
+    states that can survive when one aperture is rebuilt or repaired and a
+    sibling aperture is left untouched.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
+        htf_cols = [
+            "prev_week_high",
+            "prev_week_low",
+            "prev_week_open",
+            "prev_week_close",
+            "prev_week_range",
+            "prev_week_mid",
+            "prev_month_high",
+            "prev_month_low",
+            "prev_month_open",
+            "prev_month_close",
+            "prev_month_range",
+            "prev_month_mid",
+        ]
+
+        diff_exprs = ",\n                       ".join(
+            [
+                (
+                    "CASE WHEN COUNT(DISTINCT COALESCE(CAST("
+                    f"{col} AS VARCHAR), '__NULL__')) > 1 THEN '{col}(aperture_diff)' END AS {col}"
+                )
+                for col in htf_cols
+            ]
+        )
+
+        sql = f"""
+            WITH grouped AS (
+                SELECT symbol,
+                       trading_day,
+                       {diff_exprs}
+                FROM daily_features
+                WHERE symbol IN ({active_syms})
+                GROUP BY symbol, trading_day
+                HAVING COUNT(*) > 1
+            )
+            SELECT symbol,
+                   trading_day,
+                   COALESCE(prev_week_high, '')   AS e1,
+                   COALESCE(prev_week_low, '')    AS e2,
+                   COALESCE(prev_week_open, '')   AS e3,
+                   COALESCE(prev_week_close, '')  AS e4,
+                   COALESCE(prev_week_range, '')  AS e5,
+                   COALESCE(prev_week_mid, '')    AS e6,
+                   COALESCE(prev_month_high, '')  AS e7,
+                   COALESCE(prev_month_low, '')   AS e8,
+                   COALESCE(prev_month_open, '')  AS e9,
+                   COALESCE(prev_month_close, '') AS e10,
+                   COALESCE(prev_month_range, '') AS e11,
+                   COALESCE(prev_month_mid, '')   AS e12
+            FROM grouped
+            WHERE prev_week_high  IS NOT NULL
+               OR prev_week_low   IS NOT NULL
+               OR prev_week_open  IS NOT NULL
+               OR prev_week_close IS NOT NULL
+               OR prev_week_range IS NOT NULL
+               OR prev_week_mid   IS NOT NULL
+               OR prev_month_high IS NOT NULL
+               OR prev_month_low  IS NOT NULL
+               OR prev_month_open IS NOT NULL
+               OR prev_month_close IS NOT NULL
+               OR prev_month_range IS NOT NULL
+               OR prev_month_mid   IS NOT NULL
+            LIMIT 20
+        """
+        bad = con.execute(sql).fetchall()
+        for row in bad:
+            sym, td = row[0], row[1]
+            diverged = [msg for msg in row[2:] if msg and msg != ""]
+            violations.append(f"  {sym} {td}: HTF aperture divergence → {'; '.join(diverged)}")
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_htf_aperture_consistency: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_data_continuity(con=None) -> list[str]:
+    """Check #58: Warn on unexpected gaps in trading days per instrument.
+
+    Queries daily_features for each active instrument and flags gaps > 7
+    calendar days (~5 business days). Normal market closures (weekends,
+    holidays) produce 2-4 day gaps; longer gaps may indicate missing data
+    or incomplete ingestion.
+
+    Advisory only — market closures are legitimate.
+    """
+    warnings = []
+    _own_con = False
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return []
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        for inst in sorted(ACTIVE_ORB_INSTRUMENTS):
+            rows = con.execute(
+                """
+                WITH days AS (
+                    SELECT DISTINCT trading_day
+                    FROM daily_features
+                    WHERE symbol = ?
+                ),
+                gaps AS (
+                    SELECT trading_day,
+                           LEAD(trading_day) OVER (ORDER BY trading_day) as next_day
+                    FROM days
+                )
+                SELECT trading_day, next_day,
+                       next_day - trading_day as gap_days
+                FROM gaps
+                WHERE next_day IS NOT NULL
+                AND next_day - trading_day > 7
+                ORDER BY gap_days DESC
+            """,
+                [inst],
+            ).fetchall()
+
+            for start_day, end_day, gap in rows:
+                warnings.append(f"  {inst}: {gap}-day gap from {start_day} to {end_day}")
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_data_continuity: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+
+    if warnings:
+        for w in warnings:
+            print(f"  WARNING (non-blocking): {w.strip()}")
+    return []  # Always pass — advisory only
+
+
+def check_recent_garch_feature_coverage(con=None) -> list[str]:
+    """Fail if late-history GARCH state goes NULL on active instruments/apertures.
+
+    `garch_forecast_vol` and `garch_forecast_vol_pct` are rolling prior-only
+    features. Once a symbol × aperture partition has well past the warm-up
+    period, recent rows should not revert to NULL unless the feature builder
+    lost prior seed history or ordering.
+
+    This is intentionally scoped to late-series recent rows only:
+    early-history warm-up NULLs are legitimate; sudden recent NULLs are not.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.build_daily_features import GARCH_MIN_PRIOR_CLOSES, GARCH_PCT_MIN_PRIOR_VALUES
+
+        recent_rows = 20
+        min_total_rows = GARCH_MIN_PRIOR_CLOSES + GARCH_PCT_MIN_PRIOR_VALUES + recent_rows
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
+        rows = con.execute(
+            f"""
+            WITH ranked AS (
+                SELECT symbol,
+                       orb_minutes,
+                       trading_day,
+                       garch_forecast_vol,
+                       garch_forecast_vol_pct,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY symbol, orb_minutes
+                           ORDER BY trading_day DESC
+                       ) AS rn_recent,
+                       COUNT(*) OVER (
+                           PARTITION BY symbol, orb_minutes
+                       ) AS n_total
+                FROM daily_features
+                WHERE symbol IN ({active_syms})
+            )
+            SELECT symbol,
+                   orb_minutes,
+                   MIN(trading_day) AS first_bad_day,
+                   MAX(trading_day) AS last_bad_day,
+                   COUNT(*) AS bad_rows
+            FROM ranked
+            WHERE n_total >= {min_total_rows}
+              AND rn_recent <= {recent_rows}
+              AND (garch_forecast_vol IS NULL OR garch_forecast_vol_pct IS NULL)
+            GROUP BY symbol, orb_minutes
+            ORDER BY symbol, orb_minutes
+            """
+        ).fetchall()
+        for sym, orb_minutes, first_bad_day, last_bad_day, bad_rows in rows:
+            violations.append(
+                f"  {sym} O{orb_minutes}: recent late-history GARCH coverage has {bad_rows} NULL row(s) "
+                f"from {first_bad_day} to {last_bad_day}. Rolling post-pass state likely lost seed history "
+                f"or ordering."
+            )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_recent_garch_feature_coverage: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_family_rr_locks_coverage(con=None) -> list[str]:
+    """Every active instrument must have family_rr_locks rows covering its validated strategies."""
+    errors = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return _skip_db_check_for_ci(
+                    "  FAMILY RR LOCKS SKIPPED: gold.db not found — cannot verify lock coverage"
+                )
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+        # Check table exists
+        tables = [
+            r[0]
+            for r in con.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_name = 'family_rr_locks'"
+            ).fetchall()
+        ]
+        if not tables:
+            return _skip_db_check_for_ci("  FAMILY RR LOCKS SKIPPED: family_rr_locks table not present in DB")
+
+        # Count families in validated_setups without a matching lock
+        missing = con.execute("""
+            SELECT DISTINCT vs.instrument, vs.orb_label, vs.filter_type,
+                   vs.entry_model, vs.orb_minutes, vs.confirm_bars
+            FROM validated_setups vs
+            LEFT JOIN family_rr_locks frl
+              ON vs.instrument = frl.instrument
+              AND vs.orb_label = frl.orb_label
+              AND vs.filter_type = frl.filter_type
+              AND vs.entry_model = frl.entry_model
+              AND vs.orb_minutes = frl.orb_minutes
+              AND vs.confirm_bars = frl.confirm_bars
+            WHERE vs.status = 'active'
+              AND frl.locked_rr IS NULL
+        """).fetchall()
+        if missing:
+            errors.append(
+                f"{len(missing)} active families missing from family_rr_locks "
+                f"(run: python scripts/tools/select_family_rr.py)"
+            )
+    except (ImportError, OSError):
+        return ["SKIPPED"]
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return errors
+
+
+def check_frl_join_key_completeness() -> list[str]:
+    """Check #60: Every family_rr_locks JOIN must use the full 6-column key.
+
+    The 6-column key is: (instrument, orb_label, filter_type, entry_model,
+    orb_minutes, confirm_bars). If any JOIN is missing a column, the query
+    silently matches wrong families — catastrophic for RR lock enforcement.
+
+    Scans all .py files that contain 'family_rr_locks' JOINs.
+    """
+    violations = []
+    required_columns = {"instrument", "orb_label", "filter_type", "entry_model", "orb_minutes", "confirm_bars"}
+
+    # Scan all Python files in production paths (exclude self to avoid
+    # matching our own docstrings/comments/regex patterns)
+    scan_dirs = [TRADING_APP_DIR, PIPELINE_DIR, SCRIPTS_DIR]
+    this_file = Path(__file__).resolve()
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for fpath in scan_dir.rglob("*.py"):
+            if fpath.resolve() == this_file:
+                continue  # don't scan self
+            content = fpath.read_text(encoding="utf-8")
+            if "family_rr_locks" not in content:
+                continue
+
+            lines = content.splitlines()
+            for i, line in enumerate(lines):
+                # Match actual SQL JOINs: require 'frl' alias after table name.
+                # This skips comments/docstrings that merely mention the table.
+                if re.search(r"JOIN\s+family_rr_locks\s+frl\b", line, re.IGNORECASE):
+                    # Collect the next 10 lines to find ON clause columns
+                    block = "\n".join(lines[i : i + 12])
+                    found_cols = set()
+                    for col in required_columns:
+                        if re.search(rf"frl\.{col}\b", block):
+                            found_cols.add(col)
+                    missing = required_columns - found_cols
+                    if missing:
+                        rel = fpath.relative_to(PROJECT_ROOT)
+                        violations.append(f"  {rel}:{i + 1}: family_rr_locks JOIN missing columns: {sorted(missing)}")
+
+    return violations
+
+
+def check_rr_resolution_paths_locked() -> list[str]:
+    """Check #61: Production RR-resolution queries must JOIN family_rr_locks.
+
+    Files that SELECT from validated_setups with ROW_NUMBER() or LIMIT 1
+    (i.e., picking ONE variant per family) must JOIN family_rr_locks to
+    enforce the locked RR. Without the JOIN, the query can pick any RR.
+
+    Scans production files only (not research/, not tests/).
+    """
+    violations = []
+
+    # Production files that resolve a single variant from validated_setups
+    # (these are the only files where LIMIT 1 or ROW_NUMBER() on
+    # validated_setups is a valid pattern)
+    production_files = [
+        TRADING_APP_DIR / "live_config.py",
+        TRADING_APP_DIR / "portfolio.py",
+        TRADING_APP_DIR / "rolling_portfolio.py",
+        TRADING_APP_DIR / "ml" / "features.py",
+        SCRIPTS_DIR / "tools" / "generate_trade_sheet.py",
+    ]
+
+    # Extract individual SQL string blocks (triple-quoted) and check each
+    # independently. Previous DOTALL regex matched across function boundaries,
+    # causing false positives (e.g. FROM validated_setups in function A matching
+    # LIMIT 1 in function B which queries experimental_strategies).
+    sql_block_pattern = re.compile(r'"""(.*?)"""', re.DOTALL)
+    variant_in_block = re.compile(r"FROM\s+validated_setups", re.IGNORECASE)
+    pick_pattern = re.compile(r"LIMIT\s+1|ROW_NUMBER", re.IGNORECASE)
+
+    for fpath in production_files:
+        if not fpath.exists():
+            continue
+        content = fpath.read_text(encoding="utf-8")
+
+        # Check each SQL string block independently
+        for block_match in sql_block_pattern.finditer(content):
+            block = block_match.group(1)
+            if not variant_in_block.search(block):
+                continue
+            if not pick_pattern.search(block):
+                continue
+            # This block selects from validated_setups with LIMIT 1 / ROW_NUMBER
+            if "family_rr_locks" not in block and "frl_join" not in block:
+                line_num = content[: block_match.start()].count("\n") + 1
+                rel = fpath.relative_to(PROJECT_ROOT)
+                violations.append(
+                    f"  {rel}:{line_num}: variant selection (LIMIT 1 / "
+                    f"ROW_NUMBER) from validated_setups without "
+                    f"family_rr_locks JOIN"
+                )
+
+    return violations
+
+
+def check_no_hardcoded_scratch_db() -> list[str]:
+    """Check #62: No hardcoded C:/db/gold.db defaults in active Python code.
+
+    Research/script files must use pipeline.paths.GOLD_DB_PATH as their default,
+    not a hardcoded scratch path. Docstrings and archive/ are excluded.
+    """
+    violations = []
+    # Match both forward-slash (C:/db/gold.db) and backslash (C:\db\gold.db, C:\\db\\gold.db)
+    _sep = r"[/\\]{1,2}"  # matches /, \, or \\
+    _path = rf"C:{_sep}db{_sep}gold\.db"
+    scratch_pattern = re.compile(
+        rf"""(?:default\s*=\s*(?:Path\s*\(\s*)?["']{_path}["']|"""
+        rf"""^DB_PATH\s*=\s*Path\s*\(\s*r?["']{_path}["'])""",
+        re.MULTILINE,
+    )
+    scan_dirs = [RESEARCH_DIR, SCRIPTS_DIR]
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for py_file in scan_dir.rglob("*.py"):
+            # Skip archive directories
+            if "archive" in py_file.parts:
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for match in scratch_pattern.finditer(content):
+                line_no = content[: match.start()].count("\n") + 1
+                rel = py_file.relative_to(PROJECT_ROOT)
+                violations.append(
+                    f"  {rel}:{line_no} — hardcoded scratch DB default. Use pipeline.paths.GOLD_DB_PATH instead."
+                )
+    return violations
+
+
+def check_db_reader_cached_connection() -> list[str]:
+    """Check #63: ui/db_reader.py must use cached DB connections, not connection-per-query.
+
+    The cached _DB_CONNECTIONS pattern eliminates 45ms overhead per query.
+    Individual functions must NOT close the shared connection.
+    """
+    violations = []
+    db_reader = PROJECT_ROOT / "ui" / "db_reader.py"
+    if not db_reader.exists():
+        return violations
+    content = db_reader.read_text(encoding="utf-8")
+
+    # Must have the cached connection dict
+    if "_DB_CONNECTIONS" not in content:
+        violations.append(
+            "  ui/db_reader.py: missing _DB_CONNECTIONS cache — connection-per-query anti-pattern detected"
+        )
+
+    # Individual functions must NOT close the shared connection
+    # (Only _cleanup_connections and atexit should close)
+    lines = content.splitlines()
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if "con.close()" in stripped or "conn.close()" in stripped:
+            # Check if we're inside _cleanup_connections (allowed)
+            in_cleanup = False
+            for j in range(max(0, i - 20), i):
+                if "def _cleanup_connections" in lines[j - 1]:
+                    in_cleanup = True
+                    break
+            if not in_cleanup:
+                violations.append(
+                    f"  ui/db_reader.py:{i}: conn.close() outside _cleanup_connections — "
+                    f"shared connection must not be closed by individual callers"
+                )
+
+    return violations
+
+
+def check_drift_shared_db_connection() -> list[str]:
+    """Check #64: All requires_db drift checks must accept con= parameter.
+
+    The shared connection pattern saves ~400ms (11x45ms per connect).
+    """
+    violations = []
+    import inspect
+
+    # Get all requires_db check functions from CHECKS
+    for _label, check_fn, _is_advisory, requires_db in CHECKS:
+        if not requires_db:
+            continue
+        sig = inspect.signature(check_fn)
+        if "con" not in sig.parameters:
+            violations.append(
+                f"  {check_fn.__name__}: requires_db=True but missing con= parameter — cannot use shared DB connection"
+            )
+
+    return violations
+
+
+def check_no_broad_rglob_in_drift_checks() -> list[str]:
+    """Check #65: check_old_session_names must not use PROJECT_ROOT.rglob.
+
+    Scoped rglob (pipeline/, trading_app/, scripts/ only) saves ~1,800ms
+    by skipping venv/.git/.auto-claude tree walks.
+    """
+    violations = []
+    drift_file = PROJECT_ROOT / "pipeline" / "check_drift.py"
+    content = drift_file.read_text(encoding="utf-8")
+
+    # Find the check_old_session_names function and look for broad rglob
+    in_function = False
+    for i, line in enumerate(content.splitlines(), 1):
+        if "def check_old_session_names" in line:
+            in_function = True
+        elif in_function and line.strip().startswith("def "):
+            break  # Next function — stop scanning
+        elif in_function and "PROJECT_ROOT.rglob" in line:
+            violations.append(
+                f"  pipeline/check_drift.py:{i}: PROJECT_ROOT.rglob in "
+                f"check_old_session_names — must use scoped _scan_dirs instead"
+            )
+
+    return violations
+
+
+def check_stop_multiplier_consistency(con=None) -> list[str]:
+    """Check: _S075 in strategy_id must match stop_multiplier=0.75 in column (and vice versa)."""
+    violations = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        for table in ["experimental_strategies", "validated_setups"]:
+            # Check if column exists
+            cols = [r[0] for r in con.execute(f"DESCRIBE {table}").fetchall()]
+            if "stop_multiplier" not in cols:
+                continue  # Column not yet migrated — skip
+
+            # IDs containing _S075 but column != 0.75
+            bad_id = con.execute(f"""
+                SELECT strategy_id, stop_multiplier FROM {table}
+                WHERE strategy_id LIKE '%\\_S075%' ESCAPE '\\'
+                  AND (stop_multiplier IS NULL OR ABS(stop_multiplier - 0.75) > 0.001)
+            """).fetchall()
+            for sid, sm in bad_id:
+                violations.append(f"  {table}: {sid} has _S075 in ID but stop_multiplier={sm}")
+
+            # Column = 0.75 but no _S075 in ID
+            bad_col = con.execute(f"""
+                SELECT strategy_id, stop_multiplier FROM {table}
+                WHERE ABS(stop_multiplier - 0.75) < 0.001
+                  AND strategy_id NOT LIKE '%\\_S075%' ESCAPE '\\'
+            """).fetchall()
+            for sid, sm in bad_col:
+                violations.append(f"  {table}: {sid} has stop_multiplier={sm} but no _S075 in ID")
+
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_stop_multiplier_consistency: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+# =============================================================================
+# TOOLING CONFIG CHECKS
+# =============================================================================
+
+
+def check_pyright_config_exists(project_root: Path) -> list[str]:
+    """Ensure pyrightconfig.json exists and has basic mode."""
+    config_path = project_root / "pyrightconfig.json"
+    if not config_path.exists():
+        return ["pyrightconfig.json missing — type checking not configured"]
+    import json
+
+    config = json.loads(config_path.read_text())
+    mode = config.get("typeCheckingMode", "off")
+    if mode not in ("basic", "standard", "strict"):
+        return [f"pyrightconfig.json typeCheckingMode={mode}, expected basic/standard/strict"]
+    return []
+
+
+def check_ruff_rules_minimum(project_root: Path) -> list[str]:
+    """Ensure ruff.toml has minimum required rule sets."""
+    ruff_path = project_root / "ruff.toml"
+    if not ruff_path.exists():
+        return ["ruff.toml missing"]
+    import tomllib
+
+    config = tomllib.loads(ruff_path.read_text())
+    selected = config.get("lint", {}).get("select", [])
+    required = ["I", "B", "UP"]
+    missing = [r for r in required if r not in selected]
+    if missing:
+        return [f"ruff.toml missing required rule sets: {missing}"]
+    return []
+
+
+def check_python_version_file(project_root: Path) -> list[str]:
+    """Ensure .python-version exists and matches pyproject.toml."""
+    pv_path = project_root / ".python-version"
+    if not pv_path.exists():
+        return [".python-version file missing"]
+    version = pv_path.read_text().strip()
+    if not version.startswith("3.13"):
+        return [f".python-version says {version}, expected 3.13"]
+    return []
+
+
+def check_tradovate_api_urls() -> list[str]:
+    """Ensure all Tradovate URLs use tradovateapi.com (not tradovate.com).
+
+    Per official docs: REST = {demo,live}.tradovateapi.com, WS = md.tradovateapi.com.
+    The domain tradovate.com is the marketing site, not the API.
+    """
+    violations = []
+    live_dir = TRADING_APP_DIR / "live"
+    if not live_dir.exists():
+        return []
+    # Pattern: any URL with tradovate.com that is NOT tradovateapi.com
+    bad_url = re.compile(r"""https?://[a-z-]*\.tradovate\.com/|wss?://[a-z-]*\.tradovate\.com/""")
+    good_url = re.compile(r"""tradovateapi\.com""")
+    for py_file in live_dir.glob("*.py"):
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for i, line in enumerate(content.splitlines(), 1):
+            if bad_url.search(line) and not good_url.search(line):
+                rel = py_file.relative_to(PROJECT_ROOT)
+                violations.append(f"  {rel}:{i} — wrong Tradovate domain. Use tradovateapi.com per official API docs.")
+    return violations
+
+
+def check_uv_lock_exists(project_root: Path) -> list[str]:
+    """Ensure uv.lock exists and is not a skeleton."""
+    lock_path = project_root / "uv.lock"
+    if not lock_path.exists():
+        return ["uv.lock missing — run 'uv lock' to generate"]
+    content = lock_path.read_text()
+    if content.count("[[package]]") < 5:
+        return ["uv.lock appears to be a skeleton — run 'uv lock' to regenerate"]
+    return []
+
+
+def check_pipeline_staleness(con=None) -> list[str]:
+    """Fail if any active instrument has orb_outcomes > 7 trading days behind daily_features."""
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return []
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        stale_instruments = []
+        for inst in sorted(ACTIVE_ORB_INSTRUMENTS):
+            df_max = con.execute(
+                "SELECT MAX(trading_day) FROM daily_features WHERE symbol = ? AND orb_minutes = 5",
+                [inst],
+            ).fetchone()[0]
+            oo_max = con.execute(
+                "SELECT MAX(trading_day) FROM orb_outcomes WHERE symbol = ?",
+                [inst],
+            ).fetchone()[0]
+
+            if df_max is None or oo_max is None:
+                continue  # No data yet — not a staleness issue
+
+            # Count trading days (weekdays) between oo_max and df_max
+            from scripts.tools.pipeline_status import _trading_days_between
+
+            gap = _trading_days_between(oo_max, df_max)
+
+            if gap > 7:
+                stale_instruments.append(f"{inst} ({gap}d)")
+
+        if stale_instruments:
+            violations.append(f"  orb_outcomes stale: {', '.join(stale_instruments)}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_dead_instruments_doc_sync() -> list[str]:
+    """Verify docs referencing dead instruments match the canonical DEAD_ORB_INSTRUMENTS set."""
+    import re
+
+    from pipeline.asset_configs import DEAD_ORB_INSTRUMENTS
+
+    violations = []
+    canonical = sorted(DEAD_ORB_INSTRUMENTS)
+    canonical_str = ", ".join(canonical)
+
+    # Files that should list dead instruments — pattern: "MCL, SIL, M6E" or "MCL/SIL/M6E"
+    doc_files = [
+        PROJECT_ROOT / "CLAUDE.md",
+        PROJECT_ROOT / ".claude" / "rules" / "quant-agent-identity.md",
+        PROJECT_ROOT / "docs" / "prompts" / "SYSTEM_AUDIT.md",
+        PROJECT_ROOT / "docs" / "prompts" / "PIPELINE_DATA_GUARDIAN.md",
+        PROJECT_ROOT / "docs" / "STRATEGY_DISCOVERY_AUDIT.md",
+    ]
+
+    # Extract ALL uppercase instrument-like symbols from lines containing at least
+    # MCL and SIL, intersect with known dead set. Skip lines that also list active
+    # instruments (general instrument coverage lists, not dead-specific lists).
+    for fpath in doc_files:
+        if not fpath.exists():
+            continue
+        text = fpath.read_text(encoding="utf-8")
+        for i, line in enumerate(text.splitlines(), 1):
+            if "MCL" not in line or "SIL" not in line:
+                continue
+            all_symbols = set(re.findall(r"\b([A-Z][A-Z0-9]{1,3})\b", line))
+            found_dead = all_symbols & DEAD_ORB_INSTRUMENTS
+            # Skip lines that also list active instruments (general coverage lists)
+            active_in_line = all_symbols & {"MGC", "MNQ", "MES"}
+            if len(found_dead) >= 3 and not active_in_line and found_dead != DEAD_ORB_INSTRUMENTS:
+                missing = DEAD_ORB_INSTRUMENTS - found_dead
+                violations.append(
+                    f"  {fpath.relative_to(PROJECT_ROOT)}:{i} — "
+                    f"lists {sorted(found_dead)} but canonical is [{canonical_str}], "
+                    f"missing: {sorted(missing)}"
+                )
+
+    return violations
+
+
+# =============================================================================
+# ML-layer drift checks removed 2026-04-11 (ML V1/V2/V3 DEAD — V3 sprint Stage 4).
+# These previously validated trading_app/ml/ subsystem invariants:
+#   check_ml_evaluate_hybrid_support, check_ml_bundle_full_delta,
+#   check_ml_sharpe_jk_pvalue, check_ml_no_iterrows_filters.
+# All removed with the ML subsystem. See docs/audit/hypotheses/
+# 2026-04-11-ml-v3-pooled-confluence-postmortem.md for the terminal verdict.
+# =============================================================================
+
+
+# =============================================================================
+# CHECK REGISTRY — single source of truth for all drift checks
+# =============================================================================
+_PIPELINE_TABLES = frozenset({"orb_outcomes", "daily_features", "bars_1m", "bars_5m", "prospective_signals"})
+_TRADING_APP_TABLES = frozenset(
+    {
+        "validated_setups",
+        "edge_families",
+        "experimental_strategies",
+        "family_rr_locks",
+        "regime_strategies",
+        "rebuild_manifest",
+    }
+)
+_SQL_KW_RE = re.compile(r"\b(SELECT|FROM|JOIN|WHERE|AND|ON|GROUP BY|ORDER BY|INSERT|UPDATE|DELETE)\b", re.I)
+
+
+def check_noise_floor_active() -> list[str]:
+    """Noise floor is no longer a hard gate (2026-03-21 canon lock).
+
+    Phase 2b removed. Noise check is now a post-validation flag (noise_risk).
+    NOISE_EXPR_FLOOR being zeroed is the expected canonical state.
+    This check is retained as a no-op for registry compatibility.
+    """
+    return []
+
+
+def check_session_guard_sync() -> list[str]:
+    """Deprecated 2026-04-11 — previously verified pipeline.session_guard._SESSION_ORDER
+    against trading_app.ml.config.SESSION_CHRONOLOGICAL_ORDER. The ML subsystem was
+    removed in the V3 sprint Stage 4 (V1/V2/V3 all DEAD). session_guard now stands
+    alone as the canonical chronological ordering source. Retained as a no-op for
+    registry stability."""
+    return []
+
+
+def check_noise_floor_compliance(con=None) -> list[str]:
+    """Verify no validated strategy has ExpR at or below its entry-model noise floor.
+
+    Floors defined in NOISE_EXPR_FLOOR (trading_app.config) — derived from
+    100-seed null test (White's Reality Check 2026-03-19).
+    """
+    from trading_app.config import NOISE_EXPR_FLOOR
+
+    violations = []
+    if con is None:
+        return violations
+
+    for entry_model, floor in NOISE_EXPR_FLOOR.items():
+        rows = con.execute(
+            """SELECT strategy_id, expectancy_r
+               FROM validated_setups
+               WHERE entry_model = ?
+               AND expectancy_r <= ?
+               AND (status IS NULL OR status NOT IN ('RETIRED', 'PURGED'))""",
+            [entry_model, floor],
+        ).fetchall()
+        for sid, expr in rows:
+            violations.append(f"  {sid}: ExpR={expr:.4f} <= noise floor {floor} for {entry_model}")
+
+    return violations
+
+
+def check_symbol_instrument_sql_convention() -> list[str]:
+    """Pipeline tables use 'symbol'; trading app tables use 'instrument'.
+
+    Flags SQL-context lines in pipeline/, trading_app/, and scripts/ that use
+    the wrong column name for their table layer — the class of bug that caused
+    the BinderException on orb_outcomes in generate_promotion_candidates.py.
+
+    Only checks lines that also contain a SQL keyword to avoid false positives
+    on Python attribute access (e.g. self.instrument, self.trading_day).
+    """
+    violations: list[str] = []
+    for search_dir in (PIPELINE_DIR, TRADING_APP_DIR, SCRIPTS_DIR):
+        for py_file in sorted(search_dir.rglob("*.py")):
+            try:
+                lines = py_file.read_text(encoding="utf-8", errors="ignore").splitlines()
+            except OSError:
+                continue
+            for lineno, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                if not _SQL_KW_RE.search(stripped):
+                    continue
+                lo = stripped.lower()
+                if any(t in lo for t in _PIPELINE_TABLES) and ".instrument" in lo:
+                    violations.append(
+                        f"  {py_file.relative_to(PROJECT_ROOT)}:{lineno} — "
+                        f"pipeline table with '.instrument' (use '.symbol'): "
+                        f"{stripped[:120]}"
+                    )
+                if any(t in lo for t in _TRADING_APP_TABLES) and ".symbol" in lo:
+                    violations.append(
+                        f"  {py_file.relative_to(PROJECT_ROOT)}:{lineno} — "
+                        f"trading app table with '.symbol' (use '.instrument'): "
+                        f"{stripped[:120]}"
+                    )
+    return violations
+
+
+def check_holdout_contamination(con=None) -> list[str]:
+    """Detect sacred-holdout contamination in MNQ/MES/MGC (Mode A, Amendment 2.7).
+
+    Authority: docs/institutional/pre_registered_criteria.md Amendment 2.7 (2026-04-08)
+    Decision: docs/plans/2026-04-07-holdout-policy-decision.md (top-of-file rescission)
+    Canonical source: trading_app.holdout_policy
+
+    Policy: HOLDOUT_SACRED_FROM onwards is the sacred holdout window. Any
+    discovery run that touches sacred-window data without
+    --holdout-date <= HOLDOUT_SACRED_FROM is contaminated. The existing
+    validated_setups discovered during the Apr 3 -> Apr 8 Mode B deviation
+    window are grandfathered as research-provisional per Amendment 2.4 —
+    NOT OOS-clean, but not rejected either.
+
+    Enforcement mechanism: HOLDOUT_GRANDFATHER_CUTOFF is the Amendment 2.7
+    commit moment. Any experimental_strategies row with
+    created_at > HOLDOUT_GRANDFATHER_CUTOFF that contains a sacred-year key
+    in yearly_results was discovered without respecting --holdout-date and
+    is flagged as contamination. Rows created at or before the grandfather
+    cutoff are silently grandfathered.
+
+    Fail-closed: if DB unavailable, returns a violation (not a silent pass).
+    """
+    violations = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return _skip_db_check_for_ci(
+                    "  HOLDOUT CHECK SKIPPED: gold.db not found — cannot verify holdout integrity"
+                )
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        # Canonical source for Mode A policy (Amendment 2.7).
+        # HOLDOUT_GRANDFATHER_CUTOFF is the enforcement moment (Apr 8 2026).
+        # HOLDOUT_SACRED_FROM is the sacred window boundary (Jan 1 2026).
+        # Instrument list comes from ACTIVE_ORB_INSTRUMENTS so new active
+        # instruments automatically inherit the holdout.
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from trading_app.holdout_policy import (
+            HOLDOUT_GRANDFATHER_CUTOFF,
+            HOLDOUT_SACRED_FROM,
+        )
+
+        sacred_year_key = str(HOLDOUT_SACRED_FROM.year)
+
+        for instrument in ACTIVE_ORB_INSTRUMENTS:
+            contaminated = con.execute(
+                """SELECT COUNT(*) FROM experimental_strategies
+                   WHERE instrument = ?
+                   AND created_at > ?
+                   AND yearly_results IS NOT NULL
+                   AND json_extract_string(yearly_results, '$."' || ? || '"') IS NOT NULL""",
+                [instrument, HOLDOUT_GRANDFATHER_CUTOFF, sacred_year_key],
+            ).fetchone()[0]
+            if contaminated > 0:
+                violations.append(
+                    f"  HOLDOUT CONTAMINATION: {instrument} has {contaminated} experimental_strategies "
+                    f"created after {HOLDOUT_GRANDFATHER_CUTOFF.date()} containing "
+                    f"{sacred_year_key} trade data. "
+                    f"Discovery was run without --holdout-date {HOLDOUT_SACRED_FROM.isoformat()}. "
+                    f"Authority: docs/institutional/pre_registered_criteria.md Amendment 2.7. "
+                    f"Canonical source: trading_app.holdout_policy"
+                )
+    except (ImportError, OSError) as e:
+        violations.append(f"  HOLDOUT CHECK FAILED: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+
+    return violations
+
+
+def check_holdout_policy_declaration_consistency() -> list[str]:
+    """Declaration-consistency check for Mode A holdout policy (Amendment 2.7).
+
+    Catches drift between the canonical source (trading_app.holdout_policy),
+    the binding policy doc (pre_registered_criteria.md Amendment 2.7), and
+    the top-level research rules (RESEARCH_RULES.md).
+
+    Asserts:
+    1. trading_app/holdout_policy.py exists and exports the three canonical
+       names (HOLDOUT_SACRED_FROM, HOLDOUT_GRANDFATHER_CUTOFF,
+       enforce_holdout_date).
+    2. HOLDOUT_SACRED_FROM equals date(2026, 1, 1) — Amendment 2.7 lock.
+    3. docs/institutional/pre_registered_criteria.md contains the string
+       "Amendment 2.7" (the rescission of Amendment 2.6).
+    4. RESEARCH_RULES.md references the canonical sacred-from date
+       (2026-01-01) and cites Amendment 2.7.
+
+    Any failure indicates the canonical source and its documentation are out
+    of sync, which is the exact class of drift that produced the Apr 7 Mode B
+    autonomous error (the HANDOFF entry said one thing, the Apr 2 plan said
+    another, and the code had no single source of truth).
+
+    Fail-closed: if the canonical import fails, that IS the violation.
+    """
+    from datetime import date as _date
+    from pathlib import Path
+
+    violations = []
+    project_root = Path(__file__).parent.parent
+
+    # (1) Canonical module exists and exports the three names. We import the
+    # module as an opaque object and check exports via hasattr so the import
+    # block does not need ruff I001 hand-holding for aliased multi-imports.
+    try:
+        import trading_app.holdout_policy as _hp
+    except ImportError as e:
+        return [
+            f"  HOLDOUT POLICY CANONICAL SOURCE MISSING: {e}. Expected trading_app/holdout_policy.py per Amendment 2.7."
+        ]
+
+    required_exports = ("HOLDOUT_SACRED_FROM", "HOLDOUT_GRANDFATHER_CUTOFF", "enforce_holdout_date")
+    for name in required_exports:
+        if not hasattr(_hp, name):
+            violations.append(
+                f"  HOLDOUT POLICY EXPORT MISSING: trading_app.holdout_policy "
+                f"does not define {name!r} (required by Amendment 2.7)."
+            )
+    if violations:
+        return violations  # bail early — downstream checks rely on the exports
+
+    # (2) Sacred-from value is the Amendment 2.7 lock
+    if _date(2026, 1, 1) != _hp.HOLDOUT_SACRED_FROM:
+        violations.append(
+            f"  HOLDOUT_SACRED_FROM drifted from Amendment 2.7 lock: "
+            f"got {_hp.HOLDOUT_SACRED_FROM.isoformat()}, expected 2026-01-01. "
+            "Changing this requires a new Amendment in pre_registered_criteria.md."
+        )
+
+    # (3) pre_registered_criteria.md cites Amendment 2.7
+    criteria_path = project_root / "docs" / "institutional" / "pre_registered_criteria.md"
+    if not criteria_path.exists():
+        violations.append(f"  {criteria_path} missing — cannot verify Amendment 2.7 citation.")
+    else:
+        criteria_text = criteria_path.read_text(encoding="utf-8", errors="replace")
+        if "Amendment 2.7" not in criteria_text:
+            violations.append(
+                f"  {criteria_path.relative_to(project_root)} does not mention "
+                "'Amendment 2.7' — Mode A declaration missing from binding policy doc."
+            )
+
+    # (4) RESEARCH_RULES.md references the sacred-from date and cites Amendment 2.7
+    rules_path = project_root / "RESEARCH_RULES.md"
+    if not rules_path.exists():
+        violations.append(f"  {rules_path} missing — cannot verify Mode A declaration.")
+    else:
+        rules_text = rules_path.read_text(encoding="utf-8", errors="replace")
+        sacred_str = _hp.HOLDOUT_SACRED_FROM.isoformat()
+        if sacred_str not in rules_text:
+            violations.append(
+                f"  RESEARCH_RULES.md does not mention the sacred-from date "
+                f"'{sacred_str}' — doc-code drift against trading_app.holdout_policy."
+            )
+        if "Amendment 2.7" not in rules_text:
+            violations.append(
+                "  RESEARCH_RULES.md does not cite 'Amendment 2.7' — "
+                "Mode A declaration missing from research rules top-level file."
+            )
+
+    return violations
+
+
+def check_no_raw_orb_active_reads() -> list[str]:
+    """No direct orb_active flag reads outside pipeline/asset_configs.py.
+
+    The raw orb_active flag in ASSET_CONFIGS is dangerous because
+    DEAD_ORB_INSTRUMENTS can override it (e.g. M2K has orb_active=True
+    but is dead). All code must use ACTIVE_ORB_INSTRUMENTS or
+    get_active_instruments() instead of reading the flag directly.
+
+    Allowed: pipeline/asset_configs.py (defines the flag and derives the canonical list),
+    tests (may test the flag directly), docs/prompts (documentation).
+    """
+    violations = []
+    # Match cfg.get("orb_active" or ["orb_active"] or .orb_active patterns
+    pattern = re.compile(r"""(?:\.get\s*\(\s*["']orb_active["']|\["orb_active"\]|\.orb_active)""")
+    scan_dirs = [PIPELINE_DIR, SCRIPTS_DIR, PROJECT_ROOT / "trading_app"]
+    allowed_files = {"asset_configs.py", "check_drift.py"}
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for py_file in scan_dir.rglob("*.py"):
+            if py_file.name in allowed_files:
+                continue
+            if "archive" in py_file.parts or "test" in py_file.name.lower():
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for match in pattern.finditer(content):
+                line_no = content[: match.start()].count("\n") + 1
+                rel = py_file.relative_to(PROJECT_ROOT)
+                violations.append(
+                    f"  {rel}:{line_no} — raw orb_active read. "
+                    "Use ACTIVE_ORB_INSTRUMENTS or get_active_instruments() instead."
+                )
+    return violations
+
+
+def check_filter_self_description_coverage() -> list[str]:
+    """Every ALL_FILTERS entry must produce valid AtomDescription via describe().
+
+    The canonical-filter-self-description refactor (2026-04-07) made each
+    StrategyFilter class own its own decomposition via the describe()
+    method. This check enforces that contract: any new filter added to
+    ALL_FILTERS must implement describe() and return a list of
+    AtomDescription instances with valid enum-string fields.
+
+    Without this check, a researcher could add a new filter to
+    ALL_FILTERS, forget to implement describe(), and silently get the
+    base class default — re-introducing the parallel-model drift bug
+    that the refactor eliminated.
+
+    What this check enforces:
+      1. ALL_FILTERS[ft].describe(sample_row, "CME_REOPEN", "E2") does not raise
+      2. The return value is a list (possibly empty for NoFilter)
+      3. Every element is an AtomDescription instance
+      4. NoFilter is the only filter allowed to return zero atoms
+      5. CompositeFilter atoms come from leaf filters (recursive walk)
+      6. No concrete filter inherits the base class default describe()
+      7. atom.category ∈ {PRE_SESSION, INTRA_SESSION, OVERLAY, DIRECTIONAL}
+      8. atom.resolves_at ∈ {STARTUP, ORB_FORMATION, BREAK_DETECTED,
+         CONFIRM_COMPLETE, TRADE_ENTERED}
+      9. atom.confidence_tier ∈ {PROVEN, PLAUSIBLE, LEGACY, UNKNOWN}
+
+    Rules 7-9 close a silent-default gap in the eligibility adapter: the
+    _CATEGORY_MAP / _RESOLVES_AT_MAP lookups silently coerce typos to
+    PRE_SESSION / STARTUP (losing filter-specific semantics). By asserting
+    valid string membership at the drift layer, we catch the typo at
+    check time instead of at runtime on a mis-labeled eligibility report.
+
+    @rule canonical-filter-self-description
+    @stage canonical-filter-self-description (Phase 5 + post-review hardening)
+    """
+    # Hardcoded enum-string sets. Kept in sync with
+    # trading_app.eligibility.types.ConditionCategory / ResolvesAt and
+    # trading_app.eligibility.types.ConfidenceTier. If those enums change,
+    # this drift check must update in lock-step (single source of truth is
+    # the enum; this set is the contract-level mirror for pipeline-side
+    # validation without a cross-package import).
+    _VALID_CATEGORIES = frozenset(
+        {
+            "PRE_SESSION",
+            "INTRA_SESSION",
+            "OVERLAY",
+            "DIRECTIONAL",
+        }
+    )
+    _VALID_RESOLVES_AT = frozenset(
+        {
+            "STARTUP",
+            "ORB_FORMATION",
+            "BREAK_DETECTED",
+            "CONFIRM_COMPLETE",
+            "TRADE_ENTERED",
+        }
+    )
+    _VALID_CONFIDENCE_TIERS = frozenset(
+        {
+            "PROVEN",
+            "PLAUSIBLE",
+            "LEGACY",
+            "UNKNOWN",
+        }
+    )
+    violations: list[str] = []
+    try:
+        from trading_app.config import (
+            ALL_FILTERS,
+            AtomDescription,
+            CompositeFilter,
+            NoFilter,
+            StrategyFilter,
+        )
+    except ImportError as exc:
+        return [f"  Could not import trading_app.config: {exc}"]
+
+    # Sample row with plausible values for all common feature columns.
+    # Using CME_REOPEN as the orb_label exercises the most filters.
+    sample_row = {
+        "orb_CME_REOPEN_size": 8.0,
+        "orb_CME_REOPEN_break_delay_min": 3.0,
+        "orb_CME_REOPEN_break_bar_continues": True,
+        "orb_CME_REOPEN_break_dir": "long",
+        "orb_CME_REOPEN_compression_tier": "Compressed",
+        "orb_volume_ratio_CME_REOPEN": 1.5,
+        "rel_vol_CME_REOPEN": 1.4,
+        "symbol": "MGC",
+        "pit_range_atr": 0.15,
+        "prev_day_range": 200.0,
+        "atr_20": 150.0,
+        "gap_open_points": 5.0,
+        "overnight_range": 80.0,
+        "overnight_range_pct": 60.0,
+        "atr_20_pct": 75.0,
+        "cross_atr_MES_pct": 75.0,
+        "cross_atr_MGC_pct": 75.0,
+        "atr_vel_regime": "Stable",
+        "day_of_week": 2,
+        "is_nfp_day": False,
+        "is_opex_day": False,
+        "is_friday": False,
+        "double_break": 0,
+    }
+
+    def _walk_leaves(filt: StrategyFilter) -> list[StrategyFilter]:
+        if isinstance(filt, CompositeFilter):
+            return _walk_leaves(filt.base) + _walk_leaves(filt.overlay)
+        return [filt]
+
+    for filter_type, filter_inst in sorted(ALL_FILTERS.items()):
+        # Iterate leaves so the check sees the actual class implementing
+        # describe(), not just the composite wrapper.
+        leaves = _walk_leaves(filter_inst)
+        for leaf in leaves:
+            cls_name = type(leaf).__name__
+            try:
+                atoms = leaf.describe(sample_row, "CME_REOPEN", "E2")
+            except Exception as exc:
+                violations.append(f"  {filter_type} ({cls_name}): describe() raised {type(exc).__name__}: {exc}")
+                continue
+
+            if not isinstance(atoms, list):
+                violations.append(
+                    f"  {filter_type} ({cls_name}): describe() returned {type(atoms).__name__}, expected list"
+                )
+                continue
+
+            # NoFilter is the only filter allowed zero atoms.
+            if not atoms and not isinstance(leaf, NoFilter):
+                violations.append(
+                    f"  {filter_type} ({cls_name}): describe() returned empty list — only NoFilter may have zero atoms"
+                )
+                continue
+
+            for atom in atoms:
+                if not isinstance(atom, AtomDescription):
+                    violations.append(
+                        f"  {filter_type} ({cls_name}): describe() yielded "
+                        f"{type(atom).__name__}, expected AtomDescription"
+                    )
+                    continue
+                # Validate enum-string field membership. The eligibility
+                # adapter uses _CATEGORY_MAP.get(...) with silent defaults,
+                # so a typo in a filter's describe() would silently coerce
+                # to PRE_SESSION / STARTUP at runtime. Catch it here at
+                # check time instead.
+                if atom.category not in _VALID_CATEGORIES:
+                    violations.append(
+                        f"  {filter_type} ({cls_name}): atom.category="
+                        f"{atom.category!r} not in "
+                        f"{sorted(_VALID_CATEGORIES)}"
+                    )
+                if atom.resolves_at not in _VALID_RESOLVES_AT:
+                    violations.append(
+                        f"  {filter_type} ({cls_name}): atom.resolves_at="
+                        f"{atom.resolves_at!r} not in "
+                        f"{sorted(_VALID_RESOLVES_AT)}"
+                    )
+                if atom.confidence_tier not in _VALID_CONFIDENCE_TIERS:
+                    violations.append(
+                        f"  {filter_type} ({cls_name}): atom.confidence_tier="
+                        f"{atom.confidence_tier!r} not in "
+                        f"{sorted(_VALID_CONFIDENCE_TIERS)}"
+                    )
+
+            # Verify the leaf has not silently inherited the base class
+            # describe(): the default returns one atom with category
+            # 'INTRA_SESSION' and resolves_at 'ORB_FORMATION' regardless
+            # of filter semantics. Concrete filters MUST override
+            # describe() — except NoFilter (returns empty) and the
+            # base StrategyFilter itself (which is never instantiated).
+            uses_base_default = type(leaf).describe is StrategyFilter.describe
+            if uses_base_default and not isinstance(leaf, NoFilter):
+                violations.append(
+                    f"  {filter_type} ({cls_name}): inherits the base class "
+                    f"describe() default — concrete filters MUST override "
+                    f"describe() to surface filter-specific semantics"
+                )
+
+    return violations
+
+
+def check_no_scratch_db_in_docstrings() -> list[str]:
+    """No C:/db/gold.db in docstring usage examples (stale since Mar 2026).
+
+    Scratch DB at C:/db/gold.db is deprecated. Usage examples in docstrings
+    that suggest it as a --db or --db-path argument will mislead users.
+    Intentional scratch tooling (scratch_run.py, scratch_ingest.py) is excluded.
+    """
+    violations = []
+    scratch_re = re.compile(r"C:[/\\]{1,2}db[/\\]{1,2}gold\.db")
+    scan_dirs = [PIPELINE_DIR, SCRIPTS_DIR, PROJECT_ROOT / "trading_app"]
+    # These files intentionally reference scratch DB (tooling, deprecation docs, scratch workflows)
+    scratch_tooling = {"scratch_run.py", "scratch_ingest.py", "check_drift.py", "paths.py", "ingest_mnq.py"}
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for py_file in scan_dir.rglob("*.py"):
+            if py_file.name in scratch_tooling:
+                continue
+            if "archive" in py_file.parts:
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            # Only flag matches inside docstrings (triple-quoted strings)
+            in_docstring = False
+            for i, line in enumerate(content.splitlines(), 1):
+                stripped = line.strip()
+                if '"""' in stripped or "'''" in stripped:
+                    # Toggle docstring state (simplified — handles most cases)
+                    count = stripped.count('"""') + stripped.count("'''")
+                    if count % 2 == 1:
+                        in_docstring = not in_docstring
+                if in_docstring and scratch_re.search(line):
+                    rel = py_file.relative_to(PROJECT_ROOT)
+                    violations.append(
+                        f"  {rel}:{i} — C:/db/gold.db in docstring. Remove or replace with canonical gold.db reference."
+                    )
+    return violations
+
+
+# =============================================================================
+# E2 canonical-window fix — structural locks (added 2026-04-07, Stage 8)
+# =============================================================================
+#
+# These five checks lock in the Stage 5 fail-closed E2 fix from the
+# E2 canonical-window refactor. Each one prevents a specific regression
+# vector that would re-introduce fakeout-blind backtests (Chan Ch 1 p4
+# violation: backtest must equal live execution). See
+# docs/postmortems/2026-04-07-e2-canonical-window-fix.md for the full
+# postmortem of why these checks exist.
+#
+# Each check is paired with a negative test in
+# tests/test_pipeline/test_check_drift.py that injects a controlled
+# violation and asserts the check detects it (Generation Is Not Validation
+# rule from .claude/rules/integrity-guardian.md).
+
+
+def check_canonical_source_annotations() -> list[str]:
+    """Verify @canonical-source annotations point to existing files.
+
+    @canonical-source comments in production code (pipeline/, trading_app/,
+    scripts/) must reference real paths under docs/research-input/ or
+    docs/institutional/literature/. This catches stale citations after
+    canonical sources are renamed, moved, or deleted (e.g. quarterly
+    re-scrape that replaces a help-center article with a new article ID).
+
+    The annotation format expected by this check is:
+        # @canonical-source <relative path from project root>
+
+    Trailing parenthetical comments (article ID, scrape date) are allowed
+    after the path. Examples that match:
+        # @canonical-source docs/research-input/topstep/topstep_dll_article.md
+        # @canonical-source docs/research-input/topstep/topstep_mll_article.md  (8284204, 2026-04-08)
+
+    The check is non-fatal for paths in `tests/` (test fixtures may
+    reference deliberately-fake paths) and ignores files under archive/.
+
+    Established 2026-04-08 by stage 8 of docs/plans/2026-04-08-topstep-canonical-fixes.md.
+    """
+    violations = []
+    pattern = re.compile(r"@canonical-source\s+([^\s]+)")
+    scan_dirs = [PIPELINE_DIR, TRADING_APP_DIR, SCRIPTS_DIR]
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for py_file in scan_dir.rglob("*.py"):
+            if "archive" in py_file.parts:
+                continue
+            if py_file.name == "check_drift.py":
+                # Don't scan ourselves — this file references the regex pattern
+                # itself and would self-flag.
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for match in pattern.finditer(content):
+                ref = match.group(1).strip().rstrip(",.;:")
+                # Skip placeholder/example refs (start with `<` or contain `example`)
+                if ref.startswith("<") or "example" in ref.lower():
+                    continue
+                # Resolve relative to project root
+                target = (PROJECT_ROOT / ref).resolve()
+                if not target.exists():
+                    line_no = content[: match.start()].count("\n") + 1
+                    try:
+                        rel_path = py_file.relative_to(PROJECT_ROOT).as_posix()
+                    except ValueError:
+                        # Test fixtures may live outside PROJECT_ROOT (tmp_path)
+                        rel_path = py_file.as_posix()
+                    violations.append(f"{rel_path}:{line_no}: @canonical-source points to missing file: {ref}")
+    return violations
+
+
+def check_canonical_orb_utc_window_source() -> list[str]:
+    """Only pipeline/dst.py may define `def orb_utc_window(`.
+
+    Stage 1 of the E2 canonical-window refactor consolidated three parallel
+    implementations of "compute ORB window end UTC" into one canonical
+    function in pipeline.dst. This check prevents accidental re-encoding
+    in build_daily_features, execution_engine, outcome_builder, or any
+    new file — a regression that would re-create the parallel-models
+    drift that originally caused the fakeout-blind backtest bug.
+
+    Allowed: pipeline/dst.py (the canonical home), check_drift.py (this
+    file, which references the symbol name in regex), and tests
+    (test fixtures may import or reference the symbol).
+    """
+    violations = []
+    pattern = re.compile(r"^\s*def\s+orb_utc_window\s*\(", re.MULTILINE)
+    canonical_file = PIPELINE_DIR / "dst.py"
+    scan_dirs = [PIPELINE_DIR, TRADING_APP_DIR, SCRIPTS_DIR]
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for py_file in scan_dir.rglob("*.py"):
+            if py_file.resolve() == canonical_file.resolve():
+                continue
+            if py_file.name == "check_drift.py":
+                continue
+            if "archive" in py_file.parts:
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for match in pattern.finditer(content):
+                line_no = content[: match.start()].count("\n") + 1
+                try:
+                    rel: Path | str = py_file.relative_to(PROJECT_ROOT)
+                except ValueError:
+                    rel = py_file  # tmp_path during testing — fall back to absolute
+                violations.append(
+                    f"  {rel}:{line_no} — defines orb_utc_window outside canonical "
+                    f"pipeline/dst.py. The E2 canonical-window refactor (2026-04-07) "
+                    f"requires a single source of truth. Import from pipeline.dst instead."
+                )
+    return violations
+
+
+def check_no_silent_break_ts_fallback() -> list[str]:
+    """trading_app/outcome_builder.py must not silently fall back to break_ts.
+
+    Stage 5 of the E2 canonical-window refactor deleted these lookahead-bias
+    patterns from compute_single_outcome:
+      - `if orb_end_utc is not None else break_ts` (the L455 silent fallback)
+      - `orb_end_utc or break_ts` (a shorter equivalent)
+      - `= break_ts - timedelta(minutes=break_delay)` (the L782 derivation
+        from break_delay_min, which was a different shape of the same bug)
+
+    Each pattern would scan from the close-confirmed break bar instead of
+    the canonical ORB window close, missing fakeout entries and producing
+    backtest results that diverge from live execution (Chan Ch 1 p4
+    violation). This check prevents reintroduction.
+    """
+    violations = []
+    forbidden_patterns = [
+        ("if orb_end_utc is not None else break_ts", "silent fallback to break_ts — re-creates Stage 5 lookahead bias"),
+        ("orb_end_utc or break_ts", "shorthand silent fallback to break_ts — re-creates Stage 5 lookahead bias"),
+        (
+            "= break_ts - timedelta(minutes=break_delay)",
+            "L782-style derivation from break_delay_min — re-creates Stage 5 lookahead bias",
+        ),
+    ]
+    target = TRADING_APP_DIR / "outcome_builder.py"
+    if not target.exists():
+        return [f"  {target} — missing (cannot verify Stage 5 fix)"]
+    try:
+        content = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        return [f"  {target} — read failed: {e}"]
+    for needle, reason in forbidden_patterns:
+        if needle in content:
+            # Find first line number for the report
+            line_no = content[: content.find(needle)].count("\n") + 1
+            try:
+                rel: Path | str = target.relative_to(PROJECT_ROOT)
+            except ValueError:
+                rel = target  # tmp_path during testing — fall back to absolute
+            violations.append(f"  {rel}:{line_no} — forbidden pattern '{needle}': {reason}")
+    return violations
+
+
+def check_compute_single_outcome_canonical_kwargs() -> list[str]:
+    """compute_single_outcome must accept (trading_day, orb_label, orb_minutes, orb_end_utc).
+
+    Stage 5 added these parameters as the canonical fail-closed path for E2
+    entries. A regression that removed any of them would break the
+    fail-closed contract — callers would silently revert to the old
+    break_ts derivation. This check uses inspect.signature to read the
+    actual function parameters at import time, catching renames that a
+    text-based regex would miss.
+    """
+    violations = []
+    try:
+        import inspect
+
+        from trading_app.outcome_builder import compute_single_outcome
+    except ImportError as e:
+        return [f"  trading_app.outcome_builder.compute_single_outcome — import failed: {e}"]
+    required = {"trading_day", "orb_label", "orb_minutes", "orb_end_utc"}
+    sig = inspect.signature(compute_single_outcome)
+    missing = required - set(sig.parameters.keys())
+    if missing:
+        violations.append(
+            f"  trading_app.outcome_builder.compute_single_outcome — missing canonical "
+            f"kwargs {sorted(missing)}. Stage 5 of the E2 canonical-window refactor "
+            f"requires all four (trading_day, orb_label, orb_minutes, orb_end_utc) "
+            f"to enforce the fail-closed contract. Re-adding any will silently break "
+            f"the lookahead-bias guard."
+        )
+    return violations
+
+
+def check_nested_builder_absent() -> list[str]:
+    """trading_app/nested/builder.py must not exist.
+
+    Stage 7 of the E2 canonical-window refactor deleted this 536-line
+    module. It targeted a `nested_outcomes` table that was never created
+    in init_db.py — every build_nested_outcomes() invocation crashed on
+    the missing table, so the module was structurally dead from day one.
+    Worse, it embedded a buggy E2 path (the same lookahead-bias bug as
+    Stage 5 fixed in outcome_builder).
+
+    Two real helpers (resample_to_5m, _verify_e3_sub_bar_fill) were
+    rescued to trading_app/entry_rules.py in Stage 4 before the deletion.
+    Re-creating the file would re-introduce the dead-table bug AND the
+    duplicate E2 implementation, both of which Stage 7 eliminated.
+    """
+    target = TRADING_APP_DIR / "nested" / "builder.py"
+    if target.exists():
+        try:
+            rel: Path | str = target.relative_to(PROJECT_ROOT)
+        except ValueError:
+            rel = target  # tmp_path during testing — fall back to absolute
+        return [
+            f"  {rel} — file must not exist. Stage 7 of the E2 canonical-window "
+            f"refactor (2026-04-07) deleted this 536-line dead module. The two real "
+            f"helpers it contained (resample_to_5m, _verify_e3_sub_bar_fill) live in "
+            f"trading_app/entry_rules.py — import from there. See "
+            f"docs/postmortems/2026-04-07-e2-canonical-window-fix.md."
+        ]
+    return []
+
+
+def check_phase_4_validator_gates_present() -> list[str]:
+    """Verify the strategy_validator exposes the Phase 4 Stage 4.0 gates.
+
+    Phase 4 Stage 4.0 (2026-04-08) adds pre-flight gates for institutional
+    criteria 1 (hypothesis file presence), 2 (MinBTL bound), 8 (2026 OOS
+    positive, N/A-safe), and 9 (era stability enforced). This drift check
+    asserts the gate functions still exist as module-level callables in
+    ``trading_app/strategy_validator.py`` so a future refactor cannot
+    silently drop them while leaving the locked criteria text in
+    ``docs/institutional/pre_registered_criteria.md`` asserting they are
+    enforced.
+
+    Criteria 4 (Chordia) and 5 (DSR) are DEFERRED to Stage 4.0b and are
+    NOT checked here. Amendment 2.1 (locked) downgraded Criterion 5 to
+    cross-check only until N_eff is formally solved (the existing
+    informational DSR block at the bottom of run_validation already
+    implements this correctly). Amendment 2.2 (locked) reframed Criterion 4
+    as a 4-band ladder that requires BH FDR + WFE + 2026 OOS composition
+    and therefore cannot fire as a pre-flight gate. Stage 4.0b will
+    implement the banded Chordia rule as a post-validation check. Until
+    then, this drift check intentionally does NOT assert those gates exist.
+
+    The check is structural (presence of named functions in the source),
+    not behavioral (does the gate fire correctly). Behavioral coverage is
+    in ``tests/test_trading_app/test_strategy_validator.py``.
+
+    @canonical-source: trading_app/strategy_validator.py
+    @canonical-source: docs/institutional/pre_registered_criteria.md
+    """
+    violations = []
+    validator_path = TRADING_APP_DIR / "strategy_validator.py"
+    if not validator_path.is_file():
+        return [f"strategy_validator.py not found at {validator_path}"]
+    src = validator_path.read_text(encoding="utf-8")
+    required_gates = [
+        "_is_phase_4_grandfathered",
+        "_check_criterion_1_hypothesis_file",
+        "_check_criterion_2_minbtl",
+        "_check_criterion_8_oos",
+        "_check_criterion_9_era_stability",
+        "_check_phase_4_pre_flight_gates",
+    ]
+    for gate in required_gates:
+        if f"def {gate}(" not in src:
+            violations.append(
+                f"strategy_validator.py missing Phase 4 gate function: {gate}. "
+                f"Phase 4 Stage 4.0 enforces this gate per "
+                f"docs/institutional/pre_registered_criteria.md."
+            )
+    # Also assert the orchestrator is wired into run_validation's loop.
+    if "_check_phase_4_pre_flight_gates(" not in src:
+        violations.append(
+            "strategy_validator.py defines _check_phase_4_pre_flight_gates "
+            "but does not invoke it. The orchestrator must be called inside "
+            "the run_validation row loop or the gates are dead code."
+        )
+    # Assert C4 and C5 gate bodies are NOT present — they were removed from
+    # Stage 4.0 to comply with Amendments 2.1 (DSR cross-check only) and
+    # 2.2 (Chordia banded post-validation). If they reappear as pre-flight
+    # reject gates, drift has occurred and Amendment 2.8 is required.
+    for deferred_gate in ("_check_criterion_4_chordia", "_check_criterion_5_dsr"):
+        if f"def {deferred_gate}(" in src:
+            violations.append(
+                f"strategy_validator.py defines {deferred_gate} which is "
+                f"DEFERRED to Stage 4.0b per Amendments 2.1/2.2 of the "
+                f"locked criteria. Restoring it as a pre-flight reject gate "
+                f"requires a new amendment with literature justification."
+            )
+    return violations
+
+
+def check_phase_4_sha_integrity(con=None) -> list[str]:
+    """Verify every stamped hypothesis_file_sha references a real file on disk.
+
+    Phase 4 Stage 4.1 (2026-04-08) adds discovery-side SHA stamping: every
+    experimental_strategies row written by ``run_discovery`` with
+    ``hypothesis_file=<Path>`` carries the content SHA of the hypothesis
+    YAML in ``experimental_strategies.hypothesis_file_sha``. This check is
+    the INTEGRITY guard: any row whose SHA does NOT resolve to a real file
+    in ``docs/audit/hypotheses/`` indicates either (a) tampering (the file
+    was deleted after the run), (b) a rebase that dropped the hypothesis
+    commit, or (c) a test-fixture leak into gold.db.
+
+    Scope: rows with ``created_at >= PHASE_4_1_SHIP_DATE`` AND
+    ``hypothesis_file_sha IS NOT NULL``. Rows created BEFORE the ship date
+    are grandfathered (they come from legacy discovery runs that pre-date
+    Stage 4.1 enforcement). Rows with NULL SHA are legacy-mode runs and
+    are outside this check's scope — the validator's
+    ``_is_phase_4_grandfathered`` handles them.
+
+    This check is INTENTIONALLY narrow: it does NOT assert "post-ship-date
+    rows must have a SHA". That assertion would conflict with legitimate
+    legacy-mode callers (run_full_pipeline.py, parallel_rebuild.py, null
+    seed tests) that intentionally call run_discovery without a hypothesis
+    file. The write-time discipline enforcement for "post-ship runs should
+    stamp a SHA" is the operator's responsibility at the CLI layer; this
+    drift check only catches INTEGRITY violations where a stamped SHA has
+    become orphaned.
+
+    regime/nested/legacy rows with NULL hypothesis_file_sha are filtered
+    out at query time so the check never flags them.
+
+    Fail-closed: if DB unavailable, returns a violation (not a silent pass).
+
+    @canonical-source: trading_app/holdout_policy.py
+    @canonical-source: trading_app/hypothesis_loader.py
+    """
+    violations = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return _skip_db_check_for_ci(
+                    "  PHASE 4 SHA INTEGRITY SKIPPED: gold.db not found — cannot verify hypothesis file SHA integrity"  # noqa: E501
+                )
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        from trading_app.holdout_policy import PHASE_4_1_SHIP_DATE
+        from trading_app.hypothesis_loader import find_hypothesis_file_by_sha
+
+        # Fetch every stamped SHA that is subject to integrity enforcement.
+        # Pre-ship-date rows are grandfathered (legacy). Post-ship rows with
+        # NULL SHA are legacy-mode (out of scope — see docstring). Post-ship
+        # rows with non-null SHA are the enforcement target.
+        rows = con.execute(
+            """
+            SELECT DISTINCT hypothesis_file_sha
+            FROM experimental_strategies
+            WHERE hypothesis_file_sha IS NOT NULL
+              AND created_at >= ?
+            """,
+            [PHASE_4_1_SHIP_DATE],
+        ).fetchall()
+
+        for (sha,) in rows:
+            if not isinstance(sha, str) or not sha:
+                violations.append(
+                    f"  PHASE 4 SHA INTEGRITY: malformed SHA value {sha!r} "
+                    f"in experimental_strategies.hypothesis_file_sha"
+                )
+                continue
+            resolved = find_hypothesis_file_by_sha(sha)
+            if resolved is None:
+                # Count rows affected for operator context.
+                row_count = con.execute(
+                    """SELECT COUNT(*) FROM experimental_strategies
+                       WHERE hypothesis_file_sha = ?""",
+                    [sha],
+                ).fetchone()[0]
+                violations.append(
+                    f"  PHASE 4 SHA INTEGRITY: orphaned SHA {sha[:12]}... "
+                    f"({row_count} row(s)) — no file in "
+                    f"docs/audit/hypotheses/ matches this SHA. Either the "
+                    f"hypothesis file was deleted/rebased after discovery, "
+                    f"or a test fixture leaked into gold.db. Investigate "
+                    f"via: SELECT strategy_id, created_at FROM "
+                    f"experimental_strategies WHERE hypothesis_file_sha = "
+                    f"'{sha[:12]}...' LIMIT 5;"
+                )
+    except Exception as exc:
+        violations.append(f"  PHASE 4 SHA INTEGRITY CHECK FAILED: {exc}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_prop_profiles_validated_alignment(con=None) -> list[str]:
+    """Every DailyLaneSpec in an ``active=True`` AccountProfile must exist in
+    the deployable validated shelf.
+
+    Rationale: the 2026-04-09 alignment audit found that all 5 deployed lanes
+    in ``topstep_50k_mnq_auto`` were ghosts — strategy_ids not present in the
+    current validated book. The bot was operating with zero current validation
+    backing against real capital. This check prevents the class of drift from
+    recurring.
+
+    Scope: only profiles with ``active=True`` are audited. Inactive profiles
+    are exempt because they don't affect runtime — they're held as reference
+    templates. A lane in an inactive profile is re-validated at the point of
+    activation (the profile flip to ``active=True`` will re-run the check).
+
+    Fail mode: returns a violation per mismatched lane, naming both the
+    profile and the offending strategy_id so the operator knows where to look.
+    If DB is unavailable, returns a SKIPPED-style violation so the
+    ``requires_db=True`` runner handles it correctly.
+
+    @canonical-source: trading_app/prop_profiles.py
+    @canonical-source: trading_app/validated_setups schema
+    """
+    violations: list[str] = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return _skip_db_check_for_ci(
+                    "  PROP PROFILES ALIGNMENT SKIPPED: gold.db not found — "
+                    "cannot verify deployed lane validation backing"
+                )
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+        from trading_app.validated_shelf import validated_setups_has_deployment_scope
+
+        has_scope = validated_setups_has_deployment_scope(con)
+        lane_query = (
+            "SELECT status, LOWER(COALESCE(deployment_scope, 'deployable')) FROM validated_setups WHERE strategy_id = ?"
+            if has_scope
+            else "SELECT status, NULL FROM validated_setups WHERE strategy_id = ?"
+        )
+
+        from trading_app.prop_profiles import load_allocation_lanes
+
+        for profile_id, profile in sorted(ACCOUNT_PROFILES.items()):
+            if not profile.active:
+                continue
+            lanes_to_check = profile.daily_lanes
+            if not lanes_to_check:
+                lanes_to_check = load_allocation_lanes(profile_id)
+            for lane in lanes_to_check:
+                row = con.execute(
+                    lane_query,
+                    [lane.strategy_id],
+                ).fetchone()
+                if row is None:
+                    violations.append(
+                        f"  prop_profiles.{profile_id}: lane "
+                        f"{lane.strategy_id!r} is NOT in validated_setups. "
+                        f"Either the strategy was discovered, validated, "
+                        f"and promoted OR the profile references a stale "
+                        f"lane from an older discovery. Run discovery + "
+                        f"validator for the affected strategy or remove the "
+                        f"lane from the profile."
+                    )
+                    continue
+                status, deployment_scope = row
+                if status != "active":
+                    violations.append(
+                        f"  prop_profiles.{profile_id}: lane "
+                        f"{lane.strategy_id!r} exists in validated_setups "
+                        f"but status={status!r} (not active). A retired or "
+                        f"suspended strategy cannot back a live lane."
+                    )
+                    continue
+                if has_scope and deployment_scope != "deployable":
+                    violations.append(
+                        f"  prop_profiles.{profile_id}: lane "
+                        f"{lane.strategy_id!r} exists with deployment_scope="
+                        f"{deployment_scope!r} (not deployable). Live lanes "
+                        f"must point at deployable shelf rows only."
+                    )
+    except Exception as exc:
+        violations.append(f"  PROP PROFILES ALIGNMENT CHECK FAILED: {exc}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_validated_setups_writer_allowlist() -> list[str]:
+    """Only canonical validator/maintenance paths may mutate validated_setups."""
+    violations: list[str] = []
+    allowed_exact = {
+        Path("trading_app/db_manager.py"),
+        Path("trading_app/strategy_validator.py"),
+        Path("trading_app/edge_families.py"),
+        Path("scripts/infra/parallel_rebuild.py"),
+        Path("scripts/infra/revalidate_null_seeds.py"),
+        Path("scripts/tools/backfill_dollar_columns.py"),
+        Path("scripts/tools/migrate_fairness_audit.py"),
+    }
+    allowed_prefixes = (Path("scripts/migrations"),)
+    write_pattern = re.compile(
+        r"\b(?:INSERT(?:\s+OR\s+REPLACE)?\s+INTO|UPDATE|DELETE\s+FROM)\s+validated_setups\b",
+        re.IGNORECASE,
+    )
+
+    for base_dir in (TRADING_APP_DIR, SCRIPTS_DIR):
+        if not base_dir.exists():
+            continue
+        for fpath in sorted(base_dir.rglob("*.py")):
+            rel = fpath.relative_to(PROJECT_ROOT)
+            if rel in allowed_exact or any(str(rel).startswith(str(prefix)) for prefix in allowed_prefixes):
+                continue
+            content = fpath.read_text(encoding="utf-8")
+            for idx, line in enumerate(content.splitlines(), 1):
+                if write_pattern.search(line):
+                    violations.append(f"  {rel}:{idx}: writes validated_setups outside canonical allowlist")
+
+    return violations
+
+
+def check_critical_deployable_shelf_consumers() -> list[str]:
+    """Critical production readers must encode deployable-shelf semantics canonically."""
+    violations: list[str] = []
+    critical_files = [
+        PIPELINE_DIR / "dashboard.py",
+        TRADING_APP_DIR / "live_config.py",
+        TRADING_APP_DIR / "prop_portfolio.py",
+        TRADING_APP_DIR / "lane_allocator.py",
+        TRADING_APP_DIR / "portfolio.py",
+        TRADING_APP_DIR / "pbo.py",
+        TRADING_APP_DIR / "edge_families.py",
+        TRADING_APP_DIR / "strategy_fitness.py",
+        TRADING_APP_DIR / "sr_monitor.py",
+        TRADING_APP_DIR / "sprt_monitor.py",
+        TRADING_APP_DIR / "view_strategies.py",
+        SCRIPTS_DIR / "tools" / "backtest_allocator.py",
+        SCRIPTS_DIR / "tools" / "build_optimal_profiles.py",
+        SCRIPTS_DIR / "tools" / "forward_monitor.py",
+        SCRIPTS_DIR / "tools" / "generate_profile_lanes.py",
+        SCRIPTS_DIR / "tools" / "generate_promotion_candidates.py",
+        SCRIPTS_DIR / "tools" / "generate_trade_sheet.py",
+        SCRIPTS_DIR / "tools" / "optimal_lanes.py",
+        SCRIPTS_DIR / "tools" / "pipeline_status.py",
+        SCRIPTS_DIR / "tools" / "project_pulse.py",
+        SCRIPTS_DIR / "tools" / "rolling_portfolio_assembly.py",
+        SCRIPTS_DIR / "tools" / "score_lanes.py",
+        SCRIPTS_DIR / "tools" / "select_family_rr.py",
+        TRADING_APP_DIR / "ai" / "sql_adapter.py",
+    ]
+    relation_required = {
+        fpath.relative_to(PROJECT_ROOT)
+        for fpath in critical_files
+        if fpath != TRADING_APP_DIR / "ai" / "sql_adapter.py"
+    }
+    raw_active_pattern = re.compile(r"(?:LOWER\([^)]*status\)|status)\s*=\s*'active'", re.IGNORECASE)
+
+    for fpath in critical_files:
+        if not fpath.exists():
+            violations.append(f"  {fpath.relative_to(PROJECT_ROOT)} missing")
+            continue
+        rel = fpath.relative_to(PROJECT_ROOT)
+        content = fpath.read_text(encoding="utf-8")
+        uses_relation_helper = "deployable_validated_relation" in content or "active_validated_relation" in content
+        uses_explicit_scope = "deployment_scope" in content
+        if rel in relation_required and not uses_relation_helper:
+            violations.append(f"  {rel}: critical validated_setups reader must use published relation helper")
+        elif rel == Path("trading_app/ai/sql_adapter.py") and not (uses_relation_helper or uses_explicit_scope):
+            violations.append(f"  {rel}: critical validated_setups reader lacks canonical deployable-shelf semantics")
+        if rel != Path("trading_app/ai/sql_adapter.py"):
+            lines = content.splitlines()
+            for idx, line in enumerate(lines, 1):
+                if not raw_active_pattern.search(line):
+                    continue
+                start = max(0, idx - 6)
+                end = min(len(lines), idx + 5)
+                block = "\n".join(lines[start:end])
+                if "validated_setups" not in block:
+                    continue
+                violations.append(f"  {rel}:{idx}: raw status='active' predicate in critical shelf reader")
+
+    return violations
+
+
+def check_document_authority_registry() -> list[str]:
+    """Core authority docs must exist and advertise their roles explicitly."""
+    violations: list[str] = []
+
+    registry = PROJECT_ROOT / "docs" / "governance" / "document_authority.md"
+    if not registry.exists():
+        return ["  docs/governance/document_authority.md missing"]
+
+    registry_text = registry.read_text(encoding="utf-8")
+    required_registry_refs = [
+        "CLAUDE.md",
+        "TRADING_RULES.md",
+        "RESEARCH_RULES.md",
+        "ROADMAP.md",
+        "HANDOFF.md",
+        "docs/plans/",
+        "docs/institutional/pre_registered_criteria.md",
+        "docs/governance/system_authority_map.md",
+        "docs/ARCHITECTURE.md",
+        "docs/MONOREPO_ARCHITECTURE.md",
+        "docs/context/*.md",
+        "REPO_MAP.md",
+    ]
+    for ref in required_registry_refs:
+        if ref not in registry_text:
+            violations.append(f"  docs/governance/document_authority.md missing registry reference {ref!r}")
+
+    required_markers = {
+        Path("CLAUDE.md"): "## Document Authority",
+        Path("TRADING_RULES.md"): "Single source of truth for live trading.",
+        Path("RESEARCH_RULES.md"): "**Authority:**",
+        Path("ROADMAP.md"): "Features planned but NOT YET BUILT.",
+        Path("HANDOFF.md"): "Cross-Tool Session Baton",
+        Path("docs/ARCHITECTURE.md"): "Reference guide only.",
+        Path("docs/MONOREPO_ARCHITECTURE.md"): "Reference guide only.",
+        Path("REPO_MAP.md"): "Auto-generated by `scripts/tools/gen_repo_map.py`.",
+    }
+    for rel_path, marker in required_markers.items():
+        doc_path = PROJECT_ROOT / rel_path
+        if not doc_path.exists():
+            violations.append(f"  {rel_path} missing")
+            continue
+        content = doc_path.read_text(encoding="utf-8")
+        if marker not in content:
+            violations.append(f"  {rel_path} missing authority marker {marker!r}")
+
+    return violations
+
+
+def check_system_authority_map() -> list[str]:
+    """Whole-project authority map must stay generated from the canonical registry."""
+    violations: list[str] = []
+
+    authority_map = PROJECT_ROOT / "docs" / "governance" / "system_authority_map.md"
+    if not authority_map.exists():
+        return ["  docs/governance/system_authority_map.md missing"]
+
+    from pipeline.system_authority import render_system_authority_map
+
+    content = authority_map.read_text(encoding="utf-8")
+    expected = render_system_authority_map()
+    if content != expected:
+        violations.append(
+            "  docs/governance/system_authority_map.md drifted from pipeline/system_authority.py; "
+            "re-render via scripts/tools/render_system_authority_map.py"
+        )
+    return violations
+
+
+def check_context_routing_registry() -> list[str]:
+    """Task-context registry must resolve to real paths and known domain/profile IDs."""
+    try:
+        from context.registry import validate_registry
+    except ImportError:
+        return ["  context/registry.py not found — context package not yet on this branch"]
+
+    return [f"  {violation}" for violation in validate_registry()]
+
+
+def check_context_generated_docs() -> list[str]:
+    """Generated context-routing docs must stay in sync with the canonical registry."""
+    try:
+        from context.registry import (
+            render_institutional_markdown,
+            render_readme_markdown,
+            render_source_catalog_markdown,
+            render_task_routes_markdown,
+        )
+    except ImportError:
+        return ["  context/registry.py not found — context package not yet on this branch"]
+
+    expected_by_path = {
+        PROJECT_ROOT / "docs" / "context" / "README.md": render_readme_markdown(),
+        PROJECT_ROOT / "docs" / "context" / "source-catalog.md": render_source_catalog_markdown(),
+        PROJECT_ROOT / "docs" / "context" / "task-routes.md": render_task_routes_markdown(),
+        PROJECT_ROOT / "docs" / "context" / "institutional-contracts.md": render_institutional_markdown(),
+    }
+    violations: list[str] = []
+    for path, expected in expected_by_path.items():
+        if not path.exists():
+            violations.append(f"  {path.relative_to(PROJECT_ROOT)} missing")
+            continue
+        content = path.read_text(encoding="utf-8")
+        if content != expected:
+            violations.append(
+                f"  {path.relative_to(PROJECT_ROOT)} drifted from context/registry.py; "
+                "re-render via scripts/tools/render_context_catalog.py"
+            )
+    return violations
+
+
+def check_context_view_contracts() -> list[str]:
+    """Generated task views must preserve strict truth-class boundaries."""
+    try:
+        from scripts.tools.context_views import VIEW_BUILDERS, build_view, validate_view_payload
+    except (ImportError, ModuleNotFoundError, SystemExit):
+        # SystemExit: context_views.py runs argparse at module level
+        return ["  context_views not importable — context package not yet wired on this branch"]
+
+    violations: list[str] = []
+    db_path = PROJECT_ROOT / "data" / "gold.db"
+    for view in VIEW_BUILDERS:
+        try:
+            payload = build_view(view, PROJECT_ROOT, db_path)
+        except Exception as exc:
+            violations.append(f"  context view {view} failed to build: {type(exc).__name__}: {exc}")
+            continue
+        for violation in validate_view_payload(payload):
+            violations.append(f"  context view {view}: {violation}")
+    return violations
+
+
+def check_agents_mentions_context_resolver() -> list[str]:
+    """AGENTS.md should point cold-start agents to the deterministic context resolver."""
+    agents_path = PROJECT_ROOT / "AGENTS.md"
+    if not agents_path.exists():
+        return ["  AGENTS.md missing"]
+    content = agents_path.read_text(encoding="utf-8")
+    required_refs = [
+        "scripts/tools/context_resolver.py",
+        "docs/governance/document_authority.md",
+        "docs/governance/system_authority_map.md",
+    ]
+    violations: list[str] = []
+    for ref in required_refs:
+        if ref not in content:
+            violations.append(f"  AGENTS.md missing context-routing reference {ref!r}")
+    return violations
+
+
+def check_startup_docs_reference_context_router() -> list[str]:
+    """Startup/orientation docs must point non-trivial tasks at the deterministic router."""
+    docs = {
+        PROJECT_ROOT / "CLAUDE.md": ["scripts/tools/context_resolver.py", "## Task Routing"],
+        PROJECT_ROOT / "CODEX.md": ["scripts/tools/context_resolver.py"],
+    }
+    violations: list[str] = []
+    for path, markers in docs.items():
+        if not path.exists():
+            violations.append(f"  {path.relative_to(PROJECT_ROOT)} missing")
+            continue
+        content = path.read_text(encoding="utf-8")
+        for marker in markers:
+            if marker not in content:
+                violations.append(f"  {path.relative_to(PROJECT_ROOT)} missing context-router marker {marker!r}")
+    return violations
+
+
+def check_live_audit_uses_runtime_authority() -> list[str]:
+    """Phase 7 audit must use runtime profile lanes + deployable shelf, not deprecated LIVE_PORTFOLIO."""
+    audit_path = SCRIPTS_DIR / "audits" / "phase_7_live_trading.py"
+    if not audit_path.exists():
+        return ["  scripts/audits/phase_7_live_trading.py missing"]
+
+    content = audit_path.read_text(encoding="utf-8")
+    violations: list[str] = []
+    if "LIVE_PORTFOLIO" in content:
+        violations.append("  scripts/audits/phase_7_live_trading.py still references deprecated LIVE_PORTFOLIO")
+    if "get_active_profile_ids" not in content or "get_profile_lane_definitions" not in content:
+        violations.append(
+            "  scripts/audits/phase_7_live_trading.py must source active runtime lanes from trading_app.prop_profiles"
+        )
+    if "deployable_validated_relation" not in content:
+        violations.append(
+            "  scripts/audits/phase_7_live_trading.py must validate lanes against deployable_validated_relation()"
+        )
+    return violations
+
+
+def check_project_pulse_uses_authority_registry() -> list[str]:
+    """Project pulse must expose repo identity from canonical authority registry + path/config surfaces."""
+    pulse_path = SCRIPTS_DIR / "tools" / "project_pulse.py"
+    if not pulse_path.exists():
+        return ["  scripts/tools/project_pulse.py missing"]
+
+    content = pulse_path.read_text(encoding="utf-8")
+    violations: list[str] = []
+    required_refs = [
+        "collect_system_identity",
+        "pipeline.system_authority",
+        "ACTIVE_ORB_INSTRUMENTS",
+        "GOLD_DB_PATH",
+        "SYSTEM_AUTHORITY_BACKBONE_MODULES",
+    ]
+    for ref in required_refs:
+        if ref not in content:
+            violations.append(f"  scripts/tools/project_pulse.py missing canonical identity reference {ref!r}")
+    return violations
+
+
+def check_shared_profile_fingerprint_canonical() -> list[str]:
+    """Ensure the profile fingerprint helper lives in one canonical runtime module."""
+    violations = []
+
+    derived_state_path = TRADING_APP_DIR / "derived_state.py"
+    account_survival_path = TRADING_APP_DIR / "account_survival.py"
+
+    if not derived_state_path.exists():
+        return ["  trading_app/derived_state.py missing (canonical derived-state helper required)"]
+
+    derived_text = derived_state_path.read_text(encoding="utf-8")
+    account_text = account_survival_path.read_text(encoding="utf-8") if account_survival_path.exists() else ""
+
+    if "def build_profile_fingerprint(" not in derived_text:
+        violations.append("  trading_app/derived_state.py must define build_profile_fingerprint()")
+
+    runtime_defs = 0
+    for path in TRADING_APP_DIR.rglob("*.py"):
+        if path.name == "__init__.py":
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        runtime_defs += text.count("def build_profile_fingerprint(")
+    if runtime_defs != 1:
+        violations.append(
+            f"  Expected exactly one runtime build_profile_fingerprint() definition, found {runtime_defs}"
+        )
+
+    # AST-based import detection — robust to single-line, multi-line, and
+    # parenthesized `from X import (a, b, c)` forms. Literal string match
+    # was brittle: ruff's I001 import-sort consolidates separate imports
+    # into the existing multi-line block, breaking the literal pattern
+    # while preserving semantics. See drift-check-96-ast-aware stage.
+    canonical_module = "trading_app.derived_state"
+    canonical_name = "build_profile_fingerprint"
+    has_canonical_import = False
+    if account_text:
+        try:
+            tree = ast.parse(account_text)
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.ImportFrom)
+                    and node.module == canonical_module
+                    and any(alias.name == canonical_name for alias in node.names)
+                ):
+                    has_canonical_import = True
+                    break
+        except SyntaxError:
+            # Unparseable file — let other checks handle it; don't double-violate.
+            has_canonical_import = True
+    if not has_canonical_import:
+        violations.append(
+            "  trading_app/account_survival.py must import build_profile_fingerprint from trading_app.derived_state"
+        )
+
+    return violations
+
+
+def check_sr_state_contract_writer() -> list[str]:
+    """Ensure SR monitor persists a versioned derived-state envelope."""
+    violations = []
+    path = TRADING_APP_DIR / "sr_monitor.py"
+    if not path.exists():
+        return violations
+
+    text = path.read_text(encoding="utf-8")
+    required_tokens = [
+        "build_state_envelope(",
+        "schema_version=1",
+        'state_type="sr_monitor"',
+        "git_head=",
+        'tool="sr_monitor"',
+        "canonical_inputs={",
+        "freshness={",
+        "payload={",
+        '"profile_fingerprint"',
+        '"lane_ids"',
+        '"db_identity"',
+        '"code_fingerprint"',
+    ]
+    for token in required_tokens:
+        if token not in text:
+            violations.append(f"  trading_app/sr_monitor.py missing SR contract token: {token}")
+
+    return violations
+
+
+def check_sr_state_contract_reader() -> list[str]:
+    """Ensure the SR state reader validates the envelope before trust."""
+    violations = []
+    pulse_path = SCRIPTS_DIR / "tools" / "project_pulse.py"
+    lifecycle_path = TRADING_APP_DIR / "lifecycle_state.py"
+    if not pulse_path.exists():
+        return violations
+
+    pulse_text = pulse_path.read_text(encoding="utf-8")
+    collect_idx = pulse_text.find("def collect_sr_state(")
+    if collect_idx == -1:
+        return ["  scripts/tools/project_pulse.py missing collect_sr_state()"]
+
+    collect_text = pulse_text[
+        collect_idx : pulse_text.find("\ndef ", collect_idx + 1)
+        if pulse_text.find("\ndef ", collect_idx + 1) != -1
+        else None
+    ]
+    uses_shared_reader = "read_criterion12_state" in collect_text
+    validates_locally = "validate_state_envelope(" in collect_text and 'payload.get("results"' in collect_text
+
+    if not validates_locally and not uses_shared_reader:
+        violations.append(
+            "  project_pulse.collect_sr_state() must validate SR envelope directly or delegate to "
+            "trading_app.lifecycle_state.read_criterion12_state()"
+        )
+    if 'data.get("results"' in collect_text:
+        violations.append("  project_pulse.collect_sr_state() may not trust top-level data.get('results') directly")
+
+    if uses_shared_reader:
+        if not lifecycle_path.exists():
+            violations.append("  trading_app/lifecycle_state.py missing read_criterion12_state()")
+            return violations
+        lifecycle_text = lifecycle_path.read_text(encoding="utf-8")
+        reader_idx = lifecycle_text.find("def read_criterion12_state(")
+        if reader_idx == -1:
+            violations.append("  trading_app.lifecycle_state.read_criterion12_state() missing")
+            return violations
+        reader_text = lifecycle_text[
+            reader_idx : lifecycle_text.find("\ndef ", reader_idx + 1)
+            if lifecycle_text.find("\ndef ", reader_idx + 1) != -1
+            else None
+        ]
+        if "validate_state_envelope(" not in reader_text:
+            violations.append(
+                "  trading_app.lifecycle_state.read_criterion12_state() must validate SR envelope before trust"
+            )
+        if 'payload.get("results"' not in reader_text:
+            violations.append(
+                "  trading_app.lifecycle_state.read_criterion12_state() must read SR results from validated payload"
+            )
+        if 'data.get("results"' in reader_text:
+            violations.append(
+                "  trading_app.lifecycle_state.read_criterion12_state() may not trust top-level data.get('results') directly"
+            )
+
+    return violations
+
+
+def check_preflight_launcher_modes() -> list[str]:
+    """Ensure launcher entrypoints pass explicit preflight claim modes."""
+    violations = []
+    required_tokens = {
+        PROJECT_ROOT / "scripts" / "infra" / "codex-project.sh": "--claim codex --mode mutating",
+        PROJECT_ROOT / "scripts" / "infra" / "codex-project-search.sh": "--claim codex-search --mode read-only",
+        PROJECT_ROOT / "scripts" / "infra" / "wsl-env.sh": "--claim wsl-shell --mode read-only",
+        PROJECT_ROOT / "scripts" / "infra" / "claude-worktree.sh": "--claim claude --mode mutating",
+    }
+    for path, token in required_tokens.items():
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        if token not in text:
+            violations.append(f"  {path.relative_to(PROJECT_ROOT)} missing explicit preflight mode token: {token}")
+
+    windows_launcher = PROJECT_ROOT / "scripts" / "infra" / "windows_agent_launch.py"
+    if windows_launcher.exists():
+        text = windows_launcher.read_text(encoding="utf-8")
+        if '"--mode", mode' not in text:
+            violations.append("  scripts/infra/windows_agent_launch.py must pass --mode through run_preflight()")
+
+    return violations
+
+
+def check_resample_helpers_in_entry_rules() -> list[str]:
+    """resample_to_5m and _verify_e3_sub_bar_fill must be defined in trading_app.entry_rules.
+
+    Stage 4 of the E2 canonical-window refactor extracted these helpers
+    from the doomed nested/builder.py to trading_app/entry_rules.py before
+    Stage 7 deleted the original. They're used by trading_app/nested/audit_outcomes.py.
+    Moving them to a different module would break that import without
+    necessarily breaking tests (audit_outcomes is rarely run). This check
+    asserts the canonical home by importing the helpers and reading
+    `__module__` — catching any silent relocation.
+    """
+    violations = []
+    expected_module = "trading_app.entry_rules"
+    try:
+        from trading_app.entry_rules import (
+            _verify_e3_sub_bar_fill,
+            resample_to_5m,
+        )
+    except ImportError as e:
+        return [
+            f"  trading_app.entry_rules — could not import resample_to_5m or "
+            f"_verify_e3_sub_bar_fill: {e}. Stage 4 of the E2 canonical-window refactor "
+            f"placed these helpers here as the canonical home."
+        ]
+    for fn, name in [(resample_to_5m, "resample_to_5m"), (_verify_e3_sub_bar_fill, "_verify_e3_sub_bar_fill")]:
+        if fn.__module__ != expected_module:
+            violations.append(
+                f"  trading_app.entry_rules.{name} — __module__ is {fn.__module__!r}, "
+                f"expected {expected_module!r}. Stage 4 of the E2 canonical-window "
+                f"refactor placed these helpers in trading_app/entry_rules.py."
+            )
+    return violations
+
+
+def check_deployable_subset_of_active() -> list[str]:
+    """DEPLOYABLE_ORB_INSTRUMENTS must be a strict subset of ACTIVE_ORB_INSTRUMENTS.
+
+    The canonical taxonomy is that deployable instruments are the subset of
+    active instruments that are expected to have validated strategies on the
+    deployable shelf. Any instrument with deployable_expected=True must first
+    be orb_active=True (otherwise it's not in the run set at all). This
+    invariant is enforced at definition time by deriving DEPLOYABLE from
+    ACTIVE, but we defend-in-depth here so that any future refactor that
+    changes the derivation pattern still preserves the invariant.
+    """
+    from pipeline.asset_configs import (
+        ACTIVE_ORB_INSTRUMENTS,
+        ASSET_CONFIGS,
+        DEPLOYABLE_ORB_INSTRUMENTS,
+    )
+
+    violations = []
+    active_set = set(ACTIVE_ORB_INSTRUMENTS)
+    deployable_set = set(DEPLOYABLE_ORB_INSTRUMENTS)
+    rogue = deployable_set - active_set
+    if rogue:
+        violations.append(
+            f"  DEPLOYABLE_ORB_INSTRUMENTS contains instruments not in "
+            f"ACTIVE_ORB_INSTRUMENTS: {sorted(rogue)}. Every deployable "
+            f"instrument must first be orb_active=True."
+        )
+
+    # A separate failure mode: an instrument carries deployable_expected=True
+    # (default or explicit) but somehow didn't make it into the derived list.
+    # Catches anyone who manually builds DEPLOYABLE_ORB_INSTRUMENTS in the
+    # future and drops a valid entry.
+    expected_deployable = {k for k in active_set if ASSET_CONFIGS[k].get("deployable_expected", True)}
+    missing = expected_deployable - deployable_set
+    if missing:
+        violations.append(
+            f"  DEPLOYABLE_ORB_INSTRUMENTS is missing active instruments whose "
+            f"deployable_expected flag is True: {sorted(missing)}."
+        )
+    return violations
+
+
+def check_signal_log_rotation_not_bypassed() -> list[str]:
+    """_write_signal_record must delegate to SignalLogRotator, not raw open().
+
+    R4 fix (Ralph iter 181): live_signals.jsonl was written via a bare `open(..., "a")`
+    call inside `_write_signal_record`. This bypassed rotation and swallowed disk-full
+    errors silently (institutional-rigor.md § 6 violation).
+
+    After the fix, `_write_signal_record` must:
+      (1) NOT contain `open(self.SIGNALS_FILE` (raw file open bypasses rotator).
+      (2) Contain `_signal_rotator` (delegates to SignalLogRotator).
+      (3) SIGNALS_FILE must NOT appear in the class body (replaced by SIGNALS_DIR).
+
+    A future refactor that reverts to raw open() trips this check.
+    """
+    violations = []
+    target = TRADING_APP_DIR / "live" / "session_orchestrator.py"
+    if not target.exists():
+        violations.append(f"  {target}: missing — cannot verify signal log rotation guard")
+        return violations
+
+    try:
+        source = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        violations.append(f"  {target.name}: failed to read for signal rotation check: {exc}")
+        return violations
+
+    # Offense: raw open() on a monolithic signals file in _write_signal_record.
+    if "open(self.SIGNALS_FILE" in source:
+        violations.append(
+            "  session_orchestrator.py: `open(self.SIGNALS_FILE` found — _write_signal_record "
+            "must delegate to SignalLogRotator, not write directly. R4 rotation bypass."
+        )
+    # Offense: SIGNALS_FILE class attribute still present (replaced by SIGNALS_DIR in R4).
+    if "SIGNALS_FILE = " in source:
+        violations.append(
+            "  session_orchestrator.py: `SIGNALS_FILE = ` found — R4 replaced this with "
+            "SIGNALS_DIR. Remove SIGNALS_FILE or the rotation invariant is broken."
+        )
+    # Required: _signal_rotator delegation present.
+    if "_signal_rotator" not in source:
+        violations.append(
+            "  session_orchestrator.py: `_signal_rotator` not found — _write_signal_record "
+            "must delegate to SignalLogRotator (R4 fix). Rotation is absent."
+        )
+
+    return violations
+
+
+def check_c1_kill_switch_guards_intact() -> list[str]:
+    """C1 kill-switch guards must remain in place at the canonical insertion points.
+
+    The C1 race (iter 174 F4 audit, 2026-04-25) was: `_handle_event` had no
+    `_kill_switch_fired` guard, so an entry-creating event N+1 in the same bar
+    could submit a NEW broker entry after the kill-switch fired for event N.
+    The fix (commit f8f993b7) added a guard at the top of the ENTRY branch.
+
+    This check enforces TWO regression-prevention invariants in
+    `trading_app/live/session_orchestrator.py`:
+
+    (1) `_on_bar` body must contain `_kill_switch_fired` near its top.
+        Canonical guard added in pre-history; protects bar-level dispatch.
+
+    (2) `_handle_event` body must contain `_kill_switch_fired` AND must contain
+        a check on `event.event_type == "ENTRY"` near the same line — the
+        guard must be ENTRY-scoped so EXIT/SCRATCH events still wind down
+        existing exposure during a halt (do-not-touch from iter 178 audit).
+
+    A future refactor that removes either guard, OR widens the C1 guard to
+    blanket all event types (breaking EOD wind-down), trips this check.
+    """
+    violations = []
+    target = TRADING_APP_DIR / "live" / "session_orchestrator.py"
+    if not target.exists():
+        violations.append(f"  {target}: missing — cannot verify C1 kill-switch guards")
+        return violations
+
+    try:
+        source = target.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+    except (OSError, UnicodeDecodeError, SyntaxError) as exc:
+        violations.append(f"  {target.name}: failed to parse for C1 guard verification: {exc}")
+        return violations
+
+    methods_to_check = {"_on_bar", "_handle_event"}
+    found: dict[str, ast.AsyncFunctionDef | ast.FunctionDef] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name in methods_to_check:
+            found[node.name] = node
+
+    for missing in methods_to_check - set(found):
+        violations.append(
+            f"  session_orchestrator.py: method `{missing}` not found — "
+            f"C1 guard cannot be verified. If renamed, update check 114 to match."
+        )
+
+    if "_on_bar" in found:
+        body_src = ast.get_source_segment(source, found["_on_bar"]) or ""
+        if "_kill_switch_fired" not in body_src:
+            violations.append(
+                f"  session_orchestrator.py:{found['_on_bar'].lineno} `_on_bar`: "
+                f"`_kill_switch_fired` guard missing. C1 race re-opened — "
+                f"events arriving on a halted orchestrator can reach broker."
+            )
+
+    if "_handle_event" in found:
+        body_src = ast.get_source_segment(source, found["_handle_event"]) or ""
+        if "_kill_switch_fired" not in body_src:
+            violations.append(
+                f"  session_orchestrator.py:{found['_handle_event'].lineno} `_handle_event`: "
+                f"C1 ENTRY-branch `_kill_switch_fired` guard missing. "
+                f"See iter 174 audit + iter 177 fix `f8f993b7`."
+            )
+        elif 'event_type == "ENTRY"' not in body_src and "event_type == 'ENTRY'" not in body_src:
+            violations.append(
+                f"  session_orchestrator.py:{found['_handle_event'].lineno} `_handle_event`: "
+                f"C1 guard present but ENTRY-branch discriminator missing — "
+                f"a blanket guard would break EOD wind-down (iter 178 audit do-not-touch)."
+            )
+
+    return violations
+
+
+def check_no_crlf_in_tracked_text_blobs() -> list[str]:
+    """No tracked text file may have CRLF line endings in its committed blob.
+
+    Defense-in-depth for the pre-commit `[0b]` auto-renormalize hook.
+    The hook prevents new CRLF entering commits via the normal commit path; this
+    check catches anything that bypassed the hook — `--no-verify`, direct API push,
+    `git lfs`, hook tampering, or a missing hooksPath setting on a contributor box.
+
+    Scope: every file with `.gitattributes` `text=set` or `text=auto` whose blob
+    at HEAD contains a `\\r\\n` byte sequence is a violation.
+
+    Why blob-not-WT: working-tree state is environment-specific (Windows checkout
+    can produce CRLF on disk even from LF blobs). The COMMITTED blob is the
+    canonical contract — that is what reaches CI, other contributors, and merge
+    conflict resolution. Phantom-modified WT files do NOT trigger this check;
+    only actual CRLF in HEAD's tree does.
+
+    History: PR #130 (2026-04-26) renormalized 83 historical CRLF blobs to LF
+    after multiple sessions hit the recurring `pre-rebase CRLF noise` pattern
+    (stash@{6-10} in repo). This check exists so that debt class never returns.
+    """
+    # Perf-tuned 2026-05-02: previous implementation spawned 2 subprocesses per
+    # tracked file (git check-attr + git show), ~20k spawns on this repo, ~70s
+    # on Windows + Git Bash. New shape: O(1) subprocess calls via batched stdin
+    # for check-attr and a single `git grep` against HEAD's tree. Verdict
+    # semantics are identical — same set of files (text=set/auto per
+    # .gitattributes) is examined for CRLF in their HEAD-committed blobs.
+    violations: list[str] = []
+    try:
+        ls_files = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            check=True,
+            timeout=20,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return []  # not a git repo / git unavailable — skip silently
+
+    tracked = [p for p in ls_files.stdout.decode("utf-8", "replace").split("\x00") if p]
+    if not tracked:
+        return []
+
+    # 1. Batched check-attr: feed every path on stdin in NUL-separated form.
+    # `git check-attr --stdin -z text` returns one record per path:
+    # "<path>\0text\0<value>\0".
+    try:
+        attr_input = b"\x00".join(p.encode("utf-8", "replace") for p in tracked)
+        attr_proc = subprocess.run(
+            ["git", "check-attr", "--stdin", "-z", "text"],
+            cwd=PROJECT_ROOT,
+            input=attr_input,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return []  # git unavailable mid-run — skip silently per pre-existing fail-open
+
+    # Parse: stream is path\0attr\0value\0path\0attr\0value\0…
+    text_paths: set[str] = set()
+    fields = attr_proc.stdout.split(b"\x00")
+    # Drop trailing empty produced by the final \0
+    if fields and fields[-1] == b"":
+        fields.pop()
+    for i in range(0, len(fields), 3):
+        if i + 2 >= len(fields):
+            break
+        path = fields[i].decode("utf-8", "replace")
+        value = fields[i + 2].decode("utf-8", "replace")
+        if value in ("set", "auto"):
+            text_paths.add(path)
+
+    if not text_paths:
+        return []
+
+    # 2. Single `git grep` over HEAD's tree for CRLF. -l = list matching files,
+    # -I = skip binary, -P = PCRE (needed for \r), --cached vs treeish: use
+    # HEAD directly so we get COMMITTED blobs (the contract this check enforces).
+    # Output is NUL-terminated paths via -z.
+    try:
+        grep_proc = subprocess.run(
+            ["git", "grep", "-lI", "-z", "-P", r"\r$", "HEAD", "--"] + sorted(text_paths),
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            check=False,
+            timeout=60,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return []
+
+    # `git grep <treeish>` prefixes each match with "<treeish>:". -z stays NUL-
+    # separated. Strip the "HEAD:" prefix for reporting.
+    matches = [m for m in grep_proc.stdout.split(b"\x00") if m]
+    crlf_paths: list[str] = []
+    head_prefix = b"HEAD:"
+    for raw in matches:
+        if raw.startswith(head_prefix):
+            crlf_paths.append(raw[len(head_prefix) :].decode("utf-8", "replace"))
+        else:
+            # Defensive: should not happen with `git grep HEAD --`, but if a
+            # different output shape ever appears, surface it as a finding so
+            # silent fail-open never masks a real CRLF blob.
+            crlf_paths.append(raw.decode("utf-8", "replace"))
+
+    # 3. For each CRLF-in-HEAD path, count CRLF lines for the violation message.
+    # We only `git show` the offenders — typically zero, never more than a
+    # handful. This is the only per-file subprocess and bounded by the
+    # offender count, not the tree size.
+    for rel_path in crlf_paths:
+        try:
+            blob = subprocess.run(
+                ["git", "show", f"HEAD:{rel_path}"],
+                cwd=PROJECT_ROOT,
+                capture_output=True,
+                check=False,
+                timeout=5,
+            ).stdout
+        except (subprocess.SubprocessError, FileNotFoundError):
+            continue
+        crlf_lines = blob.count(b"\r\n")
+        if crlf_lines == 0:
+            # Should not happen if grep matched, but be defensive about
+            # cross-tool encoding/normalization edge cases.
+            continue
+        violations.append(
+            f"  {rel_path} — committed blob has {crlf_lines} CRLF line(s). "
+            f"Per .gitattributes eol=lf, must be LF. "
+            f"Fix: `git add --renormalize -- {rel_path} && git commit`."
+        )
+
+    return violations
+
+
+def check_canonical_claude_client_source() -> list[str]:
+    """Only `trading_app/ai/claude_client.py` may hardcode Claude model IDs
+    or instantiate `anthropic.Anthropic(...)` directly.
+
+    Stage 4 of the claude-api-modernization refactor (2026-04-17) consolidated
+    model pins and client construction into a single canonical module. This
+    check prevents regressions where a new file hardcodes a Claude model
+    string (e.g. `claude-opus-4-7`) or calls `anthropic.Anthropic()` directly,
+    bypassing `CLAUDE_STRUCTURED_MODEL` / `CLAUDE_REASONING_MODEL` / `get_client()`.
+
+    Allowed: `trading_app/ai/claude_client.py` (canonical home), `check_drift.py`
+    (this file, which references the literal patterns in regex), and `tests/**`
+    (stale-ID fixtures for testing). Scan covers `pipeline/`, `trading_app/`,
+    `scripts/`, `research/`.
+
+    Two offense patterns:
+      1. `claude-(opus|sonnet|haiku)-\\d(?:[\\d-]*\\d)?` — any hardcoded Claude model ID
+         (covers `claude-opus-4-7`, `claude-sonnet-4-5-20250929`, etc.)
+      2. `anthropic.Anthropic(` — any direct client construction
+    """
+    violations = []
+    model_pattern = re.compile(r"claude-(opus|sonnet|haiku)-\d(?:[\d-]*\d)?")
+    client_pattern = re.compile(r"anthropic\.Anthropic\s*\(")
+
+    canonical_file = TRADING_APP_DIR / "ai" / "claude_client.py"
+    scan_dirs = [PIPELINE_DIR, TRADING_APP_DIR, SCRIPTS_DIR, RESEARCH_DIR]
+
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for py_file in scan_dir.rglob("*.py"):
+            if py_file.resolve() == canonical_file.resolve():
+                continue
+            if py_file.name == "check_drift.py":
+                continue
+            if "archive" in py_file.parts:
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+
+            try:
+                rel: Path | str = py_file.relative_to(PROJECT_ROOT)
+            except ValueError:
+                rel = py_file  # tmp_path during testing — fall back to absolute
+
+            for match in model_pattern.finditer(content):
+                line_no = content[: match.start()].count("\n") + 1
+                violations.append(
+                    f"  {rel}:{line_no} — hardcoded Claude model ID `{match.group(0)}`. "
+                    f"Import CLAUDE_STRUCTURED_MODEL or CLAUDE_REASONING_MODEL from "
+                    f"trading_app.ai.claude_client instead."
+                )
+
+            for match in client_pattern.finditer(content):
+                line_no = content[: match.start()].count("\n") + 1
+                violations.append(
+                    f"  {rel}:{line_no} — direct `anthropic.Anthropic(` instantiation. "
+                    f"Use trading_app.ai.claude_client.get_client() instead."
+                )
+
+    return violations
+
+
+def check_routed_filter_columns_populated(con=None) -> list[str]:
+    """Every routed filter's required daily_features columns must be populated.
+
+    Catches ghost deployments — a filter registered in ALL_FILTERS and
+    routed to a session via get_session_filters, where the daily_features
+    column it depends on is 0%-populated (or near-zero). The filter is
+    fail-closed on NULL, so such a lane silently produces zero trades.
+
+    Canonical example: PIT_MIN was routed to CME_REOPEN in commit
+    f776bc13 (2026-04-06) but daily_features.pit_range_atr was never
+    populated — the backfill code did not land with the schema. Zero
+    live-trade impact only because no deployed lane used PIT_MIN; the
+    trap would have fired on the first deployment.
+
+    What this check enforces:
+      1. Collect the routed set: every filter_type string that appears
+         in get_session_filters output across all SESSION_CATALOG entries.
+      2. For each routed filter, walk composites to leaves and call
+         describe() to collect every feature_column reporting a scalar
+         daily_features column (skip orb_* per-aperture columns — those
+         are session-conditional by design and checked elsewhere).
+      3. Query the live DB for population fraction of each column scoped
+         to ACTIVE_ORB_INSTRUMENTS at orb_minutes=5.
+      4. Flag when fraction < 0.50 — catches both 0%-populated ghost
+         deployments and writer regressions while tolerating sparse
+         early-history warmups.
+
+    @rule backfill-integrity
+    @stage hardening-three-fixes (2026-04-20)
+    """
+    violations: list[str] = []
+    if con is None:
+        return violations  # DB-required check skips cleanly when unavailable
+
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.dst import SESSION_CATALOG
+        from trading_app.config import (
+            ALL_FILTERS,
+            CompositeFilter,
+            NoFilter,
+            StrategyFilter,
+            get_filters_for_grid,
+        )
+    except ImportError as exc:
+        return [f"  Could not import required modules: {exc}"]
+
+    # Collect the ROUTED set: filter_type strings appearing in any
+    # (instrument, session) filter map. This is the production-contract set.
+    routed: set[str] = set()
+    for inst in ACTIVE_ORB_INSTRUMENTS:
+        for session_label in SESSION_CATALOG:
+            try:
+                filters = get_filters_for_grid(inst, session_label)
+            except Exception:
+                continue
+            routed.update(filters.keys())
+
+    if not routed:
+        return ["  Could not enumerate routed filters — SESSION_CATALOG or get_session_filters failed"]
+
+    # Walk composites to leaves and collect scalar daily_features columns.
+    # Sample row gives describe() enough context to return atoms without
+    # raising. CME_REOPEN chosen because it routes the largest filter set.
+    sample_row = {
+        "orb_CME_REOPEN_size": 8.0,
+        "orb_CME_REOPEN_break_delay_min": 3.0,
+        "orb_CME_REOPEN_break_bar_continues": True,
+        "orb_CME_REOPEN_break_dir": "long",
+        "orb_CME_REOPEN_compression_tier": "Compressed",
+        "orb_volume_ratio_CME_REOPEN": 1.5,
+        "rel_vol_CME_REOPEN": 1.4,
+        "symbol": "MGC",
+        "pit_range_atr": 0.15,
+        "prev_day_range": 200.0,
+        "atr_20": 150.0,
+        "gap_open_points": 5.0,
+        "overnight_range": 80.0,
+        "overnight_range_pct": 60.0,
+        "atr_20_pct": 75.0,
+        "cross_atr_MES_pct": 75.0,
+        "cross_atr_MGC_pct": 75.0,
+        "atr_vel_regime": "Stable",
+        "day_of_week": 2,
+        "is_nfp_day": False,
+        "is_opex_day": False,
+        "is_friday": False,
+        "double_break": 0,
+        "garch_forecast_vol_pct": 80.0,
+    }
+
+    def _walk_leaves(filt: StrategyFilter) -> list[StrategyFilter]:
+        if isinstance(filt, CompositeFilter):
+            return _walk_leaves(filt.base) + _walk_leaves(filt.overlay)
+        return [filt]
+
+    # Map each required scalar column back to the filter(s) that need it.
+    col_to_filters: dict[str, set[str]] = {}
+    for ft in sorted(routed):
+        if ft not in ALL_FILTERS:
+            continue
+        if isinstance(ALL_FILTERS[ft], NoFilter):
+            continue
+        for leaf in _walk_leaves(ALL_FILTERS[ft]):
+            if isinstance(leaf, NoFilter):
+                continue
+            try:
+                atoms = leaf.describe(sample_row, "CME_REOPEN", "E2")
+            except Exception:
+                continue
+            for atom in atoms:
+                col = getattr(atom, "feature_column", None)
+                if col is None:
+                    continue
+                # Skip per-aperture nested columns — they are session-specific
+                # by construction and covered by other integrity checks.
+                if col.startswith("orb_"):
+                    continue
+                col_to_filters.setdefault(col, set()).add(ft)
+
+    # Verify each scalar column is present in daily_features schema AND
+    # populated at >= 50% for active instruments at orb_minutes=5.
+    try:
+        known_cols = {
+            row[0]
+            for row in con.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'daily_features'"
+            ).fetchall()
+        }
+    except Exception as exc:
+        return [f"  Could not introspect daily_features schema: {exc}"]
+
+    active = tuple(ACTIVE_ORB_INSTRUMENTS)
+    if not active:
+        return []  # nothing to check
+
+    placeholders = ",".join(["?"] * len(active))
+    # Runtime-injected columns (not backed by daily_features schema) are
+    # tracked separately. They fail-closed at eligibility time if the
+    # injector is broken, so visibility matters. The primary violation
+    # surface of this check is schema-population; runtime-injected
+    # coverage is a separate check class, emitted as advisory via stderr.
+    runtime_injected: list[str] = []
+    for col in sorted(col_to_filters):
+        if col not in known_cols:
+            filters_list = ", ".join(sorted(col_to_filters[col]))
+            runtime_injected.append(f"    {col} (required by [{filters_list}])")
+            continue
+        try:
+            row = con.execute(
+                f"SELECT COUNT(*) total, COUNT({col}) populated "
+                f"FROM daily_features WHERE orb_minutes = 5 "
+                f"AND symbol IN ({placeholders})",
+                list(active),
+            ).fetchone()
+        except Exception as exc:
+            violations.append(f"  Could not query {col} population: {exc}")
+            continue
+        if row is None:
+            continue
+        total, populated = int(row[0]), int(row[1])
+        if total == 0:
+            continue
+        pct = populated / total
+        if pct < 0.50:
+            filters_list = ", ".join(sorted(col_to_filters[col]))
+            violations.append(
+                f"  Column '{col}' is {pct:.1%} populated across "
+                f"ACTIVE_ORB_INSTRUMENTS but is required by routed filters "
+                f"[{filters_list}] — likely ghost deployment or writer regression"
+            )
+
+    if runtime_injected:
+        # Informational only — these columns are not in daily_features and
+        # must be covered by runtime-injection integrity checks elsewhere.
+        # Emit to stderr so they appear in the audit log but do not block.
+        import sys as _sys
+
+        print(
+            "  INFO: routed filters require runtime-injected columns (not daily_features-backed):",
+            file=_sys.stderr,
+        )
+        for entry in runtime_injected:
+            print(entry, file=_sys.stderr)
+
+    return violations
+
+
+def check_pooled_finding_annotations() -> list[str]:
+    """Audit-result files claiming pooled-universe findings must carry schema.
+
+    RULE 14 (2026-04-20 retroactive heterogeneity audit, commit aa3399b3):
+    pooled-universe p-values and ExpR averages hide opposite-sign
+    per-cell behavior. A pooled claim without a per-cell breakdown is
+    a silent heterogeneity artefact.
+
+    What this check enforces on audit-result files created or modified
+    after the sentinel date 2026-04-20:
+      1. If YAML front-matter sets pooled_finding: true, the file must
+         also carry per_cell_breakdown_path: <repo-relative path> and
+         flip_rate_pct: <0-100 numeric>.
+      2. If flip_rate_pct >= 25, the file must carry
+         heterogeneity_ack: true to acknowledge the heterogeneity finding.
+
+    Historical audits modified before the sentinel are exempt — editing
+    an older file after the sentinel opts into the schema.
+
+    @rule pooled-finding-rule
+    @stage hardening-three-fixes (2026-04-20)
+    """
+    sentinel_date = "2026-04-20"
+    results_dir = PROJECT_ROOT / "docs" / "audit" / "results"
+    if not results_dir.is_dir():
+        return []
+
+    violations: list[str] = []
+
+    for md_file in sorted(results_dir.glob("*.md")):
+        # Skip the template itself
+        if md_file.name.startswith("TEMPLATE-"):
+            continue
+
+        try:
+            content = md_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        # Only files whose name starts with the sentinel date or later.
+        # Filename convention: YYYY-MM-DD-<slug>.md
+        fname = md_file.name
+        date_prefix = fname[:10] if len(fname) >= 10 else ""
+        if date_prefix < sentinel_date:
+            continue
+
+        # Extract YAML front-matter (between leading --- delimiters).
+        # Minimal parser: only looks at top-level key: value lines.
+        if not content.startswith("---"):
+            continue  # no front-matter — rule does not apply
+        end_marker = content.find("\n---", 3)
+        if end_marker < 0:
+            continue
+        fm_text = content[3:end_marker]
+        fm: dict[str, str] = {}
+        for line in fm_text.splitlines():
+            if ":" in line and not line.lstrip().startswith("#"):
+                k, _, v = line.partition(":")
+                fm[k.strip()] = v.strip().strip('"').strip("'")
+
+        pooled_flag = fm.get("pooled_finding", "").lower()
+        if pooled_flag not in ("true", "yes", "1"):
+            continue  # not a pooled-finding file
+
+        rel = md_file.relative_to(PROJECT_ROOT)
+
+        breakdown_path = fm.get("per_cell_breakdown_path", "")
+        if not breakdown_path:
+            violations.append(f"  {rel}: pooled_finding: true but per_cell_breakdown_path missing")
+        flip_rate_str = fm.get("flip_rate_pct", "")
+        flip_rate: float | None = None
+        if flip_rate_str:
+            try:
+                flip_rate = float(flip_rate_str)
+            except ValueError:
+                violations.append(f"  {rel}: flip_rate_pct={flip_rate_str!r} is not a number")
+        else:
+            violations.append(f"  {rel}: pooled_finding: true but flip_rate_pct missing")
+
+        if flip_rate is not None and flip_rate >= 25.0:
+            ack = fm.get("heterogeneity_ack", "").lower()
+            if ack not in ("true", "yes", "1"):
+                violations.append(
+                    f"  {rel}: flip_rate_pct={flip_rate:.1f} >= 25 but "
+                    f"heterogeneity_ack not set to true — RULE 14 requires "
+                    f"explicit acknowledgement when pooled framing hides "
+                    f"≥25% cell-level sign flips"
+                )
+
+    return violations
+
+
+def check_magic_number_rationale(trading_app_dir: Path) -> list[str]:
+    """Pass Three: magic-number rationale audit on trading_app/live/.
+
+    Every UPPER_SNAKE_CASE assignment (class-body or module-level) in
+    trading_app/live/ whose value is a numeric literal with
+    abs(value) > RATIONALE_THRESHOLD must have either:
+      (a) a comment containing "Rationale:" or "rationale" (case-insensitive)
+          within +/- 10 lines of the assignment (covers multi-paragraph
+          comment blocks where the explicit "Rationale:" tag lands a few
+          lines above the literal), OR
+      (b) the constant name appears in RATIONALE_WHITELIST below.
+
+    Why: parameter-justification discipline per Robert Carver,
+    "Systematic Trading" Ch. 4 (resources/Robert Carver - Systematic
+    Trading.pdf) — every magic number in production code should encode a
+    documented decision, not an undefended choice. Untraceable constants
+    are how prop-desk strategies silently overfit and how operators lose
+    track of why a timeout / threshold / cap was set.
+
+    Introduced: 2026-04-26 as part of v6.1 open-work burndown (Pass Three).
+    """
+    import ast
+
+    RATIONALE_THRESHOLD = 10
+    # Names whose meaning is self-evident by context. Add here only after
+    # confirming there is no plausible operator question of "why this value".
+    RATIONALE_WHITELIST: set[str] = set()
+
+    violations: list[str] = []
+    live_dir = trading_app_dir / "live"
+    if not live_dir.exists():
+        return [f"  trading_app/live/ not found at {live_dir}"]
+
+    name_re = re.compile(r"[A-Z][A-Z0-9_]+")
+    rationale_re = re.compile(r"#.*\brationale\b", re.IGNORECASE)
+
+    for fpath in sorted(live_dir.rglob("*.py")):
+        try:
+            content = fpath.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        lines = content.splitlines()
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            continue
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                continue
+            tgt = node.targets[0]
+            if not isinstance(tgt, ast.Name) or not name_re.fullmatch(tgt.id):
+                continue
+            val = node.value
+            if not isinstance(val, ast.Constant):
+                continue
+            v = val.value
+            # bool is a subclass of int — exclude explicitly.
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                continue
+            if abs(v) <= RATIONALE_THRESHOLD:
+                continue
+            if tgt.id in RATIONALE_WHITELIST:
+                continue
+            line_no = node.lineno
+            window_start = max(0, line_no - 11)
+            window_end = min(len(lines), line_no + 10)
+            window = lines[window_start:window_end]
+            if any(rationale_re.search(line) for line in window):
+                continue
+            try:
+                rel = fpath.relative_to(trading_app_dir.parent)
+            except ValueError:
+                rel = fpath
+            violations.append(
+                f"  {rel}:{line_no}: magic number {tgt.id}={v} lacks "
+                f"'Rationale:' comment within +/- 10 lines (Carver Ch. 4)"
+            )
+    return violations
+
+
+def check_orb_outcomes_scratch_pnl(con=None) -> list[str]:
+    """Post Stage 5 fix: ≥99% of scratch rows must have non-NULL ``pnl_r``.
+
+    The canonical ``trading_app/outcome_builder.py`` fix (Stage 5 of
+    ``docs/runtime/stages/scratch-eod-mtm-canonical-fix.md``) populates
+    ``pnl_r`` / ``exit_ts`` / ``exit_price`` for ``outcome='scratch'``
+    rows from realized session-end close MTM. Pre-fix baseline was
+    0% of scratch rows populated. Post-fix target is ≥99% — the <1% gap
+    is the pathological no-post-bars edge case explicitly documented in
+    ``docs/specs/outcome_builder_scratch_eod_mtm.md``.
+
+    Pre-rebuild this check fires on stale data; it is registered as
+    advisory until Stage 5b rebuild completes.
+
+    @rule scratch-eod-mtm-canonical-fix
+    @stage stage-5b drift companion
+    """
+    if con is None:
+        return []  # SKIPPED message handled by caller via requires_db=True
+    try:
+        rows = con.execute("SELECT COUNT(*), COUNT(pnl_r) FROM orb_outcomes WHERE outcome = 'scratch'").fetchone()
+    except Exception as exc:
+        return [f"  query failed: {exc!r}"]
+    if rows is None:
+        return []
+    total = int(rows[0])
+    populated = int(rows[1])
+    if total == 0:
+        return []
+    pct_populated = 100.0 * populated / total
+    if pct_populated < 99.0:
+        return [
+            f"  scratch rows with non-NULL pnl_r: {populated}/{total} = "
+            f"{pct_populated:.2f}% (expected ≥ 99% post-Stage-5 fix; "
+            f"rebuild outcome_builder for affected instruments — see "
+            f"docs/specs/outcome_builder_scratch_eod_mtm.md and "
+            f".claude/rules/validation-workflow.md § Full Rebuild Chain)"
+        ]
+    return []
+
+
+def check_research_scratch_policy_annotation() -> list[str]:
+    """Research scripts using ``pnl_r IS NOT NULL`` must annotate scratch policy.
+
+    Class bug discovered 2026-04-27: ``trading_app/outcome_builder.py`` produces
+    ``outcome='scratch'`` rows with ``pnl_r=NULL`` when neither stop nor target
+    hits by trading-day-end. Research scripts using ``WHERE pnl_r IS NOT NULL``
+    silently drop those rows, inflating measured ExpR by 10-45% on the
+    survivor lanes (verified MNQ NYSE_OPEN 15m: 9.9% scratch at RR=1.0,
+    44.6% at RR=4.0).
+
+    This check fires on any ``research/**.py`` file (excluding
+    ``research/archive/``) that contains the literal string
+    ``pnl_r IS NOT NULL`` AND does NOT also contain a canonical
+    scratch-policy comment marker. Acceptable markers (case-insensitive):
+      - ``# scratch-policy: drop`` (deliberate exclusion of scratches)
+      - ``# scratch-policy: include-as-zero`` (count scratches as 0R)
+      - ``# scratch-policy: realized-eod`` (count scratches at EOD MTM)
+
+    Companion to Stage 5 fix in ``trading_app/outcome_builder.py`` and
+    Criterion 13 in ``docs/institutional/pre_registered_criteria.md``.
+
+    @rule scratch-policy-annotation
+    @stage stage-2 of 2026-04-27 scratch-eod-mtm plan
+    """
+    research_dir = PROJECT_ROOT / "research"
+    if not research_dir.is_dir():
+        return []
+
+    violations: list[str] = []
+    needle = "pnl_r IS NOT NULL"
+    marker_prefix = "# scratch-policy:"
+    valid_markers = ("drop", "include-as-zero", "realized-eod")
+
+    for py_file in sorted(research_dir.rglob("*.py")):
+        try:
+            rel = py_file.relative_to(research_dir)
+        except ValueError:
+            continue
+        # Skip archive — frozen scans are not retro-edited per Backtesting Rule 11.
+        if rel.parts and rel.parts[0] == "archive":
+            continue
+
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        if needle not in content:
+            continue
+
+        marker_found_with_valid_value = False
+        for line in content.splitlines():
+            stripped = line.strip().lower()
+            idx = stripped.find(marker_prefix)
+            if idx < 0:
+                continue
+            value = stripped[idx + len(marker_prefix) :].strip()
+            if any(value.startswith(m) for m in valid_markers):
+                marker_found_with_valid_value = True
+                break
+
+        if not marker_found_with_valid_value:
+            rel_repo = py_file.relative_to(PROJECT_ROOT)
+            violations.append(
+                f"  {rel_repo}: contains 'pnl_r IS NOT NULL' but no "
+                f"'# scratch-policy: drop|include-as-zero|realized-eod' annotation. "
+                f"Class bug 2026-04-27: scratch rows have NULL pnl_r and are silently "
+                f"dropped. See memory/feedback_scratch_pnl_null_class_bug.md."
+            )
+
+    return violations
+
+
+def check_e2_lookahead_research_contamination() -> list[str]:
+    """Research scripts combining ``entry_model='E2'`` with break-bar predictors.
+
+    Class bug catalogued 2026-04-28: 18 of 73 E2-using research scripts use
+    ``rel_vol``, ``break_bar_volume``, ``break_bar_continues``, or
+    ``break_delay_min`` as predictors. Real-data verification shows ~41% of
+    E2 trades have ``entry_ts < break_ts`` (the canonical "break bar"
+    defined by close-outside-ORB is later than E2's range-cross entry on
+    that subset), so break-bar features are post-entry data on ~4 in 10
+    E2 rows. Canonical authority for the gate at the registered-filter
+    layer: ``trading_app/config.py`` ``E2_EXCLUDED_FILTER_PREFIXES`` /
+    ``E2_EXCLUDED_FILTER_SUBSTRINGS``. Research scripts that bypass
+    ``ALL_FILTERS`` and read ``daily_features`` directly are not gated.
+
+    Fires on any ``research/**.py`` file (excluding ``research/archive/``)
+    that contains BOTH:
+      1. an ``entry_model='E2'`` or ``entry_model="E2"`` literal, AND
+      2. a tainted feature reference: ``rel_vol``, ``break_bar_volume``,
+         ``break_bar_continues``, or ``break_delay_min``.
+
+    Skips and policies:
+      - ``research/archive/`` is skipped (frozen scans not retro-edited).
+      - The 18 known-tainted scripts from the 2026-04-28 registry are
+        grandfathered via ``known_tainted_registry`` — the registry doc
+        is the canonical record of their status.
+      - Scripts with a canonical annotation are cleared.
+
+    Acceptable annotations (case-insensitive):
+      - ``# e2-lookahead-policy: cleared`` (verified clean post-fix)
+      - ``# e2-lookahead-policy: late-fill-only`` (filter ``entry_ts >= break_ts``)
+      - ``# e2-lookahead-policy: not-predictor`` (feature is window-sizing only)
+      - ``# e2-lookahead-policy: tainted`` (acknowledges, kept for audit trail)
+
+    See ``docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md``.
+    @rule e2-lookahead-policy
+    """
+    research_dir = PROJECT_ROOT / "research"
+    if not research_dir.is_dir():
+        return []
+
+    known_tainted_registry = frozenset(
+        {
+            "comprehensive_deployed_lane_scan.py",
+            "participation_optimum_universality_v1.py",
+            "participation_optimum_mes_universality_v1.py",
+            "participation_optimum_mgc_universality_v1.py",
+            "participation_shape_cross_instrument_v1.py",
+            "pr48_participation_shape_oos_replication_v1.py",
+            "q1_h04_mechanism_shape_validation_v1.py",
+            "close_h2_book_path_c.py",
+            "h2_exploitation_audit.py",
+            "audit_comex_settle_orb_g5_failure_pocket.py",
+            "rel_vol_is_only_quantile_sensitivity.py",
+            "rel_vol_mechanism_decomposition.py",
+            "research_vol_regime_wf.py",
+            "stress_test_rel_vol_finding.py",
+            "stress_test_rel_vol_finding_v2.py",
+            "t0_t8_audit_volume_cells.py",
+            "vwap_comprehensive_family_scan.py",
+            "research_mgc_e2_microstructure_pilot.py",
+        }
+    )
+
+    # Canonical contamination patterns from `daily_features` columns.
+    # `rel_vol_<UPPER>` matches `rel_vol_NYSE_OPEN` etc but NOT `rel_vol_session_norm`
+    # (a script-local clean-replacement name). break_bar / break_delay substrings
+    # are unambiguous — no clean features share those substrings.
+    # `orb_\w+_break_dir` added 2026-04-28: break_dir is post-entry on ~42% of E2
+    # fills (range-touch-then-reverse fakeouts) — same class as break_bar_volume.
+    # See backtesting-methodology.md § 6.3 and postmortem 2026-04-21-e2-break-bar-lookahead.md.
+    tainted_feature_re = re.compile(
+        r"\brel_vol_[A-Z]"  # rel_vol_NYSE_OPEN, rel_vol_TOKYO_OPEN, etc
+        r"|break_bar_volume"
+        r"|break_bar_continues"
+        r"|break_delay_min"
+        r"|orb_\w+_break_dir"  # post-entry on ~42% of E2 fills when used as selector
+    )
+    marker_prefix = "# e2-lookahead-policy:"
+    valid_markers = ("cleared", "late-fill-only", "not-predictor", "tainted")
+
+    # Match permissively: any file mentioning entry_model AND an 'E2' / "E2"
+    # literal AND a tainted feature. This catches kwarg form (entry_model='E2'),
+    # SQL form (entry_model = 'E2' with spaces), and dict form ('entry_model':
+    # 'E2'). False positives are tolerable because the check is advisory.
+    e2_literals = ("'E2'", '"E2"')
+
+    violations: list[str] = []
+    for py_file in sorted(research_dir.rglob("*.py")):
+        try:
+            rel = py_file.relative_to(research_dir)
+        except ValueError:
+            continue
+        if rel.parts and rel.parts[0] == "archive":
+            continue
+        if py_file.name in known_tainted_registry:
+            continue
+
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        if "entry_model" not in content:
+            continue
+        if not any(lit in content for lit in e2_literals):
+            continue
+        if not tainted_feature_re.search(content):
+            continue
+
+        marker_found = False
+        for line in content.splitlines():
+            stripped = line.strip().lower()
+            idx = stripped.find(marker_prefix)
+            if idx < 0:
+                continue
+            value = stripped[idx + len(marker_prefix) :].strip()
+            if any(value.startswith(m) for m in valid_markers):
+                marker_found = True
+                break
+
+        if not marker_found:
+            rel_repo = py_file.relative_to(PROJECT_ROOT)
+            violations.append(
+                f"  {rel_repo}: combines entry_model='E2' with break-bar feature "
+                f"(rel_vol/break_bar_volume/break_bar_continues/break_delay_min) "
+                f"but no '# e2-lookahead-policy: cleared|late-fill-only|"
+                f"not-predictor|tainted' annotation. ~41% of E2 trades have "
+                f"entry_ts<break_ts; break-bar features are post-entry on that "
+                f"subset. See docs/audit/results/"
+                f"2026-04-28-e2-lookahead-contamination-registry.md."
+            )
+
+    return violations
+
+
+def check_parked_cells_registry_completeness() -> list[str]:
+    """Every Pathway B / Phase D result file must have a matching parked-cells.yaml entry.
+
+    Authored 2026-04-29 to close the structural gap where parked Phase D cells
+    (PARK_PENDING_OOS_POWER, KILL, PARK_CONDITIONAL_DEPLOY_RETAINED, etc.) lived
+    in 4 disjoint surfaces (validated_setups, experimental_strategies,
+    docs/audit/results/, docs/runtime/decision-ledger.md) with no code-enforced
+    invariant binding them. A cell could go missing or drift between surfaces
+    and the only detection was human review.
+
+    The fix: docs/runtime/parked-cells.yaml is the single durable registry of
+    every cell with a locked Pathway B verdict. This drift check enforces three
+    invariants:
+
+      1. Every result file under docs/audit/results/*pathway-b*-result.md or
+         docs/audit/results/*-d0-v2-*backtest.md (Phase D backtest variants) that
+         contains a verdict token in {PARK_PENDING_OOS_POWER,
+         PARK_CONDITIONAL_DEPLOY_RETAINED, PARK_ABSOLUTE_FLOOR_FAIL, KILL,
+         CANDIDATE_READY_FOR_PHASE_2, KEEP_PARKED_INDEFINITELY} MUST have a
+         corresponding cell entry in parked-cells.yaml with `result:` pointing
+         at it.
+
+      2. Every cell entry's `pre_reg:` and `result:` paths MUST exist on disk.
+         Catches the failure mode where a result is renamed or moved and the
+         registry goes stale silently.
+
+      3. Every cell entry's `status:` token MUST appear in its result file.
+         Catches the failure mode where the registry says PARK but the result
+         file says KILL (e.g., a successor pre-reg moved the verdict and the
+         registry was not updated).
+
+    Authority: `docs/runtime/parked-cells.yaml` schema_version=1.
+    Origin: 2026-04-29 D6 session — user asked "do we have an automatic
+    system that keeps track of the parked trades, so we don't lose them
+    randomly over the repo and shit." This check is the answer.
+
+    BLOCKING (not advisory): registry drift is a real correctness issue.
+    """
+    issues: list[str] = []
+
+    registry_path = PROJECT_ROOT / "docs" / "runtime" / "parked-cells.yaml"
+    results_dir = PROJECT_ROOT / "docs" / "audit" / "results"
+    if not registry_path.exists():
+        issues.append(f"  parked-cells registry missing: {registry_path.relative_to(PROJECT_ROOT)}")
+        return issues
+    if not results_dir.is_dir():
+        return issues  # nothing to check
+
+    # Permissive YAML parse (avoid pyyaml dep — minimal flat-block reader).
+    # We only need the `cells:` list of dicts with `cell_id`, `status`,
+    # `pre_reg`, `result` keys.
+    try:
+        registry_text = registry_path.read_text(encoding="utf-8")
+    except OSError as e:
+        issues.append(f"  parked-cells registry unreadable: {e}")
+        return issues
+
+    # Parse `cells:` block — each entry begins with "  - cell_id:" at 2-space indent.
+    # Extract the four fields we care about per entry.
+    valid_status_tokens = {
+        "PARK_PENDING_OOS_POWER",
+        "PARK_CONDITIONAL_DEPLOY_RETAINED",
+        "PARK_ABSOLUTE_FLOOR_FAIL",
+        "KILL",
+        "CANDIDATE_READY_FOR_PHASE_2",
+        "KEEP_PARKED_INDEFINITELY",
+    }
+    cells: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    in_cells_block = False
+    for raw_line in registry_text.splitlines():
+        if raw_line.startswith("cells:"):
+            in_cells_block = True
+            continue
+        if not in_cells_block:
+            continue
+        if raw_line.startswith("events:") or (
+            raw_line and not raw_line.startswith(" ") and not raw_line.startswith("#")
+        ):
+            # Left the cells block
+            if current:
+                cells.append(current)
+                current = {}
+            in_cells_block = False
+            continue
+        stripped = raw_line.strip()
+        if stripped.startswith("- cell_id:"):
+            if current:
+                cells.append(current)
+            current = {"cell_id": stripped.partition(":")[2].strip().strip('"').strip("'")}
+            continue
+        for field in ("status", "pre_reg", "result"):
+            prefix = f"{field}:"
+            if stripped.startswith(prefix) and field not in current:
+                value = stripped[len(prefix) :].strip().strip('"').strip("'")
+                if value and value not in ("|", ">", "null", "None"):
+                    current[field] = value
+    if current:
+        cells.append(current)
+
+    # Build {result_path -> cell} map for invariant 1 reverse lookup
+    result_to_cell: dict[str, dict] = {}
+    for cell in cells:
+        cell_id = cell.get("cell_id", "<unknown>")
+        # Invariant 2: paths must exist
+        for path_field in ("pre_reg", "result"):
+            rel = cell.get(path_field, "")
+            if not rel:
+                issues.append(f"  parked-cells: cell {cell_id!r} missing required field {path_field!r}")
+                continue
+            full = PROJECT_ROOT / rel
+            if not full.exists():
+                issues.append(f"  parked-cells: cell {cell_id!r} {path_field}={rel!r} does NOT exist on disk")
+        result = cell.get("result")
+        if result:
+            result_to_cell[result] = cell
+        # Invariant 3: status token must appear in result file
+        status = cell.get("status", "")
+        if status and result:
+            full_result = PROJECT_ROOT / result
+            if full_result.exists():
+                try:
+                    body = full_result.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    body = ""
+                if status not in body:
+                    issues.append(
+                        f"  parked-cells: cell {cell_id!r} status={status!r} does NOT appear in {result!r} "
+                        f"(registry-result divergence — verdict moved or registry stale)"
+                    )
+        if status and status not in valid_status_tokens:
+            issues.append(
+                f"  parked-cells: cell {cell_id!r} status={status!r} not in canonical set {sorted(valid_status_tokens)}"
+            )
+
+    # Invariant 1: every result file with a verdict token must have a registry entry
+    surfaced_patterns = [
+        "*pathway-b*-result.md",
+        "*-d0-v2-*backtest.md",
+    ]
+    surfaced_files: set[Path] = set()
+    for pat in surfaced_patterns:
+        for path in results_dir.glob(pat):
+            surfaced_files.add(path)
+    for result_path in sorted(surfaced_files):
+        try:
+            text = result_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        # Verdict token must be present (otherwise file is not a result-doc; skip)
+        verdict_present = any(tok in text for tok in valid_status_tokens)
+        if not verdict_present:
+            continue
+        rel_path = result_path.relative_to(PROJECT_ROOT).as_posix()
+        if rel_path not in result_to_cell:
+            issues.append(
+                f"  parked-cells: result file {rel_path!r} contains a Pathway B verdict but has "
+                f"NO matching cell entry in parked-cells.yaml. Add an entry referencing this "
+                f"result + its pre_reg path."
+            )
+
+    return issues
+
+
+def check_stage_file_landed_drift() -> list[str]:
+    """ADVISORY: stage files claiming work-in-progress while git log shows landings.
+
+    Catches the "I thought we sorted this already" failure mode where a
+    stage file under docs/runtime/stages/ describes Stage N as in-progress,
+    but commits since the file's `updated:` date land Stage M (M > N) or
+    otherwise reference the stage's slug. Without this surface, /next and
+    /orient resume already-landed work, wasting cycles.
+
+    Heuristic — emits advisory, never blocks:
+      1. Skip files without YAML frontmatter, auto_trivial.md, or files
+         flagged operator-gated in body ("Status: implemented", "operator").
+      2. If `updated:` < 7 days old, skip (still fresh).
+      3. Count git commits since `updated:` whose messages reference the
+         stage's `slug:`. If >= 3, emit advisory line.
+
+    Why this rule exists: 2026-04-28 stage cleanup pass found 4 stage
+    files where 3 of 4 had landed work but were never closed; the 4th
+    was operator-gated (legitimate). User feedback: "harden and
+    future-proof as we go — i don't like wasting tokens for nothing."
+    This check makes the staleness visible in the routine drift surface
+    rather than re-discovering it manually each session.
+    """
+    issues: list[str] = []
+    stages_dir = PROJECT_ROOT / "docs" / "runtime" / "stages"
+    if not stages_dir.exists():
+        return issues
+
+    import datetime as _dt
+
+    today = _dt.date.today()
+    for stage_file in sorted(stages_dir.glob("*.md")):
+        if stage_file.name == "auto_trivial.md":
+            continue
+        try:
+            text = stage_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if not text.startswith("---"):
+            continue  # plain stage file (no frontmatter); skip
+        end = text.find("\n---", 3)
+        if end < 0:
+            continue
+        fm_text = text[3:end]
+        fm: dict[str, str] = {}
+        for raw in fm_text.splitlines():
+            if ":" in raw and not raw.lstrip().startswith("#"):
+                k, _, v = raw.partition(":")
+                fm[k.strip()] = v.strip().strip('"').strip("'")
+        slug = fm.get("slug", "").strip()
+        updated_str = fm.get("updated", "").strip()
+        if not slug or not updated_str:
+            continue
+        # Operator-gated exemption — body declares it's waiting on a person.
+        body_lower = text[end:].lower()
+        if (
+            "operator-gated" in body_lower
+            or "operator action" in body_lower
+            or "operator observation" in body_lower
+            or ("status:" in body_lower and "implemented" in body_lower and "pending" in body_lower)
+        ):
+            continue
+        try:
+            updated_date = _dt.date.fromisoformat(updated_str[:10])
+        except ValueError:
+            continue
+        age_days = (today - updated_date).days
+        if age_days < 7:
+            continue
+        # Commits since `updated:` mentioning this slug.
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "log",
+                    f"--since={updated_date.isoformat()}",
+                    "--all",
+                    "--oneline",
+                    f"--grep={slug}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=str(PROJECT_ROOT),
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            continue
+        commit_lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+        if len(commit_lines) >= 3:
+            issues.append(
+                f"  {stage_file.relative_to(PROJECT_ROOT).as_posix()}: "
+                f"updated {age_days}d ago, {len(commit_lines)} commits since "
+                f"reference slug '{slug}' — verify still active or close stage"
+            )
+    return issues
+
+
+# ── CRG-backed drift checks (D1-D5) ──────────────────────────────────────
+# All checks are ADVISORY (is_advisory=True): when CRG is unavailable they
+# print "ADVISORY: CRG unavailable" and return without blocking commits.
+# Authority: docs/plans/2026-04-29-crg-integration-spec.md Phase 2.
+
+
+def check_crg_cross_layer_surprising_connections() -> list[str]:
+    """D1: Catch surprising cross-layer edges between pipeline/ and trading_app/.
+
+    Uses ``code_review_graph.tools.analysis_tools.get_surprising_connections_func``
+    to fetch CRG's full surprise list, then filters to edges where one endpoint
+    is in pipeline/ and the other in trading_app/ AND neither endpoint is a
+    canonical surface (SESSION_CATALOG, COST_SPECS, ACTIVE_ORB_INSTRUMENTS, etc.).
+
+    ADVISORY: emits warnings; never blocks when CRG is unavailable.
+    """
+    from pipeline.check_drift_crg_helpers import (
+        CRG_UNAVAILABLE,
+        crg_is_available,
+        get_surprising_connections,
+    )
+
+    if not crg_is_available():
+        print("  ADVISORY: CRG unavailable — run `code-review-graph build` to enable cross-layer check")
+        return []
+
+    result = get_surprising_connections(top_n=50)
+    if result is CRG_UNAVAILABLE:
+        print("  ADVISORY: CRG query failed — cross-layer check skipped")
+        return []
+
+    # Canonical surfaces — when an edge passes through one of these, it's an
+    # expected cross-layer link, not a Project Truth Protocol violation.
+    canonical_surfaces = (
+        "/pipeline/dst.py",
+        "/pipeline/cost_model.py",
+        "/pipeline/asset_configs.py",
+        "/pipeline/paths.py",
+        "/trading_app/holdout_policy.py",
+        "/trading_app/eligibility/builder.py",
+    )
+
+    def _norm(qn: str) -> str:
+        return str(qn).replace("\\", "/")
+
+    surprises = []
+    for conn in result:
+        # CRG returns flat dicts with source_qualified / target_qualified holding
+        # absolute "file::symbol" paths.  Older formats may use source/target as
+        # nested dicts — we tolerate both for forward compatibility.
+        src_q = _norm(conn.get("source_qualified", ""))
+        tgt_q = _norm(conn.get("target_qualified", ""))
+        if not src_q or not tgt_q:
+            src_field, tgt_field = conn.get("source"), conn.get("target")
+            if isinstance(src_field, dict):
+                src_q = _norm(src_field.get("file_path", src_field.get("path", "")))
+            if isinstance(tgt_field, dict):
+                tgt_q = _norm(tgt_field.get("file_path", tgt_field.get("path", "")))
+
+        # Only flag pipeline <-> trading_app crossings
+        is_cross = ("/pipeline/" in src_q and "/trading_app/" in tgt_q) or (
+            "/trading_app/" in src_q and "/pipeline/" in tgt_q
+        )
+        if not is_cross:
+            continue
+
+        # Skip if either endpoint is a known canonical surface
+        if any(surf in src_q or surf in tgt_q for surf in canonical_surfaces):
+            continue
+
+        score = conn.get("surprise_score", conn.get("score", "?"))
+
+        # Trim absolute project-root prefix for readability. Derived from
+        # PROJECT_ROOT (not a hardcoded directory name) so it works in any
+        # worktree or alternate checkout location.
+        root_prefix = str(PROJECT_ROOT).replace("\\", "/").rstrip("/") + "/"
+
+        def _rel(qn: str, _prefix: str = root_prefix) -> str:
+            return qn[len(_prefix) :] if qn.startswith(_prefix) else qn
+
+        surprises.append(f"  Surprising cross-layer edge: {_rel(src_q)} -> {_rel(tgt_q)} (score={score})")
+
+    if surprises:
+        print(f"  ADVISORY: {len(surprises)} surprising pipeline/trading_app edge(s) found")
+        for s in surprises[:10]:  # cap output
+            print(s)
+    return []  # advisory — never blocks
+
+
+def check_crg_canonical_import_enforcement() -> list[str]:
+    """D2: Research scripts must import canonical functions, not re-implement them.
+
+    AST-based check: walks research/ scripts, finds any that DEFINE a function
+    whose name matches a canonical-source name (parse_strategy_id, orb_utc_window,
+    etc.) AND do not import the canonical version. CRG can't express this purely
+    as a graph query (no IMPORTS_FROM-with-name-collision pattern), so we use
+    Python's ast module directly.  This check has no CRG dependency and runs
+    even when CRG is unavailable.
+
+    ADVISORY: emits warnings; never blocks.
+    """
+    # Functions whose canonical module is verified to actually contain the
+    # definition. Audit trail vs spec original list of 5:
+    #   * ``reprice_e2_entry`` — lives in ``research/databento_microstructure.py``,
+    #     not yet promoted to pipeline.cost_model. Flagging research/ as
+    #     "re-implementing" itself would be a false positive. Excluded.
+    #   * ``_load_strategy_outcomes`` — canonical in
+    #     ``trading_app.strategy_fitness``; consumed by 27 files including 4
+    #     research scripts that all import correctly today. Included for
+    #     forward coverage.
+    canonical: dict[str, str] = {
+        "parse_strategy_id": "trading_app.eligibility.builder",
+        "orb_utc_window": "pipeline.dst",
+        "detect_break_touch": "trading_app.entry_rules",
+        "_load_strategy_outcomes": "trading_app.strategy_fitness",
+    }
+
+    if not RESEARCH_DIR.is_dir():
+        return []
+
+    violations: list[str] = []
+    for py_file in RESEARCH_DIR.rglob("*.py"):
+        # Skip archive — frozen, exempt
+        if "archive" in py_file.parts:
+            continue
+        try:
+            source = py_file.read_text(encoding="utf-8")
+            tree = ast.parse(source)
+        except (OSError, SyntaxError, UnicodeDecodeError):
+            continue
+
+        defined: set[str] = set()
+        imported_from: dict[str, str] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                if node.name in canonical:
+                    defined.add(node.name)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                for alias in node.names:
+                    imported_from[alias.name] = node.module
+
+        for func, canon_module in canonical.items():
+            if func in defined:
+                src_of_import = imported_from.get(func)
+                if src_of_import != canon_module:
+                    rel = py_file.relative_to(PROJECT_ROOT).as_posix()
+                    violations.append(f"  {rel}: locally defines `{func}` (canonical: import from {canon_module})")
+
+    if violations:
+        print(f"  ADVISORY: {len(violations)} canonical-import violation(s) in research/")
+        for v in violations[:20]:
+            print(v)
+    return []  # advisory
+
+
+def check_crg_canonical_functions_have_tests() -> list[str]:
+    """D3: Canonical functions must each have at least one test that imports them.
+
+    AST-based check: walks tests/ tree and records every (module, symbol)
+    imported via ``from <module> import <symbol>`` (or ``import <module>``)
+    AND actually called somewhere in the file.  A canonical function is
+    flagged if NO test file imports-and-calls it.
+
+    Replaces an earlier graph-based version that called
+    ``query_graph(pattern="tests_for")`` directly. CRG v2.1.0's ``tests_for``
+    pattern is incomplete: it returns 0 results for functions that ARE tested
+    (verified 2026-04-29: ``reprice_e2_entry``, ``parse_strategy_id``,
+    ``detect_break_touch`` all have unit tests but graph reports 0 edges).
+    AST scan is the correctness-first alternative.
+
+    SCOPE — callables only.
+    The Phase 2 spec originally listed canonical CONSTANTS too
+    (SESSION_CATALOG, COST_SPECS, ACTIVE_ORB_INSTRUMENTS, HOLDOUT_SACRED_FROM).
+    AST cannot detect ``Call`` nodes against constants — they are referenced,
+    not called — so this check covers callables only. Constant test-coverage
+    is a separate, currently-unbuilt drift-check class; tracked as
+    follow-up in spec §"Open follow-ups". D1 (surprising connections)
+    intentionally SKIPS canonical surfaces, so it does not cover constants
+    either; do not assume D1 fills the gap.
+
+    ADVISORY: emits warnings; never blocks. No CRG dependency — runs even
+    when CRG is uninstalled.
+    """
+    # symbol → canonical module (only entries whose canonical module is
+    # verified to contain the definition — see D2 docstring for the
+    # reprice_e2_entry exclusion rationale).
+    canonical_callable: dict[str, str] = {
+        "orb_utc_window": "pipeline.dst",
+        "parse_strategy_id": "trading_app.eligibility.builder",
+        "detect_break_touch": "trading_app.entry_rules",
+    }
+
+    tests_dir = PROJECT_ROOT / "tests"
+    if not tests_dir.is_dir():
+        return []
+
+    # Map canonical symbol -> set of test files that import-and-call it
+    coverage: dict[str, set[str]] = {sym: set() for sym in canonical_callable}
+
+    for py_file in tests_dir.rglob("test_*.py"):
+        try:
+            source = py_file.read_text(encoding="utf-8")
+            tree = ast.parse(source)
+        except (OSError, SyntaxError, UnicodeDecodeError):
+            continue
+
+        # Track which canonical symbols this test imports from canonical modules
+        imported_canonical: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                for alias in node.names:
+                    name = alias.name
+                    if name in canonical_callable and node.module == canonical_callable[name]:
+                        imported_canonical.add(name)
+
+        if not imported_canonical:
+            continue
+
+        # Verify at least one Call node references the imported symbol.  This
+        # filters out import-only files (e.g., re-exports) that don't actually
+        # exercise the function.
+        called: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                if isinstance(func, ast.Name) and func.id in imported_canonical:
+                    called.add(func.id)
+
+        rel = py_file.relative_to(PROJECT_ROOT).as_posix()
+        for sym in called:
+            coverage[sym].add(rel)
+
+    untested: list[str] = []
+    for sym, canon_module in canonical_callable.items():
+        if not coverage[sym]:
+            untested.append(f"  No test imports-and-calls `{canon_module}.{sym}`")
+
+    if untested:
+        print(f"  ADVISORY: {len(untested)} canonical function(s) lack import-and-call test coverage")
+        for u in untested:
+            print(u)
+    return []  # advisory
+
+
+def check_crg_canonical_path_function_size() -> list[str]:
+    """D4: Canonical-path functions must not exceed 200 lines (monster-function cap).
+
+    Fetches all functions exceeding 200 lines (no path filter — CRG's
+    ``file_path_pattern`` is a substring match against the stored path, which
+    is brittle on Windows where paths use backslashes), then filters
+    client-side via ``Path.parts`` to ``pipeline/`` and ``trading_app/`` only.
+
+    ADVISORY: emits warnings; never blocks when CRG is unavailable.
+    """
+    from pipeline.check_drift_crg_helpers import (
+        CRG_UNAVAILABLE,
+        crg_is_available,
+        find_large_functions,
+    )
+
+    if not crg_is_available():
+        print("  ADVISORY: CRG unavailable — function-size cap check skipped")
+        return []
+
+    result = find_large_functions(min_lines=200, limit=200)
+    if result is CRG_UNAVAILABLE:
+        print("  ADVISORY: CRG query failed — function-size cap check skipped")
+        return []
+
+    canonical_prefixes = ("pipeline", "trading_app")
+    flagged: list[dict] = []
+    for fn in result:
+        rel_path = fn.get("relative_path", "")
+        # Normalize to forward-slash for cross-platform Path.parts behaviour
+        norm = rel_path.replace("\\", "/")
+        first_part = norm.split("/", 1)[0] if norm else ""
+        if first_part in canonical_prefixes:
+            flagged.append(fn)
+
+    if flagged:
+        print(f"  ADVISORY: {len(flagged)} function(s) exceed 200 lines in canonical paths")
+        for fn in flagged[:10]:
+            name = fn.get("name", fn.get("qualified_name", "?"))
+            fpath = fn.get("relative_path", "?")
+            lines = fn.get("line_count", "?")
+            print(f"    {fpath}:{name} ({lines} lines)")
+    return []  # advisory
+
+
+def check_crg_bridge_node_test_coverage() -> list[str]:
+    """D5: Top-10 production-code bridge nodes must each have a TESTED_BY edge.
+
+    Bridge nodes are architectural chokepoints — if they break, the whole
+    pipeline breaks. Fetches a wider sample (top_n=50) and filters to
+    ``pipeline/`` and ``trading_app/`` files only (test files dominate raw
+    betweenness rankings, but their lack of TESTED_BY edges is by design,
+    not a finding).
+
+    ADVISORY: emits warnings; never blocks when CRG is unavailable.
+    """
+    from pipeline.check_drift_crg_helpers import (
+        CRG_UNAVAILABLE,
+        crg_is_available,
+        get_bridge_nodes,
+        query_tests_for,
+    )
+
+    if not crg_is_available():
+        print("  ADVISORY: CRG unavailable — bridge-node coverage check skipped")
+        return []
+
+    raw_bridges = get_bridge_nodes(top_n=50)
+    if raw_bridges is CRG_UNAVAILABLE:
+        print("  ADVISORY: CRG query failed — bridge-node coverage check skipped")
+        return []
+
+    # Filter to production-code bridges only.  ``file`` is absolute path on the
+    # indexing host; we test for "pipeline/" / "trading_app/" substring after
+    # forward-slash normalization, which works on both Windows and POSIX.
+    canonical_markers = ("/pipeline/", "/trading_app/")
+    canonical_bridges: list[dict] = []
+    for node in raw_bridges:
+        fpath = str(node.get("file", "")).replace("\\", "/")
+        if any(marker in fpath for marker in canonical_markers):
+            canonical_bridges.append(node)
+        if len(canonical_bridges) >= 10:
+            break
+
+    untested: list[str] = []
+    crg_errored: list[str] = []
+    for node in canonical_bridges:
+        node_name = node.get("qualified_name", node.get("name", ""))
+        if not node_name:
+            continue
+        result = query_tests_for(node_name)
+        if result is CRG_UNAVAILABLE:
+            continue
+        # Tagged status (post-audit 2026-04-29): distinguish "CRG returned
+        # cleanly but found no tests" from "CRG response was malformed /
+        # not_found / ambiguous". The first is a real D5 finding; the second
+        # is a CRG-graph completeness issue and is reported separately so
+        # readers don't conflate the two false-positive classes.
+        if not isinstance(result, dict):
+            continue
+        status = result.get("status")
+        fpath = str(node.get("file", "")).replace("\\", "/")
+        root_prefix = str(PROJECT_ROOT).replace("\\", "/").rstrip("/") + "/"
+        if fpath.startswith(root_prefix):
+            fpath = fpath[len(root_prefix) :]
+        betweenness = node.get("betweenness", "?")
+        sym_only = node_name.split("::", 1)[-1]
+        if status == "error":
+            crg_errored.append(
+                f"  CRG-uncertain: {sym_only} (betweenness={betweenness}, file={fpath}, raw={result.get('raw_status')!r})"
+            )
+        elif status == "empty":
+            untested.append(f"  No TESTED_BY edge: {sym_only} (betweenness={betweenness}, file={fpath})")
+
+    if untested:
+        print(f"  ADVISORY: {len(untested)} bridge node(s) in top-10 lack TESTED_BY edges")
+        for u in untested:
+            print(u)
+    if crg_errored:
+        print(
+            f"  ADVISORY: {len(crg_errored)} bridge node(s) had non-ok CRG response (graph-completeness issue, not a missing-test finding)"
+        )
+        for u in crg_errored:
+            print(u)
+    return []  # advisory
+
+
+def check_referenced_paths_in_rules() -> list[str]:
+    """Validate backtick-quoted path references in CLAUDE.md and .claude/rules/*.md.
+
+    Delegates to scripts.tools.check_referenced_paths.main() — the canonical
+    implementation. Treats the tool's stdout (one broken ref per line) as
+    advisory diagnostics.
+
+    ADVISORY: emits warnings but never blocks. Refs may transiently break
+    during refactors or worktree-specific work; blocking would create
+    cross-worktree friction.
+
+    Why this check exists: 2026-04-29 audit found 3 real broken refs in
+    canonical guardrail rules (integrity-guardian, research-truth-protocol,
+    adversarial-audit-gate) — pointers to renamed/archived files that
+    silently invalidate the rule's authority. Drift check surfaces these.
+    """
+    try:
+        import contextlib
+        import io
+
+        from scripts.tools import check_referenced_paths
+    except ImportError:
+        print("  ADVISORY: check_referenced_paths unavailable — referenced-paths check skipped")
+        return []
+
+    # Capture the tool's stdout (one broken ref per line in non-verbose mode).
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            check_referenced_paths.main(verbose=False)
+    except Exception as e:  # pragma: no cover — defensive
+        print(f"  ADVISORY: referenced-paths check raised {type(e).__name__}: {e}")
+        return []
+
+    broken = [line.strip() for line in buf.getvalue().splitlines() if line.strip()]
+    if not broken:
+        return []
+
+    print(f"  ADVISORY: {len(broken)} broken reference(s) in rule docs:")
+    for ref in broken:
+        print(f"    - {ref}")
+    print("    Run: python scripts/tools/check_referenced_paths.py --verbose")
+    return []  # advisory — surface but do not block
+
+
+def check_lane_allocation_chordia_gate() -> list[str]:
+    """Every lane in ``docs/runtime/lane_allocation.json`` must carry a passing
+    Chordia verdict and a fresh audit.
+
+    Rationale: 2026-05-01 chordia revalidation found 6 of 7 candidate lanes
+    had never been audited against Criterion 4. The fix landed via the
+    allocator gate (``trading_app.lane_allocator.apply_chordia_gate``) which
+    refuses DEPLOY for FAIL_BOTH / FAIL_CHORDIA / MISSING and stale audits.
+    This drift check is the second layer of defense: even if a developer
+    hand-edits the JSON or rolls back the gate, the check fails the build.
+
+    Fail conditions:
+      - any lane's ``chordia_verdict`` is missing / None / not in
+        (PASS_CHORDIA, PASS_PROTOCOL_A)
+      - any lane's ``chordia_audit_age_days`` is missing / None / exceeds the
+        doctrine freshness threshold (default 90, sourced live from
+        ``trading_app.chordia.load_chordia_audit_log()``)
+
+    Skip mode: if ``docs/runtime/lane_allocation.json`` does not exist, the
+    check returns no violations — the file is generated by
+    ``rebalance_lanes.py`` and may legitimately be absent in a fresh worktree
+    or a CI checkout. The ``check_allocation_staleness`` mechanism in
+    ``trading_app.lane_allocator`` handles missing-file enforcement at
+    runtime.
+
+    @canonical-source: trading_app/lane_allocator.apply_chordia_gate
+    @canonical-source: trading_app/chordia.chordia_verdict_label
+    @canonical-source: docs/runtime/chordia_audit_log.yaml
+    """
+    import json
+
+    # Resolve via PROJECT_ROOT (module-top constant) — never CWD-relative.
+    # A CWD-relative path would silently fail-open from any non-root cwd
+    # (worktree subdir, CI step that cd's into pipeline/, editor "run check"
+    # action). This drift check is the second-layer defense for a
+    # capital-class gate; it must match the path-resolution discipline of
+    # every other check in this file.
+    allocation_path = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
+    if not allocation_path.exists():
+        return []
+
+    try:
+        data = json.loads(allocation_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"  BAD lane_allocation.json: {exc}"]
+
+    lanes = data.get("lanes", []) or []
+    if not lanes:
+        return []
+
+    # Source freshness threshold from the doctrine YAML so they cannot drift.
+    try:
+        from trading_app.chordia import load_chordia_audit_log
+
+        freshness = load_chordia_audit_log().audit_freshness_days
+    except Exception:
+        # Fail-closed default matches the institutional prior.
+        freshness = 90
+
+    allow = ("PASS_CHORDIA", "PASS_PROTOCOL_A")
+    violations: list[str] = []
+    for lane in lanes:
+        sid = lane.get("strategy_id", "<unknown>")
+        verdict = lane.get("chordia_verdict")
+        age = lane.get("chordia_audit_age_days")
+        if verdict is None:
+            violations.append(
+                f"  {sid}: missing chordia_verdict in lane_allocation.json — "
+                f"rerun scripts/tools/rebalance_lanes.py to repopulate"
+            )
+            continue
+        if verdict not in allow:
+            violations.append(
+                f"  {sid}: chordia_verdict={verdict} is not in {{PASS_CHORDIA, PASS_PROTOCOL_A}} — "
+                f"allocator gate must refuse DEPLOY"
+            )
+            continue
+        if age is None:
+            violations.append(
+                f"  {sid}: missing chordia_audit_age_days — strategy not in "
+                f"docs/runtime/chordia_audit_log.yaml; add an audit entry or refuse DEPLOY"
+            )
+            continue
+        try:
+            age_int = int(age)
+        except (TypeError, ValueError):
+            violations.append(f"  {sid}: chordia_audit_age_days={age!r} is not an integer")
+            continue
+        if age_int > freshness:
+            violations.append(
+                f"  {sid}: chordia audit is stale ({age_int}d > {freshness}d freshness) — "
+                f"re-audit and update docs/runtime/chordia_audit_log.yaml"
+            )
+
+    return violations
+
+
+# Each entry: (description, callable, is_advisory).
+# is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
+# Check number is derived from position (1-indexed).
+
+# Tuple format: (description, callable, is_advisory, requires_db)
+# requires_db=True means check can return "SKIPPED" if DB unavailable
+CHECKS = [
+    (
+        "Hardcoded 'MGC' SQL literals in generic pipeline code",
+        lambda: check_hardcoded_mgc_sql(GENERIC_FILES),
+        False,
+        False,
+    ),
+    (".apply() / .iterrows() in ingest scripts", lambda: check_apply_iterrows(INGEST_FILES), False, False),
+    ("Non-bars_1m writes in ingest scripts", lambda: check_non_bars1m_writes(INGEST_WRITE_FILES), False, False),
+    ("Schema-query table name consistency", lambda: check_schema_query_consistency(PIPELINE_DIR), False, False),
+    ("Import cycle prevention", lambda: check_import_cycles(PIPELINE_DIR), False, False),
+    ("Hardcoded absolute paths", lambda: check_hardcoded_paths(PIPELINE_DIR), False, False),
+    ("Connection leak detection", lambda: check_connection_leaks(PIPELINE_DIR), False, False),
+    ("Dashboard read-only enforcement", lambda: check_dashboard_readonly(PIPELINE_DIR), False, False),
+    (
+        "Pipeline never imports trading_app (one-way dependency)",
+        lambda: check_pipeline_never_imports_trading_app(PIPELINE_DIR),
+        False,
+        False,
+    ),
+    (
+        "Trading app connection leak detection",
+        lambda: check_trading_app_connection_leaks(TRADING_APP_DIR),
+        False,
+        False,
+    ),
+    ("Trading app hardcoded paths", lambda: check_trading_app_hardcoded_paths(TRADING_APP_DIR), False, False),
+    ("Config filter_type sync", check_config_filter_sync, False, False),
+    ("ENTRY_MODELS sync", check_entry_models_sync, False, False),
+    ("Entry price sanity", check_entry_price_sanity, False, False),
+    ("Nested subpackage isolation", check_nested_isolation, False, False),
+    ("All imports resolve", check_all_imports_resolve, False, False),
+    ("Cryptography pin holds (FastMCP/Authlib compat)", check_cryptography_pin_holds, False, False),
+    ("GARCH dependency importable (`arch` package present)", check_garch_dependency_importable, False, False),
+    ("Nested production table write guard", check_nested_production_writes, False, False),
+    (
+        "Trading app schema-query consistency",
+        lambda: check_schema_query_consistency_trading_app(TRADING_APP_DIR),
+        False,
+        False,
+    ),
+    ("Timezone hygiene", check_timezone_hygiene, False, False),
+    ("MarketState read-only SQL guard", check_market_state_readonly, False, False),
+    ("Analytical honesty guard (sharpe_ann)", check_sharpe_ann_presence, False, False),
+    ("Ingest authority notice (ingest_dbn_mgc.py deprecation)", check_ingest_authority_notice, False, False),
+    ("CLAUDE.md size cap", check_claude_md_size_cap, False, False),
+    ("Validation gate existence", check_validation_gate_existence, False, False),
+    ("Naive datetime detection", check_naive_datetime, False, False),
+    ("DST session coverage (all sessions classified)", check_dst_session_coverage, False, False),
+    ("DB config usage (configure_connection after connect)", check_db_config_usage, False, False),
+    (
+        "Discovery scripts use get_filters_for_grid (not ALL_FILTERS)",
+        check_discovery_session_aware_filters,
+        False,
+        False,
+    ),
+    (
+        "All validated filter_types registered in ALL_FILTERS",
+        check_validated_filters_registered,
+        False,
+        True,
+    ),  # requires_db
+    ("E2+E3 restricted to CB1 (no CB2+ for stop-market/retrace)", check_e2_e3_cb1_only, False, False),
+    ("Non-5m strategy IDs include _O{minutes} suffix", check_orb_minutes_in_strategy_id, False, False),
+    ("ORB_LABELS matches SESSION_CATALOG dynamic entries", check_orb_labels_session_catalog_sync, False, False),
+    ("No old fixed-clock session names in Python source", check_stale_session_names_in_code, False, False),
+    ("sql_adapter VALID_* sets match outcome_builder grids", check_sql_adapter_validation_sync, False, False),
+    ("No E0 rows in trading tables", check_no_e0_in_db, False, True),  # requires_db
+    ("Doc stats match DB ground truth", check_doc_stats_consistency, False, True),  # requires_db
+    ("Doc hygiene contracts (stamps, design-only, generated markers)", check_doc_hygiene_contracts, False, False),
+    ("No duplicate gold.db at project root", check_stale_scratch_db, False, False),
+    (
+        "Active research code uses pipeline.paths for DB selection",
+        check_active_code_uses_canonical_db_path,
+        False,
+        False,
+    ),
+    ("No old session names in active code", check_old_session_names, False, False),
+    ("No active E3 strategies (soft-retired Feb 2026)", check_no_active_e3, False, True),  # requires_db
+    (
+        "No active E2 strategies with look-ahead filter families",
+        check_no_active_e2_lookahead_filters,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Active validated filters remain canonical-routable for their lane",
+        check_active_validated_filters_routable,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Active micro-only filters run only on real-micro instruments",
+        check_active_micro_only_filters_on_real_micros,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Active micro-only filters first trade on/after micro launch",
+        check_active_micro_only_filters_after_micro_launch,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Active native promotion provenance fields are populated",
+        check_active_native_promotion_provenance_populated,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Active native trade-window provenance matches canonical recomputation",
+        check_active_native_trade_windows_match_provenance,
+        False,
+        True,
+    ),  # requires_db
+    ("WF coverage for MGC/MES (soft gate)", check_wf_coverage, True, True),  # ADVISORY, requires_db
+    ("Data years disclosure (years_tested < 7)", check_data_years_disclosure, True, False),  # ADVISORY only
+    (
+        "Orphaned validated strategies (no outcome data for aperture)",
+        check_orphaned_validated_strategies,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Uncovered FDR+WF strategies (FDR-validated but no live_config spec)",
+        check_uncovered_fdr_strategies,
+        True,
+        True,
+    ),  # ADVISORY, requires_db
+    (
+        "Variant selection ORDER BY must use expectancy_r (not sharpe_ratio)",
+        check_variant_selection_metric,
+        False,
+        False,
+    ),
+    (
+        "Research-derived config values need @entry-models provenance",
+        check_research_provenance_annotations,
+        False,
+        False,
+    ),
+    ("Cost model completeness (COST_SPECS covers all active instruments)", check_cost_model_completeness, False, False),
+    ("TRADING_RULES.md authority values match code", check_trading_rules_authority, False, False),
+    # ML drift checks removed 2026-04-11 (ML V1/V2/V3 DEAD — V3 sprint Stage 4):
+    #   check_ml_config_canonical_sources, check_ml_lookahead_blacklist,
+    #   check_ml_model_files_exist, check_ml_config_hash_match,
+    #   check_ml_model_freshness — all validated invariants of a dead subsystem.
+    #   See docs/audit/hypotheses/2026-04-11-ml-v3-pooled-confluence-postmortem.md.
+    ("Audit columns populated (n_trials, fst_hurdle, DSR)", check_audit_columns_populated, False, True),  # requires_db
+    # ── New checks from deep audit (Mar 2026) ──────────────────────────
+    ("Live config spec validity (orb_label, entry_model, filter, tier)", check_live_config_spec_validity, False, False),
+    (
+        "Cost model field ranges (commission, spread, slippage, multipliers)",
+        check_cost_model_field_ranges,
+        False,
+        False,
+    ),
+    (
+        "Session resolver sanity (valid hour/minute, incl. DST transition days)",
+        check_session_resolver_sanity,
+        False,
+        False,
+    ),
+    (
+        "Daily features row integrity (one row per aperture per trading_day × symbol)",
+        check_daily_features_row_integrity,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "HTF level fields match canonical week/month SQL aggregation",
+        check_htf_levels_integrity,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "HTF fields consistent across apertures for each trading_day × symbol",
+        check_htf_aperture_consistency,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Data continuity (gaps > 7 calendar days in trading days per instrument)",
+        check_data_continuity,
+        True,
+        True,
+    ),  # ADVISORY, requires_db
+    (
+        "Recent late-history GARCH feature coverage is intact",
+        check_recent_garch_feature_coverage,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "family_rr_locks coverage (all active families have locked RR)",
+        check_family_rr_locks_coverage,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "family_rr_locks JOIN key completeness (6-column key in every JOIN)",
+        check_frl_join_key_completeness,
+        False,
+        False,
+    ),
+    (
+        "RR resolution paths locked (LIMIT 1 / ROW_NUMBER must JOIN family_rr_locks)",
+        check_rr_resolution_paths_locked,
+        False,
+        False,
+    ),
+    ("No hardcoded scratch DB defaults in active code", check_no_hardcoded_scratch_db, False, False),
+    ("db_reader cached connection enforcement", check_db_reader_cached_connection, False, False),
+    ("Drift check shared DB connection enforcement", check_drift_shared_db_connection, False, False),
+    ("No broad rglob in drift checks", check_no_broad_rglob_in_drift_checks, False, False),
+    (
+        "Stop multiplier ID-column consistency (_S075 ↔ stop_multiplier)",
+        check_stop_multiplier_consistency,
+        False,
+        True,
+    ),  # requires_db
+    ("pyrightconfig.json exists with basic+ mode", lambda: check_pyright_config_exists(PROJECT_ROOT), False, False),
+    ("ruff.toml has minimum required rules (I, B, UP)", lambda: check_ruff_rules_minimum(PROJECT_ROOT), False, False),
+    (".python-version file exists and matches 3.13", lambda: check_python_version_file(PROJECT_ROOT), False, False),
+    ("uv.lock exists and is not a skeleton", lambda: check_uv_lock_exists(PROJECT_ROOT), False, False),
+    ("Tradovate API URLs use tradovateapi.com (not tradovate.com)", check_tradovate_api_urls, False, False),
+    (
+        "Pipeline staleness: orb_outcomes not >7 trading days behind daily_features",
+        check_pipeline_staleness,
+        True,
+        True,
+    ),  # requires_db — advisory: staleness is a pipeline status issue, not code drift
+    ("Dead instruments doc sync (docs match DEAD_ORB_INSTRUMENTS)", check_dead_instruments_doc_sync, False, False),
+    # ── ML layer Bloomey fixes (Mar 2026) ─────────────────────────
+    # ML-layer drift checks removed 2026-04-11 (ML V1/V2/V3 DEAD):
+    #   check_ml_evaluate_hybrid_support, check_ml_bundle_full_delta,
+    #   check_ml_sharpe_jk_pvalue, check_ml_no_iterrows_filters
+    (
+        "SQL column convention: pipeline tables use 'symbol', trading app tables use 'instrument'",
+        check_symbol_instrument_sql_convention,
+        False,
+        False,
+    ),
+    ("Session guard ordering canonical source retained after ML removal", check_session_guard_sync, False, False),
+    ("Noise floor gate removed — no-op since 2026-03-21 canon lock", check_noise_floor_active, False, False),
+    (
+        "No validated strategies below entry-model noise floor (per-strategy null, not global max)",
+        check_noise_floor_compliance,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "2026 holdout not contaminated (pre-registered strategies sacred)",
+        check_holdout_contamination,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Holdout policy declaration consistency (docs <-> canonical source)",
+        check_holdout_policy_declaration_consistency,
+        False,
+        False,
+    ),
+    ("No raw orb_active reads outside asset_configs.py", check_no_raw_orb_active_reads, False, False),
+    ("No deprecated C:/db/gold.db in docstring usage examples", check_no_scratch_db_in_docstrings, False, False),
+    (
+        "Filter self-description coverage (every ALL_FILTERS entry has describe())",
+        check_filter_self_description_coverage,
+        False,
+        False,
+    ),
+    # ── E2 canonical-window fix structural locks (2026-04-07, Stage 8) ────────
+    (
+        "Canonical orb_utc_window source (only pipeline/dst.py may define it)",
+        check_canonical_orb_utc_window_source,
+        False,
+        False,
+    ),
+    (
+        "No silent break_ts fallback in outcome_builder (Stage 5 fail-closed lock)",
+        check_no_silent_break_ts_fallback,
+        False,
+        False,
+    ),
+    (
+        "compute_single_outcome canonical kwargs present (trading_day/orb_label/orb_minutes/orb_end_utc)",
+        check_compute_single_outcome_canonical_kwargs,
+        False,
+        False,
+    ),
+    (
+        "trading_app/nested/builder.py absent (Stage 7 dead-code deletion)",
+        check_nested_builder_absent,
+        False,
+        False,
+    ),
+    (
+        "resample_to_5m + _verify_e3_sub_bar_fill canonical home is trading_app.entry_rules",
+        check_resample_helpers_in_entry_rules,
+        False,
+        False,
+    ),
+    (
+        "@canonical-source annotations point to existing files",
+        check_canonical_source_annotations,
+        False,
+        False,
+    ),
+    (
+        "Phase 4 validator gate functions present (criteria 1, 2, 8, 9; 4 and 5 deferred per Amendments 2.1/2.2)",
+        check_phase_4_validator_gates_present,
+        False,
+        False,
+    ),
+    (
+        "Phase 4 discovery SHA integrity (stamped hypothesis_file_sha must reference real file)",
+        check_phase_4_sha_integrity,
+        False,
+        False,
+    ),
+    (
+        "validated_setups writes stay on canonical allowlist",
+        check_validated_setups_writer_allowlist,
+        False,
+        False,
+    ),
+    (
+        "critical validated_setups readers use canonical deployable-shelf semantics",
+        check_critical_deployable_shelf_consumers,
+        False,
+        False,
+    ),
+    (
+        "prop_profiles deployed lanes must exist in validated_setups (active=True profiles only)",
+        check_prop_profiles_validated_alignment,
+        False,
+        True,
+    ),
+    ("Shared profile fingerprint helper is canonical", check_shared_profile_fingerprint_canonical, False, False),
+    ("SR state writer uses derived-state contract envelope", check_sr_state_contract_writer, False, False),
+    ("SR state reader validates envelope before trust", check_sr_state_contract_reader, False, False),
+    ("Preflight launchers pass explicit claim modes", check_preflight_launcher_modes, False, False),
+    (
+        "Document authority registry exists and core docs advertise their roles",
+        check_document_authority_registry,
+        False,
+        False,
+    ),
+    ("System authority map exists and classifies linked truth surfaces", check_system_authority_map, False, False),
+    (
+        "Context-routing registry resolves only to valid domains, profiles, views, and files",
+        check_context_routing_registry,
+        False,
+        False,
+    ),
+    ("Generated context-routing docs stay in sync with the registry", check_context_generated_docs, False, False),
+    (
+        "Generated task views preserve strict truth-class boundaries",
+        check_context_view_contracts,
+        True,
+        False,
+    ),  # ADVISORY: context/ package not yet committed
+    (
+        "AGENTS.md points cold-start agents to the deterministic context router",
+        check_agents_mentions_context_resolver,
+        False,
+        False,
+    ),
+    (
+        "Startup docs point non-trivial tasks at the deterministic context router",
+        check_startup_docs_reference_context_router,
+        False,
+        False,
+    ),
+    ("Phase 7 live audit uses canonical runtime authorities", check_live_audit_uses_runtime_authority, False, False),
+    (
+        "Project pulse exposes repo identity from canonical authority registry",
+        check_project_pulse_uses_authority_registry,
+        False,
+        False,
+    ),
+    (
+        "DEPLOYABLE_ORB_INSTRUMENTS is a strict subset of ACTIVE_ORB_INSTRUMENTS",
+        check_deployable_subset_of_active,
+        False,
+        False,
+    ),
+    (
+        "Canonical Claude client source (claude_client.py is the only place for Claude model IDs + anthropic.Anthropic)",
+        check_canonical_claude_client_source,
+        False,
+        False,
+    ),
+    (
+        "No CRLF in tracked text blobs (defense-in-depth for pre-commit [0b] auto-renormalize)",
+        check_no_crlf_in_tracked_text_blobs,
+        False,
+        False,
+    ),
+    (
+        "C1 kill-switch guards intact at _on_bar and _handle_event ENTRY branch",
+        check_c1_kill_switch_guards_intact,
+        False,
+        False,
+    ),
+    (
+        "Signal log rotation: _write_signal_record delegates to SignalLogRotator (R4 fix)",
+        check_signal_log_rotation_not_bypassed,
+        False,
+        False,
+    ),
+    (
+        "Routed filter required columns populated (catches ghost deployments)",
+        check_routed_filter_columns_populated,
+        False,
+        True,
+    ),
+    (
+        "Pooled-finding audit files carry per-cell breakdown annotation (RULE 14)",
+        check_pooled_finding_annotations,
+        False,
+        False,
+    ),
+    (
+        "Magic-number rationale audit on trading_app/live/ (Carver Ch. 4)",
+        lambda: check_magic_number_rationale(TRADING_APP_DIR),
+        False,
+        False,
+    ),
+    (
+        "Research scripts using 'pnl_r IS NOT NULL' annotate scratch policy (2026-04-27 class bug)",
+        check_research_scratch_policy_annotation,
+        True,  # advisory until Stage 6 of 2026-04-27 plan annotates the 131 pre-existing scripts
+        False,
+    ),
+    (
+        "orb_outcomes scratch rows have non-NULL pnl_r post Stage-5 canonical fix",
+        check_orb_outcomes_scratch_pnl,
+        True,  # advisory until Stage 5b rebuild completes for all instruments
+        True,  # requires_db
+    ),
+    (
+        "Stage-file staleness vs landed commits (advisory; prevents re-litigation)",
+        check_stage_file_landed_drift,
+        True,
+        False,
+    ),
+    (
+        "Parked-cells registry completeness (every Pathway B result has matching docs/runtime/parked-cells.yaml entry)",
+        check_parked_cells_registry_completeness,
+        False,  # BLOCKING — registry drift is a real correctness issue
+        False,
+    ),
+    (
+        "E2 entry_model + break-bar features in research/ require e2-lookahead-policy annotation (2026-04-28 class bug)",
+        check_e2_lookahead_research_contamination,
+        True,  # advisory — surfaces new contamination without blocking commits
+        False,
+    ),
+    # ── CRG-backed checks (D1-D5) — all ADVISORY; fail-open when CRG unavailable ──
+    (
+        "CRG D1: Surprising cross-layer connections between pipeline/ and trading_app/ (bypassing canonical surfaces)",
+        check_crg_cross_layer_surprising_connections,
+        True,  # advisory — CRG may be unavailable; never blocks commits
+        False,
+    ),
+    (
+        "CRG D2: Canonical-import enforcement — research scripts must not re-implement canonical functions",
+        check_crg_canonical_import_enforcement,
+        True,
+        False,
+    ),
+    (
+        "CRG D3: Canonical functions must have at least one import-and-call test (AST-based; CRG tests_for graph proven incomplete)",
+        check_crg_canonical_functions_have_tests,
+        True,
+        False,
+    ),
+    (
+        "CRG D4: Canonical-path function size cap (>200 lines = monster-function class)",
+        check_crg_canonical_path_function_size,
+        True,
+        False,
+    ),
+    (
+        "CRG D5: Top-10 bridge nodes (betweenness-centrality chokepoints) must have TESTED_BY edges",
+        check_crg_bridge_node_test_coverage,
+        True,
+        False,
+    ),
+    (
+        "Referenced paths in CLAUDE.md / .claude/rules/ must exist (canonical-rule pointer integrity)",
+        check_referenced_paths_in_rules,
+        True,  # advisory — refs may transiently break during refactors
+        False,
+    ),
+    (
+        "lane_allocation.json lanes[] must pass Chordia gate (verdict + audit freshness)",
+        check_lane_allocation_chordia_gate,
+        False,  # blocking — capital-class gate, not advisory
+        False,
+    ),
+]  # end CHECKS
+
+
+# Checks measured >0.3s by scripts/tools/profile_check_drift.py (2026-04-19).
+# `--fast` mode (used by post-edit hook) skips these for sub-5s real-time coverage.
+# Pre-commit hook + CI run the full set — no coverage loss end-to-end.
+SLOW_CHECK_LABELS = frozenset(
+    {
+        "All imports resolve",
+        "Generated task views preserve strict truth-class boundaries",
+        "ENTRY_MODELS sync",
+        "Phase 4 discovery SHA integrity (stamped hypothesis_file_sha must reference real file)",
+        "Canonical Claude client source (claude_client.py is the only place for Claude model IDs + anthropic.Anthropic)",
+        "SQL column convention: pipeline tables use 'symbol', trading app tables use 'instrument'",
+        "Timezone hygiene",
+        "Canonical orb_utc_window source (only pipeline/dst.py may define it)",
+        "validated_setups writes stay on canonical allowlist",
+        "No hardcoded scratch DB defaults in active code",
+        "family_rr_locks JOIN key completeness (6-column key in every JOIN)",
+        "No old session names in active code",
+        "Trading app hardcoded paths",
+        "No deprecated C:/db/gold.db in docstring usage examples",
+        "No raw orb_active reads outside asset_configs.py",
+        "@canonical-source annotations point to existing files",
+        "Naive datetime detection",
+        "No old fixed-clock session names in Python source",
+        "Trading app schema-query consistency",
+        "No CRLF in tracked text blobs (defense-in-depth for pre-commit [0b] auto-renormalize)",
+        # CRG D1/D2/D3/D5 exceed 0.3s — measured 2026-04-29: D1=0.98s, D2=1.20s,
+        # D3=0.49s, D5=9.76s. D2/D3 are AST-only (no graph DB traversal) but the
+        # tree-walks over research/ and tests/ still cross the threshold. D4
+        # ran <0.3s and stays in the fast path. Pre-commit and CI run the full
+        # set; only the post-edit hook's --fast path skips.
+        "CRG D1: Surprising cross-layer connections between pipeline/ and trading_app/ (bypassing canonical surfaces)",
+        "CRG D2: Canonical-import enforcement — research scripts must not re-implement canonical functions",
+        "CRG D3: Canonical functions must have at least one import-and-call test (AST-based; CRG tests_for graph proven incomplete)",
+        "CRG D5: Top-10 bridge nodes (betweenness-centrality chokepoints) must have TESTED_BY edges",
+    }
+)
+
+
+def _assert_slow_labels_valid() -> None:
+    """Fail closed when the fast-skip registry drifts from the canonical checks.
+
+    Without this guard, renaming a CHECKS label silently removes it from the
+    ``--fast`` skip set. Fast mode then starts running the slow check on every
+    edit hook invocation, which can exceed the 30s hook timeout and degrade
+    coverage without an obvious failure.
+    """
+    known_labels = {label for label, *_ in CHECKS}
+    stale = SLOW_CHECK_LABELS - known_labels
+    if stale:
+        raise RuntimeError(
+            "SLOW_CHECK_LABELS references label(s) not present in CHECKS: "
+            f"{sorted(stale)}. Either the check was renamed/removed without "
+            "updating SLOW_CHECK_LABELS, or the label string has a typo. "
+            "Re-run scripts/tools/profile_check_drift.py and update the set."
+        )
+
+
+_assert_slow_labels_valid()
+
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Pipeline drift detection")
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help=(
+            "Skip slow checks (>0.3s) — used by post-edit hook for real-time coverage. "
+            "Pre-commit and CI run the full set so coverage is preserved end-to-end."
+        ),
+    )
+    args = parser.parse_args()
+    fast_mode = args.fast
+
+    print("=" * 60)
+    if fast_mode:
+        print(f"PIPELINE DRIFT CHECK (FAST — skipping {len(SLOW_CHECK_LABELS)} slow checks)")
+    else:
+        print("PIPELINE DRIFT CHECK")
+    print("=" * 60)
+    print()
+
+    all_violations = []
+    advisory_count = 0
+    blocking_count = 0
+    skip_count = 0
+
+    # Open shared read-only DB connection for all requires_db checks
+    duckdb = _import_duckdb_or_exit()
+
+    _shared_con = None
+    db_path = _get_db_path()
+    if db_path.exists():
+        try:
+            _shared_con = duckdb.connect(str(db_path), read_only=True)
+        except Exception as exc:
+            print(f"  WARNING: could not open DB ({exc}) — DB-dependent checks will skip")
+
+    fast_skipped = 0  # tracks --fast skips separately from DB-unavailable skips
+    for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
+        if fast_mode and label in SLOW_CHECK_LABELS:
+            fast_skipped += 1
+            continue
+        print(f"Check {i}: {label}...")
+
+        # DB-dependent checks can be skipped if DB unavailable.
+        # duckdb.IOException is NOT a subclass of OSError, so we inspect
+        # the message to distinguish "DB busy" from real code failures.
+        if requires_db:
+            try:
+                v = check_fn(con=_shared_con)
+            except Exception as e:
+                msg = str(e)
+                if "being used by another process" in msg or "Cannot open file" in msg:
+                    skip_count += 1
+                    print("  SKIPPED (DB busy — another process holds the lock)")
+                    print()
+                    continue
+                v = [f"  EXCEPTION: {type(e).__name__}: {e}"]
+        else:
+            v = check_fn()
+
+        if is_advisory:
+            advisory_count += 1
+            # Advisory checks print their own warnings; show ADVISORY tag
+            print("  ADVISORY (non-blocking)")
+        elif v:
+            print("  FAILED:")
+            for line in v:
+                print(line)
+            all_violations.extend(v)
+        else:
+            blocking_count += 1
+            print("  PASSED [OK]")
+        print()
+
+    # Cleanup shared connection
+    if _shared_con is not None:
+        _shared_con.close()
+
+    # Summary — blocking_count tracks actual passes (not computed from total)
+    print("=" * 60)
+    fast_part = f", {fast_skipped} skipped (--fast)" if fast_skipped else ""
+    summary_line = (
+        f"{blocking_count} checks passed [OK], "
+        f"{skip_count} skipped (DB unavailable){fast_part}, "
+        f"{advisory_count} advisory"
+    )
+    if all_violations:
+        print(f"DRIFT DETECTED: {len(all_violations)} violation(s) across {summary_line}")
+        print("=" * 60)
+        sys.exit(1)
+    else:
+        print(f"NO DRIFT DETECTED: {summary_line}")
+        print("=" * 60)
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

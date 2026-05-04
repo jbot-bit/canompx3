@@ -1,0 +1,91 @@
+======================================================================
+COMPREHENSIVE STATISTICS FEATURE SCAN
+10 features x all sessions x 3 instruments
+======================================================================
+
+--- PHASE 1: EXTRACT ALL STATISTICS ---
+  MES... 4723 days, cols: ['opening_price', 'indicative_open', 'settlement', 'session_low', 'session_high', 'cleared_volume', 'open_interest', 'total_cleared_volume']
+  MGC... 4788 days, cols: ['opening_price', 'indicative_open', 'settlement', 'session_low', 'session_high', 'cleared_volume', 'open_interest', 'total_cleared_volume']
+  MNQ... 4792 days, cols: ['opening_price', 'indicative_open', 'settlement', 'session_low', 'session_high', 'cleared_volume', 'open_interest', 'total_cleared_volume']
+Total: 14303 instrument-days
+
+--- PHASE 2: DAILY FEATURES ---
+Daily features: 13823 rows
+
+--- PHASE 3: COMPUTE FEATURES ---
+Features computed: 10
+  F1_settle_momentum: 13247 valid rows (99%)
+  F2_oi_change: 13394 valid rows (100%)
+  F3_oi_5d_change: 13385 valid rows (100%)
+  F4_vol_change: 13388 valid rows (100%)
+  F5_exchange_range_atr: 12910 valid rows (96%)
+  F6_ind_open_gap: 11273 valid rows (84%)
+  F7_open_surprise: 11273 valid rows (84%)
+  F8_settle_close_spread: 13313 valid rows (99%)
+  F9_vol_ratio_20ma: 13367 valid rows (100%)
+  F10_oi_ratio_20ma: 13370 valid rows (100%)
+
+======================================================================
+T0: TAUTOLOGY CHECK
+======================================================================
+  F1_settle_momentum: max |corr| = 0.0675 (vs overnight_range) -> PASS
+  F2_oi_change: max |corr| = 0.0183 (vs prev_day_close) -> PASS
+  F3_oi_5d_change: max |corr| = 0.0270 (vs prev_day_close) -> PASS
+  F4_vol_change: max |corr| = 0.0374 (vs prev_day_range) -> PASS
+  F5_exchange_range_atr: max |corr| = 0.1329 (vs overnight_range) -> PASS
+  F6_ind_open_gap: max |corr| = 0.0517 (vs gap_open_points) -> PASS
+  F7_open_surprise: max |corr| = 0.0132 (vs gap_open_points) -> PASS
+  F8_settle_close_spread: max |corr| = 0.0284 (vs overnight_range) -> PASS
+  F9_vol_ratio_20ma: max |corr| = 0.0856 (vs prev_day_range) -> PASS
+  F10_oi_ratio_20ma: max |corr| = 0.0269 (vs overnight_range) -> PASS
+
+Surviving features: 10 / 10
+
+======================================================================
+T1: WIN RATE ANALYSIS
+======================================================================
+
+  Tests: K=320 (10 features x 12 sessions x 3 instruments)
+  BH FDR significant: 3
+
+  Top 15 by p-value:
+  Feature                   Inst  Session            WR_Q5   WR_Q1   Spread      N          p BH
+  ----------------------------------------------------------------------------------------------------
+  F5_exchange_range_atr     MES   CME_REOPEN        55.2%  38.1%  +17.1%   1954     0.0000 *
+  F5_exchange_range_atr     MGC   CME_REOPEN        55.1%  39.3%  +15.8%   2025     0.0000 *
+  F5_exchange_range_atr     MNQ   CME_REOPEN        54.3%  38.4%  +15.8%   1988     0.0000 *
+  F9_vol_ratio_20ma         MNQ   TOKYO_OPEN        56.8%  49.4%   +7.3%   3953     0.0035 
+  F10_oi_ratio_20ma         MES   US_DATA_830       54.6%  47.4%   +7.2%   3838     0.0050 
+  F1_settle_momentum        MNQ   SINGAPORE_OPEN    47.3%  53.9%   -6.6%   3912     0.0086 
+  F1_settle_momentum        MES   US_DATA_830       43.4%  49.9%   -6.5%   3806     0.0109 
+  F10_oi_ratio_20ma         MNQ   COMEX_SETTLE      52.0%  45.7%   +6.3%   3885     0.0129 
+  F5_exchange_range_atr     MES   NYSE_OPEN         51.8%  45.5%   +6.3%   3817     0.0131 
+  F3_oi_5d_change           MES   EUROPE_FLOW       46.3%  52.4%   -6.1%   3909     0.0152 
+  F1_settle_momentum        MES   NYSE_OPEN         47.5%  53.5%   -6.0%   3837     0.0189 
+  F5_exchange_range_atr     MNQ   BRISBANE_1025     51.9%  46.0%   +5.9%   3880     0.0195 
+  F10_oi_ratio_20ma         MNQ   CME_PRECLOSE      48.3%  55.1%   -6.8%   2875     0.0214 
+  F4_vol_change             MES   COMEX_SETTLE      52.0%  46.1%   +5.9%   3840     0.0216 
+  F5_exchange_range_atr     MNQ   US_DATA_830       50.2%  44.5%   +5.7%   3844     0.0246 
+
+  Per-feature best results:
+  F1_settle_momentum       : best p=0.0086 (MNQ SINGAPORE_OPEN -6.6%), BH sig: 0/32
+  F2_oi_change             : best p=0.0324 (MNQ BRISBANE_1025 -5.4%), BH sig: 0/32
+  F3_oi_5d_change          : best p=0.0152 (MES EUROPE_FLOW -6.1%), BH sig: 0/32
+  F4_vol_change            : best p=0.0216 (MES COMEX_SETTLE +5.9%), BH sig: 0/32
+  F5_exchange_range_atr    : best p=0.0000 (MES CME_REOPEN +17.1%), BH sig: 3/32
+  F6_ind_open_gap          : best p=0.0609 (MNQ CME_REOPEN +6.8%), BH sig: 0/32
+  F7_open_surprise         : best p=0.0306 (MNQ CME_REOPEN -7.8%), BH sig: 0/32
+  F8_settle_close_spread   : best p=0.0556 (MGC TOKYO_OPEN +4.8%), BH sig: 0/32
+  F9_vol_ratio_20ma        : best p=0.0035 (MNQ TOKYO_OPEN +7.3%), BH sig: 0/32
+  F10_oi_ratio_20ma        : best p=0.0050 (MES US_DATA_830 +7.2%), BH sig: 0/32
+
+  Cross-instrument concordance for BH-significant features:
+    F5_exchange_range_atr MES: best=+17.1% p=0.0000 (CME_REOPEN)
+    F5_exchange_range_atr MGC: best=+15.8% p=0.0000 (CME_REOPEN)
+    F5_exchange_range_atr MNQ: best=+15.8% p=0.0000 (CME_REOPEN)
+
+======================================================================
+VERDICT
+======================================================================
+  CONDITIONAL PASS: 3 strong BH-significant.
+  Requires T3-T8 validation before deployment.

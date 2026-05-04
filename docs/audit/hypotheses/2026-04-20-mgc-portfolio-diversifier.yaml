@@ -1,0 +1,143 @@
+version: 1
+status: LOCKED
+date: 2026-04-20
+slug: mgc-portfolio-diversifier
+title: "MGC portfolio-diversifier correlation + Sharpe lift (H1 in adversarial re-exam)"
+owner: claude-opus-4-7
+parent_doc: "docs/audit/results/2026-04-20-mgc-adversarial-reexamination.md"
+
+testing_mode: individual
+pathway: pathway_b_theory_driven
+deployment: NONE  # audit only — no capital allocation claim
+
+authority:
+  primary:
+    - ".claude/rules/institutional-rigor.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+  notes:
+    - "Pathway B single hypothesis (K=1). Theory-driven per Markowitz (1952) mean-variance framework."
+    - "This is NOT a discovery of a new MGC strategy. It is a test of whether the current 38-lane MNQ/MES book would gain Sharpe from adding an uncorrelated zero-alpha MGC stream."
+    - "Passes → unlocks 'MGC as diversifier only' rationale for future minimum-alpha MGC lane construction. Kills → removes portfolio-diversifier as a reason to keep MGC work on the shelf."
+    - "Uses canonical MGC real-micro data only (2022-06-13 onward). No proxy era."
+    - "Trial cost from MGC MinBTL budget: 1 (single hypothesis)."
+
+motivation: |
+  The adversarial re-examination (2026-04-20) found that the current 38-lane
+  deployed book is 100% equity-index (30 MNQ, 2 MES + 6 others all
+  index-related). Zero commodity exposure.
+
+  Project has never computed the correlation between MGC daily returns and
+  the deployed book's daily returns, despite `research/research_mgc_mnq_correlation.py`
+  existing. The portfolio-Sharpe lift from adding an uncorrelated zero-alpha
+  stream is a first-principles Markowitz result that does not require
+  new edge discovery — only correlation measurement.
+
+  This test answers: is the "MGC is dead for ORB" closure really killing
+  potential book-level value, or is the portfolio independent of whether
+  MGC has positive ExpR?
+
+theory_citation:
+  - "Markowitz (1952) — mean-variance portfolio theory. Zero-alpha asset with correlation ρ < 1 to existing portfolio adds diversification benefit proportional to (1-ρ)."
+  - "Carver 2015 Ch 9 (docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md) — diversification multiplier in systematic trading."
+  - "Harvey-Liu 2015 (docs/institutional/literature/harvey_liu_2015_backtesting.md) — confirmatory test discipline applies even when test is portfolio-theory-tied, not new-edge-discovery."
+
+hypothesis: |
+  H1: Adding a hypothetical MGC return stream at 10% book weight, with
+  realized volatility matching the empirical MGC daily-lane variance and
+  empirical correlation to the existing 38-lane book, produces a
+  Sharpe-ratio improvement ΔSR ≥ 0.05 annualized, conditional on the
+  empirical max pairwise correlation < 0.50 between MGC and any
+  MNQ/MES lane.
+
+  Null: ΔSR < 0.05 OR max pairwise correlation ≥ 0.50 → MGC provides
+  no material portfolio benefit; closure stands on portfolio-value grounds.
+
+scope:
+  instruments: [MGC, MNQ, MES]
+  apertures_of_comparison: [5]  # book is mostly O5; single aperture for clean comparison
+  sessions: "all 12 in SESSION_CATALOG for MGC; active-book sessions for MNQ/MES"
+  data_range_is: "2022-06-13 to 2026-01-01"  # matches translation-audit scope + sacred holdout
+  data_range_oos: "none"  # not testing OOS here; this is a portfolio-structure test, not a forward-looking SR claim
+  direction: "long AND short, both included in daily return aggregation"
+  filter_handling: |
+    For MGC: use raw `orb_outcomes` rows aggregated by trading_day under
+    NO filter (every ORB break trade) AND under OVNRNG_100 filter
+    (structural, price-safe, no look-ahead). Report both — no filter
+    selection by outcome.
+  mgc_contract_assumption: "1 MGC contract per trade, uniform sizing, no Kelly/vol-targeting"
+  book_representation: "38 active validated_setups with stored Mode-A-revalidated ExpR per `docs/audit/results/2026-04-19-mode-a-revalidation-of-active-setups.md`"
+
+canonical_sources_required:
+  - "gold.db::orb_outcomes (symbol IN ('MGC','MNQ','MES'))"
+  - "gold.db::daily_features (for OVNRNG_100 filter column)"
+  - "gold.db::validated_setups (status='active', for lane identity)"
+  - "pipeline.cost_model.COST_SPECS (for friction deduction)"
+  - "pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS"
+
+prohibited:
+  - "No OOS peek. IS window (2022-06-13 → 2026-01-01) is the only window used."
+  - "No parameter tuning: correlation is measured, not optimized."
+  - "No post-hoc filter selection for MGC. Both 'no filter' and 'OVNRNG_100' are reported pre-committed."
+  - "No Kelly / vol-targeting sizing games. Uniform 1-contract per trade."
+  - "No exclusion of losing days from any lane's stream."
+  - "No cost-model adjustment (use canonical modeled costs — H1 is about correlation structure, not slippage)."
+
+statistical_plan:
+  primary_test: "Empirical pairwise Pearson correlation MGC-vs-each-of-38-lanes. Max reported."
+  secondary_test: "Monte-Carlo portfolio Sharpe lift: given realized daily return per lane and empirical correlation matrix, compute book Sharpe without MGC and with MGC at weight=10%. ΔSR reported."
+  n_trials: 1
+  k_framing: "K=1 (single hypothesis, no multiple-testing correction needed under Pathway B; Chordia not applicable to portfolio-structure claim)"
+  significance_threshold_pass: "Both: ΔSR ≥ 0.05 AND max pairwise corr < 0.50"
+  bootstrap_confidence: "Block-bootstrap daily returns (block=5 days, 1000 resamples) to produce 95% CI on ΔSR"
+
+kill_criteria:
+  C1_correlation: "max pairwise Pearson corr(MGC_daily, lane_daily) ≥ 0.50 → MGC is not genuinely diversifying → KILL"
+  C2_sharpe_lift: "median ΔSR (bootstrap) < 0.05 → adding MGC gives no material portfolio benefit → KILL"
+  C3_mgc_destructive: "adding MGC reduces book Sharpe at any weight 5-20% → definitely KILL (MGC is drag, not diversifier)"
+  C4_data_coverage: "MGC has fewer than 500 trading days of valid ORB outcomes in range → insufficient data → KILL (MinBTL floor)"
+
+  interpretation:
+    C1_PASS_C2_PASS_C3_PASS: "MGC genuinely diversifies. Consider building a minimum-alpha MGC lane (e.g., session-rotated unfiltered ORB with tight stop) purely for portfolio effect. Separate pre-reg required for any deployment."
+    C1_PASS_C2_FAIL: "Low correlation but insufficient Sharpe lift — MGC isn't destructive but isn't worth the complexity. Park."
+    C1_FAIL: "MGC correlation too high — MGC returns move with equity-index book. Diversifier thesis dead."
+    C3_FAIL_at_any_weight: "Active negative value. Closure confirmed stronger than before."
+
+testing_discipline:
+  mandatory_downstream_gates_non_waivable:
+    - "C6 (WFE) — not applicable; portfolio structure test, no OOS"
+    - "C8 (2026 OOS) — not applicable; test is IS-structure only"
+    - "C9 (era stability) — applicable; report per-year ΔSR breakdown, reject if any year produces destructive effect (kills C3)"
+  mandatory_diagnostic_reports:
+    - "Pairwise correlation matrix (MGC × each of 38 lanes)"
+    - "MGC daily return distribution summary (mean, std, skew, kurt)"
+    - "Per-year breakdown (2022-H2, 2023, 2024, 2025) of ΔSR"
+    - "Coverage check: trading days included, trading days dropped (insufficient MGC data)"
+
+baseline_cross_check:
+  - "Book's pre-MGC Sharpe computed from same 38-lane daily aggregation must be positive and match Mode-A-revalidated per-lane ExpR aggregation. If book Sharpe baseline itself is wrong, all downstream math is meaningless."
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  notes:
+    - "Does not depend on Phase 2.9 survivors; uses active validated_setups directly."
+    - "Does not re-open any retired-for-ORB instrument."
+
+out_of_scope:
+  - "Testing whether MGC has positive standalone ExpR (this is explicitly orthogonal to the test; the H1 hypothesis holds even at ExpR=0)"
+  - "Testing alternative contract sizes (e.g., 1/2 MGC or 1 MGC-equivalent). Uniform 1-contract."
+  - "Back-testing with pilot-realistic slippage (that's H0)."
+  - "MNQ NYSE_CLOSE session activation (separate thread, see HANDOFF §2026-04-19)."
+  - "Any live deployment."
+
+expected_effort_hours: 1-2
+
+execution_environment:
+  DUCKDB_PATH: "C:/Users/joshd/canompx3/gold.db"
+  python_interpreter: ".venv-wsl/bin/python OR system python with duckdb"
+  output_dir: "research/output/"
+  result_doc: "docs/audit/results/2026-04-20-mgc-portfolio-diversifier-v1.md"
+  supporting_script: "research/research_mgc_portfolio_diversifier_v1.py (to be written)"
+
+commit_sha: "TO_FILL_AFTER_COMMIT"

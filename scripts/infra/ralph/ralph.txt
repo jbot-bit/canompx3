@@ -1,0 +1,849 @@
+0:00
+We ran Ralph safe with a sandbox
+0:02
+enabled. We ran Ralph efficiently with a
+0:04
+plan MD and an activity.mmd. We ran
+0:07
+Ralph cost-effectively because we gave
+0:09
+it a max number of iterations and we let
+0:11
+Ralph validate its own work because we
+0:13
+gave it access to Claude for Chrome so
+0:16
+it could get visual input and get
+0:17
+console logs and understand if it
+0:19
+achieves its task or not. These are the
+0:21
+steps you should take for Ralph or other
+0:23
+longrunning agents. There's a lot of
+0:24
+hype about Ralph Wiggum in the AI coding
+0:26
+community and I think a lot of people
+0:27
+are getting it wrong. Here's the thing.
+0:29
+You need to know when to actually use
+0:30
+Ralph Fugum. You need to know how to use
+0:31
+it safely, efficiently, and cost-
+0:33
+effectively. And lastly, you need to
+0:35
+know how to actually run Ralph because
+0:37
+there's two main ways I see people
+0:38
+talking about online. The original way
+0:40
+by Jeffrey Huntley, which is essentially
+0:42
+just a bash loop, and then you have the
+0:44
+official Ralph Wigum plugin from Claude
+0:46
+Code, and it works very differently than
+0:47
+the original bash loop. It works on a
+0:49
+stop hook, which is fundamentally
+0:51
+different than the original Ralph Wiggum
+0:53
+setup. The good news is the way I
+0:55
+prepare before running Ralph Wiggum is
+0:57
+the same if I use the cloud setup or the
+0:59
+original bash loop. It's equally as
+1:01
+important for both methods and it's very
+1:03
+easy to tweak. So in this video I'm
+1:04
+going to go over my best practices how I
+1:06
+believe we should be running Ralph
+1:07
+Wiggum cuz I think a lot of people are
+1:09
+hyping this up and giving poor advice on
+1:11
+how to use this. So what is Ralph
+1:13
+Wiggum? It's a way to run Claude code or
+When to use Ralph Wiggum
+1:15
+whatever agent in a continuous
+1:17
+autonomous loop. It solves the problem
+1:19
+that most agents have of finishing too
+1:21
+early. But this isn't a magic pill.
+1:23
+Essentially what it does is it tells
+1:24
+Claude or whatever agent you're using,
+1:26
+do this task. Oh, you're done. Do this
+1:28
+task. Oh, you're done. Do this task. And
+1:30
+it just keeps running. And Ralph Wiggum
+1:32
+is best for long running tasks, things
+1:34
+you want going for a long period of
+1:36
+time. And more than that, when you
+1:38
+already know what you want to build. So
+1:39
+instead of cloud code or cursor or
+1:41
+codeex thinking it's done too early and
+1:43
+stopping, this is a way to force the
+1:46
+agent to keep working, keep checking
+1:48
+until it knows it's done. And by the
+1:49
+way, Ralph Wiggum doesn't only have to
+1:51
+work for cloud code. You can set it up
+1:52
+to work with any CLI agent like Codeex,
+1:55
+like Gemini, like Open Code. I'm just
+1:58
+showing you in Cloud Code, but you can
+1:59
+apply this with minimal tweaks to any
+2:01
+CLI agent. So, my first experience was,
+2:03
+wow, this gets really expensive, and it
+2:05
+does if you don't use it correctly. But
+2:07
+then when Boris Churnney made his post
+2:08
+about how he uses cloud code, by the
+2:10
+way, I did a full video on Boris's post.
+2:12
+I'll link to it above. I got pretty
+2:13
+interested when he mentioned Ralph
+2:14
+Wiggum. And then I started thinking,
+2:15
+well, Anthropic officially released a
+2:17
+Ralph Wiggum plugin, and it's actually a
+2:19
+perfect catalyst to implement what they
+2:22
+talked about in their effective
+2:23
+harnesses for long-running agents. And I
+2:25
+also did a full video on this blog post
+2:26
+by Anthropic about Spectrum Development,
+2:28
+but they never really implemented
+2:30
+something. They gave us a framework
+2:31
+here, but it stopped there. So, I came
+2:33
+back to that blog post after Boris
+2:35
+Journey's Twitter post, and all the dots
+2:36
+started connecting for me. Use Ralph
+2:38
+Wigum to try and implement Anthropic's
+2:40
+approach to longrunning agents. If Burst
+2:42
+Journey from Anthropic is using it for
+2:44
+long running tasks, I can do it, too.
+2:46
+So, that's what I set out to do. And
+2:47
+spoiler alert, the plug-in from
+2:49
+Anthropic doesn't come nearly as close
+2:51
+to achieving this as the original Bash
+2:52
+Loop. I'm going to show you both of them
+2:54
+and show you why. But first, let's just
+2:55
+get into setting it up. So, first things
+Step 1: Safety with sandboxing
+2:57
+first, safety. Boris Turney gives us the
+2:59
+answer right here. For very longunning
+3:00
+tasks, I will use the Ralph Wigan plugin
+3:03
+in a sandbox to avoid permission prompts
+3:05
+for the session so Claude could cook
+3:07
+without being blocked. At this point,
+3:09
+we've all tried yellow mode or
+3:10
+dangerously skip permissions. But what
+3:12
+happens there is if you're not careful,
+3:14
+the agent eventually gets a little bit
+3:16
+too trigger-happy, and it can make
+3:17
+changes that are really hard to revert.
+3:19
+And the whole point of raw is to run in
+3:21
+a continuous loop. So, it can be going
+3:23
+for minutes, for hours, completely
+3:25
+overnight. And the problem is you have
+3:27
+to give it a lot of permissions, but you
+3:28
+don't want to give it all the
+3:29
+permissions, and you also don't want to
+3:31
+have to babysit it and keep clicking
+3:32
+yes, because what's the point of
+3:33
+autonomous agent then? So, the obvious
+3:35
+solution is sandboxing cloud code. A few
+3:37
+months ago, Enthropic made this paper on
+3:39
+how to sandbox cloud code. It's really
+3:41
+easy. All you have to do is run slash
+3:43
+sandbox, but running / sandbox can put
+3:46
+everything in a sandbox, and you don't
+3:47
+always want that. It can get a bit
+3:48
+problematic for deploying locally, for
+3:50
+pulling down dependencies, and a bunch
+3:52
+of other things. So, I recommend going
+3:53
+to the docs and figuring out what
+3:55
+permissions you want to give it access
+3:56
+to. So, let me just open up this project
+3:58
+real quickly. If we go into my
+3:59
+settings.json, we can see how I set up
+4:01
+my sandbox. So, then when we open up
+4:02
+cloud, you will see here your bash
+4:05
+commands will be sandbox. My sandbox is
+4:06
+already turned on here. If you don't
+4:08
+have it turned on, you can do / sandbox
+4:09
+and turn it on. So, right here, you see
+4:12
+that I'm using a sandbox bash tool with
+4:13
+autoallow. If I go over to the config,
+4:16
+you can see how I set it up. Everybody
+4:18
+will set up their sandbox differently.
+4:19
+But that's my first step. Start using a
+Step 2: Planning with PRD
+4:21
+sandbox even before you start using
+4:23
+Ralph Wum cuz when you're running
+4:24
+autonomous agents, you want them to be
+4:26
+isolated. You can give them some
+4:27
+permissions, but you want that layer of
+4:29
+protection. Number two comes back to
+4:31
+planning. You don't want to leave Ralph
+4:32
+to make these ambiguous decisions and
+4:34
+come back and figure out what he did
+4:36
+later. So my first step before anything
+4:38
+before you even touch Ralph is write a
+4:40
+plan. Write a PRD. And it's so important
+4:42
+with Ralph because you're going to let
+4:44
+it run for hours on end. In all my other
+4:46
+videos about spectrum of development, we
+4:48
+always start with planning it out and
+4:49
+getting as much down on paper as
+4:51
+possible so our agents could build out a
+4:53
+task list and start working on it. So
+Step 3: Creating plan.md
+4:55
+don't waste your time and don't waste
+4:56
+your money on running for an unfleshed
+4:59
+out, unplanned idea. have as much as you
+5:01
+can figure it out. In my case here, I
+5:02
+already made my PRD. And by the way, you
+5:04
+could already see my PRD creator skill
+5:06
+here on this project. That's what
+5:07
+created this whole PRD. It works really
+5:09
+great with any spectrum of development
+5:10
+and especially with Ralph. I'll link to
+5:12
+that video above. And I already took my
+5:13
+PRD and I broke it into a plan, but I
+5:15
+didn't use specit or openspec or bb. I
+5:17
+told claude code to build this pland
+5:20
+based on what anthropic talked about in
+5:21
+effective harnesses for longrunning
+5:23
+agents. If we go down, this is how they
+5:25
+suggest writing the task list, which is
+5:27
+JSON. It has a category. It has a
+5:28
+description. It has the steps and it
+5:30
+starts as failing. Passes false. So I
+5:32
+told Claude code to look at my P and
+5:34
+then create a plan.mmd file with this
+5:36
+format. I also passed it the entire
+5:38
+article so it had more context. In that
+5:40
+article they talk about a claude
+5:41
+progress txt file but I decided to call
+Step 4: Creating activity.md
+5:43
+it the activity.md file because
+5:46
+sometimes it doesn't make progress but I
+5:48
+want to log all the activity. So now we
+5:49
+have a prd we have a plan and activity
+5:51
+file. Okay. So all the pieces are coming
+5:53
+together. Let's start talking about
+Running with the Claude plugin
+5:55
+running Ralph. We'll start with
+5:56
+Enthropic and then we'll move to the
+5:57
+official batch loop. So if we go to
+5:59
+Enthropic's Ralphum skill to talk about
+6:01
+how it works, but this is the most
+6:03
+important thing if you don't want to
+6:05
+completely obliterate your usage limits,
+6:07
+max iterations because it will just keep
+6:09
+running and the default is unlimited.
+6:11
+And trust me, make sure you set max
+6:13
+iterations. And I think the best way to
+6:16
+do this is setting it from 10 to 20 at
+6:18
+least at first. Next, set a completion
+6:20
+promise. Meaning in your prompt, and
+6:22
+we're going to get to that in a second,
+6:23
+tell it what the completion promise is.
+6:25
+so that it knows how to stop. So that's
+6:27
+how to be costefficient. Worst case
+6:28
+scenario, it doesn't finish after 20
+6:30
+durations and you can start it up again.
+6:31
+And last thing you should know is about
+6:33
+good prompt practices. Obviously, don't
+6:35
+do a very broad, very basic prompt. Give
+6:38
+it requirements. Give it success
+6:39
+criteria. And going back one last time
+6:41
+to Boris Trun's post, his final tip is
+6:44
+give it a feedback loop. So what I've
+6:46
+been doing is giving Claude code the
+6:48
+ability to use Claude for Chrome.
+6:50
+Essentially gives Claude the ability to
+6:52
+launch Chrome and test out what it's
+6:53
+doing. Take a look, take a screenshot,
+6:54
+look at console logs. It closes the
+6:56
+whole feedback loop. Okay, so enough
+6:58
+talking. Let's actually look at it in
+7:00
+action. So here we are back in this
+7:02
+project. All it has is the PRD, the
+7:04
+plan, and the activity.md because we're
+7:06
+channeling Boris Jurnney. We're going to
+7:08
+open up iterm 2. This is the terminal I
+7:11
+believe he's using, and we're just going
+7:13
+to open it next to VS Code. Okay, so
+7:14
+we're going to open up Claude. If you
+7:16
+don't have Ralph set up already, you
+7:18
+want to do /plugin, and you'll see this
+7:20
+discover page. And you can just go down
+7:22
+to you find Ralph. Or you just go to the
+7:24
+top, search Ralph. It's not showing up
+7:26
+for me because I already have it
+7:27
+installed. But you click enter, you
+7:29
+install it, and then you have it running
+7:30
+in cloud code. Then if we do /chrome, we
+7:33
+can see that we have cloud for Chrome
+7:35
+already set up. That's the whole
+7:36
+feedback loop that Claude passed to
+7:38
+check that it did a good job. And
+7:39
+lastly, to trigger Ralph, you do / Ralph
+7:41
+and you want to select this one, Ralph
+7:43
+loop. So you just press tab, and it
+7:45
+tells you everything else you need to
+7:47
+have in here. your prompt, your max
+7:48
+iterations, and your completion promise
+7:51
+text. So, here's my prompt. I'm just
+7:52
+going to tell you the important parts.
+7:53
+First, read the activity.md file to see
+7:55
+what was recently accomplished. Start
+7:57
+the site locally and keep it local host
+7:59
+only. Verify the current behavior
+8:00
+including Chrome by opening the local
+8:02
+URL and checking the page loads with no
+8:04
+obvious layout issues. Then, open
+8:06
+plan.md and choose the single highest
+8:08
+priority task whose status is failing.
+8:10
+Work on exactly one task. Check the
+8:13
+browser console for errors and confirm
+8:14
+the change matches the acceptance
+8:16
+criteria in plan.mmd. Append a dated
+8:18
+progress entry to activity.mmd
+8:20
+describing what you changed, which
+8:21
+commands you ran and what you verified
+8:23
+in Chrome. When the task is confirmed,
+8:25
+update the status in plan.mmd from
+8:28
+failing to passing. Make one get commit
+8:30
+for that task with a clear single line
+8:32
+message. Repeat until all tasks are
+8:34
+passing. When all tasks are marked
+8:36
+passing, output exactly complete. And
+8:39
+here's the most important part, the cost
+8:40
+efficiency. max iterations 20 completion
+8:43
+promise complete. Okay, so we're going
+8:45
+to take all this and paste it in after
+8:46
+this Ralph loop slash command. So we're
+8:48
+going to press enter and just like that.
+8:50
+I'll start by reading the activity.md.
+8:53
+I'll read the plan. Let me check if the
+8:55
+files already exist. And as you can see,
+8:57
+it's starting to work. It's doing it
+8:58
+all. It just opened up cloud in Chrome.
+9:00
+I'm not even touching it. And it's just
+9:02
+getting to work. So we see here task one
+9:05
+complete. Let me update activity MD,
+9:07
+planned MD, and commit. So let's just
+9:09
+check in on that. So we see that the
+9:11
+first task went to true. We can also see
+9:13
+the activity.mmd file has gotten
+9:15
+updated. If we go back to cloud code, we
+9:17
+can see that it's verifying in chrome.
+9:19
+We can see cloud in chrome. It's
+9:20
+navigating to the local version. It has
+9:22
+feedback services sections looks great.
+9:24
+We can see it changing the task from
+9:26
+false to true. And it will just continue
+9:29
+running. Okay, so it finished running.
+Plugin limitations: single context window
+9:31
+You see that it says complete here. It
+9:32
+says it ran for 17 minutes. It actually
+9:34
+ran for a bit longer than that. I had to
+9:36
+stop it. But here's what I want to show
+9:37
+you. It ran it all in a single chat in a
+9:40
+single context window. The reason I had
+9:42
+to stop it is because it got stuck at 0%
+9:45
+context. I had to manually compact it
+9:47
+and it can do autoco compact. But that's
+9:49
+not the point of Ralph Wiggum. Ralph is
+9:51
+supposed to be an autonomous agent that
+9:52
+runs non-stop where you don't have to
+9:54
+intervene. But also more importantly, in
+9:56
+the original implementation, every task,
+9:58
+every iteration is a fresh loop, a fresh
+10:01
+context window. But here in Cloud Code's
+10:03
+implementation, it all happens in the
+10:06
+same context window because the loop is
+10:08
+triggered on a stop hook. But one of the
+10:09
+biggest problems with cloud code with
+10:11
+longunning agents is the context window
+10:13
+gets bloated. So it doesn't really help
+10:14
+that all the tasks are done sequentially
+10:16
+within the same context window. Even if
+10:17
+it does autoco compact, you're just
+10:19
+adding more and more bloat and more and
+10:21
+more room for hallucination. So does it
+10:23
+run? Yes. But does it actually do the
+10:25
+loop? Not really. So now let's move to
+The bash loop method (recommended)
+10:28
+the bash loop. This implementation works
+10:30
+great for cloud code, codec cli, or any
+10:32
+CLI tool. The whole setup process is
+10:34
+pretty much the same. I still recommend
+10:35
+setting up the sandbox the same way. I
+10:37
+still recommend doing a PRD and planning
+10:39
+it out and breaking it into a plan and
+10:41
+an activity.mmd file. I still recommend
+10:43
+setting max iterations and I still
+10:45
+recommend giving it the ability to
+10:46
+verify it work. Now, because this method
+10:48
+runs headless, we're not going to be
+10:50
+able to use claude for code. We're going
+10:52
+to set up the playright MCP. So, I added
+10:54
+the playright MCP into here. Also,
+10:56
+instead of pasting the whole prompt in,
+10:57
+I made a prompt MD. It's essentially the
+11:00
+same exact prompt. I just modified it to
+11:01
+work with playright. The activity MD
+11:04
+stays the same. It's just empty right
+11:05
+now. The plan MD stays the same.
+11:07
+Everything is set as false. And then we
+11:09
+create a Ralph script for the bash loop.
+11:11
+Very basic. Of course, you have to make
+11:13
+it executable by doing chmod. We give it
+11:15
+the promise. And the way we pass in the
+11:17
+max iterations is via the command to
+11:19
+start the script. And lastly, because
+11:21
+this is in headless mode, we're not
+11:22
+going to be able to see what's actually
+11:24
+happening like we were able to see in
+11:25
+cloud code. It will give us an update
+11:27
+after every iteration, but we will be
+11:29
+able to actually watch things change in
+11:30
+the activity.mmd in the plan.mmd. We'll
+11:33
+also be able to watch it making git
+11:34
+commits. So, we're able to see what
+11:36
+happens. And what you'll see happening
+11:38
+here is a full iteration loop. It's
+11:40
+stopping iteration and then it calls
+11:42
+cloud again from a fresh context window.
+11:44
+And this is why I really recommend using
+11:46
+this method over the claude skill
+11:48
+plugin. So, let's go. I'm just going to
+11:50
+do Ralph.sh3.
+11:52
+This is the number of max iterations. I
+11:53
+just want to show you how it works. So,
+11:55
+we see starting iteration one. We can
+11:56
+see that more things are being added to
+11:58
+the file system. We can see the pass is
+12:00
+already moved to true. We can see a
+12:01
+summary of its first loop. And then I
+12:03
+added the screenshot folder to see if
+12:05
+playright's actually being called. So,
+12:07
+if we click through to it, we'll see
+12:08
+that it did the first step. It made a
+12:10
+basic web page and then it screenshotted
+12:12
+it and saved it to the screenshots
+12:13
+folder. And now we know that there's
+12:15
+this whole feedback loop running. And
+12:16
+lastly, I know that I said that Ralph
+12:18
+should be used for longunning tasks, but
+12:20
+I just want to show you how to set it up
+12:21
+and how it should run and the difference
+12:23
+between the cloud code version and the
+12:25
+original bash loop. So, wrapping things
+Wrapping up
+12:26
+up, you could run Ralph whatever way you
+12:28
+want, via the cloud plug-in or via the
+12:30
+bash loop. The most important thing is
+12:32
+giving it all the criteria for it to
+12:34
+succeed. A safety mechanism, a plan, the
+12:36
+ability to validate its work, and a
+12:38
+limit on iterations, and a way to know
+12:40
+that it's done. And this is true for any
+12:42
+longrunning agent. So, I hope you found
+12:43
+this video helpful or insightful. If you
+12:45
+have any questions or feedback, drop in
+12:47
+the comments below. If you haven't done
+12:48
+so already, subscribe to the channel. It
+12:50
+really helps me grow.

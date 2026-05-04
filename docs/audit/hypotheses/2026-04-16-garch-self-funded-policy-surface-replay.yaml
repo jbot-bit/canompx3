@@ -1,0 +1,53 @@
+# Hypothesis Registry — 2026-04-16 garch-self-funded-policy-surface-replay
+#
+# Locked: 2026-04-17T00:05:00+10:00
+# Author: Codex main session
+# Purpose: replay expanded raw discrete policy surface on the canonical self-funded profile
+
+metadata:
+  name: "garch-self-funded-policy-surface-replay"
+  purpose: "Translate the verified raw discrete garch policies into actual self-funded-profile actions under canonical account rules."
+  date_locked: "2026-04-17T00:05:00+10:00"
+  holdout_date: "2026-01-01"
+  testing_mode: "profile-replay"
+  total_expected_trials: 8
+  theory_summary: |
+    A discrete policy can look strong on raw rows or under Topstep constraints
+    yet fail or reorder once own-funds drawdown geometry replaces prop-firm
+    constraints. This replay holds the policies fixed and changes only the
+    account-constraint surface.
+
+hypotheses:
+  - id: 1
+    name: "Self-funded policy-surface replay"
+    theory_citation: >
+      Same as the Topstep replay, but on the canonical self-funded profile
+      surface in trading_app/prop_profiles.py
+    economic_basis: |
+      If a policy is structurally useful rather than only prop-compatible, it
+      should survive self-funded DD and risk-cap rules as well.
+    scope:
+      profile_id: "self_funded_tradovate"
+      policies:
+        - "SESSION_TAKE_HIGH_ONLY"
+        - "GLOBAL_TAKE_HIGH_ONLY"
+        - "SESSION_SKIP_LOW_ONLY"
+        - "GLOBAL_SKIP_LOW_ONLY"
+        - "SESSION_HIGH_2X_ONLY"
+        - "GLOBAL_HIGH_2X_ONLY"
+        - "SESSION_CLIPPED_0_1_2"
+        - "GLOBAL_CLIPPED_0_1_2"
+      actions:
+        low_state: "0 or 1 contracts depending on policy"
+        neutral_state: "1 contract"
+        high_state: "1 or 2 contracts depending on policy"
+    expected_trial_count: 8
+    kill_criteria:
+      - "Raw or Topstep winner fails under self-funded constraints."
+      - "Policy only wins by taking unacceptable survival or DD deterioration."
+
+total_hypothesis_count: 1
+total_expected_trials: 8
+budget_check:
+  max_allowed_clean: 100
+  status: "under budget"

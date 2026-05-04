@@ -1,0 +1,92 @@
+metadata:
+  name: external-context-role-audit
+  owner: codex
+  created_at: 2026-04-11
+  testing_mode: family
+  holdout_date: 2026-01-01
+  scope_note: >
+    Second-pass role audit for external-context ideas. This pass broadens the
+    question from "does a raw magnitude filter lift average ExpR?" to "does the
+    context matter as a directional qualifier or pipeline-defined regime state?"
+    No external/vendor data is used. Only canonical daily_features/orb_outcomes
+    fields that are pre-trade-safe for the target session are admissible.
+  total_expected_trials: 12
+
+hypotheses:
+  - id: 4
+    name: cme-reopen-gap-direction-alignment
+    description: >
+      On CME_REOPEN, opening-gap direction aligned with breakout direction
+      should outperform all other gap states if gap context matters as a
+      directional qualifier rather than a raw magnitude filter.
+    role: directional_qualifier
+    filter:
+      type: GAP_DIR_ALIGN
+      inputs:
+        - gap_type
+        - gap_open_points
+        - trade_direction
+    scope:
+      instruments: [MGC, MES, MNQ]
+      sessions: [CME_REOPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    kill_criteria:
+      - bh_fdr_q_ge_0_05
+      - is_expr_lift_le_0
+      - oos_expr_lift_le_0
+      - filtered_is_n_lt_30
+      - year_stability_lt_60pct_positive
+
+  - id: 5
+    name: us-data-1000-expanding-atr-regime
+    description: >
+      On US_DATA_1000, the pipeline-defined Expanding ATR regime should
+      outperform Stable/Contracting if volatility state matters as a regime
+      selector.
+    role: regime_selector
+    filter:
+      type: ATR_EXPANDING
+      inputs:
+        - atr_vel_regime
+    scope:
+      instruments: [MGC, MES, MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    kill_criteria:
+      - bh_fdr_q_ge_0_05
+      - is_expr_lift_le_0
+      - oos_expr_lift_le_0
+      - filtered_is_n_lt_30
+      - year_stability_lt_60pct_positive
+
+  - id: 6
+    name: prev-day-direction-alignment-europe
+    description: >
+      On Europe-session breakouts, previous-day bull/bear direction aligned with
+      breakout direction should outperform opposed direction if carryover state
+      matters as a directional qualifier.
+    role: directional_qualifier
+    filter:
+      type: PVD_ALIGN
+      inputs:
+        - prev_day_direction
+        - trade_direction
+    scope:
+      instruments: [MGC, MES, MNQ]
+      sessions: [LONDON_METALS, EUROPE_FLOW]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    kill_criteria:
+      - bh_fdr_q_ge_0_05
+      - is_expr_lift_le_0
+      - oos_expr_lift_le_0
+      - filtered_is_n_lt_30
+      - year_stability_lt_60pct_positive

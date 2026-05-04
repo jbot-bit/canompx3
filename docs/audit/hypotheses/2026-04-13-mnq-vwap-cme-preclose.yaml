@@ -1,0 +1,106 @@
+# Hypothesis Registry — VWAP Break-Direction Alignment (MNQ CME_PRECLOSE O5)
+#
+# Locked:       2026-04-13T20:00:00+10:00
+# Author:       Claude Code session (exhaustive filter hypothesis audit)
+# Holdout mode: A (2026-01-01 sacred)
+# Data horizon: MNQ 6.65yr post Phase 3c clean real-micro
+# Testing mode: individual (Pathway B, Amendment 3.0)
+#
+# Theory citation (LOCAL sources, NOT training memory):
+# 1. scripts/tmp/exhaustive_audit.py (2026-04-13) — 425-test cross-family BH FDR
+#    K=425. MNQ CME_PRECLOSE O5 break_price definition survived at p=0.002 (RR1.0)
+#    and p=0.002 (RR2.0). 4 total cross-family survivors for VWAP gate.
+# 2. Confound independence verified (same as US_DATA_1000 hypothesis).
+# 3. pipeline/build_daily_features.py lines 990-998 — zero look-ahead.
+# 4. Pre-flight pass rate: 55.7% aligned (healthy split).
+#    OOS aligned days: 28 (BELOW Pathway B N_oos >= 30 as of 2026-04-13).
+#    STATUS: PENDING — OOS accumulating daily. Expected to clear ~2026-04-20.
+# 5. docs/institutional/pre_registered_criteria.md — 12 locked criteria.
+#
+# Mechanism: Same institutional flow logic as US_DATA_1000 hypothesis but using
+# the break_price definition (orb_high for longs, orb_low for shorts) instead
+# of orb_mid. At CME_PRECLOSE, the break_price definition works better because
+# the session is near end-of-day — the break level itself (not the ORB center)
+# is the critical reference vs institutional VWAP.
+#
+# NOTE: This hypothesis is pre-registered but the validator will REJECT at
+# Criterion 8 until N_oos >= 30. File now, run discovery when OOS accumulates.
+
+metadata:
+  name: "mnq-vwap-cme-preclose-o5"
+  purpose: |
+    Pre-register VWAP_BP_ALIGNED filter for MNQ CME_PRECLOSE at O5 aperture.
+    Exhaustive 425-test audit (Apr 13 2026) found this as one of 4 cross-family
+    BH FDR survivors. Uses break_price definition (orb_high/low vs VWAP).
+    Currently blocked at Criterion 8 (N_oos=28 < 30). Filed for future run.
+  date_locked: "2026-04-13T20:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.65
+  data_source: "real CME Micro E-mini Nasdaq-100 futures 2019-05-06 onwards"
+  testing_mode: "individual"
+  bailey_compliance:
+    trials: 3
+    min_btl_required_years: 0.01
+    status: "PASS"
+  total_expected_trials: 3
+
+hypotheses:
+  - id: 1
+    name: "MNQ CME_PRECLOSE VWAP_BP_ALIGNED RR1.0 O5"
+    filter:
+      type: VWAP_BP_ALIGNED
+      column: orb_CME_PRECLOSE_vwap
+      definition: break_price
+    scope:
+      instruments: [MNQ]
+      sessions: [CME_PRECLOSE]
+      orb_minutes: [5]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=3"
+      - "Walk-forward efficiency < 0.50"
+      - "Criterion 8: N_oos < 30 (time-structural, retry when data accumulates)"
+
+  - id: 2
+    name: "MNQ CME_PRECLOSE VWAP_BP_ALIGNED RR1.5 O5"
+    filter:
+      type: VWAP_BP_ALIGNED
+      column: orb_CME_PRECLOSE_vwap
+      definition: break_price
+    scope:
+      instruments: [MNQ]
+      sessions: [CME_PRECLOSE]
+      orb_minutes: [5]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=3"
+      - "Walk-forward efficiency < 0.50"
+
+  - id: 3
+    name: "MNQ CME_PRECLOSE VWAP_BP_ALIGNED RR2.0 O5"
+    filter:
+      type: VWAP_BP_ALIGNED
+      column: orb_CME_PRECLOSE_vwap
+      definition: break_price
+    scope:
+      instruments: [MNQ]
+      sessions: [CME_PRECLOSE]
+      orb_minutes: [5]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=3"
+      - "Walk-forward efficiency < 0.50"
+
+total_hypothesis_count: 3

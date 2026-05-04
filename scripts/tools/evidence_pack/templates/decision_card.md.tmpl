@@ -1,0 +1,13 @@
+{# Reserved string-template form of decision_card.md.
+
+PR1 renders the card from `renderers.render_decision_card_md`, which builds
+the Markdown directly from the Manifest dataclass. This template file is
+present to satisfy the design doc § 5 / stage scope_lock declaration and
+to host the surface for a future Jinja-free `string.Template` migration if
+the inline renderer becomes hard to read. PR1 implementation does NOT load
+this file. #}
+# Evidence Pack — $slug
+
+> Verdict: $verdict
+
+(rendered from Manifest by scripts/tools/evidence_pack/renderers.py)

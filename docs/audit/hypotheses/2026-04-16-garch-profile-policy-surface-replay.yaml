@@ -1,0 +1,56 @@
+# Hypothesis Registry — 2026-04-16 garch-profile-policy-surface-replay
+#
+# Locked: 2026-04-16T23:59:00+10:00
+# Author: Codex main session
+# Purpose: replay expanded raw discrete policy surface on the active Topstep profile
+
+metadata:
+  name: "garch-profile-policy-surface-replay"
+  purpose: "Translate the verified raw discrete garch policies into actual Topstep-profile actions under canonical account rules."
+  date_locked: "2026-04-16T23:59:00+10:00"
+  holdout_date: "2026-01-01"
+  testing_mode: "profile-replay"
+  total_expected_trials: 8
+  theory_summary: |
+    The raw policy-surface audit showed that skip-only and size-up policies
+    behave differently on canonical trade rows. This replay asks which of those
+    verified discrete policies still survive real Topstep account geometry,
+    contract rounding, stop policy, and survival logic.
+
+hypotheses:
+  - id: 1
+    name: "Topstep policy-surface replay"
+    theory_citation: >
+      Chan 2008 Ch 7 regime-state logic;
+      docs/institutional/mechanism_priors.md roles R1 / R3 / R8;
+      Criterion 11 account-survival realism
+    economic_basis: |
+      A raw policy that looks attractive on canonical trade rows is only worth
+      deployment attention if it remains attractive once translated through the
+      actual Topstep profile's lane set, stop policy, copies, and survival
+      constraints.
+    scope:
+      profile_id: "topstep_50k_mnq_auto"
+      policies:
+        - "SESSION_TAKE_HIGH_ONLY"
+        - "GLOBAL_TAKE_HIGH_ONLY"
+        - "SESSION_SKIP_LOW_ONLY"
+        - "GLOBAL_SKIP_LOW_ONLY"
+        - "SESSION_HIGH_2X_ONLY"
+        - "GLOBAL_HIGH_2X_ONLY"
+        - "SESSION_CLIPPED_0_1_2"
+        - "GLOBAL_CLIPPED_0_1_2"
+      actions:
+        low_state: "0 or 1 contracts depending on policy"
+        neutral_state: "1 contract"
+        high_state: "1 or 2 contracts depending on policy"
+    expected_trial_count: 8
+    kill_criteria:
+      - "Raw policy winner fails once survival and profile constraints are applied."
+      - "Policy improves dollars while materially degrading operational pass or survival."
+
+total_hypothesis_count: 1
+total_expected_trials: 8
+budget_check:
+  max_allowed_clean: 100
+  status: "under budget"

@@ -1,0 +1,54 @@
+# MES Final Discovery — 4 mechanism-grounded bundles
+# Locked: 2026-04-09T16:00:00+10:00 | Holdout: 2026-01-01 | Mode: A
+# Bailey: N=4, MinBTL=2.77yr < 6.66yr -> PASS (140% headroom)
+# TRADING_RULES overrides: CME_PRECLOSE "delta -0.264" is UNFILTERED.
+# With G8 filter: +0.178 ExpR. "ORB Size = The Edge" creates the edge.
+# TOKYO_OPEN G8 N=90 (below N>=100 deployment threshold — noted)
+
+metadata:
+  name: "mes-final"
+  date_locked: "2026-04-09T16:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 4
+  testing_mode: "family"
+  data_horizon_years_clean: 6.66
+
+hypotheses:
+  - id: 1
+    name: "MES CME_PRECLOSE G8 RR1.0"
+    theory_citation: "Market microstructure (pre-close rebalancing)"
+    economic_basis: "S&P 500 forced rebalancing before close. UNFILTERED delta is -0.264 but G8 filter creates +0.178 edge by removing cost-killed trades. Spike-settle = RR1.0."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=4 family", "WFE < 0.50", "2026 OOS ExpR < 0", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 2
+    name: "MES COMEX_SETTLE G8 RR2.0"
+    theory_citation: "O'Hara (1995) Market Microstructure Theory"
+    economic_basis: "Settlement mandatory flow on S&P futures. Cross-product rebalancing at COMEX settlement creates directional imbalance."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MES], sessions: [COMEX_SETTLE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=4 family", "WFE < 0.50", "2026 OOS ExpR < 0", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 3
+    name: "MES NYSE_OPEN G8 RR2.0"
+    theory_citation: "Crabel (1990) ch. 3"
+    economic_basis: "Crabel on THE S&P 500 benchmark. G8 selects only days with strong institutional commitment ($40+ risk per contract)."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=4 family", "WFE < 0.50", "2026 OOS ExpR < 0", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 4
+    name: "MES TOKYO_OPEN G8 RR1.0"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: "Asian session S&P momentum. G8 fixes cost-kill (friction 9.8% at G8 vs 30% unfiltered). N=90 noted — below deployment threshold."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MES], sessions: [TOKYO_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=4 family", "WFE < 0.50", "2026 OOS ExpR < 0", "Any era N>=50 ExpR < -0.05", "N < 100 deployment gate"]
+
+total_hypothesis_count: 4
+total_expected_trials: 4

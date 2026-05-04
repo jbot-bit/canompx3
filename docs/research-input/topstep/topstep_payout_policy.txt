@@ -1,0 +1,300 @@
+Skip to main content
+Topstep Help Center
+Discord
+Topstep
+
+English
+English
+Search for articles...
+Search for articles...
+All Collections
+Payout Information
+Topstep Payout Policy
+Topstep Payout Policy
+If you’re looking for information on Topstep’s Payout Policy, you’re in the right place.
+
+Updated this week
+Topstep has one of the best payout policies in the industry, allowing disciplined Traders to take weekly payouts. The best part? You can take payouts daily and access up to 100% of your profits after accumulating 30 winning trading days in a Live Funded Account.
+
+Express Funded Account Consistency vs Express Funded Account Standard
+Standard Path
+Consistency Path
+Current payout policy
+
+New payout option
+
+5 winning days of $150+
+
+3 days with 40% consistency target
+
+Request 50% of account balance
+
+ up to $5000
+
+Request 50% of account balance 
+
+up to $6,000
+
+90/10 split
+
+90/10 split
+
+ 
+Payout Policy in the Express Funded Account Standard
+​
+Payout Policy in the Express Funded Account Consistency
+ 
+
+Payout Policy in the Live Funded Account
+ 
+
+Payout FAQs
+ 
+
+How can I request a Payout?
+You can request a payout through this form in our app. Payout requests can only be submitted during CME market hours between Sunday at 5pm CT and Friday at 5 pm CT, excluding designated holidays. Once requested, it may take Topstep 1-3 business days to approve your request. As long as you have submitted your information correctly and you've been approved, you will receive your payout within 10 business days.
+
+When a payout is requested and approved, and all appropriate forms are submitted (ACH / Wire / SWIFT info & KYC documents), we will remove the funds from the Trader's account. Topstep will then start the process of sending the funds to the Trader. Your Payout arrival will depend on the payment method.
+
+When submitting your Adobe documents for a payout request, you'll be prompted to enter an email address. You must use the email address associated with your Topstep account. If a different email address is used, your payout request will be delayed. Please note that only one Adobe banking form is needed, regardless of the number of payout requests submitted. The forms should only be resubmitted if your banking information changes or your government-issued ID has expired.
+
+Occasionally, a bank outside of the United States might request a verification letter stating why you are requesting payouts or receiving deposits to your bank account. Please note that while Topstep does not provide verification letters for payouts, you can provide your bank with a copy of your Express Funded Account Agreement for verification purposes.
+
+The Minimum Payout Request is $125.00.
+
+ 
+
+What does Topstep evaluate to Approve My Payout in the Express Funded Account?
+
+Topstep has worked hard to create the easiest and most transparent payout policy in the industry! To help make this even more transparent, we’d like to give you an inside look at what our team looks for when checking for eligibility for a payout, including, but not limited to, the following:
+​
+
+Payout Policy
+
+The first step is to ensure you've met the requirements of our Payout Policy, which is outlined in this article, including a first-payout threshold based on your account type and a 50% account balance limit.
+​
+​Code of Conduct Violations
+
+Checking to make sure you have not violated any of our Code of Conduct articles below. If any of these are violated, it can slow down or decline your payout.
+
+Prohibited Conduct
+
+Terms of Use
+
+Professional Behavior
+
+Prohibited Trading Strategies
+
+While Topstep’s rules and parameters help to promote responsible trading, we still see some traders attempting to game the system through strategies that are not indicative of live trading success. The strategies listed here will be flagged and investigated.
+
+ 
+
+What is the Profit Split?
+For new Traders who join on or after January 12, 2026:
+
+All payouts will be subject to a 90/10 profit split:
+
+Traders receive 90% of approved payouts. Topstep retains 10% of the requested payout.
+
+This profit split applies to all payouts and is calculated per Trader, not per account.
+
+Traders who joined before January 12, 2026:
+
+Will continue to receive 100% of the first $10,000 in profits, after which payouts will follow the 90/10 profit split, in accordance with the prior policy.  
+
+ 
+
+What Payout methods are available?
+Aeropay: 1-2 Business days - Coming Soon!
+
+Our fastest payout option!
+
+US Traders with US Banks only
+
+Wise: 1-3 business days
+
+ACH (U.S. Only): 1-3 business days
+
+International Wire/SWIFT: up to 5-10 business days​
+
+These transfer times are only estimates and may be impacted by additional reviews or requests for information at the discretion of the payment providers or the Finance & Compliance Team. Most payment providers, especially banks, do not process payments on weekends and public holidays.
+
+Note: When requesting a payout through ACH or Wire on the new dashboard, a $30 processing fee will be deducted, and the applicable 90/10 profit split will be applied. For example, if you request a $500 payout, 10% is retained under the profit split and the processing fee is deducted, resulting in a net payout of $420.
+​
+
+ 
+
+What is Wise?
+Wise is an online money transfer service that allows you to send, receive, and manage your funds internationally with lower fees compared to traditional banking methods. With Wise, you can enjoy transparent and real exchange rates, ensuring that you receive the most value from your payouts. Please visit the Wise Help Center for any additional questions.
+
+Here are a few benefits of using Wise:
+
+Receive payouts within one (1) business day*
+
+Payout options in either USD or your local currency**
+
+No monthly fees and fixed transaction fees***
+
+Please Note:
+* Different payment methods or routine checks may occasionally affect transfer delivery times. Wise will always keep you updated, and you can track each step in your account.
+
+** You can check for the types of payments you're able to receive, depending on your local currency, from Wise here.
+
+***Receive funds within one business with a small transaction fee of $0.39 for a USD to USD payout request. Other currencies will have a fixed fee and may receive a conversion fee. Additional information can be found here.
+
+What if I don't have a Wise account?
+
+If you don't have a Wise account, you can still request your next payout to be with Wise. Once the payout process is complete, you should receive an email from Wise saying funds are available and to sign up to gain access to the funds. The signup steps will be included in the Wise email.
+​
+
+Will I need to create a Wise account each time I earn funding?
+
+No, you do not need to create a Wise account each time you earn funding. You will only need to create a Wise account once and the same Wise account will be used for all Funded Level Accounts. Please use the same email for your Topstep profile and Wise.
+​
+
+What if I already have a Wise account?
+
+If you already have a Wise account with the same email as your Topstep profile, no new sign-up will be required. If your Wise account is using a different email address, please contact our Support Team for further assistance.
+​
+
+Are there any hidden fees when using Wise?
+
+There are no monthly fees when using Wise. A fee may be charged by Wise when selecting a certain payout method or currency. Converting currency in your account will be subject to fees and vary by currency. Additional information can be found here.
+​
+
+How long do I have to claim my funds?
+
+Wise provides 7 calendar days to create or log into your account and claim your funds from Topstep. Any funds that are unclaimed after 7 calendar days will be canceled and refunded to Topstep. If you are unable to claim your funds, please contact our Trader Support Team for assistance.
+​
+​
+
+ 
+
+When can I take a Payout?
+You're eligible to take a payout only after passing the Trading Combine and opening your Express Funded Account.
+
+It's essential to check our list of Ineligible Countries before purchasing a Trading Combine, as citizens of these countries cannot take payouts.
+
+Payouts are exclusively available from Funded Level accounts, such as Express Funded or Live Funded Accounts, and are not available from any size of Trading Combine account. You can find further information about completing the Trading Combine and what happens next here.
+
+Payout Requests can only be submitted during CME market hours between Sunday at 5 pm CT and Friday at 5 pm CT, excluding designated holidays.
+
+ 
+
+When should I start taking Payouts from my Funded Account?
+Check out the When, How, and Why to Pay Yourself blog by our Risk Manager, Mick.
+
+To keep your account long-term and take regular payouts, we recommend bringing your Maximum Loss Limit (MLL) up to $0 before requesting a payout. To reach $0, you will need to hit the corresponding profit levels.
+
+Below is a list of each account size and its corresponding MLL for reference:
+
+Account Size:
+
+Maximum Loss Limit:
+
+$50K
+
+$2,000
+
+$100K
+
+$3,000
+
+$150K
+
+$4,500
+
+ 
+ 
+
+How do payouts affect my account parameters?
+
+Your payouts affect your account parameters in the following ways:
+
+Your Maximum Loss Limit will always be set to $0 after your first payout.
+
+If your limit has already reached $0 and you take a payout, your limit will remain at $0. At that point, the capital remaining in your account will be the maximum amount you will be able to lose.
+
+ 
+
+How do Payouts affect my trade copier settings?
+If an Express Funded Account (XFA) is engaged in copy trading while a payout request is processing, the copy-trading connection will be automatically disabled. Once the payout deduction has been completed and the account balance has been updated, you must manually re-enable copy trading to resume activity.
+
+ 
+
+How do payouts impact my Maximum Position Size?
+
+Payouts can impact your Maximum Position Size in the following way:
+
+Payouts can impact how much leverage you have and the amount of risk you can take. The scaling plan will determine what impact your payout has on your Express Funded Account. If your payout brings you down a level, your account will be set to the corresponding buying power. This means that a payout could result in you not being able to trade as many contracts. Read more about the Scaling Plan here.
+
+ 
+
+How does trading impact my Payout request while it is being processed?
+In the new Topstep Dashboard, once you request a payout, the funds are moved right away so you can start trading again right away!
+
+ 
+
+How do Payouts work with multiple Express Funded Accounts?
+Each individual Funded Account will follow the same Payout Policy.
+
+Payout requests from each account do not affect one another.
+
+When a trader is called up to the Live Funded Account, all open Express Funded Accounts will be closed. The starting balance of the Live Funded Account will be based on the combined total balance of your eligible Express Funded Accounts, up to your Live Account Size. Click here to learn more.
+
+ 
+
+Which countries cannot request or receive payouts or earn funding with Topstep?
+
+You must review Topstep's Eligibility Requirements for the full details on which countries are eligible to trade and take Payouts with Topstep. The following countries cannot request or receive payouts or earn funding with Topstep: Afghanistan, Algeria, Angola, Belarus, Burkina Faso (Upper Volta), Burma/Myanmar, Burundi, Chinese Military Companies, Cote d’Ivoire (Ivory Coast), Crimea (Region of Ukraine - North of Black Sea - Crimea, Donetsk, Luhansk, Kherson, Zaporizhzhia), Cuba, Democratic Republic of Congo, Haiti, Iran, Iraq, Kenya, Kosovo, Lebanon, Libya, Mali, Morocco, Nicaragua, Nigeria, North Korea, Pakistan, Russia, Somalia, South Sudan, Sudan and Darfur, Syria, Turkey (Turkiye), Ukraine, Venezuela, and Yemen.
+​
+
+ 
+
+My bank wants a verification letter stating why I'm requesting a payout/receiving a deposit. Do you have that?
+
+Topstep does not provide verification letters for payouts, but you can provide your bank with a copy of your Express Funded Account Agreement for verification purposes.
+
+ 
+
+What does "RA" mean in payout references?
+"RA" stands for Research Analyst. Topstep provides users the ability to learn the basics and nuances of trading in a simulated environment as a research analyst. When you receive a payout, it will be referenced as such.
+
+Important Reminder 
+
+If an Express Funded Account (XFA) is engaged in copy trading while a payout request is processing, the copy-trading connection will be automatically disabled. Once the payout deduction has been completed and the account balance has been updated, you must manually re-enable copy trading to resume activity.
+
+Updates to the Payout Policy Effective July 22nd, 2025
+We’re making a few important updates to our Live Funded Account program to improve Trader experience and encourage long-term success in Live.
+
+ 
+
+Winning days earned in the Express Funded Account will no longer carry over to the Live Funded Account.
+
+Only winning days earned in a Live account will now count toward daily payout eligibility and full balance access.
+
+This change applies only to new Live Funded Accounts created on or after July 22, 2025.
+
+Traders who were already in a Live account prior to this date will retain their existing winning day count.
+
+Most Traders are called to Live after five Express Funded Account payouts (around 25 winning days), so this change helps keep the focus on staying consistent in Live.
+​
+
+Important Links
+
+Express Funded Account Parameters
+
+Live Funded Account Parameters
+
+Live Funded Account Call Up and Call Down Process
+
+Related Articles
+Topstep Program Overview
+Am I Eligible to Trade with Topstep?
+Express Funded Account™ Parameters
+Getting Started with the New Topstep Dashboard
+Did this answer your question?
+😞😐😃
+Express Funded Account Consistency vs Express Funded Account Standard
+Payout FAQs
+Topstep Help Center

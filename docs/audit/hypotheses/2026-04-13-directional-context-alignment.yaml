@@ -1,0 +1,162 @@
+# Hypothesis Registry — Directional Context Alignment
+#
+# Locked:       2026-04-13T15:30:00+10:00
+# Author:       Claude Code session (mechanism-first research program)
+# Holdout mode: A (2026-01-01 sacred)
+# Data horizon: MNQ/MES 6.65yr post Phase 3c clean real-micro
+# Testing mode: family (Pathway A, BH FDR at phase K)
+#
+# THEORY (LOCAL sources, NOT training memory):
+# 1. VWAP directional alignment (scripts/tmp/exhaustive_audit.py, Apr 13 2026)
+#    demonstrated that "prior context agrees with breakout direction" has
+#    predictive value for breakout quality. 4/425 cross-family BH FDR survivors.
+#    3 validated on MNQ US_DATA_1000 O15 (WFE 0.74-0.90, OOS +0.26R).
+#
+# 2. Cross-session state research (docs/plans/2026-04-11-cross-session-state-round3-memo.md)
+#    by Codex showed NYSE_OPEN > US_DATA_1000 4-state machine has all states
+#    OOS positive. Strongest finding: pooled IS +0.14R, OOS +0.28-0.48R.
+#
+# 3. This session's directional alignment scan (Apr 13 2026) found:
+#    - COMEX_SETTLE > CME_PRECLOSE same-dir: IS +0.178, OOS +0.240 (N=63)
+#    - Overnight momentum (took_pdh/pdl) on TOKYO: IS +0.536, OOS +0.156
+#    - Overnight momentum on SINGAPORE: IS +0.330, OOS +0.380
+#    Same-dir rate COMEX>CME_PRECLOSE = 49.2% (direction-neutral, not trend proxy)
+#
+# 4. Confound checks:
+#    - took_pdh vs OVNRNG: Pearson 0.025 (independent)
+#    - took_pdl vs OVNRNG: Pearson 0.318 (mild confound, report co-occurrence)
+#    - Prior-session same-dir rate ~50% (not trending-market artifact)
+#
+# 5. NO-GO cross-check: IBS (DEAD), gap direction (DEAD), regime-rolling (DEAD)
+#    are NOT tested here. Only structurally different mechanisms included.
+#
+# Design: Mechanism-first phased screening (Phase A screen, A.5 cross-inst,
+# B expand survivors). Budget: ~69 trials total, well under MinBTL 300.
+
+metadata:
+  name: "directional-context-alignment"
+  purpose: |
+    Comprehensive research program for the meta-signal: "when prior context
+    agrees with breakout direction, breakouts are more genuine." Tests three
+    distinct mechanisms across multiple sessions, instruments, and apertures.
+    Mechanism-first screening eliminates dead mechanisms cheaply before expanding.
+  date_locked: "2026-04-13T15:30:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.65
+  data_source: "real CME micro futures 2019-05-06 onwards"
+  testing_mode: "family"
+  bailey_compliance:
+    trials: 69
+    min_btl_required_years: 2.39
+    status: "PASS (6.65yr available >> 2.39yr required)"
+  total_expected_trials: 69
+
+hypotheses:
+  # === MECHANISM M3: Overnight Directional Momentum ===
+  # Signal: overnight took PDH (not PDL) + long break = aligned
+  #         overnight took PDL (not PDH) + short break = aligned
+  # Confound note: took_pdl mildly correlated with OVNRNG (r=0.318), report
+  # OVNRNG co-occurrence for every finding.
+
+  - id: 1
+    name: "M3 Overnight momentum — SINGAPORE_OPEN O5 (best IS)"
+    mechanism: "overnight_directional_momentum"
+    scope:
+      instruments: [MNQ]
+      sessions: [SINGAPORE_OPEN]
+      orb_minutes: [5]
+      rr_targets: [1.0, 1.5, 2.0]
+    expected_trial_count: 3
+    prior_evidence: "IS lift +0.330, OOS +0.380 (N=29)"
+    kill_criteria:
+      - "Zero BH FDR survivors at Phase A K=18"
+      - "OOS direction flips (aligned avg_r < misaligned avg_r)"
+
+  - id: 2
+    name: "M3 Overnight momentum — TOKYO_OPEN O5 (2nd best IS)"
+    mechanism: "overnight_directional_momentum"
+    scope:
+      instruments: [MNQ]
+      sessions: [TOKYO_OPEN]
+      orb_minutes: [5]
+      rr_targets: [1.0, 1.5, 2.0]
+    expected_trial_count: 3
+    prior_evidence: "IS lift +0.536, OOS +0.156 (N=26)"
+    kill_criteria:
+      - "Zero BH FDR survivors at Phase A K=18"
+      - "OOS direction flips"
+
+  # === MECHANISM M4: Cross-Session State Machine ===
+  # Signal: 4-state (prior_win/loss x aligned/opposed) decomposition.
+  # Prior-session win+aligned = take, prior-session loss+aligned = veto, etc.
+  # Subsumes M2 (binary same-dir), which is M4 collapsed.
+
+  - id: 3
+    name: "M4 Cross-session state — NYSE_OPEN>US_DATA_1000 O5 (Codex best)"
+    mechanism: "cross_session_state_machine"
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      prior_session: NYSE_OPEN
+      orb_minutes: [5]
+      rr_targets: [1.0, 1.5, 2.0]
+    expected_trial_count: 3
+    prior_evidence: "Codex Round-3: 4 states all OOS positive (+0.28 to +0.48R)"
+    kill_criteria:
+      - "Zero BH FDR survivors at Phase A K=18"
+      - "Any of 4 states reverses in OOS"
+
+  - id: 4
+    name: "M4 Cross-session state — COMEX_SETTLE>CME_PRECLOSE O5 (scan best)"
+    mechanism: "cross_session_state_machine"
+    scope:
+      instruments: [MNQ]
+      sessions: [CME_PRECLOSE]
+      prior_session: COMEX_SETTLE
+      orb_minutes: [5]
+      rr_targets: [1.0, 1.5, 2.0]
+    expected_trial_count: 3
+    prior_evidence: "IS +0.178, OOS +0.240 (N=63), same-dir rate 49.2%"
+    kill_criteria:
+      - "Zero BH FDR survivors at Phase A K=18"
+      - "OOS direction flips"
+      - "Same-dir rate drifts >60% (trend proxy)"
+
+  # === MECHANISM M5: Pre-1000 Range Expansion ===
+  # Signal: took_pdh_before_1000 + long break = aligned
+  #         took_pdl_before_1000 + short break = aligned
+  # EXPLORATORY: no prior evidence, 13.8% pass rate (thin expected N)
+
+  - id: 5
+    name: "M5 Pre-1000 expansion — NYSE_OPEN O5 (exploratory)"
+    mechanism: "pre_1000_range_expansion"
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_OPEN]
+      orb_minutes: [5]
+      rr_targets: [1.0, 1.5, 2.0]
+    expected_trial_count: 3
+    prior_evidence: "NONE — exploratory. Pass rate 13.8%, expect thin N."
+    kill_criteria:
+      - "IS filtered N < 100 trades (insufficient power)"
+      - "Zero BH FDR survivors at Phase A K=18"
+      - "OOS direction flips"
+
+  - id: 6
+    name: "M5 Pre-1000 expansion — US_DATA_1000 O5 (exploratory)"
+    mechanism: "pre_1000_range_expansion"
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      orb_minutes: [5]
+      rr_targets: [1.0, 1.5, 2.0]
+    expected_trial_count: 3
+    prior_evidence: "NONE — exploratory."
+    kill_criteria:
+      - "IS filtered N < 100 trades"
+      - "Zero BH FDR survivors at Phase A K=18"
+
+total_hypothesis_count: 18
+phase_a_k: 18
+phase_b_budget: 51
+overall_budget: 69

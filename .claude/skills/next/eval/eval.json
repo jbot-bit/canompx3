@@ -1,0 +1,48 @@
+{
+  "skill": "next",
+  "version": 1,
+  "tests": [
+    {
+      "id": "nx-01",
+      "prompt": "next",
+      "assertions": [
+        {
+          "id": "nx-01-a1",
+          "type": "regex_match",
+          "pattern": "(STAGE_STATE|docs/runtime/STAGE_STATE|stage.*none|no active stage|stage state)",
+          "description": "Checks STAGE_STATE.md for any active stage"
+        },
+        {
+          "id": "nx-01-a2",
+          "type": "regex_match",
+          "pattern": "(HANDOFF|handoff\\.md)",
+          "description": "Reads HANDOFF.md for coordination state"
+        },
+        {
+          "id": "nx-01-a3",
+          "type": "regex_match",
+          "pattern": "(ACTION QUEUE|action queue|MEMORY\\.md|next_session_todo|P1|priority)",
+          "description": "Checks action queue or next_session_todo for pending tasks"
+        },
+        {
+          "id": "nx-01-a4",
+          "type": "regex_not_match",
+          "pattern": "(here are (several|multiple|a few|some) (tasks|options|things)|option 1|option 2|\\d\\. .*\\n.*\\d\\.)",
+          "description": "Picks ONE concrete task — does not present a menu of options"
+        },
+        {
+          "id": "nx-01-a5",
+          "type": "regex_match",
+          "pattern": "(STAGE_STATE\\.md|TRIVIAL|IMPLEMENTATION|mode:|staging|stage)",
+          "description": "Classifies the task (TRIVIAL or IMPLEMENTATION) before starting work"
+        },
+        {
+          "id": "nx-01-a6",
+          "type": "regex_not_match",
+          "pattern": "(should I proceed|want me to|shall I|do you want|would you like me to|permission)",
+          "description": "Does not ask permission — /next means GO"
+        }
+      ]
+    }
+  ]
+}

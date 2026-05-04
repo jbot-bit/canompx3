@@ -1,0 +1,164 @@
+Professional Execution Cost & TCA Information Sheet
+
+(For strategy evaluation, backtest cost assimilation, and live execution benchmarking)
+
+1) Core Definitions
+
+Transaction Cost Analysis (TCA)
+
+Systematic evaluation of trade execution costs vs market benchmarks.
+
+Includes explicit and implicit costs.
+
+Explicit Costs
+
+Commissions, broker fees, exchange fees.
+
+Implicit Costs
+
+Slippage (executed price vs intended price)
+
+Spread cost (bid-ask cost)
+
+Market impact (trade moves market)
+
+Timing/Opportunity cost (delay between signal and execution)
+
+Benchmarks
+
+Arrival Price: price at decision/submit time.
+
+VWAP: volume-weighted average executed price.
+
+TWAP: time-weighted average price.
+
+Implementation Shortfall: realized cost vs theoretical trade price.
+
+2) Institutional & Pro Trader Cost Framework
+
+Pre-Trade Analysis
+
+Estimate expected cost outcomes before executing using historical cost data.
+
+Post-Trade Analysis
+
+Compare executed trade to benchmarks to measure slippage and inefficiencies.
+
+Market Impact Modeling
+
+Larger orders relative to liquidity → higher implicit costs.
+
+Slippage Decomposition (Buy-Side Practice)
+
+Delay cost
+
+Market impact cost
+
+Opportunity cost
+
+Reversion cost
+(used for attribution)
+
+3) How Pro Traders Calculate Net Trade Outcome
+
+Entry / Exit Slippage
+
+slippage = executed_price − benchmark_price
+
+
+Benchmark: arrival, VWAP or other chosen.
+
+Net PnL
+
+net_pnl = (exit_fill − entry_fill) * contract_value − explicit_costs − implicit_costs
+
+
+Cost as R formula (professional)
+
+R_net = net_pnl / (stop_distance * point_value * contracts)
+
+
+Stop distance must reflect actual risk at trade. (institutional net outcome)
+
+4) Components Institutions Report On
+Metric	What It Captures
+Slippage to Arrival	Execution vs theoretical trade price at signal.
+Execution vs VWAP	Execution efficiency relative to average volume price.
+Latency	Time delay between signal and execution (ms).
+Fill Ratio / Rejection Rate	Liquidity reliability measure.
+Market Impact	Price movement caused by the order itself.
+5) Why Flat Cost Assumptions Fall Short
+
+A fixed R cost masks dependency on stop size, liquidity, volatility.
+
+Professional TCA splits cost into components rather than 1 flat number.
+
+6) Execution Cost Modeling Logic
+
+Institutional TCA Model Template
+
+total_costs = commissions + fees
+            + slippage (arrival benchmark)
+            + market_impact
+            + timing_cost
+            + opportunity_cost
+
+
+Benchmark choice defines what slippage means.
+
+7) Practical Output Requirements (for Claude Code)
+
+Recommended logging fields per trade:
+
+Signal timestamp & price (arrival)
+
+Execution entry & exit prices with timestamps
+
+Contract count / instrument / point value
+
+Stop distance (R definition)
+
+Commission / Fee data per leg
+
+Slippage at entry and at exit
+
+Benchmark reference (Arrival, VWAP, TWAP)
+
+Market impact measure
+
+Net R output
+
+Use these to compute:
+
+net_R, cost_as_R, expected vs realized cost distributions
+
+8) Standard Quantitative Outputs
+
+Expected distributions the system should compute for strategy evaluation:
+
+Mean cost per trade (bps or R)
+
+Slippage distribution (mean, stdev)
+
+Benchmark vs execution deviation
+
+Cost breakdown by component
+
+Cost versus stop size buckets
+(Used to refine realistic cost assumptions)
+
+9) Why This Matters For Your Project
+
+Ensures you aren’t using flat cost assumptions only.
+
+Positions your strategy evaluation closer to institutional reality.
+
+Allows true net R calculation rather than theoretical edge.
+
+Usage Notes for Claude Code
+
+Benchmark definitions must be explicit in output labels.
+
+Execution slippage must be referenced to arrival price or VWAP/TWAP.
+
+Output must classify costs by type (explicit, implicitly broken down).

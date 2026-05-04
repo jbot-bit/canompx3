@@ -1,0 +1,127 @@
+{
+  "grid": [
+    {
+      "gap_threshold": 0.2,
+      "stop_multiplier": 0.5,
+      "n": 17,
+      "wr": 0.47058823529411764,
+      "expr": -0.15510206743742036,
+      "sharpe": -0.22641552429632475,
+      "maxdd": -5.056155802583749,
+      "total": -2.636735146436146,
+      "sharpe_ann": null
+    },
+    {
+      "gap_threshold": 0.2,
+      "stop_multiplier": 1.0,
+      "n": 17,
+      "wr": 0.5294117647058824,
+      "expr": -0.08001219910726876,
+      "sharpe": -0.1874571215763522,
+      "maxdd": -3.019548826174227,
+      "total": -1.3602073848235687,
+      "sharpe_ann": null
+    },
+    {
+      "gap_threshold": 0.2,
+      "stop_multiplier": 1.5,
+      "n": 17,
+      "wr": 0.5294117647058824,
+      "expr": -0.07684591732924587,
+      "sharpe": -0.22499713161479745,
+      "maxdd": -2.418672592101626,
+      "total": -1.3063805945971798,
+      "sharpe_ann": null
+    },
+    {
+      "gap_threshold": 0.3,
+      "stop_multiplier": 0.5,
+      "n": 14,
+      "wr": 0.5,
+      "expr": -0.13810436840506532,
+      "sharpe": -0.19667214218767734,
+      "maxdd": -4.0,
+      "total": -1.9334611576709144,
+      "sharpe_ann": null
+    },
+    {
+      "gap_threshold": 0.3,
+      "stop_multiplier": 1.0,
+      "n": 14,
+      "wr": 0.5714285714285714,
+      "expr": -0.06634461725624231,
+      "sharpe": -0.14976208274003022,
+      "maxdd": -2.4076014429721,
+      "total": -0.9288246415873923,
+      "sharpe_ann": null
+    },
+    {
+      "gap_threshold": 0.3,
+      "stop_multiplier": 1.5,
+      "n": 14,
+      "wr": 0.5714285714285714,
+      "expr": -0.07271922631882287,
+      "sharpe": -0.20105499724660617,
+      "maxdd": -2.009041833455211,
+      "total": -1.0180691684635201,
+      "sharpe_ann": null
+    },
+    {
+      "gap_threshold": 0.4,
+      "stop_multiplier": 0.5,
+      "n": 5,
+      "wr": 0.4,
+      "expr": -0.04563367464620342,
+      "sharpe": -0.0767544503965339,
+      "maxdd": -1.0,
+      "total": -0.22816837323101713,
+      "sharpe_ann": null
+    },
+    {
+      "gap_threshold": 0.4,
+      "stop_multiplier": 1.0,
+      "n": 5,
+      "wr": 0.4,
+      "expr": 0.06315546013637,
+      "sharpe": 0.3243331130339806,
+      "maxdd": -0.07845673025109906,
+      "total": 0.31577730068184995,
+      "sharpe_ann": null
+    },
+    {
+      "gap_threshold": 0.4,
+      "stop_multiplier": 1.5,
+      "n": 5,
+      "wr": 0.4,
+      "expr": 0.04241960003407006,
+      "sharpe": 0.32430640510357917,
+      "maxdd": -0.052622068018355964,
+      "total": 0.2120980001703503,
+      "sharpe_ann": null
+    }
+  ],
+  "dow_analysis": [
+    {
+      "day": "Mon",
+      "dow": 0,
+      "n": 1,
+      "wr": 1.0,
+      "expr": 0.386094069529652,
+      "sharpe": 0.0,
+      "maxdd": 0.0,
+      "total": 0.386094069529652,
+      "sharpe_ann": null
+    },
+    {
+      "day": "Wed",
+      "dow": 2,
+      "n": 1,
+      "wr": 0.0,
+      "expr": -0.07845673025109905,
+      "sharpe": 0.0,
+      "maxdd": 0.0,
+      "total": -0.07845673025109905,
+      "sharpe_ann": null
+    }
+  ]
+}

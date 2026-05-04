@@ -1,0 +1,16 @@
+{
+  "planPath": "docs/plans/2026-03-06-tooling-hardening.md",
+  "tasks": [
+    {"id": 0, "nativeId": "6", "subject": "Task 0: Measure coverage baseline + add .python-version", "status": "pending"},
+    {"id": 1, "nativeId": "7", "subject": "Task 1: Run ruff format across entire codebase", "status": "pending", "blockedBy": [0]},
+    {"id": 2, "nativeId": "8", "subject": "Task 2: Expand ruff lint rules (I, B, UP, SIM)", "status": "pending", "blockedBy": [1]},
+    {"id": 3, "nativeId": "9", "subject": "Task 3: Consolidate deps into pyproject.toml + uv lock", "status": "pending", "blockedBy": [2]},
+    {"id": 4, "nativeId": "10", "subject": "Task 4: Add pyright basic mode + pyrightconfig.json", "status": "pending", "blockedBy": [3]},
+    {"id": 5, "nativeId": "11", "subject": "Task 5: Add pip-audit + coverage threshold to CI", "status": "pending", "blockedBy": [3, 4]},
+    {"id": 6, "nativeId": "12", "subject": "Task 6: Add .vscode/settings.json + editor config", "status": "pending", "blockedBy": [4]},
+    {"id": 7, "nativeId": "13", "subject": "Task 7: Add ruff format check to pre-commit hook", "status": "pending", "blockedBy": [1]},
+    {"id": 8, "nativeId": "14", "subject": "Task 8: Add drift checks for tooling config", "status": "pending", "blockedBy": [3, 4]},
+    {"id": 9, "nativeId": "15", "subject": "Task 9: Final verification + downstream updates", "status": "pending", "blockedBy": [5, 6, 7, 8]}
+  ],
+  "lastUpdated": "2026-03-06T12:00:00"
+}

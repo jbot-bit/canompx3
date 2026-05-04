@@ -1,0 +1,800 @@
+{
+  "timestamp": "2026-03-27T03:27:22.234192+00:00",
+  "instrument": "MNQ",
+  "db_path": "C:\\Users\\joshd\\canompx3\\gold.db",
+  "total_elapsed_s": 66.9,
+  "combos": [
+    {
+      "rr": 1.0,
+      "per_aperture": false,
+      "mode": "flat",
+      "elapsed_s": 9.4,
+      "n_ml": 0,
+      "n_none": 12,
+      "n_samples": 28136,
+      "total_val_delta_r": 0,
+      "total_honest_delta_r": 0,
+      "total_full_delta_r": -6.86,
+      "sessions": {
+        "BRISBANE_1025": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.2751"
+        },
+        "CME_PRECLOSE": {
+          "model_type": "NONE",
+          "reason": "oos_negative_-4.6R",
+          "honest_delta_r": -4.6
+        },
+        "CME_REOPEN": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.0965"
+        },
+        "COMEX_SETTLE": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.0423"
+        },
+        "EUROPE_FLOW": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.2046"
+        },
+        "LONDON_METALS": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.1671"
+        },
+        "NYSE_CLOSE": {
+          "model_type": "NONE",
+          "reason": "oos_negative_-0.3R",
+          "honest_delta_r": -0.34
+        },
+        "NYSE_OPEN": {
+          "model_type": "NONE",
+          "reason": "no_positive_threshold",
+          "honest_delta_r": 0.0
+        },
+        "SINGAPORE_OPEN": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.1115"
+        },
+        "TOKYO_OPEN": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.1662"
+        },
+        "US_DATA_1000": {
+          "model_type": "NONE",
+          "reason": "oos_negative_-1.9R",
+          "honest_delta_r": -1.92
+        },
+        "US_DATA_830": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.0869"
+        }
+      }
+    },
+    {
+      "rr": 1.0,
+      "per_aperture": true,
+      "mode": "per_aperture",
+      "elapsed_s": 24.7,
+      "n_ml": 2,
+      "n_none": 34,
+      "n_samples": 75307,
+      "total_val_delta_r": 13.48,
+      "total_honest_delta_r": 3.96,
+      "total_full_delta_r": -10.68,
+      "sessions": {
+        "BRISBANE_1025": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.2765"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1766"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1463"
+          }
+        },
+        "CME_PRECLOSE": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "no_positive_threshold",
+            "honest_delta_r": 0.0
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "cpcv_below_random_0.488",
+            "honest_delta_r": 0.13
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "N=104<200"
+          }
+        },
+        "CME_REOPEN": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0965"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0805"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0608"
+          }
+        },
+        "COMEX_SETTLE": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0411"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0081"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0193"
+          }
+        },
+        "EUROPE_FLOW": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.2060"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1779"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0799"
+          }
+        },
+        "LONDON_METALS": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1680"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1087"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0199"
+          }
+        },
+        "NYSE_CLOSE": {
+          "O5": {
+            "model_type": "SESSION",
+            "threshold": 0.45,
+            "cpcv_auc": 0.5376,
+            "test_auc": 0.5568,
+            "val_delta_r": 12.48,
+            "honest_delta_r": 3.92,
+            "skip_pct": 0.124
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "no_positive_threshold",
+            "honest_delta_r": 0.0
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "no_positive_threshold",
+            "honest_delta_r": 0.0
+          }
+        },
+        "NYSE_OPEN": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "no_positive_threshold",
+            "honest_delta_r": 0.0
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "oos_negative_-0.8R",
+            "honest_delta_r": -0.84
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "oos_negative_-13.0R",
+            "honest_delta_r": -12.96
+          }
+        },
+        "SINGAPORE_OPEN": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1128"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0609"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0298"
+          }
+        },
+        "TOKYO_OPEN": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1690"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1438"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1132"
+          }
+        },
+        "US_DATA_1000": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "oos_negative_-1.0R",
+            "honest_delta_r": -0.97
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "no_positive_threshold",
+            "honest_delta_r": 0.0
+          },
+          "O30": {
+            "model_type": "SESSION",
+            "threshold": 0.4,
+            "cpcv_auc": 0.5016,
+            "test_auc": 0.5243,
+            "val_delta_r": 1.0,
+            "honest_delta_r": 0.04,
+            "skip_pct": 0.005
+          }
+        },
+        "US_DATA_830": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0857"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0732"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0135"
+          }
+        }
+      }
+    },
+    {
+      "rr": 1.5,
+      "per_aperture": false,
+      "mode": "flat",
+      "elapsed_s": 5.2,
+      "n_ml": 0,
+      "n_none": 12,
+      "n_samples": 27223,
+      "total_val_delta_r": 0,
+      "total_honest_delta_r": 0,
+      "total_full_delta_r": 0.3,
+      "sessions": {
+        "BRISBANE_1025": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.2567"
+        },
+        "CME_PRECLOSE": {
+          "model_type": "NONE",
+          "reason": "cpcv_below_random_0.496",
+          "honest_delta_r": 3.0
+        },
+        "CME_REOPEN": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.1505"
+        },
+        "COMEX_SETTLE": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.0693"
+        },
+        "EUROPE_FLOW": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.2181"
+        },
+        "LONDON_METALS": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.1818"
+        },
+        "NYSE_CLOSE": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.0321"
+        },
+        "NYSE_OPEN": {
+          "model_type": "NONE",
+          "reason": "oos_negative_-2.7R",
+          "honest_delta_r": -2.7
+        },
+        "SINGAPORE_OPEN": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.1031"
+        },
+        "TOKYO_OPEN": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.0554"
+        },
+        "US_DATA_1000": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.0128"
+        },
+        "US_DATA_830": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.1129"
+        }
+      }
+    },
+    {
+      "rr": 1.5,
+      "per_aperture": true,
+      "mode": "per_aperture",
+      "elapsed_s": 14.3,
+      "n_ml": 0,
+      "n_none": 36,
+      "n_samples": 72366,
+      "total_val_delta_r": 0,
+      "total_honest_delta_r": 0,
+      "total_full_delta_r": 2.58,
+      "sessions": {
+        "BRISBANE_1025": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.2618"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1887"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1259"
+          }
+        },
+        "CME_PRECLOSE": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "oos_negative_-1.0R",
+            "honest_delta_r": -1.01
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "oos_negative_-0.4R",
+            "honest_delta_r": -0.35
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "N=63<200"
+          }
+        },
+        "CME_REOPEN": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1544"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1078"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1095"
+          }
+        },
+        "COMEX_SETTLE": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0678"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0524"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0575"
+          }
+        },
+        "EUROPE_FLOW": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.2187"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0977"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0923"
+          }
+        },
+        "LONDON_METALS": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1817"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0410"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "cpcv_below_random_0.498",
+            "honest_delta_r": 6.51
+          }
+        },
+        "NYSE_CLOSE": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0347"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0147"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0147"
+          }
+        },
+        "NYSE_OPEN": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "oos_negative_-1.0R",
+            "honest_delta_r": -0.96
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0088"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0605"
+          }
+        },
+        "SINGAPORE_OPEN": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1033"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1485"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0107"
+          }
+        },
+        "TOKYO_OPEN": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0569"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0727"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0362"
+          }
+        },
+        "US_DATA_1000": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0128"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "no_positive_threshold",
+            "honest_delta_r": 0.0
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "oos_negative_-1.6R",
+            "honest_delta_r": -1.61
+          }
+        },
+        "US_DATA_830": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1116"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0709"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0209"
+          }
+        }
+      }
+    },
+    {
+      "rr": 2.0,
+      "per_aperture": false,
+      "mode": "flat",
+      "elapsed_s": 2.9,
+      "n_ml": 0,
+      "n_none": 12,
+      "n_samples": 26597,
+      "total_val_delta_r": 0,
+      "total_honest_delta_r": 0,
+      "total_full_delta_r": 2.0,
+      "sessions": {
+        "BRISBANE_1025": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.2672"
+        },
+        "CME_PRECLOSE": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.0293"
+        },
+        "CME_REOPEN": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.2156"
+        },
+        "COMEX_SETTLE": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.0817"
+        },
+        "EUROPE_FLOW": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.1281"
+        },
+        "LONDON_METALS": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.0849"
+        },
+        "NYSE_CLOSE": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.2266"
+        },
+        "NYSE_OPEN": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.0106"
+        },
+        "SINGAPORE_OPEN": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.0919"
+        },
+        "TOKYO_OPEN": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.1794"
+        },
+        "US_DATA_1000": {
+          "model_type": "NONE",
+          "reason": "cpcv_below_random_0.494",
+          "honest_delta_r": 2.0
+        },
+        "US_DATA_830": {
+          "model_type": "NONE",
+          "reason": "negative_baseline_expr=-0.1159"
+        }
+      }
+    },
+    {
+      "rr": 2.0,
+      "per_aperture": true,
+      "mode": "per_aperture",
+      "elapsed_s": 10.4,
+      "n_ml": 0,
+      "n_none": 36,
+      "n_samples": 70155,
+      "total_val_delta_r": 0,
+      "total_honest_delta_r": 0,
+      "total_full_delta_r": -11.85,
+      "sessions": {
+        "BRISBANE_1025": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.2721"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0950"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0339"
+          }
+        },
+        "CME_PRECLOSE": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0313"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1621"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "N=51<200"
+          }
+        },
+        "CME_REOPEN": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.2180"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1714"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1851"
+          }
+        },
+        "COMEX_SETTLE": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0813"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0924"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1367"
+          }
+        },
+        "EUROPE_FLOW": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1345"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1100"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1017"
+          }
+        },
+        "LONDON_METALS": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0869"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0286"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "cpcv_below_random_0.487",
+            "honest_delta_r": 3.68
+          }
+        },
+        "NYSE_CLOSE": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.2249"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.2045"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "N=179<200"
+          }
+        },
+        "NYSE_OPEN": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0092"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0821"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.2318"
+          }
+        },
+        "SINGAPORE_OPEN": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0907"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0400"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "oos_negative_-10.3R",
+            "honest_delta_r": -10.33
+          }
+        },
+        "TOKYO_OPEN": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1816"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0828"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0192"
+          }
+        },
+        "US_DATA_1000": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "cpcv_below_random_0.494",
+            "honest_delta_r": 2.0
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "oos_negative_-7.2R",
+            "honest_delta_r": -7.2
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0693"
+          }
+        },
+        "US_DATA_830": {
+          "O5": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.1149"
+          },
+          "O15": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0886"
+          },
+          "O30": {
+            "model_type": "NONE",
+            "reason": "negative_baseline_expr=-0.0447"
+          }
+        }
+      }
+    }
+  ],
+  "selected_configs": [
+    {
+      "session": "US_DATA_1000",
+      "mode": "per_aperture",
+      "aperture": 30,
+      "rr": 1.0,
+      "cpcv_auc": 0.5016,
+      "test_auc": 0.5243,
+      "honest_delta_r": 0.04,
+      "skip_pct": 0.005
+    },
+    {
+      "session": "NYSE_CLOSE",
+      "mode": "per_aperture",
+      "aperture": 5,
+      "rr": 1.0,
+      "cpcv_auc": 0.5376,
+      "test_auc": 0.5568,
+      "honest_delta_r": 3.92,
+      "skip_pct": 0.124
+    }
+  ],
+  "n_selected": 2,
+  "pre_registration": "docs/pre-registrations/ml-v2-preregistration.md"
+}

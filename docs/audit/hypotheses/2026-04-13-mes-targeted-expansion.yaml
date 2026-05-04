@@ -1,0 +1,368 @@
+# Hypothesis Registry — MES Targeted Expansion (Decorrelation Play)
+#
+# Locked:        2026-04-13T09:30:00+10:00
+# Author:        Claude Code session (MES expansion for daily PnL decorrelation)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  6.65 calendar years (MES real micro 2019-05-06 to 2025-12-31)
+# Testing mode:  family (Pathway A, BH FDR at K=28)
+#
+# MOTIVATION: 6 deployed MNQ lanes are structurally correlated (same instrument).
+# MES on different sessions gives genuine daily PnL decorrelation:
+#   MES-MNQ correlation at NYSE_OPEN = 0.331 (best decorrelation)
+#   MES-MNQ correlation at CME_PRECLOSE = 0.624 (moderate)
+#   MES-MNQ correlation at US_DATA_1000 = 0.445 (good)
+#
+# PRIOR COVERAGE GAP: Only 121 MES experimental strategies exist from prior
+# discovery (10 filters tested). Full grid has 54 filters at NYSE_OPEN alone.
+# Key untested: OVNRNG_50 (MES-calibrated overnight range), GARCH_VOL_PCT_LT20
+# (Wave 5 filter), COST_LT10 (wider cost gate).
+#
+# OVNRNG CALIBRATION: MES overnight range P50=17.5, P90=42.8.
+# OVNRNG_100 passes 0.9% of days (DEAD for MES). OVNRNG_50 passes 7.1% (viable).
+# OVNRNG_25 already tested in prior discovery — EXCLUDED.
+#
+# COST CALIBRATION: MES $3.74 RT friction, $5.00 point value = 14.96% on 5pt ORB.
+# COST_LT08 tested (41% pass NYSE_OPEN). COST_LT10 untested (60% pass).
+
+metadata:
+  name: "mes-targeted-expansion"
+  purpose: |
+    Find MES edges on sessions beyond CME_PRECLOSE for daily PnL decorrelation
+    with deployed MNQ lanes. Three novel filter mechanisms not yet tested on MES:
+    (1) OVNRNG_50 — MES-calibrated overnight range (replaces OVNRNG_100 which
+    is dead at 0.9% pass rate for MES),
+    (2) GARCH_VOL_PCT_LT20 — Wave 5 low-vol regime filter (completely novel),
+    (3) COST_LT10 — wider cost gate at NYSE_OPEN.
+    Plus RR extension of proven CME_PRECLOSE filters.
+  date_locked: "2026-04-13T09:30:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.65
+  data_source: "real CME Micro E-mini S&P 500 futures 2019-05-06 onwards"
+  testing_mode: "family"
+  bailey_compliance:
+    trials: 28
+    horizon_years: 6.65
+    e_max_n: 1.0
+    min_btl_required_years: 0.151
+    headroom_pct: 4303
+    status: "PASS"
+  total_expected_trials: 28
+
+hypotheses:
+  # ═══════════════════════════════════════════════════════════════════════
+  # GROUP A: OVNRNG_50 — Overnight Range Volatility (MES-calibrated)
+  # Theory: Large overnight range signals institutional activity and
+  # directional conviction entering the session. Proven on MNQ (OVNRNG_100
+  # has 3 validated strategies). MES-calibrated to 50pts (7.1% pass rate).
+  # Prior discovery tested OVNRNG_25 on MES but NOT OVNRNG_50.
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: 1
+    name: "MES NYSE_OPEN OVNRNG_50 RR1.0"
+    theory_citation: "Confluence program Phase 1 (Apr 2026); Chan (2009) vol-regime"
+    economic_basis: |
+      NYSE cash open is the deepest equity session. Large overnight range
+      (>=50 S&P pts) indicates macro-driven positioning. Best decorrelation
+      with MNQ (r=0.331). Preliminary scan: N=108, WR=55.6%, AvgR=+0.067.
+    filter: {type: OVNRNG_50, column: overnight_range, thresholds: [50]}
+    scope:
+      instruments: [MES]
+      sessions: [NYSE_OPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=28"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 (if N_oos >= 3)"
+      - "Any era with N >= 30 and ExpR < -0.10"
+
+  - id: 2
+    name: "MES NYSE_OPEN OVNRNG_50 RR1.5"
+    theory_citation: "Confluence program Phase 1; Crabel (1990) ch.3"
+    economic_basis: "RR1.5 extension — NYSE_OPEN has deepest follow-through."
+    filter: {type: OVNRNG_50, column: overnight_range, thresholds: [50]}
+    scope: {instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 3
+    name: "MES NYSE_OPEN OVNRNG_50 RR2.0"
+    theory_citation: "Confluence program Phase 1; Crabel (1990) ch.3"
+    economic_basis: "RR2.0 continuation — tests strong directional follow-through."
+    filter: {type: OVNRNG_50, column: overnight_range, thresholds: [50]}
+    scope: {instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 4
+    name: "MES CME_PRECLOSE OVNRNG_50 RR1.0"
+    theory_citation: "Confluence program Phase 1; market microstructure (pre-close rebalancing)"
+    economic_basis: |
+      CME_PRECLOSE proven for MES (2 validated strategies). OVNRNG_50 untested.
+      Preliminary scan: N=102, WR=52.9%, AvgR=+0.098.
+    filter: {type: OVNRNG_50, column: overnight_range, thresholds: [50]}
+    scope: {instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 5
+    name: "MES CME_PRECLOSE OVNRNG_50 RR1.5"
+    theory_citation: "Confluence program Phase 1"
+    economic_basis: "RR1.5 extension of OVNRNG_50 at proven MES session."
+    filter: {type: OVNRNG_50, column: overnight_range, thresholds: [50]}
+    scope: {instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 6
+    name: "MES CME_PRECLOSE OVNRNG_50 RR2.0"
+    theory_citation: "Confluence program Phase 1"
+    economic_basis: "RR2.0 extension of OVNRNG_50 at proven MES session."
+    filter: {type: OVNRNG_50, column: overnight_range, thresholds: [50]}
+    scope: {instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 7
+    name: "MES US_DATA_1000 OVNRNG_50 RR1.0"
+    theory_citation: "Confluence program Phase 1"
+    economic_basis: |
+      US 10:00 AM macro releases. OVNRNG_50 filters for high-activity days.
+      Preliminary scan: N=108, WR=56.5%, AvgR=+0.067.
+    filter: {type: OVNRNG_50, column: overnight_range, thresholds: [50]}
+    scope: {instruments: [MES], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 8
+    name: "MES US_DATA_1000 OVNRNG_50 RR1.5"
+    theory_citation: "Confluence program Phase 1"
+    economic_basis: "RR1.5 extension at US macro session."
+    filter: {type: OVNRNG_50, column: overnight_range, thresholds: [50]}
+    scope: {instruments: [MES], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 9
+    name: "MES COMEX_SETTLE OVNRNG_50 RR1.0"
+    theory_citation: "Confluence program Phase 1; O'Hara (1995) settlement flow"
+    economic_basis: |
+      COMEX settlement mandatory flow. OVNRNG_50 filters for high-conviction days.
+      Preliminary scan: N=105, WR=57.1%, AvgR=+0.042.
+    filter: {type: OVNRNG_50, column: overnight_range, thresholds: [50]}
+    scope: {instruments: [MES], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # GROUP B: GARCH_VOL_PCT_LT20 — Low Forecast Vol Regime
+  # Theory: Low GARCH forecast vol percentile = calm regime → ORB breakouts
+  # are more likely genuine (less noise). Wave 5 filter, completely novel
+  # for MES. MES pass rate: 29.3%.
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: 10
+    name: "MES NYSE_OPEN GARCH_VOL_PCT_LT20 RR1.0"
+    theory_citation: "Wave 5 G5 (commit 0682205b); Engle (1982) ARCH; Bollerslev (1986) GARCH"
+    economic_basis: |
+      GARCH(1,1) forecast vol below 20th percentile = structurally calm regime.
+      Breakouts in calm regimes have higher signal-to-noise. Untested on MES.
+      Best decorrelation session (r=0.331 with MNQ).
+    filter: {type: GARCH_VOL_PCT_LT20}
+    scope:
+      instruments: [MES]
+      sessions: [NYSE_OPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 11
+    name: "MES NYSE_OPEN GARCH_VOL_PCT_LT20 RR1.5"
+    theory_citation: "Wave 5 G5; Engle (1982); Bollerslev (1986)"
+    economic_basis: "Low-vol regime + deep follow-through at NYSE_OPEN."
+    filter: {type: GARCH_VOL_PCT_LT20}
+    scope: {instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 12
+    name: "MES NYSE_OPEN GARCH_VOL_PCT_LT20 RR2.0"
+    theory_citation: "Wave 5 G5; Engle (1982); Bollerslev (1986)"
+    economic_basis: "RR2.0 continuation in low-vol regime."
+    filter: {type: GARCH_VOL_PCT_LT20}
+    scope: {instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 13
+    name: "MES CME_PRECLOSE GARCH_VOL_PCT_LT20 RR1.0"
+    theory_citation: "Wave 5 G5; Engle (1982); Bollerslev (1986)"
+    economic_basis: "Low-vol regime at proven MES session."
+    filter: {type: GARCH_VOL_PCT_LT20}
+    scope: {instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 14
+    name: "MES CME_PRECLOSE GARCH_VOL_PCT_LT20 RR1.5"
+    theory_citation: "Wave 5 G5; Engle (1982); Bollerslev (1986)"
+    economic_basis: "Low-vol regime RR1.5 extension."
+    filter: {type: GARCH_VOL_PCT_LT20}
+    scope: {instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 15
+    name: "MES CME_PRECLOSE GARCH_VOL_PCT_LT20 RR2.0"
+    theory_citation: "Wave 5 G5; Engle (1982); Bollerslev (1986)"
+    economic_basis: "Low-vol regime RR2.0 continuation."
+    filter: {type: GARCH_VOL_PCT_LT20}
+    scope: {instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 16
+    name: "MES US_DATA_1000 GARCH_VOL_PCT_LT20 RR1.0"
+    theory_citation: "Wave 5 G5; Engle (1982); Bollerslev (1986)"
+    economic_basis: "Low-vol regime at US macro session."
+    filter: {type: GARCH_VOL_PCT_LT20}
+    scope: {instruments: [MES], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 17
+    name: "MES US_DATA_1000 GARCH_VOL_PCT_LT20 RR1.5"
+    theory_citation: "Wave 5 G5; Engle (1982); Bollerslev (1986)"
+    economic_basis: "Low-vol regime RR1.5 at US macro session."
+    filter: {type: GARCH_VOL_PCT_LT20}
+    scope: {instruments: [MES], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 18
+    name: "MES US_DATA_1000 GARCH_VOL_PCT_LT20 RR2.0"
+    theory_citation: "Wave 5 G5; Engle (1982); Bollerslev (1986)"
+    economic_basis: "Low-vol regime RR2.0 at US macro session."
+    filter: {type: GARCH_VOL_PCT_LT20}
+    scope: {instruments: [MES], sessions: [US_DATA_1000], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # GROUP C: COST_LT10 — Wider Cost Gate at NYSE_OPEN
+  # Theory: COST_LT08 tested (41% pass). COST_LT10 (60% pass) may capture
+  # more edge with less aggressive filtering. Only NYSE_OPEN (best decorr).
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: 19
+    name: "MES NYSE_OPEN COST_LT10 RR1.0"
+    theory_citation: "Chan (2009) ch.1-2; project friction audit"
+    economic_basis: |
+      Wider cost gate (friction < 10% of risk) at best decorrelation session.
+      60% pass rate vs 41% for LT08 — more trades, possibly better deployability.
+    filter: {type: COST_LT10}
+    scope: {instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 20
+    name: "MES NYSE_OPEN COST_LT10 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: "RR1.5 extension of wider cost gate."
+    filter: {type: COST_LT10}
+    scope: {instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 21
+    name: "MES NYSE_OPEN COST_LT10 RR2.0"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: "RR2.0 continuation with wider cost gate."
+    filter: {type: COST_LT10}
+    scope: {instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # GROUP D: CME_PRECLOSE RR Extension — Proven Filters at Higher RR
+  # Theory: G8 and COST_LT08 both validated at RR1.0 on CME_PRECLOSE.
+  # Test if edge persists at RR1.5/2.0 (deeper follow-through).
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: 22
+    name: "MES CME_PRECLOSE G8 RR1.5"
+    theory_citation: "Project validated: G8 + CME_PRECLOSE passed BH FDR (Apr 2026)"
+    economic_basis: |
+      G8 already validated at RR1.0 (N=287, ExpR=+0.173, p=0.0012, WF=PASS).
+      RR1.5 tests continuation — pre-close rebalancing may drive deeper moves.
+    filter: {type: ORB_G8}
+    scope: {instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 23
+    name: "MES CME_PRECLOSE G8 RR2.0"
+    theory_citation: "Project validated: G8 + CME_PRECLOSE"
+    economic_basis: "RR2.0 continuation test on proven session/filter."
+    filter: {type: ORB_G8}
+    scope: {instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 24
+    name: "MES CME_PRECLOSE COST_LT08 RR1.5"
+    theory_citation: "Project validated: COST_LT08 + CME_PRECLOSE passed BH FDR (Apr 2026)"
+    economic_basis: |
+      COST_LT08 already validated at RR1.0 (N=194, ExpR=+0.196, p=0.0027, WF=PASS).
+      RR1.5 continuation test.
+    filter: {type: COST_LT08}
+    scope: {instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 25
+    name: "MES CME_PRECLOSE COST_LT08 RR2.0"
+    theory_citation: "Project validated: COST_LT08 + CME_PRECLOSE"
+    economic_basis: "RR2.0 continuation test on proven session/filter."
+    filter: {type: COST_LT08}
+    scope: {instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # ADDITIONAL: COMEX_SETTLE with GARCH (decorrelation play)
+  # COMEX has r=0.582 with MNQ — moderate, but adds another session.
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: 26
+    name: "MES COMEX_SETTLE GARCH_VOL_PCT_LT20 RR1.0"
+    theory_citation: "Wave 5 G5; O'Hara (1995) settlement flow"
+    economic_basis: "Low-vol regime at COMEX settlement."
+    filter: {type: GARCH_VOL_PCT_LT20}
+    scope: {instruments: [MES], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 27
+    name: "MES COMEX_SETTLE GARCH_VOL_PCT_LT20 RR1.5"
+    theory_citation: "Wave 5 G5; O'Hara (1995)"
+    economic_basis: "RR1.5 low-vol regime at settlement."
+    filter: {type: GARCH_VOL_PCT_LT20}
+    scope: {instruments: [MES], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 28
+    name: "MES COMEX_SETTLE OVNRNG_50 RR1.5"
+    theory_citation: "Confluence program Phase 1; O'Hara (1995)"
+    economic_basis: "OVNRNG_50 RR1.5 at COMEX settlement."
+    filter: {type: OVNRNG_50, column: overnight_range, thresholds: [50]}
+    scope: {instruments: [MES], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=28", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]

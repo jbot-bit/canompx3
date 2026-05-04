@@ -1,0 +1,14 @@
+{
+  "planPath": "docs/plans/2026-03-06-multi-broker-implementation.md",
+  "tasks": [
+    {"id": 0, "nativeId": "7", "subject": "Task 0: Broker Abstraction Layer (broker_base.py)", "status": "pending"},
+    {"id": 1, "nativeId": "8", "subject": "Task 1: Refactor Tradovate into submodule", "status": "pending", "blockedBy": [0]},
+    {"id": 2, "nativeId": "9", "subject": "Task 2: ProjectX Auth + Contract Discovery", "status": "pending", "blockedBy": [0]},
+    {"id": 3, "nativeId": "10", "subject": "Task 3: ProjectX SignalR Data Feed", "status": "pending", "blockedBy": [2]},
+    {"id": 4, "nativeId": "11", "subject": "Task 4: ProjectX Order Router + Positions", "status": "pending", "blockedBy": [2]},
+    {"id": 5, "nativeId": "12", "subject": "Task 5: Broker Factory + SessionOrchestrator Integration", "status": "pending", "blockedBy": [1, 2]},
+    {"id": 6, "nativeId": "13", "subject": "Task 6: Position Reconciliation", "status": "pending", "blockedBy": [5]},
+    {"id": 7, "nativeId": "14", "subject": "Task 7: Integration Test — ProjectX Signal-Only Session", "status": "pending", "blockedBy": [3, 4, 5]}
+  ],
+  "lastUpdated": "2026-03-06T18:15:00"
+}

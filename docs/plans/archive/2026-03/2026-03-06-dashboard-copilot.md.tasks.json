@@ -1,0 +1,14 @@
+{
+  "planPath": "docs/plans/2026-03-06-dashboard-copilot.md",
+  "tasks": [
+    {"id": 0, "subject": "Task 0: Write session_helpers.py — Core session time logic (DST-safe)", "status": "pending"},
+    {"id": 1, "subject": "Task 1: Extend db_reader.py with ATR and results queries", "status": "pending"},
+    {"id": 2, "subject": "Task 2: Write copilot.py — Main render logic", "status": "pending", "blockedBy": [0, 1]},
+    {"id": 3, "subject": "Task 3: Rewrite app.py — Single-page co-pilot", "status": "pending", "blockedBy": [2]},
+    {"id": 4, "subject": "Task 4: Delete old UI files", "status": "pending", "blockedBy": [3]},
+    {"id": 5, "subject": "Task 5: Fix imports and session sort key in copilot.py", "status": "pending", "blockedBy": [2]},
+    {"id": 6, "subject": "Task 6: Integration test — full render cycle", "status": "pending", "blockedBy": [0, 2]},
+    {"id": 7, "subject": "Task 7: Run full test suite + drift checks", "status": "pending", "blockedBy": [4, 5, 6]}
+  ],
+  "lastUpdated": "2026-03-06T10:45:00+10:00"
+}

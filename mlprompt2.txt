@@ -1,0 +1,459 @@
+Yes. Here’s the **exact rewrite spec**.
+
+## 1) Core doctrine
+
+* **Raw deterministic strategy = champion**
+* **ML = meta-label overlay only**
+* ML may:
+
+  * take / skip
+  * rank concurrent setups
+  * scale risk modestly
+* ML may **not**:
+
+  * invent entries
+  * override execution logic
+  * override exits
+  * rescue junk baselines by brute-force tuning
+    Your repo already treats ML as a separate layer on top of validated ORB logic, with `ml/config.py`, `cpcv.py`, `features.py`, `meta_label.py`, `predict_live.py`, and `evaluate_validated.py`. 
+
+## 2) What standard you’re aiming for
+
+Use **SR 11-7 style model-risk discipline**:
+
+* clear purpose
+* documented assumptions/limits
+* independent validation mindset
+* ongoing monitoring
+* governance and rollback ([Federal Reserve][1])
+
+For live controls, use **market-access style controls**:
+
+* systematic risk limits
+* supervisory procedures
+* no “unfiltered” automation
+* hard kill switch ([SEC][2])
+
+For AI/model lifecycle, use **NIST AI RMF**:
+
+* govern
+* map
+* measure
+* manage ([NIST Publications][3])
+
+## 3) What your repo already proves
+
+* The playbook’s `ExpR >= 0.05` is a **raw display floor**, not an ML floor. Weaker setups are excluded from the detail tables as “not worth trading” raw. 
+* Your handoff says ML replay validation is complete and that **RR2.0 O30 ML added +12.20R and reduced DD by 12.46R vs raw baseline**. 
+* Your research rules explicitly ban sample-fixing, in-sample masquerading, post-resolution cheating, and speculative mechanism claims. 
+
+So:
+
+* **0.01R raw** = valid ML candidate pool
+* **slightly negative raw** = valid only as a noisy candidate container
+* **production** requires accepted-subset uplift after costs, CPCV, holdout, and live parity
+
+## 4) Exact file-by-file rewrite
+
+### `trading_app/ml/config.py`
+
+Add:
+
+* `MODEL_PURPOSE = "meta_label_trade_selection"`
+* `MODEL_VERSION`
+* `FEATURE_SCHEMA_VERSION`
+* `TARGET_SCHEMA_VERSION`
+* `THRESHOLD_VERSION`
+* `TRAIN_SPAN`
+* `VALIDATION_PROTOCOL = "purged_embargoed_cpcv_plus_final_holdout"`
+* `LIVE_FALLBACK_MODE = "raw_only"` or `"no_trade"`
+* `MIN_ACCEPT_RATE`
+* `MIN_ACCEPTED_TRADES_PER_PATH`
+* `SLIPPAGE_STRESS_GRID = [base, +1tick, +2tick]`
+* `PROHIBITED_FEATURE_PREFIXES = [...]`
+* `REQUIRED_LIVE_FEATURES = [...]`
+
+Also add a **config hash that includes threshold + schema + target definition**, not just model hyperparams.
+
+### `trading_app/ml/features.py`
+
+Split into 3 layers:
+
+* `build_candidate_rows(...)`
+* `build_pre_entry_features(...)`
+* `validate_feature_contract(...)`
+
+Add hard checks:
+
+* no post-entry timestamps
+* no session-complete fields
+* no future-derived aggregates
+* no target leakage columns
+* exact dtype/null checks
+* live-availability flag per feature
+
+Output:
+
+* `feature_matrix`
+* `feature_audit.json`
+* `feature_contract_hash`
+
+### `trading_app/ml/meta_label.py`
+
+Refactor into:
+
+* `fit_model_on_fold(...)`
+* `score_validation_fold(...)`
+* `optimize_threshold_on_validation(...)`
+* `evaluate_accept_reject_buckets(...)`
+* `run_cpcv_paths(...)`
+* `run_final_holdout(...)`
+
+Hard rules:
+
+* transforms fit **inside fold only**
+* threshold fit **inside fold only**
+* calibration fit **inside fold only**
+* no global scaler/encoder/imputer
+* threshold objective = **post-cost utility**, not accuracy
+
+### `trading_app/ml/cpcv.py`
+
+Add:
+
+* explicit **purge window**
+* explicit **embargo window**
+* path-level reporting:
+
+  * accepted N
+  * acceptance rate
+  * accepted ExpR
+  * rejected ExpR
+  * uplift vs raw
+  * slippage-stress results
+
+### `trading_app/ml/evaluate.py`
+
+Make it print 4 blocks:
+
+* raw baseline
+* accepted trades
+* rejected trades
+* uplift summary
+
+Must include:
+
+* N
+* WR
+* ExpR
+* dollar EV
+* Sharpe / utility
+* MaxDD
+* trades/month
+* base cost
+* +1 tick
+* +2 tick
+
+### `trading_app/ml/evaluate_validated.py`
+
+Restrict to:
+
+* validated families only
+* latest model artifact only
+* final holdout separated from CV
+
+Add:
+
+* by year
+* by session
+* by instrument
+* by aperture
+* by RR
+* calibration / drift summary
+
+### `trading_app/ml/predict_live.py`
+
+Add hard fail-closed checks:
+
+* model hash mismatch
+* feature schema mismatch
+* missing required feature
+* stale feature timestamp
+* invalid score range
+* threshold version mismatch
+
+Decision object must log:
+
+* timestamp
+* strategy_id
+* model_version
+* feature_contract_hash
+* threshold_version
+* raw score
+* calibrated score
+* action
+* fallback_reason
+* live feature completeness
+
+## 5) New files you need
+
+### `docs/specs/ML_MODEL_DOCTRINE.md`
+
+One-page doctrine:
+
+* purpose
+* allowed uses
+* banned uses
+* candidate baseline rules
+* promotion rules
+* rollback rules
+
+### `docs/specs/ML_FEATURE_CONTRACT.md`
+
+For each feature:
+
+* name
+* dtype
+* source table
+* timestamp of availability
+* live source
+* null policy
+* leakage risk
+* owner
+
+### `docs/specs/ML_TARGET_CONTRACT.md`
+
+Define:
+
+* target
+* cost treatment
+* time horizon
+* tie handling
+* stop/target/session-end precedence
+* whether the target is binary or EV
+
+### `docs/specs/ML_PROMOTION_GATE.md`
+
+Pass only if:
+
+* median CPCV uplift > 0
+* final holdout uplift > 0
+* rejected bucket worse than accepted bucket
+* survives slippage stress
+* minimum accepted N per path
+* live feature parity proven
+* replay/live shadow match
+
+### `models/ml/model_registry.json`
+
+Each artifact records:
+
+* model path
+* train span
+* code commit
+* feature schema hash
+* target schema hash
+* threshold version
+* validation report path
+* promotion status
+* rollback predecessor
+
+### `logs/ml_decisions/*.jsonl`
+
+One line per live decision.
+
+## 6) Candidate baseline rules
+
+Use ML only on setups that are:
+
+* deterministic
+* post-cost honest
+* pre-entry featureable
+* structurally interpretable
+* not banned/no-go by your rules
+
+Priority candidate zone:
+
+* **raw ExpR 0.00 to +0.05**
+* **slightly negative raw** only if there is a strong separability hypothesis
+* **deeply negative raw** = usually reject
+
+Your current validated book is already healthy and deep, especially MNQ E2 and MGC E2, so focus ML on structured, scalable buckets rather than dead ideas. 
+
+## 7) Feature policy
+
+Allowed:
+
+* ORB width
+* ORB width normalized by ATR / realized vol
+* pre-entry break speed
+* session identity
+* day-of-week / calendar flags already known before entry
+* pre-entry directional context
+* cross-asset concordance available before entry
+* pre-entry volatility state
+* instrument-specific cost state if known before entry
+
+Forbidden:
+
+* anything from after entry
+* future high/low
+* MFE/MAE
+* post-exit path summaries
+* session-complete labels
+* future double-break
+* transforms fitted on full sample
+
+This matches your own anti-cheating rules. 
+
+## 8) Threshold standard
+
+Do **not** threshold on accuracy.
+
+Threshold objective:
+
+* primary: **post-cost EV**
+* secondary: drawdown-adjusted utility
+* tertiary: calibration + coverage
+
+Use a constrained optimizer:
+
+* maximize EV
+* subject to:
+
+  * `accept_rate >= floor`
+  * `accepted_trades_per_path >= floor`
+  * `holdout_uplift > 0`
+
+## 9) Validation stack
+
+Required:
+
+* purged CV
+* embargo
+* CPCV path distribution
+* final untouched chrono holdout
+  CPCV exists specifically because standard CV is weak for dependent financial samples. ([SSRN][4])
+
+Then add:
+
+* permutation / bootstrap on finalists
+* +1 / +2 tick cost stress
+* by-year stability
+* by-session stability
+* by-instrument portability only if claimed
+
+## 10) Monitoring stack
+
+You already have live performance monitoring and CUSUM infrastructure in the repo map. Wire ML into that instead of making a separate toy monitor. 
+
+Need 4 monitors:
+
+* **feature drift**
+* **score drift**
+* **calibration drift**
+* **PnL drift**
+
+Trip conditions:
+
+* schema mismatch
+* PSI/KS drift above threshold
+* realized win rate materially below calibrated expectation
+* rolling EV below floor
+* rejected bucket starts outperforming accepted bucket
+
+Action:
+
+* switch to raw-only
+* or no-trade
+* log incident
+* freeze model
+
+## 11) Gaps to fix first
+
+Order:
+
+1. **Feature contract**
+2. **Threshold governance**
+3. **Accepted vs rejected bucket reporting**
+4. **Final holdout isolation**
+5. **Live decision logging**
+6. **Drift monitors**
+7. **Model registry / rollback**
+
+## 12) Where to focus
+
+Best use of time:
+
+* **MNQ RR2.0 O30 ML overlay**, because handoff already shows evidence there. 
+* Then extend to:
+
+  * sessions with strong raw structure
+  * decent sample depth
+  * known replay parity
+
+Do **not** focus first on:
+
+* weak/no-go filters
+* tiny-N niche regimes
+* dormant exit logic pretending to be validated
+* “indicator soup” overlays
+  Your rules already warn against exactly that.
+
+## 13) Hard truth
+
+Your likely weak point is **not model sophistication**.
+
+It’s:
+
+* feature governance
+* threshold discipline
+* promotion criteria
+* production controls
+* drift/rollback
+
+That’s the gap between “good quant project” and “Bloomberg-grade ops.”
+
+Next step should be: I turn this into a **copy-paste implementation checklist** for each file with exact functions/classes to add.
+
+[1]: https://www.federalreserve.gov/supervisionreg/srletters/sr1107.htm?utm_source=chatgpt.com "SR 11-7 on guidance on Model Risk Management"
+[2]: https://www.sec.gov/rules-regulations/2011/06/risk-management-controls-brokers-or-dealers-market-access?utm_source=chatgpt.com "Risk Management Controls for Brokers or Dealers With ..."
+[3]: https://nvlpubs.nist.gov/nistpubs/ai/nist.ai.100-1.pdf?utm_source=chatgpt.com "Artificial Intelligence Risk Management Framework (AI RMF 1.0)"
+[4]: https://papers.ssrn.com/sol3/Delivery.cfm/SSRN_ID4686376_code4361537.pdf?abstractid=4686376&mirid=1&utm_source=chatgpt.com "Backtest Overfitting in the Machine Learning Era"
+
+
+
+
+
+
+ADDON PROMPT — MULTI-CELL INSTITUTIONAL ML EXPANSION
+
+Re-audit canompx3 from current repo state. Do not assume prior conclusions survive.
+Goal: build a profitable, production-grade portfolio across instruments, sessions, apertures, and RR — not prove one ML slice.
+
+Rules:
+1) ML remains meta-label/trade-selection overlay only.
+2) Test every cell separately: instrument × session × aperture × RR.
+3) Promote only if:
+   - raw logic is structurally valid
+   - accepted bucket > raw baseline after costs
+   - rejected bucket is worse
+   - purged/embargoed CPCV passes
+   - final chronological holdout passes
+   - +1/+2 tick stress passes
+   - coverage and N are economically meaningful
+4) Run BRAC/sensitivity:
+   - small parameter perturbations
+   - adjacent apertures/sessions
+   - neighboring years/regimes
+5) Build portfolio from survivors only; no pooled masking of weak cells.
+6) Output:
+   - survivor matrix
+   - dead cells
+   - fragile cells
+   - best next 5 cells to test
+   - exact reasons and evidence
+7) Fail closed. No hand-waving, no optimism, no “probably.”
+
+
+

@@ -1,0 +1,235 @@
+# CODEX.md
+
+Codex front door for this repository.
+
+This file stays thin on purpose. `CLAUDE.md` and `.claude/` remain canonical.
+`CODEX.md` and `.codex/` only tell Codex how to operate against that shared
+project without creating a second rule system.
+
+## Role
+
+- Same project as Claude Code, with the same source files, git history, and
+  canonical `gold.db`
+- Primary Codex checkout should live under WSL home, for example
+  `~/canompx3`, not `/mnt/c/...`
+- A WSL-home clone is acceptable for Codex, but it must track the same repo
+  and rules as Claude
+- No Codex-only database or parallel truth layer
+- Claude is top dog and canonical authority
+- Codex is the second boss for implementation, review, verification, audit,
+  official-doc alignment, and stale-state detection
+- Do not mutate `CLAUDE.md`, `.claude/`, `claude.bat`, or Claude-owned
+  settings/hooks unless the user explicitly asks
+
+## Thin Session Default
+
+If the session was not opened via:
+
+- `scripts/infra/codex-project.sh`
+- `scripts/infra/codex-project-search.sh`
+- `scripts/infra/codex-worktree.sh`
+
+run:
+
+- `.venv-wsl/bin/python scripts/tools/session_preflight.py --context codex-wsl`
+
+Use `python3` only if `.venv-wsl` does not exist yet.
+
+Default read set:
+
+1. `HANDOFF.md`
+2. `AGENTS.md`
+3. `CLAUDE.md`
+4. `CODEX.md`
+
+Private personal context should live in Claude-native user/local memory, not in
+gitignored repo-root files. Prefer:
+
+- `~/.claude/CLAUDE.md` for user-level preferences that should work across worktrees
+- `CLAUDE.local.md` only for worktree-local preferences you explicitly want to keep local
+
+Do not treat gitignored repo-root files like `SOUL.md`, `USER.md`, or
+`memory/*.md` as required startup context for Codex worktrees.
+
+If `.session/task-route.md` exists, read it next before loading any broader
+repo docs. It is the generated startup packet for the current task/session and
+should replace broad cold-start wandering when present.
+
+Then, for any non-trivial repo task, resolve task context before loading extra
+docs:
+
+- `./.venv-wsl/bin/python scripts/tools/context_resolver.py --task "<user request>" --format markdown`
+
+Then load only the smallest extra `.claude/` or `.codex/` docs the route calls
+for.
+
+## Intent Mapping Rule
+
+- Do not wait for exact trigger words, slash-command names, or "magic phrase"
+  wording when the user's intent is clear enough to route safely.
+- Infer the nearest valid workflow, skill, command recipe, verification path,
+  and guardrails from the request context.
+- If more than one route is plausible, choose the highest-signal,
+  lowest-risk path and state the mapping briefly before proceeding.
+- If the intent is materially ambiguous or the wrong route could cause damage,
+  stop and ask a narrow clarifying question instead of guessing.
+
+## Authority
+
+- Identity and continuity:
+  - `AGENTS.md`
+  - `~/.claude/CLAUDE.md` for user-level private preferences
+  - `MEMORY.md` when explicitly needed as project memory
+- Architecture and implementation guardrails:
+  - `CLAUDE.md`
+  - `.claude/`
+- Trading truth:
+  - `TRADING_RULES.md`
+- Research and anti-bias discipline:
+  - `RESEARCH_RULES.md`
+
+If there is a conflict, `CLAUDE.md`, `.claude/`, `TRADING_RULES.md`, and
+`RESEARCH_RULES.md` win over anything in `.codex/`.
+
+Shared cross-tool state lives in:
+
+- `HANDOFF.md`
+- `docs/plans/`
+
+Do not treat Codex-private docs as shared truth.
+If a change matters to both tools, record it in `HANDOFF.md` or `docs/plans/`,
+not just `.codex/`.
+
+## Operator Model
+
+Primary Codex surfaces:
+
+- Codex app against a WSL-home clone
+- `codex.bat`
+- `codex.bat power`
+
+Default Codex entrypoints:
+
+- Normal mutating session:
+  - `scripts/infra/codex-project.sh`
+- Read-only/search session:
+  - `scripts/infra/codex-project-search.sh`
+- Data session with `gold-db` MCP attached explicitly:
+  - `scripts/infra/codex-project-gold-db.sh`
+  - `scripts/infra/codex-project-search-gold-db.sh`
+- Review session:
+  - `scripts/infra/codex-review.sh`
+- Parallel isolated task:
+  - `scripts/infra/codex-worktree.sh open <task>`
+
+Windows uses `.venv`. WSL uses `.venv-wsl`. Do not cross-wire them.
+
+Windows convenience entrypoints:
+
+- `claude.bat`
+  - default Claude Code session in this repo
+  - `claude.bat task <name>`
+  - `claude.bat green`
+- `codex.bat`
+  - default project session on the verified WSL-home Codex clone
+  - `codex.bat gold-db`
+  - `codex.bat power`
+  - `codex.bat search-gold-db`
+  - `codex.bat windows`
+  - `codex.bat windows-gold-db`
+  - `codex.bat windows-power`
+  - `codex.bat linux`
+  - `codex.bat linux-power`
+  - `codex.bat linux-gold-db`
+  - `codex.bat green`
+  - `codex.bat task <name>`
+  - `codex.bat search <name>`
+- `ai-workstreams.bat`
+  - Claude/Codex workstream launcher and utility menu
+  - list/resume/finish/clean/green flows
+
+For a Windows user, the human-facing front doors are:
+
+- `claude.bat`
+- `codex.bat`
+- `ai-workstreams.bat`
+
+Primary Codex path is a clone in the WSL filesystem such as `~/canompx3`,
+launched via `codex.bat` or the Codex app local environment. The Windows
+launcher sync-checks the WSL clone against the current checkout and fails
+closed if the clone is dirty, on the wrong branch, or cannot fast-forward
+cleanly. Set
+`CANOMPX3_CODEX_WSL_ROOT` if the WSL-side clone lives somewhere else.
+
+That launch path also runs the shared session-preflight claim check across the
+Windows checkout and the WSL clone before opening a mutating Codex session. If
+Claude, another Codex terminal, or another managed worktree already owns a
+fresh mutating claim on that branch, `codex.bat` blocks instead of silently
+opening a conflicting second session.
+
+Windows-native Codex is a fallback surface only. Do not target parity with the
+WSL path when official Codex behavior differs across platforms.
+
+Codex app local-environment support lives in:
+
+- `scripts/infra/codex_local_env.py`
+- `scripts/infra/codex-app-setup.sh`
+- `scripts/infra/codex-app-cleanup.sh`
+- `scripts/infra/codex-app-setup.ps1`
+- `scripts/infra/codex-app-cleanup.ps1`
+- `docs/reference/codex-claude-operator-setup.md`
+- `docs/reference/codex-operator-handbook.md`
+
+Default stance: Codex should start minimal. Repo MCPs such as `gold-db` are
+opt-in for sessions that actually need live trading-data queries.
+
+## Supporting Docs
+
+Open these only when the task calls for them:
+
+- `.codex/STARTUP.md`
+  - Codex-specific startup deltas and low-token loading rules
+- `.codex/WORKFLOWS.md`
+  - execution defaults, verification defaults, and task routing
+- `.codex/PROJECT_BRIEF.md`
+  - fast repo orientation
+- `.codex/CURRENT_STATE.md`
+  - stable project snapshot
+- `.codex/NEXT_STEPS.md`
+  - stable priority categories
+- `.codex/AUTHORITY.md`
+  - explicit deference model
+- `.codex/WORKSPACE_MAP.md`
+  - repo navigation
+- `.codex/COMMANDS.md`
+  - shared command/skill routing
+- `.codex/AGENTS.md`
+  - shared agent routing
+- `.codex/RULES.md`
+  - shared rule routing
+- `.codex/INTEGRATIONS.md`
+  - plugins, MCP, and runtime surfaces
+- `.codex/MEMORY.md`
+  - memory-writing policy
+- `.codex/OPENAI_CODEX_STANDARDS.md`
+  - official-source Codex setup principles
+- `.codex/AUTOMATIONS.md`
+  - report-only Codex maintenance automation templates
+- `.codex/CODEX_IMPROVEMENT_PLAN.md`
+  - Codex improvement backlog
+- `docs/reference/claude-token-hygiene.md`
+  - shared cheap-default / high-rigor operating model
+
+## Codex Responsibilities
+
+- Do not rename, replace, or weaken the Claude layer.
+- Do not build a second project workflow or second project truth.
+- Do not mutate Claude-owned files or launch surfaces without an explicit user
+  request.
+- Keep the Codex layer small, practical, and linked to canonical sources.
+- Prefer isolated worktrees for concurrent Claude/Codex mutating work.
+- Keep Codex automations report-only unless the user explicitly asks for
+  mutating behavior.
+- For token or context-efficiency work, prefer the report-only audit:
+  - `python3 scripts/tools/token_hygiene_report.py`
+- Update `HANDOFF.md` when you leave durable decisions or meaningful changes.

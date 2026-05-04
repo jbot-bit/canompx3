@@ -1,0 +1,202 @@
+# Hypothesis Registry — MGC Discovery Redesign (K=5, mechanism-grounded)
+#
+# Locked:        2026-04-09T12:00:00+10:00
+# Author:        Claude Code session (discovery redesign)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  3.55 calendar years (2022-06-13 to 2025-12-31, 1298 cal days / 365.25)
+# Year metric:   Calendar years (pipeline Sharpe annualization convention)
+#
+# Bailey: N=5, MinBTL=3.22yr < 3.55yr -> PASS (10.4% headroom — tight)
+# Noise floor Sharpe: 0.952
+#
+# MGC-specific: Micro Gold (10oz), $10/point, $5.74 friction. ALL sessions
+# negative unfiltered — edge exists ONLY with G5+ size filter (confirmed
+# by "ORB Size = The Edge"). London is THE primary gold pricing venue.
+# CME_PRECLOSE cost-killed (57.4% friction). SINGAPORE_OPEN 74% double-break.
+# TOKYO_OPEN "WORSE for MGC" per TRADING_RULES.
+#
+# G8 exception: US_DATA_830 uses G8 not G5. TRADING_RULES deep dive says
+# "G12+ or DEAD" for MGC US_DATA_830. G5 includes structurally noisy
+# trades at this session. G8 is the minimum viable threshold per the
+# Feb 2026 friction analysis.
+
+metadata:
+  name: "mgc-redesign"
+  purpose: |
+    Mechanism-grounded MGC discovery. 5 hypotheses testing 5 distinct
+    gold-specific economic mechanisms. G5 default with G8 exception at
+    US_DATA_830 per structural friction analysis.
+  date_locked: "2026-04-09T12:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 3.55
+  data_source: "real CME Micro Gold futures 2022-06-13 onwards (1298 calendar days)"
+  bailey_compliance:
+    trials: 5
+    horizon_years: 3.55
+    horizon_metric: "calendar years (1298 days / 365.25)"
+    e_max_n: 1.0
+    min_btl_required_years: 3.22
+    headroom_pct: 10.4
+    status: "strict Bailey E=1.0 PASS with 10.4% headroom (tight)"
+    sharpe_noise_floor_annualized: 0.95
+  total_expected_trials: 5
+
+hypotheses:
+  - id: 1
+    name: "London gold pricing at LONDON_METALS"
+    theory_citation: "Lucey & Zhao (2008); Baur & Lucey (2010) Financial Review"
+    economic_basis: |
+      London is THE global gold pricing center. The LBMA Gold Price is set
+      during London hours. Physical gold demand (central banks, jewelry,
+      ETF custodians, bullion banks) meets CME futures at this session.
+      Under Crabel's commitment hypothesis applied to gold, breakouts of
+      the London-session opening range continue because the committed
+      physical-meets-futures flow defends direction. G5 filters for
+      meaningful commitment ($50 per MGC contract).
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MGC]
+      sessions: [LONDON_METALS]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 x IS ExpR"
+      - "Any era with N >= 50 and ExpR < -0.05"
+      - "IS Sharpe < 0.95 annualized (Bailey noise floor at N=5 on 3.55yr)"
+
+  - id: 2
+    name: "Macro real-rate channel at US_DATA_830"
+    theory_citation: "Andersen et al (2003) AER; Baur & Lucey (2010)"
+    economic_basis: |
+      Gold is a macro-sensitive asset. US data releases (NFP, CPI, PPI)
+      affect gold via the USD/real-rate channel: higher-than-expected
+      inflation -> lower real rates -> gold up (and vice versa). Per
+      Andersen et al, the 08:30 ET release concentrates multi-day macro
+      news into seconds. G8 (not G5) per TRADING_RULES deep dive: MGC
+      US_DATA_830 is "G12+ or DEAD" — G5 includes structurally noisy
+      trades. G8 is the minimum viable threshold.
+    filter:
+      type: ORB_G8
+      column: orb_size_points
+    scope:
+      instruments: [MGC]
+      sessions: [US_DATA_830]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 x IS ExpR"
+      - "Any era with N >= 50 and ExpR < -0.05"
+      - "IS Sharpe < 0.95 annualized"
+
+  - id: 3
+    name: "US equity cross-asset flow at NYSE_OPEN"
+    theory_citation: "Capie, Mills, Wood (2005) JIMFIM"
+    economic_basis: |
+      Gold trades actively during US equity hours. NYSE_OPEN captures
+      peak US-session gold volume when equity/gold cross-asset flows
+      are highest: equity desks hedge with gold, risk-parity rebalances,
+      macro-overlay adjustments. Per Capie-Mills-Wood, gold moves
+      inversely with USD during US hours. G5 filters for meaningful
+      cross-asset commitment.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MGC]
+      sessions: [NYSE_OPEN]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 x IS ExpR"
+      - "Any era with N >= 50 and ExpR < -0.05"
+      - "IS Sharpe < 0.95 annualized"
+
+  - id: 4
+    name: "COMEX settlement mandatory flow"
+    theory_citation: "O'Hara (1995) Market Microstructure Theory"
+    economic_basis: |
+      COMEX is the primary US gold futures exchange. Settlement
+      concentrates mandatory flow from gold producers hedging forward
+      production, central bank reserve managers, ETF authorized
+      participants, and commodity trading advisors. Under O'Hara's
+      microstructure framework, this forced flow creates directional
+      imbalance that breakout entry captures.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MGC]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 x IS ExpR"
+      - "Any era with N >= 50 and ExpR < -0.05"
+      - "IS Sharpe < 0.95 annualized"
+
+  - id: 5
+    name: "CME reopen overnight information"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: |
+      CME Globex reopens after the daily maintenance break. Overnight
+      gap + first-session positioning reveals accumulated overnight
+      information. Under Ito-Engle-Lin's meteor shower framework,
+      non-US-session information persists in volatility and carries
+      directional implications into the reopen. G5 filters for
+      meaningful overnight accumulation.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MGC]
+      sessions: [CME_REOPEN]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 x IS ExpR"
+      - "Any era with N >= 50 and ExpR < -0.05"
+      - "IS Sharpe < 0.95 annualized"
+
+total_hypothesis_count: 5
+total_expected_trials: 5
+
+budget_check:
+  mode: "clean"
+  strict_bailey_e_1_0_max_n: 5
+  strict_bailey_e_1_0_status: "PASS with 10.4% headroom (tight)"
+  min_btl_required_years: 3.22
+  data_horizon_years_available: 3.55
+  data_horizon_metric: "calendar years"
+  sharpe_noise_floor: 0.952

@@ -1,0 +1,12 @@
+trading_day,window_label,overnight_range_pct,on_signal,entry_price,stop_price,target_price,direction,pnl_r,outcome,note
+2026-01-26,retrospective,91.67,1,6949.50,6940.75,6962.62,long,-1.000000,loss,
+2026-01-30,retrospective,93.33,1,6943.50,6926.00,6969.75,long,-1.000000,loss,
+2026-02-02,retrospective,100.00,1,6911.00,6895.00,6935.00,long,+1.383200,win,
+2026-02-06,retrospective,95.00,1,6818.00,6796.75,6849.88,long,+1.411000,win,
+2026-02-13,retrospective,81.67,1,6850.25,6827.50,6884.38,long,-1.000000,loss,
+2026-03-02,retrospective,96.67,1,6790.00,6768.50,6822.25,long,+1.412000,win,
+2026-03-04,retrospective,88.33,1,6813.25,6795.25,6840.25,long,+1.395700,win,
+2026-03-09,retrospective,96.61,1,6657.25,6633.50,6692.88,long,+1.420100,win,
+2026-03-23,retrospective,91.23,1,6516.50,6497.25,6545.38,long,-1.000000,loss,
+2026-03-31,retrospective,100.00,1,6437.25,6421.00,6461.62,long,+1.384900,win,
+2026-04-02,retrospective,100.00,1,6537.75,6528.00,6552.38,long,-1.000000,loss,

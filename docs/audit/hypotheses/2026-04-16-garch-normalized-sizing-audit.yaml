@@ -1,0 +1,73 @@
+# Hypothesis Registry — 2026-04-16 garch-normalized-sizing-audit
+#
+# Locked: 2026-04-16T21:55:00+10:00
+# Author: Codex main session
+# Purpose: evaluate normalized R3 sizing uses of garch without ad hoc map tuning
+
+metadata:
+  name: "garch-normalized-sizing-audit"
+  purpose: "Test whether garch improves portfolio utility as a normalized size modifier rather than a binary gate."
+  date_locked: "2026-04-16T21:55:00+10:00"
+  holdout_date: "2026-01-01"
+  testing_mode: "family"
+  total_expected_trials: 10
+  theory_summary: |
+    Chan 2008 frames GARCH as a volatility-regime input. Carver 2015 Ch 9-10
+    grounds continuous forecast-driven position sizing with normalized risk
+    targets rather than raw leverage. This audit tests whether garch is useful
+    as an R3 size modifier on the locked audited families.
+
+hypotheses:
+  - id: 1
+    name: "Broad exact-scope normalized sizing maps"
+    theory_citation: >
+      Carver 2015 Ch 9-10 volatility targeting and continuous sizing
+      (docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md);
+      Chan 2008 Ch 7 regime-state logic
+    economic_basis: |
+      If garch is an R3 signal, simple normalized size maps should improve total
+      R, Sharpe, or drawdown on the broad audited tradeable universe without
+      relying on hidden leverage.
+    scope:
+      trade_scope: "Broad exact rows from validated_setups + experimental_strategies with exact filter semantics"
+      maps:
+        - "LOW_CUT_ONLY"
+        - "HIGH_BOOST_ONLY"
+        - "SESSION_CLIPPED"
+        - "SESSION_LINEAR"
+        - "GLOBAL_LINEAR"
+      normalization: "mean(raw_weight IS) -> 1.0, then fixed for OOS"
+    expected_trial_count: 5
+    kill_criteria:
+      - "No normalized map improves portfolio utility versus base."
+      - "Any apparent gain comes only with materially worse drawdown."
+
+  - id: 2
+    name: "Validated-scope normalized sizing maps"
+    theory_citation: >
+      Carver 2015 Ch 9-10;
+      regime-and-rr handling framework R3 path
+      (docs/institutional/regime-and-rr-handling-framework.md)
+    economic_basis: |
+      The production-relevant question is whether the same normalized size maps
+      improve the actual validated strategy population, not just the wider
+      tradeable surface.
+    scope:
+      trade_scope: "Validated-only exact rows"
+      maps:
+        - "LOW_CUT_ONLY"
+        - "HIGH_BOOST_ONLY"
+        - "SESSION_CLIPPED"
+        - "SESSION_LINEAR"
+        - "GLOBAL_LINEAR"
+      normalization: "mean(raw_weight IS) -> 1.0, then fixed for OOS"
+    expected_trial_count: 5
+    kill_criteria:
+      - "No normalized map improves validated-scope utility versus base."
+      - "The best map depends on hidden leverage rather than information."
+
+total_hypothesis_count: 2
+total_expected_trials: 10
+budget_check:
+  max_allowed_clean: 300
+  status: "under budget"

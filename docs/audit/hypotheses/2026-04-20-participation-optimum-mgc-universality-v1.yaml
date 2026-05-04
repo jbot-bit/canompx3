@@ -1,0 +1,131 @@
+pre_reg_id: "participation-optimum-mgc-universality-v1"
+date: "2026-04-20"
+testing_mode: "individual"
+pathway: "B"
+pathway_rationale: |
+  Theory-driven confirmatory K=1 test of a PARENT MECHANISM established on MNQ
+  (PR #41, commit 126ed6b8; CONFIRMED_UNIVERSAL: pooled β₂ = -0.00156, t = -5.189,
+  21/24 lanes agree). Purpose: determine whether the 5m participation-optimum
+  (inverted-U in rel_vol) generalises from a micro equity index to a micro
+  commodity (gold) — same bar aperture, same entry model, same RR, same sessions
+  where MGC trades, unfiltered baseline. This is NOT discovery. No brute-force
+  sweep. Pre-reg follows Pathway B / Amendment 3.0 of `pre_registered_criteria.md`.
+
+parent_chain:
+  - "MNQ universality CONFIRMED_UNIVERSAL — PR #41 / 126ed6b8"
+  - "MES universality MES_NO_REPLICATION — PR #42 / 75b0d0bc (same direction, ~40% magnitude, t=-1.834)"
+  - "Q4-band deployment-shape LOCKED (doc-only) — PR #43 / a22930f0 (MNQ-only, 21 lanes)"
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  parent_scans:
+    - "Q1 H04 mechanism-shape KILL + MNQ pooled universality (PR #41)"
+    - "MES replication test (PR #42)"
+  parent_K_note: |
+    Parent MNQ scan was K=1 pooled + K=24 per-cell secondary under Pathway B.
+    Parent MES scan was K=1 pooled + K=22 per-cell secondary under Pathway B.
+    These are provenance only; THIS test's K is 1 (pooled β₂ on MGC) under
+    Pathway B (confirmatory, theory-driven).
+
+scope:
+  instrument: "MGC"
+  aperture: 5
+  entry_model: "E2"
+  confirm_bars: 1
+  rr_target: 1.5
+  filter: "none (unfiltered baseline)"
+  is_window: "trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01)"
+  oos_window: "not used by this test — this is an IS-only universality audit"
+  sessions:
+    - "TOKYO_OPEN"
+    - "SINGAPORE_OPEN"
+    - "EUROPE_FLOW"
+    - "LONDON_METALS"
+    - "NYSE_OPEN"
+    - "COMEX_SETTLE"
+    - "US_DATA_830"
+    - "US_DATA_1000"
+    - "CME_REOPEN"
+  sessions_rationale: |
+    Canonically discovered via SELECT DISTINCT orb_label FROM orb_outcomes
+    WHERE symbol='MGC' AND orb_minutes=5 AND pnl_r IS NOT NULL (2026-04-20 query).
+    MGC does not trade the BRISBANE_* index-hour sessions or CME_PRECLOSE /
+    NYSE_CLOSE at 5m — those are excluded by data, not by researcher choice.
+  directions: ["long", "short"]
+  max_cells: 18  # 9 sessions × 2 directions
+
+hypothesis:
+  H1: |
+    The mechanism tested — pnl_r ~ β₀ + β₁·rel_vol + β₂·rel_vol² + lane_FE —
+    estimated on the pooled MGC 5m E2 CB1 RR1.5 unfiltered universe across the 9
+    sessions × 2 directions produces β₂ < 0 with HC3-robust t ≤ -3.0 and
+    one-tailed p < 0.05.
+  H1_theory_citation: |
+    Fitschen (2013) Ch 3 "Breakout systems and the participation optimum" —
+    breakout continuation requires sufficient participation at the break, but
+    too much participation signals exhaustion. Predicts an inverted-U in
+    (participation-proxy, breakout-success). Aronson (2006) Ch 7 adds the
+    exhaustion prior at extreme participation. The MNQ universality result
+    (PR #41) is consistent; the MES result (PR #42) is same-sign but below
+    threshold. Gold is a different asset class with different liquidity
+    structure — theory does NOT strongly predict replication; weaker magnitude
+    is the Bayesian prior given the MES result.
+  H1_kill_if: |
+    β₂ ≥ 0, OR t > -3.0 (Chordia with theory), OR one-tailed p ≥ 0.05.
+  H1_expected_n: ">= 3000 IS rows (data availability already confirmed 2026-04-20: 9 sessions × ~820 avg = ~7400 candidate IS rows before rel_vol non-null filter)"
+
+testing_discipline:
+  K_primary: 1
+  K_primary_framing: "pooled β₂ with lane_FE, MGC 5m E2 CB1 RR1.5 unfiltered, IS only"
+  K_secondary: 18
+  K_secondary_framing: "per-cell β₂ on each (session × direction) — secondary evidence, agreement %"
+  mandatory_downstream_gates_non_waivable:
+    - "C6 (WFE) — N/A for IS-only universality test"
+    - "C8 (OOS positive) — N/A for IS-only universality test"
+    - "C9 (era stability) — report per-year β₂ sign for informational use"
+  integrity_gates:
+    - "rel_vol non-null coverage on IS ≥ 90% (fails closed if below)"
+    - "triple-join orb_outcomes × daily_features on (trading_day, symbol, orb_minutes)"
+    - "CTE reads of daily_features filter orb_minutes = 5 to prevent 3x N-inflation (RULE 9)"
+
+decision_rules:
+  verdicts:
+    - verdict: "MGC_CONFIRMED_UNIVERSAL"
+      criteria: "pooled β₂ < 0 AND t ≤ -3.0 AND p < 0.05 AND per-cell agreement ≥ 50%"
+      meaning: |
+        Mechanism replicates on gold with strength comparable to MNQ.
+        Unblocks a separate multi-instrument deployment-shape pre-reg.
+        DOES NOT deploy on its own. No capital action permitted by this pre-reg.
+    - verdict: "MGC_CONFIRMED_HETEROGENEOUS"
+      criteria: "pooled β₂ < 0 AND t ≤ -3.0 AND p < 0.05 AND 25% ≤ agreement < 50%"
+      meaning: |
+        Pooled significant but per-lane heterogeneous. Triggers a RULE 14
+        per-lane breakdown document (as was produced for MNQ in
+        `2026-04-20-heterogeneity-audit-phase3-results.md`) before any
+        downstream use.
+    - verdict: "MGC_SIMPSON_ARTEFACT"
+      criteria: "pooled β₂ < 0 AND t ≤ -3.0 AND p < 0.05 AND agreement < 25%"
+      meaning: "Pooled significant but <25% per-lane agreement — kill per RULE 14."
+    - verdict: "MGC_NO_REPLICATION"
+      criteria: "NOT (pooled β₂ < 0 AND t ≤ -3.0 AND p < 0.05)"
+      meaning: |
+        Mechanism does NOT generalise to gold at the MNQ-strength threshold.
+        Same-direction weaker outcome is the expected Bayesian posterior given
+        MES (PR #42). No follow-on capital action. May inform a future
+        asset-class-specific mechanism hypothesis.
+    - verdict: "SCAN_ABORT"
+      criteria: "integrity gate fails OR pooled N < 1000"
+      meaning: "Fail-closed; investigate data, re-run after fix."
+
+non_actions:
+  - "This pre-reg does NOT authorise any change to lane_allocation.json."
+  - "This pre-reg does NOT authorise any change to prop_profiles.ACCOUNT_PROFILES."
+  - "This pre-reg does NOT authorise any change to validated_setups."
+  - "This pre-reg does NOT authorise any sizing adjustment."
+  - "This pre-reg does NOT reopen or modify the Q4-band MNQ deployment-shape contract."
+
+outputs:
+  result_md: "docs/audit/results/2026-04-20-participation-optimum-mgc-universality-v1.md"
+  script: "research/participation_optimum_mgc_universality_v1.py"
+
+commit_sha: "9ea0a5ef"

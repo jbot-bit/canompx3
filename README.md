@@ -1,0 +1,65 @@
+# Canompx3 — Multi-Instrument Futures ORB Trading Pipeline
+
+Self-contained data pipeline and backtesting engine for Opening Range Breakout (ORB) strategies on micro futures (MGC, MNQ, MES). 10 years of 1-minute bar data, validated strategies across 5/15/30m ORB apertures, fully automated guardrails. Dead for ORB: MCL, SIL, M6E, MBT, M2K. See TRADING_RULES.md for current counts.
+
+## Quick Start
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Initialize database
+python pipeline/init_db.py
+
+# Ingest raw data (requires .dbn.zst files in DB/)
+python pipeline/run_pipeline.py --instrument MGC --start 2016-02-01 --end 2026-02-04
+
+# Run strategy discovery + validation
+python -m trading_app.outcome_builder --instrument MGC --start 2021-02-05 --end 2026-02-04
+python -m trading_app.strategy_discovery --instrument MGC
+python -m trading_app.strategy_validator --instrument MGC --min-sample 30
+
+# View results
+python -m trading_app.view_strategies
+python -m trading_app.view_strategies --orb 0900 --sort sharpe
+python pipeline/dashboard.py
+```
+
+## Project Structure
+
+```
+pipeline/           Data pipeline (ingest, aggregate, features, validation)
+trading_app/        Trading engine (strategies, execution, portfolio, risk)
+trading_app/nested/ Nested ORB research (15m/30m ORB + 5m entry bars)
+tests/              Comprehensive test suite
+scripts/            Utilities (backup, parallel ingest)
+docs/               Plans, archives, analysis documents
+.githooks/          Pre-commit hook (lint + drift + tests + syntax)
+.github/workflows/  CI pipeline (GitHub Actions)
+```
+
+## Key Commands
+
+```bash
+python -m trading_app.view_strategies --summary    # Strategy overview
+python pipeline/check_drift.py                     # Static analysis drift checks
+python -m pytest tests/ -x -q                      # Full test suite
+python pipeline/dashboard.py                       # Generate HTML dashboard
+python scripts/backup_db.py                        # Backup gold.db
+```
+
+## Architecture
+
+See [CLAUDE.md](CLAUDE.md) for full architecture, schema, time model, and guardrails documentation.
+
+See [ROADMAP.md](ROADMAP.md) for development phases and status.
+
+## Guardrails
+
+Every commit is gated by:
+1. **Ruff lint** -- catches unused imports, undefined names, unreachable code
+2. **Drift checks** -- architecture isolation, config sync, timezone hygiene (count self-reported at runtime)
+3. **Fast test suite** -- pipeline, trading app, nested ORB
+4. **Syntax validation** -- on all staged .py files
+
+CI runs the same checks on push/PR to main.

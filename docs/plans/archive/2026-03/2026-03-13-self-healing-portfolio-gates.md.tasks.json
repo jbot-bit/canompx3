@@ -1,0 +1,11 @@
+{
+  "planPath": "docs/plans/2026-03-13-self-healing-portfolio-gates.md",
+  "tasks": [
+    {"id": 9, "subject": "Task 1: Thread rolling_avg + add fields + validation", "status": "completed"},
+    {"id": 10, "subject": "Task 2: Seasonal gate with as_of_date parameter", "status": "pending", "blockedBy": [9]},
+    {"id": 11, "subject": "Task 3: Weight override + recovery using rolling_avg_expectancy_r", "status": "pending", "blockedBy": [10]},
+    {"id": 12, "subject": "Task 4: Apply gates to specs + CLI demoted section", "status": "pending", "blockedBy": [11]},
+    {"id": 13, "subject": "Task 5: Final verification", "status": "pending", "blockedBy": [12]}
+  ],
+  "lastUpdated": "2026-03-13T14:30:00"
+}

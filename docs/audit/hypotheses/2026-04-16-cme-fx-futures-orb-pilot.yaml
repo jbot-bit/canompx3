@@ -1,0 +1,112 @@
+metadata:
+  name: cme-fx-futures-orb-pilot
+  owner: codex
+  created_at: 2026-04-16
+  testing_mode: research_only_asset_pilot
+  scope_note: >
+    Research-only CME FX futures ORB pilot for 6J, 6B, 6A. No deployment
+    claim. No full onboarding claim. Purpose is cheap falsification of cleaner
+    ORB mechanics vs known weak/dead FX ORB and current active-book references.
+
+rules:
+  no_deployment_claim: true
+  no_full_onboarding: true
+  no_spot_fx_substitution: true
+  no_post_hoc_session_shopping: true
+  no_window_widening_after_first_result: true
+  no_rescue_if_pilot_fails: true
+
+universe:
+  venue: CME futures proxies only
+  dataset: Databento GLBX.MDP3
+  schema: ohlcv-1m
+  pilot_window_trading_days: 90-180
+  assets:
+    6J: [TOKYO_OPEN]
+    6B: [LONDON_METALS, US_DATA_830, US_DATA_1000]
+    6A: [LONDON_METALS, US_DATA_830, US_DATA_1000]
+
+claim: >
+  At least one CME FX futures proxy expresses cleaner ORB mechanics than known
+  weak/dead FX ORB paths and is strong enough to justify full research
+  onboarding.
+
+benchmarks:
+  dead_weak_repo_baselines:
+    - M6E TOKYO_OPEN (primary dead FX ORB benchmark)
+    - M6E broad ORB family mean (repo-dead FX benchmark)
+  exact_benchmark_map:
+    6J:
+      TOKYO_OPEN:
+        dead_fx: M6E TOKYO_OPEN
+        live_universe: MNQ TOKYO_OPEN
+    6B:
+      LONDON_METALS:
+        dead_fx: M6E broad ORB family mean
+        live_universe: MNQ EUROPE_FLOW
+      US_DATA_830:
+        dead_fx: M6E broad ORB family mean
+        live_universe: MNQ COMEX_SETTLE
+      US_DATA_1000:
+        dead_fx: M6E broad ORB family mean
+        live_universe: MNQ COMEX_SETTLE
+    6A:
+      LONDON_METALS:
+        dead_fx: M6E broad ORB family mean
+        live_universe: MNQ EUROPE_FLOW
+      US_DATA_830:
+        dead_fx: M6E broad ORB family mean
+        live_universe: MNQ COMEX_SETTLE
+      US_DATA_1000:
+        dead_fx: M6E broad ORB family mean
+        live_universe: MNQ COMEX_SETTLE
+  comparison_rule: >
+    Every pilot asset-session must be reported against its exact dead-FX
+    benchmark and exact live-universe benchmark from exact_benchmark_map.
+    Beating only the dead-FX benchmark is insufficient if the candidate is
+    structurally worse than its mapped live-universe benchmark.
+
+cost_model:
+  applies_to: [6J, 6B, 6A]
+  commission_rt_usd: 4.10
+  spread_doubled_usd: 12.50
+  slippage_usd: 12.50
+  total_friction_rt_usd: 29.10
+  pilot_assumption: >
+    Conservative full-size CME FX futures assumption: 1 tick spread and 1 tick
+    slippage per side, plus $4.10 round-trip commission. Do not relax post hoc.
+
+metrics:
+  - double_break_rate
+  - fakeout_share
+  - continuation_after_first_honest_break
+  - cost_adjusted_ExpR
+  - stability_by_month_or_subperiod_if_sample_allows
+
+go_thresholds:
+  minimum_cleanliness_vs_m6e:
+    double_break_improvement_pp: 10
+    fakeout_improvement_pp: 10
+    continuation_improvement_pp: 5
+  minimum_economics:
+    cost_adjusted_ExpR_floor_r: 0.05
+    cost_adjusted_ExpR_lift_vs_m6e_r: 0.10
+  active_book_guardrail: >
+    Candidate must not be worse than its mapped live-universe benchmark on 3 of
+    4 core metrics (double-break, fakeout, continuation, cost-adjusted ExpR).
+
+kill_rules:
+  - no asset-session meets every go threshold
+  - fakeout or double-break improvement vs M6E is below the pre-set minimum
+  - cost-adjusted ExpR is <= +0.05R or lift vs M6E is < +0.10R
+  - continuation improvement vs M6E is < 5 percentage points
+  - candidate is worse than its mapped live-universe benchmark on 3 of 4 core metrics
+  - total round-trip friction exceeds 35% of median ORB risk for the asset-session under the locked $29.10 RT assumption
+
+go_no_go:
+  go: >
+    Expand only if at least one asset-session is clearly cleaner and
+    economically better under the locked pilot metrics and thresholds.
+  no_go: >
+    Kill FX ORB fast. Do not add sessions, extend windows, switch to spot FX,
+    or widen the asset list without a brand-new pre-registration.

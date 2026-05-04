@@ -1,0 +1,184 @@
+metadata:
+  name: level-pass-fail-v1
+  owner: codex
+  created_at: 2026-04-19
+  testing_mode: research_investigation
+  supersedes: none
+  depends_on:
+    - docs/specs/level_interaction_v1.md
+    - docs/institutional/mechanism_priors.md
+  authority:
+    - RESEARCH_RULES.md
+    - docs/STRATEGY_BLUEPRINT.md
+    - docs/institutional/pre_registered_criteria.md
+    - docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+  scope_note: >
+    First pre-registered use of the research-only level interaction layer.
+    This is a narrow event study on prior-day high/low pass-fail behavior at
+    selected active sessions. It is not a deployability claim, not a broad
+    strategy discovery sweep, and not a license to add new level ontologies.
+
+edge_claim_summary: >
+  Simple pass/fail behavior at obvious prior-day liquidity levels may contain
+  short-horizon directional information that is currently under-expressed in
+  the repo because level-interaction semantics have been ad hoc. The claim is
+  modest: some instrument-session-level-event cells may show non-random
+  next-2-bar signed return after the first eligible level interaction in the
+  first 30 minutes of the session.
+
+mechanism:
+  summary: >
+    This contract tests the simplest mechanistic form of the imported
+    liquidity/failed-break language: prior-day high/low are obvious ex-ante
+    liquidity pools, and first interaction outcomes may differ between
+    close-through continuation and wick-fail reversal. Fitschen supports the
+    broader intraday trend-following premise, while the exact level-interaction
+    mechanism remains a project prior rather than separately literature-grounded.
+    Therefore Protocol B skepticism applies.
+  tier_1_literature_support:
+    - file: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+      relevance: CORE for intraday trend-follow premise
+      with_theory_claim: false
+      note: >
+        Grounds intraday trend-following as a plausible baseline on equities and
+        commodities, but does not directly validate prior-day level interaction
+        effects.
+  project_evidence:
+    - file: docs/institutional/mechanism_priors.md
+      lines: entire_doc
+
+sacred_boundary_discipline:
+  mode: A
+  holdout_date: 2026-01-01
+  mode_a_citation: >
+    docs/institutional/pre_registered_criteria.md Criterion 8 and Amendment 2.7
+    lock the 2026-01-01 sacred holdout boundary.
+  pre_2026_selection_only: true
+  2026_diagnostic_only: true
+  no_oos_re_tuning: true
+
+rules:
+  research_only: true
+  no_live_wiring: true
+  no_pipeline_schema_changes: true
+  no_market_profile_levels: true
+  no_fvg_ontology: true
+  no_extra_session_expansion: true
+  no_extra_level_expansion: true
+  no_parameter_search_beyond_locked_scope: true
+
+locked_inputs:
+  instruments:
+    - MES
+    - MGC
+    - MNQ
+  sessions:
+    - CME_PRECLOSE
+    - COMEX_SETTLE
+    - EUROPE_FLOW
+    - NYSE_OPEN
+    - TOKYO_OPEN
+    - US_DATA_1000
+  levels:
+    - prev_day_high
+    - prev_day_low
+  reference_sides:
+    prev_day_high: below
+    prev_day_low: above
+  interaction_kinds:
+    - close_through
+    - wick_fail
+  event_window_minutes: 30
+  response_horizon_bars: 2
+  orb_minutes_context: 5
+  common_start_date: 2019-05-06
+  common_end_date_is: 2025-12-31
+  oos_start_date: 2026-01-01
+  oos_end_date: 2026-04-19
+  response_normalization: atr_20
+  one_event_per_level_per_session_per_day: true
+
+trial_budget:
+  primary_selection_trials: 72
+  construction:
+    instruments: 3
+    sessions: 6
+    levels: 2
+    interaction_kinds: 2
+    response_horizons: 1
+  within_clean_cap: true
+  cap_reference: docs/institutional/pre_registered_criteria.md
+
+hypotheses:
+  - id: H1
+    type: family_primary
+    theory_citation: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+    statement: >
+      At least one locked cell in the level pass/fail family shows positive
+      pre-2026 signed next-2-bar expectancy with N >= 100 and survives
+      BH-FDR at q <= 0.05 across the locked K=72 family.
+    pass_metrics:
+      min_n_is: 100
+      p_bh_q_max: 0.05
+      avg_signed_return_gt: 0.0
+    rationale_note: >
+      This is a discovery gate only. Passing does not imply a tradeable
+      strategy because costs, execution, and full trade geometry are not yet in
+      scope.
+
+  - id: H2
+    type: diagnostic_only
+    statement: >
+      Any surviving pre-2026 cell should preserve direction in the sacred 2026
+      window if OOS N >= 20.
+    counted_against_trial_budget: false
+
+kill_criteria:
+  - id: K1
+    metric: methodology_integrity
+    fail_if:
+      - any level outside prev_day_high/prev_day_low is included
+      - any session outside the locked six-session set is included
+      - any response horizon other than next 2 bars is used
+      - any 2026 data is used for cell selection
+      - any result is described as validated edge or deployable strategy
+    action: HALT_AND_RE_AUDIT
+  - id: K2
+    metric: family_signal
+    fail_if:
+      - zero cells satisfy H1
+    action: FAMILY_NULL
+
+decision_rule:
+  continue_if:
+    - H1 passes on at least one cell
+    - K1 integrity passes
+  park_if:
+    - K2 fires
+  forbidden_follow_on_without_new_pre_reg:
+    - adding pivot into the same family
+    - adding overnight/session highs/lows into the same family
+    - adding wick-size or sweep-depth parameter sweeps
+    - widening event_window_minutes
+    - changing response_horizon_bars
+    - translating event-study cells directly into live strategy claims
+
+deliverables_locked:
+  - research/research_level_pass_fail_v1.py
+  - research/output/level_pass_fail_v1_cells.csv
+  - docs/audit/results/2026-04-19-level-pass-fail-v1.md
+
+methodology_rules_applied:
+  - rule: protocol_b_skepticism
+    application: >
+      Exact level-interaction theory is not separately literature-grounded in
+      local resources, so results must clear the standard statistical bars
+      without theory-path relaxation.
+  - rule: no_lookahead
+    application: >
+      Level resolution and session timing are constrained by
+      pipeline.session_guard and pipeline.dst.orb_utc_window.
+  - rule: narrow_scope
+    application: >
+      First use of the new helper is deliberately restricted to PDH/PDL and six
+      already-important sessions to avoid a brute-force event-family explosion.

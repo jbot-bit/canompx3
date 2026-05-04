@@ -1,0 +1,73 @@
+version: 1
+name: mgc_path_accurate_subr_v1
+date: 2026-04-19
+status: locked
+
+metadata:
+  intent: >
+    Rebuild the 5 surviving native MGC low-R families from actual 1-minute bar
+    path so the sub-1R signal is tested under canonical target/stop sequencing
+    rather than MFE-based diagnostic rewrites.
+  testing_mode: individual
+  total_expected_trials: 5
+  minbtl_mode: clean_micro
+  holdout_boundary: 2026-01-01
+  overlap_start: 2022-06-13
+  source_truth:
+    canonical:
+      - gold.db::orb_outcomes
+      - gold.db::daily_features
+      - gold.db::bars_1m
+      - pipeline.cost_model
+  locked_surface:
+    symbol: MGC
+    orb_minutes: 5
+    entry_model: E2
+    confirm_bars: 1
+    families:
+      - family_id: NYSE_OPEN_OVNRNG_50_RR1
+        target_variant: 0.75R
+      - family_id: US_DATA_1000_ATR_P70_RR1
+        target_variant: 0.5R
+      - family_id: US_DATA_1000_OVNRNG_10_RR1
+        target_variant: 0.5R
+      - family_id: US_DATA_1000_BROAD_RR1
+        target_variant: 0.5R
+      - family_id: NYSE_OPEN_BROAD_RR1
+        target_variant: 0.5R
+
+hypotheses:
+  - id: H1
+    claim: >
+      At least one of the 5 low-R survivors remains positive and BH-surviving
+      after path-accurate 1-minute target/stop reconstruction.
+    falsifier: >
+      All 5 die once actual target/stop path replaces the MFE-based rewrite.
+
+  - id: H2
+    claim: >
+      Path-accurate reconstruction weakens the low-R effect relative to the
+      rewrite approximation, but does not necessarily erase it.
+    falsifier: >
+      Path-accurate and rewrite results are essentially identical, implying the
+      prior diagnostic method already captured the full truth.
+
+rules:
+  - No 2026 holdout selection or rescue.
+  - K = 5 with global BH at q=0.10.
+  - Use actual 1-minute price path from fill bar forward to trading-day end.
+  - Same-bar target-and-stop conflicts must fail closed as losses.
+  - No broadening to new sessions, filters, or targets.
+  - No deployment claim from this pass alone.
+
+deliverables:
+  - research/research_mgc_path_accurate_subr_v1.py
+  - docs/audit/results/2026-04-19-mgc-path-accurate-subr-v1.md
+  - tests/test_research/test_mgc_path_accurate_subr_v1.py
+  - HANDOFF.md update
+
+kill_criteria:
+  - >
+    If all 5 families lose BH or flip materially weaker after path rebuild,
+    stop calling native low-R MGC a validated path and demote it back to
+    diagnostic-only.

@@ -1,0 +1,194 @@
+Canonical Backfill Ruleset (MGC · Databento DBN → DuckDB)
+A) Authority + Non-Negotiables
+
+Fail-closed: if any integrity check fails → stop with a loud error (no “best effort”).
+
+No lookahead: backfill produces atomic bars only (no indicators/features).
+
+Auditability required: every stored bar must be traceable to a specific source contract.
+
+Idempotent: safe to rerun; reruns do not create duplicates or drift.
+
+Resume required: crash/restart continues from checkpoints without manual cleanup.
+
+B) Inputs / Config (NO hardcoding)
+
+CLI args (required):
+
+--db PATH (DuckDB file)
+
+--dbn PATH (DBN file or folder)
+
+--symbol MGC
+
+--start YYYY-MM-DD / --end YYYY-MM-DD (inclusive bounds for backfill)
+
+--workers N (parallel workers)
+
+--chunk-days K (transaction unit)
+
+--checkpoint PATH (checkpoint directory)
+
+Env:
+
+DATABENTO_API_KEY only if API fetching is used (otherwise pure DBN file ingest).
+
+C) Target Schema Contract (must verify before writing)
+
+bars_1m must exist (or be created exactly once) with:
+
+ts_utc TIMESTAMPTZ NOT NULL
+
+symbol TEXT NOT NULL (constant 'MGC')
+
+source_symbol TEXT NOT NULL (e.g., MGCG24)
+
+open DOUBLE NOT NULL
+
+high DOUBLE NOT NULL
+
+low DOUBLE NOT NULL
+
+close DOUBLE NOT NULL
+
+volume BIGINT NOT NULL
+
+PRIMARY KEY(symbol, ts_utc)
+
+Hard rule: timestamps stored as real timestamps, never strings.
+
+D) Data Normalization Rules
+
+ts_utc definition: bar timestamp must be consistent (choose bar OPEN time; keep it forever).
+
+Convert all times → UTC immediately.
+
+Validate price sanity per row:
+
+high >= max(open, close, low)
+
+low <= min(open, close)
+
+all prices finite and > 0
+
+volume finite and >= 0
+
+Reject any row that violates these rules → stop (fail-closed), with row context logged.
+
+E) Contract Selection Rule (front month by volume)
+
+For each trading day (or session day):
+
+Determine source_symbol by max total volume for that day across contracts.
+
+Only ingest bars for that selected contract for that day.
+
+Store source_symbol per bar (never NULL).
+
+F) Chunking + Transactions (true chunk-days)
+
+Work unit = K trading days (e.g., --chunk-days 5).
+
+Each chunk runs inside explicit transaction:
+
+BEGIN; ingest chunk; COMMIT;
+
+Any error → ROLLBACK; and chunk marked failed (checkpoint records reason).
+
+G) Resume / Checkpoint System (mandatory)
+
+In --checkpoint directory:
+
+One checkpoint file per chunk, e.g.:
+
+mgc_backfill_state.jsonl (append-only) OR chunk_YYYYMMDD_YYYYMMDD.json
+
+Each chunk state must include:
+
+chunk_start, chunk_end
+
+status: pending|in_progress|done|failed
+
+rows_written, started_at, finished_at
+
+source: dbn path(s)
+
+error (if failed)
+
+On startup:
+
+load checkpoint(s)
+
+skip chunks marked done
+
+retry failed only if --retry-failed set
+
+H) Parallelism (safe multi-core)
+
+Parallelize by non-overlapping day-chunks (never overlapping timestamps).
+
+Use process-based workers (multiprocessing), not threads.
+
+DB lock discipline:
+
+Either:
+
+Option 1 (recommended): each worker writes to its own temporary DuckDB (or parquet), then a single “merge” step upserts into the main DB.
+
+Option 2: workers write directly to main DB but must acquire a file lock per transaction chunk (slower; simpler).
+
+Canonical preference: Option 1 for speed + no lock contention.
+
+I) Write Path (idempotent upsert)
+
+Inserts must be deterministic and idempotent:
+
+INSERT OR REPLACE (only if PK exists and verified)
+
+or MERGE INTO with PK match
+
+After each chunk commit:
+
+verify row counts for that chunk range (expected vs inserted)
+
+record counts in checkpoint
+
+J) Logging + Observability (required)
+
+Always log:
+
+start/end, config snapshot, chunk progress
+
+per chunk: days covered, contract chosen per day, rows written
+
+failures with stack trace + last processed timestamp
+
+Output a final summary:
+
+chunks done/failed/skipped, total rows inserted, wall time
+
+K) “Honesty Gates” (must run at end)
+
+Assert DuckDB types:
+
+typeof(ts_utc) is timestamp/timestamptz
+
+Assert no duplicates:
+
+COUNT(*) == COUNT(DISTINCT (symbol, ts_utc))
+
+Assert source_symbol never NULL.
+
+Optional: random spot-check N days against raw dbn counts (if accessible).
+
+L) Forbidden Behaviors
+
+No .to_df() on full-history DBN.
+
+No row-wise .apply() for day assignment on millions of rows.
+
+No storing timestamps as strings.
+
+No NULL source_symbol.
+
+No silent coercion, skipping bad rows, or continuing after integrity errors.

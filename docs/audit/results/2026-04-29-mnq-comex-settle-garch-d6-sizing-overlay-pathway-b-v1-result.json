@@ -1,0 +1,115 @@
+{
+  "run_date": "2026-04-29",
+  "db_max_trading_day": "2026-04-26",
+  "verdict": "PARK_CONDITIONAL_DEPLOY_RETAINED",
+  "reasons": [
+    "|IS t|=2.7631 in [2.5, 3.0): below Chordia with-theory but above raw p<0.05 floor",
+    "IS lift=0.1947 OK; positive_mean_floor OK; C9 OK",
+    "CONDITIONAL_DEPLOY (Phase 1 shadow-only) retained; Phase 2 size-multiplier pre-reg gated"
+  ],
+  "pressure_test": {
+    "self_corr_pnl_r_pnl_r": 1.0,
+    "corr_is_win_vs_pnl_r": 0.9890276096353066,
+    "t0_threshold": 0.7,
+    "triggered_correctly": true
+  },
+  "is": {
+    "baseline_n": 1389,
+    "baseline_expr": 0.104908279337653,
+    "baseline_sd": 1.145453330062256,
+    "part": {
+      "on": {
+        "n": 370,
+        "expr": 0.2477375675675676,
+        "sd": 1.171161537725109
+      },
+      "off": {
+        "n": 1019,
+        "expr": 0.05304681059862611,
+        "sd": 1.1321032350672962
+      }
+    },
+    "lift": 0.1946907569689415,
+    "t": 2.7630753108062263,
+    "df": 635.3593095023621,
+    "p": 0.005891750324749756,
+    "t_on_zero": 4.0688898202059285
+  },
+  "c9": {
+    "per_year": [
+      {
+        "yr": 2020,
+        "n_on": 15,
+        "expr_on": 0.3798133333333334,
+        "n_off": 132,
+        "expr_off": -0.019421212121212103
+      },
+      {
+        "yr": 2021,
+        "n_on": 48,
+        "expr_on": 0.45639166666666675,
+        "n_off": 200,
+        "expr_off": -0.04629550000000001
+      },
+      {
+        "yr": 2022,
+        "n_on": 138,
+        "expr_on": 0.047760869565217384,
+        "n_off": 112,
+        "expr_off": -0.05427767857142856
+      },
+      {
+        "yr": 2023,
+        "n_on": 10,
+        "expr_on": -0.31145,
+        "n_off": 238,
+        "expr_off": 0.1590134453781513
+      },
+      {
+        "yr": 2024,
+        "n_on": 83,
+        "expr_on": 0.2856542168674699,
+        "n_off": 166,
+        "expr_off": 0.056564457831325306
+      },
+      {
+        "yr": 2025,
+        "n_on": 76,
+        "expr_on": 0.48517236842105266,
+        "n_off": 171,
+        "expr_off": 0.14457076023391816
+      }
+    ],
+    "fails": [],
+    "positive_years": [
+      2020,
+      2021,
+      2022,
+      2024,
+      2025
+    ],
+    "positive_years_count": 5,
+    "pass_strict": true
+  },
+  "oos": {
+    "part": {
+      "on": {
+        "n": 37,
+        "expr": 0.3582351351351351,
+        "sd": 1.1762248210119377
+      },
+      "off": {
+        "n": 33,
+        "expr": -0.33517575757575757,
+        "sd": 1.0458098527667157
+      }
+    },
+    "lift": 0.6934108927108926,
+    "t": 2.6108885005621167,
+    "df": 67.99986304598058,
+    "p": 0.011100874938396066,
+    "dir_match": true,
+    "ratio_pass": true,
+    "c8_status": "GATE_INACTIVE_LOWPOWER"
+  }
+}

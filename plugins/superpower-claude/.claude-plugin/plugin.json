@@ -1,0 +1,9 @@
+{
+  "name": "superpower-claude",
+  "version": "1.0.0",
+  "description": "Clean-room workspace briefing plugin for Claude Code. Adds a concise repo brief command backed by local truth sources and the shared project pulse.",
+  "author": {
+    "name": "OpenAI Codex",
+    "email": "noreply@openai.com"
+  }
+}

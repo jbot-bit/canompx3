@@ -1,0 +1,46 @@
+# Calibration for code-review-graph v2.3.2
+#
+# Augments DEFAULT_IGNORE_PATTERNS in incremental.py:34-71.
+# Defaults already cover: node_modules, .venv, venv, __pycache__, *.pyc,
+# dist, build, coverage, *.db, *.sqlite, *.lock, package-lock.json, etc.
+#
+# Matching is fnmatch-based (incremental.py:218), NOT full gitignore.
+# Use `<dir>/**` for recursive directory exclusion.
+# Negation (!pattern) and anchored paths (/foo) are NOT supported.
+#
+# File enumeration prefers `git ls-files` (incremental.py:384), so anything
+# in .gitignore is already excluded. These patterns are defense-in-depth for
+# tracked-but-noisy paths and binary research artifacts.
+
+# Test/coverage artifacts not in defaults
+.pytest_cache/**
+htmlcov/**
+.ruff_cache/**
+.mypy_cache/**
+
+# Research output (large, regenerated, not source)
+reports/**
+logs/**
+output/**
+
+# Binary data formats — would be tracked by git but are not parseable code
+*.dbn
+*.dbn.zst
+*.parquet
+*.csv
+*.feather
+*.arrow
+*.pkl
+*.pickle
+*.npy
+*.npz
+*.h5
+*.hdf5
+
+# Generated/snapshot artifacts (per docs/governance/document_authority.md)
+REPO_MAP.md
+docs/context/**
+
+# Tooling local state
+.claude/hooks/.completion-notify-last
+.gitnexus/**
