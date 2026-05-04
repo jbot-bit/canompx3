@@ -2259,10 +2259,24 @@ def run_validation(
                     # Remove from passed list so downstream counts are correct
                     passed_strategy_ids = [s for s in passed_strategy_ids if s not in set(fdr_rejected_ids)]
 
+                # Per-session K vector for honest gate framing. Each strategy
+                # was BH-corrected against its OWN session K, not the aggregate
+                # total_k -- the latter is descriptive only. Cf. Harvey-Liu
+                # 2015 BHY (robust to dependency); Chordia 2018 sec. 4 on
+                # adaptive FDR. See docs/institutional/pre_registered_criteria.md
+                # Criterion 3 (Pathway A) for the canonical statement.
+                _k_vector = ", ".join(
+                    f"{s}: K={k}" for s, k in sorted(effective_k_by_session.items(), key=lambda x: -x[1])
+                )
                 logger.info(
-                    f"  FDR hard gate (stratified, total K={total_k}): "
+                    f"  FDR hard gate (stratified per session): "
                     f"{n_fdr_sig} survived, {n_fdr_rejected} REJECTED "
                     f"(of {n_fdr_sig + n_fdr_rejected} passed prior phases)"
+                )
+                logger.info(f"  Per-session K: {_k_vector}")
+                logger.info(
+                    f"  Aggregate total_k={total_k} is DESCRIPTIVE; "
+                    "BH-FDR stratified per session per Harvey-Liu 2015 BHY."
                 )
 
             if instrument in ACTIVE_ORB_INSTRUMENTS:
@@ -2498,6 +2512,83 @@ def _check_mode_a_holdout_integrity(db_path: Path | None, instrument: str) -> No
         )
 
 
+def _check_prereg_present(db_path: Path | None, instrument: str, allow_legacy: bool = False) -> None:
+    """Pre-flight gate: refuse to promote NEW discovery rows without a prereg yaml.
+
+    Authority: pre_registered_criteria.md Criterion 1 -- a pre-registered
+    hypothesis file must exist at ``docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml``
+    BEFORE any discovery run that writes to validated_setups.
+
+    Definition of "NEW row" for this gate:
+      * an experimental_strategies row exists for the instrument,
+      * its yearly_results contains data BUT no matching prereg file is found
+        on disk, AND
+      * the row was created after the Phase-0 cutoff
+        (HOLDOUT_SACRED_FROM, currently 2026-01-01).
+
+    Legacy carve-out: rows created at or before HOLDOUT_GRANDFATHER_CUTOFF
+    (Amendment 2.7 commit moment) are exempt. ``allow_legacy=True`` widens
+    the carve-out to ALL existing rows -- used during the gate's introduction
+    so the validator does not retroactively block already-promoted rows.
+
+    Pattern matches ``_check_mode_a_holdout_integrity`` exactly: argparse
+    catches the ValueError and exits cleanly via ``parser.error()``.
+
+    Raises
+    ------
+    ValueError
+        If a NEW (post-grandfather) experimental row exists for ``instrument``
+        whose discovery date has no matching prereg yaml.
+    """
+    from trading_app.holdout_policy import HOLDOUT_GRANDFATHER_CUTOFF
+
+    effective_path = db_path if db_path else GOLD_DB_PATH
+    if not Path(effective_path).exists():
+        return  # Fail-open if DB missing; discovery hasn't run.
+
+    project_root = Path(__file__).resolve().parents[1]
+    hyp_dir = project_root / "docs" / "audit" / "hypotheses"
+    if not hyp_dir.exists():
+        # Fresh checkout / new repo: no prereg dir = no rows to gate.
+        return
+
+    import duckdb
+
+    with duckdb.connect(str(effective_path), read_only=True) as con:
+        rows = con.execute(
+            """SELECT DISTINCT CAST(created_at AS DATE) AS d
+               FROM experimental_strategies
+               WHERE instrument = ?
+               AND created_at > ?""",
+            [instrument, HOLDOUT_GRANDFATHER_CUTOFF],
+        ).fetchall()
+
+    if allow_legacy or not rows:
+        return
+
+    instr_lower = instrument.lower()
+    missing_dates: list[str] = []
+    for (d,) in rows:
+        if d is None:
+            continue
+        ds = d.isoformat() if hasattr(d, "isoformat") else str(d)
+        if not list(hyp_dir.glob(f"{ds}-{instr_lower}-*.yaml")):
+            missing_dates.append(ds)
+
+    if missing_dates:
+        sample = ", ".join(missing_dates[:3])
+        more = f" (and {len(missing_dates) - 3} more)" if len(missing_dates) > 3 else ""
+        raise ValueError(
+            f"Validator refuses to promote {instrument} experimental_strategies "
+            f"discovered on date(s) {sample}{more} -- no matching prereg yaml "
+            f"at docs/audit/hypotheses/<date>-{instr_lower}-*.yaml. "
+            f"This violates Criterion 1 of pre_registered_criteria.md. "
+            f"Either write the prereg yaml(s) before re-running, or pass "
+            f"--allow-legacy-prereg to suppress this gate (legacy migration only). "
+            f"Authority: docs/institutional/pre_registered_criteria.md Criterion 1."
+        )
+
+
 def main():
     import argparse
 
@@ -2567,6 +2658,13 @@ def main():
         "'individual' = Pathway B (raw p < 0.05 + positive sharpe_ann). "
         "Default: family.",
     )
+    parser.add_argument(
+        "--allow-legacy-prereg",
+        action="store_true",
+        help="Suppress the Criterion 1 prereg-file gate. Legacy migration only -- "
+        "use to revalidate already-promoted rows whose discovery predated "
+        "the prereg discipline. Authority: pre_registered_criteria.md Criterion 1.",
+    )
     args = parser.parse_args()
 
     exclude = set(args.exclude_years) if args.exclude_years else None
@@ -2581,6 +2679,14 @@ def main():
         _check_mode_a_holdout_integrity(db_path, args.instrument)
     except ValueError as e:
         parser.error(str(e))  # exits code 2 with standard argparse error format
+
+    # Criterion 1 prereg-file gate. Refuses to start a NEW promotion run
+    # unless every recent (post-grandfather) experimental row's discovery
+    # date has a matching docs/audit/hypotheses/<date>-<instr>-*.yaml.
+    try:
+        _check_prereg_present(db_path, args.instrument, allow_legacy=args.allow_legacy_prereg)
+    except ValueError as e:
+        parser.error(str(e))
 
     # Load per-session K overrides if provided
     fdr_k_overrides = None
