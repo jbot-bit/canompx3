@@ -272,7 +272,13 @@ def build_live_readiness_report(
         profile_lane_ids,
     )
 
-    if allocator_summary.get("active_lanes"):
+    # Fail-closed on profile mismatch: if the allocator JSON belongs to a
+    # different profile, do NOT surface its lanes as the active set — that
+    # would silently render the wrong profile's strategies under the
+    # requested profile's banner. Fall back to profile_config lanes; the
+    # mismatch stays visible via allocator_summary["profile_match"] so
+    # operators see the integrity problem in the same report.
+    if allocator_summary.get("active_lanes") and allocator_summary.get("profile_match") is True:
         active_lanes = allocator_summary["active_lanes"]
     else:
         active_lanes = [

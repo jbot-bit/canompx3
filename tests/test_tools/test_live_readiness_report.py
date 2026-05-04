@@ -180,3 +180,97 @@ def test_build_live_readiness_report_falls_back_when_allocator_missing(tmp_path:
     assert "Live Readiness Report" in markdown
     assert "Criterion 11" in markdown
     assert "Criterion 12" in markdown
+
+
+def test_falls_back_to_profile_config_when_allocator_profile_mismatched(tmp_path: Path, monkeypatch) -> None:
+    """Allocator JSON for a different profile must NOT surface its lanes as active.
+
+    Operator-facing report must fail-closed on profile mismatch — otherwise the
+    requested-profile banner would render lanes from a different profile, a
+    silent integrity violation. Mismatch stays visible via
+    allocator_summary["profile_match"] = False so operators see the problem.
+    """
+    allocation_path = tmp_path / "lane_allocation.json"
+    allocation_path.write_text(
+        json.dumps(
+            {
+                "profile_id": "topstep_50k_mes_signal",  # different profile
+                "rebalance_date": "2026-05-03T06:07:00+00:00",
+                "lanes": [
+                    {
+                        "strategy_id": "WRONG_PROFILE_LANE",
+                        "instrument": "MES",
+                        "orb_label": "NYSE_OPEN",
+                        "orb_minutes": 5,
+                        "rr_target": 1.0,
+                        "filter_type": "COST_LT12",
+                        "status": "DEPLOY",
+                        "status_reason": "selected",
+                    }
+                ],
+                "paused": [],
+                "stale": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        live_readiness_report,
+        "resolve_profile_id",
+        lambda *_args, **_kwargs: "topstep_50k_mnq_auto",
+    )
+    monkeypatch.setattr(
+        live_readiness_report,
+        "get_profile_lane_definitions",
+        lambda _profile_id: [
+            {
+                "strategy_id": "REQUESTED_PROFILE_LANE",
+                "instrument": "MNQ",
+                "orb_label": "COMEX_SETTLE",
+                "orb_minutes": 5,
+                "rr_target": 1.0,
+                "filter_type": "OVNRNG_100",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        live_readiness_report,
+        "_load_validated_strategy_ids",
+        lambda _db_path: ["REQUESTED_PROFILE_LANE"],
+    )
+    monkeypatch.setattr(
+        live_readiness_report,
+        "read_lifecycle_state",
+        lambda *_args, **_kwargs: {
+            "criterion11": {"gate_ok": True, "gate_msg": "pass", "report_age_days": 1},
+            "criterion12": {"valid": True, "counts": {}, "state_age_days": 0},
+            "pauses": {"paused_count": 0, "paused_strategy_ids": []},
+            "conditional_overlays": {"available": True, "overlays": []},
+            "blocked_strategy_ids": [],
+            "blocked_reason_by_strategy": {},
+            "strategy_states": {
+                "REQUESTED_PROFILE_LANE": {
+                    "blocked": False,
+                    "block_source": None,
+                    "block_reason": None,
+                    "sr_status": "CONTINUE",
+                },
+            },
+        },
+    )
+    monkeypatch.setattr(live_readiness_report, "_git_branch", lambda _root: "test-branch")
+    monkeypatch.setattr(live_readiness_report, "_git_head", lambda _root: "deadbeef")
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["allocator_summary"]["profile_match"] is False
+    assert report["allocator_summary"]["allocation_profile_id"] == "topstep_50k_mes_signal"
+    assert len(report["active_lanes"]) == 1
+    assert report["active_lanes"][0]["strategy_id"] == "REQUESTED_PROFILE_LANE"
+    assert report["active_lanes"][0]["allocator_bucket"] == "profile_config"
+    wrong_ids = {lane["strategy_id"] for lane in report["active_lanes"]}
+    assert "WRONG_PROFILE_LANE" not in wrong_ids
