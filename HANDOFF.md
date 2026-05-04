@@ -100,6 +100,14 @@
 
 **Where to start next session:**
 
+0. Prior-day-context blocker memo now exists:
+   `docs/audit/results/2026-05-02-prior-day-context-blocker-memo.md`.
+   It records the smallest safe conclusion after a grounded proposal audit:
+   under current local `resources/`, `PD_*` prior-day geometry does NOT have an
+   honest theory grant for the `t >= 3.00` path; treat the branch as
+   conditioner/confluence-first, do NOT reopen the consumed bridge cells, and
+   do NOT make live-route claims while same-session half-size remains
+   unexpressible on 1-contract lanes.
 1. Read the survey: `docs/audit/results/2026-05-02-deployable-pool-edge-survey.md`.
    It is the operative truth for "what's the next high-EV thread."
 2. The chordia_audit_unlock thread is half-done (5/8) and the remaining 3 are
@@ -429,6 +437,20 @@ Main worktree (`C:/Users/joshd/canompx3`) at session-end has uncommitted Codex-s
   `code-review-graph`, not `notebooklm`.
 - Shared roadmap written:
   `docs/plans/2026-05-01-codex-supercharge-roadmap.md`
+- `repo-state` MCP landed:
+  - server: `scripts/tools/repo_state_mcp_server.py`
+  - launcher: `scripts/infra/run-repo-state-mcp.sh`
+  - shared declaration: `.mcp.json`
+  - Codex launcher wiring: `scripts/infra/codex-project*.sh`,
+    `scripts/infra/codex-review.sh`, `scripts/infra/codex-capital-review.sh`
+  - tests: `tests/test_tools/test_repo_state_mcp_server.py`
+- `research-catalog` MCP landed:
+  - server: `scripts/tools/research_catalog_mcp_server.py`
+  - launcher: `scripts/infra/run-research-catalog-mcp.sh`
+  - shared declaration: `.mcp.json`
+  - Codex launcher wiring: `scripts/infra/codex-project*.sh`,
+    `scripts/infra/codex-review.sh`, `scripts/infra/codex-capital-review.sh`
+  - tests: `tests/test_tools/test_research_catalog_mcp_server.py`
 
 ### Measured blockers still true
 
@@ -442,13 +464,7 @@ Main worktree (`C:/Users/joshd/canompx3`) at session-end has uncommitted Codex-s
 ### Next build order
 
 1. Use a WSL-home clone such as `~/canompx3` for real Codex work.
-2. Build `repo-state` MCP from:
-   `context_resolver.py`, `task_route_packet.py`, `project_pulse.py`,
-   `system_context.py`, `context_views.py`.
-3. Build `research-catalog` MCP over `docs/institutional/`,
-   `docs/audit/hypotheses/`, `docs/audit/results/`, and existing context
-   catalog tooling.
-4. Build `strategy-lab` MCP only after those two, using `gold-db` as the truth
+2. Build `strategy-lab` MCP using `gold-db` as the truth
    substrate instead of inventing a second state layer.
 
 ## Prior Session (2026-05-01 PM — Allocator Chordia Gate)

@@ -34,6 +34,10 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
   - `scripts/infra/codex-project.sh`
 - Interactive project session with live web search:
   - `scripts/infra/codex-project-search.sh`
+- Default repo-understanding MCP in those sessions:
+  - `repo-state`
+- Default research-grounding MCP in those sessions:
+  - `research-catalog`
 - Interactive project data session with `gold-db` MCP:
   - `scripts/infra/codex-project-gold-db.sh`
   - `scripts/infra/codex-project-search-gold-db.sh`
@@ -63,6 +67,10 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 - Use `blast-radius/SKILL.md` before edits that touch shared interfaces.
 - Use `quant-verify/SKILL.md` or `verify-done/SKILL.md` before closing any material implementation task.
 - Use `health-check/SKILL.md` when the right validation command is unclear.
+- Use `repo-state` MCP before broad repo scans when the question is really about
+  startup route, pulse, system context, or generated context views.
+- Use `research-catalog` MCP before broad doc scans when the question is really
+  about local literature grounding, prereg provenance, or prior audit results.
 - Use `canompx3-capital-review` or `scripts/infra/codex-capital-review.sh`
   when review scope can affect real capital, deployment, live execution,
   research truth, credentials, external inputs, CI, or supply chain.

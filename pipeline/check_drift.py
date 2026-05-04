@@ -1741,7 +1741,10 @@ def check_doc_stats_consistency(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_doc_stats_consistency SKIPPED: gold.db not found "
+                    "— cannot verify validated/FDR-significant counts vs docs"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
         validated_active = con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone()[0]
@@ -2270,7 +2273,10 @@ def check_no_active_e3(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_no_active_e3 SKIPPED: gold.db not found "
+                    "— cannot verify E3 entry-model deactivation on active shelf"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
         count = con.execute(
@@ -2307,7 +2313,10 @@ def check_no_active_e2_lookahead_filters(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_no_active_e2_lookahead_filters SKIPPED: gold.db not found "
+                    "— cannot verify E2 look-ahead filter contamination on active shelf"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -2366,7 +2375,10 @@ def check_active_validated_filters_routable(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_active_validated_filters_routable SKIPPED: gold.db not found "
+                    "— cannot verify session-aware filter routing on active shelf"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -2435,7 +2447,10 @@ def check_active_micro_only_filters_on_real_micros(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_active_micro_only_filters_on_real_micros SKIPPED: gold.db not found "
+                    "— cannot verify MICRO-only filter routing"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -2510,7 +2525,10 @@ def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_active_micro_only_filters_after_micro_launch SKIPPED: gold.db not found "
+                    "— cannot verify MICRO-only filters' validation windows"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -3036,7 +3054,10 @@ def check_orphaned_validated_strategies(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return violations  # Skip if no DB (CI)
+                return _skip_db_check_for_ci(
+                    "  check_orphaned_validated_strategies SKIPPED: gold.db not found "
+                    "— cannot verify validated strategies have orb_outcomes coverage"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
         rows = con.execute(
@@ -4610,6 +4631,157 @@ def check_holdout_policy_declaration_consistency() -> list[str]:
                 "  RESEARCH_RULES.md does not cite 'Amendment 2.7' — "
                 "Mode A declaration missing from research rules top-level file."
             )
+
+    return violations
+
+
+def check_prereg_present_for_recent_runs(con=None) -> list[str]:
+    """Pre-registration file presence for post-Phase-0 discovery runs.
+
+    Authority: docs/institutional/pre_registered_criteria.md Criterion 1
+    (line 42-53). Every discovery run that writes to validated_setups must
+    have a corresponding pre-registered hypothesis file at
+    ``docs/audit/hypotheses/YYYY-MM-DD-<instrument>-*.yaml``.
+
+    Definition of "recent run" for this check:
+      * an experimental_strategies row with ``created_at >
+        HOLDOUT_GRANDFATHER_CUTOFF`` exists,
+      * its ``CAST(created_at AS DATE)`` has no matching prereg yaml on disk.
+
+    Legacy carve-out: rows created at or before the Amendment 2.7 grandfather
+    cutoff (currently 2026-04-08 UTC) are exempt -- they pre-date the
+    prereg-discipline regime.
+
+    Reports per (instrument, discovery_date) combinations missing a prereg
+    file. Fail-closed: missing DB returns SKIPPED (not silent pass).
+    """
+    violations: list[str] = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return _skip_db_check_for_ci(
+                    "  PREREG CHECK SKIPPED: gold.db not found -- cannot verify Criterion 1 compliance"
+                )
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from trading_app.holdout_policy import HOLDOUT_GRANDFATHER_CUTOFF
+
+        hyp_dir = PROJECT_ROOT / "docs" / "audit" / "hypotheses"
+        if not hyp_dir.exists():
+            violations.append(
+                f"  PREREG: hypotheses dir missing at {hyp_dir.relative_to(PROJECT_ROOT)} -- "
+                "Criterion 1 cannot be enforced. Authority: pre_registered_criteria.md."
+            )
+            return violations
+
+        for instrument in ACTIVE_ORB_INSTRUMENTS:
+            instr_lower = instrument.lower()
+            rows = con.execute(
+                """SELECT DISTINCT CAST(created_at AS DATE) AS d
+                   FROM experimental_strategies
+                   WHERE instrument = ?
+                   AND created_at > ?
+                   ORDER BY d""",
+                [instrument, HOLDOUT_GRANDFATHER_CUTOFF],
+            ).fetchall()
+
+            for (d,) in rows:
+                if d is None:
+                    continue
+                ds = d.isoformat() if hasattr(d, "isoformat") else str(d)
+                if not list(hyp_dir.glob(f"{ds}-{instr_lower}-*.yaml")):
+                    violations.append(
+                        f"  PREREG MISSING: {instrument} discovery on {ds} has no "
+                        f"prereg yaml at docs/audit/hypotheses/{ds}-{instr_lower}-*.yaml. "
+                        f"Authority: pre_registered_criteria.md Criterion 1."
+                    )
+    except (ImportError, OSError) as e:
+        violations.append(f"  PREREG CHECK FAILED: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+
+    return violations
+
+
+def check_validator_pool_freshness(con=None, drift_threshold: float = 0.10) -> list[str]:
+    """Report drift between a row's frozen ``discovery_k`` and live per-session pool.
+
+    Authority chain:
+    - ``trading_app/strategy_validator.py:2216-2219`` -- ``discovery_k`` is
+      written ONLY on first promotion (UPDATE...CASE WHEN discovery_k IS NULL).
+    - ``docs/institutional/pre_registered_criteria.md`` Criterion 3 (BH-FDR
+      stratified per session). The frozen K is the audit-trail anchor; live
+      pool size shifts as MNQ/MES/MGC discovery rewrites peer rows.
+
+    Behavior: for every promoted row in ``validated_setups`` written in the
+    last 7 days, recompute the live per-session pool size from
+    ``experimental_strategies`` and compare to the frozen ``discovery_k``.
+    Report (advisory, do not fail) any drift > ``drift_threshold`` (default
+    10%). Surfaces silent K mutation across instrument-discovery cross-runs.
+
+    Fail-closed: missing DB returns SKIPPED.
+    """
+    violations: list[str] = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return _skip_db_check_for_ci("  POOL-FRESHNESS CHECK SKIPPED: gold.db not found")
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        # Recent promotions (last 7 days) with frozen discovery_k.
+        rows = con.execute(
+            """SELECT strategy_id, instrument, orb_label, discovery_k
+               FROM validated_setups
+               WHERE discovery_k IS NOT NULL
+               AND promoted_at IS NOT NULL
+               AND promoted_at >= now() - INTERVAL 7 DAY
+               ORDER BY promoted_at DESC"""
+        ).fetchall()
+
+        if not rows:
+            return violations
+
+        # Live per-session pool sizes for the instruments present.
+        instrument_pools: dict[tuple[str, str], int] = {}
+        live_query = con.execute(
+            """SELECT instrument, orb_label, COUNT(*) AS k
+               FROM experimental_strategies
+               WHERE is_canonical = TRUE
+               AND p_value IS NOT NULL
+               GROUP BY instrument, orb_label"""
+        ).fetchall()
+        for instr_, orb_, k_ in live_query:
+            instrument_pools[(instr_, orb_)] = int(k_)
+
+        for sid, instr, orb, frozen_k in rows:
+            live_k = instrument_pools.get((instr, orb))
+            if live_k is None or frozen_k is None or frozen_k <= 0:
+                continue
+            drift = abs(live_k - frozen_k) / float(frozen_k)
+            if drift > drift_threshold:
+                violations.append(
+                    f"  POOL-FRESHNESS: {sid} frozen discovery_k={frozen_k}, "
+                    f"live K={live_k} (drift {drift:.1%}). Frozen K is the "
+                    "audit-trail anchor; live drift is informational. "
+                    "Authority: pre_registered_criteria.md Criterion 3."
+                )
+    except (ImportError, OSError) as e:
+        violations.append(f"  POOL-FRESHNESS CHECK FAILED: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
 
     return violations
 
@@ -7577,16 +7749,33 @@ def check_lane_allocation_chordia_gate() -> list[str]:
 
     lanes = data.get("lanes", []) or []
     if not lanes:
-        return []
+        # An empty lanes[] is NOT a legitimate state — `rebalance_lanes.py`
+        # always writes at least one lane in normal operation. Empty array
+        # indicates either (a) producer crashed mid-write, (b) every
+        # strategy got demoted by the gate (hand-edit) and the file was
+        # left in place, or (c) test fixture leaked. Fail-closed: file
+        # exists -> must contain real lanes. Operators wanting "no lanes"
+        # should delete the file rather than empty its contents.
+        return [
+            "  lane_allocation.json has empty lanes[] — no active lanes to audit; "
+            "if intentional, delete the file rather than leaving it empty"
+        ]
 
     # Source freshness threshold from the doctrine YAML so they cannot drift.
+    # Fail-closed: if the doctrine module cannot be loaded or returns an
+    # unexpected shape, we cannot verify the audit threshold and must NOT
+    # silently fall back to a hardcoded 90 — that hides doctrine corruption
+    # behind a passing-looking check.
     try:
         from trading_app.chordia import load_chordia_audit_log
 
         freshness = load_chordia_audit_log().audit_freshness_days
-    except Exception:
-        # Fail-closed default matches the institutional prior.
-        freshness = 90
+    except Exception as exc:
+        return [
+            f"  Cannot load chordia freshness threshold from doctrine "
+            f"(trading_app.chordia.load_chordia_audit_log raised {type(exc).__name__}: {exc}) — "
+            f"audit threshold unverified; fix the import / YAML before this check can run"
+        ]
 
     allow = ("PASS_CHORDIA", "PASS_PROTOCOL_A")
     violations: list[str] = []
@@ -7894,6 +8083,18 @@ CHECKS = [
         check_holdout_policy_declaration_consistency,
         False,
         False,
+    ),
+    (
+        "Pre-registration file present for post-Phase-0 discovery runs (Criterion 1)",
+        check_prereg_present_for_recent_runs,
+        True,  # advisory: many already-promoted rows lack prereg files; report, do not block
+        True,  # requires_db
+    ),
+    (
+        "Validator pool freshness (frozen discovery_k vs live per-session pool)",
+        check_validator_pool_freshness,
+        True,  # advisory: drift surfaces silent K mutation, does not block
+        True,  # requires_db
     ),
     ("No raw orb_active reads outside asset_configs.py", check_no_raw_orb_active_reads, False, False),
     ("No deprecated C:/db/gold.db in docstring usage examples", check_no_scratch_db_in_docstrings, False, False),

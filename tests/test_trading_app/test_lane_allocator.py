@@ -1324,7 +1324,11 @@ class TestCrossAssetATRInjection:
         from trading_app.lane_allocator import _per_month_expr
 
         if not GOLD_DB_PATH.exists():
-            pytest.skip(f"Canonical gold.db unavailable at {GOLD_DB_PATH}")
+            pytest.skip(
+                f"gold.db not available at {GOLD_DB_PATH} - real-DB regression "
+                "test requires the canonical DB and is intended for local + "
+                "self-hosted runners only"
+            )
 
         con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
         try:

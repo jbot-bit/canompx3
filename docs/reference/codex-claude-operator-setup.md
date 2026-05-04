@@ -40,6 +40,7 @@ OpenAI's Codex docs say:
   Windows
 - use local environments for setup scripts, cleanup scripts, and top-bar
   actions in the Codex app
+- expose repo skills through Codex's documented `.agents/skills/` discovery path
 
 Sources:
 
@@ -84,6 +85,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\infra\codex-app-
 The cleanup script is intentionally safe. It removes local caches, build
 artifacts, and `__pycache__` folders, but it does not run `git clean` or delete
 tracked files.
+
+If WSL startup still fails because `.venv-wsl` is missing or preflight cannot
+run, use:
+
+```bash
+python3 scripts/infra/codex_local_env.py setup --platform wsl
+```
 
 ### Suggested actions
 
@@ -141,6 +149,14 @@ The repo-scoped `.codex/config.toml` now provides:
   - maximum-reasoning Codex profile
 - `canompx3_windows`
   - native Windows fallback profile
+
+Repo-local Codex skills are exposed through `.agents/skills/` wrappers, while
+the maintained skill sources remain in `.codex/skills/`.
+
+Default Codex launcher sessions also attach the repo-local `repo-state` and
+`research-catalog` MCPs. Use `repo-state` for route discovery, startup
+packets, pulse, and system-context work. Use `research-catalog` for bounded
+literature, prereg, and audit-result lookup grounded in committed repo docs.
 
 Quick launcher front doors:
 

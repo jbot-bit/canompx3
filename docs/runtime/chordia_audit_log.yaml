@@ -36,9 +36,25 @@
 # thresholds, but the live allocator reads the stored audit-row verdict here.
 # `validated_setups` is NOT an admissible replacement source for gate truth.
 #
+# Schema consumed by `trading_app.chordia.load_chordia_audit_log()` (verified
+# against source 2026-05-04):
+#   - version, default_has_theory, audit_freshness_days  (top-level scalars)
+#   - theory_grants:   (list — read; bare has_theory:true without theory_ref
+#                      is demoted to False per loader line 276)
+#   - audits:          (list — read; missing strategies fail-closed to MISSING)
+#
+# Top-level keys NOT in the above list (e.g. `non_auditable_notes`) are
+# silently ignored by the loader. Such keys are INFORMATIONAL ONLY — they
+# document operator-facing dispositions (e.g. strategies the strict-unlock
+# runner refuses by design) but DO NOT participate in the allocator gate.
+# A strategy listed only under `non_auditable_notes` resolves to MISSING
+# under the live gate and is PAUSED. To change a live deployment decision,
+# add to `audits:` or `theory_grants:` — never `non_auditable_notes:`.
+#
 # @research-source: docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
+# @research-source: docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md (t≥3.79 verbatim p.5)
 # @canonical-source: trading_app/chordia.py + docs/runtime/chordia_audit_log.yaml
-# @revalidated-for: allocator_chordia_gate stage 2026-05-01
+# @revalidated-for: allocator_chordia_gate stage 2026-05-01; queue closeout 2026-05-03
 
 version: 1
 default_has_theory: false
@@ -236,31 +252,58 @@ audits:
       No theory grant; strict 3.79 applies. FAIL_BOTH.
 
   - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60
-    audit_date: 2026-05-04
+    audit_date: 2026-05-03
+    audit_reaffirmed_date: 2026-05-04
     verdict: PASS_CHORDIA
     t_stat: 4.361
+    t_stat_source: in-memory float64
+    t_stat_csv_recompute: 4.323
     threshold: 3.79
     sample_size: 676
+    oos_n: 49
+    oos_power: 0.30
     note: |
       Bounded exact-lane strict unlock replay via
-      `research/chordia_strict_unlock_v1.py` and prereg
-      `docs/audit/hypotheses/2026-05-04-mnq-comexsettle-xmesatr60-chordia-unlock-v1.yaml`.
-      No theory grant claimed. Required cross-asset ATR enrichment
-      (`cross_atr_MES_pct`) before filter delegation. With
-      `WF_START_OVERRIDE['MNQ']=2020-01-01` applied (cohort N_fired=676 vs
-      `validated_setups.sample_size`=673 win+loss; reconciled by 3 scratch
-      rows), IS clears strict (t=4.361, ExpR=0.1519) and OOS sign matches
-      pooled at N_OOS=49 (OOS ExpR=+0.1537, pooled t=+1.150). Verdict
-      PASS_CHORDIA: IS strict-clean and OOS pooled-sign matches.
-
-      Caveat for downstream review: OOS directional split shows
-      long N=25 ExpR=-0.0410 (sign-flip vs IS long +0.2005) and short N=24
-      ExpR=+0.3565. Pooled OOS sign-match driven mainly by the short side.
-      Per prereg `pass_metric.extra_gates`, dir_match is satisfied at the
-      pooled level for descriptive-only OOS; this caveat does not invalidate
-      PASS_CHORDIA but should be revisited if directional rebalancing is
-      considered in a future doctrine pass.
-
+      `research/chordia_strict_unlock_v1.py`. Original audit prereg
+      `docs/audit/hypotheses/2026-05-03-mnq-comex-settle-xmesatr60-rr10-chordia-unlock-v1.yaml`
+      (post-merge addendum 2026-05-04 added the four institutional fields
+      below: t_stat_source, t_stat_csv_recompute, oos_n, oos_power).
+      An independent re-run prereg
+      `docs/audit/hypotheses/2026-05-04-mnq-comexsettle-xmesatr60-chordia-unlock-v1.yaml`
+      reaffirmed the verdict on 2026-05-04 with the same numerics
+      (t=4.361, N=676, ExpR=+0.1519). Both prereg files are retained.
+      No theory grant claimed (filter-grounding-status UNSUPPORTED per
+      2026-05-02 feasibility scan). Required cross-asset ATR enrichment
+      (`cross_atr_MES_pct`) before filter delegation. Scratch-inclusive
+      replay (N_fired=676; 3 scratches counted as R=0) on canonical
+      `orb_outcomes` + `daily_features` with
+      `WF_START_OVERRIDE['MNQ']=2020-01-01` applied. Cleared strict hurdle
+      (IS t=4.361, ExpR=+0.1519).
+      Reproducibility note: t_stat=4.361 was computed in-memory from the
+      pandas dataframe with full float64 precision. Independent recompute
+      from the committed CSV (`pnl_r_effective` rounded to 4dp) yields
+      t=4.323. Delta=0.038 is a CSV-serialization rounding artefact, not
+      an evidence discrepancy; both clear the 3.79 hurdle (post-2026-05-04
+      addendum, `chordia/post-audit-addendum`).
+      OOS context (descriptive only, not a confirmatory data point):
+      OOS sign positive on N_OOS=49 (ExpR=+0.1537), but power to detect
+      the IS-sized effect at N=49 is approximately 0.30 (1-tailed). At
+      this power, a positive OOS sign-match is uninformative - it neither
+      confirms nor falsifies. Listed here for completeness, not as
+      supporting evidence. The OOS gate is a kill-on-sign-flip veto only;
+      this lane does not trigger the veto. Per
+      `.claude/rules/backtesting-methodology.md` RULE 3.2 (`N_on_OOS < 30
+      -> directional-only, not confirmatory`), this OOS at N=49 with
+      power=0.30 is treated as directional-only.
+      Direction-mix asymmetry: IS Long_t=4.332 (n=371), IS
+      Short_t=1.761 (n=305); OOS Long_ExpR=-0.041 (n=25), OOS
+      Short_ExpR=+0.357 (n=24). Pooled gate clears strict; per-direction
+      OOS is unstable. Documented asymmetry, not a kill. Prior comparison
+      to MNQ_US_DATA_1000 VWAP_MID_ALIGNED RR1.0 sibling (audited
+      2026-05-02) is informal - no numeric magnitude comparison committed.
+      Allocator correlation gate vs already-deployed
+      MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 will likely demote this
+      lane regardless; that decision is downstream of this audit.
       Differs from sibling `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`
       (audited 2026-05-02, verdict PARK on OOS pooled sign-flip): the two
       strategies share filter class but produce different OOS behavior, so

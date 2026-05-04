@@ -112,7 +112,7 @@ def diagnose_allocation(
     scores: list[LaneScore],
     selected: list[LaneScore],
     correlation_matrix: dict[tuple[str, str], float],
-    orb_size_stats: dict[tuple[str, str], tuple[float, float]],
+    orb_size_stats: dict[tuple[str, str, int], tuple[float, float]],
     profile,
     max_slots: int,
     max_dd: float,
@@ -148,7 +148,7 @@ def diagnose_allocation(
             # Track DD usage using same logic as canonical
             cost = COST_SPECS.get(lane.instrument)
             if cost is not None:
-                key = (lane.instrument, lane.orb_label)
+                key = (lane.instrument, lane.orb_label, lane.orb_minutes)
                 _, p90 = orb_size_stats.get(key, (100.0, 100.0))
                 dd_used += p90 * profile.stop_multiplier * cost.point_value
             continue
@@ -176,7 +176,7 @@ def diagnose_allocation(
         if cost is None:
             diagnosis[lane.strategy_id] = ("no_cost_spec", "", None)
             continue
-        key = (lane.instrument, lane.orb_label)
+        key = (lane.instrument, lane.orb_label, lane.orb_minutes)
         _, p90 = orb_size_stats.get(key, (100.0, 100.0))
         lane_dd = p90 * profile.stop_multiplier * cost.point_value
         if dd_used + lane_dd > max_dd:
