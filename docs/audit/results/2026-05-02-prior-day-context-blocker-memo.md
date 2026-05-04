@@ -165,8 +165,17 @@ reconstruct the conclusion:
    passage on prior-day high/low/range/middle as a structural mechanism.
 2. Local resources read: `resources/Fitschen_2013.pdf` Ch 3 — confirm
    absence of prior-day-level mechanism distinct from intraday breakout.
-3. Local resources read: `resources/Carver_2015.pdf` Ch 9-10 — confirm
-   sizing/portfolio scope, not entry-mechanism support for PD_* features.
+3. Carver Ch 9-10 status (UNVERIFIED in this memo): no
+   `docs/institutional/literature/carver_2015_ch9*.md` or `_ch10*.md`
+   extract exists. Existing Carver extracts are Ch 11 (portfolios) and
+   Ch 12 (speed/size). The absence-of-prior-day-level-mechanism claim
+   for Ch 9-10 is plausible by analogy to the Ch 11/12 scope but is
+   NOT independently verified against the raw PDF in this memo. Per
+   `.claude/rules/institutional-rigor.md` § "Ground in local resources
+   before training memory" extract-before-dismiss rule, an explicit
+   Ch 9-10 extract is the proper grounding step before a binding
+   absence claim. This memo does not block on it because the
+   parking decision rests on (1) and (2) above plus (4).
 4. Cross-check: `docs/institutional/literature/` does not contain a
    prior-day-context extract as of 2026-05-02. Therefore filter-grounding-
    status for `PD_*` is UNSUPPORTED, and per

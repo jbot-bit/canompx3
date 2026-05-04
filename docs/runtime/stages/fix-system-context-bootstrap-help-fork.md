@@ -1,8 +1,11 @@
 ---
-task: Skip _ensure_repo_python() reinvocation when --help is in argv (fixes CI hang on test_system_context_script_help_runs_via_direct_path)
+task: Skip _ensure_repo_python() reinvocation when --help is in argv (fixes CI hang on test_system_context_script_help_runs_via_direct_path) + post-audit fixes to merged content (RULE 3.2 mis-citation, Check #134 → #136, Carver Ch 9-10 unverified absence claim)
 mode: IMPLEMENTATION
 scope_lock:
   - scripts/tools/system_context.py
+  - docs/runtime/chordia_audit_log.yaml
+  - docs/runtime/action-queue.yaml
+  - docs/audit/results/2026-05-02-prior-day-context-blocker-memo.md
 ---
 
 ## Blast Radius

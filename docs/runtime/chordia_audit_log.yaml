@@ -291,10 +291,16 @@ audits:
       this power, a positive OOS sign-match is uninformative - it neither
       confirms nor falsifies. Listed here for completeness, not as
       supporting evidence. The OOS gate is a kill-on-sign-flip veto only;
-      this lane does not trigger the veto. Per
-      `.claude/rules/backtesting-methodology.md` RULE 3.2 (`N_on_OOS < 30
-      -> directional-only, not confirmatory`), this OOS at N=49 with
-      power=0.30 is treated as directional-only.
+      this lane does not trigger the veto. RULE 3.2 of
+      `.claude/rules/backtesting-methodology.md` covers N_on_OOS<30; this
+      lane has N_OOS=49 (>=30), so RULE 3.2 does not literally apply.
+      The "directional-only" framing here is justified by power=0.30 per
+      `memory/feedback_oos_power_floor.md` ("OOS dir_match veto requires
+      power floor - if OOS power<50% verdict is UNVERIFIED not DEAD"),
+      which is project memory rather than canonical rule text - a canon
+      amendment to RULE 3.2 licensing the power-floor tier is open
+      follow-up. The PASS_CHORDIA verdict rests on IS strict
+      (t=4.361, N=676), not on OOS confirmation.
       Direction-mix asymmetry: IS Long_t=4.332 (n=371), IS
       Short_t=1.761 (n=305); OOS Long_ExpR=-0.041 (n=25), OOS
       Short_ExpR=+0.357 (n=24). Pooled gate clears strict; per-direction

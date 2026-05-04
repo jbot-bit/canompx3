@@ -56,7 +56,7 @@ items:
       (1) `apply_chordia_gate(scores)` invoked inline at top of
           `build_allocation()` -- demotes FAIL_BOTH / FAIL_CHORDIA / MISSING /
           stale-audit (>90d) to PAUSE before ranking. Idempotent.
-      (2) Drift check #134 `check_lane_allocation_chordia_gate` -- refuses
+      (2) Drift check #136 `check_lane_allocation_chordia_gate` -- refuses
           any FAIL_* / missing / stale lane in `lane_allocation.json`.
           Resolves via PROJECT_ROOT (not CWD) -- no fail-open class.
 
@@ -70,7 +70,7 @@ items:
       sit at PASS_CHORDIA but blocked on missing audit_date -- doctrine
       audit each = the unlock path for expanded allocation. Tracked
       separately as new entry below.
-    exit_criteria: Closed. PR #197 merged 2026-05-01T06:44:16Z. CI green. Drift check #134 enforces the JSON contract. 56 stage tests + 118 drift checks pass on the merged code.
+    exit_criteria: Closed. PR #197 merged 2026-05-01T06:44:16Z. CI green. Drift check #136 enforces the JSON contract. 56 stage tests + 118 drift checks pass on the merged code.
     blocked_by: []
     decision_refs:
       - docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
@@ -106,8 +106,9 @@ items:
       - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60`          (audit 2026-05-03, reaffirmed 2026-05-04;
                                                               t=4.361 in-memory float64,
                                                               t=4.323 CSV recompute; both clear 3.79.
-                                                              OOS N=49 power=0.30 directional-only per
-                                                              backtesting-methodology.md RULE 3.2)
+                                                              OOS N=49 power=0.30 directional-only
+                                                              per memory/feedback_oos_power_floor.md;
+                                                              RULE 3.2 covers N<30, this is power-floor)
 
       PARK on bounded strict replay (IS-clean, OOS sign-flip):
       - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`          (audit 2026-05-02, t=4.211 IS, OOS N_OOS=49 sign-flip)
@@ -123,7 +124,7 @@ items:
         re-promotion would re-open this as a fresh audit candidate.
 
       Rebalance verification (2026-05-04):
-      - Drift check #134 (`check_lane_allocation_chordia_gate`) PASSES.
+      - Drift check #136 (`check_lane_allocation_chordia_gate`) PASSES.
       - `compute_lane_scores()` returns the new COMEX_SETTLE X_MES_ATR60 row
         with `chordia_verdict=PASS_CHORDIA`, `chordia_audit_age_days=0`.
       - No allocator code change. Allocation update flows naturally at the
@@ -233,7 +234,7 @@ items:
       and a clear PASS_CHORDIA / PASS_PROTOCOL_A verdict on rebalance, OR
       (b) an explicit FAIL with a one-line note in the YAML explaining why
       audit failed at Pathway-A even though raw t passed (e.g. selection bias,
-      contamination, regime instability). Drift check #134 still passes.
+      contamination, regime instability). Drift check #136 still passes.
       Live `lane_allocation.json` post-rebalance shows the cleared lanes.
     blocked_by: []
     decision_refs:
@@ -249,7 +250,7 @@ items:
       Closed 2026-05-04 with 7/8 audited (6 PASS_CHORDIA + 1 PARK) + 1 implicit
       close via pipeline rebuild. Final audit row added 2026-05-04 for
       MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60 (PASS_CHORDIA, t=4.361, N=676).
-      Drift check #134 still passes. The COMEX_SETTLE X_MES_ATR60 result
+      Drift check #136 still passes. The COMEX_SETTLE X_MES_ATR60 result
       DIFFERS from its CME_PRECLOSE sibling (PARK): independent measurement
       avoided a copy-paste-by-symmetry doctrine error.
 
