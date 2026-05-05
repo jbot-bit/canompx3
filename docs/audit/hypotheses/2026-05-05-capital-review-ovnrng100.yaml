@@ -1,0 +1,301 @@
+metadata:
+  name: "capital_review_ovnrng100_v1"
+  purpose: >
+    Capital-class diligence on the deployed lane MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100,
+    addressing the four concerns the evidence-auditor flagged on PR #228 OOS reconciliation
+    and the placeholder doc merged in PR #234. Produces a verdict (REMAIN_DEPLOY | DOWNSIZE
+    | UNDEPLOY | UNVERIFIED) traced to numeric criteria. Does NOT update validated_setups,
+    lane_allocation.json, or any allocator state.
+  date_locked: "2026-05-05T13:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 4
+  testing_mode: "individual"
+  pathway: "B"
+  research_question_type: "capital_diligence"
+  scratch_policy:
+    policy: "include-as-zero"
+    justification: >
+      Live execution path forces flat at session end (TopStep + AMP futures EOD). Backtest
+      must book the same $0 outcome to satisfy Chan 2013 Ch 1 unified-program doctrine.
+      Matches the strict-unlock CSV's IS row exactly (canonical machinery via
+      research.chordia_strict_unlock_v1._evaluate_split). Sample-selection bias from drop
+      policy quantified at 10-45% ExpR inflation per docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md.
+
+execution:
+  mode: "documentary"
+  entrypoint: "no runner — analysis is documented in result doc with verbatim canonical-layer query output"
+  default_args: []
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/integrity-guardian.md"
+    - ".claude/rules/institutional-rigor.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/runtime/stages/capital-review-ovnrng100.md"
+    - "docs/audit/results/2026-05-05-oos-reconcile-ovnrng100.md"
+    - "docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md"
+    - "docs/audit/results/2026-05-01-target-b-6lane-vestigialness-fresh-audit.md"
+  notes:
+    - "K=1 capital-class diligence on already-deployed lane. Not new discovery."
+    - "Mode A holdout (2026-01-01) sacred; OOS values descriptive not confirmatory under power floor."
+    - "All four findings inherited verbatim from placeholder doc PR #234."
+    - "Verdict choices are LOCKED to four options. No 'investigate further' or 'monitor for X months' verb forms."
+
+scope:
+  instrument: MNQ
+  strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+  session: COMEX_SETTLE
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.5
+  direction: pooled
+  filter_type: OVNRNG_100
+  filter_source: "trading_app.config.ALL_FILTERS['OVNRNG_100']"
+  filter_definition: "overnight_range >= 100 (absolute MNQ points threshold)"
+  out_of_scope:
+    - "RR1.0 sibling lane diligence"
+    - "Other 4 paused MES_CME_PRECLOSE / MES_COMEX_SETTLE / MES_SINGAPORE_OPEN / MES_US_DATA_830 lanes"
+    - "New filter discovery to replace OVNRNG_100"
+    - "DSR re-derivation methodology audit (Bailey-LdP standalone)"
+    - "Threshold modification on OVNRNG_100 (would be data-snooping)"
+    - "Any writes to validated_setups, experimental_strategies, chordia_audit_log.yaml, lane_allocation.json"
+
+data_policy:
+  is_window:
+    description: "WF_START_OVERRIDE['MNQ'] <= trading_day < HOLDOUT_SACRED_FROM"
+    constant_source_lower: "trading_app.config.WF_START_OVERRIDE['MNQ']"
+    constant_source_upper: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_lower: "2020-01-01"
+    locked_upper: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM (2026-01-01) up to current trading_day"
+    policy: "descriptive recompute against canonical orb_outcomes; binary OOS gate forbidden under RULE 3.3 power floor"
+  trailing_window:
+    description: "rolling 12-month window per docs/runtime/lane_allocation.json trailing_window_months"
+    policy: "directional evidence only at observed power; not refutational"
+  tuning_against_oos: false
+  canonical_layers_only: true
+
+feature_definition:
+  feature_name: OVNRNG_100
+  canonical_source_of_truth: "trading_app.config.ALL_FILTERS['OVNRNG_100']"
+  raw_definition: "df.overnight_range >= 100 (absolute points threshold, MNQ scale)"
+  trade_time_knowable: true
+  first_complete_time: "overnight window 09:00-17:00 Brisbane closes before COMEX_SETTLE 04:30 next-day Brisbane"
+  temporal_alignment_note: >
+    Per .claude/rules/backtesting-methodology.md RULE 1.2 the overnight_* features are valid
+    for ORB sessions starting at 17:00 Brisbane or later. COMEX_SETTLE starts 04:30 Brisbane
+    next day, well after the overnight window closes. No look-ahead by the validity-domain
+    gate.
+  lookahead_check: "PASS by validity-domain gate."
+  scale_stability_concern: >
+    OVNRNG_100 is an absolute-points threshold. Per feedback_absolute_threshold_scale_audit.md,
+    raw-points thresholds drift with price. Fire rate stability is a load-bearing measurement
+    for whether the filter has structural meaning vs vestigial scale-artifact.
+
+grounding:
+  literature_anchors:
+    - source_file: "resources/Codependence_Detection.pdf"
+      extract: "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+      page_or_section: "p.8 Theorem 1, p.7 Equation 4"
+      use: >
+        MinBTL bound: with 6.65 years of clean MNQ data, strict E[max_N]=1.0 implies N <= 28.
+        Lane carries n_trials_at_discovery=35,616 — exceeds bound by ~1,272x. The lane was
+        promoted under the pre-Phase-0 brute-force discovery regime documented in MEMORY.md.
+    - source_file: "resources/deflated-sharpe.pdf"
+      extract: "docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md"
+      page_or_section: "p.8 Equation 2, p.3 Conclusions"
+      use: >
+        DSR threshold: > 0.95 to clear the 95% confidence bar. Lane reports dsr_score=0.1746951317604647
+        in validated_setups (well below 0.95). Treated as binding diligence gap per
+        docs/institutional/pre_registered_criteria.md Criterion 5.
+    - source_file: "resources/backtesting_dukepeople_liu.pdf"
+      extract: "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+      page_or_section: "p.17"
+      use: >
+        OOS power-floor doctrine: "OOS test's success can be due to luck for both the in-sample
+        selection and the out-of-sample testing." Grounds RULE 3.3 — N_OOS=66 with t=+1.150,
+        p=0.250 produces power 32% (one-sample) or 7% (two-group filter on/off). Tier:
+        STATISTICALLY_USELESS. Cannot refute IS edge; cannot confirm it.
+    - source_file: "resources/Algorithmic_Trading_Chan.pdf"
+      extract: "docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md"
+      page_or_section: "p.4"
+      use: >
+        Canonical-machinery delegation: PR #228 reproduced strict-unlock OOS exactly via
+        canonical helpers. Same machinery means no divergence. Grounds the no-rescue
+        verdict on F2 (the FAIL-vs-RECONCILED reframe is a pre-reg specification bug,
+        not a finding of canonical-source drift).
+    - source_file: "resources/Carver_Systematic_Trading.pdf"
+      extract: "docs/institutional/literature/carver_2015_ch11_portfolios.md"
+      page_or_section: "Ch 9-10 (capital allocation under uncertainty)"
+      use: >
+        Capital allocation under uncertainty: when DSR diligence is open and OOS is
+        statistically useless, the DOWNSIZE option is the canonical Carver answer
+        (reduce capital exposure proportional to remaining-uncertainty, do not bet full
+        size on a lane the system cannot refute or confirm).
+  use_for_threshold_modification: false
+  use_for_audit_rigor_only: true
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - "validated_setups row promoted_at=2026-04-11 promotion_provenance=LEGACY"
+    - "docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md (Chordia strict-unlock 2026-05-02 PASS_CHORDIA)"
+    - "docs/audit/results/2026-05-05-oos-reconcile-ovnrng100.md (OOS recompute, PR #228)"
+  note: >
+    Lane status timeline:
+    (1) 2026-04-11 promoted to validated_setups with LEGACY provenance (no validation_run_id),
+        n_trials_at_discovery=35,616, dsr_score=0.175.
+    (2) 2026-05-02 strict-unlock Chordia audit PASS_CHORDIA (IS t=4.256, p=3.3e-5).
+    (3) 2026-05-05 OOS reconciliation PR #228 confirms canonical OOS_ExpR=+0.1658
+        (LEGACY value +0.2029 is divergent; canonical value reproduces strict-unlock CSV exactly).
+    (4) 2026-05-05 evidence-auditor flags four concerns; placeholder doc PR #234.
+    (5) THIS STAGE — capital-class verdict on whether deployment math survives
+        the corrected canonical inputs and the four concerns.
+
+primary_schema:
+  family_cells:
+    - id: "MNQ_COMEX_SETTLE_O5_RR1.5_OVNRNG_100"
+      strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+      instrument: MNQ
+      session: COMEX_SETTLE
+      orb_minutes: 5
+      rr_target: 1.5
+      filter: OVNRNG_100
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  multiple_testing_basis: "K=1 capital-class diligence; no new search-family expansion."
+  promotion_gate: "none — this audit does not promote, does not modify validated_setups, does not change allocator state. Verdict is documentary."
+
+hypotheses:
+  - id: 1
+    name: "F1 — OVNRNG_100 fire-rate scale stability"
+    economic_basis: >
+      Carver 2015 (capital allocation under uncertainty) and the
+      feedback_absolute_threshold_scale_audit.md class-of-bug doctrine: an absolute-points
+      threshold filter is structurally suspect when underlying price scale drifts; what the
+      filter selected at promotion-time is not what it selects at deployment-time. If fire
+      rate has drifted from low (<25%) at promotion to high (>=75%) at deployment, the
+      filter is vestigial — admitting nearly the unfiltered universe rather than a
+      strategically-selected subset.
+    primary_metric: "fire_rate_by_year"
+    method: >
+      Per-year fire rate of df.overnight_range >= 100 on the MNQ COMEX_SETTLE E2 RR1.5
+      CB1 O5 universe via direct SQL on orb_outcomes JOIN daily_features (triple-key
+      join per .claude/rules/daily-features-joins.md).
+    kill_criterion: >
+      VESTIGIAL if fire_rate_2026 >= 75% AND fire_rate_2019_or_2023 <= 25%
+      (>= 3x scale-drift across the IS/OOS horizon).
+    theory_citation: "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md (overfitting context); feedback_absolute_threshold_scale_audit.md (raw-points threshold drift class)"
+
+  - id: 2
+    name: "F2 — PR #228 RECONCILED-after-FAIL is a pre-reg specification bug, not a no-rescue violation"
+    economic_basis: >
+      Chan 2013 Ch 1 p.4 unified-program doctrine: when canonical machinery is delegated,
+      reproducing the canonical reference exactly is the expected outcome. PR #228 runner
+      reproduced the strict-unlock CSV's IS_ExpR (+0.2171) exactly, but the pre-reg
+      criterion 4 was specified against validated_setups.expectancy_r=+0.2151 which is
+      computed under a different (scratch-EXCLUSIVE) policy. The +0.0020 delta is a known
+      accounting class difference, not a runner defect.
+    primary_metric: "delta_runner_minus_strict_unlock_csv"
+    method: >
+      Read PR #228 result doc § "IS_ExpR caveat" verbatim. Verify the strict-unlock
+      CSV's IS row matches the runner's IS_ExpR exactly. Verify the
+      validated_setups.expectancy_r value's scratch policy via the documented caveat in
+      docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md.
+    kill_criterion: >
+      NO_RESCUE_VIOLATION if delta_runner_minus_strict_unlock_csv > 0.001 R
+      (would indicate canonical machinery drift, not pre-reg spec bug).
+      Otherwise: NOT_A_VIOLATION (pre-reg spec correction documented in result doc per
+      no-post-hoc-rescue rule; pre-reg yaml left as-locked).
+    theory_citation: "docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md p.4"
+
+  - id: 3
+    name: "F3 — DSR/MinBTL deployment math under canonical OOS"
+    economic_basis: >
+      Bailey-LdP 2014 Equation 2 (DSR > 0.95 confidence threshold) + Bailey 2013 Theorem 1
+      (MinBTL bound). Lane carries n_trials_at_discovery=35,616 with dsr_score=0.175 — both
+      well outside locked Criterion 5 (DSR > 0.95) and Criterion 2 (N <= 28 at strict
+      E[max_N]=1.0 over 6.65 years). Capital review must DECIDE whether the original
+      deployment decision (April 2026) survives when the canonical OOS_ExpR drops from
+      LEGACY +0.2029 to canonical +0.1658.
+    primary_metric: "minimum_BTL_violation_factor"
+    method: >
+      Compute MinBTL factor = n_trials_at_discovery / N_max_at_strict_E1_6_65yr.
+      Read dsr_score from validated_setups directly. Compute OOS power per RULE 3.3 via
+      research.oos_power.oos_ttest_power.
+    kill_criterion: >
+      DEPLOYMENT_MATH_BROKEN if MinBTL_factor > 100 AND DSR < 0.50 AND
+      power_to_detect_IS_effect_at_N_OOS_66 < 0.50.
+      (At factor 1,272, DSR 0.175, power 0.07 two-group / 0.32 one-sample, this lane
+      meets all three triggers. Already-known finding inherited from MEMORY.md and
+      flagged out-of-scope by PR #228; this stage MUST decide on it now.)
+    theory_citation: >
+      docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md p.8 Theorem 1;
+      docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md p.8 Eq 2;
+      docs/institutional/pre_registered_criteria.md Criterion 2 + Criterion 5.
+
+  - id: 4
+    name: "F4 — Live trailing performance N=153 directionality"
+    economic_basis: >
+      Harvey-Liu 2015 OOS power floor + Carver 2015 capital allocation under uncertainty:
+      live trailing performance is independent post-deployment evidence and is the only
+      positive signal not contaminated by IS/OOS construction biases. RULE 3.3 power floor
+      applies: at d_IS=0.186 and N_live=153, power = 63% (DIRECTIONAL_ONLY tier).
+      Trend within the trailing window is informative — a monotonic-decay pattern
+      (Q2 2025 +0.57R -> Q1 2026 +0.08R) shifts the directional reading.
+    primary_metric: "trailing_quarterly_expr_trend"
+    method: >
+      Per-quarter ExpR breakdown for the lane's last 18 months of trades via direct SQL
+      on orb_outcomes JOIN daily_features (triple-key join). Compute live N=153 power
+      per RULE 3.3 to detect IS-effect d=0.186.
+    kill_criterion: >
+      LIVE_DECAY if quarterly ExpR shows monotonic decay across the most recent 4 complete
+      quarters AND Q1 2026 ExpR < 0.5 * trailing_12mo_mean.
+      (Lane shows Q2 2025 +0.57 -> Q3 2025 +0.29 -> Q4 2025 +0.10 -> Q1 2026 +0.08; ratio
+      0.08 / 0.24 = 0.33 < 0.5; meets trigger.)
+    theory_citation: >
+      docs/institutional/literature/harvey_liu_2015_backtesting.md p.17;
+      docs/institutional/literature/carver_2015_ch11_portfolios.md;
+      .claude/rules/backtesting-methodology.md RULE 3.3.
+
+verdict_taxonomy:
+  description: >
+    The verdict is one of four locked options. Each must be traced to specific F1-F4
+    triggers. No "investigate" verbs. No "monitor for X months" verbs. The verdict is
+    documentary; allocator action requires a separate stage.
+  options:
+    - id: "REMAIN_DEPLOY"
+      trigger: >
+        F1 NOT VESTIGIAL AND F3 DSR >= 0.50 AND F4 NOT LIVE_DECAY.
+        (Requires the lane to clear absolute-threshold stability, deployment math at
+        relaxed DSR threshold, AND positive live trend.)
+    - id: "DOWNSIZE"
+      trigger: >
+        F1 VESTIGIAL OR F3 DEPLOYMENT_MATH_BROKEN, AND F4 NOT outright LIVE_DECAY,
+        AND live trailing N >= 100 with positive ExpR.
+        (Carver 2015 Ch 9-10 "capital allocation under uncertainty" — when DSR
+        diligence is open and OOS is statistically useless but live signal is
+        directionally positive, reduce capital exposure rather than zero it.)
+    - id: "UNDEPLOY"
+      trigger: >
+        F1 VESTIGIAL AND F3 DEPLOYMENT_MATH_BROKEN AND F4 LIVE_DECAY.
+        (All three concerns triggered — the deployment math at promotion was broken,
+        the filter is vestigial under current scale, AND live performance is decaying.)
+    - id: "UNVERIFIED"
+      trigger: >
+        Insufficient data to evaluate any of F1/F3/F4. Reserved if canonical-layer
+        queries fail or DB freshness is insufficient.
+
+forbidden_actions:
+  - "Threshold modification on OVNRNG_100 (would be data-snooping per feedback_bias_discipline.md)."
+  - "Updating validated_setups.oos_exp_r=+0.2029 to canonical +0.1658 (requires strategy_validator path with its own pre-reg)."
+  - "Any allocator state change (lane stays as currently allocated until next rebalance evaluates the verdict)."
+  - "Re-deriving DSR for the lane (Bailey-LdP standalone audit; out of scope per PR #228 result doc)."
+  - "Changing the verdict taxonomy options (locked here; revision requires amendment commit)."
