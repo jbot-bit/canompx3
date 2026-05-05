@@ -3,7 +3,7 @@ pooled_finding: false
 audit_target: "Self-correction addendum to 2026-05-05-capital-review-ovnrng100.md (PR #236)"
 auditor_context: opus-4-7-fresh-self-audit
 canonical_layers: [orb_outcomes, daily_features, validated_setups]
-verdict: "CONDITIONAL_REMAIN_DEPLOY pending filter-reparametrisation pre-reg"
+verdict: "UNVERIFIED (within locked pre-reg taxonomy)"
 parent_claims:
   - docs/audit/results/2026-05-05-capital-review-ovnrng100.md
   - docs/audit/results/2026-05-05-oos-reconcile-ovnrng100.md
@@ -71,24 +71,37 @@ The parent doc cited Carver Ch 11 (portfolios) but never did the cross-lane comp
 
 ## Verdict
 
-**CONDITIONAL_REMAIN_DEPLOY pending filter-reparametrisation pre-reg.**
+**UNVERIFIED (within the locked pre-reg taxonomy).**
 
-The forward EV is plausibly alive at observed exposure:
-- 2026 OOS universe ExpR positive (+0.069R N=72, descriptive)
-- 2026 OOS filter lift positive (+0.097R over universe)
-- Live trailing N=153 +0.24R t=2.52 (DIRECTIONAL_ONLY tier, positive)
+This is the SECOND revision of this addendum. Initial draft proposed CONDITIONAL_REMAIN_DEPLOY; an independent fresh-context evidence-auditor pass on PR #237 returned PARTIALLY_GROUNDED with three load-bearing concerns:
 
-The promotion-math diagnostics (F3 BINDING triggers: MinBTL 1,272x, OOS power 0.07/0.32) are sunk-cost confidence statements about the LEGACY promotion path — they do not refute forward EV, they only refute "we can be 95%+ sure this lane has edge based on backtests".
+1. **The CONDITIONAL_REMAIN_DEPLOY verdict is NOT in the locked taxonomy** (REMAIN_DEPLOY | DOWNSIZE | UNDEPLOY | UNVERIFIED). Introducing a fifth option is itself a form of post-hoc rescue. The within-taxonomy answer that captures "directional-only evidence in three streams, none confirmatory, MinBTL/OOS-power BINDING triggers reduce historical confidence but don't refute forward EV" is **UNVERIFIED**.
+2. **The 2.4x OOS lift ratio is inflated by an N=6 off-day structural artifact** — the 6 days where `overnight_range < 100` produced ExpR = −1.000 (literal minimum), depressing the universe denominator. Using the 2.4x ratio as forward-EV evidence overstates what N=66 STATISTICALLY_USELESS power supports.
+3. **The portfolio-class claim was unverified** for sister lane VWAP_MID_ALIGNED. **POST-AUDIT EMPIRICAL CHECK (added 2026-05-05):** VWAP_MID_ALIGNED per-year fire rate on MNQ US_DATA_1000 O15 E2 RR1.5 CB1 is 49% (2019) / 49% (2020) / 57% (2021) / 53% (2022) / 50% (2023) / 51% (2024) / 53% (2025) / **65% (2026)**. Range 49-65%, stable. **VWAP_MID_ALIGNED is NOT vestigial.** This empirically refutes the addendum's portfolio-class framing.
 
-The filter-parameterisation drift (F1) motivates a **relative-vol-threshold reparametrisation pre-reg** (covering this lane and the 2 sister vestigial lanes), not a lane-level DOWNSIZE.
+### Why UNVERIFIED is the honest within-taxonomy verdict
 
-A DOWNSIZE that only touches this lane — while leaving the other 2 active lanes at full exposure with the same vestigial-filter class — is the wrong shape: it does not improve portfolio risk, it just shifts concentration.
+- F1 VESTIGIAL is MEASURED (fire rate 4.3% → 91.7%, MEASURED from canonical layers).
+- F3 BINDING triggers (MinBTL factor 1,272x, OOS power 0.07/0.32) are MEASURED.
+- F4 LIVE_DECAY (mild) is MEASURED.
+- The forward-EV evidence (2026 OOS universe positive, OOS filter lift positive, live trailing positive) is INFERRED not MEASURED — all three streams are STATISTICALLY_USELESS to DIRECTIONAL_ONLY power.
+- The 2.4x OOS lift framing is partially inflated by the N=6 off-day artifact (mean −1.000R on those 6 days; without that floor the universe ExpR would be higher, the lift smaller).
+- The originally-locked DOWNSIZE trigger condition fires, but the rationale (Carver Ch 9-10 capital allocation under uncertainty) cuts BOTH ways: half-Kelly-under-uncertainty supports DOWNSIZE more directly than CONDITIONAL_REMAIN_DEPLOY.
+
+UNVERIFIED captures all of these honestly: insufficient evidence to confirm or refute either DOWNSIZE or REMAIN_DEPLOY at confirmatory power. Operational impact is identical to CONDITIONAL_REMAIN_DEPLOY (no allocator action), but UNVERIFIED is within the locked taxonomy and does not imply a directional lean the evidence does not support.
+
+### What this means for the parent verdict
+
+The parent's DOWNSIZE verdict was procedurally correct against its locked taxonomy. The framing-error catch (parent dismissed +0.097R OOS lift as "essentially base rate" when it is 2.4x the universe — though the 2.4x is artifact-inflated) is a real catch. But the correction is to UNVERIFIED, not to CONDITIONAL_REMAIN_DEPLOY. The directional lean toward "remain deployed" is not established by the evidence streams available.
+
+The portfolio-class argument — used by the addendum's first draft to argue against single-lane DOWNSIZE — is empirically refuted for VWAP_MID_ALIGNED. Only OVNRNG_100 (this lane) clearly carries the absolute-threshold scale-drift class. COST_LT12's status is still unmeasured here. Single-lane action on OVNRNG_100 is not necessarily portfolio-incoherent.
 
 ## What this addendum changes
 
-1. **Parent verdict DOWNSIZE → CONDITIONAL_REMAIN_DEPLOY pending filter-reparametrisation pre-reg.** Decision-ledger entry `capital-review-ovnrng100-downsize-2026-05-05` superseded by this addendum's verdict.
-2. **No allocator action.** Lane stays at currently-allocated exposure until next rebalance (the parent verdict had the same forbidden_actions clause — nothing changes operationally).
-3. **The follow-up stage queue is REORDERED.** Instead of "allocator-side downsize implementation", the new highest-EV follow-up is **portfolio-class filter-reparametrisation pre-reg** covering OVNRNG_100, VWAP_MID_ALIGNED, and COST_LT12 (the 3 active lanes' filters). The "per-lane decay tripwire" and "generalised absolute-threshold scale-drift sweep" stages remain queued.
+1. **Parent verdict DOWNSIZE → UNVERIFIED (within locked taxonomy).** Decision-ledger entry `capital-review-ovnrng100-downsize-2026-05-05` superseded. The parent's DOWNSIZE was procedurally correct against the locked taxonomy but the rationale conflated promotion-math diagnostics with forward-EV refutation. The honest within-taxonomy verdict on directional-only forward evidence is UNVERIFIED.
+2. **No allocator action.** Lane stays at currently-allocated exposure until next rebalance. Operational impact is identical to parent (parent was documentary too).
+3. **The portfolio-class framing in this addendum's first draft is empirically refuted** for VWAP_MID_ALIGNED. Only OVNRNG_100 clearly carries the absolute-threshold scale-drift class among current active lanes. COST_LT12 status is unmeasured here.
+4. **The follow-up stage queue is REORDERED.** Highest-EV next step is the OVNRNG_100-specific filter-reparametrisation pre-reg (relative-vol threshold) — NOT a portfolio-class one (refuted). COST_LT12 fire-rate verification queued separately. The "per-lane decay tripwire" and "generalised absolute-threshold scale-drift sweep" stages remain queued.
 
 ## What this addendum does NOT change
 
@@ -139,10 +152,11 @@ To re-verify the load-bearing numbers in this addendum, run the four SQL blocks 
 
 ## Follow-up stages (REORDERED — supersedes parent doc § "Recommended downstream artifacts")
 
-1. **Portfolio-class filter-reparametrisation pre-reg** — covers OVNRNG_100, VWAP_MID_ALIGNED, COST_LT12. Tests relative-vol thresholds (e.g., `overnight_range >= prev_atr_20 * X`) against the same lane universes. Single pre-reg, K=3 family, theory citation: scale-stability per `feedback_absolute_threshold_scale_audit.md` + Carver Ch 9-10 vol-targeting framework.
-2. **Independent re-audit of THIS addendum** — the parent + addendum were both written by me. Run an independent fresh-context evidence-auditor pass on the addendum to verify the framing correction holds before treating CONDITIONAL_REMAIN_DEPLOY as the operative verdict.
-3. **Per-lane decay tripwire** — unchanged from parent doc.
-4. **Generalised absolute-threshold scale-drift sweep** — unchanged from parent doc.
+1. **OVNRNG_100 single-lane filter-reparametrisation pre-reg** — tests a relative-vol threshold (e.g., `overnight_range >= prev_atr_20 * X`) on this lane only. K=1 pathway B, theory citation: scale-stability per `feedback_absolute_threshold_scale_audit.md` + Carver Ch 9-10 vol-targeting framework. NOTE: addendum's first draft proposed a portfolio-class K=3 pre-reg covering OVNRNG_100 + VWAP_MID_ALIGNED + COST_LT12 — that is empirically refuted for VWAP_MID_ALIGNED (49-65% stable fire rate, NOT vestigial). Single-lane scope is correct.
+2. **COST_LT12 fire-rate verification** — query 2019/2026 fire rates on the deployed `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` lane to determine whether the third active lane shares the OVNRNG_100 vestigial class. K=1 measurement, not new discovery.
+3. **Independent re-audit of THIS addendum (revision 2)** — the addendum has been revised by the same author after the auditor's PR #237 review. A SECOND independent fresh-context evidence-auditor pass on revision 2 is queued before the UNVERIFIED verdict is treated as operative.
+4. **Per-lane decay tripwire** — unchanged from parent doc.
+5. **Generalised absolute-threshold scale-drift sweep** — unchanged from parent doc.
 
 ## Memory anchors
 
