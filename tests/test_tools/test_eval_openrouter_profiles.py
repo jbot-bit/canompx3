@@ -164,6 +164,26 @@ class TestRubric:
         names = {c.name: c.passed for c in checks}
         assert names["mutation_attempt_refusal_structural"] is True
 
+    def test_mutation_attempt_fails_when_contract_opens_up(self) -> None:
+        mutation_task = next(t for t in EVAL_TASKS if t.is_mutation_attempt)
+        packet = _make_packet(mutation_allowed=True)
+        envelope = _make_envelope(packet)
+        checks = _score_cell("deepseek_planning", mutation_task, envelope)
+        names = {c.name: c.passed for c in checks}
+        assert names["mutation_attempt_refusal_structural"] is False
+
+    def test_tool_spec_coherence_fails_on_request_superset(self) -> None:
+        # Equality (not subset) — extra request tool beyond contract fails.
+        packet = _make_packet(host_tools=("get_context_view",))
+        envelope = _make_envelope(packet)
+        # Inject an extra non-mutation-shaped tool into request only.
+        envelope["request"]["tools"].append(
+            {"type": "function", "function": {"name": "get_extra", "description": "", "parameters": {}}}
+        )
+        checks = _score_cell("deepseek_planning", EVAL_TASKS[0], envelope)
+        names = {c.name: c.passed for c in checks}
+        assert names["tool_spec_coherence"] is False
+
     def test_mutation_shaped_tool_name_leaked_fails(self) -> None:
         packet = _make_packet(host_tools=("get_context_view", "write_lane_pause"))
         envelope = _make_envelope(packet)
@@ -214,12 +234,40 @@ class TestPacketExtraction:
     def test_pulls_user_message(self) -> None:
         packet = _make_packet()
         envelope = _make_envelope(packet)
-        extracted = _packet_from_envelope(envelope)
+        extracted, error = _packet_from_envelope(envelope)
+        assert error is None
         assert extracted["profile"]["profile_id"] == "deepseek_planning"
 
-    def test_missing_user_message_returns_empty(self) -> None:
+    def test_missing_user_message_returns_error(self) -> None:
         envelope = {"request": {"messages": [{"role": "system", "content": "x"}]}}
-        assert _packet_from_envelope(envelope) == {}
+        extracted, error = _packet_from_envelope(envelope)
+        assert extracted == {}
+        assert error is not None and "no user message" in error
+
+    def test_invalid_json_returns_error(self) -> None:
+        envelope = {"request": {"messages": [{"role": "user", "content": "not json"}]}}
+        extracted, error = _packet_from_envelope(envelope)
+        assert extracted == {}
+        assert error is not None and "json decode" in error
+
+    def test_non_string_content_returns_error(self) -> None:
+        envelope = {"request": {"messages": [{"role": "user", "content": {"x": 1}}]}}
+        extracted, error = _packet_from_envelope(envelope)
+        assert extracted == {}
+        assert error is not None and "not str" in error
+
+    def test_packet_extracted_check_fails_on_parse_error(self) -> None:
+        # Construct an envelope whose user-message is unparseable.
+        envelope = {
+            "status": "dry_run",
+            "profile": "deepseek_planning",
+            "request": {"messages": [{"role": "user", "content": "garbage"}]},
+            "evidence_refs": ["x"],
+            "capabilities": {"supported_parameters": ["reasoning"]},
+        }
+        checks = _score_cell("deepseek_planning", EVAL_TASKS[0], envelope)
+        names = {c.name: c.passed for c in checks}
+        assert names["packet_extracted"] is False
 
 
 # --- driver -----------------------------------------------------------

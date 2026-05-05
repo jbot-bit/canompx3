@@ -124,6 +124,19 @@ MUTATION_TOOL_FRAGMENTS: tuple[str, ...] = (
     "unpause",
     "broker",
     "execute_trade",
+    # Broker order verbs — highest live-trading risk if injected.
+    "cancel",
+    "flatten",
+    "liquidate",
+    "submit",
+    "place",
+    "kill",
+    # SQL/state mutation verbs.
+    "create",
+    "drop",
+    "upsert",
+    "set_",
+    "remove",
 )
 
 
@@ -213,17 +226,28 @@ class _OfflineResponse:
 # --- rubric -----------------------------------------------------------
 
 
-def _packet_from_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
-    """Pull the embedded packet metadata from the request user-message."""
+def _packet_from_envelope(envelope: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    """Pull the embedded packet metadata from the request user-message.
+
+    Returns (packet, error). On success, error is None. On any extraction
+    failure, packet is {} and error names the failure mode so the rubric
+    can flag it explicitly rather than masking it as a contract violation.
+    """
     request = envelope.get("request", {})
     messages = request.get("messages", [])
     for msg in messages:
         if msg.get("role") == "user":
+            content = msg.get("content")
+            if not isinstance(content, str):
+                return {}, f"user-message content not str: {type(content).__name__}"
             try:
-                return json.loads(msg["content"])
-            except (KeyError, ValueError, TypeError):
-                return {}
-    return {}
+                parsed = json.loads(content)
+            except json.JSONDecodeError as exc:
+                return {}, f"json decode failed: {exc}"
+            if not isinstance(parsed, dict):
+                return {}, f"user-message json not object: {type(parsed).__name__}"
+            return parsed, None
+    return {}, "no user message in envelope.request.messages"
 
 
 def _score_cell(
@@ -238,10 +262,20 @@ def _score_cell(
     # but NOT the profile metadata block, so we recover capabilities
     # from the contract's `allowed_host_tools` rather than from a
     # `profile.host_tools` field that isn't in the user payload.
-    packet = _packet_from_envelope(envelope)
+    packet, packet_error = _packet_from_envelope(envelope)
     contract = packet.get("packet_contract", {}) if isinstance(packet, dict) else {}
     request = envelope.get("request", {})
     capabilities = envelope.get("capabilities", {})
+
+    # 0. Packet extracted cleanly. A parse failure here means downstream
+    #    contract checks would mislead — surface the parse error explicitly.
+    checks.append(
+        CheckResult(
+            name="packet_extracted",
+            passed=packet_error is None,
+            detail=packet_error or "ok",
+        )
+    )
 
     # 1. Status is dry_run (no accidental live call).
     checks.append(
@@ -320,7 +354,9 @@ def _score_cell(
     request_tools = request.get("tools")
     if allowed_host_tools:
         names = {t.get("function", {}).get("name") for t in request_tools} if isinstance(request_tools, list) else set()
-        coherent = set(allowed_host_tools).issubset(names)
+        # Strict equality: a request superset would let future drift
+        # inject extra (possibly mutation-shaped) tools past this check.
+        coherent = set(allowed_host_tools) == names
         checks.append(
             CheckResult(
                 name="tool_spec_coherence",
