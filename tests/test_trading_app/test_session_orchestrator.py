@@ -755,7 +755,92 @@ class TestDailyFeaturesFailClosed:
         mock_duckdb.connect.side_effect = OSError("DB locked")
         with patch.dict("sys.modules", {"duckdb": mock_duckdb}):
             with pytest.raises(RuntimeError, match="FAIL-CLOSED"):
-                SessionOrchestrator._build_daily_features_row(date(2026, 3, 7), "MGC")
+                SessionOrchestrator._build_daily_features_row(date(2026, 3, 7), "MGC", orb_minutes=5)
+
+
+class TestApertureRouting:
+    """_build_daily_features_row MUST honour the lane's orb_minutes (PR #189 class bug).
+
+    PR #232 evidence-auditor surfaced the live-path recurrence: this method
+    embedded `WHERE orb_minutes = 5` in the median_atr_20 query (line 1053
+    pre-fix) and the cross-asset atr_20_pct query (line 1074 pre-fix). The
+    auditor also flagged that signature tests alone cannot catch a literal-5
+    reversion inside the SQL string — a behavioral test capturing bind
+    parameters is required.
+    """
+
+    def test_signature_requires_orb_minutes(self):
+        """No default — defaulting to 5 was the original bug pattern."""
+        import inspect
+
+        sig = inspect.signature(SessionOrchestrator._build_daily_features_row)
+        assert "orb_minutes" in sig.parameters, "orb_minutes parameter missing"
+        assert sig.parameters["orb_minutes"].default is inspect.Parameter.empty, (
+            "orb_minutes must NOT have a default — defaulting to 5 was the PR #189 class bug"
+        )
+
+    def test_sql_bind_params_carry_caller_orb_minutes(self):
+        """Behavioral: queries to daily_features must bind the caller's orb_minutes,
+        not a literal 5. Captures the auditor-flagged gap on PR #232.
+        """
+        import duckdb as real_duckdb
+
+        # Mock connection: every execute returns an empty result so the function
+        # walks all 3 SQL sites (main SELECT, median, cross-asset) without
+        # raising the FAIL-CLOSED path.
+        mock_con = MagicMock()
+        mock_con.__enter__ = MagicMock(return_value=mock_con)
+        mock_con.__exit__ = MagicMock(return_value=False)
+
+        # fetchdf() for the main SELECT — return empty df so the staleness
+        # check is bypassed and we reach the median + cross-asset queries.
+        import pandas as pd
+
+        mock_main = MagicMock()
+        mock_main.fetchdf.return_value = pd.DataFrame()
+        # fetchone() for median + cross-asset — None so the row is not
+        # populated but the call is still recorded.
+        mock_call = MagicMock()
+        mock_call.fetchone.return_value = None
+
+        # execute returns mock_main first (fetchdf), then mock_call for each
+        # subsequent fetchone(). Use a generator so the mock supplies enough
+        # results regardless of how many cross-asset sources iterate.
+        def _execute_side_effect(*_args, **_kwargs):
+            if not hasattr(_execute_side_effect, "calls"):
+                _execute_side_effect.calls = 0
+            _execute_side_effect.calls += 1
+            return mock_main if _execute_side_effect.calls == 1 else mock_call
+
+        mock_con.execute = MagicMock(side_effect=_execute_side_effect)
+
+        mock_duckdb = MagicMock(spec=real_duckdb)
+        mock_duckdb.connect.return_value = mock_con
+
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb}):
+            SessionOrchestrator._build_daily_features_row(date(2026, 3, 7), "MGC", orb_minutes=15)
+
+        # Inspect every execute() call's bind parameters. None of them may
+        # contain the literal `5` in the orb_minutes slot for a call invoked
+        # with orb_minutes=15.
+        all_calls = mock_con.execute.call_args_list
+        assert len(all_calls) >= 2, f"expected >=2 SQL calls, got {len(all_calls)}"
+        for i, call in enumerate(all_calls):
+            args = call.args
+            if len(args) < 2:
+                continue
+            sql, params = args[0], args[1]
+            if "daily_features" not in sql:
+                continue
+            # Any 5-valued int in the bind list of a daily_features query
+            # implies the caller's orb_minutes wasn't plumbed.
+            int_params = [p for p in params if isinstance(p, int)]
+            assert 5 not in int_params, (
+                f"call {i}: SQL binds {params} contains literal 5 even though "
+                f"caller passed orb_minutes=15. SQL: {sql[:120]}"
+            )
+            # And 15 must appear at least once (the caller's value).
+            assert 15 in int_params, f"call {i}: caller orb_minutes=15 not in binds {params}. SQL: {sql[:120]}"
 
 
 # ---------------------------------------------------------------------------
