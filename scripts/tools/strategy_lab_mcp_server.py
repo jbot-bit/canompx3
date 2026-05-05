@@ -60,63 +60,78 @@ def _allocation_index(doc: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def _validated_row(strategy_id: str) -> dict[str, Any] | None:
-    """Read the validated_setups row for a strategy, or None if not validated."""
+    """Read the validated_setups row for a strategy, or None if not validated.
+
+    Returns None on duckdb errors (DB locked, corrupt, etc.) so MCP transport
+    surfaces a clean "no row" rather than an unhandled exception. Mirrors the
+    fail-soft pattern used by ``_load_allocation_doc`` for file reads.
+    """
     import duckdb
 
     from pipeline.paths import GOLD_DB_PATH
     from trading_app.validated_shelf import deployable_validated_relation
 
-    with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
-        relation = deployable_validated_relation(con, alias="vs")
-        row = con.execute(
-            f"""SELECT strategy_id, instrument, orb_label, orb_minutes,
-                       entry_model, rr_target, confirm_bars, filter_type,
-                       COALESCE(stop_multiplier, 1.0) AS stop_multiplier,
-                       sample_size, win_rate, expectancy_r, sharpe_ratio,
-                       max_drawdown_r
-                FROM {relation}
-                WHERE strategy_id = ?
-                LIMIT 1""",
-            [strategy_id],
-        ).fetchone()
-        if row is None:
-            return None
-        cols = [d[0] for d in con.description]
-        return dict(zip(cols, row, strict=False))
+    try:
+        with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+            relation = deployable_validated_relation(con, alias="vs")
+            row = con.execute(
+                f"""SELECT strategy_id, instrument, orb_label, orb_minutes,
+                           entry_model, rr_target, confirm_bars, filter_type,
+                           COALESCE(stop_multiplier, 1.0) AS stop_multiplier,
+                           sample_size, win_rate, expectancy_r, sharpe_ratio,
+                           max_drawdown_r
+                    FROM {relation}
+                    WHERE strategy_id = ?
+                    LIMIT 1""",
+                [strategy_id],
+            ).fetchone()
+            if row is None:
+                return None
+            cols = [d[0] for d in con.description]
+            return dict(zip(cols, row, strict=False))
+    except (duckdb.Error, OSError):
+        return None
 
 
 def _list_validated_rows(instrument: str | None) -> list[dict[str, Any]]:
+    """Returns [] on duckdb errors (DB locked, corrupt, etc.) — same fail-soft
+    pattern as ``_validated_row`` so the calling MCP tool degrades to "no rows"
+    rather than crashing the transport.
+    """
     import duckdb
 
     from pipeline.paths import GOLD_DB_PATH
     from trading_app.validated_shelf import deployable_validated_relation
 
-    with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
-        relation = deployable_validated_relation(con, alias="vs")
-        if instrument:
-            rows = con.execute(
-                f"""SELECT strategy_id, instrument, orb_label, orb_minutes,
-                           entry_model, rr_target, confirm_bars, filter_type,
-                           COALESCE(stop_multiplier, 1.0) AS stop_multiplier,
-                           sample_size, win_rate, expectancy_r, sharpe_ratio,
-                           max_drawdown_r
-                    FROM {relation}
-                    WHERE instrument = ?
-                    ORDER BY strategy_id""",
-                [instrument],
-            ).fetchall()
-        else:
-            rows = con.execute(
-                f"""SELECT strategy_id, instrument, orb_label, orb_minutes,
-                           entry_model, rr_target, confirm_bars, filter_type,
-                           COALESCE(stop_multiplier, 1.0) AS stop_multiplier,
-                           sample_size, win_rate, expectancy_r, sharpe_ratio,
-                           max_drawdown_r
-                    FROM {relation}
-                    ORDER BY strategy_id"""
-            ).fetchall()
-        cols = [d[0] for d in con.description]
-        return [dict(zip(cols, r, strict=False)) for r in rows]
+    try:
+        with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+            relation = deployable_validated_relation(con, alias="vs")
+            if instrument:
+                rows = con.execute(
+                    f"""SELECT strategy_id, instrument, orb_label, orb_minutes,
+                               entry_model, rr_target, confirm_bars, filter_type,
+                               COALESCE(stop_multiplier, 1.0) AS stop_multiplier,
+                               sample_size, win_rate, expectancy_r, sharpe_ratio,
+                               max_drawdown_r
+                        FROM {relation}
+                        WHERE instrument = ?
+                        ORDER BY strategy_id""",
+                    [instrument],
+                ).fetchall()
+            else:
+                rows = con.execute(
+                    f"""SELECT strategy_id, instrument, orb_label, orb_minutes,
+                               entry_model, rr_target, confirm_bars, filter_type,
+                               COALESCE(stop_multiplier, 1.0) AS stop_multiplier,
+                               sample_size, win_rate, expectancy_r, sharpe_ratio,
+                               max_drawdown_r
+                        FROM {relation}
+                        ORDER BY strategy_id"""
+                ).fetchall()
+            cols = [d[0] for d in con.description]
+            return [dict(zip(cols, r, strict=False)) for r in rows]
+    except (duckdb.Error, OSError):
+        return []
 
 
 def _compute_fitness_payload(
@@ -124,6 +139,8 @@ def _compute_fitness_payload(
     rolling_months: int,
     as_of_date: date | None = None,
 ) -> dict[str, Any] | dict[str, str]:
+    import duckdb
+
     from trading_app.strategy_fitness import compute_fitness
 
     try:
@@ -132,7 +149,7 @@ def _compute_fitness_payload(
             as_of_date=as_of_date,
             rolling_months=rolling_months,
         )
-    except (ValueError, KeyError) as exc:
+    except (ValueError, duckdb.Error, KeyError) as exc:
         return {"error": str(exc)}
     payload = asdict(score)
     return payload
