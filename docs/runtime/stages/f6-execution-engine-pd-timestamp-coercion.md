@@ -13,7 +13,7 @@ blast_radius: |
   trading_app/execution_engine.py routes raw pd.Timestamp into _iso_utc's
   warning branch. No production code is touched. Reads:
   trading_app/live/bot_state.py, trading_app/live/bar_aggregator.py,
-  trading_app/paper_trader.py, tests/test_trading_app/live/test_session_orchestrator.py,
+  trading_app/paper_trader.py, tests/test_trading_app/test_session_orchestrator.py,
   commit 9ba25af4. Writes: this file + 1 memory feedback file + 1 MEMORY.md
   index line. Zero callers, zero importers, zero schema impact.
 ---
@@ -80,7 +80,7 @@ Commit `9ba25af4` message body, verbatim:
 
 The author of F3 *also* believed the pd.Timestamp class-bug existed — but their tests prove the actual triggering input was `str` and `int`, not `pd.Timestamp`:
 
-`tests/test_trading_app/live/test_session_orchestrator.py:411-431`,
+`tests/test_trading_app/test_session_orchestrator.py:411-431`,
 `test_iso_utc_unsupported_type_warns_and_returns_none`:
 
 ```python
@@ -98,7 +98,7 @@ The two types F3 actually fired on are `str` and `int`. `pd.Timestamp` is not in
 
 ### F4. The smoking gun — a canonical regression test asserts the OPPOSITE of the F6 premise.
 
-`tests/test_trading_app/live/test_session_orchestrator.py:1158-1175`,
+`tests/test_trading_app/test_session_orchestrator.py:1158-1175`,
 `test_on_bar_feed_status_handles_pandas_timestamp`:
 
 ```python
@@ -123,7 +123,7 @@ The test in the same file as F3's regression suite **explicitly asserts that pd.
 
 ### F5. The F3 actual contamination class is string-typed timestamps.
 
-`tests/test_trading_app/live/test_session_orchestrator.py:1118-1142`,
+`tests/test_trading_app/test_session_orchestrator.py:1118-1142`,
 `test_on_bar_feed_status_routes_last_bar_utc_through_iso_utc`:
 
 ```python
@@ -172,7 +172,7 @@ The DESIGN doc was 119 lines, cited `institutional-rigor.md` § 3 and § 6 corre
 The author wrote the doc by **reading code** (file:line traces of `bar["ts_utc"]` assignments) without **running it** (no isinstance check, no test grep, no DuckDB roundtrip). Specifically, the DESIGN doc never:
 
 1. Ran `isinstance(pd.Timestamp(...), datetime)` to verify the warning branch was reachable for the claimed input. Two-line REPL.
-2. Grepped `tests/test_trading_app/live/test_session_orchestrator.py` for `pd.Timestamp` or `pandas_timestamp` — would have surfaced the smoking-gun test (line 1158) whose docstring contradicts the F6 premise by name.
+2. Grepped `tests/test_trading_app/test_session_orchestrator.py` for `pd.Timestamp` or `pandas_timestamp` — would have surfaced the smoking-gun test (line 1158) whose docstring contradicts the F6 premise by name.
 3. Read F3 commit `9ba25af4`'s test file diff — would have shown the actual fired types are `str` and `int`.
 4. Verified the bar source type via DuckDB execution. The DESIGN doc speculated about `iterrows()`/`to_dict()` chains that do not exist on either bar entry point.
 
@@ -279,7 +279,7 @@ Independently verified findings (file:line):
 
 **Do-not-touch:**
 - `trading_app/live/bot_state.py:70-96` `_iso_utc` — defensive helper correct as-shipped.
-- `tests/test_trading_app/live/test_session_orchestrator.py:1158` `test_on_bar_feed_status_handles_pandas_timestamp` — canonical regression guard for the falsification claim. Do not delete or weaken.
+- `tests/test_trading_app/test_session_orchestrator.py:1158` `test_on_bar_feed_status_handles_pandas_timestamp` — canonical regression guard for the falsification claim. Do not delete or weaken.
 - All 14 `.to_pydatetime()` sites in `entry_rules.py:207/288/360`, `outcome_builder.py`, `build_daily_features.py`, `market_calendar.py` — coerce pandas Series at correct sites.
 
 **Highest-priority fix:** None. F6 is CLOSED-FALSIFIED. No production code is touched. The auditor concurs with the closeout and adds no reopening conditions.
