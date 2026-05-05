@@ -77,6 +77,14 @@ def _iso_utc(value: Any) -> str | None:
     that route non-datetime timestamps (e.g. pandas Timestamp from
     execution_engine.py:978/1099/1374 — see follow-up F6) should coerce
     at the assignment site, not here.
+
+    STABLE CROSS-MODULE API: imported by trading_app.live.session_orchestrator
+    (see fix/code-review-hotpatches-2026-05-05). Despite the leading
+    underscore, this helper is the canonical operator-visible-timestamp
+    formatter for the live package. Do not rename without updating every
+    in-package caller; promotion to a public name (``iso_utc``) is queued
+    as low-priority debt — track in the memory feedback file for the
+    iso_utc silent-None class pattern.
     """
     if value is None:
         return None

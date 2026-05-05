@@ -202,6 +202,21 @@ audits:
     verdict: PASS_CHORDIA
 """
 
+# YAML unquoted ISO timestamp loads as ``datetime``. Because ``datetime``
+# is a subclass of ``date``, an isinstance(date)-first check would return
+# the ``datetime`` verbatim into a field annotated ``date | None`` and
+# break ``ChordiaAuditLog.audit_age_days`` arithmetic.
+_DATETIME_TIMESTAMP_YAML = """\
+version: 1
+default_has_theory: false
+audit_freshness_days: 90
+audits:
+  - strategy_id: TEST_DT
+    audit_date: 2026-05-01T12:34:56
+    audit_reaffirmed_date: 2026-05-04T08:00:00
+    verdict: PASS_CHORDIA
+"""
+
 
 class TestLoadChordiaAuditEntryAddendum:
     """Schema close for PR #221 evidence-auditor finding.
@@ -265,3 +280,32 @@ class TestLoadChordiaAuditEntryAddendum:
         entry = log.entries["TEST_STR"]
         assert entry.audit_reaffirmed_date == date(2026, 5, 4)
         assert isinstance(entry.audit_reaffirmed_date, date)
+
+    def test_unquoted_iso_timestamp_coerced_to_date_not_datetime(self, tmp_path):
+        # Regression: ``datetime`` is a subclass of ``date``, so a
+        # date-first isinstance check returned the ``datetime`` verbatim
+        # into a ``date | None`` field. ``ChordiaAuditLog.audit_age_days``
+        # then mixed types in ``today - audit_date`` and produced the
+        # wrong staleness, silently corrupting the allocator's chordia
+        # gate. Fix orders ``datetime`` before ``date`` and calls
+        # ``.date()``.
+        from datetime import datetime as _datetime
+
+        path = tmp_path / "chordia_audit_log.yaml"
+        path.write_text(_DATETIME_TIMESTAMP_YAML, encoding="utf-8")
+        log = load_chordia_audit_log(path)
+        entry = log.entries["TEST_DT"]
+
+        assert entry.audit_date == date(2026, 5, 1)
+        assert type(entry.audit_date) is date
+        assert not isinstance(entry.audit_date, _datetime)
+
+        assert entry.audit_reaffirmed_date == date(2026, 5, 4)
+        assert type(entry.audit_reaffirmed_date) is date
+        assert not isinstance(entry.audit_reaffirmed_date, _datetime)
+
+        # Allocator gate: audit_age_days must compute as int, not raise
+        # TypeError or return a timedelta-like with a .seconds remainder.
+        age = log.audit_age_days("TEST_DT", date(2026, 5, 5))
+        assert age == 4
+        assert isinstance(age, int)

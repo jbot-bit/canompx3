@@ -28,6 +28,7 @@ from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.live.bar_aggregator import Bar
 from trading_app.live.bar_persister import BarPersister
+from trading_app.live.bot_state import _iso_utc
 from trading_app.live.broker_factory import create_broker_components, get_broker_name
 from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
@@ -1625,7 +1626,12 @@ class SessionOrchestrator:
         self._bar_count += 1
         self._stats.bars_received += 1
         self._feed_status["status"] = "healthy"
-        self._feed_status["last_bar_utc"] = bar.ts_utc.isoformat() if bar.ts_utc is not None else None
+        # Route through _iso_utc to close the silent-None / type-mismatch
+        # class fixed for bot_state in F3 (commit 9ba25af4). Direct
+        # ``.isoformat()`` would coerce a non-datetime ``ts_utc`` (e.g. a
+        # pandas Timestamp from F6 follow-up) into an inconsistent string
+        # without an operator-visible warning.
+        self._feed_status["last_bar_utc"] = _iso_utc(bar.ts_utc)
         self._feed_status["gap_seconds"] = 0.0
         self._feed_status["stale_count"] = 0
         self._feed_status["dead"] = False

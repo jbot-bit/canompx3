@@ -79,6 +79,22 @@ def test_resolve_chat_model_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     assert ask._resolve_chat_model() == ask._DEFAULT_CHAT_MODEL_FALLBACK
 
 
+def test_resolve_chat_model_rejects_no_slash(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+    """OpenRouter requires ``provider/model`` shape; a typo missing the
+    prefix would return a 400 with no operator-visible hint that the env
+    var was the cause. The resolver must warn and fall back."""
+    import logging
+
+    monkeypatch.setenv("CANOMPX3_AI_CHAT_MODEL", "deepseek-chat")  # missing 'deepseek/'
+
+    with caplog.at_level(logging.WARNING, logger="scripts.tools.ask"):
+        result = ask._resolve_chat_model()
+
+    assert result == ask._DEFAULT_CHAT_MODEL_FALLBACK
+    assert "missing 'provider/' prefix" in caplog.text
+    assert "deepseek-chat" in caplog.text
+
+
 def test_check_api_key_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     err = ask._check_api_key()

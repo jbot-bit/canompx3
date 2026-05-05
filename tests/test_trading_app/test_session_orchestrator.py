@@ -1030,6 +1030,65 @@ class TestKillSwitch:
             # Should have logged a critical heartbeat warning
             assert any("HEARTBEAT" in str(call) for call in mock_crit.call_args_list)
 
+    async def test_on_bar_feed_status_routes_last_bar_utc_through_iso_utc(self, orch, caplog):
+        """Regression: ``_feed_status['last_bar_utc']`` must use ``_iso_utc``,
+        not ``bar.ts_utc.isoformat()`` directly. Same silent-None / type-
+        mismatch class that PR #221 F3 closed for ``bot_state``; this
+        callsite was missed.
+
+        With a non-datetime ``ts_utc`` (e.g. a string from a buggy upstream
+        coercion path), the operator-visible field must be ``None`` and a
+        warning must fire so the type drift is logged — not silently
+        coerced into an inconsistently-shaped string.
+        """
+        import logging
+
+        orch.engine.on_bar.return_value = []
+        orch._check_trading_day_rollover = AsyncMock()
+        orch._last_bar_at = datetime.now(UTC)  # avoid heartbeat noise
+
+        bar = FakeBar()
+        bar.ts_utc = "2026-03-07T22:15:00+00:00"  # type-mismatch: str, not datetime
+
+        with caplog.at_level(logging.WARNING, logger="trading_app.live.bot_state"):
+            await orch._on_bar(bar)
+
+        assert orch._feed_status["last_bar_utc"] is None
+        assert "_iso_utc: unsupported type str" in caplog.text
+
+    async def test_on_bar_feed_status_emits_iso_utc_for_datetime(self, orch):
+        """Happy path: a normal aware ``datetime`` produces the same ISO
+        string the prior implementation produced — no behavior regression
+        for the contracted input type."""
+        ts = datetime(2026, 3, 7, 22, 15, tzinfo=UTC)
+        orch.engine.on_bar.return_value = []
+        orch._check_trading_day_rollover = AsyncMock()
+        orch._last_bar_at = datetime.now(UTC)
+
+        bar = FakeBar(ts_utc=ts)
+        await orch._on_bar(bar)
+
+        assert orch._feed_status["last_bar_utc"] == ts.isoformat()
+
+    async def test_on_bar_feed_status_handles_pandas_timestamp(self, orch):
+        """``pd.Timestamp`` is a ``datetime`` subclass, so it must route
+        through the datetime branch of ``_iso_utc`` and produce a valid
+        ISO string — NOT trigger the unsupported-type warning. Documents
+        the F6 root-cause boundary: pd.Timestamp arriving at this
+        callsite is correct-by-default; the upstream coercion gap (F6)
+        is at execution_engine.py, not here."""
+        import pandas as pd
+
+        pd_ts = pd.Timestamp("2026-03-07T22:15:00", tz="UTC")
+        orch.engine.on_bar.return_value = []
+        orch._check_trading_day_rollover = AsyncMock()
+        orch._last_bar_at = datetime.now(UTC)
+
+        bar = FakeBar(ts_utc=pd_ts)
+        await orch._on_bar(bar)
+
+        assert orch._feed_status["last_bar_utc"] == "2026-03-07T22:15:00+00:00"
+
     async def test_post_session_skips_eod_close_after_kill_switch(self):
         """post_session() must NOT submit duplicate close orders after kill switch."""
         orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))

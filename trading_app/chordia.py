@@ -36,7 +36,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import yaml
@@ -229,13 +229,19 @@ class ChordiaAuditLog:
 def _coerce_audit_date(raw: object) -> date | None:
     """Coerce a YAML date-like value to ``date`` or ``None``.
 
-    YAML loaders may yield either a string (when quoted) or a native
-    ``date`` (when unquoted ISO-format). Anything else is treated as
-    missing. Mirrors the prior inline handling so ``audit_date`` and
-    ``audit_reaffirmed_date`` share one path.
+    YAML loaders may yield a string (quoted), a native ``date`` (unquoted
+    ISO date), or a native ``datetime`` (unquoted ISO timestamp). The
+    ``datetime`` branch precedes the ``date`` branch because ``datetime``
+    is a subclass of ``date``: ``isinstance(datetime.now(), date)`` is
+    ``True``, so an unquoted timestamp would otherwise return as
+    ``datetime`` into a ``date | None`` field, breaking
+    ``ChordiaAuditLog.audit_age_days`` arithmetic. Anything else is
+    treated as missing.
     """
     if isinstance(raw, str):
         return date.fromisoformat(raw)
+    if isinstance(raw, datetime):
+        return raw.date()
     if isinstance(raw, date):
         return raw
     return None
