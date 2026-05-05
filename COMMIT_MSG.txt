@@ -1,0 +1,48 @@
+research(capital-review): addendum supersedes DOWNSIZE -> CONDITIONAL_REMAIN_DEPLOY
+
+Self-correction addendum to PR #236. User-prompted post-merge tunnel-vision
+audit ("Stop. Prove this is true before using it.") surfaced a framing error
+in the parent verdict that survived both my self-review and the independent
+fresh-context evidence-auditor pass.
+
+The framing error: parent doc conflated three structurally distinct questions:
+  1. Promotion-math integrity: F3 BINDING (MinBTL 1,272x, OOS power 0.07/0.32)
+  2. Filter parameterisation drift: F1 (fire rate 4.3% to 91.7%)
+  3. Forward EV: NOT TESTED CLEANLY in parent doc
+
+Parent treated 1+2 as evidence FOR DOWNSIZE. But 1 is sunk-cost diagnostics
+about historical promotion confidence and does NOT refute future EV. 2
+motivates re-parameterisation, not de-allocation.
+
+Re-reading the parent doc F1 per-year table:
+  2026 OOS universe ExpR=+0.069 N=72, filter ExpR=+0.166 N=66
+  Filter still adds +0.097R lift over universe. Not vacuous.
+  Live trailing N=153 +0.24R t=2.52. Positive.
+
+Both forward-evidence streams positive. Promotion-math BINDING triggers
+refute "95% confidence based on backtest", NOT "future EV impaired".
+
+Same vestigial-filter pattern affects 5 of 6 deployed lanes per
+2026-05-01-target-b-6lane-vestigialness-fresh-audit.md. Single-lane DOWNSIZE
+leaves portfolio risk concentrated on equally-vestigial sister lanes.
+
+Revised verdict: CONDITIONAL_REMAIN_DEPLOY pending portfolio-class filter-
+reparametrisation pre-reg covering OVNRNG_100, VWAP_MID_ALIGNED, COST_LT12.
+
+Operational impact: ZERO. Parent verdict was documentary, no allocator action
+taken. Follow-up stages REORDERED, filter-reparametrisation pre-reg now
+highest-EV, was queued behind allocator-side downsize implementation.
+
+Decision-ledger entry capital-review-ovnrng100-downsize-2026-05-05 marked
+SUPERSEDED by capital-review-ovnrng100-addendum-2026-05-05.
+
+Independent re-audit of THIS addendum is queued before treating revised
+verdict as operative.
+
+Files: audit artifacts only, ZERO production-code edits.
+- docs/audit/results/2026-05-05-capital-review-ovnrng100-addendum.md NEW
+- docs/runtime/decision-ledger.md supersession entry
+
+The pre-reg yaml stays locked as written. This addendum documents the
+framing correction in the result doc, exactly as PR #228 documented its own
+pre-reg specification bug. No-rescue rule respected.
