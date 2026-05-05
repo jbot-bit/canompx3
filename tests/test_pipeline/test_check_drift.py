@@ -2099,3 +2099,108 @@ class TestStageAcceptanceRunner:
         all_pass, n_ran = _stage_acceptance_all_pass(cmds)
         assert all_pass is False
         assert n_ran == 0
+
+
+class TestIsoUtcFormatterSilentNone:
+    """Tests for the iso_utc silent-None formatter class-bug check."""
+
+    @staticmethod
+    def _parse_first_func(src: str):
+        import ast as _ast
+
+        tree = _ast.parse(src)
+        for node in tree.body:
+            if isinstance(node, _ast.FunctionDef | _ast.AsyncFunctionDef):
+                return node
+        raise AssertionError("no function in source")
+
+    def test_predicate_triggers_on_silent_formatter_shape(self):
+        from pipeline.check_drift import _function_has_isinstance_then_silent_none
+
+        src = "def f(v):\n    if isinstance(v, datetime):\n        return v.isoformat()\n    return None\n"
+        node = self._parse_first_func(src)
+        assert _function_has_isinstance_then_silent_none(node) is True
+
+    def test_predicate_passes_when_log_warning_present(self):
+        from pipeline.check_drift import _function_has_isinstance_then_silent_none
+
+        src = (
+            "def f(v):\n"
+            "    if isinstance(v, datetime):\n"
+            "        return v.isoformat()\n"
+            "    log.warning('bad type %s', type(v).__name__)\n"
+            "    return None\n"
+        )
+        node = self._parse_first_func(src)
+        assert _function_has_isinstance_then_silent_none(node) is False
+
+    def test_predicate_passes_when_log_critical_present(self):
+        # Round 1 regression guard — predicate must accept .critical not just .warning
+        from pipeline.check_drift import _function_has_isinstance_then_silent_none
+
+        src = (
+            "def f(v):\n"
+            "    if isinstance(v, datetime):\n"
+            "        return v.isoformat()\n"
+            "    log.critical('unrecoverable type %s', type(v).__name__)\n"
+            "    return None\n"
+        )
+        node = self._parse_first_func(src)
+        assert _function_has_isinstance_then_silent_none(node) is False
+
+    def test_predicate_passes_when_log_error_present(self):
+        from pipeline.check_drift import _function_has_isinstance_then_silent_none
+
+        src = (
+            "def f(v):\n"
+            "    if isinstance(v, datetime):\n"
+            "        return v.isoformat()\n"
+            "    logger.error('bad type %s', type(v).__name__)\n"
+            "    return None\n"
+        )
+        node = self._parse_first_func(src)
+        assert _function_has_isinstance_then_silent_none(node) is False
+
+    def test_predicate_passes_on_pure_null_passthrough(self):
+        # Regression guard: _iso_utc's `if v is None: return None` short-circuit
+        # must NOT be confused with the silent-formatter shape — the
+        # null-passthrough has no isinstance call.
+        from pipeline.check_drift import _function_has_isinstance_then_silent_none
+
+        src = "def f(v):\n    if v is None:\n        return None\n    return str(v)\n"
+        node = self._parse_first_func(src)
+        assert _function_has_isinstance_then_silent_none(node) is False
+
+    def test_check_respects_silent_none_policy_annotation(self, tmp_path, monkeypatch):
+        # End-to-end: a synthetic file matching the trigger shape but bearing
+        # the `# silent-none-policy: <reason>` annotation must produce no
+        # violation.
+        from pipeline import check_drift
+        from pipeline.check_drift import check_iso_utc_formatter_silent_none
+
+        synthetic = tmp_path / "fake_module.py"
+        synthetic.write_text(
+            "from datetime import datetime\n"
+            "log = None\n"
+            "# silent-none-policy: upstream-coerced\n"
+            "def f(v):\n"
+            "    if isinstance(v, datetime):\n"
+            "        return v.isoformat()\n"
+            "    return None\n",
+            encoding="utf-8",
+        )
+        rel = synthetic.relative_to(tmp_path).as_posix()
+        monkeypatch.setattr(check_drift, "_ISO_UTC_FORMATTER_SCAN_FILES", (rel,))
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        violations = check_iso_utc_formatter_silent_none()
+        assert violations == []
+
+    def test_check_clean_against_real_canonical_files(self):
+        # Smoke test: against the real codebase, `check_iso_utc_formatter_silent_none`
+        # must return [] — proves the predicate is correctly tuned against
+        # `_iso_utc` (logs warning) and that no other formatter helper in the
+        # scan set silently drops type-mismatched values.
+        from pipeline.check_drift import check_iso_utc_formatter_silent_none
+
+        violations = check_iso_utc_formatter_silent_none()
+        assert violations == [], f"unexpected violations: {violations}"
