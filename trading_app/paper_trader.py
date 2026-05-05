@@ -143,11 +143,16 @@ def _get_median_atr_20(con, instrument: str, trading_day: date, lookback_days: i
     return float(result[0]) if result[0] is not None else 0.0
 
 
-def _get_daily_features_row(con, instrument: str, trading_day: date, orb_minutes: int = 5) -> dict | None:
+def _get_daily_features_row(con, instrument: str, trading_day: date, orb_minutes: int) -> dict | None:
     """Fetch all daily_features columns for one day at a specific orb_minutes.
 
     Returns a full dict so composite filters (DOW, break speed, break bar
     continues) get the columns they need without manual SELECT maintenance.
+
+    orb_minutes is REQUIRED (no default) — defaulting to 5 was the PR #189
+    class bug pattern. daily_features per-session columns (orb_*_size,
+    orb_*_break_dir, rel_vol_*) carry materially different values across
+    the 3 orb_minutes rows; the consuming strategy's aperture must pick the row.
     """
     result = con.execute(
         """SELECT * FROM daily_features
@@ -162,12 +167,18 @@ def _get_daily_features_row(con, instrument: str, trading_day: date, orb_minutes
     return dict(zip(columns, row, strict=False))
 
 
-def _inject_cross_asset_atrs_for_replay(con, row: dict, instrument: str, trading_day: date) -> None:
+def _inject_cross_asset_atrs_for_replay(con, row: dict, instrument: str, trading_day: date, orb_minutes: int) -> None:
     """Inject cross-asset ATR percentiles into daily features row for replay.
 
     Mirrors session_orchestrator._build_daily_features_row() lines 330-348.
     Without this, CrossAssetATRFilter strategies silently reject every trade
     in replay (fail-closed: missing key → filter returns False).
+
+    orb_minutes is REQUIRED (no default) — reads the source instrument's
+    daily_features row at the consuming strategy's aperture so the cross-asset
+    ATR percentile is computed against the same ORB window the filter was
+    validated on. PR #189 class bug — fixed in PR #231 for the sibling
+    paper_trade_logger; this is the same fix applied here.
     """
     from trading_app.config import ALL_FILTERS, CrossAssetATRFilter
 
@@ -177,10 +188,10 @@ def _inject_cross_asset_atrs_for_replay(con, row: dict, instrument: str, trading
             continue
         src_result = con.execute(
             """SELECT atr_20_pct FROM daily_features
-               WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL
+               WHERE symbol = ? AND orb_minutes = ? AND atr_20_pct IS NOT NULL
                  AND trading_day = ?
                LIMIT 1""",
-            [source, trading_day],
+            [source, orb_minutes, trading_day],
         ).fetchone()
         if src_result and src_result[0] is not None:
             row[f"cross_atr_{source}_pct"] = float(src_result[0])
@@ -341,7 +352,7 @@ def replay_historical(
                 r = _get_daily_features_row(con, instrument, td, orb_minutes=om)
                 if r is not None:
                     r["median_atr_20"] = median_atr
-                    _inject_cross_asset_atrs_for_replay(con, r, instrument, td)
+                    _inject_cross_asset_atrs_for_replay(con, r, instrument, td, om)
                     df_rows[om] = r
             engine.on_trading_day_start(td, daily_features_rows=df_rows)
             risk_mgr.daily_reset(td)

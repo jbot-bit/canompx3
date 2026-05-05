@@ -538,3 +538,32 @@ class TestOutputHelpers:
         _print_drawdown(result)
         output = capsys.readouterr().out
         assert "0.00R (none)" in output
+
+
+class TestApertureRouting:
+    """Both daily_features helpers MUST require orb_minutes (no default).
+
+    Regression test for the PR #189 class bug recurrence in paper_trader.py.
+    Defaulting to 5 silently mis-scores any non-O5 strategy. PR #231 fixed the
+    sibling paper_trade_logger; this asserts the same discipline here.
+    """
+
+    def test_get_daily_features_row_signature_requires_orb_minutes(self):
+        import inspect
+
+        from trading_app.paper_trader import _get_daily_features_row
+
+        sig = inspect.signature(_get_daily_features_row)
+        assert "orb_minutes" in sig.parameters
+        assert sig.parameters["orb_minutes"].default is inspect.Parameter.empty, (
+            "orb_minutes must NOT have a default — defaulting to 5 was the original bug"
+        )
+
+    def test_inject_cross_asset_atrs_for_replay_signature_requires_orb_minutes(self):
+        import inspect
+
+        from trading_app.paper_trader import _inject_cross_asset_atrs_for_replay
+
+        sig = inspect.signature(_inject_cross_asset_atrs_for_replay)
+        assert "orb_minutes" in sig.parameters
+        assert sig.parameters["orb_minutes"].default is inspect.Parameter.empty, "orb_minutes must NOT have a default"
