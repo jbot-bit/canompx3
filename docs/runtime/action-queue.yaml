@@ -485,3 +485,45 @@ items:
       - trading_app/lane_allocator.py
     notes_ref: docs/audit/results/2026-05-04-allocator-paused-pool-diagnosis.md
     override_note: "PRIORITY_B / PRIORITY_C lists also in diagnosis §3 — escalate only if PRIORITY_A yields <3 PASS and additional capacity is needed. Note: this entry was originally in commit 955eb980 but was clobbered by recovery commit 7c05a60b; restored in follow-up."
+
+  - id: oos_reconcile_ovnrng100_rr15_2026_05_05
+    title: OOS reconciliation diligence -- MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100
+    class: audit
+    status: closed
+    priority: P2
+    close_before_new_work: false
+    owner_hint: user
+    last_verified_at: 2026-05-05
+    freshness_sla_days: 30
+    next_action: |
+      Closed 2026-05-05 with verdict RECONCILED_AGAINST_STRICT_UNLOCK.
+      Three pre-existing OOS values for the deployed lane disagreed:
+        A  validated_setups.oos_exp_r       = +0.2029  (LEGACY 2026-04-11)
+        B  strict-unlock CSV (2026-05-02)   = +0.1658
+        C  ad-hoc raw query (no filter dlg) = +0.069   (rejected)
+      Canonical reconciliation runner reproduces B exactly (delta=0.0000,
+      N_IS=522 exact, N_OOS=66 exact). LEGACY value A overstates canonical
+      OOS_ExpR by +0.0371 R/trade. Provenance unrecoverable from row alone
+      (promotion_provenance=LEGACY, no validation_run_id).
+
+      Open follow-up (separate workflow, not blocking): /capital-review on
+      the deployed lane to determine whether the original deployment
+      decision was conditioned on the LEGACY +0.2029 value. trailing_expr
+      from live trades is independent of this static OOS overstatement.
+    exit_criteria: Closed. Canonical OOS for this lane is +0.1658 per strict-unlock CSV reproduction. Lane validity, DSR re-derivation, and allocator decision explicitly out of scope.
+    blocked_by: []
+    decision_refs:
+      - docs/audit/results/2026-05-05-oos-reconcile-ovnrng100.md
+      - docs/audit/hypotheses/2026-05-05-oos-reconcile-ovnrng100.yaml
+      - docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md
+    evidence_refs:
+      - research/oos_reconcile_ovnrng100.py
+      - research/chordia_strict_unlock_v1.py
+      - research/filter_utils.py
+      - trading_app/holdout_policy.py
+      - trading_app/config.py
+      - docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md
+      - docs/institutional/literature/harvey_liu_2015_backtesting.md
+      - docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md
+    notes_ref: docs/audit/results/2026-05-05-oos-reconcile-ovnrng100.md
+    override_note: "K=1 confirmatory diligence on already-validated deployed lane; no new pre-reg required by Phase 0 § 'Confirmatory audits do NOT require new pre-reg'. Pre-reg yaml written for audit-trail completeness. Acceptance criterion 4 was mis-specified against scratch-EXCLUSIVE validated_setups.expectancy_r; correction documented in result MD per no-post-hoc-rescue rule. Pre-reg yaml left as-locked."
