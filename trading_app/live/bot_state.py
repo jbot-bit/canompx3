@@ -67,6 +67,67 @@ def _sort_time_key(time_text: str) -> tuple[int, int]:
         return (99, 99)
 
 
+def _iso_utc(value: Any) -> str | None:
+    """Best-effort ISO formatter for datetimes held on runtime objects.
+
+    None passes through silently. datetime is normalized to UTC ISO8601.
+    Any other non-None type returns None with a logger warning — operator-
+    visible fields must never silently drop type-mismatched values per
+    institutional-rigor.md sec 6 (no silent failures). Upstream callers
+    that route non-datetime timestamps (e.g. pandas Timestamp from
+    execution_engine.py:978/1099/1374 — see follow-up F6) should coerce
+    at the assignment site, not here.
+
+    STABLE CROSS-MODULE API: imported by trading_app.live.session_orchestrator
+    (see fix/code-review-hotpatches-2026-05-05). Despite the leading
+    underscore, this helper is the canonical operator-visible-timestamp
+    formatter for the live package. Do not rename without updating every
+    in-package caller; promotion to a public name (``iso_utc``) is queued
+    as low-priority debt — track in the memory feedback file for the
+    iso_utc silent-None class pattern.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=UTC)
+        return value.astimezone(UTC).isoformat()
+    log.warning("_iso_utc: unsupported type %s — returning None", type(value).__name__)
+    return None
+
+
+def _coerce_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _orb_snapshot(orbs: dict[tuple[str, int], Any] | None, orb_label: str, orb_minutes: int) -> dict[str, Any]:
+    """Project runtime ORB state into a JSON-safe dict for operator surfaces."""
+    if not orbs:
+        return {}
+    orb = orbs.get((orb_label, orb_minutes))
+    if orb is None:
+        return {}
+    high = _coerce_float(getattr(orb, "high", None))
+    low = _coerce_float(getattr(orb, "low", None))
+    size = None
+    if high is not None and low is not None:
+        size = high - low
+    return {
+        "orb_high": high,
+        "orb_low": low,
+        "orb_size": size,
+        "orb_complete": bool(getattr(orb, "complete", False)),
+        "orb_break_direction": getattr(orb, "break_dir", None),
+        "orb_break_time_utc": _iso_utc(getattr(orb, "break_ts", None)),
+        "orb_complete_time_utc": _iso_utc(getattr(orb, "complete_ts", None)),
+    }
+
+
 def build_state_snapshot(
     *,
     mode: str,
@@ -82,6 +143,10 @@ def build_state_snapshot(
     strategies: list,
     active_trades: list,
     completed_trades: list,
+    orbs: dict[tuple[str, int], Any] | None = None,
+    feed_status: dict[str, Any] | None = None,
+    router_status: dict[str, Any] | None = None,
+    broker_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a state dict from orchestrator internals."""
     lanes: dict[str, dict] = {}
@@ -99,28 +164,51 @@ def build_state_snapshot(
             "entry_model": s.entry_model,
             "confirm_bars": s.confirm_bars,
             "status": "WAITING",
+            "status_detail": None,
             "direction": None,
             "entry_price": None,
+            "stop_price": None,
+            "target_price": None,
+            "risk_points": None,
+            "signal_time_utc": None,
+            "entry_time_utc": None,
+            "exit_time_utc": None,
             "current_pnl_r": None,
         }
+        lane.update(_orb_snapshot(orbs, s.orb_label, s.orb_minutes))
         # Check if this strategy has an active trade
         for t in active_trades:
             if t.strategy_id == s.strategy_id:
+                lane["status_detail"] = getattr(getattr(t, "state", None), "value", None)
+                lane["direction"] = getattr(t, "direction", None)
+                lane["entry_price"] = _coerce_float(getattr(t, "entry_price", None))
+                lane["stop_price"] = _coerce_float(getattr(t, "stop_price", None))
+                lane["target_price"] = _coerce_float(getattr(t, "target_price", None))
+                lane["entry_time_utc"] = _iso_utc(getattr(t, "entry_ts", None))
+                lane["signal_time_utc"] = lane["entry_time_utc"] or lane.get("orb_break_time_utc")
                 if t.state.value == "ENTERED":
                     lane["status"] = "IN_TRADE"
-                    lane["direction"] = t.direction
-                    lane["entry_price"] = t.entry_price
-                    lane["current_pnl_r"] = t.pnl_r
+                    lane["current_pnl_r"] = _coerce_float(getattr(t, "pnl_r", None))
                 elif t.state.value in ("ARMED", "CONFIRMING"):
                     lane["status"] = "ARMED"
+                if lane["entry_price"] is not None and lane["stop_price"] is not None:
+                    lane["risk_points"] = abs(lane["entry_price"] - lane["stop_price"])
                 break
         # Check completed trades
         for t in completed_trades:
             if t.strategy_id == s.strategy_id:
                 lane["status"] = "FLAT"
-                lane["direction"] = t.direction
-                lane["entry_price"] = t.entry_price
-                lane["current_pnl_r"] = t.pnl_r
+                lane["status_detail"] = getattr(getattr(t, "state", None), "value", lane["status_detail"])
+                lane["direction"] = getattr(t, "direction", lane["direction"])
+                lane["entry_price"] = _coerce_float(getattr(t, "entry_price", lane["entry_price"]))
+                lane["stop_price"] = _coerce_float(getattr(t, "stop_price", lane["stop_price"]))
+                lane["target_price"] = _coerce_float(getattr(t, "target_price", lane["target_price"]))
+                lane["entry_time_utc"] = _iso_utc(getattr(t, "entry_ts", None)) or lane["entry_time_utc"]
+                lane["exit_time_utc"] = _iso_utc(getattr(t, "exit_ts", None))
+                lane["signal_time_utc"] = lane["entry_time_utc"] or lane.get("orb_break_time_utc")
+                lane["current_pnl_r"] = _coerce_float(getattr(t, "pnl_r", None))
+                if lane["entry_price"] is not None and lane["stop_price"] is not None:
+                    lane["risk_points"] = abs(lane["entry_price"] - lane["stop_price"])
                 break
         lanes[s.strategy_id] = lane
         lane_cards.append(lane)
@@ -143,4 +231,7 @@ def build_state_snapshot(
         "strategies_loaded": len(strategies),
         "lanes": lanes,
         "lane_cards": lane_cards,
+        "feed_status": feed_status or {},
+        "router_status": router_status or {},
+        "broker_status": broker_status or {},
     }

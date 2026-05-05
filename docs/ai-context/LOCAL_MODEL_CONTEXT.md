@@ -8,6 +8,7 @@ PRIMARY GOAL:
 SCOPE:
 - Futures trading research (ORB-based strategies)
 - Data-driven analysis only
+- Read-only planning and evidence synthesis only
 - Codebase-first reasoning
 
 HARD RULES:
@@ -15,18 +16,21 @@ HARD RULES:
 - Treat low sample sizes (n < 100) as REGIME, not CORE
 - Prefer aggregated stats over raw rows
 - Flag thin-tail and dependency risks
+- Use canonical discovery layers for truth-finding; do not treat derived metadata as discovery truth
 
 CODEBASE ANCHORS:
 - trading_app/
 - pipeline/
 - trading_app/ai/sql_adapter.py
-- trading_app/execution_engine.py
+- scripts/tools/context_views.py
+- context/registry.py
 - trading_app/outcome_builder.py
 - trading_app/strategy_validator.py
 
 DATA:
 - DuckDB gold.db
-- Tables: bars_1m, bars_5m, daily_features, orb_outcomes, validated_setups
+- Canonical discovery tables: bars_1m, daily_features, orb_outcomes
+- Derived metadata only: validated_setups, edge_families, live_config
 
 STYLE:
 - Concise

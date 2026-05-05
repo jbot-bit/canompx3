@@ -153,3 +153,54 @@ Do **not** proceed past this memo unless one of these gates is satisfied.
 If this branch is revisited before new literature arrives, the only honest
 follow-through is a bounded role/era memo on the existing `PD_*` shelf rows,
 with no theory-grant claim and no deployment claim.
+
+## Reproduction
+
+This memo is a literature-grounding read of `resources/` PDFs against the
+project Chordia-strict-unlock workflow; no executable artefact. To
+reconstruct the conclusion:
+
+1. Local resources read: `resources/Chan_2013.pdf` Ch 7 (gap mean
+   reversion) — confirm passage on 1-2 day post-gap retracement; absent
+   passage on prior-day high/low/range/middle as a structural mechanism.
+2. Local resources read: `resources/Fitschen_2013.pdf` Ch 3 — confirm
+   absence of prior-day-level mechanism distinct from intraday breakout.
+3. Carver Ch 9-10 status (UNVERIFIED in this memo): no
+   `docs/institutional/literature/carver_2015_ch9*.md` or `_ch10*.md`
+   extract exists. Existing Carver extracts are Ch 11 (portfolios) and
+   Ch 12 (speed/size). The absence-of-prior-day-level-mechanism claim
+   for Ch 9-10 is plausible by analogy to the Ch 11/12 scope but is
+   NOT independently verified against the raw PDF in this memo. Per
+   `.claude/rules/institutional-rigor.md` § "Ground in local resources
+   before training memory" extract-before-dismiss rule, an explicit
+   Ch 9-10 extract is the proper grounding step before a binding
+   absence claim. This memo does not block on it because the
+   parking decision rests on (1) and (2) above plus (4).
+4. Cross-check: `docs/institutional/literature/` does not contain a
+   prior-day-context extract as of 2026-05-02. Therefore filter-grounding-
+   status for `PD_*` is UNSUPPORTED, and per
+   `docs/institutional/pre_registered_criteria.md` Criterion 4 the strict
+   `t >= 3.79` (no theory grant) threshold applies.
+5. Memo audit trail: this file + `chordia_audit_log.yaml` PARK row(s) for
+   any audited `PD_*` strategies + `docs/runtime/action-queue.yaml` entry
+   referencing the deployable-pool survey.
+
+## Caveats / Limitations
+
+- This is a **theory-grant feasibility** memo, not a falsification of any
+  specific `PD_*` strategy. Strategies that pass strict `t >= 3.79`
+  remain deployable through the standard Chordia gate; the memo only
+  forbids invoking the theory-grant `t >= 3.00` downgrade path.
+- The memo does not search outside `resources/` or
+  `docs/institutional/literature/`. If a literature extract is added
+  later that grounds prior-day geometry as a distinct mechanism class
+  (e.g., a Fitschen-style intraday-extension chapter not yet extracted),
+  the theory gate above can be reopened with the extract path cited.
+- Memo is dated 2026-05-02. If `validated_setups` or
+  `experimental_strategies` materially shifts (new `PD_*` rows, removal
+  of cited rows), revisit before consuming.
+- The "smallest safe next step" recommendation is doctrine-level only;
+  it does not encode a numeric kill or revive criterion. Per
+  `.claude/rules/backtesting-methodology.md` RULE 3.2, any future OOS
+  evidence on `PD_*` strategies at `N_OOS < 30` must be treated as
+  directional-only, not confirmatory.

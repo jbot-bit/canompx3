@@ -7,11 +7,14 @@ Covers:
 - N < 2 raises ValueError
 - Three synthetic distributions: high-variance, low-variance, noise
 - Theory vs no-theory threshold differs
+- ChordiaAuditEntry addendum-field round-trip (PR #221 schema close)
 """
 
 from __future__ import annotations
 
+import logging
 import math
+from datetime import date
 
 import pytest
 
@@ -21,6 +24,7 @@ from trading_app.chordia import (
     chordia_gate,
     chordia_threshold,
     compute_chordia_t,
+    load_chordia_audit_log,
 )
 
 
@@ -148,3 +152,160 @@ class TestSyntheticDistributions:
         assert passed_with is False
         assert passed_without is False
         assert t_stat < CHORDIA_T_WITH_THEORY
+
+
+_FULL_FIELDS_YAML = """\
+version: 1
+default_has_theory: false
+audit_freshness_days: 90
+audits:
+  - strategy_id: TEST_FULL
+    audit_date: 2026-05-03
+    audit_reaffirmed_date: 2026-05-04
+    verdict: PASS_CHORDIA
+    t_stat: 4.361
+    t_stat_source: in-memory float64
+    t_stat_csv_recompute: 4.323
+    oos_n: 49
+    oos_power: 0.30
+"""
+
+_MINIMAL_FIELDS_YAML = """\
+version: 1
+default_has_theory: false
+audit_freshness_days: 90
+audits:
+  - strategy_id: TEST_MIN
+    audit_date: 2026-05-01
+    verdict: PASS_CHORDIA
+"""
+
+_OUT_OF_RANGE_POWER_YAML = """\
+version: 1
+default_has_theory: false
+audit_freshness_days: 90
+audits:
+  - strategy_id: TEST_OOR
+    audit_date: 2026-05-01
+    verdict: PASS_CHORDIA
+    oos_power: 1.5
+"""
+
+_REAFFIRM_AS_STRING_YAML = """\
+version: 1
+default_has_theory: false
+audit_freshness_days: 90
+audits:
+  - strategy_id: TEST_STR
+    audit_date: 2026-05-01
+    audit_reaffirmed_date: '2026-05-04'
+    verdict: PASS_CHORDIA
+"""
+
+# YAML unquoted ISO timestamp loads as ``datetime``. Because ``datetime``
+# is a subclass of ``date``, an isinstance(date)-first check would return
+# the ``datetime`` verbatim into a field annotated ``date | None`` and
+# break ``ChordiaAuditLog.audit_age_days`` arithmetic.
+_DATETIME_TIMESTAMP_YAML = """\
+version: 1
+default_has_theory: false
+audit_freshness_days: 90
+audits:
+  - strategy_id: TEST_DT
+    audit_date: 2026-05-01T12:34:56
+    audit_reaffirmed_date: 2026-05-04T08:00:00
+    verdict: PASS_CHORDIA
+"""
+
+
+class TestLoadChordiaAuditEntryAddendum:
+    """Schema close for PR #221 evidence-auditor finding.
+
+    YAML carries 6 addendum fields (4 from PR #213 + 1 from PR #221 merge +
+    ``t_stat`` peer); loader must populate them on the dataclass instead of
+    silently dropping them. Allocator behaviour is unaffected — these tests
+    exercise schema, not validation.
+    """
+
+    def test_full_fields_round_trip(self, tmp_path):
+        path = tmp_path / "chordia_audit_log.yaml"
+        path.write_text(_FULL_FIELDS_YAML, encoding="utf-8")
+        log = load_chordia_audit_log(path)
+        entry = log.entries["TEST_FULL"]
+        assert entry.audit_date == date(2026, 5, 3)
+        assert entry.audit_reaffirmed_date == date(2026, 5, 4)
+        assert entry.verdict == "PASS_CHORDIA"
+        assert entry.t_stat == pytest.approx(4.361)
+        assert entry.t_stat_source == "in-memory float64"
+        assert entry.t_stat_csv_recompute == pytest.approx(4.323)
+        assert entry.oos_n == 49
+        assert entry.oos_power == pytest.approx(0.30)
+
+    def test_minimal_fields_default_to_none(self, tmp_path):
+        # Backward-compat: a row without any addendum fields must still load
+        # cleanly and every new field must default to None.
+        path = tmp_path / "chordia_audit_log.yaml"
+        path.write_text(_MINIMAL_FIELDS_YAML, encoding="utf-8")
+        log = load_chordia_audit_log(path)
+        entry = log.entries["TEST_MIN"]
+        assert entry.audit_date == date(2026, 5, 1)
+        assert entry.verdict == "PASS_CHORDIA"
+        assert entry.t_stat is None
+        assert entry.t_stat_source is None
+        assert entry.t_stat_csv_recompute is None
+        assert entry.oos_n is None
+        assert entry.oos_power is None
+        assert entry.audit_reaffirmed_date is None
+
+    def test_oos_power_out_of_range_warns_and_accepts(self, tmp_path, caplog):
+        path = tmp_path / "chordia_audit_log.yaml"
+        path.write_text(_OUT_OF_RANGE_POWER_YAML, encoding="utf-8")
+        with caplog.at_level(logging.WARNING, logger="trading_app.chordia"):
+            log = load_chordia_audit_log(path)
+        entry = log.entries["TEST_OOR"]
+        # Stage spec § Decision 2: log.warning + accept; allocator does not
+        # consume oos_power, so out-of-range must NOT fail-closed.
+        assert entry.oos_power == pytest.approx(1.5)
+        assert any("oos_power=1.5" in rec.getMessage() and "TEST_OOR" in rec.getMessage() for rec in caplog.records), (
+            f"expected oos_power range-warning; got {[r.getMessage() for r in caplog.records]}"
+        )
+
+    def test_audit_reaffirmed_date_string_coerced_to_date(self, tmp_path):
+        # YAML quotes ISO dates in single-quoted form, yielding str rather
+        # than native date — coercion path must mirror the existing
+        # audit_date handling (str -> date.fromisoformat).
+        path = tmp_path / "chordia_audit_log.yaml"
+        path.write_text(_REAFFIRM_AS_STRING_YAML, encoding="utf-8")
+        log = load_chordia_audit_log(path)
+        entry = log.entries["TEST_STR"]
+        assert entry.audit_reaffirmed_date == date(2026, 5, 4)
+        assert isinstance(entry.audit_reaffirmed_date, date)
+
+    def test_unquoted_iso_timestamp_coerced_to_date_not_datetime(self, tmp_path):
+        # Regression: ``datetime`` is a subclass of ``date``, so a
+        # date-first isinstance check returned the ``datetime`` verbatim
+        # into a ``date | None`` field. ``ChordiaAuditLog.audit_age_days``
+        # then mixed types in ``today - audit_date`` and produced the
+        # wrong staleness, silently corrupting the allocator's chordia
+        # gate. Fix orders ``datetime`` before ``date`` and calls
+        # ``.date()``.
+        from datetime import datetime as _datetime
+
+        path = tmp_path / "chordia_audit_log.yaml"
+        path.write_text(_DATETIME_TIMESTAMP_YAML, encoding="utf-8")
+        log = load_chordia_audit_log(path)
+        entry = log.entries["TEST_DT"]
+
+        assert entry.audit_date == date(2026, 5, 1)
+        assert type(entry.audit_date) is date
+        assert not isinstance(entry.audit_date, _datetime)
+
+        assert entry.audit_reaffirmed_date == date(2026, 5, 4)
+        assert type(entry.audit_reaffirmed_date) is date
+        assert not isinstance(entry.audit_reaffirmed_date, _datetime)
+
+        # Allocator gate: audit_age_days must compute as int, not raise
+        # TypeError or return a timedelta-like with a .seconds remainder.
+        age = log.audit_age_days("TEST_DT", date(2026, 5, 5))
+        assert age == 4
+        assert isinstance(age, int)

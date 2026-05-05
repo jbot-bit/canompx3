@@ -99,7 +99,6 @@ def _same_repo_claims(root: Path) -> list[object]:
 
 
 def conflicting_mutating_claims(root: Path, branch: str) -> list[object]:
-    requested_root = root.resolve()
     if branch in {"", "unknown", "detached"}:
         return []
 
@@ -108,10 +107,6 @@ def conflicting_mutating_claims(root: Path, branch: str) -> list[object]:
         if getattr(claim, "mode", "") != "mutating":
             continue
         if getattr(claim, "branch", "") != branch:
-            continue
-        claim_root = str(getattr(claim, "root", ""))
-        if claim_root and Path(claim_root).resolve() == requested_root:
-            claims.append(claim)
             continue
         claims.append(claim)
     return claims

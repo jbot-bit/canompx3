@@ -60,6 +60,7 @@ class SessionClaim(StrictModel):
     pid: int
     mode: SessionMode = "read-only"
     root: str = ""
+    runtime: str = ""
     fresh: bool = False
 
 
@@ -163,6 +164,24 @@ def _run_git(root: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
         return None
 
 
+def _path_identity(path: Path) -> str:
+    """Return a stable directory identity across case-variant mount paths."""
+    try:
+        stat = path.stat()
+        return f"{stat.st_dev}:{stat.st_ino}"
+    except OSError:
+        return path.resolve().as_posix()
+
+
+def _paths_same_location(left: Path | str, right: Path | str) -> bool:
+    left_path = Path(left)
+    right_path = Path(right)
+    try:
+        return left_path.samefile(right_path)
+    except OSError:
+        return left_path.resolve().as_posix() == right_path.resolve().as_posix()
+
+
 def branch_name(root: Path) -> str:
     result = _run_git(root, "branch", "--show-current")
     if result is None or result.returncode != 0:
@@ -228,7 +247,7 @@ def _extract_handoff_snapshot(handoff_path: Path) -> HandoffSnapshot:
 
 
 def _active_claim_key(root: Path, tool: str) -> str:
-    payload = f"{tool}|{root.resolve()}"
+    payload = f"{tool}|{_path_identity(root.resolve())}"
     digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
     safe_tool = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in tool)
     return f"{safe_tool}-{digest}.json"
@@ -236,6 +255,53 @@ def _active_claim_key(root: Path, tool: str) -> str:
 
 def active_claim_path(root: Path, tool: str, claim_dir: Path = ACTIVE_SESSION_DIR) -> Path:
     return claim_dir / _active_claim_key(root, tool)
+
+
+def _current_runtime_tag() -> str:
+    if os.name == "nt":
+        return "windows"
+    if os.environ.get("WSL_DISTRO_NAME"):
+        return "wsl"
+    return "posix"
+
+
+def _legacy_claim_runtime(claim: SessionClaim) -> str:
+    root_text = (claim.root or "").strip()
+    if re.match(r"^[A-Za-z]:[\\/]", root_text):
+        return "windows"
+    if root_text.startswith("/"):
+        return _current_runtime_tag()
+    return ""
+
+
+def _claim_runtime_tag(claim: SessionClaim) -> str:
+    return claim.runtime or _legacy_claim_runtime(claim)
+
+
+def _claim_owner_pid() -> int:
+    owner = os.environ.get("CANOMPX3_SESSION_OWNER", "").strip()
+    if owner.isdigit():
+        return int(owner)
+    if owner.startswith("pid:") and owner[4:].isdigit():
+        return int(owner[4:])
+    match = re.search(r"(\d+)$", owner)
+    if match:
+        return int(match.group(1))
+    return os.getpid()
+
+
+def _pid_is_live(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
 
 
 def write_claim(
@@ -252,9 +318,10 @@ def write_claim(
         branch=branch,
         head_sha=head,
         started_at=datetime.now(UTC).isoformat(),
-        pid=os.getpid(),
+        pid=_claim_owner_pid(),
         mode=mode,
         root=root or "",
+        runtime=_current_runtime_tag(),
         fresh=True,
     )
     claim_path.parent.mkdir(parents=True, exist_ok=True)
@@ -269,7 +336,13 @@ def _claim_is_fresh(claim: SessionClaim) -> bool:
         return False
     if started.tzinfo is None:
         started = started.replace(tzinfo=UTC)
-    return datetime.now(UTC) - started <= CLAIM_FRESHNESS
+    if datetime.now(UTC) - started > CLAIM_FRESHNESS:
+        return False
+
+    claim_runtime = _claim_runtime_tag(claim)
+    if claim_runtime and claim_runtime == _current_runtime_tag() and not _pid_is_live(claim.pid):
+        return False
+    return True
 
 
 def read_claim(claim_path: Path) -> SessionClaim | None:
@@ -330,6 +403,9 @@ def verify_claim(
     current_branch = branch_name(root)
     current_head = head_sha(root)
 
+    if not claim.fresh:
+        warnings.append("Session claim is stale or owner process is no longer running")
+        ok = False
     if claim.tool != active_tool:
         warnings.append(f"tool mismatch: claim={claim.tool} current={active_tool}")
         ok = False
@@ -339,8 +415,8 @@ def verify_claim(
     if claim.head_sha != current_head:
         warnings.append(f"HEAD mismatch: claim={claim.head_sha} current={current_head}")
         ok = False
-    current_root = str(root.resolve())
-    if claim.root and claim.root != current_root:
+    current_root = root.resolve()
+    if claim.root and not _paths_same_location(claim.root, current_root):
         warnings.append(f"Root mismatch: claim={claim.root} current={current_root}")
         ok = False
 
@@ -623,7 +699,12 @@ def _parallel_claim_issues(snapshot: SystemContext) -> tuple[list[PolicyIssue], 
     peer_claims = [
         claim
         for claim in same_branch
-        if not (active_tool is not None and claim.tool == active_tool and claim.root == current_root)
+        if not (
+            active_tool is not None
+            and claim.tool == active_tool
+            and claim.root
+            and _paths_same_location(claim.root, current_root)
+        )
     ]
     mutating_peers = [claim for claim in peer_claims if claim.mode == "mutating"]
     if mutating_peers:
@@ -797,7 +878,12 @@ def evaluate_system_policy(snapshot: SystemContext, action: PolicyAction) -> Pol
             claim
             for claim in snapshot.claims
             if claim.branch == branch
-            and not (active_tool is not None and claim.tool == active_tool and claim.root == current_root)
+            and not (
+                active_tool is not None
+                and claim.tool == active_tool
+                and claim.root
+                and _paths_same_location(claim.root, current_root)
+            )
         ]
         if peer_claims:
             detail = ", ".join(f"{claim.tool}({claim.mode})@{claim.branch}" for claim in peer_claims)

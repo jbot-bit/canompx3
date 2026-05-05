@@ -36,7 +36,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import yaml
@@ -175,6 +175,13 @@ class ChordiaAuditEntry:
     staleness check). ``verdict`` is the strict-replay verdict recorded at
     that audit; the live allocator uses this field directly and fails closed
     to ``MISSING`` when no audit verdict exists.
+
+    Optional addendum fields (``t_stat``, ``t_stat_source``,
+    ``t_stat_csv_recompute``, ``oos_n``, ``oos_power``,
+    ``audit_reaffirmed_date``) carry per-row reproducibility and OOS-power
+    context introduced by PR #213 / PR #221. They are not consumed by the
+    live allocator gate; they are loaded so future audit-trail tools can
+    surface them without YAML-vs-code schema drift.
     """
 
     strategy_id: str
@@ -182,6 +189,12 @@ class ChordiaAuditEntry:
     audit_date: date | None
     verdict: str | None
     theory_ref: str | None
+    t_stat: float | None = None
+    t_stat_source: str | None = None
+    t_stat_csv_recompute: float | None = None
+    oos_n: int | None = None
+    oos_power: float | None = None
+    audit_reaffirmed_date: date | None = None
 
 
 @dataclass(frozen=True)
@@ -211,6 +224,100 @@ class ChordiaAuditLog:
         if d is None:
             return None
         return (today - d).days
+
+
+def _coerce_audit_date(raw: object) -> date | None:
+    """Coerce a YAML date-like value to ``date`` or ``None``.
+
+    YAML loaders may yield a string (quoted), a native ``date`` (unquoted
+    ISO date), or a native ``datetime`` (unquoted ISO timestamp). The
+    ``datetime`` branch precedes the ``date`` branch because ``datetime``
+    is a subclass of ``date``: ``isinstance(datetime.now(), date)`` is
+    ``True``, so an unquoted timestamp would otherwise return as
+    ``datetime`` into a ``date | None`` field, breaking
+    ``ChordiaAuditLog.audit_age_days`` arithmetic. Anything else is
+    treated as missing.
+    """
+    if isinstance(raw, str):
+        return date.fromisoformat(raw)
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    return None
+
+
+def _coerce_optional_float(raw: object) -> float | None:
+    """Coerce a YAML scalar to ``float`` or ``None``; warns on bad type.
+
+    Booleans are rejected because Python treats ``True``/``False`` as
+    ``int`` subclasses; an audit row with ``t_stat: true`` is a doctrine
+    error, not a numeric value.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        _LOG.warning("chordia audit: expected float, got bool (%s) — coerced to None", raw)
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        try:
+            return float(raw)
+        except ValueError:
+            _LOG.warning("chordia audit: cannot parse %r as float — coerced to None", raw)
+            return None
+    _LOG.warning("chordia audit: unsupported type for float field (%s) — coerced to None", type(raw).__name__)
+    return None
+
+
+def _coerce_optional_int(raw: object) -> int | None:
+    """Coerce a YAML scalar to ``int`` or ``None``; warns on bad type."""
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        _LOG.warning("chordia audit: expected int, got bool (%s) — coerced to None", raw)
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, float) and raw.is_integer():
+        return int(raw)
+    if isinstance(raw, str):
+        try:
+            return int(raw)
+        except ValueError:
+            _LOG.warning("chordia audit: cannot parse %r as int — coerced to None", raw)
+            return None
+    _LOG.warning("chordia audit: unsupported type for int field (%s) — coerced to None", type(raw).__name__)
+    return None
+
+
+def _coerce_optional_str(raw: object) -> str | None:
+    """Coerce a YAML scalar to ``str`` or ``None``."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return raw
+    return str(raw)
+
+
+def _coerce_oos_power(raw: object, strategy_id: str) -> float | None:
+    """Load ``oos_power`` with range-check log.warning per stage spec.
+
+    Out-of-range values (outside ``[0.0, 1.0]``) emit a warning but the
+    value is accepted — the allocator gate does not consume this field,
+    so range violations must NOT fail-closed. Pattern matches
+    ``load_chordia_audit_log`` parse-error handling at lines 240-261:
+    loud-but-non-fatal for non-allocator-load-bearing fields.
+    """
+    value = _coerce_optional_float(raw)
+    if value is not None and not 0.0 <= value <= 1.0:
+        _LOG.warning(
+            "chordia audit: oos_power=%s for %s outside [0.0, 1.0] — accepted as-is",
+            value,
+            strategy_id,
+        )
+    return value
 
 
 def load_chordia_audit_log(path: str | Path | None = None) -> ChordiaAuditLog:
@@ -282,11 +389,9 @@ def load_chordia_audit_log(path: str | Path | None = None) -> ChordiaAuditLog:
         sid = audit.get("strategy_id")
         if not sid:
             continue
-        d = audit.get("audit_date")
-        if isinstance(d, str):
-            d = date.fromisoformat(d)
-        elif not isinstance(d, date) and d is not None:
-            d = None
+        d = _coerce_audit_date(audit.get("audit_date"))
+        reaffirmed = _coerce_audit_date(audit.get("audit_reaffirmed_date"))
+        oos_power = _coerce_oos_power(audit.get("oos_power"), sid)
         has_theory, theory_ref = theory_map.get(sid, (default_has_theory, None))
         entries[sid] = ChordiaAuditEntry(
             strategy_id=sid,
@@ -294,6 +399,12 @@ def load_chordia_audit_log(path: str | Path | None = None) -> ChordiaAuditLog:
             audit_date=d,
             verdict=audit.get("verdict"),
             theory_ref=theory_ref,
+            t_stat=_coerce_optional_float(audit.get("t_stat")),
+            t_stat_source=_coerce_optional_str(audit.get("t_stat_source")),
+            t_stat_csv_recompute=_coerce_optional_float(audit.get("t_stat_csv_recompute")),
+            oos_n=_coerce_optional_int(audit.get("oos_n")),
+            oos_power=oos_power,
+            audit_reaffirmed_date=reaffirmed,
         )
 
     # Strategies with a theory grant but no audit row still appear in

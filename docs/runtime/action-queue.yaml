@@ -56,7 +56,7 @@ items:
       (1) `apply_chordia_gate(scores)` invoked inline at top of
           `build_allocation()` -- demotes FAIL_BOTH / FAIL_CHORDIA / MISSING /
           stale-audit (>90d) to PAUSE before ranking. Idempotent.
-      (2) Drift check #134 `check_lane_allocation_chordia_gate` -- refuses
+      (2) Drift check #136 `check_lane_allocation_chordia_gate` -- refuses
           any FAIL_* / missing / stale lane in `lane_allocation.json`.
           Resolves via PROJECT_ROOT (not CWD) -- no fail-open class.
 
@@ -70,7 +70,7 @@ items:
       sit at PASS_CHORDIA but blocked on missing audit_date -- doctrine
       audit each = the unlock path for expanded allocation. Tracked
       separately as new entry below.
-    exit_criteria: Closed. PR #197 merged 2026-05-01T06:44:16Z. CI green. Drift check #134 enforces the JSON contract. 56 stage tests + 118 drift checks pass on the merged code.
+    exit_criteria: Closed. PR #197 merged 2026-05-01T06:44:16Z. CI green. Drift check #136 enforces the JSON contract. 56 stage tests + 118 drift checks pass on the merged code.
     blocked_by: []
     decision_refs:
       - docs/audit/results/2026-05-01-chordia-revalidation-deployed-lanes.md
@@ -91,32 +91,46 @@ items:
     priority: P1
     close_before_new_work: false
     owner_hint: claude-or-codex
-    last_verified_at: 2026-05-03
+    last_verified_at: 2026-05-04
     freshness_sla_days: 14
     next_action: |
-      Closed 2026-05-03. All 8 originally identified PASS_CHORDIA-without-audit
-      strategies have a documented disposition in
-      `docs/runtime/chordia_audit_log.yaml`:
+      Closed 2026-05-04. Final disposition of all 8 originally identified
+      PASS_CHORDIA-without-audit strategies:
 
-      - PASS_CHORDIA (7):
-        - `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15` (t=5.158, 2026-05-02)
-        - `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15` (t=4.362, 2026-05-02)
-        - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100` (t=4.363, 2026-05-02)
-        - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100` (t=4.256, 2026-05-02)
-        - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12` (t=4.294, 2026-05-02)
-        - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60` (t=4.361, 2026-05-03 — this closeout)
+      PASS_CHORDIA (deployable per gate):
+      - `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15` (audit 2026-05-02, t=5.158)
+      - `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15` (audit 2026-05-02, t=4.362)
+      - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100`           (audit 2026-05-02, t=4.363)
+      - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`           (audit 2026-05-02, t=4.256)
+      - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12`            (audit 2026-05-02, t=4.294)
+      - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60`          (audit 2026-05-03, reaffirmed 2026-05-04;
+                                                              t=4.361 in-memory float64,
+                                                              t=4.323 CSV recompute; both clear 3.79.
+                                                              OOS N=49 power=0.30 directional-only
+                                                              per memory/feedback_oos_power_floor.md;
+                                                              RULE 3.2 covers N<30, this is power-floor)
 
-      - PARK on bounded strict replay (1):
-        - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60` (t=4.211 IS, OOS sign-flip, 2026-05-02)
+      PARK on bounded strict replay (IS-clean, OOS sign-flip):
+      - `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60`          (audit 2026-05-02, t=4.211 IS, OOS N_OOS=49 sign-flip)
 
-      - Non-auditable through this runner (1):
-        - `MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10_S075` — 0.75x stop_multiplier;
-          `chordia_strict_unlock_v1.py` lines 105-120 refuse non-default stops by
-          design (different physical trade stream). Documented under
-          `chordia_audit_log.yaml` `non_auditable_notes:`. Re-open requires an
-          `outcome_builder` rebuild at stop=0.75 + a separate runner.
+      Non-auditable through this runner / implicit close:
+      - `MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10_S075` -- 0.75x stop_multiplier;
+        `chordia_strict_unlock_v1.py` lines 105-120 refuse non-default stops by
+        design (different physical trade stream). Documented under
+        `chordia_audit_log.yaml` `non_auditable_notes:`. Re-open requires an
+        `outcome_builder` rebuild at stop=0.75 + a separate runner. As of the
+        2026-05-04 pipeline rebuild this strategy is also no longer in
+        `validated_setups` (still in `experimental_strategies` only); a future
+        re-promotion would re-open this as a fresh audit candidate.
 
-      Live-book impact (2026-05-03 rebalance pending verification):
+      Rebalance verification (2026-05-04):
+      - Drift check #136 (`check_lane_allocation_chordia_gate`) PASSES.
+      - `compute_lane_scores()` returns the new COMEX_SETTLE X_MES_ATR60 row
+        with `chordia_verdict=PASS_CHORDIA`, `chordia_audit_age_days=0`.
+      - No allocator code change. Allocation update flows naturally at the
+        next monthly rebalance via PR #197 gate logic.
+
+      Live-book impact (2026-05-03 baseline + 2026-05-04 reaffirmation):
       - 2026-05-02 lane_allocation.json had 3 DEPLOY lanes
         (MNQ_COMEX_SETTLE_OVNRNG_100_RR1.5, MNQ_US_DATA_1000_VWAP_MID_RR1.5,
         MNQ_NYSE_OPEN_COST_LT12).
@@ -126,6 +140,12 @@ items:
         fire mask, same instrument/RR class).
       - Capital-EV impact of this closeout is zero or near-zero by design;
         the queue was doctrine cleanup, not money-making.
+
+      Caveat carried forward from the COMEX_SETTLE X_MES_ATR60 audit row:
+      OOS directional split shows long sign-flip and short rescue at
+      N_OOS=49. Pooled OOS sign matches IS so PASS_CHORDIA stands per prereg
+      gate, but a directional rebalance pass on this strategy is a candidate
+      future doctrine action.
 
       Next-thread reminder (per 2026-05-02 deployable-pool survey, NOT this
       queue): the highest-EV next research move is prior-day-context theory-
@@ -140,7 +160,8 @@ items:
         The 2026-05-02 PARK audit produced a different number (t=4.211 IS).
         Do not cite the original number in future pre-regs or controls.
 
-      Bailey-LdP MinBTL: each audit run was N=1, K=1; no brute-force.
+      Bailey-LdP MinBTL: each audit run was N=1, K=1; no brute force
+      (< 300 trials per audit cumulative).
 
       Older 2026-05-02 progress note follows below.
 
@@ -213,7 +234,7 @@ items:
       and a clear PASS_CHORDIA / PASS_PROTOCOL_A verdict on rebalance, OR
       (b) an explicit FAIL with a one-line note in the YAML explaining why
       audit failed at Pathway-A even though raw t passed (e.g. selection bias,
-      contamination, regime instability). Drift check #134 still passes.
+      contamination, regime instability). Drift check #136 still passes.
       Live `lane_allocation.json` post-rebalance shows the cleared lanes.
     blocked_by: []
     decision_refs:
@@ -225,7 +246,13 @@ items:
       - trading_app/chordia.py
       - trading_app/lane_allocator.py
     notes_ref: HANDOFF.md (Item A under "What's NOT done -- ranked by EV")
-    override_note: Half complete as of 2026-05-02. Continue per-strategy Pathway-A audits on the 4 remaining names; do not reopen theory grants ad hoc.
+    override_note: |
+      Closed 2026-05-04 with 7/8 audited (6 PASS_CHORDIA + 1 PARK) + 1 implicit
+      close via pipeline rebuild. Final audit row added 2026-05-04 for
+      MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60 (PASS_CHORDIA, t=4.361, N=676).
+      Drift check #136 still passes. The COMEX_SETTLE X_MES_ATR60 result
+      DIFFERS from its CME_PRECLOSE sibling (PARK): independent measurement
+      avoided a copy-paste-by-symmetry doctrine error.
 
   - id: phase_d_d0_clean_rederivation
     title: Phase D D-0 clean re-derivation (E2 LA contamination — rel_vol → safe predictor)
@@ -422,3 +449,81 @@ items:
       - docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-pathway-b-v1.yaml
     notes_ref: docs/audit/results/2026-04-29-parked-pathway-b-additivity-triage.md
     override_note: "D4 dual-gate (OOS power + RULE 7) — re-open only if user accepts re-spec as replacement-lane Pathway-B or the deployed COMEX_SETTLE ORB_G5 anchor decays out of the book. D2 re-opens automatically when N_OOS_on >= 50."
+
+  - id: allocator_paused_pool_priority_a_audits
+    title: Run PRIORITY_A chordia replay batch (5 strategies) from paused-pool diagnosis
+    class: research
+    status: open
+    priority: P2
+    close_before_new_work: false
+    owner_hint: claude
+    last_verified_at: 2026-05-04
+    freshness_sla_days: 30
+    next_action: |
+      Diagnosis 2026-05-04 produced a 5-row PRIORITY_A list of CHORDIA_MISSING
+      strategies with implied raw_t >= 3.65 and clean E2 LA registry status:
+        A1 MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60   (t_raw=4.33, OOS+ N=673)
+        A2 MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G5        (t_raw=3.77, OOS+ N=1473)
+        A3 MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_GO_LONG    (t_raw=3.74, OOS+ N=324, DSR=0.755)
+        A4 MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60     (t_raw=3.74, OOS+ N=689)
+        A5 MNQ_COMEX_SETTLE_E2_RR1.0_CB1_PD_CLEAR_LONG (t_raw=3.65, OOS+ N=303, DSR=0.741)
+      Action when prioritized:
+        1. Pre-reg each: docs/audit/hypotheses/2026-05-XX-<sid-slug>-chordia-unlock-v1.yaml
+        2. Run research/chordia_strict_unlock_v1.py with WF_START_OVERRIDE['MNQ']=2020-01-01
+        3. Append verdict rows to docs/runtime/chordia_audit_log.yaml
+        4. Re-run allocator; verify any PASS_CHORDIA / PASS_PROTOCOL_A unpauses correctly
+      MinBTL accounting: 10 prior audit rows + 5 new = 15/300 (Bailey 2013 cap, Amendment 2.8).
+      Realistic expectation per diagnosis §3: 1-3 of 5 PASS, 2-4 PARK or FAIL_BOTH.
+    exit_criteria: All 5 PRIORITY_A strategies have a chordia_audit_log.yaml verdict row and the allocator has been re-run to reflect new state.
+    blocked_by: []
+    decision_refs:
+      - docs/audit/results/2026-05-04-allocator-paused-pool-diagnosis.md
+    evidence_refs:
+      - docs/runtime/chordia_audit_log.yaml
+      - docs/runtime/lane_allocation.json
+      - trading_app/chordia.py
+      - trading_app/lane_allocator.py
+    notes_ref: docs/audit/results/2026-05-04-allocator-paused-pool-diagnosis.md
+    override_note: "PRIORITY_B / PRIORITY_C lists also in diagnosis §3 — escalate only if PRIORITY_A yields <3 PASS and additional capacity is needed. Note: this entry was originally in commit 955eb980 but was clobbered by recovery commit 7c05a60b; restored in follow-up."
+
+  - id: oos_reconcile_ovnrng100_rr15_2026_05_05
+    title: OOS reconciliation diligence -- MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100
+    class: audit
+    status: closed
+    priority: P2
+    close_before_new_work: false
+    owner_hint: user
+    last_verified_at: 2026-05-05
+    freshness_sla_days: 30
+    next_action: |
+      Closed 2026-05-05 with verdict RECONCILED_AGAINST_STRICT_UNLOCK.
+      Three pre-existing OOS values for the deployed lane disagreed:
+        A  validated_setups.oos_exp_r       = +0.2029  (LEGACY 2026-04-11)
+        B  strict-unlock CSV (2026-05-02)   = +0.1658
+        C  ad-hoc raw query (no filter dlg) = +0.069   (rejected)
+      Canonical reconciliation runner reproduces B exactly (delta=0.0000,
+      N_IS=522 exact, N_OOS=66 exact). LEGACY value A overstates canonical
+      OOS_ExpR by +0.0371 R/trade. Provenance unrecoverable from row alone
+      (promotion_provenance=LEGACY, no validation_run_id).
+
+      Open follow-up (separate workflow, not blocking): /capital-review on
+      the deployed lane to determine whether the original deployment
+      decision was conditioned on the LEGACY +0.2029 value. trailing_expr
+      from live trades is independent of this static OOS overstatement.
+    exit_criteria: Closed. Canonical OOS for this lane is +0.1658 per strict-unlock CSV reproduction. Lane validity, DSR re-derivation, and allocator decision explicitly out of scope.
+    blocked_by: []
+    decision_refs:
+      - docs/audit/results/2026-05-05-oos-reconcile-ovnrng100.md
+      - docs/audit/hypotheses/2026-05-05-oos-reconcile-ovnrng100.yaml
+      - docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md
+    evidence_refs:
+      - research/oos_reconcile_ovnrng100.py
+      - research/chordia_strict_unlock_v1.py
+      - research/filter_utils.py
+      - trading_app/holdout_policy.py
+      - trading_app/config.py
+      - docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md
+      - docs/institutional/literature/harvey_liu_2015_backtesting.md
+      - docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md
+    notes_ref: docs/audit/results/2026-05-05-oos-reconcile-ovnrng100.md
+    override_note: "K=1 confirmatory diligence on already-validated deployed lane; no new pre-reg required by Phase 0 § 'Confirmatory audits do NOT require new pre-reg'. Pre-reg yaml written for audit-trail completeness. Acceptance criterion 4 was mis-specified against scratch-EXCLUSIVE validated_setups.expectancy_r; correction documented in result MD per no-post-hoc-rescue rule. Pre-reg yaml left as-locked."

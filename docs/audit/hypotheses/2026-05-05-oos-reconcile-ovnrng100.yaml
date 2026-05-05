@@ -1,0 +1,238 @@
+metadata:
+  name: "oos_reconcile_ovnrng100_rr15_v1"
+  purpose: "Canonical OOS reconciliation diligence audit for the deployed lane MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100. Three pre-existing OOS values disagree: validated_setups.oos_exp_r=+0.2029, strict-unlock CSV +0.166, ad-hoc raw query +0.069. Goal is one canonical recompute under Mode A using canonical machinery (filter_signal + HOLDOUT_SACRED_FROM + WF_START_OVERRIDE) and an explicit provenance diff. This is K=1 confirmatory diligence on an already-validated lane; not new discovery."
+  date_locked: "2026-05-05T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "individual"
+  pathway: "B"
+  research_question_type: "diligence_reconciliation"
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/oos_reconcile_ovnrng100.py"
+  default_args:
+    - "--hypothesis-file"
+    - "docs/audit/hypotheses/2026-05-05-oos-reconcile-ovnrng100.yaml"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/integrity-guardian.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md"
+    - "docs/audit/hypotheses/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.yaml"
+  notes:
+    - "This is a value-reconciliation audit on a deployed lane, not a fresh discovery scan."
+    - "No theory grant is claimed for OVNRNG_100; strict Chordia is not the gate here — the runner only recomputes IS/OOS values for diff against three pre-existing numbers."
+    - "Lane validity, deployment status, and DSR re-derivation are explicitly out of scope."
+    - "Mode A holdout remains sacred from 2026-01-01."
+
+scope:
+  instrument: MNQ
+  strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+  session: COMEX_SETTLE
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.5
+  direction: pooled
+  filter_type: OVNRNG_100
+  filter_source: "trading_app.config.ALL_FILTERS['OVNRNG_100']"
+  baseline: "exact canonical lane replay"
+  out_of_scope:
+    - "RR1.0 sibling lane recompute"
+    - "DSR re-derivation"
+    - "lane validity re-validation"
+    - "promotion to validated_setups (no writes)"
+    - "allocator or sizing changes"
+    - "writes to validated_setups, experimental_strategies, or chordia_audit_log.yaml"
+
+data_policy:
+  is_window:
+    description: "WF_START_OVERRIDE['MNQ'] <= trading_day < HOLDOUT_SACRED_FROM"
+    constant_source_lower: "trading_app.config.WF_START_OVERRIDE['MNQ']"
+    constant_source_upper: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_lower: "2020-01-01"
+    locked_upper: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only descriptive recompute against canonical orb_outcomes; no rescue, no kill."
+  tuning_against_oos: false
+  canonical_layers_only: true
+
+feature_definition:
+  feature_name: OVNRNG_100
+  canonical_source_of_truth: "trading_app.config.ALL_FILTERS['OVNRNG_100']"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, 'OVNRNG_100', 'COMEX_SETTLE')"
+  trade_time_knowable: true
+  first_complete_time: "overnight window 09:00-17:00 Brisbane closes before COMEX_SETTLE 04:30 next-day Brisbane"
+  temporal_alignment_note: >
+    Per .claude/rules/backtesting-methodology.md RULE 1.2: overnight_* features
+    are valid for ORB sessions starting at 17:00 Brisbane or later.
+    COMEX_SETTLE starts 04:30 Brisbane next day, well after the overnight window
+    closes; no look-ahead by the validity-domain gate.
+  lookahead_check: "PASS by validity-domain gate."
+
+grounding:
+  literature_anchors:
+    - source_file: "resources/Algorithmic_Trading_Chan.pdf"
+      extract: "docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md"
+      page_or_section: "p.4"
+      use: "Backtest must use the same canonical machinery as live execution. 'If your backtesting and live trading programs are one and the same, [...] there can be no look-ahead bias in the program.' Grounds the requirement that the runner imports canonical helpers (HOLDOUT_SACRED_FROM, WF_START_OVERRIDE, filter_signal, _load_universe) rather than re-encoding cohort logic."
+    - source_file: "resources/backtesting_dukepeople_liu.pdf"
+      extract: "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+      page_or_section: "p.17"
+      use: "OOS limitations citation. 'OOS test's success can be due to luck for both the in-sample selection and the out-of-sample testing.' Grounds the runner's policy that OOS recompute is a value-diff against pre-existing numbers, not a kill/rescue gate."
+    - source_file: "resources/deflated-sharpe.pdf"
+      extract: "docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md"
+      page_or_section: "p.3"
+      use: "Multiple-testing context. 'A backtest where the researcher has not controlled for the extent of the search involved in his or her finding is worthless.' Cited in the result doc to flag that the lane carries n_trials_at_discovery=35,616 (DSR=0.175) and the reconciliation does NOT close that diligence gap — only the OOS-value gap."
+  use_for_threshold_modification: false
+  use_for_audit_rigor_only: true
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - "docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md"
+    - "docs/audit/results/2026-05-02-deployable-pool-edge-survey.md"
+    - "validated_setups row promoted_at=2026-04-11 promotion_provenance=LEGACY"
+  note: >
+    Three pre-existing OOS values exist for the same nominal lane:
+    (A) validated_setups.oos_exp_r=+0.2029, written at 2026-04-11 promotion.
+    (B) docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md OOS ExpR=+0.1658.
+    (C) ad-hoc Mode-A raw query without filter delegation gave +0.069 — known to be
+        wrong by construction (raw column comparison rather than canonical filter wrapper).
+    Reconciliation runner produces a fourth canonical value via canonical machinery and
+    reports the diff matrix. No upstream finding is the gate for this audit's verdict.
+
+primary_schema:
+  family_cells:
+    - id: "MNQ_COMEX_SETTLE_O5_RR1.5_OVNRNG_100"
+      strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+      instrument: MNQ
+      session: COMEX_SETTLE
+      orb_minutes: 5
+      rr_target: 1.5
+      filter: OVNRNG_100
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  multiple_testing_basis: "K=1 confirmatory diligence; no new search-family expansion."
+  promotion_gate: "none — this audit does not promote, does not modify validated_setups, does not change allocator state."
+
+hypotheses:
+  - id: 1
+    name: "Canonical OOS recompute reproduces strict-unlock OOS within 0.001 R"
+    economic_basis: >
+      A canonical reconciliation runner using canonical machinery
+      (research.chordia_strict_unlock_v1._load_universe + research.filter_utils.filter_signal +
+      trading_app.holdout_policy.HOLDOUT_SACRED_FROM + trading_app.config.WF_START_OVERRIDE)
+      should reproduce the strict-unlock CSV's OOS_ExpR value to within numerical tolerance
+      (0.001 R). Grounding: Chan 2013 Ch1 p.4 — same machinery means no divergence.
+    role:
+      kind: "diligence_reconciliation"
+      parent: "Exact MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 canonical lane replay on orb_outcomes x daily_features."
+      comparator: "Three pre-existing pre-recorded OOS values for the same nominal lane."
+      primary_metric: "oos_expr_runner"
+      promotion_target: "none"
+    theory_citation: "docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md p.4"
+    filter:
+      type: "OVNRNG_100"
+      delegation: "research.filter_utils.filter_signal"
+    scope:
+      instruments: [MNQ]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [5]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Runner OOS_ExpR diverges from strict-unlock CSV +0.1658 by more than 0.001 R"
+      - "Runner N_OOS_fired diverges from strict-unlock CSV 66 by more than 2 trades"
+      - "Runner IS_ExpR diverges from validated_setups.expectancy_r=+0.2151 by more than 0.001 R"
+      - "Runner N_IS_fired diverges from strict-unlock CSV 522 by more than 2 trades"
+      - "Canonical filter delegation diverges from trading_app.config.ALL_FILTERS['OVNRNG_100']"
+      - "Inline holdout date or WF start used instead of canonical constants"
+    statement: >
+      The canonical reconciliation runner reproduces the 2026-05-02 strict-unlock
+      OOS_ExpR (+0.1658) and N_OOS (66) within numerical tolerance, and likewise reproduces
+      the validated_setups Mode-A IS_ExpR (+0.2151) and N_IS (~522) within numerical tolerance.
+      If reproduced, the diligence gap is the LEGACY validated_setups.oos_exp_r=+0.2029 value;
+      if not reproduced, the runner has a bug or a canonical-source drift exists.
+    pass_metric:
+      metric: "abs(oos_expr_runner - 0.1658)"
+      formula: "|runner_oos_expr - strict_unlock_csv_oos_expr|"
+      threshold_lte:
+        delta_oos_expr: 0.001
+        delta_n_oos: 2
+        delta_is_expr: 0.001
+        delta_n_is: 2
+    counted_against_trial_budget: true
+
+testing_discipline:
+  mandatory_downstream_gates_non_waivable: []
+  notes: >
+    This audit does not promote and does not gate on any of C6/C8/C9. It produces
+    a canonical OOS value and a diff. If the runner reproduces strict-unlock,
+    the next decision (whether to update validated_setups.oos_exp_r, route to
+    /capital-review, or take any other action) is made in a separate workflow
+    based on the report's findings — not by this pre-reg.
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+
+decision_rule:
+  reconciled_if: "H1 reproduces strict-unlock OOS_ExpR and N within tolerance"
+  flag_for_review_if: "Runner output materially differs from strict-unlock; root-cause investigation required before any allocator decision"
+  kill_if: "Runner harness fails canonical-source delegation check (would itself need fixing)"
+
+methodology_rules_applied:
+  - rule: "RULE 1.2 feature temporal alignment"
+    application: "OVNRNG_100 valid for COMEX_SETTLE (overnight window closes 17:00 Brisbane; ORB starts 04:30 next day Brisbane). Validity domain satisfied."
+  - rule: "RULE 3 sacred holdout"
+    application: "IS and OOS partitioned by HOLDOUT_SACRED_FROM only; tuning_against_oos: false."
+  - rule: "RULE 4 multiple testing"
+    application: "K=1 confirmatory diligence; no new search-family expansion."
+  - rule: "RULE 6 trade-time knowability"
+    application: "OVNRNG_100 fixed before COMEX_SETTLE entry."
+  - rule: "RULE 9 data source discipline"
+    application: "Reads canonical bars_1m/daily_features/orb_outcomes via _load_universe; one read of validated_setups for diff target only."
+  - rule: "RULE 10 pre-registration before discovery"
+    application: "Confirmatory diligence on prior survivor — pre-reg required by 2a (pre-reg writer gate); not new discovery."
+  - rule: "research-truth-protocol canonical filter delegation"
+    application: "filter_signal('OVNRNG_100', 'COMEX_SETTLE') only; no inline column comparison."
+  - rule: "research-truth-protocol Mode B baselines"
+    application: "validated_setups.oos_exp_r=+0.2029 is treated as a CLAIM to verify, not a baseline; runner recomputes against canonical layers."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-05-oos-reconcile-ovnrng100.md"
+  - "diff table: validated_setups OOS vs strict-unlock CSV OOS vs runner OOS, with cohort-definition column"
+  - "verbatim lit citations from chan_2013_ch1_backtesting_lookahead.md, harvey_liu_2015_backtesting.md, bailey_lopez_de_prado_2014_deflated_sharpe.md"
+  - "explicit out-of-scope statement: lane validity, DSR re-derivation, allocator decision"
+
+execution_gate:
+  allowed_now: true
+  execution_surface: "Windows .venv (per chordia_strict_unlock_v1.py reference) — fall back to WSL .venv-wsl if Windows fails"
+  forbidden_now:
+    - "writes to validated_setups, experimental_strategies, chordia_audit_log.yaml, lane_allocation.json"
+    - "modifying any threshold based on OOS values seen during the run"
+    - "deploying or undeploying the lane based on this audit's output alone"
+
+not_done_by_this_pre_reg:
+  - "Does not validate the lane's edge — only reconciles OOS values."
+  - "Does not derive DSR — n_trials_at_discovery=35,616 / DSR=0.175 diligence gap remains open."
+  - "Does not change live deployment, allocator state, or validated_setups row."

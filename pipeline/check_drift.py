@@ -628,6 +628,91 @@ def check_trading_app_hardcoded_paths(trading_app_dir: Path) -> list[str]:
     return violations
 
 
+def check_aperture_hardcode_in_scoring_paths(trading_app_dir: Path) -> list[str]:
+    """Block the PR #189 class bug from recurring in lane-iterating scoring paths.
+
+    Background — three recurrences of the same fingerprint:
+      - PR #189 (commit d73bab28): trading_app/lane_allocator.py — 5 query sites
+        hardcoded `WHERE orb_minutes=5` while iterating O15/O30 lanes.
+      - PR #231: trading_app/paper_trade_logger.py — _load_features and
+        _inject_cross_asset_atrs same fingerprint.
+      - PR #232: trading_app/paper_trader.py — _inject_cross_asset_atrs_for_replay
+        same fingerprint.
+
+    Root cause: no canonical "load aperture-correct daily_features for a lane"
+    helper; every lane-iterating consumer rolls its own SQL with `WHERE orb_minutes=5`
+    literal.
+
+    Scope of this check: lane-iterating scoring/execution paths —
+    `trading_app/paper_*.py`, `trading_app/lane_*.py`, and
+    `trading_app/live/*.py`. Research scripts, allocator session-regime
+    gates, and DISTINCT/aggregate reads of non-aperture columns are exempt.
+    Flag deliberate uses with `# canonical-cte-guard:`
+    (per .claude/rules/daily-features-joins.md) or
+    `# session-regime-gate:` (per lane_allocator.py:454) within 20 lines
+    above the violating line — the deliberate `lane_allocator.py:454` SQL
+    has its annotation 16 lines above, so a small window (e.g. 5) misses it.
+
+    Pattern: SQL fragment containing `daily_features` AND `orb_minutes = 5`
+    literal on the same line, AND `daily_features` appears within a 6-line
+    window. Bounded window avoids matching unrelated string literals.
+    """
+    violations: list[str] = []
+
+    if not trading_app_dir.exists():
+        return violations
+
+    target_files: list[Path] = []
+    for glob in ("paper_*.py", "lane_*.py"):
+        target_files.extend(trading_app_dir.glob(glob))
+    live_dir = trading_app_dir / "live"
+    if live_dir.exists():
+        target_files.extend(live_dir.glob("*.py"))
+
+    # Pattern: orb_minutes literal-5 (handles `=5`, `= 5`, `IN (5)` minimal forms).
+    pat_hardcode = re.compile(r"\borb_minutes\s*(=|IN\s*\(\s*)\s*5\b")
+    pat_daily_features = re.compile(r"\bdaily_features\b")
+    exempt_markers = ("canonical-cte-guard:", "session-regime-gate:")
+    exempt_lookback = 20  # lines
+
+    for fpath in target_files:
+        content = fpath.read_text(encoding="utf-8")
+        lines = content.splitlines()
+
+        for line_num, line in enumerate(lines, 1):
+            if not pat_hardcode.search(line):
+                continue
+
+            # Exemption: any of the previous `exempt_lookback` lines (or the
+            # violating line itself) carries a canonical marker comment.
+            window_start = max(0, line_num - 1 - exempt_lookback)
+            window = "\n".join(lines[window_start:line_num])
+            if any(marker in window for marker in exempt_markers):
+                continue
+
+            # Anchor: `daily_features` must appear within a 6-line window so
+            # we don't flag unrelated string literals that happen to mention
+            # `orb_minutes = 5` in a comment about a different module.
+            anchor_start = max(0, line_num - 6)
+            anchor_end = min(len(lines), line_num + 5)
+            anchor_text = "\n".join(lines[anchor_start:anchor_end])
+            if not pat_daily_features.search(anchor_text):
+                continue
+
+            rel_path = fpath.relative_to(trading_app_dir).as_posix()
+            stripped = line.strip()
+            violations.append(
+                f"  trading_app/{rel_path}:{line_num}: hardcoded `orb_minutes = 5` in "
+                f"lane-iterating scoring/execution path (PR #189 class bug). Plumb the "
+                f"lane's orb_minutes; or annotate within 20 lines above with "
+                f"`# canonical-cte-guard:` (CTE dedup) or "
+                f"`# session-regime-gate:` (deliberate cross-aperture comparator). "
+                f"See PR #231/#232. Source: {stripped[:80]}"
+            )
+
+    return violations
+
+
 def check_dashboard_readonly(pipeline_dir: Path) -> list[str]:
     """Check that dashboard.py only reads from the database (no writes)."""
     violations = []
@@ -7848,6 +7933,12 @@ CHECKS = [
         False,
     ),
     ("Trading app hardcoded paths", lambda: check_trading_app_hardcoded_paths(TRADING_APP_DIR), False, False),
+    (
+        "Aperture hardcode (orb_minutes=5) in lane-iterating scoring paths (PR #189 class bug)",
+        lambda: check_aperture_hardcode_in_scoring_paths(TRADING_APP_DIR),
+        False,
+        False,
+    ),
     ("Config filter_type sync", check_config_filter_sync, False, False),
     ("ENTRY_MODELS sync", check_entry_models_sync, False, False),
     ("Entry price sanity", check_entry_price_sanity, False, False),

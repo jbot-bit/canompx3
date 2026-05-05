@@ -8,6 +8,96 @@
 
 ## Pickup pointer (2026-05-02 PM — read this first)
 
+- Fresh memo added on branch `codex/topstep-operator-arch-v2`:
+  `docs/plans/active/2026-05/2026-05-03-prop-firm-automation-compatibility-memo.md`
+  This answers the live user question directly:
+  prop-firm auto execution is allowed by some firms, and the repo's best-fit
+  current path is `TopstepX / ProjectX`, not self-funded-only. Tradeify/MFFU
+  are policy-allowed but operationally less ready in this repo; Bulenox/Rithmic
+  is adapter-present but still marked inactive pending conformance/validation.
+
+- Active decision memo added on branch `codex/topstep-operator-arch-v2`:
+  `docs/plans/active/2026-05/2026-05-02-topstep-operator-architecture-v2.md`
+  This is a Topstep/canompx3 operator-architecture V2 memo with explicit
+  regime-split scoring, unknowns register, null candidate, and kill criteria.
+
+## Current Session Update (2026-05-03 — Codex)
+
+- Added a design-scoped operator report for the PR #209 EV-2 thread:
+  `scripts/tools/live_readiness_report.py` plus active design note
+  `docs/plans/active/2026-05/2026-05-03-live-readiness-report-design.md`
+  and focused tests in
+  `tests/test_tools/test_live_readiness_report.py`.
+- Report sources are canonical only: `trading_app/lifecycle_state.py`,
+  `trading_app/prop_profiles.py`, `deployable_validated_setups`, and
+  `docs/runtime/lane_allocation.json`. No new truth layer or write path.
+- Real-checkout JSON run surfaced current blockers instead of fake-green:
+  Criterion 11 invalid (`profile fingerprint mismatch`), Criterion 12 invalid
+  (`profile fingerprint mismatch`), and
+  `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` is lifecycle-blocked by an SR pause
+  even though it still appears in allocator `lanes[]`.
+- Verification so far:
+  `ruff check` passed;
+  `ruff format --check` passed;
+  real `live_readiness_report.py --format json` ran successfully and exposed
+  useful state.
+- Verification gap:
+  targeted `pytest` for the new test file did not return cleanly in this
+  session, and `pipeline/check_drift.py` also failed to produce a terminal
+  result before handoff. Treat those as unresolved harness/runtime follow-up,
+  not as proven passes.
+
+- Fixed a `codex.bat` launcher-table drift that broke
+  `codex.bat search-gold-db`: `scripts/infra/windows-agent-launch.ps1`
+  was missing `codex-project-linux-search-gold-db` even though
+  `codex.bat` and `scripts/infra/windows_agent_launch.py` exposed it.
+  Added focused regression coverage in
+  `tests/test_tools/test_codex_launcher_scripts.py` so every
+  `codex.bat`-advertised mode must be accepted by both Windows launchers.
+- Verification run: `./.venv-wsl/bin/python -m pytest tests/test_tools/test_codex_launcher_scripts.py -q` passed (`2 passed`).
+
+- Resumed after Codex app segfault during the Topstep operator export merge.
+  Preserved the five staged Topstep doc-packet additions.
+- Moved stale crashed Codex claim
+  `/tmp/canompx3-active-sessions/codex-734ad7ccb05c.json` to
+  `/tmp/canompx3-active-sessions/stale/codex-734ad7ccb05c.crashed-20260503.json`;
+  preflight then cleared blockers.
+- Patched only the operator export-state slice from `codex/topstep-operator-v3`:
+  `trading_app/live/session_orchestrator.py`,
+  `trading_app/live/bot_state.py`, and focused tests in
+  `tests/test_trading_app/test_session_orchestrator.py`.
+- Verification run:
+  targeted operator/export + existing companion classes passed (`18 passed`);
+  production `ruff check` passed; `ruff format --check` passed; `py_compile`
+  passed; `pipeline/check_drift.py` passed with advisories only; behavioral and
+  integrity audits passed.
+- Follow-up hook hardening after commit hang: `.githooks/pre-commit` and
+  `.githooks/post-commit` now resolve Python/Ruff by shell family. WSL/Linux
+  prefer `.venv-wsl`/POSIX venvs and explicitly block `.venv/Scripts`; Windows
+  shells prefer `.venv/Scripts` and block `.venv-wsl`. Regression coverage:
+  `tests/test_tools/test_git_hooks_env.py`.
+- Crash-recovery follow-up for the `codex.bat` path:
+  `scripts/infra/windows-agent-launch.ps1` now accepts
+  `codex-project-linux-search-gold-db`, matching `codex.bat` and
+  `scripts/infra/windows_agent_launch.py`. Regression guard:
+  `tests/test_tools/test_codex_launcher_scripts.py`.
+- Session-claim hardening landed in `pipeline/system_context.py`:
+  claims now record runtime, honor an explicit long-lived owner PID from
+  `CANOMPX3_SESSION_OWNER`, and treat dead same-runtime owners as stale instead
+  of blocking for the full freshness window. WSL Codex launchers now pass
+  `CANOMPX3_SESSION_OWNER="pid:$$"` before preflight in
+  `scripts/infra/codex-project.sh`,
+  `scripts/infra/codex-project-search.sh`,
+  `scripts/infra/codex-review.sh`, and
+  `scripts/infra/codex-capital-review.sh`.
+- Verification for the crash-recovery patch set:
+  focused suite passed (`71 passed`);
+  Python-targeted `ruff check` passed;
+  `pipeline/check_drift.py` passed with advisories only.
+  A repo-wide `pytest -q` run progressed through the touched launcher /
+  session-preflight areas and later surfaced at least one failure outside the
+  verified slice; not triaged in this recovery pass.
+
 **Where to start next session:**
 
 0. Prior-day-context blocker memo now exists:
@@ -106,6 +196,28 @@ restore them via `git checkout -- docs/runtime/stages/`.
 
 ### What landed
 
+- Codex app WSL setup now hard-blocks `/mnt/...` repo roots in
+  `scripts/infra/codex_local_env.py` with a clear recovery message pointing
+  to `codex.bat linux` / `CANOMPX3_CODEX_WSL_ROOT`. This is meant to stop the
+  unsupported `/mnt/c` daily-driver path before Codex gets far enough to
+  crash/segfault in the app session. Targeted coverage lives in
+  `tests/test_tools/test_codex_local_env.py`.
+- Follow-up fix for the session-router regression review:
+  `scripts/tools/session_router.py` once again treats fresh mutating claims
+  from the same checkout as routing conflicts. The case-variant
+  same-checkout/self allowance remains in `pipeline/system_context.py`
+  preflight/claim verification only. This restores the intended
+  `codex-project.sh` behavior where a second mutating launch from the main
+  checkout auto-routes into a managed worktree instead of staying in the
+  shared root.
+- Session-launcher self-block fix landed for WSL `/mnt/c` case drift:
+  `pipeline/system_context.py` now treats case-variant mount paths that point
+  to the same checkout as the same location when verifying/excluding fresh
+  claims, and active-claim file keys now derive from directory identity rather
+  than raw path casing. That location hardening remains in place for
+  preflight/claim verification; the router-side same-checkout exclusion was
+  reverted after review because it masked real same-checkout mutating
+  conflicts.
 - Read-only memo added:
   `docs/audit/results/2026-05-02-chordia-theory-feasibility-scan.md`
 - First strict-threshold prereg added:

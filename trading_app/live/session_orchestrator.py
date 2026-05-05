@@ -28,6 +28,7 @@ from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.live.bar_aggregator import Bar
 from trading_app.live.bar_persister import BarPersister
+from trading_app.live.bot_state import _iso_utc
 from trading_app.live.broker_factory import create_broker_components, get_broker_name
 from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
@@ -786,6 +787,14 @@ class SessionOrchestrator:
             except Exception as e:
                 log.warning("Failed to load firm close time: %s", e)
         self._stats = SessionStats()  # observability counters
+        self._feed_status: dict[str, object] = {
+            "status": "idle",
+            "last_bar_utc": None,
+            "last_stale_utc": None,
+            "gap_seconds": None,
+            "stale_count": 0,
+            "dead": False,
+        }
         self._poller_active = False  # set True once fill poller runs a cycle
         # F7/R3: generation counter incremented on each broker reconnect so the
         # fill poller can detect reconnects and reset its per-order timeout anchors.
@@ -974,7 +983,7 @@ class SessionOrchestrator:
             log.warning("Failed to load lifecycle lane blocks: %s", e)
 
     @staticmethod
-    def _build_daily_features_row(trading_day: date, instrument: str, orb_minutes: int = 5) -> dict:
+    def _build_daily_features_row(trading_day: date, instrument: str, orb_minutes: int) -> dict:
         """Build a daily_features_row from DB + calendar for live execution.
 
         Without this, fail-closed filters (VOL_RV12_N20, DOW, break speed, calendar)
@@ -989,6 +998,14 @@ class SessionOrchestrator:
         The rel_vol_* and break_delay_min values are yesterday's — imperfect but
         vastly better than None (which silently kills every VOL/FAST strategy).
         orb_{label}_size is set by ExecutionEngine from live ORB, overriding the DB value.
+
+        orb_minutes is REQUIRED (no default). Per-aperture daily_features rows
+        carry materially different per-session columns (orb_*_size,
+        orb_*_break_dir, rel_vol_*) across the 3 orb_minutes rows; the
+        consuming strategy's aperture must select the row. Defaulting to 5 was
+        the PR #189 class bug pattern (fixed in PR #231 paper_trade_logger,
+        PR #232 paper_trader; this closes the live-path recurrence flagged by
+        the PR #232 evidence-auditor).
         """
         row: dict = {}
 
@@ -1038,13 +1055,14 @@ class SessionOrchestrator:
 
                 # median_atr_20 is NOT in daily_features — it's a rolling median computed
                 # by paper_trader. Compute it here for live vol-scaling.
+                # Per-aperture (PR #189 class bug fix — see PR #232 auditor finding).
                 median_result = con.execute(
                     """
                     SELECT MEDIAN(atr_20) FROM daily_features
-                    WHERE symbol = ? AND orb_minutes = 5 AND atr_20 IS NOT NULL
+                    WHERE symbol = ? AND orb_minutes = ? AND atr_20 IS NOT NULL
                       AND trading_day < ? AND trading_day >= ? - INTERVAL '504 DAY'
                 """,
-                    [instrument, trading_day, trading_day],
+                    [instrument, orb_minutes, trading_day, trading_day],
                 ).fetchone()
                 if median_result and median_result[0] is not None:
                     row["median_atr_20"] = float(median_result[0])
@@ -1060,11 +1078,13 @@ class SessionOrchestrator:
                 for source in _cross_sources:
                     if source == instrument:
                         continue
+                    # Per-aperture cross-asset percentile (PR #189 class bug fix —
+                    # PR #232 auditor flagged this as the live-money equivalent).
                     src_result = con.execute(
                         """SELECT atr_20_pct FROM daily_features
-                           WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL
+                           WHERE symbol = ? AND orb_minutes = ? AND atr_20_pct IS NOT NULL
                            ORDER BY trading_day DESC LIMIT 1""",
-                        [source],
+                        [source, orb_minutes],
                     ).fetchone()
                     if src_result and src_result[0] is not None:
                         row[f"cross_atr_{source}_pct"] = float(src_result[0])
@@ -1095,7 +1115,12 @@ class SessionOrchestrator:
         emergency flatten. The watchdog may never fire if _last_bar_at is None
         (no bars received before death), so this is the only flatten trigger.
         """
+        self._feed_status["last_stale_utc"] = datetime.now(UTC).isoformat()
+        self._feed_status["gap_seconds"] = gap_seconds
+        self._feed_status["stale_count"] = stale_count
         if stale_count == -1:
+            self._feed_status["status"] = "dead"
+            self._feed_status["dead"] = True
             msg = f"FEED DEAD: all reconnect attempts exhausted for {self.instrument}"
             log.critical(msg)
             self._notify(msg)
@@ -1109,6 +1134,8 @@ class SessionOrchestrator:
                     # No running event loop (post_session context) — cannot schedule
                     log.critical("FEED DEAD: cannot schedule flatten (no event loop) — MANUAL CLOSE REQUIRED")
         else:
+            self._feed_status["status"] = "stale"
+            self._feed_status["dead"] = False
             msg = f"FEED STALE: {gap_seconds:.0f}s no data (check {stale_count})"
             log.critical(msg)
             self._notify(msg)
@@ -1194,6 +1221,10 @@ class SessionOrchestrator:
                 strategies=self.portfolio.strategies,
                 active_trades=self.engine.active_trades,
                 completed_trades=self.engine.completed_trades,
+                orbs=self.engine.orbs,
+                feed_status=self._feed_status_payload(),
+                router_status=self._router_status_payload(),
+                broker_status=self._broker_status_payload(),
             )
             # Add copy trading info if CopyOrderRouter is active
             from trading_app.live.copy_order_router import CopyOrderRouter
@@ -1204,6 +1235,36 @@ class SessionOrchestrator:
             write_state(snapshot)
         except Exception:
             pass  # Dashboard state is best-effort — never kill the trading loop
+
+    def _feed_status_payload(self) -> dict[str, object]:
+        payload = dict(self._feed_status)
+        payload["bars_received"] = self._stats.bars_received
+        payload["reconnect_attempts"] = self._stats.reconnect_attempts
+        payload["last_connected_at"] = self._safety_state.last_connected_at or None
+        return payload
+
+    def _router_status_payload(self) -> dict[str, object]:
+        degraded = self.order_router.is_degraded() if self.order_router is not None else False
+        degraded_accounts = self.order_router.degraded_accounts() if self.order_router is not None else {}
+        return {
+            "degraded": degraded,
+            "degraded_accounts": degraded_accounts,
+            "supports_native_brackets": self.order_router.supports_native_brackets()
+            if self.order_router is not None
+            else False,
+            "has_queryable_bracket_legs": self.order_router.has_queryable_bracket_legs()
+            if self.order_router is not None
+            else False,
+        }
+
+    def _broker_status_payload(self) -> dict[str, object]:
+        return {
+            "broker_name": self._broker_name,
+            "contract_symbol": self.contract_symbol,
+            "signal_only": self.signal_only,
+            "demo": self.demo,
+            "account_name": getattr(self, "_account_name", ""),
+        }
 
     def _notify(self, message: str) -> None:
         """Send Telegram notification. Never raises — notifications must not kill the trading loop.
@@ -1575,6 +1636,16 @@ class SessionOrchestrator:
         self._last_bar_at = now
         self._bar_count += 1
         self._stats.bars_received += 1
+        self._feed_status["status"] = "healthy"
+        # Route through _iso_utc to close the silent-None / type-mismatch
+        # class fixed for bot_state in F3 (commit 9ba25af4). Direct
+        # ``.isoformat()`` would coerce a non-datetime ``ts_utc`` (e.g. a
+        # pandas Timestamp from F6 follow-up) into an inconsistent string
+        # without an operator-visible warning.
+        self._feed_status["last_bar_utc"] = _iso_utc(bar.ts_utc)
+        self._feed_status["gap_seconds"] = 0.0
+        self._feed_status["stale_count"] = 0
+        self._feed_status["dead"] = False
 
         # Persist bar for Databento-free daily pipeline
         self._bar_persister.append(bar)
@@ -3205,6 +3276,8 @@ class SessionOrchestrator:
                     on_stale=self._on_feed_stale,
                     demo=self.demo,
                 )
+                self._feed_status["status"] = "connecting" if reconnect_count == 0 else "reconnecting"
+                self._feed_status["dead"] = False
                 log.info(
                     "Starting feed (attempt %d, reconnects_used=%d/%d): %s (broker: %s)",
                     reconnect_count + 1,
@@ -3284,6 +3357,8 @@ class SessionOrchestrator:
 
                     reconnect_count += 1
                     self._stats.reconnect_attempts += 1
+                    self._feed_status["status"] = "reconnecting"
+                    self._feed_status["dead"] = False
                     # F7/R3: signal fill poller to reset timeout anchors — broker state
                     # may have changed during the disconnect; re-query before applying timeout.
                     self._fill_reconnect_gen += 1

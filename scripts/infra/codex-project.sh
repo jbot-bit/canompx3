@@ -12,7 +12,10 @@ if [[ "${CANOMPX3_SESSION_AUTO_ROUTE:-1}" != "0" && -f "$ROUTER" ]]; then
   if [[ -n "$TASK_TEXT" ]]; then
     ROUTE_ARGS+=(--task "$TASK_TEXT")
   fi
-  ROUTED_ROOT="$(python3 "$ROUTER" "${ROUTE_ARGS[@]}" 2> >(cat >&2))"
+  # Use venv python if available (router imports pipeline which needs pydantic)
+  ROUTER_PYTHON="${ROOT}/.venv-wsl/bin/python"
+  [[ ! -f "$ROUTER_PYTHON" ]] && ROUTER_PYTHON="python3"
+  ROUTED_ROOT="$("$ROUTER_PYTHON" "$ROUTER" "${ROUTE_ARGS[@]}" 2> >(cat >&2))"
   if [[ -n "$ROUTED_ROOT" ]]; then
     ROOT="$ROUTED_ROOT"
   fi
@@ -44,7 +47,8 @@ if [[ -d "$HOME/.nvm/versions/node" ]]; then
 fi
 
 if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
-  "$VENV/bin/python" "$PREFLIGHT" --quiet --context codex-wsl --claim codex --mode mutating
+  CANOMPX3_SESSION_OWNER="pid:$$" \
+    "$VENV/bin/python" "$PREFLIGHT" --quiet --context codex-wsl --claim codex --mode mutating
 fi
 
 if [[ -f "$TASK_ROUTE_PACKET" ]]; then

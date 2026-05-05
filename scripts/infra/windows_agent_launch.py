@@ -154,7 +154,35 @@ def get_workstream_metadata(tool_name: str, workstream_name: str) -> dict[str, A
 
 
 def run_wsl(command_text: str) -> int:
-    return subprocess.call(["wsl.exe", "bash", "-lc", command_text])
+    import tempfile
+
+    # Multi-line bash scripts passed via `wsl.exe bash -lc <text>` lose
+    # variable assignments at the Win32→WSL argv boundary (lines execute,
+    # `set -x` echoes them, but assignments don't stick). Write the script
+    # to a temp file inside the repo and run it as a real file via its
+    # /mnt/c WSL path. LF newlines preserved explicitly.
+    scratch_dir = repo_root() / ".claude" / "scratch"
+    tmp_dir = str(scratch_dir) if scratch_dir.exists() else str(repo_root())
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".sh",
+        prefix="codex_launch_",
+        dir=tmp_dir,
+        delete=False,
+        newline="\n",
+        encoding="utf-8",
+    ) as tmp:
+        tmp.write(command_text)
+        tmp_name = tmp.name
+    try:
+        wsl_path = windows_to_wsl(Path(tmp_name))
+        return subprocess.call(["wsl.exe", "bash", "-lc", f"bash {wsl_path}; rm -f {wsl_path}"])
+    finally:
+        # Best-effort cleanup if WSL never ran (e.g., wsl.exe missing)
+        try:
+            Path(tmp_name).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def build_codex_wsl_command(
@@ -210,7 +238,20 @@ def build_codex_project_wsl_command(
     if use_linux_home:
         lines.extend(
             [
-                'ROOT="${CANOMPX3_CODEX_WSL_ROOT:-$HOME/canompx3}"',
+                'ROOT_INPUT="${CANOMPX3_CODEX_WSL_ROOT:-}"',
+                'if [[ -z "$ROOT_INPUT" || "$ROOT_INPUT" == "." || "$ROOT_INPUT" == "./" ]]; then',
+                '  ROOT="$HOME/canompx3"',
+                'elif [[ "$ROOT_INPUT" == "~" ]]; then',
+                '  ROOT="$HOME"',
+                'elif [[ "$ROOT_INPUT" == "~/"* ]]; then',
+                '  ROOT="$HOME/${ROOT_INPUT#~/}"',
+                'elif [[ "$ROOT_INPUT" == /* ]]; then',
+                '  ROOT="$ROOT_INPUT"',
+                "else",
+                '  echo "ERROR: CANOMPX3_CODEX_WSL_ROOT must be an absolute WSL path, not: $ROOT_INPUT" >&2',
+                '  echo "Unset it to use ~/canompx3, or set it to a path like /home/joshd/canompx3." >&2',
+                "  exit 1",
+                "fi",
                 'if [[ ! -d "$ROOT" ]]; then',
                 '  echo "ERROR: WSL Codex repo not found at $ROOT." >&2',
                 '  echo "Set CANOMPX3_CODEX_WSL_ROOT or clone canompx3 into ~/canompx3." >&2',
@@ -310,7 +351,7 @@ def open_codex_project_linux_home(search_mode: bool = False, enable_gold_db: boo
             root,
             search_mode=search_mode,
             enable_gold_db=enable_gold_db,
-            use_linux_home=True,
+            use_linux_home=False,
         )
     )
 
@@ -320,7 +361,7 @@ def open_codex_project_linux_home_power() -> int:
     return run_wsl(
         build_codex_project_wsl_command(
             root,
-            use_linux_home=True,
+            use_linux_home=False,
             profile="canompx3_power",
         )
     )

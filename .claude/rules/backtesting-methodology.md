@@ -102,6 +102,53 @@ Canonical implementation: `research/comprehensive_deployed_lane_scan.py::test_ce
 - If `N_on_OOS < 5` → cannot compute delta_OOS reliably. Report as NaN, dir_match as False.
 - If `N_on_OOS < 30` → statistical power on OOS is very low. Treat as directional-only evidence, not confirmatory.
 
+### 3.3 OOS power floor — `dir_match` cannot kill an underpowered OOS
+
+`N_on_OOS ≥ 30` is necessary but not sufficient. A binary OOS gate (`dir_match`, sign-flip, p_oos threshold) is only refutational evidence when the OOS sample has enough statistical power to detect the IS effect size. An underpowered OOS produces noise-consistent results that cannot distinguish "signal alive", "signal dead", or "signal reversed" — treating any of them as refutation is a methodological error.
+
+**Compute power BEFORE applying any binary OOS kill criterion:**
+
+```python
+from research.oos_power import oos_ttest_power, power_verdict, format_power_report
+
+report = oos_ttest_power(
+    is_delta=is_stats["delta"],
+    is_pooled_std=is_stats["pooled_std"],
+    n_oos_a=n_oos_group_a,
+    n_oos_b=n_oos_group_b,
+    alpha=0.05,
+)
+tier = power_verdict(report["power"])  # CAN_REFUTE | DIRECTIONAL_ONLY | STATISTICALLY_USELESS
+```
+
+**Tier table (canonical thresholds — `research/oos_power.py::POWER_TIERS`):**
+
+| Power | Tier | dir_match interpretation |
+|-------|------|--------------------------|
+| ≥ 0.80 | `CAN_REFUTE` | Binary OOS gate IS legitimately applicable. dir_match=FALSE → DEAD. |
+| ≥ 0.50 | `DIRECTIONAL_ONLY` | dir_match is informational, NOT a hard kill. Verdict tier = CONDITIONAL or UNVERIFIED, never DEAD. |
+| < 0.50 | `STATISTICALLY_USELESS` | OOS cannot distinguish signal from noise. dir_match outcome is noise-consistent. Verdict MUST be UNVERIFIED, never DEAD. |
+
+**Required practice:**
+
+1. Every verify script with a `dir_match`, sign-flip, or p_oos gate MUST compute OOS power as a prerequisite check via `research.oos_power.oos_ttest_power()`. Re-implementing the power calc in another script is a canonical-delegation violation per `integrity-guardian.md` § 2.
+2. Pre-registered criteria that reference `dir_match` as a kill clause MUST specify the power floor: e.g., `dir_match=TRUE required IF OOS_per_group_N ≥ 30 AND power ≥ 0.80`.
+3. Every result doc MUST report the power number and tier explicitly next to the dir_match status. No `dir_match` claim may appear without its power context. Use `format_power_report()` for stdout; cite both fields in the result file.
+4. For underpowered OOS situations, prefer one of:
+   - **Aggregate** across correlated deployed lanes to inflate N (same hypothesis, pooled scope per `pooled-finding-rule.md`)
+   - **Harvey-Liu Sharpe haircut** (`docs/institutional/literature/harvey_liu_2015_backtesting.md`) — treat OOS as Sharpe discount multiplier, not veto
+   - **CPCV** (Combinatorial Purged Cross-Validation, `docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md` § 1.4.2) — designed for short OOS data; binary IS/OOS split is misspecified when OOS < ~20% of total sample
+
+**Literature anchors (extracts in `docs/institutional/literature/`):**
+- Harvey & Liu 2015 (`harvey_liu_2015_backtesting.md`) — analytical Sharpe haircut framework; OOS is a discount multiplier, not a binary veto.
+- López de Prado 2020 (`lopez_de_prado_2020_ml_for_asset_managers.md`) — CPCV as the remedy for short OOS data.
+
+**Reference incident:** 2026-04-20 `bull_short_avoidance_deployed_lane_verify` originally produced REJECTED on OOS dir_match=FALSE at N_per_group=19/20 with power 7.9% to detect the IS effect (Cohen's d = 0.165). Verdict was corrected to CONDITIONAL — UNVERIFIED. Without the power floor, 7 years of IS evidence (p_boot=0.018, 7/7 years positive) would have been prematurely discarded on a statistically-useless OOS slice.
+
+- Canonical helper: `research/oos_power.py` (single source of truth for the math + tier mapping).
+- Reference incident audit: `docs/audit/results/2026-04-20-bull-short-avoidance-deployed-lane-verify.md` § Post-hoc correction.
+- Memory anchor: `memory/feedback_oos_power_floor.md`.
+
 ---
 
 ## RULE 4: Multiple testing correction — K is per-family, not one number

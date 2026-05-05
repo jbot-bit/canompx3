@@ -9,6 +9,7 @@ from trading_app.mcp_server import (
     _ALLOWED_PARAMS,
     MAX_MCP_ROWS,
     _generate_warnings,
+    _get_ai_research_packet,
     _get_strategy_fitness,
     _list_available_queries,
     _query_trading_db,
@@ -180,3 +181,19 @@ class TestGenerateWarnings:
 
     def test_none_no_warnings(self):
         assert _generate_warnings(None) == []
+
+
+class TestAiResearchPacket:
+    @patch("trading_app.ai.research_packet.build_research_packet")
+    def test_get_ai_research_packet_returns_packet(self, mock_build):
+        mock_build.return_value = {"packet_kind": "ai_research_packet", "task": {"text": "Plan repo research"}}
+        result = _get_ai_research_packet(task="Plan repo research", profile="deepseek_planning")
+        assert result["packet_kind"] == "ai_research_packet"
+        assert result["task"]["text"] == "Plan repo research"
+
+    @patch("trading_app.ai.research_packet.build_research_packet")
+    def test_get_ai_research_packet_returns_error_payload(self, mock_build):
+        mock_build.side_effect = ValueError("missing required env")
+        result = _get_ai_research_packet(task="Plan repo research", profile="deepseek_planning")
+        assert result["error"] == "missing required env"
+        assert result["profile"] == "deepseek_planning"

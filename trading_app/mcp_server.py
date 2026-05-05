@@ -1,11 +1,12 @@
 """
 MCP server for the Gold Trading Database.
 
-Exposes 4 read-only tools via stdio (fastmcp):
+Exposes read-only tools via stdio (fastmcp):
   - list_available_queries: discover what query templates exist
   - query_trading_db: run a pre-approved SQL template
   - get_strategy_fitness: FIT/WATCH/DECAY/STALE status
   - get_canonical_context: load grounding docs for AI context
+  - get_ai_research_packet: build an OpenRouter-grounded research packet
 
 Usage:
     claude mcp add gold-db --scope project -- python trading_app/mcp_server.py
@@ -195,6 +196,16 @@ def _get_canonical_context() -> dict:
     return load_corpus()
 
 
+def _get_ai_research_packet(task: str, profile: str = "deepseek_planning") -> dict:
+    """Build a canonical read-only AI research packet for a repo task."""
+    from trading_app.ai.research_packet import build_research_packet
+
+    try:
+        return build_research_packet(task_text=task, profile_id=profile, root=PROJECT_ROOT, db_path=GOLD_DB_PATH)
+    except Exception as exc:
+        return {"error": str(exc), "task": task, "profile": profile}
+
+
 # ---------------------------------------------------------------------------
 # MCP server (thin wrappers around core logic)
 # ---------------------------------------------------------------------------
@@ -213,7 +224,8 @@ def _build_server():
             "WORKFLOW: (1) list_available_queries to discover templates, "
             "(2) query_trading_db for strategy lookups/comparisons/raw outcomes, "
             "(3) get_strategy_fitness for rolling regime assessment (FIT/WATCH/DECAY/STALE), "
-            "(4) get_canonical_context to load trading rules before complex analysis. "
+            "(4) get_canonical_context to load trading rules before complex analysis, "
+            "(5) get_ai_research_packet for a canonical OpenRouter research packet. "
             "Use instrument parameter to filter (default MGC). "
             "For recent performance, use get_strategy_fitness with rolling_months. "
             "NEVER query orb_outcomes directly without filters — use templates."
@@ -313,6 +325,11 @@ def _build_server():
         Use this to ground your analysis in the project's actual trading rules.
         """
         return _get_canonical_context()
+
+    @mcp.tool()
+    def get_ai_research_packet(task: str, profile: str = "deepseek_planning") -> dict:
+        """Build a canonical read-only AI research packet for a repo task."""
+        return _get_ai_research_packet(task=task, profile=profile)
 
     return mcp
 
