@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import subprocess
@@ -19,7 +20,9 @@ from typing import Literal
 from uuid import uuid4
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+log = logging.getLogger(__name__)
 
 from pipeline.work_queue import WorkQueueSnapshot, queue_snapshot
 
@@ -352,7 +355,10 @@ def read_claim(claim_path: Path) -> SessionClaim | None:
         data = json.loads(claim_path.read_text(encoding="utf-8"))
         claim = SessionClaim.model_validate(data)
         return claim.model_copy(update={"fresh": _claim_is_fresh(claim)})
+    except (OSError, json.JSONDecodeError, ValidationError):
+        return None
     except Exception:
+        log.warning("read_claim: unexpected error reading %s — claim dropped", claim_path, exc_info=True)
         return None
 
 
