@@ -96,11 +96,17 @@ def _inject_cross_asset_atrs(
     feat_row: dict,
     instrument: str,
     trading_day: datetime.date,
+    orb_minutes: int,
 ) -> None:
     """Inject cross-asset ATR percentiles into daily features row.
 
     Required for CrossAssetATRFilter.matches_row (fail-closed without it).
     Mirrors paper_trader._inject_cross_asset_atrs_for_replay.
+
+    Reads the orb_minutes row matching the consuming lane's aperture so the
+    cross-asset ATR percentile is computed against the same ORB window the
+    filter was validated on (PR #189 class bug — daily_features rows differ
+    materially across orb_minutes for the same (day, symbol)).
     """
     cross_sources = {f.source_instrument for f in ALL_FILTERS.values() if isinstance(f, CrossAssetATRFilter)}
     for source in cross_sources:
@@ -108,10 +114,10 @@ def _inject_cross_asset_atrs(
             continue
         src_result = con.execute(
             """SELECT atr_20_pct FROM daily_features
-               WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL
+               WHERE symbol = ? AND orb_minutes = ? AND atr_20_pct IS NOT NULL
                  AND trading_day = ?
                LIMIT 1""",
-            [source, trading_day],
+            [source, orb_minutes, trading_day],
         ).fetchone()
         if src_result and src_result[0] is not None:
             feat_row[f"cross_atr_{source}_pct"] = float(src_result[0])
@@ -157,17 +163,28 @@ def _query_outcomes(
 def _load_features(
     con: duckdb.DuckDBPyConnection,
     instrument: str,
+    orb_minutes: int,
     since: datetime.date | None = None,
 ) -> dict[datetime.date, dict]:
-    """Load daily_features indexed by trading_day."""
+    """Load daily_features indexed by trading_day for a specific ORB aperture.
+
+    daily_features carries 3 rows per (trading_day, symbol) — one per
+    orb_minutes (5/15/30) — and per-session columns (orb_NYSE_OPEN_size,
+    orb_CME_PRECLOSE_break_dir, rel_vol_NYSE_OPEN, etc.) carry materially
+    different values across those rows because they describe ORB windows of
+    different durations. The caller MUST pass the lane's orb_minutes so the
+    filter sees session data for the aperture it was validated on. Hardcoding
+    orb_minutes=5 here (the PR #189 class bug) silently mis-scores every
+    non-O5 lane.
+    """
     start = since if since is not None else OOS_START
     rows = con.execute(
         """
         SELECT * FROM daily_features
-        WHERE symbol = ? AND orb_minutes = 5 AND trading_day >= ?
+        WHERE symbol = ? AND orb_minutes = ? AND trading_day >= ?
         ORDER BY trading_day
         """,
-        [instrument, start],
+        [instrument, orb_minutes, start],
     ).fetchall()
     cols = [desc[0] for desc in con.description]
     result = {}
@@ -231,8 +248,9 @@ def backfill(
             # 1. Load raw outcomes (no filter)
             raw_outcomes = _query_outcomes(con, lane, since=since)
 
-            # 2. Load daily_features for filter application
-            features = _load_features(con, lane.instrument, since=since)
+            # 2. Load daily_features for filter application — per-aperture
+            # (lane.orb_minutes), NOT hardcoded O5 (PR #189 class bug).
+            features = _load_features(con, lane.instrument, lane.orb_minutes, since=since)
 
             # Idempotent DELETE before filter check (ensures stale rows are cleared
             # even if the filter_type becomes unknown — audit finding #11)
@@ -277,9 +295,9 @@ def backfill(
                 if feat_row.get(f"orb_{lane.orb_label}_break_dir") is None:
                     continue
 
-                # Inject cross-asset ATR if needed
+                # Inject cross-asset ATR if needed — per-aperture (PR #189 class bug)
                 if needs_cross:
-                    _inject_cross_asset_atrs(con, feat_row, lane.instrument, trading_day)
+                    _inject_cross_asset_atrs(con, feat_row, lane.instrument, trading_day, lane.orb_minutes)
 
                 # Apply filter
                 if not strat_filter.matches_row(feat_row, lane.orb_label):
