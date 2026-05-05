@@ -3,11 +3,11 @@ pooled_finding: false
 audit_target: "Self-correction addendum to 2026-05-05-capital-review-ovnrng100.md (PR #236)"
 auditor_context: opus-4-7-fresh-self-audit
 canonical_layers: [orb_outcomes, daily_features, validated_setups]
-verdict: "UNVERIFIED (within locked pre-reg taxonomy)"
+verdict: "DOWNSIZE (parent verdict STANDS) — addendum captures framing critique only, not a verdict override"
 parent_claims:
   - docs/audit/results/2026-05-05-capital-review-ovnrng100.md
   - docs/audit/results/2026-05-05-oos-reconcile-ovnrng100.md
-supersedes_claim: "DOWNSIZE verdict in 2026-05-05-capital-review-ovnrng100.md (PR #236)"
+supersedes_claim: "none — parent's DOWNSIZE verdict STANDS; this addendum captures framing-critique findings only"
 ---
 
 # Self-correction addendum — capital-review OVNRNG_100
@@ -71,37 +71,56 @@ The parent doc cited Carver Ch 11 (portfolios) but never did the cross-lane comp
 
 ## Verdict
 
-**UNVERIFIED (within the locked pre-reg taxonomy).**
+**DOWNSIZE (parent verdict STANDS).** This addendum captures framing critique findings only — it does NOT override the parent verdict.
 
-This is the SECOND revision of this addendum. Initial draft proposed CONDITIONAL_REMAIN_DEPLOY; an independent fresh-context evidence-auditor pass on PR #237 returned PARTIALLY_GROUNDED with three load-bearing concerns:
+This addendum has been through three drafts; a treadmill signal flagged by `.claude/rules/institutional-rigor.md` § "If you find yourself saying 'oh and also fix X' more than twice in a session, stop. The architecture is wrong." The honest resolution is to stop trying to revise the verdict and accept what TWO independent fresh-context evidence-auditor passes converged on:
 
-1. **The CONDITIONAL_REMAIN_DEPLOY verdict is NOT in the locked taxonomy** (REMAIN_DEPLOY | DOWNSIZE | UNDEPLOY | UNVERIFIED). Introducing a fifth option is itself a form of post-hoc rescue. The within-taxonomy answer that captures "directional-only evidence in three streams, none confirmatory, MinBTL/OOS-power BINDING triggers reduce historical confidence but don't refute forward EV" is **UNVERIFIED**.
-2. **The 2.4x OOS lift ratio is inflated by an N=6 off-day structural artifact** — the 6 days where `overnight_range < 100` produced ExpR = −1.000 (literal minimum), depressing the universe denominator. Using the 2.4x ratio as forward-EV evidence overstates what N=66 STATISTICALLY_USELESS power supports.
-3. **The portfolio-class claim was unverified** for sister lane VWAP_MID_ALIGNED. **POST-AUDIT EMPIRICAL CHECK (added 2026-05-05):** VWAP_MID_ALIGNED per-year fire rate on MNQ US_DATA_1000 O15 E2 RR1.5 CB1 is 49% (2019) / 49% (2020) / 57% (2021) / 53% (2022) / 50% (2023) / 51% (2024) / 53% (2025) / **65% (2026)**. Range 49-65%, stable. **VWAP_MID_ALIGNED is NOT vestigial.** This empirically refutes the addendum's portfolio-class framing.
+1. **First draft:** proposed CONDITIONAL_REMAIN_DEPLOY. Auditor #1 returned PARTIALLY_GROUNDED, called it a fifth-option post-hoc rescue.
+2. **Revision 2:** proposed UNVERIFIED. Auditor #2 returned PARTIALLY_GROUNDED, noted UNVERIFIED's pre-reg-defined trigger ("Insufficient data to evaluate any of F1/F3/F4. Reserved if canonical-layer queries fail or DB freshness is insufficient") was NOT met — F1, F3, F4 all have data and all triggered. UNVERIFIED used with a redefined meaning is the same class of taxonomy escape as CONDITIONAL_REMAIN_DEPLOY.
+3. **Revision 3 (this version):** parent's **DOWNSIZE** verdict is the procedurally correct within-taxonomy answer. The pre-reg DOWNSIZE trigger fires exactly as the parent doc found.
 
-### Why UNVERIFIED is the honest within-taxonomy verdict
+### Why DOWNSIZE survives both adversarial passes
 
-- F1 VESTIGIAL is MEASURED (fire rate 4.3% → 91.7%, MEASURED from canonical layers).
-- F3 BINDING triggers (MinBTL factor 1,272x, OOS power 0.07/0.32) are MEASURED.
-- F4 LIVE_DECAY (mild) is MEASURED.
-- The forward-EV evidence (2026 OOS universe positive, OOS filter lift positive, live trailing positive) is INFERRED not MEASURED — all three streams are STATISTICALLY_USELESS to DIRECTIONAL_ONLY power.
-- The 2.4x OOS lift framing is partially inflated by the N=6 off-day artifact (mean −1.000R on those 6 days; without that floor the universe ExpR would be higher, the lift smaller).
-- The originally-locked DOWNSIZE trigger condition fires, but the rationale (Carver Ch 9-10 capital allocation under uncertainty) cuts BOTH ways: half-Kelly-under-uncertainty supports DOWNSIZE more directly than CONDITIONAL_REMAIN_DEPLOY.
+The pre-reg's DOWNSIZE trigger reads: "F1 VESTIGIAL OR F3 DEPLOYMENT_MATH_BROKEN, AND F4 NOT outright LIVE_DECAY (live N≥100, positive ExpR)." All three conditions are MEASURED:
+- F1 VESTIGIAL: fire rate 4.3% → 91.7%, MEASURED from canonical layers.
+- F3 DEPLOYMENT_MATH_BROKEN: MinBTL factor 1,272x, OOS power 0.07/0.32 (BINDING per Criterion 2 + RULE 3.3).
+- F4 LIVE_DECAY (mild) AND live N=153 +0.24R t=2.52 (positive, ≥100 trades).
 
-UNVERIFIED captures all of these honestly: insufficient evidence to confirm or refute either DOWNSIZE or REMAIN_DEPLOY at confirmatory power. Operational impact is identical to CONDITIONAL_REMAIN_DEPLOY (no allocator action), but UNVERIFIED is within the locked taxonomy and does not imply a directional lean the evidence does not support.
+DOWNSIZE's trigger fires. The locked taxonomy says DOWNSIZE. Auditor #2 confirmed: *"DOWNSIZE's trigger fires against the locked taxonomy. The framing critique is valid as future-pre-reg doctrine, not as a verdict override."*
 
-### What this means for the parent verdict
+### What the framing critique IS load-bearing for (separate from the verdict)
 
-The parent's DOWNSIZE verdict was procedurally correct against its locked taxonomy. The framing-error catch (parent dismissed +0.097R OOS lift as "essentially base rate" when it is 2.4x the universe — though the 2.4x is artifact-inflated) is a real catch. But the correction is to UNVERIFIED, not to CONDITIONAL_REMAIN_DEPLOY. The directional lean toward "remain deployed" is not established by the evidence streams available.
+Two findings from this addendum survive both adversarial passes as **VALID CRITIQUES of pre-reg authoring discipline**, NOT as verdict overrides:
 
-The portfolio-class argument — used by the addendum's first draft to argue against single-lane DOWNSIZE — is empirically refuted for VWAP_MID_ALIGNED. Only OVNRNG_100 (this lane) clearly carries the absolute-threshold scale-drift class. COST_LT12's status is still unmeasured here. Single-lane action on OVNRNG_100 is not necessarily portfolio-incoherent.
+1. **Parent doc's stated rationale partly mis-cited F3.** The DOWNSIZE rationale leaned on F3 BINDING triggers ("promotion-math broken") as forward-EV refutation. F3 BINDING triggers are sunk-cost diagnostics about historical promotion confidence — they do not refute forward EV. The CORRECT load-bearing rationale for DOWNSIZE is the Carver Ch 9-10 capital-allocation-under-uncertainty framing (half-Kelly-under-uncertainty), which the pre-reg did cite. The verdict survives; the rationale framing should be tightened in future capital-review pre-regs.
+
+2. **Parent doc dismissed the +0.097R OOS lift prematurely.** The phrase "essentially the unfiltered base rate" was arithmetically wrong (filter ExpR is 2.4x universe ExpR, even after acknowledging the N=6 off-day artifact). The 2.4x ratio is not load-bearing for the verdict (lift is artifact-inflated and DIRECTIONAL_ONLY power), but the parent's dismissal language was sloppy.
+
+### What the addendum does NOT establish
+
+- **Does NOT establish that the verdict should change.** It does not. DOWNSIZE stands.
+- **Does NOT establish that REMAIN_DEPLOY is the right answer.** It is not. REMAIN_DEPLOY's trigger requires F3 DSR ≥ 0.50, which Amendment 2.1 makes structurally unreachable, but the next-best within-taxonomy verdict is DOWNSIZE (which fires), not REMAIN_DEPLOY by default.
+- **Does NOT establish that the portfolio-class framing defeats single-lane action.** Auditor #2 caught: 2 of 3 active lanes are MEASURED vestigial (OVNRNG_100 = 91.7%, COST_LT12 on NYSE_OPEN = 100% per `2026-05-01-target-b-6lane-vestigialness-fresh-audit.md` L4 row). VWAP_MID_ALIGNED (49-65%) is the lone non-vestigial. The portfolio-class concern is REDUCED but not refuted.
+
+### Operational impact
+
+ZERO. Identical to parent's verdict. Lane stays at currently-allocated exposure until next rebalance. Allocator-side downsize implementation remains a separate follow-up stage requiring user authorization.
 
 ## What this addendum changes
 
-1. **Parent verdict DOWNSIZE → UNVERIFIED (within locked taxonomy).** Decision-ledger entry `capital-review-ovnrng100-downsize-2026-05-05` superseded. The parent's DOWNSIZE was procedurally correct against the locked taxonomy but the rationale conflated promotion-math diagnostics with forward-EV refutation. The honest within-taxonomy verdict on directional-only forward evidence is UNVERIFIED.
-2. **No allocator action.** Lane stays at currently-allocated exposure until next rebalance. Operational impact is identical to parent (parent was documentary too).
-3. **The portfolio-class framing in this addendum's first draft is empirically refuted** for VWAP_MID_ALIGNED. Only OVNRNG_100 clearly carries the absolute-threshold scale-drift class among current active lanes. COST_LT12 status is unmeasured here.
-4. **The follow-up stage queue is REORDERED.** Highest-EV next step is the OVNRNG_100-specific filter-reparametrisation pre-reg (relative-vol threshold) — NOT a portfolio-class one (refuted). COST_LT12 fire-rate verification queued separately. The "per-lane decay tripwire" and "generalised absolute-threshold scale-drift sweep" stages remain queued.
+1. **Parent verdict DOWNSIZE STANDS** (unchanged). Decision-ledger entry `capital-review-ovnrng100-downsize-2026-05-05` is NOT superseded — it is annotated with the framing-critique findings via a NEW entry `capital-review-ovnrng100-framing-critique-2026-05-05`.
+2. **Two framing critiques captured as separate findings** (NOT verdict overrides):
+   - Parent's stated rationale partly mis-cited F3 BINDING triggers as forward-EV refutation when they are sunk-cost diagnostics (correct DOWNSIZE rationale: Carver Ch 9-10 capital-allocation-under-uncertainty).
+   - Parent dismissed +0.097R OOS lift as "essentially base rate" when it is 2.4x universe ExpR (artifact-inflated but not zero).
+3. **Empirical addition:** VWAP_MID_ALIGNED 2026 fire rate measured at 65% (49-65% range across 8 years) — NOT vestigial. Only OVNRNG_100 (91.7%) and COST_LT12 (100% per 6-lane audit) among active lanes carry the vestigial class. 2 of 3 active lanes share it.
+4. **Follow-up stage queue REORDERED:**
+   - OVNRNG_100 single-lane filter-reparametrisation pre-reg (relative-vol threshold) — highest-EV.
+   - COST_LT12 fire-rate verification IS measured: 100% in 2026 per `2026-05-01-target-b-6lane-vestigialness-fresh-audit.md` L4 row. Reparametrisation pre-reg for COST_LT12 should be paired.
+   - "Per-lane decay tripwire" and "generalised absolute-threshold scale-drift sweep" remain queued.
+5. **Two new feedback files queued** (require user authorization to add to `memory/`):
+   - `feedback_pre_reg_taxonomy_can_be_misframed.md` — the locked taxonomy can be misframed; result-doc reframing is not a substitute for amending the pre-reg yaml.
+   - `feedback_downsize_rationale_sunk_cost_vs_forward_ev.md` — DOWNSIZE rationale should cite Carver capital-under-uncertainty (forward-looking), not Bailey/Harvey-Liu MinBTL-violation (sunk-cost).
+6. **Treadmill-signal acknowledgment:** I revised this addendum three times (DOWNSIZE → CONDITIONAL_REMAIN_DEPLOY → UNVERIFIED → DOWNSIZE-stands). Per `.claude/rules/institutional-rigor.md` § "If you find yourself saying 'oh and also fix X' more than twice in a session, stop. The architecture is wrong" — I should have stopped after auditor #1's pass. The revision-2 UNVERIFIED attempt was its own taxonomy escape that auditor #2 caught. **Verdict: parent's DOWNSIZE was right; addendum's value is the framing-critique findings, not a verdict override.**
 
 ## What this addendum does NOT change
 
