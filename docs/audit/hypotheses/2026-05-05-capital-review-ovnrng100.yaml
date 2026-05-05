@@ -111,8 +111,12 @@ grounding:
       page_or_section: "p.8 Equation 2, p.3 Conclusions"
       use: >
         DSR threshold: > 0.95 to clear the 95% confidence bar. Lane reports dsr_score=0.1746951317604647
-        in validated_setups (well below 0.95). Treated as binding diligence gap per
-        docs/institutional/pre_registered_criteria.md Criterion 5.
+        in validated_setups (well below 0.95). PER AMENDMENT 2.1 of
+        docs/institutional/pre_registered_criteria.md (lines 334-348), Criterion 5 (DSR)
+        is downgraded from binding gate to CROSS-CHECK until N_eff is formally solved
+        in-repo. DSR is therefore corroborating informational evidence, not a binding
+        kill arm. F3 trigger fires on MinBTL factor (BINDING) + OOS power (BINDING)
+        independently of the DSR cross-check.
     - source_file: "resources/backtesting_dukepeople_liu.pdf"
       extract: "docs/institutional/literature/harvey_liu_2015_backtesting.md"
       page_or_section: "p.17"
@@ -130,8 +134,8 @@ grounding:
         verdict on F2 (the FAIL-vs-RECONCILED reframe is a pre-reg specification bug,
         not a finding of canonical-source drift).
     - source_file: "resources/Carver_Systematic_Trading.pdf"
-      extract: "docs/institutional/literature/carver_2015_ch11_portfolios.md"
-      page_or_section: "Ch 9-10 (capital allocation under uncertainty)"
+      extract: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+      page_or_section: "Ch 9 p.143-147 (Kelly-linked vol target + half-Kelly mandate); Ch 10 p.153+ (position sizing framework)"
       use: >
         Capital allocation under uncertainty: when DSR diligence is open and OOS is
         statistically useless, the DOWNSIZE option is the canonical Carver answer
@@ -231,11 +235,17 @@ hypotheses:
       Read dsr_score from validated_setups directly. Compute OOS power per RULE 3.3 via
       research.oos_power.oos_ttest_power.
     kill_criterion: >
-      DEPLOYMENT_MATH_BROKEN if MinBTL_factor > 100 AND DSR < 0.50 AND
+      DEPLOYMENT_MATH_BROKEN if MinBTL_factor > 100 AND
       power_to_detect_IS_effect_at_N_OOS_66 < 0.50.
-      (At factor 1,272, DSR 0.175, power 0.07 two-group / 0.32 one-sample, this lane
-      meets all three triggers. Already-known finding inherited from MEMORY.md and
-      flagged out-of-scope by PR #228; this stage MUST decide on it now.)
+      Both are BINDING sub-criteria per Criterion 2 (Bailey 2013 Theorem 1) and
+      RULE 3.3 (Harvey-Liu 2015) respectively. DSR < 0.50 is reported as a
+      CROSS-CHECK only — Amendment 2.1 in pre_registered_criteria.md explicitly
+      demoted Criterion 5 (DSR) from binding kill gate to cross-check until N_eff
+      is formally solved in-repo. The lane's DSR=0.175 is corroborating informational
+      evidence, not a binding kill arm.
+      (At MinBTL factor 1,272 and OOS power 0.07 two-group / 0.32 one-sample, this
+      lane meets BOTH binding triggers independently. The DSR cross-check at 0.175
+      corroborates but is not load-bearing.)
     theory_citation: >
       docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md p.8 Theorem 1;
       docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md p.8 Eq 2;

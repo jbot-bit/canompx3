@@ -39,10 +39,10 @@ This audit does NOT push allocator state, update `validated_setups`, modify `lan
 |---|---|---|
 | F1 fire-rate scale stability | 4.3% (2019) → 91.7% (2026), 21.5x drift; avg overnight_range 43 → 199 pts (4.6x) | YES — VESTIGIAL |
 | F2 PR #228 reconciliation reframe | runner_IS = strict-unlock CSV exactly (delta 0.0000R) | NO — NOT_A_VIOLATION (pre-reg spec bug, not no-rescue rescue) |
-| F3 DSR / MinBTL deployment math | n_trials=35,616, MinBTL_max(E=1)=28, factor=1,272x; dsr_score=0.175; OOS power 0.07 (two-group) / 0.32 (one-sample) | YES — DEPLOYMENT_MATH_BROKEN |
+| F3 DSR / MinBTL deployment math | n_trials=35,616, MinBTL_max(E=1)=28, factor=1,272x (BINDING); OOS power 0.07 / 0.32 (BINDING per RULE 3.3); dsr_score=0.175 (CROSS-CHECK per Amendment 2.1, not binding) | YES — DEPLOYMENT_MATH_BROKEN |
 | F4 Live trailing trend | Q2 2025 +0.57R → Q3 2025 +0.29R → Q4 2025 +0.10R → Q1 2026 +0.08R; ratio 0.33 < 0.5 | YES — LIVE_DECAY (but live N=153 ExpR=+0.24R t=2.52 still positive) |
 
-**Verdict trace:** F1 VESTIGIAL OR F3 DEPLOYMENT_MATH_BROKEN are both true; F4 is decay-but-not-zero (live N=153 ExpR=+0.24, t=2.52, still directionally positive). Per the pre-reg verdict taxonomy, this is the DOWNSIZE pattern — Carver 2015 Ch 9-10 "capital allocation under uncertainty" answer when DSR diligence is open and OOS is statistically useless but live signal is directionally positive: reduce capital exposure proportional to remaining uncertainty, do not zero it.
+**Verdict trace:** F1 VESTIGIAL OR F3 DEPLOYMENT_MATH_BROKEN are both true; F4 is decay-but-not-zero (live N=153 ExpR=+0.24, t=2.52, still directionally positive). Per the pre-reg verdict taxonomy, this is the DOWNSIZE pattern — Carver 2015 Ch 9-10 (`carver_2015_volatility_targeting_position_sizing.md` p.143-155) "capital allocation under uncertainty" answer when DSR diligence is open and OOS is statistically useless but live signal is directionally positive: reduce capital exposure proportional to remaining uncertainty, do not zero it.
 
 This audit does NOT push allocator state. A separate follow-up stage is required for the actual capital-allocation change.
 
@@ -208,7 +208,13 @@ The Bailey 2013 extract literature anchor (`docs/institutional/literature/bailey
 
 ### DSR (Bailey-LdP 2014 Equation 2)
 
-`validated_setups.dsr_score = 0.1746951317604647`. Per `docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md` Equation 2 and `docs/institutional/pre_registered_criteria.md` Criterion 5, the threshold for "legitimate empirical discovery at 95% confidence" is **DSR > 0.95**. The lane reports 0.175 — there is only a 17.5% chance the true Sharpe is greater than zero after deflation for selection bias and non-Normality.
+`validated_setups.dsr_score = 0.1746951317604647`. Per `docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md` Equation 2, the threshold for "legitimate empirical discovery at 95% confidence" is DSR > 0.95.
+
+**Crucial Amendment 2.1 caveat:** `docs/institutional/pre_registered_criteria.md` Amendment 2.1 (committed 2026-04-07) explicitly **downgraded Criterion 5 DSR from a binding kill gate to a cross-check** until `N_eff` (effective number of independent trials) is formally solved in-repo. From the amendment verbatim:
+
+> "DSR is a CROSS-CHECK, not a hard gate, until `N_eff` is formally solved in-repo. [...] DSR does NOT override BH FDR or WFE as deploy/don't-deploy switches until N_eff is resolved."
+
+Therefore the lane's `dsr_score = 0.175` is **corroborating cross-check evidence**, not the kill switch. F3's DEPLOYMENT_MATH_BROKEN trigger fires on **MinBTL factor (1,272x >> 100) and OOS power (0.07 two-group / 0.32 one-sample, both « 0.50)** — the two BINDING sub-criteria — independently of the DSR cross-check. The DSR reading is informational here, not load-bearing.
 
 ### OOS power (Harvey-Liu 2015 + RULE 3.3)
 
@@ -219,7 +225,32 @@ IS_sd = |IS_mean| · sqrt(IS_N) / |IS_t| = 1.1654
 Cohen's d = IS_mean / IS_sd = 0.1863
 ```
 
-OOS power per `research/oos_power.py` canonical helper:
+OOS power computed via `research/oos_power.py` canonical helper. One-sample variant uses `scipy.stats.nct` directly (the helper's `oos_ttest_power` is two-sample only); both follow the Harvey-Liu 2015 framework cited in RULE 3.3. Reproduction script (in-line, run from worktree root):
+
+```python
+import sys, math
+sys.path.insert(0, '.')
+from scipy import stats
+from research.oos_power import oos_ttest_power, format_power_report
+
+is_mean, is_t, is_n = 0.2171, 4.256, 522
+is_sd = abs(is_mean) * math.sqrt(is_n) / abs(is_t)   # = 1.1654
+d = is_mean / is_sd                                  # = 0.1863
+
+# One-sample (descriptive OOS recompute against null=0)
+n_oos = 66
+ncp = d * math.sqrt(n_oos)
+crit = stats.t.ppf(0.975, n_oos - 1)
+power = 1 - stats.nct.cdf(crit, n_oos-1, ncp) + stats.nct.cdf(-crit, n_oos-1, ncp)
+# power = 0.3198
+
+# Two-group (filter on=66 vs off=6)
+report = oos_ttest_power(is_delta=is_mean, is_pooled_std=is_sd,
+                         n_oos_a=66, n_oos_b=6, alpha=0.05)
+# power = 0.072
+```
+
+Verbatim output:
 
 ```
 === OOS power (one-sample, alpha=0.05 two-sided) ===
@@ -242,17 +273,20 @@ Both the one-sample and two-group framings produce STATISTICALLY_USELESS tier. T
 
 ### Reading
 
-The lane meets all three triggers in the F3 numeric criterion:
+Two **BINDING** sub-criteria triggered (each independently sufficient under the pre-reg kill clause):
 
-- MinBTL violation factor: **1,272x** (» 100x threshold)
-- DSR: **0.175** (« 0.50 threshold)
-- OOS power: **0.07 two-group / 0.32 one-sample** (« 0.50 threshold)
+- **MinBTL violation factor: 1,272x** (» 100x threshold) — Criterion 2 BINDING per `pre_registered_criteria.md`
+- **OOS power: 0.07 two-group / 0.32 one-sample** (« 0.50 threshold) — RULE 3.3 BINDING
+
+One **CROSS-CHECK** sub-criterion:
+
+- DSR: 0.175 (« 0.50 numeric threshold the audit set, but Criterion 5 itself is downgraded to cross-check per Amendment 2.1; treat as corroborating, not the kill switch)
 
 The deployment math at promotion (April 2026) was implicitly conditioned on the LEGACY OOS_ExpR of +0.2029 (not the canonical +0.1658, which differs by 0.0371R per trade — about 18% of the headline OOS expectancy). At ~85 trades/year, that is +3.15 R/year of inflation — material at the per-lane scale.
 
 ### Verdict on F3
 
-**DEPLOYMENT_MATH_BROKEN.** All three numeric triggers met. The lane's promotion-era statistics do not survive Phase 0 institutional gates (Criterion 2 MinBTL, Criterion 5 DSR, RULE 3.3 power floor). This is a known, pre-existing finding inherited from MEMORY.md, formally re-anchored to literature here.
+**DEPLOYMENT_MATH_BROKEN.** Both binding numeric triggers (MinBTL factor 1,272x, OOS power < 0.50) met independently of the DSR cross-check. The lane's promotion-era statistics do not survive Phase 0 institutional gates that ARE binding (Criterion 2 MinBTL, RULE 3.3 OOS power floor). The DSR sub-criterion is informational corroboration, not load-bearing — Amendment 2.1 explicitly demotes Criterion 5 to cross-check until N_eff is formally solved. This is a known, pre-existing finding inherited from MEMORY.md, formally re-anchored to literature here.
 
 ---
 
@@ -308,7 +342,7 @@ Tier: DIRECTIONAL_ONLY
 ### Reading
 
 - The trailing 12-month +0.2412R headline that justifies session-regime DEPLOY status is structurally weighted by the strong contribution of Q1-Q3 2025 (+1.25R cumulative across 102 trades) and disguises a clear monotonic decay since Q3 2025.
-- Q1 2026 N=58 ExpR=+0.0792 is a 5.0R contribution — the slowest quarter on record.
+- Q1 2026 N=58 ExpR=+0.0792 is a 5.0R contribution — the lowest ExpR among the 4 most-recent complete quarters in the trailing 18-month window. (Full per-quarter history pre-2024 is not enumerated here; "slowest on record" is not claimed.)
 - Q2 2026 partial (April only, N=8 +0.79R) is too small to read as recovery vs noise.
 - At live N=153, power to detect the IS effect is 63% (DIRECTIONAL_ONLY tier per RULE 3.3). The +0.24R live ExpR is informational, not confirmatory.
 - t = 2.52 on N=153 fails Chordia-strict t ≥ 3.79 (no-theory Pathway A) and is below the t ≥ 3.0 with-theory Pathway B threshold.
@@ -318,7 +352,7 @@ Tier: DIRECTIONAL_ONLY
 
 **LIVE_DECAY (mild).** Per the pre-reg numeric criterion: monotonic decay across Q2 2025 → Q1 2026 (4 consecutive declining quarters: +0.57 → +0.29 → +0.10 → +0.08), AND ratio Q1-2026/12mo-mean = 0.33 < 0.5. **Trigger met.**
 
-But the lane is NOT in zero-or-negative territory — live N=153 ExpR is still +0.24R t=2.52 (Pathway B-pass at relaxed t ≥ 2.0 threshold but below institutional t ≥ 3.0). The decay-but-not-zero pattern is exactly the canary signal Carver 2015 Ch 9-10 describes for "capital allocation under uncertainty" — keep the lane in the portfolio at REDUCED exposure, do not zero it.
+But the lane is NOT in zero-or-negative territory — live N=153 ExpR is still +0.24R t=2.52 (Pathway B-pass at relaxed t ≥ 2.0 threshold but below institutional t ≥ 3.0). The decay-but-not-zero pattern is exactly the canary signal Carver 2015 Ch 9-10 (`carver_2015_volatility_targeting_position_sizing.md` p.143-155) describes for "capital allocation under uncertainty" — keep the lane in the portfolio at REDUCED exposure, do not zero it.
 
 ---
 
@@ -331,11 +365,15 @@ But the lane is NOT in zero-or-negative territory — live N=153 ExpR is still +
 | F1 VESTIGIAL AND F3 DEPLOYMENT_MATH_BROKEN AND F4 LIVE_DECAY (zero-or-negative live) | UNDEPLOY |
 | Insufficient data | UNVERIFIED |
 
-**Observed pattern:** F1 = VESTIGIAL ✓, F2 = NOT_A_VIOLATION (no rescue), F3 = DEPLOYMENT_MATH_BROKEN ✓, F4 = LIVE_DECAY (mild, live N=153 still +0.24R t=2.52).
+**Observed pattern:** F1 = VESTIGIAL ✓, F2 = NOT_A_VIOLATION (no rescue), F3 = DEPLOYMENT_MATH_BROKEN ✓ (binding triggers: MinBTL factor 1,272x and OOS power < 0.50; DSR is informational cross-check per Amendment 2.1, not a binding gate), F4 = LIVE_DECAY (mild, live N=153 still +0.24R t=2.52).
 
 **Verdict: DOWNSIZE.**
 
-The lane's promotion-era statistics do not survive Phase 0 institutional gates AND the filter is vestigial under current scale, BUT live trailing performance is still directionally positive at N=153, even though decaying. Carver 2015 Ch 9-10 capital-allocation-under-uncertainty answer: reduce exposure proportional to remaining uncertainty rather than zero it.
+The DOWNSIZE-vs-UNDEPLOY boundary turns on the F4 sub-clause "outright LIVE_DECAY (zero-or-negative live)". The lane's live N=153 trailing ExpR is +0.24R t=2.52 — directionally positive at DIRECTIONAL_ONLY tier (63% power). Per the pre-reg taxonomy, "outright" is read as "zero-or-negative" because the UNDEPLOY clause explicitly says so. Live ExpR > 0 with directional-tier power therefore selects DOWNSIZE rather than UNDEPLOY, even though F1 + F3 + mild-F4 all triggered.
+
+If post-rebalance evidence flips F4 to outright (Q2 2026 closes negative AND live trailing N≥100 turns negative), this verdict re-opens to UNDEPLOY in the follow-up rebalance stage. That re-evaluation is forward-looking, not a post-hoc rescue of this audit.
+
+The lane's promotion-era statistics do not survive Phase 0 institutional gates that ARE binding (Criterion 2 MinBTL, RULE 3.3 OOS power) AND the filter is vestigial under current scale, BUT live trailing performance is still directionally positive at N=153, even though decaying. Carver 2015 Ch 9-10 (`carver_2015_volatility_targeting_position_sizing.md` p.143-155) capital-allocation-under-uncertainty answer: reduce exposure proportional to remaining uncertainty rather than zero it.
 
 A separate follow-up stage is required for the actual capital-allocation change. THIS audit does not push allocator state. Recommended downstream artifacts:
 
@@ -358,7 +396,7 @@ These are SEPARATE stages, not part of this verdict's scope.
 
 ## Caveats and limitations
 
-- **Capital-allocation under uncertainty is itself uncertain.** Carver 2015 Ch 9-10 provides a framework, not a closed-form sizing rule. The exact downsize ratio is a Stage-2 decision — this audit only declares the directional verdict.
+- **Capital-allocation under uncertainty is itself uncertain.** Carver 2015 Ch 9-10 (`carver_2015_volatility_targeting_position_sizing.md` p.143-155) provides a framework, not a closed-form sizing rule. The exact downsize ratio is a Stage-2 decision — this audit only declares the directional verdict.
 - **Live N=153 power is DIRECTIONAL_ONLY (63%).** The decay reading itself has structural noise — a single strong quarter (Q2 2026, currently N=8 +0.79R) could shift the directional read.
 - **Session-regime gate is the only allocator pause path.** This audit recommends a downsize, not a pause; if the user wants a pause, that requires either explicit intervention or a separate stage to add lane-level decay logic to the allocator.
 - **Trade-time knowability.** OVNRNG_100 has no look-ahead bias on COMEX_SETTLE (overnight window 09:00-17:00 Brisbane closes well before COMEX_SETTLE 04:30 next-day Brisbane, per `.claude/rules/backtesting-methodology.md` RULE 1.2). The vestigial finding is structural-drift, not a look-ahead problem.
