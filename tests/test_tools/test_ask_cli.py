@@ -87,7 +87,7 @@ def test_resolve_chat_model_rejects_no_slash(monkeypatch: pytest.MonkeyPatch, ca
 
     monkeypatch.setenv("CANOMPX3_AI_CHAT_MODEL", "deepseek-chat")  # missing 'deepseek/'
 
-    with caplog.at_level(logging.WARNING, logger="ask"):
+    with caplog.at_level(logging.WARNING, logger="scripts.tools.ask"):
         result = ask._resolve_chat_model()
 
     assert result == ask._DEFAULT_CHAT_MODEL_FALLBACK

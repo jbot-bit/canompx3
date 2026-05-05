@@ -135,7 +135,7 @@ def _resolve_chat_model() -> str:
     # operator-visible hint that the env var was the cause. Warn + fall back
     # so the operator sees the misconfiguration in the same line of output.
     if "/" not in raw:
-        logger = logging.getLogger("ask")
+        logger = logging.getLogger(__name__)
         logger.warning(
             "CANOMPX3_AI_CHAT_MODEL=%r missing 'provider/' prefix — "
             "falling back to %s. Expected format: deepseek/deepseek-chat.",
