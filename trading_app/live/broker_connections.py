@@ -214,24 +214,43 @@ class BrokerConnectionManager:
         except Exception as e:
             return {"success": False, "message": str(e)}
 
-    def connect(self, conn_id: str) -> None:
+    def connect(self, conn_id: str, max_retries: int = 3, retry_delay: float = 2.0) -> None:
         conn = next((c for c in self._connections if c["id"] == conn_id), None)
         if not conn:
             raise ValueError(f"Unknown connection: {conn_id}")
         state = self._states.setdefault(conn_id, ConnectionState())
-        try:
-            auth = self._create_auth(conn["broker_type"], conn["credentials"])
-            auth.get_token()
-            state.auth = auth
-            state.status = "connected"
-            state.last_error = None
-            state.connected_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-            log.info("Connected: %s (%s)", conn["display_name"], conn["broker_type"])
-        except Exception as e:
-            state.auth = None
-            state.status = "error"
-            state.last_error = str(e)
-            raise
+        
+        last_exception = None
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    log.info("Connection attempt %d/%d for %s", 
+                            attempt + 1, max_retries, conn["display_name"])
+                    time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+                
+                auth = self._create_auth(conn["broker_type"], conn["credentials"])
+                auth.get_token()
+                state.auth = auth
+                state.status = "connected"
+                state.last_error = None
+                state.connected_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+                log.info("Connected: %s (%s)", conn["display_name"], conn["broker_type"])
+                return
+                
+            except Exception as e:
+                last_exception = e
+                log.warning("Connection attempt %d/%d failed for %s: %s",
+                           attempt + 1, max_retries, conn["display_name"], e)
+                state.status = "retrying"
+                state.last_error = str(e)
+        
+        # All attempts failed
+        state.auth = None
+        state.status = "error"
+        state.last_error = f"All {max_retries} connection attempts failed: {last_exception}"
+        log.error("Failed to connect %s after %d attempts: %s",
+                 conn["display_name"], max_retries, last_exception)
+        raise ConnectionError(f"Failed to connect {conn['display_name']}: {last_exception}")
 
     def connect_all_enabled(self) -> None:
         for conn in self._connections:

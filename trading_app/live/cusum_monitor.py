@@ -25,25 +25,39 @@ class CUSUMMonitor:
     alarm_triggered: bool = field(default=False, init=False)
     n_trades: int = field(default=0, init=False)
 
-    def update(self, actual_r: float) -> bool:
+    def update(self, actual_r: float) -> dict:
         """
         Process one completed trade result.
 
-        Returns True if alarm just triggered for the first time.
-        After alarm is triggered, returns False on all subsequent calls
-        (alarm stays set until clear() is called).
+        Returns dict with:
+        - alarm_triggered: bool (if alarm just triggered)
+        - current_drift: float (current drift severity)
+        - stats: dict with monitoring statistics
         """
         self.n_trades += 1
+        result = {
+            'alarm_triggered': False,
+            'current_drift': self.drift_severity,
+            'stats': {
+                'n_trades': self.n_trades,
+                'cusum_neg': self.cusum_neg,
+                'cusum_pos': self.cusum_pos
+            }
+        }
+        
         if self.std_r <= 0:
-            return False  # Cannot compute z-score — degenerate distribution
+            return result  # Cannot compute z-score — degenerate distribution
+            
         z = (actual_r - self.expected_r) / self.std_r
         self.cusum_neg = min(0.0, self.cusum_neg + z)  # tracks persistent losses
         self.cusum_pos = max(0.0, self.cusum_pos + z)  # tracks persistent gains
 
         if -self.cusum_neg > self.threshold and not self.alarm_triggered:
             self.alarm_triggered = True
-            return True
-        return False
+            result['alarm_triggered'] = True
+            result['current_drift'] = self.drift_severity
+            
+        return result
 
     def clear(self) -> None:
         """Reset CUSUM state after investigation/acknowledgement.
