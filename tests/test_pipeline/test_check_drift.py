@@ -16,6 +16,7 @@ from pipeline.check_drift import (
     check_apply_iterrows,
     check_config_filter_sync,
     check_daily_features_row_integrity,
+    check_deepseek_review_gate_intact,
     check_hardcoded_mgc_sql,
     check_holdout_policy_declaration_consistency,
     check_non_bars1m_writes,
@@ -2204,3 +2205,102 @@ class TestIsoUtcFormatterSilentNone:
 
         violations = check_iso_utc_formatter_silent_none()
         assert violations == [], f"unexpected violations: {violations}"
+
+
+class TestDeepseekReviewGateNoOp:
+    """Phase 1 of DeepSeek Coding Agent v4: drift check is a registry slot.
+
+    The check is wired into CHECKS so Phase 1 cannot land without keeping
+    the slot. Until Phase 3 lands the `# 0d.` marker in `.githooks/pre-commit`,
+    the check returns [] (no-op). Once the marker lands, the check asserts
+    the canonical reviewer invocation is wired.
+    """
+
+    def test_returns_empty_on_real_repo_phase1(self):
+        # Smoke test on the real repo: until Phase 3 adds the marker, the
+        # check must be a no-op so Phase 1 commits with a green bar.
+        violations = check_deepseek_review_gate_intact()
+        assert violations == []
+
+    def test_returns_empty_when_pre_commit_missing(self, tmp_path, monkeypatch):
+        # Fail-safe: missing pre-commit hook → no-op (defer to other checks).
+        from pipeline import check_drift as cd
+
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        violations = cd.check_deepseek_review_gate_intact()
+        assert violations == []
+
+    def test_no_op_when_marker_absent(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        hooks_dir = tmp_path / ".githooks"
+        hooks_dir.mkdir()
+        # Marker `# 0d.` not present.
+        (hooks_dir / "pre-commit").write_text(
+            "#!/usr/bin/env bash\n# 0a. Some other step\n# 0b. Another step\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        assert cd.check_deepseek_review_gate_intact() == []
+
+    def test_flips_to_blocking_when_marker_present_but_invocation_missing(self, tmp_path, monkeypatch):
+        # Phase-3 forward-compatibility test: if a future maintainer adds the
+        # `# 0d.` marker but forgets the canonical reviewer call, the check
+        # must turn into a hard block.
+        from pipeline import check_drift as cd
+
+        hooks_dir = tmp_path / ".githooks"
+        hooks_dir.mkdir()
+        (hooks_dir / "pre-commit").write_text(
+            "#!/usr/bin/env bash\n# 0d. DeepSeek review gate (claim)\necho hello\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        violations = cd.check_deepseek_review_gate_intact()
+        assert len(violations) == 1
+        assert "claude_review_deepseek" in violations[0]
+
+
+class TestQuietModeOutputSanitization:
+    """`python pipeline/check_drift.py --quiet` emits sanitized lines only.
+
+    Acceptance criterion 5: every emitted line must match `PASS: <name>`,
+    `FAIL: <name> (count=N)`, `ADVISORY: <name>`, `SKIP: <name>`, or the
+    final `SUMMARY: ...` line. No file paths, SQL fragments, or DB internals.
+    """
+
+    def test_quiet_mode_lines_are_sanitized(self, tmp_path):
+        import re
+        import subprocess
+        import sys
+
+        proj_root = Path(__file__).resolve().parents[2]
+        result = subprocess.run(
+            [sys.executable, str(proj_root / "pipeline" / "check_drift.py"), "--quiet", "--fast"],
+            capture_output=True,
+            text=True,
+            cwd=str(proj_root),
+        )
+        # Exit 0 = clean, 1 = drift; either is fine for sanitization test.
+        assert result.returncode in (0, 1), f"unexpected exit: {result.stderr}"
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        assert lines, "quiet mode produced no output"
+        allowed = re.compile(r"^(?:PASS|FAIL|ADVISORY|SKIP):\s.+$|^SUMMARY:\s.+$")
+        for line in lines:
+            assert allowed.match(line), f"unsanitized line leaked: {line!r}"
+        # The summary line is required and last-emitted.
+        assert lines[-1].startswith("SUMMARY:"), f"missing summary line: {lines[-1]!r}"
+
+    def test_quiet_mode_summary_carries_passed_count(self, tmp_path):
+        import subprocess
+        import sys
+
+        proj_root = Path(__file__).resolve().parents[2]
+        result = subprocess.run(
+            [sys.executable, str(proj_root / "pipeline" / "check_drift.py"), "--quiet", "--fast"],
+            capture_output=True,
+            text=True,
+            cwd=str(proj_root),
+        )
+        summary = [line for line in result.stdout.splitlines() if line.startswith("SUMMARY:")]
+        assert len(summary) == 1
+        assert "passed=" in summary[0]

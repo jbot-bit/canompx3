@@ -22,7 +22,7 @@ from trading_app.ai.claude_client import CLAUDE_REASONING_MODEL, CLAUDE_STRUCTUR
 
 ProviderName = Literal["anthropic", "openrouter"]
 ResponseMode = Literal["free_text", "json_schema"]
-RuntimeClass = Literal["read_only_single_turn", "read_only_tool_loop"]
+RuntimeClass = Literal["read_only_single_turn", "read_only_tool_loop", "interactive_editor"]
 ReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
 
 
@@ -136,10 +136,14 @@ class AIProfile:
         missing = self.missing_env()
         if missing:
             errors.append("missing required env: " + ", ".join(missing))
-        if self.mutation_allowed:
-            errors.append("mutation authority is not allowed for repo research profiles")
-        if self.live_control_allowed:
-            errors.append("live-control authority is not allowed for repo research profiles")
+        # Mutation/live-control authority is rejected for read-only research profiles.
+        # The interactive_editor runtime class is the dedicated escape hatch for the
+        # repo-native coding-agent profile, which mutates source files by design.
+        if self.runtime_class != "interactive_editor":
+            if self.mutation_allowed:
+                errors.append("mutation authority is not allowed for repo research profiles")
+            if self.live_control_allowed:
+                errors.append("live-control authority is not allowed for repo research profiles")
         if self.router is not None and self.router.allow_fallbacks:
             errors.append("openrouter research profiles must not allow provider fallbacks")
         if self.router is not None and not self.router.require_parameters:
@@ -248,6 +252,31 @@ PROFILE_REGISTRY: dict[str, AIProfile] = {
             "model via CANOMPX3_AI_DEEPSEEK_STRUCTURED_EXTRACTION_MODEL."
         ),
     ),
+    "deepseek_coding": AIProfile(
+        profile_id="deepseek_coding",
+        provider="openrouter",
+        use_case="repo-native coding-agent edits with claude-side review gating",
+        model=None,
+        api_key_env="OPENROUTER_API_KEY",
+        base_url="https://openrouter.ai/api/v1",
+        runtime_class="interactive_editor",
+        router=ProviderRouting(
+            order=("deepseek",),
+            allow_fallbacks=False,
+            require_parameters=True,
+            data_collection="deny",
+            zdr=True,
+        ),
+        mutation_allowed=True,
+        required_env=("OPENROUTER_API_KEY",),
+        notes=(
+            "OpenRouter-backed coding-agent profile (DeepSeek Coding Agent v4). "
+            "model is None until Phase 2.5 bake-off picks the winner; assert_ready "
+            "fails-closed by design until then. Edits land via aider; every commit "
+            "is reviewed by claude-side gate (Phase 3) before push. Configure the "
+            "selected model via CANOMPX3_AI_DEEPSEEK_CODING_MODEL."
+        ),
+    ),
 }
 
 
@@ -256,7 +285,11 @@ def list_profiles() -> list[str]:
 
 
 def list_openrouter_research_profiles() -> list[str]:
-    return sorted(profile_id for profile_id, profile in PROFILE_REGISTRY.items() if profile.provider == "openrouter")
+    return sorted(
+        profile_id
+        for profile_id, profile in PROFILE_REGISTRY.items()
+        if profile.provider == "openrouter" and profile.runtime_class != "interactive_editor"
+    )
 
 
 def get_profile(profile_id: str) -> AIProfile:
@@ -275,6 +308,11 @@ def assert_openrouter_research_profile(profile_id: str) -> AIProfile:
     profile = get_profile(profile_id)
     if profile.provider != "openrouter":
         raise ValueError(f"{profile_id} is not an OpenRouter research profile")
+    if profile.runtime_class == "interactive_editor":
+        raise ValueError(
+            f"{profile_id} is not an OpenRouter research profile "
+            "(runtime_class=interactive_editor; use the dedicated coding-agent launcher)"
+        )
     return profile.assert_ready()
 
 
