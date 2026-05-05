@@ -7109,6 +7109,148 @@ def check_e2_lookahead_research_contamination() -> list[str]:
     return violations
 
 
+# ── iso_utc silent-None formatter class bug (2026-05-04) ──
+# Class memo: memory/feedback_iso_utc_silent_none_class_pattern.md
+# Pattern: operator-visible formatter helper takes Any → does isinstance branch
+# → returns formatted on match, returns None on miss without log.warning. Result
+# is silent type drops on the live dashboard / state file. Canonical fix:
+# `_iso_utc` in trading_app/live/bot_state.py logs a warning on the unsupported
+# branch (line 95). This check enforces the same shape on related operator-
+# visible files. Annotation `# silent-none-policy: <reason>` exempts a function
+# whose silent-None tail is intentional (e.g., try/except-pass publishers).
+_ISO_UTC_FORMATTER_SCAN_FILES = (
+    "trading_app/live/bot_state.py",
+    "trading_app/live/bot_dashboard.py",
+    "trading_app/pre_session_check.py",
+    "scripts/tools/live_readiness_report.py",
+    "trading_app/lifecycle_state.py",
+    "trading_app/live/session_orchestrator.py",
+    "trading_app/lane_allocator.py",
+)
+_SILENT_NONE_POLICY_MARKER = "# silent-none-policy:"
+
+
+def _function_has_isinstance_then_silent_none(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Detect the iso_utc silent-None formatter shape on a function body.
+
+    Returns True iff ALL of:
+      1. function body contains at least one ``isinstance(...)`` call (anywhere)
+      2. last statement of body is an explicit ``return None`` or bare
+         ``return`` (matches the canonical ``_iso_utc`` shape — explicit
+         silent-None tail). Implicit fall-off-end is not flagged because
+         most functions whose last statement is a ``try``/``with``/``for``
+         actually return values from inner branches and AST cannot prove
+         the tail is reachable.
+      3. function body contains NO ``log.warning|critical|error`` /
+         ``logger.*`` / ``self.log.*`` / ``cls.log.*`` call AND NO
+         ``raise`` statement at any nesting level
+
+    The combined predicate distinguishes the silent-formatter shape from the
+    pure null-passthrough idiom (``if v is None: return None; return str(v)``)
+    which has no isinstance call.
+    """
+    body = func_node.body
+    if not body:
+        return False
+
+    last_stmt = body[-1]
+    if not isinstance(last_stmt, ast.Return):
+        return False
+    if last_stmt.value is not None:
+        if not (isinstance(last_stmt.value, ast.Constant) and last_stmt.value.value is None):
+            return False
+
+    has_isinstance = False
+    has_warn_or_raise = False
+
+    for sub in ast.walk(func_node):
+        if isinstance(sub, ast.Call):
+            func = sub.func
+            if isinstance(func, ast.Name) and func.id == "isinstance":
+                has_isinstance = True
+            elif isinstance(func, ast.Attribute) and func.attr in {"warning", "critical", "error"}:
+                # log.warning / logger.warning / self.log.warning / cls.log.error etc
+                value = func.value
+                target_names = {"log", "logger"}
+                if (isinstance(value, ast.Name) and value.id in target_names) or (
+                    isinstance(value, ast.Attribute) and value.attr in target_names
+                ):
+                    has_warn_or_raise = True
+        elif isinstance(sub, ast.Raise):
+            has_warn_or_raise = True
+
+    return has_isinstance and not has_warn_or_raise
+
+
+def check_iso_utc_formatter_silent_none() -> list[str]:
+    """Operator-visible formatter helpers must warn on unrecognized types.
+
+    Class bug catalogued 2026-05-04 (memo:
+    ``memory/feedback_iso_utc_silent_none_class_pattern.md``): formatter
+    helpers that take ``Any`` and silently return ``None`` on the off-branch
+    of an ``isinstance`` test let upstream type drift propagate to the
+    operator surface (``bot_state.json``, dashboard, lifecycle, allocator)
+    as missing fields rather than visible warnings.
+
+    Canonical fix: ``trading_app/live/bot_state.py:_iso_utc`` logs a warning
+    before returning None on the unsupported-type branch (line 95). The check
+    fires on functions in the scan set whose body contains an ``isinstance``
+    call AND falls off the end / returns None at the tail AND has no
+    ``log.warning|critical|error`` (or ``logger.*``, ``self.log.*``,
+    ``cls.log.*``) call AND no ``raise``.
+
+    Annotation exemption: prepend
+    ``# silent-none-policy: <reason>`` on any line within the function (or
+    on the line above its ``def``) to declare an intentional silent-None
+    tail (e.g., ``try/except: pass`` publishers, cleanup utilities). The
+    reason is documentation for future readers.
+
+    @rule iso-utc-silent-none-formatter
+    @class-memo memory/feedback_iso_utc_silent_none_class_pattern.md
+    """
+    violations: list[str] = []
+    for rel_path in _ISO_UTC_FORMATTER_SCAN_FILES:
+        py_file = PROJECT_ROOT / rel_path
+        if not py_file.is_file():
+            continue
+        try:
+            source = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue
+
+        source_lines = source.splitlines()
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            if not _function_has_isinstance_then_silent_none(node):
+                continue
+
+            # Annotation exemption: scan from one line above the def through
+            # the end of the function body. Match the marker prefix literally.
+            start = max(0, node.lineno - 2)
+            end_lineno = getattr(node, "end_lineno", node.lineno) or node.lineno
+            end = min(len(source_lines), end_lineno)
+            window = source_lines[start:end]
+            if any(_SILENT_NONE_POLICY_MARKER in line for line in window):
+                continue
+
+            violations.append(
+                f"  {rel_path}:{node.lineno} {node.name}: operator-visible formatter "
+                f"with isinstance + silent None tail and no log.warning|critical|error / "
+                f"raise. Add `log.warning(...)` before the tail return OR annotate the "
+                f"def with `# silent-none-policy: <reason>` if the silent tail is "
+                f"intentional. Class memo: "
+                f"memory/feedback_iso_utc_silent_none_class_pattern.md."
+            )
+
+    return violations
+
+
 def check_parked_cells_registry_completeness() -> list[str]:
     """Every Pathway B / Phase D result file must have a matching parked-cells.yaml entry.
 
@@ -8508,6 +8650,12 @@ CHECKS = [
         "E2 entry_model + break-bar features in research/ require e2-lookahead-policy annotation (2026-04-28 class bug)",
         check_e2_lookahead_research_contamination,
         True,  # advisory — surfaces new contamination without blocking commits
+        False,
+    ),
+    (
+        "Operator-visible formatter helpers must warn on unrecognized types (iso_utc class bug, 2026-05-04)",
+        check_iso_utc_formatter_silent_none,
+        True,  # advisory — first-week shakeout may surface unenumerated false positives
         False,
     ),
     # ── CRG-backed checks (D1-D5) — all ADVISORY; fail-open when CRG unavailable ──
