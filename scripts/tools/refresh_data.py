@@ -241,6 +241,27 @@ def refresh_instrument(instrument: str, dry_run: bool = False, full_rebuild: boo
     # Use today as API end to get data through yesterday (last complete session).
     yesterday = date.today() - timedelta(days=1)
     api_end = date.today()  # exclusive — fetches data through yesterday
+
+    # Clamp `api_end` to Databento's published available_end to avoid 422.
+    # Mirrors the pattern in scripts/databento_daily.py:160-170. Without this,
+    # the daily 1m refresh fails any time `today` outruns dataset availability
+    # (the regression that started 2026-05-01).
+    try:
+        import databento as _db
+
+        ds_range = _db.Historical().metadata.get_dataset_range(dataset=DATASET)
+        available_end = date.fromisoformat(str(ds_range["end"])[:10])
+        if api_end > available_end:
+            print(f"  Clamping api_end {api_end} -> {available_end} (Databento availability)")
+            api_end = available_end
+            # `yesterday` is the last *complete* session = api_end - 1 day.
+            yesterday = api_end - timedelta(days=1)
+    except Exception as exc:
+        # Fail-open here is safe: a broken metadata call still funnels into the
+        # 422 surface from the actual fetch — which is the legacy behavior we're
+        # superseding, not making worse. Log loudly so silent regressions show up.
+        print(f"  WARNING: could not read dataset range ({exc}); proceeding without clamp")
+
     fetch_start = last_date + timedelta(days=1)
 
     gap_days = (yesterday - last_date).days
