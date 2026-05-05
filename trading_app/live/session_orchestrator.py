@@ -983,7 +983,7 @@ class SessionOrchestrator:
             log.warning("Failed to load lifecycle lane blocks: %s", e)
 
     @staticmethod
-    def _build_daily_features_row(trading_day: date, instrument: str, orb_minutes: int = 5) -> dict:
+    def _build_daily_features_row(trading_day: date, instrument: str, orb_minutes: int) -> dict:
         """Build a daily_features_row from DB + calendar for live execution.
 
         Without this, fail-closed filters (VOL_RV12_N20, DOW, break speed, calendar)
@@ -998,6 +998,14 @@ class SessionOrchestrator:
         The rel_vol_* and break_delay_min values are yesterday's — imperfect but
         vastly better than None (which silently kills every VOL/FAST strategy).
         orb_{label}_size is set by ExecutionEngine from live ORB, overriding the DB value.
+
+        orb_minutes is REQUIRED (no default). Per-aperture daily_features rows
+        carry materially different per-session columns (orb_*_size,
+        orb_*_break_dir, rel_vol_*) across the 3 orb_minutes rows; the
+        consuming strategy's aperture must select the row. Defaulting to 5 was
+        the PR #189 class bug pattern (fixed in PR #231 paper_trade_logger,
+        PR #232 paper_trader; this closes the live-path recurrence flagged by
+        the PR #232 evidence-auditor).
         """
         row: dict = {}
 
@@ -1047,13 +1055,14 @@ class SessionOrchestrator:
 
                 # median_atr_20 is NOT in daily_features — it's a rolling median computed
                 # by paper_trader. Compute it here for live vol-scaling.
+                # Per-aperture (PR #189 class bug fix — see PR #232 auditor finding).
                 median_result = con.execute(
                     """
                     SELECT MEDIAN(atr_20) FROM daily_features
-                    WHERE symbol = ? AND orb_minutes = 5 AND atr_20 IS NOT NULL
+                    WHERE symbol = ? AND orb_minutes = ? AND atr_20 IS NOT NULL
                       AND trading_day < ? AND trading_day >= ? - INTERVAL '504 DAY'
                 """,
-                    [instrument, trading_day, trading_day],
+                    [instrument, orb_minutes, trading_day, trading_day],
                 ).fetchone()
                 if median_result and median_result[0] is not None:
                     row["median_atr_20"] = float(median_result[0])
@@ -1069,11 +1078,13 @@ class SessionOrchestrator:
                 for source in _cross_sources:
                     if source == instrument:
                         continue
+                    # Per-aperture cross-asset percentile (PR #189 class bug fix —
+                    # PR #232 auditor flagged this as the live-money equivalent).
                     src_result = con.execute(
                         """SELECT atr_20_pct FROM daily_features
-                           WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL
+                           WHERE symbol = ? AND orb_minutes = ? AND atr_20_pct IS NOT NULL
                            ORDER BY trading_day DESC LIMIT 1""",
-                        [source],
+                        [source, orb_minutes],
                     ).fetchone()
                     if src_result and src_result[0] is not None:
                         row[f"cross_atr_{source}_pct"] = float(src_result[0])

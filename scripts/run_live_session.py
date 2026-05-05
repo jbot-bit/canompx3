@@ -131,7 +131,9 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
             preflight_trading_day = (bris_now - timedelta(days=1)).date()
         else:
             preflight_trading_day = bris_now.date()
-        row = SessionOrchestrator._build_daily_features_row(preflight_trading_day, instrument)
+        # Preflight check is deliberately at O5 reference aperture — health probe
+        # for atr_20/atr_vel_regime population, not a per-lane scoring read.
+        row = SessionOrchestrator._build_daily_features_row(preflight_trading_day, instrument, orb_minutes=5)
         atr = row.get("atr_20")
         vel = row.get("atr_vel_regime")
         if atr is None or vel is None:
