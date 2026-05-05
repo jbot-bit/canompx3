@@ -1,7 +1,7 @@
 {
-  "total_iterations": 174,
+  "total_iterations": 175,
   "last_updated": "2026-05-06",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 181,
   "findings_by_type": {
     "canonical_violation": {
@@ -117,23 +117,29 @@
       "fixed": 0,
       "deferred": 1,
       "fix_rate": 0.0
+    },
+    "async_safety": {
+      "found": 1,
+      "fixed": 0,
+      "deferred": 0,
+      "fix_rate": 0.0
     }
   },
   "findings_by_severity": {
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 45,
-    "LOW": 106
+    "LOW": 107
   },
   "classifications": {
     "judgment": 82,
     "mechanical": 61,
-    "audit-only": 31
+    "audit-only": 32
   },
   "files_audited": {
     "trading_app/live/session_orchestrator.py": {
-      "audit_count": 7,
-      "last_iter": 178,
+      "audit_count": 8,
+      "last_iter": 182,
       "findings": 4
     },
     "execution_engine.py": {
@@ -340,6 +346,11 @@
       "audit_count": 2,
       "last_iter": 135,
       "findings": 2
+    },
+    "pipeline/asset_configs.py": {
+      "audit_count": 2,
+      "last_iter": 182,
+      "findings": 1
     },
     "research/research_edge_structure.py": {
       "audit_count": 2,
@@ -826,11 +837,6 @@
       "last_iter": 99,
       "findings": 0
     },
-    "pipeline/asset_configs.py": {
-      "audit_count": 1,
-      "last_iter": 100,
-      "findings": 1
-    },
     "tests/test_pipeline/test_asset_configs.py": {
       "audit_count": 1,
       "last_iter": 100,
@@ -1140,6 +1146,16 @@
       "audit_count": 1,
       "last_iter": 181,
       "findings": 1
+    },
+    "pipeline/cost_model.py": {
+      "audit_count": 1,
+      "last_iter": 182,
+      "findings": 0
+    },
+    "pipeline/dst.py": {
+      "audit_count": 1,
+      "last_iter": 182,
+      "findings": 0
     }
   },
   "iterations": [
@@ -3056,6 +3072,17 @@
       "severity": "HIGH",
       "verdict": "FIXED",
       "commit": "c807d29c"
+    },
+    {
+      "iter": 182,
+      "date": "2026-05-06",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "pipeline/asset_configs.py (critical, never scanned) + trading_app/live/session_orchestrator.py (stale re-audit) + pipeline/cost_model.py + pipeline/dst.py (no-touch audit)",
+      "finding_type": "async_safety",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE (audit-only)"
     }
   ]
 }
