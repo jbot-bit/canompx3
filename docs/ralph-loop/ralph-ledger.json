@@ -1,8 +1,8 @@
 {
-  "total_iterations": 172,
-  "last_updated": "2026-04-29",
+  "total_iterations": 174,
+  "last_updated": "2026-05-06",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 179,
+  "last_high_finding_iter": 181,
   "findings_by_type": {
     "canonical_violation": {
       "found": 56,
@@ -11,10 +11,10 @@
       "fix_rate": 0.77
     },
     "silent_failure": {
-      "found": 39,
-      "fixed": 36,
+      "found": 41,
+      "fixed": 37,
       "deferred": 2,
-      "fix_rate": 0.92
+      "fix_rate": 0.9
     },
     "other": {
       "found": 29,
@@ -120,15 +120,15 @@
     }
   },
   "findings_by_severity": {
-    "CRITICAL": 8,
-    "HIGH": 13,
+    "CRITICAL": 9,
+    "HIGH": 14,
     "MEDIUM": 45,
     "LOW": 106
   },
   "classifications": {
-    "judgment": 81,
+    "judgment": 82,
     "mechanical": 61,
-    "audit-only": 30
+    "audit-only": 31
   },
   "files_audited": {
     "trading_app/live/session_orchestrator.py": {
@@ -151,6 +151,11 @@
       "last_iter": 10,
       "findings": 3
     },
+    "pipeline/build_daily_features.py": {
+      "audit_count": 4,
+      "last_iter": 180,
+      "findings": 3
+    },
     "trading_app/strategy_validator.py": {
       "audit_count": 4,
       "last_iter": 117,
@@ -171,14 +176,14 @@
       "last_iter": 170,
       "findings": 4
     },
+    "trading_app/db_manager.py": {
+      "audit_count": 4,
+      "last_iter": 180,
+      "findings": 2
+    },
     "webhook_server.py": {
       "audit_count": 3,
       "last_iter": 9,
-      "findings": 3
-    },
-    "pipeline/build_daily_features.py": {
-      "audit_count": 3,
-      "last_iter": 138,
       "findings": 3
     },
     "performance_monitor.py": {
@@ -210,11 +215,6 @@
       "audit_count": 3,
       "last_iter": 116,
       "findings": 3
-    },
-    "trading_app/db_manager.py": {
-      "audit_count": 3,
-      "last_iter": 169,
-      "findings": 2
     },
     "scripts/tools/build_edge_families.py": {
       "audit_count": 3,
@@ -351,10 +351,20 @@
       "last_iter": 109,
       "findings": 2
     },
+    "trading_app/live/projectx/auth.py": {
+      "audit_count": 2,
+      "last_iter": 180,
+      "findings": 1
+    },
     "trading_app/lane_allocator.py": {
       "audit_count": 2,
       "last_iter": 171,
       "findings": 2
+    },
+    "trading_app/live/multi_runner.py": {
+      "audit_count": 2,
+      "last_iter": 180,
+      "findings": 1
     },
     "trading_app/pre_session_check.py": {
       "audit_count": 2,
@@ -901,11 +911,6 @@
       "last_iter": 114,
       "findings": 1
     },
-    "trading_app/live/projectx/auth.py": {
-      "audit_count": 1,
-      "last_iter": 121,
-      "findings": 1
-    },
     "trading_app/live/projectx/order_router.py": {
       "audit_count": 1,
       "last_iter": 122,
@@ -1010,11 +1015,6 @@
       "audit_count": 1,
       "last_iter": 141,
       "findings": 0
-    },
-    "trading_app/live/multi_runner.py": {
-      "audit_count": 1,
-      "last_iter": 144,
-      "findings": 1
     },
     "trading_app/live/broker_dispatcher.py": {
       "audit_count": 1,
@@ -1130,6 +1130,16 @@
       "audit_count": 1,
       "last_iter": 179,
       "findings": 0
+    },
+    "trading_app/lifecycle_state.py": {
+      "audit_count": 1,
+      "last_iter": 180,
+      "findings": 0
+    },
+    "pipeline/system_context.py": {
+      "audit_count": 1,
+      "last_iter": 181,
+      "findings": 1
     }
   },
   "iterations": [
@@ -3024,6 +3034,28 @@
       "severity": "CRITICAL",
       "verdict": "CLEAN",
       "commit": "NONE (audit-only)"
+    },
+    {
+      "iter": 180,
+      "date": "2026-05-06",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "pipeline/build_daily_features.py (17 importers, critical) + trading_app/db_manager.py (13 importers, critical) + trading_app/lifecycle_state.py (5 importers, high) + trading_app/live/projectx/auth.py (5 importers, high) + trading_app/live/multi_runner.py (async gather pattern)",
+      "finding_type": "silent_failure",
+      "severity": "CRITICAL",
+      "verdict": "CLEAN",
+      "commit": "NONE (audit-only)"
+    },
+    {
+      "iter": 181,
+      "date": "2026-05-06",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "pipeline/system_context.py:355",
+      "finding_type": "silent_failure",
+      "severity": "HIGH",
+      "verdict": "FIXED",
+      "commit": "c807d29c"
     }
   ]
 }

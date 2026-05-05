@@ -18,6 +18,32 @@
 
 ---
 
+## Iteration 181 — 2026-05-06
+- Phase: fix
+- Classification: [judgment]
+- Target: pipeline/system_context.py:355
+- Finding: SC-1 HIGH — read_claim() catches bare except Exception, silently drops corrupt/unexpected claim files, makes parallel-session blocker fail-open
+- Doctrine cited: integrity-guardian.md § 3 (never catch Exception and return success in health/audit paths) + § 6 (no silent failures)
+- Action: Narrowed except Exception to (OSError, JSONDecodeError, ValidationError); added log.warning + exc_info on unexpected exceptions. Also fixed ruff W291/W293/F401/UP035 in broker_connections.py, circuit_breaker.py, cusum_monitor.py (pre-commit blocking). Added 2 regression tests (corrupt JSON → None, unexpected exception → warning + None).
+- Blast radius: 2 files changed (pipeline/system_context.py, tests/test_pipeline/test_system_context.py) + 3 files ruff-cleaned (trading_app/live/broker_connections.py, circuit_breaker.py, cusum_monitor.py)
+- Verification: PASS — 19/19 tests, 119/119 drift checks pass, 7/7 behavioral audit pass, ruff clean
+- Commit: c807d29c
+
+---
+
+## Iteration 180 — 2026-05-06
+- Phase: audit-only
+- Classification: audit-only
+- Target: pipeline/build_daily_features.py (17 importers, critical) + trading_app/db_manager.py (13 importers, critical) + trading_app/lifecycle_state.py (5 importers, high) + trading_app/live/projectx/auth.py (5 importers, high) + trading_app/live/multi_runner.py (async gather pattern)
+- Finding: Five critical/high unscanned/stale files — all CLEAN. Zero CRIT/HIGH/MEDIUM findings. GARCH silent-NULL (BDF-1) already fixed in 5a4b4450. rel_vol look-ahead (BDF-2) ACCEPTABLE per registry. asyncio.gather return_exceptions=True (MR-1) REFUTED — guarded by explicit per-result checking.
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources — verified none violated), § 3 (fail-closed — DST gate, SR alarm, credential KeyError all confirmed fail-closed), § 6 (silent failure — GARCH already fixed, gather guarded), backtesting-methodology.md § 6.3 (E2 look-ahead documented in registry)
+- Action: Audit-only. No production edits. No stage file created.
+- Blast radius: 0 files changed
+- Verification: PASS — 119/119 drift pass, 7/7 behavioral audit pass, ruff clean
+- Commit: NONE (audit-only)
+
+---
+
 ## Iteration 178 — 2026-04-26
 - Phase: audit-only
 - Classification: [judgment]
