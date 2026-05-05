@@ -117,6 +117,8 @@ class ReplayResult:
 
 def _get_trading_days(con, instrument: str, start_date: date, end_date: date) -> list[date]:
     """Get trading days from daily_features."""
+    # canonical-cte-guard: DISTINCT trading_day is non-aperture; orb_minutes=5
+    # dedups the 3 rows-per-day to one per the daily-features-joins.md rule.
     rows = con.execute(
         """SELECT DISTINCT trading_day FROM daily_features
            WHERE symbol = ? AND orb_minutes = 5
@@ -133,6 +135,8 @@ def _get_median_atr_20(con, instrument: str, trading_day: date, lookback_days: i
     Used by ExecutionEngine._compute_contracts() for Turtle-style vol scalar:
     scalar = median_atr / current_atr → sizes position inversely to vol.
     """
+    # canonical-cte-guard: atr_20 is a non-aperture column (single value per day);
+    # orb_minutes=5 dedups the 3 rows-per-day per daily-features-joins.md.
     result = con.execute(
         """SELECT MEDIAN(atr_20) FROM daily_features
            WHERE symbol = ? AND orb_minutes = 5 AND atr_20 IS NOT NULL
