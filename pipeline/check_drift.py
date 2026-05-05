@@ -7273,28 +7273,140 @@ def check_parked_cells_registry_completeness() -> list[str]:
     return issues
 
 
+_STAGE_ACCEPTANCE_CMD_ALLOWLIST = ("pytest", "python", "ls", "grep", "test")
+
+
+def _parse_stage_acceptance_commands(text: str) -> list[str]:
+    """Extract runnable acceptance commands from a stage file body.
+
+    Handles two shapes:
+      (1) YAML ``acceptance:`` list under frontmatter — bullets that begin
+          with one of the allowlisted commands.
+      (2) ``## Acceptance`` markdown section — bullets containing backtick-
+          quoted commands like `` `pytest tests/...` `` or
+          `` `python pipeline/check_drift.py` ``.
+
+    Returns commands as raw strings; caller validates against the allowlist
+    again before subprocess-shelling. Anything containing shell metacharacters
+    that suggest mutation (``rm``, ``>``, ``|``, ``;``, ``&``, ``$(``) is
+    dropped.
+    """
+    commands: list[str] = []
+    bad_chars = (">", "|", ";", "&", "$(", "`rm ", " rm ", "rm -")
+    # Shape 2: markdown section — pull every backtick-fenced span and keep
+    # ones that start with an allowlisted command.
+    in_acceptance = False
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if stripped.lower().startswith("## acceptance"):
+            in_acceptance = True
+            continue
+        if in_acceptance and stripped.startswith("## "):
+            in_acceptance = False
+            continue
+        if in_acceptance:
+            # backtick-fenced command on a bullet line
+            if "`" in stripped:
+                segments = stripped.split("`")
+                for idx in range(1, len(segments), 2):
+                    cmd = segments[idx].strip()
+                    if not cmd:
+                        continue
+                    head = cmd.split()[0] if cmd.split() else ""
+                    if head in _STAGE_ACCEPTANCE_CMD_ALLOWLIST and not any(b in cmd for b in bad_chars):
+                        commands.append(cmd)
+    # Shape 1: YAML acceptance: list — only fires if frontmatter contained
+    # the key. Detect by scanning for a top-level "acceptance:" line followed
+    # by indented "- " bullets that contain backtick-fenced commands.
+    lines = text.splitlines()
+    for i, raw in enumerate(lines):
+        if raw.strip() == "acceptance:" or raw.strip().startswith("acceptance:"):
+            for j in range(i + 1, min(i + 40, len(lines))):
+                item = lines[j]
+                if item and not item.startswith((" ", "\t", "-")):
+                    break  # left the YAML block
+                stripped_item = item.strip()
+                if not stripped_item.startswith("-"):
+                    continue
+                # Look for backtick-fenced command in the bullet text
+                if "`" in stripped_item:
+                    segs = stripped_item.split("`")
+                    for k in range(1, len(segs), 2):
+                        cmd = segs[k].strip()
+                        head = cmd.split()[0] if cmd.split() else ""
+                        if head in _STAGE_ACCEPTANCE_CMD_ALLOWLIST and not any(b in cmd for b in bad_chars):
+                            commands.append(cmd)
+    return commands
+
+
+def _stage_acceptance_all_pass(commands: list[str], timeout_s: int = 5) -> tuple[bool, int]:
+    """Run each acceptance command and return (all_passed, count_run).
+
+    Returns (False, 0) on empty input — caller treats as "no parseable
+    acceptance", falls through to slug-grep heuristic.
+    Returns (False, n) if any command exits non-zero or times out.
+    Returns (True, n) only if every command exits 0.
+    """
+    if not commands:
+        return (False, 0)
+    ran = 0
+    for cmd in commands:
+        head = cmd.split()[0] if cmd.split() else ""
+        if head not in _STAGE_ACCEPTANCE_CMD_ALLOWLIST:
+            return (False, ran)
+        try:
+            # shlex.split for safety; never shell=True
+            import shlex
+
+            argv = shlex.split(cmd)
+            result = subprocess.run(
+                argv,
+                capture_output=True,
+                text=True,
+                timeout=timeout_s,
+                cwd=str(PROJECT_ROOT),
+            )
+            ran += 1
+            if result.returncode != 0:
+                return (False, ran)
+        except (subprocess.TimeoutExpired, OSError, ValueError):
+            return (False, ran)
+    return (True, ran)
+
+
 def check_stage_file_landed_drift() -> list[str]:
-    """ADVISORY: stage files claiming work-in-progress while git log shows landings.
+    """ADVISORY: stage files claiming work-in-progress while either (a) their
+    own acceptance criteria all pass when executed, or (b) git log shows
+    landings.
 
     Catches the "I thought we sorted this already" failure mode where a
-    stage file under docs/runtime/stages/ describes Stage N as in-progress,
-    but commits since the file's `updated:` date land Stage M (M > N) or
-    otherwise reference the stage's slug. Without this surface, /next and
-    /orient resume already-landed work, wasting cycles.
+    stage file under docs/runtime/stages/ describes work as in-progress
+    but the actual artifacts are already on disk and tests already pass.
+    Without this surface, /next and /orient resume already-landed work,
+    wasting cycles.
 
-    Heuristic — emits advisory, never blocks:
-      1. Skip files without YAML frontmatter, auto_trivial.md, or files
-         flagged operator-gated in body ("Status: implemented", "operator").
-      2. If `updated:` < 7 days old, skip (still fresh).
-      3. Count git commits since `updated:` whose messages reference the
-         stage's `slug:`. If >= 3, emit advisory line.
+    Two detection modes (file fires advisory if EITHER trips):
 
-    Why this rule exists: 2026-04-28 stage cleanup pass found 4 stage
-    files where 3 of 4 had landed work but were never closed; the 4th
-    was operator-gated (legitimate). User feedback: "harden and
-    future-proof as we go — i don't like wasting tokens for nothing."
-    This check makes the staleness visible in the routine drift surface
-    rather than re-discovering it manually each session.
+      Mode A — acceptance verification (added 2026-05-05):
+        Parse the stage's ``acceptance:`` YAML list or ``## Acceptance``
+        markdown section. Extract backtick-fenced commands whose head is
+        in ``_STAGE_ACCEPTANCE_CMD_ALLOWLIST``. Execute each with a 5s
+        timeout. If ≥1 command ran AND all commands exit 0 AND the stage
+        is ≥3 days old, emit advisory.
+
+      Mode B — slug-grep landings (original 2026-04-28 behavior):
+        If `updated:` ≥7 days old, count git commits since whose messages
+        reference the stage's `slug:`. If ≥3, emit advisory.
+
+    Files without YAML frontmatter, auto_trivial.md, and files flagged
+    operator-gated in body ("Status: implemented", "operator-gated") are
+    skipped in both modes.
+
+    Why Mode A was added: 2026-05-05 manual /next pass discovered 13 stale
+    stages — most lacked a `slug:` field OR landed via single squash-merge
+    PR (so slug-grep saw 1 commit, not ≥3) OR were under the 7-day age
+    floor. Mode A closes those gaps by trusting the stage's own acceptance
+    contract instead of inferring from commit archaeology.
     """
     issues: list[str] = []
     stages_dir = PROJECT_ROOT / "docs" / "runtime" / "stages"
@@ -7324,8 +7436,8 @@ def check_stage_file_landed_drift() -> list[str]:
                 fm[k.strip()] = v.strip().strip('"').strip("'")
         slug = fm.get("slug", "").strip()
         updated_str = fm.get("updated", "").strip()
-        if not slug or not updated_str:
-            continue
+        if not updated_str:
+            continue  # Mode A and Mode B both need an `updated:` date
         # Operator-gated exemption — body declares it's waiting on a person.
         body_lower = text[end:].lower()
         if (
@@ -7340,9 +7452,24 @@ def check_stage_file_landed_drift() -> list[str]:
         except ValueError:
             continue
         age_days = (today - updated_date).days
+
+        # ── Mode A: acceptance-verification (≥3 days old, runnable acceptance) ──
+        if age_days >= 3:
+            commands = _parse_stage_acceptance_commands(text)
+            all_pass, n_ran = _stage_acceptance_all_pass(commands)
+            if all_pass and n_ran >= 1:
+                issues.append(
+                    f"  {stage_file.relative_to(PROJECT_ROOT).as_posix()}: "
+                    f"updated {age_days}d ago, all {n_ran} acceptance command(s) "
+                    f"exit 0 — close the stage"
+                )
+                continue  # don't double-fire on Mode B
+
+        # ── Mode B: slug-grep landings (≥7 days old) ──
         if age_days < 7:
             continue
-        # Commits since `updated:` mentioning this slug.
+        if not slug:
+            continue  # Mode B requires slug; Mode A above already ran
         try:
             result = subprocess.run(
                 [

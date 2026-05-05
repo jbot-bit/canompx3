@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 
 from pipeline.check_drift import (
+    _parse_stage_acceptance_commands,
+    _stage_acceptance_all_pass,
     check_apply_iterrows,
     check_config_filter_sync,
     check_daily_features_row_integrity,
@@ -2000,3 +2002,100 @@ class TestLaneAllocationChordiaGate:
         assert len(violations) == 1
         assert "Cannot load chordia freshness threshold" in violations[0]
         assert "audit threshold unverified" in violations[0]
+
+
+class TestStageAcceptanceParser:
+    """Tests for stage-file acceptance command parsing (Check #121 Mode A)."""
+
+    def test_parses_yaml_acceptance_list_with_backtick_command(self):
+        text = (
+            "---\n"
+            "task: foo\n"
+            "mode: IMPLEMENTATION\n"
+            "acceptance:\n"
+            "  - `pytest tests/test_foo.py -q` passes\n"
+            "  - drift check exits 0\n"
+            "---\n"
+            "## Body\n"
+            "blah\n"
+        )
+        cmds = _parse_stage_acceptance_commands(text)
+        assert "pytest tests/test_foo.py -q" in cmds
+
+    def test_parses_markdown_acceptance_section(self):
+        text = (
+            "---\n"
+            "task: foo\n"
+            "---\n"
+            "## Acceptance\n"
+            "- `pytest tests/test_bar.py -q` green\n"
+            "- `python pipeline/check_drift.py` exits 0\n"
+            "## Notes\n"
+            "- ignored: `rm -rf /`\n"
+        )
+        cmds = _parse_stage_acceptance_commands(text)
+        assert "pytest tests/test_bar.py -q" in cmds
+        assert "python pipeline/check_drift.py" in cmds
+        # Ignore section: rm command must NOT be picked up regardless of section
+        assert not any("rm" in c for c in cmds)
+
+    def test_drops_dangerous_shell_metachars(self):
+        text = (
+            "---\n"
+            "task: bad\n"
+            "---\n"
+            "## Acceptance\n"
+            "- `pytest foo > /tmp/out` ignored due to redirect\n"
+            "- `python a.py | grep b` ignored due to pipe\n"
+            "- `python a.py; rm b` ignored due to semicolon\n"
+            "- `python clean.py` kept\n"
+        )
+        cmds = _parse_stage_acceptance_commands(text)
+        assert "python clean.py" in cmds
+        assert len(cmds) == 1
+
+    def test_non_runnable_acceptance_returns_empty(self):
+        text = (
+            "---\n"
+            "task: prose-only\n"
+            "---\n"
+            "## Acceptance\n"
+            "- Verdict committed to docs/audit/results/.\n"
+            "- User confirmed via /capital-review.\n"
+        )
+        cmds = _parse_stage_acceptance_commands(text)
+        assert cmds == []
+
+
+class TestStageAcceptanceRunner:
+    """Tests for _stage_acceptance_all_pass (Check #121 Mode A executor)."""
+
+    def test_empty_command_list_returns_false_zero(self):
+        all_pass, n_ran = _stage_acceptance_all_pass([])
+        assert all_pass is False
+        assert n_ran == 0
+
+    def test_all_passing_returns_true_with_count(self):
+        # python -c is rejected by allowlist? No — head is "python".
+        # But we don't want to actually allow `-c` injection in production;
+        # the allowlist guards by HEAD only. This test verifies the executor
+        # contract on a benign all-pass case.
+        cmds = ["python --version"]
+        all_pass, n_ran = _stage_acceptance_all_pass(cmds)
+        assert all_pass is True
+        assert n_ran == 1
+
+    def test_failing_command_short_circuits(self):
+        # `ls` on a definitely-missing path returns non-zero
+        cmds = ["ls /definitely/does/not/exist/xyz123"]
+        all_pass, n_ran = _stage_acceptance_all_pass(cmds)
+        assert all_pass is False
+        assert n_ran == 1
+
+    def test_disallowed_head_short_circuits(self):
+        # `cat` is not in the allowlist; the runner must reject it even if
+        # the parser somehow let it through.
+        cmds = ["cat /etc/hostname"]
+        all_pass, n_ran = _stage_acceptance_all_pass(cmds)
+        assert all_pass is False
+        assert n_ran == 0
