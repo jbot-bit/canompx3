@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import logging
 import mimetypes
 import os
 import subprocess
@@ -126,7 +127,23 @@ CHAT_PROVIDER_DEFAULTS: dict[str, Any] = {
 
 
 def _resolve_chat_model() -> str:
-    return os.environ.get("CANOMPX3_AI_CHAT_MODEL", "").strip() or _DEFAULT_CHAT_MODEL_FALLBACK
+    raw = os.environ.get("CANOMPX3_AI_CHAT_MODEL", "").strip()
+    if not raw:
+        return _DEFAULT_CHAT_MODEL_FALLBACK
+    # OpenRouter requires ``provider/model`` shape (e.g. ``deepseek/deepseek-chat``).
+    # A typo without the provider prefix returns a 400 from the API with no
+    # operator-visible hint that the env var was the cause. Warn + fall back
+    # so the operator sees the misconfiguration in the same line of output.
+    if "/" not in raw:
+        logger = logging.getLogger("ask")
+        logger.warning(
+            "CANOMPX3_AI_CHAT_MODEL=%r missing 'provider/' prefix — "
+            "falling back to %s. Expected format: deepseek/deepseek-chat.",
+            raw,
+            _DEFAULT_CHAT_MODEL_FALLBACK,
+        )
+        return _DEFAULT_CHAT_MODEL_FALLBACK
+    return raw
 
 
 def _ensure_default_models() -> None:
