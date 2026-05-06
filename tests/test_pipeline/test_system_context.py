@@ -504,6 +504,44 @@ class TestVerifyClaim:
         assert not any("Root mismatch" in warning for warning in warnings)
 
 
+class TestReadClaimExceptionHandling:
+    def test_read_claim_returns_none_on_corrupt_json(self, tmp_path: Path) -> None:
+        claim_path = tmp_path / "corrupt.json"
+        claim_path.write_text("{invalid json", encoding="utf-8")
+        result = system_context.read_claim(claim_path)
+        assert result is None
+
+    def test_read_claim_returns_none_on_unexpected_exception_and_logs_warning(self, tmp_path: Path, caplog) -> None:
+        import json as _json
+
+        claim_path = tmp_path / "claim.json"
+        claim_path.write_text(
+            _json.dumps(
+                {
+                    "tool": "codex",
+                    "branch": "main",
+                    "head_sha": "abc123",
+                    "started_at": "2099-04-12T00:00:00+00:00",
+                    "pid": 1,
+                    "mode": "mutating",
+                    "root": str(tmp_path),
+                    "runtime": "windows",
+                }
+            ),
+            encoding="utf-8",
+        )
+        import logging
+
+        with (
+            patch.object(system_context, "_claim_is_fresh", side_effect=RuntimeError("unexpected")),
+            caplog.at_level(logging.WARNING, logger="pipeline.system_context"),
+        ):
+            result = system_context.read_claim(claim_path)
+
+        assert result is None
+        assert any("unexpected error" in record.message for record in caplog.records)
+
+
 class TestCliBootstrap:
     # Full investigation history + four falsified hypotheses live at
     # docs/runtime/stages/fix-system-context-bootstrap-help-fork.md

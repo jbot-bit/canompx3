@@ -34,9 +34,11 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from trading_app.config import (
     ALL_FILTERS,
     ATR_VELOCITY_OVERLAY,
+    ENTRY_MODELS,
     AtomDescription,
     CompositeFilter,
     StrategyFilter,
@@ -84,12 +86,12 @@ def parse_strategy_id(strategy_id: str) -> dict[str, Any]:
         raise ValueError(f"strategy_id too short to parse: {strategy_id!r}")
 
     instrument = parts[0]
-    if instrument not in ("MGC", "MNQ", "MES"):
+    if instrument not in ACTIVE_ORB_INSTRUMENTS:
         raise ValueError(f"strategy_id has unknown instrument {instrument!r}: {strategy_id!r}")
 
     em_idx = None
     for i, p in enumerate(parts):
-        if p in ("E1", "E2", "E3"):
+        if p in ENTRY_MODELS:
             em_idx = i
             break
     if em_idx is None:
