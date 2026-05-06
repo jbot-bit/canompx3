@@ -27,7 +27,10 @@ import argparse
 import asyncio
 import logging
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,56 +75,80 @@ def _run_lightweight_component_self_tests(
     return results
 
 
-def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=None) -> bool:
-    """Pre-flight validation. Returns True if all checks pass."""
+@dataclass
+class PreflightContext:
+    """Mutable state shared across preflight checks.
 
-    from trading_app.live.broker_factory import create_broker_components, get_broker_name
+    `components` is set by check_auth and consumed by check_contracts +
+    check_notifications. `components_all_pass` is set by check_notifications
+    and read by the final summary print.
+    """
 
-    checks_passed = 0
-    checks_total = 6  # NOTE: must match number of check blocks (1-6) below — update if adding/removing checks
+    instrument: str
+    broker_name: str
+    demo: bool
+    portfolio: Any  # Portfolio | None — typed loosely to avoid runtime import cycle
+    components: dict[str, Any] | None = None
+    components_all_pass: bool = True
 
-    # 1. Auth check
-    broker_name = broker or get_broker_name()
-    print(f"\n[1/{checks_total}] Auth check ({broker_name})...", end=" ", flush=True)
+
+@dataclass
+class CheckResult:
+    """Return shape for every preflight check."""
+
+    passed: bool
+    message: str  # printed inline after "[i/N] <name>... "
+
+
+# Type alias for a check function. Each check reads/mutates ctx and returns
+# a CheckResult. The runner enforces ordering and counts via len(checks).
+CheckFn = Callable[[PreflightContext], CheckResult]
+
+
+def _check_auth(ctx: PreflightContext) -> CheckResult:
+    """Auth check"""
+    from trading_app.live.broker_factory import create_broker_components
+
     try:
-        components = create_broker_components(broker_name, demo=demo)
-        token = components["auth"].get_token()
-        print(f"OK (token: {token[:8]}...)")
-        checks_passed += 1
+        ctx.components = create_broker_components(ctx.broker_name, demo=ctx.demo)
+        token = ctx.components["auth"].get_token()
+        return CheckResult(True, f"OK (token: {token[:8]}...)")
     except Exception as e:
-        print(f"FAILED: {e}")
-        components = None
+        ctx.components = None
+        return CheckResult(False, f"FAILED: {e}")
 
-    # 2. Portfolio check
-    print(f"[2/{checks_total}] Portfolio check ({instrument})...", end=" ", flush=True)
+
+def _check_portfolio(ctx: PreflightContext) -> CheckResult:
+    """Portfolio check"""
     try:
-        if portfolio is not None:
-            pf = portfolio
-            notes = [f"Using injected portfolio ({len(pf.strategies)} strategies)"]
-        else:
+        if ctx.portfolio is None:
             raise RuntimeError(
-                f"No portfolio injected for {instrument}. "
+                f"No portfolio injected for {ctx.instrument}. "
                 "Pass --profile or --raw-baseline to build a portfolio from "
                 "prop_profiles.ACCOUNT_PROFILES. build_live_portfolio() is DEPRECATED."
             )
-        print(f"OK ({len(pf.strategies)} strategies)")
-        for s in pf.strategies:
-            print(
-                f"    {s.strategy_id} | {s.orb_label} {s.entry_model} "
-                f"RR{s.rr_target} O{s.orb_minutes} | WR={s.win_rate:.0%} "
-                f"ExpR={s.expectancy_r:.3f} N={s.sample_size}"
-            )
-        for note in notes:
-            print(f"    NOTE: {note}")
-        checks_passed += 1
+        pf = ctx.portfolio
+        # Detail lines are printed AFTER the result, mirroring the original
+        # behaviour where the summary header lands on the inline line and the
+        # per-strategy / NOTE lines stream below.
+        head = f"OK ({len(pf.strategies)} strategies)"
+        details = [
+            f"    {s.strategy_id} | {s.orb_label} {s.entry_model} "
+            f"RR{s.rr_target} O{s.orb_minutes} | WR={s.win_rate:.0%} "
+            f"ExpR={s.expectancy_r:.3f} N={s.sample_size}"
+            for s in pf.strategies
+        ]
+        details.append(f"    NOTE: Using injected portfolio ({len(pf.strategies)} strategies)")
+        return CheckResult(True, "\n".join([head, *details]))
     except Exception as e:
-        print(f"FAILED: {e}")
+        return CheckResult(False, f"FAILED: {e}")
 
-    # 3. Daily features freshness
+
+def _check_daily_features(ctx: PreflightContext) -> CheckResult:
+    """Daily features freshness"""
     # R2-M5: use Brisbane trading day, not date.today() (Windows system time).
     # For late-night sessions (NYSE_OPEN at 00:30 Brisbane), date.today() gives
     # yesterday's date, validating stale data and producing a false-positive pass.
-    print(f"[3/{checks_total}] Daily features freshness...", end=" ", flush=True)
     try:
         from datetime import datetime, timedelta
         from zoneinfo import ZoneInfo
@@ -133,7 +160,7 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
             preflight_trading_day = bris_now.date()
         # Preflight check is deliberately at O5 reference aperture — health probe
         # for atr_20/atr_vel_regime population, not a per-lane scoring read.
-        row = SessionOrchestrator._build_daily_features_row(preflight_trading_day, instrument, orb_minutes=5)
+        row = SessionOrchestrator._build_daily_features_row(preflight_trading_day, ctx.instrument, orb_minutes=5)
         atr = row.get("atr_20")
         vel = row.get("atr_vel_regime")
         if atr is None or vel is None:
@@ -147,78 +174,126 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
             # atr_vel_regime: ATR_VEL (ATRVelocity)
             atr_prefixes = ("PDR_", "GAP_", "X_MES_ATR", "X_MGC_ATR", "ATR70_VOL", "ATR_P")
             vel_prefixes = ("ATR_VEL",)
-            needs_atr = portfolio is not None and (
-                (atr is None and any(s.filter_type.startswith(atr_prefixes) for s in portfolio.strategies))
-                or (vel is None and any(s.filter_type.startswith(vel_prefixes) for s in portfolio.strategies))
+            needs_atr = ctx.portfolio is not None and (
+                (atr is None and any(s.filter_type.startswith(atr_prefixes) for s in ctx.portfolio.strategies))
+                or (vel is None and any(s.filter_type.startswith(vel_prefixes) for s in ctx.portfolio.strategies))
             )
             if needs_atr:
-                print(
+                return CheckResult(
+                    False,
                     f"FAILED: {', '.join(missing)} = None and portfolio has "
-                    f"ATR-dependent filters — run pipeline/build_daily_features.py"
+                    f"ATR-dependent filters — run pipeline/build_daily_features.py",
                 )
-            else:
-                print(f"WARN: {', '.join(missing)} = None — run pipeline/build_daily_features.py")
-                checks_passed += 1
-        else:
-            print(f"OK (atr_20={atr}, atr_vel={vel})")
-            checks_passed += 1
+            return CheckResult(
+                True,
+                f"WARN: {', '.join(missing)} = None — run pipeline/build_daily_features.py",
+            )
+        return CheckResult(True, f"OK (atr_20={atr}, atr_vel={vel})")
     except Exception as e:
-        print(f"FAILED: {e}")
+        return CheckResult(False, f"FAILED: {e}")
 
-    # 4. Contract resolution
-    print(f"[4/{checks_total}] Contract resolution...", end=" ", flush=True)
-    if components is not None:
-        try:
-            contracts_cls = components["contracts_class"]
-            contracts = contracts_cls(auth=components["auth"], demo=demo)
-            front = contracts.resolve_front_month(instrument)
-            print(f"OK ({front})")
-            checks_passed += 1
-        except Exception as e:
-            print(f"FAILED: {e}")
-    else:
-        print("SKIPPED (auth failed)")
 
-    # 5. Notifications probe (broker bracket / fill-poller probes deferred to live/demo startup)
-    all_pass = True  # default if check 5 fails entirely
-    print(f"[5/{checks_total}] Notifications probe...", end=" ", flush=True)
+def _check_contracts(ctx: PreflightContext) -> CheckResult:
+    """Contract resolution"""
+    if ctx.components is None:
+        return CheckResult(False, "SKIPPED (auth failed)")
     try:
-        if components is None:
-            raise RuntimeError("auth failed")
-        test_results = _run_lightweight_component_self_tests(instrument=instrument)
-        all_pass = all(test_results.values())
-        if all_pass:
-            print("OK (notifications probed; broker probes deferred to live/demo)")
-            checks_passed += 1
-        else:
-            failed = [k for k, v in test_results.items() if not v]
-            print(f"WARNINGS: {', '.join(failed)}")
-            # Don't fail preflight for component warnings — they're informational
-            checks_passed += 1
+        contracts_cls = ctx.components["contracts_class"]
+        contracts = contracts_cls(auth=ctx.components["auth"], demo=ctx.demo)
+        front = contracts.resolve_front_month(ctx.instrument)
+        return CheckResult(True, f"OK ({front})")
     except Exception as e:
-        print(f"FAILED: {e}")
+        return CheckResult(False, f"FAILED: {e}")
 
-    # 6. Trade journal health
+
+def _check_notifications(ctx: PreflightContext) -> CheckResult:
+    """Notifications probe"""
+    # Broker bracket / fill-poller probes deferred to live/demo startup.
+    try:
+        if ctx.components is None:
+            raise RuntimeError("auth failed")
+        test_results = _run_lightweight_component_self_tests(instrument=ctx.instrument)
+        ctx.components_all_pass = all(test_results.values())
+        if ctx.components_all_pass:
+            return CheckResult(True, "OK (notifications probed; broker probes deferred to live/demo)")
+        # Don't fail preflight for component warnings — they're informational.
+        failed = [k for k, v in test_results.items() if not v]
+        return CheckResult(True, f"WARNINGS: {', '.join(failed)}")
+    except Exception as e:
+        return CheckResult(False, f"FAILED: {e}")
+
+
+def _check_trade_journal(ctx: PreflightContext) -> CheckResult:
+    """Trade journal health"""
     # session_orchestrator only enforces journal health when mode == "live", so a
     # broken journal stays invisible until session start. Surface it in preflight
     # so operators see the failure before committing to a session launch.
-    print(f"[6/{checks_total}] Trade journal health...", end=" ", flush=True)
     try:
         from pipeline.paths import LIVE_JOURNAL_DB_PATH
         from trading_app.live.trade_journal import TradeJournal
 
         journal = TradeJournal(LIVE_JOURNAL_DB_PATH, mode="preflight")
         if journal.is_healthy:
-            print(f"OK ({LIVE_JOURNAL_DB_PATH.name})")
-            checks_passed += 1
-        else:
-            print(f"FAILED: TradeJournal could not open {LIVE_JOURNAL_DB_PATH}")
+            return CheckResult(True, f"OK ({LIVE_JOURNAL_DB_PATH.name})")
+        return CheckResult(False, f"FAILED: TradeJournal could not open {LIVE_JOURNAL_DB_PATH}")
     except Exception as e:
-        print(f"FAILED: {e}")
+        return CheckResult(False, f"FAILED: {e}")
+
+
+# Ordered list of checks. State coupling: _check_auth populates
+# ctx.components (consumed by _check_contracts and _check_notifications);
+# _check_notifications sets ctx.components_all_pass (read by the summary
+# branch in _run_preflight). Reordering breaks the contract — see stage
+# doc preflight-checks-total-hardcode.md § risk register.
+PREFLIGHT_CHECKS: list[CheckFn] = [
+    _check_auth,
+    _check_portfolio,
+    _check_daily_features,
+    _check_contracts,
+    _check_notifications,
+    _check_trade_journal,
+]
+
+
+def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=None) -> bool:
+    """Pre-flight validation. Returns True if all checks pass.
+
+    Counts derive from len(PREFLIGHT_CHECKS) — adding or removing a check
+    auto-updates the [i/N] header and the final summary. Closes
+    debt-ledger entry `preflight-checks-total-hardcode`.
+    """
+    from trading_app.live.broker_factory import get_broker_name
+
+    ctx = PreflightContext(
+        instrument=instrument,
+        broker_name=broker or get_broker_name(),
+        demo=demo,
+        portfolio=portfolio,
+    )
+
+    checks_total = len(PREFLIGHT_CHECKS)
+    checks_passed = 0
+
+    # First check is auth — header includes broker name. Other checks use
+    # the function's own __doc__ (first-line title). The original output
+    # parenthesised the instrument on the portfolio line; keep that form.
+    titles = {
+        _check_auth: f"Auth check ({ctx.broker_name})",
+        _check_portfolio: f"Portfolio check ({ctx.instrument})",
+    }
+
+    print()  # leading blank line, mirroring the original "\n[1/N]..." header
+    for i, check in enumerate(PREFLIGHT_CHECKS, 1):
+        title = titles.get(check) or (check.__doc__ or check.__name__).strip().splitlines()[0]
+        print(f"[{i}/{checks_total}] {title}...", end=" ", flush=True)
+        result = check(ctx)
+        print(result.message)
+        if result.passed:
+            checks_passed += 1
 
     print(f"\nPreflight: {checks_passed}/{checks_total} passed")
     if checks_passed == checks_total:
-        if not all_pass:
+        if not ctx.components_all_pass:
             print("All checks passed, but component warnings present. Review above.\n")
         else:
             print("All clear — ready to trade.\n")
