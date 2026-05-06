@@ -711,7 +711,7 @@ def compute_single_outcome(
 
 def build_outcomes(
     db_path: Path | None = None,
-    instrument: str = "MGC",
+    instrument: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
     orb_minutes: int = 5,
@@ -721,11 +721,23 @@ def build_outcomes(
     """
     Build orb_outcomes for all RR targets x confirm_bars.
 
+    ``instrument`` is required — there is no safe default. Pass the instrument
+    symbol explicitly (e.g. ``"MGC"``, ``"MNQ"``, ``"MES"``).  The previous
+    ``"MGC"`` default was a canonical violation (integrity-guardian.md § 2):
+    callers that omitted the argument silently processed only MGC.
+
     Returns count of rows written.
     """
     import duckdb
     import numpy as np
     import pandas as pd
+
+    if instrument is None:
+        raise ValueError(
+            "build_outcomes() requires an explicit instrument argument (e.g. 'MGC'). "
+            "No default is provided to prevent silent wrong-instrument processing. "
+            "See integrity-guardian.md § 2."
+        )
 
     if db_path is None:
         db_path = GOLD_DB_PATH

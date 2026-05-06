@@ -415,14 +415,11 @@ Exit code: 0
       DEVIATION_RECORDED scope (alarm informational under signal-only) STILL HOLDS for
       this fact-pattern — but Phase 2 dispatch must now answer: are 3-of-3 lanes truly
       decaying, or is this paper-stream noise during shake-down?
-- [x] **R3 — Validator re-run** (closed 2026-05-06). Canonical writer
-      `scripts/migrations/backfill_validated_trade_windows.py` re-ran
-      `StrategyTradeWindowResolver.resolve()` against the 10 stale `VALIDATOR_NATIVE`
-      active rows. `inspected=30 drifted=10 updated=10`, all forward drift (windows
-      extended by 1–3 trade days; performance columns + `status` left untouched per the
-      writer contract). Post-fix: `python pipeline/check_drift.py` → 119 PASS / 0 SKIPPED
-      / 19 advisory / EXIT 0; Check 50 clean. None of the 10 rows are deployed lanes.
-      Stage file: `docs/runtime/stages/r3-validated-setups-trade-window-refresh.md`.
+- [ ] **R3 — Validator re-run** to clear the 8 `validated_setups` snapshot drift entries
+      (Check 50). Lower priority than R1/R2 because none of the 8 are deployed; queue before
+      any candidate-promotion decision touches those rows. Currently blocking the Phase 0
+      evidence-packet commit (pre-commit refuses on drift); evidence packet sits in working
+      tree pending R3.
 - [ ] **R4 — `daily_features` next refresh** runs full-instrument scope (G1 limitation);
       MES + MGC are also stale (2026-05-01) per memory and will be caught up at the same time.
 
