@@ -1859,7 +1859,7 @@ function fmtAlertTime(v) {
 }
 
 /* ── Section Toggle ─────────────────── */
-const SEC_MAP = {profiles: "profiles-section", trades: "trades-section", lanes: "live-lanes-panel", specs: "specs-section", broker: "broker-accounts-section"};
+const SEC_MAP = {profiles: "profiles-section", trades: "trades-section", lanes: "live-lanes-panel", specs: "specs-section", broker: "broker-accounts-section", "trade-book": "trade-book-section"};
 
 function toggleSection(name) {
   const el = $(SEC_MAP[name]); if (!el) return;
@@ -3646,26 +3646,26 @@ async function fetchTradeBook() {
       liveBody.innerHTML = live.length === 0
         ? `<tr><td colspan="12" class="muted">No real broker fills</td></tr>`
         : live.map(t => `<tr>
-            <td>${fmt(t.created_at)}</td><td>${fmt(t.trading_day)}</td><td>${fmt(t.instrument)}</td>
-            <td>${fmt(t.strategy_id)}</td><td>${fmt(t.direction)}</td><td>${fmt(t.entry_model)}</td>
-            <td class="r">${fmtNum(t.fill_entry, 2)}</td><td class="r">${fmtNum(t.fill_exit, 2)}</td>
-            <td class="r">${fmtNum(t.actual_r, 2)}</td><td class="r">${fmtNum(t.pnl_dollars, 2)}</td>
-            <td>${fmt(t.exit_reason)}</td><td>${fmt(t.broker)}</td></tr>`).join("");
+            <td>${escapeHtml(fmt(t.created_at))}</td><td>${escapeHtml(fmt(t.trading_day))}</td><td>${escapeHtml(fmt(t.instrument))}</td>
+            <td>${escapeHtml(fmt(t.strategy_id))}</td><td>${escapeHtml(fmt(t.direction))}</td><td>${escapeHtml(fmt(t.entry_model))}</td>
+            <td class="r">${escapeHtml(fmtNum(t.fill_entry, 2))}</td><td class="r">${escapeHtml(fmtNum(t.fill_exit, 2))}</td>
+            <td class="r">${escapeHtml(fmtNum(t.actual_r, 2))}</td><td class="r">${escapeHtml(fmtNum(t.pnl_dollars, 2))}</td>
+            <td>${escapeHtml(fmt(t.exit_reason))}</td><td>${escapeHtml(fmt(t.broker))}</td></tr>`).join("");
     }
     if (paperBody) {
       paperBody.innerHTML = paper.length === 0
         ? `<tr><td colspan="15" class="muted">No paper trades</td></tr>`
         : paper.map(t => `<tr>
-            <td>${fmt(t.trading_day)}</td><td>${fmt(t.instrument)}</td><td>${fmt(t.strategy_id)}</td>
-            <td>${fmt(t.lane_name)}</td><td>${fmt(t.direction)}</td><td>${fmt(t.entry_model)}</td>
-            <td>${fmt(t.orb_label)}</td><td class="r">${fmtNum(t.rr_target, 1)}</td><td>${fmt(t.filter_type)}</td>
-            <td class="r">${fmtNum(t.entry_price, 2)}</td><td class="r">${fmtNum(t.exit_price, 2)}</td>
-            <td class="r">${fmtNum(t.pnl_r, 2)}</td><td class="r">${fmtNum(t.pnl_dollar, 2)}</td>
-            <td>${fmt(t.exit_reason)}</td><td>${fmt(t.execution_source)}</td></tr>`).join("");
+            <td>${escapeHtml(fmt(t.trading_day))}</td><td>${escapeHtml(fmt(t.instrument))}</td><td>${escapeHtml(fmt(t.strategy_id))}</td>
+            <td>${escapeHtml(fmt(t.lane_name))}</td><td>${escapeHtml(fmt(t.direction))}</td><td>${escapeHtml(fmt(t.entry_model))}</td>
+            <td>${escapeHtml(fmt(t.orb_label))}</td><td class="r">${escapeHtml(fmtNum(t.rr_target, 1))}</td><td>${escapeHtml(fmt(t.filter_type))}</td>
+            <td class="r">${escapeHtml(fmtNum(t.entry_price, 2))}</td><td class="r">${escapeHtml(fmtNum(t.exit_price, 2))}</td>
+            <td class="r">${escapeHtml(fmtNum(t.pnl_r, 2))}</td><td class="r">${escapeHtml(fmtNum(t.pnl_dollar, 2))}</td>
+            <td>${escapeHtml(fmt(t.exit_reason))}</td><td>${escapeHtml(fmt(t.execution_source))}</td></tr>`).join("");
     }
   } catch (e) {
-    if (liveBody) liveBody.innerHTML = `<tr><td colspan="12" class="muted">Fetch failed: ${e}</td></tr>`;
-    if (paperBody) paperBody.innerHTML = `<tr><td colspan="15" class="muted">Fetch failed: ${e}</td></tr>`;
+    if (liveBody) liveBody.innerHTML = `<tr><td colspan="12" class="muted">Fetch failed: ${escapeHtml(String(e))}</td></tr>`;
+    if (paperBody) paperBody.innerHTML = `<tr><td colspan="15" class="muted">Fetch failed: ${escapeHtml(String(e))}</td></tr>`;
   }
 }
 async function fetchLaneStatus() {

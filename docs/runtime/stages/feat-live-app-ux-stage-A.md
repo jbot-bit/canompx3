@@ -20,8 +20,11 @@ Operator double-clicks a desktop launcher → browser opens to `http://localhost
 - trading_app/live/bot_dashboard.py
 - trading_app/live/bot_dashboard.html
 - tests/test_trading_app/test_bot_dashboard.py
+- tests/test_trading_app/test_bot_dashboard_routes.py
 - Start-Live-App.bat
 - docs/runtime/stages/feat-live-app-ux-stage-A.md
+- docs/runtime/stages/feat-live-app-ux-smoke.md
+- docs/audit/results/2026-05-06-feat-live-app-ux.md
 
 Per-file purpose:
 - `scripts/run_live_session.py` — preflight only (add TradeJournal health block)
