@@ -196,18 +196,6 @@
         ]
       }
     ],
-    "PostCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python C:/Users/joshd/canompx3/.claude/hooks/post-compact-reinject.py",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
         "matcher": "",
