@@ -6,6 +6,49 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Pickup pointer (2026-05-06 — read this first)
+
+**Phase 0 of the live-trading rollout was executed today** with disposition Option C
+(DEVIATION_RECORDED + remediation queued). Full evidence packet:
+`docs/plans/active/2026-05/2026-05-05-live-trading-rollout.md` § "Phase 0 — executed 2026-05-06".
+
+**Phase 1 (`--signal-only`) is now runnable** — no broker writes, no capital risk.
+
+**Phase 2 status:** R1 + R2 + R3 closed. R4 still queued.
+
+- [x] **R1** — `python scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto`
+      closed C11 (now `gate_ok=True`, operational survival 90.9%, paths=10000).
+- [x] **R2** — Same command closed C12 (now `valid=True, counts={'ALARM': 3}`). Post-refresh
+      truth: all 3 deployed lanes alarm under SR (paper-stream + canonical-forward streams,
+      threshold 31.96). Alarm action is "report only" (`apply_pauses=false` in sr_state).
+      DEVIATION_RECORDED scope holds; Phase 2 dispatch needs a fresh read on whether the
+      3-of-3 alarm pattern is shake-down noise or real decay.
+- [x] **R3** (closed 2026-05-06) — Canonical writer
+      `scripts/migrations/backfill_validated_trade_windows.py` re-ran
+      `StrategyTradeWindowResolver` against the 10 stale `VALIDATOR_NATIVE` active rows.
+      `inspected=30 drifted=10 updated=10`, all forward drift (windows extended by 1–3
+      trade days as `orb_outcomes` accumulated since the validator snapshot). Performance
+      columns and `status` left untouched per the writer's contract. Post-fix verification:
+      `python pipeline/check_drift.py` → 119 PASS / 0 SKIPPED / 19 advisory / EXIT 0;
+      Check 50 (`check_active_native_trade_windows_match_provenance`) clean. None of the
+      10 rows are deployed lanes (deployed lanes today are
+      MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100, MNQ_US_DATA_1000_E2_..._VWAP_MID_ALIGNED_O15,
+      MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12). Stage file:
+      `docs/runtime/stages/r3-validated-setups-trade-window-refresh.md`.
+- [ ] **R4** — `daily_features` rebuild: requires full-instrument scope per
+      `scripts/tools/rebuild_with_daily_features.py` (no narrow-window canonical path; FK
+      `orb_outcomes → daily_features` enforced strictly by DuckDB). MES + MGC also stale
+      (2026-05-01); refresh together. Plan gap G1 surfaced during Phase 0.
+
+**Open Phase 2 decisions** (also in plan § "Decisions still required from user"):
+
+- First-trade lane: COMEX_SETTLE OVNRNG_100 (recommended) or other?
+- First-trade `--auto-confirm`: OFF (recommended) or ON?
+- Express account: dormant for now (recommended) or shadow from Phase 1?
+- Plan-as-living-document (recommended) or freeze at Phase 0 approval?
+
+---
+
 ## Pickup pointer (2026-05-02 PM — read this first)
 
 - Fresh memo added on branch `codex/topstep-operator-arch-v2`:

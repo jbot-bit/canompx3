@@ -277,10 +277,178 @@ None of these begin until Phase 3 is solid.
 
 ## Phase log (append as phases progress)
 
-### Phase 0 — pending approval
+### Phase 0 — executed 2026-05-06 (DEVIATION_RECORDED + remediation queued)
 
-_(append output of `daily_features` rebuild, `check_drift.py`, allocator re-query, and handshake
-re-run here once executed.)_
+**Outcome:** Phase 0 verification ran with extended scope per [Phase 0 execution plan](#).
+Original 4-gate plan (0.1-0.4) extended with gate 0.5 (`live_readiness_report.py`) and 4 added
+halt-conditions to close anti-pigeonhole gaps. Gate 0.5 surfaced two institutional-doctrine halts
+the original 4-gate plan would have missed silently. Disposition Option C (DEVIATION_RECORDED +
+remediation queued) authorised by user 2026-05-06.
+
+**Wall clock:** ~25 min. **Git HEAD start = end = `f04a10b8`** (no commits during Phase 0).
+
+#### Gate 0.1 — `daily_features` rebuild [DEFERRED — surfaced as plan gap]
+
+Plan called for narrow-window rebuild of MNQ orb_minutes=5 across 2026-04-25..2026-05-06.
+Failed with FK constraint: `orb_outcomes(symbol, trading_day, orb_minutes) → daily_features`.
+DuckDB enforces FK strictly (no cascade). 1764 child rows in window blocked the parent DELETE.
+
+Canonical orchestrator `scripts/tools/rebuild_with_daily_features.py` is **full-instrument
+all-aperture full-history** scope (~hours), not narrow-window. Manual `DELETE FROM orb_outcomes`
+on the narrow window was correctly blocked by the permission guardrail (per
+`RESEARCH_RULES.md § Discovery Layer Discipline`).
+
+**Pre-rebuild state captured (acceptable for Phase 1 signal-only):**
+
+- `daily_features` MNQ orb_minutes=5: n=2045, earliest=2019-05-06, latest=2026-05-05
+- `bars_1m` MNQ: n=2,454,672, earliest=2019-05-06 10:00 BNE, latest=2026-05-06 09:59 BNE
+- Gap: 1 day (daily_features lags bars_1m by one trading-day boundary; expected — fresh bars
+  for 2026-05-06 not yet rolled into daily_features)
+
+**Plan gap surfaced (G1):** the canonical rebuild contract has no narrow-window parent-child
+option. Next refresh is multi-hour full-instrument or requires a sanctioned narrow-window path
+that does not yet exist. Phase 1 signal-only is not blocked because all 3 deployed lanes are
+status WAITING and the 1-day stale `daily_features` does not affect signal generation for
+sessions that fire on data already in the table.
+
+#### Gate 0.2 — `pipeline/check_drift.py` [FAIL — 10 violations, all non-deployed]
+
+Exit code 1. **138 checks total: 118 PASS, 0 SKIP (DB available), 19 ADVISORY, 10 VIOLATIONS.**
+
+All 10 violations are from **Check 50** ("Active native trade-window provenance matches canonical
+recomputation") — `validated_setups` snapshot drift for 8 strategies whose
+`(min_trading_day, max_trading_day, n_trades)` is stale by ~5-13 days vs canonical recomputation.
+
+| Strategy | Stored max | Canonical max | N delta | Deployed? |
+|---|---|---|---|---|
+| MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT15 | 2026-04-23 | 2026-05-04 | +1 | NO |
+| MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT15_S075 | 2026-04-23 | 2026-05-04 | +1 | NO |
+| MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G4_S075 | 2026-04-30 | 2026-05-04 | +1 | NO |
+| MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G6_S075 | 2026-04-23 | 2026-05-04 | +1 | NO |
+| MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4 | 2026-04-28 | 2026-05-05 | +3 | NO |
+| MNQ_COMEX_SETTLE_E2_RR1.0_CB1_PD_CLEAR_LONG | 2026-04-30 | 2026-05-05 | +1 | NO |
+| MNQ_EUROPE_FLOW_E2_RR1.0_CB1_CROSS_SGP_MOMENTUM | 2026-04-30 | 2026-05-05 | +1 | NO |
+| MNQ_EUROPE_FLOW_E2_RR1.5_CB1_CROSS_SGP_MOMENTUM | 2026-04-30 | 2026-05-05 | +1 | NO |
+
+**Cross-reference vs `lane_allocation.json`:** 0 of 8 flagged strategies are in the deployed lane
+set (`MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`, `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`,
+`MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12`). All 3 deployed lanes are clean of this drift.
+
+**Root-cause fix:** validator re-run to refresh `validated_setups` snapshots for affected rows.
+Out of Phase 0 scope (multi-hour, multi-instrument). Per `RESEARCH_RULES.md`, `validated_setups`
+is a DERIVED layer banned for truth-finding; live runner reads `lane_allocation.json` not
+`validated_setups`, so live correctness is unaffected.
+
+#### Gate 0.3 — Allocator re-read [PASS]
+
+| Field | Value |
+|---|---|
+| `rebalance_date` | 2026-05-03 (3 days old, expected) |
+| `profile_id` | topstep_50k_mnq_auto |
+| Lane 1 | MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 (status=DEPLOY, regime=None) |
+| Lane 2 | MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15 (status=DEPLOY, regime=None) |
+| Lane 3 | MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12 (status=DEPLOY, regime=None) |
+| `sha256` | `0302385e759f361e1c77e52738ef3ece40c2d9556da3b872661b43f4b9a24bc9` |
+| File size | 14400 bytes |
+
+Note: `regime=None` in JSON; memory rollup said HOT. Regime field lives in SR state (gate 0.5),
+not in allocator JSON. Not a halt — surfaced as evidence note.
+
+#### Gate 0.5 — `live_readiness_report.py` [HALT — both institutional gates invalid]
+
+This gate was added by the Phase 0 execution plan to close the pigeonhole the original 4-gate
+plan left open. It surfaced two halts the original would have missed:
+
+- **C11 `gate_ok=False`** — "BLOCKED: Criterion 11 state db identity mismatch. Re-run account
+  survival." (`age_days=1`). Per `pre_registered_criteria.md` Criterion 11, this is a
+  non-waivable institutional gate (90-day account survival ≥ 70%).
+- **C12 `valid=False`** — profile fingerprint mismatch. SR state envelope was computed against
+  a different lane set than the current allocator. Result: alarm count returned (`alarms=0`)
+  is **not trustworthy** because the envelope itself is invalid.
+- **NYSE_OPEN `blocked=True`** — SR alarm `stat=33.27 >= thr=31.96`, baseline=`paper_trades_first_50`,
+  stream=`paper_trades`. Lifecycle correctly blocking this lane.
+- Other 2 lanes show `blocked=False` with reason "Session HOT" but `sr=None` — meaning their
+  SR state isn't being read at all (fingerprint mismatch downstream symptom).
+
+**Allocator visible:** available=True, deployed=3, validated_active=57, validated_only=54,
+deployed_not_validated=0, paused=52, stale=0.
+
+#### Gate 0.4 — Broker handshake [PASS]
+
+```
+Auth health: True (token 740 chars)
+Accounts visible: 2
+  - id=21390438 name=50KTC-V2-451890-67605663 (Topstep XFA Combine)
+  - id=21944866 name=EXPRESS-V2-451890-53179846 (Topstep Express)
+MNQ front-month contract: CON.F.US.MNQ.M26 (MNQM6)
+Exit code: 0
+```
+
+#### Step 8 — Criterion 12 disposition: DEVIATION_RECORDED + remediation queued (Option C)
+
+**Disposition:** `DEVIATION_RECORDED` with explicit remediation queued in `HANDOFF.md`.
+
+**Rationale:**
+
+1. **C11/C12 are pre-registered institutional gates** (`pre_registered_criteria.md` § 11-12).
+   Both are currently False. Phase 1 (`--signal-only`) does not place broker orders, so the
+   gates' load-bearing role is for **Phase 2 (live orders)** dispatch, not Phase 1 shake-down.
+2. **C12 alarm count is itself untrustworthy** because the envelope is invalid (fingerprint
+   mismatch). The original locked-in disposition assumed alarm-count was known and informational;
+   it is neither.
+3. **Phase 1 truly carries no capital risk** under signal-only. The deviation is bounded
+   (no orders dispatched) and the remediation actions are concrete and queued.
+
+**Hard remediation actions (NON-WAIVABLE before Phase 2 dispatch):**
+
+- [x] **R1 — Re-run account survival Monte Carlo** to refresh C11 state DB.
+      **CLOSED 2026-05-06 in same session** via
+      `python scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto`.
+      Result: `C11.valid=True, gate_ok=True`, operational survival 90.9%, paths=10000,
+      age=0d.
+- [x] **R2 — Refresh SR state fingerprint** so envelope matches current 3-lane allocator.
+      **CLOSED 2026-05-06 in same session** via the same `refresh_control_state.py` run.
+      Result: `C12.valid=True, counts={'ALARM': 3}`. Post-refresh truth: all 3 deployed
+      lanes alarm under SR (L1 COMEX_SETTLE OVNRNG_100 SR=35.39, L2 US_DATA_1000
+      VWAP_MID_ALIGNED SR=41.60, L3 NYSE_OPEN COST_LT12 SR=33.27, threshold 31.96).
+      Alarm action is "report only" because `apply_pauses=false` in sr_state. The
+      DEVIATION_RECORDED scope (alarm informational under signal-only) STILL HOLDS for
+      this fact-pattern — but Phase 2 dispatch must now answer: are 3-of-3 lanes truly
+      decaying, or is this paper-stream noise during shake-down?
+- [x] **R3 — Validator re-run** (closed 2026-05-06). Canonical writer
+      `scripts/migrations/backfill_validated_trade_windows.py` re-ran
+      `StrategyTradeWindowResolver.resolve()` against the 10 stale `VALIDATOR_NATIVE`
+      active rows. `inspected=30 drifted=10 updated=10`, all forward drift (windows
+      extended by 1–3 trade days; performance columns + `status` left untouched per the
+      writer contract). Post-fix: `python pipeline/check_drift.py` → 119 PASS / 0 SKIPPED
+      / 19 advisory / EXIT 0; Check 50 clean. None of the 10 rows are deployed lanes.
+      Stage file: `docs/runtime/stages/r3-validated-setups-trade-window-refresh.md`.
+- [ ] **R4 — `daily_features` next refresh** runs full-instrument scope (G1 limitation);
+      MES + MGC are also stale (2026-05-01) per memory and will be caught up at the same time.
+
+**What this disposition does NOT authorise:**
+
+- Phase 2 dispatch with C11 or C12 still invalid.
+- Treating the C12 invalid envelope as if `alarms=0` were a real state.
+- Bypassing R1-R3 with another DEVIATION_RECORDED if Phase 2 timing pressure surfaces.
+
+#### Step 9 — Evidence packet (this section)
+
+- [x] Gate 0.1 — DEFERRED (FK constraint, plan gap G1 documented)
+- [x] Gate 0.2 — FAIL (10 violations, all non-deployed; documented above)
+- [x] Gate 0.3 — PASS (allocator SHA256 captured)
+- [x] Gate 0.4 — PASS (broker handshake clean)
+- [x] Gate 0.5 — HALT (C11 + C12 invalid; remediation R1-R3 queued)
+- [x] Step 8 disposition — DEVIATION_RECORDED + remediation queued (Option C, user-authorised
+      2026-05-06)
+- [x] Step 9 evidence packet — this section
+- Git HEAD start: `f04a10b8` (clean tree, 0 ahead/0 behind)
+- Git HEAD end: `f04a10b8` (no commits during Phase 0; doc-only edit pending)
+- Wall clock: ~25 min
+- Phase 0 verification verdict: **PROCEED to Phase 1 signal-only with Option C disposition;
+  HARD-BLOCK Phase 2 until R1 + R2 close.**
+
+---
 
 ### Phase 1 — gated by Phase 0
 
