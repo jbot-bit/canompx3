@@ -186,6 +186,48 @@ INNER_EOF
 fi
 
 
+# 0d. DeepSeek/OpenCode review gate — every commit authored under the
+# coding-agent runtime is reviewed by Claude (seven-sins rubric) before
+# it lands. Activated only when the launcher exports
+# OPENCODE_AGENT_ACTIVE=1 (so normal Claude/manual commits skip the gate).
+# The script is canonical at scripts/tools/claude_review_deepseek.py;
+# drift check `check_deepseek_review_gate_intact` enforces presence.
+if [ "$OPENCODE_AGENT_ACTIVE" = "1" ]; then
+    echo "[0d] DeepSeek review gate (Claude)..."
+    if [ -x "$CANONICAL_VENV_PY" ]; then
+        REVIEW_PY="$CANONICAL_VENV_PY"
+    else
+        REVIEW_PY="python"
+    fi
+    # Reviewer contract (claude_review_deepseek.py:7-12): 0=APPROVE,
+    # 1=BLOCK, 2=REVIEW_UNAVAILABLE (network/parse error). Earlier
+    # `|| exit 1` collapsed rc=2 to a hard block — silently failing
+    # legitimate commits when the gate is unreachable. Dispatch
+    # explicitly so advisory-vs-block stays separated.
+    #
+    # NOTE: `set -e` is active at line 8. A bare invocation here would
+    # trigger script exit on any non-zero reviewer rc BEFORE we can
+    # capture it. The `|| review_rc=$?` idiom places the call inside a
+    # `||` list which is exempt from `set -e`, letting the dispatch
+    # below see rc=1 and rc=2 as intended.
+    review_rc=0
+    "$REVIEW_PY" "$SCRIPT_DIR/scripts/tools/claude_review_deepseek.py" || review_rc=$?
+    if [ "$review_rc" -eq 1 ]; then
+        exit 1
+    elif [ "$review_rc" -eq 2 ]; then
+        echo "[0d] (advisory: review unavailable — proceeding; \`--no-verify\` available if needed)"
+    elif [ "$review_rc" -ne 0 ]; then
+        # Reviewer contract (claude_review_deepseek.py:7-12) only specifies
+        # rc 0/1/2. Anything else (rc=130 SIGINT, rc=137 SIGKILL/OOM, rc=3
+        # uncaught Python exception, etc.) is undefined — treat as
+        # REVIEW_UNAVAILABLE rather than silent APPROVE on a capital-class
+        # commit-gate path. The review didn't complete; the operator gets a
+        # diagnostic instead of a quiet pass.
+        echo "[0d] WARN: reviewer returned unexpected rc=$review_rc; treating as REVIEW_UNAVAILABLE — proceeding."
+    fi
+fi
+
+
 # 1. Ruff lint check (~1 second)
 echo "[1/8] Ruff lint..."
 RUFF="ruff"

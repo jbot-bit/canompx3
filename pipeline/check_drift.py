@@ -16,6 +16,8 @@ Usage:
 """
 
 import ast
+import contextlib
+import io
 import re
 import subprocess
 import sys
@@ -84,6 +86,32 @@ def _get_db_path() -> Path:
     from pipeline.paths import GOLD_DB_PATH
 
     return GOLD_DB_PATH
+
+
+class _QuietSink(io.StringIO):
+    """Drop-in sys.stdout replacement for --quiet mode.
+
+    Swallows every print() emitted by per-check helpers so the sanitized
+    PASS/FAIL stream stays clean. Provides ``reconfigure()`` as a no-op
+    because some imported modules (e.g. ``trading_app.outcome_builder``)
+    call ``sys.stdout.reconfigure(line_buffering=True)`` at import time.
+    Bare ``io.StringIO`` does not expose that method.
+    """
+
+    def reconfigure(self, **_kwargs: object) -> None:  # noqa: D401
+        return None
+
+
+def _safe_label_for_quiet(label: str) -> str:
+    """Strip non-ASCII glyphs from a CHECKS label for --quiet output.
+
+    --quiet output is meant for LLM consumption and pre-commit subprocess
+    capture where the parent stdout encoding may be cp1252 (Windows
+    default). Some legacy labels contain glyphs like ``↔`` that break
+    cp1252; we ASCII-fold them here rather than mutating the canonical
+    CHECKS list.
+    """
+    return label.encode("ascii", "replace").decode("ascii")
 
 
 def _skip_db_check_for_ci(skip_msg: str) -> list[str]:
@@ -8169,6 +8197,115 @@ def check_lane_allocation_chordia_gate() -> list[str]:
     return violations
 
 
+# Match a real OpenRouter model literal: openrouter/<vendor>[-./_word]+
+# The first character after `openrouter/` must be alphanumeric so prose
+# placeholders like `openrouter/...` (used in error messages) are not flagged.
+_OPENROUTER_MODEL_LITERAL_RE = re.compile(r"openrouter/[A-Za-z0-9][A-Za-z0-9_./-]*")
+_CANONICAL_DEFAULT_ANNOTATION = "canonical-default-fallback:"
+
+
+def check_hardcoded_openrouter_model_in_launcher() -> list[str]:
+    """Forward-looking ratchet: at most one hardcoded openrouter/ model per launcher.
+
+    The OpenCode coding-agent launcher (`scripts/tools/opencode-agent.ps1`) keeps
+    exactly one hardcoded `openrouter/<vendor>/<model>` literal as a fallback
+    default for when the canonical profile resolver
+    (`scripts/tools/opencode_resolve_model.py`) cannot return a model. That one
+    literal must be annotated with the `canonical-default-fallback:` token in
+    a comment line so the model identity is greppable, scoped, and reviewable.
+
+    This check fires if a `*-agent.ps1` file under `scripts/tools/` contains
+    an `openrouter/` model literal on a non-comment line that is NOT preceded
+    (within 3 lines) by the annotation token. Comment lines (starting with
+    `#` after lstrip) are not scanned for literals, so the annotation comment
+    itself never trips the regex.
+    """
+    violations: list[str] = []
+    launcher_dir = PROJECT_ROOT / "scripts" / "tools"
+    if not launcher_dir.exists():
+        return []
+    for path in sorted(launcher_dir.glob("*-agent.ps1")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        lines = text.splitlines()
+        # An annotation comment exempts the NEXT non-comment, non-blank
+        # executable line in the same file. This lets multi-line comment
+        # blocks describe the rationale before the actual default value.
+        exempt = [False] * len(lines)
+        pending_exempt = False
+        for idx, line in enumerate(lines):
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                if _CANONICAL_DEFAULT_ANNOTATION in line:
+                    pending_exempt = True
+                continue
+            if not stripped:
+                continue
+            if pending_exempt:
+                exempt[idx] = True
+                pending_exempt = False
+        # Flag any openrouter/<...> literal NOT inside a comment AND NOT exempt.
+        rel = path.relative_to(PROJECT_ROOT).as_posix()
+        for idx, line in enumerate(lines):
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                continue
+            if _OPENROUTER_MODEL_LITERAL_RE.search(line) and not exempt[idx]:
+                violations.append(
+                    f"  {rel}:{idx + 1}: hardcoded openrouter model literal without "
+                    f"`{_CANONICAL_DEFAULT_ANNOTATION}` annotation; route through "
+                    f"scripts/tools/opencode_resolve_model.py instead"
+                )
+    return violations
+
+
+def check_deepseek_review_gate_intact() -> list[str]:
+    """DeepSeek Coding Agent review gate (pre-commit step 0d) is intact.
+
+    Phase 1 of the DeepSeek Coding Agent v4 plan registers this check as a
+    declarative no-op. Phase 3 lands the actual `pre-commit` step 0d that
+    routes commits authored by the coding agent through the claude-side
+    reviewer; at that point this check flips to assert the step-0d marker
+    is present in `.githooks/pre-commit`.
+
+    Until the marker is added by Phase 3, this check returns [] (no-op).
+    Once the marker is present, it must remain present — removing the
+    marker (e.g. by accidentally rewriting `.githooks/pre-commit` without
+    porting step 0d) becomes a hard drift failure.
+
+    The marker convention: a comment line starting with `# 0d.` near the
+    other numbered hook steps in `.githooks/pre-commit`. The check is
+    intentionally lenient on whitespace and the line that follows; it
+    only asserts the marker token's presence.
+    """
+    pre_commit = PROJECT_ROOT / ".githooks" / "pre-commit"
+    if not pre_commit.exists():
+        # No pre-commit hook installed; defer to the existing hook-presence
+        # checks elsewhere in this file.
+        return []
+    try:
+        content = pre_commit.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    # Phase 1: marker absent → no-op (returns []).
+    # Phase 3: once step 0d is added, the marker is present and the check
+    # asserts the deepseek-review-gate invocation is wired alongside it.
+    has_step_0d_marker = bool(re.search(r"^\s*#\s*0d\.\s", content, re.MULTILINE))
+    if not has_step_0d_marker:
+        return []
+    # Marker present (Phase 3+). Assert the reviewer invocation is wired.
+    if "claude_review_deepseek" not in content:
+        return [
+            "  .githooks/pre-commit: step 0d marker present but "
+            "claude_review_deepseek invocation missing. The DeepSeek "
+            "Coding Agent review gate must call the canonical reviewer "
+            "before any commit authored by the agent is allowed."
+        ]
+    return []
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -8701,6 +8838,18 @@ CHECKS = [
         False,  # blocking — capital-class gate, not advisory
         False,
     ),
+    (
+        "DeepSeek Coding Agent review gate (pre-commit step 0d) is intact",
+        check_deepseek_review_gate_intact,
+        False,  # blocking once Phase 3 lands the marker; no-op until then
+        False,
+    ),
+    (
+        "OpenCode launcher: at most one canonical-default-annotated openrouter/ literal",
+        check_hardcoded_openrouter_model_in_launcher,
+        False,  # blocking — model selection must route through canonical resolver
+        False,
+    ),
 ]  # end CHECKS
 
 
@@ -8776,16 +8925,28 @@ def main():
             "Pre-commit and CI run the full set so coverage is preserved end-to-end."
         ),
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help=(
+            "Sanitized output for LLM consumption: emit only PASS / FAIL: <name> (count=N) "
+            "lines per check, plus a single summary line. Suppresses banner, file paths, "
+            "SQL fragments, DB internals, and any per-check diagnostic detail. "
+            "Exit code semantics are unchanged (0 = clean, 1 = drift detected)."
+        ),
+    )
     args = parser.parse_args()
     fast_mode = args.fast
+    quiet_mode = args.quiet
 
-    print("=" * 60)
-    if fast_mode:
-        print(f"PIPELINE DRIFT CHECK (FAST — skipping {len(SLOW_CHECK_LABELS)} slow checks)")
-    else:
-        print("PIPELINE DRIFT CHECK")
-    print("=" * 60)
-    print()
+    if not quiet_mode:
+        print("=" * 60)
+        if fast_mode:
+            print(f"PIPELINE DRIFT CHECK (FAST — skipping {len(SLOW_CHECK_LABELS)} slow checks)")
+        else:
+            print("PIPELINE DRIFT CHECK")
+        print("=" * 60)
+        print()
 
     all_violations = []
     advisory_count = 0
@@ -8801,52 +8962,75 @@ def main():
         try:
             _shared_con = duckdb.connect(str(db_path), read_only=True)
         except Exception as exc:
-            print(f"  WARNING: could not open DB ({exc}) — DB-dependent checks will skip")
+            if not quiet_mode:
+                print(f"  WARNING: could not open DB ({exc}) — DB-dependent checks will skip")
 
     fast_skipped = 0  # tracks --fast skips separately from DB-unavailable skips
     for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
         if fast_mode and label in SLOW_CHECK_LABELS:
             fast_skipped += 1
             continue
-        print(f"Check {i}: {label}...")
+        if not quiet_mode:
+            print(f"Check {i}: {label}...")
 
         # DB-dependent checks can be skipped if DB unavailable.
         # duckdb.IOException is NOT a subclass of OSError, so we inspect
         # the message to distinguish "DB busy" from real code failures.
+        # In --quiet mode, redirect stdout for the duration of the check call
+        # so per-check inline prints (advisory WARNINGs, doc-stat dumps, etc.)
+        # never leak to the sanitized output stream. _QuietSink mimics the
+        # subset of TextIOBase that imported modules call at import-time
+        # (e.g. trading_app.outcome_builder calls sys.stdout.reconfigure()).
+        suppress_ctx = contextlib.redirect_stdout(_QuietSink()) if quiet_mode else contextlib.nullcontext()
         if requires_db:
             try:
-                v = check_fn(con=_shared_con)
+                with suppress_ctx:
+                    v = check_fn(con=_shared_con)
             except Exception as e:
                 msg = str(e)
                 if "being used by another process" in msg or "Cannot open file" in msg:
                     skip_count += 1
-                    print("  SKIPPED (DB busy — another process holds the lock)")
-                    print()
+                    if quiet_mode:
+                        print(f"SKIP: {_safe_label_for_quiet(label)}")
+                    else:
+                        print("  SKIPPED (DB busy — another process holds the lock)")
+                        print()
                     continue
                 v = [f"  EXCEPTION: {type(e).__name__}: {e}"]
         else:
-            v = check_fn()
+            with suppress_ctx:
+                v = check_fn()
 
         if is_advisory:
             advisory_count += 1
-            # Advisory checks print their own warnings; show ADVISORY tag
-            print("  ADVISORY (non-blocking)")
+            if quiet_mode:
+                print(f"ADVISORY: {_safe_label_for_quiet(label)}")
+            else:
+                # Advisory checks print their own warnings; show ADVISORY tag
+                print("  ADVISORY (non-blocking)")
         elif v:
-            print("  FAILED:")
-            for line in v:
-                print(line)
+            if quiet_mode:
+                # Sanitized — count only, no per-violation detail.
+                print(f"FAIL: {_safe_label_for_quiet(label)} (count={len(v)})")
+            else:
+                print("  FAILED:")
+                for line in v:
+                    print(line)
             all_violations.extend(v)
         else:
             blocking_count += 1
-            print("  PASSED [OK]")
-        print()
+            if quiet_mode:
+                print(f"PASS: {_safe_label_for_quiet(label)}")
+            else:
+                print("  PASSED [OK]")
+        if not quiet_mode:
+            print()
 
     # Cleanup shared connection
     if _shared_con is not None:
         _shared_con.close()
 
     # Summary — blocking_count tracks actual passes (not computed from total)
-    print("=" * 60)
     fast_part = f", {fast_skipped} skipped (--fast)" if fast_skipped else ""
     summary_line = (
         f"{blocking_count} checks passed [OK], "
@@ -8854,12 +9038,20 @@ def main():
         f"{advisory_count} advisory"
     )
     if all_violations:
-        print(f"DRIFT DETECTED: {len(all_violations)} violation(s) across {summary_line}")
-        print("=" * 60)
+        if quiet_mode:
+            print(f"SUMMARY: drift_detected violations={len(all_violations)} passed={blocking_count}")
+        else:
+            print("=" * 60)
+            print(f"DRIFT DETECTED: {len(all_violations)} violation(s) across {summary_line}")
+            print("=" * 60)
         sys.exit(1)
     else:
-        print(f"NO DRIFT DETECTED: {summary_line}")
-        print("=" * 60)
+        if quiet_mode:
+            print(f"SUMMARY: clean passed={blocking_count} advisory={advisory_count}")
+        else:
+            print("=" * 60)
+            print(f"NO DRIFT DETECTED: {summary_line}")
+            print("=" * 60)
         sys.exit(0)
 
 

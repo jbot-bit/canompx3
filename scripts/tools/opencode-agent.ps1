@@ -25,6 +25,12 @@
 # Opt-out for auto-install: $env:OPENCODE_AGENT_SKIP_INSTALL=1
 
 param(
+    # canonical-default-fallback: openrouter/deepseek-chat-v3.1
+    # Used only when the canonical profile resolver cannot return a model
+    # (e.g. CANOMPX3_AI_DEEPSEEK_CODING_MODEL unset). The drift check
+    # `check_hardcoded_openrouter_model_in_launcher` exempts this annotation;
+    # any second hardcoded openrouter/<vendor>/<model> in this file flips it
+    # to a hard block.
     [string]$Model = "openrouter/deepseek-chat-v3.1",
     [switch]$NoLaunch
 )
@@ -167,13 +173,61 @@ if (-not (Test-OpencodeInstalled)) {
     if (-not (Install-Opencode)) { exit 1 }
 }
 
+# ---------- canonical model resolution ----------
+# Delegate to provider_registry.get_profile("deepseek_coding"); single
+# source of truth for the model ID. If the env var is unset (or any other
+# validation_errors), fall back to the launcher default with explicit WARN.
+$repoRootForResolver = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$resolverScript = Join-Path $repoRootForResolver "scripts\tools\opencode_resolve_model.py"
+$modelSource = "launcher default"
+if (Test-Path -LiteralPath $resolverScript) {
+    try {
+        $resolved = & python $resolverScript 2>$null
+        if ($LASTEXITCODE -eq 0 -and $resolved -and $resolved.Trim()) {
+            $Model = $resolved.Trim()
+            $modelSource = "canonical profile"
+        } else {
+            Write-Host ("[opencode-agent] WARN: canonical profile not configured; " +
+                "using launcher default model=$Model. Set " +
+                "CANOMPX3_AI_DEEPSEEK_CODING_MODEL=<openrouter/...> for single-source-of-truth.") `
+                -ForegroundColor Yellow
+        }
+    } catch {
+        # `$ErrorActionPreference = "Stop"` (line 38) makes
+        # CommandNotFoundException terminating. Without this catch,
+        # missing-python aborts the entire launcher. Fall through to
+        # launcher-default model — same behaviour as Phase 1, before
+        # the canonical resolver was wired.
+        Write-Host ("[opencode-agent] WARN: canonical resolver failed " +
+            "({0}: {1}); using launcher default model=$Model." -f `
+            $_.Exception.GetType().Name, $_.Exception.Message) `
+            -ForegroundColor Yellow
+    }
+}
+
 $version = Get-OpencodeVersion
 $tail = Get-KeyTail $key
-Write-Host "[opencode-agent] tool=opencode version=$version model=$Model key=...$tail source=$source"
+Write-Host "[opencode-agent] tool=opencode version=$version model=$Model ($modelSource) key=...$tail source=$source"
+
+# Optional credit-balance probe (advisory only). Off by default to avoid
+# adding a network round-trip per launch; opt in with
+# OPENCODE_AGENT_CHECK_CREDITS=1. The script always exits 0 — bad
+# response or missing key emits stderr WARN and the launch continues.
+if ($env:OPENCODE_AGENT_CHECK_CREDITS -eq "1") {
+    $creditsScript = Join-Path $repoRootForResolver "scripts\tools\check_or_credits.py"
+    if (Test-Path -LiteralPath $creditsScript) {
+        & python $creditsScript
+    }
+}
 
 if ($NoLaunch) {
     exit 0
 }
+
+# Activate the pre-commit review gate (step 0d in .githooks/pre-commit).
+# Every commit during this session is reviewed by Claude (seven-sins rubric)
+# before it lands. See scripts/tools/claude_review_deepseek.py.
+$env:OPENCODE_AGENT_ACTIVE = "1"
 
 & opencode --model $Model @args
 exit $LASTEXITCODE

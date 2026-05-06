@@ -16,7 +16,9 @@ from pipeline.check_drift import (
     check_apply_iterrows,
     check_config_filter_sync,
     check_daily_features_row_integrity,
+    check_deepseek_review_gate_intact,
     check_hardcoded_mgc_sql,
+    check_hardcoded_openrouter_model_in_launcher,
     check_holdout_policy_declaration_consistency,
     check_non_bars1m_writes,
     check_pipeline_never_imports_trading_app,
@@ -2204,3 +2206,219 @@ class TestIsoUtcFormatterSilentNone:
 
         violations = check_iso_utc_formatter_silent_none()
         assert violations == [], f"unexpected violations: {violations}"
+
+
+class TestDeepseekReviewGateNoOp:
+    """Phase 1 of DeepSeek Coding Agent v4: drift check is a registry slot.
+
+    The check is wired into CHECKS so Phase 1 cannot land without keeping
+    the slot. Until Phase 3 lands the `# 0d.` marker in `.githooks/pre-commit`,
+    the check returns [] (no-op). Once the marker lands, the check asserts
+    the canonical reviewer invocation is wired.
+    """
+
+    def test_returns_empty_on_real_repo_phase1(self):
+        # Smoke test on the real repo: until Phase 3 adds the marker, the
+        # check must be a no-op so Phase 1 commits with a green bar.
+        violations = check_deepseek_review_gate_intact()
+        assert violations == []
+
+    def test_returns_empty_when_pre_commit_missing(self, tmp_path, monkeypatch):
+        # Fail-safe: missing pre-commit hook → no-op (defer to other checks).
+        from pipeline import check_drift as cd
+
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        violations = cd.check_deepseek_review_gate_intact()
+        assert violations == []
+
+    def test_no_op_when_marker_absent(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        hooks_dir = tmp_path / ".githooks"
+        hooks_dir.mkdir()
+        # Marker `# 0d.` not present.
+        (hooks_dir / "pre-commit").write_text(
+            "#!/usr/bin/env bash\n# 0a. Some other step\n# 0b. Another step\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        assert cd.check_deepseek_review_gate_intact() == []
+
+    def test_flips_to_blocking_when_marker_present_but_invocation_missing(self, tmp_path, monkeypatch):
+        # Phase-3 forward-compatibility test: if a future maintainer adds the
+        # `# 0d.` marker but forgets the canonical reviewer call, the check
+        # must turn into a hard block.
+        from pipeline import check_drift as cd
+
+        hooks_dir = tmp_path / ".githooks"
+        hooks_dir.mkdir()
+        (hooks_dir / "pre-commit").write_text(
+            "#!/usr/bin/env bash\n# 0d. DeepSeek review gate (claim)\necho hello\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        violations = cd.check_deepseek_review_gate_intact()
+        assert len(violations) == 1
+        assert "claude_review_deepseek" in violations[0]
+
+    def test_passes_when_marker_and_invocation_both_present(self, tmp_path, monkeypatch):
+        # Phase 3 wired-up positive case: marker present AND canonical
+        # reviewer invoked. The check must return [].
+        from pipeline import check_drift as cd
+
+        hooks_dir = tmp_path / ".githooks"
+        hooks_dir.mkdir()
+        (hooks_dir / "pre-commit").write_text(
+            "#!/usr/bin/env bash\n"
+            "# 0d. DeepSeek review gate\n"
+            'if [ "$OPENCODE_AGENT_ACTIVE" = "1" ]; then\n'
+            "  python scripts/tools/claude_review_deepseek.py || exit 1\n"
+            "fi\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        assert cd.check_deepseek_review_gate_intact() == []
+
+
+class TestQuietModeOutputSanitization:
+    """`python pipeline/check_drift.py --quiet` emits sanitized lines only.
+
+    Acceptance criterion 5: every emitted line must match `PASS: <name>`,
+    `FAIL: <name> (count=N)`, `ADVISORY: <name>`, `SKIP: <name>`, or the
+    final `SUMMARY: ...` line. No file paths, SQL fragments, or DB internals.
+    """
+
+    def test_quiet_mode_lines_are_sanitized(self, tmp_path):
+        import re
+        import subprocess
+        import sys
+
+        proj_root = Path(__file__).resolve().parents[2]
+        result = subprocess.run(
+            [sys.executable, str(proj_root / "pipeline" / "check_drift.py"), "--quiet", "--fast"],
+            capture_output=True,
+            text=True,
+            cwd=str(proj_root),
+        )
+        # Exit 0 = clean, 1 = drift; either is fine for sanitization test.
+        assert result.returncode in (0, 1), f"unexpected exit: {result.stderr}"
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        assert lines, "quiet mode produced no output"
+        allowed = re.compile(r"^(?:PASS|FAIL|ADVISORY|SKIP):\s.+$|^SUMMARY:\s.+$")
+        for line in lines:
+            assert allowed.match(line), f"unsanitized line leaked: {line!r}"
+        # The summary line is required and last-emitted.
+        assert lines[-1].startswith("SUMMARY:"), f"missing summary line: {lines[-1]!r}"
+
+    def test_quiet_mode_summary_carries_passed_count(self, tmp_path):
+        import subprocess
+        import sys
+
+        proj_root = Path(__file__).resolve().parents[2]
+        result = subprocess.run(
+            [sys.executable, str(proj_root / "pipeline" / "check_drift.py"), "--quiet", "--fast"],
+            capture_output=True,
+            text=True,
+            cwd=str(proj_root),
+        )
+        summary = [line for line in result.stdout.splitlines() if line.startswith("SUMMARY:")]
+        assert len(summary) == 1
+        assert "passed=" in summary[0]
+
+
+class TestHardcodedOpenrouterModelInLauncher:
+    """Phase 2 of DeepSeek Coding Agent v4: forward-looking ratchet.
+
+    The OpenCode launcher keeps exactly one annotated openrouter/<vendor>/<model>
+    literal as a fallback for when the canonical profile resolver cannot
+    return a model. The check fires when the annotation is missing or when
+    a second hardcoded literal is added.
+    """
+
+    def test_passes_against_in_tree_launcher(self):
+        # Smoke test: the real launcher must pass after Phase 2 lands.
+        violations = check_hardcoded_openrouter_model_in_launcher()
+        assert violations == [], f"in-tree launcher tripped the check: {violations}"
+
+    def test_no_op_when_launcher_dir_missing(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        # No scripts/tools dir present.
+        assert cd.check_hardcoded_openrouter_model_in_launcher() == []
+
+    def test_passes_when_literal_is_annotated(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "fake-agent.ps1").write_text(
+            "param(\n"
+            "    # canonical-default-fallback: openrouter/deepseek-chat-v3.1\n"
+            '    [string]$Model = "openrouter/deepseek-chat-v3.1"\n'
+            ")\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        assert cd.check_hardcoded_openrouter_model_in_launcher() == []
+
+    def test_fires_when_literal_is_unannotated(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "fake-agent.ps1").write_text(
+            'param(\n    [string]$Model = "openrouter/deepseek-chat-v3.1"\n)\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        violations = cd.check_hardcoded_openrouter_model_in_launcher()
+        assert len(violations) == 1
+        assert "fake-agent.ps1" in violations[0]
+        assert "canonical-default-fallback" in violations[0]
+
+    def test_fires_when_second_literal_added_unannotated(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "fake-agent.ps1").write_text(
+            "param(\n"
+            "    # canonical-default-fallback: openrouter/deepseek-chat-v3.1\n"
+            '    [string]$Model = "openrouter/deepseek-chat-v3.1"\n'
+            ")\n"
+            '$Backup = "openrouter/anthropic/claude-3.5-sonnet"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        violations = cd.check_hardcoded_openrouter_model_in_launcher()
+        assert len(violations) == 1
+        assert "claude-3.5-sonnet" not in violations[0]  # message says path:line, not literal
+        assert "fake-agent.ps1:5" in violations[0]
+
+    def test_does_not_flag_prose_placeholder_in_strings(self, tmp_path, monkeypatch):
+        # Error messages may contain `openrouter/...` as a placeholder; those
+        # are not hardcoded model literals because the regex requires an
+        # alphanumeric character after the slash.
+        from pipeline import check_drift as cd
+
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "fake-agent.ps1").write_text(
+            'Write-Host "set CANOMPX3_AI_DEEPSEEK_CODING_MODEL=<openrouter/...>"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        assert cd.check_hardcoded_openrouter_model_in_launcher() == []
+
+    def test_ignores_non_agent_ps1_scripts(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        # Glob is `*-agent.ps1`; non-matching scripts are out of scope.
+        (tools / "build.ps1").write_text(
+            '$Model = "openrouter/deepseek-chat-v3.1"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        assert cd.check_hardcoded_openrouter_model_in_launcher() == []
