@@ -1179,6 +1179,17 @@ async def api_trade_book():
     live_note: str | None = None
     paper_trades: list[dict] = []
     paper_note: str | None = None
+    paper_truncated: bool = False
+    paper_total_count: int = 0
+    # Rationale: Browser DOM rendering and JSON payload size grow linearly
+    # with row count; at the current 580-row baseline (2026-05-07 smoke
+    # check) latency is unobservable, but at 10k+ rows the operator-facing
+    # Trade Book panel becomes laggy and the JSON response approaches MB
+    # scale. 5000 is a comfortable headroom over today's count while
+    # keeping the page snappy. Truncation is signalled to the UI via
+    # paper_truncated + paper_total_count for an explicit "showing first
+    # N of M" hint instead of silent row loss.
+    PAPER_TRADES_LIMIT = 5000
 
     if JOURNAL_PATH.exists():
         try:
@@ -1225,8 +1236,12 @@ async def api_trade_book():
         try:
             with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
                 configure_connection(con)
+                # LIMIT N+1 lets us detect truncation in one query (rows
+                # returned > N → truncated). Only when truncated do we run
+                # the second COUNT(*) for the exact total. Untruncated path
+                # stays single-query.
                 rows = con.execute(
-                    """
+                    f"""
                     SELECT trading_day, instrument, strategy_id, lane_name, direction,
                            entry_model, orb_label, orb_minutes, rr_target, filter_type,
                            entry_time, exit_time, entry_price, exit_price,
@@ -1234,8 +1249,15 @@ async def api_trade_book():
                            execution_source
                     FROM paper_trades
                     ORDER BY trading_day DESC, entry_time DESC
+                    LIMIT {PAPER_TRADES_LIMIT + 1}
                     """
                 ).fetchall()
+                if len(rows) > PAPER_TRADES_LIMIT:
+                    paper_truncated = True
+                    rows = rows[:PAPER_TRADES_LIMIT]
+                    paper_total_count = con.execute("SELECT COUNT(*) FROM paper_trades").fetchone()[0]
+                else:
+                    paper_total_count = len(rows)
                 cols = [
                     "trading_day",
                     "instrument",
@@ -1270,6 +1292,8 @@ async def api_trade_book():
         "live_note": live_note,
         "paper_trades": paper_trades,
         "paper_note": paper_note,
+        "paper_truncated": paper_truncated,
+        "paper_total_count": paper_total_count,
         "counts": {
             "live": len(live_trades),
             "paper": len(paper_trades),
