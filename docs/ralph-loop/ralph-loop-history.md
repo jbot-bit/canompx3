@@ -1981,3 +1981,16 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 2 files (db_manager.py production + line-ending normalization in pre-commit for test file)
 - Verification: PASS — 13/13 test_db_manager.py; 107/107 drift checks; 324 fast tests (pre-commit)
 - Commit: 6811640a
+
+---
+
+## Iteration 185 — 2026-05-07
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/outcome_builder.py:714
+- Finding: build_outcomes() had instrument='MGC' hardcoded default — silent wrong-instrument path for any future caller omitting the argument. Violates integrity-guardian.md § 2 (never hardcode instrument names inline).
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources — instrument names must come from ACTIVE_ORB_INSTRUMENTS, never hardcoded)
+- Action: Replaced instrument='MGC' default with instrument: str | None = None + ValueError guard. All 12 production call sites already pass instrument= explicitly; no behavior change for current callers. Also rebuilt MGC 2026-05-06 O15+O30 daily_features rows via pipeline to resolve pre-existing Check 63 DB state failure.
+- Blast radius: 1 file (outcome_builder.py)
+- Verification: PASS — 36/36 test_outcome_builder.py; 122/122 drift checks; 341 pre-commit tests
+- Commit: 9e23de0c

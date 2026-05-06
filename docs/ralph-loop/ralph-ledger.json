@@ -1,14 +1,14 @@
 {
-  "total_iterations": 177,
+  "total_iterations": 178,
   "last_updated": "2026-05-07",
-  "consecutive_low_only": 3,
-  "last_high_finding_iter": 181,
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 185,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 57,
-      "fixed": 44,
+      "found": 58,
+      "fixed": 45,
       "deferred": 4,
-      "fix_rate": 0.77
+      "fix_rate": 0.78
     },
     "silent_failure": {
       "found": 41,
@@ -128,12 +128,12 @@
   "findings_by_severity": {
     "CRITICAL": 9,
     "HIGH": 14,
-    "MEDIUM": 45,
+    "MEDIUM": 46,
     "LOW": 109
   },
   "classifications": {
     "judgment": 83,
-    "mechanical": 61,
+    "mechanical": 62,
     "audit-only": 33
   },
   "files_audited": {
@@ -151,6 +151,11 @@
       "audit_count": 5,
       "last_iter": 164,
       "findings": 4
+    },
+    "trading_app/outcome_builder.py": {
+      "audit_count": 5,
+      "last_iter": 185,
+      "findings": 5
     },
     "session_orchestrator.py": {
       "audit_count": 4,
@@ -176,11 +181,6 @@
       "audit_count": 4,
       "last_iter": 119,
       "findings": 3
-    },
-    "trading_app/outcome_builder.py": {
-      "audit_count": 4,
-      "last_iter": 170,
-      "findings": 4
     },
     "trading_app/db_manager.py": {
       "audit_count": 4,
@@ -3110,6 +3110,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "74a8ed63"
+    },
+    {
+      "iter": 185,
+      "date": "2026-05-07",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/outcome_builder.py:714",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "9e23de0c"
     }
   ]
 }
