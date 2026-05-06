@@ -54,11 +54,12 @@ class LaneDef:
 def build_lanes(profile_id: str | None = None) -> tuple[LaneDef, ...]:
     """Build lane definitions from a prop profile's daily_lanes.
 
-    Single source of truth: prop_profiles.py → parse_strategy_id.
+    Single source of truth: trading_app.eligibility.builder.parse_strategy_id.
     No hardcoded strategy_ids or filter_sql in this module.
     If profile_id is None, uses first active profile.
     """
-    from trading_app.prop_profiles import ACCOUNT_PROFILES, parse_strategy_id
+    from trading_app.eligibility.builder import parse_strategy_id
+    from trading_app.prop_profiles import ACCOUNT_PROFILES
 
     if profile_id is None:
         for pid, p in ACCOUNT_PROFILES.items():

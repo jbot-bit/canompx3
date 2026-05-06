@@ -746,3 +746,48 @@ class TestExecutionSymbolMap:
             assert profile.execution_symbol_map is None, profile.profile_id
             assert profile.execution_qty_divisor is None, profile.profile_id
             assert resolve_execution_symbol(profile, "MNQ") == ("MNQ", 1)
+
+
+class TestParseStrategyIdDelegator:
+    """Regression coverage for the canonical-parser delegator.
+
+    prop_profiles.parse_strategy_id used to silently default {E2/RR1.0/CB1/
+    NO_FILTER/orb_minutes=5} on malformed input. It now delegates to
+    trading_app.eligibility.builder.parse_strategy_id, which raises
+    ValueError. This test pins both behaviours.
+    """
+
+    def test_delegates_to_canonical_on_valid_id(self):
+        from trading_app.eligibility.builder import parse_strategy_id as canonical
+        from trading_app.prop_profiles import parse_strategy_id
+
+        sid = "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G6_S075"
+        result = parse_strategy_id(sid)
+        assert result == canonical(sid)
+        assert result["filter_type"] == "ORB_G6"
+        assert result["entry_model"] == "E2"
+        assert result["rr_target"] == 1.0
+        assert result["orb_minutes"] == 5
+
+    def test_aperture_suffix_parsed(self):
+        from trading_app.prop_profiles import parse_strategy_id
+
+        result = parse_strategy_id("MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10_O15")
+        assert result["orb_minutes"] == 15
+        assert result["filter_type"] == "COST_LT10"
+
+    @pytest.mark.parametrize(
+        "bad_sid",
+        [
+            "INVALID_GARBAGE",
+            "XYZ_NYSE_OPEN_E2_RR1.0_CB1_NO_FILTER",
+            "MNQ_NYSE_OPEN_NOENTRY_RR1.0_CB1_NO_FILTER",
+            "",
+            "short",
+        ],
+    )
+    def test_malformed_input_raises(self, bad_sid):
+        from trading_app.prop_profiles import parse_strategy_id
+
+        with pytest.raises(ValueError):
+            parse_strategy_id(bad_sid)

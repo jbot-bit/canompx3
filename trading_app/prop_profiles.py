@@ -26,8 +26,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from trading_app.config import ENTRY_MODELS
-
 # =========================================================================
 # Data structures
 # =========================================================================
@@ -931,44 +929,14 @@ def resolve_profile_id(
 def parse_strategy_id(strategy_id: str) -> dict:
     """Parse strategy parameters from canonical strategy_id string.
 
-    Format: {INSTR}_{SESSION}_{ENTRY}_{RR}_{CB}_{FILTER}[_O{MIN}][_S{MULT}]
-    Returns dict with: entry_model, rr_target, confirm_bars, filter_type, orb_minutes.
+    Thin delegator to `trading_app.eligibility.builder.parse_strategy_id`
+    (single source of truth per institutional-rigor.md § 4 + the
+    feedback_aperture_overlay_canonical_parser.md memo). Raises ValueError
+    on malformed input — no silent default.
     """
-    parts = strategy_id.split("_")
-    result: dict = {
-        "entry_model": "E2",
-        "rr_target": 1.0,
-        "confirm_bars": 1,
-        "filter_type": "NO_FILTER",
-        "orb_minutes": 5,
-    }
-    for p in parts:
-        if p in ENTRY_MODELS:
-            result["entry_model"] = p
-        elif p.startswith("RR"):
-            result["rr_target"] = float(p[2:])
-        elif p.startswith("CB"):
-            result["confirm_bars"] = int(p[2:])
-        elif p.startswith("O") and p[1:].isdigit():
-            result["orb_minutes"] = int(p[1:])
-    # filter_type: everything between CB and O/S suffix (or end)
-    # Reconstruct from parts after CB until we hit O{digits} or S{digits} or end
-    cb_idx = None
-    for i, p in enumerate(parts):
-        if p.startswith("CB") and p[2:].isdigit():
-            cb_idx = i
-            break
-    if cb_idx is not None:
-        filter_parts = []
-        for p in parts[cb_idx + 1 :]:
-            if (p.startswith("O") and p[1:].isdigit()) or (p.startswith("S") and p[1:].replace(".", "").isdigit()):
-                break
-            filter_parts.append(p)
-        if filter_parts:
-            result["filter_type"] = "_".join(filter_parts)
-        else:
-            result["filter_type"] = "NO_FILTER"
-    return result
+    from trading_app.eligibility.builder import parse_strategy_id as _canonical
+
+    return _canonical(strategy_id)
 
 
 # DEPRECATED 2026-05-07 (Ralph iter 184): session-keyed static names no longer

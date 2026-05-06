@@ -49,7 +49,8 @@ from trading_app.account_survival import (
     TradePath,
 )
 from trading_app.config import apply_tight_stop
-from trading_app.prop_profiles import _LANE_NAMES, get_profile, load_allocation_lanes, parse_strategy_id
+from trading_app.eligibility.builder import parse_strategy_id
+from trading_app.prop_profiles import _LANE_NAMES, get_profile, load_allocation_lanes
 from trading_app.strategy_fitness import _load_strategy_outcomes
 
 DEFAULT_PROFILE_ID = "topstep_50k_mnq_auto"
