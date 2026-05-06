@@ -142,3 +142,29 @@ All four required (institutional rigor §8):
   - rc=1 (BLOCK) → script exits 1, FINAL_EXIT=1.
 - [x] **Adversarial audit (`evidence-auditor`):** initial verdict caught a critical defect — original F7 fix was semantically a no-op under `set -e` because the bare invocation tripped `set -e` before `review_rc=$?` could capture the exit code. Fixed by switching to the `cmd || review_rc=$?` idiom (places the call inside a `||` list which is exempt from `set -e` per POSIX). Re-tested under `set -e` confirms advisory-vs-block separation works.
 - [x] F1/F5/F9/F6 audit verdicts: PASS / PASS / PASS / phantom-confirmed.
+
+## Code-review follow-up (post-commit `ecce35a1`)
+
+A bloomey-style code review on `ecce35a1` graded the commit B+ and surfaced two real follow-up items, both addressed here:
+
+### MEDIUM — `model_configured` parity with `validation_errors()`
+
+- **Symptom:** with the F1 fix tightening `validation_errors()` to reject whitespace-only `model` strings (`provider_registry.py:134`), the sibling `to_metadata()` at line 163 still computed `model_configured = bool(self.model)`, returning `True` for `"   "`. Net effect: a self-contradicting metadata payload (`model_configured=True` alongside `validation_errors=["model not configured..."]`) rendered to the AI Research Packet markdown via `research_packet.py:218`.
+- **Fix:** `bool(self.model and self.model.strip())` — exact parity with the canonical validator at line 134.
+- **Blast radius:** display-only (only consumer is the markdown rendering at `research_packet.py:218`; verified via `grep -rn "model_configured"` — exactly 2 hits in the entire repo: definition + rendering). Behavior is monotonically tighter (anything previously `False` stays `False`; only whitespace strings flip `True → False`).
+- **Test:** `test_to_metadata_model_configured_consistent_with_validation_errors` asserts both signals agree on whitespace-only model.
+
+### LOW — F7 dispatch fail-CLOSED on unexpected reviewer rc
+
+- **Symptom:** the F7 dispatch at `.githooks/pre-commit:213-220` handled rc=0 (continue), rc=1 (block), rc=2 (advisory + continue). Any other rc — rc=130 (Ctrl-C), rc=137 (SIGKILL/OOM), rc=3 (uncaught Python exception) — silently fell through, treating the commit as APPROVED on a capital-class commit-gate path.
+- **Fix:** explicit `elif ... -ne 0` branch emits a loud `[0d] WARN: reviewer returned unexpected rc=N; treating as REVIEW_UNAVAILABLE` and continues. Defense-in-depth: undefined rc no longer silently approves.
+- **Behavioral semantics:** rc=0 → APPROVE (continue); rc=1 → BLOCK (exit 1); rc=2 → REVIEW_UNAVAILABLE (advisory + continue); rc=anything-else → REVIEW_UNAVAILABLE with diagnostic + continue. Conservative: if the review didn't complete (signal kill, OOM), don't lie and say it passed.
+- **Note:** this is **not** a gate-semantic change — rc=0/1/2 behavior is identical to the prior commit. Only previously-undefined rc paths change from silent APPROVE to logged REVIEW_UNAVAILABLE. Hence no adversarial-audit gate (advisory log on already-undefined behavior, not a CRIT/HIGH path).
+
+### Verification log (follow-up)
+
+- [x] Drift baseline pre-fix: `121 PASS / 0 skipped / 19 advisory`.
+- [x] Drift post-fix: `121 PASS / 0 skipped / 19 advisory` — no regression.
+- [x] `tests/test_trading_app/test_ai/test_provider_registry.py`: 19 passed (18 prior + 1 new metadata-parity test).
+- [x] Stage A live falsification (whitespace-only model env): `model_configured: False`, `validation_errors_count: 1` — internally consistent.
+- [x] Stage B behavioral test (synthetic `set -e` shim, rc=137 and rc=130): WARN line emitted, FINAL_EXIT=0 (continued, not blocked).

@@ -214,9 +214,16 @@ if [ "$OPENCODE_AGENT_ACTIVE" = "1" ]; then
     "$REVIEW_PY" "$SCRIPT_DIR/scripts/tools/claude_review_deepseek.py" || review_rc=$?
     if [ "$review_rc" -eq 1 ]; then
         exit 1
-    fi
-    if [ "$review_rc" -eq 2 ]; then
+    elif [ "$review_rc" -eq 2 ]; then
         echo "[0d] (advisory: review unavailable — proceeding; \`--no-verify\` available if needed)"
+    elif [ "$review_rc" -ne 0 ]; then
+        # Reviewer contract (claude_review_deepseek.py:7-12) only specifies
+        # rc 0/1/2. Anything else (rc=130 SIGINT, rc=137 SIGKILL/OOM, rc=3
+        # uncaught Python exception, etc.) is undefined — treat as
+        # REVIEW_UNAVAILABLE rather than silent APPROVE on a capital-class
+        # commit-gate path. The review didn't complete; the operator gets a
+        # diagnostic instead of a quiet pass.
+        echo "[0d] WARN: reviewer returned unexpected rc=$review_rc; treating as REVIEW_UNAVAILABLE — proceeding."
     fi
 fi
 

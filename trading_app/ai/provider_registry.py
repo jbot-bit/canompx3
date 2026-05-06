@@ -160,7 +160,12 @@ class AIProfile:
 
     def to_metadata(self) -> dict[str, Any]:
         payload = asdict(self)
-        payload["model_configured"] = bool(self.model)
+        # Parity with validation_errors() at line 134: a whitespace-only
+        # model is "not configured". Without `.strip()`, the metadata payload
+        # produced a self-contradicting pair (model_configured=True alongside
+        # a "model not configured" entry in validation_errors) that surfaced
+        # in the AI Research Packet markdown via research_packet.py:218.
+        payload["model_configured"] = bool(self.model and self.model.strip())
         payload["validation_errors"] = self.validation_errors()
         if self.router is not None:
             payload["router"] = self.router.to_openrouter_dict()

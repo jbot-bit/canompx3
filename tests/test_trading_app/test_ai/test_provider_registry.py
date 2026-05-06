@@ -183,6 +183,27 @@ class TestDeepseekCodingProfile:
         assert any("mutation authority is not allowed" in e for e in errors), errors
         assert any("live-control authority is not allowed" in e for e in errors), errors
 
+    def test_to_metadata_model_configured_consistent_with_validation_errors(self) -> None:
+        """Producer/consumer parity: ``to_metadata()['model_configured']`` and
+        ``validation_errors()`` must agree on what "configured" means.
+
+        Whitespace-only model strings are rejected by validation_errors() at
+        provider_registry.py:134. Prior to the parity fix, to_metadata() at
+        line 163 used ``bool(self.model)`` which returned True for "   ",
+        producing an internally inconsistent metadata payload that surfaced
+        in the AI Research Packet markdown (research_packet.py:218).
+        """
+        base = PROFILE_REGISTRY["deepseek_coding"]
+        whitespace_only = replace(base, model="   ")
+        with patch.dict("os.environ", {"OPENROUTER_API_KEY": "sk-or-test"}, clear=True):
+            metadata = whitespace_only.to_metadata()
+        assert metadata["model_configured"] is False, metadata
+        assert any("model not configured" in e for e in metadata["validation_errors"]), metadata
+        # Internal-consistency invariant: if validation_errors flags
+        # "model not configured", model_configured MUST be False.
+        if any("model not configured" in e for e in metadata["validation_errors"]):
+            assert metadata["model_configured"] is False
+
     def test_handset_interactive_editor_research_profile_allows_mutation(self) -> None:
         """Sister of the regression guard: the gate hinges on runtime_class.
 
