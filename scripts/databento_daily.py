@@ -86,12 +86,21 @@ _DATABENTO_SYMBOLS: dict[str, str] = {
 }
 
 # Additional schemas to refresh daily (beyond ohlcv-1m which refresh_data.py handles).
-# Only FREE (L0) schemas are downloaded daily. Paid schemas (L1 tbbo/trades/bbo-1s,
-# L2 mbp-1/mbp-10) are one-time backfills only — see config/databento_config.yaml.
 #
-# Rationale (Apr 2026): OI research KILLED (confounded with ATR, r=0.4-0.6).
-# Tick-level data (tbbo/trades/mbp-1) not ingested, no validated use case.
-# Keeping FREE schemas as research archive costs nothing on usage-based plan.
+# All schemas listed here are INCLUDED IN THE EXISTING DATABENTO STANDARD PLAN
+# at zero marginal cost:
+#   - ohlcv-1s, statistics    -> unlimited free (L0)
+#   - tbbo, trades, bbo-1s    -> rolling 12-month free (L1)
+#
+# L2 schemas (mbp-1, mbp-10) are NOT in this list — they roll on a 1-month
+# window and are pulled on-demand via scripts/databento_l2_snapshot.py when
+# there is a research question that needs deep-book data. Keeping L2 out of
+# the cron prevents 8-12 GB/month of churn for distributional questions a
+# single representative sample already answers.
+#
+# Cost-guard (refresh_schema): every schema/instrument combo is verified FREE
+# via client.metadata.get_cost BEFORE the live download. Non-zero cost
+# triggers a WARN-and-skip — no surprise spending, by code not by trust.
 DAILY_SCHEMAS = [
     {
         "schema": "ohlcv-1s",
@@ -103,7 +112,26 @@ DAILY_SCHEMAS = [
         "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
         "description": "Settlement prices, OI, volume stats (L0 FREE)",
     },
+    {
+        "schema": "tbbo",
+        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
+        "description": "Trade+quote tape (L1, 12mo rolling FREE)",
+    },
+    {
+        "schema": "trades",
+        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
+        "description": "Tick-by-tick trades (L1, 12mo rolling FREE)",
+    },
+    {
+        "schema": "bbo-1s",
+        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
+        "description": "1-second NBBO snapshot (L1, 12mo rolling FREE)",
+    },
 ]
+
+# Cost-guard threshold: Databento returns float USD; treat anything below this
+# as FREE (covers floating-point noise on the genuinely-zero case).
+_FREE_COST_THRESHOLD_USD = 0.0001
 
 
 # ---------------------------------------------------------------------------
@@ -181,24 +209,39 @@ def refresh_schema(
             results[name] = "SKIP"
             continue
 
+        # Cost-guard pre-flight — runs in BOTH dry-run and live mode.
+        # In live mode, a non-FREE response aborts this schema/instrument
+        # before any billable HTTP call is made.
+        try:
+            cost = client.metadata.get_cost(
+                dataset=DATASET,
+                symbols=[db_symbol],
+                schema=schema,
+                stype_in="parent",
+                start=str(fetch_start),
+                end=str(fetch_end),
+            )
+            is_free = cost is not None and cost <= _FREE_COST_THRESHOLD_USD
+            cost_str = "FREE" if is_free else f"${cost:.4f}"
+        except Exception as e:
+            log.warning(f"  {name}: COST PROBE FAIL ({e}) — refusing to fetch (no billable surprise)")
+            results[name] = f"SKIP (cost probe failed: {e})"
+            continue
+
         if dry_run:
-            try:
-                cost = client.metadata.get_cost(
-                    dataset=DATASET,
-                    symbols=[db_symbol],
-                    schema=schema,
-                    stype_in="parent",
-                    start=str(fetch_start),
-                    end=str(fetch_end),
-                )
-                cost_str = "FREE" if cost == 0 else f"${cost:.2f}"
-                log.info(f"  {name}: WOULD download {fetch_start} -> {fetch_end} ({cost_str})")
-            except Exception as e:
-                log.info(f"  {name}: WOULD download {fetch_start} -> {fetch_end} (cost unknown: {e})")
+            log.info(f"  {name}: WOULD download {fetch_start} -> {fetch_end} ({cost_str})")
             results[name] = "DRY_RUN"
             continue
 
-        log.info(f"  {name}: downloading {fetch_start} -> {fetch_end}")
+        if not is_free:
+            log.warning(
+                f"  {name}: NON-FREE ({cost_str}) — refusing to fetch. "
+                f"User policy: zero additional paid spending. Adjust window or schema."
+            )
+            results[name] = f"SKIP (non-free: {cost_str})"
+            continue
+
+        log.info(f"  {name}: downloading {fetch_start} -> {fetch_end} (cost-guard: FREE)")
 
         try:
             data = client.timeseries.get_range(
