@@ -18,6 +18,7 @@ from pipeline.check_drift import (
     check_daily_features_row_integrity,
     check_deepseek_review_gate_intact,
     check_hardcoded_mgc_sql,
+    check_hardcoded_openrouter_model_in_launcher,
     check_holdout_policy_declaration_consistency,
     check_non_bars1m_writes,
     check_pipeline_never_imports_trading_app,
@@ -2304,3 +2305,102 @@ class TestQuietModeOutputSanitization:
         summary = [line for line in result.stdout.splitlines() if line.startswith("SUMMARY:")]
         assert len(summary) == 1
         assert "passed=" in summary[0]
+
+
+class TestHardcodedOpenrouterModelInLauncher:
+    """Phase 2 of DeepSeek Coding Agent v4: forward-looking ratchet.
+
+    The OpenCode launcher keeps exactly one annotated openrouter/<vendor>/<model>
+    literal as a fallback for when the canonical profile resolver cannot
+    return a model. The check fires when the annotation is missing or when
+    a second hardcoded literal is added.
+    """
+
+    def test_passes_against_in_tree_launcher(self):
+        # Smoke test: the real launcher must pass after Phase 2 lands.
+        violations = check_hardcoded_openrouter_model_in_launcher()
+        assert violations == [], f"in-tree launcher tripped the check: {violations}"
+
+    def test_no_op_when_launcher_dir_missing(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        # No scripts/tools dir present.
+        assert cd.check_hardcoded_openrouter_model_in_launcher() == []
+
+    def test_passes_when_literal_is_annotated(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "fake-agent.ps1").write_text(
+            "param(\n"
+            "    # canonical-default-fallback: openrouter/deepseek-chat-v3.1\n"
+            '    [string]$Model = "openrouter/deepseek-chat-v3.1"\n'
+            ")\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        assert cd.check_hardcoded_openrouter_model_in_launcher() == []
+
+    def test_fires_when_literal_is_unannotated(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "fake-agent.ps1").write_text(
+            'param(\n    [string]$Model = "openrouter/deepseek-chat-v3.1"\n)\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        violations = cd.check_hardcoded_openrouter_model_in_launcher()
+        assert len(violations) == 1
+        assert "fake-agent.ps1" in violations[0]
+        assert "canonical-default-fallback" in violations[0]
+
+    def test_fires_when_second_literal_added_unannotated(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "fake-agent.ps1").write_text(
+            "param(\n"
+            "    # canonical-default-fallback: openrouter/deepseek-chat-v3.1\n"
+            '    [string]$Model = "openrouter/deepseek-chat-v3.1"\n'
+            ")\n"
+            '$Backup = "openrouter/anthropic/claude-3.5-sonnet"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        violations = cd.check_hardcoded_openrouter_model_in_launcher()
+        assert len(violations) == 1
+        assert "claude-3.5-sonnet" not in violations[0]  # message says path:line, not literal
+        assert "fake-agent.ps1:5" in violations[0]
+
+    def test_does_not_flag_prose_placeholder_in_strings(self, tmp_path, monkeypatch):
+        # Error messages may contain `openrouter/...` as a placeholder; those
+        # are not hardcoded model literals because the regex requires an
+        # alphanumeric character after the slash.
+        from pipeline import check_drift as cd
+
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "fake-agent.ps1").write_text(
+            'Write-Host "set CANOMPX3_AI_DEEPSEEK_CODING_MODEL=<openrouter/...>"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        assert cd.check_hardcoded_openrouter_model_in_launcher() == []
+
+    def test_ignores_non_agent_ps1_scripts(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        tools = tmp_path / "scripts" / "tools"
+        tools.mkdir(parents=True)
+        # Glob is `*-agent.ps1`; non-matching scripts are out of scope.
+        (tools / "build.ps1").write_text(
+            '$Model = "openrouter/deepseek-chat-v3.1"\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        assert cd.check_hardcoded_openrouter_model_in_launcher() == []

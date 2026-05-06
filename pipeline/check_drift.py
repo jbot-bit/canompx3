@@ -8197,6 +8197,70 @@ def check_lane_allocation_chordia_gate() -> list[str]:
     return violations
 
 
+# Match a real OpenRouter model literal: openrouter/<vendor>[-./_word]+
+# The first character after `openrouter/` must be alphanumeric so prose
+# placeholders like `openrouter/...` (used in error messages) are not flagged.
+_OPENROUTER_MODEL_LITERAL_RE = re.compile(r"openrouter/[A-Za-z0-9][A-Za-z0-9_./-]*")
+_CANONICAL_DEFAULT_ANNOTATION = "canonical-default-fallback:"
+
+
+def check_hardcoded_openrouter_model_in_launcher() -> list[str]:
+    """Forward-looking ratchet: at most one hardcoded openrouter/ model per launcher.
+
+    The OpenCode coding-agent launcher (`scripts/tools/opencode-agent.ps1`) keeps
+    exactly one hardcoded `openrouter/<vendor>/<model>` literal as a fallback
+    default for when the canonical profile resolver
+    (`scripts/tools/opencode_resolve_model.py`) cannot return a model. That one
+    literal must be annotated with the `canonical-default-fallback:` token in
+    a comment line so the model identity is greppable, scoped, and reviewable.
+
+    This check fires if a `*-agent.ps1` file under `scripts/tools/` contains
+    an `openrouter/` model literal on a non-comment line that is NOT preceded
+    (within 3 lines) by the annotation token. Comment lines (starting with
+    `#` after lstrip) are not scanned for literals, so the annotation comment
+    itself never trips the regex.
+    """
+    violations: list[str] = []
+    launcher_dir = PROJECT_ROOT / "scripts" / "tools"
+    if not launcher_dir.exists():
+        return []
+    for path in sorted(launcher_dir.glob("*-agent.ps1")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        lines = text.splitlines()
+        # An annotation comment exempts the NEXT non-comment, non-blank
+        # executable line in the same file. This lets multi-line comment
+        # blocks describe the rationale before the actual default value.
+        exempt = [False] * len(lines)
+        pending_exempt = False
+        for idx, line in enumerate(lines):
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                if _CANONICAL_DEFAULT_ANNOTATION in line:
+                    pending_exempt = True
+                continue
+            if not stripped:
+                continue
+            if pending_exempt:
+                exempt[idx] = True
+                pending_exempt = False
+        # Flag any openrouter/<...> literal NOT inside a comment AND NOT exempt.
+        rel = path.relative_to(PROJECT_ROOT).as_posix()
+        for idx, line in enumerate(lines):
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                continue
+            if _OPENROUTER_MODEL_LITERAL_RE.search(line) and not exempt[idx]:
+                violations.append(
+                    f"  {rel}:{idx + 1}: hardcoded openrouter model literal without "
+                    f"`{_CANONICAL_DEFAULT_ANNOTATION}` annotation; route through "
+                    f"scripts/tools/opencode_resolve_model.py instead"
+                )
+    return violations
+
+
 def check_deepseek_review_gate_intact() -> list[str]:
     """DeepSeek Coding Agent review gate (pre-commit step 0d) is intact.
 
@@ -8778,6 +8842,12 @@ CHECKS = [
         "DeepSeek Coding Agent review gate (pre-commit step 0d) is intact",
         check_deepseek_review_gate_intact,
         False,  # blocking once Phase 3 lands the marker; no-op until then
+        False,
+    ),
+    (
+        "OpenCode launcher: at most one canonical-default-annotated openrouter/ literal",
+        check_hardcoded_openrouter_model_in_launcher,
+        False,  # blocking — model selection must route through canonical resolver
         False,
     ),
 ]  # end CHECKS

@@ -25,6 +25,12 @@
 # Opt-out for auto-install: $env:OPENCODE_AGENT_SKIP_INSTALL=1
 
 param(
+    # canonical-default-fallback: openrouter/deepseek-chat-v3.1
+    # Used only when the canonical profile resolver cannot return a model
+    # (e.g. CANOMPX3_AI_DEEPSEEK_CODING_MODEL unset). The drift check
+    # `check_hardcoded_openrouter_model_in_launcher` exempts this annotation;
+    # any second hardcoded openrouter/<vendor>/<model> in this file flips it
+    # to a hard block.
     [string]$Model = "openrouter/deepseek-chat-v3.1",
     [switch]$NoLaunch
 )
@@ -167,9 +173,29 @@ if (-not (Test-OpencodeInstalled)) {
     if (-not (Install-Opencode)) { exit 1 }
 }
 
+# ---------- canonical model resolution ----------
+# Delegate to provider_registry.get_profile("deepseek_coding"); single
+# source of truth for the model ID. If the env var is unset (or any other
+# validation_errors), fall back to the launcher default with explicit WARN.
+$repoRootForResolver = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$resolverScript = Join-Path $repoRootForResolver "scripts\tools\opencode_resolve_model.py"
+$modelSource = "launcher default"
+if (Test-Path -LiteralPath $resolverScript) {
+    $resolved = & python $resolverScript 2>$null
+    if ($LASTEXITCODE -eq 0 -and $resolved -and $resolved.Trim()) {
+        $Model = $resolved.Trim()
+        $modelSource = "canonical profile"
+    } else {
+        Write-Host ("[opencode-agent] WARN: canonical profile not configured; " +
+            "using launcher default model=$Model. Set " +
+            "CANOMPX3_AI_DEEPSEEK_CODING_MODEL=<openrouter/...> for single-source-of-truth.") `
+            -ForegroundColor Yellow
+    }
+}
+
 $version = Get-OpencodeVersion
 $tail = Get-KeyTail $key
-Write-Host "[opencode-agent] tool=opencode version=$version model=$Model key=...$tail source=$source"
+Write-Host "[opencode-agent] tool=opencode version=$version model=$Model ($modelSource) key=...$tail source=$source"
 
 if ($NoLaunch) {
     exit 0

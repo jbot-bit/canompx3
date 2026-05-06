@@ -271,10 +271,9 @@ PROFILE_REGISTRY: dict[str, AIProfile] = {
         required_env=("OPENROUTER_API_KEY",),
         notes=(
             "OpenRouter-backed coding-agent profile (DeepSeek Coding Agent v4). "
-            "model is None until Phase 2.5 bake-off picks the winner; assert_ready "
-            "fails-closed by design until then. Edits land via aider; every commit "
-            "is reviewed by claude-side gate (Phase 3) before push. Configure the "
-            "selected model via CANOMPX3_AI_DEEPSEEK_CODING_MODEL."
+            "model is None until configured via CANOMPX3_AI_DEEPSEEK_CODING_MODEL; "
+            "assert_ready fails-closed by design until then. Edits land via opencode; "
+            "every commit is reviewed by claude-side gate (Phase 3) before push."
         ),
     ),
 }

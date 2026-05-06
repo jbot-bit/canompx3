@@ -145,7 +145,17 @@ All required:
 
 All four required (institutional rigor rule #8):
 
-- [ ] Acceptance criteria 1-7 all green with execution evidence pasted into Verification log.
-- [ ] Dead-code sweep: `grep -r "deepseek_coding\|interactive_editor\|check_deepseek_review_gate_intact" --include="*.py"` shows only the new code paths and their tests, no orphaned imports.
-- [ ] `python pipeline/check_drift.py` passes (and `--quiet` mode passes too).
-- [ ] Self-review (code-review skill or equivalent) run on the commit's diff; findings either resolved or explicitly accepted with rationale.
+- [x] Acceptance criteria 1-7 all green with execution evidence pasted into Verification log.
+- [x] Dead-code sweep: `grep -r "deepseek_coding\|interactive_editor\|check_deepseek_review_gate_intact" --include="*.py"` shows only the new code paths and their tests, no orphaned imports.
+- [x] `python pipeline/check_drift.py` passes (and `--quiet` mode passes too).
+- [x] Self-review (code-review skill or equivalent) run on the commit's diff; findings either resolved or explicitly accepted with rationale.
+
+## Phase 1 closeout (2026-05-06)
+
+Phase 1 landed at commit `e36f2b94` and is **closed**. The two aider
+artifacts created in Phase 1 (`CONVENTIONS.md` + `.aiderignore`) were
+removed in Phase 2 — see
+`docs/runtime/stages/deepseek-coding-agent-v4-phase2.md`. AGENTS.md +
+CLAUDE.md auto-load in OpenCode per https://opencode.ai/docs/rules/, so
+the aider doctrine slot was never load-bearing. Phase 1's profile +
+drift-gate registration + `--quiet` flag remain in production.
