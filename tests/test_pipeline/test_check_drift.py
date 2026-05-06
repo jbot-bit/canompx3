@@ -2260,6 +2260,24 @@ class TestDeepseekReviewGateNoOp:
         assert len(violations) == 1
         assert "claude_review_deepseek" in violations[0]
 
+    def test_passes_when_marker_and_invocation_both_present(self, tmp_path, monkeypatch):
+        # Phase 3 wired-up positive case: marker present AND canonical
+        # reviewer invoked. The check must return [].
+        from pipeline import check_drift as cd
+
+        hooks_dir = tmp_path / ".githooks"
+        hooks_dir.mkdir()
+        (hooks_dir / "pre-commit").write_text(
+            "#!/usr/bin/env bash\n"
+            "# 0d. DeepSeek review gate\n"
+            'if [ "$OPENCODE_AGENT_ACTIVE" = "1" ]; then\n'
+            "  python scripts/tools/claude_review_deepseek.py || exit 1\n"
+            "fi\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        assert cd.check_deepseek_review_gate_intact() == []
+
 
 class TestQuietModeOutputSanitization:
     """`python pipeline/check_drift.py --quiet` emits sanitized lines only.

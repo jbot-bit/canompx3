@@ -186,6 +186,23 @@ INNER_EOF
 fi
 
 
+# 0d. DeepSeek/OpenCode review gate — every commit authored under the
+# coding-agent runtime is reviewed by Claude (seven-sins rubric) before
+# it lands. Activated only when the launcher exports
+# OPENCODE_AGENT_ACTIVE=1 (so normal Claude/manual commits skip the gate).
+# The script is canonical at scripts/tools/claude_review_deepseek.py;
+# drift check `check_deepseek_review_gate_intact` enforces presence.
+if [ "$OPENCODE_AGENT_ACTIVE" = "1" ]; then
+    echo "[0d] DeepSeek review gate (Claude)..."
+    if [ -x "$CANONICAL_VENV_PY" ]; then
+        REVIEW_PY="$CANONICAL_VENV_PY"
+    else
+        REVIEW_PY="python"
+    fi
+    "$REVIEW_PY" "$SCRIPT_DIR/scripts/tools/claude_review_deepseek.py" || exit 1
+fi
+
+
 # 1. Ruff lint check (~1 second)
 echo "[1/8] Ruff lint..."
 RUFF="ruff"

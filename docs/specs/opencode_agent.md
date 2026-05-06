@@ -65,13 +65,26 @@ Source of truth for what each server exposes is `.mcp.json` (read-only mirror).
 `code-review-graph` is intentionally excluded — it ships via `uvx` with a
 separate auth lifecycle and will be added in a follow-up.
 
-## Review Gate (Phase 3 — not yet wired)
+## Review Gate
 
-Phase 3 lands `scripts/tools/claude_review_deepseek.py` and adds
-`# 0d.` step in `.githooks/pre-commit`. With `OPENCODE_AGENT_ACTIVE=1`
-exported by the launcher, every commit's staged diff is reviewed by
-Claude (seven-sins rubric) before it lands. Until Phase 3, the drift
-check `check_deepseek_review_gate_intact` is a no-op.
+`scripts/tools/claude_review_deepseek.py` reads `git diff --cached`,
+asks Claude (seven-sins rubric inlined as a hermetic constant for
+`CLAUDE_REASONING_MODEL`), parses a strict JSON verdict, and exits:
+
+- `0` — APPROVE, or no diff to review (empty / doc-only / < 5-line).
+- `1` — BLOCK; findings printed to stderr; commit aborted.
+- `2` — REVIEW_UNAVAILABLE (network or parse error); never silent. User
+  may `--no-verify` once with explicit acknowledgement; the drift check
+  `check_deepseek_review_gate_intact` still fires if the marker is
+  present but the canonical invocation is missing.
+
+The launcher exports `OPENCODE_AGENT_ACTIVE=1` before spawning OpenCode.
+Pre-commit step `# 0d.` only fires when that env var is set, so normal
+Claude-side / manual commits skip the gate.
+
+Test surface: `tests/test_scripts/test_claude_review_deepseek.py` covers
+mock APPROVE / BLOCK / inactive-env / empty-diff / doc-only / threshold
+helpers. Live Claude calls are not exercised in CI.
 
 ## Credits (Phase 4 — not yet wired)
 

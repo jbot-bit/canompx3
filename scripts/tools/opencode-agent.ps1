@@ -201,5 +201,10 @@ if ($NoLaunch) {
     exit 0
 }
 
+# Activate the pre-commit review gate (step 0d in .githooks/pre-commit).
+# Every commit during this session is reviewed by Claude (seven-sins rubric)
+# before it lands. See scripts/tools/claude_review_deepseek.py.
+$env:OPENCODE_AGENT_ACTIVE = "1"
+
 & opencode --model $Model @args
 exit $LASTEXITCODE
