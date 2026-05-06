@@ -78,7 +78,7 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
     from trading_app.live.broker_factory import create_broker_components, get_broker_name
 
     checks_passed = 0
-    checks_total = 5  # NOTE: must match number of check blocks (1-5) below — update if adding/removing checks
+    checks_total = 6  # NOTE: must match number of check blocks (1-6) below — update if adding/removing checks
 
     # 1. Auth check
     broker_name = broker or get_broker_name()
@@ -195,6 +195,24 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
             print(f"WARNINGS: {', '.join(failed)}")
             # Don't fail preflight for component warnings — they're informational
             checks_passed += 1
+    except Exception as e:
+        print(f"FAILED: {e}")
+
+    # 6. Trade journal health
+    # session_orchestrator only enforces journal health when mode == "live", so a
+    # broken journal stays invisible until session start. Surface it in preflight
+    # so operators see the failure before committing to a session launch.
+    print(f"[6/{checks_total}] Trade journal health...", end=" ", flush=True)
+    try:
+        from pipeline.paths import LIVE_JOURNAL_DB_PATH
+        from trading_app.live.trade_journal import TradeJournal
+
+        journal = TradeJournal(LIVE_JOURNAL_DB_PATH, mode="preflight")
+        if journal.is_healthy:
+            print(f"OK ({LIVE_JOURNAL_DB_PATH.name})")
+            checks_passed += 1
+        else:
+            print(f"FAILED: TradeJournal could not open {LIVE_JOURNAL_DB_PATH}")
     except Exception as e:
         print(f"FAILED: {e}")
 
