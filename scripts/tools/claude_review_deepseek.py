@@ -111,12 +111,57 @@ def _staged_diff() -> str:
     return result.stdout
 
 
-def _diff_is_doc_only(diff: str) -> bool:
-    """True when every changed file is *.md or under docs/."""
+# Canonical-source allowlist: files whose modification ALWAYS triggers
+# Claude review, regardless of diff size or doc-only heuristic. Grounded
+# in actual production reads (file:line evidence in the stage doc
+# `docs/runtime/stages/fix-canonical-source-review-bypass.md`). Drift
+# check `check_canonical_source_review_allowlist_complete` enforces the
+# minimum set; this constant may grow as new canonical sources are added.
+_CANONICAL_SOURCE_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        # docs/runtime/ structured-data files that production code reads:
+        "docs/runtime/lane_allocation.json",  # lane_allocator.py:54, session_orchestrator.py:392, pre_session_check.py:578, prop_profiles.py:1119
+        "docs/runtime/chordia_audit_log.yaml",  # trading_app/chordia.py:165
+        # Pipeline canonical sources (per integrity-guardian.md § 2):
+        "pipeline/cost_model.py",  # COST_SPECS — friction inputs
+        "pipeline/dst.py",  # SESSION_CATALOG, orb_utc_window
+        "pipeline/asset_configs.py",  # ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
+        "pipeline/paths.py",  # GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
+        # Trading-app canonical sources:
+        "trading_app/prop_profiles.py",  # ACCOUNT_PROFILES — live profiles + risk caps
+        "trading_app/lane_ctl.py",  # get_paused_strategy_ids, get_lane_override
+        "trading_app/config.py",  # ALL_FILTERS, E2_EXCLUDED_FILTER_PREFIXES
+        "trading_app/holdout_policy.py",  # HOLDOUT_SACRED_FROM, enforce_holdout_date
+        "trading_app/eligibility/builder.py",  # parse_strategy_id (canonical parser)
+        "trading_app/entry_rules.py",  # detect_break_touch (E2 entry math)
+    }
+)
+
+
+def _diff_files(diff: str) -> set[str]:
+    """Extract changed-file paths from a unified diff. Handles new-file
+    (+++ only) and deletion (--- only with /dev/null on the +++ side)."""
     files: set[str] = set()
     for line in diff.splitlines():
         if line.startswith("+++ b/") or line.startswith("--- a/"):
-            files.add(line[6:])
+            path = line[6:]
+            if path != "/dev/null":
+                files.add(path)
+    return files
+
+
+def _diff_touches_canonical_source(diff: str) -> bool:
+    """True if any changed file is in the canonical-source allowlist.
+
+    When True, the small-diff and doc-only short-circuits MUST be
+    bypassed — capital-class files always go to Claude review.
+    """
+    return bool(_diff_files(diff) & _CANONICAL_SOURCE_ALLOWLIST)
+
+
+def _diff_is_doc_only(diff: str) -> bool:
+    """True when every changed file is *.md or under docs/."""
+    files = _diff_files(diff)
     if not files:
         return False
     return all(f.endswith(".md") or f.startswith("docs/") for f in files)
@@ -220,10 +265,16 @@ def main() -> int:
     if not diff.strip():
         return 0
 
-    if len(diff.splitlines()) < 5:
-        return 0
-    if _diff_is_doc_only(diff):
-        return 0
+    # Canonical-source allowlist OVERRIDES the small-diff and doc-only
+    # short-circuits. A 2-line change to lane_allocation.json or a
+    # comment-only edit to cost_model.py is still capital-class and must
+    # be reviewed. See stage doc fix-canonical-source-review-bypass.md.
+    canonical_hit = _diff_touches_canonical_source(diff)
+    if not canonical_hit:
+        if len(diff.splitlines()) < 5:
+            return 0
+        if _diff_is_doc_only(diff):
+            return 0
 
     if args.mock:
         parsed = _mock_response(rubric_pass=args.rubric_pass or not args.rubric_fail)

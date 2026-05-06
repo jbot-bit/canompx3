@@ -8306,6 +8306,76 @@ def check_deepseek_review_gate_intact() -> list[str]:
     return []
 
 
+def check_canonical_source_review_allowlist_complete() -> list[str]:
+    """`scripts/tools/claude_review_deepseek.py::_CANONICAL_SOURCE_ALLOWLIST`
+    must contain every capital-class canonical source.
+
+    Origin: PR #247 follow-up. The reviewer's `_diff_is_doc_only()` and
+    `<5 lines` short-circuits previously bypassed canonical-source files
+    (notably `docs/runtime/lane_allocation.json`). The allowlist closes
+    that gap; this check prevents silent regression — if a future commit
+    drops an entry from the allowlist, the bypass re-opens.
+
+    Subset semantics: the allowlist may grow without breaking this check,
+    but the minimum set below must always be present. Each entry is
+    grounded in production-code reads (file:line evidence in stage doc
+    `docs/runtime/stages/fix-canonical-source-review-bypass.md`).
+    """
+    reviewer = PROJECT_ROOT / "scripts" / "tools" / "claude_review_deepseek.py"
+    if not reviewer.exists():
+        return []  # Phase-1 no-op if the reviewer module is absent.
+
+    required: frozenset[str] = frozenset(
+        {
+            "docs/runtime/lane_allocation.json",
+            "docs/runtime/chordia_audit_log.yaml",
+            "pipeline/cost_model.py",
+            "pipeline/dst.py",
+            "pipeline/asset_configs.py",
+            "pipeline/paths.py",
+            "trading_app/prop_profiles.py",
+            "trading_app/lane_ctl.py",
+            "trading_app/config.py",
+            "trading_app/holdout_policy.py",
+            "trading_app/eligibility/builder.py",
+            "trading_app/entry_rules.py",
+        }
+    )
+
+    try:
+        # Import via importlib so check_drift stays import-cycle-safe; the
+        # reviewer module imports trading_app.ai.claude_client lazily so
+        # this is cheap.
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("_claude_review_deepseek_for_drift", reviewer)
+        if spec is None or spec.loader is None:
+            return [f"  Could not load spec for {reviewer}"]
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        allowlist = getattr(module, "_CANONICAL_SOURCE_ALLOWLIST", None)
+    except Exception as exc:  # noqa: BLE001 — load-time failure is a real drift signal
+        return [f"  Failed to load _CANONICAL_SOURCE_ALLOWLIST from {reviewer}: {type(exc).__name__}: {exc}"]
+
+    if allowlist is None:
+        return [
+            "  scripts/tools/claude_review_deepseek.py is missing "
+            "_CANONICAL_SOURCE_ALLOWLIST. The capital-class review-gate "
+            "bypass closed by this constant has re-opened."
+        ]
+
+    missing = required - set(allowlist)
+    if missing:
+        return [
+            f"  _CANONICAL_SOURCE_ALLOWLIST in claude_review_deepseek.py "
+            f"is missing {len(missing)} required entries: "
+            f"{sorted(missing)}. Removing any of these silently re-opens "
+            f"the doc-only / small-diff review bypass on a capital-class "
+            f"file."
+        ]
+    return []
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -8848,6 +8918,12 @@ CHECKS = [
         "OpenCode launcher: at most one canonical-default-annotated openrouter/ literal",
         check_hardcoded_openrouter_model_in_launcher,
         False,  # blocking — model selection must route through canonical resolver
+        False,
+    ),
+    (
+        "Canonical-source allowlist in claude_review_deepseek.py is complete",
+        check_canonical_source_review_allowlist_complete,
+        False,  # blocking — capital-class review bypass closure must hold
         False,
     ),
 ]  # end CHECKS
