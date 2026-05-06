@@ -5,6 +5,32 @@
 
 ---
 
+## Iteration 184 — 2026-05-07
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/prop_profiles.py:1030
+- Finding: _LANE_NAMES stale hardcode — static session-keyed dict returns wrong lane_name values that don't match paper_trades DB records (paper_trade_logger.py dynamic format diverged)
+- Doctrine cited: integrity-guardian.md § 4 (producer/consumer format divergence), § 6 (silent failure — wrong value silently returned)
+- Action: Replaced `_LANE_NAMES.get()` with `f"{orb_label}_{filter_type[:12]}"` dynamic derivation; deprecated _LANE_NAMES with backward-compat note; added regression test
+- Blast radius: 2 files (prop_profiles.py + test_prop_profiles.py)
+- Verification: PASS (73 tests passed, 122 drift checks PASS)
+- Commit: 74a8ed63
+
+---
+
+## Iteration 183 — 2026-05-07
+- Phase: audit-only
+- Classification: audit-only
+- Target: pipeline/paths.py + trading_app/validated_shelf.py + trading_app/strategy_fitness.py
+- Finding: 0 findings — all 3 files clean
+- Doctrine cited: integrity-guardian.md § 2, § 3 (canonical sources, fail-closed) — all verified correct
+- Action: audit-only, no fix
+- Blast radius: 0 files
+- Verification: N/A
+- Commit: NONE
+
+---
+
 ## Iteration 182 — 2026-05-06
 - Phase: audit-only
 - Classification: audit-only

@@ -3,146 +3,84 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 182
+## Last iteration: 184
 
-## RALPH AUDIT — Iteration 182
-## Date: 2026-05-06
-## Infrastructure Gates: 119 drift checks PASS; behavioral audit 7/7 PASS; ruff PASS on all targets
-## Scope: pipeline/asset_configs.py (critical — never scanned) + trading_app/live/session_orchestrator.py (stale re-audit, last iter 173-178) + pipeline/cost_model.py (no-touch, audit) + pipeline/dst.py (no-touch, audit)
+## RALPH AUDIT — Iteration 184
+## Date: 2026-05-07
+## Infrastructure Gates: 122 drift checks PASS; behavioral audit 7/7 PASS; ruff PASS; 73 tests passed, 1 skipped
+## Scope: trading_app/prop_profiles.py (critical, 37 importers, Priority 1)
 
 ---
 
-## Iteration 182 — pipeline/asset_configs.py + trading_app/live/session_orchestrator.py
+## Iteration 184 — trading_app/prop_profiles.py
 
 ### Auto-Targeting
-- Priority 1: `pipeline/asset_configs.py` — critical tier, never scanned
-- Priority 2: `trading_app/live/session_orchestrator.py` — stale re-audit (last iter 178, modified since then per R4/R5 additions)
-- Fallback expanded: `pipeline/cost_model.py`, `pipeline/dst.py` (no-touch zones, audit only)
-- `trading_app/lane_health_monitor.py` — file does not exist
+- Priority 1: `trading_app/prop_profiles.py` — critical tier, 37 importers, never scanned
+- Priority 0 check: No unresolved CRIT/HIGH in deferred-findings.md or HANDOFF.md at time of targeting
 
 ### Infrastructure Gates
-- `check_drift.py`: 119 PASS — NO DRIFT DETECTED
+- `check_drift.py`: 122 PASS — NO DRIFT DETECTED
 - `audit_behavioral.py`: 7/7 PASS
-- `ruff`: PASS (pipeline/asset_configs.py, trading_app/live/session_orchestrator.py)
+- `ruff`: PASS
+- Tests: 73 passed, 1 skipped (test_prop_profiles.py)
 
 ---
 
-## File 1: pipeline/asset_configs.py (critical tier, 580 lines)
+## File: trading_app/prop_profiles.py
 
-Full scan: ASSET_CONFIGS dict, ACTIVE_ORB_INSTRUMENTS derivation, DEAD_ORB_INSTRUMENTS frozenset,
-get_asset_config(), require_dbn_available(), get_outright_root(), _dbn_store_has_matching_files().
+Full scan: dataclasses, canonical sourcing, `_LANE_NAMES`, `get_profile_lane_definitions`, `parse_strategy_id`, `get_lane_registry`, `effective_daily_lanes`.
 
-**Canonical sourcing (integrity-guardian.md § 2):** ACTIVE_ORB_INSTRUMENTS IS the canonical source — derived dynamically from ASSET_CONFIGS. No downstream hardcoding. DEAD_ORB_INSTRUMENTS frozenset correct.
+### Finding PROP-184 — MEDIUM — FIXED
 
-**Fail-closed (integrity-guardian.md § 3):** require_dbn_available raises ValueError/FileNotFoundError on every failure path. get_asset_config raises ValueError for unknown instruments. get_outright_root raises ValueError on pattern mismatch.
+**PREMISE:** `_LANE_NAMES` is a static session-keyed dict whose values (e.g. `"NYSE_CLOSE_VOL"`, `"SING_G8"`) no longer match the `lane_name` format written to `paper_trades.lane_name` by `paper_trade_logger.py`, which uses the dynamic format `"{orb_label}_{filter_type[:12]}"`. Any downstream code consuming `lane_name` from `get_profile_lane_definitions` will get a value that doesn't join to DB records.
 
-**No silent failures (institutional-rigor.md § 6):** No bare except, no swallowed exceptions.
+**TRACE:** `trading_app/prop_profiles.py:1030` → `lane["lane_name"] = _LANE_NAMES.get(lane.orb_label, lane.orb_label)` → uses stale dict. `trading_app/live/paper_trade_logger.py:77` writes `lane_name = f"{orb_label}_{filter_type[:12]}"` — producer format diverged from consumer.
 
-**Contract drift scan:** All 3 callers of SessionOrchestrator.__init__ match current 7-arg signature.
+**EVIDENCE:** Grep confirmed `paper_trade_logger.py` uses dynamic format. `_LANE_NAMES` dict has 8 static entries keyed only on `orb_label`, ignoring `filter_type`. DB records for `NYSE_OPEN` lane with `COST_LT12` filter would have `lane_name="NYSE_OPEN_COST_LT12"` but the dict returned `"NYSE_CLOSE_VOL"` for `NYSE_CLOSE` or `lane.orb_label` fallback for unlisted labels.
 
-**Overall: CLEAN** — No findings at any severity.
+**DOCTRINE:** integrity-guardian.md § 4 (Impact awareness — producer/consumer lane_name format divergence); integrity-guardian.md § 6 (No silent failures — stale lookup silently produces wrong value).
 
----
+**FIX:** Replace `_LANE_NAMES.get(lane.orb_label, lane.orb_label)` with `f"{lane.orb_label}_{parsed['filter_type'][:12]}"`. Mark `_LANE_NAMES` DEPRECATED with backward-compat note for `research/garch_profile_production_replay.py`.
 
-## File 2: trading_app/live/session_orchestrator.py (stale re-audit, 3560+ lines)
+**Diff lines:** 4 production lines changed (well under 20-line cap).
 
-Scanned since iter-178 additions: R4 (signal log rotator), R5 (CB re-notify heartbeat),
-async safety patterns, time.sleep, return_exceptions, create_task crash propagation.
+**Test added:** `test_lane_name_is_dynamic_not_static` in `tests/test_trading_app/test_prop_profiles.py` — asserts every lane from `topstep_50k_mnq_auto` profile uses `{orb_label}_{filter_type[:12]}` format.
 
-### Semi-Formal Reasoning
-
-**SO-1 (time.sleep in async context — candidate):**
-PREMISE: `time.sleep` at line 3467 in async code.
-TRACE: `post_session():3418` is `def` (sync), called from `finally` block after `asyncio.run()` exits.
-EVIDENCE: Docstring line 3420-3422 "Called from a synchronous finally block after asyncio.run() completes". Comment lines 3459-3464 explicitly documents: "BLOCKING SLEEP — acceptable here because: 1. post_session() runs AFTER asyncio.run() exits (no event loop)".
-VERDICT: REFUTE — sync context, intentional, documented.
-
-**SO-2 (return_exceptions=True silencing task crashes):**
-PREMISE: asyncio.gather with return_exceptions could silence task crashes.
-TRACE: Searched all 3560 lines — no `return_exceptions=True` found anywhere.
-EVIDENCE: grep returned no matches.
-VERDICT: REFUTE — pattern does not exist.
-
-**SO-3 (background task crash propagation):**
-PREMISE: watchdog/heartbeat tasks could crash silently.
-TRACE: `_watchdog():2743` has `except Exception as e: log.error(...)` — intentional (documented "MUST NOT die"). `_heartbeat_notifier():2798` same. Shutdown via `_shutdown_task()` (3382) uses `asyncio.wait_for + CancelledError` with critical+notify on timeout.
-EVIDENCE: Both tasks have `except asyncio.CancelledError: raise` (proper propagation) and `except Exception: log.error` (intentional resilience).
-VERDICT: REFUTE — intentional design, documented in docstring.
-
-**SO-4 (except Exception swallowing in critical paths):**
-Scanned all 44 except-Exception sites. Key findings:
-- Line 176: bracket orphan cleanup — re-raises as RuntimeError (fail-closed)
-- Line 367: ORB cap load — raises for prop accounts, warns for paper (correct tiering)
-- Line 383: risk cap load — always re-raises (fail-closed)
-- Line 406: regime gate load — raises for prop, warns for paper (correct tiering)
-- Line 509: RoleResolver init — warns (advisory feature)
-- Line 760: HWM tracker init — raises RuntimeError (fail-closed)
-- Line 787: firm close time load — logs warning (advisory)
-- Line 982: lifecycle lane blocks — logs warning (advisory)
-- Line 1200: minutes_to_close_et — returns None (purely advisory)
-- Line 1236: _publish_state — `pass` with documented "Dashboard state is best-effort"
-- Line 3129: fill poller outer loop — `log.exception` (records full traceback)
-All paths either: (a) fail-closed for prop/trading-critical paths, (b) log.warning/error/exception for advisory paths, or (c) have explicit documented reasoning.
-VERDICT: REFUTE — no silent failures at HIGH/CRIT severity.
-
-**SO-5 (state persistence gap):**
-Scanned for `self._X = value` without `_save_state()`.
-Key mutable state: `_kill_switch_fired`, `_blocked_strategies`, `_blocked_strategy_reasons`, `_consecutive_engine_errors`.
-`_fire_kill_switch()` sets `_kill_switch_fired=True` and calls `self._safety_state.save()` via the safety_state object.
-`_block_strategy(persist=True)` calls `self._safety_state.save()`.
-VERDICT: REFUTE — state persistence correctly guarded.
-
-### Findings
-
-| ID | Severity | Finding | Verdict |
-|----|----------|---------|---------|
-| SO-1 | — | time.sleep at line 3467 | REFUTE — sync context post asyncio.run() |
-| SO-2 | — | return_exceptions=True | REFUTE — does not exist in file |
-| SO-3 | — | Background task crash propagation | REFUTE — intentional resilience with logging |
-| SO-4 | — | except Exception in critical paths | REFUTE — correct tiering, all paths logged |
-| SO-5 | — | State persistence gap | REFUTE — _fire_kill_switch + _block_strategy save correctly |
-
-**Overall: CLEAN** — No findings at any severity. Post-iter-178 additions (R4, R5) are correctly implemented.
+**Status: FIXED** — Commit `74a8ed63`
 
 ---
 
-## File 3: pipeline/cost_model.py (no-touch zone — audit only)
+### Other Patterns Scanned — All Clean
 
-Grep scan: no except Exception, no time.sleep, no return_exceptions=True, no ACTIVE_ORB hardcoding.
-COST_SPECS is the canonical source, imported by consumers.
-**Overall: CLEAN** — No findings.
-
----
-
-## File 4: pipeline/dst.py (no-touch zone — audit only)
-
-Grep scan: no except Exception, no return_exceptions=True.
-SESSION_CATALOG is the canonical source; orb_utc_window() is the canonical resolver.
-**Overall: CLEAN** — No findings.
+- **Canonical sources:** `ENTRY_MODELS` from `trading_app.config`, `ACTIVE_ORB_INSTRUMENTS` indirectly via `asset_configs`. No hardcoded instrument lists in logic.
+- **parse_strategy_id:** Pure string parsing, no canonical violations.
+- **Holdout dates:** None present. No `date(2026,...)` patterns.
+- **Broad exceptions:** `except Exception` at line ~940 in `load_lane_allocation` logs via `logger.exception` — correct.
+- **Silent failures:** `effective_daily_lanes` falls back to `daily_lanes` if JSON missing — intentional with logger.warning. Correct.
+- **No-touch zones:** `trading_app/config.py` import only — not modified.
 
 ---
 
-## Iteration 182 — Overall Summary
+## Iteration 184 — Overall Summary
 
-4 files scanned. 0 findings at any severity. **Clean iteration.**
+1 file scanned. 1 MEDIUM finding (FIXED). 0 LOW findings.
 
-**Consecutive LOW-only iterations: 0** (prior was HIGH fix, counter remains 0 on clean iteration)
-Note: consecutive_low_only only increments on LOW-finding iterations, not clean iterations.
+**Consecutive LOW-only iterations: 0** (reset — MEDIUM finding fixed this iteration)
 
 ### Infrastructure Gate Results
-- check_drift.py: 119 PASS — NO DRIFT DETECTED
+- check_drift.py: 122 PASS — NO DRIFT DETECTED
 - audit_behavioral.py: 7/7 PASS
-- ruff: PASS
-- Tests: N/A (no fix applied)
+- ruff: PASS (auto-formatted test file)
+- Tests: 73 passed, 1 skipped
 
-### Action: audit-only
-### Classification: N/A (no commit)
-### Commit: NONE
+### Action: fix
+### Classification: [judgment]
+### Commit: 74a8ed63
 
 ---
 
 ## Files Fully Scanned
-- trading_app/live/session_orchestrator.py (iters 173, 174, 175, 176, 177, 178, **182**)
+- trading_app/live/session_orchestrator.py (iters 173, 174, 175, 176, 177, 178, 182)
 - trading_app/live/session_safety_state.py (iters 176, 178)
 - tests/test_trading_app/test_session_orchestrator.py (iters 173, 174, 175, 176, 177, 178)
 - scripts/infra/telegram_feed.py (iter 173)
@@ -156,15 +94,17 @@ Note: consecutive_low_only only increments on LOW-finding iterations, not clean 
 - trading_app/live/multi_runner.py (iter 180)
 - pipeline/log.py (iter 181)
 - pipeline/system_context.py (iter 181)
-- pipeline/asset_configs.py (**iter 182**)
-- pipeline/cost_model.py (**iter 182**, no-touch audit)
-- pipeline/dst.py (**iter 182**, no-touch audit)
+- pipeline/asset_configs.py (iter 182)
+- pipeline/cost_model.py (iter 182, no-touch audit)
+- pipeline/dst.py (iter 182, no-touch audit)
+- pipeline/paths.py (iter 183)
+- trading_app/validated_shelf.py (iter 183)
+- trading_app/strategy_fitness.py (iter 183)
+- trading_app/prop_profiles.py (iter 184)
 
 ## Next Iteration Targets
 
-Priority 1 (unscanned critical/high): Check `import_centrality.json` for next unscanned critical file.
-Candidates: `pipeline/outcome_builder.py`, `pipeline/check_drift.py`, `trading_app/strategy_discovery.py` (SQL no-touch), `trading_app/execution_engine.py`.
-
-Priority 2 (stale re-audit): Files modified since their last scan — check git log vs iter dates.
-
-Diminishing returns signal: counter stays 0 (clean iteration does not increment it).
+Priority 1 (unscanned critical, by importer count):
+1. `trading_app/outcome_builder.py` (11 importers, critical — SQL no-touch zone for discovery SQL, but non-SQL logic auditable)
+2. `trading_app/strategy_discovery.py` (10 importers, critical — SQL no-touch zone)
+3. `trading_app/strategy_validator.py` (critical — SQL no-touch zone for SQL logic)

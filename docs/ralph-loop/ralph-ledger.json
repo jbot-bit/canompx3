@@ -1,12 +1,12 @@
 {
-  "total_iterations": 175,
-  "last_updated": "2026-05-06",
-  "consecutive_low_only": 1,
+  "total_iterations": 177,
+  "last_updated": "2026-05-07",
+  "consecutive_low_only": 3,
   "last_high_finding_iter": 181,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 56,
-      "fixed": 43,
+      "found": 57,
+      "fixed": 44,
       "deferred": 4,
       "fix_rate": 0.77
     },
@@ -17,10 +17,10 @@
       "fix_rate": 0.9
     },
     "other": {
-      "found": 29,
+      "found": 30,
       "fixed": 15,
       "deferred": 4,
-      "fix_rate": 0.52
+      "fix_rate": 0.5
     },
     "dead_code": {
       "found": 16,
@@ -129,12 +129,12 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 45,
-    "LOW": 107
+    "LOW": 109
   },
   "classifications": {
-    "judgment": 82,
+    "judgment": 83,
     "mechanical": 61,
-    "audit-only": 32
+    "audit-only": 33
   },
   "files_audited": {
     "trading_app/live/session_orchestrator.py": {
@@ -187,6 +187,11 @@
       "last_iter": 180,
       "findings": 2
     },
+    "trading_app/prop_profiles.py": {
+      "audit_count": 4,
+      "last_iter": 184,
+      "findings": 3
+    },
     "webhook_server.py": {
       "audit_count": 3,
       "last_iter": 9,
@@ -222,14 +227,14 @@
       "last_iter": 116,
       "findings": 3
     },
+    "trading_app/strategy_fitness.py": {
+      "audit_count": 3,
+      "last_iter": 183,
+      "findings": 0
+    },
     "scripts/tools/build_edge_families.py": {
       "audit_count": 3,
       "last_iter": 91,
-      "findings": 2
-    },
-    "trading_app/prop_profiles.py": {
-      "audit_count": 3,
-      "last_iter": 167,
       "findings": 2
     },
     "tradovate/order_router.py": {
@@ -277,11 +282,6 @@
       "last_iter": 172,
       "findings": 1
     },
-    "trading_app/strategy_fitness.py": {
-      "audit_count": 2,
-      "last_iter": 49,
-      "findings": 0
-    },
     "trading_app/portfolio.py": {
       "audit_count": 2,
       "last_iter": 118,
@@ -306,6 +306,11 @@
       "audit_count": 2,
       "last_iter": 140,
       "findings": 2
+    },
+    "pipeline/paths.py": {
+      "audit_count": 2,
+      "last_iter": 183,
+      "findings": 1
     },
     "scripts/tools/select_family_rr.py": {
       "audit_count": 2,
@@ -581,11 +586,6 @@
       "audit_count": 1,
       "last_iter": 70,
       "findings": 0
-    },
-    "pipeline/paths.py": {
-      "audit_count": 1,
-      "last_iter": 71,
-      "findings": 1
     },
     "pipeline/log.py": {
       "audit_count": 1,
@@ -1155,6 +1155,11 @@
     "pipeline/dst.py": {
       "audit_count": 1,
       "last_iter": 182,
+      "findings": 0
+    },
+    "trading_app/validated_shelf.py": {
+      "audit_count": 1,
+      "last_iter": 183,
       "findings": 0
     }
   },
@@ -3083,6 +3088,28 @@
       "severity": "LOW",
       "verdict": "CLEAN",
       "commit": "NONE (audit-only)"
+    },
+    {
+      "iter": 183,
+      "date": "2026-05-07",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "pipeline/paths.py + trading_app/validated_shelf.py + trading_app/strategy_fitness.py",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 184,
+      "date": "2026-05-07",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/prop_profiles.py:1030",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "74a8ed63"
     }
   ]
 }
