@@ -1163,6 +1163,169 @@ async def api_trades():
         return {"trades": [], "error": str(e)}
 
 
+@app.get("/api/trade-book")
+async def api_trade_book():
+    """All-time trade book — real broker fills + paper-trade simulations, separated.
+
+    Live blotter (/api/trades) only shows the last 24h. This endpoint returns
+    the full history so the operator can see lifetime fills without leaving
+    the dashboard. Two arrays so the UI can render them as distinct tables —
+    real money trades must never be visually conflated with paper-trade
+    research output.
+
+    Read-only on both DBs. Empty arrays if a DB is locked or absent.
+    """
+    live_trades: list[dict] = []
+    live_note: str | None = None
+    paper_trades: list[dict] = []
+    paper_note: str | None = None
+
+    if JOURNAL_PATH.exists():
+        try:
+            with duckdb.connect(str(JOURNAL_PATH), read_only=True) as con:
+                configure_connection(con)
+                rows = con.execute(
+                    """
+                    SELECT trade_id, trading_day, instrument, strategy_id, direction,
+                           entry_model, fill_entry, fill_exit, actual_r, expected_r,
+                           pnl_dollars, exit_reason, contracts, session_mode, broker,
+                           created_at, exited_at
+                    FROM live_trades
+                    ORDER BY created_at DESC
+                    """
+                ).fetchall()
+                cols = [
+                    "trade_id",
+                    "trading_day",
+                    "instrument",
+                    "strategy_id",
+                    "direction",
+                    "entry_model",
+                    "fill_entry",
+                    "fill_exit",
+                    "actual_r",
+                    "expected_r",
+                    "pnl_dollars",
+                    "exit_reason",
+                    "contracts",
+                    "session_mode",
+                    "broker",
+                    "created_at",
+                    "exited_at",
+                ]
+                live_trades = [dict(zip(cols, r, strict=False)) for r in rows]
+        except duckdb.IOException as e:
+            live_note = f"live_journal.db locked by active session: {e}"
+        except Exception as e:
+            live_note = f"live_journal.db read failed: {e}"
+    else:
+        live_note = "No live_journal.db found"
+
+    if GOLD_DB_PATH.exists():
+        try:
+            with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+                configure_connection(con)
+                rows = con.execute(
+                    """
+                    SELECT trading_day, instrument, strategy_id, lane_name, direction,
+                           entry_model, orb_label, orb_minutes, rr_target, filter_type,
+                           entry_time, exit_time, entry_price, exit_price,
+                           pnl_r, pnl_dollar, slippage_ticks, exit_reason,
+                           execution_source
+                    FROM paper_trades
+                    ORDER BY trading_day DESC, entry_time DESC
+                    """
+                ).fetchall()
+                cols = [
+                    "trading_day",
+                    "instrument",
+                    "strategy_id",
+                    "lane_name",
+                    "direction",
+                    "entry_model",
+                    "orb_label",
+                    "orb_minutes",
+                    "rr_target",
+                    "filter_type",
+                    "entry_time",
+                    "exit_time",
+                    "entry_price",
+                    "exit_price",
+                    "pnl_r",
+                    "pnl_dollar",
+                    "slippage_ticks",
+                    "exit_reason",
+                    "execution_source",
+                ]
+                paper_trades = [dict(zip(cols, r, strict=False)) for r in rows]
+        except duckdb.IOException as e:
+            paper_note = f"gold.db locked: {e}"
+        except Exception as e:
+            paper_note = f"gold.db read failed: {e}"
+    else:
+        paper_note = "No gold.db found"
+
+    return {
+        "live_trades": live_trades,
+        "live_note": live_note,
+        "paper_trades": paper_trades,
+        "paper_note": paper_note,
+        "counts": {
+            "live": len(live_trades),
+            "paper": len(paper_trades),
+        },
+    }
+
+
+@app.get("/api/lane-status")
+async def api_lane_status(profile: str = "topstep_50k_mnq_auto"):
+    """Lane pause status from the canonical lane_ctl accessor.
+
+    Returns the strategy_ids currently paused via lane_overrides JSON, with
+    the human-readable reason and expiry. The dashboard uses this to render
+    a "Paused — SR alarm" badge on lane cards so the operator understands
+    why a deployed lane is silent.
+
+    Reads through trading_app.lane_ctl (canonical accessor) — never touches
+    the override JSON directly.
+    """
+    try:
+        from trading_app.lane_ctl import get_lane_override, get_paused_strategy_ids
+
+        paused_ids = sorted(get_paused_strategy_ids(profile))
+        items = []
+        for sid in paused_ids:
+            override = get_lane_override(profile, sid)
+            if override is None:
+                items.append(
+                    {
+                        "strategy_id": sid,
+                        "paused": True,
+                        "reason": None,
+                        "expires_on": None,
+                        "warning": "paused per get_paused_strategy_ids but get_lane_override returned None",
+                    }
+                )
+                continue
+            items.append(
+                {
+                    "strategy_id": sid,
+                    "paused": True,
+                    "reason": override.get("reason") or None,
+                    "expires_on": override.get("expires") or None,
+                    "paused_at": override.get("paused_at") or None,
+                }
+            )
+        return {
+            "profile": profile,
+            "paused_count": len(items),
+            "paused": items,
+        }
+    except Exception as e:
+        log.warning("api/lane-status failed for profile=%s: %s", profile, e)
+        return {"profile": profile, "paused_count": 0, "paused": [], "error": str(e)}
+
+
 @app.post("/api/action/kill")
 async def action_kill():
     """Write stop file to kill the bot gracefully."""
