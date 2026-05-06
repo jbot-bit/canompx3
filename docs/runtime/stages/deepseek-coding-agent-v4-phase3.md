@@ -126,3 +126,29 @@ All four required (institutional rigor §8):
 ## Live smoke test (Stage B criterion 6)
 
 User-supervised; pending. Per spec doc § Review Gate: `OPENCODE_AGENT_ACTIVE=1`-set commit with a clean code change should APPROVE; same env with a hardcoded `openrouter/<vendor>/<model>` literal lacking the canonical-default-fallback annotation should BLOCK.
+
+## Closeout — review-fixes follow-up (filed under deepseek-coding-agent-v4-review-fixes)
+
+- **F7 (capital-class semantic correctness):** `.githooks/pre-commit:202`
+  used `|| exit 1`, collapsing reviewer rc=2 (REVIEW_UNAVAILABLE) to a
+  hard block — silently failing legitimate commits when the review
+  network is down. Replaced with explicit rc dispatch matching the
+  reviewer contract (`claude_review_deepseek.py:7-12`):
+  - rc=0 → APPROVE (continue)
+  - rc=1 → BLOCK (`exit 1`)
+  - rc=2 → REVIEW_UNAVAILABLE (advisory log + continue)
+- **`set -e` interaction (caught by adversarial audit):** the first
+  iteration of the F7 fix used a bare invocation:
+  `"$REVIEW_PY" ... ; review_rc=$?`. Because `set -e` is active at
+  `.githooks/pre-commit:8`, the bare invocation tripped `set -e` on
+  any non-zero reviewer rc BEFORE `review_rc=$?` could capture it,
+  re-introducing the original bug via a different mechanism. Fixed
+  by switching to the POSIX-standard `cmd || review_rc=$?` idiom,
+  which places the call inside a `||` list and is exempt from `set -e`.
+- Behavioral test under `set -e` (synthetic reviewer at rc=0/1/2)
+  confirms advisory-vs-block separation now works as intended.
+
+Drift baseline preserved at 121 PASS / 0 skipped / 19 advisory.
+Adversarial audit (`evidence-auditor`) PASS on F7 dispatch (after
+the `set -e` fix); FAIL on the initial dispatch attempt — proof case
+for why the audit gate is mandatory on capital-class paths.

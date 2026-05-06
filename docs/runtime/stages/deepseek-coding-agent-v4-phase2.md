@@ -156,3 +156,25 @@ All four required (institutional rigor §8):
 ## Live smoke test (Stage A criterion 9)
 
 User-supervised; pending. Follow `docs/specs/opencode_agent.md` § Auth + § MCP for the manual gate before merging.
+
+## Closeout — review-fixes follow-up (filed under deepseek-coding-agent-v4-review-fixes)
+
+5 review findings were raised against this phase (F1/F5/F6/F7/F9 — see the
+`deepseek-coding-agent-v4-review-fixes` stage doc for the registry).
+
+- **F1 (canonical validator):** `AIProfile.validation_errors()` accepted
+  whitespace-only `model` strings. Per institutional-rigor §4 the fix
+  landed in the canonical `provider_registry.py:134` rather than the
+  resolver consumer, so every caller benefits.
+- **F5 (PowerShell launcher):** `& python $resolverScript` had no
+  try/catch under `$ErrorActionPreference = "Stop"` — missing python
+  aborted the launcher. Wrapped in try/catch at
+  `scripts/tools/opencode-agent.ps1:183-205`; falls through to launcher
+  default with WARN.
+- **F6 (PHANTOM):** initially filed as "`$CANONICAL_VENV_PY` used before
+  assignment". Verified false: assignment is at `.githooks/pre-commit:76`
+  (initialization) and `:83-97` (population); first use is at `:197`.
+  No code change required.
+
+Drift baseline preserved at 121 PASS / 0 skipped / 19 advisory.
+Adversarial audit (`evidence-auditor`) PASS on F1/F5/F6 fixes.

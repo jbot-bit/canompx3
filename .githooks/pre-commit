@@ -199,7 +199,25 @@ if [ "$OPENCODE_AGENT_ACTIVE" = "1" ]; then
     else
         REVIEW_PY="python"
     fi
-    "$REVIEW_PY" "$SCRIPT_DIR/scripts/tools/claude_review_deepseek.py" || exit 1
+    # Reviewer contract (claude_review_deepseek.py:7-12): 0=APPROVE,
+    # 1=BLOCK, 2=REVIEW_UNAVAILABLE (network/parse error). Earlier
+    # `|| exit 1` collapsed rc=2 to a hard block — silently failing
+    # legitimate commits when the gate is unreachable. Dispatch
+    # explicitly so advisory-vs-block stays separated.
+    #
+    # NOTE: `set -e` is active at line 8. A bare invocation here would
+    # trigger script exit on any non-zero reviewer rc BEFORE we can
+    # capture it. The `|| review_rc=$?` idiom places the call inside a
+    # `||` list which is exempt from `set -e`, letting the dispatch
+    # below see rc=1 and rc=2 as intended.
+    review_rc=0
+    "$REVIEW_PY" "$SCRIPT_DIR/scripts/tools/claude_review_deepseek.py" || review_rc=$?
+    if [ "$review_rc" -eq 1 ]; then
+        exit 1
+    fi
+    if [ "$review_rc" -eq 2 ]; then
+        echo "[0d] (advisory: review unavailable — proceeding; \`--no-verify\` available if needed)"
+    fi
 fi
 
 

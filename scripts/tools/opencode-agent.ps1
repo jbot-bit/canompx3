@@ -181,14 +181,26 @@ $repoRootForResolver = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $resolverScript = Join-Path $repoRootForResolver "scripts\tools\opencode_resolve_model.py"
 $modelSource = "launcher default"
 if (Test-Path -LiteralPath $resolverScript) {
-    $resolved = & python $resolverScript 2>$null
-    if ($LASTEXITCODE -eq 0 -and $resolved -and $resolved.Trim()) {
-        $Model = $resolved.Trim()
-        $modelSource = "canonical profile"
-    } else {
-        Write-Host ("[opencode-agent] WARN: canonical profile not configured; " +
-            "using launcher default model=$Model. Set " +
-            "CANOMPX3_AI_DEEPSEEK_CODING_MODEL=<openrouter/...> for single-source-of-truth.") `
+    try {
+        $resolved = & python $resolverScript 2>$null
+        if ($LASTEXITCODE -eq 0 -and $resolved -and $resolved.Trim()) {
+            $Model = $resolved.Trim()
+            $modelSource = "canonical profile"
+        } else {
+            Write-Host ("[opencode-agent] WARN: canonical profile not configured; " +
+                "using launcher default model=$Model. Set " +
+                "CANOMPX3_AI_DEEPSEEK_CODING_MODEL=<openrouter/...> for single-source-of-truth.") `
+                -ForegroundColor Yellow
+        }
+    } catch {
+        # `$ErrorActionPreference = "Stop"` (line 38) makes
+        # CommandNotFoundException terminating. Without this catch,
+        # missing-python aborts the entire launcher. Fall through to
+        # launcher-default model — same behaviour as Phase 1, before
+        # the canonical resolver was wired.
+        Write-Host ("[opencode-agent] WARN: canonical resolver failed " +
+            "({0}: {1}); using launcher default model=$Model." -f `
+            $_.Exception.GetType().Name, $_.Exception.Message) `
             -ForegroundColor Yellow
     }
 }

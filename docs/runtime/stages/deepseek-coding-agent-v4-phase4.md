@@ -114,3 +114,24 @@ All four required (institutional rigor §8):
 ## Memory note
 
 `opencode_vs_claude_routing.md` is filed via the memory protocol after this commit (out of scope for this stage; saved directly to `~/.claude/projects/.../memory/`). Index entry will be added to `MEMORY.md`.
+
+## Closeout — review-fixes follow-up (filed under deepseek-coding-agent-v4-review-fixes)
+
+- **F9 (additive coverage):** `_fetch_live` in
+  `scripts/tools/check_or_credits.py:50-74` has 3 distinct except
+  branches (`HTTPError`, `URLError | TimeoutError | OSError`,
+  `JSONDecodeError`) which had no unit coverage prior to this
+  follow-up. Added 3 new tests in
+  `tests/test_scripts/test_check_or_credits.py` using a `_load_module()`
+  helper (importlib.util — safe because the script's
+  `if __name__ == "__main__"` guard at line 143 prevents CLI invocation
+  on import). Tests patch `urlopen` directly and assert the WARN
+  diagnostic per branch:
+  - `test_fetch_live_handles_http_error` (HTTP 500 → "HTTP 500" + "WARN")
+  - `test_fetch_live_handles_network_error` (parametrized over
+    URLError / TimeoutError / OSError → "network error" + "WARN")
+  - `test_fetch_live_handles_parse_error` (non-JSON body →
+    "parse error" + "WARN")
+
+Drift baseline preserved at 121 PASS / 0 skipped / 19 advisory.
+Adversarial audit (`evidence-auditor`) PASS on F9 coverage.

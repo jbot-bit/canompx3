@@ -86,6 +86,22 @@ class TestOpencodeResolveModel:
         assert result.returncode == 0
         assert result.stdout.rstrip("\r\n") == "openrouter/some-vendor/some-model"
 
+    def test_whitespace_only_model_rejected(self) -> None:
+        # Canonical-layer fix: AIProfile.validation_errors() must reject
+        # whitespace-only model strings (e.g. " ") with the same diagnostic
+        # as the unset case. Without this, env=" " produces a "configured"
+        # but useless model and the launcher silently picks junk.
+        result = _run(
+            {
+                "CANOMPX3_AI_DEEPSEEK_CODING_MODEL": "   ",
+                "OPENROUTER_API_KEY": "sk-or-test",
+            }
+        )
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert "model not configured" in result.stderr
+        assert "DEEPSEEK_CODING_MODEL" in result.stderr
+
     def test_resolver_does_not_validate_keys_against_openrouter_live(self) -> None:
         # Resolver is offline by contract — it only checks env presence and
         # router config. Setting a clearly-fake key still resolves OK.

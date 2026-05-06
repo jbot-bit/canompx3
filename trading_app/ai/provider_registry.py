@@ -131,7 +131,7 @@ class AIProfile:
         errors: list[str] = []
         if self.provider == "openrouter" and not self.base_url:
             errors.append("openrouter profile missing base_url")
-        if self.provider == "openrouter" and not self.model:
+        if self.provider == "openrouter" and not (self.model and self.model.strip()):
             errors.append(f"model not configured; set {self.env_prefix()}_MODEL for this profile")
         missing = self.missing_env()
         if missing:
