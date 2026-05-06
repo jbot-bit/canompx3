@@ -1502,6 +1502,7 @@
     <span id="running-profile-detail" class="compat-hidden"></span>
     <span class="topbar-spacer"></span>
     <button id="btn-primary-cta" class="topbar-btn primary" style="display:none" type="button"></button>
+    <button id="btn-trade-book" class="topbar-btn" type="button" onclick="toggleTradeBook()">Trade Book</button>
     <button id="btn-preflight" class="topbar-btn">Preflight</button>
     <button id="btn-refresh" class="topbar-btn warn">Refresh</button>
     <button id="btn-kill" class="topbar-btn danger">Kill All</button>
@@ -1704,6 +1705,7 @@
       <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
       <span class="sec-ttl">Positions</span>
       <span id="live-lanes-badge" class="sec-badge"></span>
+      <span id="lanes-paused-badge" class="sec-badge" style="display:none; background:rgba(245,158,11,0.15); color:var(--yellow); border-color:rgba(245,158,11,0.30); margin-left:6px"></span>
     </div>
     <div class="sec-bd"><div id="live-lanes-grid"></div></div>
   </section>
@@ -1734,6 +1736,34 @@
         <table class="blotter">
           <thead><tr><th>Time</th><th>Lane</th><th>Setup</th><th>Dir</th><th class="r">Entry</th><th class="r">Exit</th><th class="r">P&amp;L</th><th>Status</th></tr></thead>
           <tbody id="trade-log"><tr><td colspan="8" class="muted">No trades today</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRADE BOOK (lifetime fills + paper trades, separate tables) -->
+  <section id="trade-book-section" class="sec hidden">
+    <div class="sec-hd" onclick="toggleSection('trade-book')">
+      <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
+      <span class="sec-ttl">Trade Book</span>
+      <span id="trade-book-badge" class="sec-badge">·</span>
+      <div class="sec-right"><span id="trade-book-summary" class="trade-summary"></span></div>
+    </div>
+    <div class="sec-bd">
+      <h4 style="margin:8px 0 4px; font-size:12px; letter-spacing:0.04em; text-transform:uppercase;" class="muted">Real broker fills (live_journal.db)</h4>
+      <div id="trade-book-live-note" class="muted" style="font-size:11px; margin-bottom:6px"></div>
+      <div class="tbl-wrap">
+        <table class="blotter">
+          <thead><tr><th>Created</th><th>Day</th><th>Instr</th><th>Strategy</th><th>Dir</th><th>Entry Mdl</th><th class="r">Fill In</th><th class="r">Fill Out</th><th class="r">Actual R</th><th class="r">P&amp;L $</th><th>Exit</th><th>Broker</th></tr></thead>
+          <tbody id="trade-book-live-body"><tr><td colspan="12" class="muted">Loading...</td></tr></tbody>
+        </table>
+      </div>
+      <h4 style="margin:18px 0 4px; font-size:12px; letter-spacing:0.04em; text-transform:uppercase;" class="muted">Paper trades (gold.db)</h4>
+      <div id="trade-book-paper-note" class="muted" style="font-size:11px; margin-bottom:6px"></div>
+      <div class="tbl-wrap">
+        <table class="blotter">
+          <thead><tr><th>Day</th><th>Instr</th><th>Strategy</th><th>Lane</th><th>Dir</th><th>Mdl</th><th>ORB</th><th class="r">RR</th><th>Filter</th><th class="r">Entry</th><th class="r">Exit</th><th class="r">PnL R</th><th class="r">PnL $</th><th>Reason</th><th>Source</th></tr></thead>
+          <tbody id="trade-book-paper-body"><tr><td colspan="15" class="muted">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -3588,14 +3618,85 @@ async function saveConnection() {
   }
 }
 
+/* ── Trade Book + Paused Lanes ──────────────────────────── */
+function toggleTradeBook() {
+  const sec = document.getElementById("trade-book-section");
+  if (!sec) return;
+  sec.classList.toggle("hidden");
+  if (!sec.classList.contains("hidden")) fetchTradeBook();
+}
+function fmt(v) { return (v === null || v === undefined || v === "") ? "" : v; }
+function fmtNum(v, d) { if (v === null || v === undefined || v === "") return ""; const n = Number(v); return isFinite(n) ? n.toFixed(d ?? 2) : ""; }
+async function fetchTradeBook() {
+  const liveBody = document.getElementById("trade-book-live-body");
+  const paperBody = document.getElementById("trade-book-paper-body");
+  const liveNoteEl = document.getElementById("trade-book-live-note");
+  const paperNoteEl = document.getElementById("trade-book-paper-note");
+  const badge = document.getElementById("trade-book-badge");
+  const summary = document.getElementById("trade-book-summary");
+  try {
+    const data = await (await fetch("/api/trade-book")).json();
+    const live = data.live_trades || [];
+    const paper = data.paper_trades || [];
+    if (liveNoteEl) liveNoteEl.textContent = data.live_note || "";
+    if (paperNoteEl) paperNoteEl.textContent = data.paper_note || "";
+    if (badge) badge.textContent = `${live.length} live · ${paper.length} paper`;
+    if (summary) summary.textContent = `live=${live.length} paper=${paper.length}`;
+    if (liveBody) {
+      liveBody.innerHTML = live.length === 0
+        ? `<tr><td colspan="12" class="muted">No real broker fills</td></tr>`
+        : live.map(t => `<tr>
+            <td>${fmt(t.created_at)}</td><td>${fmt(t.trading_day)}</td><td>${fmt(t.instrument)}</td>
+            <td>${fmt(t.strategy_id)}</td><td>${fmt(t.direction)}</td><td>${fmt(t.entry_model)}</td>
+            <td class="r">${fmtNum(t.fill_entry, 2)}</td><td class="r">${fmtNum(t.fill_exit, 2)}</td>
+            <td class="r">${fmtNum(t.actual_r, 2)}</td><td class="r">${fmtNum(t.pnl_dollars, 2)}</td>
+            <td>${fmt(t.exit_reason)}</td><td>${fmt(t.broker)}</td></tr>`).join("");
+    }
+    if (paperBody) {
+      paperBody.innerHTML = paper.length === 0
+        ? `<tr><td colspan="15" class="muted">No paper trades</td></tr>`
+        : paper.map(t => `<tr>
+            <td>${fmt(t.trading_day)}</td><td>${fmt(t.instrument)}</td><td>${fmt(t.strategy_id)}</td>
+            <td>${fmt(t.lane_name)}</td><td>${fmt(t.direction)}</td><td>${fmt(t.entry_model)}</td>
+            <td>${fmt(t.orb_label)}</td><td class="r">${fmtNum(t.rr_target, 1)}</td><td>${fmt(t.filter_type)}</td>
+            <td class="r">${fmtNum(t.entry_price, 2)}</td><td class="r">${fmtNum(t.exit_price, 2)}</td>
+            <td class="r">${fmtNum(t.pnl_r, 2)}</td><td class="r">${fmtNum(t.pnl_dollar, 2)}</td>
+            <td>${fmt(t.exit_reason)}</td><td>${fmt(t.execution_source)}</td></tr>`).join("");
+    }
+  } catch (e) {
+    if (liveBody) liveBody.innerHTML = `<tr><td colspan="12" class="muted">Fetch failed: ${e}</td></tr>`;
+    if (paperBody) paperBody.innerHTML = `<tr><td colspan="15" class="muted">Fetch failed: ${e}</td></tr>`;
+  }
+}
+async function fetchLaneStatus() {
+  const badge = document.getElementById("lanes-paused-badge");
+  if (!badge) return;
+  try {
+    const data = await (await fetch("/api/lane-status")).json();
+    const n = Number(data.paused_count || 0);
+    if (n > 0) {
+      badge.style.display = "";
+      const reasons = (data.paused || []).map(p => `${p.strategy_id}${p.reason ? " — " + p.reason : ""}${p.expires_on ? " (until " + p.expires_on + ")" : ""}`).join("\n");
+      badge.textContent = `${n} paused`;
+      badge.title = reasons || "paused lanes";
+    } else {
+      badge.style.display = "none";
+      badge.textContent = "";
+      badge.title = "";
+    }
+  } catch (_) {
+    badge.style.display = "none";
+  }
+}
+
 /* ── Init ───────────────────────────── */
 restoreSections();
 restoreTab();
 initAccountSelector();
 try { localStorage.removeItem("orb_sections"); } catch (_) {} // migrate old key
 initCockpit();
-fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth();
-setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000); setInterval(fetchEquity, 30000); setInterval(fetchOperatorState, 5000); setInterval(fetchAlerts, 5000);
+fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth(); fetchLaneStatus();
+setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000); setInterval(fetchEquity, 30000); setInterval(fetchOperatorState, 5000); setInterval(fetchAlerts, 5000); setInterval(fetchLaneStatus, 60000);
 // Tier 1.3 — broker health dot (topbar) polled regardless of tab
 setInterval(fetchBrokerHealth, 30000);
 // Auto-refresh broker list when on Connections tab
