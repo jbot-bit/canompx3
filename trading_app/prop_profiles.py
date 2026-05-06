@@ -971,8 +971,11 @@ def parse_strategy_id(strategy_id: str) -> dict:
     return result
 
 
-# Abbreviated lane names for paper_trades.lane_name column.
-# Must match existing DB values to preserve continuity.
+# DEPRECATED 2026-05-07 (Ralph iter 184): session-keyed static names no longer
+# match current paper_trades DB records. The canonical lane_name format is
+# "{orb_label}_{filter_type[:12]}" as used in paper_trade_logger.py:77.
+# Kept only for research/garch_profile_production_replay.py backward-compat.
+# Do NOT use for new code — use get_profile_lane_definitions instead.
 _LANE_NAMES: dict[str, str] = {
     "NYSE_CLOSE": "NYSE_CLOSE_VOL",
     "SINGAPORE_OPEN": "SING_G8",
@@ -1027,7 +1030,7 @@ def get_profile_lane_definitions(profile_id: str | None = None) -> list[dict]:
                 "confirm_bars": parsed["confirm_bars"],
                 "filter_type": parsed["filter_type"],
                 "orb_minutes": parsed["orb_minutes"],
-                "lane_name": _LANE_NAMES.get(lane.orb_label, lane.orb_label),
+                "lane_name": f"{lane.orb_label}_{parsed['filter_type'][:12]}",
                 "stop_multiplier": profile.stop_multiplier,
                 "is_half_size": is_half,
                 "shadow_only": shadow,

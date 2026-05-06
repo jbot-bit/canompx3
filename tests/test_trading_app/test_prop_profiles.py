@@ -360,6 +360,19 @@ class TestLaneRegistryOrbCap:
         finally:
             ACCOUNT_PROFILES.pop("dup_lane_profile", None)
 
+    def test_lane_name_is_dynamic_not_static(self):
+        """lane_name must be derived as '{orb_label}_{filter_type[:12]}', not from
+        the stale _LANE_NAMES dict.  Regression guard for Ralph iter 184.
+        """
+        lanes = get_profile_lane_definitions("topstep_50k_mnq_auto")
+        for lane in lanes:
+            orb_label = lane["orb_label"]
+            filter_type = lane["filter_type"]
+            expected = f"{orb_label}_{filter_type[:12]}"
+            assert lane["lane_name"] == expected, (
+                f"lane_name mismatch for {orb_label}: got {lane['lane_name']!r}, expected {expected!r}"
+            )
+
 
 class TestOrbCapLogic:
     """Unit tests for the ORB cap check logic (mirrors session_orchestrator gate)."""
