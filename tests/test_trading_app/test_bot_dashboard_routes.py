@@ -179,6 +179,70 @@ def test_trade_book_missing_db(client, monkeypatch, tmp_path):
     assert body["paper_note"] and "gold.db" in body["paper_note"]
 
 
+def _seed_gold_db_n_paper_rows(path: Path, n: int) -> None:
+    """Seed gold.db with N paper_trades rows (entry_time spaced by minutes
+    so ORDER BY trading_day DESC, entry_time DESC is well-defined)."""
+    with duckdb.connect(str(path)) as con:
+        con.execute(
+            """
+            CREATE TABLE paper_trades (
+                trading_day DATE, instrument VARCHAR, strategy_id VARCHAR,
+                lane_name VARCHAR, direction VARCHAR, entry_model VARCHAR,
+                orb_label VARCHAR, orb_minutes INTEGER, rr_target DOUBLE,
+                filter_type VARCHAR, entry_time TIMESTAMP, exit_time TIMESTAMP,
+                entry_price DOUBLE, exit_price DOUBLE, pnl_r DOUBLE,
+                pnl_dollar DOUBLE, slippage_ticks DOUBLE, exit_reason VARCHAR,
+                execution_source VARCHAR
+            )
+            """
+        )
+        # Bulk insert via VALUES is fast enough for 5050 rows.
+        rows_sql = ",\n".join(
+            f"(DATE '2026-05-05', 'MNQ', 's', 'l', 'long', 'E2', 'NYSE_OPEN', 5, 1.0, "
+            f"'COST_LT12', TIMESTAMP '2026-05-05 14:30:00' + INTERVAL '{i} minutes', "
+            f"TIMESTAMP '2026-05-05 15:00:00', 18000.0, 18020.0, 1.0, 100.0, 0.5, "
+            f"'tp', 'paper')"
+            for i in range(n)
+        )
+        con.execute(f"INSERT INTO paper_trades VALUES {rows_sql}")
+
+
+def test_trade_book_paper_truncation_flag_under_limit(client, monkeypatch, tmp_path):
+    """N=1 < limit → paper_truncated=False, paper_total_count=N, single query."""
+    journal = tmp_path / "live_journal.db"
+    gold = tmp_path / "gold.db"
+    _seed_live_journal(journal)
+    _seed_gold_db(gold)
+    monkeypatch.setattr(bot_dashboard, "JOURNAL_PATH", journal)
+    monkeypatch.setattr(bot_dashboard, "GOLD_DB_PATH", gold)
+
+    resp = client.get("/api/trade-book")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["paper_truncated"] is False
+    assert body["paper_total_count"] == 1
+    assert len(body["paper_trades"]) == 1
+
+
+def test_trade_book_paper_truncation_flag_over_limit(client, monkeypatch, tmp_path):
+    """N=5050 > limit → 5000 returned, paper_truncated=True, total_count=5050."""
+    journal = tmp_path / "live_journal.db"
+    gold = tmp_path / "gold.db"
+    _seed_live_journal(journal)
+    _seed_gold_db_n_paper_rows(gold, 5050)
+    monkeypatch.setattr(bot_dashboard, "JOURNAL_PATH", journal)
+    monkeypatch.setattr(bot_dashboard, "GOLD_DB_PATH", gold)
+
+    resp = client.get("/api/trade-book")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["paper_trades"]) == 5000, "must trim to LIMIT"
+    assert body["paper_truncated"] is True
+    assert body["paper_total_count"] == 5050
+    # counts.paper reflects what's RETURNED, total_count reflects what EXISTS.
+    assert body["counts"]["paper"] == 5000
+
+
 def test_lane_status_happy(client, monkeypatch):
     """One paused strategy → response surfaces strategy_id, reason, expires_on."""
     paused_sid = "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"

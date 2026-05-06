@@ -3639,7 +3639,15 @@ async function fetchTradeBook() {
     const live = data.live_trades || [];
     const paper = data.paper_trades || [];
     if (liveNoteEl) liveNoteEl.textContent = data.live_note || "";
-    if (paperNoteEl) paperNoteEl.textContent = data.paper_note || "";
+    if (paperNoteEl) {
+      const baseNote = data.paper_note || "";
+      if (data.paper_truncated) {
+        const total = data.paper_total_count;
+        paperNoteEl.textContent = baseNote + (baseNote ? " · " : "") + `showing first 5000 of ${total}`;
+      } else {
+        paperNoteEl.textContent = baseNote;
+      }
+    }
     if (badge) badge.textContent = `${live.length} live · ${paper.length} paper`;
     if (summary) summary.textContent = `live=${live.length} paper=${paper.length}`;
     if (liveBody) {
