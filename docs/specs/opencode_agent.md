@@ -86,11 +86,34 @@ Test surface: `tests/test_scripts/test_claude_review_deepseek.py` covers
 mock APPROVE / BLOCK / inactive-env / empty-diff / doc-only / threshold
 helpers. Live Claude calls are not exercised in CI.
 
-## Credits (Phase 4 — not yet wired)
+## Credits
 
-Phase 4 lands `scripts/tools/check_or_credits.py`. Opt-in via
-`OPENCODE_AGENT_CHECK_CREDITS=1`. The endpoint URL must be falsified
-against the live OpenRouter API before the script ships (Phase 4 step 1).
+`scripts/tools/check_or_credits.py` is an **advisory-only** balance
+probe. Opt in by setting `OPENCODE_AGENT_CHECK_CREDITS=1` before
+launching the agent. The launcher then runs the script after the
+banner; the script:
+
+- Calls `GET https://openrouter.ai/api/v1/auth/key` (the conventional
+  OpenRouter balance endpoint) with a 5-second timeout.
+- Prints `usage / limit / remaining` to stdout on success.
+- Emits stderr WARN when `remaining < $5` (override via `--threshold`).
+- **Always exits 0** so the launch continues; bad responses or missing
+  keys downgrade to a WARN, never block.
+
+Tests cover mock-normal, mock-low (forces WARN), threshold-override,
+and no-key-set paths. Live HTTP is not exercised in CI.
+
+**Endpoint falsification (manual gate):** The OpenRouter docs site
+returned 404 during planning, so the `/auth/key` URL is documented by
+convention. Before promoting the credits check from opt-in to
+default-on, run:
+```
+curl -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+  https://openrouter.ai/api/v1/auth/key
+```
+Expected: 200 OK with `data.usage` + `data.limit` fields. If the URL
+is wrong, locate the correct endpoint at https://openrouter.ai/docs
+before changing the default.
 
 ## Fallback Path
 
@@ -132,3 +155,8 @@ For one-shot review questions when a full TUI isn't warranted, use
 - Updating the launcher default: edit the `param()` block AND keep the
   `# canonical-default-fallback:` annotation. The drift check enforces
   the contract.
+- Promoting the credits check to default-on: first falsify the endpoint
+  URL via `curl -H "Authorization: Bearer $OPENROUTER_API_KEY"
+  https://openrouter.ai/api/v1/auth/key` (Phase 4 manual gate). Then
+  flip the launcher to call `check_or_credits.py` unconditionally;
+  keep `OPENCODE_AGENT_CHECK_CREDITS=0` as the opt-out.

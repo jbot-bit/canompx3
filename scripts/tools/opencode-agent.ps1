@@ -197,6 +197,17 @@ $version = Get-OpencodeVersion
 $tail = Get-KeyTail $key
 Write-Host "[opencode-agent] tool=opencode version=$version model=$Model ($modelSource) key=...$tail source=$source"
 
+# Optional credit-balance probe (advisory only). Off by default to avoid
+# adding a network round-trip per launch; opt in with
+# OPENCODE_AGENT_CHECK_CREDITS=1. The script always exits 0 — bad
+# response or missing key emits stderr WARN and the launch continues.
+if ($env:OPENCODE_AGENT_CHECK_CREDITS -eq "1") {
+    $creditsScript = Join-Path $repoRootForResolver "scripts\tools\check_or_credits.py"
+    if (Test-Path -LiteralPath $creditsScript) {
+        & python $creditsScript
+    }
+}
+
 if ($NoLaunch) {
     exit 0
 }
