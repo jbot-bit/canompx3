@@ -1,0 +1,340 @@
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: "2026-05-07"
+slug: "2026-05-07-mnq-yordanov-crossmiss-triage-v1"
+title: "Yordanov 2026 § 3.8 Cross+Miss veto-signal triage on the 3 deployed MNQ lanes"
+owner: "joshdlees@gmail.com"
+parent_spec: "docs/institutional/literature/yordanov_2026_nq_orb_value_area_breakouts.md"
+
+testing_mode: "individual"
+pathway: "B_individual"
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/pooled-finding-rule.md"
+    - ".claude/rules/integrity-guardian.md"
+    - ".claude/rules/quant-audit-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/yordanov_2026_nq_orb_value_area_breakouts.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/runtime/lane_allocation.json"
+  notes:
+    - "Triage probe: read-only IS scan to decide whether the Cross+Miss veto pattern (Yordanov 2026 § 3.8) is even present on MNQ before any further grounding work."
+    - "Pathway B / K=1: ONE mechanism (Cross+Miss veto), tested on the pooled 3-lane scope. Per-lane breakdown mandatory via pooled-finding-rule.md."
+    - "NO promotion is permitted from this pre-reg. SURVIVES verdict only triggers a separate confirmatory Pathway B K=1 pre-reg next session."
+    - "AUDIT-FIRST default per CLAUDE.md: this is the audit step; downstream gates C6/C8/C9 are non-waivable IF and only IF a confirmatory pre-reg follows."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+scope:
+  lanes:
+    - strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+      instrument: "MNQ"
+      orb_label: "COMEX_SETTLE"
+      orb_minutes: 5
+      entry_model: "E2"
+      confirm_bars: 1
+      rr_target: 1.5
+      filter_type: "OVNRNG_100"
+      lane_allocation_ref: "docs/runtime/lane_allocation.json:7-25"
+    - strategy_id: "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15"
+      instrument: "MNQ"
+      orb_label: "US_DATA_1000"
+      orb_minutes: 15
+      entry_model: "E2"
+      confirm_bars: 1
+      rr_target: 1.5
+      filter_type: "VWAP_MID_ALIGNED"
+      lane_allocation_ref: "docs/runtime/lane_allocation.json:26-45"
+    - strategy_id: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+      instrument: "MNQ"
+      orb_label: "NYSE_OPEN"
+      orb_minutes: 5
+      entry_model: "E2"
+      confirm_bars: 1
+      rr_target: 1.0
+      filter_type: "COST_LT12"
+      lane_allocation_ref: "docs/runtime/lane_allocation.json:46-65"
+  direction: pooled
+  out_of_scope:
+    - "non-deployed MNQ lanes"
+    - "MES, MGC instruments"
+    - "filter or RR variants on the deployed lanes"
+    - "any change to validated_setups, lane_allocation.json, paper_trades"
+    - "any post-hoc threshold relaxation"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "Not used in this triage."
+    policy: "OOS not consumed; this is an IS-only triage probe. Confirmatory pre-reg next session would invoke OOS power gate per RULE 3.3."
+  tuning_against_oos: false
+  canonical_layers_only: true
+  canonical_layers_used:
+    - "orb_outcomes"
+    - "daily_features"
+    - "bars_1m"
+  banned_layers:
+    - "validated_setups (DERIVED)"
+    - "edge_families (DERIVED)"
+    - "live_config (HARDCODED)"
+
+scratch_policy:
+  policy: "drop"
+  justification: >
+    The 3 lanes in scope use confirm_bars=1 stop-market entries with explicit
+    target/stop geometry; outcome='scratch' rows (pnl_r=NULL) represent sessions
+    where the trade was never resolved by stop or target before session end and
+    are excluded by the canonical promoter via WHERE pnl_r IS NOT NULL. This
+    triage matches the deployed-lane convention so bucket counts are comparable
+    to live performance. Per pre_registered_criteria.md Criterion 13, this is
+    declared explicitly. Bailey-LdP 2014 sample-selection caveat acknowledged:
+    inflation risk is shared with the deployed lane baseline, not introduced by
+    this triage.
+  literature_ref: "docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md"
+
+theory_citation:
+  source_file: "docs/institutional/literature/yordanov_2026_nq_orb_value_area_breakouts.md"
+  section: "§ 3.8"
+  verbatim_extract: >
+    "Cross + Dev Miss (n=44): Only 22.7% at 0.5x — a 48.4 percentage-point drop
+    from the baseline 71.1%. ... a breakout that retreats through the Filter Mid
+    without having extended even 0.5x of the filter range has a high probability
+    of full failure."
+  source_dataset: "NQ continuous front-month, 159 trading days, Databento GLBX.MDP3"
+  citation_caveats:
+    - "Single-instrument NQ; instrument transfer to MNQ is the test."
+    - "Not peer-reviewed; author identity unverified."
+    - "Author defines Filter Range from Volume Profile Value Area (Case A) or 10:00 candle (Case B/C); this triage uses ORB high/low as the tractable analogue. The mid-cross mechanism is what is being tested, not the VA construction."
+  scope_relaxation_acknowledged: >
+    Yordanov defines Filter Range from Value Area / 10:00 candle. This triage
+    uses the canonical project ORB high/low as the analogue range. The
+    structural mechanism under test is "post-entry mid-cross before 0.5x
+    deviation" — not the specific VA construction. A SURVIVES verdict here
+    motivates a more faithful VA replication next session; a FALSIFIED verdict
+    falsifies the mid-cross mechanism on MNQ regardless of range definition.
+
+bucket_definitions:
+  reference_anchors:
+    orb_mid: "(orb_high + orb_low) / 2"
+    deviation_target_R: "0.5 * (orb_high - orb_low)"
+  side_resolution: >
+    Side inferred from entry_price vs orb_mid: long if entry_price > orb_mid,
+    short if entry_price < orb_mid. Trades with entry_price == orb_mid (zero
+    bars expected on continuous-tick data) are excluded with a logged warning.
+  buckets:
+    NO_CROSS:
+      definition: >
+        Across all post-entry bars (ts_utc > entry_ts) up to and including
+        exit_ts, no bar.close re-crosses orb_mid in the direction opposite to
+        entry side.
+      yordanov_analogue: "Yordanov § 3.8 group ① No Cross (n=80, 85.0% at 0.5x)"
+    CROSS_HIT:
+      definition: >
+        Post-entry favourable excursion reaches at least
+        deviation_target_R points (long: bar.high - entry_price >= 0.5*(orb_high-orb_low);
+        short: entry_price - bar.low >= 0.5*(orb_high-orb_low)) BEFORE any
+        bar.close re-cross of orb_mid.
+      yordanov_analogue: "Yordanov § 3.8 group ② Cross + Dev Hit (n=35, 100% at 0.5x by definition; 60.0% at 1.0x)"
+    CROSS_MISS:
+      definition: >
+        bar.close re-cross of orb_mid occurs BEFORE the favourable excursion
+        reaches 0.5*(orb_high-orb_low). First-event-wins loop.
+      yordanov_analogue: "Yordanov § 3.8 group ③ Cross + Dev Miss (n=44, 22.7% at 0.5x)"
+  hit_rate_metric:
+    definition: "P(post-entry favourable excursion reaches 0.5x deviation target before exit_ts)"
+    formula_long: "max(bar.high - entry_price for bar in post_entry_bars) >= 0.5*(orb_high-orb_low)"
+    formula_short: "max(entry_price - bar.low for bar in post_entry_bars) >= 0.5*(orb_high-orb_low)"
+    rationale: >
+      Yordanov reports hit-rate at the 0.5x dev target. Within the CROSS_HIT
+      bucket the value is 100% by construction. Within NO_CROSS and CROSS_MISS
+      it is the empirical follow-through rate post-entry, computed from
+      intraday bars_1m. This is independent of the lane's own RR target — the
+      veto signal Yordanov measures is geometric structural, not RR-conditional.
+
+feature_definition:
+  feature_name: "post_entry_mid_cross_before_dev"
+  column_source: "computed at runtime from bars_1m + orb_outcomes.entry_ts/entry_price + daily_features.orb_<SESSION>_high/low"
+  canonical_source_of_truth: "this script — no canonical column exists"
+  trade_time_knowable: false
+  first_complete_time: "AT exit_ts (post-trade, retrospective)"
+  temporal_alignment_note: >
+    The bucket label is a POST-TRADE retrospective classifier. This is a VETO
+    SIGNAL evaluation: we ask "would knowing the bucket label at exit-ish time
+    inform a future-session veto?" not "would the label have been known at
+    entry?". For SURVIVES verdict, a separate confirmatory pre-reg must define
+    a TRADE-TIME-KNOWABLE proxy (e.g., live-tracked mid-cross detector) and
+    backtest it under the standard look-ahead gates.
+  lookahead_check: >
+    Look-ahead boundary IS strict: bars_1m.ts_utc > entry_ts (exclusive).
+    bar at ts_utc == entry_ts is the entry bar itself (entry executes on close);
+    all post-entry bars are strictly later. Per backtesting-methodology.md
+    § 6.3 and trading_app/outcome_builder.py:277-282 (entry_ts is bar-CLOSE).
+    Self-review asserts first post-entry bar has ts_utc > entry_ts on every
+    sampled trade.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  source: "Yordanov 2026 working paper (NQ, 159 days, n=44 cross-miss observations)"
+  upstream_scan_k_framings:
+    note: >
+      Yordanov tested multiple bucket schemes (Filter Case A/B/C, Cross/No-Cross,
+      Cross+Hit/Cross+Miss, volume buckets). The Cross+Miss group at 22.7% vs
+      71.1% baseline is one of ~8 buckets reported. Yordanov did not apply
+      multiple-comparison correction. The signal we test here is the SINGLE
+      strongest one Yordanov reported (his § 4 grading: STRONGEST SIGNAL, ✓).
+    note_on_K_for_this_pre_reg: >
+      The CURRENT TEST is K=1 — one mechanism, three lanes scored independently
+      then pooled. Pooled scope is the test's single hypothesis. Per-lane
+      breakdown is reported as a heterogeneity check (pooled-finding-rule.md),
+      NOT three independent hypotheses.
+
+testing_discipline:
+  pathway: "B_individual"
+  k: 1
+  significance_threshold:
+    raw_p_required: "<0.05 on pooled NO_CROSS vs CROSS_MISS hit-rate proportion z-test"
+    effect_size_required: "pooled hit_rate(NO_CROSS) - hit_rate(CROSS_MISS) >= 35pp for SURVIVES tier"
+  mandatory_downstream_gates_non_waivable:
+    - "C6_WFE: walk-forward efficiency >= 0.50 (only invoked on confirmatory pre-reg next session)"
+    - "C8_OOS: OOS-power-gated dir_match per backtesting-methodology.md § 3.3"
+    - "C9_era_stability: no era ExpR < -0.05 at N>=50 on the veto-signal subset"
+  theory_citation: "see top-level theory_citation block"
+
+pooled_finding_protocol:
+  applies: true
+  per_cell_breakdown_required: true
+  per_lane_table_required_in_result_md: true
+  flip_rate_pct_annotation_required: true
+  heterogeneity_threshold_pct: 25
+  per_lane_table_columns:
+    - "lane (strategy_id)"
+    - "N_total"
+    - "N_NO_CROSS"
+    - "hit_rate_NO_CROSS"
+    - "N_CROSS_HIT"
+    - "hit_rate_CROSS_HIT_05x"
+    - "N_CROSS_MISS"
+    - "hit_rate_CROSS_MISS_05x"
+    - "gap_pp (NO_CROSS - CROSS_MISS)"
+    - "tier (per locked_kill_criteria)"
+
+primary_schema:
+  measured:
+    - "per_lane bucket counts and hit-rates"
+    - "pooled bucket counts and hit-rates"
+    - "pooled gap_pp = hit_rate(NO_CROSS) - hit_rate(CROSS_MISS)"
+    - "raw two-proportion z-test p-value on pooled NO_CROSS vs CROSS_MISS"
+    - "flip_rate_pct = share of lanes whose per-lane gap sign opposes pooled gap sign"
+
+locked_kill_criteria:
+  K1_FALSIFIED:
+    metric: "pooled gap_pp"
+    threshold: "< 20"
+    action: "FALSIFIED — annotate Yordanov extract § 3.8 with MNQ-falsified status; update mechanism_priors.md."
+  K2_SURVIVES:
+    metric: "pooled gap_pp AND per-lane gap consistency"
+    threshold: "pooled gap_pp >= 35 AND >= 2 of 3 lanes show per-lane gap >= 25"
+    action: "SURVIVES — author confirmatory Pathway B K=1 pre-reg next session for highest-effect lane."
+  K3_AMBIGUOUS:
+    metric: "pooled gap_pp in [20, 35) OR (pooled >=35 BUT only 1/3 lanes confirms)"
+    threshold: "see metric"
+    action: "AMBIGUOUS — park; no promotion; record DOWNGRADE in decision-ledger; queue for re-test on next data refresh."
+  K4_UNDERPOWERED:
+    metric: "min(N_NO_CROSS, N_CROSS_HIT, N_CROSS_MISS) per lane"
+    threshold: "< 30 on ANY of the 3 lanes"
+    action: "UNDERPOWERED — note bucket-N gap in decision-ledger; do not promote; do not annotate Yordanov extract."
+
+decision_rule:
+  precedence_order: ["K4_UNDERPOWERED", "K1_FALSIFIED", "K2_SURVIVES", "K3_AMBIGUOUS"]
+  precedence_rationale: >
+    K4 fires first because power is a precondition for any other interpretation
+    (a 22.7% reading on N=12 is uninterpretable). K1 fires before K2 because
+    falsification is more conservative than confirmation under shared evidence.
+    K3 is the residual — neither confirmed nor falsified. Exactly one branch
+    fires per decision.
+  continue_if: "K2_SURVIVES — write confirmatory Pathway B K=1 pre-reg next session."
+  park_if: "K3_AMBIGUOUS — record DOWNGRADE; no annotation, no promotion."
+  kill_if: "K1_FALSIFIED — annotate Yordanov extract; update mechanism_priors.md (auction theory literature) to MNQ-falsified."
+  hold_if: "K4_UNDERPOWERED — neither annotate nor promote; note bucket-N gap only."
+
+methodology_rules_applied:
+  RULE_1_temporal_alignment:
+    application: "POST-TRADE retrospective classifier explicitly declared in feature_definition. Triage role only — not deployable as-is."
+  RULE_3_holdout_discipline:
+    application: "IS-only window; OOS not consumed; tuning_against_oos=false."
+  RULE_4_multiple_testing:
+    application: "K=1 (Pathway B individual). Per-lane breakdown is heterogeneity check, NOT a 3-hypothesis family."
+  RULE_6_trade_time_knowability:
+    application: "Feature trade_time_knowable=false declared explicitly; classifier is post-exit retrospective. SURVIVES requires confirmatory pre-reg with trade-time-knowable proxy."
+  RULE_9_data_source_discipline:
+    application: "Canonical layers only (orb_outcomes, daily_features, bars_1m). Triple-join on (trading_day, symbol, orb_minutes) per daily-features-joins.md."
+  RULE_10_pre_registration:
+    application: "This file. Locked numeric criteria precede script execution. commit_sha stamped post-commit before run."
+  RULE_11_audit_trail:
+    application: "Result md + companion CSV emitted to docs/audit/results/. Decision-ledger 1-line entry. No deletion of prior results."
+  POOLED_FINDING_RULE:
+    application: "per_cell_breakdown_path, flip_rate_pct, and heterogeneity_ack (if flip>=25) MANDATORY in result md front-matter. check_pooled_finding_annotations enforces."
+  CANONICAL_FILTER_DELEGATION:
+    application: "research.filter_utils.filter_signal(df, key, orb_label) is the only path. No inline OVNRNG_100/VWAP_MID_ALIGNED/COST_LT12 arithmetic."
+  AUDIT_FIRST_DEFAULT:
+    application: "This pre-reg + script is the audit step. No deployment, validated_setups, or lane_allocation change permitted from a SURVIVES verdict — confirmatory pre-reg required first."
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2"
+    N_trials: 1
+    note: "K=1 confirmatory triage; MinBTL ~0 by construction. No multi-cell enumeration."
+    within_cap: true
+    cap_reference: "pre_registered_criteria.md Criterion 2 (N <= 300 clean-MNQ)"
+
+implementation_integrity_checklist:
+  - check: "IS/OOS discipline: SQL hardcodes trading_day < 2026-01-01 sourced from HOLDOUT_SACRED_FROM"
+  - check: "Thresholds frozen pre-run: kill criteria above; result md must echo verbatim before printing data"
+  - check: "Look-ahead guard: bars_1m.ts_utc > entry_ts (strict); first post-entry bar timestamp asserted strictly later than entry_ts on every sampled trade"
+  - check: "Triple-join on (trading_day, symbol, orb_minutes) — no 3x N inflation"
+  - check: "Filter applied via canonical research.filter_utils.filter_signal — no inline filter arithmetic"
+  - check: "Side resolution from entry_price vs orb_mid is deterministic; entry_price == orb_mid edge case warned and excluded"
+  - check: "Bucket counts sum to N_total per lane (sanity invariant)"
+  - check: "Pre-run pre-reg-vs-script consistency: script reads kill criteria from this YAML file, fails closed on any mismatch"
+  - check: "self_review() runs python pipeline/check_drift.py via subprocess; nonzero exit blocks output emission"
+  - check: "Result md front-matter contains pooled_finding=true, per_cell_breakdown_path, flip_rate_pct (and heterogeneity_ack if >=25)"
+
+outputs_required_after_run:
+  - "docs/audit/results/2026-05-07-mnq-yordanov-crossmiss-triage-v1.md"
+  - "docs/audit/results/2026-05-07-mnq-yordanov-crossmiss-triage-v1.csv"
+  - "1-line append to docs/runtime/decision-ledger.md"
+
+execution_gate:
+  allowed_now:
+    - "commit this pre-reg, stamp commit_sha"
+    - "run research/yordanov_crossmiss_triage_v1.py against gold.db (read-only)"
+    - "emit result md+csv with all required front-matter and per-lane table"
+    - "append decision-ledger one-line entry"
+    - "(if FALSIFIED) annotate yordanov literature extract + mechanism_priors.md"
+    - "(if SURVIVES) write a SEPARATE confirmatory Pathway B K=1 pre-reg in a future session"
+  forbidden_now:
+    - "any write to validated_setups, experimental_strategies, lane_allocation.json, paper_trades, live_config"
+    - "any change to the deployed 3 MNQ lanes"
+    - "post-hoc threshold relaxation"
+    - "running with a different IS boundary"
+    - "promoting the veto signal to a deployment decision from this pre-reg's verdict"
+    - "writing the confirmatory Pathway B K=1 pre-reg in this same session (cools cycle: triage today, decide tomorrow)"
+
+not_done_by_this_pre_reg:
+  - "Faithful Volume Profile Value Area replication (uses ORB high/low analogue)"
+  - "Trade-time-knowable veto-signal proxy (post-trade retrospective classifier)"
+  - "OOS confirmation (IS-only triage)"
+  - "Cross-instrument generalization (MNQ-only)"
+  - "Cross-session generalization beyond the 3 deployed lanes"
+  - "Any deployment, sizing, or allocator change"
