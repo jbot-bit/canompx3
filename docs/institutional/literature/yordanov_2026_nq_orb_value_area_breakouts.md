@@ -174,8 +174,8 @@ Per `pre_registered_criteria.md` and `backtesting-methodology.md`:
 
 **Output artifacts (`research/output/`):**
 - `dalton_80_rule_notes.md` — STRICT mode: hit rates 3–50%, mostly 20–30% (well below the 80% rule label). LOOSE mode: 60–100% but those are touch counts not directional outcomes.
-- `dalton_filter_anchor_uplift.md` — Best lane: MNQ 0900 ON-trades N=90 (5.7% fire rate), Δ(on-off)=+0.7357R, WR ON/OFF 62.2%/32.3%, ΔDD favorable. MES 0900 also positive. MGC anchors all near-zero or negative. **Sub-30 fire rate raises Bailey-LdP DSR concern; small-N inflation per `feedback_oos_power_floor.md`.**
-- `dalton_mnq0900_oos.md` — train 2024 → test 2025+ uplift: train +0.97R, test +0.46R. ON N=90 aggregate, OFF N=1499. KEEP/WATCH zone per the doc's own verdict guide. Not committed to `validated_setups`.
+- `dalton_filter_anchor_uplift.md` — Best lane: MNQ 0900 aggregate ON-trades N=90 (across 2024+2025+2026, 5.7% fire rate), Δ(on-off)=+0.7357R, aggregate WR ON/OFF 62.2%/32.3%, ΔDD favorable. MES 0900 also positive. MGC anchors all near-zero or negative. **Sub-30 fire rate raises Bailey-LdP DSR concern; small-N inflation per `feedback_oos_power_floor.md`.**
+- `dalton_mnq0900_oos.md` — train year 2024 (ON N=48, WR=79.2%, +1.11R) → test 2025-2026 (ON N=42, WR=42.9%, +0.53R; OFF N=864, WR=28.4%, +0.078R; net uplift +0.4559R). **Two correctness caveats:** (1) the WR collapse 79%→43% is a regime shift the headline +0.46R hides — would fail C9 era stability under any reasonable single-split test; (2) the "test" block aggregates 2025 (Mode A IS under `HOLDOUT_SACRED_FROM=2026-01-01`) with 2026 (Mode A sacred OOS), so per `research-truth-protocol.md` § "Mode B grandfathered baselines" this CANNOT be cited as Mode A OOS evidence — it is a Mode B grandfathered split. KEEP/WATCH zone per the doc's own verdict guide. Not committed to `validated_setups`.
 - `dalton_mid_monetization_notes.md` — VA midpoint as target: predominantly negative ExpR across MGC/MES/MNQ at 0900/1000/1100. KILL-zone.
 
 **Status reading:**
