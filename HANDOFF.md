@@ -6,6 +6,32 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Current Session Update (2026-05-08 - Codex GitHub CI unblock)
+
+- GitHub is connected. There was no open PR for this repo when checked; the
+  most recent PR was #254 and it was already merged. Work continued on branch
+  `codex/unblock-ci-main` from current `main` to unblock the failing main CI.
+- Root CI failure was the monolithic Windows pytest coverage step being
+  interrupted around six minutes after collecting 5,608 tests, not an assertion
+  failure. The workflow now shards coverage into bounded pytest processes:
+  repo core, tools/research, pipeline drift, pipeline core, and four
+  trading-app shards.
+- Fixed two local blockers surfaced while validating the CI unblock:
+  - `tests/test_pipeline/test_check_drift.py` no longer relies on `ls` being on
+    Windows PATH for the failing-command short-circuit test.
+  - `scripts/tools/project_pulse.py` keeps text output under the existing
+    scannability cap by compacting the header/authority line and capping
+    lower-priority item lists.
+- Verification run in this Windows worktree:
+  - shard selectors collect the original 5,608-test surface as
+    403/890/379/984/1231/582/905/234 tests.
+  - `uv run pytest tests/test_tools/test_project_pulse.py tests/test_tools/test_pulse_integration.py tests/test_pipeline/test_check_drift.py::TestStageAcceptanceRunner -q`
+    passed (`87 passed`).
+  - pipeline drift shard command with coverage passed (`377 passed, 2 skipped`).
+  - `uv run ruff format --check ...`, `uv run ruff check ...`,
+    `git diff --check`, YAML parse, and `uv run python pipeline/check_drift.py`
+    passed.
+
 ## Current Session Update (2026-05-08 — live pre-session unblock)
 
 - Baked the readiness prep into the dashboard/operator flow instead of
