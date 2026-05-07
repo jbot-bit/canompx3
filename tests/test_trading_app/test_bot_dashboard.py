@@ -172,7 +172,7 @@ FIX FAILURES before starting a live session.
     assert check_map["Contract resolution"]["status"] == "warn"
 
 
-def test_derive_operator_state_requires_preflight_before_ready():
+def test_derive_operator_state_allows_start_without_cached_preflight():
     top_state, reason, action = _derive_operator_state(
         raw_mode="STOPPED",
         heartbeat_age_s=9999,
@@ -181,9 +181,9 @@ def test_derive_operator_state_requires_preflight_before_ready():
         preflight_summary=None,
     )
 
-    assert top_state == "STOPPED"
-    assert "preflight" in reason.lower()
-    assert action["id"] == "run_preflight"
+    assert top_state == "READY"
+    assert "auto-run readiness checks" in reason
+    assert action["id"] == "start_signal"
 
 
 def test_derive_operator_state_becomes_ready_after_passing_preflight():
@@ -576,15 +576,15 @@ def test_handoff_snapshot_walks_state_machine_to_ready(monkeypatch):
     snap = bot_dashboard._handoff_snapshot(data_summary=stale_data)
     assert snap["status"] == "needs_refresh"
 
-    # Stage 5: data fresh, no/failed preflight → "needs_preflight"
+    # Stage 5: fresh data is start-ready; Start auto-runs readiness checks.
     fresh_data = {"status": "ok", "any_stale": False, "instruments": {}}
     snap = bot_dashboard._handoff_snapshot(data_summary=fresh_data, preflight_summary=None)
-    assert snap["status"] == "needs_preflight"
+    assert snap["status"] == "ready_to_start"
 
     snap = bot_dashboard._handoff_snapshot(data_summary=fresh_data, preflight_summary={"status": "fail"})
-    assert snap["status"] == "needs_preflight"
+    assert snap["status"] == "ready_to_start"
 
-    # Stage 6: data fresh + preflight pass → "ready_to_start"
+    # Stage 6: an existing passing preflight remains start-ready.
     snap = bot_dashboard._handoff_snapshot(data_summary=fresh_data, preflight_summary={"status": "pass"})
     assert snap["status"] == "ready_to_start"
     assert snap["action"]["id"] == "continue_handoff"
@@ -607,9 +607,8 @@ def test_preflight_helper_opens_no_duckdb_connection(monkeypatch):
     """
     import duckdb
 
-    from scripts.run_live_session import _run_lightweight_component_self_tests
-
     import trading_app.live.notifications as notifications
+    from scripts.run_live_session import _run_lightweight_component_self_tests
 
     monkeypatch.setattr(notifications, "notify", lambda *a, **k: True)
 

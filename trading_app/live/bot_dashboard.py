@@ -496,20 +496,12 @@ def _handoff_snapshot(
             reason = "Data is stale. Refresh before continuing the handoff."
             action = {"id": "refresh_data", "label": "Refresh Data"}
         else:
-            with _state_lock:
-                pf = preflight_summary or _preflight_cache.get(target_profile)
-            pf_status = str((pf or {}).get("status") or "")
-            if pf is None or pf_status in {"fail", "error", "timeout"}:
-                status = "needs_preflight"
-                reason = "Run preflight again before continuing the handoff."
-                action = {"id": "run_preflight", "label": "Run Preflight"}
-            else:
-                status = "ready_to_start"
-                reason = f"Cleanup finished. Ready to start {target_mode.upper()}."
-                action = {
-                    "id": "continue_handoff",
-                    "label": f"Start {target_mode.upper()}",
-                }
+            status = "ready_to_start"
+            reason = f"Cleanup finished. Ready to start {target_mode.upper()}."
+            action = {
+                "id": "continue_handoff",
+                "label": f"Start {target_mode.upper()}",
+            }
 
     with _state_lock:
         _handoff_state["status"] = status
@@ -586,6 +578,152 @@ def _parse_preflight_output(output: str) -> dict[str, object]:
         "overall": overall,
         "has_warnings": has_warn,
         "has_failures": has_fail,
+    }
+
+
+def _cache_preflight_entry(profile: str, cache_entry: dict[str, object]) -> None:
+    with _state_lock:
+        _preflight_cache[profile] = cache_entry
+
+
+def _run_preflight_subprocess(profile: str) -> dict[str, object]:
+    result = subprocess.run(
+        [sys.executable, "-m", "scripts.run_live_session", "--profile", profile, "--preflight"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=str(PROJECT_ROOT),
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    output = result.stdout + result.stderr
+    parsed = _parse_preflight_output(output)
+    status = "pass" if result.returncode == 0 else "fail"
+    if status == "pass" and bool(parsed.get("has_warnings")):
+        status = "warn"
+    cache_entry = {
+        "status": status,
+        "profile": profile,
+        "ran_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "returncode": result.returncode,
+        **parsed,
+        "output": output,
+    }
+    _cache_preflight_entry(profile, cache_entry)
+    return cache_entry
+
+
+def _run_control_refresh_subprocess(profile: str) -> dict[str, object]:
+    result = subprocess.run(
+        [sys.executable, "-m", "scripts.tools.refresh_control_state", "--profile", profile],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=str(PROJECT_ROOT),
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+    )
+    output = result.stdout + result.stderr
+    return {
+        "status": "pass" if result.returncode == 0 else "fail",
+        "profile": profile,
+        "ran_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "returncode": result.returncode,
+        "output": output,
+    }
+
+
+def _combine_prepare_output(control: dict[str, object], preflight: dict[str, object] | None = None) -> str:
+    parts: list[str] = []
+    control_output = str(control.get("output") or "").strip()
+    if control_output:
+        parts.append("=== Control Refresh ===")
+        parts.append(control_output)
+    if preflight is not None:
+        preflight_output = str(preflight.get("output") or "").strip()
+        if preflight_output:
+            parts.append("=== Preflight ===")
+            parts.append(preflight_output)
+    return "\n\n".join(parts).strip()
+
+
+async def _prepare_profile_for_start(profile: str) -> dict[str, object]:
+    import asyncio
+
+    try:
+        control = await asyncio.to_thread(_run_control_refresh_subprocess, profile)
+    except subprocess.TimeoutExpired:
+        return {
+            "status": "timeout",
+            "profile": profile,
+            "message": "Control-state refresh timed out.",
+            "output": "Control-state refresh timed out after 120s.",
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "profile": profile,
+            "message": f"Control-state refresh failed: {exc}",
+            "output": str(exc),
+        }
+
+    if str(control.get("status")) != "pass":
+        return {
+            "status": "fail",
+            "profile": profile,
+            "message": "Control-state refresh failed.",
+            "control": control,
+            "output": _combine_prepare_output(control),
+        }
+
+    try:
+        preflight = await asyncio.to_thread(_run_preflight_subprocess, profile)
+    except subprocess.TimeoutExpired:
+        cache_entry = {
+            "status": "timeout",
+            "profile": profile,
+            "ran_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "checks": [],
+            "passed": 0,
+            "total": None,
+            "overall": "fail",
+            "output": "Preflight timed out after 60s",
+        }
+        _cache_preflight_entry(profile, cache_entry)
+        return {
+            "status": "timeout",
+            "profile": profile,
+            "message": "Automatic preflight timed out.",
+            "control": control,
+            "preflight": cache_entry,
+            "output": _combine_prepare_output(control, cache_entry),
+        }
+    except Exception as exc:
+        cache_entry = {
+            "status": "error",
+            "profile": profile,
+            "ran_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "checks": [],
+            "passed": 0,
+            "total": None,
+            "overall": "fail",
+            "output": str(exc),
+        }
+        _cache_preflight_entry(profile, cache_entry)
+        return {
+            "status": "error",
+            "profile": profile,
+            "message": f"Automatic preflight failed: {exc}",
+            "control": control,
+            "preflight": cache_entry,
+            "output": _combine_prepare_output(control, cache_entry),
+        }
+
+    return {
+        "status": str(preflight.get("status") or "error"),
+        "profile": profile,
+        "message": "Automatic readiness checks completed.",
+        "control": control,
+        "preflight": preflight,
+        "output": _combine_prepare_output(control, preflight),
     }
 
 
@@ -751,9 +889,7 @@ def _build_action_guard(
             reason = str(data_summary.get("busy_reason") or "Data refresh in progress.")
             action = {"id": "wait_refresh", "label": "Refresh Running"}
             blocked_action_ids.extend(["start_signal", "start_demo", "start_live", "run_preflight", "refresh_data"])
-        elif bool(data_summary.get("any_stale", True)) or (
-            preflight_summary is None or str(preflight_summary.get("status") or "") in {"fail", "error", "timeout"}
-        ):
+        elif bool(data_summary.get("any_stale", True)):
             blocked_action_ids.extend(["start_signal", "start_demo", "start_live"])
 
     return {
@@ -831,24 +967,24 @@ def _derive_operator_state(
 
     if preflight_summary is None:
         return (
-            "STOPPED",
-            "System looks healthy, but no recent preflight is cached for this profile.",
-            {"id": "run_preflight", "label": "Run Preflight"},
+            "READY",
+            "System looks healthy. Start will auto-run readiness checks.",
+            {"id": "start_signal", "label": "Start Alerts"},
         )
 
     preflight_status = str(preflight_summary.get("status") or "unknown")
     if preflight_status in {"fail", "error", "timeout"}:
         return (
-            "BLOCKED",
-            "Most recent preflight failed. Fix failures before starting.",
-            {"id": "run_preflight", "label": "Rerun Preflight"},
+            "DEGRADED",
+            "Last readiness check failed. Start will rerun readiness checks automatically.",
+            {"id": "start_signal", "label": "Start Alerts"},
         )
 
     if preflight_status == "warn":
         return (
             "DEGRADED",
-            "Preflight passed with warnings. Review them before starting.",
-            {"id": "run_preflight", "label": "Review Preflight"},
+            "Last readiness check had warnings. Start will rerun readiness checks automatically.",
+            {"id": "start_signal", "label": "Start Alerts"},
         )
 
     return (
@@ -1396,37 +1532,23 @@ async def action_preflight(profile: str | None = None):
                 "profile": profile,
                 "output": "A session is already running — stop it before preflight.",
             }
-        result = subprocess.run(
-            [sys.executable, "-m", "scripts.run_live_session", "--profile", profile, "--preflight"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=str(PROJECT_ROOT),
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-        )
-        parsed = _parse_preflight_output(result.stdout + result.stderr)
-        status = "pass" if result.returncode == 0 else "fail"
-        if status == "pass" and bool(parsed.get("has_warnings")):
-            status = "warn"
-        cache_entry = {
-            "status": status,
-            "profile": profile,
-            "ran_at": datetime.now(UTC).isoformat(timespec="seconds"),
-            "returncode": result.returncode,
-            **parsed,
-            "output": result.stdout + result.stderr,
-        }
-        with _state_lock:
-            _preflight_cache[profile] = cache_entry
+        prepared = await _prepare_profile_for_start(profile)
+        preflight = prepared.get("preflight")
+        if not isinstance(preflight, dict):
+            return {
+                "status": prepared.get("status", "error"),
+                "profile": profile,
+                "output": prepared.get("output", prepared.get("message", "No output")),
+            }
         return {
-            "status": status,
-            "output": result.stdout + result.stderr,
-            "returncode": result.returncode,
+            "status": preflight.get("status"),
+            "output": prepared.get("output", preflight.get("output")),
+            "returncode": preflight.get("returncode"),
             "profile": profile,
-            "checks": parsed.get("checks", []),
-            "passed": parsed.get("passed"),
-            "total": parsed.get("total"),
-            "overall": parsed.get("overall"),
+            "checks": preflight.get("checks", []),
+            "passed": preflight.get("passed"),
+            "total": preflight.get("total"),
+            "overall": preflight.get("overall"),
         }
     except subprocess.TimeoutExpired:
         cache_entry = {
@@ -2053,9 +2175,15 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
     if bool(data_summary.get("any_stale", True)):
         return {"status": "blocked", "message": "Market data is stale. Refresh data before starting."}
 
-    pf_status = str((preflight_summary or {}).get("status") or "")
-    if preflight_summary is None or pf_status in {"fail", "error", "timeout"}:
-        return {"status": "blocked", "message": "Run preflight before starting a session."}
+    prepared = await _prepare_profile_for_start(profile)
+    prep_status = str(prepared.get("status") or "error")
+    if prep_status in {"fail", "error", "timeout"}:
+        return {
+            "status": "blocked",
+            "message": str(prepared.get("message") or "Automatic readiness checks failed."),
+            "profile": profile,
+            "output": prepared.get("output", ""),
+        }
 
     with _bg_lock:
         if "session" in _bg_processes:
@@ -2106,6 +2234,8 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
             return {
                 "status": "started",
                 "message": f"{mode_label} session started: {profile}",
+                "output": prepared.get("output", ""),
+                "readiness_status": prep_status,
                 "pid": proc.pid,
                 "profile": profile,
                 "mode": mode,

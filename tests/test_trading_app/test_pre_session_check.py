@@ -747,6 +747,37 @@ class TestStage4InactivityWindow:
         assert "WARN" in msg
         assert "29d" in msg
 
+    def test_filters_to_relevant_topstep_accounts_when_discovery_succeeds(self, tmp_path):
+        state_dir = _seed_aged_state_file(tmp_path, "ACTIVE", age_days=10.0)
+        _seed_aged_state_file(tmp_path, "STALE_OTHER", age_days=31.0)
+        with (
+            patch("trading_app.pre_session_check.STATE_DIR", state_dir),
+            patch(
+                "trading_app.pre_session_check._discover_topstep_active_account_ids",
+                return_value={"ACTIVE"},
+            ),
+        ):
+            ok, msg = check_topstep_inactivity_window("topstep_50k_mnq_auto")
+        assert ok is True
+        assert "ACTIVE" in msg
+        assert "STALE_OTHER" not in msg
+        assert "BLOCKED" not in msg
+
+    def test_discovery_fallback_preserves_historical_all_files_behavior(self, tmp_path):
+        state_dir = _seed_aged_state_file(tmp_path, "ACTIVE", age_days=10.0)
+        _seed_aged_state_file(tmp_path, "STALE_OTHER", age_days=31.0)
+        with (
+            patch("trading_app.pre_session_check.STATE_DIR", state_dir),
+            patch(
+                "trading_app.pre_session_check._discover_topstep_active_account_ids",
+                return_value=None,
+            ),
+        ):
+            ok, msg = check_topstep_inactivity_window("topstep_50k_mnq_auto")
+        assert ok is False
+        assert "STALE_OTHER" in msg
+        assert "BLOCKED" in msg
+
     def test_30_days_plus_1s_blocks(self, tmp_path):
         """Upper-boundary direction (>= 30). Mutation: > 30 flips.
 

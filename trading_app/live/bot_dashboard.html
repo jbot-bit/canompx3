@@ -3298,11 +3298,12 @@ async function launchSession(pid, firm, instr, mode) {
   const lbl = {signal: "SIGNAL-ONLY", demo: "DEMO", live: "LIVE"};
   const warn = mode === "live" ? "\n\nREAL MONEY." : mode === "demo" ? "\n\nPaper orders." : "\n\nSignals only.";
   if (!confirm(`Start ${lbl[mode]}?\n\n${firm} | ${instr}\n${pid}${warn}`)) return;
-  showActivity(`${lbl[mode]} Start`, `Launching ${pid}...`, mode === "live" ? "error" : "info");
+  showActivity(`${lbl[mode]} Start`, `Auto-running readiness checks for ${pid} before launch...`, mode === "live" ? "error" : "info");
   try {
     const d = await (await fetch(`/api/action/start?${new URLSearchParams({profile: pid, mode})}`, {method: "POST"})).json();
     const tone = ["blocked", "handoff_wait"].includes(d.status) ? "warning" : d.status === "started" ? "success" : "info";
-    showActivity(`${lbl[mode]} ${String(d.status || "").toUpperCase()}`, d.message || d.status || "No response", tone);
+    const detail = d.output ? `${d.message || d.status || "No response"}\n\n${d.output}` : (d.message || d.status || "No response");
+    showActivity(`${lbl[mode]} ${String(d.status || "").toUpperCase()}`, detail, tone);
     if (d.pid) appendActivity(`PID: ${d.pid}`);
     setTimeout(fetchOperatorState, 1000);
   }

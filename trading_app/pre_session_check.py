@@ -269,7 +269,54 @@ def check_hwm_tracker() -> tuple[bool, str]:
     return (not any_halt), f"DD TRACKER: {msg}"
 
 
-def check_topstep_inactivity_window() -> tuple[bool, str]:
+def _discover_topstep_active_account_ids(profile_id: str | None = None) -> set[str] | None:
+    """Best-effort account scope for the TopStep inactivity pre-flight gate.
+
+    Returns broker-visible active TopStep account IDs when discovery succeeds.
+    Returns None when discovery is unavailable so callers can preserve the
+    historical fail-closed all-files behavior.
+    """
+    if profile_id is None:
+        return None
+
+    from trading_app.prop_profiles import get_profile, resolve_profile_id
+
+    resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
+    profile = get_profile(resolved_profile_id)
+    if profile.firm != "topstep":
+        return None
+
+    try:
+        from trading_app.live.broker_connections import connection_manager
+        from trading_app.live.projectx.contract_resolver import ProjectXContracts
+
+        connection_manager.load()
+        account_ids: set[str] = set()
+        for conn in connection_manager.get_enabled_connections():
+            if conn.get("broker_type") != "projectx":
+                continue
+            conn_id = str(conn.get("id") or "")
+            if not conn_id:
+                continue
+            connection_manager.connect(conn_id)
+            auth = connection_manager.get_auth(conn_id)
+            if auth is None:
+                continue
+            accounts = ProjectXContracts(auth).resolve_all_account_ids()
+            connection_manager.update_account_count(conn_id, len(accounts))
+            for account_id, _account_name in accounts:
+                account_ids.add(str(account_id))
+        return account_ids or None
+    except Exception as exc:  # noqa: BLE001 - pre-flight fallback should remain fail-closed
+        log.warning(
+            "check_topstep_inactivity_window: TopStep account discovery unavailable for %s: %s",
+            resolved_profile_id,
+            exc,
+        )
+        return None
+
+
+def check_topstep_inactivity_window(profile_id: str | None = None) -> tuple[bool, str]:
     """Pre-session pre-flight: surface the TopStep XFA inactivity-closure boundary.
 
     For each non-CORRUPT account_hwm_*.json in STATE_DIR, compute age in days
@@ -307,6 +354,19 @@ def check_topstep_inactivity_window() -> tuple[bool, str]:
 
     hwm_files = list(STATE_DIR.glob("account_hwm_*.json"))
     hwm_files = [f for f in hwm_files if "CORRUPT" not in f.name]
+    relevant_account_ids = _discover_topstep_active_account_ids(profile_id)
+    if relevant_account_ids is not None:
+        scoped_files: list[Path] = []
+        for f in hwm_files:
+            data = read_state_file(f)
+            if data is None:
+                # Keep unreadable files in scope so the later fail-closed path
+                # still surfaces the problem instead of silently skipping it.
+                scoped_files.append(f)
+                continue
+            if str(data.get("account_id") or "") in relevant_account_ids:
+                scoped_files.append(f)
+        hwm_files = scoped_files
     if not hwm_files:
         return True, "No account state files (first session — inactivity gate not applicable)"
 
@@ -706,7 +766,7 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
         ok, msg = check_dd_circuit_breaker()
         results.append(("DD circuit breaker (intraday)", ok, msg))
 
-        ok, msg = check_topstep_inactivity_window()
+        ok, msg = check_topstep_inactivity_window(resolved_profile_id)
         results.append(("TopStep inactivity window", ok, msg))
 
         ok, msg = check_daily_equity(resolved_profile_id)

@@ -6,6 +6,68 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Current Session Update (2026-05-08 — live pre-session unblock)
+
+- Baked the readiness prep into the dashboard/operator flow instead of
+  requiring a separate manual preflight step:
+  - `trading_app/live/bot_dashboard.py` now auto-runs control-state refresh
+    plus preflight when `/api/action/preflight` is called or when a Start
+    action is launched.
+  - Fresh data with no cached preflight is now treated as
+    `ready_to_start`; the UI/operator copy explicitly says Start will
+    auto-run readiness checks.
+  - Start actions still fail closed if the refresh or preflight pass comes
+    back `fail` / `error` / `timeout`, and the launch response now includes
+    the readiness output so the operator can see why it blocked.
+- Updated `trading_app/live/bot_dashboard.html` so launch activity text makes
+  the flow logical to the user: it announces that readiness checks are being
+  auto-run before launch and surfaces the combined readiness output in the
+  activity pane.
+- Updated `tests/test_trading_app/test_bot_dashboard.py` to match the new
+  semantics and keep the operator state machine covered.
+- Refreshed the live control-state surfaces with
+  `python3 scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto`.
+  Result after refresh:
+  - Criterion 11: `valid=True`, `gate_ok=True`, operational survival `90.9%`,
+    `as_of=2026-05-08`, `paths=10000`
+  - Criterion 12: `valid=True`, `counts={'ALARM': 3}`
+- Patched `trading_app/pre_session_check.py` so
+  `check_topstep_inactivity_window(profile_id=...)` now does a best-effort
+  ProjectX active-account discovery for Topstep profiles and scopes the
+  inactivity scan to broker-visible account IDs when that discovery succeeds.
+  If broker discovery is unavailable, it falls back to the historical
+  fail-closed all-files behavior.
+- Added focused regression coverage in
+  `tests/test_trading_app/test_pre_session_check.py` for:
+  - relevant-account filtering when discovery succeeds
+  - fallback to historical all-files behavior when discovery is unavailable
+- Operator-state cleanup:
+  archived stale HWM file
+  `data/state/account_hwm_20092334.json` ->
+  `data/state/archive/account_hwm_20092334.STALE_20260508.json`
+  because it was false-blocking pre-session checks despite not matching the
+  current live Topstep account set.
+- Real gate outcome after refresh + stale-file archive:
+  - `python3 -m trading_app.pre_session_check --profile topstep_50k_mnq_auto --session COMEX_SETTLE`
+    -> `GATE STATUS: GO`
+  - `python3 -m trading_app.pre_session_check --profile topstep_50k_mnq_auto --session US_DATA_1000`
+    -> `GATE STATUS: GO`
+  - `python3 -m trading_app.pre_session_check --profile topstep_50k_mnq_auto --session NYSE_OPEN`
+    -> `GATE STATUS: NO-GO`
+    because `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` remains blocked by a real
+    Criterion 12 SR alarm (`stat=33.27 >= thr=31.96`).
+- Verification:
+  - `./.venv-wsl/bin/python -m ruff check trading_app/live/bot_dashboard.py tests/test_trading_app/test_bot_dashboard.py trading_app/pre_session_check.py tests/test_trading_app/test_pre_session_check.py`
+    passed
+  - `./.venv-wsl/bin/python -m py_compile trading_app/live/bot_dashboard.py trading_app/pre_session_check.py`
+    passed
+  - `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_bot_dashboard.py -q`
+    passed (`19 passed`)
+  - `./.venv-wsl/bin/python -m ruff check trading_app/pre_session_check.py tests/test_trading_app/test_pre_session_check.py`
+    passed
+  - `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_pre_session_check.py -q -k "filters_to_relevant_topstep_accounts_when_discovery_succeeds or discovery_fallback_preserves_historical_all_files_behavior"`
+    passed (`2 passed, 52 deselected`)
+
 ## Current Session Update (2026-05-07 — Codex launcher/env hardening)
 
 - Fixed a Windows launcher regression in `scripts/infra/windows_agent_launch.py`:
