@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from trading_app.account_hwm_tracker import AccountHWMTracker, HWMState, _BRISBANE
+from trading_app.account_hwm_tracker import _BRISBANE, AccountHWMTracker, HWMState
 
 
 @pytest.fixture
@@ -673,17 +673,18 @@ class TestDailyWeeklyPersistence:
             t1.update_equity(30000.0)
             saved_date = t1._daily_start_date
 
-        # Reload from disk
-        t2 = AccountHWMTracker(
-            "SELF001",
-            "self_funded",
-            dd_limit_dollars=3000.0,
-            state_dir=state_dir,
-            dd_type="none",
-            daily_loss_limit=600.0,
-        )
-        assert t2._daily_start_equity == 30000.0
-        assert t2._daily_start_date == saved_date
+            # Reload from disk under the same clock; stale-state boundaries are
+            # covered separately below.
+            t2 = AccountHWMTracker(
+                "SELF001",
+                "self_funded",
+                dd_limit_dollars=3000.0,
+                state_dir=state_dir,
+                dd_type="none",
+                daily_loss_limit=600.0,
+            )
+            assert t2._daily_start_equity == 30000.0
+            assert t2._daily_start_date == saved_date
 
 
 class TestDailyWeeklyValidation:
@@ -822,7 +823,7 @@ class TestStaleStateBoundaries:
         with caplog.at_level(logging.WARNING, logger="trading_app.account_hwm_tracker"):
             AccountHWMTracker("STALE004", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
         warns = [r for r in caplog.records if r.levelno == logging.WARNING]
-        assert warns, f"24h+1s must warn; got no WARNING records"
+        assert warns, "24h+1s must warn; got no WARNING records"
 
     def test_load_warn_24h_minus_1s_silent(self, state_dir, caplog):
         import logging
@@ -1032,6 +1033,7 @@ class TestAnnotationDiscipline:
         + institutional-rigor.md § 7 honesty requirement.
         """
         import inspect
+
         from trading_app import account_hwm_tracker as mod
 
         source_lines = inspect.getsource(mod).splitlines()
@@ -1077,6 +1079,7 @@ class TestStateFileAgeDays:
         because that bypasses the fail-closed stale gate. Falls back to file
         mtime — strictly fresher than last_equity_timestamp would be."""
         import os
+
         from trading_app.account_hwm_tracker import state_file_age_days
 
         state_dir.mkdir(parents=True, exist_ok=True)
@@ -1092,6 +1095,7 @@ class TestStateFileAgeDays:
     def test_state_file_age_days_missing_timestamp_falls_back_to_mtime(self, state_dir):
         """SG1 fix: missing/null last_equity_timestamp must NOT return None."""
         import os
+
         from trading_app.account_hwm_tracker import state_file_age_days
 
         state_dir.mkdir(parents=True, exist_ok=True)

@@ -16,7 +16,7 @@
   failure. The workflow now shards coverage into bounded pytest processes:
   repo core, tools/research, pipeline drift, pipeline core, and four
   trading-app shards.
-- Fixed four local blockers surfaced while validating the CI unblock:
+- Fixed five local blockers surfaced while validating the CI unblock:
   - `tests/test_pipeline/test_check_drift.py` no longer relies on `ls` being on
     Windows PATH for the failing-command short-circuit test.
   - `scripts/tools/project_pulse.py` keeps text output under the existing
@@ -30,6 +30,10 @@
     environment when launching the probe stdio server and only overrides
     `PYTHONPATH`. The previous near-empty env let `pip_system_certs` emit a
     startup error on stdout before the JSON-RPC response.
+  - `tests/test_trading_app/test_account_hwm_tracker.py` keeps the daily-state
+    persistence reload under the same mocked clock so the persistence test does
+    not age into the production 30-day stale-state fail-closed guard. Dedicated
+    stale-state boundary tests still cover that guard.
 - Verification run in this Windows worktree:
   - shard selectors collect the original 5,608-test surface as
     403/890/379/984/1231/582/905/234 tests.
@@ -38,6 +42,8 @@
   - pipeline drift shard command with coverage passed (`377 passed, 2 skipped`).
   - GitHub failing tools/research shard command now passes locally:
     `881 passed, 9 skipped`.
+  - GitHub failing trading-app A-L shard command now passes locally:
+    `1222 passed, 9 skipped`.
   - `uv run ruff format --check ...`, `uv run ruff check ...`,
     `git diff --check`, YAML parse, and `uv run python pipeline/check_drift.py`
     passed.
