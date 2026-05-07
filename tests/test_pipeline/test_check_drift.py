@@ -2422,3 +2422,73 @@ class TestHardcodedOpenrouterModelInLauncher:
         )
         monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
         assert cd.check_hardcoded_openrouter_model_in_launcher() == []
+
+
+class TestLiteratureExtractsModeABFraming:
+    """Check 142 — literature extracts citing research/output/ must carry
+    explicit Mode A / Mode B / HOLDOUT_SACRED_FROM / grandfathered framing.
+
+    Origin: 2026-05-07 self-review commit 2ea6fc5e — composite-N + Mode A/B
+    conflation class bug.
+    """
+
+    def _setup(self, tmp_path, monkeypatch):
+        from pipeline import check_drift as cd
+
+        lit_dir = tmp_path / "docs" / "institutional" / "literature"
+        lit_dir.mkdir(parents=True)
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        return cd, lit_dir
+
+    def test_passes_when_no_research_output_citation(self, tmp_path, monkeypatch):
+        cd, lit_dir = self._setup(tmp_path, monkeypatch)
+        (lit_dir / "external_only_paper.md").write_text(
+            "# External Paper\n\nQuoted from a 2024 SSRN paper. No internal result references at all.\n",
+            encoding="utf-8",
+        )
+        assert cd.check_literature_extracts_mode_a_b_framing() == []
+
+    def test_fails_when_cites_research_output_without_framing(self, tmp_path, monkeypatch):
+        cd, lit_dir = self._setup(tmp_path, monkeypatch)
+        (lit_dir / "bad_extract.md").write_text(
+            "# Bad Extract\n\nCites research/output/dalton_summary.csv with no holdout framing at all. Just numbers.\n",
+            encoding="utf-8",
+        )
+        violations = cd.check_literature_extracts_mode_a_b_framing()
+        assert len(violations) == 1
+        assert "bad_extract.md" in violations[0]
+        assert "Mode A" in violations[0] or "Mode B" in violations[0]
+
+    @pytest.mark.parametrize(
+        "framing_token",
+        ["Mode A", "Mode B", "HOLDOUT_SACRED_FROM", "grandfathered"],
+    )
+    def test_passes_with_any_recognized_framing_token(self, tmp_path, monkeypatch, framing_token):
+        cd, lit_dir = self._setup(tmp_path, monkeypatch)
+        (lit_dir / "good_extract.md").write_text(
+            f"# Good Extract\n\nCites research/output/dalton_summary.csv. "
+            f"Note: this result was produced under {framing_token} regime.\n",
+            encoding="utf-8",
+        )
+        assert cd.check_literature_extracts_mode_a_b_framing() == []
+
+    def test_case_insensitive_framing_match(self, tmp_path, monkeypatch):
+        cd, lit_dir = self._setup(tmp_path, monkeypatch)
+        (lit_dir / "good_lower.md").write_text(
+            "Cites research/output/foo.csv under mode a holdout window.\n",
+            encoding="utf-8",
+        )
+        assert cd.check_literature_extracts_mode_a_b_framing() == []
+
+    def test_pending_acquisition_files_exempt(self, tmp_path, monkeypatch):
+        cd, lit_dir = self._setup(tmp_path, monkeypatch)
+        (lit_dir / "PENDING_ACQUISITION_foo.md").write_text(
+            "Cites research/output/bar.csv with no framing — exempt by filename prefix.\n",
+            encoding="utf-8",
+        )
+        assert cd.check_literature_extracts_mode_a_b_framing() == []
+
+    def test_check_callable_imports_cleanly(self):
+        from pipeline.check_drift import check_literature_extracts_mode_a_b_framing
+
+        assert callable(check_literature_extracts_mode_a_b_framing)

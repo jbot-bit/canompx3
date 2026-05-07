@@ -8376,6 +8376,61 @@ def check_canonical_source_review_allowlist_complete() -> list[str]:
     return []
 
 
+def check_literature_extracts_mode_a_b_framing() -> list[str]:
+    """Literature extracts that cite internal `research/output/` artifacts
+    must carry explicit Mode A / Mode B / holdout-window framing.
+
+    Origin: 2026-05-07 self-review (commit 2ea6fc5e) caught two storytelling
+    issues in `yordanov_2026_nq_orb_value_area_breakouts.md` initial draft:
+    (1) composite-N conflation (cited aggregate N=90 alongside test-only
+    +0.46R, which actually came from N=42 OOS-on); (2) the cited "test
+    2025+" block aggregates 2025 (Mode A IS under
+    `trading_app.holdout_policy.HOLDOUT_SACRED_FROM=2026-01-01`) with 2026
+    (Mode A sacred OOS), which per `research-truth-protocol.md` § "Mode B
+    grandfathered baselines" CANNOT be cited as Mode A OOS evidence.
+
+    Both classes of error fire when an extract references internal
+    pre-Phase-0 research output without naming the holdout regime under
+    which the cited results were produced. This check enforces that any
+    new/edited extract citing `research/output/` mentions Mode A, Mode B,
+    `HOLDOUT_SACRED_FROM`, or "grandfathered" at least once.
+
+    Forward-looking: at adoption (2026-05-07) only 2 existing extracts
+    cite `research/output/` and both already comply — zero violations at
+    first run. PENDING_ACQUISITION_*.md files are exempt by filename
+    prefix because they are sourcing-status reports, not extracts.
+    """
+    lit_dir = PROJECT_ROOT / "docs" / "institutional" / "literature"
+    if not lit_dir.exists():
+        return []
+    framing_pattern = re.compile(r"Mode\s*A|Mode\s*B|HOLDOUT_SACRED_FROM|grandfathered", re.IGNORECASE)
+    citation_pattern = re.compile(r"research/output/")
+    violations: list[str] = []
+    for md_file in sorted(lit_dir.glob("*.md")):
+        if md_file.name.startswith("PENDING_ACQUISITION_"):
+            continue
+        try:
+            content = md_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if not citation_pattern.search(content):
+            continue  # extract does not cite internal output — exempt
+        if not framing_pattern.search(content):
+            try:
+                rel = md_file.relative_to(PROJECT_ROOT).as_posix()
+            except ValueError:
+                rel = md_file.as_posix()
+            violations.append(
+                f"{rel}: cites research/output/ but lacks Mode A / Mode B / "
+                f"HOLDOUT_SACRED_FROM / grandfathered framing. Add explicit "
+                f"holdout-regime framing per .claude/rules/research-truth-protocol.md "
+                f"section 'Mode B grandfathered baselines'. (Class bug: "
+                f"composite-N + Mode A/B conflation, 2026-05-07 self-review "
+                f"commit 2ea6fc5e)"
+            )
+    return violations
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -8924,6 +8979,12 @@ CHECKS = [
         "Canonical-source allowlist in claude_review_deepseek.py is complete",
         check_canonical_source_review_allowlist_complete,
         False,  # blocking — capital-class review bypass closure must hold
+        False,
+    ),
+    (
+        "Literature extracts citing research/output/ carry Mode A/B framing",
+        check_literature_extracts_mode_a_b_framing,
+        False,  # blocking — composite-N / Mode A/B conflation class bug
         False,
     ),
 ]  # end CHECKS

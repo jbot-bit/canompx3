@@ -6,7 +6,19 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Pickup pointer (2026-05-07 — read this first)
+## Pickup pointer (2026-05-07 PM — read this first)
+
+**Yordanov § 3.8 Cross+Miss MNQ triage = HALT (DESIGN_FLAWED).** Pre-reg `fd7c5073` ran cleanly against canonical layers (3,103 IS trades on 3 deployed MNQ lanes) but the pre-registered hit-rate metric is **structurally tautological** against the bucket definitions: hit_rate(CROSS_HIT)=1.0 by construction, hit_rate(CROSS_MISS)=0.0 by construction. Pooled gap = 99.4pp is mathematical artifact, NOT edge. Per backtesting-methodology.md RULE 12 (|t|>7 STOP), NO promotion / NO Yordanov annotation / NO confirmatory pre-reg authored. Detail: `docs/audit/results/2026-05-07-mnq-yordanov-crossmiss-triage-v1.md`.
+
+**Adversarial post-audit unlocked the right framing.** Same data re-tested with PnL-as-outcome and cross-timing distributions surfaced: Yordanov mechanism IS present on MNQ in a different operational form — **live mid-cross as early-exit veto signal**. 79.8% of cross-seen trades lose; median CROSS_MISS loser has 8 bars between cross and stop. Within-cross-seen recovery rate ≈ 20.2% on MNQ vs Yordanov NQ ≈ 23%, mechanism transfer confirmed within ~3pp. Napkin EV: ~+0.18R per cross-seen trade × 1,760 cross-seen trades = ~316R IS uplift IF an early-exit veto with realistic slippage holds up — UNTESTED.
+
+**USER GATE for next session:** choose
+1. **AMENDMENT v2:** author `docs/audit/hypotheses/2026-05-08-mnq-yordanov-crossmiss-early-exit-veto-v2.yaml` (Pathway B K=1, primary metric = per-trade ΔR comparing baseline-stopout vs early-exit-at-cross-bar-N+1-open with explicit slippage model, locked SURVIVES = ΔR ≥ +0.10R AND OOS power ≥ 50% AND ≥2/3 lanes confirm).
+2. **SHELVE:** annotate Yordanov extract as "MNQ replication halted; mechanism present in early-exit form but not pursued"; move on.
+
+The 3 deployed MNQ lanes (COMEX_SETTLE OVNRNG_100 / US_DATA_1000 VWAP_MID_ALIGNED / NYSE_OPEN COST_LT12) are unaffected. All three confirmed dir_match PASS, OOS positive, era-stable in the audit.
+
+**Earlier on 2026-05-07 (still relevant):**
 
 **AMT literature grounding landed.** `yordanov_2026_nq_orb_value_area_breakouts.md` added — empirical NQ ORB/value-area study (159 days, Databento MBO). Key operative finding: "Cross + Miss" veto pattern (48.4pp gap vs baseline) is testable on existing deployed lanes at minimal multiple-comparison cost. `mechanism_priors.md` updated: R5 level-theory now has empirical mechanism citation; Protocol A pathway (t≥3.00) now available for value-area veto pre-regs.
 
