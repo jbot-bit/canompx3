@@ -175,14 +175,29 @@ Do NOT propose Stage 2 (size scaling) on these patterns until Stage 1 is validat
 
 ### Auction theory literature
 
-Dalton (*Mind Over Markets*, 1990s-2000s editions) and Steidlmayer (*Markets and Market Logic*, 1989) are the canonical level-theory references. **Neither is in `resources/`**, neither is available as free public PDF (both copyrighted commercial publications). CME Group publishes free "Trading with Market Profile" educational material (citation pending — webfetch timed out 2026-04-15).
+Dalton (*Mind Over Markets*, 1990s-2000s editions) and Steidlmayer (*Markets and Market Logic*, 1989) remain the canonical level-theory references. **Neither is in `resources/`** (both copyrighted commercial publications). CME Group's market-profile guides are gated behind anti-bot (browser-only download).
 
-**Operational consequence:** mechanism claims about "level-target theory" (Role R5) can be stated as priors (this doc) but cannot invoke Chordia t≥3.00 Protocol A pathway. Until grounded, all level-based signal tests run at Protocol B t≥3.79.
+**Partial grounding landed 2026-05-07** (`yordanov_2026_nq_orb_value_area_breakouts.md`):
+- Empirical, not theoretical. Working paper, not peer-reviewed.
+- 159-day NQ futures study using Databento MBO data (= our exact ingest stack).
+- Provides operational definitions for VAH/VAL/POC/Filter Cases A/B/C and quantitative follow-through hit rates.
+- Strongest signal: "Cross + Miss" veto pattern (48.4pp gap from baseline) — a *don't-trade* gate that is testable on existing deployed lanes with minimal multiple-comparison cost.
+- Cross-citation: `topstep_2026_auction_market_theory_intro.md` for operational vocabulary; `PENDING_ACQUISITION_market_profile.md` tracks Tolušić 2026 (formal mathematical AMT treatment) + Howard 2026 (ES futures companion) + Dalton (theory).
 
-**Acquisition options:**
-- User-provided PDF of Dalton or Steidlmayer (if they buy them)
-- CME Group public education (fetch when available)
-- Academic papers on market microstructure (SSRN/ScienceDirect search returned nothing specific 2026-04-15)
+**Prior project work on this mechanism (2026-Q1, archived):**
+- `research/archive/research_dalton_80_rule.py`, `research_dalton_80_rule_deepdive.py`, `analyze_value_area.py`, `research_dalton_filter_uplift.py`, `research_dalton_filter_anchor_uplift.py`, `research_dalton_mid_monetization.py`, `research_dalton_mnq0900_oos.py`.
+- Output artifacts in `research/output/dalton_*` and `research/output/dalton_mnq0900_oos.md`.
+- Headline result: STRICT Dalton 80% Rule fails on most MGC/MNQ/MES anchors (hit rates 3–50%, mostly 20–30%); LOOSE-touch hit rates are inflated by ambiguity (60–100%); MNQ 0900 anchor showed positive train-uplift (+0.97R) and positive 2024-train→2025-test holdout (+0.46R) but with very small N=90 ON-trades (5.7% fire rate).
+- **Status: not in NO-GO registry, not in validated_setups. "Ran without literature backbone" — that's why it sat archived.**
+- Yordanov 2026 + the Cross+Miss veto framing are STRUCTURALLY DIFFERENT from these prior tests (veto-on-existing-lane vs new entry signal); a fresh pre-reg can legitimately use the new grounding without colliding with the archived work.
+
+**Operational consequence:** Role R5 (level-target theory) and any value-area-acceptance hypothesis can now invoke Yordanov 2026 as the empirical mechanism citation under Chordia Protocol A pathway (t≥3.00 with theory). Pre-reg writer must explicitly cite the extract file and acknowledge the limitations enumerated in `yordanov_2026_nq_orb_value_area_breakouts.md` § 5. Pure theory claims (mechanism causation, not just correlation) still require Dalton or Tolušić acquisition.
+
+**Acquisition priority** (see `docs/institutional/literature/PENDING_ACQUISITION_market_profile.md` for full list):
+1. Tolušić 2026 (SSRN abstract_id=6616280) — first formal mathematical treatment of AMT, 26-year FX validation. **Highest priority** for theory grounding.
+2. Howard 2026 (SSRN abstract_id=6350238) — ES futures companion to Yordanov NQ work.
+3. Dalton *Mind Over Markets* (Wiley Kindle $45) — canonical narrative theory.
+- Refused: pirate / grey-zone PDF mirrors (break audit chain per source-of-truth rule).
 
 ### Speed-of-trade / turnover-cost scaling
 
