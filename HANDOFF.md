@@ -6,6 +6,18 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Pickup pointer (2026-05-07 — read this first)
+
+**AMT literature grounding landed.** `yordanov_2026_nq_orb_value_area_breakouts.md` added — empirical NQ ORB/value-area study (159 days, Databento MBO). Key operative finding: "Cross + Miss" veto pattern (48.4pp gap vs baseline) is testable on existing deployed lanes at minimal multiple-comparison cost. `mechanism_priors.md` updated: R5 level-theory now has empirical mechanism citation; Protocol A pathway (t≥3.00) now available for value-area veto pre-regs.
+
+**RR1.5 Chordia unlock committed** (commit `a35acf30` + OOS/IS disclosure fix `535aae6b`). Both RR1.0 + RR1.5 siblings are PASS_PROTOCOL_A (family pathway). Deployment-alongside decision **not made** — needs capital/correlation review before acting. Audit CSV at `docs/audit/results/2026-05-07-mnq-nyseopen-costlt12-rr15-chordia-unlock-v1.csv`.
+
+**Acquisition priority** (see `docs/institutional/literature/PENDING_ACQUISITION_market_profile.md`): Tolušić 2026 SSRN:6616280 (formal AMT math, highest priority), Howard 2026 SSRN:6350238 (ES companion), Dalton (narrative theory).
+
+**Prereq answered:** each RR variant needs its own pre-reg for deployment. Family-pathway validation ≠ deployment approval. RR1.5 deployment alongside RR1.0 in same session = correlation + capital risk requiring explicit pre-reg.
+
+---
+
 ## Pickup pointer (2026-05-06 — read this first)
 
 **Phase 0 of the live-trading rollout was executed today** with disposition Option C
