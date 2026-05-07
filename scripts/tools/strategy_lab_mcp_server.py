@@ -355,88 +355,76 @@ def _list_promotable_candidates(
 
 
 def _build_server():
-    from fastmcp import FastMCP
+    from scripts.tools.simple_mcp_stdio import StdioToolServer, ToolSpec
 
-    mcp = FastMCP(
-        "strategy-lab",
-        instructions=(
-            "Repo-local read-only strategy-validation, fitness, and lane-allocation MCP for canompx3. "
-            "Use it to ask: is this strategy validated, currently fit, currently deployed, or promotable. "
-            "Reads validated_setups, compute_fitness, and docs/runtime/lane_allocation.json — does not "
-            "re-derive any of them. Overlaps gold-db.get_strategy_fitness intentionally so deployment-"
-            "readiness questions can be answered from one server."
-        ),
+    instructions = (
+        "Repo-local read-only strategy-validation, fitness, and lane-allocation MCP for canompx3. "
+        "Use it to ask: is this strategy validated, currently fit, currently deployed, or promotable. "
+        "Reads validated_setups, compute_fitness, and docs/runtime/lane_allocation.json — does not "
+        "re-derive any of them. Overlaps gold-db.get_strategy_fitness intentionally so deployment-"
+        "readiness questions can be answered from one server."
     )
 
-    @mcp.tool()
-    def get_strategy_readiness(
-        strategy_id: str,
-        rolling_months: int = 18,
-    ) -> dict[str, Any]:
-        """One-call readiness verdict joining validator + fitness + lane allocation.
-
-        Args:
-            strategy_id: Full strategy id (e.g. ``MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12``).
-            rolling_months: Rolling fitness window in months (default 18).
-
-        Returns:
-            ``{verdict, reason, validated, fitness, allocation_entry, ...}`` where
-            ``verdict`` is one of NOT_VALIDATED / DEPLOYED / PAUSED / PROMOTABLE /
-            VALIDATED_BUT_<STATUS> / VALIDATED_FITNESS_UNAVAILABLE / VALIDATED_UNKNOWN.
-        """
-
-        return _get_strategy_readiness(strategy_id=strategy_id, rolling_months=rolling_months)
-
-    @mcp.tool()
-    def get_lane_allocation_summary(profile_name: str | None = None) -> dict[str, Any]:
-        """Profile-scoped read of the latest lane_allocation.json rebalance.
-
-        Args:
-            profile_name: Optional profile id. If supplied and the JSON file is for a
-                different profile, the call returns an error rather than mismatched
-                lanes.
-
-        Returns:
-            Active + paused lanes, staleness verdict, and the underlying file path.
-        """
-
-        return _get_lane_allocation_summary(profile_name=profile_name)
-
-    @mcp.tool()
-    def get_recent_fitness(
-        strategy_id: str,
-        rolling_months: int = 18,
-    ) -> dict[str, Any]:
-        """Rolling regime fitness for a single strategy (thin wrapper over compute_fitness).
-
-        Args:
-            strategy_id: Full strategy id.
-            rolling_months: Rolling window in months (default 18).
-        """
-
-        return _get_recent_fitness(strategy_id=strategy_id, rolling_months=rolling_months)
-
-    @mcp.tool()
-    def list_promotable_candidates(
-        instrument: str | None = None,
-        rolling_months: int = 18,
-        limit: int = 50,
-    ) -> dict[str, Any]:
-        """List validated strategies that are currently FIT but not in the active allocation.
-
-        Args:
-            instrument: Optional ACTIVE ORB instrument filter (e.g. ``MNQ``).
-            rolling_months: Rolling window in months (default 18).
-            limit: Maximum candidates to return (sorted by rolling ExpR desc).
-        """
-
-        return _list_promotable_candidates(
-            instrument=instrument,
-            rolling_months=rolling_months,
-            limit=limit,
-        )
-
-    return mcp
+    return StdioToolServer(
+        "strategy-lab",
+        instructions=instructions,
+        tools=[
+            ToolSpec(
+                "get_strategy_readiness",
+                "One-call readiness verdict joining validator + fitness + lane allocation.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "strategy_id": {"type": "string"},
+                        "rolling_months": {"type": "integer", "default": 18},
+                    },
+                    "required": ["strategy_id"],
+                    "additionalProperties": False,
+                },
+                _get_strategy_readiness,
+            ),
+            ToolSpec(
+                "get_lane_allocation_summary",
+                "Profile-scoped read of the latest lane_allocation.json rebalance.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "profile_name": {"type": ["string", "null"], "default": None},
+                    },
+                    "additionalProperties": False,
+                },
+                _get_lane_allocation_summary,
+            ),
+            ToolSpec(
+                "get_recent_fitness",
+                "Rolling regime fitness for a single strategy.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "strategy_id": {"type": "string"},
+                        "rolling_months": {"type": "integer", "default": 18},
+                    },
+                    "required": ["strategy_id"],
+                    "additionalProperties": False,
+                },
+                _get_recent_fitness,
+            ),
+            ToolSpec(
+                "list_promotable_candidates",
+                "List validated strategies that are currently FIT but not in the active allocation.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "instrument": {"type": ["string", "null"], "default": None},
+                        "rolling_months": {"type": "integer", "default": 18},
+                        "limit": {"type": "integer", "default": 50},
+                    },
+                    "additionalProperties": False,
+                },
+                _list_promotable_candidates,
+            ),
+        ],
+    )
 
 
 def main() -> None:

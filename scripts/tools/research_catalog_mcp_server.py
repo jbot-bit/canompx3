@@ -440,77 +440,111 @@ def _search_research_catalog(
 
 
 def _build_server():
-    from fastmcp import FastMCP
+    from scripts.tools.simple_mcp_stdio import StdioToolServer, ToolSpec
 
-    mcp = FastMCP(
-        "research-catalog",
-        instructions=(
-            "Repo-local read-only research grounding surface for canompx3. "
-            "Use it to search committed literature extracts, prereg hypotheses, and audit results. "
-            "Prefer bounded excerpts and shallow catalog views before loading whole docs. "
-            "Treat hypothesis open/closed status as a filename-stem heuristic unless a deeper audit confirms it."
-        ),
+    instructions = (
+        "Repo-local read-only research grounding surface for canompx3. "
+        "Use it to search committed literature extracts, prereg hypotheses, and audit results. "
+        "Prefer bounded excerpts and shallow catalog views before loading whole docs. "
+        "Treat hypothesis open/closed status as a filename-stem heuristic unless a deeper audit confirms it."
     )
 
-    @mcp.tool()
-    def list_literature_sources(limit: int = 50, query: str | None = None) -> dict[str, object]:
-        """List committed literature extracts from docs/institutional/literature."""
-
-        return _list_literature_sources(limit=limit, query=query)
-
-    @mcp.tool()
-    def get_literature_excerpt(
-        source_id: str,
-        section_hint: str | None = None,
-        max_chars: int = 2000,
-    ) -> dict[str, object]:
-        """Return a bounded excerpt from a literature extract.
-
-        Args:
-            source_id: File stem from list_literature_sources.
-            section_hint: Optional heading fragment to narrow the excerpt.
-            max_chars: Maximum excerpt size in characters.
-        """
-
-        return _get_literature_excerpt(source_id=source_id, section_hint=section_hint, max_chars=max_chars)
-
-    @mcp.tool()
-    def list_open_hypotheses(limit: int = 50, query: str | None = None) -> dict[str, object]:
-        """List prereg artifacts without an exact filename-stem match in docs/audit/results."""
-
-        return _list_open_hypotheses(limit=limit, query=query)
-
-    @mcp.tool()
-    def get_hypothesis_artifact(
-        hypothesis_id: str,
-        section_hint: str | None = None,
-        max_chars: int = 2200,
-    ) -> dict[str, object]:
-        """Return a bounded hypothesis artifact payload for a prereg doc."""
-
-        return _get_hypothesis_artifact(hypothesis_id=hypothesis_id, section_hint=section_hint, max_chars=max_chars)
-
-    @mcp.tool()
-    def get_audit_result(
-        result_id: str,
-        section_hint: str | None = None,
-        max_chars: int = 2400,
-    ) -> dict[str, object]:
-        """Return a bounded audit-result payload from docs/audit/results."""
-
-        return _get_audit_result(result_id=result_id, section_hint=section_hint, max_chars=max_chars)
-
-    @mcp.tool()
-    def search_research_catalog(
-        query: str,
-        scopes: list[ArtifactKind] | None = None,
-        limit: int = 10,
-    ) -> dict[str, object]:
-        """Search the committed literature, prereg, and result catalog."""
-
-        return _search_research_catalog(query=query, scopes=scopes, limit=limit)
-
-    return mcp
+    return StdioToolServer(
+        "research-catalog",
+        instructions=instructions,
+        tools=[
+            ToolSpec(
+                "list_literature_sources",
+                "List committed literature extracts from docs/institutional/literature.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "integer", "default": 50},
+                        "query": {"type": ["string", "null"], "default": None},
+                    },
+                    "additionalProperties": False,
+                },
+                _list_literature_sources,
+            ),
+            ToolSpec(
+                "get_literature_excerpt",
+                "Return a bounded excerpt from a literature extract.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "source_id": {"type": "string"},
+                        "section_hint": {"type": ["string", "null"], "default": None},
+                        "max_chars": {"type": "integer", "default": 2000},
+                    },
+                    "required": ["source_id"],
+                    "additionalProperties": False,
+                },
+                _get_literature_excerpt,
+            ),
+            ToolSpec(
+                "list_open_hypotheses",
+                "List prereg artifacts without an exact filename-stem match in docs/audit/results.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "limit": {"type": "integer", "default": 50},
+                        "query": {"type": ["string", "null"], "default": None},
+                    },
+                    "additionalProperties": False,
+                },
+                _list_open_hypotheses,
+            ),
+            ToolSpec(
+                "get_hypothesis_artifact",
+                "Return a bounded hypothesis artifact payload for a prereg doc.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "hypothesis_id": {"type": "string"},
+                        "section_hint": {"type": ["string", "null"], "default": None},
+                        "max_chars": {"type": "integer", "default": 2200},
+                    },
+                    "required": ["hypothesis_id"],
+                    "additionalProperties": False,
+                },
+                _get_hypothesis_artifact,
+            ),
+            ToolSpec(
+                "get_audit_result",
+                "Return a bounded audit-result payload from docs/audit/results.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "result_id": {"type": "string"},
+                        "section_hint": {"type": ["string", "null"], "default": None},
+                        "max_chars": {"type": "integer", "default": 2400},
+                    },
+                    "required": ["result_id"],
+                    "additionalProperties": False,
+                },
+                _get_audit_result,
+            ),
+            ToolSpec(
+                "search_research_catalog",
+                "Search the committed literature, prereg, and result catalog.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "scopes": {
+                            "type": ["array", "null"],
+                            "items": {"type": "string"},
+                            "default": None,
+                        },
+                        "limit": {"type": "integer", "default": 10},
+                    },
+                    "required": ["query"],
+                    "additionalProperties": False,
+                },
+                _search_research_catalog,
+            ),
+        ],
+    )
 
 
 def main() -> None:

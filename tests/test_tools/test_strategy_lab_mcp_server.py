@@ -10,7 +10,6 @@ import pytest
 
 from scripts.tools import strategy_lab_mcp_server as srv
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -348,16 +347,7 @@ def test_list_promotable_candidates_sort_handles_missing_rolling_expr(tmp_path: 
 
 
 def test_build_server_does_not_raise() -> None:
-    # FastMCP build is synchronous; tool enumeration is async and varies by
-    # version, so we only assert the server constructs without error here and
-    # rely on the unit tests above for tool behavior.
-    #
-    # fastmcp is a sidecar pip-install (constraints.txt:19-29 — deliberately
-    # not in pyproject.toml/uv.lock to keep ~30 transitive deps out of the
-    # production runtime). A fresh `uv sync` worktree won't have it; skip
-    # rather than fail, since the absence is a documented env condition not
-    # a regression in this PR. Drift check #17 covers the cryptography<47
-    # interaction; the gold-db MCP also depends on fastmcp at runtime.
-    pytest.importorskip("fastmcp")
     server = srv._build_server()
     assert server is not None
+    assert server.name == "strategy-lab"
+    assert "get_strategy_readiness" in server.tool_names()

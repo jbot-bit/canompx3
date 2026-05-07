@@ -216,134 +216,107 @@ def _get_startup_packet(
 
 
 def _build_server():
-    from fastmcp import FastMCP
+    from scripts.tools.simple_mcp_stdio import StdioToolServer, ToolSpec
 
-    mcp = FastMCP(
-        "repo-state",
-        instructions=(
-            "Repo-local read-only control-plane and startup MCP for canompx3. "
-            "Use it to resolve task routes, read the operator pulse, inspect system context, "
-            "load strict-truth context views, and derive startup packets. "
-            "Prefer fast pulse unless deeper verification is actually needed. "
-            "This server explains repo state; it does not replace canonical code or gold-db truth."
-        ),
+    instructions = (
+        "Repo-local read-only control-plane and startup MCP for canompx3. "
+        "Use it to resolve task routes, read the operator pulse, inspect system context, "
+        "load strict-truth context views, and derive startup packets. "
+        "Prefer fast pulse unless deeper verification is actually needed. "
+        "This server explains repo state; it does not replace canonical code or gold-db truth."
     )
 
-    @mcp.tool()
-    def list_task_routes() -> list[dict[str, object]]:
-        """List deterministic repo task routes with their live views and owner files."""
-
-        return _list_task_routes()
-
-    @mcp.tool()
-    def list_context_views() -> list[dict[str, str]]:
-        """List generated strict-truth context views available from this repo."""
-
-        return _list_context_views()
-
-    @mcp.tool()
-    def resolve_task_route(task_text: str | None = None, task_id: str | None = None) -> dict[str, object]:
-        """Resolve a natural-language task or explicit task_id into the canonical repo route.
-
-        Args:
-            task_text: Natural-language task description. Use this for ordinary work.
-            task_id: Explicit route id when the exact route is already known.
-        """
-
-        return _resolve_task_route(task_text=task_text, task_id=task_id)
-
-    @mcp.tool()
-    def get_project_pulse(
-        fast: bool = True,
-        deep: bool = False,
-        no_cache: bool = False,
-        skip_drift: bool = False,
-        skip_tests: bool = False,
-        tool_name: str = "repo-state-mcp",
-    ) -> dict[str, object]:
-        """Return the bounded project pulse read-model.
-
-        Args:
-            fast: Prefer cached / cheap collectors only. Recommended default.
-            deep: Run deeper fitness collection when available.
-            no_cache: Ignore the expensive-results cache.
-            skip_drift: Hard-skip drift checks in the pulse.
-            skip_tests: Hard-skip test collection in the pulse.
-            tool_name: Label used for session-delta / brief context.
-        """
-
-        return _get_project_pulse(
-            fast=fast,
-            deep=deep,
-            no_cache=no_cache,
-            skip_drift=skip_drift,
-            skip_tests=skip_tests,
-            tool_name=tool_name,
-        )
-
-    @mcp.tool()
-    def get_system_context(
-        context_name: ContextName = "generic",
-        action: PolicyAction | None = None,
-        active_tool: str | None = "repo-state-mcp",
-        active_mode: str = "read-only",
-    ) -> dict[str, object]:
-        """Return canonical system context and optional policy decision.
-
-        Args:
-            context_name: Runtime context being evaluated.
-            action: Optional policy action to evaluate against the snapshot.
-            active_tool: Tool label for the snapshot.
-            active_mode: Active session mode, usually `read-only` or `mutating`.
-        """
-
-        return _get_system_context(
-            context_name=context_name,
-            action=action,
-            active_tool=active_tool,
-            active_mode=active_mode,
-        )
-
-    @mcp.tool()
-    def get_context_view(view_name: str) -> dict[str, object]:
-        """Return one generated strict-truth context view.
-
-        Args:
-            view_name: One of `research`, `recent_performance`, `trading`, `verification`.
-        """
-
-        return _get_context_view(view_name)
-
-    @mcp.tool()
-    def get_startup_packet(
-        task_text: str | None = None,
-        task_id: str | None = None,
-        briefing_level: BriefingLevel = "read_only",
-        context_name: ContextName = "generic",
-        active_tool: str = "repo-state-mcp",
-        active_mode: str = "read-only",
-    ) -> dict[str, object]:
-        """Derive the compact startup packet for a task without writing `.session/task-route.md`.
-
-        Args:
-            task_text: Natural-language task description.
-            task_id: Explicit route id when already known.
-            briefing_level: Startup scope / latency budget to target.
-            context_name: Runtime context being evaluated.
-            active_tool: Tool label for the brief.
-            active_mode: Active session mode, usually `read-only` or `mutating`.
-        """
-
-        return _get_startup_packet(
-            task_text=task_text,
-            task_id=task_id,
-            briefing_level=briefing_level,
-            context_name=context_name,
-            active_tool=active_tool,
-            active_mode=active_mode,
-        )
-
-    return mcp
+    return StdioToolServer(
+        "repo-state",
+        instructions=instructions,
+        tools=[
+            ToolSpec(
+                "list_task_routes",
+                "List deterministic repo task routes with their live views and owner files.",
+                {"type": "object", "properties": {}, "additionalProperties": False},
+                _list_task_routes,
+            ),
+            ToolSpec(
+                "list_context_views",
+                "List generated strict-truth context views available from this repo.",
+                {"type": "object", "properties": {}, "additionalProperties": False},
+                _list_context_views,
+            ),
+            ToolSpec(
+                "resolve_task_route",
+                "Resolve a natural-language task or explicit task_id into the canonical repo route.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "task_text": {"type": ["string", "null"]},
+                        "task_id": {"type": ["string", "null"]},
+                    },
+                    "additionalProperties": False,
+                },
+                _resolve_task_route,
+            ),
+            ToolSpec(
+                "get_project_pulse",
+                "Return the bounded project pulse read-model.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "fast": {"type": "boolean", "default": True},
+                        "deep": {"type": "boolean", "default": False},
+                        "no_cache": {"type": "boolean", "default": False},
+                        "skip_drift": {"type": "boolean", "default": False},
+                        "skip_tests": {"type": "boolean", "default": False},
+                        "tool_name": {"type": "string", "default": "repo-state-mcp"},
+                    },
+                    "additionalProperties": False,
+                },
+                _get_project_pulse,
+            ),
+            ToolSpec(
+                "get_system_context",
+                "Return canonical system context and optional policy decision.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "context_name": {"type": "string", "default": "generic"},
+                        "action": {"type": ["string", "null"], "default": None},
+                        "active_tool": {"type": ["string", "null"], "default": "repo-state-mcp"},
+                        "active_mode": {"type": "string", "default": "read-only"},
+                    },
+                    "additionalProperties": False,
+                },
+                _get_system_context,
+            ),
+            ToolSpec(
+                "get_context_view",
+                "Return one generated strict-truth context view.",
+                {
+                    "type": "object",
+                    "properties": {"view_name": {"type": "string"}},
+                    "required": ["view_name"],
+                    "additionalProperties": False,
+                },
+                _get_context_view,
+            ),
+            ToolSpec(
+                "get_startup_packet",
+                "Derive the compact startup packet for a task without writing .session/task-route.md.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "task_text": {"type": ["string", "null"]},
+                        "task_id": {"type": ["string", "null"]},
+                        "briefing_level": {"type": "string", "default": "read_only"},
+                        "context_name": {"type": "string", "default": "generic"},
+                        "active_tool": {"type": "string", "default": "repo-state-mcp"},
+                        "active_mode": {"type": "string", "default": "read-only"},
+                    },
+                    "additionalProperties": False,
+                },
+                _get_startup_packet,
+            ),
+        ],
+    )
 
 
 if __name__ == "__main__":
