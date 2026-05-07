@@ -80,6 +80,17 @@ theory_grants:
       Chan Ch 7 intraday-momentum at NYSE open; canonical theoretical grounding
       for the "first-hour-of-cash-session" momentum class.
 
+  - strategy_id: MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12
+    has_theory: true
+    theory_ref: docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
+    rationale: |
+      Consistency grant with already-audited RR1.0 sibling
+      (MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12, verdict PASS_PROTOCOL_A 2026-05-01).
+      Same Chan Ch 7 intraday-momentum mechanism: stop-triggered breakout cascade
+      at market open (p.155), equity-index futures precedent FSTX Sharpe=1.4 (p.156).
+      COST_LT12 is a friction-floor gate, not a theory-grounded filter — the theory
+      grant covers the session-entry mechanism, not the filter class.
+
   # Strategies WITHOUT theory grant (has_theory=False, T=3.79):
   #   - MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5  (settlement-window pattern; no
   #     pre-registered mechanism)
@@ -241,6 +252,40 @@ audits:
         produced N_fired=1539 (win+loss=1396). All three numbers are valid
         against their own cohort definition; only 1695 belongs in this audit
         row.
+
+  - strategy_id: MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12
+    audit_date: 2026-05-07
+    verdict: PASS_PROTOCOL_A
+    t_stat: 3.600
+    threshold: 3.00
+    sample_size: 1532
+    oos_n: 77
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg
+      `docs/audit/hypotheses/2026-05-07-mnq-nyseopen-costlt12-rr15-chordia-unlock-v1.yaml`.
+      Theory grant: Chan Ch 7 p.155 stop-cascade mechanism at NYSE open (same
+      as already-audited RR1.0 sibling, PASS_PROTOCOL_A 2026-05-01). Hurdle
+      is t >= 3.00 (PASS_PROTOCOL_A pathway).
+      Scratch-inclusive replay (N_fired=1532; 60 scratches counted as R=0) on
+      canonical `orb_outcomes` + `daily_features` with
+      `WF_START_OVERRIDE['MNQ']=2020-01-01` applied.
+      IS: N=1532, ExpR=+0.1092, Sharpe=0.0920, t=3.600, p=0.00032.
+      OOS: N=77, ExpR=+0.0743, OOS sign matches (positive).
+      IS directional context: Long_IS t=2.591 (n=778), Short_IS t=2.498
+      (n=754). Neither direction clears t>=3.00 unilaterally; pooled gate
+      is the applicable hurdle per the pre-reg, which is pooled.
+      OOS power: 0.088 (STATISTICALLY_USELESS, n_for_80pct=1853). OOS sign
+      evidence is non-confirmatory; verdict rests on IS gates only.
+      OOS directional context (descriptive only): Long_OOS ExpR=+0.218 (n=35),
+      Short_OOS ExpR=-0.045 (n=42). Short OOS reverses vs IS; pooled OOS
+      positive but directional asymmetry noted. PARK on sign-flip requires
+      OOS sign to oppose IS at N_OOS>=30 — pooled OOS is positive so this
+      veto does not trigger. Does NOT qualify for PASS_CHORDIA (t=3.600
+      < 3.79 strict hurdle).
+      Allocator MAY DEPLOY at t >= 3.00 with positive IS ExpR.
+      Correlation vs already-deployed RR1.0 sibling will be assessed by
+      the allocator's RHO_REJECT_THRESHOLD gate; that decision is downstream.
 
   - strategy_id: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12
     audit_date: 2026-05-01
