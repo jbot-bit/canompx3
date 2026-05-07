@@ -263,8 +263,8 @@ class TestPrintReport:
             patch.object(session_preflight, "recent_commits", return_value=["abc123 test"]),
             patch.object(session_preflight, "branch_name", return_value="main"),
             patch.object(session_preflight, "head_sha", return_value="abc123"),
-            patch.object(session_preflight, "build_blockers", return_value=[]),
-            patch.object(session_preflight, "build_warnings", return_value=[]),
+            patch.object(session_preflight, "_evaluate_preflight_policy", return_value=([], [])),
+            patch("pipeline.system_brief.build_system_brief", return_value=None),
         ):
             exit_code = session_preflight.print_report(tmp_path, context="generic")
 
