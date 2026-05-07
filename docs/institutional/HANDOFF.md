@@ -124,3 +124,7 @@ docs/institutional/
 7. After files are written: wire integration points (CLAUDE.md Document Authority, rules files, drift check)
 8. Commit in logical chunks
 9. Only then start Phase 4 (pre-registered rediscovery)
+
+---
+
+- 2026-05-08 — v2 pre-reg locked at commit `9afda4df`, slug `2026-05-08-mnq-yordanov-early-exit-cross-v2` (Pathway B K=1, paired ΔR early-exit-at-cross). Supersedes v1 HALT/DESIGN_FLAWED. USER GATE resolved → AMENDMENT v2. LOCKED-NOT-RUN.
