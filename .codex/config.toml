@@ -18,7 +18,7 @@ Repo-specific Codex startup contract for canompx3:
 - Do not mutate `CLAUDE.md`, `.claude/`, `claude.bat`, or Claude-owned settings/hooks unless the user explicitly requests it.
 - Do not mutate `.claude/` or `CLAUDE.md` unless the user explicitly asks.
 """
-
+trusted_projects= "c:\users\joshd\canompx3"
 sandbox_mode = "danger-full-access"
 [history]
 persistence = "save-all"

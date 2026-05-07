@@ -3,7 +3,7 @@
 **Source:** `resources/Algorithmic_Trading_Chan.pdf` pp. 155-168
 **Author:** Ernest P. Chan
 **Publication:** Wiley Trading, 2013 (ISBN 978-1-118-46014-6)
-**Extracted:** 2026-04-19
+**Extracted:** 2026-04-19; expanded 2026-05-08
 
 **Criticality for our project:** 🟢 **HIGH** — provides a SECOND literature source (alongside Fitschen Ch 3 at `fitschen_2013_path_of_least_resistance.md`) grounding intraday momentum / ORB breakout strategies on equity indices and futures. Also grounds stop-triggered breakout strategies (directly relevant to our E2 entry model) and news-driven intraday momentum.
 
@@ -40,6 +40,35 @@ Chan's rationale (p.157 verbatim):
 > "What's special about the overnight or weekend gap that sometimes triggers momentum? The extended period without any trading means that the opening price is often quite different from the closing price. Hence, stop orders set at different prices may get triggered all at once at the open. The execution of these stop orders often leads to momentum because a cascading effect may trigger stop orders placed further away from the open price as well. Alternatively, there may be significant events that occurred overnight. As discussed in the next section, many types of news events generate momentum."
 
 **Application:** Chan's gap-momentum result on FSTX (EU equity index future) is directly analogous to the project's MNQ/MES equity-index ORB breakout premise. A Sharpe 1.4 over 8 years on a simple gap-momentum strategy provides a literature precedent that equity-index intraday momentum is real and deployable. Our E2 entry model isn't strictly gap-based — it's ORB-break-based — but Chan's stop-cascade mechanism explains BOTH patterns.
+
+## Support / resistance breach momentum (p.167)
+
+Chan later makes the visible-level mechanism more explicit in the context of
+short-horizon momentum:
+
+> "once support (resistance) levels are breached, prices will go further down
+> (up) for a while"
+
+And explains why:
+
+> "This short-term price momentum occurs because of the large number of stop
+> orders placed at or near the support and resistance levels."
+
+Chan's examples of such levels include:
+
+> "those reported daily by banks or brokerages, or they can just be round
+> numbers in the proximity of the current price levels."
+
+**Application:** This is stronger than the p.155 generic breakout mention. It
+grounds a general mechanism class for **pre-visible technical levels**:
+breaching widely watched levels can create short-term momentum through stop
+clustering. That supports the repo's broader "visible liquidity pool" prior.
+
+**Important limit:** this still does **not** directly name prior-day
+high/low/range geometry as the tested level class, and it does not by itself
+validate the specific `PD_CLEAR_LONG` / `PD_GO_LONG` / `PD_DISPLACE_LONG`
+filters. Use it as general level-breach grounding, not as an automatic theory
+grant for every prior-day-context filter.
 
 ## Post-Earnings Announcement Drift — PEAD (p.157-162)
 
@@ -94,6 +123,9 @@ When writing a pre-reg that cites Chan Ch 7, use one of these verbatim quotes wi
 4. **For stop-loss-as-re-entry consistency with momentum:**
    "Stop losses are perfectly consistent with momentum strategies. If momentum has changed direction, we should enter into the opposite position. Since the original position would have been losing, and now we have exited it, this new entry signal effectively served as a stop loss." (p.153) — grounds E2 stop-design.
 
+5. **For general visible-level stop-cluster momentum:**
+   "once support (resistance) levels are breached, prices will go further down (up) for a while" (p.167) and "This short-term price momentum occurs because of the large number of stop orders placed at or near the support and resistance levels." (p.167) — grounds the mechanism class of widely watched level breaches, but not any one specific prior-day filter family by itself.
+
 ---
 
 ## Usage rules
@@ -101,8 +133,10 @@ When writing a pre-reg that cites Chan Ch 7, use one of these verbatim quotes wi
 1. **Cite this extract** as a second source alongside Fitschen Ch 3 for intraday-trend-follow / intraday-momentum grounding.
 2. **Cite this extract specifically** for stop-triggered breakout mechanism (p.155), which Fitschen Ch 3 does NOT explicitly cover — Fitschen is about trend direction at a timescale, Chan Ch 7 is about the cascading-stop mechanism. These are complementary.
 3. **Cite this extract** for equity-index intraday momentum (FSTX Sharpe 1.4) as a near-peer benchmark for MNQ/MES ORB strategies.
-4. **Do NOT cite this extract** for: mean-reversion strategies (use Chan Ch 4 instead, not extracted), high-frequency order-book strategies (out of canompx3 scope), stock-only stories (our scope is futures).
-5. For any Pathway-A pre-reg on canompx3 ORB breakout strategies at O5/O15/O30 apertures, Fitschen Ch 3 AND Chan Ch 7 together provide robust double-source grounding for Chordia t ≥ 3.00 with-theory.
+4. **Cite p.167 carefully** for general level-breach momentum or stop-cluster mechanisms when the tested object genuinely uses pre-trade visible levels.
+5. **Do NOT overclaim from p.167.** It is not, by itself, a direct theory grant for every prior-day-level or prior-day-range-derived filter; those need an honest object-level mapping.
+6. **Do NOT cite this extract** for: mean-reversion strategies (use Chan Ch 4 instead, not extracted), high-frequency order-book strategies (out of canompx3 scope), stock-only stories (our scope is futures).
+7. For any Pathway-A pre-reg on canompx3 ORB breakout strategies at O5/O15/O30 apertures, Fitschen Ch 3 AND Chan Ch 7 together provide robust double-source grounding for Chordia t ≥ 3.00 with-theory.
 
 ## Related local extracts
 
