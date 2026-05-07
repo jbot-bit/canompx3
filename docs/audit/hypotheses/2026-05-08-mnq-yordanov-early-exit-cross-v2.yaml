@@ -1,0 +1,512 @@
+version: 2
+status: PRE_REGISTERED_DRAFT
+date: "2026-05-08"
+slug: "2026-05-08-mnq-yordanov-early-exit-cross-v2"
+title: "Yordanov 2026 § 3.8 Cross+Miss veto reframed as paired-trade early-exit-at-cross ΔR — MNQ deployed lanes"
+owner: "joshdlees@gmail.com"
+parent_spec: "docs/institutional/literature/yordanov_2026_nq_orb_value_area_breakouts.md"
+supersedes: "docs/audit/hypotheses/2026-05-07-mnq-yordanov-crossmiss-triage-v1.yaml (HALT — DESIGN_FLAWED, see docs/audit/results/2026-05-07-mnq-yordanov-crossmiss-triage-v1.md)"
+
+testing_mode: "individual"
+pathway: "B_individual"
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/backtesting-methodology.md § 6.3 (E2 break-bar look-ahead protocol)"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/pooled-finding-rule.md"
+    - ".claude/rules/integrity-guardian.md"
+    - ".claude/rules/quant-audit-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/yordanov_2026_nq_orb_value_area_breakouts.md"
+    - "docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md"
+    - "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/runtime/lane_allocation.json"
+    - "pipeline/cost_model.py:185-193 (MNQ slippage canonical anchor)"
+    - "research/oos_power.py (canonical OOS power calc per RULE 3.3)"
+    - "trading_app/outcome_builder.py:277-282 (entry_ts is bar-CLOSE — load-bearing for look-ahead boundary)"
+    - "trading_app/holdout_policy.py (HOLDOUT_SACRED_FROM = 2026-01-01)"
+  notes:
+    - "v2 reframes the v1 Cross+Miss bucket-hit-rate (tautological by construction — see v1 result md) as a paired-trade ΔR test of an early-exit rule conditional on a post-entry close-cross of orb_mid."
+    - "Pathway B / K=1: ONE mechanism (early-exit-at-cross veto), tested over the pooled 3-lane scope. Per-lane breakdown mandatory per pooled-finding-rule.md."
+    - "NO promotion is permitted from this pre-reg. SURVIVES verdict triggers ONLY a separate confirmatory pre-reg next session (CPCV-based per RULE 3.3 if OOS underpowered)."
+    - "AUDIT-FIRST default per CLAUDE.md: this is the audit step; downstream gates C6/C8/C9 are non-waivable IF and only IF a confirmatory pre-reg follows."
+    - "v1 verdict was HALT (design flawed). This is the v2 amendment per the v1 result md USER GATE."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "9afda4df"
+  committed_required_before_run: true
+
+scope:
+  lanes:
+    - strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+      instrument: "MNQ"
+      orb_label: "COMEX_SETTLE"
+      orb_minutes: 5
+      entry_model: "E2"
+      confirm_bars: 1
+      rr_target: 1.5
+      filter_type: "OVNRNG_100"
+      lane_allocation_ref: "docs/runtime/lane_allocation.json:7-25"
+    - strategy_id: "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15"
+      instrument: "MNQ"
+      orb_label: "US_DATA_1000"
+      orb_minutes: 15
+      entry_model: "E2"
+      confirm_bars: 1
+      rr_target: 1.5
+      filter_type: "VWAP_MID_ALIGNED"
+      lane_allocation_ref: "docs/runtime/lane_allocation.json:26-45"
+    - strategy_id: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+      instrument: "MNQ"
+      orb_label: "NYSE_OPEN"
+      orb_minutes: 5
+      entry_model: "E2"
+      confirm_bars: 1
+      rr_target: 1.0
+      filter_type: "COST_LT12"
+      lane_allocation_ref: "docs/runtime/lane_allocation.json:46-65"
+  direction: pooled
+  out_of_scope:
+    - "non-deployed MNQ lanes"
+    - "MES, MGC instruments"
+    - "filter or RR variants on the deployed lanes"
+    - "any change to validated_setups, lane_allocation.json, paper_trades, live_config"
+    - "any change to the 3 deployed MNQ lanes' baseline P&L"
+    - "any post-hoc threshold relaxation"
+    - "promotion or deployment from this pre-reg's verdict"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+    locked: true
+  oos_window:
+    description: "DESCRIPTIVE-ONLY. 2026-01-01 <= trading_day < <current OOS cutoff>."
+    policy: >
+      OOS is CONSUMED for descriptive reporting ONLY (per RULE 3.3 — power floor declared up-front
+      in oos_power_declaration § below). dir_match cannot kill an underpowered OOS. No threshold
+      tuning against OOS. Verdict is decided on IS pooled ΔR + per-lane breakdown; OOS is reported
+      as a directional sanity check, never as a binary kill.
+    locked: true
+  tuning_against_oos: false
+  canonical_layers_only: true
+  canonical_layers_used:
+    - "orb_outcomes"
+    - "daily_features"
+    - "bars_1m"
+  banned_layers:
+    - "validated_setups (DERIVED — Mode B grandfathered baselines forbidden per research-truth-protocol.md)"
+    - "edge_families (DERIVED)"
+    - "live_config (HARDCODED)"
+
+scratch_policy:
+  policy: "drop"
+  justification: >
+    The 3 lanes in scope use confirm_bars=1 stop-market entries with explicit
+    target/stop geometry; outcome='scratch' rows (pnl_r=NULL) represent sessions
+    where the trade was never resolved by stop or target before session end and
+    are excluded by the canonical promoter via WHERE pnl_r IS NOT NULL. v2 matches
+    the deployed-lane convention so paired-ΔR samples are comparable to live
+    performance. Bailey-LdP 2014 sample-selection caveat acknowledged: inflation
+    risk is shared with the deployed lane baseline, not introduced by this triage.
+  literature_ref: "docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md"
+  scratch_handling_in_intervention: >
+    A trade with pnl_r=NULL is excluded from the paired-ΔR sample entirely
+    (R_baseline_i is undefined). It cannot be cross-seen, not-cross-seen, or
+    intervened on — the canonical exit was never resolved.
+
+theory_citation:
+  source_file: "docs/institutional/literature/yordanov_2026_nq_orb_value_area_breakouts.md"
+  section: "§ 3.8"
+  verbatim_extract: >
+    "Cross + Dev Miss (n=44): Only 22.7% at 0.5x — a 48.4 percentage-point drop
+    from the baseline 71.1%. ... a breakout that retreats through the Filter Mid
+    without having extended even 0.5x of the filter range has a high probability
+    of full failure."
+  reframed_question: >
+    The v1 attempt operationalized "high probability of full failure" as a
+    bucket-hit-rate metric that turned out to be tautological with the bucket
+    definition. v2 reframes the same Yordanov mechanism as a TRADE-TIME
+    ACTIONABLE veto: given a post-entry close-cross of orb_mid (cross_observed
+    at bar b), would exiting at bar b+1.open improve per-trade outcomes
+    relative to the canonical exit? The outcome variable (paired ΔR) is
+    orthogonal to the cross-seen bucket label by construction.
+  source_dataset: "NQ continuous front-month, 159 trading days, Databento GLBX.MDP3"
+  citation_caveats:
+    - "Single-instrument NQ; instrument transfer to MNQ is the test."
+    - "Not peer-reviewed; author identity unverified."
+    - "Adversarial post-audit on v1 cross-seen subset showed MNQ recovery rate 20.2% vs Yordanov NQ ~23% — within 3pp Bailey-LdP transfer tolerance, supportive of mechanism transfer; this is the empirical motivation for v2."
+    - "Yordanov defines Filter Range from Volume Profile Value Area (Case A) or 10:00 candle (Case B/C); v2 uses ORB high/low as the tractable analogue. The mid-cross mechanism is what is being tested, not the VA construction."
+  scope_relaxation_acknowledged: >
+    Yordanov defines Filter Range from Value Area / 10:00 candle. v2 uses the
+    canonical project ORB high/low as the analogue range. The structural
+    mechanism under test is "post-entry close-cross of mid as a veto signal"
+    — not the specific VA construction. A SURVIVES verdict here motivates a
+    more faithful VA replication next session; a FALSIFIED verdict falsifies
+    the early-exit-at-cross mechanism on MNQ regardless of range definition.
+
+intervention_definition:
+  reference_anchors:
+    orb_mid: "(orb_high + orb_low) / 2"
+    orb_high_source: "daily_features.orb_<orb_label>_high (triple-joined per daily-features-joins.md)"
+    orb_low_source: "daily_features.orb_<orb_label>_low"
+  side_resolution: >
+    Side inferred from entry_price vs orb_mid: long if entry_price > orb_mid,
+    short if entry_price < orb_mid. Trades with entry_price == orb_mid (zero
+    bars expected on continuous-tick data) are excluded with a logged warning
+    and excluded from N_total.
+  cross_detection:
+    definition: >
+      cross_observed_at_b is the FIRST post-entry 1m bar (call it bar b) where
+      bar.close crosses orb_mid in the direction OPPOSITE to entry side.
+      Long entry: cross occurs when bar.close <= orb_mid.
+      Short entry: cross occurs when bar.close >= orb_mid.
+    first_event_wins: true
+    scan_window: >
+      Single forward pass over bars_1m WHERE ts_utc > entry_ts AND ts_utc <= exit_ts
+      ORDER BY ts_utc ASC. Strict > on entry_ts (exclusive) per outcome_builder.py:277-282
+      (entry_ts is bar-CLOSE; bar at ts_utc == entry_ts is the entry bar itself).
+    locked: true
+  intervention_action:
+    definition: >
+      If cross_observed_at_b fires, the intervention exits the trade at the
+      OPEN of bar b+1 (the next 1m bar after the cross-detection bar).
+      bar b+1 is selected as bars_1m WHERE ts_utc > b.ts_utc ORDER BY ts_utc ASC LIMIT 1.
+    fill_price_source: "bar[b+1].open from bars_1m"
+    fill_price_locked: true
+    locked_rationale: >
+      Locking the fill at bar[b+1].open (NOT bar[b].close) is the canonical
+      look-ahead guard. Cross-detection at bar b's close is observable in
+      live trading only AFTER bar b closes, so the soonest live execution is
+      bar b+1's open. Using bar[b].close as the fill would be a same-bar
+      information leak (a Chan Ch1 p.4 violation per backtesting-methodology.md
+      § 6.3). Tie-breaker: if cross_observed_at_b fires on the LAST bar before
+      exit_ts (no bar b+1 within the trade's session window), abstain — see
+      gap_or_halt_handling below.
+  gap_or_halt_handling:
+    rule: >
+      If bar b+1 is missing within the bars_1m post-entry window (gap, halt,
+      session boundary, or cross fires on the last bar before exit_ts),
+      ABSTAIN: R_intervention_i := R_baseline_i, ΔR_i := 0. The intervention
+      cannot fire because no fill is available. This is a deliberate
+      conservative choice — the intervention should never EXTEND a trade past
+      the canonical exit, only end it earlier.
+    not_done_yet: false
+  cross_observed_count_per_trade:
+    definition: >
+      cross_observed_count is the count of post-entry close-cross events on a
+      trade (zero if no cross was ever observed, one if a single cross,
+      higher if multiple oscillations across mid). Reported as exploratory
+      diagnostic only — the intervention fires on the FIRST cross; subsequent
+      crosses do not change the intervention.
+    use: "T0 correlation diagnostic against deployed-filter fire (RULE 7) and exploratory frequency histogram."
+
+outcome_metric:
+  primary_metric: "paired_delta_R"
+  paired_delta_R_definition:
+    R_baseline_i:
+      source: "orb_outcomes.pnl_r for trade i (canonical, scratch-policy=drop)"
+      semantics: "Per-trade R-multiple of canonical exit — already net of canonical entry/exit slippage and commission per outcome_builder.py."
+    R_intervention_i:
+      formula_long: "(intervention_fill_price - entry_price) / stop_distance_pts"
+      formula_short: "(entry_price - intervention_fill_price) / stop_distance_pts"
+      stop_distance_pts: "(entry_price - stop_price) for long, (stop_price - entry_price) for short — read from orb_outcomes for trade i; canonical lane stop geometry"
+      slippage_subtraction: >
+        |R_intervention_i| := |R_intervention_i| - (early_exit_slippage_pts / stop_distance_pts).
+        Sign of R_intervention_i preserved. Slippage charged on the early-exit leg ONLY (entry leg
+        and any baseline-exit slippage are already in pnl_r per cost_model.py).
+      cross_not_observed_case: "If no post-entry cross is observed for trade i, intervention does not fire: R_intervention_i := R_baseline_i, ΔR_i := 0."
+      gap_abstain_case: "If cross fires but bar b+1 is missing (see gap_or_halt_handling), R_intervention_i := R_baseline_i, ΔR_i := 0."
+    delta_R_i: "R_intervention_i - R_baseline_i"
+  conditional_pooled_metric:
+    name: "conditional_pooled_delta_R"
+    universe: "trades where cross_observed_at_b is True (cross-seen subset)"
+    estimator: "mean(ΔR_i) over cross-seen subset, with HC-robust SE via paired t-test"
+    purpose: "Is the early-exit rule beneficial CONDITIONAL on a cross being observed? — this is the promotion-bearing metric."
+  unconditional_pooled_metric:
+    name: "unconditional_pooled_delta_R"
+    universe: "ALL trades in the lane (cross-seen contribute their ΔR_i; non-cross-seen contribute 0)"
+    estimator: "mean(ΔR_i) over full trade book"
+    purpose: "What is the deployment-relevant ΔR per trade if the rule were applied to every future trade? — addresses selection-bias-in-cross-seen-subset (see selection_bias_guard § below)."
+  per_lane_breakdown:
+    required: true
+    breakdown_columns:
+      - "lane (strategy_id)"
+      - "N_total (all trades in lane, IS)"
+      - "N_cross_seen"
+      - "cross_seen_rate_pct = N_cross_seen / N_total * 100"
+      - "mean_R_baseline_cross_seen"
+      - "mean_R_intervention_cross_seen"
+      - "conditional_delta_R (mean ΔR over cross-seen)"
+      - "conditional_paired_t"
+      - "conditional_paired_p"
+      - "conditional_95pct_CI_lo / CI_hi"
+      - "unconditional_delta_R (mean ΔR over all trades)"
+      - "tier (per locked_kill_criteria, evaluated POOLED)"
+  pooled_aggregation_rule: >
+    Pooled metric is a single mean over all cross-seen trades across the 3 lanes (NOT a mean of
+    lane-level means). Per-lane breakdown is required for heterogeneity check
+    (pooled-finding-rule.md): if >=25% of lanes (i.e. >=1 of 3) flips per-lane sign vs pooled
+    sign, heterogeneity_ack: true is mandated in result md front-matter.
+  paired_test:
+    method: "paired t-test on (R_intervention_i - R_baseline_i) over cross-seen subset"
+    standard_error: "HC-robust SE (heteroskedasticity-consistent), conservative vs vanilla paired SE"
+    alpha: 0.05
+    two_sided: true
+
+slippage_model:
+  basis_canonical_anchor: "pipeline/cost_model.py:185-193 — MNQ slippage = 1.00pt (full spec, both sides)"
+  early_exit_slippage_locked:
+    base_charge_pts: 0.25
+    base_charge_rationale: >
+      0.25pt = 1 tick on MNQ (tick_size=0.25 per cost_model.py:191). Half of the canonical
+      slippage spec, applied to the early-exit leg ONLY. Anchored to cost_model.py canonical
+      values; query at runtime, never inline.
+    base_charge_locked: true
+  stress_sensitivity:
+    stress_charge_pts: 0.50
+    rationale: "Full canonical slippage spec applied to the early-exit leg. Exploratory; does NOT decide verdict alone — reported alongside base."
+    locked: true
+  small_stop_guard:
+    rule: >
+      If any lane's mean stop_distance_pts < 4.0 (a known fragility threshold for the
+      COMEX_SETTLE break-even fragility per cost_model.py:175-178 comment block),
+      charge stress_charge_pts (0.50pt) regardless of base/stress declaration. This
+      protects against headline ΔR being driven by tight-stop lanes where 1 tick of
+      slippage is a 6%+ R hit.
+    locked: true
+  fail_closed: >
+    Slippage is the primary kill-zone for this rule. If realistic slippage subtraction
+    (base or small-stop guard) drives conditional_pooled_delta_R below the SURVIVES
+    threshold, the verdict is FALSIFIED — no narrative recovery via "but the stress
+    case is too pessimistic." stress is exploratory; base+small-stop is binding.
+
+locked_kill_criteria:
+  K1_FALSIFIED:
+    metric: "conditional_pooled_delta_R AND its 95% CI upper bound"
+    threshold: "conditional_pooled_delta_R <= 0 AND CI_hi < +0.05"
+    action: "FALSIFIED — annotate Yordanov extract § 3.8 with MNQ early-exit-falsified status; update mechanism_priors.md to MNQ-falsified for the early-exit operationalization."
+  K2_SURVIVES:
+    metric: "conditional_pooled_delta_R AND OOS power tier AND per-lane consistency"
+    threshold: >
+      conditional_pooled_delta_R >= +0.10 AND
+      OOS power tier == DIRECTIONAL_ONLY or CAN_REFUTE (>= 50%) AND
+      >= 2 of 3 lanes per-lane conditional_delta_R >= +0.05
+    action: "SURVIVES — author confirmatory pre-reg next session; CPCV pathway if OOS power < CAN_REFUTE per RULE 3.3."
+  K3_AMBIGUOUS:
+    metric: "conditional_pooled_delta_R OR per-lane consistency"
+    threshold: "conditional_pooled_delta_R in (0, +0.10) OR (>= +0.10 BUT only 1 of 3 lanes shows per-lane conditional_delta_R >= +0.05)"
+    action: "AMBIGUOUS — park; no promotion; record DOWNGRADE in decision-ledger; queue for re-test on next data refresh."
+  K4_UNDERPOWERED:
+    metric: "N_cross_seen per lane"
+    threshold: "N_cross_seen < 30 on ANY of the 3 lanes"
+    action: "UNDERPOWERED — note cross-seen sample gap in decision-ledger; do not promote; do not annotate Yordanov extract; v3 amendment must justify N expansion (cross-instrument or longer IS) before re-running."
+
+decision_rule:
+  precedence_order: ["K4_UNDERPOWERED", "K1_FALSIFIED", "K2_SURVIVES", "K3_AMBIGUOUS"]
+  precedence_locked: true
+  precedence_rationale: >
+    K4 fires first because power is a precondition for any other interpretation
+    (a +0.20R reading on N_cross_seen=12 is uninterpretable). K1 fires before K2
+    because falsification is more conservative than confirmation under shared
+    evidence. K3 is the residual — neither confirmed nor falsified. Exactly one
+    branch fires per decision.
+  continue_if: "K2_SURVIVES — write confirmatory pre-reg next session (CPCV per RULE 3.3 if OOS underpowered)."
+  park_if: "K3_AMBIGUOUS — record DOWNGRADE; no annotation, no promotion."
+  kill_if: "K1_FALSIFIED — annotate Yordanov extract § 3.8 + mechanism_priors.md."
+  hold_if: "K4_UNDERPOWERED — neither annotate nor promote; note cross-seen-N gap only."
+
+selection_bias_guard:
+  description: >
+    The cross-seen subset is conditional on a post-entry observable that is correlated
+    with trade outcome (a trade that has crossed mid is structurally more likely to be
+    a losing trade — selecting on a downstream variable creates conditional dependence
+    even if cross_observed and pnl_r share no causal link). conditional_pooled_delta_R
+    measures "given the bucket is selected, is intervention beneficial?" but the
+    deployment-relevance question is "what is the per-trade ΔR if applied to ALL
+    future trades, including ones never expected to cross?".
+  required_reporting:
+    - "conditional_pooled_delta_R (cross-seen subset only) — promotion-bearing"
+    - "unconditional_pooled_delta_R (all trades, non-cross-seen contribute 0) — deployment-relevance"
+    - "cross_seen_rate_pct per lane and pooled (frequency of intervention firing)"
+  promotion_rule: "Promotion-bearing metric is conditional. SURVIVES requires conditional ΔR >= +0.10. Unconditional is reported alongside as a sanity check; if unconditional is negative or near-zero with conditional >= +0.10, it is a fire-rate effect, not a refutation, but MUST be flagged in result md front-matter."
+  locked: true
+
+oos_power_declaration:
+  estimated_n_oos_cross_seen: 88
+  estimated_n_oos_cross_seen_basis: >
+    IS yielded 1,760 cross-seen trades over 84 months (~2019-2025 IS window per HOLDOUT_SACRED_FROM).
+    OOS window is approximately 4 months (2026-01-01 to current cutoff ~2026-04). Linear extrapolation:
+    1760 * (4/84) ~= 84. Rounded up to 88 to be slightly generous on cross-seen-rate stability.
+    Recompute at run time from actual IS:OOS ratio; do NOT hard-code if cutoff has shifted.
+  estimated_n_required_for_power_080: 170
+  estimated_n_required_basis: "d ~= 0.15 (assumed effect size if SURVIVES threshold +0.10R holds at sigma ~= 1.2R per cross-seen trade), alpha=0.05, paired t-test, computed via research/oos_power.py."
+  expected_oos_tier_ceiling: "CONDITIONAL — DIRECTIONAL_ONLY (per RULE 3.3 tier table; N_oos << N_required_for_080)."
+  honest_implication: >
+    OOS dir_match cannot kill this rule on this scope by construction (RULE 3.3:
+    DIRECTIONAL_ONLY tier means dir_match=FALSE -> verdict UNVERIFIED, never DEAD).
+    If IS verdict is SURVIVES and OOS comes back DIRECTIONAL_ONLY (the expected case),
+    the deployment-readiness path is CPCV (Combinatorial Purged Cross-Validation,
+    LdP 2020 § 1.4.2 — designed for short OOS data) — NOT a v3 with looser power.
+  oos_power_helper: "research/oos_power.py — canonical, do not re-implement"
+  locked: true
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  source: "Yordanov 2026 working paper (NQ, 159 days) + v1 adversarial-audit napkin EV (1,760 IS cross-seen, 20.2% recovery)"
+  upstream_scan_k_framings:
+    note: >
+      Yordanov tested multiple bucket schemes (Filter Case A/B/C, Cross/No-Cross,
+      Cross+Hit/Cross+Miss, volume buckets). v1 adversarial post-audit reframed
+      the cross-seen subset as a candidate for early-exit testing. v2 K=1 — one
+      mechanism (early-exit-at-cross), three lanes scored independently then
+      pooled. Pooled scope is the single hypothesis. Per-lane breakdown is a
+      heterogeneity check (pooled-finding-rule.md), NOT three independent
+      hypotheses.
+    note_on_K_for_this_pre_reg: >
+      The CURRENT TEST is K=1. v1 (HALT) and Yordanov's NQ paper are upstream
+      provenance only — they do NOT inflate K for this pre-reg. v1's tautology
+      is not a hypothesis-burnt event; it was a metric-design failure caught
+      pre-promotion, no false-positive risk transferred to v2.
+
+testing_discipline:
+  pathway: "B_individual"
+  k: 1
+  significance_threshold:
+    raw_p_required: "<0.05 on conditional_pooled_delta_R paired-t (HC-robust)"
+    effect_size_required: "conditional_pooled_delta_R >= +0.10R for SURVIVES tier (locked)"
+  mandatory_downstream_gates_non_waivable:
+    - "C6_WFE: walk-forward efficiency >= 0.50 (only invoked on confirmatory pre-reg next session)"
+    - "C8_OOS: OOS-power-gated dir_match per backtesting-methodology.md § 3.3 (RULE 3.3) — DIRECTIONAL_ONLY tier expected and accepted"
+    - "C9_era_stability: no era ΔR < -0.05 at N_cross_seen >= 50 on the cross-seen subset"
+  theory_citation: "see top-level theory_citation block"
+
+pooled_finding_protocol:
+  applies: true
+  per_cell_breakdown_required: true
+  per_lane_table_required_in_result_md: true
+  flip_rate_pct_annotation_required: true
+  heterogeneity_threshold_pct: 25
+  per_lane_table_columns: "see outcome_metric.per_lane_breakdown.breakdown_columns"
+  conditional_vs_unconditional_both_reported: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2"
+    N_trials: 1
+    note: "K=1 confirmatory test; MinBTL ~0 by construction. No multi-cell enumeration. v1 K=1 also (different metric); no K-inflation across v1/v2."
+    within_cap: true
+    cap_reference: "pre_registered_criteria.md Criterion 2 (N <= 300 clean-MNQ); 300 cap is ceiling, this pre-reg is K=1."
+
+implementation_integrity_checklist:
+  - check: "is_lookahead_safe: TRUE. Evidence: (a) no reference to orb_*_break_*, rel_vol_*, or any feature in backtesting-methodology.md § 6.3 banned-for-E2 list — cross detection reads bars_1m DIRECTLY, not daily_features.orb_*_break_*. (b) strict ts_utc > entry_ts boundary on the bars_1m post-entry scan (entry_ts is bar-CLOSE per outcome_builder.py:277-282). (c) intervention fill price locked at bar[b+1].open — cross-detection at bar b's close means soonest live action is bar b+1's open; bar[b].close as fill would be a same-bar information leak. (d) Pressure-test (RULE 13): inject synthetic cross-at-entry_ts (must drop — strict >); inject cross on last bar before exit_ts with no b+1 (must abstain via gap handler); inject orb_outcomes.pnl_r as a 'feature' (must fail T0 at correlation 1.0 with R_baseline_i)."
+  - check: "IS/OOS discipline: trading_day < 2026-01-01 sourced from HOLDOUT_SACRED_FROM constant. OOS reported descriptive-only with power tier."
+  - check: "Thresholds frozen pre-run: kill criteria above; result md must echo verbatim before printing data."
+  - check: "Look-ahead guard: bars_1m.ts_utc > entry_ts (strict); bar[b+1].open used for fill, never bar[b].close. First post-entry bar timestamp asserted strictly later than entry_ts on every sampled trade."
+  - check: "Triple-join on (trading_day, symbol, orb_minutes) per daily-features-joins.md — no 3x N inflation."
+  - check: "Filter applied via canonical research.filter_utils.filter_signal — no inline filter arithmetic. (Lane definitions are deployed-filter scoped, so filter is applied via lane-scoping query, not as a feature.)"
+  - check: "Side resolution from entry_price vs orb_mid is deterministic; entry_price == orb_mid edge case warned and excluded from N_total."
+  - check: "Slippage sourced from pipeline.cost_model.COST_SPECS['MNQ'] at runtime — never inlined. Tick size 0.25 (1 tick = 0.25pt) confirmed against COST_SPECS at runtime."
+  - check: "Stop distance read from orb_outcomes.entry_price - orb_outcomes.stop_price (or symmetric for short); never recomputed from RR + ORB range."
+  - check: "Selection-bias unconditional ΔR reported alongside conditional ΔR (selection_bias_guard § enforced)."
+  - check: "Pre-run pre-reg-vs-script consistency: script reads kill criteria from this YAML; fails closed on any mismatch."
+  - check: "self_review() runs python pipeline/check_drift.py via subprocess; nonzero exit blocks output emission."
+  - check: "Result md front-matter contains pooled_finding=true, per_cell_breakdown_path, flip_rate_pct (heterogeneity_ack if >=25), conditional_vs_unconditional_both_reported=true."
+  - check: "OOS power computed at runtime via research.oos_power.oos_ttest_power; tier reported alongside dir_match per RULE 3.3 § Required practice point 3."
+
+outputs_required_after_run:
+  - "docs/audit/results/2026-05-08-mnq-yordanov-early-exit-cross-v2.md (with required front-matter)"
+  - "docs/audit/results/2026-05-08-mnq-yordanov-early-exit-cross-v2.csv (per-trade ΔR ledger + per-lane summary)"
+  - "Slippage sensitivity sweep: base 0.25pt + stress 0.50pt + small-stop guard 0.50pt — all three reported in result md"
+  - "Cross-time histogram (exploratory): minutes-from-entry distribution of cross_observed_at_b firings"
+  - "T0 correlation: corr(cross_observed_count, deployed_filter_fire_indicator) — RULE 7 tautology check"
+  - "OOS descriptive: paired ΔR + power tier (per RULE 3.3 format_power_report)"
+  - "1-line append to docs/runtime/decision-ledger.md"
+
+execution_gate:
+  allowed_now:
+    - "commit this pre-reg, stamp commit_sha"
+    - "run research/yordanov_early_exit_cross_v2.py against gold.db (read-only)"
+    - "emit result md+csv with all required front-matter and per-lane table"
+    - "append decision-ledger one-line entry"
+    - "(if K1_FALSIFIED) annotate yordanov literature extract + mechanism_priors.md"
+    - "(if K2_SURVIVES) write a SEPARATE confirmatory pre-reg in a future session — CPCV pathway if OOS power < CAN_REFUTE"
+  forbidden_now:
+    - "any write to validated_setups, experimental_strategies, lane_allocation.json, paper_trades, live_config"
+    - "any change to the deployed 3 MNQ lanes' baseline P&L or stop/target geometry"
+    - "post-hoc threshold relaxation"
+    - "running with a different IS boundary"
+    - "promoting the early-exit rule to a deployment decision from this pre-reg's verdict"
+    - "writing the confirmatory pre-reg in this same session (cools cycle: triage today, decide tomorrow)"
+    - "tuning slippage charges against IS or OOS results"
+
+risks_acknowledged:
+  - id: 1
+    name: "Selection bias in cross-seen subset"
+    description: "Cross-seen is a downstream-conditional sample; conditional ΔR overstates deployment-relevance."
+    mitigation: "selection_bias_guard § — unconditional pooled ΔR reported alongside; heterogeneity flagged in result md."
+  - id: 2
+    name: "Stopped-trade slippage > spec"
+    description: "Exiting a moving-against-you trade may incur higher slippage than the canonical 1-tick (0.25pt) base charge."
+    mitigation: "slippage_model.stress_sensitivity (0.50pt) + small_stop_guard (force 0.50pt on lanes with mean stop < 4pt). Slippage is the primary kill-zone."
+  - id: 3
+    name: "Same-bar information leak"
+    description: "Using bar[b].close as the fill (instead of bar[b+1].open) would mean the fill is observable at the same instant as the cross-detection signal."
+    mitigation: "intervention_action.fill_price_source locked at bar[b+1].open. Pressure-test in implementation_integrity_checklist injects synthetic cross-at-entry_ts to verify strict-> boundary."
+  - id: 4
+    name: "cross_observed × deployed filter correlation"
+    description: "The deployed filter (OVNRNG_100, VWAP_MID_ALIGNED, COST_LT12) may already be correlated with cross-seen rate, so the rule's apparent edge is partly a filter-restatement."
+    mitigation: "T0 correlation in outputs_required_after_run; if |corr| > 0.70 (RULE 7), flag as TAUTOLOGY and exclude from SURVIVES even if numeric thresholds pass."
+  - id: 5
+    name: "OOS underpowered structurally"
+    description: "OOS N_cross_seen ~88 << 170 needed for power 0.80; dir_match cannot binary-kill."
+    mitigation: "oos_power_declaration § declared up-front. CONDITIONAL — DIRECTIONAL_ONLY ceiling accepted. Deployment-readiness path is CPCV (RULE 3.3), NOT a v3 with looser power."
+
+methodology_rules_applied:
+  RULE_1_temporal_alignment:
+    application: "Cross detection is a TRADE-TIME-KNOWABLE signal — bar.close at bar b is observable AT bar b's close, intervention fires at bar b+1.open. Locked in intervention_action.fill_price_source."
+  RULE_3_holdout_discipline:
+    application: "IS-strict (< 2026-01-01); OOS DESCRIPTIVE-ONLY with power-tier annotation; tuning_against_oos=false."
+  RULE_3_3_oos_power_floor:
+    application: "OOS power ceiling declared up-front (DIRECTIONAL_ONLY expected); dir_match cannot binary-kill on this OOS scope per RULE 3.3 tier table."
+  RULE_4_multiple_testing:
+    application: "K=1 (Pathway B individual). v1's tautology is not K-inflating (caught pre-promotion). Per-lane breakdown is heterogeneity check, NOT a 3-hypothesis family."
+  RULE_6_trade_time_knowability:
+    application: "cross_observed and bar[b+1].open are both trade-time-knowable. R_baseline_i is post-trade by construction (it IS pnl_r) — but it is the OUTCOME the intervention is paired against, not a predictor."
+  RULE_7_tautology_t0:
+    application: "T0 correlation against deployed_filter_fire required in outputs; |corr|>0.70 flags TAUTOLOGY exclusion even if K2 numerics pass."
+  RULE_9_data_source_discipline:
+    application: "Canonical layers only (orb_outcomes, daily_features, bars_1m). Triple-join on (trading_day, symbol, orb_minutes). bars_1m is the ONLY ts-resolved source for cross detection."
+  RULE_10_pre_registration:
+    application: "This file. Locked numeric criteria precede script execution. commit_sha stamped post-commit before run."
+  RULE_11_audit_trail:
+    application: "Result md + companion CSV emitted to docs/audit/results/. Decision-ledger 1-line entry. v1 supersession recorded in supersedes: field above; v1 result md remains as historical record."
+  RULE_12_red_flags:
+    application: "If pooled |t| > 7 or |conditional_delta_R| > +0.6, treat as discovery-loop failure (likely metric-design bug, look-ahead, or selection-effect artefact) and INVESTIGATE before celebrating per RULE 12."
+  RULE_13_pressure_test:
+    application: "Pressure-test set declared in implementation_integrity_checklist.is_lookahead_safe.evidence — synthetic cross-at-entry_ts (drop), cross-on-last-bar (abstain), pnl_r-as-feature (T0 fail)."
+  POOLED_FINDING_RULE:
+    application: "per_cell_breakdown_path, flip_rate_pct, and heterogeneity_ack (if flip>=25) MANDATORY in result md front-matter. check_pooled_finding_annotations enforces."
+  CANONICAL_FILTER_DELEGATION:
+    application: "research.filter_utils.filter_signal(df, key, orb_label) is the only path for any filter logic. No inline OVNRNG_100/VWAP_MID_ALIGNED/COST_LT12 arithmetic."
+  CANONICAL_COST_DELEGATION:
+    application: "pipeline.cost_model.COST_SPECS['MNQ'] is the only path for slippage/tick values. No inline 0.25 or 1.00 outside the locked v2 spec (which IS the canonical anchor)."
+  AUDIT_FIRST_DEFAULT:
+    application: "This pre-reg + script is the audit step. No deployment, validated_setups, or lane_allocation change permitted from a SURVIVES verdict — confirmatory CPCV pre-reg required first."
+
+not_done_by_this_pre_reg:
+  - "Faithful Volume Profile Value Area replication (uses ORB high/low analogue per scope_relaxation_acknowledged)"
+  - "Multi-episode session reconstruction (intervention is per-trade, single-cross-event)"
+  - "OOS confirmation (IS-binding, OOS descriptive-only per oos_power_declaration)"
+  - "CPCV walk-forward (deferred to confirmatory pre-reg next session if SURVIVES)"
+  - "Cross-instrument generalization (MNQ-only)"
+  - "Cross-session generalization beyond the 3 deployed lanes"
+  - "Any deployment, sizing, or allocator change"
+  - "Any modification to the 3 deployed MNQ lanes' baseline behavior"
