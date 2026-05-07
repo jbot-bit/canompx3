@@ -52,3 +52,17 @@ def test_run_setup_blocks_wsl_mount_repo_roots(monkeypatch: pytest.MonkeyPatch) 
 
     with pytest.raises(SystemExit, match="Codex WSL setup is blocked for non-native repo root"):
         codex_local_env.run_setup("wsl")
+
+
+def test_safe_path_exists_handles_inaccessible_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    target = Path("C:/fake/.venv-wsl/bin/python")
+
+    def _raise_oserror(self: Path) -> bool:
+        raise OSError("[WinError 1920] The file cannot be accessed by the system")
+
+    monkeypatch.setattr(Path, "exists", _raise_oserror)
+
+    exists, detail = codex_local_env.safe_path_exists(target)
+
+    assert not exists
+    assert "WinError 1920" in detail

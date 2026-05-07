@@ -4,6 +4,7 @@ Canonical paths for the MGC data pipeline.
 All path constants are defined here to ensure consistency across the codebase.
 """
 
+import logging as _logging
 import subprocess as _subprocess
 from pathlib import Path
 
@@ -13,8 +14,14 @@ PROJECT_ROOT = Path(__file__).parent.parent
 # Load .env from project root (populates DUCKDB_PATH and API keys into os.environ)
 try:
     from dotenv import load_dotenv as _load_dotenv
+    from dotenv.main import logger as _dotenv_logger
 
-    _load_dotenv(PROJECT_ROOT / ".env", override=False)
+    _previous_level = _dotenv_logger.level
+    _dotenv_logger.setLevel(max(_previous_level, _logging.ERROR))
+    try:
+        _load_dotenv(PROJECT_ROOT / ".env", override=False)
+    finally:
+        _dotenv_logger.setLevel(_previous_level)
 except ImportError:
     pass  # python-dotenv not installed — rely on shell env
 

@@ -239,12 +239,48 @@ class TestOpenCodexProject:
         assert 'ROOT="$HOME/canompx3"' in command
         assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
 
+    def test_smart_project_prefers_linux_home_when_available(self) -> None:
+        with (
+            patch.object(windows_agent_launch, "wsl_home_clone_available", return_value=True),
+            patch.object(windows_agent_launch, "open_codex_project_linux_home", return_value=0) as linux_mock,
+            patch.object(windows_agent_launch, "open_codex_project") as windows_mock,
+        ):
+            exit_code = windows_agent_launch.open_codex_project_smart()
+
+        assert exit_code == 0
+        linux_mock.assert_called_once_with(search_mode=False, enable_gold_db=False)
+        windows_mock.assert_not_called()
+
+    def test_smart_project_falls_back_to_windows_when_linux_home_unavailable(self) -> None:
+        with (
+            patch.object(windows_agent_launch, "wsl_home_clone_available", return_value=False),
+            patch.object(windows_agent_launch, "open_codex_project_linux_home") as linux_mock,
+            patch.object(windows_agent_launch, "open_codex_project", return_value=0) as windows_mock,
+        ):
+            exit_code = windows_agent_launch.open_codex_project_smart(enable_gold_db=True)
+
+        assert exit_code == 0
+        linux_mock.assert_not_called()
+        windows_mock.assert_called_once_with(search_mode=False, enable_gold_db=True)
+
+    def test_smart_power_falls_back_to_windows_when_linux_home_unavailable(self) -> None:
+        with (
+            patch.object(windows_agent_launch, "wsl_home_clone_available", return_value=False),
+            patch.object(windows_agent_launch, "open_codex_project_linux_home_power") as linux_mock,
+            patch.object(windows_agent_launch, "open_codex_project_power", return_value=0) as windows_mock,
+        ):
+            exit_code = windows_agent_launch.open_codex_project_smart_power()
+
+        assert exit_code == 0
+        linux_mock.assert_not_called()
+        windows_mock.assert_called_once_with()
+
 
 class TestWindowsBatchWrappers:
     def test_codex_batch_is_the_single_smart_codex_entrypoint(self) -> None:
         content = (windows_agent_launch.repo_root() / "codex.bat").read_text(encoding="utf-8")
 
-        assert 'set "MODE=codex-project-linux"' in content
+        assert 'set "MODE=codex-project-smart"' in content
         assert 'if /I "%ACTION%"=="gold-db" (' in content
         assert 'if /I "%ACTION%"=="search-gold-db" (' in content
         assert 'if /I "%ACTION%"=="windows" (' in content
@@ -276,6 +312,7 @@ class TestWindowsBatchWrappers:
 
     def test_linux_search_gold_db_mode_is_supported(self) -> None:
         assert "codex-project-linux-search-gold-db" in windows_agent_launch.VALID_MODES
+        assert "codex-project-smart-search-gold-db" in windows_agent_launch.VALID_MODES
 
     def test_windows_gui_script_supports_button_actions_and_dry_run(self) -> None:
         content = (windows_agent_launch.repo_root() / "scripts" / "infra" / "windows-workstreams-gui.ps1").read_text(

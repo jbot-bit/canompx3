@@ -6,6 +6,42 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Current Session Update (2026-05-07 — Codex launcher/env hardening)
+
+- Fixed a Windows launcher regression in `scripts/infra/windows_agent_launch.py`:
+  `codex.bat` modes `linux` / `linux-power` were incorrectly routed with
+  `use_linux_home=False`, so the supposed WSL-home path actually launched the
+  fallback `/mnt/c/...` checkout. They now pass `use_linux_home=True`.
+- Simplified the default front door: `codex.bat` now targets smart modes that
+  prefer the WSL-home clone when it exists, but automatically fall back to the
+  current checkout when the WSL clone is missing or unavailable. Explicit
+  `windows` / `linux` modes remain for manual override.
+- Hardened `scripts/infra/codex_local_env.py` so `doctor --platform wsl` no
+  longer crashes under Windows with `WinError 1920` when probing
+  `.venv-wsl/bin/python`; inaccessible paths now fail closed and report cleanly.
+- Silenced `python-dotenv` parse-warning spam during `pipeline.paths` startup
+  env loading by temporarily raising the dotenv logger threshold around the
+  repo `.env` load. This keeps launcher/preflight startup readable without
+  changing env resolution behavior.
+- Added regression coverage in
+  `tests/test_tools/test_codex_launcher_scripts.py` and
+  `tests/test_tools/test_codex_local_env.py`, plus focused Windows launcher
+  tests in `tests/test_tools/test_windows_agent_launch.py` and
+  `tests/test_tools/test_windows_agent_launch_light.py`.
+- Verification:
+  `./.venv-wsl/bin/python -c "import pipeline.paths"`
+  passed silently;
+  `./.venv-wsl/bin/python -m ruff check scripts/infra/codex_local_env.py scripts/infra/windows_agent_launch.py tests/test_tools/test_codex_local_env.py tests/test_tools/test_codex_launcher_scripts.py`
+  passed;
+  `./.venv-wsl/bin/python -m pytest tests/test_tools/test_codex_local_env.py -q`
+  passed (`6 passed`);
+  `./.venv-wsl/bin/python -m pytest tests/test_tools/test_codex_launcher_scripts.py -q`
+  passed (`3 passed`);
+  `./.venv-wsl/bin/python -m pytest tests/test_tools/test_windows_agent_launch_light.py -q`
+  passed (`10 passed`);
+  `./.venv-wsl/bin/python -m pytest tests/test_tools/test_windows_agent_launch.py -q`
+  passed (`27 passed`).
+
 ## Pickup pointer (2026-05-07 PM — read this first)
 
 **Yordanov § 3.8 Cross+Miss MNQ triage = HALT (DESIGN_FLAWED).** Pre-reg `fd7c5073` ran cleanly against canonical layers (3,103 IS trades on 3 deployed MNQ lanes) but the pre-registered hit-rate metric is **structurally tautological** against the bucket definitions: hit_rate(CROSS_HIT)=1.0 by construction, hit_rate(CROSS_MISS)=0.0 by construction. Pooled gap = 99.4pp is mathematical artifact, NOT edge. Per backtesting-methodology.md RULE 12 (|t|>7 STOP), NO promotion / NO Yordanov annotation / NO confirmatory pre-reg authored. Detail: `docs/audit/results/2026-05-07-mnq-yordanov-crossmiss-triage-v1.md`.

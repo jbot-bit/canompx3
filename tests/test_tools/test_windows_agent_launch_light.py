@@ -69,9 +69,9 @@ def test_linux_project_batches_target_linux_modes() -> None:
     root = Path(__file__).resolve().parents[2]
     codex_bat = (root / "codex.bat").read_text(encoding="utf-8")
 
-    assert 'set "MODE=codex-project-linux"' in codex_bat
+    assert 'set "MODE=codex-project-smart"' in codex_bat
     assert 'if /I "%ACTION%"=="power" (' in codex_bat
-    assert 'set "MODE=codex-project-linux-power"' in codex_bat
+    assert 'set "MODE=codex-project-smart-power"' in codex_bat
     assert 'if /I "%ACTION%"=="windows" (' in codex_bat
     assert 'set "MODE=codex-project"' in codex_bat
     assert 'if /I "%ACTION%"=="linux" (' in codex_bat
@@ -80,6 +80,14 @@ def test_linux_project_batches_target_linux_modes() -> None:
     assert 'set "MODE=codex-project-linux-power"' in codex_bat
     assert 'if /I "%ACTION%"=="linux-gold-db" (' in codex_bat
     assert 'set "MODE=codex-project-linux-gold-db"' in codex_bat
+
+
+def test_valid_modes_include_smart_project_modes() -> None:
+    module = _load_module()
+
+    assert "codex-project-smart" in module.VALID_MODES
+    assert "codex-project-smart-power" in module.VALID_MODES
+    assert "codex-project-smart-search-gold-db" in module.VALID_MODES
 
 
 def test_codex_bat_routes_task_shortcuts_to_ai_workstreams() -> None:

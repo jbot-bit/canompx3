@@ -64,15 +64,24 @@ def env_for_platform(platform: str) -> dict[str, str]:
     return env
 
 
+def safe_path_exists(path: Path) -> tuple[bool, str]:
+    try:
+        return path.exists(), str(path)
+    except OSError as exc:
+        return False, f"{path} ({exc})"
+
+
 def platform_python(platform: str) -> list[str]:
     if platform == "wsl":
         venv_python = ROOT / ".venv-wsl" / "bin" / "python"
-        if venv_python.exists():
+        venv_exists, _ = safe_path_exists(venv_python)
+        if venv_exists:
             return [str(venv_python)]
         return ["python3"]
 
     venv_python = ROOT / ".venv" / "Scripts" / "python.exe"
-    if venv_python.exists():
+    venv_exists, _ = safe_path_exists(venv_python)
+    if venv_exists:
         return [str(venv_python)]
     if shutil.which("py"):
         return ["py", "-3"]
@@ -166,16 +175,19 @@ def is_wsl_native_root(root: Path) -> bool:
 
 
 def capture_command(command: list[str], *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        cwd=ROOT,
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    try:
+        return subprocess.run(
+            command,
+            cwd=ROOT,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError as exc:
+        return subprocess.CompletedProcess(command, 1, stdout="", stderr=str(exc))
 
 
 def _doctor_check(label: str, ok: bool, detail: str) -> tuple[str, bool, str]:
@@ -187,6 +199,7 @@ def run_doctor(platform: str) -> None:
     checks: list[tuple[str, bool, str]] = []
 
     if platform == "wsl":
+        venv_exists, venv_detail = safe_path_exists(ROOT / ".venv-wsl" / "bin" / "python")
         checks.append(
             _doctor_check(
                 "WSL-native repo root",
@@ -197,8 +210,8 @@ def run_doctor(platform: str) -> None:
         checks.append(
             _doctor_check(
                 ".venv-wsl present",
-                (ROOT / ".venv-wsl" / "bin" / "python").exists(),
-                str(ROOT / ".venv-wsl" / "bin" / "python"),
+                venv_exists,
+                venv_detail,
             )
         )
         codex_path = shutil.which("codex")
@@ -222,11 +235,12 @@ def run_doctor(platform: str) -> None:
         )
         preflight_context = "codex-wsl"
     else:
+        venv_exists, venv_detail = safe_path_exists(ROOT / ".venv" / "Scripts" / "python.exe")
         checks.append(
             _doctor_check(
                 ".venv present",
-                (ROOT / ".venv" / "Scripts" / "python.exe").exists(),
-                str(ROOT / ".venv" / "Scripts" / "python.exe"),
+                venv_exists,
+                venv_detail,
             )
         )
         launcher = ROOT / "codex.bat"

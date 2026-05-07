@@ -67,3 +67,10 @@ def test_codex_bat_modes_are_supported_by_windows_launchers() -> None:
 
     assert not missing_in_powershell, f"codex.bat exposes unsupported PowerShell modes: {sorted(missing_in_powershell)}"
     assert not missing_in_python, f"codex.bat exposes unsupported Python launcher modes: {sorted(missing_in_python)}"
+
+
+def test_linux_modes_route_to_wsl_home_clone() -> None:
+    root = Path(__file__).resolve().parents[2]
+    py_launcher = (root / "scripts" / "infra" / "windows_agent_launch.py").read_text(encoding="utf-8")
+
+    assert py_launcher.count("use_linux_home=True") >= 2

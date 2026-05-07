@@ -25,6 +25,10 @@ VALID_MODES = {
     "codex-search",
     "codex-project",
     "codex-project-gold-db",
+    "codex-project-smart",
+    "codex-project-smart-gold-db",
+    "codex-project-smart-power",
+    "codex-project-smart-search-gold-db",
     "codex-project-linux-search-gold-db",
     "codex-project-power",
     "codex-project-linux",
@@ -183,6 +187,38 @@ def run_wsl(command_text: str) -> int:
             Path(tmp_name).unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def wsl_home_clone_available() -> bool:
+    root_probe = "\n".join(
+        [
+            "set -euo pipefail",
+            'ROOT_INPUT="${CANOMPX3_CODEX_WSL_ROOT:-}"',
+            'if [[ -z "$ROOT_INPUT" || "$ROOT_INPUT" == "." || "$ROOT_INPUT" == "./" ]]; then',
+            '  ROOT="$HOME/canompx3"',
+            'elif [[ "$ROOT_INPUT" == "~" ]]; then',
+            '  ROOT="$HOME"',
+            'elif [[ "$ROOT_INPUT" == "~/"* ]]; then',
+            '  ROOT="$HOME/${ROOT_INPUT#~/}"',
+            'elif [[ "$ROOT_INPUT" == /* ]]; then',
+            '  ROOT="$ROOT_INPUT"',
+            "else",
+            "  exit 1",
+            "fi",
+            '[[ -d "$ROOT/.git" ]]',
+        ]
+    )
+    try:
+        result = subprocess.run(
+            ["wsl.exe", "bash", "-lc", root_probe],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
 
 
 def build_codex_wsl_command(
@@ -351,7 +387,7 @@ def open_codex_project_linux_home(search_mode: bool = False, enable_gold_db: boo
             root,
             search_mode=search_mode,
             enable_gold_db=enable_gold_db,
-            use_linux_home=False,
+            use_linux_home=True,
         )
     )
 
@@ -361,10 +397,28 @@ def open_codex_project_linux_home_power() -> int:
     return run_wsl(
         build_codex_project_wsl_command(
             root,
-            use_linux_home=False,
+            use_linux_home=True,
             profile="canompx3_power",
         )
     )
+
+
+def _fallback_notice() -> None:
+    print("INFO: WSL-home Codex repo unavailable; falling back to the current Windows checkout.")
+
+
+def open_codex_project_smart(search_mode: bool = False, enable_gold_db: bool = False) -> int:
+    if wsl_home_clone_available():
+        return open_codex_project_linux_home(search_mode=search_mode, enable_gold_db=enable_gold_db)
+    _fallback_notice()
+    return open_codex_project(search_mode=search_mode, enable_gold_db=enable_gold_db)
+
+
+def open_codex_project_smart_power() -> int:
+    if wsl_home_clone_available():
+        return open_codex_project_linux_home_power()
+    _fallback_notice()
+    return open_codex_project_power()
 
 
 def _green_baseline_worktree() -> Path:
@@ -859,6 +913,14 @@ def main() -> int:
         return open_codex_project()
     if args.mode == "codex-project-gold-db":
         return open_codex_project(enable_gold_db=True)
+    if args.mode == "codex-project-smart":
+        return open_codex_project_smart()
+    if args.mode == "codex-project-smart-gold-db":
+        return open_codex_project_smart(enable_gold_db=True)
+    if args.mode == "codex-project-smart-power":
+        return open_codex_project_smart_power()
+    if args.mode == "codex-project-smart-search-gold-db":
+        return open_codex_project_smart(search_mode=True, enable_gold_db=True)
     if args.mode == "codex-project-linux-search-gold-db":
         return open_codex_project_linux_home(search_mode=True, enable_gold_db=True)
     if args.mode == "codex-project-power":
