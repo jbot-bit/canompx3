@@ -325,13 +325,19 @@ def collect_git_state(root: Path) -> list[PulseItem]:
     return items
 
 
-_UPDATE_HEADER_RE = re.compile(r"^## Update \((\d{4}-\d{2}-\d{2})(?:[^)]*?\s+[—-]\s+(.*?))?\)$")
+_UPDATE_HEADER_RE = re.compile(r"^## (?:Current Session )?Update \((\d{4}-\d{2}-\d{2})(?:[^)]*?\s+[—-]\s+(.*?))?\)$")
 
 
 def _strip_handoff_markup(text: str) -> str:
     text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
     text = text.replace("`", "")
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _normalize_handoff_step(text: str) -> str:
+    stripped = _strip_handoff_markup(text)
+    bullet_match = re.match(r"^(?:[-*]|\d+\.)\s+(.+)$", stripped)
+    return bullet_match.group(1) if bullet_match else stripped
 
 
 def _extract_first_paragraph(lines: list[str], start_index: int) -> str | None:
@@ -548,7 +554,10 @@ def collect_handoff(root: Path) -> tuple[dict, list[PulseItem]]:
     blocker_keywords = {"failure", "broken", "missing", "error", "cannot", "blocked"}
     context = _parse_rolling_handoff(lines) or _parse_legacy_handoff(lines)
     if queue_steps:
-        if context.get("next_steps") != queue_steps:
+        parsed_steps = context.get("next_steps", [])
+        if parsed_steps and [_normalize_handoff_step(step) for step in parsed_steps] != [
+            _normalize_handoff_step(step) for step in queue_steps
+        ]:
             items.append(
                 PulseItem(
                     category="decaying",

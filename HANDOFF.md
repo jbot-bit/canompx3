@@ -54,6 +54,44 @@
     `git diff --check`, YAML parse, and `uv run python pipeline/check_drift.py`
     passed.
 
+## Current Session Update (2026-05-08 — project pulse handoff parsing)
+
+- Fixed `scripts/tools/project_pulse.py` so handoff parsing recognizes
+  `## Current Session Update (...)` sections and no longer falls through to
+  stale historical `## Next Steps` sections below them.
+- Added handoff-step normalization before queue comparison so numbered or
+  bulleted queue-rendered legacy baton lines do not create false
+  `HANDOFF next steps drifted from canonical action queue` warnings.
+- Live check after the fix:
+  `project_pulse.py --fast --format json` reports `handoff_drift_count=0`,
+  summary `project pulse handoff parsing`, and 3 queue-backed next steps.
+- Focused verification passed:
+  `pytest tests/test_tools/test_project_pulse.py -q`, `ruff check`,
+  `ruff format --check`, `py_compile`, `pipeline/check_drift.py`, and
+  `scripts/tools/audit_behavioral.py`.
+
+## Current Session Update (2026-05-08 — prior-day resource pass)
+
+- Re-checked the local `resources/` PDFs directly for the `PD_*` theory-grant
+  question instead of relying on the older blocker memo's assumptions.
+- Stronger general level-breach grounding was found in
+  `resources/Algorithmic_Trading_Chan.pdf` Ch. 7 and recorded in
+  `docs/institutional/literature/chan_2013_ch7_intraday_momentum.md`:
+  Chan explicitly states that once support/resistance levels are breached,
+  prices can continue for a while because clustered stop orders sit near
+  those levels.
+- Important caveat preserved in the extract:
+  this is **general visible-level stop-cluster grounding**, not an automatic
+  theory grant for the specific `PD_CLEAR_LONG` / `PD_GO_LONG` /
+  `PD_DISPLACE_LONG` prior-day-context filters.
+- Carver Ch. 9-10 in local `resources/Robert Carver - Systematic Trading.pdf`
+  were also checked at the raw-PDF level. They are volatility-targeting /
+  position-sizing chapters, not the missing direct prior-day-level source.
+- Net result: the raw-resource pass improved the local canon for
+  level-breach mechanics, but `PD_*` still should not be treated as
+  automatically reopened under a `t >= 3.00` theory grant without a tighter
+  object-level mapping or a more direct local source on prior-day geometry.
+
 ## Current Session Update (2026-05-08 — live pre-session unblock)
 
 - Baked the readiness prep into the dashboard/operator flow instead of

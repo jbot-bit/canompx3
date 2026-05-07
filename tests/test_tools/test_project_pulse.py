@@ -175,6 +175,101 @@ class TestCollectHandoff:
         assert context["next_steps"] == ["First queue item — Do the queue thing"]
         assert any("drifted from canonical action queue" in i.summary for i in items)
 
+    def test_matching_numbered_legacy_handoff_does_not_drift_from_queue(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "HANDOFF.md",
+            "\n".join(
+                [
+                    "## Last Session",
+                    "- **Tool:** Claude",
+                    "- **Date:** 2026-03-17",
+                    "- **Summary:** Queue-backed baton refreshed",
+                    "",
+                    "## Next Steps — Active",
+                    "1. First queue item — Do the queue thing",
+                ]
+            ),
+        )
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: queue-first",
+                    "    title: First queue item",
+                    "    class: research",
+                    "    status: ready",
+                    "    priority: P1",
+                    "    close_before_new_work: true",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 2",
+                    "    next_action: Do the queue thing",
+                    "    exit_criteria: Finish it",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref: docs/runtime/stages/first.md",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        context, items = collect_handoff(tmp_path)
+
+        assert context["next_steps"] == ["First queue item — Do the queue thing"]
+        assert not any("drifted from canonical action queue" in i.summary for i in items)
+
+    def test_current_session_update_ignores_stale_legacy_next_steps(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "HANDOFF.md",
+            "\n".join(
+                [
+                    "## Current Session Update (2026-05-08 — Fresh work)",
+                    "",
+                    "- Current handoff update without an explicit next-step list.",
+                    "",
+                    "## Next Steps — Active",
+                    "",
+                    "1. stale historical item",
+                ]
+            ),
+        )
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "action-queue.yaml",
+            "\n".join(
+                [
+                    "schema_version: 1",
+                    "updated_at: 2026-04-24T00:00:00+00:00",
+                    "items:",
+                    "  - id: queue-first",
+                    "    title: First queue item",
+                    "    class: research",
+                    "    status: ready",
+                    "    priority: P1",
+                    "    close_before_new_work: true",
+                    "    owner_hint: codex",
+                    "    last_verified_at: 2026-04-24",
+                    "    freshness_sla_days: 2",
+                    "    next_action: Do the queue thing",
+                    "    exit_criteria: Finish it",
+                    "    blocked_by: []",
+                    "    decision_refs: []",
+                    "    evidence_refs: []",
+                    "    notes_ref: docs/runtime/stages/first.md",
+                    "    override_note:",
+                ]
+            ),
+        )
+
+        context, items = collect_handoff(tmp_path)
+
+        assert context["summary"] == "Fresh work"
+        assert context["next_steps"] == ["First queue item — Do the queue thing"]
+        assert not any("drifted from canonical action queue" in i.summary for i in items)
+
     def test_no_blockers_section(self, tmp_path: Path) -> None:
         _mkfile(
             tmp_path / "HANDOFF.md",
