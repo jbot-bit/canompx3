@@ -1318,7 +1318,7 @@ class TestPhase4DiscoveryEnforcement:
                     "theory_citation": "docs/institutional/literature/synthetic.md",
                     "economic_basis": "synthetic fixture for integration tests",
                     "filter": {
-                        "type": "OVNRNG",
+                        "type": "OVNRNG_100",
                         "column": "overnight_range",
                         "thresholds": [50, 75],
                     },
@@ -1637,9 +1637,11 @@ class TestHypothesisFilterInjection:
     Plus two safety tests for the no-op branches:
     - filter already in the legacy grid → no-op (prevents double-counting
       and preserves legacy-mode parity, criterion #3).
-    - filter not in ALL_FILTERS → silent skip (combo enumeration path
-      rejects later via scope_predicate.accepts(), giving a clean
-      zero-combos result instead of a crash).
+    - filter not in ALL_FILTERS → raise ``HypothesisLoaderError``
+      (fail-closed defense-in-depth — the upstream
+      ``hypothesis_loader.extract_scope_predicate`` already rejects
+      unregistered filter_types in every mode, so reaching this branch
+      indicates the upstream gate was bypassed).
     """
 
     @staticmethod
@@ -1794,13 +1796,27 @@ class TestHypothesisFilterInjection:
         # session (once from the legacy grid, once from injection).
         assert "NO_FILTER" not in hypothesis_extra_by_session["NYSE_OPEN"]
 
-    def test_hypothesis_filter_injection_skips_unknown_filter_type(self):
-        """Safety: if the hypothesis file declares a filter_type string
-        that does not exist in ALL_FILTERS, injection silently skips it.
-        The combo enumeration path's ``scope_predicate.accepts()`` check
-        will reject every combo for that type, producing a clean
-        zero-combos result instead of a KeyError or silent pass-through."""
+    def test_hypothesis_filter_injection_raises_on_unknown_filter_type(self):
+        """Defense-in-depth: if a ``ScopePredicate`` reaches injection with
+        a filter_type that is not in ``ALL_FILTERS``, raise
+        ``HypothesisLoaderError``. The upstream
+        ``hypothesis_loader.extract_scope_predicate`` already fails-closed
+        on unregistered filters in every mode (clean and proxy), so
+        reaching this branch means the upstream gate was bypassed (e.g.
+        a ScopePredicate constructed in code, not loaded from YAML).
+
+        Mutation test: bypass the upstream gate by building a
+        ``ScopePredicate`` directly with a filter_type that does not
+        exist in ALL_FILTERS, and assert the helper raises rather than
+        silently producing a zero-combos discovery run.
+        """
+        from trading_app.config import ALL_FILTERS
+        from trading_app.hypothesis_loader import HypothesisLoaderError
         from trading_app.strategy_discovery import _inject_hypothesis_filters
+
+        # Sanity: confirm the chosen filter_type really is unregistered,
+        # so the test exercises the fail-closed branch deliberately.
+        assert "NONSENSE_FILTER_TYPE" not in ALL_FILTERS
 
         sessions = ["NYSE_OPEN"]
         all_grid_filters: dict = {}
@@ -1808,12 +1824,10 @@ class TestHypothesisFilterInjection:
 
         sp = self._build_scope_predicate(["NONSENSE_FILTER_TYPE"], sessions)
 
-        _inject_hypothesis_filters(
-            scope_predicate=sp,
-            sessions=sessions,
-            all_grid_filters=all_grid_filters,
-            hypothesis_extra_by_session=hypothesis_extra_by_session,
-        )
-
-        assert all_grid_filters == {}
-        assert hypothesis_extra_by_session["NYSE_OPEN"] == {}
+        with pytest.raises(HypothesisLoaderError, match="not registered in"):
+            _inject_hypothesis_filters(
+                scope_predicate=sp,
+                sessions=sessions,
+                all_grid_filters=all_grid_filters,
+                hypothesis_extra_by_session=hypothesis_extra_by_session,
+            )

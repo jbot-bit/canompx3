@@ -1111,9 +1111,11 @@ def _inject_hypothesis_filters(
     Both dicts are mutated in place.
 
     Safety rules:
-    - Filter must exist in ``ALL_FILTERS``. Unknown strings are silently
-      skipped here; ``scope_predicate.accepts()`` will reject the combo at
-      combo-enumeration time, producing a clean zero-combos result.
+    - Filter must exist in ``ALL_FILTERS``. Unknown filter_types raise
+      ``HypothesisLoaderError`` here as defense-in-depth — the upstream
+      ``hypothesis_loader.extract_scope_predicate`` already rejects
+      unknown filters in every mode, so reaching this branch indicates
+      the upstream gate was bypassed.
     - DOW composites (``CompositeFilter`` with a ``DayOfWeekSkipFilter``
       overlay) are skipped for sessions in ``DOW_MISALIGNED_SESSIONS``
       because Brisbane DOW != exchange DOW at NYSE_OPEN. A Friday-skip
@@ -1123,12 +1125,20 @@ def _inject_hypothesis_filters(
     - E2 look-ahead filters are still blocked downstream by
       ``is_e2_lookahead_filter()`` during combo enumeration.
     """
+    from trading_app.hypothesis_loader import HypothesisLoaderError
+
     declared_filter_types = scope_predicate.allowed_filter_types()
     for ft in declared_filter_types:
         if ft in all_grid_filters:
             continue  # already in legacy grid
         if ft not in ALL_FILTERS:
-            continue  # unknown — scope predicate will reject anyway
+            raise HypothesisLoaderError(
+                f"hypothesis declares filter.type {ft!r} which is not registered in "
+                f"trading_app.config.ALL_FILTERS. Upstream gate (hypothesis_loader) "
+                f"should have rejected this; reaching here means the upstream gate "
+                f"was bypassed. Fail-closed to prevent a silent zero-combos "
+                f"discovery run against an undeclared scope."
+            )
         filter_obj = ALL_FILTERS[ft]
         is_dow_composite = isinstance(filter_obj, CompositeFilter) and isinstance(
             filter_obj.overlay, DayOfWeekSkipFilter

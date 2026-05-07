@@ -747,22 +747,28 @@ def extract_scope_predicate(
         if not isinstance(filter_type, str) or not filter_type:
             raise HypothesisLoaderError(f"{h_tag} filter.type must be a non-empty string")
 
-        if proxy_mode:
-            from trading_app.config import ALL_FILTERS
+        # Fail-closed: filter_type MUST be registered in ALL_FILTERS in every
+        # mode (not only proxy). An unregistered filter is silently skipped
+        # downstream in strategy_discovery._inject_hypothesis_filters and
+        # produces a zero-combos result with only a logger.warning the
+        # operator may miss. Per integrity-guardian.md § 3, warnings are
+        # not sufficient in audit/discipline paths — we fail-closed here.
+        from trading_app.config import ALL_FILTERS
 
-            filter_obj = ALL_FILTERS.get(filter_type)
-            if filter_obj is None:
-                raise HypothesisLoaderError(
-                    f"{h_tag} uses filter.type {filter_type!r} in proxy mode, but the filter is not "
-                    "registered in ALL_FILTERS so proxy-safety cannot be classified. "
-                    "Proxy hypotheses must use known, classifiable filters."
-                )
-            if filter_obj.requires_micro_data:
-                raise HypothesisLoaderError(
-                    f"{h_tag} uses micro-only filter.type {filter_type!r} in proxy mode. "
-                    "Proxy hypotheses may only use price-safe filters; requires_micro_data "
-                    "filters are invalid on parent/proxy data."
-                )
+        filter_obj = ALL_FILTERS.get(filter_type)
+        if filter_obj is None:
+            raise HypothesisLoaderError(
+                f"{h_tag} uses filter.type {filter_type!r}, but the filter is not "
+                "registered in trading_app.config.ALL_FILTERS. Hypotheses must use "
+                "known, registered filters so the discovery grid actually exercises "
+                "the declared scope."
+            )
+        if proxy_mode and filter_obj.requires_micro_data:
+            raise HypothesisLoaderError(
+                f"{h_tag} uses micro-only filter.type {filter_type!r} in proxy mode. "
+                "Proxy hypotheses may only use price-safe filters; requires_micro_data "
+                "filters are invalid on parent/proxy data."
+            )
 
         sessions_raw = scope.get("sessions")
         if not isinstance(sessions_raw, list) or not sessions_raw:

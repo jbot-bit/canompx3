@@ -343,7 +343,7 @@ def _make_scoped_hypothesis(
     entry_models: list[str] | None = None,
     confirm_bars: list[int] | None = None,
     stop_multipliers: list[float] | None = None,
-    filter_type: str = "OVNRNG",
+    filter_type: str = "OVNRNG_100",
     expected_trials: int = 10,
     hypothesis_id: int = 1,
 ) -> dict:
@@ -512,7 +512,7 @@ class TestScopePredicate:
             "hypotheses": [
                 _make_scoped_hypothesis(
                     hypothesis_id=1,
-                    filter_type="OVNRNG",
+                    filter_type="OVNRNG_100",
                     instruments=["MNQ"],
                     sessions=["EUROPE_FLOW"],
                     rr_targets=[1.0, 1.5, 2.0],
@@ -520,7 +520,7 @@ class TestScopePredicate:
                 ),
                 _make_scoped_hypothesis(
                     hypothesis_id=2,
-                    filter_type="ORB_G",
+                    filter_type="ORB_G5",
                     instruments=["MGC"],
                     sessions=["CME_REOPEN"],
                     rr_targets=[2.0, 2.5],
@@ -552,13 +552,13 @@ class TestScopePredicate:
             "hypotheses": [
                 _make_scoped_hypothesis(
                     hypothesis_id=1,
-                    filter_type="OVNRNG",
+                    filter_type="OVNRNG_100",
                     instruments=["MNQ"],
                     sessions=["EUROPE_FLOW"],
                 ),
                 _make_scoped_hypothesis(
                     hypothesis_id=2,
-                    filter_type="ORB_G",
+                    filter_type="ORB_G5",
                     instruments=["MNQ"],
                     sessions=["CME_REOPEN"],
                 ),
@@ -569,7 +569,7 @@ class TestScopePredicate:
         # Valid: OVNRNG + EUROPE_FLOW
         assert pred.accepts(
             orb_label="EUROPE_FLOW",
-            filter_type="OVNRNG",
+            filter_type="OVNRNG_100",
             entry_model="E2",
             rr_target=1.5,
             confirm_bars=1,
@@ -578,7 +578,7 @@ class TestScopePredicate:
         # Valid: ORB_G + CME_REOPEN
         assert pred.accepts(
             orb_label="CME_REOPEN",
-            filter_type="ORB_G",
+            filter_type="ORB_G5",
             entry_model="E2",
             rr_target=1.5,
             confirm_bars=1,
@@ -587,7 +587,7 @@ class TestScopePredicate:
         # INVALID: OVNRNG + CME_REOPEN — cross-pollination
         assert not pred.accepts(
             orb_label="CME_REOPEN",
-            filter_type="OVNRNG",
+            filter_type="OVNRNG_100",
             entry_model="E2",
             rr_target=1.5,
             confirm_bars=1,
@@ -596,7 +596,7 @@ class TestScopePredicate:
         # INVALID: ORB_G + EUROPE_FLOW — the other cross-pollination
         assert not pred.accepts(
             orb_label="EUROPE_FLOW",
-            filter_type="ORB_G",
+            filter_type="ORB_G5",
             entry_model="E2",
             rr_target=1.5,
             confirm_bars=1,
@@ -608,7 +608,7 @@ class TestScopePredicate:
         meta = {
             "hypotheses": [
                 _make_scoped_hypothesis(
-                    filter_type="OVNRNG",
+                    filter_type="OVNRNG_100",
                     instruments=["MNQ"],
                     sessions=["EUROPE_FLOW"],
                     rr_targets=[2.0],
@@ -622,7 +622,7 @@ class TestScopePredicate:
         # Baseline: all 6 dimensions valid
         assert pred.accepts(
             orb_label="EUROPE_FLOW",
-            filter_type="OVNRNG",
+            filter_type="OVNRNG_100",
             entry_model="E2",
             rr_target=2.0,
             confirm_bars=1,
@@ -634,7 +634,7 @@ class TestScopePredicate:
         # strict per-parameter typing).
         assert not pred.accepts(
             orb_label="NYSE_OPEN",
-            filter_type="OVNRNG",
+            filter_type="OVNRNG_100",
             entry_model="E2",
             rr_target=2.0,
             confirm_bars=1,
@@ -642,7 +642,7 @@ class TestScopePredicate:
         )
         assert not pred.accepts(
             orb_label="EUROPE_FLOW",
-            filter_type="ORB_G",
+            filter_type="ORB_G5",
             entry_model="E2",
             rr_target=2.0,
             confirm_bars=1,
@@ -650,7 +650,7 @@ class TestScopePredicate:
         )
         assert not pred.accepts(
             orb_label="EUROPE_FLOW",
-            filter_type="OVNRNG",
+            filter_type="OVNRNG_100",
             entry_model="E1",
             rr_target=2.0,
             confirm_bars=1,
@@ -658,7 +658,7 @@ class TestScopePredicate:
         )
         assert not pred.accepts(
             orb_label="EUROPE_FLOW",
-            filter_type="OVNRNG",
+            filter_type="OVNRNG_100",
             entry_model="E2",
             rr_target=1.5,
             confirm_bars=1,
@@ -666,7 +666,7 @@ class TestScopePredicate:
         )
         assert not pred.accepts(
             orb_label="EUROPE_FLOW",
-            filter_type="OVNRNG",
+            filter_type="OVNRNG_100",
             entry_model="E2",
             rr_target=2.0,
             confirm_bars=2,
@@ -674,7 +674,7 @@ class TestScopePredicate:
         )
         assert not pred.accepts(
             orb_label="EUROPE_FLOW",
-            filter_type="OVNRNG",
+            filter_type="OVNRNG_100",
             entry_model="E2",
             rr_target=2.0,
             confirm_bars=1,
@@ -686,13 +686,13 @@ class TestScopePredicate:
             "hypotheses": [
                 _make_scoped_hypothesis(
                     hypothesis_id=1,
-                    filter_type="OVNRNG",
+                    filter_type="OVNRNG_100",
                     instruments=["MNQ"],
                     sessions=["EUROPE_FLOW", "NYSE_OPEN"],
                 ),
                 _make_scoped_hypothesis(
                     hypothesis_id=2,
-                    filter_type="ORB_G",
+                    filter_type="ORB_G5",
                     instruments=["MNQ"],
                     sessions=["CME_REOPEN"],
                 ),
@@ -705,7 +705,7 @@ class TestScopePredicate:
         meta = {
             "hypotheses": [
                 _make_scoped_hypothesis(hypothesis_id=1, instruments=["MNQ"], expected_trials=30),
-                _make_scoped_hypothesis(hypothesis_id=2, instruments=["MNQ"], expected_trials=45, filter_type="ORB_G"),
+                _make_scoped_hypothesis(hypothesis_id=2, instruments=["MNQ"], expected_trials=45, filter_type="ORB_G5"),
             ]
         }
         pred = extract_scope_predicate(meta, instrument="MNQ")
@@ -819,8 +819,34 @@ class TestScopePredicate:
                 )
             ],
         }
-        with pytest.raises(HypothesisLoaderError, match="not registered in ALL_FILTERS"):
+        with pytest.raises(HypothesisLoaderError, match="not registered in"):
             extract_scope_predicate(meta, instrument="MGC")
+
+    def test_clean_mode_rejects_unknown_filter(self):
+        """Clean (non-proxy) mode must also fail-closed on an unregistered filter.type.
+
+        Regression test for the silent-failure surface where a typo'd or
+        unregistered filter.type passed hypothesis validation in clean mode
+        and was then silently dropped downstream by
+        ``strategy_discovery._inject_hypothesis_filters`` — producing a
+        zero-combos discovery run with only a logger.warning the operator
+        could miss. Per integrity-guardian.md § 3, warnings are not
+        sufficient in audit/discipline paths.
+        """
+        meta = {
+            "metadata": {
+                # No data_source_mode → defaults to "clean".
+            },
+            "hypotheses": [
+                _make_scoped_hypothesis(
+                    hypothesis_id=1,
+                    filter_type="DEFINITELY_UNKNOWN_FILTER",
+                    instruments=["MNQ"],
+                )
+            ],
+        }
+        with pytest.raises(HypothesisLoaderError, match="not registered in"):
+            extract_scope_predicate(meta, instrument="MNQ")
 
 
 class TestTestingMode:
