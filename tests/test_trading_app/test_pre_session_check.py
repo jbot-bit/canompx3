@@ -892,16 +892,9 @@ class TestStage4InactivityWindow:
         """Source-file scan: UNGROUNDED + Rationale: tokens in the function
         body, near the 25-day buffer constant.
         """
-        from trading_app import pre_session_check as ps_mod
+        import inspect
 
-        mod_file = ps_mod.__file__
-        assert mod_file is not None
-        src = Path(mod_file).read_text(encoding="utf-8")
-        # Locate the function body
-        assert "def check_topstep_inactivity_window" in src
-        idx = src.index("def check_topstep_inactivity_window")
-        # Grab the next 3000 chars (function body)
-        body = src[idx : idx + 3000]
+        body = inspect.getsource(check_topstep_inactivity_window)
         assert "UNGROUNDED" in body, "Missing UNGROUNDED label on the buffer constant"
         assert "Rationale:" in body, "Missing Rationale: block on the buffer constant"
         assert "_INACTIVITY_WARN_DAYS" in body or "25.0" in body, "Missing buffer constant"

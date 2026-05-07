@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -45,7 +46,7 @@ def test_simple_stdio_server_initializes_and_lists_tools(tmp_path: Path) -> None
     )
 
     root = Path(__file__).resolve().parents[2]
-    env = dict(**{"PYTHONPATH": str(root)}, **dict())
+    env = {**os.environ, "PYTHONPATH": str(root)}
     proc = subprocess.Popen(
         [sys.executable, str(script)],
         cwd=root,

@@ -6,6 +6,54 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Current Session Update (2026-05-08 - Codex GitHub CI unblock)
+
+- GitHub is connected. There was no open PR for this repo when checked; the
+  most recent PR was #254 and it was already merged. Work continued on branch
+  `codex/unblock-ci-main` from current `main` to unblock the failing main CI.
+- Root CI failure was the monolithic Windows pytest coverage step being
+  interrupted around six minutes after collecting 5,608 tests, not an assertion
+  failure. The workflow now shards coverage into bounded pytest processes:
+  repo core, tools/research, pipeline drift, pipeline core, and four
+  trading-app shards.
+- Fixed six local blockers surfaced while validating the CI unblock:
+  - `tests/test_pipeline/test_check_drift.py` no longer relies on `ls` being on
+    Windows PATH for the failing-command short-circuit test.
+  - `scripts/tools/project_pulse.py` keeps text output under the existing
+    scannability cap by compacting the header/authority line and capping
+    lower-priority item lists.
+  - `pipeline/system_context.py` no longer uses `os.kill(pid, 0)` as a
+    liveness probe on Windows. On Windows signal `0` sends a console control
+    event, which was interrupting grouped pytest runs during preflight-claim
+    checks; it now queries the process handle instead.
+  - `tests/test_tools/test_simple_mcp_stdio.py` preserves the parent
+    environment when launching the probe stdio server and only overrides
+    `PYTHONPATH`. The previous near-empty env let `pip_system_certs` emit a
+    startup error on stdout before the JSON-RPC response.
+  - `tests/test_trading_app/test_account_hwm_tracker.py` keeps the daily-state
+    persistence reload under the same mocked clock so the persistence test does
+    not age into the production 30-day stale-state fail-closed guard. Dedicated
+    stale-state boundary tests still cover that guard.
+  - `tests/test_trading_app/test_pre_session_check.py` now inspects the full
+    `check_topstep_inactivity_window()` source instead of a fixed 3000-character
+    slice, so the 25-day buffer rationale test remains stable after the function
+    grew to include profile/account filtering.
+- Verification run in this Windows worktree:
+  - shard selectors collect the original 5,608-test surface as
+    403/890/379/984/1231/582/905/234 tests.
+  - `uv run pytest tests/test_tools/test_project_pulse.py tests/test_tools/test_pulse_integration.py tests/test_pipeline/test_check_drift.py::TestStageAcceptanceRunner -q`
+    passed (`87 passed`).
+  - pipeline drift shard command with coverage passed (`377 passed, 2 skipped`).
+  - GitHub failing tools/research shard command now passes locally:
+    `881 passed, 9 skipped`.
+  - GitHub failing trading-app A-L shard command now passes locally:
+    `1222 passed, 9 skipped`.
+  - GitHub failing trading-app M-P shard command now passes locally:
+    `581 passed, 1 skipped`.
+  - `uv run ruff format --check ...`, `uv run ruff check ...`,
+    `git diff --check`, YAML parse, and `uv run python pipeline/check_drift.py`
+    passed.
+
 ## Current Session Update (2026-05-08 — live pre-session unblock)
 
 - Baked the readiness prep into the dashboard/operator flow instead of

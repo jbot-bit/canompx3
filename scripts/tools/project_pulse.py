@@ -2171,15 +2171,14 @@ SEVERITY_ICONS = {"high": "!", "medium": "~", "low": " "}
 def format_text(report: PulseReport) -> str:
     """Concise terminal output for humans."""
     lines: list[str] = []
-    lines.append("=" * 60)
-    lines.append("PROJECT PULSE")
-    lines.append("=" * 60)
     meta_parts = [f"Branch: {report.git_branch}", f"HEAD: {report.git_head}"]
     if report.cache_hit:
         meta_parts.append("(cached)")
     if report.time_since_green:
         meta_parts.append(f"Green: {report.time_since_green}")
-    lines.append("  ".join(meta_parts))
+    lines.append("=" * 60)
+    lines.append(f"PROJECT PULSE | {'  '.join(meta_parts)}")
+    lines.append("=" * 60)
     lines.append("")
 
     # Session delta (what changed since last session)
@@ -2204,10 +2203,9 @@ def format_text(report: PulseReport) -> str:
         if identity.get("db_override_active"):
             lines.append(f"  Active DB override: {identity.get('selected_db_path')}")
         lines.append(f"  Active ORB instruments: {', '.join(identity.get('active_orb_instruments', [])) or 'none'}")
-        lines.append(f"  Shelf contracts: {relations.get('active', '?')}, {relations.get('deployable', '?')}")
         lines.append(
-            f"  Authority: {identity.get('authority_map_doc')} "
-            f"({doctrine_count} doctrine, {backbone_count} backbone) — see --json for full list"
+            f"  Shelf: {relations.get('active', '?')}, {relations.get('deployable', '?')} | "
+            f"Authority: {identity.get('authority_map_doc')} ({doctrine_count} doctrine, {backbone_count} backbone)"
         )
         lines.append("")
 
@@ -2277,7 +2275,7 @@ def format_text(report: PulseReport) -> str:
         lines.append("")
 
     # Cap display items per category to keep output scannable
-    MAX_DISPLAY = {"ready": 5, "unactioned": 5, "paused": 5}
+    MAX_DISPLAY = {"decaying": 5, "ready": 5, "unactioned": 3, "paused": 3}
     for cat in CATEGORIES:
         cat_items = [i for i in report.items if i.category == cat]
         if not cat_items:

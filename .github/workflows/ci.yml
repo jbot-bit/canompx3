@@ -71,5 +71,93 @@ jobs:
         run: uv run pip-audit --desc on
         continue-on-error: true
 
-      - name: Tests with coverage
-        run: uv run pytest tests/ -v --ignore=tests/test_trader_logic.py --cov=pipeline --cov=trading_app --cov-report=term-missing --cov-fail-under=35
+      - name: Clear coverage data
+        run: uv run coverage erase
+
+      - name: Tests with coverage (repo core)
+        run: >
+          uv run pytest tests/ -q
+          --ignore=tests/test_trader_logic.py
+          --ignore=tests/test_pipeline
+          --ignore=tests/test_trading_app
+          --ignore=tests/test_research
+          --ignore=tests/test_tools
+          --ignore=tests/tools
+          --ignore=tests/test_integration
+          --ignore=tests/test_mf_futures
+          --cov=pipeline --cov=trading_app --cov-report= --cov-append
+
+      - name: Tests with coverage (tools and research)
+        run: >
+          uv run pytest
+          tests/test_research
+          tests/test_tools
+          tests/tools
+          tests/test_integration
+          tests/test_mf_futures
+          -q
+          --cov=pipeline --cov=trading_app --cov-report= --cov-append
+
+      - name: Tests with coverage (pipeline drift)
+        run: |
+          $paths = Get-ChildItem tests/test_pipeline -File -Filter "test_check_drift*.py" | ForEach-Object { $_.FullName }
+          uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
+
+      - name: Tests with coverage (pipeline core)
+        run: >
+          uv run pytest tests/test_pipeline -q
+          --ignore=tests/test_pipeline/test_check_drift.py
+          --ignore=tests/test_pipeline/test_check_drift_aperture.py
+          --ignore=tests/test_pipeline/test_check_drift_context.py
+          --ignore=tests/test_pipeline/test_check_drift_crg.py
+          --ignore=tests/test_pipeline/test_check_drift_crypto_pin.py
+          --ignore=tests/test_pipeline/test_check_drift_db.py
+          --ignore=tests/test_pipeline/test_check_drift_db_path_usage.py
+          --ignore=tests/test_pipeline/test_check_drift_e2_lookahead.py
+          --ignore=tests/test_pipeline/test_check_drift_scratch_policy.py
+          --ignore=tests/test_pipeline/test_check_drift_slow_labels.py
+          --ignore=tests/test_pipeline/test_check_drift_ws2.py
+          --cov=pipeline --cov=trading_app --cov-report= --cov-append
+
+      - name: Tests with coverage (trading app A-L)
+        run: |
+          $patterns = @("test_a*.py", "test_b*.py", "test_c*.py", "test_d*.py", "test_e*.py", "test_h*.py", "test_i*.py", "test_l*.py")
+          $paths = @()
+          foreach ($pattern in $patterns) {
+            $paths += Get-ChildItem tests/test_trading_app -File -Filter $pattern | ForEach-Object { $_.FullName }
+          }
+          $paths += "tests/test_trading_app/test_ai"
+          uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
+
+      - name: Tests with coverage (trading app M-P)
+        run: |
+          $patterns = @("test_m*.py", "test_n*.py", "test_o*.py", "test_p*.py")
+          $paths = @()
+          foreach ($pattern in $patterns) {
+            $paths += Get-ChildItem tests/test_trading_app -File -Filter $pattern | ForEach-Object { $_.FullName }
+          }
+          $paths += "tests/test_trading_app/test_nested"
+          uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
+
+      - name: Tests with coverage (trading app R-S)
+        run: |
+          $patterns = @("test_r*.py", "test_s*.py")
+          $paths = @()
+          foreach ($pattern in $patterns) {
+            $paths += Get-ChildItem tests/test_trading_app -File -Filter $pattern | ForEach-Object { $_.FullName }
+          }
+          $paths += "tests/test_trading_app/test_regime"
+          $paths += "tests/test_trading_app/test_strategy_validator"
+          uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
+
+      - name: Tests with coverage (trading app T-Z)
+        run: |
+          $patterns = @("test_t*.py", "test_v*.py", "test_w*.py")
+          $paths = @()
+          foreach ($pattern in $patterns) {
+            $paths += Get-ChildItem tests/test_trading_app -File -Filter $pattern | ForEach-Object { $_.FullName }
+          }
+          uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
+
+      - name: Coverage threshold
+        run: uv run coverage report --show-missing --fail-under=35

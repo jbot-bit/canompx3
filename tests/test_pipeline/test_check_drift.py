@@ -2088,8 +2088,9 @@ class TestStageAcceptanceRunner:
         assert n_ran == 1
 
     def test_failing_command_short_circuits(self):
-        # `ls` on a definitely-missing path returns non-zero
-        cmds = ["ls /definitely/does/not/exist/xyz123"]
+        # Keep this portable: GitHub's Windows runner has ls.exe from Git on PATH,
+        # but local Windows shells may not.
+        cmds = ['python -c "raise SystemExit(7)"']
         all_pass, n_ran = _stage_acceptance_all_pass(cmds)
         assert all_pass is False
         assert n_ran == 1
