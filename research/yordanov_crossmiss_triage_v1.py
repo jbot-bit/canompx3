@@ -37,18 +37,15 @@ import csv
 import math
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 import duckdb
-import numpy as np
 import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
 from research.filter_utils import filter_signal
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
-
 
 # ---------------------------------------------------------------------------
 # Lane scope — verbatim from docs/runtime/lane_allocation.json:7-65 (deployed
@@ -93,21 +90,10 @@ LOCKED_COMMIT_SHA = "fd7c5073"
 Bucket = Literal["NO_CROSS", "CROSS_HIT", "CROSS_MISS"]
 
 
-@dataclass
-class TradeRow:
-    trading_day: pd.Timestamp
-    entry_ts: pd.Timestamp
-    entry_price: float
-    pnl_r: float
-    orb_high: float
-    orb_low: float
-    bucket: Bucket
-    favourable_excursion_pts: float
-
-
 # ---------------------------------------------------------------------------
 # (1) load_lane_outcomes — canonical SQL with triple-join + filter columns.
 # ---------------------------------------------------------------------------
+
 
 def load_lane_outcomes(con: duckdb.DuckDBPyConnection, lane: dict) -> pd.DataFrame:
     """Load IS orb_outcomes JOIN daily_features (triple-join) for one lane.
@@ -169,6 +155,7 @@ def load_lane_outcomes(con: duckdb.DuckDBPyConnection, lane: dict) -> pd.DataFra
 # (2) apply_canonical_filter — wraps research.filter_utils.filter_signal.
 # ---------------------------------------------------------------------------
 
+
 def apply_canonical_filter(df: pd.DataFrame, filter_key: str, orb_label: str) -> pd.DataFrame:
     """Apply canonical lane filter. Returns rows where filter fires (signal==1)."""
     if df.empty:
@@ -180,6 +167,7 @@ def apply_canonical_filter(df: pd.DataFrame, filter_key: str, orb_label: str) ->
 # ---------------------------------------------------------------------------
 # (3) load_post_entry_bars — strict ts_utc > entry_ts.
 # ---------------------------------------------------------------------------
+
 
 def load_post_entry_bars(
     con: duckdb.DuckDBPyConnection,
@@ -213,6 +201,7 @@ def load_post_entry_bars(
 # (4) classify_trade — first-event-wins bucket assignment.
 # ---------------------------------------------------------------------------
 
+
 def classify_trade(
     orb_high: float,
     orb_low: float,
@@ -230,12 +219,12 @@ def classify_trade(
     back through the Filter Mid"). Dev target met on bar high/low (favourable
     excursion can be reached intra-bar).
 
-    First-event-wins loop:
-      - Iterate bars in ts order
-      - On each bar, check (a) favourable excursion >= dev target, (b) close
-        crossed mid in opposite direction
-      - If both happen on the same bar: dev hit takes precedence (Yordanov
-        § 3.8 group ② "by definition hit the 0.5x target").
+    Bucket assignment is presence-based (order-agnostic), per Yordanov § 3.8:
+      NO_CROSS   = no opposite-direction close-cross of orb_mid in window
+      CROSS_HIT  = cross occurred AND favourable excursion reached 0.5x dev
+      CROSS_MISS = cross occurred AND favourable excursion never reached 0.5x
+    Returned `max_favourable_excursion_pts` is the true session max across
+    the full post-entry window (not truncated to the bucket-assignment bar).
     """
     orb_mid = (orb_high + orb_low) / 2.0
     dev_target = 0.5 * (orb_high - orb_low)
@@ -247,86 +236,39 @@ def classify_trade(
     else:
         # Edge case: entry exactly on mid. Pre-reg side_resolution: warned and
         # excluded (caller decides; we return a sentinel by raising).
-        raise ValueError(
-            f"entry_price == orb_mid ({entry_price}) — undecidable side"
-        )
+        raise ValueError(f"entry_price == orb_mid ({entry_price}) — undecidable side")
 
     if post_entry_bars.empty:
-        # No post-entry data — no cross, no excursion. Treat as NO_CROSS
-        # with zero excursion. This is data-sparse but bucket-coherent.
         return "NO_CROSS", 0.0
 
     cross_seen = False
     max_excursion = 0.0
     for bar in post_entry_bars.itertuples(index=False):
-        # Favourable excursion (intra-bar high/low):
         if side == "long":
             excursion = float(bar.high) - entry_price
+            if not cross_seen and float(bar.close) < orb_mid:
+                cross_seen = True
         else:
             excursion = entry_price - float(bar.low)
+            if not cross_seen and float(bar.close) > orb_mid:
+                cross_seen = True
         if excursion > max_excursion:
             max_excursion = excursion
 
-        if excursion >= dev_target:
-            # Dev hit. If cross already seen → CROSS_HIT; else NO_CROSS-but-hit
-            # is impossible in our mapping because hit-without-cross still
-            # belongs to NO_CROSS group (group ① has 85% hit-rate; hit is the
-            # outcome, not the bucket label). Group ② is hit AFTER cross.
-            if cross_seen:
-                return "CROSS_HIT", max_excursion
-            else:
-                # Continue scanning to see if a later cross occurs — but the
-                # dev hit already occurred without prior cross, which puts the
-                # trade in NO_CROSS-and-hit territory (group ① with hit=true).
-                # We still need to scan remaining bars for the cross detector
-                # so we know whether to label CROSS_HIT (cross AFTER dev hit).
-                # Yordanov defines group ② as "Cross + Dev Hit" but the
-                # ordering is "cross then hit" (he says "Episode 1 reached the
-                # 0.5x deviation target before the cross" → group ②).
-                # Re-reading § 3.8 verbatim:
-                #   ② Cross + Dev Hit (n=35): hit the 0.5x target (100%)
-                # So group ② is "cross occurred AND dev was hit". The
-                # ordering ambiguity is which-came-first. Yordanov § 3.5 +
-                # § 3.8 say: Episode 1 reaches 0.5x BEFORE cross → group ②;
-                # cross BEFORE 0.5x → group ③. So:
-                #   - dev hit FIRST, then cross → group ②
-                #   - cross FIRST, then dev hit → group ② (still "Cross + Hit")
-                #   - dev hit, no subsequent cross → group ① with hit
-                # Group ② definition is "cross occurred at some point AND
-                # 0.5x target was hit at some point" — order does not matter
-                # for bucket assignment, only for the 100%-by-definition claim.
-                # Simpler: bucket = NO_CROSS iff no cross ever; CROSS_HIT iff
-                # cross occurred AND dev hit; CROSS_MISS iff cross occurred
-                # AND dev never hit.
-                # → continue scanning.
-                pass
-
-        # Mid-cross check (close-based, opposite-direction):
-        if not cross_seen:
-            if side == "long" and float(bar.close) < orb_mid:
-                cross_seen = True
-            elif side == "short" and float(bar.close) > orb_mid:
-                cross_seen = True
-                # If cross happens BEFORE dev hit, this is the CROSS_MISS
-                # signature unless a later dev hit promotes to CROSS_HIT.
-
     dev_hit = max_excursion >= dev_target
-
     if not cross_seen:
         return "NO_CROSS", max_excursion
-    elif dev_hit:
+    if dev_hit:
         return "CROSS_HIT", max_excursion
-    else:
-        return "CROSS_MISS", max_excursion
+    return "CROSS_MISS", max_excursion
 
 
 # ---------------------------------------------------------------------------
 # (5) compute_lane_buckets — orchestrates per-trade classification.
 # ---------------------------------------------------------------------------
 
-def compute_lane_buckets(
-    con: duckdb.DuckDBPyConnection, lane: dict
-) -> tuple[pd.DataFrame, dict]:
+
+def compute_lane_buckets(con: duckdb.DuckDBPyConnection, lane: dict) -> tuple[pd.DataFrame, dict]:
     """For one lane: load filtered IS trades, classify each, return frame + diags."""
     raw = load_lane_outcomes(con, lane)
     n_unfiltered = len(raw)
@@ -366,9 +308,7 @@ def compute_lane_buckets(
             no_post_bars += 1
 
         try:
-            bucket, excursion = classify_trade(
-                row.orb_high, row.orb_low, float(row.entry_price), bars
-            )
+            bucket, excursion = classify_trade(row.orb_high, row.orb_low, float(row.entry_price), bars)
         except ValueError:
             excluded_mid_eq += 1
             continue
@@ -403,6 +343,7 @@ def compute_lane_buckets(
 # ---------------------------------------------------------------------------
 # (6) summarize_lane — bucket counts, hit-rates, gap, lane verdict tier.
 # ---------------------------------------------------------------------------
+
 
 def summarize_lane(df: pd.DataFrame, lane: dict, diags: dict) -> dict:
     """Per-lane summary aligned with pooled-finding-rule per-lane table cols."""
@@ -479,6 +420,7 @@ def summarize_lane(df: pd.DataFrame, lane: dict, diags: dict) -> dict:
 # (7) pool_summary — pooled hit-rates, gap, flip rate, two-prop z-test.
 # ---------------------------------------------------------------------------
 
+
 def pool_summary(per_lane: list[dict]) -> dict:
     """Pool buckets across lanes; compute flip_rate_pct and z-test on NC vs CM.
 
@@ -513,12 +455,7 @@ def pool_summary(per_lane: list[dict]) -> dict:
         pooled_gap_pp = (pooled_hr_nc - pooled_hr_cm) * 100.0
 
     # Two-proportion z-test: NO_CROSS hits vs CROSS_MISS hits.
-    if (
-        not math.isnan(pooled_hr_nc)
-        and not math.isnan(pooled_hr_cm)
-        and n_nc > 0
-        and n_cm > 0
-    ):
+    if not math.isnan(pooled_hr_nc) and not math.isnan(pooled_hr_cm) and n_nc > 0 and n_cm > 0:
         x_nc = pooled_hr_nc * n_nc
         x_cm = pooled_hr_cm * n_cm
         p_pool = (x_nc + x_cm) / (n_nc + n_cm)
@@ -541,23 +478,17 @@ def pool_summary(per_lane: list[dict]) -> dict:
         if not eligible:
             flip_rate_pct = float("nan")
         else:
-            flips = sum(
-                1 for d in eligible
-                if (1 if d["gap_pp"] >= 0 else -1) != pooled_sign
-            )
+            flips = sum(1 for d in eligible if (1 if d["gap_pp"] >= 0 else -1) != pooled_sign)
             flip_rate_pct = 100.0 * flips / len(eligible)
 
     # Pooled verdict per locked kill criteria (precedence per pre-reg)
-    if any(d["tier"] == "UNDERPOWERED" for d in per_lane):
-        verdict = "UNDERPOWERED"
-    elif math.isnan(pooled_gap_pp):
+    if any(d["tier"] == "UNDERPOWERED" for d in per_lane) or math.isnan(pooled_gap_pp):
         verdict = "UNDERPOWERED"
     elif pooled_gap_pp < 20:
         verdict = "FALSIFIED"
     elif pooled_gap_pp >= 35:
         per_lane_passes = sum(
-            1 for d in per_lane
-            if not math.isnan(d["gap_pp"]) and d["gap_pp"] >= 25 and d["tier"] != "UNDERPOWERED"
+            1 for d in per_lane if not math.isnan(d["gap_pp"]) and d["gap_pp"] >= 25 and d["tier"] != "UNDERPOWERED"
         )
         verdict = "SURVIVES" if per_lane_passes >= 2 else "AMBIGUOUS"
     else:
@@ -583,8 +514,9 @@ def pool_summary(per_lane: list[dict]) -> dict:
 # (8) write_outputs — md result + companion CSV + decision-ledger append.
 # ---------------------------------------------------------------------------
 
+
 def _fmt_pct(x: float) -> str:
-    return "n/a" if math.isnan(x) else f"{x*100:.1f}%"
+    return "n/a" if math.isnan(x) else f"{x * 100:.1f}%"
 
 
 def _fmt_pp(x: float) -> str:
@@ -606,28 +538,61 @@ def write_outputs(
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow([
-            "scope", "lane", "N_total",
-            "N_NO_CROSS", "hit_rate_NO_CROSS", "expr_NO_CROSS",
-            "N_CROSS_HIT", "hit_rate_CROSS_HIT_05x", "expr_CROSS_HIT",
-            "N_CROSS_MISS", "hit_rate_CROSS_MISS_05x", "expr_CROSS_MISS",
-            "gap_pp", "tier",
-        ])
+        w.writerow(
+            [
+                "scope",
+                "lane",
+                "N_total",
+                "N_NO_CROSS",
+                "hit_rate_NO_CROSS",
+                "expr_NO_CROSS",
+                "N_CROSS_HIT",
+                "hit_rate_CROSS_HIT_05x",
+                "expr_CROSS_HIT",
+                "N_CROSS_MISS",
+                "hit_rate_CROSS_MISS_05x",
+                "expr_CROSS_MISS",
+                "gap_pp",
+                "tier",
+            ]
+        )
         for d in per_lane:
-            w.writerow([
-                "per_lane", d["strategy_id"], d["N_total"],
-                d["N_NO_CROSS"], d["hit_rate_NO_CROSS"], d["expr_NO_CROSS"],
-                d["N_CROSS_HIT"], d["hit_rate_CROSS_HIT_05x"], d["expr_CROSS_HIT"],
-                d["N_CROSS_MISS"], d["hit_rate_CROSS_MISS_05x"], d["expr_CROSS_MISS"],
-                d["gap_pp"], d["tier"],
-            ])
-        w.writerow([
-            "pooled", "ALL_3_LANES", pooled["N_total"],
-            pooled["N_NO_CROSS"], pooled["pooled_hit_rate_NO_CROSS"], "",
-            pooled["N_CROSS_HIT"], pooled["pooled_hit_rate_CROSS_HIT_05x"], "",
-            pooled["N_CROSS_MISS"], pooled["pooled_hit_rate_CROSS_MISS_05x"], "",
-            pooled["pooled_gap_pp"], pooled["verdict"],
-        ])
+            w.writerow(
+                [
+                    "per_lane",
+                    d["strategy_id"],
+                    d["N_total"],
+                    d["N_NO_CROSS"],
+                    d["hit_rate_NO_CROSS"],
+                    d["expr_NO_CROSS"],
+                    d["N_CROSS_HIT"],
+                    d["hit_rate_CROSS_HIT_05x"],
+                    d["expr_CROSS_HIT"],
+                    d["N_CROSS_MISS"],
+                    d["hit_rate_CROSS_MISS_05x"],
+                    d["expr_CROSS_MISS"],
+                    d["gap_pp"],
+                    d["tier"],
+                ]
+            )
+        w.writerow(
+            [
+                "pooled",
+                "ALL_3_LANES",
+                pooled["N_total"],
+                pooled["N_NO_CROSS"],
+                pooled["pooled_hit_rate_NO_CROSS"],
+                "",
+                pooled["N_CROSS_HIT"],
+                pooled["pooled_hit_rate_CROSS_HIT_05x"],
+                "",
+                pooled["N_CROSS_MISS"],
+                pooled["pooled_hit_rate_CROSS_MISS_05x"],
+                "",
+                pooled["pooled_gap_pp"],
+                pooled["verdict"],
+            ]
+        )
 
     # Per-lane table rows
     rows = []
@@ -650,11 +615,7 @@ def write_outputs(
     )
 
     flip_rate = pooled["flip_rate_pct"]
-    heterogeneity_line = (
-        "heterogeneity_ack: true\n"
-        if not math.isnan(flip_rate) and flip_rate >= 25
-        else ""
-    )
+    heterogeneity_line = "heterogeneity_ack: true\n" if not math.isnan(flip_rate) and flip_rate >= 25 else ""
     flip_rate_str = "n/a" if math.isnan(flip_rate) else f"{flip_rate:.1f}"
 
     # Echo locked kill criteria verbatim from pre-reg (no recomputation)
@@ -665,7 +626,8 @@ def write_outputs(
 - **K4 UNDERPOWERED** (precedence: fires first): any of {N_NO_CROSS, N_CROSS_HIT, N_CROSS_MISS} < 30 on any lane
 """
 
-    md = f"""---
+    md = (
+        f"""---
 pooled_finding: true
 per_cell_breakdown_path: {csv_path.as_posix()}
 flip_rate_pct: {flip_rate_str}
@@ -688,13 +650,13 @@ Pathway B K=1 individual-mechanism IS-only triage. Three deployed MNQ lanes (reb
 
 ## Verdict
 
-**{pooled['verdict']}**
+**{pooled["verdict"]}**
 
-Pooled gap (NO_CROSS − CROSS_MISS hit-rate at 0.5×) = **{_fmt_pp(pooled['pooled_gap_pp'])}**.
-Two-proportion z = {_fmt_num(pooled['z_two_prop'], '{:.3f}')}, two-sided p = {_fmt_num(pooled['p_two_sided'], '{:.4f}')}.
+Pooled gap (NO_CROSS − CROSS_MISS hit-rate at 0.5×) = **{_fmt_pp(pooled["pooled_gap_pp"])}**.
+Two-proportion z = {_fmt_num(pooled["z_two_prop"], "{:.3f}")}, two-sided p = {_fmt_num(pooled["p_two_sided"], "{:.4f}")}.
 Per-lane gap-sign flip rate = **{flip_rate_str}%**.
 
-Per-lane confirmations (gap_pp >= 25 AND not UNDERPOWERED): {sum(1 for d in per_lane if not math.isnan(d['gap_pp']) and d['gap_pp'] >= 25 and d['tier'] != 'UNDERPOWERED')} of 3.
+Per-lane confirmations (gap_pp >= 25 AND not UNDERPOWERED): {sum(1 for d in per_lane if not math.isnan(d["gap_pp"]) and d["gap_pp"] >= 25 and d["tier"] != "UNDERPOWERED")} of 3.
 
 ## Per-lane summary
 
@@ -707,10 +669,12 @@ Per-lane confirmations (gap_pp >= 25 AND not UNDERPOWERED): {sum(1 for d in per_
 
 | lane | N_unfiltered_IS | N_filtered_IS | N_classified | N_excluded_mid_eq | N_no_post_bars | N_no_exit_ts |
 |---|---:|---:|---:|---:|---:|---:|
-""" + "\n".join(
-        f"| {d['strategy_id']} | {d['diags']['n_unfiltered_IS']} | {d['diags']['n_filtered_IS']} | {d['diags']['n_classified']} | {d['diags']['n_excluded_mid_eq']} | {d['diags']['n_no_post_bars']} | {d['diags'].get('n_no_exit_ts', 0)} |"
-        for d in per_lane
-    ) + f"""
+"""
+        + "\n".join(
+            f"| {d['strategy_id']} | {d['diags']['n_unfiltered_IS']} | {d['diags']['n_filtered_IS']} | {d['diags']['n_classified']} | {d['diags']['n_excluded_mid_eq']} | {d['diags']['n_no_post_bars']} | {d['diags'].get('n_no_exit_ts', 0)} |"
+            for d in per_lane
+        )
+        + f"""
 
 ## Method notes
 
@@ -719,7 +683,7 @@ Per-lane confirmations (gap_pp >= 25 AND not UNDERPOWERED): {sum(1 for d in per_
 - Canonical filter delegation: `research.filter_utils.filter_signal(df, key, orb_label)` for OVNRNG_100, VWAP_MID_ALIGNED, COST_LT12.
 - Look-ahead boundary: `bars_1m.ts_utc > entry_ts` (strict). `entry_ts` is bar-CLOSE per `trading_app/outcome_builder.py:277-282`.
 - Bucket assignment: first-event-wins on (favourable_excursion >= 0.5×(orb_high−orb_low), bar.close re-cross of orb_mid). Side from entry_price vs orb_mid.
-- Hit metric: P(post-entry favourable excursion >= 0.5× deviation target before exit/day-end).
+- Hit metric: P(post-entry favourable excursion >= 0.5× deviation target before exit_ts).
 - scratch-policy: drop (`WHERE pnl_r IS NOT NULL`); matches deployed-lane convention.
 - No writes to `validated_setups`, `experimental_strategies`, `lane_allocation.json`, `paper_trades`.
 
@@ -739,8 +703,9 @@ python research/yordanov_crossmiss_triage_v1.py --self-review
 
 ## Ledger entry (appended to `{DECISION_LEDGER_PATH.as_posix()}`)
 
-`yordanov-crossmiss-triage-v1-2026-05-07` — {pooled['verdict']}: pooled NO_CROSS−CROSS_MISS gap = {_fmt_pp(pooled['pooled_gap_pp'])}; per-lane gaps = {' / '.join(_fmt_pp(d['gap_pp']) for d in per_lane)} on (COMEX_SETTLE / US_DATA_1000 / NYSE_OPEN). Locked kill criteria pre-committed in `2026-05-07-mnq-yordanov-crossmiss-triage-v1.yaml` (commit {LOCKED_COMMIT_SHA}).
+`yordanov-crossmiss-triage-v1-2026-05-07` — {pooled["verdict"]}: pooled NO_CROSS−CROSS_MISS gap = {_fmt_pp(pooled["pooled_gap_pp"])}; per-lane gaps = {" / ".join(_fmt_pp(d["gap_pp"]) for d in per_lane)} on (COMEX_SETTLE / US_DATA_1000 / NYSE_OPEN). Locked kill criteria pre-committed in `2026-05-07-mnq-yordanov-crossmiss-triage-v1.yaml` (commit {LOCKED_COMMIT_SHA}).
 """
+    )
 
     md_path.parent.mkdir(parents=True, exist_ok=True)
     md_path.write_text(md, encoding="utf-8")
@@ -771,6 +736,7 @@ def append_decision_ledger(per_lane: list[dict], pooled: dict) -> None:
 # ---------------------------------------------------------------------------
 # (9) self_review — drift check + result-md sanity assertions.
 # ---------------------------------------------------------------------------
+
 
 def self_review(con: duckdb.DuckDBPyConnection) -> int:
     """Post-run integrity gate. Returns nonzero exit code on any failure."""
@@ -832,7 +798,8 @@ def self_review(con: duckdb.DuckDBPyConnection) -> int:
     print("[self_review] running pipeline/check_drift.py …", flush=True)
     proc = subprocess.run(
         [sys.executable, "pipeline/check_drift.py"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if proc.returncode != 0:
         fails.append(f"check_drift.py failed: rc={proc.returncode}")
@@ -852,14 +819,17 @@ def self_review(con: duckdb.DuckDBPyConnection) -> int:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--self-review", action="store_true",
+        "--self-review",
+        action="store_true",
         help="Run drift check + result-md assertions after the probe.",
     )
     parser.add_argument(
-        "--skip-drift", action="store_true",
+        "--skip-drift",
+        action="store_true",
         help="(self-review only) skip the check_drift.py subprocess.",
     )
     args = parser.parse_args()
