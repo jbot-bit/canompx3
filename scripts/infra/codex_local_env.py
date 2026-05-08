@@ -251,10 +251,28 @@ def _detect_recent_wsl_reset() -> str | None:
     return None
 
 
-def _detect_model_mismatch_warning() -> str | None:
-    if _read_toml_model(Path.home() / ".codex" / "config.toml") == EXPECTED_PRIMARY_MODEL:
+def _effective_codex_home(env: dict[str, str] | None = None) -> Path | None:
+    if env:
+        codex_home = env.get("CODEX_HOME")
+        if codex_home:
+            return Path(codex_home)
+    codex_home = os.environ.get("CODEX_HOME")
+    if codex_home:
+        return Path(codex_home)
+    shared_codex_home = default_shared_codex_home()
+    if shared_codex_home and shared_codex_home.exists():
+        return shared_codex_home
+    fallback = Path.home() / ".codex"
+    return fallback if fallback.exists() else None
+
+
+def _detect_model_mismatch_warning(env: dict[str, str] | None = None) -> str | None:
+    codex_home = _effective_codex_home(env)
+    if codex_home is None:
         return None
-    log_path = Path.home() / ".codex" / "log" / "codex-tui.log"
+    if _read_toml_model(codex_home / "config.toml") == EXPECTED_PRIMARY_MODEL:
+        return None
+    log_path = codex_home / "log" / "codex-tui.log"
     if not log_path.exists():
         return None
     try:
@@ -306,12 +324,35 @@ def _read_toml_model(path: Path) -> str | None:
     return model if isinstance(model, str) else None
 
 
-def _detect_primary_model_drift() -> str | None:
-    user_model = _read_toml_model(Path.home() / ".codex" / "config.toml")
+def _detect_primary_model_drift(env: dict[str, str] | None = None) -> str | None:
+    codex_home = _effective_codex_home(env)
+    if codex_home is None:
+        return None
+    user_model = _read_toml_model(codex_home / "config.toml")
     if user_model and user_model != EXPECTED_PRIMARY_MODEL:
         return (
-            f"user-level Codex default model is `{user_model}`; this repo's stable primary path is `{EXPECTED_PRIMARY_MODEL}` "
-            "until a newer Codex build is verified"
+            f"effective Codex home `{codex_home}` defaults to `{user_model}`; this repo's stable primary path is "
+            f"`{EXPECTED_PRIMARY_MODEL}` until a newer Codex build is verified"
+        )
+    return None
+
+
+def _detect_auth_state_warning(env: dict[str, str] | None = None) -> str | None:
+    codex_home = _effective_codex_home(env)
+    if codex_home is None:
+        return None
+    log_path = codex_home / "log" / "codex-tui.log"
+    if not log_path.exists():
+        return None
+    try:
+        recent = _tail_text(log_path)
+    except OSError as exc:
+        return f"could not inspect Codex auth state at `{log_path}` ({exc})"
+
+    if "refresh token was already used" in recent or "token_expired" in recent:
+        return (
+            f"effective Codex home `{codex_home}` has stale auth in `log/codex-tui.log`; "
+            "log out and sign in again in the Windows Codex app/CLI before retrying `codex.bat`"
         )
     return None
 
@@ -353,12 +394,15 @@ def run_doctor(platform: str) -> None:
         reset_warning = _detect_recent_wsl_reset()
         if reset_warning:
             checks.append(_doctor_status("Recent WSL reset evidence", "WARN", reset_warning))
-        model_warning = _detect_model_mismatch_warning()
+        model_warning = _detect_model_mismatch_warning(env)
         if model_warning:
             checks.append(_doctor_status("Codex model compatibility", "WARN", model_warning))
-        primary_model_warning = _detect_primary_model_drift()
+        primary_model_warning = _detect_primary_model_drift(env)
         if primary_model_warning:
             checks.append(_doctor_status("Primary model drift", "WARN", primary_model_warning))
+        auth_warning = _detect_auth_state_warning(env)
+        if auth_warning:
+            checks.append(_doctor_status("Codex auth state", "WARN", auth_warning))
         shared_home_status, shared_home_detail = _shared_codex_home_status()
         checks.append(_doctor_status("Shared CODEX_HOME", shared_home_status, shared_home_detail))
         preflight_context = "codex-wsl"

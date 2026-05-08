@@ -33,6 +33,7 @@ def _extract_python_valid_modes(script_text: str) -> set[str]:
 def test_wsl_launcher_scripts_call_mount_guard() -> None:
     root = Path(__file__).resolve().parents[2]
     shared_home = (root / "scripts" / "infra" / "codex_shared_home.sh").read_text(encoding="utf-8")
+    sticky = (root / "scripts" / "infra" / "windows-sticky-launch.ps1").read_text(encoding="utf-8")
     project = (root / "scripts" / "infra" / "codex-project.sh").read_text(encoding="utf-8")
     search = (root / "scripts" / "infra" / "codex-project-search.sh").read_text(encoding="utf-8")
     review = (root / "scripts" / "infra" / "codex-review.sh").read_text(encoding="utf-8")
@@ -58,6 +59,8 @@ def test_wsl_launcher_scripts_call_mount_guard() -> None:
     assert '--related-root "$SOURCE_ROOT"' in sync_guard
     assert "--claim codex" in sync_guard
     assert "--mode mutating" in sync_guard
+    assert "suspiciousQuickExit" in sticky
+    assert "Start-Process powershell.exe" in sticky
 
 
 def test_codex_bat_modes_are_supported_by_windows_launchers() -> None:

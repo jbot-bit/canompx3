@@ -170,7 +170,7 @@ class TestCodexWslCommand:
         assert "CANOMPX3_CODEX_WSL_ROOT must be an absolute WSL path" in command
         assert 'bash /mnt/c/repo/scripts/infra/codex-wsl-sync.sh --source /mnt/c/repo --target "$ROOT"' in command
         assert 'cd "$ROOT"' in command
-        assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
+        assert "exec bash ./scripts/infra/codex-project.sh --no-alt-screen" in command
 
     def test_builds_gold_db_project_command(self) -> None:
         command = windows_agent_launch.build_codex_project_wsl_command("/mnt/c/repo", enable_gold_db=True)
@@ -237,7 +237,7 @@ class TestOpenCodexProject:
         assert exit_code == 0
         command = run_wsl_mock.call_args.args[0]
         assert 'ROOT="$HOME/canompx3"' in command
-        assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
+        assert "exec bash ./scripts/infra/codex-project.sh --no-alt-screen" in command
 
     def test_smart_project_prefers_linux_home_when_available(self) -> None:
         with (
@@ -329,6 +329,64 @@ class TestWindowsBatchWrappers:
         assert '"green-claude" { Invoke-LauncherMode -Mode "green-claude"; exit 0 }' in content
         assert "CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY" in content
         assert "Open an isolated AI workstream" in content
+
+
+class TestRepoRelationClassification:
+    def test_classifies_aligned_repos(self) -> None:
+        state = windows_agent_launch.classify_source_target_relation(
+            "main",
+            "aaa111",
+            "main",
+            "aaa111",
+        )
+
+        assert state == "aligned"
+
+    def test_classifies_target_behind_source(self) -> None:
+        state = windows_agent_launch.classify_source_target_relation(
+            "main",
+            "bbb222",
+            "main",
+            "aaa111",
+            source_contains_target=True,
+            target_contains_source=False,
+        )
+
+        assert state == "target_behind_source"
+
+    def test_classifies_source_behind_target(self) -> None:
+        state = windows_agent_launch.classify_source_target_relation(
+            "main",
+            "aaa111",
+            "main",
+            "bbb222",
+            source_contains_target=False,
+            target_contains_source=True,
+        )
+
+        assert state == "source_behind_target"
+
+    def test_classifies_diverged_repos(self) -> None:
+        state = windows_agent_launch.classify_source_target_relation(
+            "main",
+            "aaa111",
+            "main",
+            "bbb222",
+            source_contains_target=False,
+            target_contains_source=False,
+        )
+
+        assert state == "diverged"
+
+    def test_classifies_branch_mismatch(self) -> None:
+        state = windows_agent_launch.classify_source_target_relation(
+            "main",
+            "aaa111",
+            "feature",
+            "bbb222",
+        )
+
+        assert state == "branch_mismatch"
 
 
 class TestWorkflowCommands:

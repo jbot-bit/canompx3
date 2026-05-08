@@ -12,6 +12,7 @@ drift from what the smart codepath actually probes.
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,7 @@ from pathlib import Path
 # Same-dir import: this module lives next to windows_agent_launch.py.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from windows_agent_launch import (  # noqa: E402
+    classify_source_target_relation,
     repo_root,
     wsl_home_clone_available,
 )
@@ -85,6 +87,72 @@ def _wsl(script: str) -> tuple[int, str]:
     out = (result.stdout or "").strip()
     err = (result.stderr or "").strip()
     return result.returncode, out or err
+
+
+def _wsl_git(args: list[str], cwd: str) -> tuple[int, str]:
+    command = f"git -C {shlex.quote(cwd)} " + " ".join(shlex.quote(arg) for arg in args)
+    return _wsl(command)
+
+
+def _commit_known_git(commit: str, cwd: Path) -> bool:
+    rc, _ = _git(["cat-file", "-e", f"{commit}^{{commit}}"], cwd=cwd)
+    return rc == 0
+
+
+def _commit_known_wsl(commit: str, cwd: str) -> bool:
+    rc, _ = _wsl_git(["cat-file", "-e", f"{commit}^{{commit}}"], cwd)
+    return rc == 0
+
+
+def _is_ancestor_git(older: str, newer: str, cwd: Path) -> bool | None:
+    rc, _ = _git(["merge-base", "--is-ancestor", older, newer], cwd=cwd)
+    if rc == 0:
+        return True
+    if rc == 1:
+        return False
+    return None
+
+
+def _is_ancestor_wsl(older: str, newer: str, cwd: str) -> bool | None:
+    rc, _ = _wsl_git(["merge-base", "--is-ancestor", older, newer], cwd)
+    if rc == 0:
+        return True
+    if rc == 1:
+        return False
+    return None
+
+
+def _resolve_sync_relation(
+    win_root: Path,
+    win_branch: str,
+    win_head: str,
+    wsl_root: str,
+    wsl_branch: str,
+    wsl_head: str,
+) -> tuple[str, str]:
+    source_contains_target: bool | None = None
+    target_contains_source: bool | None = None
+    comparison_repo = ""
+
+    if _commit_known_wsl(win_head, wsl_root) and _commit_known_wsl(wsl_head, wsl_root):
+        comparison_repo = wsl_root
+        source_contains_target = _is_ancestor_wsl(wsl_head, win_head, wsl_root)
+        target_contains_source = _is_ancestor_wsl(win_head, wsl_head, wsl_root)
+    elif _commit_known_git(win_head, win_root) and _commit_known_git(wsl_head, win_root):
+        comparison_repo = str(win_root)
+        source_contains_target = _is_ancestor_git(wsl_head, win_head, win_root)
+        target_contains_source = _is_ancestor_git(win_head, wsl_head, win_root)
+
+    relation = classify_source_target_relation(
+        win_branch,
+        win_head,
+        wsl_branch,
+        wsl_head,
+        source_contains_target=source_contains_target,
+        target_contains_source=target_contains_source,
+    )
+    detail = f"comparison repo: {comparison_repo}" if comparison_repo else "comparison repo: unavailable"
+    return relation, detail
 
 
 def _wsl_clone_root_script() -> str:
@@ -165,12 +233,14 @@ def run() -> int:
         print("  resolved root: <could not resolve>")
         clone_present = False
         wsl_branch = "<n/a>"
+        wsl_head = "<n/a>"
         wsl_head_short = "<n/a>"
     elif resolved_root.startswith("INVALID:"):
         print(f"  resolved root: INVALID ({resolved_root.split(':', 1)[1]})")
         print("  CANOMPX3_CODEX_WSL_ROOT must be empty, '~', '~/...', or absolute (/...)")
         clone_present = False
         wsl_branch = "<n/a>"
+        wsl_head = "<n/a>"
         wsl_head_short = "<n/a>"
     else:
         print(f"  resolved root: {resolved_root}")
@@ -184,6 +254,7 @@ def run() -> int:
             print(f"  clone:   present  ({wsl_branch} @ {wsl_head_short})")
         else:
             wsl_branch = "<absent>"
+            wsl_head = "<absent>"
             wsl_head_short = "<absent>"
             print("  clone:   ABSENT (no .git directory at resolved root)")
     print()
@@ -203,15 +274,54 @@ def run() -> int:
         print("SMART_PATH=BLOCKED: Windows checkout dirty (codex-wsl-sync.sh requires clean tree)")
         return 0
 
-    if win_branch != wsl_branch:
+    rc, wsl_status = _wsl(f'git -C "{resolved_root}" status --short') if clone_present else (1, "")
+    wsl_dirty = clone_present and rc == 0 and bool(wsl_status)
+    if wsl_dirty:
+        print("SMART_PATH=BLOCKED: WSL clone dirty (codex-wsl-sync.sh refuses to auto-sync a dirty target)")
+        return 0
+
+    relation, relation_detail = _resolve_sync_relation(
+        win_root,
+        win_branch,
+        win_head,
+        resolved_root,
+        wsl_branch,
+        wsl_head,
+    )
+    print(relation_detail)
+
+    if relation == "branch_mismatch":
         print(f"SMART_PATH=BLOCKED: branch mismatch (windows={win_branch}, wsl={wsl_branch})")
         return 0
 
-    if win_branch in ("HEAD", "<unknown>") or wsl_branch in ("HEAD", "<unknown>"):
+    if relation == "detached_head":
         print("SMART_PATH=BLOCKED: detached HEAD on one side")
         return 0
 
-    print("SMART_PATH=READY")
+    if relation == "unknown":
+        print("SMART_PATH=BLOCKED: could not prove the source/target HEAD relationship from local history")
+        print("Manual remedy: sync the Windows checkout and WSL clone explicitly, then rerun doctor.")
+        return 0
+
+    if relation == "source_behind_target":
+        print("SMART_PATH=BLOCKED: Windows checkout is behind the WSL clone on the same branch")
+        print(f"  windows: {win_branch} @ {win_head_short}")
+        print(f"  wsl:     {wsl_branch} @ {wsl_head_short}")
+        print("Manual remedy: update the Windows checkout to the newer commit before launching `codex.bat`.")
+        return 0
+
+    if relation == "diverged":
+        print("SMART_PATH=BLOCKED: Windows checkout and WSL clone diverged on the same branch")
+        print(f"  windows: {win_branch} @ {win_head_short}")
+        print(f"  wsl:     {wsl_branch} @ {wsl_head_short}")
+        print("Manual remedy: reconcile the two repos manually, then rerun doctor.")
+        return 0
+
+    if relation == "target_behind_source":
+        print("SMART_PATH=READY: WSL clone is behind but can be fast-forwarded from the Windows checkout")
+        return 0
+
+    print("SMART_PATH=READY: Windows checkout and WSL clone are aligned")
     return 0
 
 

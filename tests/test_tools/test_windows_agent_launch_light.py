@@ -38,7 +38,7 @@ def test_build_linux_home_project_command_uses_linux_root() -> None:
     assert "CANOMPX3_CODEX_WSL_ROOT must be an absolute WSL path" in command
     assert 'bash /mnt/c/repo/scripts/infra/codex-wsl-sync.sh --source /mnt/c/repo --target "$ROOT"' in command
     assert 'cd "$ROOT"' in command
-    assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
+    assert "exec bash ./scripts/infra/codex-project.sh --no-alt-screen" in command
 
 
 def test_build_power_project_command_exports_power_profile() -> None:
@@ -96,6 +96,8 @@ def test_codex_bat_routes_task_shortcuts_to_ai_workstreams() -> None:
 
     assert 'call "ai-workstreams.bat" codex %*' in codex_bat
     assert 'call "ai-workstreams.bat" search %*' in codex_bat
+    assert "CANOMPX3_WINDOWS_LAUNCH_INLINE" in codex_bat
+    assert "windows-sticky-launch.ps1" in codex_bat
     assert "Unknown codex mode: %ACTION%" in codex_bat
     assert "codex.bat help" in codex_bat
 

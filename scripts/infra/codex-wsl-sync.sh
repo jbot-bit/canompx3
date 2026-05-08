@@ -88,27 +88,60 @@ source_head="$(git -C "$SOURCE_ROOT" rev-parse HEAD)"
 target_head="$(git -C "$TARGET_ROOT" rev-parse HEAD)"
 sync_message=""
 
+repo_knows_commit() {
+  local repo_root="$1"
+  local commit="$2"
+  git -C "$repo_root" cat-file -e "${commit}^{commit}" >/dev/null 2>&1
+}
+
 if [[ "$source_head" == "$target_head" ]]; then
   sync_message="WSL Codex repo already current at ${source_branch} @ ${source_head:0:12}"
 else
-  git -C "$TARGET_ROOT" fetch --quiet "$SOURCE_ROOT" "$source_branch"
-  fetch_head="$(git -C "$TARGET_ROOT" rev-parse FETCH_HEAD)"
-
-  if [[ "$fetch_head" != "$source_head" ]]; then
-    echo "ERROR: fetched WSL state does not match source HEAD." >&2
-    echo "Source: $source_head" >&2
-    echo "Fetched: $fetch_head" >&2
-    exit 1
-  fi
-
-  if ! git -C "$TARGET_ROOT" merge --ff-only --quiet FETCH_HEAD; then
-    echo "ERROR: WSL Codex repo cannot fast-forward to the current checkout." >&2
+  comparison_repo=""
+  if repo_knows_commit "$TARGET_ROOT" "$source_head" && repo_knows_commit "$TARGET_ROOT" "$target_head"; then
+    comparison_repo="$TARGET_ROOT"
+  elif repo_knows_commit "$SOURCE_ROOT" "$source_head" && repo_knows_commit "$SOURCE_ROOT" "$target_head"; then
+    comparison_repo="$SOURCE_ROOT"
+  else
+    echo "ERROR: source and target HEADs differ, but local history is insufficient to compare them safely." >&2
     echo "Source: $SOURCE_ROOT [$source_branch @ ${source_head:0:12}]" >&2
     echo "Target: $TARGET_ROOT [$target_branch @ ${target_head:0:12}]" >&2
+    echo "Sync the repos manually, then retry `codex.bat`." >&2
     exit 1
   fi
 
-  sync_message="Synced WSL Codex repo to ${source_branch} @ ${source_head:0:12}"
+  if git -C "$comparison_repo" merge-base --is-ancestor "$target_head" "$source_head"; then
+    git -C "$TARGET_ROOT" fetch --quiet "$SOURCE_ROOT" "$source_branch"
+    fetch_head="$(git -C "$TARGET_ROOT" rev-parse FETCH_HEAD)"
+
+    if [[ "$fetch_head" != "$source_head" ]]; then
+      echo "ERROR: fetched WSL state does not match source HEAD." >&2
+      echo "Source: $source_head" >&2
+      echo "Fetched: $fetch_head" >&2
+      exit 1
+    fi
+
+    if ! git -C "$TARGET_ROOT" merge --ff-only --quiet FETCH_HEAD; then
+      echo "ERROR: WSL Codex repo cannot fast-forward to the current checkout." >&2
+      echo "Source: $SOURCE_ROOT [$source_branch @ ${source_head:0:12}]" >&2
+      echo "Target: $TARGET_ROOT [$target_branch @ ${target_head:0:12}]" >&2
+      exit 1
+    fi
+
+    sync_message="Synced WSL Codex repo to ${source_branch} @ ${source_head:0:12}"
+  elif git -C "$comparison_repo" merge-base --is-ancestor "$source_head" "$target_head"; then
+    echo "ERROR: source repo is behind the WSL Codex repo on the same branch." >&2
+    echo "Source: $SOURCE_ROOT [$source_branch @ ${source_head:0:12}]" >&2
+    echo "Target: $TARGET_ROOT [$target_branch @ ${target_head:0:12}]" >&2
+    echo "Update the source checkout before launching Codex so the smart path does not reopen stale code." >&2
+    exit 1
+  else
+    echo "ERROR: source repo and WSL Codex repo diverged on the same branch." >&2
+    echo "Source: $SOURCE_ROOT [$source_branch @ ${source_head:0:12}]" >&2
+    echo "Target: $TARGET_ROOT [$target_branch @ ${target_head:0:12}]" >&2
+    echo "Reconcile the two repos manually, then retry `codex.bat`." >&2
+    exit 1
+  fi
 fi
 
 preflight_py="$TARGET_ROOT/.venv-wsl/bin/python"

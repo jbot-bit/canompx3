@@ -55,6 +55,11 @@ instead of silently launching old code.
 It also evaluates the shared session-claim layer across the Windows checkout
 and WSL clone, so a fresh Claude or parallel terminal mutating claim on the
 same branch blocks the launch early.
+If the Windows checkout is behind the WSL clone on the same branch, the smart
+path blocks and tells you to update the Windows checkout first rather than
+silently reopening stale code.
+`codex.bat` now opens the real session inside a dedicated PowerShell host so a
+failed or suspiciously fast exit stays visible instead of flashing closed.
 
 ## Task Discipline
 
@@ -82,6 +87,14 @@ The `doctor` action is the fast health check. It verifies:
 - Codex launcher or binary availability
 - session preflight success
 - git worktree visibility
+- smart-path repo relation between the Windows checkout and the WSL clone
+
+For `codex.bat` smart mode, `doctor` now distinguishes:
+
+- aligned repos
+- WSL clone behind but fast-forwardable
+- Windows checkout behind the WSL clone
+- branch mismatch or same-branch divergence
 
 If `.venv-wsl` is missing or preflight fails during doctor, the normal remedy
 is:

@@ -158,6 +158,38 @@ def get_workstream_metadata(tool_name: str, workstream_name: str) -> dict[str, A
     return payload if isinstance(payload, dict) else None
 
 
+def classify_source_target_relation(
+    source_branch: str,
+    source_head: str,
+    target_branch: str,
+    target_head: str,
+    *,
+    source_contains_target: bool | None = None,
+    target_contains_source: bool | None = None,
+) -> str:
+    """Classify the sync relation between source and target repos.
+
+    The smart launcher treats the Windows checkout as the source of truth and
+    the WSL-home clone as the target that may be fast-forwarded from it.
+    """
+
+    if source_branch != target_branch:
+        return "branch_mismatch"
+    if source_branch in {"HEAD", "<unknown>"} or target_branch in {"HEAD", "<unknown>"}:
+        return "detached_head"
+    if source_head in {"", "<unknown>"} or target_head in {"", "<unknown>"}:
+        return "unknown"
+    if source_head == target_head:
+        return "aligned"
+    if source_contains_target is True:
+        return "target_behind_source"
+    if target_contains_source is True:
+        return "source_behind_target"
+    if source_contains_target is False and target_contains_source is False:
+        return "diverged"
+    return "unknown"
+
+
 def run_wsl(command_text: str) -> int:
     import tempfile
 

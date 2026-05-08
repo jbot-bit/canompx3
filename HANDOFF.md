@@ -6,6 +6,97 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Current Session Update (2026-05-08 - codex.bat smart-path sync diagnosis hardening)
+
+- Hardened the `codex.bat` smart-path diagnosis so the read-only doctor now
+  agrees with the real sync contract instead of reporting `SMART_PATH=READY`
+  for same-branch but mismatched HEADs.
+- Added a dedicated Windows front-door wrapper
+  `scripts/infra/windows-sticky-launch.ps1` and repointed `codex.bat` through
+  it by default. The wrapper opens the real session in a child PowerShell host
+  and keeps the window open on nonzero exits or suspiciously fast `exit 0`
+  returns so the operator does not get a flash-close with no context.
+- Added a shared repo-relation classifier in
+  `scripts/infra/windows_agent_launch.py` and used it from
+  `scripts/infra/codex_doctor.py` to distinguish:
+  - aligned repos
+  - WSL clone behind but fast-forwardable
+  - Windows/source checkout behind the WSL clone
+  - same-branch divergence
+  - unknown local-history relation
+- Updated `scripts/infra/codex-wsl-sync.sh` to fail closed with explicit
+  ahead/behind/diverged messages instead of collapsing everything into a
+  generic fast-forward failure.
+- Fixed stale launcher test expectations caused by the prior
+  `exec bash ./scripts/infra/codex-project.sh` hardening and added focused
+  doctor verdict coverage in `tests/test_tools/test_codex_doctor.py`.
+- Updated `docs/reference/codex-operator-handbook.md` so the documented doctor
+  semantics now include smart-path source/target relation checks and the new
+  sticky-window launcher behavior.
+- Real repo finding that motivated the fix:
+  the Windows checkout at `/mnt/c/Users/joshd/canompx3` was clean on `main`
+  but behind the WSL clone (`2705cfe0` vs `220bcfd9`), which is a blocked
+  smart-path state by design.
+- Mirrored the relevant launcher fixes into the clean Windows checkout after
+  fast-forwarding it to `220bcfd9`, so the user-facing `codex.bat` under
+  `/mnt/c/Users/joshd/canompx3` now contains the same front-door changes.
+- Verification passed:
+  - `./.venv-wsl/bin/python -m pytest tests/test_tools/test_windows_agent_launch.py tests/test_tools/test_windows_agent_launch_light.py tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_codex_local_env.py tests/test_tools/test_codex_doctor.py -q`
+  - `./.venv-wsl/bin/python -m ruff check scripts/infra/windows_agent_launch.py scripts/infra/codex_doctor.py tests/test_tools/test_windows_agent_launch.py tests/test_tools/test_windows_agent_launch_light.py tests/test_tools/test_codex_doctor.py`
+  - `./.venv-wsl/bin/python -m ruff format --check scripts/infra/windows_agent_launch.py scripts/infra/codex_doctor.py tests/test_tools/test_windows_agent_launch.py tests/test_tools/test_windows_agent_launch_light.py tests/test_tools/test_codex_doctor.py`
+  - `./.venv-wsl/bin/python -m py_compile scripts/infra/windows_agent_launch.py scripts/infra/codex_doctor.py`
+  - `bash -n scripts/infra/codex-wsl-sync.sh`
+  - `git diff --check`
+- Verification note:
+  `./.venv-wsl/bin/python pipeline/check_drift.py` still fails in this WSL
+  checkout because canonical `gold.db` is absent, producing the existing
+  database-dependent skip/fail class rather than a launcher-specific defect.
+  Direct Windows-host launch validation from this WSL sandbox remains
+  partially blocked by intermittent `UtilBindVsockAnyPort:307` bridge errors
+  when invoking `cmd.exe` / `powershell.exe`, so Windows-side file presence
+  was confirmed through the checkout diff/status instead.
+
+## Current Session Update (2026-05-09 - codex.bat environment root-cause pass)
+
+- Stepped back from the launcher theory and checked the actual effective Codex
+  environment used by `codex.bat`.
+- Root cause found:
+  the shared Windows-side Codex home at `/mnt/c/Users/joshd/.codex` was still
+  configured with `model = "gpt-5.5"` even though this repo's stable launch
+  path is pinned to `gpt-5.4`, and the same shared log showed stale auth:
+  `token_expired` / `refresh token was already used`.
+- Updated the shared Windows Codex config in place:
+  `/mnt/c/Users/joshd/.codex/config.toml` now starts with
+  `model = "gpt-5.4"`.
+  Backup kept at:
+  `/mnt/c/Users/joshd/.codex/config.toml.bak-20260509`
+- Hardened `scripts/infra/codex_local_env.py doctor --platform wsl` so it no
+  longer inspects the wrong local `~/.codex` by default when managed launchers
+  will actually use shared `CODEX_HOME`.
+  It now:
+  - resolves the effective Codex home from env/shared-path precedence
+  - checks model drift against that effective home
+  - checks recent auth failure signatures in that effective home's
+    `log/codex-tui.log`
+- Added regression coverage in
+  `tests/test_tools/test_codex_local_env.py` for:
+  - effective shared-home resolution
+  - primary-model drift from shared home
+  - auth-state warnings from shared home
+- State after fix:
+  `python3 scripts/infra/codex_local_env.py doctor --platform wsl`
+  no longer reports primary-model drift; the remaining real blocker is stale
+  auth in the shared Windows Codex home.
+- Operator action still required outside the repo:
+  sign out and sign back in to Codex on Windows so the shared
+  `/mnt/c/Users/joshd/.codex` auth state is refreshed.
+- Verification passed:
+  - `./.venv-wsl/bin/python -m pytest tests/test_tools/test_windows_agent_launch.py tests/test_tools/test_windows_agent_launch_light.py tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_codex_local_env.py tests/test_tools/test_codex_doctor.py -q`
+  - `./.venv-wsl/bin/python -m ruff check scripts/infra/windows_agent_launch.py scripts/infra/codex_doctor.py scripts/infra/codex_local_env.py tests/test_tools/test_windows_agent_launch.py tests/test_tools/test_windows_agent_launch_light.py tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_codex_local_env.py tests/test_tools/test_codex_doctor.py`
+  - `./.venv-wsl/bin/python -m ruff format --check scripts/infra/windows_agent_launch.py scripts/infra/codex_doctor.py scripts/infra/codex_local_env.py tests/test_tools/test_windows_agent_launch.py tests/test_tools/test_windows_agent_launch_light.py tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_codex_local_env.py tests/test_tools/test_codex_doctor.py`
+  - `./.venv-wsl/bin/python -m py_compile scripts/infra/windows_agent_launch.py scripts/infra/codex_doctor.py scripts/infra/codex_local_env.py`
+  - `git diff --check`
+
 ## Current Session Update (2026-05-08 - Codex GitHub CI unblock)
 
 ## Current Session Update (2026-05-08 - Codex WSL crash hardening)

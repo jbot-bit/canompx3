@@ -63,7 +63,11 @@ if not "%ACTION%"=="" if /I not "%ACTION%"=="gold-db" if /I not "%ACTION%"=="pow
     exit /b 2
 )
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\infra\windows-agent-launch.ps1" -Mode %MODE%
+if defined CANOMPX3_WINDOWS_LAUNCH_INLINE (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\infra\windows-agent-launch.ps1" -Mode %MODE%
+) else (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\infra\windows-sticky-launch.ps1" -Mode %MODE% -Title "Codex"
+)
 set "EXITCODE=%ERRORLEVEL%"
 if not "%EXITCODE%"=="0" (
     echo.

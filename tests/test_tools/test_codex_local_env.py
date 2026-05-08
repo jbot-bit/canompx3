@@ -113,8 +113,9 @@ def test_run_doctor_prints_warn_without_failing(
         codex_local_env, "_parse_mount_guard_detail", lambda platform, env: ("WARN", "sandbox-protected")
     )
     monkeypatch.setattr(codex_local_env, "_detect_recent_wsl_reset", lambda: None)
-    monkeypatch.setattr(codex_local_env, "_detect_model_mismatch_warning", lambda: None)
-    monkeypatch.setattr(codex_local_env, "_detect_primary_model_drift", lambda: None)
+    monkeypatch.setattr(codex_local_env, "_detect_model_mismatch_warning", lambda env=None: None)
+    monkeypatch.setattr(codex_local_env, "_detect_primary_model_drift", lambda env=None: None)
+    monkeypatch.setattr(codex_local_env, "_detect_auth_state_warning", lambda env=None: None)
     monkeypatch.setattr(codex_local_env, "_shared_codex_home_status", lambda: ("PASS", "managed launchers default"))
 
     def fake_capture(command: list[str], env=None):
@@ -155,3 +156,42 @@ def test_shared_codex_home_status_reports_managed_launcher_default(
 
     assert status == "PASS"
     assert str(shared_codex_home) in detail
+
+
+def test_effective_codex_home_prefers_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    shared_codex_home = tmp_path / "shared-codex"
+    monkeypatch.setenv("CODEX_HOME", str(shared_codex_home))
+
+    assert codex_local_env._effective_codex_home() == shared_codex_home
+
+
+def test_detect_primary_model_drift_reads_effective_shared_home(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    shared_codex_home = tmp_path / ".codex"
+    shared_codex_home.mkdir()
+    (shared_codex_home / "config.toml").write_text('model = "gpt-5.5"\n', encoding="utf-8")
+    monkeypatch.setenv("CODEX_HOME", str(shared_codex_home))
+
+    warning = codex_local_env._detect_primary_model_drift()
+
+    assert warning is not None
+    assert str(shared_codex_home) in warning
+    assert "gpt-5.5" in warning
+
+
+def test_detect_auth_state_warning_reads_effective_shared_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    shared_codex_home = tmp_path / ".codex"
+    log_dir = shared_codex_home / "log"
+    log_dir.mkdir(parents=True)
+    (log_dir / "codex-tui.log").write_text(
+        "Provided authentication token is expired. token_expired\nrefresh token was already used\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODEX_HOME", str(shared_codex_home))
+
+    warning = codex_local_env._detect_auth_state_warning()
+
+    assert warning is not None
+    assert str(shared_codex_home) in warning
+    assert "log out and sign in again" in warning
