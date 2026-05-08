@@ -45,6 +45,7 @@ VALID_MODES = {
     "ship",
     "menu",
     "prune",
+    "doctor",
 }
 
 AGENT_STYLES = {
@@ -190,6 +191,11 @@ def run_wsl(command_text: str) -> int:
 
 
 def wsl_home_clone_available() -> bool:
+    # Multi-line scripts via `wsl.exe bash -lc <text>` lose statements at the
+    # Win32->WSL argv boundary (same class as the bug documented in run_wsl).
+    # Write the probe to a tempfile and execute it as a real script file.
+    import tempfile
+
     root_probe = "\n".join(
         [
             "set -euo pipefail",
@@ -208,9 +214,25 @@ def wsl_home_clone_available() -> bool:
             '[[ -d "$ROOT/.git" ]]',
         ]
     )
+
+    scratch_dir = repo_root() / ".claude" / "scratch"
+    tmp_dir = str(scratch_dir) if scratch_dir.exists() else str(repo_root())
+    tmp_name: str | None = None
     try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".sh",
+            prefix="codex_probe_",
+            dir=tmp_dir,
+            delete=False,
+            newline="\n",
+            encoding="utf-8",
+        ) as tmp:
+            tmp.write(root_probe)
+            tmp_name = tmp.name
+        wsl_path = windows_to_wsl(Path(tmp_name))
         result = subprocess.run(
-            ["wsl.exe", "bash", "-lc", root_probe],
+            ["wsl.exe", "bash", wsl_path],
             check=False,
             capture_output=True,
             text=True,
@@ -218,6 +240,12 @@ def wsl_home_clone_available() -> bool:
         )
     except OSError:
         return False
+    finally:
+        if tmp_name:
+            try:
+                Path(tmp_name).unlink(missing_ok=True)
+            except OSError:
+                pass
     return result.returncode == 0
 
 
@@ -1049,6 +1077,10 @@ def main() -> int:
         if output:
             console.print(output)
         return 0
+    if args.mode == "doctor":
+        from codex_doctor import run as run_doctor
+
+        return run_doctor()
     if args.mode == "prune":
         success, output = invoke_manager(["prune"])
         if not success:

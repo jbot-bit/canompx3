@@ -28,6 +28,8 @@ if /I "%ACTION%"=="gold-db" (
     set "MODE=codex-project-linux-gold-db"
 ) else if /I "%ACTION%"=="green" (
     set "MODE=green-codex"
+) else if /I "%ACTION%"=="doctor" (
+    set "MODE=doctor"
 ) else if /I "%ACTION%"=="task" (
     shift
     call "ai-workstreams.bat" codex %*
@@ -49,12 +51,13 @@ if /I "%ACTION%"=="gold-db" (
     echo   codex.bat linux-power
     echo   codex.bat linux-gold-db
     echo   codex.bat green
+    echo   codex.bat doctor
     echo   codex.bat task ^<name^>
     echo   codex.bat search ^<name^>
     exit /b 0
 )
 
-if not "%ACTION%"=="" if /I not "%ACTION%"=="gold-db" if /I not "%ACTION%"=="power" if /I not "%ACTION%"=="search-gold-db" if /I not "%ACTION%"=="windows" if /I not "%ACTION%"=="windows-gold-db" if /I not "%ACTION%"=="windows-power" if /I not "%ACTION%"=="linux" if /I not "%ACTION%"=="linux-power" if /I not "%ACTION%"=="linux-gold-db" if /I not "%ACTION%"=="green" if /I not "%ACTION%"=="task" if /I not "%ACTION%"=="search" if /I not "%ACTION%"=="help" (
+if not "%ACTION%"=="" if /I not "%ACTION%"=="gold-db" if /I not "%ACTION%"=="power" if /I not "%ACTION%"=="search-gold-db" if /I not "%ACTION%"=="windows" if /I not "%ACTION%"=="windows-gold-db" if /I not "%ACTION%"=="windows-power" if /I not "%ACTION%"=="linux" if /I not "%ACTION%"=="linux-power" if /I not "%ACTION%"=="linux-gold-db" if /I not "%ACTION%"=="green" if /I not "%ACTION%"=="doctor" if /I not "%ACTION%"=="task" if /I not "%ACTION%"=="search" if /I not "%ACTION%"=="help" (
     echo Unknown codex mode: %ACTION%
     echo Run `codex.bat help` for usage.
     exit /b 2
