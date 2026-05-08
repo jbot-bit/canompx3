@@ -36,9 +36,22 @@ def test_build_linux_home_project_command_uses_linux_root() -> None:
     assert 'ROOT="$HOME/${ROOT_INPUT#~/}"' in command
     assert 'ROOT="$ROOT_INPUT"' in command
     assert "CANOMPX3_CODEX_WSL_ROOT must be an absolute WSL path" in command
-    assert 'bash /mnt/c/repo/scripts/infra/codex-wsl-sync.sh --source /mnt/c/repo --target "$ROOT"' in command
     assert 'cd "$ROOT"' in command
     assert "exec bash ./scripts/infra/codex-project.sh --no-alt-screen" in command
+
+
+def test_build_linux_home_project_command_only_syncs_when_requested() -> None:
+    module = _load_module()
+
+    direct_command = module.build_codex_project_wsl_command("/mnt/c/repo", use_linux_home=True)
+    synced_command = module.build_codex_project_wsl_command(
+        "/mnt/c/repo",
+        use_linux_home=True,
+        sync_windows_checkout=True,
+    )
+
+    assert "codex-wsl-sync.sh" not in direct_command
+    assert 'bash /mnt/c/repo/scripts/infra/codex-wsl-sync.sh --source /mnt/c/repo --target "$ROOT"' in synced_command
 
 
 def test_build_power_project_command_exports_power_profile() -> None:
@@ -69,9 +82,13 @@ def test_linux_project_batches_target_linux_modes() -> None:
     root = Path(__file__).resolve().parents[2]
     codex_bat = (root / "codex.bat").read_text(encoding="utf-8")
 
-    assert 'set "MODE=codex-project-smart"' in codex_bat
+    assert 'set "MODE=codex-project-linux"' in codex_bat
     assert 'if /I "%ACTION%"=="power" (' in codex_bat
-    assert 'set "MODE=codex-project-smart-power"' in codex_bat
+    assert 'set "MODE=codex-project-linux-power"' in codex_bat
+    assert 'if /I "%ACTION%"=="gold-db" (' in codex_bat
+    assert 'set "MODE=codex-project-linux-gold-db"' in codex_bat
+    assert 'if /I "%ACTION%"=="search-gold-db" (' in codex_bat
+    assert 'set "MODE=codex-project-linux-search-gold-db"' in codex_bat
     assert 'if /I "%ACTION%"=="windows" (' in codex_bat
     assert 'set "MODE=codex-project"' in codex_bat
     assert 'if /I "%ACTION%"=="linux" (' in codex_bat
@@ -88,6 +105,13 @@ def test_valid_modes_include_smart_project_modes() -> None:
     assert "codex-project-smart" in module.VALID_MODES
     assert "codex-project-smart-power" in module.VALID_MODES
     assert "codex-project-smart-search-gold-db" in module.VALID_MODES
+
+
+def test_run_wsl_preserves_launcher_exit_code() -> None:
+    root = Path(__file__).resolve().parents[2]
+    py_launcher = (root / "scripts" / "infra" / "windows_agent_launch.py").read_text(encoding="utf-8")
+
+    assert "status=0; bash {wsl_path} || status=$?; rm -f {wsl_path}; exit $status" in py_launcher
 
 
 def test_codex_bat_routes_task_shortcuts_to_ai_workstreams() -> None:

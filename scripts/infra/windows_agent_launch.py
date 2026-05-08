@@ -213,7 +213,14 @@ def run_wsl(command_text: str) -> int:
         tmp_name = tmp.name
     try:
         wsl_path = windows_to_wsl(Path(tmp_name))
-        return subprocess.call(["wsl.exe", "bash", "-lc", f"bash {wsl_path}; rm -f {wsl_path}"])
+        return subprocess.call(
+            [
+                "wsl.exe",
+                "bash",
+                "-lc",
+                f"status=0; bash {wsl_path} || status=$?; rm -f {wsl_path}; exit $status",
+            ]
+        )
     finally:
         # Best-effort cleanup if WSL never ran (e.g., wsl.exe missing)
         try:
@@ -320,6 +327,7 @@ def build_codex_project_wsl_command(
     enable_gold_db: bool = False,
     use_linux_home: bool = False,
     profile: str | None = None,
+    sync_windows_checkout: bool = False,
 ) -> str:
     import shlex
 
@@ -353,12 +361,18 @@ def build_codex_project_wsl_command(
                 '  echo "Set CANOMPX3_CODEX_WSL_ROOT or clone canompx3 into ~/canompx3." >&2',
                 "  exit 1",
                 "fi",
-                f'bash {shlex.quote(root_wsl)}/scripts/infra/codex-wsl-sync.sh --source {shlex.quote(root_wsl)} --target "$ROOT"',
+            ]
+        )
+        if sync_windows_checkout:
+            lines.append(
+                f'bash {shlex.quote(root_wsl)}/scripts/infra/codex-wsl-sync.sh --source {shlex.quote(root_wsl)} --target "$ROOT"'
+            )
+        lines.extend(
+            [
                 'cd "$ROOT"',
                 # Bootstrap .venv-wsl on first launch. codex-project.sh exits
                 # immediately if .venv-wsl/bin/python is missing, which would
-                # otherwise leave a fresh `git clone` of the WSL home repo
-                # unusable through the smart path.
+                # otherwise leave a fresh WSL-home clone unusable on first run.
                 'if [[ ! -x ".venv-wsl/bin/python" ]]; then',
                 "  if ! command -v uv >/dev/null 2>&1; then",
                 "    echo 'ERROR: uv is not installed in WSL PATH.' >&2",
@@ -479,20 +493,45 @@ def open_codex_project_linux_home_power() -> int:
     )
 
 
+def open_codex_project_linux_home_synced(search_mode: bool = False, enable_gold_db: bool = False) -> int:
+    root = windows_to_wsl(repo_root())
+    return run_wsl(
+        build_codex_project_wsl_command(
+            root,
+            search_mode=search_mode,
+            enable_gold_db=enable_gold_db,
+            use_linux_home=True,
+            sync_windows_checkout=True,
+        )
+    )
+
+
+def open_codex_project_linux_home_power_synced() -> int:
+    root = windows_to_wsl(repo_root())
+    return run_wsl(
+        build_codex_project_wsl_command(
+            root,
+            use_linux_home=True,
+            profile="canompx3_power",
+            sync_windows_checkout=True,
+        )
+    )
+
+
 def _fallback_notice() -> None:
     print("INFO: WSL-home Codex repo unavailable; falling back to the current Windows checkout.")
 
 
 def open_codex_project_smart(search_mode: bool = False, enable_gold_db: bool = False) -> int:
     if wsl_home_clone_available():
-        return open_codex_project_linux_home(search_mode=search_mode, enable_gold_db=enable_gold_db)
+        return open_codex_project_linux_home_synced(search_mode=search_mode, enable_gold_db=enable_gold_db)
     _fallback_notice()
     return open_codex_project(search_mode=search_mode, enable_gold_db=enable_gold_db)
 
 
 def open_codex_project_smart_power() -> int:
     if wsl_home_clone_available():
-        return open_codex_project_linux_home_power()
+        return open_codex_project_linux_home_power_synced()
     _fallback_notice()
     return open_codex_project_power()
 

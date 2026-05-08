@@ -54,7 +54,6 @@ fi
 
 CODEX_ARGS=(
   -C "$ROOT"
-  -p "$PROFILE"
   --sandbox workspace-write
   --ask-for-approval on-request
   --search
@@ -71,6 +70,10 @@ if [[ "${CANOMPX3_CODEX_ENABLE_GOLD_DB:-0}" == "1" ]]; then
     -c 'mcp_servers.gold-db.command="bash"'
     -c 'mcp_servers.gold-db.args=["scripts/infra/run-gold-db-mcp.sh"]'
   )
+fi
+
+if declare -F append_codex_profile_arg >/dev/null 2>&1; then
+  append_codex_profile_arg "$PROFILE" CODEX_ARGS
 fi
 
 exec codex \

@@ -143,7 +143,7 @@ For the operator split and recommended day-to-day surface choice, see
 
 ## Current Project Profiles
 
-Defined in `.codex/config.toml`:
+For WSL launcher sessions, define these in user-level `~/.codex/config.toml`:
 
 - `canompx3`: default project profile
 - `canompx3_search`: live-search variant

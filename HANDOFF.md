@@ -6,6 +6,143 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Current Session Update (2026-05-09 - codex.bat defaults to direct WSL-home launch)
+
+- User intent clarification:
+  the priority is an easy, automatic Codex launch into the right env without
+  smart sync logic, Windows checkout dirtiness checks, or fragile close/reopen
+  behavior.
+- Simplified the default launch path:
+  - `codex.bat` with no args now defaults to `codex-project-linux`
+  - `codex.bat power`, `gold-db`, and `search-gold-db` now route to the direct
+    WSL-home variants instead of the smart synced variants
+- Split Linux-home launcher behavior in
+  `scripts/infra/windows_agent_launch.py`:
+  - direct WSL-home launch: resolves `~/canompx3` (or
+    `CANOMPX3_CODEX_WSL_ROOT`) and opens it without syncing against the Windows
+    checkout
+  - synced smart launch: still available internally and explicitly opts into
+    `codex-wsl-sync.sh`
+- Verification:
+  - manual Windows launch path check of
+    `windows-agent-launch.ps1 -Mode codex-project-linux` stayed alive instead of
+    failing on the dirty Windows checkout
+  - `./.venv-wsl/bin/python -m pytest tests/test_tools/test_windows_agent_launch_light.py tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_codex_local_env.py -q`
+  - `git diff --check`
+
+## Previous Session Update (2026-05-09 - codex.bat smart-mode exit-code propagation)
+
+- Reproduced the remaining Windows-side close-on-launch symptom through the
+  actual `powershell.exe -> windows-agent-launch.ps1 -> windows_agent_launch.py
+  -> wsl.exe` path instead of only testing WSL launchers directly.
+- New root cause:
+  `scripts/infra/windows_agent_launch.py::run_wsl()` invoked WSL as
+  `bash <tmp-script>; rm -f <tmp-script>`, so the returned exit status came
+  from `rm`, not from the launcher script. Smart-mode sync failures therefore
+  surfaced as success and the sticky wrapper closed the window.
+- Concrete reproduced failure that was being flattened to success:
+  `scripts/infra/codex-wsl-sync.sh` correctly aborts when the Windows source
+  repo is dirty (`source repo has uncommitted changes, so the WSL Codex clone
+  would be stale`), but that nonzero exit was lost before it reached the
+  PowerShell wrapper.
+- Fixes:
+  - `scripts/infra/windows_agent_launch.py` now preserves the launcher status
+    via `status=0; bash ... || status=$?; rm -f ...; exit $status`
+  - `scripts/infra/windows-sticky-launch.ps1` now runs the inner launcher as a
+    native `powershell.exe` child process instead of dot-invoking another `.ps1`
+    script and then trusting `$LASTEXITCODE`
+  - added regression coverage in
+    `tests/test_tools/test_codex_launcher_scripts.py` and
+    `tests/test_tools/test_windows_agent_launch_light.py`
+- Verification:
+  - `./.venv-wsl/bin/python -m pytest tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_windows_agent_launch_light.py tests/test_tools/test_codex_local_env.py -q`
+  - `git diff --check`
+
+## Previous Session Update (2026-05-09 - codex.bat doctor quick-exit exemption)
+
+- Root-cause correction after live launch reproduction:
+  the real `codex.bat` close-on-launch defect was not auth and not the sticky
+  wrapper. The actual failing path was:
+  - WSL launcher auto-exported `CODEX_HOME=/mnt/c/Users/joshd/.codex`
+  - that shared Windows-side home lacked the `canompx3` profile expected by
+    repo launchers, so `codex-project.sh` died immediately with
+    `Error loading configuration: config profile 'canompx3' not found`
+  - when that was bypassed, the same shared Windows-side home also triggered
+    `failed to initialize state runtime ... disk I/O error` from the SQLite
+    runtime under WSL
+- Official OpenAI docs check:
+  `https://developers.openai.com/codex/config-reference#configtoml` says
+  user-level config lives in `~/.codex/config.toml`, project-scoped overrides
+  live in `.codex/config.toml`, and `profile` / `profiles.*` are config-layer
+  concepts while `sqlite_home` controls SQLite runtime placement.
+- Live local finding that matched the docs:
+  WSL-local `/home/joshd/.codex` was healthy, trusted this repo, and already
+  had live ChatGPT auth. Launching with `CODEX_HOME=/home/joshd/.codex`
+  avoided the profile crash, avoided the trust prompt, and avoided the Windows
+  `.codex` SQLite disk I/O fault.
+- Fixed repo launcher behavior:
+  - `scripts/infra/codex_shared_home.sh` now prefers local WSL `~/.codex` by
+    default and only falls back to the Windows shared home when local home is
+    absent or a shared-home override is explicitly requested
+  - profile-dependent launchers now fail open if a named profile is missing
+    instead of killing the whole session
+  - `scripts/infra/codex_local_env.py` now matches that precedence, preferring
+    local WSL Codex home over the Windows shared path
+- Fixed config layering mismatch:
+  - removed unsupported `profile` / `[profiles.*]` keys from repo-local
+    `.codex/config.toml` so Codex no longer warns that project-local config is
+    using unsupported keys
+  - moved repo-named WSL launcher profiles into the correct user-level home at
+    `/home/joshd/.codex/config.toml`:
+    `canompx3_search`, `canompx3_power`, `canompx3_windows`, `canompx3_max`
+- Docs updated to match the official/user-level profile placement:
+  - `.codex/WORKFLOWS.md`
+  - `.codex/COMMANDS.md`
+  - `docs/reference/codex-claude-operator-setup.md`
+- Verification passed:
+  - `CODEX_HOME=/home/joshd/.codex codex -p canompx3_search --help`
+  - `CODEX_HOME=/home/joshd/.codex codex -p canompx3_power --help`
+  - `CODEX_HOME=/home/joshd/.codex codex -p canompx3_max --help`
+  - `./.venv-wsl/bin/python -m pytest tests/test_tools/test_codex_local_env.py tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_windows_agent_launch_light.py -q`
+  - manual PTY launch of `bash ./scripts/infra/codex-project.sh --no-alt-screen`
+    no longer showed the profile-missing failure, the Windows `.codex` SQLite
+    disk I/O error, or the unsupported project-local profile warning
+
+- Follow-up root cause correction:
+  the remaining `Codex auth state` warning from
+  `python3 scripts/infra/codex_local_env.py doctor --platform wsl` turned out
+  to be a stale-diagnosis bug, not a live auth failure.
+- Evidence:
+  `/mnt/c/Users/joshd/.codex/auth.json` was updated on 2026-05-06 after the
+  stale `token_expired` entries in `/mnt/c/Users/joshd/.codex/log/codex-tui.log`
+  from 2026-05-03, and `CODEX_HOME=/mnt/c/Users/joshd/.codex codex login status`
+  now reports `Logged in using ChatGPT`.
+- Fixed `scripts/infra/codex_local_env.py` so auth warnings are suppressed when:
+  - the stored auth state is newer than the stale failure log
+  - current `codex login status` looks healthy
+- Added regression coverage in
+  `tests/test_tools/test_codex_local_env.py` for the stale-log-after-reauth case.
+- Fresh verification:
+  - `./.venv-wsl/bin/python -m pytest tests/test_tools/test_codex_local_env.py tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_windows_agent_launch_light.py -q`
+  - `python3 scripts/infra/codex_local_env.py doctor --platform wsl`
+  - `git diff --check`
+- Updated state:
+  the false quick-exit failure for `codex.bat doctor` is fixed and the false
+  stale-auth doctor warning is fixed. No remaining launcher evidence currently
+  points to a repo-side Codex auth blocker.
+
+- Fixed a launcher regression where `codex.bat doctor` was routed through the
+  sticky PowerShell wrapper and then falsely reclassified as a failed launch
+  purely because the read-only doctor exited successfully in under two seconds.
+- Updated `scripts/infra/windows-sticky-launch.ps1` so the suspicious quick-exit
+  heuristic explicitly exempts `doctor` mode while still preserving the
+  sticky-window behavior for real interactive Codex launches.
+- Added regression coverage in
+  `tests/test_tools/test_codex_launcher_scripts.py` to lock the `doctor`
+  exemption into the wrapper contract.
+- Focused verification passed:
+  - `./.venv-wsl/bin/python -m pytest tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_windows_agent_launch_light.py -q`
+  - `git diff --check`
 ## Current Session Update (2026-05-08 - codex.bat smart-path sync diagnosis hardening)
 
 - Hardened the `codex.bat` smart-path diagnosis so the read-only doctor now

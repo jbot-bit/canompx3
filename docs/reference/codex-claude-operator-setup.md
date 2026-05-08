@@ -158,7 +158,7 @@ uv run --frozen python scripts/infra/codex_local_env.py drift --platform windows
 
 ## Codex profiles
 
-The repo-scoped `.codex/config.toml` now provides:
+For WSL launcher sessions, the user-level `~/.codex/config.toml` should provide:
 
 - `canompx3`
   - normal day-to-day profile

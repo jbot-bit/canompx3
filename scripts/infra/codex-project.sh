@@ -3,7 +3,7 @@ set -euo pipefail
 
 DEFAULT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROOT="${CANOMPX3_ROOT:-$DEFAULT_ROOT}"
-PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3}"
+PROFILE="${CANOMPX3_CODEX_PROFILE:-}"
 TASK_TEXT="${CANOMPX3_STARTUP_TASK:-}"
 ROUTER="$ROOT/scripts/tools/session_router.py"
 SHARED_CODEX_HOME_HELPER="$ROOT/scripts/infra/codex_shared_home.sh"
@@ -71,7 +71,6 @@ fi
 
 CODEX_ARGS=(
   -C "$ROOT"
-  -p "$PROFILE"
   --sandbox workspace-write
   --ask-for-approval on-request
   -c 'mcp_servers.repo-state.command="bash"'
@@ -87,6 +86,10 @@ if [[ "${CANOMPX3_CODEX_ENABLE_GOLD_DB:-0}" == "1" ]]; then
     -c 'mcp_servers.gold-db.command="bash"'
     -c 'mcp_servers.gold-db.args=["scripts/infra/run-gold-db-mcp.sh"]'
   )
+fi
+
+if declare -F append_codex_profile_arg >/dev/null 2>&1; then
+  append_codex_profile_arg "$PROFILE" CODEX_ARGS
 fi
 
 exec codex \

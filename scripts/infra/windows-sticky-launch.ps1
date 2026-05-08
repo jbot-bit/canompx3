@@ -35,11 +35,25 @@ try {
 }
 
 $start = Get-Date
-& $launcherPs1 -Mode $Mode -Task $Task
+$launcherArgs = @(
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-File", $launcherPs1,
+    "-Mode", $Mode
+)
+if ($Task) {
+    $launcherArgs += @("-Task", $Task)
+}
+& powershell.exe @launcherArgs
 $exitCode = $LASTEXITCODE
 $elapsedSeconds = ((Get-Date) - $start).TotalSeconds
 $quickExitThresholdSeconds = 2.0
-$suspiciousQuickExit = $exitCode -eq 0 -and $elapsedSeconds -lt $quickExitThresholdSeconds
+$quickExitExemptModes = @("doctor")
+$suspiciousQuickExit = (
+    $exitCode -eq 0 -and
+    $elapsedSeconds -lt $quickExitThresholdSeconds -and
+    $Mode -notin $quickExitExemptModes
+)
 
 if ($exitCode -ne 0 -or $suspiciousQuickExit) {
     Write-Host ""

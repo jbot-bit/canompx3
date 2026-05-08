@@ -6,14 +6,14 @@ set "PYTHONIOENCODING=utf-8"
 cd /d "%~dp0"
 
 set "ACTION=%~1"
-set "MODE=codex-project-smart"
+set "MODE=codex-project-linux"
 
 if /I "%ACTION%"=="gold-db" (
-    set "MODE=codex-project-smart-gold-db"
+    set "MODE=codex-project-linux-gold-db"
 ) else if /I "%ACTION%"=="power" (
-    set "MODE=codex-project-smart-power"
+    set "MODE=codex-project-linux-power"
 ) else if /I "%ACTION%"=="search-gold-db" (
-    set "MODE=codex-project-smart-search-gold-db"
+    set "MODE=codex-project-linux-search-gold-db"
 ) else if /I "%ACTION%"=="windows" (
     set "MODE=codex-project"
 ) else if /I "%ACTION%"=="windows-gold-db" (
