@@ -339,7 +339,7 @@ def build_codex_project_wsl_command(
                 '  mkdir -p "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"',
                 "  uv sync --frozen --python 3.13 --group dev",
                 "fi",
-                f"exec ./scripts/infra/{script_name} --no-alt-screen",
+                f"exec bash ./scripts/infra/{script_name} --no-alt-screen",
             ]
         )
         return "\n".join(lines)
