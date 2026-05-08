@@ -6,6 +6,7 @@ ROOT="${CANOMPX3_ROOT:-$DEFAULT_ROOT}"
 PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3}"
 TASK_TEXT="${CANOMPX3_STARTUP_TASK:-}"
 ROUTER="$ROOT/scripts/tools/session_router.py"
+SHARED_CODEX_HOME_HELPER="$ROOT/scripts/infra/codex_shared_home.sh"
 
 if [[ "${CANOMPX3_SESSION_AUTO_ROUTE:-1}" != "0" && -f "$ROUTER" ]]; then
   ROUTE_ARGS=(--root "$ROOT" --tool codex --mode mutating)
@@ -36,6 +37,11 @@ cd "$ROOT"
 export JOBLIB_MULTIPROCESSING=0
 export VIRTUAL_ENV="$VENV"
 export PATH="$VENV/bin:$PATH"
+if [[ -f "$SHARED_CODEX_HOME_HELPER" ]]; then
+  # Keep app/CLI auth, config, and session state aligned across WSL terminals.
+  source "$SHARED_CODEX_HOME_HELPER"
+  setup_shared_codex_home
+fi
 
 "$VENV/bin/python" "$ROOT/scripts/tools/wsl_mount_guard.py" --root "$ROOT"
 

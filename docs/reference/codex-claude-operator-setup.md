@@ -5,6 +5,7 @@ the same checkout at the same time.
 
 This document is setup-only. For the day-to-day operator split and Codex
 workflow rules, see `docs/reference/codex-operator-handbook.md`.
+For crash and recovery handling, see `docs/reference/codex-wsl-crash-recovery.md`.
 
 ## Recommended split
 
@@ -53,6 +54,24 @@ Sources:
 
 Use the Codex app settings pane and paste these commands into the local
 environment fields.
+
+Managed WSL Codex launchers in this repo now auto-export a shared `CODEX_HOME`
+when the default Windows-side path exists, so the Windows app and WSL CLI use
+the same config, auth, and session state across multiple supported terminals.
+For ad hoc WSL shells or direct `codex` launches outside the repo scripts, set
+the same path manually:
+
+```bash
+export CODEX_HOME=/mnt/c/Users/joshd/.codex
+```
+
+Add the same line to `~/.bashrc` or `~/.zshrc` if you want it on every shell.
+This follows the official OpenAI Windows-app-plus-WSL guidance. Keep the repo
+itself under WSL home such as `~/canompx3`.
+
+If the Windows username differs from the WSL username, set
+`CANOMPX3_SHARED_CODEX_HOME` to the Windows-side `.codex` path before running
+the managed launchers.
 
 ### Default setup script
 
@@ -175,6 +194,8 @@ Quick launcher front doors:
 - `codex.bat` now sync-checks the WSL clone and cross-checks fresh session
   claims across the Windows checkout and WSL clone before opening a mutating
   Codex session.
+- Managed WSL launchers also auto-share `CODEX_HOME`, which reduces split
+  session state when multiple Codex terminals are open at once.
 - Use `codex.bat power` when the task is hard enough to justify extra
   reasoning cost and latency.
 - Use `ai-workstreams.bat` when both tools need to be active on different tasks.

@@ -32,18 +32,26 @@ def _extract_python_valid_modes(script_text: str) -> set[str]:
 
 def test_wsl_launcher_scripts_call_mount_guard() -> None:
     root = Path(__file__).resolve().parents[2]
+    shared_home = (root / "scripts" / "infra" / "codex_shared_home.sh").read_text(encoding="utf-8")
     project = (root / "scripts" / "infra" / "codex-project.sh").read_text(encoding="utf-8")
     search = (root / "scripts" / "infra" / "codex-project-search.sh").read_text(encoding="utf-8")
     review = (root / "scripts" / "infra" / "codex-review.sh").read_text(encoding="utf-8")
     worktree = (root / "scripts" / "infra" / "codex-worktree.sh").read_text(encoding="utf-8")
     sync_guard = (root / "scripts" / "infra" / "codex-wsl-sync.sh").read_text(encoding="utf-8")
 
+    assert "setup_shared_codex_home()" in shared_home
+    assert 'source "$SHARED_CODEX_HOME_HELPER"' in project
+    assert "setup_shared_codex_home" in project
     assert 'wsl_mount_guard.py" --root "$ROOT"' in project
+    assert 'source "$SHARED_CODEX_HOME_HELPER"' in search
+    assert "setup_shared_codex_home" in search
     assert 'wsl_mount_guard.py" --root "$ROOT"' in search
     assert "task_route_packet.py" in project
     assert "task_route_packet.py" in search
     assert 'CANOMPX3_SESSION_OWNER="pid:$$"' in project
     assert 'CANOMPX3_SESSION_OWNER="pid:$$"' in search
+    assert 'source "$SHARED_CODEX_HOME_HELPER"' in review
+    assert "setup_shared_codex_home" in review
     assert 'wsl_mount_guard.py" --root "$ROOT"' in review
     assert 'python3 "$ROOT/scripts/tools/wsl_mount_guard.py" --root "$ROOT"' in worktree
     assert "task_route_packet.py" in worktree

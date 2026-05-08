@@ -8,6 +8,61 @@
 
 ## Current Session Update (2026-05-08 - Codex GitHub CI unblock)
 
+## Current Session Update (2026-05-08 - Codex WSL crash hardening)
+
+- Managed WSL Codex launchers now auto-export a shared `CODEX_HOME` when the
+  default Windows-side path exists. This closes the remaining supported-path
+  state drift between the Windows Codex app and multiple WSL terminals without
+  requiring shell-profile edits.
+- Added `scripts/infra/codex_shared_home.sh` and wired it into
+  `scripts/infra/codex-project.sh`, `scripts/infra/codex-project-search.sh`,
+  and `scripts/infra/codex-review.sh`.
+- Updated `scripts/infra/codex_local_env.py` so WSL env helpers inherit the
+  same default shared path, and `doctor --platform wsl` now reports the
+  effective shared-state status as `PASS` when managed launchers can auto-export
+  it instead of warning unconditionally.
+- Added launcher and local-env coverage for the shared-state default in
+  `tests/test_tools/test_codex_launcher_scripts.py` and
+  `tests/test_tools/test_codex_local_env.py`.
+- Updated the operator docs to clarify the new default:
+  managed launchers auto-share state; manual `export CODEX_HOME=...` remains
+  for ad hoc shells and direct `codex` launches.
+- Verification passed:
+  - `./.venv-wsl/bin/python -m pytest tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_codex_local_env.py -q`
+  - `./.venv-wsl/bin/python -m ruff check scripts/infra/codex_local_env.py tests/test_tools/test_codex_local_env.py tests/test_tools/test_codex_launcher_scripts.py`
+  - `./.venv-wsl/bin/python -m ruff format --check scripts/infra/codex_local_env.py tests/test_tools/test_codex_local_env.py tests/test_tools/test_codex_launcher_scripts.py`
+  - `python3 scripts/infra/codex_local_env.py doctor --platform wsl`
+  - `git diff --check`
+
+- Hardened `scripts/tools/wsl_mount_guard.py` so repo-root health is now the
+  fatal signal. Nested read-only mounts under sandbox-protected paths such as
+  `.git`, `.codex`, `.agents`, and `.claude` are downgraded to warnings rather
+  than being treated as proof that WSL is broken.
+- Added structured mount-guard reporting and updated
+  `scripts/infra/codex_local_env.py doctor --platform wsl` to surface:
+  - expected sandbox-protected path warnings
+  - current-boot WSL reset evidence from journal logs
+  - shared `CODEX_HOME` drift for the Windows-app-plus-WSL workflow
+- Added the operator runbook
+  `docs/reference/codex-wsl-crash-recovery.md` with the exact incident
+  signature (`AcceptAsync`, ext4 unmount/remount, unclean shutdown), the
+  official OpenAI Windows/WSL guidance, and the Microsoft VHD repair ladder.
+- Updated `docs/reference/codex-claude-operator-setup.md` to point at the new
+  recovery guide and to document the shared `CODEX_HOME=/mnt/c/Users/joshd/.codex`
+  pattern for Windows app + WSL state sharing.
+- Added tests covering the new guard and doctor behavior:
+  `tests/test_tools/test_wsl_mount_guard.py`,
+  `tests/test_tools/test_codex_local_env.py`.
+- Outside the repo, the user-level Codex config at `~/.codex/config.toml` was
+  pinned from `gpt-5.5` to `gpt-5.4` to stop the observed
+  "requires a newer version of Codex" failure from recurring in the default
+  workflow.
+- Verification passed:
+  - `./.venv-wsl/bin/python -m pytest tests/test_tools/test_wsl_mount_guard.py tests/test_tools/test_codex_local_env.py -q`
+  - `./.venv-wsl/bin/python -m ruff check scripts/infra/codex_local_env.py scripts/tools/wsl_mount_guard.py tests/test_tools/test_codex_local_env.py tests/test_tools/test_wsl_mount_guard.py`
+  - `./.venv-wsl/bin/python -m ruff format --check scripts/infra/codex_local_env.py scripts/tools/wsl_mount_guard.py tests/test_tools/test_codex_local_env.py tests/test_tools/test_wsl_mount_guard.py`
+  - `git diff --check`
+
 - GitHub is connected. There was no open PR for this repo when checked; the
   most recent PR was #254 and it was already merged. Work continued on branch
   `codex/unblock-ci-main` from current `main` to unblock the failing main CI.

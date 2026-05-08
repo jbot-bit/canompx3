@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +35,8 @@ REMOVABLE_DIRS = {
 REMOVABLE_FILES = {
     ".coverage",
 }
+EXPECTED_PRIMARY_MODEL = "gpt-5.4"
+SHARED_CODEX_HOME_OVERRIDE_ENV = "CANOMPX3_SHARED_CODEX_HOME"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -59,6 +63,9 @@ def env_for_platform(platform: str) -> dict[str, str]:
         env.setdefault("UV_CACHE_DIR", "/tmp/uv-cache")
         env.setdefault("UV_PYTHON_INSTALL_DIR", "/tmp/uv-python")
         env.setdefault("UV_LINK_MODE", "copy")
+        shared_codex_home = default_shared_codex_home()
+        if shared_codex_home and shared_codex_home.exists():
+            env.setdefault("CODEX_HOME", str(shared_codex_home))
     else:
         env["UV_PROJECT_ENVIRONMENT"] = ".venv"
     return env
@@ -194,60 +201,181 @@ def _doctor_check(label: str, ok: bool, detail: str) -> tuple[str, bool, str]:
     return label, ok, detail
 
 
+def _doctor_status(label: str, status: str, detail: str) -> tuple[str, str, str]:
+    return label, status, detail
+
+
+def _tail_text(path: Path, *, max_bytes: int = 65536) -> str:
+    with path.open("rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        file_size = handle.tell()
+        handle.seek(max(file_size - max_bytes, 0))
+        return handle.read().decode("utf-8", errors="replace")
+
+
+def _parse_mount_guard_detail(platform: str, env: dict[str, str]) -> tuple[str, str]:
+    mount_guard = capture_command(
+        platform_python(platform) + ["scripts/tools/wsl_mount_guard.py", "--root", str(ROOT), "--json"],
+        env=env,
+    )
+    if mount_guard.returncode not in {0, 2}:
+        return "FAIL", mount_guard.stdout.strip() or mount_guard.stderr.strip() or f"exit {mount_guard.returncode}"
+    try:
+        payload = json.loads(mount_guard.stdout)
+    except json.JSONDecodeError:
+        return "FAIL", mount_guard.stdout.strip() or mount_guard.stderr.strip() or "invalid JSON from mount guard"
+
+    state = str(payload.get("state", "unknown"))
+    fatal_issues = [str(item) for item in payload.get("fatal_issues", [])]
+    warnings = [str(item) for item in payload.get("warnings", [])]
+    if state == "healthy":
+        return "PASS", "repo root is writable and no unhealthy nested mounts were detected"
+    if state == "sandbox-protected":
+        joined = "; ".join(warnings) if warnings else "protected paths remain read-only inside workspace-write"
+        return "WARN", joined
+    joined = "; ".join(fatal_issues) if fatal_issues else "WSL repo mount is unhealthy"
+    return "FAIL", joined
+
+
+def _detect_recent_wsl_reset() -> str | None:
+    journal = capture_command(["journalctl", "-b", "--no-pager"])
+    text = f"{journal.stdout}\n{journal.stderr}"
+    if "Operation canceled @p9io.cpp:258 (AcceptAsync)" in text and "unmounting filesystem" in text:
+        return (
+            "current-boot journal shows a WSL reset signature "
+            "(`AcceptAsync` plus distro filesystem unmount/remount); if terminals are still dying, run `wsl --shutdown`, "
+            "then `wsl --update`, and use the Microsoft VHD repair flow if the issue repeats"
+        )
+    if "uncleanly shut down" in text and "unmounting filesystem" in text:
+        return "current-boot journal shows an unclean WSL shutdown/remount sequence"
+    return None
+
+
+def _detect_model_mismatch_warning() -> str | None:
+    if _read_toml_model(Path.home() / ".codex" / "config.toml") == EXPECTED_PRIMARY_MODEL:
+        return None
+    log_path = Path.home() / ".codex" / "log" / "codex-tui.log"
+    if not log_path.exists():
+        return None
+    try:
+        recent = _tail_text(log_path)
+    except OSError as exc:
+        return f"could not inspect Codex log for recent model/build mismatches ({exc})"
+    if "requires a newer version of Codex" in recent:
+        return (
+            "recent Codex log shows a configured model that requires a newer app/CLI build; "
+            "update Codex or pin the primary workflow to a supported model"
+        )
+    return None
+
+
+def default_shared_codex_home() -> Path | None:
+    override = os.environ.get(SHARED_CODEX_HOME_OVERRIDE_ENV)
+    if override:
+        return Path(override)
+    user = os.environ.get("USER")
+    if not user:
+        return None
+    return Path("/mnt/c/Users") / user / ".codex"
+
+
+def _shared_codex_home_status() -> tuple[str, str]:
+    codex_home = os.environ.get("CODEX_HOME")
+    if codex_home:
+        return "PASS", f"CODEX_HOME is already set to `{codex_home}`"
+    shared_codex_home = default_shared_codex_home()
+    if shared_codex_home and shared_codex_home.exists():
+        return (
+            "PASS",
+            "managed WSL launchers will auto-export "
+            f"`CODEX_HOME={shared_codex_home}` when unset, keeping Windows app and WSL CLI state aligned",
+        )
+    return (
+        "WARN",
+        "CODEX_HOME is unset in WSL, so the Windows Codex app and WSL CLI are not sharing config/auth/session state; "
+        "set `CODEX_HOME` manually or create the default shared path under `/mnt/c/Users/<windows-user>/.codex`",
+    )
+
+
+def _read_toml_model(path: Path) -> str | None:
+    try:
+        payload = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    model = payload.get("model")
+    return model if isinstance(model, str) else None
+
+
+def _detect_primary_model_drift() -> str | None:
+    user_model = _read_toml_model(Path.home() / ".codex" / "config.toml")
+    if user_model and user_model != EXPECTED_PRIMARY_MODEL:
+        return (
+            f"user-level Codex default model is `{user_model}`; this repo's stable primary path is `{EXPECTED_PRIMARY_MODEL}` "
+            "until a newer Codex build is verified"
+        )
+    return None
+
+
 def run_doctor(platform: str) -> None:
     env = env_for_platform(platform)
-    checks: list[tuple[str, bool, str]] = []
+    checks: list[tuple[str, str, str]] = []
 
     if platform == "wsl":
         venv_exists, venv_detail = safe_path_exists(ROOT / ".venv-wsl" / "bin" / "python")
         checks.append(
-            _doctor_check(
+            _doctor_status(
                 "WSL-native repo root",
-                is_wsl_native_root(ROOT),
+                "PASS" if is_wsl_native_root(ROOT) else "FAIL",
                 str(ROOT),
             )
         )
         checks.append(
-            _doctor_check(
+            _doctor_status(
                 ".venv-wsl present",
-                venv_exists,
+                "PASS" if venv_exists else "FAIL",
                 venv_detail,
             )
         )
         codex_path = shutil.which("codex")
         checks.append(
-            _doctor_check(
+            _doctor_status(
                 "Codex binary available",
-                bool(codex_path),
+                "PASS" if codex_path else "FAIL",
                 codex_path or "codex not found on PATH",
             )
         )
-        mount_guard = capture_command(
-            platform_python(platform) + ["scripts/tools/wsl_mount_guard.py", "--root", str(ROOT)],
-            env=env,
-        )
         checks.append(
-            _doctor_check(
+            _doctor_status(
                 "WSL mount guard",
-                mount_guard.returncode == 0,
-                mount_guard.stdout.strip() or mount_guard.stderr.strip() or f"exit {mount_guard.returncode}",
+                *_parse_mount_guard_detail(platform, env),
             )
         )
+        reset_warning = _detect_recent_wsl_reset()
+        if reset_warning:
+            checks.append(_doctor_status("Recent WSL reset evidence", "WARN", reset_warning))
+        model_warning = _detect_model_mismatch_warning()
+        if model_warning:
+            checks.append(_doctor_status("Codex model compatibility", "WARN", model_warning))
+        primary_model_warning = _detect_primary_model_drift()
+        if primary_model_warning:
+            checks.append(_doctor_status("Primary model drift", "WARN", primary_model_warning))
+        shared_home_status, shared_home_detail = _shared_codex_home_status()
+        checks.append(_doctor_status("Shared CODEX_HOME", shared_home_status, shared_home_detail))
         preflight_context = "codex-wsl"
     else:
         venv_exists, venv_detail = safe_path_exists(ROOT / ".venv" / "Scripts" / "python.exe")
         checks.append(
-            _doctor_check(
+            _doctor_status(
                 ".venv present",
-                venv_exists,
+                "PASS" if venv_exists else "FAIL",
                 venv_detail,
             )
         )
         launcher = ROOT / "codex.bat"
         checks.append(
-            _doctor_check(
+            _doctor_status(
                 "Codex launcher available",
-                launcher.exists(),
+                "PASS" if launcher.exists() else "FAIL",
                 str(launcher),
             )
         )
@@ -273,32 +401,31 @@ def run_doctor(platform: str) -> None:
             env=env,
         )
         checks.append(
-            _doctor_check(
+            _doctor_status(
                 "Session preflight",
-                preflight_result.returncode == 0,
+                "PASS" if preflight_result.returncode == 0 else "FAIL",
                 preflight_result.stdout.strip()
                 or preflight_result.stderr.strip()
                 or f"exit {preflight_result.returncode}",
             )
         )
     else:
-        checks.append(_doctor_check("Session preflight", False, f"missing {preflight}"))
+        checks.append(_doctor_status("Session preflight", "FAIL", f"missing {preflight}"))
 
     worktrees = capture_command(["git", "worktree", "list"], env=env)
     worktree_detail = worktrees.stdout.strip().splitlines()
     checks.append(
-        _doctor_check(
+        _doctor_status(
             "Git worktree visibility",
-            worktrees.returncode == 0,
+            "PASS" if worktrees.returncode == 0 else "FAIL",
             worktree_detail[0] if worktree_detail else worktrees.stderr.strip() or f"exit {worktrees.returncode}",
         )
     )
 
     failures = 0
-    for label, ok, detail in checks:
-        status = "PASS" if ok else "FAIL"
+    for label, status, detail in checks:
         print(f"[{status}] {label}: {detail}")
-        if not ok:
+        if status == "FAIL":
             failures += 1
 
     if failures:

@@ -66,6 +66,45 @@ def test_collect_mount_issues_reports_write_probe_failure(monkeypatch: object, t
     assert issues == ["repo root write probe failed: permission denied"]
 
 
+def test_collect_mount_report_downgrades_protected_nested_mounts_to_warnings(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    git_dir = root / ".git"
+    root.mkdir()
+    git_dir.mkdir()
+    mount_text = "\n".join(
+        [
+            f"/dev/sdd {root.as_posix()} ext4 rw,relatime 0 0",
+            f"/dev/sdd {git_dir.as_posix()} ext4 ro,relatime 0 0",
+        ]
+    )
+
+    report = wsl_mount_guard.collect_mount_report(root, mount_text=mount_text, git_dir=git_dir)
+
+    assert report.ok
+    assert report.state == "sandbox-protected"
+    assert not report.fatal_issues
+    assert any(".git" in warning for warning in report.warnings)
+
+
+def test_collect_mount_report_fails_for_non_protected_nested_read_only_mount(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    data_dir = root / "data"
+    root.mkdir()
+    data_dir.mkdir()
+    mount_text = "\n".join(
+        [
+            f"/dev/sdd {root.as_posix()} ext4 rw,relatime 0 0",
+            f"/dev/sdd {data_dir.as_posix()} ext4 ro,relatime 0 0",
+        ]
+    )
+
+    report = wsl_mount_guard.collect_mount_report(root, mount_text=mount_text, git_dir=None)
+
+    assert not report.ok
+    assert report.state == "root-unhealthy"
+    assert any("nested repo mount is read-only" in issue for issue in report.fatal_issues)
+
+
 def test_format_failure_mentions_linux_filesystem(tmp_path: Path) -> None:
     message = wsl_mount_guard.format_failure(tmp_path, ["mount /mnt/c is read-only"])
 
