@@ -323,6 +323,22 @@ def build_codex_project_wsl_command(
                 "fi",
                 f'bash {shlex.quote(root_wsl)}/scripts/infra/codex-wsl-sync.sh --source {shlex.quote(root_wsl)} --target "$ROOT"',
                 'cd "$ROOT"',
+                # Bootstrap .venv-wsl on first launch. codex-project.sh exits
+                # immediately if .venv-wsl/bin/python is missing, which would
+                # otherwise leave a fresh `git clone` of the WSL home repo
+                # unusable through the smart path.
+                'if [[ ! -x ".venv-wsl/bin/python" ]]; then',
+                "  if ! command -v uv >/dev/null 2>&1; then",
+                "    echo 'ERROR: uv is not installed in WSL PATH.' >&2",
+                "    exit 1",
+                "  fi",
+                "  export UV_PROJECT_ENVIRONMENT=.venv-wsl",
+                "  export UV_CACHE_DIR=/tmp/uv-cache",
+                "  export UV_PYTHON_INSTALL_DIR=/tmp/uv-python",
+                "  export UV_LINK_MODE=copy",
+                '  mkdir -p "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"',
+                "  uv sync --frozen --python 3.13 --group dev",
+                "fi",
                 f"exec ./scripts/infra/{script_name} --no-alt-screen",
             ]
         )
