@@ -16,9 +16,6 @@
 2. PR48 MGC shadow-only observation closeout — Observe the MGC shadow-only context in dashboard and live logs and record whether the visibility path behaves as designed.
 3. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
 
-## Blockers / Warnings
-- Stale queue items need re-verification: mes_q45_exec_bridge, pr48_mgc_shadow_observation, track_d_mnq_comex_settle_gate0_runner_design
-
 ## Durable References
 - `docs/runtime/action-queue.yaml`
 - `docs/runtime/decision-ledger.md`

@@ -352,7 +352,7 @@ items:
     priority: P2
     close_before_new_work: false
     owner_hint: operator
-    last_verified_at: 2026-04-27
+    last_verified_at: 2026-05-10
     freshness_sla_days: 2
     next_action: Observe the MGC shadow-only context in dashboard and live logs and record whether the visibility path behaves as designed.
     exit_criteria: Observation is recorded as PASS, FAIL, or redesign-needed with a durable result note.
@@ -360,10 +360,10 @@ items:
     decision_refs:
       - docs/runtime/decision-ledger.md
     evidence_refs:
-      - docs/runtime/stages/pr48-mgc-shadow-only-overlay-contract.md
+      - docs/audit/results/2026-04-23-pr48-mgc-shadow-only-overlay-design.md
       - docs/audit/results/2026-04-23-pr48-mes-mgc-sizer-rule-backtest-v1.md
-    notes_ref: docs/runtime/stages/pr48-mgc-shadow-only-overlay-contract.md
-    override_note:
+    notes_ref: docs/audit/results/2026-04-23-pr48-mgc-shadow-only-overlay-design.md
+    override_note: "Re-verified 2026-05-10 during Codex repo-health pass: MGC shadow-only overlay design/backtest artifacts still exist; item remains waiting_observation, not closed."
 
   - id: mes_q45_exec_bridge
     title: PR48 MES q45_exec bridge
@@ -372,7 +372,7 @@ items:
     priority: P2
     close_before_new_work: false
     owner_hint: codex-or-claude
-    last_verified_at: 2026-04-24
+    last_verified_at: 2026-05-10
     freshness_sla_days: 5
     next_action: Define the honest bridge from the alive MES q45_exec research branch into a bounded runtime surface.
     exit_criteria: The bridge is either designed as a bounded next stage or explicitly rejected as not yet expressible.
@@ -381,9 +381,10 @@ items:
     decision_refs:
       - docs/runtime/decision-ledger.md
     evidence_refs:
-      - HANDOFF.md
+      - docs/audit/results/2026-04-23-pr48-conditional-role-validation-translation.md
+      - docs/audit/results/2026-04-22-pr48-promotion-shortlist-v1.md
     notes_ref: docs/runtime/decision-ledger.md
-    override_note:
+    override_note: "Re-verified 2026-05-10 during Codex repo-health pass: MES:q45_exec remains NEEDS_BRIDGE and is still blocked behind the MGC shadow-observation closeout."
 
   - id: track_d_mnq_comex_settle_gate0_runner_design
     title: Track D MNQ COMEX_SETTLE Gate 0 runner design
@@ -392,7 +393,7 @@ items:
     priority: P3
     close_before_new_work: false
     owner_hint: codex-or-claude
-    last_verified_at: 2026-04-24
+    last_verified_at: 2026-05-10
     freshness_sla_days: 7
     next_action: Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
     exit_criteria: The branch has an executable runner/table design or is explicitly deferred with a measured reason.
@@ -400,10 +401,10 @@ items:
     decision_refs:
       - docs/runtime/decision-ledger.md
     evidence_refs:
-      - docs/plans/2026-04-23-microstructure-gate0-design.md
+      - docs/plans/archive/2026-04/2026-04-23-microstructure-gate0-design.md
       - docs/audit/hypotheses/2026-04-23-mnq-comex-settle-gate0-microstructure-v1.yaml
-    notes_ref: docs/plans/2026-04-23-microstructure-gate0-design.md
-    override_note:
+    notes_ref: docs/plans/archive/2026-04/2026-04-23-microstructure-gate0-design.md
+    override_note: "Re-verified 2026-05-10 during Codex repo-health pass: DESIGN_ONLY prereg and archived Gate 0 design exist; item remains blocked on Databento top-of-book runner/table design."
 
   - id: mes_event_tail_slippage_realism
     title: MES event-tail slippage realism debt
