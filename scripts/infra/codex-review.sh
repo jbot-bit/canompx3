@@ -6,6 +6,7 @@ ROOT="${CANOMPX3_ROOT:-$DEFAULT_ROOT}"
 VENV="$ROOT/.venv-wsl"
 PREFLIGHT="$ROOT/scripts/tools/session_preflight.py"
 SHARED_CODEX_HOME_HELPER="$ROOT/scripts/infra/codex_shared_home.sh"
+PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3_max}"
 
 if [[ ! -f "$VENV/bin/python" ]]; then
   echo "ERROR: .venv-wsl/bin/python not found." >&2
@@ -38,11 +39,19 @@ if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
     "$VENV/bin/python" "$PREFLIGHT" --context codex-wsl --claim codex-review || true
 fi
 
-exec codex \
+CODEX_ARGS=(
   -c 'mcp_servers.repo-state.command="bash"' \
   -c 'mcp_servers.repo-state.args=["scripts/infra/run-repo-state-mcp.sh"]' \
   -c 'mcp_servers.research-catalog.command="bash"' \
   -c 'mcp_servers.research-catalog.args=["scripts/infra/run-research-catalog-mcp.sh"]' \
   -c 'mcp_servers.strategy-lab.command="bash"' \
   -c 'mcp_servers.strategy-lab.args=["scripts/infra/run-strategy-lab-mcp.sh"]' \
-  -p canompx3_max review --uncommitted "$@"
+)
+
+if declare -F append_codex_profile_arg >/dev/null 2>&1; then
+  append_codex_profile_arg "$PROFILE" CODEX_ARGS
+fi
+
+exec codex \
+  "${CODEX_ARGS[@]}" \
+  review --uncommitted "$@"

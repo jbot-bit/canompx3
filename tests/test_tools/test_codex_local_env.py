@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,10 @@ def test_cleanup_paths_removes_caches_and_skips_envs(tmp_path: Path) -> None:
 def test_env_for_platform_sets_expected_uv_project_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     shared_codex_home = tmp_path / ".codex"
     shared_codex_home.mkdir()
+    local_codex_home = tmp_path / "local-codex"
+    local_codex_home.mkdir()
     monkeypatch.delenv("CODEX_HOME", raising=False)
+    monkeypatch.setattr(codex_local_env, "default_local_codex_home", lambda: local_codex_home)
     monkeypatch.setattr(codex_local_env, "default_shared_codex_home", lambda: shared_codex_home)
 
     wsl_env = codex_local_env.env_for_platform("wsl")
@@ -37,7 +41,7 @@ def test_env_for_platform_sets_expected_uv_project_environment(monkeypatch: pyte
 
     assert wsl_env["UV_PROJECT_ENVIRONMENT"] == ".venv-wsl"
     assert wsl_env["JOBLIB_MULTIPROCESSING"] == "0"
-    assert wsl_env["CODEX_HOME"] == str(shared_codex_home)
+    assert "CODEX_HOME" not in wsl_env
     assert windows_env["UV_PROJECT_ENVIRONMENT"] == ".venv"
     assert windows_env["JOBLIB_MULTIPROCESSING"] == "0"
 
@@ -147,15 +151,18 @@ def test_shared_codex_home_status_prefers_existing_env(monkeypatch: pytest.Monke
 def test_shared_codex_home_status_reports_managed_launcher_default(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    local_codex_home = tmp_path / "local-codex"
+    local_codex_home.mkdir()
     shared_codex_home = tmp_path / ".codex"
     shared_codex_home.mkdir()
     monkeypatch.delenv("CODEX_HOME", raising=False)
+    monkeypatch.setattr(codex_local_env, "default_local_codex_home", lambda: local_codex_home)
     monkeypatch.setattr(codex_local_env, "default_shared_codex_home", lambda: shared_codex_home)
 
     status, detail = codex_local_env._shared_codex_home_status()
 
     assert status == "PASS"
-    assert str(shared_codex_home) in detail
+    assert str(local_codex_home) in detail
 
 
 def test_effective_codex_home_prefers_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -163,6 +170,32 @@ def test_effective_codex_home_prefers_env(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.setenv("CODEX_HOME", str(shared_codex_home))
 
     assert codex_local_env._effective_codex_home() == shared_codex_home
+
+
+def test_effective_codex_home_prefers_local_before_shared(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    local_codex_home = tmp_path / "local-codex"
+    local_codex_home.mkdir()
+    shared_codex_home = tmp_path / "shared-codex"
+    shared_codex_home.mkdir()
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    monkeypatch.setattr(codex_local_env, "default_local_codex_home", lambda: local_codex_home)
+    monkeypatch.setattr(codex_local_env, "default_shared_codex_home", lambda: shared_codex_home)
+
+    assert codex_local_env._effective_codex_home() == local_codex_home
+
+
+def test_env_for_platform_falls_back_to_shared_when_local_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    shared_codex_home = tmp_path / "shared-codex"
+    shared_codex_home.mkdir()
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    monkeypatch.setattr(codex_local_env, "default_local_codex_home", lambda: tmp_path / "missing-local")
+    monkeypatch.setattr(codex_local_env, "default_shared_codex_home", lambda: shared_codex_home)
+
+    wsl_env = codex_local_env.env_for_platform("wsl")
+
+    assert wsl_env["CODEX_HOME"] == str(shared_codex_home)
 
 
 def test_detect_primary_model_drift_reads_effective_shared_home(
@@ -189,9 +222,33 @@ def test_detect_auth_state_warning_reads_effective_shared_home(monkeypatch: pyte
         encoding="utf-8",
     )
     monkeypatch.setenv("CODEX_HOME", str(shared_codex_home))
+    monkeypatch.setattr(codex_local_env, "_codex_login_looks_healthy", lambda env=None: False)
 
     warning = codex_local_env._detect_auth_state_warning()
 
     assert warning is not None
     assert str(shared_codex_home) in warning
     assert "log out and sign in again" in warning
+
+
+def test_detect_auth_state_warning_ignores_stale_log_after_reauth(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    shared_codex_home = tmp_path / ".codex"
+    log_dir = shared_codex_home / "log"
+    log_dir.mkdir(parents=True)
+    log_path = log_dir / "codex-tui.log"
+    log_path.write_text(
+        "Provided authentication token is expired. token_expired\nrefresh token was already used\n",
+        encoding="utf-8",
+    )
+    auth_path = shared_codex_home / "auth.json"
+    auth_path.write_text("{}", encoding="utf-8")
+    auth_stat = auth_path.stat()
+    os.utime(log_path, ns=(auth_stat.st_atime_ns - 1_000_000_000, auth_stat.st_mtime_ns - 1_000_000_000))
+    monkeypatch.setenv("CODEX_HOME", str(shared_codex_home))
+    monkeypatch.setattr(codex_local_env, "_codex_login_looks_healthy", lambda env=None: True)
+
+    warning = codex_local_env._detect_auth_state_warning()
+
+    assert warning is None

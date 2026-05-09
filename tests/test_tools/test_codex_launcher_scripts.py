@@ -41,11 +41,16 @@ def test_wsl_launcher_scripts_call_mount_guard() -> None:
     sync_guard = (root / "scripts" / "infra" / "codex-wsl-sync.sh").read_text(encoding="utf-8")
 
     assert "setup_shared_codex_home()" in shared_home
+    assert "resolve_local_codex_home()" in shared_home
+    assert "append_codex_profile_arg()" in shared_home
     assert 'source "$SHARED_CODEX_HOME_HELPER"' in project
     assert "setup_shared_codex_home" in project
+    assert 'append_codex_profile_arg "$PROFILE" CODEX_ARGS' in project
     assert 'wsl_mount_guard.py" --root "$ROOT"' in project
+    assert 'PROFILE="${CANOMPX3_CODEX_PROFILE:-}"' in project
     assert 'source "$SHARED_CODEX_HOME_HELPER"' in search
     assert "setup_shared_codex_home" in search
+    assert 'append_codex_profile_arg "$PROFILE" CODEX_ARGS' in search
     assert 'wsl_mount_guard.py" --root "$ROOT"' in search
     assert "task_route_packet.py" in project
     assert "task_route_packet.py" in search
@@ -53,14 +58,19 @@ def test_wsl_launcher_scripts_call_mount_guard() -> None:
     assert 'CANOMPX3_SESSION_OWNER="pid:$$"' in search
     assert 'source "$SHARED_CODEX_HOME_HELPER"' in review
     assert "setup_shared_codex_home" in review
+    assert 'append_codex_profile_arg "$PROFILE" CODEX_ARGS' in review
     assert 'wsl_mount_guard.py" --root "$ROOT"' in review
     assert 'python3 "$ROOT/scripts/tools/wsl_mount_guard.py" --root "$ROOT"' in worktree
     assert "task_route_packet.py" in worktree
     assert '--related-root "$SOURCE_ROOT"' in sync_guard
     assert "--claim codex" in sync_guard
     assert "--mode mutating" in sync_guard
+    assert '$quickExitExemptModes = @("doctor")' in sticky
+    assert "$Mode -notin $quickExitExemptModes" in sticky
     assert "suspiciousQuickExit" in sticky
     assert "Start-Process powershell.exe" in sticky
+    assert '"-File", $launcherPs1' in sticky
+    assert "& powershell.exe @launcherArgs" in sticky
 
 
 def test_codex_bat_modes_are_supported_by_windows_launchers() -> None:

@@ -7,8 +7,8 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
-- **Tool:** Claude Code (autonomous)
-- **Date:** 2026-04-28
+- **Tool:** Codex
+- **Date:** 2026-05-09
 - **Summary:** Queue-backed baton refreshed from canonical active-work registry.
 
 ## Next Steps — Active

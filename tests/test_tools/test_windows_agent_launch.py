@@ -168,8 +168,16 @@ class TestCodexWslCommand:
         assert 'ROOT="$HOME/${ROOT_INPUT#~/}"' in command
         assert 'ROOT="$ROOT_INPUT"' in command
         assert "CANOMPX3_CODEX_WSL_ROOT must be an absolute WSL path" in command
-        assert 'bash /mnt/c/repo/scripts/infra/codex-wsl-sync.sh --source /mnt/c/repo --target "$ROOT"' in command
+        assert "codex-wsl-sync.sh" not in command
         assert 'cd "$ROOT"' in command
+        assert "exec bash ./scripts/infra/codex-project.sh --no-alt-screen" in command
+
+    def test_builds_synced_linux_home_project_command(self) -> None:
+        command = windows_agent_launch.build_codex_project_wsl_command(
+            "/mnt/c/repo", use_linux_home=True, sync_windows_checkout=True
+        )
+
+        assert 'bash /mnt/c/repo/scripts/infra/codex-wsl-sync.sh --source /mnt/c/repo --target "$ROOT"' in command
         assert "exec bash ./scripts/infra/codex-project.sh --no-alt-screen" in command
 
     def test_builds_gold_db_project_command(self) -> None:
@@ -242,7 +250,7 @@ class TestOpenCodexProject:
     def test_smart_project_prefers_linux_home_when_available(self) -> None:
         with (
             patch.object(windows_agent_launch, "wsl_home_clone_available", return_value=True),
-            patch.object(windows_agent_launch, "open_codex_project_linux_home", return_value=0) as linux_mock,
+            patch.object(windows_agent_launch, "open_codex_project_linux_home_synced", return_value=0) as linux_mock,
             patch.object(windows_agent_launch, "open_codex_project") as windows_mock,
         ):
             exit_code = windows_agent_launch.open_codex_project_smart()
@@ -280,7 +288,7 @@ class TestWindowsBatchWrappers:
     def test_codex_batch_is_the_single_smart_codex_entrypoint(self) -> None:
         content = (windows_agent_launch.repo_root() / "codex.bat").read_text(encoding="utf-8")
 
-        assert 'set "MODE=codex-project-smart"' in content
+        assert 'set "MODE=codex-project-linux"' in content
         assert 'if /I "%ACTION%"=="gold-db" (' in content
         assert 'if /I "%ACTION%"=="search-gold-db" (' in content
         assert 'if /I "%ACTION%"=="windows" (' in content

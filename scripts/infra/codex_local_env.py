@@ -63,9 +63,16 @@ def env_for_platform(platform: str) -> dict[str, str]:
         env.setdefault("UV_CACHE_DIR", "/tmp/uv-cache")
         env.setdefault("UV_PYTHON_INSTALL_DIR", "/tmp/uv-python")
         env.setdefault("UV_LINK_MODE", "copy")
+        local_codex_home = default_local_codex_home()
         shared_codex_home = default_shared_codex_home()
-        if shared_codex_home and shared_codex_home.exists():
-            env.setdefault("CODEX_HOME", str(shared_codex_home))
+        forced_shared_home = os.environ.get(SHARED_CODEX_HOME_OVERRIDE_ENV)
+        if forced_shared_home:
+            forced_path = Path(forced_shared_home)
+            if forced_path.exists():
+                env.setdefault("CODEX_HOME", str(forced_path))
+        elif not (local_codex_home and local_codex_home.exists()):
+            if shared_codex_home and shared_codex_home.exists():
+                env.setdefault("CODEX_HOME", str(shared_codex_home))
     else:
         env["UV_PROJECT_ENVIRONMENT"] = ".venv"
     return env
@@ -259,11 +266,18 @@ def _effective_codex_home(env: dict[str, str] | None = None) -> Path | None:
     codex_home = os.environ.get("CODEX_HOME")
     if codex_home:
         return Path(codex_home)
+    local_home = default_local_codex_home()
+    if local_home and local_home.exists():
+        return local_home
     shared_codex_home = default_shared_codex_home()
     if shared_codex_home and shared_codex_home.exists():
         return shared_codex_home
-    fallback = Path.home() / ".codex"
-    return fallback if fallback.exists() else None
+    return None
+
+
+def default_local_codex_home() -> Path | None:
+    home = Path.home()
+    return home / ".codex" if home.exists() else None
 
 
 def _detect_model_mismatch_warning(env: dict[str, str] | None = None) -> str | None:
@@ -301,17 +315,23 @@ def _shared_codex_home_status() -> tuple[str, str]:
     codex_home = os.environ.get("CODEX_HOME")
     if codex_home:
         return "PASS", f"CODEX_HOME is already set to `{codex_home}`"
+    local_codex_home = default_local_codex_home()
+    if local_codex_home and local_codex_home.exists():
+        return (
+            "PASS",
+            f"managed WSL launchers will use the local user-level Codex home `{local_codex_home}` by default",
+        )
     shared_codex_home = default_shared_codex_home()
     if shared_codex_home and shared_codex_home.exists():
         return (
             "PASS",
-            "managed WSL launchers will auto-export "
-            f"`CODEX_HOME={shared_codex_home}` when unset, keeping Windows app and WSL CLI state aligned",
+            "no local `~/.codex` detected, so managed WSL launchers will fall back to "
+            f"`CODEX_HOME={shared_codex_home}`",
         )
     return (
         "WARN",
-        "CODEX_HOME is unset in WSL, so the Windows Codex app and WSL CLI are not sharing config/auth/session state; "
-        "set `CODEX_HOME` manually or create the default shared path under `/mnt/c/Users/<windows-user>/.codex`",
+        "no Codex home was found for WSL; create `~/.codex` or set "
+        f"`{SHARED_CODEX_HOME_OVERRIDE_ENV}` / `CODEX_HOME` explicitly",
     )
 
 
@@ -337,10 +357,24 @@ def _detect_primary_model_drift(env: dict[str, str] | None = None) -> str | None
     return None
 
 
+def _codex_login_looks_healthy(env: dict[str, str] | None = None) -> bool | None:
+    codex_path = shutil.which("codex")
+    if not codex_path:
+        return None
+    status = capture_command([codex_path, "login", "status"], env=env)
+    text = f"{status.stdout}\n{status.stderr}".strip().lower()
+    if status.returncode == 0 and "logged in" in text:
+        return True
+    if "not logged in" in text:
+        return False
+    return None
+
+
 def _detect_auth_state_warning(env: dict[str, str] | None = None) -> str | None:
     codex_home = _effective_codex_home(env)
     if codex_home is None:
         return None
+    auth_path = codex_home / "auth.json"
     log_path = codex_home / "log" / "codex-tui.log"
     if not log_path.exists():
         return None
@@ -350,6 +384,12 @@ def _detect_auth_state_warning(env: dict[str, str] | None = None) -> str | None:
         return f"could not inspect Codex auth state at `{log_path}` ({exc})"
 
     if "refresh token was already used" in recent or "token_expired" in recent:
+        try:
+            auth_is_newer = auth_path.exists() and auth_path.stat().st_mtime_ns > log_path.stat().st_mtime_ns
+        except OSError:
+            auth_is_newer = False
+        if auth_is_newer and _codex_login_looks_healthy(env) is True:
+            return None
         return (
             f"effective Codex home `{codex_home}` has stale auth in `log/codex-tui.log`; "
             "log out and sign in again in the Windows Codex app/CLI before retrying `codex.bat`"

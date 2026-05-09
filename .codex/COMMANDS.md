@@ -46,7 +46,7 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 - Capital-at-risk review profile:
   - `scripts/infra/codex-capital-review.sh`
 - Review current changes:
-  - `codex -p canompx3_max review --uncommitted`
+  - `scripts/infra/codex-review.sh`
 - Non-interactive task execution:
   - `codex exec`
 - Non-interactive review:
