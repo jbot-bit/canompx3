@@ -1,6 +1,49 @@
 schema_version: 1
-updated_at: 2026-05-01T13:50:00+00:00
+updated_at: 2026-05-11T00:00:00+10:00
 items:
+  - id: mnq_controlled_candidate_profile_construction_gate_2026_05_11
+    title: Convert MNQ controlled-pilot shelf pool into a profile-safe paper/sandbox proposal
+    class: stage
+    status: ready
+    priority: P1
+    close_before_new_work: false
+    owner_hint: claude-or-codex
+    last_verified_at: 2026-05-11
+    freshness_sla_days: 7
+    next_action: |
+      Use `docs/audit/results/2026-05-11-mnq-all-active-deployability.json` as
+      the candidate input, not a fresh signal search. The all-active audit now
+      finds 177 `CONTROLLED_LIVE_PILOT_CANDIDATE` MNQ rows after the routine
+      MNQ E2 TBBO slippage metadata gap was fixed. This queue item is the
+      bounded production-readiness translation layer:
+
+      1. Deduplicate same-family / same-session / same-filter variants.
+      2. Run add/replace/correlation against the current selected
+         `topstep_50k_mnq_auto` profile.
+      3. Enforce account-risk, one-position/session, SR, allocator Chordia,
+         replay, OOS, and execution constraints.
+      4. Emit a paper/sandbox-only proposed profile change set, or an explicit
+         no-change verdict.
+
+      Do not mutate `docs/runtime/lane_allocation.json`, broker/live state,
+      schema, or deployment DB state in this item. The 177 rows are not direct
+      live routes.
+    exit_criteria: |
+      A result doc classifies the 177 controlled candidates into:
+      PASS_ADD, PASS_REPLACE, PARK, KILL, or ARCHITECTURE_REQUIRED, with exact
+      blocker math and no live allocation mutation.
+    blocked_by: []
+    decision_refs:
+      - docs/audit/results/2026-05-11-mnq-live-readiness-gap-fill.md
+      - docs/audit/results/2026-05-11-mnq-all-active-deployability.json
+      - docs/audit/results/2026-05-11-topstep-50k-mnq-profile-deployability.json
+    evidence_refs:
+      - trading_app/deployability.py
+      - trading_app/lane_allocator.py
+      - docs/runtime/debt-ledger.md
+      - docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v2-gap-fill.md
+    notes_ref: docs/audit/results/2026-05-11-mnq-live-readiness-gap-fill.md
+
   - id: chordia_revalidation_2026_05_01_v3_finalized
     title: Chordia revalidation v3 honest-grounding (3 FAIL_BOTH / 1 PASS_PROTOCOL_A)
     class: audit
@@ -454,38 +497,104 @@ items:
   - id: allocator_paused_pool_priority_a_audits
     title: Run PRIORITY_A chordia replay batch (5 strategies) from paused-pool diagnosis
     class: research
-    status: open
+    status: closed
     priority: P2
     close_before_new_work: false
-    owner_hint: claude
-    last_verified_at: 2026-05-04
+    owner_hint: codex-or-claude
+    last_verified_at: 2026-05-11
     freshness_sla_days: 30
     next_action: |
-      Diagnosis 2026-05-04 produced a 5-row PRIORITY_A list of CHORDIA_MISSING
-      strategies with implied raw_t >= 3.65 and clean E2 LA registry status:
-        A1 MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60   (t_raw=4.33, OOS+ N=673)
-        A2 MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G5        (t_raw=3.77, OOS+ N=1473)
-        A3 MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_GO_LONG    (t_raw=3.74, OOS+ N=324, DSR=0.755)
-        A4 MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60     (t_raw=3.74, OOS+ N=689)
-        A5 MNQ_COMEX_SETTLE_E2_RR1.0_CB1_PD_CLEAR_LONG (t_raw=3.65, OOS+ N=303, DSR=0.741)
-      Action when prioritized:
-        1. Pre-reg each: docs/audit/hypotheses/2026-05-XX-<sid-slug>-chordia-unlock-v1.yaml
-        2. Run research/chordia_strict_unlock_v1.py with WF_START_OVERRIDE['MNQ']=2020-01-01
-        3. Append verdict rows to docs/runtime/chordia_audit_log.yaml
-        4. Re-run allocator; verify any PASS_CHORDIA / PASS_PROTOCOL_A unpauses correctly
-      MinBTL accounting: 10 prior audit rows + 5 new = 15/300 (Bailey 2013 cap, Amendment 2.8).
-      Realistic expectation per diagnosis §3: 1-3 of 5 PASS, 2-4 PARK or FAIL_BOTH.
-    exit_criteria: All 5 PRIORITY_A strategies have a chordia_audit_log.yaml verdict row and the allocator has been re-run to reflect new state.
+      Closed 2026-05-11 by proof-gate disposition, not by blind YAML append.
+      The old queue shape was too narrow: it assumed every PRIORITY_A row should
+      become a Chordia audit-log row and then allocator rerun. The 2026-05-10
+      proof pass showed that assumption was wrong for deployment-bound E2.
+
+      Final disposition of the five rows:
+      - A1 `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60`: CONDITIONAL. Already
+        has a Chordia audit row from 2026-05-04; next question is replacement /
+        additivity vs current book, not another unlock.
+      - A2 `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G5`: CONDITIONAL parent/session
+        exposure. Strict replay passed narrowly, but fire rate is effectively
+        broad parent exposure; next question is replacement/additivity.
+      - A3 `MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_GO_LONG`: WRONG as tested for
+        production. Raw replay used close-confirmed direction; clean long-stop
+        replay fell to IS t=1.885 and OOS ExpR=+0.0049. Blocked by code gates.
+      - A4 `MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60`: UNVERIFIED. Strict replay
+        IS t=3.690 < 3.79. Do not promote.
+      - A5 `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_PD_CLEAR_LONG`: WRONG as tested for
+        production. Clean long-stop replay is IS negative (ExpR=-0.0192,
+        t=-0.480). Blocked by code gates.
+
+      No allocator rerun is appropriate from this item because none of the
+      five has a direct production-unpause verdict. The admissible COMEX rows
+      are carried into `mnq_live_tradeability_additivity_gate_2026_05_11`.
+    exit_criteria: |
+      Closed. Each of the five PRIORITY_A rows has a proof disposition in the
+      2026-05-10 proof gate / 2026-05-11 lens reset. Direct allocator unpause is
+      rejected; remaining admissible COMEX rows are routed to a replacement /
+      additivity gate. `PD_*` E2 rows are deployment-blocked in code and must not
+      be written to `chordia_audit_log.yaml` as cleared.
     blocked_by: []
     decision_refs:
       - docs/audit/results/2026-05-04-allocator-paused-pool-diagnosis.md
+      - docs/audit/results/2026-05-10-mnq-production-trade-expansion-proof-gate.md
+      - docs/audit/results/2026-05-11-mnq-live-tradeability-lens-reset.md
     evidence_refs:
       - docs/runtime/chordia_audit_log.yaml
       - docs/runtime/lane_allocation.json
       - trading_app/chordia.py
       - trading_app/lane_allocator.py
-    notes_ref: docs/audit/results/2026-05-04-allocator-paused-pool-diagnosis.md
-    override_note: "PRIORITY_B / PRIORITY_C lists also in diagnosis §3 — escalate only if PRIORITY_A yields <3 PASS and additional capacity is needed. Note: this entry was originally in commit 955eb980 but was clobbered by recovery commit 7c05a60b; restored in follow-up."
+      - trading_app/config.py
+      - trading_app/strategy_discovery.py
+      - trading_app/execution_engine.py
+      - trading_app/deployability.py
+      - research/mnq_e2_long_stop_replay_v1.py
+    notes_ref: docs/audit/results/2026-05-11-mnq-live-tradeability-lens-reset.md
+    override_note: "Closed 2026-05-11. Original queue assumed Chordia-row append + allocator rerun; proof-gate found two PD rows are deployment-invalid under the correct live-placeable question, one NYSE row fails strict Chordia, and two COMEX rows require replacement/additivity instead of direct unpause."
+
+  - id: mnq_live_tradeability_additivity_gate_2026_05_11
+    title: MNQ live-tradeability additivity/replacement gate for admissible COMEX candidates
+    class: research
+    status: closed
+    priority: P1
+    close_before_new_work: true
+    owner_hint: codex-or-claude
+    last_verified_at: 2026-05-11
+    freshness_sla_days: 7
+    next_action: |
+      Closed 2026-05-11. Bounded replacement/additivity gate executed against
+      the current `topstep_50k_mnq_auto` controlled live pilot for:
+      - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60` -> PARK
+      - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G5` -> PARK
+
+      Both candidates are same-session COMEX O5 alternatives to the deployed
+      COMEX lane. Same-session ADD is not runtime-clean in the current stack,
+      and replacement did not improve both common-window IS annualized R and
+      honest Sharpe. Canonical correlation thresholds also reject both versus
+      the deployed COMEX lane (rho > 0.70; ORB_G5 also subset > 80%).
+
+      No live allocation, DB, broker, schema, or validated_setups state changed.
+    exit_criteria: |
+      Closed. Result doc and CSV classify both candidates as PARK with canonical
+      data references, WF-eligible sample, cost/risk portfolio math,
+      no-lookahead framing, K=2 multiple-testing accounting, and runtime
+      expressibility. No PASS_ADD / PASS_REPLACE candidate exists from this gate.
+    blocked_by: []
+    decision_refs:
+      - docs/audit/results/2026-05-10-mnq-production-trade-expansion-proof-gate.md
+      - docs/audit/results/2026-05-11-mnq-live-tradeability-lens-reset.md
+      - docs/audit/results/2026-05-11-mnq-comex-additivity-replacement-gate.md
+      - docs/runtime/decision-ledger.md
+    evidence_refs:
+      - docs/runtime/lane_allocation.json
+      - docs/runtime/chordia_audit_log.yaml
+      - trading_app/lane_allocator.py
+      - trading_app/lane_correlation.py
+      - trading_app/risk_manager.py
+      - trading_app/config.py
+      - research/mnq_comex_additivity_replacement_gate_2026_05_11.py
+    notes_ref: docs/audit/results/2026-05-11-mnq-live-tradeability-lens-reset.md
+    override_note: "Closed 2026-05-11. The widened-lens COMEX production-tradeability path was executed, not left as commentary; both admissible candidates PARK and no live mutation is allowed from this pass."
 
   - id: oos_reconcile_ovnrng100_rr15_2026_05_05
     title: OOS reconciliation diligence -- MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100

@@ -37,7 +37,7 @@ from trading_app.chordia import (
     chordia_verdict_allows_deploy,
     load_chordia_audit_log,
 )
-from trading_app.config import ALL_FILTERS
+from trading_app.config import ALL_FILTERS, e2_deployment_unsafe_reason, is_e2_deployment_unsafe_filter
 from trading_app.lane_correlation import RHO_REJECT_THRESHOLD, _load_lane_daily_pnl, _pearson
 from trading_app.strategy_discovery import _inject_cross_asset_atrs
 from trading_app.validated_shelf import deployable_validated_relation
@@ -99,6 +99,7 @@ class LaneScore:
     # updating.
     chordia_verdict: str | None = None  # PASS_CHORDIA/PASS_PROTOCOL_A/FAIL_CHORDIA/FAIL_BOTH/MISSING
     chordia_audit_age_days: int | None = None  # days since audit_date in doctrine YAML
+    entry_model: str = "E2"
 
 
 def _month_range(rebalance_date: date, months_back: int) -> tuple[date, date]:
@@ -288,6 +289,34 @@ def compute_lane_scores(
         for sid, inst, orb, om, em, rr, cb, ft, sm in strategies:
             chordia_verdict_value = audit_log.verdict(sid) or "MISSING"
             chordia_age = audit_log.audit_age_days(sid, rebalance_date)
+            if em == "E2" and is_e2_deployment_unsafe_filter(str(ft)):
+                reason = e2_deployment_unsafe_reason(str(ft)) or "E2 deployment-safety gate"
+                scores.append(
+                    LaneScore(
+                        strategy_id=sid,
+                        instrument=inst,
+                        orb_label=orb,
+                        orb_minutes=om,
+                        rr_target=rr,
+                        filter_type=ft,
+                        confirm_bars=cb,
+                        stop_multiplier=sm,
+                        trailing_expr=0.0,
+                        trailing_n=0,
+                        trailing_months=trailing_months,
+                        annual_r_estimate=0.0,
+                        trailing_wr=0.0,
+                        session_regime_expr=None,
+                        months_negative=trailing_months,
+                        months_positive_since_last_neg_streak=0,
+                        status="PAUSE",
+                        status_reason=f"live tradeability gate: {reason}",
+                        chordia_verdict=chordia_verdict_value,
+                        chordia_audit_age_days=chordia_age,
+                        entry_model=em,
+                    )
+                )
+                continue
             # Per-month ExpR for trailing window
             monthly, total_wins, total_trades = _per_month_expr(
                 con,
@@ -326,6 +355,7 @@ def compute_lane_scores(
                         status_reason="No trades in trailing window",
                         chordia_verdict=chordia_verdict_value,
                         chordia_audit_age_days=chordia_age,
+                        entry_model=em,
                     )
                 )
                 continue
@@ -416,6 +446,7 @@ def compute_lane_scores(
                     recent_3mo_expr=recent_3mo,
                     chordia_verdict=chordia_verdict_value,
                     chordia_audit_age_days=chordia_age,
+                    entry_model=em,
                 )
             )
 
@@ -696,8 +727,50 @@ def apply_chordia_gate(
                 sr_status=s.sr_status,
                 chordia_verdict=verdict,
                 chordia_audit_age_days=age,
+                entry_model=s.entry_model,
             )
         )
+    return out
+
+
+def apply_live_tradeability_gate(scores: list[LaneScore]) -> list[LaneScore]:
+    """Refuse DEPLOY for E2 filter shapes that cannot be live-selected."""
+    out: list[LaneScore] = []
+    for s in scores:
+        if s.status in ("PAUSE", "STALE"):
+            out.append(s)
+            continue
+        if s.entry_model == "E2" and is_e2_deployment_unsafe_filter(s.filter_type):
+            reason = e2_deployment_unsafe_reason(s.filter_type) or "E2 deployment-safety gate"
+            out.append(
+                LaneScore(
+                    strategy_id=s.strategy_id,
+                    instrument=s.instrument,
+                    orb_label=s.orb_label,
+                    orb_minutes=s.orb_minutes,
+                    rr_target=s.rr_target,
+                    filter_type=s.filter_type,
+                    confirm_bars=s.confirm_bars,
+                    stop_multiplier=s.stop_multiplier,
+                    trailing_expr=s.trailing_expr,
+                    trailing_n=s.trailing_n,
+                    trailing_months=s.trailing_months,
+                    annual_r_estimate=s.annual_r_estimate,
+                    trailing_wr=s.trailing_wr,
+                    session_regime_expr=s.session_regime_expr,
+                    months_negative=s.months_negative,
+                    months_positive_since_last_neg_streak=s.months_positive_since_last_neg_streak,
+                    status="PAUSE",
+                    status_reason=f"live tradeability gate: {reason}",
+                    recent_3mo_expr=s.recent_3mo_expr,
+                    sr_status=s.sr_status,
+                    chordia_verdict=s.chordia_verdict,
+                    chordia_audit_age_days=s.chordia_audit_age_days,
+                    entry_model=s.entry_model,
+                )
+            )
+            continue
+        out.append(s)
     return out
 
 
@@ -727,14 +800,15 @@ def build_allocation(
     DD estimation uses per-session P90 from orb_size_stats when available.
     Hysteresis: only replace a lane if new candidate >20% better.
 
-    Chordia gate is applied in-line: any score whose chordia_verdict / age
-    fails policy is demoted to PAUSE before the deployable filter, so the
-    refused strategy cannot leak into the JSON. Callers may also call
-    apply_chordia_gate() upstream — running the gate twice is idempotent.
+    Chordia and live-tradeability gates are applied in-line before the
+    deployable filter, so refused strategies cannot leak into the JSON.
+    Callers may also call the gates upstream — running them twice is
+    idempotent.
     """
-    # Apply Chordia gate first — refuse FAIL_BOTH / FAIL_CHORDIA / MISSING /
-    # stale-audit strategies before any ranking. Idempotent.
+    # Apply hard gates first — refuse FAIL_BOTH / FAIL_CHORDIA / MISSING /
+    # stale-audit and deployment-unsafe E2 strategies before any ranking.
     scores = apply_chordia_gate(scores)
+    scores = apply_live_tradeability_gate(scores)
 
     # Filter to deployable
     candidates = [s for s in scores if s.status in ("DEPLOY", "RESUME", "PROVISIONAL")]

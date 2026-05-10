@@ -21,6 +21,7 @@ from trading_app.config import (
     VolumeFilter,
     VWAPBreakDirectionFilter,
     get_filters_for_grid,
+    is_e2_deployment_unsafe_filter,
     is_e2_lookahead_filter,
 )
 
@@ -1455,11 +1456,26 @@ class TestE2LookaheadHelper:
             ("ORB_G5_NOMON_CONT", True),
             ("ORB_G5", False),
             ("OVNRNG_25", False),
+            ("PD_GO_LONG", False),
             ("PDR_R105", False),
         ],
     )
     def test_classifies_filter_types(self, filter_type, expected):
         assert is_e2_lookahead_filter(filter_type) is expected
+
+    @pytest.mark.parametrize(
+        ("filter_type", "expected"),
+        [
+            ("VOL_RV12_N20", True),
+            ("PD_GO_LONG", True),
+            ("PD_CLEAR_LONG", True),
+            ("PD_DISPLACE_LONG", True),
+            ("ORB_G5", False),
+            ("PDR_R105", False),
+        ],
+    )
+    def test_classifies_deployment_unsafe_filter_types(self, filter_type, expected):
+        assert is_e2_deployment_unsafe_filter(filter_type) is expected
 
 
 class TestBreakQualityComposites:

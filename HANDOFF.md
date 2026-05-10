@@ -8,25 +8,47 @@
 
 ## Last Session
 - **Tool:** Codex (WSL)
-- **Date:** 2026-05-10
-- **Commit:** c87c344f — fix(deployability): persist selected-profile readiness gate
-- **Files changed:** 8 files
-  - `pipeline/audit_log.py`
-  - `scripts/tools/full_shelf_deployability_audit.py`
-  - `scripts/tools/pipeline_status.py`
-  - `tests/test_pipeline/test_pipeline_status.py`
-  - `tests/test_trading_app/test_deployability.py`
-  - `trading_app/db_manager.py`
-  - `trading_app/deployability.py`
-  - `trading_app/deployability_state.py`
-
-## Session Note
-- Selected profile gate `topstep_50k_mnq_auto` passed with 2 MNQ controlled-live-pilot candidates, 0 hard blockers, and 0 institutional-language-approved lanes; append-only readiness rows were written to `deployment_readiness_evaluations` with rebuild id `manual-deployability-20260510`.
+- **Date:** 2026-05-11
+- **Commit:** saved in latest git history as `fix(deployability): ground MNQ live readiness gates`
+- **Files changed:** 20 files
+  - `HANDOFF.md`
+  - `docs/audit/hypotheses/2026-05-10-mnq-comexsettle-orbg5-rr10-chordia-unlock-v1.yaml`
+  - `docs/audit/hypotheses/2026-05-10-mnq-comexsettle-pdclearlong-rr10-chordia-unlock-v1.yaml`
+  - `docs/audit/hypotheses/2026-05-10-mnq-nyseopen-xmesatr60-rr10-chordia-unlock-v1.yaml`
+  - `docs/audit/hypotheses/2026-05-10-mnq-usdata1000-pdgolong-rr10-chordia-unlock-v1.yaml`
+  - `docs/audit/results/2026-05-10-clean-long-stop-mnq-comex-settle-e2-rr1.0-cb1-pd-clear-long.csv`
+  - `docs/audit/results/2026-05-10-clean-long-stop-mnq-comex-settle-e2-rr1.0-cb1-pd-clear-long.md`
+  - `docs/audit/results/2026-05-10-clean-long-stop-mnq-us-data-1000-e2-rr1.0-cb1-pd-go-long.csv`
+  - `docs/audit/results/2026-05-10-clean-long-stop-mnq-us-data-1000-e2-rr1.0-cb1-pd-go-long.md`
+  - `docs/audit/results/2026-05-10-mnq-comexsettle-orbg5-rr10-chordia-unlock-v1.csv`
+  - `docs/audit/results/2026-05-10-mnq-comexsettle-orbg5-rr10-chordia-unlock-v1.md`
+  - `docs/audit/results/2026-05-10-mnq-comexsettle-pdclearlong-rr10-chordia-unlock-v1.csv`
+  - `docs/audit/results/2026-05-10-mnq-comexsettle-pdclearlong-rr10-chordia-unlock-v1.md`
+  - `docs/audit/results/2026-05-10-mnq-nyseopen-xmesatr60-rr10-chordia-unlock-v1.csv`
+  - `docs/audit/results/2026-05-10-mnq-nyseopen-xmesatr60-rr10-chordia-unlock-v1.md`
+  - ... and 5 more
 
 ## Next Steps — Active
-1. Treat current MNQ book as controlled live pilot only: 1 contract, no institutional/full-production language, no scaling until SR watch recheck, chain warnings, and event-tail debt are explicitly reviewed.
-2. If moving to broker execution, run the normal live preflight immediately before session start; do not rely on this handoff as live-market freshness.
-3. Continue PR48 MES q45_exec bridge / MGC shadow-only closeout / Track D MNQ COMEX_SETTLE Gate 0 runner only after preserving the controlled-pilot deployability state above.
+1. Convert MNQ controlled-pilot shelf pool into a profile-safe paper/sandbox proposal — Use `docs/audit/results/2026-05-11-mnq-all-active-deployability.json` as
+the candidate input, not a fresh signal search. The all-active audit now
+finds 177 `CONTROLLED_LIVE_PILOT_CANDIDATE` MNQ rows after the routine
+MNQ E2 TBBO slippage metadata gap was fixed. This queue item is the
+bounded production-readiness translation layer:
+
+1. Deduplicate same-family / same-session / same-filter variants.
+2. Run add/replace/correlation against the current selected
+   `topstep_50k_mnq_auto` profile.
+3. Enforce account-risk, one-position/session, SR, allocator Chordia,
+   replay, OOS, and execution constraints.
+4. Emit a paper/sandbox-only proposed profile change set, or an explicit
+   no-change verdict.
+
+Do not mutate `docs/runtime/lane_allocation.json`, broker/live state,
+schema, or deployment DB state in this item. The 177 rows are not direct
+live routes.
+
+2. PR48 MES q45_exec bridge — Define the honest bridge from the alive MES q45_exec research branch into a bounded runtime surface.
+3. PR48 MGC shadow-only observation closeout — Observe the MGC shadow-only context in dashboard and live logs and record whether the visibility path behaves as designed.
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`

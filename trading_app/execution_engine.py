@@ -30,7 +30,7 @@ from trading_app.config import (
     HOLD_HOURS,
     IB_DURATION_MINUTES,
     SESSION_EXIT_MODE,
-    is_e2_lookahead_filter,
+    is_e2_deployment_unsafe_filter,
 )
 from trading_app.portfolio import (
     Portfolio,
@@ -697,9 +697,10 @@ class ExecutionEngine:
             if entry_models and strategy.entry_model not in entry_models:
                 continue
 
-            # E2 filter exclusion: skip break-bar-derived filters (look-ahead
-            # for stop-market entries that fire before the break bar closes).
-            if strategy.entry_model == "E2" and is_e2_lookahead_filter(strategy.filter_type):
+            # E2 filter exclusion: skip break-bar-derived filters and
+            # close-confirmed direction selectors. Stop-market entries can
+            # fire before those values are knowable at entry time.
+            if strategy.entry_model == "E2" and is_e2_deployment_unsafe_filter(strategy.filter_type):
                 continue
 
             # Check strategy filter (size, DOW, break speed, etc.)

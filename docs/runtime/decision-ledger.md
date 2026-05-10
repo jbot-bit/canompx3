@@ -4,6 +4,46 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
+- `mnq-live-readiness-gap-fill-2026-05-11` — Live-readiness pass found and
+  fixed a real blocker at the evidence-metadata layer, not by weakening proof.
+  Canonical MNQ E2 TBBO routine-slippage evidence already covers 9 deployed
+  MNQ sessions, but blank `validated_setups.slippage_validation_status` rows
+  were hard-blocked as `slippage_missing`. `trading_app/deployability.py` now
+  infers only `MNQ` + `E2` + covered-session rows to controlled
+  `slippage_event_tail_pending`; uncovered sessions, MNQ E1, MES, MGC, and all
+  other hard blockers still fail closed. Profile audit now shows 2/2 selected
+  Topstep MNQ lanes as `CONTROLLED_LIVE_PILOT_CANDIDATE` with no hard blockers.
+  All-active MNQ audit now completes normally and shows 177 controlled pilot
+  candidates out of 786 active MNQ rows; these are shelf/profile-construction
+  candidates, not direct live routes. Institutional language remains disallowed
+  for all rows because event-tail / DSR / warning state remains. Broad audit
+  native crash was also hardened by refreshing the read-only replay DuckDB
+  connection every 50 rows. Result doc:
+  `docs/audit/results/2026-05-11-mnq-live-readiness-gap-fill.md`. JSON outputs:
+  `docs/audit/results/2026-05-11-topstep-50k-mnq-profile-deployability.json`,
+  `docs/audit/results/2026-05-11-mnq-all-active-deployability.json`. No live
+  allocation, broker, schema, or deployment DB state changed.
+
+- `mnq-live-tradeability-lens-reset-2026-05-11` — Follow-up to the user’s
+  tunnel-vision concern. Wider lens does **not** mean weaker proof or a broader
+  undocumented search. It means changing the tested role: standalone signal vs
+  allocator replacement/additivity vs execution/portfolio layer. The 2026-05-10
+  proof gate closed the old five-row PRIORITY_A queue: two `PD_*` E2 rows are
+  **WRONG as tested** under the correct live-placeable long-stop question; one
+  NYSE row is **UNVERIFIED**; two COMEX rows were routed to a bounded
+  additivity/replacement gate and both classified **PARK** on 2026-05-11.
+  `X_MES_ATR60`: add improves annualized R/Sharpe but is same-session and
+  correlation-rejected; replacement is -1.5 annualized R and -0.008 Sharpe.
+  `ORB_G5`: add loses Sharpe, replacement loses Sharpe, and subset/correlation
+  reject. Durable lens reset:
+  `docs/audit/results/2026-05-11-mnq-live-tradeability-lens-reset.md`.
+  Queue update: `allocator_paused_pool_priority_a_audits` closed and
+  `mnq_live_tradeability_additivity_gate_2026_05_11` opened then closed with
+  result doc `docs/audit/results/2026-05-11-mnq-comex-additivity-replacement-gate.md`.
+  No live allocation, DB, broker, or schema state changed.
+
+- `mnq-production-trade-expansion-proof-gate-2026-05-10` — User asked for more live-tradeable trades without tunnel vision. Fresh proof gate says **no new production lane from this pass**. `PD_GO_LONG` / `PD_CLEAR_LONG` E2 evidence is **WRONG as tested** for production because registered `PD_*` filters select on close-confirmed `orb_<session>_break_dir='long'`, which can be post-entry for E2 stop-market fills. Clean long-stop replay answered the correct live question: `MNQ_US_DATA_1000 PD_GO_LONG` clean IS t=1.885, OOS ExpR=+0.0049; `MNQ_COMEX_SETTLE PD_CLEAR_LONG` clean IS ExpR=-0.0192, t=-0.480. Code gates now block deployment-bound E2 use of `PD_*`: discovery skips it, execution refuses to arm it, deployability returns `NO_GO_BIAS_OR_DATA`, allocator pauses it. `COMEX_SETTLE X_MES_ATR60` remains **CONDITIONAL** and `COMEX_SETTLE ORB_G5 RR1.0` remains **CONDITIONAL parent/session exposure**, both requiring allocator replacement/additivity and runtime gates before any live expansion. Summary: `docs/audit/results/2026-05-10-mnq-production-trade-expansion-proof-gate.md`; clean replays: `docs/audit/results/2026-05-10-clean-long-stop-mnq-us-data-1000-e2-rr1.0-cb1-pd-go-long.md`, `docs/audit/results/2026-05-10-clean-long-stop-mnq-comex-settle-e2-rr1.0-cb1-pd-clear-long.md`. No `lane_allocation.json`, DB, or live-routing change.
+
 - `chordia-unlock-nyseopen-rr15-costlt12-2026-05-07` — Bounded exact-lane Chordia unlock for `MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12`. Verdict: **PASS_PROTOCOL_A** (IS t=3.600, N=1532, ExpR=+0.1092, p=0.00032). OOS N=77, sign positive; OOS power=0.088 (STATISTICALLY_USELESS) — OOS non-confirmatory, verdict rests on IS gates only. IS directional: Long_IS t=2.591 (n=778), Short_IS t=2.498 (n=754); neither direction clears t≥3.00 unilaterally; pooled gate applies. Theory grant: Chan Ch 7 p.155 stop-cascade at NYSE open, consistency grant with already-audited RR1.0 sibling. COST_LT12 is a friction-floor gate, not a theory-grounded filter. Allocator MAY DEPLOY; correlation gate vs existing RR1.0 sibling to be assessed at next rebalance. Does NOT qualify for PASS_CHORDIA (t < 3.79). Pre-reg: `docs/audit/hypotheses/2026-05-07-mnq-nyseopen-costlt12-rr15-chordia-unlock-v1.yaml`. Result: `docs/audit/results/2026-05-07-mnq-nyseopen-costlt12-rr15-chordia-unlock-v1.md`. [Updated 2026-05-07: OOS power disclosure + IS directional context added per code review.]
 
 - `capital-review-ovnrng100-framing-critique-2026-05-05` — **DOES NOT SUPERSEDE `capital-review-ovnrng100-downsize-2026-05-05` below — that DOWNSIZE verdict STANDS.** This entry annotates the parent verdict with framing-critique findings. Three-revision addendum: (rev1) proposed CONDITIONAL_REMAIN_DEPLOY → auditor #1 PARTIALLY_GROUNDED, called fifth-option post-hoc rescue. (rev2) proposed UNVERIFIED → auditor #2 PARTIALLY_GROUNDED, noted UNVERIFIED's pre-reg-defined trigger ("Insufficient data to evaluate any of F1/F3/F4. DB freshness insufficient.") was NOT met since F1/F3/F4 all triggered with measured data. UNVERIFIED used with redefined meaning is the same class of taxonomy escape as CONDITIONAL_REMAIN_DEPLOY. (rev3, this version) **parent's DOWNSIZE is the procedurally correct within-taxonomy answer**. Treadmill-signal triggered per institutional-rigor.md ("more than twice = architecture is wrong"). **Findings that survive both adversarial passes as VALID CRITIQUES of pre-reg authoring discipline (not verdict overrides):** (1) parent's stated rationale partly mis-cited F3 BINDING triggers as forward-EV refutation when they are sunk-cost diagnostics — correct DOWNSIZE rationale is Carver Ch 9-10 capital-allocation-under-uncertainty (which the pre-reg did cite); (2) parent dismissed +0.097R OOS lift as "essentially base rate" when filter ExpR is 2.4x universe ExpR (artifact-inflated by N=6 off-days at pnl_r=-1.000 but not literal-base-rate). **Empirical addition:** VWAP_MID_ALIGNED 2026 fire rate 65% (49-65% range, NOT vestigial); COST_LT12 100% in 2026 per L4 row of 2026-05-01 6-lane audit (VESTIGIAL). 2 of 3 active lanes carry the vestigial class. Operational impact: ZERO. Two feedback files queued: `feedback_pre_reg_taxonomy_can_be_misframed.md`, `feedback_downsize_rationale_sunk_cost_vs_forward_ev.md`. Highest-EV follow-up unchanged from parent: OVNRNG_100 + COST_LT12 paired filter-reparametrisation pre-reg. Addendum doc (rev3): `docs/audit/results/2026-05-05-capital-review-ovnrng100-addendum.md`.

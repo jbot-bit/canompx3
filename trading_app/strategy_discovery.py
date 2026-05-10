@@ -44,7 +44,7 @@ from trading_app.config import (
     VolumeFilter,
     apply_tight_stop,
     get_filters_for_grid,
-    is_e2_lookahead_filter,
+    is_e2_deployment_unsafe_filter,
 )
 from trading_app.db_manager import compute_trade_day_hash, init_trading_app_schema
 from trading_app.hypothesis_loader import (
@@ -1122,8 +1122,8 @@ def _inject_hypothesis_filters(
       would fire on the wrong exchange-local day there.
     - Filters already present in ``all_grid_filters`` are no-ops — the
       legacy grid wins, no duplication into the per-session map.
-    - E2 look-ahead filters are still blocked downstream by
-      ``is_e2_lookahead_filter()`` during combo enumeration.
+    - E2 deployment-unsafe filters are still blocked downstream by
+      ``is_e2_deployment_unsafe_filter()`` during combo enumeration.
     """
     from trading_app.hypothesis_loader import HypothesisLoaderError
 
@@ -1449,12 +1449,11 @@ def run_discovery(
                 for em in ENTRY_MODELS:
                     if em in SKIP_ENTRY_MODELS:
                         continue
-                    # E2 look-ahead exclusion: skip filters that reference
-                    # break-bar data (volume, continuation, speed). E2 enters
-                    # on the first touch after ORB end, before the break bar
-                    # closes — these filter values are unknowable at entry time.
-                    # E1 is unaffected (enters after break bar closes).
-                    if em == "E2" and is_e2_lookahead_filter(filter_key):
+                    # E2 deployment-safety exclusion: skip filters that use
+                    # break-bar data or close-confirmed direction selectors.
+                    # E2 enters on the first touch after ORB end, before those
+                    # values are reliably knowable at entry time.
+                    if em == "E2" and is_e2_deployment_unsafe_filter(filter_key):
                         continue
                     # Phase 4 early-exit: skip entry_models not referenced
                     if p4_allowed_entry_models is not None and em not in p4_allowed_entry_models:

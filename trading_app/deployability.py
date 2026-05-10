@@ -19,7 +19,7 @@ import duckdb
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import is_e2_lookahead_filter
+from trading_app.config import is_e2_deployment_unsafe_filter
 from trading_app.lifecycle_state import read_lifecycle_state
 from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
 from trading_app.strategy_fitness import _load_strategy_outcomes
@@ -52,10 +52,31 @@ SLIPPAGE_PASS_STATUSES = {
     "SLIPPAGE_PASSED",
 }
 
+MNQ_ROUTINE_TBBO_SLIPPAGE_SESSIONS = frozenset(
+    {
+        "CME_PRECLOSE",
+        "COMEX_SETTLE",
+        "EUROPE_FLOW",
+        "LONDON_METALS",
+        "NYSE_OPEN",
+        "SINGAPORE_OPEN",
+        "TOKYO_OPEN",
+        "US_DATA_1000",
+        "US_DATA_830",
+    }
+)
+MNQ_ROUTINE_TBBO_SLIPPAGE_BASIS = (
+    "MNQ routine TBBO slippage measured conservative across all 9 deployed sessions; "
+    "event-day tail remains an open known-unknown per docs/runtime/debt-ledger.md and "
+    "docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v2-gap-fill.md"
+)
+REPLAY_CONNECTION_REFRESH_ROWS = 50
+
 HARD_BLOCKER_TO_VERDICT = {
     "replay_mismatch": BLOCKED_REPLAY_MISMATCH,
     "unknown_filter": NO_GO_BIAS_OR_DATA,
     "e2_lookahead_filter": NO_GO_BIAS_OR_DATA,
+    "e2_deployment_unsafe_filter": NO_GO_BIAS_OR_DATA,
     "current_k_fdr_fail": BLOCKED_CURRENT_K_FDR,
     "current_k_fdr_missing": BLOCKED_CURRENT_K_FDR,
     "family_purged": BLOCKED_FAMILY_FRAGILE,
@@ -76,6 +97,7 @@ HARD_BLOCKER_TO_VERDICT = {
 RETIRE_OR_PURGE_ISSUES = {
     "unknown_filter",
     "e2_lookahead_filter",
+    "e2_deployment_unsafe_filter",
     "current_k_fdr_fail",
     "family_purged",
     "family_singleton",
@@ -292,6 +314,28 @@ def _replay_strategy(
     }
 
 
+def _iter_replay_results(
+    db_path: Path,
+    rows: list[dict[str, Any]],
+    *,
+    refresh_every: int = REPLAY_CONNECTION_REFRESH_ROWS,
+):
+    """Replay audit rows with periodic connection refresh to avoid native-driver buildup."""
+
+    replay_con: duckdb.DuckDBPyConnection | None = None
+    try:
+        for idx, row in enumerate(rows):
+            if replay_con is None or idx % refresh_every == 0:
+                if replay_con is not None:
+                    replay_con.close()
+                replay_con = duckdb.connect(str(db_path), read_only=True)
+                configure_connection(replay_con)
+            yield row, _replay_strategy(replay_con, row)
+    finally:
+        if replay_con is not None:
+            replay_con.close()
+
+
 def _slippage_passes(value: Any) -> bool:
     if value is None:
         return False
@@ -300,6 +344,24 @@ def _slippage_passes(value: Any) -> bool:
 
 def _slippage_is_controlled_event_tail_pending(row: dict[str, Any], value: Any) -> bool:
     return str(row.get("instrument") or "").upper() == "MNQ" and str(value).strip().upper() == "PENDING_EVENT_TAIL"
+
+
+def _mnq_routine_tbbo_slippage_applies(row: dict[str, Any]) -> bool:
+    return (
+        str(row.get("instrument") or "").upper() == "MNQ"
+        and str(row.get("entry_model") or "").upper() == "E2"
+        and str(row.get("orb_label") or "").upper() in MNQ_ROUTINE_TBBO_SLIPPAGE_SESSIONS
+    )
+
+
+def _controlled_slippage_event_tail_detail(row: dict[str, Any], value: Any, *, inferred: bool) -> dict[str, Any]:
+    return {
+        "status": value,
+        "effective_status": "PENDING_EVENT_TAIL",
+        "inferred_from_routine_tbbo": inferred,
+        "covered_session": str(row.get("orb_label") or "").upper() in MNQ_ROUTINE_TBBO_SLIPPAGE_SESSIONS,
+        "basis": MNQ_ROUTINE_TBBO_SLIPPAGE_BASIS,
+    }
 
 
 def _issue(issue_id: str, severity: Literal["hard", "warning", "info"], detail: Any) -> DeployabilityIssue:
@@ -451,8 +513,12 @@ def _classify_strategy(
 
     if row.get("filter_type") is None:
         issues.append(_issue("unknown_filter", "hard", "filter_type NULL"))
-    if row.get("entry_model") == "E2" and row.get("filter_type") and is_e2_lookahead_filter(str(row["filter_type"])):
-        issues.append(_issue("e2_lookahead_filter", "hard", row["filter_type"]))
+    if (
+        row.get("entry_model") == "E2"
+        and row.get("filter_type")
+        and is_e2_deployment_unsafe_filter(str(row["filter_type"]))
+    ):
+        issues.append(_issue("e2_deployment_unsafe_filter", "hard", row["filter_type"]))
 
     if not replay.get("ok"):
         issues.append(_issue("replay_mismatch", "hard", replay))
@@ -474,20 +540,22 @@ def _classify_strategy(
 
     slip = row.get("slippage_validation_status")
     if slip in (None, ""):
-        issues.append(_issue("slippage_missing", "hard", slip))
+        if _mnq_routine_tbbo_slippage_applies(row):
+            issues.append(
+                _issue(
+                    "slippage_event_tail_pending",
+                    "warning",
+                    _controlled_slippage_event_tail_detail(row, slip, inferred=True),
+                )
+            )
+        else:
+            issues.append(_issue("slippage_missing", "hard", slip))
     elif _slippage_is_controlled_event_tail_pending(row, slip):
         issues.append(
             _issue(
                 "slippage_event_tail_pending",
                 "warning",
-                {
-                    "status": slip,
-                    "basis": (
-                        "MNQ routine TBBO slippage measured conservative; event-day tail remains an open "
-                        "known-unknown per docs/runtime/debt-ledger.md and "
-                        "docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v2-gap-fill.md"
-                    ),
-                },
+                _controlled_slippage_event_tail_detail(row, slip, inferred=False),
             )
         )
     elif not _slippage_passes(slip):
@@ -705,24 +773,22 @@ def build_deployability_audit(
             raise RuntimeError("validated_setups table missing")
         rows = _load_candidate_rows(con, scope=scope, profile_id=resolved_profile, instruments=instruments)
         current_fdr = _current_k_fdr(con, rows)
-        strategy_reports: list[StrategyDeployability] = []
-        for row in rows:
-            replay = _replay_strategy(con, row)
-            c8 = _evaluate_criterion_8_oos(
-                row, db_path, strict_oos_n=str(row.get("validation_pathway")) == "individual"
+
+    strategy_reports: list[StrategyDeployability] = []
+    for row, replay in _iter_replay_results(db_path, rows):
+        c8 = _evaluate_criterion_8_oos(row, db_path, strict_oos_n=str(row.get("validation_pathway")) == "individual")
+        strategy_reports.append(
+            _classify_strategy(
+                row,
+                replay=replay,
+                current_fdr=current_fdr.get(str(row["strategy_id"]), {}),
+                c8=c8,
+                account_state=account_state if strict else None,
+                lifecycle_state=lifecycle_state if strict else None,
+                profile_lane_ids=profile_lane_ids,
+                scope=scope,
             )
-            strategy_reports.append(
-                _classify_strategy(
-                    row,
-                    replay=replay,
-                    current_fdr=current_fdr.get(str(row["strategy_id"]), {}),
-                    c8=c8,
-                    account_state=account_state if strict else None,
-                    lifecycle_state=lifecycle_state if strict else None,
-                    profile_lane_ids=profile_lane_ids,
-                    scope=scope,
-                )
-            )
+        )
 
     verdict_counts = Counter(report.verdict for report in strategy_reports)
     hard_issue_counts = Counter(

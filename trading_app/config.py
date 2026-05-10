@@ -156,6 +156,31 @@ def is_e2_lookahead_filter(filter_type: str) -> bool:
     )
 
 
+def is_e2_deployment_unsafe_filter(filter_type: str) -> bool:
+    """True iff an E2 filter is unsafe for deployment-bound use.
+
+    This includes direct break-bar look-ahead filters plus filters whose
+    canonical implementation selects E2 trades by the close-confirmed
+    ``orb_<session>_break_dir``. For E2, the stop order can fill on a range
+    touch before the close-confirmed break direction exists, so such filters
+    are not admissible as live pre-entry selectors.
+    """
+    return is_e2_lookahead_filter(filter_type) or filter_type.startswith(E2_DEPLOYMENT_UNSAFE_FILTER_PREFIXES)
+
+
+def e2_deployment_unsafe_reason(filter_type: str) -> str | None:
+    """Return the E2 deployment-safety reason for ``filter_type`` if blocked."""
+    lookahead_reason = _e2_look_ahead_reason(filter_type)
+    if lookahead_reason is not None:
+        return lookahead_reason
+    if filter_type.startswith(E2_DIRECTION_SELECTOR_FILTER_PREFIXES):
+        return (
+            f"E2 deployment-unsafe: filter_type '{filter_type}' selects by close-confirmed "
+            "break_dir, which can be post-entry for stop-market touch fills"
+        )
+    return None
+
+
 def _e2_look_ahead_reason(filter_type: str) -> str | None:
     """Return E2 look-ahead exclusion reason if filter_type is E2-excluded.
 
@@ -1720,7 +1745,6 @@ class PrevDayGeometryFilter(StrategyFilter):
         orb_label: str,
         entry_model: str,
     ) -> list[AtomDescription]:
-        _ = entry_model
         hi = _atom_numeric(row.get(f"orb_{orb_label}_high"))
         lo = _atom_numeric(row.get(f"orb_{orb_label}_low"))
         pdh = _atom_numeric(row.get("prev_day_high"))
@@ -1728,6 +1752,31 @@ class PrevDayGeometryFilter(StrategyFilter):
         pdc = _atom_numeric(row.get("prev_day_close"))
         atr = _atom_numeric(row.get("atr_20"))
         break_dir = row.get(f"orb_{orb_label}_break_dir")
+
+        if entry_model == "E2":
+            reason = e2_deployment_unsafe_reason(self.filter_type)
+            if reason is not None:
+                return [
+                    AtomDescription(
+                        name=f"Prior-day geometry ({self.filter_type})",
+                        category="PRE_SESSION",
+                        resolves_at="ORB_FORMATION",
+                        passes=None,
+                        feature_column=f"orb_{orb_label}_break_dir",
+                        threshold="long",
+                        comparator="==",
+                        is_not_applicable=True,
+                        not_applicable_reason=reason,
+                        last_revalidated=self.LAST_REVALIDATED,
+                        confidence_tier=self.CONFIDENCE_TIER,
+                        explanation=(
+                            "Prior-day geometry's level context is known at ORB formation, "
+                            "but this registered E2 filter also selects on close-confirmed "
+                            "break direction. Use a clean side-specific E2 replay before "
+                            "deployment-bound use."
+                        ),
+                    )
+                ]
 
         observed_value: str | None = None
         error_message: str | None = None
@@ -3898,6 +3947,9 @@ E2_STRESS_TICKS = 2
 # FAST: break delay/speed (break_ts unknown until confirmed close)
 # VOL_RV*: relative volume = break_bar_volume / baseline (break bar not yet closed)
 # ATR70_VOL: combines ATR (safe) + rel_vol (look-ahead) — hybrid contaminated
+# PD_*: prior-day geometry filters whose current registered implementation
+#       also requires close-confirmed break_dir == "long". The prior-day levels
+#       and ORB midpoint are safe; the E2 fire-day direction selector is not.
 #
 # E1 is NOT affected: E1 enters AFTER the break bar closes (next bar open),
 # so all break-bar properties are known at E1 entry time.
@@ -3910,6 +3962,10 @@ E2_EXCLUDED_FILTER_SUBSTRINGS: tuple[str, ...] = (
     "_FAST",  # break delay/speed
     "NOMON_CONT",  # continuation variant
 )
+E2_DIRECTION_SELECTOR_FILTER_PREFIXES: tuple[str, ...] = (
+    "PD_",  # PrevDayGeometryFilter uses orb_<session>_break_dir == "long"
+)
+E2_DEPLOYMENT_UNSAFE_FILTER_PREFIXES: tuple[str, ...] = E2_DIRECTION_SELECTOR_FILTER_PREFIXES
 
 # =========================================================================
 # Stop Multipliers: tighter stop placement via MAE profiling

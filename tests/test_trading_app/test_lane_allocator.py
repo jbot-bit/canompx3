@@ -13,6 +13,7 @@ import pytest
 
 from trading_app.lane_allocator import (
     LaneScore,
+    apply_live_tradeability_gate,
     _classify_status,
     _effective_annual_r,
     build_allocation,
@@ -1207,6 +1208,39 @@ class TestChordiaGate:
         sids = {s.strategy_id for s in result}
         assert "CLEAN" in sids
         assert "FAILED" not in sids
+
+    def test_live_tradeability_gate_demotes_e2_prior_day_selector(self):
+        """E2 PD_* direction-selector lanes cannot be allocated without clean replay."""
+        s = _make_score(
+            strategy_id="PD",
+            filter_type="PD_GO_LONG",
+            annual_r_estimate=99.0,
+            chordia_verdict="PASS_CHORDIA",
+            chordia_audit_age_days=0,
+        )
+        result = apply_live_tradeability_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "break_dir" in result[0].status_reason
+
+    def test_build_allocation_invokes_live_tradeability_gate(self):
+        """build_allocation refuses E2 PD_* even if the caller forgot the gate."""
+        clean = _make_score(
+            strategy_id="CLEAN",
+            filter_type="ORB_G5",
+            annual_r_estimate=40.0,
+        )
+        unsafe = _make_score(
+            strategy_id="UNSAFE_PD",
+            orb_label="US_DATA_1000",
+            filter_type="PD_GO_LONG",
+            annual_r_estimate=99.0,
+            chordia_verdict="PASS_CHORDIA",
+            chordia_audit_age_days=0,
+        )
+        result = build_allocation([clean, unsafe], max_slots=5)
+        sids = {s.strategy_id for s in result}
+        assert "CLEAN" in sids
+        assert "UNSAFE_PD" not in sids
 
     def test_save_allocation_emits_chordia_fields(self, tmp_path):
         """save_allocation writes chordia_verdict + chordia_audit_age_days into the JSON."""

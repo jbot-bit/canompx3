@@ -1,0 +1,179 @@
+metadata:
+  name: "mnq_nyseopen_xmesatr60_rr10_chordia_unlock_v1"
+  purpose: "Bounded exact-lane Chordia unlock audit for MNQ NYSE_OPEN O5 RR1.0 X_MES_ATR60. No theory grant is claimed."
+  date_locked: "2026-05-10T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "family"
+  research_question_type: "conditional_role"
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/runtime/chordia_audit_log.yaml"
+    - "docs/audit/results/2026-05-04-allocator-paused-pool-diagnosis.md"
+  notes:
+    - "This is an unlock audit for one already-validated shelf candidate, not a fresh discovery scan."
+    - "Criterion 4 strict threshold t >= 3.79 applies because no theory citation is claimed."
+    - "Mode A holdout remains sacred from 2026-01-01."
+
+scope:
+  instrument: MNQ
+  strategy_id: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60"
+  session: NYSE_OPEN
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  direction: pooled
+  filter_type: X_MES_ATR60
+  filter_source: "trading_app.config.ALL_FILTERS['X_MES_ATR60']"
+  out_of_scope:
+    - "COMEX_SETTLE X_MES_ATR60 sibling, already audited separately"
+    - "theory-grant upgrade for cross-asset ATR conditioning"
+    - "allocator, sizing, schema, or live-execution changes"
+    - "writes to validated_setups or chordia_audit_log.yaml before execution evidence exists"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only descriptive corroboration only; never used to tune the lane"
+  tuning_against_oos: false
+  canonical_layers_only: true
+
+feature_definition:
+  feature_name: X_MES_ATR60
+  canonical_source_of_truth: "trading_app.config.CrossAssetATRFilter"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, 'X_MES_ATR60', 'NYSE_OPEN')"
+  trade_time_knowable: true
+  temporal_alignment_note: >
+    The filter is admissible only if the MES ATR input is trade-time-knowable
+    before the MNQ NYSE_OPEN entry decision. This prereg does not claim the
+    cross-asset mechanism has literature grounding.
+  lookahead_check: "Required PASS before execution."
+
+grounding:
+  filter_grounding_status:
+    verdict: "UNSUPPORTED"
+    basis: >
+      The prior feasibility scan did not establish a local resource-backed
+      citation for cross-asset MES ATR as a causal mechanism for MNQ breakout
+      quality. Strict no-theory Chordia threshold applies.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - "docs/audit/results/2026-05-04-allocator-paused-pool-diagnosis.md"
+  note: >
+    The paused-pool diagnosis identified this exact strategy as a Priority A
+    CHORDIA_MISSING candidate. Those statistics motivate this audit but are
+    not the verdict evidence.
+
+primary_schema:
+  family_cells:
+    - id: "MNQ_NYSE_OPEN_O5_RR1.0_X_MES_ATR60"
+      strategy_id: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60"
+      instrument: MNQ
+      session: NYSE_OPEN
+      orb_minutes: 5
+      rr_target: 1.0
+      filter: X_MES_ATR60
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  chordia_threshold_basis: "Criterion 4 no-theory strict threshold (t >= 3.79)"
+  promotion_gate: "PASS_CHORDIA only; PASS_PROTOCOL_A is not available in this prereg"
+
+hypotheses:
+  - id: 1
+    name: "MNQ NYSE_OPEN O5 RR1.0 X_MES_ATR60 exact-lane strict unlock"
+    economic_basis: >
+      Bounded exact-lane replay of a pre-existing validated shelf candidate.
+      The audit asks whether the configured lane clears the strict no-theory
+      Chordia hurdle without inferring from the COMEX_SETTLE sibling.
+    role:
+      kind: "standalone"
+      parent: "Exact MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60 canonical lane replay on orb_outcomes x daily_features."
+      comparator: "Strict Chordia threshold and descriptive OOS sign monitor; no sibling rescue or parameter variation."
+      primary_metric: "selected_trade_mean_r"
+      promotion_target: "chordia_audit_unlock_only"
+    filter:
+      type: "X_MES_ATR60"
+      column: "cross_atr_MES_pct"
+      thresholds:
+        - "fire_vs_off"
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_OPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [5]
+    expected_trial_count: 1
+    kill_criteria:
+      - "IS t-stat < 3.79"
+      - "IS ExpR <= 0.0"
+      - "N_IS_on < 100"
+      - "If OOS N >= 30, OOS sign opposes IS sign"
+      - "Canonical filter delegation diverges from trading_app.config"
+      - "Scratch/null handling is not explicit in the measured trade stream"
+    statement: >
+      On the fixed MNQ NYSE_OPEN O5 E2 CB1 RR1.0 lane using the canonical
+      X_MES_ATR60 filter, the IS sample remains positive and strong enough to
+      clear the strict no-theory Chordia severity gate when recomputed honestly
+      on canonical Mode-A data.
+    pass_metric:
+      metric: "t_IS"
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical IS fired trades after canonical filter delegation"
+      threshold_gte:
+        t_is: 3.79
+        n_is_on: 100
+        expr_is: 0.0
+      extra_gates:
+        - "dir_match_oos = true when OOS N is sufficient for a descriptive read"
+        - "adversarial split table emitted"
+        - "scratch-inclusive accounting required if scratch rows exist"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+
+decision_rule:
+  continue_if: "H1 clears strict t >= 3.79 with positive IS ExpR and no harness failure"
+  park_if: "H1 clears strict IS gates but OOS directional corroboration is ambiguous"
+  kill_if: "H1 fails t or ExpR gates, or execution integrity fails"
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-10-mnq-nyseopen-xmesatr60-rr10-chordia-unlock-v1.md"
+  - "row-level CSV with IS/OOS split, raw/effective pnl_r, and scratch/null handling"
+  - "single-cell summary table with N_IS_on, ExpR_IS, Sharpe_IS, t_IS, OOS sign check, and verdict"
+  - "explicit statement that no theory grant was used"
+
+execution_gate:
+  allowed_now: true
+  execution_surface: "WSL with .venv-wsl"
+  forbidden_now:
+    - "theory-grant upgrade without new resources-backed citation"
+    - "sibling-cell rescue"
+    - "auto-writing PASS rows into chordia_audit_log.yaml without execution evidence"

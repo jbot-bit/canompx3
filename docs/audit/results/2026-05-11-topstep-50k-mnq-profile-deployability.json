@@ -1,0 +1,411 @@
+{
+  "account_state": {
+    "as_of_date": "2026-05-10",
+    "available": true,
+    "gate_msg": "Criterion 11 pass: operational 95.6%, as_of=2026-05-10, age=1d, paths=10000",
+    "gate_ok": true,
+    "gate_pass": true,
+    "generated_at_utc": "2026-05-10T07:17:58.397727+00:00",
+    "horizon_days": 90,
+    "n_paths": 10000,
+    "operational_pass_probability": 0.956,
+    "path_model": "trade_path_conservative",
+    "profile_id": "topstep_50k_mnq_auto",
+    "reason": null,
+    "report_age_days": 0,
+    "valid": true
+  },
+  "db_path": "/mnt/c/Users/joshd/canompx3/gold.db",
+  "generated_at": "2026-05-10T15:00:05.017715+00:00",
+  "instrument_summary": {
+    "MNQ": {
+      "c8_status_counts": {
+        "PASSED": 2
+      },
+      "current_k_fdr_fail": 0,
+      "current_k_fdr_missing": 0,
+      "deployable": 2,
+      "family_status_counts": {
+        "WHITELISTED": 2
+      },
+      "hard_issue_counts": {},
+      "institutional_language_allowed": 0,
+      "replay_mismatch": 0,
+      "sample_class_counts": {
+        "HIGH_CONFIDENCE_IF_MULTI_REGIME": 2
+      },
+      "sample_size_below_100": 0,
+      "slippage_status_counts": {
+        "PENDING_EVENT_TAIL": 2
+      },
+      "stored_c8_status_counts": {
+        "PASSED": 2
+      },
+      "total": 2,
+      "trade_role_counts": {
+        "standalone_lane_with_conditional_filters": 2
+      },
+      "verdict_counts": {
+        "CONTROLLED_LIVE_PILOT_CANDIDATE": 2
+      }
+    }
+  },
+  "instruments": [
+    "MNQ"
+  ],
+  "profile_evaluation": {
+    "account_risk_is_deployment_gate": true,
+    "mode": "strict_profile",
+    "note": "profile scope fails closed on Criterion 11 for selected lanes",
+    "profile_lane_count": 2
+  },
+  "profile_id": "topstep_50k_mnq_auto",
+  "promotion_queue": {
+    "deployable_now": {
+      "count": 2,
+      "rows": [
+        {
+          "c8_oos_status": "PASSED",
+          "expectancy_r": 0.2151,
+          "family_status": "WHITELISTED",
+          "hard_issues": [],
+          "instrument": "MNQ",
+          "sample_size": 513,
+          "slippage_validation_status": "PENDING_EVENT_TAIL",
+          "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+          "verdict": "CONTROLLED_LIVE_PILOT_CANDIDATE"
+        },
+        {
+          "c8_oos_status": "PASSED",
+          "expectancy_r": 0.2101,
+          "family_status": "WHITELISTED",
+          "hard_issues": [],
+          "instrument": "MNQ",
+          "sample_size": 701,
+          "slippage_validation_status": "PENDING_EVENT_TAIL",
+          "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15",
+          "verdict": "CONTROLLED_LIVE_PILOT_CANDIDATE"
+        }
+      ],
+      "truncated": 0
+    },
+    "nearest_to_deployable": {
+      "count": 0,
+      "rows": [],
+      "truncated": 0
+    },
+    "research_only": {
+      "count": 0,
+      "rows": [],
+      "truncated": 0
+    },
+    "retire_or_purge": {
+      "count": 0,
+      "rows": [],
+      "truncated": 0
+    }
+  },
+  "resource_lit": {
+    "cost_realism": "docs/institutional/literature/carver_2015_ch12_speed_and_size.md",
+    "dsr": "docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md",
+    "lookahead": "docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md",
+    "multiple_testing": "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md; docs/institutional/literature/harvey_liu_2015_backtesting.md",
+    "prop_risk": "resources/prop-firm-official-rules.md"
+  },
+  "scope": "profile",
+  "source_truth": {
+    "account_source": "trading_app.lifecycle_state.read_lifecycle_state['criterion11']",
+    "candidate_source": "validated_setups as candidate list only",
+    "fdr_source": "experimental_strategies current full canonical session pool via trading_app.strategy_validator.benjamini_hochberg",
+    "oos_source": "trading_app.strategy_validator._evaluate_criterion_8_oos",
+    "replay_source": "orb_outcomes JOIN daily_features via trading_app.strategy_fitness._load_strategy_outcomes",
+    "runtime_control_source": "trading_app.lifecycle_state.read_lifecycle_state including Criterion 12 SR state"
+  },
+  "strategies": [
+    {
+      "c8_oos": {
+        "c8_oos_status": "PASSED",
+        "n_oos": 69,
+        "oos_expectancy_r": 0.14842608695652174,
+        "oos_is_ratio": 0.6900329472641642,
+        "reason": null,
+        "status": null
+      },
+      "current_k_fdr": {
+        "current_adj_p": 8e-05,
+        "current_pass": true,
+        "stored_adj_p": 8e-05,
+        "stored_k": 15948
+      },
+      "deployable": true,
+      "institutional_language_allowed": false,
+      "instrument": "MNQ",
+      "issues": [
+        {
+          "detail": {
+            "block_reason": null,
+            "block_source": null,
+            "blocked": false,
+            "criterion12_reason": null,
+            "criterion12_state_age_days": 1,
+            "criterion12_valid": true,
+            "evaluated": true,
+            "pause_reason": null,
+            "paused": false,
+            "sr_recheck_trigger": "Re-check after N>=100 monitored trades. Retire if SR remains ALARM and (WFE < 0.50 or C8 ratio < 0.40).",
+            "sr_review_outcome": "watch",
+            "sr_review_summary": "Reviewed WATCH: C6 WFE 0.52 and C8 ratio 53% still clear the literature floors; SR alarm is the only trigger.",
+            "sr_reviewed_at": "2026-04-12",
+            "sr_status": "ALARM"
+          },
+          "evidence_class": "INFERRED",
+          "id": "sr_alarm_watch_reviewed",
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "expectancy_match": false,
+            "first_trade_day": "2019-05-10",
+            "last_trade_day": "2026-05-07",
+            "null_pnl_count": 0,
+            "ok": true,
+            "recomputed_expectancy_r": 0.20158595317725753,
+            "recomputed_sample_size": 598,
+            "replay_window": {
+              "end": "2026-05-07",
+              "start": "2019-05-10"
+            },
+            "sample_count_source": "trade_day_count",
+            "sample_size_match": true,
+            "stored_expectancy_r": 0.2151,
+            "stored_sample_size": 513,
+            "stored_trade_day_count": 598
+          },
+          "evidence_class": "INFERRED",
+          "id": "replay_expectancy_drift",
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "basis": "MNQ routine TBBO slippage measured conservative across all 9 deployed sessions; event-day tail remains an open known-unknown per docs/runtime/debt-ledger.md and docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v2-gap-fill.md",
+            "covered_session": true,
+            "effective_status": "PENDING_EVENT_TAIL",
+            "inferred_from_routine_tbbo": false,
+            "status": "PENDING_EVENT_TAIL"
+          },
+          "evidence_class": "INFERRED",
+          "id": "slippage_event_tail_pending",
+          "severity": "warning"
+        },
+        {
+          "detail": 6,
+          "evidence_class": "INFERRED",
+          "id": "short_history",
+          "severity": "warning"
+        },
+        {
+          "detail": 7.64771579397916e-12,
+          "evidence_class": "INFERRED",
+          "id": "dsr_below_cross_check",
+          "severity": "warning"
+        }
+      ],
+      "metrics": {
+        "c8_oos_status": "PASSED",
+        "dsr_score": 7.64771579397916e-12,
+        "expectancy_r": 0.2151,
+        "family_status": "WHITELISTED",
+        "oos_exp_r": 0.2079,
+        "sample_size": 513,
+        "slippage_validation_status": "PENDING_EVENT_TAIL",
+        "wfe": 1.1321,
+        "years_tested": 6
+      },
+      "replay": {
+        "expectancy_match": false,
+        "first_trade_day": "2019-05-10",
+        "last_trade_day": "2026-05-07",
+        "null_pnl_count": 0,
+        "ok": true,
+        "recomputed_expectancy_r": 0.20158595317725753,
+        "recomputed_sample_size": 598,
+        "replay_window": {
+          "end": "2026-05-07",
+          "start": "2019-05-10"
+        },
+        "sample_count_source": "trade_day_count",
+        "sample_size_match": true,
+        "stored_expectancy_r": 0.2151,
+        "stored_sample_size": 513,
+        "stored_trade_day_count": 598
+      },
+      "runtime_control": {
+        "block_reason": null,
+        "block_source": null,
+        "blocked": false,
+        "criterion12_reason": null,
+        "criterion12_state_age_days": 1,
+        "criterion12_valid": true,
+        "evaluated": true,
+        "pause_reason": null,
+        "paused": false,
+        "sr_recheck_trigger": "Re-check after N>=100 monitored trades. Retire if SR remains ALARM and (WFE < 0.50 or C8 ratio < 0.40).",
+        "sr_review_outcome": "watch",
+        "sr_review_summary": "Reviewed WATCH: C6 WFE 0.52 and C8 ratio 53% still clear the literature floors; SR alarm is the only trigger.",
+        "sr_reviewed_at": "2026-04-12",
+        "sr_status": "ALARM"
+      },
+      "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+      "trade_context": {
+        "archetype": "event_session_orb_breakout",
+        "conditional_components": [
+          "location_or_confluence_conditioner"
+        ],
+        "entry_model": "E2",
+        "instrument": "MNQ",
+        "regime_rule": "Treat session/regime filters as conditional mechanisms; do not promote selected-trade mean into standalone or portfolio capacity without role-appropriate evidence.",
+        "research_role": "standalone_lane_with_conditional_filters",
+        "role_authority": "docs/institutional/conditional-edge-framework.md",
+        "sample_class": "HIGH_CONFIDENCE_IF_MULTI_REGIME",
+        "session": "COMEX_SETTLE"
+      },
+      "verdict": "CONTROLLED_LIVE_PILOT_CANDIDATE"
+    },
+    {
+      "c8_oos": {
+        "c8_oos_status": "PASSED",
+        "n_oos": 47,
+        "oos_expectancy_r": 0.2708659574468085,
+        "oos_is_ratio": 1.2892239764246003,
+        "reason": null,
+        "status": null
+      },
+      "current_k_fdr": {
+        "current_adj_p": 1.6e-05,
+        "current_pass": true,
+        "stored_adj_p": 1.6e-05,
+        "stored_k": 17536
+      },
+      "deployable": true,
+      "institutional_language_allowed": false,
+      "instrument": "MNQ",
+      "issues": [
+        {
+          "detail": {
+            "block_reason": null,
+            "block_source": null,
+            "blocked": false,
+            "criterion12_reason": null,
+            "criterion12_state_age_days": 1,
+            "criterion12_valid": true,
+            "evaluated": true,
+            "pause_reason": null,
+            "paused": false,
+            "sr_recheck_trigger": "Re-check after N>=100 monitored trades. Retire if SR remains ALARM and (WFE < 0.50 or OOS/IS ratio < 0.40).",
+            "sr_review_outcome": "watch",
+            "sr_review_summary": "Reviewed WATCH: WFE 0.90 and OOS ExpR 0.207 = 98% of IS 0.210 \u2014 near-perfect OOS match on N=701, p<0.0001. SR alarm on N=35 monitored trades is expected noise; matches L3 standard.",
+            "sr_reviewed_at": "2026-04-14",
+            "sr_status": "ALARM"
+          },
+          "evidence_class": "INFERRED",
+          "id": "sr_alarm_watch_reviewed",
+          "severity": "warning"
+        },
+        {
+          "detail": {
+            "basis": "MNQ routine TBBO slippage measured conservative across all 9 deployed sessions; event-day tail remains an open known-unknown per docs/runtime/debt-ledger.md and docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v2-gap-fill.md",
+            "covered_session": true,
+            "effective_status": "PENDING_EVENT_TAIL",
+            "inferred_from_routine_tbbo": false,
+            "status": "PENDING_EVENT_TAIL"
+          },
+          "evidence_class": "INFERRED",
+          "id": "slippage_event_tail_pending",
+          "severity": "warning"
+        },
+        {
+          "detail": 6,
+          "evidence_class": "INFERRED",
+          "id": "short_history",
+          "severity": "warning"
+        },
+        {
+          "detail": 1.1102230246251565e-16,
+          "evidence_class": "INFERRED",
+          "id": "dsr_below_cross_check",
+          "severity": "warning"
+        }
+      ],
+      "metrics": {
+        "c8_oos_status": "PASSED",
+        "dsr_score": 1.1102230246251565e-16,
+        "expectancy_r": 0.2101,
+        "family_status": "WHITELISTED",
+        "oos_exp_r": 0.2086,
+        "sample_size": 701,
+        "slippage_validation_status": "PENDING_EVENT_TAIL",
+        "wfe": 0.9107,
+        "years_tested": 6
+      },
+      "replay": {
+        "expectancy_match": true,
+        "first_trade_day": "2019-05-06",
+        "last_trade_day": "2026-04-23",
+        "null_pnl_count": 0,
+        "ok": true,
+        "recomputed_expectancy_r": 0.21425042735042735,
+        "recomputed_sample_size": 936,
+        "replay_window": {
+          "end": "2026-04-23",
+          "start": "2019-05-06"
+        },
+        "sample_count_source": "trade_day_count",
+        "sample_size_match": true,
+        "stored_expectancy_r": 0.2101,
+        "stored_sample_size": 701,
+        "stored_trade_day_count": 936
+      },
+      "runtime_control": {
+        "block_reason": null,
+        "block_source": null,
+        "blocked": false,
+        "criterion12_reason": null,
+        "criterion12_state_age_days": 1,
+        "criterion12_valid": true,
+        "evaluated": true,
+        "pause_reason": null,
+        "paused": false,
+        "sr_recheck_trigger": "Re-check after N>=100 monitored trades. Retire if SR remains ALARM and (WFE < 0.50 or OOS/IS ratio < 0.40).",
+        "sr_review_outcome": "watch",
+        "sr_review_summary": "Reviewed WATCH: WFE 0.90 and OOS ExpR 0.207 = 98% of IS 0.210 \u2014 near-perfect OOS match on N=701, p<0.0001. SR alarm on N=35 monitored trades is expected noise; matches L3 standard.",
+        "sr_reviewed_at": "2026-04-14",
+        "sr_status": "ALARM"
+      },
+      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15",
+      "trade_context": {
+        "archetype": "event_session_orb_breakout",
+        "conditional_components": [
+          "location_or_confluence_conditioner"
+        ],
+        "entry_model": "E2",
+        "instrument": "MNQ",
+        "regime_rule": "Treat session/regime filters as conditional mechanisms; do not promote selected-trade mean into standalone or portfolio capacity without role-appropriate evidence.",
+        "research_role": "standalone_lane_with_conditional_filters",
+        "role_authority": "docs/institutional/conditional-edge-framework.md",
+        "sample_class": "HIGH_CONFIDENCE_IF_MULTI_REGIME",
+        "session": "US_DATA_1000"
+      },
+      "verdict": "CONTROLLED_LIVE_PILOT_CANDIDATE"
+    }
+  ],
+  "strict": true,
+  "summary": {
+    "deployable_candidates": 2,
+    "hard_issue_counts": {},
+    "institutional_language_allowed": 0,
+    "total_candidates": 2,
+    "verdict_counts": {
+      "CONTROLLED_LIVE_PILOT_CANDIDATE": 2
+    }
+  }
+}

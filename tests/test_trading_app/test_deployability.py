@@ -129,7 +129,33 @@ def test_oos_pass_through_is_not_deployable():
 
 
 def test_missing_slippage_blocks_deployability():
+    result = _classify(row=_row(instrument="MGC", slippage_validation_status=None))
+
+    assert result.verdict == dep.BLOCKED_SLIPPAGE
+    assert any(issue.id == "slippage_missing" for issue in result.issues)
+
+
+def test_mnq_e2_covered_session_infers_routine_slippage_evidence():
     result = _classify(row=_row(slippage_validation_status=None))
+
+    assert result.verdict == dep.CONTROLLED_LIVE_PILOT_CANDIDATE
+    assert result.deployable is True
+    assert result.institutional_language_allowed is False
+    event_tail = [issue for issue in result.issues if issue.id == "slippage_event_tail_pending"]
+    assert len(event_tail) == 1
+    assert event_tail[0].detail["inferred_from_routine_tbbo"] is True
+    assert event_tail[0].detail["effective_status"] == "PENDING_EVENT_TAIL"
+
+
+def test_mnq_e2_uncovered_session_missing_slippage_still_blocks():
+    result = _classify(row=_row(orb_label="BRISBANE_1025", slippage_validation_status=None))
+
+    assert result.verdict == dep.BLOCKED_SLIPPAGE
+    assert any(issue.id == "slippage_missing" for issue in result.issues)
+
+
+def test_mnq_non_e2_missing_slippage_still_blocks():
+    result = _classify(row=_row(entry_model="E1", slippage_validation_status=None))
 
     assert result.verdict == dep.BLOCKED_SLIPPAGE
     assert any(issue.id == "slippage_missing" for issue in result.issues)
@@ -199,7 +225,14 @@ def test_e2_lookahead_filter_is_no_go_bias_or_data():
     result = _classify(row=_row(filter_type="VOL_RV12_N20"))
 
     assert result.verdict == dep.NO_GO_BIAS_OR_DATA
-    assert any(issue.id == "e2_lookahead_filter" for issue in result.issues)
+    assert any(issue.id == "e2_deployment_unsafe_filter" for issue in result.issues)
+
+
+def test_e2_prior_day_direction_selector_is_no_go_bias_or_data():
+    result = _classify(row=_row(filter_type="PD_GO_LONG"))
+
+    assert result.verdict == dep.NO_GO_BIAS_OR_DATA
+    assert any(issue.id == "e2_deployment_unsafe_filter" for issue in result.issues)
 
 
 def test_replay_mismatch_blocks_deployability():
@@ -290,7 +323,7 @@ def test_instrument_summary_labels_mes_and_mgc_gaps():
 
 
 def test_promotion_queue_separates_evidence_gaps_from_purge_candidates():
-    near = _classify(row=_row(strategy_id="NEAR", slippage_validation_status=None))
+    near = _classify(row=_row(strategy_id="NEAR", instrument="MGC", slippage_validation_status=None))
     purge = _classify(row=_row(strategy_id="PURGE", robustness_status="PURGED"))
 
     queue = dep._build_promotion_queue([near, purge])
@@ -329,7 +362,7 @@ def _state_report(strategy):
 def test_write_deployability_state_is_append_only_and_latest_selects_current_verdict(tmp_path):
     db_path = tmp_path / "state.db"
     first = _classify().to_dict()
-    second = _classify(row=_row(slippage_validation_status=None)).to_dict()
+    second = _classify(row=_row(instrument="MGC", slippage_validation_status=None)).to_dict()
 
     first_write = write_deployability_state(
         _state_report(first),
