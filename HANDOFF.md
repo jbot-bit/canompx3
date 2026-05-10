@@ -9,15 +9,19 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-10
-- **Commit:** 7cfacd6b — fix(pipeline): harden rebuild resume chain
-- **Files changed:** 7 files
-  - `REPO_MAP.md`
-  - `pipeline/build_daily_features.py`
+- **Commit:** c87c344f — fix(deployability): persist selected-profile readiness gate
+- **Files changed:** 8 files
+  - `pipeline/audit_log.py`
+  - `scripts/tools/full_shelf_deployability_audit.py`
   - `scripts/tools/pipeline_status.py`
-  - `scripts/tools/run_rebuild_with_sync.sh`
-  - `scripts/tools/stress_test_chain_integrity.py`
-  - `tests/test_pipeline/test_build_daily_features.py`
   - `tests/test_pipeline/test_pipeline_status.py`
+  - `tests/test_trading_app/test_deployability.py`
+  - `trading_app/db_manager.py`
+  - `trading_app/deployability.py`
+  - `trading_app/deployability_state.py`
+
+## Session Note
+- Selected profile gate `topstep_50k_mnq_auto` passed with 2 MNQ controlled-live-pilot candidates, 0 hard blockers, and 0 institutional-language-approved lanes; append-only readiness rows were written to `deployment_readiness_evaluations` with rebuild id `manual-deployability-20260510`.
 
 ## Next Steps — Active
 1. Treat current MNQ book as controlled live pilot only: 1 contract, no institutional/full-production language, no scaling until SR watch recheck, chain warnings, and event-tail debt are explicitly reviewed.
