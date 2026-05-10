@@ -41,6 +41,7 @@ STEP_TABLE_MAP: dict[str, str] = {
     "retire_e3": "validated_setups",
     "edge_families": "edge_families",
     "family_rr_locks": "family_rr_locks",
+    "deployability_gate": "deployment_readiness_evaluations",
     # Steps below don't write to DB tables
     "repo_map": "",
     "health_check": "",
@@ -328,6 +329,20 @@ REBUILD_STEPS: list[tuple[str, list[str]]] = [
     ("retire_e3", [_PY, "scripts/migrations/retire_e3_strategies.py"]),
     ("family_rr_locks", [_PY, "scripts/tools/select_family_rr.py"]),
     ("edge_families", [_PY, "scripts/tools/build_edge_families.py", "--instrument", "{instrument}"]),
+    (
+        "deployability_gate",
+        [
+            _PY,
+            "scripts/tools/full_shelf_deployability_audit.py",
+            "--scope",
+            "profile",
+            "--write-state",
+            "--fail-policy",
+            "profile-hard-blockers",
+            "--max-rows",
+            "10",
+        ],
+    ),
     ("repo_map", [_PY, "scripts/tools/gen_repo_map.py"]),
     ("health_check", [_PY, "pipeline/health_check.py"]),
     ("pinecone_sync", [_PY, "scripts/tools/sync_pinecone.py"]),
@@ -474,7 +489,9 @@ def run_rebuild(
 
     for i, step in enumerate(steps, 1):
         step_name = step["name"]
-        step_cmd = step["cmd"]
+        step_cmd = list(step["cmd"])
+        if step_name == "deployability_gate":
+            step_cmd.extend(["--rebuild-id", rebuild_id, "--db-path", reconnect_db_path])
 
         # Pre-flight check
         step_base, orb_min = _parse_step_preflight(step_name)

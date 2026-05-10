@@ -27,6 +27,7 @@ from pipeline.db_contracts import (
     DEPLOYMENT_SCOPE_DEPLOYABLE,
 )
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.deployability_state import DEPLOYMENT_READINESS_EVALUATIONS_SCHEMA
 
 
 def compute_trade_day_hash(days: list) -> str:
@@ -77,6 +78,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             logger.warning("WARN: Force mode: Dropping existing trading_app tables...")
             con.execute(f"DROP VIEW IF EXISTS {DEPLOYABLE_VALIDATED_VIEW}")
             con.execute(f"DROP VIEW IF EXISTS {ACTIVE_VALIDATED_VIEW}")
+            con.execute("DROP TABLE IF EXISTS deployment_readiness_evaluations")
             con.execute("DROP TABLE IF EXISTS edge_families")
             con.execute("DROP TABLE IF EXISTS strategy_trade_days")
             con.execute("DROP TABLE IF EXISTS validated_setups_archive")
@@ -360,6 +362,11 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 PRIMARY KEY (strategy_id, trading_day)
             )
         """)
+
+        # Table 9: append-only deployment readiness evaluations.
+        # Derived state only; canonical research evidence remains owned by
+        # validated_setups, edge_families, replay, account, and runtime surfaces.
+        con.execute(DEPLOYMENT_READINESS_EVALUATIONS_SCHEMA)
 
         # Migration: add regime waiver columns (for existing DBs)
         for col, typedef in [
@@ -666,6 +673,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
             "family_rr_locks",
             "validation_run_log",
             "paper_trades",
+            "deployment_readiness_evaluations",
         ]
         expected_views = [
             ACTIVE_VALIDATED_VIEW,
@@ -903,6 +911,37 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
             missing = expected_cols - actual_cols
             if missing:
                 violations.append(f"validated_setups missing columns: {missing}")
+
+        if "deployment_readiness_evaluations" in existing_tables:
+            result = con.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'deployment_readiness_evaluations'
+            """).fetchall()
+
+            expected_cols = {
+                "evaluation_id",
+                "generated_at",
+                "rebuild_id",
+                "git_sha",
+                "scope",
+                "profile_id",
+                "strategy_id",
+                "instrument",
+                "verdict",
+                "deployable",
+                "institutional_language_allowed",
+                "hard_issue_ids",
+                "warning_issue_ids",
+                "info_issue_ids",
+                "evidence_json",
+                "provenance_json",
+            }
+            actual_cols = {row[0] for row in result}
+
+            missing = expected_cols - actual_cols
+            if missing:
+                violations.append(f"deployment_readiness_evaluations missing columns: {missing}")
 
         all_valid = len(violations) == 0
         return all_valid, violations

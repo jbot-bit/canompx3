@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import json
+
+import duckdb
+
 from trading_app import deployability as dep
+from trading_app.deployability_state import load_latest_deployment_readiness, write_deployability_state
 
 
 def _row(**overrides):
@@ -153,6 +158,43 @@ def test_current_k_fdr_failure_blocks_deployability():
     assert any(issue.id == "current_k_fdr_fail" for issue in result.issues)
 
 
+def test_current_k_fdr_uses_canonical_bh_owner(monkeypatch):
+    con = duckdb.connect(":memory:")
+    con.execute("""
+        CREATE TABLE experimental_strategies (
+            strategy_id TEXT,
+            p_value DOUBLE,
+            is_canonical BOOLEAN,
+            orb_label TEXT,
+            instrument TEXT
+        )
+    """)
+    con.executemany(
+        "INSERT INTO experimental_strategies VALUES (?, ?, TRUE, 'COMEX_SETTLE', 'MNQ')",
+        [("SID_A", 0.001), ("SID_B", 0.20)],
+    )
+    calls = []
+
+    def fake_bh(p_values, *, alpha=0.05, total_tests=None):
+        calls.append((p_values, alpha, total_tests))
+        return {
+            "SID_A": {"adjusted_p": 0.01},
+            "SID_B": {"adjusted_p": 0.20},
+        }
+
+    monkeypatch.setattr(dep, "benjamini_hochberg", fake_bh)
+
+    result = dep._current_k_fdr(
+        con,
+        [{"strategy_id": "SID_A", "orb_label": "COMEX_SETTLE", "fdr_adjusted_p": 0.50, "discovery_k": 10}],
+    )
+    con.close()
+
+    assert calls == [([("SID_A", 0.001), ("SID_B", 0.20)], 0.05, 2)]
+    assert result["SID_A"]["current_adj_p"] == 0.01
+    assert result["SID_A"]["current_pass"] is True
+
+
 def test_e2_lookahead_filter_is_no_go_bias_or_data():
     result = _classify(row=_row(filter_type="VOL_RV12_N20"))
 
@@ -267,3 +309,71 @@ def test_trade_context_marks_regime_conditional_filters():
     assert result.trade_context["sample_class"] == "REGIME_CONDITIONAL_ONLY"
     assert "volatility_or_participation_regime_filter" in result.trade_context["conditional_components"]
     assert "friction_or_orb_size_regime_filter" in result.trade_context["conditional_components"]
+
+
+def _state_report(strategy):
+    return {
+        "generated_at": "2026-05-10T00:00:00+00:00",
+        "db_path": "test.db",
+        "scope": "profile",
+        "profile_id": "topstep_50k_mnq_auto",
+        "strict": True,
+        "source_truth": {"candidate_source": "validated_setups as candidate list only"},
+        "resource_lit": {"multiple_testing": "docs/institutional/literature/harvey_liu_2015_backtesting.md"},
+        "summary": {"total_candidates": 1, "hard_issue_counts": {}},
+        "account_state": {"available": True, "gate_ok": True},
+        "strategies": [strategy],
+    }
+
+
+def test_write_deployability_state_is_append_only_and_latest_selects_current_verdict(tmp_path):
+    db_path = tmp_path / "state.db"
+    first = _classify().to_dict()
+    second = _classify(row=_row(slippage_validation_status=None)).to_dict()
+
+    first_write = write_deployability_state(
+        _state_report(first),
+        db_path=db_path,
+        rebuild_id="rid-1",
+        git_sha="abc123",
+    )
+    second_write = write_deployability_state(
+        _state_report(second),
+        db_path=db_path,
+        rebuild_id="rid-2",
+        git_sha="def456",
+    )
+
+    assert first_write["rows_written"] == 1
+    assert second_write["rows_written"] == 1
+
+    latest = load_latest_deployment_readiness(
+        db_path=db_path,
+        profile_id="topstep_50k_mnq_auto",
+        scope="profile",
+    )
+    assert len(latest) == 1
+    assert latest[0]["strategy_id"] == "SID_A"
+    assert latest[0]["verdict"] == dep.BLOCKED_SLIPPAGE
+    assert latest[0]["rebuild_id"] == "rid-2"
+    assert "rn" not in latest[0]
+    assert json.loads(latest[0]["hard_issue_ids"]) == ["slippage_missing"]
+    assert "source_truth" in json.loads(latest[0]["provenance_json"])
+
+    with duckdb.connect(str(db_path), read_only=True) as con:
+        row = con.execute("SELECT COUNT(*) FROM deployment_readiness_evaluations").fetchone()
+    assert row[0] == 2
+
+
+def test_write_deployability_state_rejects_malformed_report(tmp_path):
+    bad_report = {
+        "scope": "profile",
+        "strategies": [{"strategy_id": "SID_A", "verdict": dep.DEPLOYABLE_CANDIDATE}],
+    }
+
+    try:
+        write_deployability_state(bad_report, db_path=tmp_path / "bad.db", git_sha="abc123")
+    except ValueError as exc:
+        assert "missing fields" in str(exc)
+    else:
+        raise AssertionError("malformed deployability report should fail closed")

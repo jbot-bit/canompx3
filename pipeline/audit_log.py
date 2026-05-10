@@ -176,6 +176,7 @@ _ALLOWED_TABLES: frozenset[str] = frozenset(
         "validated_setups",
         "edge_families",
         "family_rr_locks",
+        "deployment_readiness_evaluations",
         "prospective_signals",
         "pipeline_audit_log",
         "rebuild_manifest",
@@ -189,6 +190,7 @@ _INSTRUMENT_COLUMN_TABLES: frozenset[str] = frozenset(
         "validated_setups",
         "edge_families",
         "family_rr_locks",
+        "deployment_readiness_evaluations",
     }
 )
 

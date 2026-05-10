@@ -23,7 +23,7 @@ from trading_app.config import is_e2_lookahead_filter
 from trading_app.lifecycle_state import read_lifecycle_state
 from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
 from trading_app.strategy_fitness import _load_strategy_outcomes
-from trading_app.strategy_validator import _evaluate_criterion_8_oos
+from trading_app.strategy_validator import _evaluate_criterion_8_oos, benjamini_hochberg
 
 DEPLOYABLE_CANDIDATE = "DEPLOYABLE_CANDIDATE"
 CONTROLLED_LIVE_PILOT_CANDIDATE = "CONTROLLED_LIVE_PILOT_CANDIDATE"
@@ -206,15 +206,9 @@ def _bh_adjusted_for_session(con: duckdb.DuckDBPyConnection, orb_label: str) -> 
     ).fetchall()
     if not rows:
         return {}
-    adjusted = [0.0] * len(rows)
-    m = len(rows)
-    for idx in range(len(rows) - 1, -1, -1):
-        rank = idx + 1
-        raw = min(float(rows[idx][1]) * m / rank, 1.0)
-        if idx < len(rows) - 1:
-            raw = min(raw, adjusted[idx + 1])
-        adjusted[idx] = raw
-    return {str(row[0]): adj for row, adj in zip(rows, adjusted, strict=False)}
+    p_values = [(str(strategy_id), float(p_value)) for strategy_id, p_value in rows]
+    adjusted = benjamini_hochberg(p_values, alpha=0.05, total_tests=len(p_values))
+    return {strategy_id: float(result["adjusted_p"]) for strategy_id, result in adjusted.items()}
 
 
 def _current_k_fdr(
@@ -745,7 +739,7 @@ def build_deployability_audit(
         "source_truth": {
             "candidate_source": "validated_setups as candidate list only",
             "replay_source": "orb_outcomes JOIN daily_features via trading_app.strategy_fitness._load_strategy_outcomes",
-            "fdr_source": "experimental_strategies current full canonical session pool",
+            "fdr_source": "experimental_strategies current full canonical session pool via trading_app.strategy_validator.benjamini_hochberg",
             "oos_source": "trading_app.strategy_validator._evaluate_criterion_8_oos",
             "account_source": "trading_app.lifecycle_state.read_lifecycle_state['criterion11']",
             "runtime_control_source": "trading_app.lifecycle_state.read_lifecycle_state including Criterion 12 SR state",

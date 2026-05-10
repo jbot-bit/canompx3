@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only full-shelf deployability audit.
+"""Full-shelf deployability audit.
 
 This is a deployment-readiness tool, not a research validator. It replays every
 candidate through canonical surfaces and fails closed on missing evidence.
@@ -21,6 +21,25 @@ from trading_app.deployability import (  # noqa: E402
     build_deployability_audit,
     render_deployability_text,
 )
+from trading_app.deployability_state import write_deployability_state  # noqa: E402
+
+
+def _exit_code_for_policy(report: dict, fail_policy: str) -> int:
+    if fail_policy == "report-only":
+        return 0
+    if fail_policy == "legacy":
+        return 0 if report["summary"]["deployable_candidates"] > 0 else 2
+
+    total = int(report["summary"].get("total_candidates") or 0)
+    hard_issue_counts = report["summary"].get("hard_issue_counts") or {}
+    has_hard_blockers = bool(hard_issue_counts)
+    if fail_policy == "any-hard-blockers":
+        return 2 if total == 0 or has_hard_blockers else 0
+    if fail_policy == "profile-hard-blockers":
+        if report.get("scope") != "profile":
+            return 2
+        return 2 if total == 0 or has_hard_blockers else 0
+    raise ValueError(f"unknown fail policy: {fail_policy}")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -42,6 +61,21 @@ def _build_parser() -> argparse.ArgumentParser:
         "--non-strict", action="store_true", help="Reserved for diagnostics; strict deployability is default."
     )
     parser.add_argument("--max-rows", type=int, default=30, help="Max strategy rows in text output.")
+    parser.add_argument(
+        "--write-state",
+        action="store_true",
+        help="Append strategy-level rows to deployment_readiness_evaluations.",
+    )
+    parser.add_argument("--rebuild-id", default=None, help="Rebuild manifest id to attach to written state.")
+    parser.add_argument(
+        "--fail-policy",
+        choices=("legacy", "report-only", "profile-hard-blockers", "any-hard-blockers"),
+        default="legacy",
+        help=(
+            "Exit behavior. legacy preserves candidate-count behavior; "
+            "profile-hard-blockers is intended for selected-profile rebuild gates."
+        ),
+    )
     return parser
 
 
@@ -67,6 +101,24 @@ def main() -> int:
             print(rendered)
         return 3
 
+    if args.write_state:
+        try:
+            report["state_write"] = write_deployability_state(
+                report,
+                db_path=Path(args.db_path),
+                rebuild_id=args.rebuild_id,
+            )
+        except Exception as exc:
+            payload = {"verdict": "state_write_error", "error": str(exc)}
+            rendered = (
+                json.dumps(payload, indent=2, sort_keys=True) if args.format == "json" else f"state_write_error: {exc}"
+            )
+            if args.output:
+                Path(args.output).write_text(rendered + "\n", encoding="utf-8")
+            else:
+                print(rendered)
+            return 3
+
     rendered = (
         json.dumps(report, indent=2, sort_keys=True, default=str)
         if args.format == "json"
@@ -79,7 +131,7 @@ def main() -> int:
     else:
         print(rendered)
 
-    return 0 if report["summary"]["deployable_candidates"] > 0 else 2
+    return _exit_code_for_policy(report, args.fail_policy)
 
 
 if __name__ == "__main__":

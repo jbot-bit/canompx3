@@ -121,6 +121,26 @@ def _create_test_db(tmp_path):
             created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS deployment_readiness_evaluations (
+            evaluation_id TEXT PRIMARY KEY,
+            generated_at TIMESTAMPTZ NOT NULL,
+            rebuild_id TEXT,
+            git_sha TEXT,
+            scope TEXT NOT NULL,
+            profile_id TEXT,
+            strategy_id TEXT NOT NULL,
+            instrument TEXT,
+            verdict TEXT NOT NULL,
+            deployable BOOLEAN NOT NULL,
+            institutional_language_allowed BOOLEAN NOT NULL,
+            hard_issue_ids TEXT NOT NULL,
+            warning_issue_ids TEXT NOT NULL,
+            info_issue_ids TEXT NOT NULL,
+            evidence_json TEXT NOT NULL,
+            provenance_json TEXT NOT NULL
+        )
+    """)
     con.commit()
     return db_path, con
 
@@ -466,12 +486,13 @@ class TestManifest:
 
 class TestBuildStepList:
     def test_build_step_list_full(self):
-        """Full step list has the canonical 13-step multi-aperture rebuild chain."""
+        """Full step list has the canonical 14-step multi-aperture rebuild chain."""
         steps = build_step_list("MGC")
-        assert len(steps) == 13
+        assert len(steps) == 14
         assert steps[0]["name"] == "outcome_builder_O5"
         assert steps[1]["name"] == "outcome_builder_O15"
         assert steps[2]["name"] == "outcome_builder_O30"
+        assert steps[10]["name"] == "deployability_gate"
         assert "MGC" in steps[0]["cmd"]
         assert steps[-1]["name"] == "pinecone_sync"
 
@@ -479,7 +500,7 @@ class TestBuildStepList:
         """Resume skips completed steps."""
         completed = ["outcome_builder_O5"]
         steps = build_step_list("MGC", resume_from=completed)
-        assert len(steps) == 12
+        assert len(steps) == 13
         assert steps[0]["name"] == "outcome_builder_O15"
 
     def test_build_step_list_validator_accepts_legacy_prereg_flag(self):
@@ -515,11 +536,12 @@ class TestRebuildDryRun:
         con.close()
 
     def test_rebuild_dry_run_shows_all_steps(self, tmp_path, capsys):
-        """Dry run lists all 13 canonical rebuild steps."""
+        """Dry run lists all 14 canonical rebuild steps."""
         db_path, con = _create_test_db(tmp_path)
         _, con = run_rebuild(con, "MGC", dry_run=True)
         captured = capsys.readouterr()
-        assert "[13/13]" in captured.out
+        assert "[14/14]" in captured.out
+        assert "deployability_gate" in captured.out
         assert "pinecone_sync" in captured.out
         con.close()
 
@@ -569,7 +591,8 @@ class TestRebuildExecution:
         manifest = read_last_manifest(con, sym)
         assert manifest is not None
         assert manifest["status"] == "COMPLETED"
-        assert len(manifest["steps_completed"]) == 13
+        assert len(manifest["steps_completed"]) == 14
+        assert "deployability_gate" in manifest["steps_completed"]
         con.close()
 
     def test_rebuild_step_fails_writes_manifest(self, tmp_path, capsys):
