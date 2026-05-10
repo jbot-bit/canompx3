@@ -1698,46 +1698,57 @@ def build_daily_features(
     # Convert to DataFrame for bulk insert
     features_df = pd.DataFrame(rows)
 
-    # IDEMPOTENT: Delete existing rows, then insert
+    # IDEMPOTENT: update existing rows by PK, then insert missing rows.
+    # This preserves child orb_outcomes FK references on reruns.
     con.execute("BEGIN TRANSACTION")
 
     try:
-        # Delete existing rows in range (scoped to this orb_minutes)
-        delete_count = con.execute(
-            """
-            SELECT COUNT(*) FROM daily_features
-            WHERE symbol = ?
-            AND trading_day >= ?
-            AND trading_day <= ?
-            AND orb_minutes = ?
-        """,
-            [symbol, start_date, end_date, orb_minutes],
-        ).fetchone()[0]
-
-        con.execute(
-            """
-            DELETE FROM daily_features
-            WHERE symbol = ?
-            AND trading_day >= ?
-            AND trading_day <= ?
-            AND orb_minutes = ?
-        """,
-            [symbol, start_date, end_date, orb_minutes],
+        key_cols = {"symbol", "trading_day", "orb_minutes"}
+        data_cols = [col for col in features_df.columns if col not in key_cols]
+        col_names = ", ".join(features_df.columns)
+        join_clause = (
+            "target.symbol = src.symbol "
+            "AND target.trading_day = src.trading_day "
+            "AND target.orb_minutes = src.orb_minutes"
         )
 
-        if delete_count > 0:
-            logger.info(f"  Deleted {delete_count:,} existing daily_features rows")
+        existing_count = con.execute(
+            """
+            SELECT COUNT(*) FROM daily_features
+            WHERE (symbol, trading_day, orb_minutes) IN (
+                SELECT symbol, trading_day, orb_minutes FROM features_df
+            )
+            """
+        ).fetchone()[0]
 
-        # Insert new rows — use explicit column list for safety
-        col_names = ", ".join(features_df.columns)
-        con.execute(f"""
-            INSERT INTO daily_features ({col_names})
-            SELECT {col_names} FROM features_df
-        """)
+        if existing_count > 0 and data_cols:
+            set_clause = ", ".join(f"{col} = src.{col}" for col in data_cols)
+            con.execute(f"""
+                UPDATE daily_features AS target
+                SET {set_clause}
+                FROM features_df AS src
+                WHERE {join_clause}
+            """)
+
+        insert_count = len(rows) - existing_count
+        if insert_count > 0:
+            con.execute(f"""
+                INSERT INTO daily_features ({col_names})
+                SELECT {col_names}
+                FROM features_df AS src
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM daily_features AS target
+                    WHERE {join_clause}
+                )
+            """)
 
         con.execute("COMMIT")
 
-        logger.info(f"  Inserted {len(rows):,} daily_features rows")
+        if existing_count > 0:
+            logger.info(f"  Updated {existing_count:,} existing daily_features rows")
+        if insert_count > 0:
+            logger.info(f"  Inserted {insert_count:,} new daily_features rows")
 
         # Post-pass enrichment: populate pit_range_atr from exchange_statistics
         # for the freshly-written slice. PitRangeFilter is fail-closed at

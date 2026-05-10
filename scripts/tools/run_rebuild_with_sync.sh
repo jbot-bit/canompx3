@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Wrapper: run full rebuild chain + pinecone sync for a single instrument
-# Usage: bash scripts/tools/run_rebuild_with_sync.sh [INSTRUMENT]
-# Default: MGC
+# Usage: bash scripts/tools/run_rebuild_with_sync.sh [INSTRUMENT] [--allow-legacy-prereg]
+# Default instrument: MGC
 #
 # This extends the standard rebuild chain (outcome_builder -> discovery
-# -> validator -> edge_families -> family_rr_locks) with E3 retirement
+# -> validator -> family_rr_locks -> edge_families) with E3 retirement
 # and Pinecone knowledge sync.
 #
 # For a full all-instrument rebuild WITHOUT sync, see full_rebuild.sh.
@@ -14,6 +14,12 @@ set -e
 cd "$(dirname "$0")/../.."
 
 INSTRUMENT="${1:-MGC}"
+LEGACY_PREREG_FLAG="${2:-}"
+if [[ -n "$LEGACY_PREREG_FLAG" && "$LEGACY_PREREG_FLAG" != "--allow-legacy-prereg" ]]; then
+    echo "Invalid optional flag: $LEGACY_PREREG_FLAG" >&2
+    echo "Usage: bash scripts/tools/run_rebuild_with_sync.sh [INSTRUMENT] [--allow-legacy-prereg]" >&2
+    exit 2
+fi
 
 # Write FAILED manifest on error (non-fatal — must not abort rebuild)
 trap 'python scripts/tools/pipeline_status.py --write-manifest --instrument "$INSTRUMENT" --status-value FAILED --trigger SHELL 2>/dev/null || true' ERR
@@ -52,22 +58,23 @@ echo "Step 3/10: Validating strategies..."
 python trading_app/strategy_validator.py \
     --instrument "$INSTRUMENT" --min-sample 30 \
     --no-regime-waivers --min-years-positive-pct 0.75 \
-    $WF_FLAG
+    $WF_FLAG \
+    $LEGACY_PREREG_FLAG
 
 # Step 4: Retire E3 strategies (validator promotes E3 to active; this fixes it)
 echo ""
 echo "Step 4/10: Retiring E3 strategies..."
 python scripts/migrations/retire_e3_strategies.py
 
-# Step 5: Build edge families
+# Step 5: Recompute family RR locks
 echo ""
-echo "Step 5/10: Building edge families..."
-python scripts/tools/build_edge_families.py --instrument "$INSTRUMENT"
-
-# Step 6: Recompute family RR locks (SharpeDD criterion)
-echo ""
-echo "Step 6/10: Recomputing family RR locks..."
+echo "Step 5/10: Recomputing family RR locks..."
 python scripts/tools/select_family_rr.py
+
+# Step 6: Build edge families
+echo ""
+echo "Step 6/10: Building edge families..."
+python scripts/tools/build_edge_families.py --instrument "$INSTRUMENT"
 
 # Step 7: Regenerate REPO_MAP (tracks file inventory drift)
 echo ""

@@ -973,6 +973,42 @@ class TestBuildIntegration:
         """).fetchone()[0]
         assert count == 1
 
+    def test_idempotent_with_child_outcomes_fk(self, feature_db):
+        """Re-running daily_features must not break child orb_outcomes FK rows."""
+        build_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5), 5, False)
+
+        feature_db.execute("""
+            CREATE TABLE orb_outcomes (
+                trading_day   DATE NOT NULL,
+                symbol        TEXT NOT NULL,
+                orb_label     TEXT NOT NULL,
+                orb_minutes   INTEGER NOT NULL,
+                rr_target     DOUBLE NOT NULL,
+                confirm_bars  INTEGER NOT NULL,
+                entry_model   TEXT NOT NULL,
+                PRIMARY KEY (symbol, trading_day, orb_label, orb_minutes, rr_target, confirm_bars, entry_model),
+                FOREIGN KEY (symbol, trading_day, orb_minutes)
+                    REFERENCES daily_features(symbol, trading_day, orb_minutes)
+            )
+        """)
+        feature_db.execute("""
+            INSERT INTO orb_outcomes
+                (trading_day, symbol, orb_label, orb_minutes, rr_target, confirm_bars, entry_model)
+            VALUES
+                ('2024-01-05', 'MGC', 'CME_REOPEN', 5, 1.0, 1, 'E1')
+        """)
+
+        build_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5), 5, False)
+
+        feature_count = feature_db.execute("""
+            SELECT COUNT(*) FROM daily_features
+            WHERE symbol = 'MGC' AND trading_day = '2024-01-05' AND orb_minutes = 5
+        """).fetchone()[0]
+        outcome_count = feature_db.execute("SELECT COUNT(*) FROM orb_outcomes").fetchone()[0]
+
+        assert feature_count == 1
+        assert outcome_count == 1
+
     def test_dry_run_no_writes(self, feature_db):
         """Dry run doesn't write to database."""
         build_daily_features(feature_db, "MGC", date(2024, 1, 5), date(2024, 1, 5), 5, True)

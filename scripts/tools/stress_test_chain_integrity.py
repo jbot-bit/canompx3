@@ -9,7 +9,7 @@ arithmetic, and outcome replay.
 
 Bug vectors targeted:
   V1: rel_vol dual computation divergence (build_daily_features vs discovery)
-  V2: orb_minutes hardcode in paper_trader (always loads orb_minutes=5)
+  V2: aperture hardcode in lane replay/scoring paths
   V3: stop_multiplier chain (apply_tight_stop vs execution_engine stop adjust)
   V4: cross_atr three-code-path injection asymmetry
   V5: Wrong-but-non-NULL values passing fail-closed checks silently
@@ -17,6 +17,7 @@ Bug vectors targeted:
 Usage:
     python scripts/tools/stress_test_chain_integrity.py
     python scripts/tools/stress_test_chain_integrity.py --quick   # skip T3,T5
+    python scripts/tools/stress_test_chain_integrity.py --legacy-bug-scan
 """
 
 import argparse
@@ -191,7 +192,7 @@ def test_t0_db_snapshot(con):
 # ================================================================
 
 
-def test_t1_row_dict_forensics(con, sample_size=30):
+def test_t1_row_dict_forensics(con, sample_size=30, legacy_bug_scan: bool = False):
     print_section("T1: ROW DICT FORENSICS")
     findings = []
 
@@ -259,8 +260,8 @@ def test_t1_row_dict_forensics(con, sample_size=30):
     for col, cnt in sorted(orb.items(), key=lambda x: -x[1])[:10]:
         print(f"    {col:45s} {cnt}/{total_checked} days")
 
-    if orb:
-        findings.append(f"V2 EXPOSURE: {len(orb)} ORB columns differ 5m vs 30m. Paper trader always loads 5m.")
+    if orb and legacy_bug_scan:
+        findings.append(f"V2 EXPOSURE: {len(orb)} ORB columns differ 5m vs 30m under legacy 5m replay scan.")
 
     non5m = con.execute("""
         SELECT orb_minutes, COUNT(*), GROUP_CONCAT(DISTINCT filter_type)
@@ -270,8 +271,13 @@ def test_t1_row_dict_forensics(con, sample_size=30):
     """).fetchall()
     if non5m:
         for om, n, filters in non5m:
-            findings.append(f"RED FLAG: {n} strategies with orb_minutes={om}")
-            print(f"\n  RED FLAG: {n} validated at orb_minutes={om} (filters: {filters})")
+            if legacy_bug_scan:
+                findings.append(f"RED FLAG: {n} strategies with orb_minutes={om}")
+                print(f"\n  RED FLAG: {n} validated at orb_minutes={om} (filters: {filters})")
+            else:
+                print(
+                    f"\n  INFO: {n} validated at orb_minutes={om} (expected aperture-aware shelf; filters: {filters})"
+                )
     else:
         print("\n  All validated use orb_minutes=5 -- V2 not exposed.")
 
@@ -295,7 +301,7 @@ def test_t1_row_dict_forensics(con, sample_size=30):
 # ================================================================
 
 
-def test_t2_filter_population_match(con):
+def test_t2_filter_population_match(con, legacy_bug_scan: bool = False):
     print_section("T2: FILTER POPULATION MATCH")
     findings = []
 
@@ -318,7 +324,7 @@ def test_t2_filter_population_match(con):
         disc_features = load_daily_features(con, instrument, orb_minutes)
         inject_cross_asset_atrs(con, disc_features, instrument)
 
-        if orb_minutes == 5:
+        if orb_minutes == 5 or not legacy_bug_scan:
             pt_features = disc_features
         else:
             pt_features = load_daily_features(con, instrument, 5)
@@ -493,7 +499,7 @@ def test_t3_rel_vol_concordance(con, per_group=5):
 # ================================================================
 
 
-def test_t4_orb_minutes_contamination(con):
+def test_t4_orb_minutes_contamination(con, legacy_bug_scan: bool = False):
     print_section("T4: ORB_MINUTES CROSS-CONTAMINATION")
     findings = []
 
@@ -510,16 +516,22 @@ def test_t4_orb_minutes_contamination(con):
 
     cols = ["strategy_id", "instrument", "orb_label", "orb_minutes", "filter_type", "sample_size", "expectancy_r"]
     strats = [dict(zip(cols, r, strict=False)) for r in non5m]
-    print(f"  EXPOSED: {len(strats)} strategies\n")
+    label = "EXPOSED" if legacy_bug_scan else "APERTURE-AWARE SHELF"
+    print(f"  {label}: {len(strats)} non-5m strategies\n")
     for s in strats[:15]:
         print(
             f"  {s['strategy_id']:50s} om={s['orb_minutes']} {s['filter_type']:20s} "
             f"N={s['sample_size']} ExpR={s['expectancy_r']:+.4f}"
         )
 
-    findings.append(f"V2: {len(strats)} strategies use orb_minutes!=5")
-    print("\n  T4 VERDICT: FAIL")
-    return "FAIL", findings, {"exposed": len(strats)}
+    if legacy_bug_scan:
+        findings.append(f"V2: {len(strats)} strategies use orb_minutes!=5")
+        print("\n  T4 VERDICT: FAIL")
+        return "FAIL", findings, {"exposed": len(strats), "legacy_bug_scan": True}
+
+    findings.append("stale_harness_reconciled: non-5m strategies are expected; drift enforces aperture-aware consumers")
+    print("\n  T4 VERDICT: WARN")
+    return "WARN", findings, {"exposed": len(strats), "legacy_bug_scan": False}
 
 
 # ================================================================
@@ -967,6 +979,11 @@ def print_report(results):
 def main():
     parser = argparse.ArgumentParser(description="Chain integrity stress test v2")
     parser.add_argument("--quick", action="store_true", help="Skip T3, T5")
+    parser.add_argument(
+        "--legacy-bug-scan",
+        action="store_true",
+        help="Treat any non-5m validated row as exposed, matching the old PR #189 bug scan semantics.",
+    )
     args = parser.parse_args()
 
     print("=" * 60)
@@ -984,10 +1001,10 @@ def main():
             print_report(R)
             return 1
 
-        v, f, d = test_t1_row_dict_forensics(con)
+        v, f, d = test_t1_row_dict_forensics(con, legacy_bug_scan=args.legacy_bug_scan)
         R["T1: Row Dict Forensics"] = (v, f, d)
 
-        v, f, d = test_t2_filter_population_match(con)
+        v, f, d = test_t2_filter_population_match(con, legacy_bug_scan=args.legacy_bug_scan)
         R["T2: Filter Population Match"] = (v, f, d)
 
         if args.quick:
@@ -996,7 +1013,7 @@ def main():
             v, f, d = test_t3_rel_vol_concordance(con)
             R["T3: rel_vol Concordance"] = (v, f, d)
 
-        v, f, d = test_t4_orb_minutes_contamination(con)
+        v, f, d = test_t4_orb_minutes_contamination(con, legacy_bug_scan=args.legacy_bug_scan)
         R["T4: orb_minutes Contamination"] = (v, f, d)
 
         if args.quick:

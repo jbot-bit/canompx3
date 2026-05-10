@@ -382,6 +382,18 @@ class TestPreflightCheck:
         assert ok is False
         assert "deployable validated_setups" in msg
 
+    def test_family_rr_locks_preflight_uses_validated_shelf(self, tmp_path):
+        """family_rr_locks should gate on validated shelf availability, not edge_families."""
+        db_path, con = _create_test_db(tmp_path)
+        con.execute("INSERT INTO validated_setups (strategy_id, instrument, status) VALUES ('s1', 'MGC', 'active')")
+        con.commit()
+
+        ok, msg = preflight_check(con, "MGC", "family_rr_locks")
+        con.close()
+
+        assert ok is True
+        assert "deployable validated_setups" in msg
+
 
 # ---------------------------------------------------------------------------
 # Manifest tests
@@ -454,10 +466,12 @@ class TestManifest:
 
 class TestBuildStepList:
     def test_build_step_list_full(self):
-        """Full step list has all 9 steps (O15/O30 removed)."""
+        """Full step list has the canonical 13-step multi-aperture rebuild chain."""
         steps = build_step_list("MGC")
-        assert len(steps) == 9
+        assert len(steps) == 13
         assert steps[0]["name"] == "outcome_builder_O5"
+        assert steps[1]["name"] == "outcome_builder_O15"
+        assert steps[2]["name"] == "outcome_builder_O30"
         assert "MGC" in steps[0]["cmd"]
         assert steps[-1]["name"] == "pinecone_sync"
 
@@ -465,8 +479,14 @@ class TestBuildStepList:
         """Resume skips completed steps."""
         completed = ["outcome_builder_O5"]
         steps = build_step_list("MGC", resume_from=completed)
-        assert len(steps) == 8
-        assert steps[0]["name"] == "discovery_O5"
+        assert len(steps) == 12
+        assert steps[0]["name"] == "outcome_builder_O15"
+
+    def test_build_step_list_validator_accepts_legacy_prereg_flag(self):
+        """Validator step carries the legacy-prereg bypass only when requested."""
+        steps = build_step_list("MNQ", allow_legacy_prereg=True)
+        validator = next(step for step in steps if step["name"] == "validator")
+        assert "--allow-legacy-prereg" in validator["cmd"]
 
     def test_build_step_list_instrument_substitution(self):
         """Instrument name is substituted into all commands."""
@@ -495,11 +515,11 @@ class TestRebuildDryRun:
         con.close()
 
     def test_rebuild_dry_run_shows_all_steps(self, tmp_path, capsys):
-        """Dry run lists all 9 steps (O15/O30 removed)."""
+        """Dry run lists all 13 canonical rebuild steps."""
         db_path, con = _create_test_db(tmp_path)
         _, con = run_rebuild(con, "MGC", dry_run=True)
         captured = capsys.readouterr()
-        assert "[9/9]" in captured.out
+        assert "[13/13]" in captured.out
         assert "pinecone_sync" in captured.out
         con.close()
 
@@ -519,13 +539,13 @@ class TestRebuildExecution:
         # Seed prerequisites so preflight checks pass
         _insert_bar_1m(con, sym, "2026-03-06T00:00:00+00:00")
         _insert_bar_1m(con, sym, "2026-03-07T00:00:00+00:00")
-        from pipeline.build_daily_features import ACTIVE_ORB_MINUTES, VALID_ORB_MINUTES
+        from pipeline.build_daily_features import VALID_ORB_MINUTES
 
         for ap in VALID_ORB_MINUTES:
             _insert_daily_features(con, sym, "2026-03-06", ap)
-        # Seed all session×aperture combos so A5 assertion passes (active apertures only)
+        # Seed all session×aperture combos so multi-aperture discovery preflight passes.
         for session in SESSION_CATALOG:
-            for ap in ACTIVE_ORB_MINUTES:
+            for ap in VALID_ORB_MINUTES:
                 con.execute(
                     "INSERT INTO orb_outcomes (trading_day, symbol, orb_label, orb_minutes, rr_target, "
                     "confirm_bars, entry_model, outcome, pnl_r) "
@@ -549,7 +569,7 @@ class TestRebuildExecution:
         manifest = read_last_manifest(con, sym)
         assert manifest is not None
         assert manifest["status"] == "COMPLETED"
-        assert len(manifest["steps_completed"]) == 9
+        assert len(manifest["steps_completed"]) == 13
         con.close()
 
     def test_rebuild_step_fails_writes_manifest(self, tmp_path, capsys):
@@ -565,7 +585,7 @@ class TestRebuildExecution:
         def mock_run(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            # Fail on 2nd step (discovery_O5)
+            # Fail on 2nd step (outcome_builder_O15)
             rc = 1 if call_count == 2 else 0
             return type("Result", (), {"returncode": rc})()
 
@@ -576,7 +596,7 @@ class TestRebuildExecution:
         manifest = read_last_manifest(con, sym)
         assert manifest is not None
         assert manifest["status"] == "FAILED"
-        assert manifest["failed_step"] == "discovery_O5"
+        assert manifest["failed_step"] == "outcome_builder_O15"
         assert manifest["steps_completed"] == ["outcome_builder_O5"]
         con.close()
 

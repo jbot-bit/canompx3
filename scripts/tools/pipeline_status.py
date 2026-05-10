@@ -139,10 +139,11 @@ PREFLIGHT_RULES: dict[str, dict] = {
         "desc": "deployable validated_setups for {instrument}",
     },
     "family_rr_locks": {
-        "query": "SELECT COUNT(*) FROM edge_families WHERE instrument = $1",
+        "query": "SELECT COUNT(*) FROM validated_setups WHERE instrument = $1",
         "params": lambda inst, orb: [inst],
-        "fix": _PY + " scripts/tools/build_edge_families.py --instrument {instrument}",
-        "desc": "edge_families rows for {instrument}",
+        "fix": _PY
+        + " trading_app/strategy_validator.py --instrument {instrument} --min-sample 30 --no-regime-waivers --min-years-positive-pct 0.75",
+        "desc": "deployable validated_setups for {instrument}",
     },
 }
 
@@ -293,7 +294,23 @@ REBUILD_STEPS: list[tuple[str, list[str]]] = [
         "outcome_builder_O5",
         [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "5"],
     ),
+    (
+        "outcome_builder_O15",
+        [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "15"],
+    ),
+    (
+        "outcome_builder_O30",
+        [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "30"],
+    ),
     ("discovery_O5", [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "5"]),
+    (
+        "discovery_O15",
+        [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "15"],
+    ),
+    (
+        "discovery_O30",
+        [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "30"],
+    ),
     (
         "validator",
         [
@@ -309,15 +326,20 @@ REBUILD_STEPS: list[tuple[str, list[str]]] = [
         ],
     ),
     ("retire_e3", [_PY, "scripts/migrations/retire_e3_strategies.py"]),
-    ("edge_families", [_PY, "scripts/tools/build_edge_families.py", "--instrument", "{instrument}"]),
     ("family_rr_locks", [_PY, "scripts/tools/select_family_rr.py"]),
+    ("edge_families", [_PY, "scripts/tools/build_edge_families.py", "--instrument", "{instrument}"]),
     ("repo_map", [_PY, "scripts/tools/gen_repo_map.py"]),
     ("health_check", [_PY, "pipeline/health_check.py"]),
     ("pinecone_sync", [_PY, "scripts/tools/sync_pinecone.py"]),
 ]
 
 
-def build_step_list(instrument: str, resume_from: list[str] | None = None) -> list[dict]:
+def build_step_list(
+    instrument: str,
+    resume_from: list[str] | None = None,
+    *,
+    allow_legacy_prereg: bool = False,
+) -> list[dict]:
     """Build ordered list of rebuild steps, optionally skipping completed ones.
 
     Args:
@@ -332,10 +354,13 @@ def build_step_list(instrument: str, resume_from: list[str] | None = None) -> li
     for name, cmd_args in REBUILD_STEPS:
         if name in skip:
             continue
+        rendered = [arg.format(instrument=instrument) for arg in cmd_args]
+        if name == "validator" and allow_legacy_prereg:
+            rendered.append("--allow-legacy-prereg")
         steps.append(
             {
                 "name": name,
-                "cmd": [arg.format(instrument=instrument) for arg in cmd_args],
+                "cmd": rendered,
             }
         )
     return steps
@@ -396,6 +421,7 @@ def run_rebuild(
     instrument: str,
     dry_run: bool = False,
     resume: bool = False,
+    allow_legacy_prereg: bool = False,
     trigger: str = "CLI",
     rebuild_id: str | None = None,
     db_path: str | None = None,
@@ -424,7 +450,11 @@ def run_rebuild(
         else:
             print("No failed rebuild found to resume — running full chain.")
 
-    steps = build_step_list(instrument, resume_from=resume_completed if resume_completed else None)
+    steps = build_step_list(
+        instrument,
+        resume_from=resume_completed if resume_completed else None,
+        allow_legacy_prereg=allow_legacy_prereg,
+    )
     total = len(steps)
 
     if dry_run:
@@ -782,6 +812,7 @@ def _run_with_safety(
     *,
     dry_run: bool = False,
     resume: bool = False,
+    allow_legacy_prereg: bool = False,
     trigger: str = "CLI",
 ) -> bool:
     """Run a rebuild with backup + lock + labeled post-backup.
@@ -795,9 +826,25 @@ def _run_with_safety(
     """
     rebuild_id = str(uuid.uuid4())
 
+    if dry_run:
+        con = duckdb.connect(db_path, read_only=True)
+        try:
+            ok, _ = run_rebuild(
+                con,
+                instrument,
+                dry_run=True,
+                resume=resume,
+                allow_legacy_prereg=allow_legacy_prereg,
+                trigger=trigger,
+                rebuild_id=rebuild_id,
+                db_path=db_path,
+            )
+            return ok
+        finally:
+            con.close()
+
     # 1. Backup BEFORE connection opens (safe for shutil.copy2)
-    if not dry_run:
-        _pre_rebuild_backup()
+    _pre_rebuild_backup()
 
     # 2-3. Lock + connect + rebuild
     try:
@@ -809,6 +856,7 @@ def _run_with_safety(
                     instrument,
                     dry_run=dry_run,
                     resume=resume,
+                    allow_legacy_prereg=allow_legacy_prereg,
                     trigger=trigger,
                     rebuild_id=rebuild_id,
                     db_path=db_path,
@@ -820,7 +868,7 @@ def _run_with_safety(
         return False
 
     # 4. Post-rebuild labeled backup
-    if ok and not dry_run:
+    if ok:
         from scripts.infra.backup_db import labeled_backup
 
         labeled_backup(rebuild_id)
@@ -857,6 +905,11 @@ def main() -> None:
         "--trigger", type=str, default="CLI", choices=["CLI", "SHELL", "MANUAL"], help="Trigger type (default: CLI)"
     )
     parser.add_argument("--dry-run", action="store_true", help="Show what would execute without running")
+    parser.add_argument(
+        "--allow-legacy-prereg",
+        action="store_true",
+        help="Pass --allow-legacy-prereg through to the validator step during rebuild/resume.",
+    )
     parser.add_argument("--db-path", type=str, default=None, help="Database path (default: GOLD_DB_PATH)")
 
     args = parser.parse_args()
@@ -886,7 +939,13 @@ def main() -> None:
     if args.rebuild:
         if not args.instrument:
             parser.error("--rebuild requires --instrument")
-        ok = _run_with_safety(db_path, args.instrument, dry_run=args.dry_run, trigger=args.trigger)
+        ok = _run_with_safety(
+            db_path,
+            args.instrument,
+            dry_run=args.dry_run,
+            allow_legacy_prereg=args.allow_legacy_prereg,
+            trigger=args.trigger,
+        )
         sys.exit(0 if ok else 1)
 
     # --- --rebuild-all ---
@@ -904,7 +963,14 @@ def main() -> None:
                             print(f"{inst}: up to date, skipping.")
                             continue
                         print(f"{inst}: stale ({', '.join(status['stale_steps'])}), rebuilding...")
-                        ok, con = run_rebuild(con, inst, dry_run=args.dry_run, trigger=args.trigger, db_path=db_path)
+                        ok, con = run_rebuild(
+                            con,
+                            inst,
+                            dry_run=args.dry_run,
+                            allow_legacy_prereg=args.allow_legacy_prereg,
+                            trigger=args.trigger,
+                            db_path=db_path,
+                        )
                         if not ok:
                             print(f"{inst}: rebuild FAILED — stopping.")
                             sys.exit(1)
@@ -925,7 +991,14 @@ def main() -> None:
     if args.resume:
         if not args.instrument:
             parser.error("--resume requires --instrument")
-        ok = _run_with_safety(db_path, args.instrument, dry_run=args.dry_run, resume=True, trigger=args.trigger)
+        ok = _run_with_safety(
+            db_path,
+            args.instrument,
+            dry_run=args.dry_run,
+            resume=True,
+            allow_legacy_prereg=args.allow_legacy_prereg,
+            trigger=args.trigger,
+        )
         sys.exit(0 if ok else 1)
 
     # --- Default: --status ---
