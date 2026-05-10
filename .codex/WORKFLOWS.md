@@ -62,6 +62,22 @@ Before proposing or implementing any non-trivial change:
 3. If the task touches pipeline data flow or schema, read `docs/prompts/PIPELINE_DATA_GUARDIAN.md`.
 4. For broad design work, use the `/design` logic in `.claude/skills/design/SKILL.md`.
 
+## Terminal Proposal Approval Audit
+
+When Claude or a terminal session emits a large proposal/design plan for user
+approval, use `docs/prompts/TERMINAL_PROPOSAL_APPROVAL_AUDIT.md` before
+recommending approval.
+
+- Keep the review read-only and scoped to the proposal.
+- Read only relevant authority docs, files the proposal says it will touch, and
+  local resources/literature needed for methodology or trading-evidence claims.
+- List `READ` / `NOT READ` sources and mark unsupported claims as `UNSUPPORTED`.
+- Decide `APPROVE` / `MODIFY` / `BLOCK`; default to `MODIFY` for fixable
+  grounding gaps and `BLOCK` for unsafe mutation, hidden blast radius, stale
+  truth, or unclear stop gates.
+- Do not substitute this prompt for a full system audit, deploy-readiness
+  review, post-result sanity pass, or research validation workflow.
+
 ## Research And Data Routing
 
 Route to the correct source:

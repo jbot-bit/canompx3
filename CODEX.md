@@ -79,6 +79,8 @@ for.
   lowest-risk path and state the mapping briefly before proceeding.
 - If the intent is materially ambiguous or the wrong route could cause damage,
   stop and ask a narrow clarifying question instead of guessing.
+- When reviewing a large Claude or terminal proposal before approval, use the
+  scoped gate in `docs/prompts/TERMINAL_PROPOSAL_APPROVAL_AUDIT.md`.
 
 ## Authority
 

@@ -23,6 +23,7 @@ to mean, and what it is not allowed to mean.
 | `ROADMAP.md` | planning inventory | planned or not-yet-built work only | current implementation truth, live behavior, policy |
 | `HANDOFF.md` | cross-tool baton | current session baton, recent changes, local warnings | durable truth when code or canonical docs disagree |
 | `docs/plans/` | design history and active decisions | durable design decisions and rationale while active and not archived; lifecycle metadata governance | live runtime truth when code or DB disagree |
+| `docs/prompts/` | supporting operator prompt templates | output shape and workflow discipline when explicitly invoked | code truth, live trading truth, research truth, runtime state, canonical policy |
 | `docs/ARCHITECTURE.md` | operational reference guide | command reference and orientation when consistent with code | current runtime truth when code/DB disagree |
 | `docs/MONOREPO_ARCHITECTURE.md` | monorepo orientation reference | service inventory and repository navigation | current DB location, canonical runtime policy, live deployment semantics |
 | `docs/context/*.md` | generated task-routing orientation | deterministic task-context views when rendered from `context/registry.py` | live runtime truth by itself; policy beyond the canonical doctrine docs |
