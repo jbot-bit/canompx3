@@ -54,7 +54,8 @@ If the `mcp__code-review-graph__review_changes` MCP prompt is available, call it
 BEFORE Gate 1. Use it for blast-radius framing — it returns the structural impact summary
 the static gates can't surface (callers, importers, downstream effects). Treat the output
 as advisory context for your subsequent Gate 1-6 analysis, NOT as a gate. If the prompt is
-unavailable (MCP server down, tool not surfaced), skip silently and proceed to Gate 1.
+unavailable (MCP server down, tool not surfaced), proceed to Gate 1 and report
+`CRG review_changes: SKIPPED — <reason> — residual risk: structural diff context unavailable`.
 This is the diff-aware companion to Gate 6's `detect-changes` CLI — both fail-open per
 spec § Phase 3.
 
@@ -208,7 +209,7 @@ GATE 4 — Full Suite: [PASS / FAIL / SKIPPED]
 
 GATE 6 — CRG Advisory: [PASS / FINDINGS / SKIPPED]
   [If FINDINGS: include risk score and stale-test/coverage findings verbatim]
-  [If SKIPPED: reason — graph unavailable, binary missing, timeout]
+  [If SKIPPED: reason plus residual risk — graph unavailable, binary missing, timeout]
 
 COMPLETENESS:
   [List any orphaned imports, docstring drift, config gaps, schema gaps]
@@ -262,12 +263,11 @@ ruff format --check pipeline/ trading_app/    # Format check
 6. **Low trade counts under G6/G8 filters** — Expected behavior, not a data bug.
 
 ### Architecture
-<!-- VOLATILE: Update this section when instruments, entry models, or sessions change. Last updated: 2026-03-07 -->
 - One-way dependency: pipeline/ → trading_app/ (never reversed)
 - Fail-closed: any validation failure aborts immediately
 - Idempotent: all operations safe to re-run (DELETE+INSERT)
 - All DB timestamps UTC. Local timezone Australia/Brisbane (UTC+10, no DST)
-- Active instruments: from ACTIVE_ORB_INSTRUMENTS (currently 3: MGC, MNQ, MES; M2K dead Mar 2026)
+- Active instruments: query `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS`; do not cite a count from this prompt.
 
 ## Memory Instructions
 

@@ -40,6 +40,10 @@ shell_snapshot = true
 shell_tool = true
 skill_mcp_dependency_install = true
 
+[agents]
+max_threads = 6
+max_depth = 1
+
 [[hooks.SessionStart]]
 matcher = "startup|resume|clear"
 

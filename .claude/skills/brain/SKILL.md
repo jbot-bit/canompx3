@@ -37,6 +37,9 @@ Route the work in $ARGUMENTS through the correct pipeline. You are the single en
 | "is X real", "test this", "research", "investigate edge" | `/research` skill |
 | "real capital", "before deploy", "thorough", "no pigeonhole" | `/capital-review` skill |
 | "review", "before I commit", "anything wrong" | `/code-review` skill |
+| "OOS", "holdout", "FDR", "DSR", "MinBTL", "significant", "validated", "deployable" | dispatch `research-methodologist` + `evidence-auditor` |
+| "live", "broker", "webhook", "account", "profile", "kill", "flatten", "order", "execution" | dispatch `live-risk-auditor` + `evidence-auditor` |
+| "coverage", "missing tests", "stale tests", "pytest targets" | dispatch `test-coverage-scout` |
 | "plan", "design", "how should we", "4t" | `/design` skill |
 | "commit", "push", "merge" (any typo) | execute directly, no narration |
 
@@ -51,6 +54,9 @@ Route the work in $ARGUMENTS through the correct pipeline. You are the single en
 | Execute a stage-locked plan | `executor` |
 | Audit fixes for completeness | `verify-complete` |
 | Independent evidence review | `evidence-auditor` |
+| Map missing tests / exact pytest targets | `test-coverage-scout` |
+| Audit live/broker/account-routing risk | `live-risk-auditor` |
+| Critique research methodology and local-literature grounding | `research-methodologist` |
 | Pre-implementation sanity check | `preflight-auditor` |
 
 Run independent dispatches in PARALLEL (single message, multiple Agent calls).

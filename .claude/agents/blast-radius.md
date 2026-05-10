@@ -6,7 +6,7 @@ description: >
   dependencies. Returns a structured impact report so the main agent edits with full understanding.
   Use proactively whenever about to change production logic — especially schema changes, entry model
   modifications, pipeline data flow, or strategy lifecycle logic.
-tools: Read, Grep, Glob, Bash, Write, Edit
+tools: Read, Grep, Glob, Bash
 model: sonnet
 effort: high
 memory: project
@@ -46,7 +46,7 @@ Before grepping, ask the graph. CRG has the call/import graph pre-computed:
 code-review-graph impact-radius --target <file>::<symbol> --max-depth 2 --repo C:/Users/joshd/canompx3 2>/dev/null | head -40
 ```
 - If CRG returns a structured impact list: use it as the seed. **Still grep** to verify and to catch what CRG missed (the graph is a frozen snapshot per the Volatile Data Rule; v2.1.0 has known incomplete coverage on tests_for, qualified-name format quirks, and Windows path matching).
-- If CRG is unavailable / binary missing / errors out: SKIP, fall through to grep-only as before.
+- If CRG is unavailable / binary missing / errors out: report `CRG advisory: SKIPPED — <reason> — residual risk: grep-only impact map may miss graph-only coupling`, then fall through to grep-only as before.
 - **Never substitute CRG output for grep.** CRG is the seed; grep is the truth.
 - **Log the call:** `python .claude/hooks/_crg_usage_log.py --agent blast-radius --tool impact_radius --query "<target>"` (fail-silent telemetry).
 
@@ -170,6 +170,8 @@ If the change touches ANY of these, flag that the relevant guardian prompt must 
 
 These principles come from the project's reference library. They are not suggestions — they are
 the epistemic foundation for WHY this agent exists.
+When citing or relying on these claims, prefer `docs/institutional/literature/` extracts; use
+`resources/` raw PDFs only when an extract is missing, and label any training-memory-only support.
 
 ### "Most backtested results are wrong" — Pardo, Building Reliable Trading Systems
 In-sample performance means NOTHING without out-of-sample confirmation. Walk-forward is the only

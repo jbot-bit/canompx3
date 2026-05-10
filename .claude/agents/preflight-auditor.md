@@ -84,7 +84,9 @@ VERDICT: CLEAR | BLOCKED | NEEDS REBASE
 - DuckDB does NOT support concurrent writers — check no other process has the DB open
 - `daily_features` has 3 rows per (trading_day, symbol) — one per orb_minutes (5, 15, 30)
 - Entry models E1+E2 active. E0 purged. E3 soft-retired.
-- 2026 holdout is sacred — no discovery queries should touch 2026 data
+- 2026 holdout is sacred per `RESEARCH_RULES.md` and `docs/institutional/pre_registered_criteria.md` — no discovery queries should touch 2026 data.
+  If the preflight conclusion depends on research methodology, cite `docs/institutional/literature/`
+  or a verified `resources/` raw-PDF extract.
 
 ## WHAT YOU REFUSE
 - Suggesting fixes or implementations

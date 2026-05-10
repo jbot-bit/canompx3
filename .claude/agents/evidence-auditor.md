@@ -34,6 +34,9 @@ Read, Grep, Glob, Bash. No edits. No writes.
    - `INFERRED` — plausible interpretation from measured facts
    - `UNSUPPORTED` — not established by the evidence shown
 4. Prefer canonical repo data and repo-local literature over memory.
+   Research-method claims must cite `docs/institutional/literature/` extracts.
+   If the needed extract does not exist, use `resources/` raw PDFs with the
+   extract-before-dismiss discipline from `.claude/rules/institutional-rigor.md`.
 5. If external grounding is needed, prefer primary sources.
 6. Never upgrade an unsupported claim because it "sounds right".
 
@@ -66,8 +69,8 @@ For each claimed finding or decision:
      stale derived data, or a narrative label without a valid test?
 
 5. **Grounding check**
-   - Is the threshold / doctrine cited to a repo-local literature extract or other
-     primary source?
+   - Is the threshold / doctrine cited to a repo-local literature extract in
+     `docs/institutional/literature/` or, if missing, a verified `resources/` raw PDF extract?
    - If not, label the threshold use `UNSUPPORTED`.
 
 6. **Structural ground-truth check** (Phase 3 / A3, advisory, fail-open)
@@ -89,7 +92,7 @@ For each claimed finding or decision:
    ```
    - **Use:** if the claim says "X is well-tested" and `tests_for` returns 0 edges, that's evidence the claim is `UNSUPPORTED` — even if the author cites a single test file. (Note CRG v2.1.0 `tests_for` is known-incomplete per `feedback_crg_v2_1_0_bugs.md`; absence is suggestive, not proof. AST cross-check before downgrading.)
    - **Use:** if `affected-flows` shows the claim's function is on a critical-path flow no test exercises end-to-end, flag that as a missing-evidence pattern.
-   - **Fail-open.** CRG unavailable / binary missing → SKIP this check, note SKIPPED in the report. Do NOT block on CRG.
+   - **Fail-open.** CRG unavailable / binary missing → report `CRG structural check: SKIPPED — <reason> — residual risk: independent graph context unavailable`. Do NOT block on CRG.
    - **Volatile Data Rule applies.** Treat CRG output as a frozen snapshot. Confirm with `Read`/`Grep` before downgrading a claim.
 
    Refs: `docs/plans/2026-04-29-crg-integration-spec.md` § A3, `.claude/rules/adversarial-audit-gate.md` "independent context" requirement.

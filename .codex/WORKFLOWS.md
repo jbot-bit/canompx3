@@ -47,11 +47,49 @@ Codex should route from intent, not from exact wording.
   - `canompx3-capital-review` when the ask is broad, adversarial, anti-bias,
     "real capital", "thorough AF", or spans multiple risk surfaces
   - `evidence-auditor.md` for separate-context scrutiny of claims, results, and readiness narratives
+  - `research-methodologist.md` / `canompx3_reviewer` for research, OOS, holdout, FDR, DSR, MinBTL, edge, significance, or methodology claims
+  - `live-risk-auditor.md` / `canompx3_reviewer` for live, broker, webhook, prop-profile, order execution, kill/flatten, account-routing, or runtime-control work
+  - `test-coverage-scout.md` / `canompx3_reviewer` for missing tests, stale tests, coverage, or exact pytest-target selection
+  - `canompx3_worker` for one scope-locked implementation task after planning and ownership are clear
   - shared `.claude/skills/` recipes when the task is really a shared command
     flow
 - If multiple routes fit, prefer the path with the strongest verification and
   the lowest blast radius, then state the mapping briefly.
 - Only ask for clarification when the ambiguity is load-bearing.
+
+## Agent Auto-Routing Hints
+
+The user should not need to remember agent names. When a prompt contains the intent signals below, route automatically:
+
+| Signal | Agent route |
+| --- | --- |
+| research, backtest, validation, OOS, holdout, FDR, DSR, MinBTL, edge, significant | `research-methodologist` plus `canompx3_reviewer` for separate-context critique |
+| live, broker, webhook, account, prop profile, order, execution, kill, flatten, risk | `live-risk-auditor` plus `canompx3_reviewer` |
+| coverage, missing tests, stale tests, pytest, verification uncertainty | `test-coverage-scout` |
+| non-trivial implementation after plan approval | `canompx3_worker` or Claude `executor`, one writer per owned scope |
+| broad review with independent concerns | spawn `canompx3_explorer`, `canompx3_reviewer`, and the relevant specialist; synthesize in the lead |
+
+## Codex Plugin Routing
+
+Use Codex plugins as helpers, not project authority. `CLAUDE.md`, `.claude/`,
+`RESEARCH_RULES.md`, `TRADING_RULES.md`, `HANDOFF.md`, and `docs/plans/`
+remain canonical.
+
+- `Superpowers`: useful for process discipline. Prefer
+  `superpowers:systematic-debugging` for bugs, `superpowers:dispatching-parallel-agents`
+  for independent parallel investigations, `superpowers:requesting-code-review`
+  for review passes, and `superpowers:verification-before-completion` before
+  completion claims. Do not let it create unmanaged durable truth under
+  `docs/superpowers/`; use `docs/plans/` and `HANDOFF.md`. Do not use generic
+  worktree behavior instead of `scripts/infra/codex-worktree.sh`.
+- `GitHub`: useful for PR, review-comment, CI, and publishing workflows. Use it
+  only after local repo state and canompx3 verification are clear.
+- `CodeRabbit`: useful as an extra external-style review lens on PRs. Treat its
+  output as claims to verify, not authority.
+- `OpenAI Developer Docs`: use for current OpenAI/Codex/API behavior.
+- `CB Insights`, `Stripe`, `Gmail`, and `Google Calendar`: not core canompx3
+  development tools. Use only when a task explicitly needs company-market
+  research, payments, or personal/admin context.
 
 ## Design / Implementation Routing
 
