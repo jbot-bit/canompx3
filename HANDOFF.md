@@ -7,11 +7,23 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
-- **Tool:** Codex
+- **Tool:** Codex (WSL)
 - **Date:** 2026-05-10
-- **Summary:** Deployability guardrail pass completed for `topstep_50k_mnq_auto`. Active runtime allocation is now 2 MNQ lanes; `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` is marked `PAUSE` in `docs/runtime/lane_allocation.json` because it has a persisted SR alarm pause. Refreshed C11/C12 state after allocation change. Full profile deployability audit reports `2/2 CONTROLLED_LIVE_PILOT_CANDIDATE`, hard issues `{}`, institutional-language candidates `0`. Full adversarial stress gate exits `GO` with no hard blockers/silences.
-- **Residual warnings:** FDR audit warnings remain portfolio-accounting warnings (847 raw active, 353 unique streams, 527 families; 2 non-profile rows would fail current K). Chain integrity reports `SUSPECT` with `critical=0` and warnings only. Both active lanes have reviewed SR `watch` alarms, short-history warning (`years_tested=6`), MNQ event-tail slippage debt (`PENDING_EVENT_TAIL`), and weak DSR cross-check. These are controlled-pilot warnings, not full-production clearance.
-- **Verification:** `pytest tests/test_tools/test_adversarial_stress_gate.py tests/test_trading_app/test_deployability.py tests/test_tools/test_live_readiness_report.py tests/test_tools/test_backfill_deployability_evidence.py tests/test_pipeline/test_check_drift_ws2.py::TestValidatedSetupsWriterAllowlist -q` = 40 passed. `ruff check` on touched files passed. `pipeline/check_drift.py` = no drift, 123 OK, 19 advisory. `scripts/tools/adversarial_stress_gate.py --profile topstep_50k_mnq_auto --format text --timeout-seconds 900` = GO.
+- **Commit:** 069ec333 — fix(deployability): gate controlled live pilot state
+- **Files changed:** 13 files
+  - `HANDOFF.md`
+  - `docs/runtime/lane_allocation.json`
+  - `pipeline/check_drift.py`
+  - `scripts/tools/adversarial_stress_gate.py`
+  - `scripts/tools/backfill_deployability_evidence.py`
+  - `scripts/tools/full_shelf_deployability_audit.py`
+  - `scripts/tools/live_readiness_report.py`
+  - `tests/test_pipeline/test_check_drift_ws2.py`
+  - `tests/test_tools/test_adversarial_stress_gate.py`
+  - `tests/test_tools/test_backfill_deployability_evidence.py`
+  - `tests/test_tools/test_live_readiness_report.py`
+  - `tests/test_trading_app/test_deployability.py`
+  - `trading_app/deployability.py`
 
 ## Next Steps — Active
 1. Treat current MNQ book as controlled live pilot only: 1 contract, no institutional/full-production language, no scaling until SR watch recheck, chain warnings, and event-tail debt are explicitly reviewed.
