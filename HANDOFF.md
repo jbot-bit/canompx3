@@ -9,21 +9,15 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-10
-- **Commit:** 069ec333 — fix(deployability): gate controlled live pilot state
-- **Files changed:** 13 files
-  - `HANDOFF.md`
-  - `docs/runtime/lane_allocation.json`
-  - `pipeline/check_drift.py`
-  - `scripts/tools/adversarial_stress_gate.py`
-  - `scripts/tools/backfill_deployability_evidence.py`
-  - `scripts/tools/full_shelf_deployability_audit.py`
-  - `scripts/tools/live_readiness_report.py`
-  - `tests/test_pipeline/test_check_drift_ws2.py`
-  - `tests/test_tools/test_adversarial_stress_gate.py`
-  - `tests/test_tools/test_backfill_deployability_evidence.py`
-  - `tests/test_tools/test_live_readiness_report.py`
-  - `tests/test_trading_app/test_deployability.py`
-  - `trading_app/deployability.py`
+- **Commit:** 7cfacd6b — fix(pipeline): harden rebuild resume chain
+- **Files changed:** 7 files
+  - `REPO_MAP.md`
+  - `pipeline/build_daily_features.py`
+  - `scripts/tools/pipeline_status.py`
+  - `scripts/tools/run_rebuild_with_sync.sh`
+  - `scripts/tools/stress_test_chain_integrity.py`
+  - `tests/test_pipeline/test_build_daily_features.py`
+  - `tests/test_pipeline/test_pipeline_status.py`
 
 ## Next Steps — Active
 1. Treat current MNQ book as controlled live pilot only: 1 contract, no institutional/full-production language, no scaling until SR watch recheck, chain warnings, and event-tail debt are explicitly reviewed.
