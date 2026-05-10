@@ -5664,6 +5664,7 @@ def check_validated_setups_writer_allowlist() -> list[str]:
         Path("scripts/infra/parallel_rebuild.py"),
         Path("scripts/infra/revalidate_null_seeds.py"),
         Path("scripts/tools/backfill_dollar_columns.py"),
+        Path("scripts/tools/backfill_deployability_evidence.py"),
         Path("scripts/tools/migrate_fairness_audit.py"),
     }
     allowed_prefixes = (Path("scripts/migrations"),)
@@ -7529,6 +7530,8 @@ def _stage_acceptance_all_pass(commands: list[str], timeout_s: int = 5) -> tuple
             import shlex
 
             argv = shlex.split(cmd)
+            if argv and argv[0] == "python":
+                argv[0] = sys.executable
             result = subprocess.run(
                 argv,
                 capture_output=True,

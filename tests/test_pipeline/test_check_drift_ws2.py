@@ -884,6 +884,10 @@ class TestValidatedSetupsWriterAllowlist:
             tmp_path / "scripts" / "migrations" / "fixup.py",
             "con.execute(\"UPDATE validated_setups SET status = 'retired'\")\n",
         )
+        _mkfile(
+            tmp_path / "scripts" / "tools" / "backfill_deployability_evidence.py",
+            "con.execute(\"UPDATE validated_setups SET c8_oos_status = 'PASSED'\")\n",
+        )
         violations = check_drift.check_validated_setups_writer_allowlist()
         assert violations == []
 

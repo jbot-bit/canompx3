@@ -123,6 +123,75 @@ def test_build_live_readiness_report_merges_allocator_and_lifecycle(tmp_path: Pa
     assert report["allocator_summary"]["stale_lanes"][0]["status_reason"] == "needs replay"
 
 
+def test_paused_status_inside_allocator_lanes_is_not_active(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    allocation_path.write_text(
+        json.dumps(
+            {
+                "profile_id": "topstep_50k_mnq_auto",
+                "rebalance_date": "2026-05-03",
+                "lanes": [
+                    {
+                        "strategy_id": "SID_A",
+                        "instrument": "MNQ",
+                        "orb_label": "COMEX_SETTLE",
+                        "orb_minutes": 5,
+                        "rr_target": 1.0,
+                        "filter_type": "OVNRNG_100",
+                        "status": "DEPLOY",
+                    },
+                    {
+                        "strategy_id": "SID_B",
+                        "instrument": "MNQ",
+                        "orb_label": "NYSE_OPEN",
+                        "orb_minutes": 5,
+                        "rr_target": 1.0,
+                        "filter_type": "COST_LT12",
+                        "status": "PAUSE",
+                        "status_reason": "SR alarm",
+                    },
+                ],
+                "paused": [],
+                "stale": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(live_readiness_report, "resolve_profile_id", lambda *_args, **_kwargs: "topstep_50k_mnq_auto")
+    monkeypatch.setattr(
+        live_readiness_report,
+        "get_profile_lane_definitions",
+        lambda _profile_id: [{"strategy_id": "SID_A"}, {"strategy_id": "SID_B"}],
+    )
+    monkeypatch.setattr(live_readiness_report, "_load_validated_strategy_ids", lambda _db_path: ["SID_A", "SID_B"])
+    monkeypatch.setattr(
+        live_readiness_report,
+        "read_lifecycle_state",
+        lambda *_args, **_kwargs: {
+            "criterion11": {"gate_ok": True},
+            "criterion12": {"valid": True},
+            "pauses": {"paused_count": 0, "paused_strategy_ids": []},
+            "conditional_overlays": {"available": True, "overlays": []},
+            "blocked_strategy_ids": [],
+            "blocked_reason_by_strategy": {},
+            "strategy_states": {
+                "SID_A": {"blocked": False},
+                "SID_B": {"blocked": True, "block_reason": "SR alarm"},
+            },
+        },
+    )
+    monkeypatch.setattr(live_readiness_report, "_git_branch", lambda _root: "test")
+    monkeypatch.setattr(live_readiness_report, "_git_head", lambda _root: "abc")
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert [lane["strategy_id"] for lane in report["active_lanes"]] == ["SID_A"]
+    assert [lane["strategy_id"] for lane in report["allocator_summary"]["paused_lanes"]] == ["SID_B"]
+
+
 def test_build_live_readiness_report_falls_back_when_allocator_missing(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(live_readiness_report, "resolve_profile_id", lambda *_args, **_kwargs: "topstep_50k")
     monkeypatch.setattr(

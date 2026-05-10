@@ -143,6 +143,10 @@ def _normalize_lane_row(
         "lifecycle_block_source": state.get("block_source"),
         "lifecycle_block_reason": blocked_reason_by_strategy.get(strategy_id) or state.get("block_reason"),
         "sr_status": state.get("sr_status"),
+        "sr_review_outcome": state.get("sr_review_outcome"),
+        "sr_review_summary": state.get("sr_review_summary"),
+        "sr_reviewed_at": state.get("sr_reviewed_at"),
+        "sr_recheck_trigger": state.get("sr_recheck_trigger"),
         "paused": bool(state.get("paused")),
         "pause_reason": state.get("pause_reason"),
     }
@@ -173,6 +177,10 @@ def _normalize_profile_lane_row(
         "lifecycle_block_source": state.get("block_source"),
         "lifecycle_block_reason": blocked_reason_by_strategy.get(strategy_id) or state.get("block_reason"),
         "sr_status": state.get("sr_status"),
+        "sr_review_outcome": state.get("sr_review_outcome"),
+        "sr_review_summary": state.get("sr_review_summary"),
+        "sr_reviewed_at": state.get("sr_reviewed_at"),
+        "sr_recheck_trigger": state.get("sr_recheck_trigger"),
         "paused": bool(state.get("paused")),
         "pause_reason": state.get("pause_reason"),
     }
@@ -213,16 +221,23 @@ def _load_allocator_summary(
     summary["rebalance_date"] = data.get("rebalance_date")
     summary["trailing_window_months"] = data.get("trailing_window_months")
     summary["all_scores_count"] = data.get("all_scores_count")
-    summary["active_lanes"] = [
-        _normalize_lane_row(
+    for row in data.get("lanes", []):
+        normalized = _normalize_lane_row(
             row,
             bucket="lanes",
             strategy_states=strategy_states,
             blocked_reason_by_strategy=blocked_reason_by_strategy,
         )
-        for row in data.get("lanes", [])
-    ]
-    summary["paused_lanes"] = [
+        status = str(row.get("status") or "").upper()
+        if status in {"DEPLOY", "PROVISIONAL"}:
+            summary["active_lanes"].append(normalized)
+        elif status in {"PAUSE", "PAUSED"}:
+            summary["paused_lanes"].append(normalized)
+        elif status == "STALE":
+            summary["stale_lanes"].append(normalized)
+        else:
+            summary["stale_lanes"].append(normalized)
+    summary["paused_lanes"].extend(
         _normalize_lane_row(
             row,
             bucket="paused",
@@ -230,8 +245,8 @@ def _load_allocator_summary(
             blocked_reason_by_strategy=blocked_reason_by_strategy,
         )
         for row in data.get("paused", [])
-    ]
-    summary["stale_lanes"] = [
+    )
+    summary["stale_lanes"].extend(
         _normalize_lane_row(
             row,
             bucket="stale",
@@ -239,7 +254,7 @@ def _load_allocator_summary(
             blocked_reason_by_strategy=blocked_reason_by_strategy,
         )
         for row in data.get("stale", [])
-    ]
+    )
 
     allocator_ids = {
         lane["strategy_id"]
