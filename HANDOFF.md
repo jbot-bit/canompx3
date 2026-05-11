@@ -58,11 +58,12 @@ to deployable.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** cecec1db — remove(AccountProfile): dead is_live_funded field + companion test
-- **Files changed:** 3 files
+- **Commit:** 56f69f51 — fix(validator): match preregs by content (scope.instruments), not filename
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_prop_profiles.py`
-  - `trading_app/prop_profiles.py`
+  - `docs/runtime/stages/fix-llm-prereg-naming-parity.md`
+  - `tests/test_trading_app/test_strategy_validator.py`
+  - `trading_app/strategy_validator.py`
 
 ## Next Steps — Active
 

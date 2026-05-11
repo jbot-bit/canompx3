@@ -2625,7 +2625,7 @@ class TestPreregPresentContentAwareMatch:
         _write_prereg_yaml(hyp_dir / "2026-05-12-mes-only.yaml", instruments=["MES"])
         _seed_experimental_row(db_path, "MNQ", datetime(2026, 5, 12, tzinfo=UTC))
 
-        with pytest.raises(ValueError, match="no committed prereg yaml"):
+        with pytest.raises(ValueError, match="EXIST.*but none declare"):
             _check_prereg_present(db_path, "MNQ", hyp_dir_override=hyp_dir)
 
     def test_no_prereg_at_all_raises(self, tmp_path):
@@ -2637,7 +2637,7 @@ class TestPreregPresentContentAwareMatch:
         hyp_dir.mkdir()  # exists but empty
         _seed_experimental_row(db_path, "MNQ", datetime(2026, 5, 12, tzinfo=UTC))
 
-        with pytest.raises(ValueError, match="no committed prereg yaml"):
+        with pytest.raises(ValueError, match="NO yaml file"):
             _check_prereg_present(db_path, "MNQ", hyp_dir_override=hyp_dir)
 
     def test_malformed_yaml_in_dir_does_not_block_valid_match(self, tmp_path):
@@ -2673,3 +2673,105 @@ class TestPreregPresentContentAwareMatch:
 
         # Should NOT raise even with no preregs.
         _check_prereg_present(db_path, "MNQ", allow_legacy=True, hyp_dir_override=hyp_dir)
+
+    def test_invalid_yaml_distinguished_from_missing_in_error(self, tmp_path):
+        """Audit finding: error must distinguish 'no yaml exists' from 'yaml exists but invalid for instrument'."""
+        from trading_app.strategy_validator import _check_prereg_present
+
+        db_path = tmp_path / "gold.db"
+        hyp_dir = tmp_path / "hypotheses"
+        hyp_dir.mkdir()
+        # yaml exists with unregistered filter_type — extract_scope_predicate will raise.
+        import yaml as _yaml
+
+        body = {
+            "metadata": {
+                "name": "bad_filter",
+                "date_locked": "2026-05-12",
+                "holdout_date": "2026-01-01",
+                "total_expected_trials": 1,
+            },
+            "hypotheses": [
+                {
+                    "id": 1,
+                    "name": "synthetic",
+                    "theory_citation": "x",
+                    "filter": {"type": "FILTER_THAT_DOES_NOT_EXIST_IN_ALL_FILTERS"},
+                    "scope": {
+                        "instruments": ["MNQ"],
+                        "sessions": ["NYSE_OPEN"],
+                        "rr_targets": [1.0],
+                        "entry_models": ["E2"],
+                        "confirm_bars": [1],
+                        "stop_multipliers": [1.0],
+                    },
+                    "expected_trial_count": 1,
+                }
+            ],
+            "total_hypothesis_count": 1,
+            "total_expected_trials": 1,
+        }
+        (hyp_dir / "2026-05-12-mnq-bogus.yaml").write_text(_yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+        _seed_experimental_row(db_path, "MNQ", datetime(2026, 5, 12, tzinfo=UTC))
+
+        with pytest.raises(ValueError, match="yaml.*EXIST.*but none declare"):
+            _check_prereg_present(db_path, "MNQ", hyp_dir_override=hyp_dir)
+
+    def test_multi_date_accumulation_in_error(self, tmp_path):
+        """Audit finding: when experimental_strategies has rows on multiple dates with different failure modes, the error must list all dates."""
+        from trading_app.strategy_validator import _check_prereg_present
+
+        db_path = tmp_path / "gold.db"
+        hyp_dir = tmp_path / "hypotheses"
+        hyp_dir.mkdir()
+        # Date 1: no yaml at all (missing).
+        # Date 2: yaml exists but wrong instrument scope (invalid).
+        _write_prereg_yaml(hyp_dir / "2026-05-13-mes-only.yaml", instruments=["MES"])
+        _seed_experimental_row(db_path, "MNQ", datetime(2026, 5, 12, tzinfo=UTC))
+        # Add a second row on a different date.
+        with duckdb.connect(str(db_path)) as con:
+            con.execute(
+                """INSERT INTO experimental_strategies
+                   (strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                    confirm_bars, rr_target, filter_type, sample_size,
+                    expectancy_r, sharpe_ratio, p_value, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                [
+                    "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OTHER",
+                    "MNQ",
+                    "NYSE_OPEN",
+                    5,
+                    "E2",
+                    1,
+                    1.0,
+                    "OTHER",
+                    100,
+                    0.15,
+                    0.3,
+                    0.001,
+                    datetime(2026, 5, 13, tzinfo=UTC),
+                ],
+            )
+
+        with pytest.raises(ValueError) as exc_info:
+            _check_prereg_present(db_path, "MNQ", hyp_dir_override=hyp_dir)
+        msg = str(exc_info.value)
+        # Both failure modes mentioned, both dates surfaced.
+        assert "2026-05-12" in msg, f"missing-date 2026-05-12 not in error: {msg}"
+        assert "2026-05-13" in msg, f"invalid-date 2026-05-13 not in error: {msg}"
+        assert "NO yaml file" in msg
+        assert "EXIST" in msg
+
+    def test_db_path_none_uses_canonical_gold_db(self, tmp_path, monkeypatch):
+        """db_path=None branch resolves to canonical GOLD_DB_PATH; verify by monkeypatching."""
+        from trading_app import strategy_validator
+        from trading_app.strategy_validator import _check_prereg_present
+
+        # Point GOLD_DB_PATH at a non-existent file so the function fail-opens
+        # at the early return (effective_path does not exist). This proves the
+        # None branch resolves to the module-level constant rather than crashing.
+        fake_path = tmp_path / "nonexistent_gold.db"
+        monkeypatch.setattr(strategy_validator, "GOLD_DB_PATH", fake_path)
+
+        # Should NOT raise — fail-open on missing DB is the documented behavior.
+        _check_prereg_present(None, "MNQ")

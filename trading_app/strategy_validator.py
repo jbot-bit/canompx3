@@ -2590,7 +2590,15 @@ def _check_prereg_present(
         load_hypothesis_metadata,
     )
 
+    # Two-tier accumulation per the audit on commit 56f69f51:
+    # - missing_dates: no yaml file exists for the date.
+    # - invalid_dates: yaml file(s) exist for the date but none satisfy
+    #   extract_scope_predicate for this instrument (could be wrong instrument
+    #   scope OR structural defect like unregistered filter_type / missing
+    #   scope fields). Distinguished in the error message so the operator
+    #   knows whether to commit a new prereg or fix an existing one.
     missing_dates: list[str] = []
+    invalid_dates: list[str] = []
     for (d,) in rows:
         if d is None:
             continue
@@ -2601,30 +2609,51 @@ def _check_prereg_present(
             try:
                 meta = load_hypothesis_metadata(cand)
                 # extract_scope_predicate raises HypothesisLoaderError if the
-                # instrument is not in any hypothesis's scope.instruments.
+                # instrument is not in any hypothesis's scope.instruments OR
+                # if the yaml has a structural defect (malformed scope block,
+                # unregistered filter_type, missing required scope fields).
+                # Both cases skip to the next candidate; the missing-vs-invalid
+                # distinction below tells the operator which.
                 extract_scope_predicate(meta, instrument=instrument)
                 matched = True
                 break
             except HypothesisLoaderError:
-                # Either malformed yaml or instrument not in scope — try next
-                # candidate. A malformed prereg in the directory is a separate
-                # bug surfaced by check_drift; here we just continue searching.
                 continue
         if not matched:
-            missing_dates.append(ds)
+            if candidates:
+                invalid_dates.append(ds)
+            else:
+                missing_dates.append(ds)
 
-    if missing_dates:
-        sample = ", ".join(missing_dates[:3])
-        more = f" (and {len(missing_dates) - 3} more)" if len(missing_dates) > 3 else ""
+    if missing_dates or invalid_dates:
+        parts = []
+        if missing_dates:
+            sample = ", ".join(missing_dates[:3])
+            more = f" (and {len(missing_dates) - 3} more)" if len(missing_dates) > 3 else ""
+            parts.append(
+                f"NO yaml file at docs/audit/hypotheses/<date>-*.yaml for date(s) "
+                f"{sample}{more} -- commit a prereg yaml whose scope.instruments "
+                f"includes {instrument}."
+            )
+        if invalid_dates:
+            sample = ", ".join(invalid_dates[:3])
+            more = f" (and {len(invalid_dates) - 3} more)" if len(invalid_dates) > 3 else ""
+            parts.append(
+                f"yaml(s) EXIST for date(s) {sample}{more} but none declare "
+                f"{instrument} in scope.instruments OR they fail "
+                f"hypothesis_loader.extract_scope_predicate (malformed scope, "
+                f"unregistered filter_type, etc). Run "
+                f"`python -c 'from trading_app.hypothesis_loader import "
+                f"load_hypothesis_metadata, extract_scope_predicate; "
+                f'meta = load_hypothesis_metadata("<path>"); '
+                f'extract_scope_predicate(meta, instrument="{instrument}")\'` '
+                f"on the candidate file to see the exact error."
+            )
         raise ValueError(
-            f"Validator refuses to promote {instrument} experimental_strategies "
-            f"discovered on date(s) {sample}{more} -- no committed prereg yaml at "
-            f"docs/audit/hypotheses/<date>-*.yaml declares {instrument} in its "
-            f"scope.instruments. This violates Criterion 1 of "
-            f"pre_registered_criteria.md. Either commit a prereg yaml whose "
-            f"scope.instruments includes {instrument}, or pass "
-            f"--allow-legacy-prereg to suppress this gate (legacy migration only). "
-            f"Authority: docs/institutional/pre_registered_criteria.md Criterion 1."
+            f"Validator refuses to promote {instrument} experimental_strategies. "
+            + " | ".join(parts)
+            + " Pass --allow-legacy-prereg to suppress (legacy migration only). "
+            "Authority: docs/institutional/pre_registered_criteria.md Criterion 1."
         )
 
 
