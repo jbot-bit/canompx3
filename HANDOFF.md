@@ -9,10 +9,24 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-11
-- **Commit:** c0ca14c6 — docs(audit): document --bootstrap-runtime-control consultation path + add caveats
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `docs/audit/results/2026-05-11-mnq-profile-candidate-proposal.md`
+- **Commit:** fabae777 — feat(research): LLM hypothesis proposer (Track A) — literature-grounded prereg drafts
+- **Files changed:** 18 files
+  - `.claude/skills/propose-hypothesis/SKILL.md`
+  - `docs/prompts/hypothesis-proposer-fewshot.md`
+  - `docs/prompts/hypothesis-proposer-system.md`
+  - `docs/runtime/stages/llm-hypothesis-proposer-track-a.md`
+  - `scripts/research/lhp/__init__.py`
+  - `scripts/research/lhp/adjacency.py`
+  - `scripts/research/lhp/literature_index.py`
+  - `scripts/research/lhp/llm_client.py`
+  - `scripts/research/lhp/static_checks.py`
+  - `scripts/research/lhp/yaml_emitter.py`
+  - `scripts/research/llm_hypothesis_proposer.py`
+  - `tests/fixtures/lhp/bad_banned_feature.yaml`
+  - `tests/fixtures/lhp/bad_fabricated_citation.yaml`
+  - `tests/fixtures/lhp/bad_minbtl_exceeded.yaml`
+  - `tests/fixtures/lhp/bad_wrong_holdout.yaml`
+  - ... and 3 more
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.

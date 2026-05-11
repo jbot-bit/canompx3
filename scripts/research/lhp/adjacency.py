@@ -43,7 +43,7 @@ def list_active_strategies(con: duckdb.DuckDBPyConnection) -> list[dict]:
             expectancy_r,
             sharpe_ratio
         FROM validated_setups
-        WHERE strategy_status = 'active'
+        WHERE status = 'active'
         ORDER BY expectancy_r DESC NULLS LAST
         """
     ).fetchall()

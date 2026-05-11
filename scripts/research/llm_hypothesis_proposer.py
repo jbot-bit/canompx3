@@ -40,6 +40,32 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+# Load .env so OPENROUTER_API_KEY / ANTHROPIC_API_KEY resolve in subprocess shells
+# that don't auto-source .env (e.g., Claude Code's bash). _REPO_ROOT here is the
+# *worktree* root; .env is canonically at the parent canompx3 root and is gitignored
+# (so it's NOT copied into worktrees). Try worktree-local first (allows overrides)
+# then fall back to the canonical root next to gold.db. Fail-open: missing dotenv
+# or missing .env file is not an error — llm_client raises a clear LLMRequestError
+# when no key is present. Parse warnings on shell-specific lines silenced.
+try:
+    import logging as _logging
+
+    from dotenv import load_dotenv  # type: ignore[import-not-found]
+
+    from pipeline.paths import GOLD_DB_PATH as _GOLD_DB_PATH  # type: ignore[import-not-found]
+
+    _dotenv_log = _logging.getLogger("dotenv.main")
+    _prev_level = _dotenv_log.level
+    _dotenv_log.setLevel(_logging.ERROR)
+    try:
+        for _candidate in (_REPO_ROOT / ".env", Path(_GOLD_DB_PATH).parent / ".env"):
+            if _candidate.is_file():
+                load_dotenv(_candidate, override=False)
+    finally:
+        _dotenv_log.setLevel(_prev_level)
+except ImportError:
+    pass
+
 from scripts.research.lhp.adjacency import (  # noqa: E402
     _connect_read_only,
     adjacency_summary_for_llm,
