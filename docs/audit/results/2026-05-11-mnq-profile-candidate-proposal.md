@@ -73,6 +73,47 @@ No `PASS_ADD` or `PASS_REPLACE` candidates survived the profile-construction gat
 
 No direct allocation mutation is authorized by this report. Rows parked by `runtime_sr_not_evaluated` may only enter a PROVISIONAL bootstrap patch if a pre-promotion Criterion 12 SR evaluation returns `CONTINUE`, `NO_DATA`, or a code-backed `watch` review. An unreviewed SR `ALARM` remains a hard deployment block. Rows parked by missing Chordia audit need exact-lane strict replay before any profile proposal; dominated duplicates should not be re-opened unless the selected head fails under a newer audit.
 
+**Note on the PROVISIONAL row in `docs/runtime/lane_allocation.json`:** the
+`MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12` row that landed in the runtime
+allocation reached PROVISIONAL only via the `--bootstrap-runtime-control`
+invocation below. The mechanism is: in default-mode the candidate parks on
+`runtime_sr_not_evaluated` because the SR monitor returns `ALARM`; with
+`--bootstrap-runtime-control`, the runner consults
+`trading_app/sr_review_registry.SR_ALARM_REVIEWS` for an existing manual
+WATCH review (see entry reviewed 2026-05-11) and, if present, grants the
+deployability bypass per `_runtime_bootstrap_allows()` lines 881-885. The
+WATCH review itself was authored as a static-code entry in this PR — the
+flag reads it; it does not write it. The default-mode classification counts
+above (0 `PASS_REPLACE`) describe the path WITHOUT the bypass; the JSON
+output describes the path WITH the bypass. A future auditor must read both.
+Memo: `memory/feedback_bootstrap_runtime_control_in_band_audit_pattern.md`.
+
+## Caveats / Limitations
+
+- Default-mode classification counts (0 PASS_ADD / 0 PASS_REPLACE) reflect
+  the path WITHOUT `--bootstrap-runtime-control`. The PROVISIONAL row in
+  `docs/runtime/lane_allocation.json` reached its status via the bootstrap
+  path that consults the static `SR_ALARM_REVIEWS` registry; the default-
+  mode reading underspecifies the runtime allocation. See the Verdict note
+  above and `memory/feedback_bootstrap_runtime_control_in_band_audit_pattern.md`.
+- Controlled-pilot slippage status is retained on the promoted lane; event-
+  tail risk is unmeasured and institutional language is disallowed. SR
+  refresh against live paper-trades is required before any live trade.
+- The promoted lane carries a code-backed Criterion 12 WATCH review, not
+  a doctrine-pure SR `suspended` outcome. The WATCH-continue path is a
+  project operational extension formalised in
+  `docs/institutional/pre_registered_criteria.md` Criterion 12 (Operational
+  extension subsection, added 2026-05-11). Recheck trigger at N>=100
+  monitored trades retires the lane on persistent SR ALARM with deploy-
+  floor breach OR persistent negative OOS short direction.
+- Per-direction IS t-stats on the underlying Chordia unlock (Long=2.591,
+  Short=2.498) both fail t>=3.00 unilaterally; only pooled t=3.600 clears
+  the theory-backed gate. Pooled-finding heterogeneity is acknowledged in
+  the audit MD front-matter.
+- OOS power on the underlying audit is 0.088 (STATISTICALLY_USELESS); OOS
+  evidence is non-confirmatory. PASS_PROTOCOL_A verdict rests on IS gates
+  only.
+
 ## Reproduction
 
 ```bash
