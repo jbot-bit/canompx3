@@ -95,7 +95,9 @@ def _candidate(**overrides) -> PromotionCandidate:
 def test_pass_replace_promotes_candidate_and_removes_stale_blocks() -> None:
     result = apply_promotions(_allocation(), [_candidate()], rebalance_date=date(2026, 5, 11))
 
-    active_ids = [lane["strategy_id"] for lane in result.allocation["lanes"] if lane["status"] in {"DEPLOY", "PROVISIONAL"}]
+    active_ids = [
+        lane["strategy_id"] for lane in result.allocation["lanes"] if lane["status"] in {"DEPLOY", "PROVISIONAL"}
+    ]
     blocked_ids = [row["strategy_id"] for row in result.allocation["paused"] + result.allocation.get("stale", [])]
 
     assert active_ids == [

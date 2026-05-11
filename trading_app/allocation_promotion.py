@@ -102,8 +102,14 @@ def _same_runtime_slot(left: dict[str, Any], right: PromotionCandidate) -> bool:
 
 def _validate_candidate(candidate: PromotionCandidate, allocation: dict[str, Any]) -> None:
     profile_id = allocation.get("profile_id")
-    _require(candidate.profile_id == profile_id, f"profile mismatch for {candidate.strategy_id}: {candidate.profile_id} != {profile_id}")
-    _require(candidate.decision in PASS_DECISIONS, f"{candidate.strategy_id}: decision {candidate.decision!r} is not promotable")
+    _require(
+        candidate.profile_id == profile_id,
+        f"profile mismatch for {candidate.strategy_id}: {candidate.profile_id} != {profile_id}",
+    )
+    _require(
+        candidate.decision in PASS_DECISIONS,
+        f"{candidate.strategy_id}: decision {candidate.decision!r} is not promotable",
+    )
     _require(
         candidate.status in DEPLOYABLE_STATUSES,
         f"{candidate.strategy_id}: status {candidate.status!r} is not runtime deployable",
