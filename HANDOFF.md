@@ -9,11 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-11
-- **Commit:** d2f3519b — fix(sr-review): correct OOS/IS figure to canonical 112%; add directional recheck
-- **Files changed:** 3 files
+- **Commit:** 0e755ba2 — docs(audit): add pooled_finding front-matter to 2026-05-07 chordia result
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_sr_review_registry.py`
-  - `trading_app/sr_review_registry.py`
+  - `docs/audit/results/2026-05-07-mnq-nyseopen-costlt12-rr15-chordia-unlock-v1.md`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
