@@ -1,3 +1,22 @@
+---
+pooled_finding: true
+per_cell_breakdown_path: docs/audit/results/2026-05-07-mnq-nyseopen-costlt12-rr15-chordia-unlock-v1.md#directional-breakdown
+flip_rate_pct: 0.0
+heterogeneity_ack: true
+heterogeneity_note: >
+  IS flip rate is 0% (both long and short directions positive on IS, matching
+  pooled positive sign). OOS heterogeneity is material however: OOS long
+  ExpR=+0.218 matches pooled positive, OOS short ExpR=-0.045 opposes
+  (1-of-2 OOS direction cells = 50% OOS-side flip). OOS power 0.088
+  STATISTICALLY_USELESS so neither leg refutes the IS verdict, but the
+  directional asymmetry is a live-monitoring risk and is now carried in the
+  trading_app/sr_review_registry.py recheck trigger for this lane.
+  Per-direction IS t-stats (long=2.591, short=2.498) BOTH fail t>=3.00
+  unilaterally; only pooled t=3.600 clears the Chordia theory-backed gate.
+  Pooled framing is headline; per-direction reading is required for
+  capital-allocation interpretation.
+---
+
 # Chordia strict unlock audit — MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12
 
 **Prereq file:** `docs\audit\hypotheses\2026-05-07-mnq-nyseopen-costlt12-rr15-chordia-unlock-v1.yaml`
@@ -27,6 +46,7 @@ IS clears theory threshold 3.00 with N=1532 and ExpR=0.1092. Verdict rests on IS
 
 **OOS power:** 0.088 (STATISTICALLY_USELESS per `research/oos_power.py`; n_for_80pct=1,853). OOS sign is positive but cannot be interpreted as confirmatory — the sample is too small to distinguish signal-alive from noise. The PASS_PROTOCOL_A verdict is determined by IS gates alone.
 
+<a id="directional-breakdown"></a>
 ## Directional breakdown
 
 | Split | Long N | Long ExpR | Long t | Short N | Short ExpR | Short t |
