@@ -101,3 +101,15 @@ to deployable.
 - `docs/runtime/decision-ledger.md`
 - `docs/runtime/debt-ledger.md`
 - `docs/plans/2026-04-22-handoff-baton-compaction.md`
+
+## Codex launcher simplification (2026-05-12, Codex)
+
+Codex operator path is being simplified to one normal terminal command:
+`codex` in WSL or `codex.bat` from Windows. Normal Codex launchers now own
+`.venv-wsl` setup, use the WSL-home clone, and attach local repo MCPs including
+read-only `gold-db` by default. There is still one canonical data store:
+`gold.db`. In the WSL-home clone, `~/canompx3/gold.db` is a symlink to
+`/mnt/c/Users/joshd/canompx3/gold.db`, so it is not a stale copied DB.
+`/tmp/canompx3-fastmcp` is only a constrained Python dependency cache for the
+MCP package stack when FastMCP is not complete in `.venv-wsl`; it contains no
+market data and is not a database.

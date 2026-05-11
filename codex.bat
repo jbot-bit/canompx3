@@ -41,8 +41,12 @@ if /I "%ACTION%"=="gold-db" (
 ) else if /I "%ACTION%"=="help" (
     echo Usage:
     echo   codex.bat
-    echo   codex.bat gold-db
     echo   codex.bat power
+    echo   codex.bat search ^<name^>
+    echo   codex.bat task ^<name^>
+    echo.
+    echo Advanced compatibility modes:
+    echo   codex.bat gold-db
     echo   codex.bat search-gold-db
     echo   codex.bat windows
     echo   codex.bat windows-gold-db
@@ -52,8 +56,6 @@ if /I "%ACTION%"=="gold-db" (
     echo   codex.bat linux-gold-db
     echo   codex.bat green
     echo   codex.bat doctor
-    echo   codex.bat task ^<name^>
-    echo   codex.bat search ^<name^>
     exit /b 0
 )
 

@@ -3,10 +3,34 @@ set -euo pipefail
 
 DEFAULT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROOT="${CANOMPX3_ROOT:-$DEFAULT_ROOT}"
+VENV="$ROOT/.venv-wsl"
 PROFILE="${CANOMPX3_CODEX_PROFILE:-}"
 TASK_TEXT="${CANOMPX3_STARTUP_TASK:-}"
 ROUTER="$ROOT/scripts/tools/session_router.py"
 SHARED_CODEX_HOME_HELPER="$ROOT/scripts/infra/codex_shared_home.sh"
+
+ensure_wsl_venv() {
+  if [[ -x "$VENV/bin/python" ]]; then
+    return 0
+  fi
+
+  echo "Setting up .venv-wsl for Codex..."
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "ERROR: uv is not installed in WSL PATH." >&2
+    echo "Install uv once, then run 'codex' again from this repo." >&2
+    exit 1
+  fi
+
+  export UV_PROJECT_ENVIRONMENT=.venv-wsl
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/uv-cache}"
+  export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-/tmp/uv-python}"
+  export UV_LINK_MODE="${UV_LINK_MODE:-copy}"
+  mkdir -p "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"
+  cd "$ROOT"
+  uv sync --frozen --python 3.13 --group dev
+}
+
+ensure_wsl_venv
 
 if [[ "${CANOMPX3_SESSION_AUTO_ROUTE:-1}" != "0" && -f "$ROUTER" ]]; then
   ROUTE_ARGS=(--root "$ROOT" --tool codex --mode mutating)
@@ -26,12 +50,7 @@ VENV="$ROOT/.venv-wsl"
 PREFLIGHT="$ROOT/scripts/tools/session_preflight.py"
 TASK_ROUTE_PACKET="$ROOT/scripts/tools/task_route_packet.py"
 
-if [[ ! -f "$VENV/bin/python" ]]; then
-  echo "ERROR: .venv-wsl/bin/python not found." >&2
-  echo "Run 'UV_PROJECT_ENVIRONMENT=.venv-wsl uv sync --frozen --python 3.13 --group dev' inside WSL to create the venv." >&2
-  echo "Windows Claude Code uses .venv/ - this script is WSL-only." >&2
-  exit 1
-fi
+ensure_wsl_venv
 
 cd "$ROOT"
 export JOBLIB_MULTIPROCESSING=0
@@ -79,14 +98,9 @@ CODEX_ARGS=(
   -c 'mcp_servers.research-catalog.args=["scripts/infra/run-research-catalog-mcp.sh"]'
   -c 'mcp_servers.strategy-lab.command="bash"'
   -c 'mcp_servers.strategy-lab.args=["scripts/infra/run-strategy-lab-mcp.sh"]'
+  -c 'mcp_servers.gold-db.command="bash"'
+  -c 'mcp_servers.gold-db.args=["scripts/infra/run-gold-db-mcp.sh"]'
 )
-
-if [[ "${CANOMPX3_CODEX_ENABLE_GOLD_DB:-0}" == "1" ]]; then
-  CODEX_ARGS+=(
-    -c 'mcp_servers.gold-db.command="bash"'
-    -c 'mcp_servers.gold-db.args=["scripts/infra/run-gold-db-mcp.sh"]'
-  )
-fi
 
 if declare -F append_codex_profile_arg >/dev/null 2>&1; then
   append_codex_profile_arg "$PROFILE" CODEX_ARGS

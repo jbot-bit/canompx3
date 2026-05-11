@@ -17,15 +17,21 @@ fi
 
 if ! "$PYTHON_BIN" -c "import fastmcp" >/dev/null 2>&1; then
   if [[ -d "$TMP_SITE" ]]; then
+    # Dependency cache only: this is not a second gold.db or market-data store.
     export PYTHONPATH="$TMP_SITE${PYTHONPATH:+:$PYTHONPATH}"
   fi
 fi
 
 if ! "$PYTHON_BIN" -c "import fastmcp" >/dev/null 2>&1; then
-  echo "ERROR: gold-db MCP requires the 'fastmcp' package, but it is not installed in the selected interpreter." >&2
+  echo "Setting up gold-db MCP dependencies..." >&2
+  "$PYTHON_BIN" -m pip install --upgrade --target "$TMP_SITE" -c "$ROOT/constraints.txt" fastmcp >&2
+  export PYTHONPATH="$TMP_SITE${PYTHONPATH:+:$PYTHONPATH}"
+fi
+
+if ! "$PYTHON_BIN" -c "import fastmcp" >/dev/null 2>&1; then
+  echo "ERROR: gold-db MCP requires the 'fastmcp' package, but dependency setup failed." >&2
   echo "Interpreter: $PYTHON_BIN" >&2
-  echo "Fallback site-packages path checked: $TMP_SITE" >&2
-  echo "Fix the environment first, then retry." >&2
+  echo "Dependency cache checked: $TMP_SITE (not a gold.db copy)" >&2
   exit 1
 fi
 

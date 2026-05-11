@@ -63,10 +63,9 @@ fi
 
 source_dirty="$(git -C "$SOURCE_ROOT" status --short)"
 if [[ -n "$source_dirty" ]]; then
-  echo "ERROR: source repo has uncommitted changes, so the WSL Codex clone would be stale." >&2
-  echo "Commit or stash the current checkout before launching Codex on the WSL clone." >&2
+  echo "WARNING: source repo has uncommitted changes; WSL Codex will use committed HEAD only." >&2
+  echo "Uncommitted Windows-checkout changes are not mirrored into the WSL-home clone:" >&2
   git -C "$SOURCE_ROOT" status --short >&2
-  exit 1
 fi
 
 target_dirty="$(git -C "$TARGET_ROOT" status --short)"

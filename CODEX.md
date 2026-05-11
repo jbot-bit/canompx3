@@ -122,9 +122,9 @@ Default Codex entrypoints:
   - `scripts/infra/codex-project.sh`
 - Read-only/search session:
   - `scripts/infra/codex-project-search.sh`
-- Data session with `gold-db` MCP attached explicitly:
-  - `scripts/infra/codex-project-gold-db.sh`
-  - `scripts/infra/codex-project-search-gold-db.sh`
+- Default local data context:
+  - `gold-db` MCP is attached by the normal project/search launchers
+  - `scripts/infra/codex-project-gold-db.sh` remains a compatibility alias
 - Review session:
   - `scripts/infra/codex-review.sh`
 - Parallel isolated task:
@@ -140,16 +140,14 @@ Windows convenience entrypoints:
   - `claude.bat green`
 - `codex.bat`
   - default project session on the verified WSL-home Codex clone
-  - `codex.bat gold-db`
   - `codex.bat power`
-  - `codex.bat search-gold-db`
   - `codex.bat windows`
-  - `codex.bat windows-gold-db`
   - `codex.bat windows-power`
   - `codex.bat linux`
   - `codex.bat linux-power`
-  - `codex.bat linux-gold-db`
   - `codex.bat green`
+  - `codex.bat task <name>`
+  - `codex.bat search <name>`
   - `codex.bat task <name>`
   - `codex.bat search <name>`
 - `ai-workstreams.bat`
@@ -188,15 +186,18 @@ Codex app local-environment support lives in:
 - `docs/reference/codex-claude-operator-setup.md`
 - `docs/reference/codex-operator-handbook.md`
 
-Default stance: Codex should start minimal. Repo MCPs such as `gold-db` are
-opt-in for sessions that actually need live trading-data queries.
-
 Default Codex launcher sessions now attach the local `repo-state` MCP for task
 routing, startup briefing, system context, pulse, and generated context views.
 That surface is read-only and is the preferred default repo-understanding loop.
 Default launcher sessions also attach the local `research-catalog` MCP for
 bounded literature, prereg, and audit-result lookup grounded in committed repo
-evidence.
+evidence. The normal Codex project/search launchers also attach the local
+read-only `gold-db` MCP because this repo's default work frequently needs live
+canonical trading-data context. `gold-db` is a read-only MCP over the single
+canonical `gold.db`; the WSL-home clone keeps `gold.db` as a symlink to the
+Windows checkout database rather than a copied stale database. The
+`/tmp/canompx3-fastmcp` path, when used, is only a Python dependency cache for
+FastMCP packages and contains no market data.
 
 ## Supporting Docs
 
