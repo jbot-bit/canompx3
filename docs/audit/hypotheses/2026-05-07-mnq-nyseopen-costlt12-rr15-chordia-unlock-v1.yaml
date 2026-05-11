@@ -64,6 +64,26 @@ data_policy:
   tuning_against_oos: false
   canonical_layers_only: true
 
+scratch_policy:
+  policy: realized-eod
+  justification: >
+    Canonical orb_outcomes for MNQ NYSE_OPEN E2 CB1 RR1.5 IS window contains
+    69 scratch rows, all with non-NULL realized-eod pnl_r per Stage 5
+    (trading_app/outcome_builder.py:299,368,395,615,646). Mean scratch R is
+    +0.1827 (realized session-end MTM). The audit runner
+    research/chordia_strict_unlock_v1.py:269 calls pnl_r.fillna(0.0) as a
+    defensive no-op against pre-Stage-5 NULLs; on this lane it fills zero
+    rows, so the measured trade stream IS realized-eod, not include-as-zero.
+    Verified 2026-05-11 via canonical query (audit retrofit).
+    Grounding: carver_2015_ch12_speed_and_size.md (round-trip pricing — a
+    scratch is a completed round trip), chan_2013_ch1_backtesting_lookahead.md
+    (unified backtest/live program — TopStep flat-at-session-end realizes a
+    P&L that backtest must book).
+  verified_at: "2026-05-11"
+  verification_method: >
+    duckdb query against gold.db: COUNT(scratch) = 69, SUM(scratch_null_pnl_r) = 0
+    on the IS sample; mean_scratch_r computed directly from canonical pnl_r.
+
 feature_definition:
   feature_name: COST_LT12
   canonical_source_of_truth: "trading_app.config.CostRatioFilter"

@@ -466,7 +466,8 @@ def run_doctor(platform: str) -> None:
         preflight_context = "generic"
 
     preflight = ROOT / "scripts" / "tools" / "session_preflight.py"
-    if preflight.exists():
+    preflight_exists, preflight_detail = safe_path_exists(preflight)
+    if preflight_exists:
         preflight_result = capture_command(
             [
                 "uv",
@@ -494,7 +495,7 @@ def run_doctor(platform: str) -> None:
             )
         )
     else:
-        checks.append(_doctor_status("Session preflight", "FAIL", f"missing {preflight}"))
+        checks.append(_doctor_status("Session preflight", "FAIL", f"missing {preflight_detail}"))
 
     worktrees = capture_command(["git", "worktree", "list"], env=env)
     worktree_detail = worktrees.stdout.strip().splitlines()

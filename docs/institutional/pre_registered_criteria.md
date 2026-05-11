@@ -217,6 +217,30 @@ Price-based filters (ORB_G, COST_LT, OVNRNG using range points, ATR_P30/P50/P70)
 - Detection threshold A calibrated to ARL to false alarm ≈ 60 trading days
 - On alarm: strategy goes to "suspended" state pending manual review
 
+### Operational extension — code-backed WATCH review (added 2026-05-11)
+
+**Status:** project operational extension. NOT a Pepelyshev-Polunchenko reading. The 2015 paper defines the SR statistic, threshold, and ARL; it does not define a post-alarm outcome other than "stop." The WATCH-continue path below is a project amendment to make manual review machine-readable and bounded.
+
+**Canonical registry:** `trading_app/sr_review_registry.py::SR_ALARM_REVIEWS`. Keyed by `(profile_id, strategy_id)`. Each entry has `outcome ∈ {"watch", "pause"}`, `reviewed_at`, `summary`, and `recheck_trigger`.
+
+**WATCH-continue floors (deploy floors repurposed):**
+- WFE ≥ 0.50 — Criterion 6 deploy floor.
+- OOS/IS ratio ≥ 0.40 — Criterion 8 deploy floor.
+
+**Interpretive chain:** an SR alarm by itself is not evidence of strategy degradation. It is evidence of a statistical anomaly under the pre-change distribution. When both deploy floors still pass on the underlying validated data, the alarm is treated as a transient anomaly, not a regime change. The lane remains live with a recheck trigger; the alarm is recorded in the registry as a reviewed WATCH.
+
+**Recheck trigger requirement:** every WATCH entry must specify the N-of-monitored-trades count and the retire conditions. Standard form: "Re-check after N>=100 monitored trades. Retire if SR remains ALARM AND (WFE < 0.50 OR OOS/IS ratio < 0.40)."
+
+**Directional-risk addendum:** if the audit MD that backs the WATCH lane shows OOS directional sign-flip at low OOS power (e.g., OOS short ExpR negative while OOS long positive), the recheck trigger must also retire on persistent directional asymmetry at N≥30. This was added 2026-05-11 after the NYSE_OPEN RR1.5 COST_LT12 audit showed OOS short ExpR=-0.045 at OOS power=0.088 STATISTICALLY_USELESS.
+
+**Sibling-pathway disclosure rule:** when a WATCH lane is audited because its sibling SR-alarmed (e.g., RR1.5 audited after RR1.0 alarmed), the audit pre-reg must (a) cite the sibling alarm as the audit's motivation, (b) limit `K_family=1` to RR-agnostic mechanisms (Chan Ch 7 stop-cascade is RR-agnostic; friction filters are not), and (c) record the selection pathway in the sibling-grant section of the pre-reg yaml. This disclosure makes the implicit family-K visible and prevents the audit from being read as a fresh independent test.
+
+**Verification discipline:** every quantitative figure in a registry entry's `summary` field must verify against canonical `validated_setups` at the time of writing. Stale or unsourced figures (cited 2026-05-11: L3 COMEX_SETTLE has WFE 0.52 in registry vs 1.13 canonical; NYSE_OPEN RR1.5 originally cited "61%" OOS/IS that was not derivable from canonical data) must be corrected or annotated `(stale, see canonical Y)` rather than silently formalized. Reference: `memory/feedback_sr_review_registry_audit_pattern.md`.
+
+**Live-deployment consultation path:** the `--bootstrap-runtime-control` flag on profile-construction gate runners (`research/mnq_profile_candidate_proposal_2026_05_11.py` and successors) consults the registry to grant a deployability bypass when a candidate's SR monitor returns `ALARM`. The flag reads the registry; it does not write. Result MDs must disclose this consultation path so default-mode `PASS_*` counts and post-bypass `lane_allocation.json` rows reconcile. Reference: `memory/feedback_bootstrap_runtime_control_in_band_audit_pattern.md`.
+
+**Stop conditions on the extension itself:** if a fifth or later WATCH lane is added without independent literature grounding for the post-alarm continue path, the extension must be promoted from "operational" to a documented amendment with its own literature source (Pepelyshev-Polunchenko extension paper, a Carver / Chan citation, or a project audit demonstrating the WATCH-floor pass rate matches deploy-floor pass rate empirically). Until then, every new WATCH entry must cite the four-precedent history (L3 2026-04-12, L4/L6 2026-04-14, NYSE_OPEN RR1.5 2026-05-11) explicitly.
+
 ---
 
 ## Criterion 13 — Scratch treatment policy (declared, justified)

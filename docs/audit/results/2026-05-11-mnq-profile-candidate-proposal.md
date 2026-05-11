@@ -1,0 +1,123 @@
+# MNQ Profile Candidate Proposal
+
+**Date:** 2026-05-11
+**Profile:** `topstep_50k_mnq_auto`
+**Live impact:** None. No DB, schema, broker, validated-setups, or `lane_allocation.json` mutation.
+
+## Scope
+
+This classifies the 177 `CONTROLLED_LIVE_PILOT_CANDIDATE` MNQ rows from `docs/audit/results/2026-05-11-mnq-all-active-deployability.json` into the queue-required profile-construction taxonomy.
+
+This is a paper/sandbox-only proposal gate. A `PASS_*` row is not live authorization; it still carries controlled-pilot slippage/event-tail status and must pass operator preflight before any allocation mutation.
+
+## Grounding / Authority
+
+- Multiple-testing and strict replay gate: `docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md` extracted from `resources/Two_Million_Trading_Strategies_FDR.pdf`.
+- Selection-bias and correlated-trial caution: `docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md` extracted from `resources/deflated-sharpe.pdf`.
+- Portfolio add/replace and correlation discipline: `docs/institutional/literature/carver_2015_ch11_portfolios.md` extracted from `resources/Robert Carver - Systematic Trading.pdf`.
+- Live drift monitoring requirement: `docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md` extracted from `resources/real_time_strategy_monitoring_cusum.pdf`.
+- Prop-firm profile constraints: `resources/prop-firm-official-rules.md` plus `trading_app/prop_profiles.py`.
+- Research/deployment separation: `docs/institutional/research_pipeline_contract.md` and `docs/institutional/pre_registered_criteria.md`.
+
+## Classification Counts
+
+| Decision | Count |
+|---|---:|
+| `PASS_ADD` | 0 |
+| `PASS_REPLACE` | 0 |
+| `PARK` | 50 |
+| `KILL` | 118 |
+| `ARCHITECTURE_REQUIRED` | 9 |
+
+## Proposed Paper/Sandbox Change Set
+
+No `PASS_ADD` or `PASS_REPLACE` candidates survived the profile-construction gate.
+
+## Main Blockers
+
+| Blocker | Count |
+|---|---:|
+| `dedupe_dominated_variant` | 118 |
+| `chordia_missing` | 45 |
+| `non_default_stop_multiplier` | 9 |
+| `runtime_sr_not_evaluated` | 2 |
+| `already_selected` | 2 |
+| `chordia_fail_both` | 1 |
+
+## Highest-Signal Parked Rows
+
+| Candidate | Reason | Chordia | Add dAnnR | Add dSharpe | Corr |
+|---|---|---|---:|---:|---|
+| `MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_DIR_LONG_O30` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100` | Already selected in the current active profile; no proposal change. | `PASS_CHORDIA` | +0.0 | +0.000 | `False` |
+| `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15` | Already selected in the current active profile; no proposal change. | `PASS_CHORDIA` | +0.0 | +0.000 | `False` |
+| `MNQ_EUROPE_FLOW_E2_RR2.0_CB1_OVNRNG_100` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_TOKYO_OPEN_E2_RR2.5_CB1_ORB_VOL_4K_O15` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_US_DATA_1000_E2_RR2.5_CB1_VWAP_MID_ALIGNED` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_EUROPE_FLOW_E2_RR2.0_CB1_COST_LT10` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_SINGAPORE_OPEN_E2_RR3.0_CB1_COST_LT10_O15` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_COST_LT12_O30` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ATR_P50` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_US_DATA_1000_E2_RR2.5_CB1_CROSS_NYSE_MOMENTUM` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_SINGAPORE_OPEN_E2_RR3.0_CB1_ORB_VOL_4K_O30` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_SINGAPORE_OPEN_E2_RR2.5_CB1_COST_LT12_O15` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_SINGAPORE_OPEN_E2_RR3.0_CB1_COST_LT15_O15` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT12` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_SINGAPORE_OPEN_E2_RR3.0_CB1_ORB_G8_O15` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_COST_LT15` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_EUROPE_FLOW_E2_RR2.0_CB1_PDR_R080` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G8` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+| `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ATR_P30` | Allocator Chordia gate does not permit deploy (MISSING). | `MISSING` | - | - | - |
+
+## Verdict
+
+No direct allocation mutation is authorized by this report. Rows parked by `runtime_sr_not_evaluated` may only enter a PROVISIONAL bootstrap patch if a pre-promotion Criterion 12 SR evaluation returns `CONTINUE`, `NO_DATA`, or a code-backed `watch` review. An unreviewed SR `ALARM` remains a hard deployment block. Rows parked by missing Chordia audit need exact-lane strict replay before any profile proposal; dominated duplicates should not be re-opened unless the selected head fails under a newer audit.
+
+**Note on the PROVISIONAL row in `docs/runtime/lane_allocation.json`:** the
+`MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12` row that landed in the runtime
+allocation reached PROVISIONAL only via the `--bootstrap-runtime-control`
+invocation below. The mechanism is: in default-mode the candidate parks on
+`runtime_sr_not_evaluated` because the SR monitor returns `ALARM`; with
+`--bootstrap-runtime-control`, the runner consults
+`trading_app/sr_review_registry.SR_ALARM_REVIEWS` for an existing manual
+WATCH review (see entry reviewed 2026-05-11) and, if present, grants the
+deployability bypass per `_runtime_bootstrap_allows()` lines 881-885. The
+WATCH review itself was authored as a static-code entry in this PR — the
+flag reads it; it does not write it. The default-mode classification counts
+above (0 `PASS_REPLACE`) describe the path WITHOUT the bypass; the JSON
+output describes the path WITH the bypass. A future auditor must read both.
+Memo: `memory/feedback_bootstrap_runtime_control_in_band_audit_pattern.md`.
+
+## Caveats / Limitations
+
+- Default-mode classification counts (0 PASS_ADD / 0 PASS_REPLACE) reflect
+  the path WITHOUT `--bootstrap-runtime-control`. The PROVISIONAL row in
+  `docs/runtime/lane_allocation.json` reached its status via the bootstrap
+  path that consults the static `SR_ALARM_REVIEWS` registry; the default-
+  mode reading underspecifies the runtime allocation. See the Verdict note
+  above and `memory/feedback_bootstrap_runtime_control_in_band_audit_pattern.md`.
+- Controlled-pilot slippage status is retained on the promoted lane; event-
+  tail risk is unmeasured and institutional language is disallowed. SR
+  refresh against live paper-trades is required before any live trade.
+- The promoted lane carries a code-backed Criterion 12 WATCH review, not
+  a doctrine-pure SR `suspended` outcome. The WATCH-continue path is a
+  project operational extension formalised in
+  `docs/institutional/pre_registered_criteria.md` Criterion 12 (Operational
+  extension subsection, added 2026-05-11). Recheck trigger at N>=100
+  monitored trades retires the lane on persistent SR ALARM with deploy-
+  floor breach OR persistent negative OOS short direction.
+- Per-direction IS t-stats on the underlying Chordia unlock (Long=2.591,
+  Short=2.498) both fail t>=3.00 unilaterally; only pooled t=3.600 clears
+  the theory-backed gate. Pooled-finding heterogeneity is acknowledged in
+  the audit MD front-matter.
+- OOS power on the underlying audit is 0.088 (STATISTICALLY_USELESS); OOS
+  evidence is non-confirmatory. PASS_PROTOCOL_A verdict rests on IS gates
+  only.
+
+## Reproduction
+
+```bash
+./.venv-wsl/bin/python research/mnq_profile_candidate_proposal_2026_05_11.py
+# Optional patch emission path; still fails closed on unreviewed SR ALARM:
+./.venv-wsl/bin/python research/mnq_profile_candidate_proposal_2026_05_11.py --bootstrap-runtime-control
+```

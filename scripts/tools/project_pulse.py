@@ -2207,8 +2207,7 @@ def format_text(report: PulseReport) -> str:
         doctrine_count = len(identity.get("doctrine_docs", []))
         backbone_count = len(identity.get("backbone_modules", []))
         lines.append("System identity:")
-        lines.append(f"  Root: {identity.get('canonical_repo_root')}")
-        lines.append(f"  Canonical DB: {identity.get('canonical_db_path')}")
+        lines.append(f"  Root: {identity.get('canonical_repo_root')} | DB: {identity.get('canonical_db_path')}")
         if identity.get("db_override_active"):
             lines.append(f"  Active DB override: {identity.get('selected_db_path')}")
         lines.append(f"  Active ORB instruments: {', '.join(identity.get('active_orb_instruments', [])) or 'none'}")
