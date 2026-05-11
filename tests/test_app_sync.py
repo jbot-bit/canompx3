@@ -245,6 +245,11 @@ class TestAllFiltersSync:
         # series above (OvernightRangeAbsFilter); registered for hypothesis-
         # file injection / DB compat.
         "OVNRNG_PCT_GT80",
+        # Percentile-band gates (2026-05-12 — external trading AI framework,
+        # hypothesis-scoped only, not in BASE_GRID). Pre-reg target:
+        # docs/audit/hypotheses/<future>-mgc-london-metals-compression-release.yaml
+        "ATR_P30_75",
+        "OVNRNG_PCT_BAND_20_55",
         # VWAP break-direction filters (Apr 2026 hypothesis-scoped validation).
         # Registered in ALL_FILTERS for hypothesis-file injection / DB compat,
         # then routed selectively by get_filters_for_grid().
