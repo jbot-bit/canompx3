@@ -58,9 +58,10 @@ to deployable.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-11
-- **Commit:** c027bb12 — @ doctrine: flag v1 Acceptance matrix C5/C8 rows as SUPERSEDED
-- **Files changed:** 1 files
-  - `docs/institutional/pre_registered_criteria.md`
+- **Commit:** aee9daba — fix(llm-proposer): strip markdown fences and surface 4xx body
+- **Files changed:** 2 files
+  - `HANDOFF.md`
+  - `scripts/research/lhp/llm_client.py`
 
 ## Next Steps — Active
 

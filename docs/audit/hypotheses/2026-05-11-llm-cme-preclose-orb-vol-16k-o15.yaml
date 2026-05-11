@@ -1,0 +1,54 @@
+# REVIEW CHECKLIST (LLM-generated draft — do NOT commit until verified)
+# 1. [ ] Each theory_citation maps to a real file in docs/institutional/literature/
+#         (script checked existence; YOU verify the citation actually says what
+#         the economic_basis claims it says)
+# 2. [ ] economic_basis is a mechanism, not a pattern description
+# 3. [ ] kill_criteria are FALSIFIABLE
+# 4. [ ] No proposed filter is in the banned-features list (auto-checked but verify)
+# 5. [ ] expected_trial_count is justifiable (script defaults to Bailey-strict)
+# 6. [ ] holdout_date == 2026-01-01 (Mode A)
+# 7. [ ] If applicable: research_question_type, role{} block, data_source_mode set
+#
+# After review, move from drafts/ up one level to publish:
+#   mv docs/audit/hypotheses/drafts/<this-file> docs/audit/hypotheses/<this-file>
+# Then commit and run:
+#   scripts/infra/prereg-loop.sh --hypothesis-file <published-path> --execute
+#
+metadata:
+  name: "mnq-cme-preclose-vol16k-revalidation"
+  purpose: "Revalidate MNQ CME_PRECLOSE E2 RR1.0 CB1 ORB_VOL_16K O15"
+  date_locked: "2026-05-11T22:00:00+10:00"
+  data_horizon_years_clean: 6.65
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  research_question_type: "standalone_edge"
+
+hypotheses:
+  - id: 1
+    name: "High ORB volume confirms directional momentum"
+    theory_citation: "fitschen_2013_path_of_least_resistance — chan_2013_ch7_intraday_momentum"
+    economic_basis: |
+      High volume during the ORB window signals institutional participation confirming
+      the directional move. When volume exceeds 16k contracts in first 5 minutes,
+      the path of least resistance follows the breakout direction as liquidity
+      providers have already committed capital to that side.
+    filter:
+      type: ORB_VOL_16K
+      column: orb_5_volume
+    scope:
+      instruments: [MNQ]
+      sessions: [CME_PRECLOSE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [15]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on K=1 family"
+      - "WFE < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era N>=50 ExpR < -0.05"
+
+total_hypothesis_count: 1
+total_expected_trials: 1
