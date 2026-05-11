@@ -4,7 +4,7 @@ items:
   - id: mnq_controlled_candidate_profile_construction_gate_2026_05_11
     title: Convert MNQ controlled-pilot shelf pool into a profile-safe paper/sandbox proposal
     class: stage
-    status: ready
+    status: closed
     priority: P1
     close_before_new_work: false
     owner_hint: claude-or-codex
@@ -391,13 +391,13 @@ items:
   - id: pr48_mgc_shadow_observation
     title: PR48 MGC shadow-only observation closeout
     class: ops
-    status: waiting_observation
+    status: closed
     priority: P2
     close_before_new_work: false
     owner_hint: operator
-    last_verified_at: 2026-05-10
+    last_verified_at: 2026-05-11
     freshness_sla_days: 2
-    next_action: Observe the MGC shadow-only context in dashboard and live logs and record whether the visibility path behaves as designed.
+    next_action: Closed 2026-05-11 with PASS_OPERATOR_VISIBILITY_UNSCORED; dashboard/lifecycle visibility works, no current-day bucket was scored, and E2 rel_vol remains research-tainted for promotion.
     exit_criteria: Observation is recorded as PASS, FAIL, or redesign-needed with a durable result note.
     blocked_by: []
     decision_refs:
@@ -405,29 +405,31 @@ items:
     evidence_refs:
       - docs/audit/results/2026-04-23-pr48-mgc-shadow-only-overlay-design.md
       - docs/audit/results/2026-04-23-pr48-mes-mgc-sizer-rule-backtest-v1.md
-    notes_ref: docs/audit/results/2026-04-23-pr48-mgc-shadow-only-overlay-design.md
-    override_note: "Re-verified 2026-05-10 during Codex repo-health pass: MGC shadow-only overlay design/backtest artifacts still exist; item remains waiting_observation, not closed."
+      - docs/audit/results/2026-05-11-pr48-mgc-shadow-only-observation-closeout.md
+    notes_ref: docs/audit/results/2026-05-11-pr48-mgc-shadow-only-observation-closeout.md
+    override_note: "Closed 2026-05-11: lifecycle and dashboard expose pr48_mgc_cont_exec_v1 as valid shadow_only allocator state; 2026-05-11 observation is unscored because current-day MGC daily_features are absent. Visibility PASS only; E2 rel_vol remains banned for deployment/promotion evidence."
 
   - id: mes_q45_exec_bridge
     title: PR48 MES q45_exec bridge
     class: runtime
-    status: blocked
+    status: closed
     priority: P2
     close_before_new_work: false
     owner_hint: codex-or-claude
-    last_verified_at: 2026-05-10
+    last_verified_at: 2026-05-11
     freshness_sla_days: 5
-    next_action: Define the honest bridge from the alive MES q45_exec research branch into a bounded runtime surface.
+    next_action: Closed 2026-05-11 as REJECT_CURRENT_BRIDGE_TAINTED_E2_RELVOL; fresh numeric rerun remains positive, but E2 rel_vol is a banned predictor and cannot be carried into runtime.
     exit_criteria: The bridge is either designed as a bounded next stage or explicitly rejected as not yet expressible.
-    blocked_by:
-      - pr48_mgc_shadow_observation
+    blocked_by: []
     decision_refs:
       - docs/runtime/decision-ledger.md
     evidence_refs:
       - docs/audit/results/2026-04-23-pr48-conditional-role-validation-translation.md
       - docs/audit/results/2026-04-22-pr48-promotion-shortlist-v1.md
-    notes_ref: docs/runtime/decision-ledger.md
-    override_note: "Re-verified 2026-05-10 during Codex repo-health pass: MES:q45_exec remains NEEDS_BRIDGE and is still blocked behind the MGC shadow-observation closeout."
+      - docs/audit/results/2026-04-28-e2-lookahead-contamination-registry.md
+      - docs/audit/results/2026-05-11-pr48-mes-q45-exec-bridge-rejection.md
+    notes_ref: docs/audit/results/2026-05-11-pr48-mes-q45-exec-bridge-rejection.md
+    override_note: "Closed 2026-05-11: rerun through 2026-05-07 keeps MES:q45_exec numerically positive, but the bridge is rejected because rel_vol_<SESSION> is banned as an E2 predictor by the 2026-04-28 look-ahead registry."
 
   - id: track_d_mnq_comex_settle_gate0_runner_design
     title: Track D MNQ COMEX_SETTLE Gate 0 runner design

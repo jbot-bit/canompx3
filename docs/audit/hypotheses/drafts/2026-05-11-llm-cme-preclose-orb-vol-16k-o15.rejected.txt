@@ -1,0 +1,49 @@
+# REJECTED LLM DRAFT — fatal static checks failed.
+# This file is NOT a valid hypothesis. Do not rename to .yaml.
+# Failure summary:
+#   [YAML_PARSE_ERROR] <root>: YAML did not parse: while scanning for the next token
+#   found character '`' that cannot start any token
+#     in "<unicode string>", line 1, column 1:
+#       ```yaml
+#       ^
+#
+```yaml
+metadata:
+  name: "mnq-cme-preclose-volconfirm-revalidation"
+  purpose: "Pathway-A revalidation of MNQ CME_PRECLOSE high-volume ORB confirmation"
+  date_locked: "2026-04-27T10:00:00+10:00"
+  data_horizon_years_clean: 6.65
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  research_question_type: "standalone_edge"
+
+hypotheses:
+  - id: 1
+    name: "MNQ CME_PRECLOSE high-volume ORB momentum"
+    theory_citation: "fitschen_2013_path_of_least_resistance — chan_2013_ch7_intraday_momentum"
+    economic_basis: |
+      High opening-range volume signals institutional participation and commitment
+      to directional moves. When volume exceeds 16k contracts in first 5 minutes,
+      path of least resistance favors breakout continuation into close.
+    filter:
+      type: ORB_VOL_16K
+      column: orb_5_volume
+    scope:
+      instruments: [MNQ]
+      sessions: [CME_PRECLOSE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [15]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on K=1 family"
+      - "WFE < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era N>=50 ExpR < -0.05"
+      - "2026 H1 ExpR < 0.15R with N >= 50"
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+```

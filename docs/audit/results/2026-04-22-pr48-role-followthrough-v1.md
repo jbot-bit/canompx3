@@ -7,7 +7,7 @@
 **Primary test:** daily policy delta versus parent for `Q4+Q5` and `continuous_desired`, BH FDR at family `K=6`.
 **Diagnostics:** drawdown, dollar translation, executable drag, and max-open-lots proxy.
 **Sacred OOS window:** `2026-01-01` onward.
-**Latest canonical trading day:** `2026-04-16`
+**Latest canonical trading day:** `2026-05-07`
 
 ## MNQ
 
@@ -15,33 +15,33 @@
 
 | candidate | mean_daily_delta_r | t | p_two_tailed | bh_survives | direction_positive |
 |---|---:|---:|---:|:---:|:---:|
-| q45_filter | +0.1157 | +1.812 | 0.0702 | N | Y |
-| continuous_desired | +0.2842 | +9.444 | 0.0000 | Y | Y |
+| q45_filter | +0.0715 | +1.202 | 0.2294 | N | Y |
+| continuous_desired | +0.2749 | +9.844 | 0.0000 | Y | Y |
 
 ### Role metrics
 
 | era | role | selected_n | trade_share | selected_avg_r | policy_ev_per_opp_r | capital_normalized_ev_r | daily_total_r | daily_max_dd_r | daily_total_dollars | daily_max_dd_dollars |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| IS | parent | 17828 | 1.000 | +0.0365 | +0.0365 | +0.0365 | +650.97 | +177.68 | +54,112 | +3,467 |
-| IS | q45_filter | 7131 | 0.400 | +0.1196 | +0.0478 | +0.1196 | +852.92 | +42.48 | +41,132 | +2,646 |
-| IS | continuous_desired | 17828 | 1.000 | +0.0365 | +0.0643 | +0.0644 | +1147.14 | +131.39 | +69,687 | +3,599 |
-| OOS | parent | 771 | 1.000 | +0.0589 | +0.0589 | +0.0589 | +45.45 | +12.98 | +2,083 | +2,555 |
-| OOS | q45_filter | 320 | 0.415 | +0.0851 | +0.0353 | +0.0851 | +27.25 | +12.30 | +1,409 | +2,268 |
-| OOS | continuous_desired | 771 | 1.000 | +0.0589 | +0.0652 | +0.0643 | +50.29 | +14.80 | +2,006 | +3,199 |
+| IS | parent | 19922 | 1.000 | +0.0412 | +0.0412 | +0.0412 | +820.36 | +166.24 | +75,028 | +2,861 |
+| IS | q45_filter | 7966 | 0.400 | +0.1200 | +0.0480 | +0.1200 | +956.20 | +35.50 | +56,168 | +2,493 |
+| IS | continuous_desired | 19922 | 1.000 | +0.0412 | +0.0674 | +0.0674 | +1342.31 | +120.40 | +95,531 | +3,125 |
+| OOS | parent | 919 | 1.000 | +0.0827 | +0.0827 | +0.0827 | +75.96 | +12.46 | +4,819 | +2,147 |
+| OOS | q45_filter | 381 | 0.415 | +0.1281 | +0.0531 | +0.1281 | +48.80 | +9.63 | +3,216 | +1,980 |
+| OOS | continuous_desired | 919 | 1.000 | +0.0827 | +0.0906 | +0.0893 | +83.23 | +14.15 | +5,003 | +2,925 |
 
 ### OOS direction match
 
 | candidate | IS daily delta sign | OOS daily delta sign | OOS mean_daily_delta_r | direction_match |
 |---|---:|---:|---:|:---:|
-| q45_filter | + | - | -0.2493 | N |
-| continuous_desired | + | + | +0.0663 | Y |
+| q45_filter | + | - | -0.3122 | N |
+| continuous_desired | + | + | +0.0835 | Y |
 
 ### Executable drag and concurrency diagnostics
 
-- Continuous desired -> executable proxy policy EV drag: IS `+0.0179R/opp`, OOS `-0.0073R/opp`
-- Continuous executable proxy total dollars: IS `$+79,311`, OOS `$+531`
+- Continuous desired -> executable proxy policy EV drag: IS `+0.0169R/opp`, OOS `-0.0107R/opp`
+- Continuous executable proxy total dollars: IS `$+108,668`, OOS `$+3,537`
 - Q4+Q5 max open contracts/lots in IS: 4 contracts / 1 lots
-- Continuous executable max open contracts/lots in IS: 6 contracts / 1 lots
+- Continuous executable max open contracts/lots in IS: 7 contracts / 1 lots
 
 ## MES
 
@@ -49,33 +49,33 @@
 
 | candidate | mean_daily_delta_r | t | p_two_tailed | bh_survives | direction_positive |
 |---|---:|---:|---:|:---:|:---:|
-| q45_filter | +1.0151 | +17.299 | 0.0000 | Y | Y |
-| continuous_desired | +0.2992 | +11.113 | 0.0000 | Y | Y |
+| q45_filter | +0.9606 | +17.541 | 0.0000 | Y | Y |
+| continuous_desired | +0.2981 | +11.881 | 0.0000 | Y | Y |
 
 ### Role metrics
 
 | era | role | selected_n | trade_share | selected_avg_r | policy_ev_per_opp_r | capital_normalized_ev_r | daily_total_r | daily_max_dd_r | daily_total_dollars | daily_max_dd_dollars |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| IS | parent | 16014 | 1.000 | -0.1160 | -0.1160 | -0.1160 | -1857.91 | +1863.52 | -25,591 | +28,541 |
-| IS | q45_filter | 6407 | 0.400 | -0.0137 | -0.0055 | -0.0137 | -87.65 | +193.67 | +5,768 | +6,560 |
-| IS | continuous_desired | 16014 | 1.000 | -0.1160 | -0.0834 | -0.0834 | -1336.10 | +1337.04 | -13,926 | +21,051 |
-| OOS | parent | 702 | 1.000 | -0.0902 | -0.0902 | -0.0902 | -63.34 | +62.75 | -1,349 | +2,031 |
-| OOS | q45_filter | 296 | 0.422 | -0.0112 | -0.0047 | -0.0112 | -3.30 | +22.93 | -57 | +1,641 |
-| OOS | continuous_desired | 702 | 1.000 | -0.0902 | -0.0600 | -0.0583 | -42.10 | +47.06 | -801 | +2,571 |
+| IS | parent | 18151 | 1.000 | -0.1019 | -0.1019 | -0.1019 | -1849.69 | +1854.79 | -17,215 | +21,201 |
+| IS | q45_filter | 7261 | 0.400 | -0.0038 | -0.0015 | -0.0038 | -27.43 | +171.41 | +13,502 | +4,967 |
+| IS | continuous_desired | 18151 | 1.000 | -0.1019 | -0.0708 | -0.0708 | -1284.26 | +1284.69 | -2,444 | +13,031 |
+| OOS | parent | 873 | 1.000 | -0.0863 | -0.0863 | -0.0863 | -75.35 | +78.58 | -1,500 | +2,337 |
+| OOS | q45_filter | 356 | 0.408 | +0.0097 | +0.0040 | +0.0097 | +3.47 | +25.08 | +323 | +1,629 |
+| OOS | continuous_desired | 873 | 1.000 | -0.0863 | -0.0568 | -0.0559 | -49.60 | +58.12 | -792 | +2,715 |
 
 ### OOS direction match
 
 | candidate | IS daily delta sign | OOS daily delta sign | OOS mean_daily_delta_r | direction_match |
 |---|---:|---:|---:|:---:|
-| q45_filter | + | + | +0.8338 | Y |
-| continuous_desired | + | + | +0.2950 | Y |
+| q45_filter | + | + | +0.8856 | Y |
+| continuous_desired | + | + | +0.2893 | Y |
 
 ### Executable drag and concurrency diagnostics
 
-- Continuous desired -> executable proxy policy EV drag: IS `+0.0212R/opp`, OOS `+0.0280R/opp`
-- Continuous executable proxy total dollars: IS `$-7,443`, OOS `$-64`
+- Continuous desired -> executable proxy policy EV drag: IS `+0.0204R/opp`, OOS `+0.0192R/opp`
+- Continuous executable proxy total dollars: IS `$+6,108`, OOS `$-256`
 - Q4+Q5 max open contracts/lots in IS: 3 contracts / 1 lots
-- Continuous executable max open contracts/lots in IS: 6 contracts / 1 lots
+- Continuous executable max open contracts/lots in IS: 7 contracts / 1 lots
 
 ## MGC
 
@@ -83,33 +83,33 @@
 
 | candidate | mean_daily_delta_r | t | p_two_tailed | bh_survives | direction_positive |
 |---|---:|---:|---:|:---:|:---:|
-| q45_filter | +0.9562 | +13.074 | 0.0000 | Y | Y |
-| continuous_desired | +0.2416 | +7.197 | 0.0000 | Y | Y |
+| q45_filter | +0.9266 | +13.320 | 0.0000 | Y | Y |
+| continuous_desired | +0.2382 | +7.600 | 0.0000 | Y | Y |
 
 ### Role metrics
 
 | era | role | selected_n | trade_share | selected_avg_r | policy_ev_per_opp_r | capital_normalized_ev_r | daily_total_r | daily_max_dd_r | daily_total_dollars | daily_max_dd_dollars |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| IS | parent | 7444 | 1.000 | -0.1346 | -0.1346 | -0.1346 | -1001.61 | +1028.37 | -17,739 | +22,483 |
-| IS | q45_filter | 2974 | 0.400 | -0.0374 | -0.0150 | -0.0375 | -111.38 | +209.43 | +3,903 | +4,496 |
-| IS | continuous_desired | 7444 | 1.000 | -0.1346 | -0.1043 | -0.1044 | -776.71 | +840.49 | -9,509 | +18,655 |
-| OOS | parent | 601 | 1.000 | +0.0695 | +0.0695 | +0.0695 | +41.80 | +18.40 | +13,494 | +1,984 |
-| OOS | q45_filter | 222 | 0.369 | +0.1941 | +0.0717 | +0.1941 | +43.09 | +11.14 | +8,824 | +1,650 |
-| OOS | continuous_desired | 601 | 1.000 | +0.0695 | +0.1013 | +0.1021 | +60.88 | +19.42 | +15,937 | +2,366 |
+| IS | parent | 8082 | 1.000 | -0.1302 | -0.1302 | -0.1302 | -1052.13 | +1078.57 | -16,789 | +22,540 |
+| IS | q45_filter | 3229 | 0.400 | -0.0377 | -0.0151 | -0.0377 | -121.84 | +222.00 | +5,293 | +4,038 |
+| IS | continuous_desired | 8082 | 1.000 | -0.1302 | -0.1006 | -0.1007 | -812.99 | +884.36 | -7,447 | +18,028 |
+| OOS | parent | 681 | 1.000 | +0.0406 | +0.0406 | +0.0406 | +27.68 | +29.59 | +12,575 | +3,457 |
+| OOS | q45_filter | 241 | 0.354 | +0.1456 | +0.0515 | +0.1456 | +35.09 | +12.35 | +8,814 | +1,709 |
+| OOS | continuous_desired | 681 | 1.000 | +0.0406 | +0.0639 | +0.0655 | +43.53 | +27.81 | +14,666 | +3,455 |
 
 ### OOS direction match
 
 | candidate | IS daily delta sign | OOS daily delta sign | OOS mean_daily_delta_r | direction_match |
 |---|---:|---:|---:|:---:|
-| q45_filter | + | + | +0.0182 | Y |
-| continuous_desired | + | + | +0.2688 | Y |
+| q45_filter | + | + | +0.0893 | Y |
+| continuous_desired | + | + | +0.1910 | Y |
 
 ### Executable drag and concurrency diagnostics
 
-- Continuous desired -> executable proxy policy EV drag: IS `+0.0190R/opp`, OOS `+0.0139R/opp`
-- Continuous executable proxy total dollars: IS `$-3,505`, OOS `$+17,122`
+- Continuous desired -> executable proxy policy EV drag: IS `+0.0205R/opp`, OOS `+0.0104R/opp`
+- Continuous executable proxy total dollars: IS `$-120`, OOS `$+14,962`
 - Q4+Q5 max open contracts/lots in IS: 3 contracts / 1 lots
-- Continuous executable max open contracts/lots in IS: 6 contracts / 1 lots
+- Continuous executable max open contracts/lots in IS: 7 contracts / 1 lots
 
 ## Interpretation guardrails
 

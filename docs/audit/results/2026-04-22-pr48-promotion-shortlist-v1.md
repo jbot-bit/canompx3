@@ -7,51 +7,51 @@
 **Candidates:** `MES q45 executable`, `MGC continuous executable`, `MES+MGC duo`, `MNQ continuous executable shadow add-on`
 **Primary tests:** daily dollar delta vs the declared parent comparator, BH FDR at family `K=4` on IS.
 **Sacred OOS window:** `2026-01-01` onward
-**Latest canonical trading day:** `2026-04-16`
+**Latest canonical trading day:** `2026-05-07`
 
 ## IS shortlist tests
 
 | candidate | mean_daily_delta_$ | t | p_two_tailed | bh_survives | direction_positive |
 |---|---:|---:|---:|:---:|:---:|
-| MES:q45_exec | +17.98 | +8.642 | 0.0000 | Y | Y |
-| MGC:cont_exec | +15.29 | +4.188 | 0.0000 | Y | Y |
-| DUO:mes_q45_plus_mgc_cont_exec | +25.92 | +9.050 | 0.0000 | Y | Y |
-| MNQ:shadow_addon | +44.71 | +5.604 | 0.0000 | Y | Y |
+| MES:q45_exec | +16.19 | +8.219 | 0.0000 | Y | Y |
+| MGC:cont_exec | +16.60 | +4.935 | 0.0000 | Y | Y |
+| DUO:mes_q45_plus_mgc_cont_exec | +24.76 | +9.257 | 0.0000 | Y | Y |
+| MNQ:shadow_addon | +56.39 | +7.446 | 0.0000 | Y | Y |
 
 ## OOS direction checks
 
 | candidate | IS sign | OOS sign | OOS mean_daily_delta_$ | direction_match |
 |---|---:|---:|---:|:---:|
-| MES:q45_exec | + | + | +17.95 | Y |
-| MGC:cont_exec | + | + | +51.10 | Y |
-| DUO:mes_q45_plus_mgc_cont_exec | + | + | +68.34 | Y |
-| MNQ:shadow_addon | + | + | +7.27 | Y |
+| MES:q45_exec | + | + | +20.48 | Y |
+| MGC:cont_exec | + | + | +28.76 | Y |
+| DUO:mes_q45_plus_mgc_cont_exec | + | + | +47.29 | Y |
+| MNQ:shadow_addon | + | + | +38.87 | Y |
 
 ## Candidate-level metrics
 
 | instrument | era | role | policy_ev_per_opp_r | daily_total_$ | daily_max_dd_$ |
 |---|---|---|---:|---:|---:|
-| MES | IS | parent | -0.1160 | -25,591 | +28,541 |
-| MES | OOS | parent | -0.0902 | -1,349 | +2,031 |
-| MES | IS | q45_exec | -0.0055 | +5,768 | +6,560 |
-| MES | OOS | q45_exec | -0.0047 | -57 | +1,641 |
-| MGC | IS | parent | -0.1346 | -17,739 | +22,483 |
-| MGC | OOS | parent | +0.0695 | +13,494 | +1,984 |
-| MGC | IS | cont_exec | -0.0854 | -3,505 | +16,306 |
-| MGC | OOS | cont_exec | +0.1152 | +17,122 | +2,426 |
-| MNQ | IS | cont_exec_shadow | +0.0823 | +79,311 | +3,821 |
-| MNQ | OOS | cont_exec_shadow | +0.0579 | +531 | +4,331 |
+| MES | IS | parent | -0.1019 | -17,215 | +21,201 |
+| MES | OOS | parent | -0.0863 | -1,500 | +2,337 |
+| MES | IS | q45_exec | -0.0015 | +13,502 | +4,967 |
+| MES | OOS | q45_exec | +0.0040 | +323 | +1,629 |
+| MGC | IS | parent | -0.1302 | -16,789 | +22,540 |
+| MGC | OOS | parent | +0.0406 | +12,575 | +3,457 |
+| MGC | IS | cont_exec | -0.0801 | -120 | +14,673 |
+| MGC | OOS | cont_exec | +0.0743 | +14,962 | +4,059 |
+| MNQ | IS | cont_exec_shadow | +0.0843 | +108,668 | +3,775 |
+| MNQ | OOS | cont_exec_shadow | +0.0799 | +3,537 | +3,666 |
 
 ## Combo metrics
 
 | combo | era | total_$ | mean_daily_$ | max_dd_$ | best_day_$ | worst_day_$ |
 |---|---|---:|---:|---:|---:|---:|
-| parent_duo | IS | -43,330 | -24.63 | +50,114 | +1,354 | -1,055 |
-| candidate_duo | IS | +2,263 | +1.29 | +20,897 | +1,831 | -991 |
-| candidate_trio | IS | +81,574 | +45.98 | +13,098 | +3,701 | -2,331 |
-| parent_duo | OOS | +12,145 | +168.68 | +1,869 | +1,726 | -1,226 |
-| candidate_duo | OOS | +17,066 | +237.02 | +3,121 | +3,760 | -1,785 |
-| candidate_trio | OOS | +17,596 | +241.04 | +6,510 | +4,758 | -2,286 |
+| parent_duo | IS | -34,004 | -17.77 | +42,999 | +1,567 | -1,054 |
+| candidate_duo | IS | +13,383 | +6.99 | +15,795 | +1,885 | -1,070 |
+| candidate_trio | IS | +122,051 | +63.34 | +9,005 | +3,786 | -2,329 |
+| parent_duo | OOS | +11,075 | +124.44 | +4,618 | +1,947 | -1,401 |
+| candidate_duo | OOS | +15,285 | +171.74 | +4,057 | +3,750 | -1,694 |
+| candidate_trio | OOS | +18,821 | +206.83 | +4,941 | +4,794 | -2,233 |
 
 ## Interpretation guardrails
 

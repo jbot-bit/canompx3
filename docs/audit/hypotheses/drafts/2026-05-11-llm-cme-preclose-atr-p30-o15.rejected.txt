@@ -1,0 +1,51 @@
+# REJECTED LLM DRAFT — fatal static checks failed.
+# This file is NOT a valid hypothesis. Do not rename to .yaml.
+# Failure summary:
+#   [YAML_PARSE_ERROR] <root>: YAML did not parse: while scanning for the next token
+#   found character '`' that cannot start any token
+#     in "<unicode string>", line 1, column 1:
+#       ```yaml
+#       ^
+#
+```yaml
+metadata:
+  name: "mnq-cme-preclose-atr-p30-revalidation"
+  purpose: "Pathway-A revalidation of MNQ CME_PRECLOSE E2 volatility-regime filter"
+  date_locked: "2026-01-15T09:30:00+10:00"
+  data_horizon_years_clean: 6.65
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  research_question_type: "standalone_edge"
+
+hypotheses:
+  - id: 1
+    name: "MNQ CME_PRECLOSE volatility-regime ATR_P30 filter"
+    theory_citation: "carver_2015_volatility_targeting_position_sizing — chan_2013_ch7_intraday_momentum"
+    economic_basis: |
+      Pre-close momentum trades require sufficient volatility to overcome transaction costs. 
+      ATR percentile acts as regime filter: when 20-day ATR is in bottom 30th percentile, 
+      market lacks the volatility needed for profitable intraday breakouts. Carver's volatility 
+      targeting framework suggests scaling exposure to volatility regimes; here we binary-exclude 
+      the quiet regime where noise dominates signal.
+    filter:
+      type: ATR_P30
+      column: atr_20
+    scope:
+      instruments: [MNQ]
+      sessions: [CME_PRECLOSE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [15]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on K=1 family"
+      - "WFE < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era N>=50 ExpR < -0.05"
+      - "OOS ExpR degrades >20% from IS ExpR=0.278R"
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+```
