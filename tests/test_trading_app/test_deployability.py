@@ -25,6 +25,10 @@ def _row(**overrides):
         "oos_exp_r": 0.12,
         "wfe": 0.80,
         "dsr_score": 0.96,
+        "sharpe_ratio": 0.30,  # Stage 4: t = 0.30 * sqrt(200) = 4.24 (BAND A / PASS_CHORDIA)
+        "era_dependent": False,
+        "fdr_significant": True,
+        "fdr_adjusted_p": 0.01,
         "years_tested": 7.0,
         "slippage_validation_status": "PASSED",
         "c8_oos_status": "PASSED",
@@ -320,6 +324,160 @@ def test_instrument_summary_labels_mes_and_mgc_gaps():
     assert summary["MES"]["hard_issue_counts"]["slippage_missing"] == 1
     assert summary["MGC"]["sample_size_below_100"] == 1
     assert summary["MGC"]["family_status_counts"]["ROBUST"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Stage 4 — family_singleton conditional downgrade (Disposition C)
+# ---------------------------------------------------------------------------
+# These tests assert the conditional behaviour added 2026-05-11:
+#   - SINGLETON + all binding criteria pass -> warning + CONTROLLED_LIVE_PILOT_CANDIDATE
+#   - SINGLETON + any binding criterion fail -> hard + BLOCKED_FAMILY_FRAGILE
+# Reference: docs/runtime/stages/stage4-family-singleton-conditional.md;
+# Stage 3 § 4 floor spec; pre_registered_criteria.md Enforcement summary
+# (line 480-494 post-amendments).
+
+
+def test_singleton_clearing_all_binding_criteria_is_controlled_pilot_warning():
+    result = _classify(row=_row(strategy_id="SOLO_OK", robustness_status="SINGLETON"))
+
+    assert result.verdict == dep.CONTROLLED_LIVE_PILOT_CANDIDATE
+    assert result.deployable is True
+    assert result.institutional_language_allowed is False  # singletons never get institutional language
+    family_issues = [issue for issue in result.issues if issue.id == "family_singleton"]
+    assert len(family_issues) == 1
+    assert family_issues[0].severity == "warning"
+
+
+def test_singleton_failing_chordia_band_is_still_hard_block():
+    # Sharpe 0.10 with N=200 -> t = 0.10 * sqrt(200) ~= 1.41 -> FAIL_BOTH.
+    # This mirrors the 5 MES Stage-2 candidates (t ~ 2.2-2.6, BAND C).
+    result = _classify(row=_row(strategy_id="SOLO_LOW_T", robustness_status="SINGLETON", sharpe_ratio=0.10))
+
+    assert result.verdict == dep.BLOCKED_FAMILY_FRAGILE
+    assert result.deployable is False
+    family_issues = [issue for issue in result.issues if issue.id == "family_singleton"]
+    assert len(family_issues) == 1
+    assert family_issues[0].severity == "hard"
+    detail = family_issues[0].detail
+    assert "C4_Chordia" in str(detail.get("failed_binding_criteria", []))
+
+
+def test_singleton_with_era_dependent_true_is_hard_block():
+    result = _classify(row=_row(strategy_id="SOLO_ERA", robustness_status="SINGLETON", era_dependent=True))
+
+    assert result.verdict == dep.BLOCKED_FAMILY_FRAGILE
+    assert result.deployable is False
+    family_issues = [issue for issue in result.issues if issue.id == "family_singleton"]
+    assert len(family_issues) == 1
+    assert family_issues[0].severity == "hard"
+
+
+def test_singleton_with_low_sample_size_is_hard_block():
+    # N=80 below the C7 threshold. Note: also fails C4 because t is small,
+    # but the floor failure carries both criteria — we just need to see
+    # the hard severity persist.
+    result = _classify(row=_row(strategy_id="SOLO_LOW_N", robustness_status="SINGLETON", sample_size=80))
+
+    assert result.verdict == dep.BLOCKED_FAMILY_FRAGILE
+    assert result.deployable is False
+    family_issues = [issue for issue in result.issues if issue.id == "family_singleton"]
+    assert family_issues[0].severity == "hard"
+    detail = family_issues[0].detail
+    assert "C7_N" in str(detail.get("failed_binding_criteria", []))
+
+
+def test_purged_family_remains_unconditional_hard_block():
+    # Sanity: the Stage 4 change is SINGLETON-only. PURGED must keep its
+    # unconditional hard-block semantics.
+    result = _classify(row=_row(strategy_id="PURGE_X", robustness_status="PURGED"))
+
+    assert result.verdict == dep.BLOCKED_FAMILY_FRAGILE
+    family_issues = [issue for issue in result.issues if issue.id == "family_purged"]
+    assert len(family_issues) == 1
+    assert family_issues[0].severity == "hard"
+
+
+def test_singleton_passing_routes_to_nearest_to_deployable_not_retire():
+    # Promotion-bucket routing: a downgraded-to-warning singleton must
+    # NOT land in retire_or_purge. RETIRE_OR_PURGE_ISSUES no longer
+    # contains family_singleton (Stage 4 / Disposition C).
+    passing = _classify(row=_row(strategy_id="SOLO_OK_2", robustness_status="SINGLETON"))
+    purged = _classify(row=_row(strategy_id="PURGE_2", robustness_status="PURGED"))
+
+    queue = dep._build_promotion_queue([passing, purged])
+
+    # SOLO_OK_2 is DEPLOYABLE/CONTROLLED_PILOT — should not be in retire bucket.
+    retire_ids = {row["strategy_id"] for row in queue["retire_or_purge"]["rows"]}
+    assert "SOLO_OK_2" not in retire_ids
+    assert "PURGE_2" in retire_ids
+
+
+def test_singleton_passing_emits_doctrine_reference_in_detail():
+    # Bloomberg-grade audit trail: the warning's detail dict must include
+    # the doctrine reason so a downstream reader can trace the decision.
+    result = _classify(row=_row(strategy_id="SOLO_AUDIT", robustness_status="SINGLETON"))
+
+    family_issues = [issue for issue in result.issues if issue.id == "family_singleton"]
+    assert family_issues[0].severity == "warning"
+    detail = family_issues[0].detail
+    assert detail["robustness_status"] == "SINGLETON"
+    assert detail["verdict_route"] == "CONTROLLED_LIVE_PILOT_CANDIDATE"
+    assert "Stage 4" in detail["doctrine"]
+    assert detail["c5_dsr_reported"] is True  # default fixture dsr_score=0.96
+
+
+def test_singleton_with_null_dsr_still_passes_when_binding_criteria_cleared():
+    # Adversarial-audit gate (2026-05-11) caught a prior version that
+    # gated the floor on C5 dsr_score being non-NULL, contradicting
+    # pre_registered_criteria.md Amendment 2.1 ("CROSS-CHECK ONLY").
+    # A SINGLETON with NULL dsr_score must still pass the floor when
+    # all six binding criteria (C3/C4/C6/C7/C9/C10) clear; C5 NULL is
+    # a reporting gap, not a gate failure.
+    result = _classify(
+        row=_row(
+            strategy_id="SOLO_NULL_DSR",
+            robustness_status="SINGLETON",
+            dsr_score=None,
+        )
+    )
+
+    assert result.verdict == dep.CONTROLLED_LIVE_PILOT_CANDIDATE
+    assert result.deployable is True
+    family_issues = [issue for issue in result.issues if issue.id == "family_singleton"]
+    assert len(family_issues) == 1
+    assert family_issues[0].severity == "warning"
+    detail = family_issues[0].detail
+    assert detail["c5_dsr_reported"] is False
+    assert detail["c5_status"] == "uncomputed_reporting_gap_cross_check_only"
+    # Sanity: failed_binding_criteria should NOT have been populated for
+    # a passing row (no "C5_DSR_uncomputed" leak into the audit trail).
+    assert "failed_binding_criteria" not in detail
+
+
+def test_singleton_with_null_dsr_AND_failing_chordia_is_still_hard():
+    # Sanity: NULL dsr_score combined with a real binding failure should
+    # still hard-block. The C5 fix must not accidentally rescue a row
+    # that fails C4 Chordia.
+    result = _classify(
+        row=_row(
+            strategy_id="SOLO_NULL_DSR_LOW_T",
+            robustness_status="SINGLETON",
+            dsr_score=None,
+            sharpe_ratio=0.10,  # t = 0.10 * sqrt(200) = 1.41 -> FAIL_BOTH
+        )
+    )
+
+    assert result.verdict == dep.BLOCKED_FAMILY_FRAGILE
+    assert result.deployable is False
+    family_issues = [issue for issue in result.issues if issue.id == "family_singleton"]
+    assert family_issues[0].severity == "hard"
+    detail = family_issues[0].detail
+    failed = str(detail.get("failed_binding_criteria", []))
+    assert "C4_Chordia" in failed
+    # C5 reporting state must surface on the hard branch too.
+    assert detail["c5_dsr_reported"] is False
+    # And C5 MUST NOT appear in the failed list — it is cross-check only.
+    assert "C5_DSR_uncomputed" not in failed
 
 
 def test_promotion_queue_separates_evidence_gaps_from_purge_candidates():

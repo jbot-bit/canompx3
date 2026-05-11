@@ -9,27 +9,43 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-11
-- **Commit:** fabae777 — feat(research): LLM hypothesis proposer (Track A) — literature-grounded prereg drafts
-- **Files changed:** 18 files
-  - `.claude/skills/propose-hypothesis/SKILL.md`
-  - `docs/prompts/hypothesis-proposer-fewshot.md`
-  - `docs/prompts/hypothesis-proposer-system.md`
-  - `docs/runtime/stages/llm-hypothesis-proposer-track-a.md`
-  - `scripts/research/lhp/__init__.py`
-  - `scripts/research/lhp/adjacency.py`
-  - `scripts/research/lhp/literature_index.py`
-  - `scripts/research/lhp/llm_client.py`
-  - `scripts/research/lhp/static_checks.py`
-  - `scripts/research/lhp/yaml_emitter.py`
-  - `scripts/research/llm_hypothesis_proposer.py`
-  - `tests/fixtures/lhp/bad_banned_feature.yaml`
-  - `tests/fixtures/lhp/bad_fabricated_citation.yaml`
-  - `tests/fixtures/lhp/bad_minbtl_exceeded.yaml`
-  - `tests/fixtures/lhp/bad_wrong_holdout.yaml`
-  - ... and 3 more
+- **Commit:** 6fd3bb0b — Stage 4: family_singleton conditional downgrade per Disposition C
+- **Files changed:** 5 files
+  - `HANDOFF.md`
+  - `docs/audit/results/2026-05-11-stage4-family-singleton-conditional-impl.md`
+  - `docs/runtime/stages/stage4-family-singleton-conditional.md`
+  - `tests/test_trading_app/test_deployability.py`
+  - `trading_app/deployability.py`
 
 ## Next Steps — Active
-1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
+
+1. **STAGE 4 — IMPLEMENTED + AUDIT-PASS** on branch
+   `stage4/family-singleton-conditional`. Adversarial-audit gate
+   returned CONDITIONAL with 1 finding (C5 docstring/code contradiction:
+   helper was gating on NULL dsr_score contrary to Amendment 2.1). Fix
+   committed as follow-up: helper now returns 3-tuple `(passes, failed,
+   dsr_reported)`; C5 NULL surfaces as audit-trail flag, not blocker;
+   2 new tests added (NULL DSR + binding pass → CONTROLLED_LIVE_PILOT;
+   NULL DSR + failing Chordia → still hard). 50 tests pass; 123 drift
+   checks pass; empirical regression unchanged (33 MNQ pass, 0 MES).
+   Lane allocator independence VERIFIED (grep, not just inferred).
+   **Ready to open PR.**
+2. **5 MES Stage-2 candidates outcome:** still HARD-BLOCKED under
+   Stage 4 because they fail C4 Chordia (t ≈ 2.2-2.6, BAND C). The
+   original Stage 2 expectation that Disposition C "unlocks at most
+   5 after C5 + C8 resolved" is empirically refuted under the
+   literature-grounded floor — 0 of 5 clear.
+3. **33 MNQ CONTROLLED_LIVE_PILOT_CANDIDATE rows:** the new conditional-
+   warning surface. All MNQ; sample includes CME_PRECLOSE-cluster
+   sibling RR variants of deployed lanes. Lane-correlation gates
+   downstream would collapse most of them before any real deployment.
+   No allocator change in Stage 4.
+4. **Stage 1 PR #258** awaiting merge.
+5. **Stage 2 / Stage 3 / Stage 3.5 branches** awaiting PR bundling
+   decision.
+6. **Doctrine fix for `pre_registered_criteria.md:290-303`** (Stage 3
+   § 5) — separate workstream, MEDIUM severity, NOT blocking.
+7. Track D MNQ COMEX_SETTLE Gate 0 runner design — carried forward.
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
