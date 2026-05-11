@@ -58,10 +58,12 @@ to deployable.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-11
-- **Commit:** aee9daba — fix(llm-proposer): strip markdown fences and surface 4xx body
-- **Files changed:** 2 files
+- **Commit:** 82ab4c06 — prereg: lock 3 LLM-drafted hypotheses for chordia-MISSING audit unlock
+- **Files changed:** 4 files
   - `HANDOFF.md`
-  - `scripts/research/lhp/llm_client.py`
+  - `docs/audit/hypotheses/2026-05-11-llm-cme-preclose-atr-p30-o15.yaml`
+  - `docs/audit/hypotheses/2026-05-11-llm-cme-preclose-orb-vol-16k-o15.yaml`
+  - `docs/audit/hypotheses/2026-05-11-llm-tokyo-open-atr-vel-ge105.yaml`
 
 ## Next Steps — Active
 

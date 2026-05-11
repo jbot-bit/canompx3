@@ -449,7 +449,7 @@ class TestCorrectedTierValues:
         assert PROP_FIRM_SPECS["tradeify"].close_time_et == "16:59"
 
 
-# ─── F-5: AccountProfile is_express_funded / is_live_funded fields ───
+# ─── F-5: AccountProfile is_express_funded field ───
 # @canonical-source docs/research-input/topstep/topstep_mll_article.md
 # @verbatim "For a $50,000 Express Funded Account, your Maximum Loss Limit
 #            starts at -$2,000 and trails upward as your balance grows.
@@ -457,7 +457,7 @@ class TestCorrectedTierValues:
 
 
 class TestAccountProfileXfaFlag:
-    """AccountProfile.is_express_funded and is_live_funded (F-5 + F-3 stub)."""
+    """AccountProfile.is_express_funded (F-5)."""
 
     def test_is_express_funded_default_true(self):
         """New AccountProfiles default to XFA semantics (matches active deployment)."""
@@ -465,13 +465,6 @@ class TestAccountProfileXfaFlag:
 
         prof = AccountProfile(profile_id="test", firm="topstep", account_size=50_000)
         assert prof.is_express_funded is True
-
-    def test_is_live_funded_default_false(self):
-        """LFA flag is reserved for future LFA-promotion path; default False."""
-        from trading_app.prop_profiles import AccountProfile
-
-        prof = AccountProfile(profile_id="test", firm="topstep", account_size=50_000)
-        assert prof.is_live_funded is False
 
     def test_active_topstep_profiles_are_xfa(self):
         """All currently active TopStep profiles in the repo are XFA-shaped."""

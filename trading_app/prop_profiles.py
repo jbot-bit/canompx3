@@ -105,11 +105,6 @@ class AccountProfile:
     # Default True because the active deployment topstep_50k_mnq_auto is XFA-shaped.
     # Set to False only for Trading Combine practice profiles.
     is_express_funded: bool = True
-    # @canonical-source docs/research-input/topstep/topstep_live_funded_parameters.md
-    # @audit-finding F-3 (DEFERRED — LFA DLL = MLL with $10K low-balance override).
-    # Reserved for the LFA-promotion path. Not yet wired into AccountHWMTracker.
-    # Stage 4 reserves the slot; LFA DLL semantics will be wired in a future stage.
-    is_live_funded: bool = False
     notes: str = ""
     # Execution-layer symbol-substitution contract (Stage 1 of NQ-mini feature).
     # Both fields default None for identity behaviour. When populated, downstream
