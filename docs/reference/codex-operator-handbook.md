@@ -106,10 +106,11 @@ skill sources kept in `.codex/skills/`.
 
 ## Maintenance
 
-- Keep MCP minimal. `repo-state` is the default local self-understanding MCP;
-  `research-catalog` is the default local research-grounding MCP;
-  `openaiDeveloperDocs` stays on by default; `gold-db` remains opt-in for live
-  trading-data sessions.
+- Keep MCP explicit and local. `repo-state` is the default local
+  self-understanding MCP; `research-catalog` is the default local
+  research-grounding MCP; `gold-db` is the default read-only trading-data MCP
+  over the single canonical `gold.db`; `openaiDeveloperDocs` stays available
+  for official OpenAI documentation checks.
 - Keep repeatable Codex workflows in skills, scripts, or thin docs rather than
   repeated prompts.
 - Use the report-only automation templates in `.codex/AUTOMATIONS.md` for

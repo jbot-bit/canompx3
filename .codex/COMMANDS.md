@@ -38,9 +38,8 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
   - `repo-state`
 - Default research-grounding MCP in those sessions:
   - `research-catalog`
-- Interactive project data session with `gold-db` MCP:
-  - `scripts/infra/codex-project-gold-db.sh`
-  - `scripts/infra/codex-project-search-gold-db.sh`
+- Default local data MCP in those sessions:
+  - `gold-db`
 - Max-capability review profile:
   - `scripts/infra/codex-review.sh`
 - Capital-at-risk review profile:

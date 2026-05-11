@@ -50,10 +50,9 @@ Project-scoped Codex MCP declarations also exist in `.codex/config.toml`:
   - this is the default local grounding surface for literature, prereg, and audit-result work
 - `strategy-lab` is attached by the Codex project/review launchers by default
   - this is the default deployment-readiness surface for single-strategy and lane-allocation lookups
-- `gold-db` is deliberately not attached by default
-  - use `scripts/infra/codex-project-gold-db.sh` or
-    `scripts/infra/codex-project-search-gold-db.sh` when a task actually needs
-    the trading DB via MCP
+- `gold-db` is attached by the normal Codex project/search launchers
+  - it is read-only and points at the single canonical `gold.db`
+  - do not create a second DB or a copied WSL DB
 - `code-review-graph` stays repo-scoped in `.mcp.json`
   - keep it opt-in for structural code navigation and review, not routine truth-finding
 
@@ -113,7 +112,7 @@ Current intended split:
 - default self-understanding: `repo-state`
 - default research grounding: `research-catalog`
 - default deployment-readiness: `strategy-lab`
-- explicit trading-data truth: `gold-db`
+- default read-only trading-data truth: `gold-db`
 - explicit structural code navigation: `code-review-graph`
 - explicit official-doc lookup: `openaiDeveloperDocs`
 

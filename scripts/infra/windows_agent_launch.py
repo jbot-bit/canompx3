@@ -24,17 +24,11 @@ VALID_MODES = {
     "codex",
     "codex-search",
     "codex-project",
-    "codex-project-gold-db",
     "codex-project-smart",
-    "codex-project-smart-gold-db",
     "codex-project-smart-power",
-    "codex-project-smart-search-gold-db",
-    "codex-project-linux-search-gold-db",
     "codex-project-power",
     "codex-project-linux",
-    "codex-project-linux-gold-db",
     "codex-project-linux-power",
-    "codex-project-search-gold-db",
     "green-codex",
     "green-claude",
     "handoff",
@@ -324,7 +318,6 @@ def build_codex_wsl_command(
 def build_codex_project_wsl_command(
     root_wsl: str,
     search_mode: bool = False,
-    enable_gold_db: bool = False,
     use_linux_home: bool = False,
     profile: str | None = None,
     sync_windows_checkout: bool = False,
@@ -332,8 +325,6 @@ def build_codex_project_wsl_command(
     import shlex
 
     script_name = "codex-project-search.sh" if search_mode else "codex-project.sh"
-    if enable_gold_db:
-        script_name = "codex-project-search-gold-db.sh" if search_mode else "codex-project-gold-db.sh"
 
     lines = ["set -euo pipefail"]
     if profile:
@@ -460,9 +451,9 @@ def open_codex_workstream(workstream_name: str, purpose: str | None, search_mode
     return run_wsl(build_codex_wsl_command(root, workstream_name, purpose, search_mode))
 
 
-def open_codex_project(search_mode: bool = False, enable_gold_db: bool = False) -> int:
+def open_codex_project(search_mode: bool = False) -> int:
     root = windows_to_wsl(repo_root())
-    return run_wsl(build_codex_project_wsl_command(root, search_mode=search_mode, enable_gold_db=enable_gold_db))
+    return run_wsl(build_codex_project_wsl_command(root, search_mode=search_mode))
 
 
 def open_codex_project_power() -> int:
@@ -470,13 +461,12 @@ def open_codex_project_power() -> int:
     return run_wsl(build_codex_project_wsl_command(root, profile="canompx3_power"))
 
 
-def open_codex_project_linux_home(search_mode: bool = False, enable_gold_db: bool = False) -> int:
+def open_codex_project_linux_home(search_mode: bool = False) -> int:
     root = windows_to_wsl(repo_root())
     return run_wsl(
         build_codex_project_wsl_command(
             root,
             search_mode=search_mode,
-            enable_gold_db=enable_gold_db,
             use_linux_home=True,
         )
     )
@@ -493,13 +483,12 @@ def open_codex_project_linux_home_power() -> int:
     )
 
 
-def open_codex_project_linux_home_synced(search_mode: bool = False, enable_gold_db: bool = False) -> int:
+def open_codex_project_linux_home_synced(search_mode: bool = False) -> int:
     root = windows_to_wsl(repo_root())
     return run_wsl(
         build_codex_project_wsl_command(
             root,
             search_mode=search_mode,
-            enable_gold_db=enable_gold_db,
             use_linux_home=True,
             sync_windows_checkout=True,
         )
@@ -522,11 +511,11 @@ def _fallback_notice() -> None:
     print("INFO: WSL-home Codex repo unavailable; falling back to the current Windows checkout.")
 
 
-def open_codex_project_smart(search_mode: bool = False, enable_gold_db: bool = False) -> int:
+def open_codex_project_smart(search_mode: bool = False) -> int:
     if wsl_home_clone_available():
-        return open_codex_project_linux_home_synced(search_mode=search_mode, enable_gold_db=enable_gold_db)
+        return open_codex_project_linux_home_synced(search_mode=search_mode)
     _fallback_notice()
-    return open_codex_project(search_mode=search_mode, enable_gold_db=enable_gold_db)
+    return open_codex_project(search_mode=search_mode)
 
 
 def open_codex_project_smart_power() -> int:
@@ -1026,28 +1015,16 @@ def main() -> int:
         return open_codex_workstream(task, "Build / edit", False)
     if args.mode == "codex-project":
         return open_codex_project()
-    if args.mode == "codex-project-gold-db":
-        return open_codex_project(enable_gold_db=True)
     if args.mode == "codex-project-smart":
         return open_codex_project_smart()
-    if args.mode == "codex-project-smart-gold-db":
-        return open_codex_project_smart(enable_gold_db=True)
     if args.mode == "codex-project-smart-power":
         return open_codex_project_smart_power()
-    if args.mode == "codex-project-smart-search-gold-db":
-        return open_codex_project_smart(search_mode=True, enable_gold_db=True)
-    if args.mode == "codex-project-linux-search-gold-db":
-        return open_codex_project_linux_home(search_mode=True, enable_gold_db=True)
     if args.mode == "codex-project-power":
         return open_codex_project_power()
     if args.mode == "codex-project-linux":
         return open_codex_project_linux_home()
-    if args.mode == "codex-project-linux-gold-db":
-        return open_codex_project_linux_home(enable_gold_db=True)
     if args.mode == "codex-project-linux-power":
         return open_codex_project_linux_home_power()
-    if args.mode == "codex-project-search-gold-db":
-        return open_codex_project(search_mode=True, enable_gold_db=True)
     if args.mode == "green-codex":
         return open_codex_green_baseline()
     if args.mode == "green-claude":

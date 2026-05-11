@@ -124,7 +124,6 @@ Default Codex entrypoints:
   - `scripts/infra/codex-project-search.sh`
 - Default local data context:
   - `gold-db` MCP is attached by the normal project/search launchers
-  - `scripts/infra/codex-project-gold-db.sh` remains a compatibility alias
 - Review session:
   - `scripts/infra/codex-review.sh`
 - Parallel isolated task:

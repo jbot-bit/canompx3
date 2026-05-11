@@ -6,110 +6,16 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## Stage 2/3/3.5 docs bundle (2026-05-11, Claude Opus, branch `docs/family-singleton-doctrine-bundle`)
-
-Docs-only PR bundling the audit trail from three sibling stage worktrees that
-drove Stage 4 (PR #260, merged `d8925815`) end-to-end. 6 new docs files; 0
-production code; 0 DB writes.
-
-- Stage 2: Disposition C lock + 3 self-audit passes (analysis doc + stage doc).
-  Empirical landscape on 276 active SINGLETONs. Third-pass correction:
-  `pre_registered_criteria.md` Amendment 2.1 already downgraded C5 to
-  CROSS-CHECK; the "non-operational drift" framing was wrong for two prior
-  passes.
-- Stage 3: Floor spec + 3 user decisions (analysis doc + stage doc). BINDING
-  criteria = C3+C4+C6+C7+C9+C10. Flags intra-doc inconsistency in
-  `pre_registered_criteria.md:290-303` vs line 480-494 (separate workstream,
-  MEDIUM severity).
-- Stage 3.5: shelf-wide C8 OOS backfill APPLIED to gold.db (844 rows flipped
-  via `scripts/tools/backfill_deployability_evidence.py --write --evidence
-  c8_oos --instrument ALL`). Bloomberg-grade audit trail with reproducibility
-  commands. Capital impact zero (all deployed lanes + siblings PASS).
-
-Capital safety: lane allocator reads `validated_setups.status`, not the
-deployability verdict string. Grep-verified during Stage 4 audit.
-
-## Stage 1 — Routine-TBBO slippage registry refactor (2026-05-11, Claude Opus, branch `stage1/generalize-tbbo-slippage-inference`)
-
-Landed: `refactor(deployability): registry-driven routine-TBBO slippage inference`.
-- Replaced MNQ-only `_mnq_routine_tbbo_slippage_applies()` (deployability.py:349)
-  with a registry-driven dispatcher; added `RoutineTbboPilot` dataclass +
-  `ROUTINE_TBBO_SLIPPAGE_REGISTRY` populated from MNQ + MES pilot v1 evidence.
-- New BLOCKING drift check `check_routine_tbbo_slippage_registry_coverage`
-  parses `## Verdict: **PASS**` lines on `*slippage*pilot*v1*.md` and fails
-  closed on under/over-coverage.
-- Empirical: 2 MES COMEX_SETTLE rows drop the `slippage_missing` hard issue
-  (verdict still `BLOCKED_FAMILY_FRAGILE` pending Stage 2 family_singleton
-  policy decision).
-- 124 drift checks pass, 33 deployability + 6 drift-check tests pass, 198 in
-  Stage 1 scope, 4551 broader tests pass (1 pre-existing WSL-doctor failure
-  unrelated to this diff).
-- Capital safety verified: lane allocator keys off `s.status`, not the
-  deployable flag — no MES capital deploys without Stage 3 profile +
-  lane_allocation.json edit.
-- Stage doc: `docs/runtime/stages/stage1-generalize-tbbo-slippage-inference.md`.
-- Survey doc landed as evidence provenance:
-  `docs/audit/results/2026-05-11-mes-profile-feasibility-readonly-survey.md`.
-
-Next: Stage 2 (separate worktree from `origin/main`) — doctrine decision on
-`family_singleton` policy. Without Stage 2, no MES verdict actually flips
-to deployable.
-
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Codex (WSL)
 - **Date:** 2026-05-12
-- **Commit:** d49af9ab — feat(filters): add max_pct band semantics - ATR_P30_75, OVNRNG_PCT_BAND_20_55
-- **Files changed:** 5 files
-  - `docs/runtime/stages/filter-library-band-extension-2026-05-12.md`
-  - `docs/runtime/stages/filter-library-deferred-3-disambiguation-2026-05-12.md`
-  - `tests/test_app_sync.py`
-  - `tests/test_trading_app/test_config.py`
-  - `trading_app/config.py`
+- **Summary:** Queue-backed baton refreshed from canonical active-work registry.
 
 ## Next Steps — Active
-
-1. **STAGE 4 — IMPLEMENTED + AUDIT-PASS** on branch
-   `stage4/family-singleton-conditional`. Adversarial-audit gate
-   returned CONDITIONAL with 1 finding (C5 docstring/code contradiction:
-   helper was gating on NULL dsr_score contrary to Amendment 2.1). Fix
-   committed as follow-up: helper now returns 3-tuple `(passes, failed,
-   dsr_reported)`; C5 NULL surfaces as audit-trail flag, not blocker;
-   2 new tests added (NULL DSR + binding pass → CONTROLLED_LIVE_PILOT;
-   NULL DSR + failing Chordia → still hard). 50 tests pass; 123 drift
-   checks pass; empirical regression unchanged (33 MNQ pass, 0 MES).
-   Lane allocator independence VERIFIED (grep, not just inferred).
-   **Ready to open PR.**
-2. **5 MES Stage-2 candidates outcome:** still HARD-BLOCKED under
-   Stage 4 because they fail C4 Chordia (t ≈ 2.2-2.6, BAND C). The
-   original Stage 2 expectation that Disposition C "unlocks at most
-   5 after C5 + C8 resolved" is empirically refuted under the
-   literature-grounded floor — 0 of 5 clear.
-3. **33 MNQ CONTROLLED_LIVE_PILOT_CANDIDATE rows:** the new conditional-
-   warning surface. All MNQ; sample includes CME_PRECLOSE-cluster
-   sibling RR variants of deployed lanes. Lane-correlation gates
-   downstream would collapse most of them before any real deployment.
-   No allocator change in Stage 4.
-4. **Stage 1 PR #258** awaiting merge.
-5. **Stage 2 / Stage 3 / Stage 3.5 branches** awaiting PR bundling
-   decision.
-6. **Doctrine fix for `pre_registered_criteria.md:290-303`** (Stage 3
-   § 5) — separate workstream, MEDIUM severity, NOT blocking.
-7. Track D MNQ COMEX_SETTLE Gate 0 runner design — carried forward.
+1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
 - `docs/runtime/decision-ledger.md`
 - `docs/runtime/debt-ledger.md`
 - `docs/plans/2026-04-22-handoff-baton-compaction.md`
-
-## Codex launcher simplification (2026-05-12, Codex)
-
-Codex operator path is being simplified to one normal terminal command:
-`codex` in WSL or `codex.bat` from Windows. Normal Codex launchers now own
-`.venv-wsl` setup, use the WSL-home clone, and attach local repo MCPs including
-read-only `gold-db` by default. There is still one canonical data store:
-`gold.db`. In the WSL-home clone, `~/canompx3/gold.db` is a symlink to
-`/mnt/c/Users/joshd/canompx3/gold.db`, so it is not a stale copied DB.
-`/tmp/canompx3-fastmcp` is only a constrained Python dependency cache for the
-MCP package stack when FastMCP is not complete in `.venv-wsl`; it contains no
-market data and is not a database.
