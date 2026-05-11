@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-11
-- **Commit:** 87675298 — @ fix(prereg): declare scratch_policy on 2026-05-07 chordia unlock (Criterion 13)
+- **Commit:** b2470202 — fix(prereg): declare scratch_policy on 2026-05-07 chordia unlock (Criterion 13)
 - **Files changed:** 3 files
   - `HANDOFF.md`
   - `docs/audit/hypotheses/2026-05-07-mnq-nyseopen-costlt12-rr15-chordia-unlock-v1.yaml`

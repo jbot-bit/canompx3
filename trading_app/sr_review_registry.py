@@ -91,7 +91,13 @@ SR_ALARM_REVIEWS: dict[tuple[str, str], SrAlarmReview] = {
     # NYSE_OPEN RR1.5 COST_LT12 — reviewed 2026-05-11 for the allocation
     # promotion pipeline. The SR alarm is path-real (alarm at monitored trade
     # 43, max SR 552.36), but the lane still clears the same review floors used
-    # for the existing WATCH precedents: WFE 1.80 and OOS/IS 61%.
+    # for the existing WATCH precedents: WFE 1.80 and OOS/IS 112%.
+    # Canonical figures verified 2026-05-11 vs validated_setups:
+    #   wfe=1.7986, expectancy_r=0.105, oos_exp_r=0.1179,
+    #   oos_exp_r/expectancy_r = 0.1179 / 0.105 = 1.1229 (112%).
+    # Earlier draft of this entry cited "61%" — that figure was not derivable
+    # from any committed source. Correction trail in
+    # memory/feedback_sr_review_registry_audit_pattern.md.
     (
         "topstep_50k_mnq_auto",
         "MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12",
@@ -101,14 +107,20 @@ SR_ALARM_REVIEWS: dict[tuple[str, str], SrAlarmReview] = {
         outcome="watch",
         reviewed_at="2026-05-11",
         summary=(
-            "Reviewed WATCH: WFE 1.80 and OOS/IS 61% clear the existing C12 "
+            "Reviewed WATCH: WFE 1.80 and OOS/IS 112% (validated_setups "
+            "oos_exp_r/expectancy_r = 0.1179/0.105) clear the existing C12 "
             "watch floors; SR alarm is path-real (alarm trade 43, max SR 552.36) "
-            "and therefore requires tight recheck rather than silent promotion."
+            "and therefore requires tight recheck rather than silent promotion. "
+            "OOS short direction is negative (ExpR=-0.0451 on N=42, OOS power 0.088 "
+            "STATISTICALLY_USELESS); pooled OOS sign positive only because OOS long "
+            "(ExpR=+0.218 on N=35) outweighs short. Directional risk tracked in "
+            "recheck trigger."
         ),
         recheck_trigger=(
             "Re-check after N>=100 monitored trades. Retire if SR remains ALARM "
-            "and (WFE < 0.50 or OOS/IS ratio < 0.40), or if the promoted "
-            "provisional lane breaches account/session risk controls."
+            "and (WFE < 0.50 or OOS/IS ratio < 0.40), or if OOS short direction "
+            "remains negative at N>=30, or if the promoted provisional lane "
+            "breaches account/session risk controls."
         ),
     ),
 }
