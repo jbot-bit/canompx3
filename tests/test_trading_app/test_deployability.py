@@ -171,10 +171,34 @@ def test_mnq_event_tail_pending_is_controlled_pilot_not_institutional_language()
 
 
 def test_non_mnq_event_tail_pending_still_blocks_slippage():
+    # MGC is NOT in ROUTINE_TBBO_SLIPPAGE_REGISTRY; an explicit PENDING_EVENT_TAIL
+    # on an unregistered instrument falls through to slippage_not_passed (HARD).
     result = _classify(row=_row(instrument="MGC", slippage_validation_status="PENDING_EVENT_TAIL"))
 
     assert result.verdict == dep.BLOCKED_SLIPPAGE
     assert any(issue.id == "slippage_not_passed" for issue in result.issues)
+
+
+def test_mes_event_tail_pending_is_controlled_pilot_not_institutional_language():
+    # MES IS in ROUTINE_TBBO_SLIPPAGE_REGISTRY; an explicit PENDING_EVENT_TAIL on a
+    # MES row must reach CONTROLLED_LIVE_PILOT_CANDIDATE, the same as MNQ.
+    # Pre-audit-fix this fell through to BLOCKED_SLIPPAGE because
+    # `_slippage_is_controlled_event_tail_pending` hardcoded `instrument == "MNQ"`.
+    result = _classify(
+        row=_row(
+            instrument="MES",
+            orb_label="COMEX_SETTLE",
+            slippage_validation_status="PENDING_EVENT_TAIL",
+        )
+    )
+
+    assert result.verdict == dep.CONTROLLED_LIVE_PILOT_CANDIDATE
+    assert result.deployable is True
+    assert result.institutional_language_allowed is False
+    event_tail = [issue for issue in result.issues if issue.id == "slippage_event_tail_pending"]
+    assert len(event_tail) == 1
+    assert event_tail[0].detail["inferred_from_routine_tbbo"] is False
+    assert event_tail[0].detail["effective_status"] == "PENDING_EVENT_TAIL"
 
 
 def test_current_k_fdr_failure_blocks_deployability():

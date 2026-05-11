@@ -7354,7 +7354,7 @@ def check_routine_tbbo_slippage_registry_coverage() -> list[str]:
         re.IGNORECASE | re.MULTILINE,
     )
 
-    pilot_docs: list[tuple[str, str, Path]] = []  # (instrument, verdict, path)
+    pilot_docs: list[tuple[str, str, str, Path]] = []  # (instrument, date, verdict, path)
     for path in sorted(results_dir.glob("*slippage*pilot*v1*.md")):
         match = pilot_re.match(path.name)
         if match is None:
@@ -7364,6 +7364,7 @@ def check_routine_tbbo_slippage_registry_coverage() -> list[str]:
             )
             continue
         instrument = match.group("instrument").upper()
+        date_str = match.group("date")  # YYYY-MM-DD, sortable as string
         try:
             text = path.read_text(encoding="utf-8")
         except OSError as exc:
@@ -7375,35 +7376,42 @@ def check_routine_tbbo_slippage_registry_coverage() -> list[str]:
                 f"  pilot doc {path.name} has no `## Verdict: **PASS|WARN|FAIL**` line; cannot be classified."
             )
             continue
-        pilot_docs.append((instrument, verdict_match.group("verdict").upper(), path))
+        pilot_docs.append((instrument, date_str, verdict_match.group("verdict").upper(), path))
 
-    pass_instruments = {inst for inst, verdict, _ in pilot_docs if verdict == "PASS"}
-    non_pass_instruments = {inst for inst, verdict, _ in pilot_docs if verdict != "PASS"}
+    # Per instrument the LATEST pilot v1 doc (by filename date) is authoritative.
+    # A stale older PASS does not justify a registry entry if a newer WARN/FAIL
+    # refutes it; equally, a stale older WARN does not block a newer PASS.
+    # Filename date is YYYY-MM-DD so string sort = chronological sort.
+    latest_by_instrument: dict[str, tuple[str, str, Path]] = {}  # inst -> (date, verdict, path)
+    for instrument, date_str, verdict, path in pilot_docs:
+        prior = latest_by_instrument.get(instrument)
+        if prior is None or date_str > prior[0]:
+            latest_by_instrument[instrument] = (date_str, verdict, path)
+
+    pass_instruments = {inst for inst, (_, v, _) in latest_by_instrument.items() if v == "PASS"}
+    non_pass_instruments = {inst for inst, (_, v, _) in latest_by_instrument.items() if v != "PASS"}
 
     # PASS pilots must be covered.
     for inst in sorted(pass_instruments - registry_instruments):
-        evidence_paths = [path.name for i, v, path in pilot_docs if i == inst and v == "PASS"]
+        date_str, _, path = latest_by_instrument[inst]
         violations.append(
-            f"  routine-TBBO slippage pilot v1 PASS for {inst} ({', '.join(evidence_paths)}) "
+            f"  routine-TBBO slippage pilot v1 PASS for {inst} (latest: {path.name} dated {date_str}) "
             f"but {inst} is missing from trading_app.deployability."
             f"ROUTINE_TBBO_SLIPPAGE_REGISTRY. Add a RoutineTbboPilot entry covering the "
             f"pilot's session set so deployability infers PENDING_EVENT_TAIL instead of "
             f"hard-blocking on slippage_missing."
         )
 
-    # WARN/FAIL pilots must NOT be in the registry, UNLESS a later PASS pilot exists
-    # for the same instrument (PASS supersedes earlier non-PASS).
+    # The LATEST pilot per instrument is authoritative: if it is WARN/FAIL,
+    # the registry entry must be removed even if older PASS pilots exist
+    # (newer evidence supersedes stale PASS).
     for inst in sorted(non_pass_instruments & registry_instruments):
-        if inst in pass_instruments:
-            continue  # PASS supersedes earlier WARN/FAIL for the same instrument
-        evidence_paths = [
-            f"{path.name} ({verdict})" for i, verdict, path in pilot_docs if i == inst and verdict != "PASS"
-        ]
+        date_str, verdict, path = latest_by_instrument[inst]
         violations.append(
-            f"  {inst} is registered in ROUTINE_TBBO_SLIPPAGE_REGISTRY but its only "
-            f"slippage pilot v1 evidence is non-PASS ({', '.join(evidence_paths)}). "
-            f"Remove the registry entry or land a PASS pilot v1 for {inst} before "
-            f"inferring PENDING_EVENT_TAIL on its rows."
+            f"  {inst} is registered in ROUTINE_TBBO_SLIPPAGE_REGISTRY but its LATEST "
+            f"slippage pilot v1 doc is non-PASS ({path.name} dated {date_str}, verdict={verdict}). "
+            f"Remove the registry entry or land a newer PASS pilot v1 for {inst} before "
+            f"continuing to infer PENDING_EVENT_TAIL on its rows."
         )
 
     return violations

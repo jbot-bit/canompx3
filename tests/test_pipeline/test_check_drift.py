@@ -2696,13 +2696,13 @@ class TestCheckRoutineTbboSlippageRegistryCoverage:
         assert len(violations) == 1
         assert "MGC" in violations[0]
         assert "non-PASS" in violations[0]
+        assert "verdict=WARN" in violations[0]
 
-    def test_pass_supersedes_earlier_warn_for_same_instrument(self, monkeypatch, tmp_path):
+    def test_newer_pass_supersedes_older_warn_for_same_instrument(self, monkeypatch, tmp_path):
+        """LATEST-by-filename-date pilot is authoritative. Newer PASS overrides older WARN."""
         from pipeline.check_drift import check_routine_tbbo_slippage_registry_coverage
         from trading_app.deployability import RoutineTbboPilot
 
-        # MGC has both an earlier WARN pilot AND a later PASS pilot — the registry
-        # entry is justified by the PASS, and the WARN must NOT trigger over-coverage.
         registry = {
             "MGC": RoutineTbboPilot("MGC", "E2", frozenset({"LONDON_METALS"}), "basis"),
         }
@@ -2712,6 +2712,30 @@ class TestCheckRoutineTbboSlippageRegistryCoverage:
 
         violations = check_routine_tbbo_slippage_registry_coverage()
         assert violations == []
+
+    def test_newer_warn_supersedes_older_pass_for_same_instrument(self, monkeypatch, tmp_path):
+        """LATEST-by-filename-date pilot is authoritative. Newer WARN refutes older PASS,
+        and the registry entry must be flagged for removal — staleness cannot keep a
+        registry entry alive after newer evidence refutes the original PASS verdict.
+        """
+        from pipeline.check_drift import check_routine_tbbo_slippage_registry_coverage
+        from trading_app.deployability import RoutineTbboPilot
+
+        # Same registry as the supersedes-PASS test, but the date ordering of the
+        # pilot docs is REVERSED: an OLDER PASS exists, but the LATEST evidence is WARN.
+        registry = {
+            "MGC": RoutineTbboPilot("MGC", "E2", frozenset({"LONDON_METALS"}), "basis"),
+        }
+        results_dir = self._patch(monkeypatch, tmp_path, registry)
+        self._write_pilot_doc(results_dir, "2026-04-01-mgc-e2-slippage-pilot-v1.md", "PASS")
+        self._write_pilot_doc(results_dir, "2026-05-01-mgc-e2-slippage-pilot-v1.md", "WARN")
+
+        violations = check_routine_tbbo_slippage_registry_coverage()
+        assert len(violations) == 1
+        assert "MGC" in violations[0]
+        # Should cite the LATEST doc and verdict, not the older PASS.
+        assert "2026-05-01-mgc-e2-slippage-pilot-v1.md" in violations[0]
+        assert "verdict=WARN" in violations[0]
 
     def test_pilot_doc_without_verdict_line_fails_closed(self, monkeypatch, tmp_path):
         from pipeline.check_drift import check_routine_tbbo_slippage_registry_coverage

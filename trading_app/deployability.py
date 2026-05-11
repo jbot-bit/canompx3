@@ -395,8 +395,19 @@ def _slippage_passes(value: Any) -> bool:
     return str(value).strip().upper() in SLIPPAGE_PASS_STATUSES
 
 
-def _slippage_is_controlled_event_tail_pending(row: dict[str, Any], value: Any) -> bool:
-    return str(row.get("instrument") or "").upper() == "MNQ" and str(value).strip().upper() == "PENDING_EVENT_TAIL"
+def _slippage_is_controlled_event_tail_pending(
+    row: dict[str, Any],
+    value: Any,
+    *,
+    registry: dict[str, RoutineTbboPilot] = ROUTINE_TBBO_SLIPPAGE_REGISTRY,
+) -> bool:
+    if str(value).strip().upper() != "PENDING_EVENT_TAIL":
+        return False
+    # Any instrument with a registered routine-TBBO slippage pilot is eligible to
+    # carry an explicit PENDING_EVENT_TAIL status. Hardcoding MNQ here was the
+    # second half of the class bug fixed by the routine-TBBO registry refactor;
+    # MES (and any future registered instrument) must follow the same path.
+    return str(row.get("instrument") or "").upper() in registry
 
 
 def _routine_tbbo_pilot_for_row(
