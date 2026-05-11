@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-11
-- **Commit:** cbaa3a9a — docs(institutional): document Criterion 12 WATCH-continue operational extension
+- **Commit:** c0ca14c6 — docs(audit): document --bootstrap-runtime-control consultation path + add caveats
 - **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/institutional/pre_registered_criteria.md`
+  - `docs/audit/results/2026-05-11-mnq-profile-candidate-proposal.md`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.

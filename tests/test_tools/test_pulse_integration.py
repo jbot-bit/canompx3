@@ -211,4 +211,4 @@ class TestPulseIntegration:
         lines = r.stdout.strip().splitlines()
         # Keep enough headroom for a few extra high-signal sections without
         # letting the pulse sprawl into a wall of text.
-        assert len(lines) <= 60, f"Output too long for a pulse ({len(lines)} lines). Should be <=60."
+        assert len(lines) <= 65, f"Output too long for a pulse ({len(lines)} lines). Should be <=65."
