@@ -1178,19 +1178,28 @@ class OwnATRPercentileFilter(StrategyFilter):
     CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
 
     min_pct: float = 60.0
+    max_pct: float | None = None
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         val = row.get("atr_20_pct")
         if val is None:
             return False
-        return val >= self.min_pct
+        if val < self.min_pct:
+            return False
+        if self.max_pct is not None and val > self.max_pct:
+            return False
+        return True
 
     def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
         import pandas as pd
 
         if "atr_20_pct" not in df.columns:
             return pd.Series(False, index=df.index)
-        return df["atr_20_pct"].notna() & (df["atr_20_pct"] >= self.min_pct)
+        col = df["atr_20_pct"]
+        mask = col.notna() & (col >= self.min_pct)
+        if self.max_pct is not None:
+            mask = mask & (col <= self.max_pct)
+        return mask
 
     def describe(
         self,
@@ -1200,18 +1209,21 @@ class OwnATRPercentileFilter(StrategyFilter):
     ) -> list[AtomDescription]:
         """Own ATR-20 percentile gate. Pre-session, resolves at STARTUP.
 
-        Threads CONFIDENCE_TIER (PLAUSIBLE) through.
+        Threads CONFIDENCE_TIER (PLAUSIBLE) through. When ``max_pct`` is set,
+        emits a second atom for the upper bound — band semantics are
+        inclusive on both ends (``min_pct <= val <= max_pct``), matching the
+        canonical "P30_75" percentile-band notation used in research preregs.
         """
         _ = (orb_label, entry_model)
         observed = _atom_numeric(row.get("atr_20_pct"))
         missing = observed is None
-        passes = None if missing else observed >= self.min_pct
-        return [
+        passes_min = None if missing else observed >= self.min_pct
+        atoms: list[AtomDescription] = [
             AtomDescription(
                 name=f"Own ATR percentile >= {self.min_pct:g}",
                 category="PRE_SESSION",
                 resolves_at="STARTUP",
-                passes=passes,
+                passes=passes_min,
                 feature_column="atr_20_pct",
                 confidence_tier=self.CONFIDENCE_TIER,
                 observed_value=observed,
@@ -1223,6 +1235,26 @@ class OwnATRPercentileFilter(StrategyFilter):
                 ),
             )
         ]
+        if self.max_pct is not None:
+            passes_max = None if missing else observed <= self.max_pct
+            atoms.append(
+                AtomDescription(
+                    name=f"Own ATR percentile <= {self.max_pct:g}",
+                    category="PRE_SESSION",
+                    resolves_at="STARTUP",
+                    passes=passes_max,
+                    feature_column="atr_20_pct",
+                    confidence_tier=self.CONFIDENCE_TIER,
+                    observed_value=observed,
+                    threshold=self.max_pct,
+                    comparator="<=",
+                    is_data_missing=missing,
+                    explanation=(
+                        f"Cap own-instrument ATR-20 rolling percentile <= {self.max_pct:g}% (band upper bound — exclude extreme-vol regime)."
+                    ),
+                )
+            )
+        return atoms
 
 
 @dataclass(frozen=True)
@@ -1242,12 +1274,21 @@ class OvernightRangeFilter(StrategyFilter):
 
     min_pct: float = 60.0
     strict_gt: bool = False  # default False preserves >= semantics for all existing instances
+    max_pct: float | None = None  # optional upper bound — inclusive (<=)
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         val = row.get("overnight_range_pct")
         if val is None:
             return False
-        return val > self.min_pct if self.strict_gt else val >= self.min_pct
+        if self.strict_gt:
+            if not (val > self.min_pct):
+                return False
+        else:
+            if val < self.min_pct:
+                return False
+        if self.max_pct is not None and val > self.max_pct:
+            return False
+        return True
 
     def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
         import pandas as pd
@@ -1256,8 +1297,12 @@ class OvernightRangeFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         col = df["overnight_range_pct"]
         if self.strict_gt:
-            return col.notna() & (col > self.min_pct)
-        return col.notna() & (col >= self.min_pct)
+            mask = col.notna() & (col > self.min_pct)
+        else:
+            mask = col.notna() & (col >= self.min_pct)
+        if self.max_pct is not None:
+            mask = mask & (col <= self.max_pct)
+        return mask
 
     def describe(
         self,
@@ -1265,33 +1310,58 @@ class OvernightRangeFilter(StrategyFilter):
         orb_label: str,
         entry_model: str,
     ) -> list[AtomDescription]:
-        """Overnight range rolling percentile gate. Pre-session, resolves at STARTUP."""
+        """Overnight range rolling percentile gate. Pre-session, resolves at STARTUP.
+
+        When ``max_pct`` is set, emits a second atom for the upper bound —
+        band semantics are inclusive on the upper end (``<= max_pct``),
+        matching the canonical "PCT_BAND_20_55" percentile-band notation.
+        The lower-bound comparator continues to be governed by ``strict_gt``.
+        """
         _ = (orb_label, entry_model)
         observed = _atom_numeric(row.get("overnight_range_pct"))
         missing = observed is None
         if missing:
-            passes = None
+            passes_min = None
         elif self.strict_gt:
-            passes = observed > self.min_pct
+            passes_min = observed > self.min_pct
         else:
-            passes = observed >= self.min_pct
-        comparator = ">" if self.strict_gt else ">="
-        return [
+            passes_min = observed >= self.min_pct
+        comparator_min = ">" if self.strict_gt else ">="
+        atoms: list[AtomDescription] = [
             AtomDescription(
-                name=f"Overnight range percentile {comparator} {self.min_pct:g}",
+                name=f"Overnight range percentile {comparator_min} {self.min_pct:g}",
                 category="PRE_SESSION",
                 resolves_at="STARTUP",
-                passes=passes,
+                passes=passes_min,
                 feature_column="overnight_range_pct",
                 observed_value=observed,
                 threshold=self.min_pct,
-                comparator=comparator,
+                comparator=comparator_min,
                 is_data_missing=missing,
                 explanation=(
-                    f"Require overnight range rolling percentile {comparator} {self.min_pct:g}% (Asian-session activity gate)."
+                    f"Require overnight range rolling percentile {comparator_min} {self.min_pct:g}% (Asian-session activity gate)."
                 ),
             )
         ]
+        if self.max_pct is not None:
+            passes_max = None if missing else observed <= self.max_pct
+            atoms.append(
+                AtomDescription(
+                    name=f"Overnight range percentile <= {self.max_pct:g}",
+                    category="PRE_SESSION",
+                    resolves_at="STARTUP",
+                    passes=passes_max,
+                    feature_column="overnight_range_pct",
+                    observed_value=observed,
+                    threshold=self.max_pct,
+                    comparator="<=",
+                    is_data_missing=missing,
+                    explanation=(
+                        f"Cap overnight range rolling percentile <= {self.max_pct:g}% (band upper bound — exclude extreme-overnight regime)."
+                    ),
+                )
+            )
+        return atoms
 
 
 @dataclass(frozen=True)
@@ -3337,6 +3407,25 @@ _HYPOTHESIS_SCOPED_FILTERS: dict[str, StrategyFilter] = {
         description="Overnight range rolling percentile > 80 (strict)",
         min_pct=80.0,
         strict_gt=True,
+    ),
+    # Percentile-band gates (hypothesis-scoped, filed 2026-05-12). NOT in
+    # BASE_GRID_FILTERS — registered here only so prereg hypothesis-file
+    # injection can find them. Mechanism prior (from external trading AI
+    # framework): MGC LONDON_METALS compression-release setups need mid-vol
+    # ATR regime (neither too quiet for impulse fuel nor too noisy) and
+    # modest overnight activity (neither dead nor exhausted overnight).
+    # Pre-reg target: docs/audit/hypotheses/<future>-mgc-london-metals-compression-release.yaml
+    "ATR_P30_75": OwnATRPercentileFilter(
+        filter_type="ATR_P30_75",
+        description="Own ATR(20) percentile in [30, 75] (mid-vol regime band)",
+        min_pct=30.0,
+        max_pct=75.0,
+    ),
+    "OVNRNG_PCT_BAND_20_55": OvernightRangeFilter(
+        filter_type="OVNRNG_PCT_BAND_20_55",
+        description="Overnight range rolling percentile in [20, 55] (mid-overnight band)",
+        min_pct=20.0,
+        max_pct=55.0,
     ),
     # Phase D D4 PARK candidate (B-MNQ-COX Pathway B K=1, 2026-04-28).
     # Pre-reg cell predicate: daily_features.garch_forecast_vol_pct > 70 (strict gt).

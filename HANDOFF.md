@@ -58,12 +58,13 @@ to deployable.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 56f69f51 — fix(validator): match preregs by content (scope.instruments), not filename
-- **Files changed:** 4 files
-  - `HANDOFF.md`
-  - `docs/runtime/stages/fix-llm-prereg-naming-parity.md`
-  - `tests/test_trading_app/test_strategy_validator.py`
-  - `trading_app/strategy_validator.py`
+- **Commit:** d49af9ab — feat(filters): add max_pct band semantics - ATR_P30_75, OVNRNG_PCT_BAND_20_55
+- **Files changed:** 5 files
+  - `docs/runtime/stages/filter-library-band-extension-2026-05-12.md`
+  - `docs/runtime/stages/filter-library-deferred-3-disambiguation-2026-05-12.md`
+  - `tests/test_app_sync.py`
+  - `tests/test_trading_app/test_config.py`
+  - `trading_app/config.py`
 
 ## Next Steps — Active
 

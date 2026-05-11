@@ -171,8 +171,10 @@ class TestAllFilters:
         #     PD_GO_LONG (Apr 2026 union of validated positive MNQ prior-day families)
         #     OVNRNG_PCT_GT80 (Apr 2026 Phase D D2 PARK candidate B-MES-EUR — additivity audit only)
         #     GARCH_VOL_PCT_GT70 (Apr 2026 Phase D D4 PARK candidate B-MNQ-COX — additivity audit only)
-        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 15 scoped = 97
-        assert len(ALL_FILTERS) == 97
+        #     ATR_P30_75 (2026-05-12 band gate for external-AI MGC LONDON_METALS framework, prereg pending)
+        #     OVNRNG_PCT_BAND_20_55 (2026-05-12 band gate for external-AI MGC LONDON_METALS framework, prereg pending)
+        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 17 scoped = 99
+        assert len(ALL_FILTERS) == 99
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -608,6 +610,86 @@ class TestOwnATRPercentileFilter:
             assert f.min_pct == expected_pct
             assert f.filter_type == key
 
+    # ── Band semantics (max_pct upper bound, filed 2026-05-12) ──────────
+
+    def test_band_inside_inclusive_both_ends(self):
+        """Band [30, 75] admits 30.0, 50.0, 75.0 (inclusive on both ends)."""
+        from trading_app.config import OwnATRPercentileFilter
+
+        f = OwnATRPercentileFilter(filter_type="TEST", description="test", min_pct=30.0, max_pct=75.0)
+        assert f.matches_row({"atr_20_pct": 30.0}, "LONDON_METALS") is True
+        assert f.matches_row({"atr_20_pct": 50.0}, "LONDON_METALS") is True
+        assert f.matches_row({"atr_20_pct": 75.0}, "LONDON_METALS") is True
+
+    def test_band_rejects_below_min(self):
+        """Band [30, 75] rejects 29.9 (just below min)."""
+        from trading_app.config import OwnATRPercentileFilter
+
+        f = OwnATRPercentileFilter(filter_type="TEST", description="test", min_pct=30.0, max_pct=75.0)
+        assert f.matches_row({"atr_20_pct": 29.9}, "LONDON_METALS") is False
+
+    def test_band_rejects_above_max(self):
+        """Band [30, 75] rejects 75.1 (just above max)."""
+        from trading_app.config import OwnATRPercentileFilter
+
+        f = OwnATRPercentileFilter(filter_type="TEST", description="test", min_pct=30.0, max_pct=75.0)
+        assert f.matches_row({"atr_20_pct": 75.1}, "LONDON_METALS") is False
+
+    def test_band_fail_closed_missing(self):
+        """Band still fail-closed on missing atr_20_pct."""
+        from trading_app.config import OwnATRPercentileFilter
+
+        f = OwnATRPercentileFilter(filter_type="TEST", description="test", min_pct=30.0, max_pct=75.0)
+        assert f.matches_row({}, "LONDON_METALS") is False
+        assert f.matches_row({"atr_20_pct": None}, "LONDON_METALS") is False
+
+    def test_band_matches_df_vectorised(self):
+        """matches_df vectorised result matches matches_row per-row."""
+        import pandas as pd
+
+        from trading_app.config import OwnATRPercentileFilter
+
+        f = OwnATRPercentileFilter(filter_type="TEST", description="test", min_pct=30.0, max_pct=75.0)
+        df = pd.DataFrame({"atr_20_pct": [29.9, 30.0, 50.0, 75.0, 75.1, None]})
+        expected = [False, True, True, True, False, False]
+        assert list(f.matches_df(df, "LONDON_METALS")) == expected
+
+    def test_band_describe_emits_two_atoms(self):
+        """When max_pct is set, describe() emits 2 atoms (min + max)."""
+        from trading_app.config import OwnATRPercentileFilter
+
+        f = OwnATRPercentileFilter(filter_type="TEST", description="test", min_pct=30.0, max_pct=75.0)
+        atoms = f.describe({"atr_20_pct": 50.0}, "LONDON_METALS", "E2")
+        assert len(atoms) == 2
+        assert atoms[0].comparator == ">="
+        assert atoms[0].threshold == 30.0
+        assert atoms[0].passes is True
+        assert atoms[1].comparator == "<="
+        assert atoms[1].threshold == 75.0
+        assert atoms[1].passes is True
+
+    def test_single_bound_describe_unchanged_one_atom(self):
+        """Backward compat: min_pct-only (max_pct=None) emits exactly 1 atom."""
+        from trading_app.config import OwnATRPercentileFilter
+
+        f = OwnATRPercentileFilter(filter_type="TEST", description="test", min_pct=30.0)
+        atoms = f.describe({"atr_20_pct": 50.0}, "LONDON_METALS", "E2")
+        assert len(atoms) == 1
+        assert atoms[0].comparator == ">="
+
+    def test_atr_p30_75_registered(self):
+        """ATR_P30_75 is registered in ALL_FILTERS (hypothesis-scoped, not BASE_GRID)."""
+        from trading_app.config import BASE_GRID_FILTERS, OwnATRPercentileFilter
+
+        assert "ATR_P30_75" in ALL_FILTERS
+        f = ALL_FILTERS["ATR_P30_75"]
+        assert isinstance(f, OwnATRPercentileFilter)
+        assert f.filter_type == "ATR_P30_75"
+        assert f.min_pct == 30.0
+        assert f.max_pct == 75.0
+        # Hypothesis-scoped: NOT in BASE_GRID (parity with OVNRNG_PCT_GT80 discipline)
+        assert "ATR_P30_75" not in BASE_GRID_FILTERS
+
 
 class TestGARCHForecastVolPctFilter:
     """GARCHForecastVolPctFilter gates on GARCH forecast vol rolling percentile.
@@ -979,6 +1061,128 @@ class TestStrictGtVariants:
             for sess in sessions:
                 grid = get_filters_for_grid(inst, sess)
                 assert "OVNRNG_PCT_GT80" not in grid, f"OVNRNG_PCT_GT80 leaked into {inst} {sess} grid"
+
+    # ── OVNRNG_PCT_BAND_20_55 (band semantics, filed 2026-05-12) ─────────
+
+    def test_ovnrng_band_inside_inclusive_both_ends(self):
+        """Band [20, 55] admits 20.0, 35.0, 55.0 (inclusive on both ends)."""
+        from trading_app.config import OvernightRangeFilter
+
+        f = OvernightRangeFilter(filter_type="TEST", description="test", min_pct=20.0, max_pct=55.0)
+        assert f.matches_row({"overnight_range_pct": 20.0}, "LONDON_METALS") is True
+        assert f.matches_row({"overnight_range_pct": 35.0}, "LONDON_METALS") is True
+        assert f.matches_row({"overnight_range_pct": 55.0}, "LONDON_METALS") is True
+
+    def test_ovnrng_band_rejects_below_min(self):
+        """Band [20, 55] rejects 19.9."""
+        from trading_app.config import OvernightRangeFilter
+
+        f = OvernightRangeFilter(filter_type="TEST", description="test", min_pct=20.0, max_pct=55.0)
+        assert f.matches_row({"overnight_range_pct": 19.9}, "LONDON_METALS") is False
+
+    def test_ovnrng_band_rejects_above_max(self):
+        """Band [20, 55] rejects 55.1."""
+        from trading_app.config import OvernightRangeFilter
+
+        f = OvernightRangeFilter(filter_type="TEST", description="test", min_pct=20.0, max_pct=55.0)
+        assert f.matches_row({"overnight_range_pct": 55.1}, "LONDON_METALS") is False
+
+    def test_ovnrng_band_fail_closed_missing(self):
+        """Band fail-closed on missing data."""
+        from trading_app.config import OvernightRangeFilter
+
+        f = OvernightRangeFilter(filter_type="TEST", description="test", min_pct=20.0, max_pct=55.0)
+        assert f.matches_row({}, "LONDON_METALS") is False
+        assert f.matches_row({"overnight_range_pct": None}, "LONDON_METALS") is False
+
+    def test_ovnrng_band_matches_df_vectorised(self):
+        """matches_df vectorised result matches matches_row per-row."""
+        import pandas as pd
+
+        from trading_app.config import OvernightRangeFilter
+
+        f = OvernightRangeFilter(filter_type="TEST", description="test", min_pct=20.0, max_pct=55.0)
+        df = pd.DataFrame({"overnight_range_pct": [19.9, 20.0, 35.0, 55.0, 55.1, None]})
+        expected = [False, True, True, True, False, False]
+        assert list(f.matches_df(df, "LONDON_METALS")) == expected
+
+    def test_ovnrng_band_with_strict_gt_lower_bound(self):
+        """Band + strict_gt: lower bound uses '>', upper bound uses '<=' (independent semantics)."""
+        from trading_app.config import OvernightRangeFilter
+
+        f = OvernightRangeFilter(
+            filter_type="TEST",
+            description="test",
+            min_pct=20.0,
+            strict_gt=True,
+            max_pct=55.0,
+        )
+        # 20.0 fails (strict >), 20.0001 passes
+        assert f.matches_row({"overnight_range_pct": 20.0}, "LONDON_METALS") is False
+        assert f.matches_row({"overnight_range_pct": 20.0001}, "LONDON_METALS") is True
+        # 55.0 still passes (max is inclusive)
+        assert f.matches_row({"overnight_range_pct": 55.0}, "LONDON_METALS") is True
+        assert f.matches_row({"overnight_range_pct": 55.1}, "LONDON_METALS") is False
+
+    def test_ovnrng_band_describe_emits_two_atoms(self):
+        """Band describe() emits 2 atoms (lower comparator from strict_gt, upper always '<=')."""
+        from trading_app.config import OvernightRangeFilter
+
+        f = OvernightRangeFilter(filter_type="TEST", description="test", min_pct=20.0, max_pct=55.0)
+        atoms = f.describe({"overnight_range_pct": 35.0}, "LONDON_METALS", "E2")
+        assert len(atoms) == 2
+        assert atoms[0].comparator == ">="
+        assert atoms[0].threshold == 20.0
+        assert atoms[0].passes is True
+        assert atoms[1].comparator == "<="
+        assert atoms[1].threshold == 55.0
+        assert atoms[1].passes is True
+
+    def test_ovnrng_single_bound_describe_unchanged_one_atom(self):
+        """Backward compat: min_pct-only (max_pct=None) emits exactly 1 atom."""
+        from trading_app.config import OvernightRangeFilter
+
+        f = OvernightRangeFilter(filter_type="TEST", description="test", min_pct=80.0)
+        atoms = f.describe({"overnight_range_pct": 90.0}, "LONDON_METALS", "E2")
+        assert len(atoms) == 1
+        assert atoms[0].comparator == ">="
+
+    def test_ovnrng_pct_band_20_55_registered(self):
+        """OVNRNG_PCT_BAND_20_55 in ALL_FILTERS (hypothesis-scoped, not BASE_GRID)."""
+        from trading_app.config import BASE_GRID_FILTERS, OvernightRangeFilter
+
+        assert "OVNRNG_PCT_BAND_20_55" in ALL_FILTERS
+        f = ALL_FILTERS["OVNRNG_PCT_BAND_20_55"]
+        assert isinstance(f, OvernightRangeFilter)
+        assert f.filter_type == "OVNRNG_PCT_BAND_20_55"
+        assert f.min_pct == 20.0
+        assert f.max_pct == 55.0
+        assert f.strict_gt is False
+        # Hypothesis-scoped: NOT in BASE_GRID (parity with OVNRNG_PCT_GT80 discipline)
+        assert "OVNRNG_PCT_BAND_20_55" not in BASE_GRID_FILTERS
+
+    def test_ovnrng_pct_band_not_in_legacy_grid_for_any_session(self):
+        """OVNRNG_PCT_BAND_20_55 must NOT appear in get_filters_for_grid for any session."""
+        from trading_app.config import get_filters_for_grid
+
+        sessions = [
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "BRISBANE_1025",
+            "CME_REOPEN",
+            "LONDON_METALS",
+            "EUROPE_FLOW",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+            "CME_PRECLOSE",
+            "NYSE_CLOSE",
+        ]
+        for inst in ("MNQ", "MES", "MGC"):
+            for sess in sessions:
+                grid = get_filters_for_grid(inst, sess)
+                assert "OVNRNG_PCT_BAND_20_55" not in grid, f"OVNRNG_PCT_BAND_20_55 leaked into {inst} {sess} grid"
 
     # ── GARCHForecastVolPctFilter strict_gt regression + new key ──────
 
