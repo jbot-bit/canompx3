@@ -4,6 +4,20 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
+- `dst-transitions-verification-2026-05-12` — DST asymmetric-transition
+  verification audit (read-only). Verdict: **PASS**. Canonical
+  `pipeline.dst.orb_utc_window()` resolves correctly across all five DST
+  regimes including the two ~3-week `us_dst_only` asymmetric windows per year.
+  Historic `orb_outcomes` data (13,692 E2 transition-window rows, 3 active
+  instruments, 2024-2026) is consistent with the current canonical resolver:
+  0 `entry_ts >= window_end` violations, 0 trading-day OOB violations.
+  Existing convergence tests already cover 15 asymmetric-window dates
+  (Mar 10-24 2024); 23/23 cases pass byte-identically backtest↔live.
+  No production code changes. Two advisory hardening proposals filed
+  (orb_outcomes provenance column, MarketState dead-field cleanup) — neither
+  required for PASS. Verdict at
+  `docs/audit/results/2026-05-12-dst-transition-verification.md`.
+
 - `mnq-live-readiness-gap-fill-2026-05-11` — Live-readiness pass found and
   fixed a real blocker at the evidence-metadata layer, not by weakening proof.
   Canonical MNQ E2 TBBO routine-slippage evidence already covers 9 deployed
