@@ -58,13 +58,12 @@ to deployable.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** d49af9ab — feat(filters): add max_pct band semantics - ATR_P30_75, OVNRNG_PCT_BAND_20_55
-- **Files changed:** 5 files
-  - `docs/runtime/stages/filter-library-band-extension-2026-05-12.md`
-  - `docs/runtime/stages/filter-library-deferred-3-disambiguation-2026-05-12.md`
-  - `tests/test_app_sync.py`
-  - `tests/test_trading_app/test_config.py`
-  - `trading_app/config.py`
+- **Commit:** 59e59678 — @ feat(research-catalog): add verdict_tags filter + STRATEGY_BLUEPRINT NO-GO indexing
+- **Files changed:** 4 files
+  - `docs/runtime/stages/research-catalog-verdict-filter.md`
+  - `docs/specs/research_catalog_verdict_filter.md`
+  - `scripts/tools/research_catalog_mcp_server.py`
+  - `tests/test_tools/test_research_catalog_mcp_server.py`
 
 ## Next Steps — Active
 
