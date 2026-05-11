@@ -170,7 +170,7 @@ _VERDICT_FRONTMATTER_RE = re.compile(
 # after the prefix (stripping leading punctuation / backticks / bold), and
 # defer normalization to ``_normalize_verdict`` which handles aliases.
 #
-# Verified 2026-05-12 against 44 production audit-result files using the
+# Verified 2026-05-12 against 31 production audit-result files using the
 # ``^**Verdict...:**`` family of prefixes (`grep -E "^\*\*[Vv]erdict[^:]*:\*\*"`).
 _VERDICT_BODY_RE = re.compile(
     r"""

@@ -471,6 +471,24 @@ def test_compound_verdict_qualifiers_normalize_to_kill_tag() -> None:
         assert got == expected, f"verdict {raw!r} normalized to {got!r}, expected {expected!r}"
 
 
+def test_verdict_priority_tokens_are_subset_of_normalize_keys() -> None:
+    """Two-list-sync invariant: every PRIORITY token must resolve via NORMALIZE.
+
+    `_normalize_verdict` iterates `_VERDICT_PRIORITY_TOKENS` and indexes
+    `_VERDICT_NORMALIZE[token]` directly (no `.get(...)` fallback). A token
+    present in PRIORITY but absent from NORMALIZE would raise KeyError at
+    runtime on the matching input — a silent class-bug risk. This guard
+    rots-detects the divergence at test time instead of in production.
+    """
+    priority = set(research_catalog_mcp_server._VERDICT_PRIORITY_TOKENS)
+    normalize_keys = set(research_catalog_mcp_server._VERDICT_NORMALIZE.keys())
+    missing = priority - normalize_keys
+    assert not missing, (
+        f"_VERDICT_PRIORITY_TOKENS contains tokens missing from _VERDICT_NORMALIZE: "
+        f"{sorted(missing)}. Add them to _VERDICT_NORMALIZE or drop from PRIORITY."
+    )
+
+
 def test_search_rejects_unknown_verdict_tag() -> None:
     with _temporary_catalog() as (_literature, _hypotheses, results, _blueprint):
         _write_verdict_fixtures(results)

@@ -1,6 +1,41 @@
 schema_version: 1
-updated_at: 2026-05-11T00:00:00+10:00
+updated_at: 2026-05-12T00:00:00+10:00
 items:
+  - id: research_catalog_verdict_vocabulary_doctrine_2026_05_12
+    title: Promote verdict-token vocabulary into a doctrine file (RESEARCH_RULES.md § Verdict tokens)
+    class: doctrine
+    status: open
+    priority: P3
+    close_before_new_work: false
+    owner_hint: user
+    last_verified_at: 2026-05-12
+    freshness_sla_days: 90
+    next_action: |
+      `scripts/tools/research_catalog_mcp_server.py` is currently the de-facto
+      registry for the project's verdict vocabulary (`_VERDICT_NORMALIZE` +
+      `_VERDICT_PRIORITY_TOKENS`). The spec at
+      `docs/specs/research_catalog_verdict_filter.md` § "Doctrine source"
+      acknowledges this and names the follow-up: move the canonical token list
+      into `RESEARCH_RULES.md` § Verdict tokens (or `pre_registered_criteria.md`
+      if it ties to a locked criterion), then have the MCP server import or
+      validate against that doctrine file rather than re-encoding it. Until
+      then, additions to `_VERDICT_NORMALIZE` MUST be backed by `grep` evidence
+      of production usage. A sync-invariant test
+      (`test_verdict_priority_tokens_are_subset_of_normalize_keys`) prevents
+      the two-list drift class in the meantime.
+    exit_criteria: |
+      RESEARCH_RULES.md (or equivalent doctrine file) contains the canonical
+      verdict vocabulary. `_VERDICT_NORMALIZE` either imports from it or has a
+      drift check that fails when the two diverge. Spec § "Doctrine source"
+      note is removed or updated to reflect the promotion.
+    blocked_by: []
+    decision_refs:
+      - docs/specs/research_catalog_verdict_filter.md
+    evidence_refs:
+      - scripts/tools/research_catalog_mcp_server.py
+      - tests/test_tools/test_research_catalog_mcp_server.py
+    notes_ref: docs/specs/research_catalog_verdict_filter.md
+
   - id: mnq_controlled_candidate_profile_construction_gate_2026_05_11
     title: Convert MNQ controlled-pilot shelf pool into a profile-safe paper/sandbox proposal
     class: stage

@@ -83,7 +83,7 @@ normalizer to "any unknown string passes."
    every matching line and returns the FIRST token that `_normalize_verdict`
    recognizes — handles audit-results that carry `Verdict on <subscope>:`
    informational headers before the load-bearing summary. Verified 2026-05-12
-   against 44 production audit-result files using
+   against 31 production audit-result files using
    `grep -E "^\*\*[Vv]erdict[^:]*:\*\*" docs/audit/results/*.md`.
 3. **Filename stem suffix** — `*-nogo.md`, `*-park.md`, `*-kill.md`,
    `*-unsupported.md`, `*-decay.md`, `*-stale.md`, `*-dead.md`

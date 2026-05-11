@@ -153,6 +153,7 @@ tasks.txt
 *.tmp
 _tmp_*.py
 tmp_*.py
+_audit_scratch_*.json
 
 # Working/temp docs (prompts, plans, scratch notes)
 PLAN.md
