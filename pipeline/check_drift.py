@@ -7298,6 +7298,144 @@ def _function_has_isinstance_then_silent_none(func_node: ast.FunctionDef | ast.A
     return has_isinstance and not has_warn_or_raise
 
 
+def check_routine_tbbo_slippage_registry_coverage() -> list[str]:
+    """Every PASS routine-TBBO slippage pilot must be in ROUTINE_TBBO_SLIPPAGE_REGISTRY.
+
+    `trading_app/deployability.py` reads
+    ``ROUTINE_TBBO_SLIPPAGE_REGISTRY`` to decide whether a row's missing
+    ``slippage_validation_status`` should be inferred as
+    ``PENDING_EVENT_TAIL`` (controlled-pilot eligible, warning) versus
+    ``slippage_missing`` (hard-blocked). The registry is the single source
+    of truth for "this instrument's routine-liquidity slippage pilot has
+    shipped a PASS."
+
+    This check globs ``docs/audit/results/*slippage*pilot*v1*.md``,
+    parses the verdict line, and fails closed when:
+
+      * a pilot doc carries verdict ``PASS`` but its instrument is absent
+        from the registry — silent under-coverage, qualifying rows would
+        be over-blocked as ``slippage_missing`` despite shipped evidence;
+      * a pilot doc carries verdict ``WARN`` or ``FAIL`` but its instrument
+        IS in the registry — silent over-coverage, qualifying rows would
+        be inferred-passed despite shipped evidence saying otherwise.
+
+    Verdict format is the project convention used by both pilot docs:
+    a level-2 markdown heading ``## Verdict: **PASS**`` (or WARN/FAIL).
+    Surrounding markdown bold (``**``) is tolerated; surrounding spaces
+    are tolerated; case is tolerated.
+
+    Pilot doc filename convention: ``YYYY-MM-DD-<instrument>-...slippage-pilot-v1.md``
+    where ``<instrument>`` is the lowercase ticker (mnq/mes/mgc).
+
+    @rule routine-tbbo-slippage-registry
+    """
+
+    violations: list[str] = []
+    results_dir = PROJECT_ROOT / "docs" / "audit" / "results"
+    if not results_dir.is_dir():
+        return violations
+
+    try:
+        from trading_app.deployability import ROUTINE_TBBO_SLIPPAGE_REGISTRY
+    except Exception as exc:  # pragma: no cover - import-side surfaces in upstream check
+        violations.append(
+            f"  trading_app.deployability.ROUTINE_TBBO_SLIPPAGE_REGISTRY import failed: {type(exc).__name__}: {exc}"
+        )
+        return violations
+
+    registry_instruments = {key.upper() for key in ROUTINE_TBBO_SLIPPAGE_REGISTRY}
+
+    pilot_re = re.compile(
+        r"^(?P<date>\d{4}-\d{2}-\d{2})-(?P<instrument>[a-z0-9]+)-.*slippage[-_]?pilot[-_]?v1\.md$",
+        re.IGNORECASE,
+    )
+    verdict_re = re.compile(
+        r"^##\s*Verdict\s*:\s*\**\s*(?P<verdict>PASS|WARN|FAIL)\b",
+        re.IGNORECASE | re.MULTILINE,
+    )
+
+    pilot_docs: list[tuple[str, str, str, Path]] = []  # (instrument, date, verdict, path)
+    for path in sorted(results_dir.glob("*slippage*pilot*v1*.md")):
+        match = pilot_re.match(path.name)
+        if match is None:
+            violations.append(
+                f"  pilot doc {path.name} does not match expected filename pattern "
+                f"`YYYY-MM-DD-<instrument>-...slippage-pilot-v1.md`; cannot be classified."
+            )
+            continue
+        instrument = match.group("instrument").upper()
+        date_str = match.group("date")  # YYYY-MM-DD, sortable as string
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            violations.append(f"  failed to read {path.name}: {exc}")
+            continue
+        verdict_match = verdict_re.search(text)
+        if verdict_match is None:
+            violations.append(
+                f"  pilot doc {path.name} has no `## Verdict: **PASS|WARN|FAIL**` line; cannot be classified."
+            )
+            continue
+        pilot_docs.append((instrument, date_str, verdict_match.group("verdict").upper(), path))
+
+    # Per instrument the LATEST pilot v1 doc (by filename date) is authoritative.
+    # A stale older PASS does not justify a registry entry if a newer WARN/FAIL
+    # refutes it; equally, a stale older WARN does not block a newer PASS.
+    # Filename date is YYYY-MM-DD so string sort = chronological sort.
+    latest_by_instrument: dict[str, tuple[str, str, Path]] = {}  # inst -> (date, verdict, path)
+    for instrument, date_str, verdict, path in pilot_docs:
+        prior = latest_by_instrument.get(instrument)
+        if prior is None or date_str > prior[0]:
+            latest_by_instrument[instrument] = (date_str, verdict, path)
+
+    # Symmetric registry-vs-evidence assertion: one loop per direction, each
+    # iterating the registry / evidence side and demanding the other side
+    # carries matching support. Earlier set-difference loops missed the
+    # registered-but-no-doc case (silent over-coverage). Same class of bug
+    # the chronology fix closed; this loop structure prevents recurrence.
+
+    # Direction 1: every PASS pilot must have a matching registry entry.
+    for inst, (date_str, verdict, path) in sorted(latest_by_instrument.items()):
+        if verdict != "PASS":
+            continue
+        if inst in registry_instruments:
+            continue
+        violations.append(
+            f"  routine-TBBO slippage pilot v1 PASS for {inst} (latest: {path.name} dated {date_str}) "
+            f"but {inst} is missing from trading_app.deployability."
+            f"ROUTINE_TBBO_SLIPPAGE_REGISTRY. Add a RoutineTbboPilot entry covering the "
+            f"pilot's session set so deployability infers PENDING_EVENT_TAIL instead of "
+            f"hard-blocking on slippage_missing."
+        )
+
+    # Direction 2: every registry entry must be backed by a current PASS pilot.
+    # Catches both (a) registered with latest verdict WARN/FAIL (chronology
+    # fix), and (b) registered with NO matching pilot doc at all (no evidence,
+    # registry entry with nothing supporting it).
+    for inst in sorted(registry_instruments):
+        latest = latest_by_instrument.get(inst)
+        if latest is None:
+            violations.append(
+                f"  {inst} is registered in ROUTINE_TBBO_SLIPPAGE_REGISTRY but no "
+                f"`{inst.lower()}-...slippage-pilot-v1.md` doc was found in "
+                f"docs/audit/results/. Either commit the pilot v1 evidence doc that "
+                f"justifies this registry entry, or remove the entry — registry membership "
+                f"without committed evidence is silent over-coverage."
+            )
+            continue
+        date_str, verdict, path = latest
+        if verdict == "PASS":
+            continue
+        violations.append(
+            f"  {inst} is registered in ROUTINE_TBBO_SLIPPAGE_REGISTRY but its LATEST "
+            f"slippage pilot v1 doc is non-PASS ({path.name} dated {date_str}, verdict={verdict}). "
+            f"Remove the registry entry or land a newer PASS pilot v1 for {inst} before "
+            f"continuing to infer PENDING_EVENT_TAIL on its rows."
+        )
+
+    return violations
+
+
 def check_iso_utc_formatter_silent_none() -> list[str]:
     """Operator-visible formatter helpers must warn on unrecognized types.
 
@@ -9002,6 +9140,12 @@ CHECKS = [
         "E2 entry_model + break-bar features in research/ require e2-lookahead-policy annotation (2026-04-28 class bug)",
         check_e2_lookahead_research_contamination,
         True,  # advisory — surfaces new contamination without blocking commits
+        False,
+    ),
+    (
+        "Routine-TBBO slippage pilot v1 PASS coverage in ROUTINE_TBBO_SLIPPAGE_REGISTRY (deployability inference parity)",
+        check_routine_tbbo_slippage_registry_coverage,
+        False,  # BLOCKING — registry under/over-coverage silently mis-classifies slippage_missing
         False,
     ),
     (

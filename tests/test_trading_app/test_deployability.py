@@ -175,10 +175,34 @@ def test_mnq_event_tail_pending_is_controlled_pilot_not_institutional_language()
 
 
 def test_non_mnq_event_tail_pending_still_blocks_slippage():
+    # MGC is NOT in ROUTINE_TBBO_SLIPPAGE_REGISTRY; an explicit PENDING_EVENT_TAIL
+    # on an unregistered instrument falls through to slippage_not_passed (HARD).
     result = _classify(row=_row(instrument="MGC", slippage_validation_status="PENDING_EVENT_TAIL"))
 
     assert result.verdict == dep.BLOCKED_SLIPPAGE
     assert any(issue.id == "slippage_not_passed" for issue in result.issues)
+
+
+def test_mes_event_tail_pending_is_controlled_pilot_not_institutional_language():
+    # MES IS in ROUTINE_TBBO_SLIPPAGE_REGISTRY; an explicit PENDING_EVENT_TAIL on a
+    # MES row must reach CONTROLLED_LIVE_PILOT_CANDIDATE, the same as MNQ.
+    # Pre-audit-fix this fell through to BLOCKED_SLIPPAGE because
+    # `_slippage_is_controlled_event_tail_pending` hardcoded `instrument == "MNQ"`.
+    result = _classify(
+        row=_row(
+            instrument="MES",
+            orb_label="COMEX_SETTLE",
+            slippage_validation_status="PENDING_EVENT_TAIL",
+        )
+    )
+
+    assert result.verdict == dep.CONTROLLED_LIVE_PILOT_CANDIDATE
+    assert result.deployable is True
+    assert result.institutional_language_allowed is False
+    event_tail = [issue for issue in result.issues if issue.id == "slippage_event_tail_pending"]
+    assert len(event_tail) == 1
+    assert event_tail[0].detail["inferred_from_routine_tbbo"] is False
+    assert event_tail[0].detail["effective_status"] == "PENDING_EVENT_TAIL"
 
 
 def test_current_k_fdr_failure_blocks_deployability():
@@ -308,7 +332,17 @@ def test_profile_scope_still_blocks_non_profile_rows_on_account_risk():
 
 
 def test_instrument_summary_labels_mes_and_mgc_gaps():
-    mes = _classify(row=_row(strategy_id="MES_A", instrument="MES", slippage_validation_status=None))
+    # MES_A uses an orb_label NOT in the MES routine-TBBO pilot v1 registry
+    # (BRISBANE_1025 is MGC's session); routine-TBBO inference must NOT apply,
+    # so slippage_missing remains the surfaced hard issue.
+    mes = _classify(
+        row=_row(
+            strategy_id="MES_A",
+            instrument="MES",
+            orb_label="BRISBANE_1025",
+            slippage_validation_status=None,
+        )
+    )
     mgc = _classify(
         row=_row(
             strategy_id="MGC_A",
@@ -568,3 +602,78 @@ def test_write_deployability_state_rejects_malformed_report(tmp_path):
         assert "missing fields" in str(exc)
     else:
         raise AssertionError("malformed deployability report should fail closed")
+
+
+# --- MES routine-TBBO slippage registry coverage (Stage 1) ---
+
+import pytest
+
+
+@pytest.mark.parametrize(
+    "session",
+    sorted(dep.ROUTINE_TBBO_SLIPPAGE_REGISTRY["MES"].sessions),
+)
+def test_mes_e2_covered_session_infers_routine_slippage_evidence(session):
+    result = _classify(
+        row=_row(
+            instrument="MES",
+            orb_label=session,
+            slippage_validation_status=None,
+        )
+    )
+
+    assert result.verdict == dep.CONTROLLED_LIVE_PILOT_CANDIDATE
+    assert result.deployable is True
+    assert result.institutional_language_allowed is False
+    event_tail = [issue for issue in result.issues if issue.id == "slippage_event_tail_pending"]
+    assert len(event_tail) == 1
+    assert event_tail[0].detail["inferred_from_routine_tbbo"] is True
+    assert event_tail[0].detail["effective_status"] == "PENDING_EVENT_TAIL"
+    assert event_tail[0].detail["covered_session"] is True
+    assert "MES" in event_tail[0].detail["basis"]
+    assert "2026-04-24-mes-e2-slippage-pilot-v1.md" in event_tail[0].detail["basis"]
+
+
+def test_mes_e2_uncovered_session_missing_slippage_still_blocks():
+    # US_DATA_1000 is a deployable MNQ session but is NOT in the MES pilot v1
+    # session set; routine inference must NOT fire on MES for it.
+    result = _classify(
+        row=_row(
+            instrument="MES",
+            orb_label="US_DATA_1000",
+            slippage_validation_status=None,
+        )
+    )
+
+    assert result.verdict == dep.BLOCKED_SLIPPAGE
+    assert any(issue.id == "slippage_missing" for issue in result.issues)
+
+
+def test_mes_non_e2_missing_slippage_still_blocks():
+    result = _classify(
+        row=_row(
+            instrument="MES",
+            orb_label="COMEX_SETTLE",
+            entry_model="E1",
+            slippage_validation_status=None,
+        )
+    )
+
+    assert result.verdict == dep.BLOCKED_SLIPPAGE
+    assert any(issue.id == "slippage_missing" for issue in result.issues)
+
+
+def test_unregistered_instrument_is_not_routine_tbbo_eligible():
+    # MGC has no entry in the routine-TBBO pilot registry; matching session+model
+    # alone must NOT trigger routine inference.
+    result = _classify(
+        row=_row(
+            instrument="MGC",
+            orb_label="COMEX_SETTLE",
+            entry_model="E2",
+            slippage_validation_status=None,
+        )
+    )
+
+    assert result.verdict == dep.BLOCKED_SLIPPAGE
+    assert any(issue.id == "slippage_missing" for issue in result.issues)

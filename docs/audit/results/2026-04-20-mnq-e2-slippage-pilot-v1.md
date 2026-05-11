@@ -9,6 +9,29 @@
 **Status:** COMPLETE. Closes `mnq-tbbo-pilot-script-broken` debt entry.
 **Classification:** Confirmatory audit (K=0 MinBTL trials).
 
+## Scope
+
+Routine-liquidity TBBO slippage measurement on MNQ E2 across a 119-day Databento
+TBBO cache spanning the 5 unique sessions of the 6 deployed MNQ lanes. Tests
+whether the modeled 1-tick slippage assumption in `pipeline/cost_model.py` is
+conservative against measured fills.
+
+## Verdict: **PASS**
+
+Added 2026-05-11 as machine-parseable metadata for
+`pipeline.check_drift.check_routine_tbbo_slippage_registry_coverage`. Records
+what the Executive verdict body below already says: modeled 1-tick slippage is
+CONSERVATIVE vs measured on the 119-day TBBO cache.
+
+## Limitations
+
+This is a routine-liquidity sample. Event-day tail slippage (rare degraded /
+gap / liquidity-shock days) is NOT bounded by this evidence and remains open
+debt per `docs/runtime/debt-ledger.md`. The PASS verdict applies only to
+routine slippage; event-tail uncertainty justifies the
+`slippage_event_tail_pending` warning that the deployability audit raises on
+covered rows rather than treating them as fully cleared.
+
 ## Executive verdict
 
 **MNQ modeled slippage (1 tick) is CONSERVATIVE vs measured** on the
