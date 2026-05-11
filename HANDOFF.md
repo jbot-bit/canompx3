@@ -9,19 +9,7 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-12
-- **Commit:** b5cca6c6 — chore(codex): remove redundant gold db launch modes
-- **Files changed:** 11 files
-  - `.codex/COMMANDS.md`
-  - `.codex/INTEGRATIONS.md`
-  - `.codex/STARTUP.md`
-  - `CODEX.md`
-  - `HANDOFF.md`
-  - `codex.bat`
-  - `docs/reference/codex-operator-handbook.md`
-  - `scripts/infra/codex-project-gold-db.sh`
-  - `scripts/infra/codex-project-search-gold-db.sh`
-  - `scripts/infra/windows-agent-launch.ps1`
-  - `scripts/infra/windows_agent_launch.py`
+- **Summary:** Queue-backed baton refreshed from canonical active-work registry.
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
