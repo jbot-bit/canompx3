@@ -6,6 +6,29 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## Stage 2/3/3.5 docs bundle (2026-05-11, Claude Opus, branch `docs/family-singleton-doctrine-bundle`)
+
+Docs-only PR bundling the audit trail from three sibling stage worktrees that
+drove Stage 4 (PR #260, merged `d8925815`) end-to-end. 6 new docs files; 0
+production code; 0 DB writes.
+
+- Stage 2: Disposition C lock + 3 self-audit passes (analysis doc + stage doc).
+  Empirical landscape on 276 active SINGLETONs. Third-pass correction:
+  `pre_registered_criteria.md` Amendment 2.1 already downgraded C5 to
+  CROSS-CHECK; the "non-operational drift" framing was wrong for two prior
+  passes.
+- Stage 3: Floor spec + 3 user decisions (analysis doc + stage doc). BINDING
+  criteria = C3+C4+C6+C7+C9+C10. Flags intra-doc inconsistency in
+  `pre_registered_criteria.md:290-303` vs line 480-494 (separate workstream,
+  MEDIUM severity).
+- Stage 3.5: shelf-wide C8 OOS backfill APPLIED to gold.db (844 rows flipped
+  via `scripts/tools/backfill_deployability_evidence.py --write --evidence
+  c8_oos --instrument ALL`). Bloomberg-grade audit trail with reproducibility
+  commands. Capital impact zero (all deployed lanes + siblings PASS).
+
+Capital safety: lane allocator reads `validated_setups.status`, not the
+deployability verdict string. Grep-verified during Stage 4 audit.
+
 ## Stage 1 — Routine-TBBO slippage registry refactor (2026-05-11, Claude Opus, branch `stage1/generalize-tbbo-slippage-inference`)
 
 Landed: `refactor(deployability): registry-driven routine-TBBO slippage inference`.
