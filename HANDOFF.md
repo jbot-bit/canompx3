@@ -58,13 +58,9 @@ to deployable.
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-11
-- **Commit:** 6fd3bb0b — Stage 4: family_singleton conditional downgrade per Disposition C
-- **Files changed:** 5 files
-  - `HANDOFF.md`
-  - `docs/audit/results/2026-05-11-stage4-family-singleton-conditional-impl.md`
-  - `docs/runtime/stages/stage4-family-singleton-conditional.md`
-  - `tests/test_trading_app/test_deployability.py`
-  - `trading_app/deployability.py`
+- **Commit:** c027bb12 — @ doctrine: flag v1 Acceptance matrix C5/C8 rows as SUPERSEDED
+- **Files changed:** 1 files
+  - `docs/institutional/pre_registered_criteria.md`
 
 ## Next Steps — Active
 

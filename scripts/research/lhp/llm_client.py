@@ -199,6 +199,12 @@ def propose(
             resp.raise_for_status()
             data = resp.json()
             break
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text[:500] if exc.response is not None else ""
+            last_exc = LLMRequestError(f"{exc} | body: {body}")
+            if attempt == 0 and exc.response is not None and exc.response.status_code >= 500:
+                continue
+            raise last_exc from exc
         except httpx.HTTPError as exc:
             last_exc = LLMRequestError(str(exc))
             if attempt == 0:
@@ -220,8 +226,17 @@ def propose(
         in_used = usage.get("input_tokens", in_toks)
         out_used = usage.get("output_tokens", _rough_token_count(text))
 
-    if text.strip().startswith("REFUSE: no_literature_match"):
-        raise LLMRefusalToGround(text.strip())
+    text = text.strip()
+    if text.startswith("```"):
+        first_newline = text.find("\n")
+        if first_newline != -1:
+            text = text[first_newline + 1 :]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    if text.startswith("REFUSE: no_literature_match"):
+        raise LLMRefusalToGround(text)
 
     final_cost = estimate_cost_usd(model, in_used, out_used)
     return ProposerResult(
