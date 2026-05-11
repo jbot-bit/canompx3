@@ -1,0 +1,37 @@
+metadata:
+  name: "lhp-fixture-good-1"
+  date_locked: "2026-05-11T10:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 2
+  testing_mode: "family"
+  data_horizon_years_clean: 6.65
+
+hypotheses:
+  - id: 1
+    name: "MNQ EUROPE_FLOW ORB_G8 RR1.5"
+    theory_citation: "chordia_et_al_2018_two_million_strategies"
+    economic_basis: "Pre-registered placeholder mirroring the MES-final shape. ORB_G8 selects high-institutional-commitment sessions where breakouts have follow-through."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [5]}
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on K=2 family"
+      - "WFE < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era N>=50 ExpR < -0.05"
+
+  - id: 2
+    name: "MNQ NYSE_OPEN ORB_G8 RR1.0"
+    theory_citation: "fitschen_2013_path_of_least_resistance"
+    economic_basis: "Fitschen Ch.3 grounds intraday trend-follow on equity indices. ORB_G8 removes cost-killed days."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [5]}
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on K=2 family"
+      - "WFE < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era N>=50 ExpR < -0.05"
+
+total_hypothesis_count: 2
+total_expected_trials: 2
