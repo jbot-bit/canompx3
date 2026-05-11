@@ -17,9 +17,11 @@ from typing import Any, Literal
 import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from pipeline.data_era import is_micro
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.config import is_e2_deployment_unsafe_filter
+from trading_app.chordia import chordia_verdict_allows_deploy, chordia_verdict_label
+from trading_app.config import ALL_FILTERS, is_e2_deployment_unsafe_filter
 from trading_app.lifecycle_state import read_lifecycle_state
 from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
 from trading_app.strategy_fitness import _load_strategy_outcomes
@@ -100,7 +102,15 @@ RETIRE_OR_PURGE_ISSUES = {
     "e2_deployment_unsafe_filter",
     "current_k_fdr_fail",
     "family_purged",
-    "family_singleton",
+    # `family_singleton` is intentionally NOT in this set per Stage 4 doctrine
+    # (Disposition C, Stage 3 § 4). A SINGLETON-status row is a no-peer-evidence
+    # state, not a rejected-family state — distinct from `family_purged`. When
+    # the row also fails any binding criterion (C3/C4/C6/C7/C9/C10) the issue
+    # is emitted as `hard` and BLOCKED_FAMILY_FRAGILE verdict is still returned
+    # via HARD_BLOCKER_TO_VERDICT, but the row no longer routes to retire-or-purge
+    # bucket on the singleton signal alone. When the row clears all binding
+    # criteria the issue is emitted as `warning` and routed to
+    # CONTROLLED_LIVE_PILOT_CANDIDATE via CONTROLLED_PILOT_WARNINGS.
     "replay_mismatch",
     "wfe_below_threshold",
 }
@@ -110,6 +120,24 @@ EVIDENCE_GAP_ISSUES = {
     "c8_missing",
     "account_risk_missing",
     "account_risk_fail",
+}
+
+# Warning issues that, when present and not accompanied by any hard blocker,
+# route the verdict to CONTROLLED_LIVE_PILOT_CANDIDATE rather than full
+# DEPLOYABLE_CANDIDATE. These represent evidence states that are not
+# blocking but warrant a supervised pilot before full auto-deploy.
+# - slippage_event_tail_pending: routine TBBO slippage measured but
+#   event-day tail debt unresolved.
+# - sr_alarm_watch_reviewed: Shiryaev-Roberts monitor on WATCH; reviewed
+#   but not cleared.
+# - family_singleton: SINGLETON-status row that clears all binding
+#   pre_registered_criteria.md C-criteria (Disposition C, Stage 4,
+#   2026-05-11). No peer-evidence by construction, so route to pilot
+#   for manual sign-off before lane_allocation.json mutation.
+CONTROLLED_PILOT_WARNINGS = {
+    "slippage_event_tail_pending",
+    "sr_alarm_watch_reviewed",
+    "family_singleton",
 }
 
 
@@ -146,6 +174,90 @@ def _active_in_sql() -> str:
     return ", ".join(f"'{inst}'" for inst in ACTIVE_ORB_INSTRUMENTS)
 
 
+def _singleton_clears_binding_criteria(row: dict[str, Any]) -> tuple[bool, list[str]]:
+    """Evaluate the SINGLETON-pass floor per Stage 4 Disposition C.
+
+    Returns (passes, failed_criterion_ids). The floor enforces the binding
+    criteria from `docs/institutional/pre_registered_criteria.md` Enforcement
+    summary (lines 480-494, post-amendments authoritative):
+        C3 BH FDR        — fdr_significant AND fdr_adjusted_p < 0.05
+        C4 Chordia       — chordia_verdict_label in {PASS_CHORDIA, PASS_PROTOCOL_A}
+        C6 WFE           — wfe >= 0.50
+        C7 sample size   — sample_size >= 100
+        C9 era stability — era_dependent == False
+        C10 micro-era    — if filter.requires_micro_data, instrument must be micro
+        C5 DSR cross-check — dsr_score IS NOT NULL (reported, NOT gating
+                             per Amendment 2.1)
+
+    C5 is included in the "reported" sense only — its absence does not fail
+    the floor. The check enforces that dsr_score is computed and persisted
+    so the cross-check is visible.
+
+    For C4, `has_theory` defaults to False because SINGLETON candidates are
+    by construction Pathway A family-pathway promotions (no per-strategy
+    theory citation). BAND A (t >= 3.79) still passes; BAND B (t >= 3.00
+    with theory) does NOT, by construction of has_theory=False.
+
+    A row that is not SINGLETON returns (False, []) — callers should gate
+    on `robustness_status == "SINGLETON"` before calling.
+    """
+    failed: list[str] = []
+
+    # C3 BH FDR
+    fdr_sig = row.get("fdr_significant")
+    fdr_q = row.get("fdr_adjusted_p")
+    if not (fdr_sig and fdr_q is not None and float(fdr_q) < 0.05):
+        failed.append("C3_BH_FDR")
+
+    # C4 Chordia banded (delegate to canonical helper)
+    sr = row.get("sharpe_ratio")
+    n = row.get("sample_size")
+    chordia_label = chordia_verdict_label(
+        sharpe_ratio=float(sr) if sr is not None else None,
+        sample_size=int(n) if n is not None else None,
+        has_theory=False,
+    )
+    if not chordia_verdict_allows_deploy(chordia_label):
+        failed.append(f"C4_Chordia[{chordia_label}]")
+
+    # C5 DSR computed-and-reported (cross-check, NOT gating). Treat NULL
+    # as a reporting gap: the row should have a DSR value. This is the
+    # Amendment 2.1 minimum: "Every candidate strategy must have its DSR
+    # computed and reported in the audit write-up."
+    if row.get("dsr_score") is None:
+        failed.append("C5_DSR_uncomputed")
+
+    # C6 WFE >= 0.50
+    wfe = row.get("wfe")
+    if wfe is None or float(wfe) < 0.50:
+        failed.append("C6_WFE")
+
+    # C7 N >= 100
+    if n is None or int(n) < 100:
+        failed.append("C7_N")
+
+    # C9 era stability — era_dependent should be False
+    era_dep = row.get("era_dependent")
+    if era_dep is None or bool(era_dep):
+        failed.append("C9_era_dependent")
+
+    # C10 micro-era compatibility — if filter requires micro data,
+    # instrument must be a real micro contract. Delegate to canonical
+    # predicates.
+    filter_type = row.get("filter_type")
+    instrument = row.get("instrument")
+    if filter_type and instrument:
+        filter_obj = ALL_FILTERS.get(filter_type)
+        if filter_obj is not None and getattr(filter_obj, "requires_micro_data", False):
+            try:
+                if not is_micro(instrument):
+                    failed.append("C10_micro_only_filter_on_non_micro")
+            except Exception:  # noqa: BLE001 - fail closed
+                failed.append("C10_micro_check_error")
+
+    return (len(failed) == 0, failed)
+
+
 def _has_table(con: duckdb.DuckDBPyConnection, table_name: str) -> bool:
     row = con.execute(
         """
@@ -172,7 +284,8 @@ def _load_candidate_rows(
         LOWER(vs.status) AS status,
         LOWER(COALESCE(vs.deployment_scope, 'deployable')) AS deployment_scope,
         vs.sample_size, vs.win_rate, vs.expectancy_r, vs.oos_exp_r,
-        vs.wfe, vs.dsr_score, vs.years_tested, vs.first_trade_day,
+        vs.wfe, vs.dsr_score, vs.sharpe_ratio, vs.era_dependent,
+        vs.years_tested, vs.first_trade_day,
         vs.last_trade_day, vs.trade_day_count, vs.fdr_adjusted_p,
         vs.fdr_significant, vs.discovery_k, vs.slippage_validation_status,
         vs.c8_oos_status, vs.validation_pathway,
@@ -536,7 +649,45 @@ def _classify_strategy(
     if family is None or family == "PURGED":
         issues.append(_issue("family_purged", "hard", family))
     elif family == "SINGLETON":
-        issues.append(_issue("family_singleton", "hard", family))
+        # Stage 4 / Disposition C conditional downgrade. SINGLETON is
+        # asymmetric vs PURGED: no peer-evidence, NOT a rejected family.
+        # If the row clears all binding criteria from
+        # `pre_registered_criteria.md` § Enforcement summary, downgrade
+        # the issue to a warning and let it route via
+        # CONTROLLED_PILOT_WARNINGS to CONTROLLED_LIVE_PILOT_CANDIDATE
+        # (manual sign-off before lane_allocation.json mutation).
+        # Otherwise emit hard and let HARD_BLOCKER_TO_VERDICT route to
+        # BLOCKED_FAMILY_FRAGILE.
+        passes, failed_criteria = _singleton_clears_binding_criteria(row)
+        if passes:
+            issues.append(
+                _issue(
+                    "family_singleton",
+                    "warning",
+                    {
+                        "robustness_status": family,
+                        "binding_criteria": "C3+C4+C6+C7+C9+C10 cleared; C5 dsr_score reported",
+                        "verdict_route": "CONTROLLED_LIVE_PILOT_CANDIDATE",
+                        "doctrine": (
+                            "Stage 4 Disposition C — no peer-evidence is "
+                            "tolerable when individual evidence clears the "
+                            "locked criteria; supervised pilot before "
+                            "full deploy."
+                        ),
+                    },
+                )
+            )
+        else:
+            issues.append(
+                _issue(
+                    "family_singleton",
+                    "hard",
+                    {
+                        "robustness_status": family,
+                        "failed_binding_criteria": failed_criteria,
+                    },
+                )
+            )
 
     slip = row.get("slippage_validation_status")
     if slip in (None, ""):
@@ -616,9 +767,7 @@ def _classify_strategy(
 
     hard_ids = [issue.id for issue in issues if issue.severity == "hard"]
     controlled_warning_ids = {
-        issue.id
-        for issue in issues
-        if issue.severity == "warning" and issue.id in {"slippage_event_tail_pending", "sr_alarm_watch_reviewed"}
+        issue.id for issue in issues if issue.severity == "warning" and issue.id in CONTROLLED_PILOT_WARNINGS
     }
     if hard_ids:
         verdict = HARD_BLOCKER_TO_VERDICT.get(hard_ids[0], RESEARCH_PROVISIONAL)
