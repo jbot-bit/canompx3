@@ -283,9 +283,14 @@ scratch_policy:
 
 ---
 
-## Acceptance matrix
+## Acceptance matrix (v1 — SUPERSEDED — see § v2 Acceptance matrix + Amendment 2.7)
 
-A strategy is ELIGIBLE FOR DEPLOYMENT if and only if all 13 criteria pass:
+> **DO NOT enforce from this v1 table.** It is preserved for audit-trail continuity. Operative enforcement lives in **§ v2 Acceptance matrix** (line ~476) as further amended by **Amendment 2.7** (Mode A, line ~499) and **Criterion 13** (Scratch policy, line ~246). Two rows below disagree with current canonical enforcement and are flagged inline:
+>
+> - **C5 (DSR):** v1 says BINDING (`YES`). Current canonical: **CROSS-CHECK ONLY** per Amendment 2.1.
+> - **C8 (2026 OOS):** v1 says BINDING (`YES`) with a fixed threshold. Current canonical: **BINDING under Mode A** per Amendment 2.7, with `--holdout-date 2026-01-01` required for discovery and an **OOS power floor** (RULE 3.3 in `backtesting-methodology.md`) gating any binary kill clause. The v1 row omits the power floor and the Mode-A discovery prerequisite.
+
+A strategy is ELIGIBLE FOR DEPLOYMENT if and only if all 13 criteria pass (v1 framing — superseded):
 
 | Criterion | Threshold | Required |
 |---|---|---|
@@ -293,10 +298,10 @@ A strategy is ELIGIBLE FOR DEPLOYMENT if and only if all 13 criteria pass:
 | 2 MinBTL | N ≤ 300 (clean MNQ) or N ≤ 2000 (proxy) | YES |
 | 3 BH FDR | q < 0.05 | YES |
 | 4 Chordia t-stat | t ≥ 3.00 (with theory) or 3.79 (without) | YES |
-| 5 DSR | DSR > 0.95 | YES |
+| 5 DSR | DSR > 0.95 | ⚠️ **SUPERSEDED → CROSS-CHECK ONLY (Amendment 2.1)** |
 | 6 WFE | WFE ≥ 0.50 | YES |
 | 7 Sample size | N ≥ 100 trades | YES |
-| 8 2026 OOS | OOS ExpR ≥ 0 and ≥ 0.40 × IS ExpR | YES |
+| 8 2026 OOS | OOS ExpR ≥ 0 and ≥ 0.40 × IS ExpR | ⚠️ **SUPERSEDED → BINDING under Mode A (Amendment 2.7) + power floor (RULE 3.3)** |
 | 9 Era stability | No era with ExpR < -0.05 (N ≥ 50) | YES |
 | 10 Data era compat | Volume filters only on MICRO era data | YES |
 | 11 Account MC | 90-day survival ≥ 70% | YES (at deployment) |
