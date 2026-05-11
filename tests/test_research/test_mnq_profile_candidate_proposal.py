@@ -114,6 +114,34 @@ def test_classify_current_deployed_lane_is_no_change_park() -> None:
     assert "already selected" in decision.primary_reason.lower()
 
 
+def test_classify_current_provisional_lane_is_no_change_park() -> None:
+    candidate = _candidate(
+        "MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12",
+        expectancy_r=0.105,
+        chordia_verdict="PASS_PROTOCOL_A",
+        family_hash="nyse",
+        session="NYSE_OPEN",
+        filter_type="COST_LT12",
+    )
+    gate = PortfolioGate(
+        add_delta_annual_r=0.0,
+        add_delta_sharpe=0.0,
+        replace_delta_annual_r=0.0,
+        replace_delta_sharpe=0.0,
+        corr_gate_pass=False,
+        corr_reject_reasons=("self",),
+        replacement_target=candidate.strategy_id,
+        replacement_target_status="PROVISIONAL",
+        account_risk_ok=True,
+        account_risk_detail="ok",
+    )
+
+    decision = classify_candidate(candidate, dedupe_head=True, gate=gate)
+
+    assert decision.decision == "PARK"
+    assert "already selected" in decision.primary_reason.lower()
+
+
 def test_classify_paused_same_session_can_pass_as_replacement_when_additive_math_clears() -> None:
     candidate = _candidate(
         "MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12",

@@ -59,6 +59,7 @@ RESULT_PROMOTION_PATCH_JSON = Path("docs/audit/results/2026-05-11-mnq-profile-al
 
 CONTROLLED_VERDICT = "CONTROLLED_LIVE_PILOT_CANDIDATE"
 SUPPORTED_STOP_MULTIPLIER = 1.0
+RUNTIME_ACTIVE_STATUSES = {"DEPLOY", "PROVISIONAL"}
 
 
 @dataclass(frozen=True)
@@ -254,7 +255,7 @@ def classify_candidate(
             ("account_risk", gate.account_risk_detail),
         )
 
-    if gate.replacement_target == candidate.strategy_id and gate.replacement_target_status == "DEPLOY":
+    if gate.replacement_target == candidate.strategy_id and gate.replacement_target_status in RUNTIME_ACTIVE_STATUSES:
         return CandidateDecision(
             candidate.strategy_id,
             "PARK",
@@ -262,8 +263,12 @@ def classify_candidate(
             ("already_selected",),
         )
 
-    active_replacement = gate.replacement_target is not None and gate.replacement_target_status == "DEPLOY"
-    paused_replacement = gate.replacement_target is not None and gate.replacement_target_status != "DEPLOY"
+    active_replacement = (
+        gate.replacement_target is not None and gate.replacement_target_status in RUNTIME_ACTIVE_STATUSES
+    )
+    paused_replacement = (
+        gate.replacement_target is not None and gate.replacement_target_status not in RUNTIME_ACTIVE_STATUSES
+    )
 
     if active_replacement:
         if _positive(gate.replace_delta_annual_r) and _positive(gate.replace_delta_sharpe):
@@ -540,9 +545,9 @@ def _account_risk_gate(
 ) -> tuple[bool, str]:
     profile = ACCOUNT_PROFILES[PROFILE_ID]
     tier = ACCOUNT_TIERS[(profile.firm, profile.account_size)]
-    deploy_rows = [row for row in allocation.get("lanes", []) if row.get("status") == "DEPLOY"]
+    deploy_rows = [row for row in allocation.get("lanes", []) if row.get("status") in RUNTIME_ACTIVE_STATUSES]
     current_risk = sum(_allocation_risk(row, profile.stop_multiplier) for row in deploy_rows)
-    if replacement_target and replacement_status == "DEPLOY":
+    if replacement_target and replacement_status in RUNTIME_ACTIVE_STATUSES:
         current_risk -= sum(
             _allocation_risk(row, profile.stop_multiplier)
             for row in deploy_rows
@@ -552,7 +557,7 @@ def _account_risk_gate(
     if candidate_risk is None:
         return False, candidate_detail
     proposed_risk = current_risk + candidate_risk
-    proposed_slots = len(deploy_rows) + (0 if replacement_status == "DEPLOY" else 1)
+    proposed_slots = len(deploy_rows) + (0 if replacement_status in RUNTIME_ACTIVE_STATUSES else 1)
     if proposed_slots > profile.max_slots:
         return False, f"slots {proposed_slots}>{profile.max_slots}; {candidate_detail}"
     if proposed_risk > tier.max_dd:
@@ -593,7 +598,7 @@ def compute_portfolio_gate(
     add_is = compute_snapshot(f"Current active book + {candidate.strategy_id}", add_trades, start_all, is_end)
 
     replace_is = None
-    if replacement_target and replacement_status == "DEPLOY":
+    if replacement_target and replacement_status in RUNTIME_ACTIVE_STATUSES:
         replace_trades = dict(base_trades)
         replace_trades.pop(replacement_target, None)
         replace_trades[candidate.strategy_id] = candidate_trades

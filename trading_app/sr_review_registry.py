@@ -88,6 +88,29 @@ SR_ALARM_REVIEWS: dict[tuple[str, str], SrAlarmReview] = {
             "and (WFE < 0.50 or OOS/IS ratio < 0.40)."
         ),
     ),
+    # NYSE_OPEN RR1.5 COST_LT12 — reviewed 2026-05-11 for the allocation
+    # promotion pipeline. The SR alarm is path-real (alarm at monitored trade
+    # 43, max SR 552.36), but the lane still clears the same review floors used
+    # for the existing WATCH precedents: WFE 1.80 and OOS/IS 61%.
+    (
+        "topstep_50k_mnq_auto",
+        "MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12",
+    ): SrAlarmReview(
+        profile_id="topstep_50k_mnq_auto",
+        strategy_id="MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12",
+        outcome="watch",
+        reviewed_at="2026-05-11",
+        summary=(
+            "Reviewed WATCH: WFE 1.80 and OOS/IS 61% clear the existing C12 "
+            "watch floors; SR alarm is path-real (alarm trade 43, max SR 552.36) "
+            "and therefore requires tight recheck rather than silent promotion."
+        ),
+        recheck_trigger=(
+            "Re-check after N>=100 monitored trades. Retire if SR remains ALARM "
+            "and (WFE < 0.50 or OOS/IS ratio < 0.40), or if the promoted "
+            "provisional lane breaches account/session risk controls."
+        ),
+    ),
 }
 
 
