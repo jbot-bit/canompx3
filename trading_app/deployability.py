@@ -70,6 +70,59 @@ MNQ_ROUTINE_TBBO_SLIPPAGE_BASIS = (
     "event-day tail remains an open known-unknown per docs/runtime/debt-ledger.md and "
     "docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v2-gap-fill.md"
 )
+
+_MES_ROUTINE_TBBO_SLIPPAGE_BASIS = (
+    "MES routine TBBO slippage measured at or below modeled 1-tick on 4 deployable MES "
+    "sessions per docs/audit/results/2026-04-24-mes-e2-slippage-pilot-v1.md "
+    "(median 0.00 ticks, p95 0.00 ticks, 100% within 1 tick on N=40); "
+    "event-day tail remains an open known-unknown per docs/runtime/debt-ledger.md"
+)
+
+
+@dataclass(frozen=True)
+class RoutineTbboPilot:
+    """Committed routine-TBBO slippage pilot evidence keyed by instrument.
+
+    A registry entry means: pilot v1 has shipped a PASS verdict and routine-liquidity
+    slippage is at or under the modeled assumption for the listed sessions on the
+    listed entry model. The deployability audit treats matching rows as
+    slippage_event_tail_pending (warning, controlled-pilot eligible) rather than
+    slippage_missing (hard, blocked). Only the event-day tail remains as open debt
+    per docs/runtime/debt-ledger.md.
+    """
+
+    instrument: str
+    entry_model: str
+    sessions: frozenset[str]
+    basis: str
+
+
+# Routine-TBBO slippage pilots that have shipped a PASS verdict. Coverage is enforced
+# by pipeline.check_drift.check_routine_tbbo_slippage_registry_coverage: every committed
+# pilot v1 result MD with verdict PASS must be registered here, and WARN/FAIL pilots
+# must NOT be registered. Add a new instrument here when its pilot v1 lands PASS.
+ROUTINE_TBBO_SLIPPAGE_REGISTRY: dict[str, RoutineTbboPilot] = {
+    "MNQ": RoutineTbboPilot(
+        instrument="MNQ",
+        entry_model="E2",
+        sessions=MNQ_ROUTINE_TBBO_SLIPPAGE_SESSIONS,
+        basis=MNQ_ROUTINE_TBBO_SLIPPAGE_BASIS,
+    ),
+    "MES": RoutineTbboPilot(
+        instrument="MES",
+        entry_model="E2",
+        sessions=frozenset(
+            {
+                "CME_PRECLOSE",
+                "COMEX_SETTLE",
+                "SINGAPORE_OPEN",
+                "US_DATA_830",
+            }
+        ),
+        basis=_MES_ROUTINE_TBBO_SLIPPAGE_BASIS,
+    ),
+}
+
 REPLAY_CONNECTION_REFRESH_ROWS = 50
 
 HARD_BLOCKER_TO_VERDICT = {
@@ -346,21 +399,52 @@ def _slippage_is_controlled_event_tail_pending(row: dict[str, Any], value: Any) 
     return str(row.get("instrument") or "").upper() == "MNQ" and str(value).strip().upper() == "PENDING_EVENT_TAIL"
 
 
-def _mnq_routine_tbbo_slippage_applies(row: dict[str, Any]) -> bool:
-    return (
-        str(row.get("instrument") or "").upper() == "MNQ"
-        and str(row.get("entry_model") or "").upper() == "E2"
-        and str(row.get("orb_label") or "").upper() in MNQ_ROUTINE_TBBO_SLIPPAGE_SESSIONS
+def _routine_tbbo_pilot_for_row(
+    row: dict[str, Any],
+    *,
+    registry: dict[str, RoutineTbboPilot] = ROUTINE_TBBO_SLIPPAGE_REGISTRY,
+) -> RoutineTbboPilot | None:
+    instrument = str(row.get("instrument") or "").upper()
+    pilot = registry.get(instrument)
+    if pilot is None:
+        return None
+    if str(row.get("entry_model") or "").upper() != pilot.entry_model:
+        return None
+    if str(row.get("orb_label") or "").upper() not in pilot.sessions:
+        return None
+    return pilot
+
+
+def _routine_tbbo_slippage_applies(
+    row: dict[str, Any],
+    *,
+    registry: dict[str, RoutineTbboPilot] = ROUTINE_TBBO_SLIPPAGE_REGISTRY,
+) -> bool:
+    return _routine_tbbo_pilot_for_row(row, registry=registry) is not None
+
+
+def _controlled_slippage_event_tail_detail(
+    row: dict[str, Any],
+    value: Any,
+    *,
+    inferred: bool,
+    registry: dict[str, RoutineTbboPilot] = ROUTINE_TBBO_SLIPPAGE_REGISTRY,
+) -> dict[str, Any]:
+    pilot = _routine_tbbo_pilot_for_row(row, registry=registry)
+    instrument = str(row.get("instrument") or "").upper()
+    fallback_pilot = pilot or registry.get(instrument)
+    sessions = fallback_pilot.sessions if fallback_pilot is not None else frozenset()
+    basis = (
+        fallback_pilot.basis
+        if fallback_pilot is not None
+        else "routine TBBO slippage pilot evidence not registered for this instrument"
     )
-
-
-def _controlled_slippage_event_tail_detail(row: dict[str, Any], value: Any, *, inferred: bool) -> dict[str, Any]:
     return {
         "status": value,
         "effective_status": "PENDING_EVENT_TAIL",
         "inferred_from_routine_tbbo": inferred,
-        "covered_session": str(row.get("orb_label") or "").upper() in MNQ_ROUTINE_TBBO_SLIPPAGE_SESSIONS,
-        "basis": MNQ_ROUTINE_TBBO_SLIPPAGE_BASIS,
+        "covered_session": str(row.get("orb_label") or "").upper() in sessions,
+        "basis": basis,
     }
 
 
@@ -540,7 +624,7 @@ def _classify_strategy(
 
     slip = row.get("slippage_validation_status")
     if slip in (None, ""):
-        if _mnq_routine_tbbo_slippage_applies(row):
+        if _routine_tbbo_slippage_applies(row):
             issues.append(
                 _issue(
                     "slippage_event_tail_pending",

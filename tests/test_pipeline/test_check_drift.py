@@ -2620,3 +2620,113 @@ class TestCheckSrPausesHaveRecentEvidence:
         from pipeline.check_drift import check_sr_pauses_have_recent_evidence
 
         assert callable(check_sr_pauses_have_recent_evidence)
+
+
+# --- Routine-TBBO slippage registry coverage (Stage 1, 2026-05-11) ---
+
+
+class TestCheckRoutineTbboSlippageRegistryCoverage:
+    """Fail-closed coverage check for `ROUTINE_TBBO_SLIPPAGE_REGISTRY`.
+
+    Verifies the check fires on:
+      - PASS pilot doc whose instrument is missing from the registry
+      - WARN/FAIL pilot doc whose instrument is incorrectly registered
+    And passes on:
+      - matched PASS-and-registered
+      - WARN/FAIL when the same instrument also has a PASS pilot
+    """
+
+    @staticmethod
+    def _write_pilot_doc(results_dir, name: str, verdict: str) -> None:
+        path = results_dir / name
+        path.write_text(
+            f"# pilot fixture\n\n## Verdict: **{verdict}**\n\nbody body\n",
+            encoding="utf-8",
+        )
+
+    def _patch(self, monkeypatch, tmp_path, registry):
+        from pipeline import check_drift as cd
+        from trading_app import deployability as dep
+
+        # Redirect PROJECT_ROOT so PROJECT_ROOT/docs/audit/results/ resolves to tmp_path.
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        monkeypatch.setattr(dep, "ROUTINE_TBBO_SLIPPAGE_REGISTRY", registry)
+
+        results_dir = tmp_path / "docs" / "audit" / "results"
+        results_dir.mkdir(parents=True, exist_ok=True)
+        return results_dir
+
+    def test_pass_pilot_with_matching_registry_passes(self, monkeypatch, tmp_path):
+        from pipeline.check_drift import check_routine_tbbo_slippage_registry_coverage
+        from trading_app.deployability import RoutineTbboPilot
+
+        registry = {
+            "MNQ": RoutineTbboPilot("MNQ", "E2", frozenset({"NYSE_OPEN"}), "basis"),
+        }
+        results_dir = self._patch(monkeypatch, tmp_path, registry)
+        self._write_pilot_doc(results_dir, "2026-04-20-mnq-e2-slippage-pilot-v1.md", "PASS")
+
+        violations = check_routine_tbbo_slippage_registry_coverage()
+        assert violations == []
+
+    def test_pass_pilot_with_missing_registry_fails_closed(self, monkeypatch, tmp_path):
+        from pipeline.check_drift import check_routine_tbbo_slippage_registry_coverage
+
+        registry = {}  # empty — MES PASS pilot has no registry coverage
+        results_dir = self._patch(monkeypatch, tmp_path, registry)
+        self._write_pilot_doc(results_dir, "2026-04-24-mes-e2-slippage-pilot-v1.md", "PASS")
+
+        violations = check_routine_tbbo_slippage_registry_coverage()
+        assert len(violations) == 1
+        assert "MES" in violations[0]
+        assert "missing from trading_app.deployability.ROUTINE_TBBO_SLIPPAGE_REGISTRY" in violations[0]
+
+    def test_warn_pilot_with_registry_entry_fails_closed(self, monkeypatch, tmp_path):
+        from pipeline.check_drift import check_routine_tbbo_slippage_registry_coverage
+        from trading_app.deployability import RoutineTbboPilot
+
+        # Instrument is registered but its only pilot v1 doc is WARN — should fail closed.
+        registry = {
+            "MGC": RoutineTbboPilot("MGC", "E2", frozenset({"LONDON_METALS"}), "basis"),
+        }
+        results_dir = self._patch(monkeypatch, tmp_path, registry)
+        self._write_pilot_doc(results_dir, "2026-04-24-mgc-e2-slippage-pilot-v1.md", "WARN")
+
+        violations = check_routine_tbbo_slippage_registry_coverage()
+        assert len(violations) == 1
+        assert "MGC" in violations[0]
+        assert "non-PASS" in violations[0]
+
+    def test_pass_supersedes_earlier_warn_for_same_instrument(self, monkeypatch, tmp_path):
+        from pipeline.check_drift import check_routine_tbbo_slippage_registry_coverage
+        from trading_app.deployability import RoutineTbboPilot
+
+        # MGC has both an earlier WARN pilot AND a later PASS pilot — the registry
+        # entry is justified by the PASS, and the WARN must NOT trigger over-coverage.
+        registry = {
+            "MGC": RoutineTbboPilot("MGC", "E2", frozenset({"LONDON_METALS"}), "basis"),
+        }
+        results_dir = self._patch(monkeypatch, tmp_path, registry)
+        self._write_pilot_doc(results_dir, "2026-04-01-mgc-e2-slippage-pilot-v1.md", "WARN")
+        self._write_pilot_doc(results_dir, "2026-05-01-mgc-e2-slippage-pilot-v1.md", "PASS")
+
+        violations = check_routine_tbbo_slippage_registry_coverage()
+        assert violations == []
+
+    def test_pilot_doc_without_verdict_line_fails_closed(self, monkeypatch, tmp_path):
+        from pipeline.check_drift import check_routine_tbbo_slippage_registry_coverage
+
+        results_dir = self._patch(monkeypatch, tmp_path, {})
+        path = results_dir / "2026-05-01-mes-e2-slippage-pilot-v1.md"
+        path.write_text("# fixture\n\n(no verdict line)\n", encoding="utf-8")
+
+        violations = check_routine_tbbo_slippage_registry_coverage()
+        assert len(violations) == 1
+        assert "no `## Verdict:" in violations[0]
+
+    def test_no_pilot_docs_returns_clean(self, monkeypatch, tmp_path):
+        from pipeline.check_drift import check_routine_tbbo_slippage_registry_coverage
+
+        self._patch(monkeypatch, tmp_path, {})
+        # results_dir exists but is empty
+        assert check_routine_tbbo_slippage_registry_coverage() == []

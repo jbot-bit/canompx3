@@ -7298,6 +7298,117 @@ def _function_has_isinstance_then_silent_none(func_node: ast.FunctionDef | ast.A
     return has_isinstance and not has_warn_or_raise
 
 
+def check_routine_tbbo_slippage_registry_coverage() -> list[str]:
+    """Every PASS routine-TBBO slippage pilot must be in ROUTINE_TBBO_SLIPPAGE_REGISTRY.
+
+    `trading_app/deployability.py` reads
+    ``ROUTINE_TBBO_SLIPPAGE_REGISTRY`` to decide whether a row's missing
+    ``slippage_validation_status`` should be inferred as
+    ``PENDING_EVENT_TAIL`` (controlled-pilot eligible, warning) versus
+    ``slippage_missing`` (hard-blocked). The registry is the single source
+    of truth for "this instrument's routine-liquidity slippage pilot has
+    shipped a PASS."
+
+    This check globs ``docs/audit/results/*slippage*pilot*v1*.md``,
+    parses the verdict line, and fails closed when:
+
+      * a pilot doc carries verdict ``PASS`` but its instrument is absent
+        from the registry — silent under-coverage, qualifying rows would
+        be over-blocked as ``slippage_missing`` despite shipped evidence;
+      * a pilot doc carries verdict ``WARN`` or ``FAIL`` but its instrument
+        IS in the registry — silent over-coverage, qualifying rows would
+        be inferred-passed despite shipped evidence saying otherwise.
+
+    Verdict format is the project convention used by both pilot docs:
+    a level-2 markdown heading ``## Verdict: **PASS**`` (or WARN/FAIL).
+    Surrounding markdown bold (``**``) is tolerated; surrounding spaces
+    are tolerated; case is tolerated.
+
+    Pilot doc filename convention: ``YYYY-MM-DD-<instrument>-...slippage-pilot-v1.md``
+    where ``<instrument>`` is the lowercase ticker (mnq/mes/mgc).
+
+    @rule routine-tbbo-slippage-registry
+    """
+
+    violations: list[str] = []
+    results_dir = PROJECT_ROOT / "docs" / "audit" / "results"
+    if not results_dir.is_dir():
+        return violations
+
+    try:
+        from trading_app.deployability import ROUTINE_TBBO_SLIPPAGE_REGISTRY
+    except Exception as exc:  # pragma: no cover - import-side surfaces in upstream check
+        violations.append(
+            f"  trading_app.deployability.ROUTINE_TBBO_SLIPPAGE_REGISTRY import failed: {type(exc).__name__}: {exc}"
+        )
+        return violations
+
+    registry_instruments = {key.upper() for key in ROUTINE_TBBO_SLIPPAGE_REGISTRY}
+
+    pilot_re = re.compile(
+        r"^(?P<date>\d{4}-\d{2}-\d{2})-(?P<instrument>[a-z0-9]+)-.*slippage[-_]?pilot[-_]?v1\.md$",
+        re.IGNORECASE,
+    )
+    verdict_re = re.compile(
+        r"^##\s*Verdict\s*:\s*\**\s*(?P<verdict>PASS|WARN|FAIL)\b",
+        re.IGNORECASE | re.MULTILINE,
+    )
+
+    pilot_docs: list[tuple[str, str, Path]] = []  # (instrument, verdict, path)
+    for path in sorted(results_dir.glob("*slippage*pilot*v1*.md")):
+        match = pilot_re.match(path.name)
+        if match is None:
+            violations.append(
+                f"  pilot doc {path.name} does not match expected filename pattern "
+                f"`YYYY-MM-DD-<instrument>-...slippage-pilot-v1.md`; cannot be classified."
+            )
+            continue
+        instrument = match.group("instrument").upper()
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            violations.append(f"  failed to read {path.name}: {exc}")
+            continue
+        verdict_match = verdict_re.search(text)
+        if verdict_match is None:
+            violations.append(
+                f"  pilot doc {path.name} has no `## Verdict: **PASS|WARN|FAIL**` line; cannot be classified."
+            )
+            continue
+        pilot_docs.append((instrument, verdict_match.group("verdict").upper(), path))
+
+    pass_instruments = {inst for inst, verdict, _ in pilot_docs if verdict == "PASS"}
+    non_pass_instruments = {inst for inst, verdict, _ in pilot_docs if verdict != "PASS"}
+
+    # PASS pilots must be covered.
+    for inst in sorted(pass_instruments - registry_instruments):
+        evidence_paths = [path.name for i, v, path in pilot_docs if i == inst and v == "PASS"]
+        violations.append(
+            f"  routine-TBBO slippage pilot v1 PASS for {inst} ({', '.join(evidence_paths)}) "
+            f"but {inst} is missing from trading_app.deployability."
+            f"ROUTINE_TBBO_SLIPPAGE_REGISTRY. Add a RoutineTbboPilot entry covering the "
+            f"pilot's session set so deployability infers PENDING_EVENT_TAIL instead of "
+            f"hard-blocking on slippage_missing."
+        )
+
+    # WARN/FAIL pilots must NOT be in the registry, UNLESS a later PASS pilot exists
+    # for the same instrument (PASS supersedes earlier non-PASS).
+    for inst in sorted(non_pass_instruments & registry_instruments):
+        if inst in pass_instruments:
+            continue  # PASS supersedes earlier WARN/FAIL for the same instrument
+        evidence_paths = [
+            f"{path.name} ({verdict})" for i, verdict, path in pilot_docs if i == inst and verdict != "PASS"
+        ]
+        violations.append(
+            f"  {inst} is registered in ROUTINE_TBBO_SLIPPAGE_REGISTRY but its only "
+            f"slippage pilot v1 evidence is non-PASS ({', '.join(evidence_paths)}). "
+            f"Remove the registry entry or land a PASS pilot v1 for {inst} before "
+            f"inferring PENDING_EVENT_TAIL on its rows."
+        )
+
+    return violations
+
+
 def check_iso_utc_formatter_silent_none() -> list[str]:
     """Operator-visible formatter helpers must warn on unrecognized types.
 
@@ -9002,6 +9113,12 @@ CHECKS = [
         "E2 entry_model + break-bar features in research/ require e2-lookahead-policy annotation (2026-04-28 class bug)",
         check_e2_lookahead_research_contamination,
         True,  # advisory — surfaces new contamination without blocking commits
+        False,
+    ),
+    (
+        "Routine-TBBO slippage pilot v1 PASS coverage in ROUTINE_TBBO_SLIPPAGE_REGISTRY (deployability inference parity)",
+        check_routine_tbbo_slippage_registry_coverage,
+        False,  # BLOCKING — registry under/over-coverage silently mis-classifies slippage_missing
         False,
     ),
     (
