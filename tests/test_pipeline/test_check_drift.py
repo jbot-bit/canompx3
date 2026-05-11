@@ -2493,3 +2493,130 @@ class TestLiteratureExtractsModeABFraming:
         from pipeline.check_drift import check_literature_extracts_mode_a_b_framing
 
         assert callable(check_literature_extracts_mode_a_b_framing)
+
+
+class TestCheckSrPausesHaveRecentEvidence:
+    """Drift check for stale SR-monitor pauses (2026-05-11 misread incident)."""
+
+    THRESHOLD = 31.96
+
+    def _setup(self, tmp_path, monkeypatch):
+        import pipeline.check_drift as cd
+
+        state_dir = tmp_path / "data" / "state"
+        state_dir.mkdir(parents=True)
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        return cd, state_dir
+
+    def _write_sr_state(self, state_dir, profile_id, lanes):
+        import json
+
+        state_dir.joinpath("sr_state.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "state_type": "sr_monitor",
+                    "canonical_inputs": {"profile_id": profile_id, "lane_ids": [l["strategy_id"] for l in lanes]},
+                    "payload": {"results": lanes},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def _write_overrides(self, state_dir, profile_id, overrides):
+        import json
+
+        state_dir.joinpath(f"lane_overrides_{profile_id}.json").write_text(
+            json.dumps(overrides),
+            encoding="utf-8",
+        )
+
+    def _stale_lane(self, sid):
+        return {
+            "strategy_id": sid,
+            "status": "ALARM",
+            "sr_stat": 41.6,
+            "current_sr_stat": 0.5,
+            "trades_since_alarm": 34,
+            "recent_10_mean_r": 0.47,
+            "threshold": self.THRESHOLD,
+        }
+
+    def _pause_entry(self, source="sr_monitor"):
+        return {"active": False, "source": source, "reason": "SR alarm: stat=41.60 ..."}
+
+    def test_passes_when_no_state_files_exist(self, tmp_path, monkeypatch):
+        cd, _state_dir = self._setup(tmp_path, monkeypatch)
+        assert cd.check_sr_pauses_have_recent_evidence() == []
+
+    def test_fires_when_paused_lane_has_recovered(self, tmp_path, monkeypatch):
+        cd, state_dir = self._setup(tmp_path, monkeypatch)
+        sid = "MNQ_FOO_BAR"
+        self._write_sr_state(state_dir, "p1", [self._stale_lane(sid)])
+        self._write_overrides(state_dir, "p1", {sid: self._pause_entry()})
+        violations = cd.check_sr_pauses_have_recent_evidence()
+        assert len(violations) == 1
+        assert sid in violations[0]
+        assert "stale" in violations[0].lower()
+        assert "watch" in violations[0]
+
+    def test_does_not_fire_when_sr_still_above_half_threshold(self, tmp_path, monkeypatch):
+        cd, state_dir = self._setup(tmp_path, monkeypatch)
+        sid = "MNQ_FOO_BAR"
+        lane = self._stale_lane(sid)
+        lane["current_sr_stat"] = self.THRESHOLD * 0.75  # 75% of threshold — not recovered
+        self._write_sr_state(state_dir, "p1", [lane])
+        self._write_overrides(state_dir, "p1", {sid: self._pause_entry()})
+        assert cd.check_sr_pauses_have_recent_evidence() == []
+
+    def test_does_not_fire_when_too_few_trades_since_alarm(self, tmp_path, monkeypatch):
+        cd, state_dir = self._setup(tmp_path, monkeypatch)
+        sid = "MNQ_FOO_BAR"
+        lane = self._stale_lane(sid)
+        lane["trades_since_alarm"] = 5  # < 10 minimum
+        self._write_sr_state(state_dir, "p1", [lane])
+        self._write_overrides(state_dir, "p1", {sid: self._pause_entry()})
+        assert cd.check_sr_pauses_have_recent_evidence() == []
+
+    def test_does_not_fire_when_recent_mean_r_negative(self, tmp_path, monkeypatch):
+        cd, state_dir = self._setup(tmp_path, monkeypatch)
+        sid = "MNQ_FOO_BAR"
+        lane = self._stale_lane(sid)
+        lane["recent_10_mean_r"] = -0.27  # negative recent performance
+        self._write_sr_state(state_dir, "p1", [lane])
+        self._write_overrides(state_dir, "p1", {sid: self._pause_entry()})
+        assert cd.check_sr_pauses_have_recent_evidence() == []
+
+    def test_does_not_fire_for_active_overrides(self, tmp_path, monkeypatch):
+        cd, state_dir = self._setup(tmp_path, monkeypatch)
+        sid = "MNQ_FOO_BAR"
+        self._write_sr_state(state_dir, "p1", [self._stale_lane(sid)])
+        self._write_overrides(state_dir, "p1", {sid: {"active": True, "source": "sr_monitor"}})
+        assert cd.check_sr_pauses_have_recent_evidence() == []
+
+    def test_does_not_fire_for_non_sr_monitor_pauses(self, tmp_path, monkeypatch):
+        cd, state_dir = self._setup(tmp_path, monkeypatch)
+        sid = "MNQ_FOO_BAR"
+        self._write_sr_state(state_dir, "p1", [self._stale_lane(sid)])
+        self._write_overrides(state_dir, "p1", {sid: self._pause_entry(source="manual")})
+        assert cd.check_sr_pauses_have_recent_evidence() == []
+
+    def test_skips_lanes_missing_new_fields(self, tmp_path, monkeypatch):
+        """Backwards-compat: legacy sr_state.json without current_sr_stat/etc must not fire false positives."""
+        cd, state_dir = self._setup(tmp_path, monkeypatch)
+        sid = "MNQ_FOO_BAR"
+        legacy_lane = {
+            "strategy_id": sid,
+            "status": "ALARM",
+            "sr_stat": 41.6,
+            "threshold": self.THRESHOLD,
+            # no current_sr_stat / trades_since_alarm / recent_10_mean_r
+        }
+        self._write_sr_state(state_dir, "p1", [legacy_lane])
+        self._write_overrides(state_dir, "p1", {sid: self._pause_entry()})
+        assert cd.check_sr_pauses_have_recent_evidence() == []
+
+    def test_check_callable_imports_cleanly(self):
+        from pipeline.check_drift import check_sr_pauses_have_recent_evidence
+
+        assert callable(check_sr_pauses_have_recent_evidence)

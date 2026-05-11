@@ -6106,6 +6106,93 @@ def check_sr_state_contract_reader() -> list[str]:
     return violations
 
 
+def check_sr_pauses_have_recent_evidence() -> list[str]:
+    """ADVISORY: SR-monitor pauses on lane_overrides_*.json should be supported by
+    current evidence (post-alarm recovery NOT observed) — surfaces stale peak-SR
+    alarms that mask recovered streams.
+
+    Conjunction predicate (per 2026-05-11 plan agent finding): all three must hold
+    for the advisory to fire on a paused lane:
+      1. current_sr_stat < threshold * 0.5  (SR has fully recovered)
+      2. trades_since_alarm >= 10            (enough post-alarm trades to be informative)
+      3. recent_10_mean_r > 0                (last 10 trades are net positive)
+
+    Origin: 2026-05-11 sr_monitor misread incident. Operator (Claude) ran
+    `--apply-pauses` reading `sr_stat` as current state when it is the peak / trigger
+    value. All 3 deployed MNQ lanes were paused; 2 had >30 trades of clean recovery.
+    Even with the registry override, `sr_monitor --apply-pauses` can re-shadow the
+    review at `lifecycle_state.py:232` because pause_info short-circuits the
+    registry consultation.
+
+    Advisory (does not block): the canonical override surface is
+    `trading_app/sr_review_registry.py`; this check just surfaces drift between the
+    SR-monitor's autonomous pause writes and recovered streams. Remediation is to
+    register a `watch` outcome and delete the `lane_overrides_*.json` entry.
+    """
+    import json
+
+    violations: list[str] = []
+    state_dir = PROJECT_ROOT / "data" / "state"
+    sr_state_path = state_dir / "sr_state.json"
+    if not sr_state_path.exists():
+        return violations
+
+    try:
+        sr = json.loads(sr_state_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return violations
+
+    try:
+        profile_id = sr["canonical_inputs"]["profile_id"]
+        results = sr["payload"]["results"]
+    except (KeyError, TypeError):
+        return violations
+
+    overrides_path = state_dir / f"lane_overrides_{profile_id}.json"
+    if not overrides_path.exists():
+        return violations
+
+    try:
+        overrides = json.loads(overrides_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return violations
+
+    sr_by_sid = {row.get("strategy_id"): row for row in results if isinstance(row, dict)}
+    K_TRADES_SINCE = 10
+
+    for sid, ov in overrides.items():
+        if not isinstance(ov, dict):
+            continue
+        if ov.get("active", True):
+            continue
+        if ov.get("source") != "sr_monitor":
+            continue
+        sr_lane = sr_by_sid.get(sid)
+        if not sr_lane:
+            continue
+        current = sr_lane.get("current_sr_stat")
+        threshold = sr_lane.get("threshold")
+        trades_since = sr_lane.get("trades_since_alarm")
+        recent_mean_r = sr_lane.get("recent_10_mean_r")
+        if current is None or threshold is None:
+            continue
+        if trades_since is None or recent_mean_r is None:
+            continue
+        recovered_sr = current < threshold * 0.5
+        enough_trades = trades_since >= K_TRADES_SINCE
+        positive_recent = recent_mean_r > 0
+        if recovered_sr and enough_trades and positive_recent:
+            violations.append(
+                f"  {sid}: sr_monitor pause looks stale "
+                f"(current_sr={current:.2f} << threshold={threshold:.2f}, "
+                f"trades_since_alarm={trades_since}, recent_10_mean_r={recent_mean_r:+.3f}). "
+                f"Remediate: register a 'watch' outcome in trading_app/sr_review_registry.py "
+                f"and remove the entry from data/state/lane_overrides_{profile_id}.json."
+            )
+
+    return violations
+
+
 def check_preflight_launcher_modes() -> list[str]:
     """Ensure launcher entrypoints pass explicit preflight claim modes."""
     violations = []
@@ -8921,6 +9008,12 @@ CHECKS = [
         "Operator-visible formatter helpers must warn on unrecognized types (iso_utc class bug, 2026-05-04)",
         check_iso_utc_formatter_silent_none,
         True,  # advisory — first-week shakeout may surface unenumerated false positives
+        False,
+    ),
+    (
+        "SR-monitor pauses on lane_overrides_*.json should be supported by current evidence (2026-05-11 stale-pause class bug)",
+        check_sr_pauses_have_recent_evidence,
+        True,  # advisory — surfaces stale peak-SR alarms masking recovered streams
         False,
     ),
     # ── CRG-backed checks (D1-D5) — all ADVISORY; fail-open when CRG unavailable ──

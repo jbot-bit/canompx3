@@ -284,3 +284,161 @@ def test_run_monitor_reports_sr_at_alarm_not_at_stream_end():
         "if they are equal, the recovery branch of this regression guard is "
         "not exercising the reporting-mode difference it is meant to cover."
     )
+
+
+def test_run_monitor_emits_current_sr_stat_and_recovery_fields(tmp_path, monkeypatch, capsys):
+    """run_monitor must emit current_sr_stat (post-alarm walk), trades_since_alarm,
+    and recent_10_mean_r in sr_state.json so operators/drift checks can distinguish
+    a stale peak alarm from a currently-alarmed lane.
+
+    Stream: 20 adverse trades (drive SR above threshold) then 30 recovery trades
+    (pull SR back down). Expected:
+      - sr_stat (peak) >= threshold
+      - current_sr_stat (final walk) < sr_stat
+      - trades_since_alarm > 0
+      - recent_10_mean_r positive (recovery dominates the tail)
+    """
+    adverse_run = [-1.0] * 20
+    recovery_run = [2.0] * 30
+
+    con = duckdb.connect(":memory:")
+    con.execute("CREATE TABLE validated_setups (status VARCHAR)")
+    con.execute("INSERT INTO validated_setups VALUES ('active')")
+    con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE)")
+    con.execute("CREATE TABLE orb_outcomes (trading_day DATE)")
+    con.execute("INSERT INTO orb_outcomes VALUES (DATE '2026-04-09')")
+    con.execute("CREATE TABLE daily_features (trading_day DATE)")
+    con.execute("INSERT INTO daily_features VALUES (DATE '2026-04-09')")
+
+    monkeypatch.setattr(sr_monitor, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(sr_monitor.duckdb, "connect", lambda *_args, **_kwargs: con)
+    monkeypatch.setattr(sr_monitor, "resolve_profile_id", lambda: "topstep_50k_mnq_auto")
+    monkeypatch.setattr(sr_monitor, "get_profile", lambda _pid: object())
+    monkeypatch.setattr(
+        sr_monitor,
+        "_build_lanes",
+        lambda: {
+            "SID_RECOVERY": {
+                "mu0": 0.1,
+                "sigma": 1.0,
+                "instrument": "MNQ",
+                "orb_label": "NYSE_CLOSE",
+                "orb_minutes": 5,
+                "entry_model": "E2",
+                "rr_target": 1.0,
+                "confirm_bars": 1,
+                "filter_type": "ORB_G8",
+                "label": "L1 NYSE_CLOSE ORB_G8",
+            }
+        },
+    )
+    monkeypatch.setattr(
+        sr_monitor,
+        "prepare_monitor_inputs",
+        lambda _con, _sid, _params: (
+            ShiryaevRobertsMonitor(expected_r=0.1, std_r=1.0, threshold=10.0, delta=-1.0),
+            adverse_run + recovery_run,
+            "validated_backtest",
+            "paper_trades",
+        ),
+    )
+    monkeypatch.setattr(sr_monitor, "build_profile_fingerprint", lambda _profile: "pfp")
+    monkeypatch.setattr(sr_monitor, "build_code_fingerprint", lambda _paths: "codeid")
+    monkeypatch.setattr(sr_monitor, "get_git_head", lambda _root: "abc123")
+
+    sr_monitor.run_monitor(apply_pauses=False, pause_days=30)
+    capsys.readouterr()
+
+    payload = json.loads((tmp_path / "sr_state.json").read_text(encoding="utf-8"))
+    row = payload["payload"]["results"][0]
+
+    assert row["status"] == "ALARM"
+    assert row["sr_stat"] >= row["threshold"], (
+        f"peak sr_stat ({row['sr_stat']}) must be >= threshold ({row['threshold']})"
+    )
+
+    assert "current_sr_stat" in row, "current_sr_stat field missing from result dict"
+    assert "trades_since_alarm" in row, "trades_since_alarm field missing"
+    assert "recent_10_mean_r" in row, "recent_10_mean_r field missing"
+
+    assert row["current_sr_stat"] is not None
+    assert row["current_sr_stat"] < row["sr_stat"], (
+        "current_sr_stat (full walk) must be below sr_stat (peak) when stream recovered "
+        f"after alarm — got current={row['current_sr_stat']} vs peak={row['sr_stat']}"
+    )
+
+    assert row["trades_since_alarm"] is not None
+    assert row["trades_since_alarm"] > 0, "trades_since_alarm must be > 0 when stream continues past alarm"
+    assert row["trades_since_alarm"] == len(adverse_run + recovery_run) - row["alarm_trade"]
+
+    assert row["recent_10_mean_r"] is not None
+    assert row["recent_10_mean_r"] > 0, (
+        f"recent_10_mean_r must be positive when recovery dominates the tail (got {row['recent_10_mean_r']})"
+    )
+
+
+def test_run_monitor_no_alarm_emits_current_sr_stat_equal_to_sr_stat(tmp_path, monkeypatch, capsys):
+    """When no alarm fires, sr_stat == current_sr_stat (both reflect the full walk)
+    and trades_since_alarm is None.
+    """
+    benign_stream = [0.3] * 20
+
+    con = duckdb.connect(":memory:")
+    con.execute("CREATE TABLE validated_setups (status VARCHAR)")
+    con.execute("INSERT INTO validated_setups VALUES ('active')")
+    con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE)")
+    con.execute("CREATE TABLE orb_outcomes (trading_day DATE)")
+    con.execute("INSERT INTO orb_outcomes VALUES (DATE '2026-04-09')")
+    con.execute("CREATE TABLE daily_features (trading_day DATE)")
+    con.execute("INSERT INTO daily_features VALUES (DATE '2026-04-09')")
+
+    monkeypatch.setattr(sr_monitor, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(sr_monitor.duckdb, "connect", lambda *_args, **_kwargs: con)
+    monkeypatch.setattr(sr_monitor, "resolve_profile_id", lambda: "topstep_50k_mnq_auto")
+    monkeypatch.setattr(sr_monitor, "get_profile", lambda _pid: object())
+    monkeypatch.setattr(
+        sr_monitor,
+        "_build_lanes",
+        lambda: {
+            "SID_NOALARM": {
+                "mu0": 0.2,
+                "sigma": 1.0,
+                "instrument": "MNQ",
+                "orb_label": "NYSE_CLOSE",
+                "orb_minutes": 5,
+                "entry_model": "E2",
+                "rr_target": 1.0,
+                "confirm_bars": 1,
+                "filter_type": "ORB_G8",
+                "label": "L1 NYSE_CLOSE ORB_G8",
+            }
+        },
+    )
+    monkeypatch.setattr(
+        sr_monitor,
+        "prepare_monitor_inputs",
+        lambda _con, _sid, _params: (
+            ShiryaevRobertsMonitor(expected_r=0.2, std_r=1.0, threshold=99.0, delta=-1.0),
+            benign_stream,
+            "validated_backtest",
+            "paper_trades",
+        ),
+    )
+    monkeypatch.setattr(sr_monitor, "build_profile_fingerprint", lambda _profile: "pfp")
+    monkeypatch.setattr(sr_monitor, "build_code_fingerprint", lambda _paths: "codeid")
+    monkeypatch.setattr(sr_monitor, "get_git_head", lambda _root: "abc123")
+
+    sr_monitor.run_monitor(apply_pauses=False, pause_days=30)
+    capsys.readouterr()
+
+    payload = json.loads((tmp_path / "sr_state.json").read_text(encoding="utf-8"))
+    row = payload["payload"]["results"][0]
+
+    assert row["status"] == "CONTINUE"
+    assert row["alarm_trade"] is None
+    assert row["trades_since_alarm"] is None, "trades_since_alarm must be None when no alarm fired"
+    assert row["current_sr_stat"] == row["sr_stat"], (
+        "with no alarm, current_sr_stat and sr_stat are the same full-walk value"
+    )
+    assert row["recent_10_mean_r"] is not None
+    assert abs(row["recent_10_mean_r"] - 0.3) < 1e-9

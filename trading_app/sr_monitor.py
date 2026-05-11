@@ -4,6 +4,30 @@ This is the Criterion 12 monitor:
 - live/paper trade stream preferred
 - canonical forward outcomes allowed only as an explicitly labeled fallback
 - threshold calibrated to approximately 60 trading days ARL
+
+State schema reporting modes (sr_state.json `payload.results[]` fields):
+
+- ``sr_stat`` — the SR statistic at the FIRST-CROSSING (peak / trigger) trade.
+  Stops updating after the alarm fires. Locked by
+  test_run_monitor_reports_sr_at_alarm_not_at_stream_end. Do NOT read this
+  field as "current health"; an ALARM lane can have a long-recovered current
+  SR while ``sr_stat`` still reflects the trigger value.
+
+- ``current_sr_stat`` — the SR statistic after walking the FULL monitored
+  stream (post-alarm path). Use this for "is the lane currently in alarm
+  territory?" questions.
+
+- ``trades_since_alarm`` — count of trades AFTER the trigger trade. ``None`` if
+  no alarm fired. Use with ``current_sr_stat`` to assess whether recovery has
+  enough evidence to be meaningful.
+
+- ``recent_10_mean_r`` — mean R of the last 10 trades in the monitored stream
+  (or fewer if N < 10). Signed: positive means recent profitability.
+
+Operator workflow for overturning an SR alarm: see
+``docs/runtime/sr_monitor_workflow.md``. Canonical override surface is
+``trading_app/sr_review_registry.py`` (consulted by ``lifecycle_state``
+ONLY when no ``lane_overrides_*.json`` pause shadow exists).
 """
 
 from __future__ import annotations
@@ -277,6 +301,29 @@ def run_monitor(*, apply_pauses: bool = False, pause_days: int = 30) -> None:
                 if trades:
                     status = "CONTINUE"
 
+            # current_sr_stat = SR after walking the FULL stream (post-alarm path).
+            # Distinct from sr_stat (peak / first-crossing value, locked by
+            # test_run_monitor_reports_sr_at_alarm_not_at_stream_end).
+            current_sr_stat: float | None = None
+            trades_since_alarm: int | None = None
+            recent_10_mean_r: float | None = None
+            if trades:
+                continued = ShiryaevRobertsMonitor(
+                    expected_r=monitor.expected_r,
+                    std_r=monitor.std_r,
+                    threshold=monitor.threshold,
+                    delta=DEFAULT_DELTA,
+                    variance_ratio=DEFAULT_VARIANCE_RATIO,
+                )
+                for trade_r in trades:
+                    continued.update(trade_r)
+                current_sr_stat = round(continued.sr_stat, 4)
+                if alarm_trade is not None:
+                    trades_since_alarm = len(trades) - alarm_trade
+                tail = trades[-10:]
+                if tail:
+                    recent_10_mean_r = round(sum(tail) / len(tail), 4)
+
             print(
                 f"{params['label']:<40} {len(trades):>4} {monitor.sr_stat:>10.2f} "
                 f"{monitor.threshold:>8.2f} {status:<10} "
@@ -289,6 +336,9 @@ def run_monitor(*, apply_pauses: bool = False, pause_days: int = 30) -> None:
                     "orb_label": params["orb_label"],
                     "n_monitored": len(trades),
                     "sr_stat": round(monitor.sr_stat, 4),
+                    "current_sr_stat": current_sr_stat,
+                    "trades_since_alarm": trades_since_alarm,
+                    "recent_10_mean_r": recent_10_mean_r,
                     "threshold": round(monitor.threshold, 4),
                     "status": status,
                     "alarm_trade": alarm_trade,
