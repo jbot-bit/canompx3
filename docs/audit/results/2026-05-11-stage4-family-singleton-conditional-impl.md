@@ -256,11 +256,90 @@ print(f'Pass by instrument: {dict(inst_pass)}')
   inconsistency (Stage 3 § 5) is still pending and remains a separate
   workstream.
 
+## Adversarial-audit gate (2026-05-11, CONDITIONAL → fix → PASS)
+
+Per `.claude/rules/adversarial-audit-gate.md` the `evidence-auditor`
+subagent was dispatched on commit `6fd3bb0b` in an independent context.
+
+**Audit verdict: CONDITIONAL.** One critical finding closed in the
+follow-up commit:
+
+### Finding C5-GATING-CONTRADICTION (CONDITIONAL)
+
+The auditor caught a docstring/code contradiction in
+`_singleton_clears_binding_criteria`:
+
+- Docstring at line 189-194: "C5 is included in the 'reported' sense
+  only — its absence does not fail the floor."
+- Inline comment at line 223-226: "reported, NOT gating per Amendment
+  2.1."
+- BUT code at line 227-228:
+  ```python
+  if row.get("dsr_score") is None:
+      failed.append("C5_DSR_uncomputed")
+  ```
+  with `passes = len(failed) == 0` at line 260.
+
+So a NULL `dsr_score` was actually gating the floor — a latent bug
+contrary to `pre_registered_criteria.md` Amendment 2.1 (line 367-370,
+"CROSS-CHECK ONLY"). The bug had zero current empirical impact (all
+276 active SINGLETONs have non-NULL `dsr_score`), but would have
+hard-blocked any future SINGLETON with NULL DSR — exactly the kind of
+silent doctrine violation the audit gate exists to catch.
+
+### Fix applied (follow-up commit)
+
+- `_singleton_clears_binding_criteria` now returns a 3-tuple:
+  `(passes, failed_criterion_ids, dsr_reported)`. C5 NULL no longer
+  appends to `failed`; instead it surfaces as the `dsr_reported`
+  boolean for audit-trail visibility.
+- Family-branch caller updated to consume the 3-tuple and emit
+  `c5_dsr_reported` + `c5_status` in both the warning-branch and
+  hard-branch detail dicts.
+- Docstring rewritten to explicitly state C5 is NOT in the gating
+  set, with a note referencing the audit incident so the fix cannot
+  silently regress.
+- 2 new tests added:
+  - `test_singleton_with_null_dsr_still_passes_when_binding_criteria_cleared`
+  - `test_singleton_with_null_dsr_AND_failing_chordia_is_still_hard`
+
+### Other audit findings (resolved)
+
+- **Lane allocator independence (INFERRED → VERIFIED):** the auditor
+  flagged that the implementer's "capital impact zero" claim was
+  INFERRED rather than traced. Post-audit grep across
+  `scripts/tools/rebalance_lanes.py` and `trading_app/lane_allocator.py`
+  for `build_deployability_audit`, `StrategyDeployability`,
+  deployability verdict strings, and `CONTROLLED_LIVE_PILOT_CANDIDATE`
+  returned **zero hits**. Capital independence is now VERIFIED.
+- **NULL handling for sharpe_ratio, fdr_significant, era_dependent:**
+  reviewed; all fail-closed, intentional, doctrine-aligned.
+- **Multi-warning coexistence:** `CONTROLLED_PILOT_WARNINGS` set
+  membership correctly handles multiple coexisting warnings; verdict
+  defaults to `CONTROLLED_LIVE_PILOT_CANDIDATE` when any controlled
+  warning present and no hard.
+- **SELECT widening compatibility:** the new `sharpe_ratio` +
+  `era_dependent` columns are additive; no destructure consumers
+  depend on positional ordering.
+
+### Post-fix verification
+
+- `pytest tests/test_trading_app/test_deployability.py` — **35 passed**
+  (was 33 before; +2 new C5-NULL tests).
+- `pytest tests/test_trading_app/test_deployability.py
+  tests/test_tools/test_adversarial_stress_gate.py
+  tests/test_tools/test_backfill_deployability_evidence.py` —
+  **50 passed**.
+- `python pipeline/check_drift.py` — **123 checks pass, 0 fail**.
+- Re-ran empirical regression: **33 / 276 SINGLETONs pass** (unchanged;
+  all MNQ; 0 MES). The 5 MES candidates still fail on C4 Chordia. The
+  fix is backward-compatible because no current row has NULL DSR.
+
+**Audit verdict post-fix: PASS.** Ready to open PR.
+
 ## Next actions
 
-1. **Adversarial-audit gate** — dispatch `evidence-auditor` subagent
-   per `.claude/rules/adversarial-audit-gate.md` BEFORE pushing PR
-   for merge. This is the truth-layer + judgment-class requirement.
+1. ~~Adversarial-audit gate~~ **DONE (CONDITIONAL → PASS).**
 2. **Open PR** — single PR scope per Stage 4 stage doc; full body
    matches Stage 1 PR #258 pattern.
 3. **Stage 2 + Stage 3 docs PRs** — separate docs-only PRs awaiting

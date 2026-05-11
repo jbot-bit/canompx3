@@ -423,6 +423,61 @@ def test_singleton_passing_emits_doctrine_reference_in_detail():
     assert detail["robustness_status"] == "SINGLETON"
     assert detail["verdict_route"] == "CONTROLLED_LIVE_PILOT_CANDIDATE"
     assert "Stage 4" in detail["doctrine"]
+    assert detail["c5_dsr_reported"] is True  # default fixture dsr_score=0.96
+
+
+def test_singleton_with_null_dsr_still_passes_when_binding_criteria_cleared():
+    # Adversarial-audit gate (2026-05-11) caught a prior version that
+    # gated the floor on C5 dsr_score being non-NULL, contradicting
+    # pre_registered_criteria.md Amendment 2.1 ("CROSS-CHECK ONLY").
+    # A SINGLETON with NULL dsr_score must still pass the floor when
+    # all six binding criteria (C3/C4/C6/C7/C9/C10) clear; C5 NULL is
+    # a reporting gap, not a gate failure.
+    result = _classify(
+        row=_row(
+            strategy_id="SOLO_NULL_DSR",
+            robustness_status="SINGLETON",
+            dsr_score=None,
+        )
+    )
+
+    assert result.verdict == dep.CONTROLLED_LIVE_PILOT_CANDIDATE
+    assert result.deployable is True
+    family_issues = [issue for issue in result.issues if issue.id == "family_singleton"]
+    assert len(family_issues) == 1
+    assert family_issues[0].severity == "warning"
+    detail = family_issues[0].detail
+    assert detail["c5_dsr_reported"] is False
+    assert detail["c5_status"] == "uncomputed_reporting_gap_cross_check_only"
+    # Sanity: failed_binding_criteria should NOT have been populated for
+    # a passing row (no "C5_DSR_uncomputed" leak into the audit trail).
+    assert "failed_binding_criteria" not in detail
+
+
+def test_singleton_with_null_dsr_AND_failing_chordia_is_still_hard():
+    # Sanity: NULL dsr_score combined with a real binding failure should
+    # still hard-block. The C5 fix must not accidentally rescue a row
+    # that fails C4 Chordia.
+    result = _classify(
+        row=_row(
+            strategy_id="SOLO_NULL_DSR_LOW_T",
+            robustness_status="SINGLETON",
+            dsr_score=None,
+            sharpe_ratio=0.10,  # t = 0.10 * sqrt(200) = 1.41 -> FAIL_BOTH
+        )
+    )
+
+    assert result.verdict == dep.BLOCKED_FAMILY_FRAGILE
+    assert result.deployable is False
+    family_issues = [issue for issue in result.issues if issue.id == "family_singleton"]
+    assert family_issues[0].severity == "hard"
+    detail = family_issues[0].detail
+    failed = str(detail.get("failed_binding_criteria", []))
+    assert "C4_Chordia" in failed
+    # C5 reporting state must surface on the hard branch too.
+    assert detail["c5_dsr_reported"] is False
+    # And C5 MUST NOT appear in the failed list — it is cross-check only.
+    assert "C5_DSR_uncomputed" not in failed
 
 
 def test_promotion_queue_separates_evidence_gaps_from_purge_candidates():

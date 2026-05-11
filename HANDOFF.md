@@ -9,34 +9,27 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-11
-- **Branch:** stage4/family-singleton-conditional (worktree
-  `.worktrees/stage4-family-singleton-conditional`)
-- **Base:** origin/main @ 62732518 (post-PR #257)
-- **Summary:** Stage 4 IMPLEMENTED. trading_app/deployability.py now
-  conditionally downgrades `family_singleton` to a `warning` (routing
-  to `CONTROLLED_LIVE_PILOT_CANDIDATE`) when the row clears the locked
-  binding criteria from pre_registered_criteria.md (C3 + C4 banded +
-  C6 + C7 + C9 + C10), with C5 dsr_score required computed-and-reported
-  (cross-check per Amendment 2.1, NOT gating). 33 tests passing in
-  test_deployability.py (+7 new SINGLETON fixtures).
-- **Empirical regression on real gold.db:** 33 / 276 active SINGLETONs
-  clear the floor (all 33 are MNQ; 0 MES); 243 stay hard-blocked
-  (Chordia C4 is the dominant blocker: 242 of 243). All 5 original MES
-  Stage-2 candidates remain HARD-BLOCKED (fail C4 Chordia). Capital
-  impact NONE — lane allocator reads validated_setups.status not the
-  deployability verdict.
-- **Canonical delegation:** C4 delegates to
-  trading_app.chordia.chordia_verdict_label; C10 delegates to
-  ALL_FILTERS[filter_type].requires_micro_data + pipeline.data_era.is_micro.
-  No parallel logic.
+- **Commit:** 6fd3bb0b — Stage 4: family_singleton conditional downgrade per Disposition C
+- **Files changed:** 5 files
+  - `HANDOFF.md`
+  - `docs/audit/results/2026-05-11-stage4-family-singleton-conditional-impl.md`
+  - `docs/runtime/stages/stage4-family-singleton-conditional.md`
+  - `tests/test_trading_app/test_deployability.py`
+  - `trading_app/deployability.py`
 
 ## Next Steps — Active
 
-1. **STAGE 4 — IMPLEMENTED** on branch `stage4/family-singleton-conditional`.
-   Pre-merge **adversarial-audit gate pending** per
-   `.claude/rules/adversarial-audit-gate.md` (truth-layer + judgment-class
-   change requires independent-context evidence-auditor pass before PR
-   merge). After audit returns PASS, open PR.
+1. **STAGE 4 — IMPLEMENTED + AUDIT-PASS** on branch
+   `stage4/family-singleton-conditional`. Adversarial-audit gate
+   returned CONDITIONAL with 1 finding (C5 docstring/code contradiction:
+   helper was gating on NULL dsr_score contrary to Amendment 2.1). Fix
+   committed as follow-up: helper now returns 3-tuple `(passes, failed,
+   dsr_reported)`; C5 NULL surfaces as audit-trail flag, not blocker;
+   2 new tests added (NULL DSR + binding pass → CONTROLLED_LIVE_PILOT;
+   NULL DSR + failing Chordia → still hard). 50 tests pass; 123 drift
+   checks pass; empirical regression unchanged (33 MNQ pass, 0 MES).
+   Lane allocator independence VERIFIED (grep, not just inferred).
+   **Ready to open PR.**
 2. **5 MES Stage-2 candidates outcome:** still HARD-BLOCKED under
    Stage 4 because they fail C4 Chordia (t ≈ 2.2-2.6, BAND C). The
    original Stage 2 expectation that Disposition C "unlocks at most

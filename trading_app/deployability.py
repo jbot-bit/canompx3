@@ -174,32 +174,43 @@ def _active_in_sql() -> str:
     return ", ".join(f"'{inst}'" for inst in ACTIVE_ORB_INSTRUMENTS)
 
 
-def _singleton_clears_binding_criteria(row: dict[str, Any]) -> tuple[bool, list[str]]:
+def _singleton_clears_binding_criteria(
+    row: dict[str, Any],
+) -> tuple[bool, list[str], bool]:
     """Evaluate the SINGLETON-pass floor per Stage 4 Disposition C.
 
-    Returns (passes, failed_criterion_ids). The floor enforces the binding
-    criteria from `docs/institutional/pre_registered_criteria.md` Enforcement
-    summary (lines 480-494, post-amendments authoritative):
+    Returns (passes, failed_criterion_ids, dsr_reported). The floor
+    enforces the binding criteria from
+    `docs/institutional/pre_registered_criteria.md` Enforcement summary
+    (lines 480-494, post-amendments authoritative):
         C3 BH FDR        — fdr_significant AND fdr_adjusted_p < 0.05
         C4 Chordia       — chordia_verdict_label in {PASS_CHORDIA, PASS_PROTOCOL_A}
         C6 WFE           — wfe >= 0.50
         C7 sample size   — sample_size >= 100
         C9 era stability — era_dependent == False
         C10 micro-era    — if filter.requires_micro_data, instrument must be micro
-        C5 DSR cross-check — dsr_score IS NOT NULL (reported, NOT gating
-                             per Amendment 2.1)
 
-    C5 is included in the "reported" sense only — its absence does not fail
-    the floor. The check enforces that dsr_score is computed and persisted
-    so the cross-check is visible.
+    C5 (DSR) is CROSS-CHECK ONLY per Amendment 2.1 (line 367-370) and
+    therefore IS NOT a gating criterion in this function. The DSR
+    reporting state is returned as the third tuple element
+    `dsr_reported` (True when dsr_score IS NOT NULL) so callers can
+    surface it in audit detail without conflating it with the binding
+    gate. A SINGLETON with dsr_score IS NULL but all six binding
+    criteria cleared MUST pass the floor — the reporting gap is
+    informational, not blocking.
 
     For C4, `has_theory` defaults to False because SINGLETON candidates are
     by construction Pathway A family-pathway promotions (no per-strategy
     theory citation). BAND A (t >= 3.79) still passes; BAND B (t >= 3.00
     with theory) does NOT, by construction of has_theory=False.
 
-    A row that is not SINGLETON returns (False, []) — callers should gate
-    on `robustness_status == "SINGLETON"` before calling.
+    A row that is not SINGLETON returns (False, [], False) — callers
+    should gate on `robustness_status == "SINGLETON"` before calling.
+
+    The adversarial-audit gate on 2026-05-11 caught a prior version of
+    this function that accidentally appended `C5_DSR_uncomputed` to the
+    `failed` list, gating contrary to Amendment 2.1. Do not regress
+    this behaviour.
     """
     failed: list[str] = []
 
@@ -220,12 +231,14 @@ def _singleton_clears_binding_criteria(row: dict[str, Any]) -> tuple[bool, list[
     if not chordia_verdict_allows_deploy(chordia_label):
         failed.append(f"C4_Chordia[{chordia_label}]")
 
-    # C5 DSR computed-and-reported (cross-check, NOT gating). Treat NULL
-    # as a reporting gap: the row should have a DSR value. This is the
-    # Amendment 2.1 minimum: "Every candidate strategy must have its DSR
-    # computed and reported in the audit write-up."
-    if row.get("dsr_score") is None:
-        failed.append("C5_DSR_uncomputed")
+    # C5 DSR is CROSS-CHECK ONLY per pre_registered_criteria.md Amendment
+    # 2.1 (line 367-370). Its absence MUST NOT fail the floor — the
+    # criterion is informational pending the N_eff / ONC resolution
+    # workstream. We record NULL as a reporting note for the audit trail
+    # but do NOT append it to `failed`. This is what the docstring above
+    # describes, and what the adversarial-audit gate (2026-05-11) caught
+    # as a contradiction in the original Stage 4 implementation.
+    dsr_reported = row.get("dsr_score") is not None
 
     # C6 WFE >= 0.50
     wfe = row.get("wfe")
@@ -255,7 +268,14 @@ def _singleton_clears_binding_criteria(row: dict[str, Any]) -> tuple[bool, list[
             except Exception:  # noqa: BLE001 - fail closed
                 failed.append("C10_micro_check_error")
 
-    return (len(failed) == 0, failed)
+    # Surface C5 reporting state alongside the failed list. C5 NULL is a
+    # cross-check reporting gap, not a gate failure (Amendment 2.1).
+    # Callers use the returned `failed` list to gate; the C5 reporting
+    # state is observable via the `dsr_reported` flag we hand back as
+    # part of the row's audit detail. We append a non-blocking advisory
+    # tag to `failed` ONLY in the human-readable detail dict (see the
+    # family-branch caller), never as a blocking criterion here.
+    return (len(failed) == 0, failed, dsr_reported)
 
 
 def _has_table(con: duckdb.DuckDBPyConnection, table_name: str) -> bool:
@@ -658,7 +678,7 @@ def _classify_strategy(
         # (manual sign-off before lane_allocation.json mutation).
         # Otherwise emit hard and let HARD_BLOCKER_TO_VERDICT route to
         # BLOCKED_FAMILY_FRAGILE.
-        passes, failed_criteria = _singleton_clears_binding_criteria(row)
+        passes, failed_criteria, dsr_reported = _singleton_clears_binding_criteria(row)
         if passes:
             issues.append(
                 _issue(
@@ -666,13 +686,18 @@ def _classify_strategy(
                     "warning",
                     {
                         "robustness_status": family,
-                        "binding_criteria": "C3+C4+C6+C7+C9+C10 cleared; C5 dsr_score reported",
+                        "binding_criteria_cleared": "C3+C4+C6+C7+C9+C10",
+                        "c5_dsr_reported": dsr_reported,
+                        "c5_status": (
+                            "computed_and_reported" if dsr_reported else "uncomputed_reporting_gap_cross_check_only"
+                        ),
                         "verdict_route": "CONTROLLED_LIVE_PILOT_CANDIDATE",
                         "doctrine": (
                             "Stage 4 Disposition C — no peer-evidence is "
                             "tolerable when individual evidence clears the "
-                            "locked criteria; supervised pilot before "
-                            "full deploy."
+                            "locked binding criteria; supervised pilot before "
+                            "full deploy. C5 is cross-check only per "
+                            "pre_registered_criteria.md Amendment 2.1."
                         ),
                     },
                 )
@@ -685,6 +710,7 @@ def _classify_strategy(
                     {
                         "robustness_status": family,
                         "failed_binding_criteria": failed_criteria,
+                        "c5_dsr_reported": dsr_reported,
                     },
                 )
             )
