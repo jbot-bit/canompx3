@@ -7388,12 +7388,18 @@ def check_routine_tbbo_slippage_registry_coverage() -> list[str]:
         if prior is None or date_str > prior[0]:
             latest_by_instrument[instrument] = (date_str, verdict, path)
 
-    pass_instruments = {inst for inst, (_, v, _) in latest_by_instrument.items() if v == "PASS"}
-    non_pass_instruments = {inst for inst, (_, v, _) in latest_by_instrument.items() if v != "PASS"}
+    # Symmetric registry-vs-evidence assertion: one loop per direction, each
+    # iterating the registry / evidence side and demanding the other side
+    # carries matching support. Earlier set-difference loops missed the
+    # registered-but-no-doc case (silent over-coverage). Same class of bug
+    # the chronology fix closed; this loop structure prevents recurrence.
 
-    # PASS pilots must be covered.
-    for inst in sorted(pass_instruments - registry_instruments):
-        date_str, _, path = latest_by_instrument[inst]
+    # Direction 1: every PASS pilot must have a matching registry entry.
+    for inst, (date_str, verdict, path) in sorted(latest_by_instrument.items()):
+        if verdict != "PASS":
+            continue
+        if inst in registry_instruments:
+            continue
         violations.append(
             f"  routine-TBBO slippage pilot v1 PASS for {inst} (latest: {path.name} dated {date_str}) "
             f"but {inst} is missing from trading_app.deployability."
@@ -7402,11 +7408,24 @@ def check_routine_tbbo_slippage_registry_coverage() -> list[str]:
             f"hard-blocking on slippage_missing."
         )
 
-    # The LATEST pilot per instrument is authoritative: if it is WARN/FAIL,
-    # the registry entry must be removed even if older PASS pilots exist
-    # (newer evidence supersedes stale PASS).
-    for inst in sorted(non_pass_instruments & registry_instruments):
-        date_str, verdict, path = latest_by_instrument[inst]
+    # Direction 2: every registry entry must be backed by a current PASS pilot.
+    # Catches both (a) registered with latest verdict WARN/FAIL (chronology
+    # fix), and (b) registered with NO matching pilot doc at all (no evidence,
+    # registry entry with nothing supporting it).
+    for inst in sorted(registry_instruments):
+        latest = latest_by_instrument.get(inst)
+        if latest is None:
+            violations.append(
+                f"  {inst} is registered in ROUTINE_TBBO_SLIPPAGE_REGISTRY but no "
+                f"`{inst.lower()}-...slippage-pilot-v1.md` doc was found in "
+                f"docs/audit/results/. Either commit the pilot v1 evidence doc that "
+                f"justifies this registry entry, or remove the entry — registry membership "
+                f"without committed evidence is silent over-coverage."
+            )
+            continue
+        date_str, verdict, path = latest
+        if verdict == "PASS":
+            continue
         violations.append(
             f"  {inst} is registered in ROUTINE_TBBO_SLIPPAGE_REGISTRY but its LATEST "
             f"slippage pilot v1 doc is non-PASS ({path.name} dated {date_str}, verdict={verdict}). "

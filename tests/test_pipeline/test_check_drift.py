@@ -2754,3 +2754,28 @@ class TestCheckRoutineTbboSlippageRegistryCoverage:
         self._patch(monkeypatch, tmp_path, {})
         # results_dir exists but is empty
         assert check_routine_tbbo_slippage_registry_coverage() == []
+
+    def test_registered_instrument_with_no_pilot_doc_fails_closed(self, monkeypatch, tmp_path):
+        """Registry membership without ANY committed pilot doc is silent over-coverage.
+
+        Catches the no-evidence-at-all case the original set-difference loop missed:
+        if a future maintainer adds an instrument to the registry without committing
+        its pilot v1 doc (or a doc gets deleted/moved/renamed), the registry entry
+        persists with no evidence backing it. The post-self-review symmetric loop
+        catches this; the original implementation silently passed.
+        """
+        from pipeline.check_drift import check_routine_tbbo_slippage_registry_coverage
+        from trading_app.deployability import RoutineTbboPilot
+
+        registry = {
+            "MES": RoutineTbboPilot("MES", "E2", frozenset({"COMEX_SETTLE"}), "basis"),
+        }
+        results_dir = self._patch(monkeypatch, tmp_path, registry)
+        # results_dir is empty — no pilot docs at all
+        assert results_dir.is_dir()
+
+        violations = check_routine_tbbo_slippage_registry_coverage()
+        assert len(violations) == 1
+        assert "MES" in violations[0]
+        assert "no `mes-...slippage-pilot-v1.md` doc was found" in violations[0]
+        assert "silent over-coverage" in violations[0]
