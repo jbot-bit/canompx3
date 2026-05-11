@@ -2512,7 +2512,13 @@ def _check_mode_a_holdout_integrity(db_path: Path | None, instrument: str) -> No
         )
 
 
-def _check_prereg_present(db_path: Path | None, instrument: str, allow_legacy: bool = False) -> None:
+def _check_prereg_present(
+    db_path: Path | None,
+    instrument: str,
+    allow_legacy: bool = False,
+    *,
+    hyp_dir_override: Path | None = None,
+) -> None:
     """Pre-flight gate: refuse to promote NEW discovery rows without a prereg yaml.
 
     Authority: pre_registered_criteria.md Criterion 1 -- a pre-registered
@@ -2546,8 +2552,11 @@ def _check_prereg_present(db_path: Path | None, instrument: str, allow_legacy: b
     if not Path(effective_path).exists():
         return  # Fail-open if DB missing; discovery hasn't run.
 
-    project_root = Path(__file__).resolve().parents[1]
-    hyp_dir = project_root / "docs" / "audit" / "hypotheses"
+    if hyp_dir_override is not None:
+        hyp_dir = hyp_dir_override
+    else:
+        project_root = Path(__file__).resolve().parents[1]
+        hyp_dir = project_root / "docs" / "audit" / "hypotheses"
     if not hyp_dir.exists():
         # Fresh checkout / new repo: no prereg dir = no rows to gate.
         return
@@ -2566,13 +2575,42 @@ def _check_prereg_present(db_path: Path | None, instrument: str, allow_legacy: b
     if allow_legacy or not rows:
         return
 
-    instr_lower = instrument.lower()
+    # Match preregs by content (declared scope.instruments) rather than by
+    # filename pattern. Filenames are free-form descriptors; the canonical
+    # source-of-truth for "does this prereg cover instrument X" is the
+    # prereg yaml's own scope.instruments field, parsed via the canonical
+    # hypothesis_loader (institutional-rigor.md Rule #4: delegate, never
+    # re-encode). This unifies the historic <date>-<instr>-*.yaml convention
+    # with the LLM proposer's <date>-llm-<slug>.yaml convention without
+    # privileging either at the filename level. See
+    # docs/runtime/stages/fix-llm-prereg-naming-parity.md.
+    from trading_app.hypothesis_loader import (
+        HypothesisLoaderError,
+        extract_scope_predicate,
+        load_hypothesis_metadata,
+    )
+
     missing_dates: list[str] = []
     for (d,) in rows:
         if d is None:
             continue
         ds = d.isoformat() if hasattr(d, "isoformat") else str(d)
-        if not list(hyp_dir.glob(f"{ds}-{instr_lower}-*.yaml")):
+        candidates = sorted(hyp_dir.glob(f"{ds}-*.yaml"))
+        matched = False
+        for cand in candidates:
+            try:
+                meta = load_hypothesis_metadata(cand)
+                # extract_scope_predicate raises HypothesisLoaderError if the
+                # instrument is not in any hypothesis's scope.instruments.
+                extract_scope_predicate(meta, instrument=instrument)
+                matched = True
+                break
+            except HypothesisLoaderError:
+                # Either malformed yaml or instrument not in scope — try next
+                # candidate. A malformed prereg in the directory is a separate
+                # bug surfaced by check_drift; here we just continue searching.
+                continue
+        if not matched:
             missing_dates.append(ds)
 
     if missing_dates:
@@ -2580,10 +2618,11 @@ def _check_prereg_present(db_path: Path | None, instrument: str, allow_legacy: b
         more = f" (and {len(missing_dates) - 3} more)" if len(missing_dates) > 3 else ""
         raise ValueError(
             f"Validator refuses to promote {instrument} experimental_strategies "
-            f"discovered on date(s) {sample}{more} -- no matching prereg yaml "
-            f"at docs/audit/hypotheses/<date>-{instr_lower}-*.yaml. "
-            f"This violates Criterion 1 of pre_registered_criteria.md. "
-            f"Either write the prereg yaml(s) before re-running, or pass "
+            f"discovered on date(s) {sample}{more} -- no committed prereg yaml at "
+            f"docs/audit/hypotheses/<date>-*.yaml declares {instrument} in its "
+            f"scope.instruments. This violates Criterion 1 of "
+            f"pre_registered_criteria.md. Either commit a prereg yaml whose "
+            f"scope.instruments includes {instrument}, or pass "
             f"--allow-legacy-prereg to suppress this gate (legacy migration only). "
             f"Authority: docs/institutional/pre_registered_criteria.md Criterion 1."
         )

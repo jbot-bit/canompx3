@@ -57,13 +57,12 @@ to deployable.
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-05-11
-- **Commit:** 82ab4c06 — prereg: lock 3 LLM-drafted hypotheses for chordia-MISSING audit unlock
-- **Files changed:** 4 files
+- **Date:** 2026-05-12
+- **Commit:** cecec1db — remove(AccountProfile): dead is_live_funded field + companion test
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/audit/hypotheses/2026-05-11-llm-cme-preclose-atr-p30-o15.yaml`
-  - `docs/audit/hypotheses/2026-05-11-llm-cme-preclose-orb-vol-16k-o15.yaml`
-  - `docs/audit/hypotheses/2026-05-11-llm-tokyo-open-atr-vel-ge105.yaml`
+  - `tests/test_trading_app/test_prop_profiles.py`
+  - `trading_app/prop_profiles.py`
 
 ## Next Steps — Active
 

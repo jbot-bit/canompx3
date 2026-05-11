@@ -2477,3 +2477,199 @@ class TestFdrPoolIncludesCurrentInstrument:
             assert status == "retired"
             assert deployment_scope == "non_deployable"
             assert retirement_reason is not None and "ACTIVE_ORB_INSTRUMENTS" in retirement_reason
+
+
+# ─── _check_prereg_present content-aware match (Stage 1 of fix-llm-prereg-naming-parity) ───
+# Replaces the legacy filename-glob (`<date>-<instr>-*.yaml`) with a content-
+# aware match that parses each candidate yaml's scope.instruments via the
+# canonical hypothesis_loader. Unifies historic <date>-<instr>-*.yaml with
+# the LLM proposer's <date>-llm-<slug>.yaml convention.
+# Stage doc: docs/runtime/stages/fix-llm-prereg-naming-parity.md.
+
+
+def _write_prereg_yaml(
+    path: Path,
+    *,
+    instruments: list[str],
+    date_locked: str = "2026-05-12T00:00:00+10:00",
+    holdout_date: str = "2026-01-01",
+    filter_type: str = "NO_FILTER",
+    sessions: list[str] | None = None,
+    rr_targets: list[float] | None = None,
+    entry_models: list[str] | None = None,
+    confirm_bars: list[int] | None = None,
+    stop_multipliers: list[float] | None = None,
+    expected_trial_count: int = 1,
+) -> None:
+    """Write a minimal valid prereg yaml satisfying extract_scope_predicate."""
+    import yaml
+
+    body: dict = {
+        "metadata": {
+            "name": f"test_{path.stem}",
+            "date_locked": date_locked,
+            "holdout_date": holdout_date,
+            "total_expected_trials": expected_trial_count,
+        },
+        "hypotheses": [
+            {
+                "id": 1,
+                "name": "synthetic",
+                "theory_citation": "docs/institutional/literature/synthetic_test.md",
+                "filter": {"type": filter_type},
+                "scope": {
+                    "instruments": instruments,
+                    "sessions": sessions or ["NYSE_OPEN"],
+                    "rr_targets": rr_targets or [1.0],
+                    "entry_models": entry_models or ["E2"],
+                    "confirm_bars": confirm_bars or [1],
+                    "stop_multipliers": stop_multipliers or [1.0],
+                },
+                "expected_trial_count": expected_trial_count,
+            }
+        ],
+        "total_hypothesis_count": 1,
+        "total_expected_trials": expected_trial_count,
+    }
+    path.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+
+
+def _seed_experimental_row(db_path: Path, instrument: str, created_at: datetime) -> None:
+    """Seed a single experimental_strategies row for the prereg-present gate."""
+    from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+    from trading_app.db_manager import init_trading_app_schema
+
+    with duckdb.connect(str(db_path)) as con:
+        con.execute(BARS_1M_SCHEMA)
+        con.execute(BARS_5M_SCHEMA)
+        con.execute(DAILY_FEATURES_SCHEMA)
+    init_trading_app_schema(db_path=db_path)
+    with duckdb.connect(str(db_path)) as con:
+        con.execute(
+            """INSERT INTO experimental_strategies
+               (strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                confirm_bars, rr_target, filter_type, sample_size,
+                expectancy_r, sharpe_ratio, p_value, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [
+                f"{instrument}_NYSE_OPEN_E2_RR1.0_CB1_NO_FILTER",
+                instrument,
+                "NYSE_OPEN",
+                5,
+                "E2",
+                1,
+                1.0,
+                "NO_FILTER",
+                100,
+                0.15,
+                0.3,
+                0.001,
+                created_at,
+            ],
+        )
+
+
+class TestPreregPresentContentAwareMatch:
+    """Stage 1 of fix-llm-prereg-naming-parity: validator matches preregs by
+    declared scope.instruments, not filename pattern."""
+
+    def test_legacy_naming_matches_when_scope_includes_instrument(self, tmp_path):
+        """Old convention `<date>-<instr>-foo.yaml` still matches when scope.instruments includes the instrument."""
+        from trading_app.strategy_validator import _check_prereg_present
+
+        db_path = tmp_path / "gold.db"
+        hyp_dir = tmp_path / "hypotheses"
+        hyp_dir.mkdir()
+        _write_prereg_yaml(hyp_dir / "2026-05-12-mnq-foo.yaml", instruments=["MNQ"])
+
+        # Created_at must be after HOLDOUT_GRANDFATHER_CUTOFF for the gate to fire.
+        _seed_experimental_row(db_path, "MNQ", datetime(2026, 5, 12, tzinfo=UTC))
+
+        # Should NOT raise — prereg matches.
+        _check_prereg_present(db_path, "MNQ", hyp_dir_override=hyp_dir)
+
+    def test_llm_naming_matches_when_scope_includes_instrument(self, tmp_path):
+        """New LLM-proposer convention `<date>-llm-<slug>.yaml` matches when scope.instruments includes the instrument."""
+        from trading_app.strategy_validator import _check_prereg_present
+
+        db_path = tmp_path / "gold.db"
+        hyp_dir = tmp_path / "hypotheses"
+        hyp_dir.mkdir()
+        _write_prereg_yaml(hyp_dir / "2026-05-12-llm-tokyo-foo.yaml", instruments=["MNQ"])
+        _seed_experimental_row(db_path, "MNQ", datetime(2026, 5, 12, tzinfo=UTC))
+
+        _check_prereg_present(db_path, "MNQ", hyp_dir_override=hyp_dir)
+
+    def test_multi_instrument_prereg_matches_each_instrument(self, tmp_path):
+        """One prereg with `scope.instruments: [MNQ, MES]` satisfies the gate for both MNQ and MES discoveries."""
+        from trading_app.strategy_validator import _check_prereg_present
+
+        db_path_mnq = tmp_path / "gold_mnq.db"
+        db_path_mes = tmp_path / "gold_mes.db"
+        hyp_dir = tmp_path / "hypotheses"
+        hyp_dir.mkdir()
+        _write_prereg_yaml(hyp_dir / "2026-05-12-cross-asset.yaml", instruments=["MNQ", "MES"])
+        _seed_experimental_row(db_path_mnq, "MNQ", datetime(2026, 5, 12, tzinfo=UTC))
+        _seed_experimental_row(db_path_mes, "MES", datetime(2026, 5, 12, tzinfo=UTC))
+
+        _check_prereg_present(db_path_mnq, "MNQ", hyp_dir_override=hyp_dir)
+        _check_prereg_present(db_path_mes, "MES", hyp_dir_override=hyp_dir)
+
+    def test_wrong_instrument_prereg_does_not_match(self, tmp_path):
+        """Prereg with `scope.instruments: [MES]` MUST NOT satisfy MNQ discovery — the gate raises."""
+        from trading_app.strategy_validator import _check_prereg_present
+
+        db_path = tmp_path / "gold.db"
+        hyp_dir = tmp_path / "hypotheses"
+        hyp_dir.mkdir()
+        _write_prereg_yaml(hyp_dir / "2026-05-12-mes-only.yaml", instruments=["MES"])
+        _seed_experimental_row(db_path, "MNQ", datetime(2026, 5, 12, tzinfo=UTC))
+
+        with pytest.raises(ValueError, match="no committed prereg yaml"):
+            _check_prereg_present(db_path, "MNQ", hyp_dir_override=hyp_dir)
+
+    def test_no_prereg_at_all_raises(self, tmp_path):
+        """No yaml in the hypotheses dir => the gate raises (Criterion 1 violation)."""
+        from trading_app.strategy_validator import _check_prereg_present
+
+        db_path = tmp_path / "gold.db"
+        hyp_dir = tmp_path / "hypotheses"
+        hyp_dir.mkdir()  # exists but empty
+        _seed_experimental_row(db_path, "MNQ", datetime(2026, 5, 12, tzinfo=UTC))
+
+        with pytest.raises(ValueError, match="no committed prereg yaml"):
+            _check_prereg_present(db_path, "MNQ", hyp_dir_override=hyp_dir)
+
+    def test_malformed_yaml_in_dir_does_not_block_valid_match(self, tmp_path):
+        """A malformed sibling yaml MUST NOT prevent a valid sibling from satisfying the gate.
+
+        The validator catches HypothesisLoaderError per-candidate and continues
+        to the next file. Malformed yamls are a separate concern (drift checks)
+        but should not silently fail-open the prereg gate when a valid one
+        exists.
+        """
+        from trading_app.strategy_validator import _check_prereg_present
+
+        db_path = tmp_path / "gold.db"
+        hyp_dir = tmp_path / "hypotheses"
+        hyp_dir.mkdir()
+        # Malformed: missing required scope fields.
+        (hyp_dir / "2026-05-12-broken.yaml").write_text("metadata: {name: bad}\nhypotheses: []\n", encoding="utf-8")
+        # Valid sibling for the same date.
+        _write_prereg_yaml(hyp_dir / "2026-05-12-llm-good.yaml", instruments=["MNQ"])
+        _seed_experimental_row(db_path, "MNQ", datetime(2026, 5, 12, tzinfo=UTC))
+
+        # Should NOT raise — broken yaml is skipped, good one matches.
+        _check_prereg_present(db_path, "MNQ", hyp_dir_override=hyp_dir)
+
+    def test_allow_legacy_bypasses_gate(self, tmp_path):
+        """allow_legacy=True must short-circuit before any yaml inspection."""
+        from trading_app.strategy_validator import _check_prereg_present
+
+        db_path = tmp_path / "gold.db"
+        hyp_dir = tmp_path / "hypotheses"
+        hyp_dir.mkdir()  # empty
+        _seed_experimental_row(db_path, "MNQ", datetime(2026, 5, 12, tzinfo=UTC))
+
+        # Should NOT raise even with no preregs.
+        _check_prereg_present(db_path, "MNQ", allow_legacy=True, hyp_dir_override=hyp_dir)
