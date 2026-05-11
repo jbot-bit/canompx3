@@ -1,0 +1,24 @@
+metadata:
+  name: "lhp-fixture-bad-holdout"
+  date_locked: "2026-05-11T10:00:00+10:00"
+  holdout_date: "2025-01-01"
+  total_expected_trials: 1
+  testing_mode: "family"
+  data_horizon_years_clean: 6.65
+
+hypotheses:
+  - id: 1
+    name: "Wrong-holdout placeholder"
+    theory_citation: "chordia_et_al_2018_two_million_strategies"
+    economic_basis: "Deliberate wrong-holdout for testing."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [5]}
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on K=1 family"
+      - "WFE < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era N>=50 ExpR < -0.05"
+
+total_hypothesis_count: 1
+total_expected_trials: 1
