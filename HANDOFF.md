@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 1c01995c — docs(institutional): add Howard 2026 value-area breakouts ES extract
+- **Commit:** 11500d43 — docs(institutional): add AFML 2018 focused extract (Ch 3 Labeling, Ch 7 CV, Ch 8 Feature Importance, Ch 12 CPCV)
 - **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/institutional/literature/howard_2026_value_area_breakouts_es.md`
+  - `docs/institutional/literature/lopez_de_prado_2018_afml_ch_3_7_8.md`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
