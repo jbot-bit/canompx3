@@ -1,0 +1,189 @@
+metadata:
+  name: "mgc_cmereopen_orbg4_chordia_criteria_repair_v1"
+  purpose: >
+    Bounded exact-lane MGC-first Chordia/criteria repair audit for
+    MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4. This tests the lone allocator-paused
+    MGC row before any MES/MNQ backlog expansion. It does not authorize an
+    active MGC profile.
+  date_locked: "2026-05-12T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "individual"
+  research_question_type: "conditional_role"
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+  default_args:
+    - "--hypothesis-file"
+    - "docs/audit/hypotheses/2026-05-12-mgc-cmereopen-orbg4-chordia-criteria-repair-v1.yaml"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md"
+    - "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+    - "docs/runtime/chordia_audit_log.yaml"
+    - "docs/audit/results/2026-05-04-mgc-chain-quarantine.md"
+  notes:
+    - "MGC has only 2.70 clean years; K=1 is deliberate and passes the strict MGC MinBTL check."
+    - "This is an exact-lane repair audit, not a discovery scan or profile activation."
+    - "Mode A holdout remains sacred from 2026-01-01."
+    - "A PASS_PROTOCOL_A/PASS_CHORDIA result is necessary but not sufficient for any MGC deployment."
+
+scope:
+  instrument: MGC
+  strategy_id: "MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4"
+  session: CME_REOPEN
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  direction: pooled
+  filter_type: ORB_G4
+  filter_source: "trading_app.config.ALL_FILTERS['ORB_G4']"
+  baseline: "lone MGC row currently paused by missing allocator Chordia audit"
+  out_of_scope:
+    - "MGC profile activation"
+    - "GC proxy discovery or validation"
+    - "ORB size threshold tuning"
+    - "MES or MNQ same-session sibling audits"
+    - "writes to validated_setups, lane_allocation.json, or chordia_audit_log.yaml before execution evidence exists"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only descriptive corroboration only; never used to tune the lane"
+  tuning_against_oos: false
+  canonical_layers_only: true
+
+grounding:
+  core_orb_premise:
+    - source_file: "resources/Building_Reliable_Trading_Systems.pdf"
+      extract_proxy: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: >
+        Fitschen Ch 3 grounds commodities as trend-following on both daily and
+        intraday bars, and names breakouts as a natural trend-following method.
+        This grants the commodity ORB entry premise only.
+      with_theory_claim: true
+  filter_grounding_status:
+    verdict: "ENTRY_THEORY_ONLY"
+    basis: >
+      ORB_G4 is a minimum breakout-size gate. Fitschen grounds commodity
+      intraday breakout continuation at the class level, not the exact G4
+      threshold. Therefore no threshold tuning or sibling rescue is allowed.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - "docs/audit/results/2026-05-04-mgc-chain-quarantine.md"
+    - "docs/audit/results/2026-05-04-allocator-paused-pool-diagnosis.md"
+  note: >
+    Prior docs identify this row as research-provisional and paused by missing
+    Chordia audit. Those docs motivate this repair audit but do not supply the
+    verdict. Fresh execution against canonical layers is required.
+
+primary_schema:
+  family_cells:
+    - id: "MGC_CME_REOPEN_O5_RR1.0_ORB_G4"
+      strategy_id: "MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4"
+      instrument: MGC
+      session: CME_REOPEN
+      orb_minutes: 5
+      rr_target: 1.0
+      filter: ORB_G4
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  chordia_threshold_basis: "Criterion 4 theory-backed threshold (t >= 3.00); PASS_CHORDIA still requires t >= 3.79"
+  promotion_gate: "audit-only; no active MGC profile until Criteria 1-10 plus deployment gates are clean"
+
+hypotheses:
+  - id: 1
+    name: "MGC CME_REOPEN O5 RR1.0 ORB_G4 exact-lane Chordia repair"
+    theory_citation: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+    economic_basis: >
+      MGC is a commodity future. Fitschen Ch 3 reports that commodities trend
+      on intraday bars and identifies breakouts as a natural trend-following
+      method. The audit tests whether the fixed MGC CME_REOPEN ORB breakout
+      lane clears the theory-backed Chordia floor without tuning against 2026.
+    role:
+      kind: "standalone"
+      parent: "Exact MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4 canonical lane replay."
+      comparator: "Theory-backed Chordia threshold and descriptive OOS sign monitor; no sibling rescue or parameter variation."
+      primary_metric: "selected_trade_mean_r"
+      promotion_target: "chordia_audit_repair_only"
+    filter:
+      type: "ORB_G4"
+      column: "orb_CME_REOPEN_size"
+      thresholds:
+        - "fixed G4 threshold only"
+    scope:
+      instruments: [MGC]
+      sessions: [CME_REOPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [5]
+    expected_trial_count: 1
+    kill_criteria:
+      - "IS t-stat < 3.00 (theory-backed hurdle)"
+      - "IS ExpR <= 0.0"
+      - "N_IS_on < 100"
+      - "If OOS N >= 30, OOS sign opposes IS sign"
+      - "Canonical filter delegation diverges from trading_app.config"
+      - "Any use of 2026 data to tune threshold, session, profile, or eligibility"
+    statement: >
+      On the fixed MGC CME_REOPEN O5 E2 CB1 RR1.0 lane using the canonical
+      ORB_G4 filter, the IS sample remains positive and strong enough to clear
+      the theory-backed Chordia floor when recomputed on canonical Mode-A data.
+    pass_metric:
+      metric: "t_IS"
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical IS fired trades after canonical filter delegation"
+      threshold_gte:
+        t_is: 3.00
+        n_is_on: 100
+        expr_is: 0.0
+      extra_gates:
+        - "descriptive OOS sign table emitted"
+        - "adversarial long/short split emitted"
+        - "scratch-inclusive accounting required if scratch rows exist"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  status: "PASS"
+  basis: "research-catalog estimate_k_budget(MGC, n_trials=1, e_max=1.0): requires 0.00 clean years against 2.70 available."
+
+decision_rule:
+  continue_if: "H1 clears t >= 3.00 with positive IS ExpR, N_IS_on >= 100, and no execution-integrity failure"
+  park_if: "H1 clears IS gates but downstream Criteria 1-10 or deployment gates remain unresolved"
+  kill_if: "H1 fails t, ExpR, N, Mode A, or canonical delegation gates"
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-12-mgc-cmereopen-orbg4-chordia-criteria-repair-v1.md"
+  - "row-level CSV with IS/OOS split, raw/effective pnl_r, and scratch/null handling"
+  - "single-cell summary with N_IS_on, ExpR_IS, Sharpe_IS, t_IS, OOS sign check, and verdict"
+  - "explicit statement that no active MGC profile is authorized"
+
+execution_gate:
+  allowed_now: true
+  execution_surface: "WSL with .venv-wsl"
+  forbidden_now:
+    - "threshold/profile tuning off 2026"
+    - "GC proxy substitution"
+    - "auto-writing PASS rows into chordia_audit_log.yaml without reviewing full Criteria 1-10 and deployment gates"

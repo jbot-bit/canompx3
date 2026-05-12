@@ -286,6 +286,7 @@ def compute_lane_scores(
         ).fetchall()
 
         scores = []
+        session_regime_cache: dict[tuple[str, str, date], float | None] = {}
         for sid, inst, orb, om, em, rr, cb, ft, sm in strategies:
             chordia_verdict_value = audit_log.verdict(sid) or "MISSING"
             chordia_age = audit_log.audit_age_days(sid, rebalance_date)
@@ -396,12 +397,15 @@ def compute_lane_scores(
                     break
 
             # Session regime (unfiltered E2 RR1.0 CB1, 6-month window)
-            session_regime = _compute_session_regime(
-                con,
-                inst,
-                orb,
-                rebalance_date,
-            )
+            regime_key = (inst, orb, rebalance_date)
+            if regime_key not in session_regime_cache:
+                session_regime_cache[regime_key] = _compute_session_regime(
+                    con,
+                    inst,
+                    orb,
+                    rebalance_date,
+                )
+            session_regime = session_regime_cache[regime_key]
 
             # Determine status
             status, reason = _classify_status(
