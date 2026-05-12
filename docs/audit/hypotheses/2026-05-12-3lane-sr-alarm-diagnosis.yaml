@@ -1,0 +1,502 @@
+metadata:
+  name: "3lane_sr_alarm_diagnosis_2026_05_12"
+  purpose: >
+    Documentary diagnosis of why all 3 deployed MNQ lanes are simultaneously on
+    SR ALARM (sr_state.json 2026-05-11). Tests, per lane, whether the alarm is
+    consistent with (a) Harris 2002 mechanism still valid but variance compressing,
+    (b) a Harris-cited falsification trigger having fired, or (c) Bailey-style
+    sample-selection / deflated-Sharpe artifact catching up post-deployment.
+    The output is one MD report per lane plus a cross-lane summary verdict file.
+    NO writes to validated_setups, experimental_strategies, lane_allocation.json,
+    sr_review_registry, or any deployed-state file. Allocator action (pause /
+    replace / hold) is a separate stage gated by these verdicts plus user approval.
+  date_locked: "2026-05-12T18:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 15
+  testing_mode: "family"
+  pathway: "A"
+  research_question_type: "capital_diligence"
+  scratch_policy:
+    policy: "include-as-zero"
+    justification: >
+      Live execution path forces flat at session end (TopStep XFA + AMP futures
+      EOD). All canonical-layer queries must book the same $0 outcome to satisfy
+      Chan 2013 Ch 1 unified-program doctrine. Per
+      docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md
+      sample-selection bias from a `WHERE pnl_r IS NOT NULL` drop policy inflates
+      ExpR by 10-45%. Captured in feedback_scratch_pnl_null_class_bug.md class
+      doctrine. Step 2 rolling-window decomposition MUST annotate scratch policy.
+
+execution:
+  mode: "documentary"
+  entrypoint: "no runner — analysis is documented in result MDs with verbatim canonical-layer query output. Step 2 is the only sub-test that requires a script; the script is created in a follow-up commit (see verification.post_step_2 below)."
+  default_args: []
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/integrity-guardian.md"
+    - ".claude/rules/institutional-rigor.md"
+    - ".claude/rules/pooled-finding-rule.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md"
+    - "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+    - "docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md"
+    - "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+    - "docs/institutional/literature/pepelyshev_polunchenko_2015_changepoint.md"
+    - "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    - "docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md"
+  notes:
+    - "K=15 capital-class diligence on already-deployed lanes (3 lanes x 5 steps). Not new discovery."
+    - "MinBTL bound: 2*ln(15) = 5.42yr <= MNQ 6.65yr clean horizon. PASS at E[max_N]=1.0."
+    - "Mode A holdout (2026-01-01) sacred; OOS values descriptive not confirmatory under power floor (RULE 3.3)."
+    - "Per-lane verdicts traced to F1-F5 sub-criteria below. Verdict options LOCKED."
+    - "Lane ID for NYSE_OPEN locked to canonical sr_state.json value MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12 (RR1.5, NOT RR1.0 as plan-text named). Source-of-truth chain per CLAUDE.md."
+
+scope:
+  instruments: [MNQ]
+  lanes:
+    - strategy_id: "MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12"
+      session: NYSE_OPEN
+      orb_minutes: 5
+      entry_model: E2
+      confirm_bars: 1
+      rr_target: 1.5
+      direction: pooled
+      filter_type: COST_LT12
+      sr_state_snapshot:
+        sr_stat_peak: 47.541
+        current_sr_stat: 6.6757
+        n_monitored: 75
+        trades_since_alarm: 30
+        recent_10_mean_r: -0.2675
+        threshold: 31.96
+        alarm_trade: 45
+        expected_r: 0.105
+        std_r: 1.2458
+    - strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+      session: COMEX_SETTLE
+      orb_minutes: 5
+      entry_model: E2
+      confirm_bars: 1
+      rr_target: 1.5
+      direction: pooled
+      filter_type: OVNRNG_100
+      sr_state_snapshot:
+        sr_stat_peak: 35.3897
+        current_sr_stat: 2.877
+        n_monitored: 66
+        trades_since_alarm: 42
+        recent_10_mean_r: 0.4243
+        threshold: 31.96
+        alarm_trade: 24
+        expected_r: 0.2151
+        std_r: 1.2518
+    - strategy_id: "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15"
+      session: US_DATA_1000
+      orb_minutes: 15
+      entry_model: E2
+      confirm_bars: 1
+      rr_target: 1.5
+      direction: pooled
+      filter_type: VWAP_MID_ALIGNED
+      sr_state_snapshot:
+        sr_stat_peak: 41.6048
+        current_sr_stat: 0.5338
+        n_monitored: 40
+        trades_since_alarm: 34
+        recent_10_mean_r: 0.4703
+        threshold: 31.96
+        alarm_trade: 6
+        expected_r: 0.2101
+        std_r: 1.2506
+  out_of_scope:
+    - "Pausing / replacing / resizing any deployed lane (separate stage gated by verdict + sr_review_registry update + user approval)."
+    - "Any 4th candidate lane re-validation scan."
+    - "Threshold modification on any deployed filter (data-snooping per feedback_bias_discipline.md)."
+    - "Updating mechanism_priors.md sec 2.5 — those are priors, not refined by this diagnostic."
+    - "ML / regime-switching modelling (Hamilton 1989 still deferred per literature gap audit)."
+    - "Almgren-Chriss optimal execution (still pending fetch per literature gap audit)."
+    - "Re-deriving Pepelyshev-Polunchenko 2015 score-based recursion (canonical in trading_app/live/sr_monitor.py)."
+    - "Re-deriving DSR (delegate to research/audit_ovnrng50_canonical_dsr.py per institutional-rigor sec 4)."
+    - "Any writes to validated_setups, experimental_strategies, lane_allocation.json, sr_review_registry, sr_state.json."
+
+data_policy:
+  is_window:
+    description: "WF_START_OVERRIDE['MNQ'] <= trading_day < HOLDOUT_SACRED_FROM"
+    constant_source_lower: "trading_app.config.WF_START_OVERRIDE['MNQ']"
+    constant_source_upper: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_lower: "2020-01-01"
+    locked_upper: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM (2026-01-01) up to current trading_day"
+    policy: "descriptive recompute against canonical orb_outcomes JOIN daily_features (triple-key join per .claude/rules/daily-features-joins.md). Binary OOS gate forbidden under RULE 3.3 power floor."
+  trailing_window:
+    description: "Per-lane rolling 60-trade window across full IS+OOS history."
+    policy: "Directional / decomposition evidence only at observed power; not refutational. Step 2 reports power tier per research/oos_power.py for each window comparison."
+  tuning_against_oos: false
+  canonical_layers_only: true
+  canonical_db_path: "pipeline.paths.GOLD_DB_PATH"
+  triple_join_required: true
+
+grounding:
+  literature_anchors:
+    - source_file: "resources/Harris-Trading-and-Exchanges-Market-Microstructure-for-Practitioners-2002.pdf"
+      extract: "docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md"
+      page_or_section: "Ch 4 sec 4.5.2 (stop-cascade), Ch 14 sec 14.2 (adverse-selection spread component), Ch 21 sec 21.2 (effective-spread treatment), Ch 22 sec 22.6 (sample-selection / 17.8x commodity-pool deflation reference)"
+      use: >
+        Per-lane mechanism citations (mechanism_priors.md sec 2.5). Step 3
+        falsification triggers test each lane against its specific cited
+        chapter / section. The 17.8x deflation reference (Ch 22 sec 22.6)
+        anchors NYSE_OPEN trigger (c) — live annual_r vs backtested annual_r
+        ratio is the canonical out-of-sample deflation check.
+    - source_file: "resources/Codependence_Detection.pdf"
+      extract: "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+      page_or_section: "p.8 Theorem 1, p.7 Equation 4 (loose form)"
+      use: >
+        K-budget bound for this audit: K=15 -> 2*ln(15)=5.42yr required at
+        E[max_N]=1.0; MNQ 6.65yr clean horizon clears it. PASS verified by
+        scripts/tools/estimate_k_budget.py at pre-reg lock time.
+    - source_file: "resources/deflated-sharpe.pdf"
+      extract: "docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md"
+      page_or_section: "p.8 Equation 2, p.3 Conclusions"
+      use: >
+        Step 4 DSR revisit: recompute DSR on the full per-lane trade ledger as
+        of today (not the deployment-time DSR locked in validated_setups).
+        Decay vs deployment-time DSR is the Bailey-style sample-selection
+        catching up signal. Per Amendment 2.1 of pre_registered_criteria.md
+        DSR is CROSS-CHECK informational, not a binding kill arm. DELEGATE
+        to research/audit_ovnrng50_canonical_dsr.py compute_dsr() (NEVER
+        re-implement per institutional-rigor sec 4).
+    - source_file: "resources/backtesting_dukepeople_liu.pdf"
+      extract: "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+      page_or_section: "p.17"
+      use: >
+        OOS power-floor doctrine grounds RULE 3.3. Step 2 rolling-window
+        N=60 leaves only 2-3 windows in OOS per lane. Many sub-tests will
+        produce STATISTICALLY_USELESS or DIRECTIONAL_ONLY tier per
+        research/oos_power.py — verdict MUST default to UNVERIFIED in
+        those cases, never DEAD. Honest declaration of underpowered tier
+        is the correct output, not a workaround.
+    - source_file: "resources/changepoint_polunchenko_pepelyshev_2015.pdf"
+      extract: "docs/institutional/literature/pepelyshev_polunchenko_2015_changepoint.md"
+      page_or_section: "Score-based Shiryaev-Roberts recursion + ARL recalibration"
+      use: >
+        Canonical authority for the SR statistic. trading_app/live/sr_monitor.py
+        delegates to it. NEVER re-derive in this diagnostic. Step 1 reads peak
+        sr_stat AND current_sr_stat AND trades_since_alarm AND recent_10_mean_r
+        from sr_state.json (added 2026-05-11 per
+        feedback_sr_monitor_peak_vs_current_misread.md). Verdict
+        MECHANISM_HOLDS_VARIANCE_COMPRESSION explicitly recommends ARL
+        threshold recalibration per this paper (NOT a kill).
+    - source_file: "resources/Carver_Systematic_Trading.pdf"
+      extract: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+      page_or_section: "Ch 9 p.143-147 (Kelly-linked vol target + half-Kelly mandate); Ch 10 p.153+ (position sizing framework)"
+      use: >
+        Capital allocation under uncertainty: when DSR diligence is open and
+        OOS is statistically useless but live signal is directionally positive,
+        DOWNSIZE per Carver (reduce capital exposure proportional to remaining
+        uncertainty, do not zero exposure). Anchors verdict
+        MECHANISM_HOLDS_BUT_DEFLATED.
+    - source_file: "resources/Algorithmic_Trading_Chan.pdf"
+      extract: "docs/institutional/literature/chan_2013_ch1_backtesting_lookahead.md"
+      page_or_section: "p.4 unified-program doctrine"
+      use: >
+        Canonical-machinery delegation: Step 2 decomposition MUST reuse
+        pipeline.paths.GOLD_DB_PATH, trading_app.eligibility.builder.parse_strategy_id
+        (per feedback_aperture_overlay_canonical_parser.md), and
+        research/oos_power.py. No re-implementation. Step 4 MUST delegate to
+        research/audit_ovnrng50_canonical_dsr.py.
+  use_for_threshold_modification: false
+  use_for_audit_rigor_only: true
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - "validated_setups (3 lanes deployed via topstep_50k_mnq_auto profile)"
+    - "data/state/sr_state.json (snapshot 2026-05-11T22:26:39Z; git_head 398693ea)"
+    - "memory/live_lanes_2026_05_03_three_alarm_one_pause.md"
+    - "docs/audit/results/2026-05-05-oos-reconcile-ovnrng100.md (PR #228 OOS reconciliation, OVNRNG_100 lane only)"
+    - "docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md (Chordia strict-unlock 2026-05-02 PASS_CHORDIA, OVNRNG_100 only)"
+  note: >
+    All 3 lanes ALARM simultaneously per sr_state.json 2026-05-11. SR review
+    registry has 2 of 3 flagged 'watch' since 2026-05-11; the third (NYSE_OPEN
+    RR1.5) was reviewed 2026-05-11 but the watch outcome predates the freshly-
+    extracted Harris ground-truth mechanism column (added 2026-05-12 to
+    mechanism_priors.md sec 2.5). Path D auto-switch in place per memory note
+    2026-05-06 but baseline flip is gated by N>=50 on paper_trades; current
+    paper_trades 0/0/73 across the 3 lanes (NYSE_OPEN / COMEX_SETTLE / US_DATA_1000)
+    -- not enough to let auto-switch decide. This manual diagnosis bridges that
+    gap; verdicts feed sr_review_registry watch outcomes (separate stage).
+
+primary_schema:
+  family_cells:
+    - id: "L1_NYSE_OPEN_RR1.5_COST_LT12"
+      strategy_id: "MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12"
+      instrument: MNQ
+      session: NYSE_OPEN
+      orb_minutes: 5
+      rr_target: 1.5
+      filter: COST_LT12
+      n_sub_tests: 5
+    - id: "L2_COMEX_SETTLE_RR1.5_OVNRNG_100"
+      strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+      instrument: MNQ
+      session: COMEX_SETTLE
+      orb_minutes: 5
+      rr_target: 1.5
+      filter: OVNRNG_100
+      n_sub_tests: 5
+    - id: "L3_US_DATA_1000_RR1.5_VWAP_MID_ALIGNED"
+      strategy_id: "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15"
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 15
+      rr_target: 1.5
+      filter: VWAP_MID_ALIGNED
+      n_sub_tests: 5
+  k_family: 15
+  k_global: 15
+  k_lane: 5
+  k_session: 5
+  multiple_testing_basis: >
+    K=15 capital-class diligence (3 lanes x 5 sub-tests). MinBTL loose-form
+    horizon: 2*ln(15) = 5.42yr at E[max_N]=1.0; MNQ has 6.65yr clean. PASS.
+    Per-lane K_lane=5 below the per-cell BH-FDR floor; Step 2 sub-tests
+    interpreted as decomposition evidence, not multiple-testing-corrected
+    discovery.
+  promotion_gate: >
+    NONE — this audit does NOT promote, does NOT modify validated_setups,
+    does NOT change allocator state, does NOT modify sr_review_registry.
+    Verdict is documentary; informs the next stage (sr_review_registry
+    watch outcome update + user approval gate).
+
+hypotheses:
+  - id: 1
+    name: "F1 (per lane) — SR peak-vs-current decomposition (Step 1)"
+    economic_basis: >
+      Pepelyshev-Polunchenko 2015 score-based Shiryaev-Roberts recursion:
+      sr_stat is monotonic in change-point evidence; once it crosses
+      threshold, it is the PEAK value. Live mechanism health is reflected
+      in current_sr_stat + trades_since_alarm + recent_10_mean_r (all added
+      to sr_state.json 2026-05-11 per feedback_sr_monitor_peak_vs_current_misread.md).
+      The peak-vs-current misread class-bug is the canonical reason a
+      ALARM lane can still be mechanism-healthy.
+    primary_metric: "current_sr_stat / sr_stat_peak ratio + recent_10_mean_r sign"
+    method: >
+      Read sr_state.json per-lane payload. Cross-check against
+      trading_app/sr_monitor.py output schema (orchestrator) and
+      trading_app/sr_review_registry.py (watch outcome schema). Report
+      whether the watch outcome (if any) was based on peak or current.
+      DO NOT re-derive the SR algorithm.
+    kill_criterion: >
+      Per lane: PEAK_DECAYED if current_sr_stat / sr_stat_peak < 0.10
+      AND recent_10_mean_r > 0 (alarm trigger no longer reflects current
+      health). Otherwise: ALARM_STILL_LIVE.
+    theory_citation: "docs/institutional/literature/pepelyshev_polunchenko_2015_changepoint.md"
+
+  - id: 2
+    name: "F2 (per lane) — Rolling-60-trade decomposition (Step 2)"
+    economic_basis: >
+      The SR statistic compresses three independent components: mean shift,
+      variance shift, sample-size effect. Decomposing each on a per-lane
+      rolling-60-trade window (ExpR, stdev(pnl_r), fire-rate, win-rate,
+      cadence) shows whether the alarm is 'mean dropped' vs 'variance
+      compressed' vs 'fire-rate collapsed'. Each maps to a different Harris
+      mechanism falsification path. Carver Ch 9 vol-targeting framework
+      provides the structural-break detection prior.
+    primary_metric: "rolling_window_decomposition (5 components x N windows)"
+    method: >
+      research/sr_alarm_decomposition_2026_05_12.py reads orb_outcomes JOIN
+      daily_features (triple-key join per .claude/rules/daily-features-joins.md)
+      filtered by canonical strategy_id parsed via
+      trading_app.eligibility.builder.parse_strategy_id (NEVER regex per
+      feedback_aperture_overlay_canonical_parser.md). Reuses
+      pipeline.paths.GOLD_DB_PATH and research.oos_power.oos_ttest_power
+      for any window-vs-window comparison. Pressure-test per RULE 13:
+      inject a known look-ahead column and confirm the script flags it.
+      Plot 2022 -> 2026-04 time series; flag SR ALARM trigger window vs
+      current window.
+    kill_criterion: >
+      Per lane + per component:
+      VARIANCE_COMPRESSION if stdev(pnl_r)_recent < 0.6 * stdev(pnl_r)_full_history
+        AND mean(pnl_r)_recent within 1.0 * pooled_std of expected_r.
+      MEAN_DECAY if mean(pnl_r)_recent < 0 AND mean(pnl_r)_full_history > 0.10R.
+      FIRE_RATE_COLLAPSE if fire_rate_recent < 0.5 * fire_rate_full_history.
+      UNVERIFIED_INSUFFICIENT_POWER if rolling-60 window has N<30 OR OOS
+        power<50% per RULE 3.3.
+    theory_citation: >
+      docs/institutional/literature/pepelyshev_polunchenko_2015_changepoint.md;
+      docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md;
+      .claude/rules/backtesting-methodology.md RULE 3.3 + RULE 13.
+
+  - id: 3
+    name: "F3 (per lane) — Harris falsification-trigger check (Step 3)"
+    economic_basis: >
+      Each deployed lane has explicit Harris 2002 falsification triggers in
+      mechanism_priors.md sec 2.5 (added 2026-05-12 from full-text OCR
+      extract). Tests whether the underlying mechanism's load-bearing
+      conditions still hold in live data.
+    primary_metric: "per-trigger fire status (FIRED / NOT_FIRED / UNTESTABLE_WITH_CURRENT_DATA)"
+    method: >
+      Per lane, test the 3 triggers cited in mechanism_priors.md sec 2.5:
+      L1 NYSE_OPEN: (a) NYSE / Nasdaq cash-equity hours change since deployment
+        (calendar check via pipeline.dst.SESSION_CATALOG vs vendor calendar);
+        (b) ORB-side book depth at 09:30 ET = mid-session average (UNTESTABLE
+        with current schema — declare gap honestly, do NOT fabricate);
+        (c) live annual_r / backtested annual_r ratio vs Harris Ch 22 sec 22.6
+        17.8x commodity-pool deflation reference.
+      L2 COMEX_SETTLE: (a) CME settlement-window methodology change (vendor
+        calendar check); (b) OVNRNG_100 fire-rate by year, flag if drift >2 sigma
+        outside calibration band; (c) per-(year, direction) sign-flip rate
+        per pooled-finding-rule.md (>=25% = heterogeneity-artifact).
+      L3 US_DATA_1000: (a) BLS / BEA / Fed 08:30 ET release schedule change
+        (calendar check); (b) 10:00 ET multi-release coincidence (calendar
+        overlap check); (c) VWAP_MID_ALIGNED fire-rate by year, flag if
+        drift toward 95% (no longer selective).
+      For each trigger: report status with SQL evidence. Honest UNTESTABLE
+      declaration is the correct output for missing-schema cases.
+    kill_criterion: >
+      Per lane: MECHANISM_FALSIFIED if any of triggers (a), (b), or (c)
+      returns FIRED. Otherwise: MECHANISM_NOT_FALSIFIED.
+      UNTESTABLE results do NOT count as FIRED; they are explicit gaps
+      logged for future schema work.
+    theory_citation: >
+      docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md
+      Ch 4 sec 4.5.2 + Ch 14 sec 14.2 + Ch 21 sec 21.2 + Ch 22 sec 22.6;
+      docs/institutional/mechanism_priors.md sec 2.5;
+      .claude/rules/pooled-finding-rule.md.
+
+  - id: 4
+    name: "F4 (per lane) — Bailey deflated-Sharpe revisit (Step 4)"
+    economic_basis: >
+      Bailey-LdP 2014 Equation 2 deflated Sharpe ratio: selection bias
+      decays as live trades accumulate; recomputing DSR on the full ledger
+      as of today vs the deployment-time DSR locked in validated_setups
+      isolates the sample-selection-catching-up signal. Per Amendment 2.1
+      of pre_registered_criteria.md, DSR is CROSS-CHECK informational
+      (not a binding kill arm) until N_eff is formally solved in-repo.
+    primary_metric: "live_dsr - deployment_dsr"
+    method: >
+      DELEGATE to research/audit_ovnrng50_canonical_dsr.py::compute_dsr()
+      (NEVER re-implement per institutional-rigor sec 4). For each lane:
+      recompute DSR on the full trade ledger as of today (Mode A IS + OOS
+      combined per Bailey 2014 sample definition). Compare to the
+      deployment-time DSR locked in validated_setups.
+    kill_criterion: >
+      Per lane: DSR_DECAYED if live_dsr < deployment_dsr - 0.20
+        OR live_dsr < 0.50 (Amendment 2.1 relaxed CROSS-CHECK floor).
+      Otherwise: DSR_STABLE. CROSS-CHECK only — does not solo-kill.
+    theory_citation: >
+      docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md
+      p.8 Eq 2; docs/institutional/pre_registered_criteria.md Amendment 2.1.
+
+  - id: 5
+    name: "F5 (cross-lane) — Common-factor / three-way coincidence audit (Step 5 cross-lane summary)"
+    economic_basis: >
+      Three-way ALARM coincidence on independent mechanisms is unlikely
+      under the null. Either the SR threshold calibration is mis-set
+      (Pepelyshev-Polunchenko ARL too tight for the realized noise), or
+      a common factor (regime, cost-model spike, infrastructure shift)
+      hits all three. Per pooled-finding-rule.md a cross-lane claim
+      MUST carry per_cell_breakdown_path + flip_rate_pct front-matter.
+    primary_metric: "3-way ALARM probability under null + common-factor decomposition"
+    method: >
+      Cross-lane summary file (docs/audit/results/2026-05-12-sr-alarm-3lane-summary.md)
+      MUST carry pooled_finding: true front-matter pointing at the 3
+      individual lane MDs as per_cell_breakdown_path (synthetic-cohort
+      flip_rate_pct = share of lanes whose F1-F4 verdicts disagree with
+      the headline 3-way claim). Tests:
+        (1) Regime check via daily_features.atr_vel_regime distribution
+            in the alarm windows vs full history.
+        (2) Cost-model spike check via pipeline.cost_model.COST_SPECS
+            (any change to MNQ total_friction since 2026-04 per
+            feedback_doctrine_drift_cost_specs_2026_05_01.md).
+        (3) SR threshold calibration check: trading_app/live/sr_monitor.py
+            ARL parameters, audit consistency vs Pepelyshev-Polunchenko 2015
+            recommended values for the realized noise.
+    kill_criterion: >
+      COMMON_FACTOR_IDENTIFIED if any of (regime / cost / threshold) test
+        returns FIRED across >=2 of 3 lanes.
+      INDEPENDENT_THREE_WAY if all 3 lanes' alarms decompose to lane-specific
+        mechanism components per F1-F4.
+      UNVERIFIED_INSUFFICIENT_POWER if cross-lane data insufficient.
+    theory_citation: >
+      docs/institutional/literature/pepelyshev_polunchenko_2015_changepoint.md
+      (ARL recalibration); .claude/rules/pooled-finding-rule.md (per-cell breakdown).
+
+verdict_taxonomy:
+  description: >
+    Per-lane verdict is one of four locked options. Each must be traced to
+    F1-F4 sub-criteria. Cross-lane verdict is one of three options. NO
+    'investigate further' or 'monitor for X months' verbs. The verdict is
+    documentary; allocator action is a separate stage.
+  per_lane_options:
+    - id: "MECHANISM_HOLDS_VARIANCE_COMPRESSION"
+      trigger: >
+        F1 PEAK_DECAYED AND F2 VARIANCE_COMPRESSION AND F3 MECHANISM_NOT_FALSIFIED.
+        (Variance dropped but mean / fire-rate intact AND no Harris trigger
+        FIRED. Harris mechanism still valid; SR ALARM is statistical noise on
+        a compressed signal.)
+        Recommended action (informs separate stage): hold; raise SR threshold
+        per Pepelyshev-Polunchenko 2015 ARL recalibration.
+    - id: "MECHANISM_HOLDS_BUT_DEFLATED"
+      trigger: >
+        F3 MECHANISM_NOT_FALSIFIED AND F4 DSR_DECAYED AND F2 NOT FIRE_RATE_COLLAPSE.
+        (No Harris falsification trigger but DSR has crossed below relaxed
+        Amendment 2.1 floor.) Recommended action: hold but downsize per
+        Carver Ch 9 vol-targeting framework.
+    - id: "MECHANISM_FALSIFIED"
+      trigger: >
+        F3 MECHANISM_FALSIFIED (any Harris trigger FIRED).
+        (Underlying mechanism's load-bearing condition shifted.) Recommended
+        action: pause via sr_review_registry; recommend full revalidation.
+    - id: "UNVERIFIED_INSUFFICIENT_POWER"
+      trigger: >
+        F2 UNVERIFIED_INSUFFICIENT_POWER OR per-lane rolling-60 N<30 OR
+        OOS power<50% per RULE 3.3 across all sub-tests.
+        (Cannot distinguish signal from noise.) Recommended action: hold
+        and re-check at N>=50.
+  cross_lane_options:
+    - id: "COMMON_FACTOR_IDENTIFIED"
+      trigger: "F5 returns FIRED on regime / cost / threshold across >=2 of 3 lanes."
+    - id: "INDEPENDENT_THREE_WAY"
+      trigger: "All 3 lanes' alarms decompose to lane-specific mechanism components per F1-F4."
+    - id: "UNVERIFIED_INSUFFICIENT_POWER"
+      trigger: "Cross-lane data insufficient OR per-lane verdicts conflict in a way F5 cannot resolve."
+  internal_consistency_check:
+    description: >
+      Cross-lane verdict + per-lane verdicts must be internally consistent.
+      If F5 = COMMON_FACTOR_IDENTIFIED (e.g., SR threshold miscalibration),
+      no individual lane MAY carry verdict MECHANISM_FALSIFIED. Inconsistency
+      requires re-examining F3 trigger evaluations before locking the summary.
+
+forbidden_actions:
+  - "Threshold modification on any deployed filter (data-snooping per feedback_bias_discipline.md)."
+  - "Parameter retune on any deployed lane (would be data-snooping)."
+  - "Modifying mechanism_priors.md sec 2.5 (priors are not refined by this diagnostic)."
+  - "Modifying pre_registered_criteria.md (gate-pass is the only path to amendments)."
+  - "Re-implementing parse_strategy_id, oos_power math, or DSR (delegate to canonical sources per institutional-rigor sec 4)."
+  - "Any writes to validated_setups, experimental_strategies, lane_allocation.json, sr_review_registry, sr_state.json, paper_trades, or any state file."
+  - "Editing trading_app/, pipeline/, or scripts/ production code."
+  - "Changing the verdict taxonomy options (locked here; revision requires amendment commit)."
+  - "Citing training-memory thresholds or stats (volatile data rule — query live)."
+  - "Pausing / replacing / resizing any deployed lane (separate stage gated by verdict + sr_review_registry update + user approval)."
+
+verification:
+  pre_lock:
+    - "scripts/tools/estimate_k_budget.py --hypothesis docs/audit/hypotheses/2026-05-12-3lane-sr-alarm-diagnosis.yaml -> PASS expected (K=15, MNQ 6.65yr horizon, MinBTL=5.42yr)"
+    - "pipeline/check_drift.py -> PASS (doc-only commit; per feedback_precommit_overkill_for_docs.md)"
+  post_step_2:
+    - "research/sr_alarm_decomposition_2026_05_12.py --pressure-test injects look-ahead column; script must flag per RULE 13"
+    - "Triple-key join verified: orb_outcomes.trading_day = daily_features.trading_day AND .symbol AND .orb_minutes"
+    - "research.oos_power.oos_ttest_power power tier reported next to every dir_match / window-comparison claim"
+  post_result_md:
+    - "Cross-lane summary MD carries pooled_finding: true front-matter per pooled-finding-rule.md"
+    - "Each per-lane MD cites the canonical sr_state.json snapshot timestamp + git_head fingerprint"
+    - "All 4 lane verdicts (3 per-lane + 1 cross-lane) internally consistent per verdict_taxonomy.internal_consistency_check"
+  done_definition:
+    - "tests pass (show output) + dead code swept (grep -r) + check_drift.py passes + self-review passed (institutional-rigor sec 1)"
