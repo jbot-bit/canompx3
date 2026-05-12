@@ -136,9 +136,196 @@ def corpus_summary_for_llm(corpus: Sequence[LiteratureEntry], max_bytes: int = 8
     return "".join(parts)
 
 
+_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "from",
+        "have",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "of",
+        "on",
+        "or",
+        "over",
+        "than",
+        "that",
+        "the",
+        "this",
+        "those",
+        "to",
+        "was",
+        "were",
+        "which",
+        "while",
+        "with",
+        "without",
+        "would",
+        "should",
+        "must",
+        "where",
+        "when",
+        "what",
+        "such",
+        "shows",
+        "demonstrates",
+        "filter",
+        "filters",
+        "framework",
+        "implies",
+        "regime",
+        "regimes",
+        "exceeds",
+        "exceeding",
+        "exceed",
+        "above",
+        "below",
+        "higher",
+        "lower",
+        "etc",
+    }
+)
+
+
+def _tokenize(text: str, *, min_len: int = 4) -> list[str]:
+    """Lowercase alpha tokens >= min_len, stopwords removed."""
+    return [t.lower() for t in re.findall(r"[A-Za-z]+", text) if len(t) >= min_len and t.lower() not in _STOPWORDS]
+
+
+def find_citation_entries(corpus: Sequence[LiteratureEntry], cite_str: str) -> list[LiteratureEntry]:
+    """Return all corpus entries that match ``cite_str``.
+
+    Same match rule as ``citation_exists`` but returns the matching entries
+    rather than a boolean. ``theory_citation`` strings often join multiple
+    slugs with an em-dash or comma; this surfaces all matched files so the
+    content-verification step can scan each one for the economic_basis terms.
+    """
+    if not isinstance(cite_str, str) or not cite_str.strip():
+        return []
+    needle = cite_str.lower()
+    matches: list[LiteratureEntry] = []
+    seen: set[Path] = set()
+    for entry in corpus:
+        already = entry.path in seen
+        slug_hit = entry.slug.lower() in needle
+        name_hit = entry.path.name.lower() in needle
+        title_tokens = [t for t in re.findall(r"[A-Za-z]{4,}", entry.title.lower())]
+        title_hit = False
+        if len(title_tokens) >= 2:
+            matched_tokens = sum(1 for tok in title_tokens if tok in needle)
+            title_hit = matched_tokens >= 2
+        if not already and (slug_hit or name_hit or title_hit):
+            matches.append(entry)
+            seen.add(entry.path)
+    return matches
+
+
+def verify_citation_content(
+    corpus: Sequence[LiteratureEntry],
+    cite_str: str,
+    economic_basis: str,
+    *,
+    min_term_overlap: int = 3,
+    min_term_overlap_pct: float = 0.30,
+) -> dict[str, object]:
+    """Verify that the cited literature ACTUALLY supports ``economic_basis``.
+
+    Catches the Carver-sizing-cited-for-entry-filter class bug: file exists,
+    filename appears in cite_str, but the file body doesn't address the
+    claimed mechanism. Yesterday's 3 LLM-drafted pre-regs all passed file-
+    existence and would have failed this content check.
+
+    Algorithm:
+        1. Tokenize ``economic_basis`` (lowercase alpha, ≥4 chars, stopwords
+           removed). Call this set ``E``.
+        2. Find the entries cited (``find_citation_entries``).
+        3. For each entry, tokenize its body the same way. Call this ``B``.
+        4. Compute ``overlap = E ∩ B``. Compute ``coverage = |overlap| / |E|``.
+        5. Pass if EITHER ``|overlap| >= min_term_overlap`` OR
+           ``coverage >= min_term_overlap_pct``.
+
+    Why both thresholds: a 3-word ``economic_basis`` (rare but possible)
+    needs coverage; a 50-word one needs absolute count or it becomes too
+    strict to satisfy.
+
+    Returns
+    -------
+    dict with keys:
+        - ``passes``: bool
+        - ``cited_files``: list[str] of slugs matched
+        - ``no_cited_file_found``: bool — caller should reject outright
+        - ``per_file``: list[dict] with slug, overlap_count, coverage, overlap_terms
+        - ``reason``: human-readable verdict line
+    """
+    cited = find_citation_entries(corpus, cite_str)
+    if not cited:
+        return {
+            "passes": False,
+            "cited_files": [],
+            "no_cited_file_found": True,
+            "per_file": [],
+            "reason": f"no corpus entry matches theory_citation={cite_str!r}",
+        }
+
+    basis_tokens = set(_tokenize(economic_basis))
+    if not basis_tokens:
+        return {
+            "passes": False,
+            "cited_files": [e.slug for e in cited],
+            "no_cited_file_found": False,
+            "per_file": [],
+            "reason": "economic_basis has no content tokens after stopword removal",
+        }
+
+    per_file: list[dict[str, object]] = []
+    any_pass = False
+    for entry in cited:
+        body_tokens = set(_tokenize(entry.text))
+        overlap = basis_tokens & body_tokens
+        coverage = len(overlap) / max(1, len(basis_tokens))
+        file_pass = len(overlap) >= min_term_overlap or coverage >= min_term_overlap_pct
+        any_pass = any_pass or file_pass
+        per_file.append(
+            {
+                "slug": entry.slug,
+                "overlap_count": len(overlap),
+                "basis_token_count": len(basis_tokens),
+                "coverage": coverage,
+                "overlap_terms": sorted(overlap)[:20],
+                "file_passes": file_pass,
+            }
+        )
+
+    reason = (
+        "citation_content_OK: at least one cited file shares enough mechanism terms with economic_basis"
+        if any_pass
+        else f"citation_content_MISMATCH: none of {[e.slug for e in cited]} shares "
+        f">= {min_term_overlap} or {min_term_overlap_pct:.0%} of {len(basis_tokens)} basis tokens"
+    )
+    return {
+        "passes": any_pass,
+        "cited_files": [e.slug for e in cited],
+        "no_cited_file_found": False,
+        "per_file": per_file,
+        "reason": reason,
+    }
+
+
 __all__ = [
     "LiteratureEntry",
     "citation_exists",
     "corpus_summary_for_llm",
+    "find_citation_entries",
     "load_corpus",
+    "verify_citation_content",
 ]

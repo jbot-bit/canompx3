@@ -6,6 +6,25 @@ metadata:
   testing_mode: "family"
   data_horizon_years_clean: 6.65
 
+scratch_policy:
+  policy: "realized-eod"
+  justification: "Capital-decision-relevant per pre_registered_criteria.md C13 BINDING."
+
+oos_power_floor:
+  required_tier: "DIRECTIONAL_ONLY"
+  source: "research.oos_power.oos_ttest_power"
+  rule: "Binary OOS gates apply only when power >= 0.50; else UNVERIFIED_INSUFFICIENT_POWER."
+
+prior_art:
+  family_health: "CLEAN"
+  siblings_tested: 0
+  siblings_evaluable: 0
+  siblings_killed: 0
+  siblings_blocked_by_graveyard: 0
+  notes: []
+  graveyard_summary: "CLEAR (fixture)"
+  neighbor_scan_summary: "fixture — adjacency sweep, no neighbour scan"
+
 hypotheses:
   - id: 1
     name: "MNQ overnight range adjacency sweep"
@@ -24,6 +43,10 @@ hypotheses:
       stop_multipliers: [1.0]
       orb_minutes: [5]
     expected_trial_count: 50
+    sensitivity_test:
+      axes:
+        - "OVNRNG threshold band [40, 60, 80, 100, 120, 140, 160]"
+        - "OVNRNG threshold band [60, 90, 120, 150]"
     kill_criteria:
       - "BH FDR q=0.05 fails on K=50 family"
       - "WFE < 0.50"

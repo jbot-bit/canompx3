@@ -6,6 +6,25 @@ metadata:
   testing_mode: "family"
   data_horizon_years_clean: 6.65
 
+scratch_policy:
+  policy: "realized-eod"
+  justification: "Capital-decision-relevant per pre_registered_criteria.md C13 BINDING."
+
+oos_power_floor:
+  required_tier: "DIRECTIONAL_ONLY"
+  source: "research.oos_power.oos_ttest_power"
+  rule: "Binary OOS gates apply only when power >= 0.50; else UNVERIFIED_INSUFFICIENT_POWER."
+
+prior_art:
+  family_health: "CLEAN"
+  siblings_tested: 0
+  siblings_evaluable: 0
+  siblings_killed: 0
+  siblings_blocked_by_graveyard: 0
+  notes: []
+  graveyard_summary: "CLEAR (fixture)"
+  neighbor_scan_summary: "fixture — no neighbours scanned"
+
 hypotheses:
   - id: 1
     name: "MNQ EUROPE_FLOW ORB_G8 RR1.5"
@@ -14,6 +33,10 @@ hypotheses:
     filter: {type: ORB_G8, column: orb_size_points}
     scope: {instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [5]}
     expected_trial_count: 1
+    sensitivity_test:
+      axes:
+        - "ORB_G6"
+        - "ORB_G10"
     kill_criteria:
       - "BH FDR q=0.05 fails on K=2 family"
       - "WFE < 0.50"
@@ -27,6 +50,10 @@ hypotheses:
     filter: {type: ORB_G8, column: orb_size_points}
     scope: {instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [5]}
     expected_trial_count: 1
+    sensitivity_test:
+      axes:
+        - "ORB_G6"
+        - "ORB_G10"
     kill_criteria:
       - "BH FDR q=0.05 fails on K=2 family"
       - "WFE < 0.50"
