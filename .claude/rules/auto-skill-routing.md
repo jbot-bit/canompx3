@@ -18,7 +18,8 @@ Use skills only after the route narrows what should be read.
 - Something wrong / weird / doesn't add up / failing -> `/quant-debug`
 - Plan / design / brainstorm / approach / 4t -> `/design`
 - Past findings / history / NO-GO / remind me -> `/pinecone-assistant`
-- Test a hypothesis / research / investigate edge -> `/research`
+- Kill-verdict lookup / has X been ruled out / graveyard / NO-GO on X -> `/nogo` (single-call research-catalog filter; faster than `/pinecone-assistant` for verdict-only)
+- Test a hypothesis / research / investigate edge -> `/research` (and call `/nogo` FIRST so we don't re-litigate a buried verdict)
 - Real-capital scrutiny / bias check / before deploy -> `/capital-review`
 - Review / check my work / before I commit -> `/code-review`
 - Editing schema or canonical config -> full stage-gate

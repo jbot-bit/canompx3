@@ -7,26 +7,16 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
-- **Tool:** Codex (WSL)
+- **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 271dbb6b — chore: save active workspace state
-- **Files changed:** 16 files
-  - `docs/audit/hypotheses/drafts/2026-05-11-llm-cme-preclose-atr-p30-o15.rejected.txt`
-  - `docs/audit/hypotheses/drafts/2026-05-11-llm-cme-preclose-orb-vol-16k-o15.rejected.txt`
-  - `docs/audit/hypotheses/drafts/2026-05-11-llm-tokyo-open-atr-vel-ge105.rejected.txt`
-  - `docs/audit/results/2026-04-22-pr48-promotion-shortlist-v1.md`
-  - `docs/audit/results/2026-04-22-pr48-role-followthrough-v1.md`
-  - `docs/audit/results/2026-05-11-mgc-mes-profile-activation-feasibility.md`
-  - `docs/audit/results/2026-05-11-pr48-mes-q45-exec-bridge-rejection.md`
-  - `docs/audit/results/2026-05-11-pr48-mgc-shadow-only-observation-closeout.md`
+- **Commit:** f3292d83 — @ feat(research-catalog): verdict-tag filter + post-review hardening
+- **Files changed:** 6 files
+  - `.gitignore`
+  - `HANDOFF.md`
   - `docs/runtime/action-queue.yaml`
-  - `docs/runtime/decision-ledger.md`
-  - `docs/runtime/stages/fix-mgc-2026-05-08-partial-daily-features.md`
-  - `docs/runtime/stages/orphan-experimental-strategies-2026-05-10.md`
-  - `docs/runtime/stages/research-catalog-verdict-filter.md`
   - `docs/specs/research_catalog_verdict_filter.md`
   - `scripts/tools/research_catalog_mcp_server.py`
-  - ... and 1 more
+  - `tests/test_tools/test_research_catalog_mcp_server.py`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.

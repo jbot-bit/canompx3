@@ -3145,6 +3145,118 @@ def check_research_provenance_annotations() -> list[str]:
     return violations
 
 
+def check_hypothesis_minbtl_compliance() -> list[str]:
+    """Check: every pre-reg yaml under docs/audit/hypotheses/ passes the
+    Bailey 2013 MinBTL K-budget gate.
+
+    Authority: ``pre_registered_criteria.md`` Criterion 2 (locked
+    operational cap N<=300 clean / N<=2000 proxy; strict-Bailey
+    horizon ``2*Ln[N]/E[max_N]^2`` must fit within the instrument's
+    clean-data window).
+
+    Delegates math to ``scripts.tools.estimate_k_budget`` (which
+    delegates further to ``scripts.tools.minbtl_retro_report.strict_bailey_n``
+    — single source of truth, per ``integrity-guardian.md`` § 2).
+
+    Enforcement tiers (mirrors ``check_pooled_finding_annotations``):
+    All gates are **binding for files dated >= sentinel (2026-05-12)**
+    and **advisory for older files**. The sentinel matches the date this
+    drift check landed; pre-existing pre-regs were written under earlier
+    doctrine and are grandfathered. Editing an old file after the
+    sentinel re-asserts the full gate (drift check sees current content).
+
+    1. Operational cap (N<=300 clean / N<=2000 proxy) — Criterion 2.
+    2. Bailey horizon (``2*Ln[N]/E^2 <= clean_years``) — Criterion 2.
+    3. Missing trial count when instruments are declared — Criterion 1.
+    4. Unknown instruments (6A/6B/6J, GC proxy) are **always advisory** —
+       extending coverage requires a Criterion 2 amendment + horizons
+       table update, never a silent pass.
+
+    Pathway B K=1 files and audit-only N=0 files trivially PASS
+    (ln(1)=ln(0+epsilon)=0 short-circuited in ``required_minbtl_years``).
+
+    Silently skips files that declare neither trial count nor instrument
+    scope — these are documentation stubs / templates.
+    """
+    from scripts.tools.estimate_k_budget import (
+        CLEAN_YEARS_BY_INSTRUMENT,
+        check_hypothesis_file,
+        load_hypothesis,
+    )
+
+    # Date >= this string activates strict enforcement for new pre-regs.
+    # Bump forward only via an explicit Criterion 2 amendment + commit;
+    # never back-date to silently grandfather a new violation.
+    sentinel = "2026-05-12"
+
+    def _is_binding(path: Path) -> bool:
+        return path.name[:10] >= sentinel
+
+    violations: list[str] = []
+    advisories: list[str] = []
+    hyp_dir = PROJECT_ROOT / "docs" / "audit" / "hypotheses"
+    if not hyp_dir.exists():
+        return violations
+    for path in sorted(hyp_dir.glob("*.yaml")):
+        binding = _is_binding(path)
+        rel = path.relative_to(PROJECT_ROOT)
+        try:
+            summary = load_hypothesis(path)
+        except Exception as exc:
+            msg = f"  {rel}: failed to parse ({type(exc).__name__}: {exc})"
+            (violations if binding else advisories).append(msg)
+            continue
+        # Documentation stubs / templates — skip.
+        if summary.n_trials is None and not summary.instruments:
+            continue
+        if summary.n_trials is None:
+            msg = (
+                f"  {rel}: declares instruments {list(summary.instruments)} "
+                "but no total_expected_trials / primary_selection_trials / "
+                "n_trials — Criterion 1 requires a pre-committed N."
+            )
+            (violations if binding else advisories).append(msg)
+            continue
+        # Unknown instruments — always advisory; doctrine gap to surface.
+        recognized = [i for i in summary.instruments if i in CLEAN_YEARS_BY_INSTRUMENT]
+        if summary.instruments and not recognized:
+            advisories.append(
+                f"  {rel}: instruments {list(summary.instruments)} not in "
+                "CLEAN_YEARS_BY_INSTRUMENT — horizon gate skipped. "
+                "Extend horizons table to enforce."
+            )
+            continue
+        reports = check_hypothesis_file(path)
+        for report in reports:
+            if report.passed:
+                continue
+            cap_violated = report.n_trials > report.operational_cap
+            horizon_violated = report.minbtl_years_required > report.clean_years
+            if cap_violated:
+                msg = (
+                    f"  {rel} [{report.instrument}]: N={report.n_trials} "
+                    f"exceeds operational cap {report.operational_cap} "
+                    "(Criterion 2)."
+                )
+                (violations if binding else advisories).append(msg)
+            elif horizon_violated:
+                msg = (
+                    f"  {rel} [{report.instrument}]: N={report.n_trials}, "
+                    f"requires {report.minbtl_years_required:.2f}yr but "
+                    f"{report.instrument} has {report.clean_years:.2f}yr "
+                    f"clean data (max N={report.n_max_at_horizon} at "
+                    f"E={report.e_max})."
+                )
+                (violations if binding else advisories).append(msg)
+    if advisories:
+        print(f"  WARNING (non-blocking, pre-{sentinel} grandfathered) — MinBTL advisory: {len(advisories)} pre-reg(s)")
+        for a in advisories[:5]:
+            print(f"    {a.strip()}")
+        if len(advisories) > 5:
+            print(f"    ... and {len(advisories) - 5} more")
+    return violations
+
+
 def check_orphaned_validated_strategies(con=None) -> list[str]:
     """Check #42: Validated strategies must have corresponding outcome data.
 
@@ -8809,6 +8921,12 @@ CHECKS = [
     (
         "Research-derived config values need @entry-models provenance",
         check_research_provenance_annotations,
+        False,
+        False,
+    ),
+    (
+        "Pre-reg hypothesis files pass Bailey 2013 MinBTL K-budget gate",
+        check_hypothesis_minbtl_compliance,
         False,
         False,
     ),

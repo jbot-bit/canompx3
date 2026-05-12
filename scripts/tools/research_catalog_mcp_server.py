@@ -10,6 +10,10 @@ Exposes read-only tools via stdio (fastmcp):
     optional verdict_tags filter (NO-GO/PARK/KILL/UNSUPPORTED/DECAY/STALE)
     surfaces kill verdicts from filename stems, markdown front-matter, and
     docs/STRATEGY_BLUEPRINT.md §5 NO-GO Registry table rows
+  - estimate_k_budget: Bailey 2013 MinBTL K-budget gate for a pre-reg.
+    Accepts inline (instrument, n_trials) OR hypothesis_id (yaml lookup).
+    Delegates math to scripts.tools.estimate_k_budget (single source of
+    truth, never re-encoded here).
 """
 
 from __future__ import annotations
@@ -767,6 +771,71 @@ def _search_research_catalog(
     }
 
 
+def _estimate_k_budget_tool(
+    instrument: str | None = None,
+    n_trials: int | None = None,
+    hypothesis_id: str | None = None,
+    e_max: float = 1.0,
+    proxy_extended: bool = False,
+) -> dict[str, object]:
+    """Bailey 2013 MinBTL K-budget gate exposed as an MCP tool.
+
+    Two call shapes:
+    1. Inline: pass (instrument, n_trials) and optional e_max,
+       proxy_extended. Returns a single KBudgetReport as dict.
+    2. Hypothesis-file: pass hypothesis_id (the file stem, e.g.
+       ``2026-04-09-mnq-comprehensive``). Returns one report per
+       instrument scoped in the file.
+
+    Per integrity-guardian.md §2 / institutional-rigor.md §4: delegates
+    the math to ``scripts.tools.estimate_k_budget`` — no inline formula.
+    """
+    from scripts.tools.estimate_k_budget import (
+        CLEAN_YEARS_BY_INSTRUMENT,
+        check_hypothesis_file,
+        estimate_k_budget,
+    )
+
+    if hypothesis_id is not None and (instrument is not None or n_trials is not None):
+        raise ValueError("Pass either hypothesis_id OR (instrument, n_trials), not both.")
+
+    if hypothesis_id is not None:
+        if not hypothesis_id.strip():
+            raise ValueError("hypothesis_id is required and non-empty.")
+        artifact = _lookup_artifact("hypothesis", hypothesis_id)
+        reports = check_hypothesis_file(artifact.path, e_max=e_max)
+        return {
+            "mode": "hypothesis_file",
+            "hypothesis_id": artifact.artifact_id,
+            "path": _display_path(artifact.path),
+            "report_count": len(reports),
+            "reports": [r.as_dict() for r in reports],
+            "all_passed": all(r.passed for r in reports) if reports else True,
+            "authority": (
+                "pre_registered_criteria.md Criterion 2; literature/bailey_et_al_2013_pseudo_mathematics.md Theorem 1"
+            ),
+        }
+
+    if instrument is None or n_trials is None:
+        raise ValueError("Pass either hypothesis_id, OR both instrument and n_trials.")
+    if instrument not in CLEAN_YEARS_BY_INSTRUMENT:
+        raise ValueError(f"Unknown instrument {instrument!r}. Known: {sorted(CLEAN_YEARS_BY_INSTRUMENT)}.")
+    report = estimate_k_budget(
+        instrument=instrument,
+        n_trials=n_trials,
+        e_max=e_max,
+        proxy_extended=proxy_extended,
+    )
+    return {
+        "mode": "inline",
+        "report": report.as_dict(),
+        "passed": report.passed,
+        "authority": (
+            "pre_registered_criteria.md Criterion 2; literature/bailey_et_al_2013_pseudo_mathematics.md Theorem 1"
+        ),
+    }
+
+
 def _build_server():
     from scripts.tools.simple_mcp_stdio import StdioToolServer, ToolSpec
 
@@ -774,7 +843,8 @@ def _build_server():
         "Repo-local read-only research grounding surface for canompx3. "
         "Use it to search committed literature extracts, prereg hypotheses, and audit results. "
         "Prefer bounded excerpts and shallow catalog views before loading whole docs. "
-        "Treat hypothesis open/closed status as a filename-stem heuristic unless a deeper audit confirms it."
+        "Treat hypothesis open/closed status as a filename-stem heuristic unless a deeper audit confirms it. "
+        "For pre-reg planning, call estimate_k_budget BEFORE writing the yaml — gates Bailey 2013 MinBTL."
     )
 
     return StdioToolServer(
@@ -881,6 +951,50 @@ def _build_server():
                     "additionalProperties": False,
                 },
                 _search_research_catalog,
+            ),
+            ToolSpec(
+                "estimate_k_budget",
+                (
+                    "Bailey 2013 MinBTL K-budget gate. Pass EITHER (instrument, "
+                    "n_trials) for inline check OR hypothesis_id for a yaml "
+                    "lookup. e_max defaults to 1.0 (Bailey default Sharpe noise "
+                    "floor). proxy_extended=true uses N<=2000 operational cap "
+                    "(price-based filters on GC proxy per Amendment 2.7); "
+                    "otherwise N<=300. Returns pass/fail + structured fields. "
+                    "Authority: pre_registered_criteria.md Criterion 2."
+                ),
+                {
+                    "type": "object",
+                    "properties": {
+                        "instrument": {
+                            "type": ["string", "null"],
+                            "default": None,
+                            "description": "MNQ / MES / MGC (with n_trials).",
+                        },
+                        "n_trials": {
+                            "type": ["integer", "null"],
+                            "default": None,
+                            "description": "Total pre-registered trial count.",
+                        },
+                        "hypothesis_id": {
+                            "type": ["string", "null"],
+                            "default": None,
+                            "description": "Pre-reg yaml stem (alternative to inline).",
+                        },
+                        "e_max": {
+                            "type": "number",
+                            "default": 1.0,
+                            "description": "Noise-floor target Sharpe (Bailey default 1.0).",
+                        },
+                        "proxy_extended": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "Use N<=2000 cap (GC-proxy price-based).",
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                _estimate_k_budget_tool,
             ),
         ],
     )

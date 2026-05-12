@@ -89,6 +89,7 @@ live_signals.jsonl
 !.claude/skills/
 !.claude/hooks/
 !.claude/agents/
+!.claude/commands/
 !.claude/settings.json
 .claude/hooks/.last_drift_ok
 # Per-guard runtime state — ephemeral. The state/ directory itself is tracked
