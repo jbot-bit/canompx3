@@ -9,9 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 3bc11025 — feat(hooks): add literature-corpus nudge to session-start output
+- **Commit:** 7a3fab56 — docs(rules): refresh institutional-rigor covered-papers roster to current 27-extract corpus
 - **Files changed:** 2 files
-  - `.claude/hooks/session-start.py`
+  - `.claude/rules/institutional-rigor.md`
   - `HANDOFF.md`
 
 ## Next Steps — Active
