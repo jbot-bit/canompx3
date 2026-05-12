@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 7a3fab56 — docs(rules): refresh institutional-rigor covered-papers roster to current 27-extract corpus
+- **Commit:** 7c61c48c — docs(institutional): sync README inventory with current 27-extract literature corpus
 - **Files changed:** 2 files
-  - `.claude/rules/institutional-rigor.md`
   - `HANDOFF.md`
+  - `docs/institutional/README.md`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.

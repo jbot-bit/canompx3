@@ -1,7 +1,7 @@
 # Pending Literature Acquisition — Market Profile / Auction Theory
 
 **Created:** 2026-05-07
-**Last updated:** 2026-05-07 (post-sourcing-attempt)
+**Last updated:** 2026-05-12 (Tolušić + Howard INGESTED; Dalton remains only outstanding TIER-1 item)
 **Trigger:** User question on whether "post-thrust horizontal range" (drawn on MGC 5m 2026-05-06/07) could serve as overlay/condition. Plan document: `~/.claude/plans/image-1-analyse-jolly-kite.md`. Existing local NO-GO registry kills NR4/NR7/Crabel/compression × overnight. Only honest re-open path is value-area / auction-market-theory framework.
 
 ---
@@ -18,12 +18,14 @@
 **Prior project work that connects (must read before any new pre-reg):**
 - 7 archived scripts in `research/archive/` testing Dalton 80% Rule + VA reversion + filter overlays across MGC/MNQ/MES. Mostly fail-or-marginal; MNQ 0900 anchor only positive carrier. Pre-Phase-0, Mode B holdout — cannot be cited as Mode A evidence. Yordanov-grounded veto-signal pre-reg is structurally different (non-execution gate vs entry signal) and does not collide with the archive.
 
-**Sourcing attempted, blocked by anti-bot:**
-- ✗ Howard 2026 (SSRN abstract_id=6350238) — "Stop Distance, Exit Methodology, and Signal Preservation in Intraday Value Area Breakouts: Evidence from E-mini S&P 500 Futures." Published 2026-03-05. Tried 4 SSRN delivery URL variants + 2 user-agents + Google referer. Cloudflare Turnstile blocks every script attempt. **Manual download required.**
-- ✗ Tolušić 2026 (SSRN abstract_id=6616280) — "Auction Market Theory as an Emergent Property of Inventory Dynamics: The First Formal Mathematical Treatment." This is the **first formal mathematical treatment of AMT** with Hawkes-process inventory dynamics, validated on 44k FX bars + 17k gap-fade trades over 26 years. **Highest citation-weight item on the list.** Same Cloudflare block. Manual download required.
-- ✗ CME Group market profile guides (UST + FX) — explicit ToS forbids scripted access (HTTP 403 with policy notice). Manual browser download required.
-- ✗ Mind Over Markets (Dalton) on archive.org — access-restricted, no current borrow.
-- ✗ Steidlmayer on Markets / Markets and Market Logic on archive.org — access-restricted.
+**INGESTED 2026-05-12:**
+- ✓ Howard 2026 — "Stop Distance, Exit Methodology, and Signal Preservation in Intraday Value Area Breakouts: Evidence from E-mini S&P 500 Futures." Extract at `howard_2026_value_area_breakouts_es.md`. Independent ES confirmation of the same mechanism Yordanov tested on NQ.
+- ✓ Tolušić 2026 — "Auction Market Theory as an Emergent Property of Inventory Dynamics: The First Formal Mathematical Treatment." Extract at `tolusic_2026_amt_inventory_dynamics.md`. The formal Hawkes-process inventory-dynamics model with 44k FX bars + 17k gap-fade trades over 26 years now grounds Role R5 level-target hypotheses.
+
+**Sourcing still blocked / outstanding:**
+- ✗ Mind Over Markets (Dalton) — pending user purchase (Kindle ASIN B00DOSTEVG, $45, TIER 2 below). **Now the only outstanding TIER-1/2 item.** Tolušić's formal model partially substitutes; Dalton remains required for narrative AMT vocabulary and Role R5 target-geometry priors.
+- ✗ CME Group market profile guides (UST + FX) — explicit ToS forbids scripted access. Optional; Tolušić + Howard cover the empirical content.
+- ✗ Steidlmayer on Markets / Markets and Market Logic — out of print, Dalton restates the theory. TIER-3 / skip.
 
 **Refused on integrity grounds (will NOT download):**
 - pdfroom, pdfcoffee, forex-station, kupdf, scribd, r-5.org, quastic.cz mirrors of CBOT/Dalton/Steidlmayer material. Per project source-of-truth chain rule, grey-zone copies break the audit chain even if content is identical. Pirate copies of copyrighted books are excluded from the canonical resources directory by policy.
@@ -34,27 +36,21 @@
 
 For maximum institutional-rigor weight, in priority order:
 
-### TIER 1 — ~5 minutes total, free, legitimate
+### TIER 1 — ALL LANDED 2026-05-12
 
-**1. Tolušić 2026 — formal mathematical treatment of AMT** ⭐ HIGHEST PRIORITY
-- URL: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6616280
-- Action: Open in browser → click "Download This Paper" → may require free SSRN account → save PDF.
-- Save as: `resources/Tolusic_2026_Auction_Market_Theory_Inventory_Dynamics.pdf`
-- Why it's #1: Empirically validated (44,035 FX bars, 17,716 gap-fade trades, 26 years) AND formally derived (Hawkes inventory model). This is a genuine academic mechanism source, not narrative theory. **One paper that could legitimately ground both an MGC and an MNQ pre-reg.**
+**1. Tolušić 2026 — formal mathematical treatment of AMT** ✓ INGESTED 2026-05-12
+- Extract: `docs/institutional/literature/tolusic_2026_amt_inventory_dynamics.md`
+- Source: `resources/Tolusic_2026_Auction_Market_Theory_Inventory_Dynamics.pdf`
 
-**2. Howard 2026 — value-area breakouts on E-mini S&P 500**
-- URL: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6350238
-- Action: Same as above.
-- Save as: `resources/Howard_2026_Value_Area_Breakouts_ES_Futures.pdf`
-- Why: Direct algorithmic test of the same mechanism Yordanov 2026 tested on NQ. Independent confirmation across two index futures = much stronger Phase 0 grounding than either alone.
+**2. Howard 2026 — value-area breakouts on E-mini S&P 500** ✓ INGESTED 2026-05-12
+- Extract: `docs/institutional/literature/howard_2026_value_area_breakouts_es.md`
+- Source: `resources/Howard_2026_Value_Area_Breakouts_ES_Futures.pdf`
 
-**3. CME Group UST Market Profile Guide**
+**3. CME Group UST Market Profile Guide** — optional, not yet acquired
 - URL: https://www.cmegroup.com/tools-information/webhelp/us-treasury-market-profile/Content/USTreasuryMarket.pdf
-- Action: Open in browser (CME blocks scripts but permits browser access), save PDF.
-- Save as: `resources/CME_UST_Market_Profile_Guide.pdf`
-- Why: Authoritative current-CME definitions for vocabulary alignment in any pre-reg or design memo.
+- Status: optional vocabulary-alignment reference; Tolušić + Howard cover the empirical content. Acquire only if a pre-reg requires CME-canonical terminology.
 
-### TIER 2 — paid, $45 Kindle, ~5 minutes
+### TIER 2 — paid, $45 Kindle, ~5 minutes — ONLY OUTSTANDING ITEM
 
 **4. Dalton — Mind Over Markets (Wiley, 2013 updated edition)**
 - Buy: Amazon Kindle ASIN B00DOSTEVG, $45 USD, instant.
@@ -84,13 +80,13 @@ For each PDF dropped:
 
 ## Honest summary of what's possible RIGHT NOW vs after acquisition
 
-| Question | Right now (Yordanov + Topstep grounded) | After Tolušić + Howard + Dalton |
-|----------|-----------------------------------------|----------------------------------|
-| Cite a value-area mechanism for an MNQ pre-reg | YES (Yordanov §3.5 Filter Case A; instrument-class match NQ→MNQ) | STRONGER (3 independent empirical sources + theory) |
-| Cite a mechanism for an MGC pre-reg | NO (Yordanov is index futures only) | YES once Tolušić's FX/cross-asset 26-year validation lands |
-| Pre-reg the "Cross + Miss" veto signal | YES, supported by Yordanov §3.8 alone (n=44 occurrences, 48.4pp gap from baseline) | STRONGER if Howard 2026 confirms on ES |
-| Update `docs/institutional/mechanism_priors.md` with AMT | NO — needs theoretical grounding (Dalton or Tolušić formal model) | YES |
-| Reopen NR7/Crabel NO-GO entries | NO — none of these papers provide a "fundamentally new mechanism class" justifying a re-open of those specific NO-GO entries; they propose a STRUCTURALLY DIFFERENT framework (value-area), not a re-test of compression | NO (same answer; the new framework is the alternative path, not a NO-GO reopen) |
+| Question | CURRENT (Yordanov + Topstep + Tolušić + Howard grounded) | After Dalton lands |
+|----------|----------------------------------------------------------|---------------------|
+| Cite a value-area mechanism for an MNQ pre-reg | YES — 3 independent empirical sources (Yordanov NQ + Howard ES + Tolušić FX 26yr) + Tolušić formal Hawkes-inventory theory | STRONGER (narrative day-type taxonomy adds Role R5 target-geometry priors) |
+| Cite a mechanism for an MGC pre-reg | YES — Tolušić's cross-asset FX/26-year validation extends beyond index futures | STRONGER once Dalton's narrative target-rules are available |
+| Pre-reg the "Cross + Miss" veto signal | YES — Yordanov §3.8 + Howard ES confirmation (independent instrument) | Same; Dalton adds qualitative day-type context |
+| Update `docs/institutional/mechanism_priors.md` with AMT | YES — Tolušić formal model already wired in (PR-time edits to mechanism_priors.md auction-theory section) | STRONGER for narrative day-type priors |
+| Reopen NR7/Crabel NO-GO entries | NO — value-area framework is structurally different; not a NR7/Crabel re-open | NO (same answer) |
 
 ---
 
