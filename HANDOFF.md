@@ -9,14 +9,17 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** f3292d83 — @ feat(research-catalog): verdict-tag filter + post-review hardening
-- **Files changed:** 6 files
+- **Commit:** b1068bac — feat(research-control-plane): MinBTL K-budget gate + /nogo command
+- **Files changed:** 9 files
+  - `.claude/commands/nogo.md`
+  - `.claude/rules/auto-skill-routing.md`
+  - `.claude/rules/hypothesis-prereg-discipline.md`
   - `.gitignore`
   - `HANDOFF.md`
-  - `docs/runtime/action-queue.yaml`
-  - `docs/specs/research_catalog_verdict_filter.md`
+  - `pipeline/check_drift.py`
+  - `scripts/tools/estimate_k_budget.py`
   - `scripts/tools/research_catalog_mcp_server.py`
-  - `tests/test_tools/test_research_catalog_mcp_server.py`
+  - `tests/test_tools/test_estimate_k_budget.py`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
