@@ -37,9 +37,16 @@ The 3-way coincidence decomposes into:
   filter selectivity collapsed (cost-ratio saturated to 100%, overnight-range
   threshold scale-drifted to 92% fire rate). Both classify under the
   `feedback_absolute_threshold_scale_audit.md` class bug.
-- **1 lane (US_DATA_1000 VWAP_MID_ALIGNED): MECHANISM_HOLDS_VARIANCE_COMPRESSION** —
+- **1 lane (US_DATA_1000 VWAP_MID_ALIGNED): UNVERIFIED_INSUFFICIENT_POWER** —
   all Harris triggers NOT_FIRED, recent-60 mean ABOVE expectancy, alarm decayed
-  to current_sr_stat = 0.53 (1.7% of peak).
+  to current_sr_stat = 0.53 (1.7% of peak). Original label
+  `MECHANISM_HOLDS_VARIANCE_COMPRESSION` retracted 2026-05-12 post-self-audit
+  because F2 trigger requires `recent_std/full_std < 0.6`; actual ratio is
+  1.015 (NORMAL, not VARIANCE_COMPRESSION). Power on recent-vs-history Welch
+  t-test = 7.7% (STATISTICALLY_USELESS per RULE 3.3); pre-reg option 4 arm
+  "OOS power<50% per RULE 3.3" fires directly. F1/F3 descriptive findings
+  remain on record but cannot statistically distinguish "mechanism holds"
+  from "underpowered noise."
 
 Cross-lane verdict: **COMMON_FACTOR_IDENTIFIED** (per F5 trigger) with two
 overlapping factors: (1) regime shift toward "Stable" volatility regime (+15pp
@@ -57,15 +64,16 @@ modes are lane-specific.
 |---|---|---|---|---|---|---|---|---|---|
 | NYSE_OPEN | NYSE_OPEN | 5 | 1.5 | COST_LT12 | ALARM_STILL_LIVE (0.140) | NORMAL all | **FALSIFIED** (fire=100%) | 0.0000 | **MECHANISM_FALSIFIED** |
 | COMEX_SETTLE | COMEX_SETTLE | 5 | 1.5 | OVNRNG_100 | PEAK_DECAYED (0.081) | NORMAL all | **FALSIFIED** (fire 8%→92%) | 0.0637 | **MECHANISM_FALSIFIED** |
-| US_DATA_1000 | US_DATA_1000 | 15 | 1.5 | VWAP_MID_ALIGNED | PEAK_DECAYED (0.013) | NORMAL all | NOT_FALSIFIED | 0.0000 | **MECHANISM_HOLDS_VARIANCE_COMPRESSION** |
+| US_DATA_1000 | US_DATA_1000 | 15 | 1.5 | VWAP_MID_ALIGNED | PEAK_DECAYED (0.013) | NORMAL all (ratio 1.015, NOT <0.6); recent-vs-history power=7.7% | NOT_FALSIFIED (descriptive) | 0.0000 (cross-check) | **UNVERIFIED_INSUFFICIENT_POWER** |
 
 **Per-lane heterogeneity:** 1 of 3 lanes (US_DATA_1000) lands a different
-verdict (`MECHANISM_HOLDS_VARIANCE_COMPRESSION`) than the other 2
+verdict (`UNVERIFIED_INSUFFICIENT_POWER`) than the other 2
 (`MECHANISM_FALSIFIED`). The 2 falsified lanes share a class-bug pattern
-(filter selectivity collapse via scale drift), the 1 healthy lane has a
-different filter family (VWAP_MID_ALIGNED, not an absolute-points threshold).
-This heterogeneity is the load-bearing observation — DO NOT treat the
-3 lanes as a single class.
+(filter selectivity collapse via scale drift), the 1 unverified lane has a
+different filter family (VWAP_MID_ALIGNED, not an absolute-points threshold)
+and its mechanism cannot be confirmed or refuted at current N (recent-vs-history
+power = 7.7%). This heterogeneity is the load-bearing observation — DO NOT
+treat the 3 lanes as a single class.
 
 Detailed per-lane reports:
 - `docs/audit/results/2026-05-12-sr-alarm-nyse-open-rr1.md`
@@ -186,7 +194,7 @@ Per-lane actions are documented in each lane's MD. Cross-lane actions:
 1. **Update SR review registry** with the 3 verdicts:
    - NYSE_OPEN: `MECHANISM_FALSIFIED` → recommend pause
    - COMEX_SETTLE: `MECHANISM_FALSIFIED` → recommend pause
-   - US_DATA_1000: `MECHANISM_HOLDS_VARIANCE_COMPRESSION` → recommend hold + threshold recalibration
+   - US_DATA_1000: `UNVERIFIED_INSUFFICIENT_POWER` → recommend hold and re-check at N≥50 (pre-reg yaml line 461-462). Original label `MECHANISM_HOLDS_VARIANCE_COMPRESSION` retracted 2026-05-12 post-self-audit (F2 ratio 1.015 fails <0.6 trigger).
 
 2. **Add fire-rate bounds to SR monitor** as an early-warning (not in scope of
    this audit, but flagged): `0.20 ≤ fire_rate ≤ 0.80` would have caught both

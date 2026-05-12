@@ -17,16 +17,30 @@ sr_review_registry, or any deployed-state file.
 
 ## Verdict
 
-**MECHANISM_HOLDS_VARIANCE_COMPRESSION** — All Harris falsification triggers
-NOT_FIRED; rolling-60 components NORMAL; recent-60 mean (+0.294) is ABOVE
-long-run expectancy (+0.214). The SR alarm fired because the realised pnl_r
-distribution drifted mildly off the SR baseline due to a regime shift (more
-"Stable" atr_vel days in 2026, see cross-lane summary § F5), not a mechanism
-failure.
+**UNVERIFIED_INSUFFICIENT_POWER** — Recent-60 vs full-history Welch t-test
+power is 7.7% (Cohen's d = 0.064), which is STATISTICALLY_USELESS per
+`.claude/rules/backtesting-methodology.md` RULE 3.3 / `research/oos_power.py`
+canonical thresholds. The pre-reg verdict_taxonomy option 4 trigger arm
+"OOS power<50% per RULE 3.3" fires directly on this evidence. F1, F3
+descriptive findings (PEAK_DECAYED, all Harris triggers NOT_FIRED, 8/8
+years positive, recent-60 mean +0.294 above long-run expectancy +0.214)
+remain on record but are descriptive, not refutational — they cannot
+statistically distinguish "mechanism holds" from "underpowered noise."
 
-Recommended action (informs separate stage, not executed here): **hold**;
-recommend SR threshold recalibration per Pepelyshev-Polunchenko 2015 ARL
-methodology, accounting for the realised live std and regime mix.
+**Verdict-label correction history (2026-05-12 post-self-audit):** Original
+verdict was `MECHANISM_HOLDS_VARIANCE_COMPRESSION`, retracted because that
+option's F2 trigger requires `recent_std/full_std < 0.6`; actual ratio is
+**1.015** (NORMAL, not VARIANCE_COMPRESSION). Of the 4 locked taxonomy
+options, only `UNVERIFIED_INSUFFICIENT_POWER` has all its primary triggers
+satisfied by the evidence on record. Retraction is doctrinally clean
+(stays within locked taxonomy; no pre-reg amendment); the underlying F1/F3
+descriptive findings are unchanged.
+
+Recommended action (informs separate stage, not executed here, per
+pre-reg yaml line 461-462): **hold and re-check at N≥50**. Lane currently
+at `n_monitored=40` (trades_since_alarm=34 + alarm_trade=6); re-trigger
+the diagnostic once an additional ~10 trades accumulate so the recent
+window has the power to refute or confirm the F3 descriptive finding.
 
 ## Step 1 — SR peak-vs-current decomposition
 
@@ -192,25 +206,37 @@ flat (no decay vs deployment). CROSS-CHECK only.
 
 ## Internal consistency
 
-- F1: **PEAK_DECAYED** — alarm trigger no longer reflects live health
-- F2: **NORMAL** across components; recent-60 mean ABOVE expectancy
-- F3: **MECHANISM_NOT_FALSIFIED** — all 3 triggers NOT_FIRED, 8/8 years positive
-- F4: DSR_DECAYED (cross-check, expected per promotion pathway)
+- F1: **PEAK_DECAYED** — alarm trigger no longer reflects live health (descriptive)
+- F2: **NORMAL** components (recent_std/full_std = 1.015, NOT VARIANCE_COMPRESSION which requires <0.6); recent-60 mean ABOVE expectancy (descriptive)
+- F3: **MECHANISM_NOT_FALSIFIED** — all 3 binary structural triggers NOT_FIRED, 8/8 years positive, 0% sign-flip
+- F4: DSR_DECAYED (cross-check only per pre-reg F4 spec + Amendment 2.1; not load-bearing)
+- **Statistical power on the recent-vs-history comparison: 7.7% (STATISTICALLY_USELESS per RULE 3.3)**
 
-F3 dominates the verdict per pre-reg verdict_taxonomy. The Harris mechanism
-holds; the SR alarm is a statistical artefact (stale early-OOS peak +
-regime-driven mild std drift).
+The F1/F3 descriptive findings cannot statistically distinguish "mechanism
+holds" from "underpowered noise consistent with mechanism failure" at this
+sample size. Per RULE 3.3 (`backtesting-methodology.md`) the canonical
+reading of power<50% is UNVERIFIED, never DEAD and never CONFIRMED. The
+pre-reg verdict_taxonomy option 4 trigger arm is satisfied; the original
+`MECHANISM_HOLDS_VARIANCE_COMPRESSION` label is retracted (F2 trigger
+ratio 1.015 fails the <0.6 requirement). The SR alarm interpretation —
+stale early-OOS peak + regime-driven mild std drift — remains a coherent
+hypothesis but cannot be confirmed at current N.
 
 ## Action queue (informs separate stage)
 
-1. **Hold** — do not pause this lane.
-2. Recommend SR threshold recalibration per Pepelyshev-Polunchenko 2015 ARL
-   methodology: the current threshold (31.96) was calibrated against the
-   IS pooled-std (1.25); realised live std is 1.15-1.17, and the regime
-   mix has shifted. A recalibrated threshold would be ~10-15% higher and
-   would not have alarmed on this lane.
-3. Acknowledge in `sr_review_registry` watch outcome: `MECHANISM_HOLDS_VARIANCE_COMPRESSION`,
-   action `HOLD`.
+1. **Hold and re-check at N≥50** — pre-reg yaml line 461-462 locked action
+   for `UNVERIFIED_INSUFFICIENT_POWER`. Lane currently at n_monitored=40;
+   re-trigger this diagnostic once ~10 additional trades accumulate so
+   recent-vs-history has the power to refute or confirm F3.
+2. Do not pause the lane (capital action gated by separate stage + user
+   approval; descriptive findings do not warrant a fail-closed pause).
+3. The Pepelyshev-Polunchenko 2015 ARL threshold-recalibration framing
+   from the original verdict is descriptive context, not load-bearing
+   evidence under the corrected verdict. Recalibration remains a coherent
+   follow-up hypothesis but requires its own pre-reg per pre-reg
+   forbidden_actions (no in-band SR threshold modification).
+4. Acknowledge in `sr_review_registry` watch outcome: `UNVERIFIED_INSUFFICIENT_POWER`,
+   action `HOLD_AND_RECHECK`.
 
 ## Reproduction
 

@@ -9,14 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 1ccd1107 — feat(research): commit Steps 3/4/5 reproducer + close 3 review findings
-- **Files changed:** 7 files
+- **Commit:** 7bf689a4 — docs(audit): post-self-review polish — scratch-policy doc + CLI invocations
+- **Files changed:** 6 files
   - `HANDOFF.md`
   - `docs/audit/results/2026-05-12-sr-alarm-3lane-summary.md`
   - `docs/audit/results/2026-05-12-sr-alarm-comex-settle-rr1.5.md`
   - `docs/audit/results/2026-05-12-sr-alarm-nyse-open-rr1.md`
   - `docs/audit/results/2026-05-12-sr-alarm-us-data-1000-rr1.5.md`
-  - `research/audit_ovnrng50_canonical_dsr.py`
   - `research/sr_alarm_steps_3_4_5_2026_05_12.py`
 
 ## Next Steps — Active
