@@ -3,7 +3,7 @@ updated_at: 2026-05-12T00:00:00+10:00
 items:
   - id: research_catalog_verdict_vocabulary_doctrine_2026_05_12
     title: Promote verdict-token vocabulary into a doctrine file (RESEARCH_RULES.md § Verdict tokens)
-    class: doctrine
+    class: docs
     status: open
     priority: P3
     close_before_new_work: false

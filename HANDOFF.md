@@ -7,19 +7,9 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Codex (WSL)
 - **Date:** 2026-05-12
-- **Commit:** b1068bac — feat(research-control-plane): MinBTL K-budget gate + /nogo command
-- **Files changed:** 9 files
-  - `.claude/commands/nogo.md`
-  - `.claude/rules/auto-skill-routing.md`
-  - `.claude/rules/hypothesis-prereg-discipline.md`
-  - `.gitignore`
-  - `HANDOFF.md`
-  - `pipeline/check_drift.py`
-  - `scripts/tools/estimate_k_budget.py`
-  - `scripts/tools/research_catalog_mcp_server.py`
-  - `tests/test_tools/test_estimate_k_budget.py`
+- **Summary:** Queue-backed baton refreshed from canonical active-work registry.
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
