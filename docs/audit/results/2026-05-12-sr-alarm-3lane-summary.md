@@ -1,11 +1,14 @@
----
-pooled_finding: true
-per_cell_breakdown_path: docs/audit/results/2026-05-12-sr-alarm-3lane-summary.md#per-lane-breakdown
-flip_rate_pct: 33.3
-heterogeneity_ack: true
----
-
 # 3-lane SR alarm cross-lane summary — 2026-05-12
+
+> **Front-matter note (2026-05-12 self-review):** earlier draft of this file
+> carried `pooled_finding: true` + `flip_rate_pct: 33.3` + `heterogeneity_ack:
+> true`. Removed on review per `.claude/rules/pooled-finding-rule.md` § "What
+> counts as a pooled claim": this summary does NOT compute a pooled p-value,
+> ExpR average across lanes, or BH-global survivor list — it reports three
+> independent per-lane verdicts. The rule is opt-in for files that make
+> aggregate claims; misapplying it to a per-cell-by-construction summary
+> dilutes the signal it carries elsewhere. The per-lane verdict table below
+> remains the authoritative cross-lane view.
 
 Date: 2026-05-12
 Author: Claude Code session (feat/sr-alarm-diagnosis-2026-05-12)
@@ -20,7 +23,8 @@ Cross-lane summary of the 3-lane SR alarm diagnostic across:
 
 Tests F5 (common-factor / 3-way coincidence audit) per pre-reg, and synthesises
 per-lane verdicts from the 3 companion result MDs into a cross-lane verdict.
-Carries pooled_finding front-matter per `.claude/rules/pooled-finding-rule.md`.
+No pooled-finding front-matter (does not compute a pooled p-value, ExpR
+average, or BH-global survivor list — see § Front-matter note above).
 No writes to validated_setups, sr_review_registry, or any deployed-state file.
 
 ## Verdict
@@ -42,10 +46,10 @@ overlapping factors: (1) regime shift toward "Stable" volatility regime (+15pp
 across all 3 lanes in 2026), (2) shared promotion provenance (all 3 promoted
 2026-05-10 with `dsr_score ≈ 0` via Chordia strict-unlock pathway).
 
-Per-cell breakdown shows **1 of 3 lanes opposes the headline "all 3 falsified"
-framing** → flip_rate_pct = 33.3% → `heterogeneity_ack: true`. The pooled
-"3-way SR alarm" framing is misleading without the per-lane breakdown; trading
-decisions MUST examine each lane individually.
+Trading decisions MUST be made on the per-lane verdicts in the table below,
+not on the headline "3 lanes simultaneously alarmed" framing — the alarms
+share a common upstream amplifier (regime shift) but the underlying failure
+modes are lane-specific.
 
 ## Per-lane breakdown
 
@@ -55,8 +59,13 @@ decisions MUST examine each lane individually.
 | COMEX_SETTLE | COMEX_SETTLE | 5 | 1.5 | OVNRNG_100 | PEAK_DECAYED (0.081) | NORMAL all | **FALSIFIED** (fire 8%→92%) | 0.0637 | **MECHANISM_FALSIFIED** |
 | US_DATA_1000 | US_DATA_1000 | 15 | 1.5 | VWAP_MID_ALIGNED | PEAK_DECAYED (0.013) | NORMAL all | NOT_FALSIFIED | 0.0000 | **MECHANISM_HOLDS_VARIANCE_COMPRESSION** |
 
-`flip_rate_pct = 1/3 = 33.3%` — share of lanes whose verdict opposes the
-headline pooled framing. heterogeneity_ack = true.
+**Per-lane heterogeneity:** 1 of 3 lanes (US_DATA_1000) lands a different
+verdict (`MECHANISM_HOLDS_VARIANCE_COMPRESSION`) than the other 2
+(`MECHANISM_FALSIFIED`). The 2 falsified lanes share a class-bug pattern
+(filter selectivity collapse via scale drift), the 1 healthy lane has a
+different filter family (VWAP_MID_ALIGNED, not an absolute-points threshold).
+This heterogeneity is the load-bearing observation — DO NOT treat the
+3 lanes as a single class.
 
 Detailed per-lane reports:
 - `docs/audit/results/2026-05-12-sr-alarm-nyse-open-rr1.md`
@@ -197,6 +206,13 @@ Per-lane actions are documented in each lane's MD. Cross-lane actions:
 - Pre-reg yaml: `docs/audit/hypotheses/2026-05-12-3lane-sr-alarm-diagnosis.yaml`
 - Step 2 script: `research/sr_alarm_decomposition_2026_05_12.py --pressure-test
   --out research/output/sr_alarm_decomposition_2026_05_12.json`
+- Steps 3/4/5 script (added 2026-05-12 post-review):
+  `research/sr_alarm_steps_3_4_5_2026_05_12.py` — reproduces F3 fire-rate-
+  by-year + per-year sign-flip rate, F4 live Bailey DSR per lane, F5(1)
+  atr_vel_regime distribution shift, and F5(2) cost-spec drift check.
+  Per-lane Stable-share deltas reproduce as +15.3 / +16.3 / +17.0 pp
+  (script 3-decimal rounding) vs +15.5 / +16.5 / +17.2 pp in the F5(1)
+  table above (unrounded fractions); the +15pp headline holds either way.
 - Per-lane MDs:
   - `docs/audit/results/2026-05-12-sr-alarm-nyse-open-rr1.md`
   - `docs/audit/results/2026-05-12-sr-alarm-comex-settle-rr1.5.md`
@@ -236,8 +252,10 @@ Per-lane actions are documented in each lane's MD. Cross-lane actions:
   themselves. Spec gap acknowledged; no post-hoc revision to verdicts per
   no-rescue rule.
 - Pressure test (RULE 13) on the Step 2 script PASSED.
-- Per-cell flip rate 1/3 (33.3%) crosses the 25% heterogeneity-ack threshold;
-  `heterogeneity_ack: true` is set in front-matter. Trading decisions MUST be
-  made on per-lane verdicts, not the pooled framing.
+- 1 of 3 lanes (US_DATA_1000) lands a different verdict than the other 2.
+  Trading decisions MUST be made on per-lane verdicts; the "all 3 alarmed
+  simultaneously" framing is a TRIVIAL FACT from `sr_state.json`, not a
+  pooled statistical claim. See § Front-matter note for why
+  `pooled_finding: true` was removed on review.
 - This diagnostic is documentary only. Allocator action (pause / replace /
   hold / threshold recalibration) is a separate stage gated by user approval.

@@ -76,7 +76,7 @@ Pressure test (RULE 13): PASS.
 **Component flags (F2 kill criteria):**
 - `variance`: **NORMAL** (recent_std/full_std = 1.015)
 - `mean`: **WITHIN_BAND** AND ABOVE expectancy (recent +0.294 > expected_r +0.210)
-- `win_rate`: **NORMAL** (recent_wr 0.533 ≥ 0.7 × full_wr 0.363)
+- `win_rate`: **NORMAL** (recent_wr 0.533 ≥ threshold 0.363 = 0.7 × full_wr 0.518)
 
 **Power floor (RULE 3.3):** Cohen's d = 0.064 → power 7.7% → **STATISTICALLY_USELESS**.
 Recent-window vs history cannot be statistically distinguished.
@@ -217,9 +217,13 @@ regime-driven mild std drift).
 - Pre-reg yaml: `docs/audit/hypotheses/2026-05-12-3lane-sr-alarm-diagnosis.yaml`
 - Step 2 script: `research/sr_alarm_decomposition_2026_05_12.py --pressure-test
   --out research/output/sr_alarm_decomposition_2026_05_12.json`
-- Step 3-4 SQL: inline in this MD § Step 3 + Step 4 (against
-  `pipeline.paths.GOLD_DB_PATH`, triple-key JOIN per
-  `.claude/rules/daily-features-joins.md`)
+- Steps 3/4/5 script (added 2026-05-12 post-review):
+  `research/sr_alarm_steps_3_4_5_2026_05_12.py` — reproduces the fire-rate-
+  by-year, per-year sign-flip, live Bailey DSR, regime distribution shift,
+  and cost-spec drift numbers cited in this MD. Reads lane list from the
+  pre-reg yaml `scope.lanes[]`; delegates DSR math to
+  `research.audit_ovnrng50_canonical_dsr.bailey_dsr` (top-level import safe
+  after the same-commit `__main__`-guard refactor).
 - DSR helper: `research.audit_ovnrng50_canonical_dsr.bailey_dsr` (Bailey 2014
   Eq 2; Bailey-example sanity check 0.9004 = paper)
 - SR state snapshot: `data/state/sr_state.json` git_head `398693ea` (read-only)
