@@ -9,9 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** d4381b58 — docs(institutional): add BH-1995 FDR primary-source extract
-- **Files changed:** 1 files
-  - `docs/institutional/literature/benjamini_hochberg_1995_fdr.md`
+- **Commit:** 23243b44 — docs(institutional): add Aronson 2007 EBTA data-snooping extract
+- **Files changed:** 2 files
+  - `HANDOFF.md`
+  - `docs/institutional/literature/aronson_2007_ebta_data_snooping.md`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
