@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 0fe34725 — docs(institutional): add Tolusic 2026 AMT formal mathematical treatment extract
+- **Commit:** 1c01995c — docs(institutional): add Howard 2026 value-area breakouts ES extract
 - **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/institutional/literature/tolusic_2026_amt_inventory_dynamics.md`
+  - `docs/institutional/literature/howard_2026_value_area_breakouts_es.md`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
