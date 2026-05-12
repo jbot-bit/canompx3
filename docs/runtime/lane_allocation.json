@@ -42,9 +42,15 @@
       "chordia_audit_age_days": 1,
       "avg_orb_pts": 78.6,
       "p90_orb_pts": 142.3
-    },
+    }
+  ],
+  "paused": [
     {
       "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12",
+      "status": "PAUSE",
+      "reason": "MECHANISM_FALSIFIED + ALARM_STILL_LIVE + live-routable PROVISIONAL — fail-closed pause per 2026-05-12 SR-alarm diagnostic (docs/audit/results/2026-05-12-sr-alarm-nyse-open-rr1.md); F3 fire_rate=100% (COST_LT12 absolute-threshold scale drift); F1 alarm unresolved (recent_10_mean_r=-0.2675); evidence-auditor highest-priority recommendation",
+      "chordia_verdict": "PASS_PROTOCOL_A",
+      "chordia_audit_age_days": 4,
       "instrument": "MNQ",
       "orb_label": "NYSE_OPEN",
       "orb_minutes": 5,
@@ -54,19 +60,13 @@
       "trailing_expr": 0.105,
       "trailing_n": 1472,
       "trailing_wr": 0.4565,
-      "months_negative": null,
-      "session_regime": null,
-      "status": "PROVISIONAL",
-      "status_reason": "PASS_REPLACE via profile-construction gate; controlled-pilot/event-tail slippage status retained; post-promotion SR refresh required before session start",
-      "chordia_verdict": "PASS_PROTOCOL_A",
-      "chordia_audit_age_days": 4,
       "promotion_source": "docs/audit/results/2026-05-11-mnq-profile-candidate-proposal.md",
       "promotion_decision": "PASS_REPLACE",
       "promotion_account_risk": "worst_case=$415<=2000; slots=3/7; candidate_p90_orb=85.8pts, candidate_risk=$129",
-      "p90_orb_pts": 85.75
-    }
-  ],
-  "paused": [
+      "p90_orb_pts": 85.75,
+      "prior_status_before_pause": "PROVISIONAL",
+      "pause_date": "2026-05-12"
+    },
     {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_VOL_16K_S075",
       "status": "PAUSE",
