@@ -11,11 +11,13 @@ from datetime import date
 import duckdb
 import pytest
 
+import trading_app.lane_allocator as lane_allocator
+from trading_app.chordia import ChordiaAuditEntry, ChordiaAuditLog
 from trading_app.lane_allocator import (
     LaneScore,
-    apply_live_tradeability_gate,
     _classify_status,
     _effective_annual_r,
+    apply_live_tradeability_gate,
     build_allocation,
     check_allocation_staleness,
     compute_lane_scores,
@@ -24,8 +26,6 @@ from trading_app.lane_allocator import (
     load_sr_state,
 )
 from trading_app.lane_correlation import RHO_REJECT_THRESHOLD
-from trading_app.chordia import ChordiaAuditEntry, ChordiaAuditLog
-
 
 # ── Factories ──────────────────────────────────────────────────────
 
@@ -790,6 +790,49 @@ class TestIntegration:
         assert scores[0].chordia_verdict == "MISSING"
         assert scores[0].chordia_audit_age_days is None
 
+    def test_compute_lane_scores_caches_session_regime_per_instrument_session(self, test_db, monkeypatch):
+        """Session-regime computation is shared across strategy siblings.
+
+        A 30-strategy shelf with two unique instrument/session pairs should
+        compute the session regime twice, not once per strategy row.
+        """
+        rebalance = date(2025, 7, 1)
+        days = [date(2025, 6, 1 + i) for i in range(10)]
+        trades = [(td, 1.0, "win", 0.3, 100.0, 99.0) for td in days]
+
+        for i in range(20):
+            _seed_strategy(
+                test_db,
+                strategy_id=f"MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER_CACHE_{i:02d}",
+                instrument="MNQ",
+            )
+        for i in range(10):
+            _seed_strategy(
+                test_db,
+                strategy_id=f"MES_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER_CACHE_{i:02d}",
+                instrument="MES",
+            )
+
+        _seed_outcomes(test_db, trades, symbol="MNQ")
+        _seed_outcomes(test_db, trades, symbol="MES")
+        _seed_features(test_db, days, symbol="MNQ")
+        _seed_features(test_db, days, symbol="MES")
+
+        calls: list[tuple[str, str, date]] = []
+
+        def fake_session_regime(con, instrument, orb_label, asof_date):
+            calls.append((instrument, orb_label, asof_date))
+            return 0.05
+
+        monkeypatch.setattr(lane_allocator, "_compute_session_regime", fake_session_regime)
+
+        scores = compute_lane_scores(rebalance_date=rebalance, db_path=test_db)
+
+        assert len(scores) == 30
+        unique_pairs = {(score.instrument, score.orb_label, rebalance) for score in scores}
+        assert len(calls) == len(unique_pairs)
+        assert set(calls) == unique_pairs
+
 
 class TestLivenessScoring:
     """Tests for SR alarm + 3mo decay ranking adjustments."""
@@ -1146,8 +1189,8 @@ class TestChordiaGate:
 
     def test_stale_audit_demoted_to_pause(self):
         """audit_age_days=91 is stale (>90 default freshness) — PAUSE."""
-        from trading_app.lane_allocator import apply_chordia_gate
         from trading_app.chordia import ChordiaAuditLog
+        from trading_app.lane_allocator import apply_chordia_gate
 
         # Construct an empty doctrine log with default freshness=90.
         log = ChordiaAuditLog(default_has_theory=False, audit_freshness_days=90, entries={})
@@ -1162,8 +1205,8 @@ class TestChordiaGate:
 
     def test_audit_age_at_freshness_boundary_passes(self):
         """audit_age_days=90 exactly equals freshness — still passes (>, not >=)."""
-        from trading_app.lane_allocator import apply_chordia_gate
         from trading_app.chordia import ChordiaAuditLog
+        from trading_app.lane_allocator import apply_chordia_gate
 
         log = ChordiaAuditLog(default_has_theory=False, audit_freshness_days=90, entries={})
         s = _make_score(
@@ -1246,6 +1289,7 @@ class TestChordiaGate:
         """save_allocation writes chordia_verdict + chordia_audit_age_days into the JSON."""
         import json
         from datetime import date as _date
+
         from trading_app.lane_allocator import save_allocation
 
         s = _make_score(
@@ -1270,6 +1314,7 @@ class TestChordiaGate:
         """save_allocation serializes Chordia-gated pauses into paused[]."""
         import json
         from datetime import date as _date
+
         from trading_app.lane_allocator import save_allocation
 
         selected = _make_score(
@@ -1306,6 +1351,7 @@ class TestChordiaGate:
         """stale[] preserves strict-audit state for non-selected blocked lanes."""
         import json
         from datetime import date as _date
+
         from trading_app.lane_allocator import save_allocation
 
         selected = _make_score(
@@ -1351,8 +1397,9 @@ class TestCrossAssetATRInjection:
     def test_per_month_expr_x_mes_atr60_non_empty_on_canonical_db(self):
         """Real-DB regression: an X_MES_ATR60 lane with an active validated_setups
         cohort and ~100 trades/yr must produce non-empty trailing data when scored."""
-        import duckdb
         from datetime import date
+
+        import duckdb
 
         from pipeline.paths import GOLD_DB_PATH
         from trading_app.lane_allocator import _per_month_expr
