@@ -9,9 +9,7 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-12
-- **Commit:** dfeb0df1 — docs(plans): add Harris full-text ingestion plan
-- **Files changed:** 0
-0 files
+- **Summary:** Queue-backed baton refreshed from canonical active-work registry.
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
