@@ -1,0 +1,389 @@
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: "2026-05-13"
+slug: "mnq-nyse-close-mode-a-k1-revalidation"
+title: "MNQ NYSE_CLOSE Stage 1 — K=1 Mode-A revalidation of highest-defensibility family head"
+owner: josh
+parent_spec: "docs/plans/2026-05-12-mnq-nyse-close-institutional-validation-pathway.md"
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+  default_args:
+    - "--hypothesis-file"
+    - "docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml"
+  note: >
+    Runner is the narrow bounded Pathway-B K=1 replay used for the MNQ
+    COMEX_SETTLE Chordia unlock prereg and the 2026-05-12 MGC LONDON_METALS
+    Stage 1 prereg. It enforces canonical filter delegation
+    (research.filter_utils.filter_signal), Mode-A holdout split via
+    trading_app.holdout_policy.HOLDOUT_SACRED_FROM, and Chordia strict
+    no-theory t>=3.79 evaluation; no writes to validated_setups, edge_families,
+    chordia_audit_log.yaml, or lane_allocation.json. Emits result MD + CSV
+    only.
+
+metadata:
+  name: "mnq_nyse_close_mode_a_k1_revalidation"
+  purpose: "Stage 1 of the three-stage triage for the 10-lane MNQ NYSE_CLOSE cohort. Pathway-B K=1 Mode-A revalidation of the single most defensible family head, executed under canonical Mode-A IS to test whether the cohort earns the right to a Stage-2 family scan. Cohort-park rule binding: Stage 1 KILL parks all 10 lanes."
+  date_locked: "2026-05-13T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: individual
+  pathway: B_individual
+  research_question_type: conditional_role
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/hypothesis-prereg-discipline.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/conditional-edge-framework.md"
+    - "docs/institutional/research_pipeline_contract.md"
+    - "docs/runtime/chordia_audit_log.yaml"
+  notes:
+    - "Stage 1 of a three-stage triage. Cohort = 10 active MNQ NYSE_CLOSE family heads sitting behind a single ACTIVE-profile whitelist gate (no profile activation required; profile mutation is Stage 3, separate session)."
+    - "Cohort is grandfathered research-provisional per pre_registered_criteria.md § Applying to existing validated_setups. Stored ExpR / sharpe / WFE / DSR values may be MODE_B-contaminated for any rows with last_trade_day >= 2026-01-01 and are NOT used as evidence in this prereg."
+    - "No theory grant claimed for ORB_G8 (bucketed ORB size) on NYSE_CLOSE. Chordia strict threshold t >= 3.79 applies (Criterion 4 no-theory)."
+    - "K=1 Bailey budget verified: estimate_k_budget(instrument=MNQ, n_trials=1) returned PASS — 6.65yr doctrine clean_years (scripts/tools/minbtl_retro_report.CLEAN_YEARS_BY_INSTRUMENT['MNQ']), n_max_at_horizon=27, operational cap 300. This prereg consumes 1 of 27 strict-Bailey slots; no budget pressure."
+    - "If Stage 1 KILLs, the entire 10-lane MNQ NYSE_CLOSE cohort parks. If Stage 1 PASSes, Stage 2 may test additional family heads under a separate prereg + separate K-budget recheck. The Stage 3 profile-whitelist mutation in trading_app/prop_profiles.py and allocator add/replace/correlation work is explicitly out of scope."
+
+scope:
+  instrument: MNQ
+  strategy_id: "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G8"
+  session: NYSE_CLOSE
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  direction: pooled
+  filter_type: ORB_G8
+  filter_source: "trading_app.config.ALL_FILTERS['ORB_G8']"
+  baseline: "no comparative baseline — Pathway B K=1 tests selected-trade mean_r against absolute Chordia floor, not a delta."
+  candidate_selection_basis: >
+    Of 10 active MNQ NYSE_CLOSE family heads in validated_setups, this is the
+    highest-defensibility candidate by the same selection logic used in the
+    2026-05-12 MGC LONDON_METALS Stage 1 prereg: (i) c8_oos_status = PASSED
+    (excludes the 2 NO_OOS_DATA heads which would fail an OOS power-floor
+    inspection on arrival); (ii) lowest p_value among PASSED heads
+    (p=0.005364, fdr_p=0.009303); (iii) largest IS sample (677 stored trades);
+    (iv) most recent activity (last_trade_day = 2026-05-07); (v) non-degenerate
+    filter (ORB_G8 — bucketed ORB size, registered in
+    trading_app/config.py ALL_FILTERS); (vi) aperture O5 (5m) — encoded in the
+    family_hash. The competing PASSED heads (COST_LT15 p=0.009 /
+    X_MES_ATR70 p=0.013 with NO_OOS) are not Stage 2 candidates by this
+    prereg; a Stage 2 prereg would re-rank. Stored per-strategy stats
+    (expectancy_r=0.0974, sharpe_ratio=0.107, win_rate=0.5938) are used ONLY
+    to pick the candidate, NOT as evidence — Mode-A recompute is the evidence.
+  out_of_scope:
+    - "The other 9 MNQ NYSE_CLOSE family heads (deferred to Stage 2 conditional on Stage 1 PASS, separate prereg + separate K-budget recheck)."
+    - "Adjacent filters (other ORB_G buckets, RR variants, confirm_bars variants, stop-multiplier variants)."
+    - "Theory-grant attempt for ORB_G8 on NYSE_CLOSE."
+    - "Allocator, sizing, deployment, profile-whitelist mutation, or chordia_audit_log writes (all Stage 3, separate authorized session)."
+    - "Chordia audit on MGC LONDON_METALS surviving lanes (cohort-park rule from 2026-05-12 Stage 1 KILL stands; see docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md)."
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+    effective_first_day: "2019-05-06"
+    effective_first_day_source: "MIN(trading_day) FROM orb_outcomes WHERE symbol='MNQ' AND orb_label='NYSE_CLOSE' AND orb_minutes=5 AND entry_model='E2' AND rr_target=1.0 AND confirm_bars=1, verified live 2026-05-12"
+    effective_years: 6.65
+    per_year_is_counts: {2019: 146, 2020: 214, 2021: 222, 2022: 225, 2023: 205, 2024: 214, 2025: 212}
+    total_is_trade_count_pre_filter: 1438
+  oos_window:
+    description: "HOLDOUT_SACRED_FROM <= trading_day < CURRENT_DATE"
+    policy: "read-only descriptive corroboration only; cannot rescue an IS-kill nor kill an IS-pass except via the explicit dir_match-with-power-floor clause in kill_criteria."
+  tuning_against_oos: false
+  canonical_layers_only: true
+  scratch_policy: "realized-eod"
+  scratch_policy_justification: >
+    Per pre_registered_criteria.md Criterion 13 default after Stage 5
+    outcome_builder fix landed. Excluding scratches via WHERE pnl_r IS NOT NULL
+    inflated ExpR 10-45 percent on MNQ E2 CB1 survivor lanes
+    (memory/feedback_scratch_pnl_null_class_bug.md). NYSE_CLOSE is a
+    session-bounded lane; scratches at session end MTM count via
+    pipeline.cost_model.pnl_points_to_r. Literature:
+    docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md.
+
+feature_definition:
+  feature_name: ORB_G8
+  canonical_source_of_truth: "trading_app.config.ALL_FILTERS['ORB_G8']"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, 'ORB_G8', 'NYSE_CLOSE')"
+  column_source: "ORB-window size (high - low in points) from canonical orb_outcomes / daily_features columns; first complete at ORB end (NYSE_CLOSE O5 ORB ends 07:05 Brisbane)."
+  trade_time_knowable: true
+  first_complete_time: "ORB end (07:05 Brisbane for NYSE_CLOSE O5)"
+  temporal_alignment_note: >
+    ORB-window size is a § 6.1 safe feature — measured strictly within the
+    ORB window (07:00-07:05 Brisbane for NYSE_CLOSE O5) and complete before
+    E2 break detection on the bar AFTER ORB close. ORB_G8 is a bucketed
+    ORB-size threshold; bucket assignment uses orb_size_pts only. No § 6.2
+    conditional-validity feature is read; no overnight_*, session_*, or
+    break-bar feature is consulted at entry time. E2 entry model is a
+    stop-market on range-cross of the first bar after ORB close; ORB_G8
+    fires at ORB end, BEFORE the break bar. § 6.3 E2 break-bar look-ahead
+    concerns do not apply (ORB_G8 is not a break-bar feature).
+  lookahead_check: "Required PASS before execution. Runner must emit ORB_G8 fire mask vs trading_app.config delegation parity check."
+
+grounding:
+  core_orb_premise:
+    - source_file: "resources/Building_Reliable_Trading_Systems.pdf"
+      extract_proxy: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "Grounds intraday trend-follow / breakout continuation as a strategy class. Fitschen Ch 3 is equity-index-specific; NYSE_CLOSE on MNQ (Nasdaq E-mini micro) is a Fitschen-class instrument-session pairing. The breakout CLASS is grounded; the ORB_G8 bucketed-size filter is NOT a Fitschen-cited mechanism. No theory grant for the filter itself."
+      with_theory_claim: false
+    - source_file: "resources/Trading_Exchanges_Harris_2002.pdf"
+      extract_proxy: "docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md"
+      use: "Harris Ch 4 § 4.5.2 stop-cascade liquidity-demand mechanism grounds breakout entries in general. Not ORB_G8-specific."
+      with_theory_claim: false
+  filter_grounding_status:
+    verdict: NO_THEORY_GRANT
+    basis: >
+      No local literature extract grounds ORB_G8 (bucketed ORB size) as a
+      causal alpha mechanism on NYSE_CLOSE. ORB_G8 is a size-bucket gate; it
+      survives here as a liquidity / execution gate, not a theory-grounded
+      edge. Therefore Chordia strict no-theory threshold t >= 3.79 applies
+      (Criterion 4, no-theory branch). Per chordia_audit_log.yaml
+      default_has_theory=false.
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  sources:
+    - "validated_setups row for MNQ_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G8 (stored expectancy_r=0.0974, sharpe_ratio=0.107, win_rate=0.5938, sample_size=677, fdr_adjusted_p=0.009303, all_years_positive=false, years_tested=6, c8_oos_status=PASSED, last_trade_day=2026-05-07)"
+  upstream_scan_k_framings:
+    note: "Upstream discovery K not used as this prereg's K. This prereg's K is exactly 1."
+  note: >
+    Stored expectancy_r / sharpe_ratio / win_rate / fdr_adjusted_p from
+    validated_setups are used here ONLY to identify and rank the candidate
+    strategy_id among the 10 active MNQ NYSE_CLOSE family heads. They are
+    NOT evidence for this prereg's verdict and are NOT used as a baseline.
+    The Mode-A revalidation recomputes IS metrics from canonical
+    orb_outcomes JOIN daily_features with realized-eod scratch accounting
+    and canonical filter delegation.
+
+primary_schema:
+  family_cells:
+    - id: "MNQ_NYSE_CLOSE_O5_E2_RR1.0_CB1_ORB_G8"
+      strategy_id: "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G8"
+      instrument: MNQ
+      session: NYSE_CLOSE
+      orb_minutes: 5
+      rr_target: 1.0
+      entry_model: E2
+      confirm_bars: 1
+      filter: ORB_G8
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  chordia_threshold_basis: "Criterion 4 no-theory strict threshold (t >= 3.79); filter_grounding_status.verdict = NO_THEORY_GRANT."
+  promotion_gate: "Stage-1 PASS verdict — opens Stage-2 family scan eligibility ONLY. Does not authorize allocator, deployment, profile-whitelist mutation, or chordia_audit_log mutation."
+
+testing_discipline:
+  pathway: B_individual
+  k: 1
+  significance_threshold:
+    raw_p_branch: "raw IS p < 0.05 is necessary but not sufficient"
+    severity_branch: "Chordia strict t_IS >= 3.79 (no-theory, Criterion 4)"
+    effect_size: "ExpR_IS > 0 (positive-mean floor) AND N_IS_on >= 100 (deployable-sample floor, Criterion 7)"
+  mandatory_downstream_gates_non_waivable:
+    - "Criterion 6 WFE_modeA >= 0.50 — recomputed under Mode-A IS only (stored WFE is potentially MODE_B-contaminated and disregarded)."
+    - "Criterion 8 OOS dir_match conditional on power-tier per research.oos_power.oos_ttest_power; underpowered OOS cannot kill."
+    - "Criterion 9 era stability — years_positive_IS >= 5 with N>=10 per year (denominator = 7 IS years 2019-2025; MNQ Databento coverage starts 2019-05-06, verified live 2026-05-12). Per-year IS counts: 2019=146, 2020=214, 2021=222, 2022=225, 2023=205, 2024=214, 2025=212."
+    - "Criterion 5 DSR (Z-score scale per Amendment 2.1) cross-check only — not a kill criterion at this stage; advisory."
+
+hypotheses:
+  - id: 1
+    type: primary
+    name: "MNQ NYSE_CLOSE O5 E2 RR1.0 CB1 ORB_G8 Mode-A K=1 revalidation"
+    economic_basis: >
+      Question is honest: does this stored "validated" lane still clear strict
+      Chordia severity under canonical Mode-A IS with the canonical filter
+      delegation and scratch-realized-eod accounting? The 10-lane MNQ
+      NYSE_CLOSE cohort sits behind a single ACTIVE-profile whitelist gate;
+      if the highest-defensibility family head cannot clear strict
+      t >= 3.79 under Mode-A re-measurement, the cohort has no claim to
+      institutional validation and Stage 2 must not run. Pathway B K=1 is
+      the doctrine-correct framing for a confirmatory revalidation question
+      type per pre_registered_criteria.md Amendment 3.0.
+    role:
+      kind: standalone
+      parent: "Mode-A canonical replay of MNQ_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G8 on orb_outcomes JOIN daily_features."
+      comparator: "Selected trades vs absolute Chordia floor t>=3.79 and ExpR>0; descriptive OOS sign monitor with power-tier; no sibling rescue, no parameter variation."
+      primary_metric: "selected_trade_mean_r_IS"
+      promotion_target: "stage_2_eligibility_only"
+    filter:
+      type: "ORB_G8"
+      column: "ORB-window size in points from orb_outcomes / daily_features"
+      thresholds:
+        - "fire_vs_off (canonical delegation only)"
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_CLOSE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      stop_multiplier_note: "1.0 only — strategy_id has no _S{n} suffix per make_strategy_id convention (suffix only emitted when stop_multiplier != 1.0)."
+      orb_minutes: [5]
+    expected_trial_count: 1
+    statement: >
+      Under canonical Mode-A IS (trading_day < 2026-01-01) on
+      orb_outcomes JOIN daily_features with research.filter_utils.filter_signal
+      ('ORB_G8', 'NYSE_CLOSE') as the fire mask and realized-eod scratch
+      accounting, the selected-trade sample produces t_IS >= 3.79, ExpR_IS > 0,
+      N_IS_on >= 100, and years_positive_IS >= 5 of 7 IS years
+      (MNQ IS window 2019-05-06 to 2025-12-31, denominator=7 verified live).
+    pass_metric:
+      metric: t_IS
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical Mode-A IS fired trades after canonical filter delegation and realized-eod scratch accounting"
+      threshold_gte:
+        t_is: 3.79
+        n_is_on: 100
+        expr_is: 0.0
+        years_positive_is: 5
+      threshold_lt: {}
+      extra_gates:
+        - "dir_match_oos = true when oos_ttest_power tier is CAN_REFUTE (power >= 0.80)"
+        - "dir_match_oos advisory only when tier is DIRECTIONAL_ONLY (power in [0.50, 0.80))"
+        - "OOS sign mismatch with power tier STATISTICALLY_USELESS (power < 0.50) does NOT kill"
+        - "adversarial split table emitted (per-year ExpR, t, N, sign)"
+        - "scratch-inclusive accounting required; runner emits scratch_count and realized-eod pnl_r"
+        - "filter delegation parity check vs trading_app.config.ALL_FILTERS['ORB_G8'] required"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  n_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2 (Bailey et al 2013 Theorem 1)"
+    n_trials: 1
+    minbtl_years_required: 0.00
+    clean_years_available: 6.65
+    clean_years_source: "scripts/tools/minbtl_retro_report.CLEAN_YEARS_BY_INSTRUMENT['MNQ'] (doctrine constant)"
+    n_max_at_horizon: 27
+    operational_cap: 300
+    within_cap: true
+    verdict: PASS
+    cap_reference: "estimate_k_budget(instrument=MNQ, n_trials=1, e_max=1.0, proxy_extended=false) -> PASS, 2026-05-12 (n_max_at_horizon=27, 6.65yr headroom)"
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+
+kill_criteria:
+  - id: K1
+    metric: t_IS
+    threshold: "t_IS < 3.79"
+    action: KILL_COHORT
+    note: "Chordia strict no-theory severity floor. Failure parks all 10 MNQ NYSE_CLOSE lanes (cohort-park rule)."
+  - id: K2
+    metric: ExpR_IS
+    threshold: "ExpR_IS <= 0"
+    action: KILL_COHORT
+    note: "Positive-mean floor. Negative selected-trade mean is not edge."
+  - id: K3
+    metric: N_IS_on
+    threshold: "N_IS_on < 100"
+    action: KILL_COHORT
+    note: "Criterion 7 deployable-sample power floor. Cohort cannot be validated on <100 IS trades."
+  - id: K4
+    metric: years_positive_IS
+    threshold: "years_positive_IS < 5 (absolute count, N>=10 per year, denominator=7 — MNQ IS window is 2019-05-06 to 2025-12-31, verified live against orb_outcomes 2026-05-12)"
+    action: KILL_COHORT
+    note: "Criterion 9 era stability. Denominator is 7 (2019-2025 inclusive; 2019 is a partial year starting 2019-05-06 with N=146>=10). 5-of-7 is the standard era-stability rule on full-horizon MNQ instruments."
+  - id: K5
+    metric: WFE_modeA
+    threshold: "WFE_modeA < 0.50"
+    action: KILL_COHORT
+    note: "Criterion 6. Stored WFE is potentially MODE_B-contaminated and disregarded; this is a fresh Mode-A WFE computation."
+  - id: K6
+    metric: dir_match_oos
+    threshold: "dir_match_oos = false AND oos_ttest_power tier = CAN_REFUTE (power >= 0.80)"
+    action: KILL_COHORT
+    note: "OOS power-floor-gated dir_match. Underpowered OOS sign mismatch does NOT trigger this kill."
+  - id: K7
+    metric: filter_delegation_parity
+    threshold: "fire-mask divergence from trading_app.config.ALL_FILTERS['ORB_G8'] > 0 rows"
+    action: ABORT_AND_FIX
+    note: "Canonical filter delegation must match. Abort, fix, rerun (does not count as new trial)."
+  - id: K8
+    metric: scratch_accounting
+    threshold: "runner uses WHERE pnl_r IS NOT NULL or any scratch-drop equivalent"
+    action: ABORT_AND_FIX
+    note: "Criterion 13 scratch_policy=realized-eod is binding. Abort, fix, rerun."
+
+decision_rule:
+  continue_if: "All of K1-K6 cleared with K7-K8 PASS — cohort earns Stage-2 family-scan eligibility under a separate prereg + K-budget recheck."
+  park_if: "K1-K5 cleared but K6 fires with power tier DIRECTIONAL_ONLY — Stage-1 verdict UNVERIFIED; cohort parks; revisit when OOS power tier reaches CAN_REFUTE."
+  kill_if: "Any of K1-K5 fires, OR K6 fires with power tier CAN_REFUTE — all 10 MNQ NYSE_CLOSE lanes park as not_revalidated_strict_chordia."
+
+methodology_rules_applied:
+  - rule: "RULE 1 feature temporal alignment"
+    application: "ORB_G8 reads ORB-window size only; § 6.1 safe. No § 6.2 conditional-validity feature used. E2 entry (stop-market on first bar AFTER ORB close) — ORB_G8 fires at ORB end BEFORE break bar; § 6.3 break-bar-look-ahead class does not apply (ORB_G8 is not a break-bar feature)."
+  - rule: "RULE 2 filter application timing"
+    application: "Filter fires at ORB end (07:05 Brisbane for NYSE_CLOSE O5) before E2 break detection. Trades skipped on filter=off; not retro-filtered."
+  - rule: "RULE 3 IS/OOS discipline"
+    application: "IS = trading_day < 2026-01-01; OOS read-only descriptive with power-tier gate. No OOS tuning."
+  - rule: "RULE 3.3 OOS power floor"
+    application: "K6 dir_match kill gated by research.oos_power.oos_ttest_power tier; underpowered OOS does not kill."
+  - rule: "RULE 4 multiple testing"
+    application: "K_family = K_global = K_lane = K_session = 1 for this prereg (Pathway B K=1). Per Amendment 3.0, Pathway-B individual does not apply multi-framing K to itself."
+  - rule: "RULE 4.2 MinBTL budget"
+    application: "estimate_k_budget PASS: 0.00yr required, 6.65yr available, n_max_at_horizon=27, operational cap 300. Verdict PASS recorded 2026-05-12."
+  - rule: "RULE 6 trade-time knowability"
+    application: "ORB_G8 first-complete-time = ORB end (07:05 Brisbane). E2 break detection fires AFTER ORB close. Trade-time-knowable = true. Lookahead_check required PASS before execution."
+  - rule: "RULE 9 canonical data source"
+    application: "Reads orb_outcomes JOIN daily_features only. No derived-layer (validated_setups stored numbers used only for candidate identification, NOT evidence)."
+  - rule: "research-truth-protocol canonical filter delegation"
+    application: "research.filter_utils.filter_signal mandatory; no inline filter re-encoding. K7 parity check enforces."
+  - rule: "Criterion 13 scratch policy"
+    application: "realized-eod required; WHERE pnl_r IS NOT NULL forbidden. K8 enforces."
+  - rule: "Amendment 2.1 DSR scale"
+    application: "DSR Z-score from trading_app/strategy_discovery.py recorded for cross-check only; not a kill criterion."
+  - rule: "Mode-B grandfathered baseline rule"
+    application: "validated_setups stored expectancy_r=0.0974 NOT used as baseline. Mode-A IS recomputed from canonical orb_outcomes; candidate selected by stored c8_oos_status + p_value ranking among family heads only."
+  - rule: "Chordia theory_citation field-presence trap"
+    application: "theory_citation field OMITTED entirely from this prereg (no top-level, no per-hypothesis). Per memory/feedback_chordia_theory_citation_field_presence_trap.md, presence of any truthy value silently flips loader has_theory=True and downgrades the strict no-theory threshold from 3.79 to 3.00. Strict no-theory hurdle (t>=3.79) is the intended behaviour."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.md"
+  - "row-level CSV with IS/OOS split, raw + realized-eod pnl_r, scratch flag, filter fire status, trading_day, entry_ts"
+  - "single-cell summary table: N_IS_on, N_IS_scratch, ExpR_IS, Sharpe_IS, t_IS, years_positive_IS, WFE_modeA, DSR_Z, OOS N, OOS ExpR, dir_match, oos_power, oos_power_tier, verdict"
+  - "filter-delegation parity check report (rows divergent vs ALL_FILTERS['ORB_G8'])"
+  - "per-year adversarial split table (year, N, ExpR, t, sign)"
+  - "explicit statement that no theory grant was applied and strict t>=3.79 governed"
+  - "pooled-finding front-matter on result MD per .claude/rules/pooled-finding-rule.md (direction: pooled): pooled_finding: true, per_cell_breakdown_path pointing at directional breakdown table in same MD, flip_rate_pct (long/short row signs), heterogeneity_ack: true if flip_rate_pct >= 25%"
+  - "evidence-auditor sign-off (per .claude/rules/adversarial-audit-gate.md) before any downstream Stage-2 work"
+  - "explicit cohort-fate articulation: result MD verdict block must state whether the 10-lane cohort proceeds to Stage 2 or parks"
+
+execution_gate:
+  allowed_now: false
+  allowed_after: "user confirmation (authorization to run the Mode-A scan) AND commit_sha stamped"
+  execution_surface: "WSL with .venv-wsl or canonical Windows .venv per repo policy"
+  forbidden_now:
+    - "running the Mode-A scan before user authorization"
+    - "writing to validated_setups, edge_families, lane_allocation.json, or chordia_audit_log.yaml"
+    - "Stage-2 family-scan prereg authorship before Stage-1 result MD and adversarial-audit sign-off"
+    - "Stage-3 profile-whitelist mutation in trading_app/prop_profiles.py"
+    - "theory-grant upgrade without /resources-backed citation specific to ORB_G8 on NYSE_CLOSE"
+    - "threshold rescue if a kill criterion fires"
+
+not_done_by_this_pre_reg:
+  - "Does not test the other 9 MNQ NYSE_CLOSE family heads (Stage 2 scope, conditional on Stage 1 PASS, separate prereg + K-budget recheck)."
+  - "Does not test adjacent filters (other ORB_G buckets, RR/CB/stop variants)."
+  - "Does not modify the profile whitelist or activate any inactive profile (Stage 3, separate session)."
+  - "Does not run a Chordia audit on MGC LONDON_METALS surviving lanes (cohort-park rule from 2026-05-12 Stage 1 KILL stands)."
+  - "Does not touch MES US_DATA_1000 / MNQ LONDON_METALS NOMON_O15 clusters (separate units, separate sessions)."
+  - "Does not authorize allocator activation, lane deployment, or paper-trading enablement."
+  - "Does not write a Chordia audit-log entry (Stage 3 scope, conditional on Stage 2 survivors)."
