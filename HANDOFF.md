@@ -14,6 +14,11 @@
   - `HANDOFF.md`
   - `docs/institutional/literature/PENDING_ACQUISITION_market_profile.md`
 
+## Current Session Addendum
+- **Tool:** Codex (WSL)
+- **Date:** 2026-05-12
+- **Summary:** Fixed `gold-db` MCP WAL replay failure by moving stale orphan `/home/joshd/canompx3/gold.db.wal` to `/tmp/canompx3-gold.db.wal.stale-2026-05-12-setup-debug`; `gold-db` MCP table counts and MGC fitness now work. Wrote and ran bounded prereg `2026-05-12-vwap-dead-confluence-reaudit-v1`; result `PASS_STANDS` confirms VWAP remains closed as a broad confluence family while exact VWAP lanes remain exact-lane facts only. CB Insights remains cached/enabled as a plugin descriptor but not callable until connector/app install completes.
+
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
 
