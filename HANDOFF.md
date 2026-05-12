@@ -9,10 +9,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 11500d43 — docs(institutional): add AFML 2018 focused extract (Ch 3 Labeling, Ch 7 CV, Ch 8 Feature Importance, Ch 12 CPCV)
-- **Files changed:** 2 files
+- **Commit:** c9ec08f3 — docs(institutional): wire new extracts into backtesting-methodology and mechanism_priors auto-load
+- **Files changed:** 4 files
+  - `.claude/rules/backtesting-methodology.md`
   - `HANDOFF.md`
-  - `docs/institutional/literature/lopez_de_prado_2018_afml_ch_3_7_8.md`
+  - `docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md`
+  - `docs/institutional/mechanism_priors.md`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
