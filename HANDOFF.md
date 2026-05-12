@@ -9,14 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 7bf689a4 — docs(audit): post-self-review polish — scratch-policy doc + CLI invocations
-- **Files changed:** 6 files
+- **Commit:** cf0eb7b8 — @ docs(audit): retract L3 verdict label per numerical re-verification
+- **Files changed:** 3 files
   - `HANDOFF.md`
   - `docs/audit/results/2026-05-12-sr-alarm-3lane-summary.md`
-  - `docs/audit/results/2026-05-12-sr-alarm-comex-settle-rr1.5.md`
-  - `docs/audit/results/2026-05-12-sr-alarm-nyse-open-rr1.md`
   - `docs/audit/results/2026-05-12-sr-alarm-us-data-1000-rr1.5.md`
-  - `research/sr_alarm_steps_3_4_5_2026_05_12.py`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
