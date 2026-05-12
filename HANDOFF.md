@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 39eef419 — docs(audit): pre-reg 3-lane SR alarm diagnosis (Harris-grounded)
+- **Commit:** 449aef96 — feat(research): SR alarm decomposition script for 3-lane diagnosis
 - **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/audit/hypotheses/2026-05-12-3lane-sr-alarm-diagnosis.yaml`
+  - `research/sr_alarm_decomposition_2026_05_12.py`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
