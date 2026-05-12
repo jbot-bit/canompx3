@@ -83,24 +83,32 @@
 | `[EXTRA]` | `hypothesis_registry_template.md` | `docs/institutional/` — pre-reg template |
 | `[EXTRA]` | `institutional_README.md` | `docs/institutional/README.md` — institutional framework overview |
 
-### Literature (11 verbatim extracts, one paper per file)
+### Literature (17 verbatim extracts, one paper per file)
 | Tag | File | Paper | What it answers |
 |-----|------|-------|-----------------|
 | `[CORE]` | `LIT_bailey_2013_pseudo_math_minBTL.md` | Bailey et al 2013 | MinBTL bound, data-snooping in finance |
 | `[CORE]` | `LIT_bailey_lopez_2014_deflated_sharpe.md` | Bailey-Lopez de Prado 2014 | Deflated Sharpe Ratio (DSR) |
 | `[CORE]` | `LIT_harvey_liu_2015_backtesting_haircut.md` | Harvey-Liu 2015 | BHY haircut, multiple-testing in finance |
 | `[CORE]` | `LIT_chordia_2018_two_million_t379.md` | Chordia et al 2018 | t ≥ 3.79 threshold, no prior theory |
-| `[CORE]` | `LIT_lopez_2020_ml_asset_managers.md` | Lopez de Prado 2020 | CPCV, theory-first ML, backtest overfitting |
+| `[CORE]` | `LIT_lopez_2020_ml_asset_managers.md` | Lopez de Prado 2020 | CPCV intro, theory-first ML (Cambridge Elements sampler) |
+| `[CORE]` | `LIT_lopez_de_prado_2018_afml.md` | Lopez de Prado 2018 AFML Ch 3+7+8+12 | **CPCV primary source (Ch 12)**, triple-barrier labeling (Ch 3), MDI/MDA/SFI feature importance (Ch 8), purged k-fold + embargo (Ch 7). Added 2026-05-12. |
 | `[CORE]` | `LIT_chan_2013_ch1_backtesting_invariant.md` | Chan 2013 ch 1 (pp 1-10) | Look-ahead invariant (p4), data-snooping, survivorship |
 | `[CORE]` | `LIT_fitschen_2013_orb_premise.md` | Fitschen 2013 ch 3 | Intraday trend-follow (ORB premise) |
+| `[CORE]` | `LIT_benjamini_hochberg_1995_fdr.md` | Benjamini-Hochberg 1995 | FDR primary source (the original paper that grounds Chordia et al 2018). Added 2026-05-12. |
+| `[CORE]` | `LIT_aronson_2007_ebta_data_snooping.md` | Aronson 2007 (EBTA) | Empirical data-mining-bias case study — 6,402 S&P TA rules, ZERO significant after WRC/MCP. Naive testing would have flagged ~320 = α·N. Added 2026-05-12. |
+| `[CORE]` | `LIT_harris_2002_microstructure.md` | Harris 2002 (Trading & Exchanges) | Mechanism source: stop-cascade, adverse selection, order anticipators, volatility decomposition. Anchors `mechanism_priors.md`. Added 2026-05-12. |
+| `[CORE]` | `LIT_tolusic_2026_amt_inventory_dynamics.md` | Tolušić 2026 (SSRN 6616280) | **First formal mathematical AMT treatment.** Hawkes inventory dynamics + linear price impact; magnitude-direction separation theorem; 44k FX bars / 26 yrs empirical. Asset-class general mechanism. Added 2026-05-12. |
+| `[CORE]` | `LIT_howard_2026_value_area_breakouts_es.md` | Howard 2026 (SSRN 6350238) | Independent ES futures replication of Yordanov 2026 NQ value-area work. 6,284 events. Selectivity framework for price-stop EV-destruction at structural boundaries. Added 2026-05-12. |
 | `[EXTRA]` | `LIT_lopez_bailey_2018_false_strategy.md` | Lopez de Prado-Bailey 2018 | False Strategy Theorem, E[max_SR] |
 | `[EXTRA]` | `LIT_carver_2015_vol_target_sizing.md` | Carver 2015 | Volatility targeting, Kelly-linked sizing |
 | `[EXTRA]` | `LIT_chan_2008_ch7_regime_switching.md` | Chan 2008 ch 7 | Regime switching |
 | `[EXTRA]` | `LIT_pepelyshev_2015_cusum_monitoring.md` | Pepelyshev-Polunchenko 2015 | CUSUM / Shiryaev-Roberts monitoring |
 
-### `[CORE]` 20 — strict Plus-tier set
+### `[CORE]` 26 — strict Plus-tier set
 
-Meta (7) + rules (6) + lit (7) = 20.
+Meta (7) + rules (6) + lit (13) = 26.
+
+> **2026-05-12 note:** the core literature set expanded from 7 to 13 papers as the Phase-0 grounding closed five gaps (BH-1995, Aronson 2007, Harris 2002, Tolušić 2026, Howard 2026, AFML 2018). The total bundle is now over the 20-file Plus-tier soft cap. If using ChatGPT Plus, prioritize the 7 meta + 6 rule files first and add lit files by topical relevance to current work. The Pro tier and Team tier handle 26 files comfortably.
 
 Upload these to Plus. They're self-contained: key content of every `[EXTRA]` is inlined or summarized in one of the CORE meta files:
 - T0-T8 audit framework → summary in `01_OPERATING_RULES.md` (§11a added for Plus parity)
@@ -122,11 +130,15 @@ Bundled files cite **repo paths** (e.g. `docs/institutional/pre_registered_crite
 |-------|-------|
 | "Is this hypothesis worth testing?" | `07_PLAYBOOKS.md` Playbook 1 + `06_RD_GRAVEYARD.md` + `STRATEGY_BLUEPRINT.md` + `pre_registered_criteria.md` |
 | "Review this backtest for bias" | `07_PLAYBOOKS.md` Playbook 2 + `backtesting-methodology.md` + `quant-audit-protocol.md` |
-| "Multiple testing / BH-FDR" | `LIT_bailey_2013_pseudo_math_minBTL.md` + `LIT_harvey_liu_2015_backtesting_haircut.md` + `LIT_chordia_2018_two_million_t379.md` |
+| "Multiple testing / BH-FDR" | `LIT_benjamini_hochberg_1995_fdr.md` (primary) + `LIT_bailey_2013_pseudo_math_minBTL.md` + `LIT_harvey_liu_2015_backtesting_haircut.md` + `LIT_chordia_2018_two_million_t379.md` |
+| "Data-mining bias empirical demo" | `LIT_aronson_2007_ebta_data_snooping.md` (6,402 TA rules → 0 significant) |
 | "Is my Sharpe real?" | `LIT_bailey_lopez_2014_deflated_sharpe.md` + `LIT_lopez_bailey_2018_false_strategy.md` |
-| "Why does ORB work?" | `LIT_fitschen_2013_orb_premise.md` + `mechanism_priors.md` |
+| "Why does ORB work?" | `LIT_fitschen_2013_orb_premise.md` + `LIT_harris_2002_microstructure.md` (stop-cascade) + `mechanism_priors.md` |
 | "Look-ahead bias invariant" | `LIT_chan_2013_ch1_backtesting_invariant.md` (book p4) |
 | "How should I size positions?" | `LIT_carver_2015_vol_target_sizing.md` + `mechanism_priors.md` R8 role |
+| "CPCV / purged k-fold / triple-barrier / feature importance" | `LIT_lopez_de_prado_2018_afml.md` (primary, Ch 7+8+12) + `LIT_lopez_2020_ml_asset_managers.md` (secondary intro) |
+| "Value-area / auction-market-theory mechanism" | `LIT_tolusic_2026_amt_inventory_dynamics.md` (formal model) + `LIT_howard_2026_value_area_breakouts_es.md` (ES empirical) + `mechanism_priors.md` § Auction theory |
+| "Are price-based stops at structural boundaries a good idea?" | `LIT_howard_2026_value_area_breakouts_es.md` § 5.3 (selectivity framework; answer: no, almost never) |
 | "Regime switching / monitoring" | `LIT_chan_2008_ch7_regime_switching.md` + `LIT_pepelyshev_2015_cusum_monitoring.md` |
 | "What's the cost for MGC?" | `CANONICAL_VALUES.md` §2 |
 | "When does session X start in Brisbane?" | `CANONICAL_VALUES.md` §3 |

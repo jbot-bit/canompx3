@@ -31,18 +31,24 @@ Update when the underlying canonical source changes materially:
 | `02_USER_PROFILE.md` | User working-style changes (new typo pattern, new escalation rule) |
 | `07_PLAYBOOKS.md` | New recurring question type emerges from ChatGPT usage |
 | 17 copied rule files | When the `.claude/rules/*.md` or `docs/institutional/*.md` source changes — re-copy |
-| 11 LIT files | When a new paper is extracted to `docs/institutional/literature/` — copy in |
+| 13 LIT files | When a new paper is extracted to `docs/institutional/literature/` — copy in (last grew 7→13 on 2026-05-12) |
 
 ## Known gaps (called out in `00_INDEX.md` provenance section)
 
 Primary sources exist in `resources/` but are NOT extracted:
-- Aronson ch6 (data-mining bias)
-- Chan 2013 ch2-8 (we have ch1 pp 1-10 only)
+- ~~Aronson ch6 (data-mining bias)~~ — **CLOSED 2026-05-12** → `LIT_aronson_2007_ebta_data_snooping.md`
+- Chan 2013 ch2-8 (we have ch1 pp 1-10, ch5, ch7, TOC)
 - Chan 2008 *Quantitative Trading* (different book, only ch7 extracted)
-- Carver ch4 / ch6 / ch8 (we have ch9-10 only)
-- Benjamini-Hochberg 1995 (original FDR paper)
+- Carver ch4 / ch6 / ch8 (we have ch9-10, ch11, ch12)
+- ~~Benjamini-Hochberg 1995 (original FDR paper)~~ — **CLOSED 2026-05-12** → `LIT_benjamini_hochberg_1995_fdr.md`
 - Man Group 2015 overfitting
 - Pardo (Trading Strategy Optimization)
+
+Closed 2026-05-12 (5 of 6 in the 2026-05-12 batch):
+- ✓ Harris 2002 *Trading & Exchanges* (microstructure mechanism) → `LIT_harris_2002_microstructure.md`
+- ✓ Tolušić 2026 AMT formal model → `LIT_tolusic_2026_amt_inventory_dynamics.md`
+- ✓ Howard 2026 ES value-area breakouts → `LIT_howard_2026_value_area_breakouts_es.md`
+- ✓ LdP 2018 AFML Ch 3+7+8+12 (CPCV primary) → `LIT_lopez_de_prado_2018_afml.md`
 
 To close any of these: open the PDF, extract specific pages, write a new `LIT_<name>.md` file in the same style as existing extracts (verbatim quotes + page citations + "how we use it" section). Add the file to `chatgpt_bundle_optional/` and update `00_INDEX.md` file map.
 
@@ -59,7 +65,7 @@ Common drift patterns and fixes documented in `CHATGPT_PROJECT_INSTRUCTIONS.md` 
 
 ## What's next (for future sessions)
 
-- Extract Aronson ch6 when first needed — it's referenced but not verified in `quant-audit-protocol.md`.
+- ~~Extract Aronson ch6 when first needed~~ — DONE 2026-05-12.
 - Extract Chan 2013 ch7 "Intraday Momentum Strategies" — closest to our ORB work but not extracted.
 - If user downgrades Pro→Plus: delete `chatgpt_bundle_optional/*` from the ChatGPT Project. Nothing else needs to change.
 
