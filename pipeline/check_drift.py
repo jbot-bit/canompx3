@@ -3257,6 +3257,122 @@ def check_hypothesis_minbtl_compliance() -> list[str]:
     return violations
 
 
+def check_chordia_result_threshold_matches_prereg() -> list[str]:
+    """Result MD `MEASURED threshold applied` must match prereg `chordia_threshold_basis`.
+
+    Origin: 2026-05-12 MGC LONDON_METALS Stage 1 run. The prereg's
+    ``hypotheses[0].theory_citation`` field contained prose ("No filter-mechanism
+    theory citation available...") which is a truthy string. The loader at
+    ``trading_app/hypothesis_loader.py:262-269`` correctly emitted
+    ``has_theory=True`` and the runner applied 3.00 instead of the prereg's
+    declared strict 3.79. The result MD's ``MEASURED threshold applied`` line
+    surfaces the mismatch but only post-run. This check catches the same class
+    of authoring error at commit time, by comparing the numeric threshold
+    declared in the prereg's ``chordia_threshold_basis`` string against the
+    numeric ``MEASURED threshold applied`` in the matching result MD.
+
+    The check is **paired-file** (prereg + matching result MD by stem) and
+    silently passes when either file is missing — preregs without result MDs
+    are pre-run state and not yet auditable. Likewise result MDs without
+    prereg are out-of-scope.
+
+    Authority: ``pre_registered_criteria.md`` Criterion 4 (Chordia threshold
+    contract); ``docs/audit/results/2026-05-12-deployed-lanes-chordia-strict-379-exposure-audit.md``
+    (root cause analysis).
+
+    Date sentinel mirrors check_hypothesis_minbtl_compliance — binding for
+    files dated >= 2026-05-12; advisory for older files. Grandfathered
+    behaviour because pre-sentinel preregs were authored without this
+    expectation.
+    """
+    import re
+
+    sentinel = "2026-05-12"
+
+    def _is_binding(stem: str) -> bool:
+        return stem[:10] >= sentinel
+
+    def _extract_prereg_threshold(prereg_text: str) -> float | None:
+        """Pull the numeric threshold from chordia_threshold_basis prose.
+
+        Matches phrasing like ``t >= 3.79`` or ``t >= 3.00``. Returns None if
+        the string is absent or unparseable (silent skip — not every prereg
+        carries chordia_threshold_basis; only Chordia unlock / revalidation
+        preregs do).
+        """
+        m = re.search(
+            r"chordia_threshold_basis\s*:\s*[\"']?[^\n\"']*?t\s*>=\s*(\d+\.\d+)",
+            prereg_text,
+        )
+        if m is None:
+            return None
+        return float(m.group(1))
+
+    def _extract_result_threshold(result_text: str) -> float | None:
+        """Pull the numeric ``MEASURED threshold applied`` from the result MD."""
+        m = re.search(
+            r"\*\*MEASURED threshold applied:\*\*\s*`(\d+\.\d+)`",
+            result_text,
+        )
+        if m is None:
+            return None
+        return float(m.group(1))
+
+    violations: list[str] = []
+    advisories: list[str] = []
+    hyp_dir = PROJECT_ROOT / "docs" / "audit" / "hypotheses"
+    res_dir = PROJECT_ROOT / "docs" / "audit" / "results"
+    if not hyp_dir.exists() or not res_dir.exists():
+        return violations
+
+    for prereg_path in sorted(hyp_dir.glob("*.yaml")):
+        stem = prereg_path.stem
+        result_path = res_dir / f"{stem}.md"
+        if not result_path.exists():
+            continue  # pre-run state — no result to compare against
+
+        try:
+            prereg_text = prereg_path.read_text(encoding="utf-8")
+            result_text = result_path.read_text(encoding="utf-8")
+        except Exception as exc:
+            advisories.append(f"  {prereg_path.name}: failed to read prereg/result pair ({type(exc).__name__}: {exc})")
+            continue
+
+        prereg_threshold = _extract_prereg_threshold(prereg_text)
+        result_threshold = _extract_result_threshold(result_text)
+        if prereg_threshold is None or result_threshold is None:
+            # Not a Chordia-style audit (no threshold to compare). Silent skip.
+            continue
+
+        if abs(prereg_threshold - result_threshold) < 0.001:
+            continue
+
+        binding = _is_binding(stem)
+        msg = (
+            f"  {prereg_path.name}: prereg declares t>={prereg_threshold} "
+            f"but result MD applied t>={result_threshold}. "
+            "Likely cause: hypotheses[i].theory_citation contains a truthy "
+            "string for a no-theory prereg (the loader treats field-presence "
+            "as the boolean). Omit theory_citation entirely for no-theory "
+            "preregs, OR amend the prereg's chordia_threshold_basis if the "
+            "applied threshold is the institutionally correct one. "
+            "See docs/audit/results/2026-05-12-deployed-lanes-chordia-strict-379-exposure-audit.md."
+        )
+        (violations if binding else advisories).append(msg)
+
+    if advisories:
+        print(
+            f"  WARNING (non-blocking, pre-{sentinel} grandfathered) — "
+            f"Chordia threshold mismatch advisory: {len(advisories)} prereg/result pair(s)"
+        )
+        for a in advisories[:5]:
+            print(f"    {a.strip()}")
+        if len(advisories) > 5:
+            print(f"    ... and {len(advisories) - 5} more")
+
+    return violations
+
+
 def check_orphaned_validated_strategies(con=None) -> list[str]:
     """Check #42: Validated strategies must have corresponding outcome data.
 
@@ -8927,6 +9043,12 @@ CHECKS = [
     (
         "Pre-reg hypothesis files pass Bailey 2013 MinBTL K-budget gate",
         check_hypothesis_minbtl_compliance,
+        False,
+        False,
+    ),
+    (
+        "Chordia result MD threshold matches prereg chordia_threshold_basis (theory_citation field-presence trap)",
+        check_chordia_result_threshold_matches_prereg,
         False,
         False,
     ),

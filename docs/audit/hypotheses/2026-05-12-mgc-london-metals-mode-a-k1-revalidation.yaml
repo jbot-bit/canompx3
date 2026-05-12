@@ -175,7 +175,25 @@ primary_schema:
   k_global: 1
   k_lane: 1
   k_session: 1
-  chordia_threshold_basis: "Criterion 4 no-theory strict threshold (t >= 3.79); filter_grounding_status.verdict = NO_THEORY_GRANT."
+  chordia_threshold_basis: "Criterion 4 theory-backed threshold (t >= 3.00); as-authored implicit theory grant — see authoring_lesson below."
+  authoring_lesson: >
+    INSTITUTIONAL TRAP — recorded 2026-05-12 retrospectively per Path-E
+    exposure audit (docs/audit/results/2026-05-12-deployed-lanes-chordia-strict-379-exposure-audit.md).
+    The original author INTENT was no-theory (t >= 3.79). hypotheses[0].theory_citation
+    was set to prose saying "No filter-mechanism theory citation available
+    for ORB_VOL_8K on LONDON_METALS..." — but the trading_app/hypothesis_loader.py
+    field-presence semantics (lines 262-269) interpret ANY truthy string in
+    that field as theory-present. The loader correctly emitted has_theory=True
+    and the runner correctly applied t >= 3.00. To honor the loader's contract
+    and keep this prereg internally consistent with the result MD's "MEASURED
+    threshold applied: 3.00", chordia_threshold_basis is amended from 3.79
+    to 3.00. Substantive verdict (FAIL_STRICT_CHORDIA at t=2.930) survives
+    EITHER threshold — t=2.930 < 3.00 AND < 3.79 — so the MGC LONDON_METALS
+    cohort KILL_COHORT decision is unaffected. New drift check
+    check_chordia_result_threshold_matches_prereg in pipeline/check_drift.py
+    catches this class of authoring error going forward. Prereg-writer prompt
+    updated with explicit guidance to OMIT theory_citation entirely (not set
+    it to "no citation available" prose) for no-theory preregs.
   promotion_gate: "Stage-1 PASS verdict — opens Stage-2 family scan eligibility ONLY. Does not authorize allocator, deployment, or chordia_audit_log mutation."
 
 testing_discipline:

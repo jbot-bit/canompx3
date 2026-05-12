@@ -26,6 +26,7 @@ You will be given (user supplies or you must ask):
 If any of these are missing, demand them. Do not guess.
 
 NON-NEGOTIABLE OUTPUT RULES
+0. **`hypotheses[i].theory_citation` is field-presence-based, NOT field-content-based.** The hypothesis loader at `trading_app/hypothesis_loader.py:262-269` sets `has_theory=True` iff `hypotheses[i].theory_citation` is any truthy value (any non-empty string). For a **no-theory** prereg, **OMIT the `theory_citation` field entirely** from each hypothesis. Do NOT set it to prose like "No filter-mechanism theory citation available..." — that string is truthy and silently flips the Chordia threshold from strict t>=3.79 (no-theory) to theory-backed t>=3.00. Origin: 2026-05-12 MGC LONDON_METALS Stage 1 prereg authoring error caught by the Path-E exposure audit (`docs/audit/results/2026-05-12-deployed-lanes-chordia-strict-379-exposure-audit.md`). Drift check `check_chordia_result_threshold_matches_prereg` catches this at commit time when a result MD exists.
 1. No "TO_FILL" / placeholder tokens in the committed file, except `commit_sha: "TO_FILL_AFTER_COMMIT"` which is legitimately known only after the first commit. Everything else must be verified.
 2. Every scope field must be verified against a canonical source:
    - `HOLDOUT_SACRED_FROM` from `trading_app.holdout_policy`
