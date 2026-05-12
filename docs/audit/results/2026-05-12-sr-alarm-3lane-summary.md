@@ -207,9 +207,10 @@ Per-lane actions are documented in each lane's MD. Cross-lane actions:
 - Step 2 script: `research/sr_alarm_decomposition_2026_05_12.py --pressure-test
   --out research/output/sr_alarm_decomposition_2026_05_12.json`
 - Steps 3/4/5 script (added 2026-05-12 post-review):
-  `research/sr_alarm_steps_3_4_5_2026_05_12.py` — reproduces F3 fire-rate-
-  by-year + per-year sign-flip rate, F4 live Bailey DSR per lane, F5(1)
-  atr_vel_regime distribution shift, and F5(2) cost-spec drift check.
+  `python research/sr_alarm_steps_3_4_5_2026_05_12.py` — reproduces F3
+  fire-rate-by-year + per-year sign-flip rate, F4 live Bailey DSR per lane,
+  F5(1) atr_vel_regime distribution shift, and F5(2) cost-spec drift check.
+  Default args run all 3 steps on all 3 lanes; `--steps 3,5` skips DSR.
   Per-lane Stable-share deltas reproduce as +15.3 / +16.3 / +17.0 pp
   (script 3-decimal rounding) vs +15.5 / +16.5 / +17.2 pp in the F5(1)
   table above (unrounded fractions); the +15pp headline holds either way.

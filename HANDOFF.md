@@ -9,13 +9,15 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 98d64503 — docs(audit): 3-lane SR alarm diagnostic results (4 MDs)
-- **Files changed:** 5 files
+- **Commit:** 1ccd1107 — feat(research): commit Steps 3/4/5 reproducer + close 3 review findings
+- **Files changed:** 7 files
   - `HANDOFF.md`
   - `docs/audit/results/2026-05-12-sr-alarm-3lane-summary.md`
   - `docs/audit/results/2026-05-12-sr-alarm-comex-settle-rr1.5.md`
   - `docs/audit/results/2026-05-12-sr-alarm-nyse-open-rr1.md`
   - `docs/audit/results/2026-05-12-sr-alarm-us-data-1000-rr1.5.md`
+  - `research/audit_ovnrng50_canonical_dsr.py`
+  - `research/sr_alarm_steps_3_4_5_2026_05_12.py`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.

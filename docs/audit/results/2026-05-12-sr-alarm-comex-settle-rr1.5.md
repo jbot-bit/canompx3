@@ -215,12 +215,13 @@ longer selects for that subset.
 - Step 2 script: `research/sr_alarm_decomposition_2026_05_12.py --pressure-test
   --out research/output/sr_alarm_decomposition_2026_05_12.json`
 - Steps 3/4/5 script (added 2026-05-12 post-review):
-  `research/sr_alarm_steps_3_4_5_2026_05_12.py` — reproduces the fire-rate-
-  by-year, per-year sign-flip, live Bailey DSR, regime distribution shift,
-  and cost-spec drift numbers cited in this MD. Reads lane list from the
-  pre-reg yaml `scope.lanes[]`; delegates DSR math to
+  `python research/sr_alarm_steps_3_4_5_2026_05_12.py` — reproduces the
+  fire-rate-by-year, per-year sign-flip, live Bailey DSR, regime
+  distribution shift, and cost-spec drift numbers cited in this MD. Reads
+  lane list from the pre-reg yaml `scope.lanes[]`; delegates DSR math to
   `research.audit_ovnrng50_canonical_dsr.bailey_dsr` (top-level import safe
-  after the same-commit `__main__`-guard refactor).
+  after the same-commit `__main__`-guard refactor). Default args run all
+  3 steps on all 3 lanes; `--steps 4` runs DSR only.
 - DSR helper: `research.audit_ovnrng50_canonical_dsr.bailey_dsr` (Bailey 2014
   Eq 2; Bailey-example sanity check 0.9004 = paper)
 - SR state snapshot: `data/state/sr_state.json` git_head `398693ea` (read-only)

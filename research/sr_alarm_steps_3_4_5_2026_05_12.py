@@ -227,6 +227,18 @@ def _scan_cell_sr_samples(
     Mirrors the per-(instrument, session) scan used by
     research/audit_ovnrng50_canonical_dsr._run_ovnrng50_analysis. Confirm_bars
     locked to the lane's confirm_bars; entry_model locked to the lane's.
+
+    Scratch policy: this reference distribution uses ``WHERE pnl_r IS NOT NULL``
+    to MATCH the canonical OVNRNG50 Bailey-LdP 2014 reference computation
+    (research/audit_ovnrng50_canonical_dsr.py:67 + :100). This INTENTIONALLY
+    differs from the lane's own filtered SR (``_fetch_lane_ledger`` uses
+    ``fillna(0.0)`` per pre-reg ``scratch_policy: include-as-zero``).
+    Verified 0 NULLs on all 3 deployed MNQ lanes 2026-05-12, so the divergence
+    is operationally a no-op today. For a future lane with scratches the lane
+    SR would be slightly compressed (zeros pulling toward mean=0) while the
+    reference distribution wouldn't be — making DSR more conservative
+    (Bailey-style under-rejection bias). Documented for future maintainers
+    so the inconsistency is not "fixed" away.
     """
     samples: list[float] = []
     for orb_m in (5, 15, 30):
