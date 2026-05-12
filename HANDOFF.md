@@ -9,10 +9,24 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 23243b44 — docs(institutional): add Aronson 2007 EBTA data-snooping extract
-- **Files changed:** 2 files
+- **Commit:** 526f3d87 — chore(resources): add ml4am code companion (third-party LdP 2020 implementations)
+- **Files changed:** 20 files
   - `HANDOFF.md`
-  - `docs/institutional/literature/aronson_2007_ebta_data_snooping.md`
+  - `resources/ml4am_code_companion/Chapter_2/02Denoising and Detoning.ipynb`
+  - `resources/ml4am_code_companion/Chapter_2/AssetManagerMachineLearning.py`
+  - `resources/ml4am_code_companion/Chapter_2/Chapter 2.ipynb`
+  - `resources/ml4am_code_companion/Chapter_2/ConstantResidual.py`
+  - `resources/ml4am_code_companion/Chapter_2/Detoning.py`
+  - `resources/ml4am_code_companion/Chapter_2/FittingMarcenkoPastur.py`
+  - `resources/ml4am_code_companion/Chapter_2/MarcenkoPastur.py`
+  - `resources/ml4am_code_companion/Chapter_2/RandomMatrixWithSignal.py`
+  - `resources/ml4am_code_companion/Chapter_2/TargetedShrinkage.py`
+  - `resources/ml4am_code_companion/Chapter_3/03DistanceMetrics.ipynb`
+  - `resources/ml4am_code_companion/Chapter_3/AssetManagerMachineLearning.py`
+  - `resources/ml4am_code_companion/Chapter_3/ConstantResidual.py`
+  - `resources/ml4am_code_companion/Chapter_3/Detoning.py`
+  - `resources/ml4am_code_companion/Chapter_3/FittingMarcenkoPastur.py`
+  - ... and 5 more
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
