@@ -35,8 +35,9 @@ authority:
     - "Stage 1 of a three-stage triage (plan: docs/plans/2026-05-12-mgc-london-metals-institutional-validation-pathway.md)."
     - "Cohort is grandfathered research-provisional per pre_registered_criteria.md § Applying to existing validated_setups. Discovery_k=19195 violated Bailey MinBTL when written. All stored ExpR / WFE / DSR numbers are MODE_B-contaminated and are NOT used as evidence in this prereg."
     - "No theory grant claimed for LONDON_METALS gold breakouts. Chordia strict threshold t >= 3.79 applies (Criterion 4 no-theory)."
-    - "K=1 Bailey budget verified: estimate_k_budget(instrument=MGC, n_trials=1) returned PASS — 2.70yr clean horizon, n_max_at_horizon=3, operational cap 300. This prereg consumes 1 of 3 strict-Bailey slots."
-    - "If Stage 1 KILLs, the entire 12-lane cohort parks. If Stage 1 PASSes, Stage 2 may test up to 2 additional family heads."
+    - "K=1 Bailey budget verified: estimate_k_budget(instrument=MGC, n_trials=1) returned PASS — 2.70yr doctrine clean_years (scripts/tools/minbtl_retro_report.CLEAN_YEARS_BY_INSTRUMENT['MGC']), n_max_at_horizon=3, operational cap 300. This prereg consumes 1 of 3 strict-Bailey slots."
+    - "Bailey horizon vs effective IS horizon: doctrine clean_years=2.70 is the value the K-budget gate enforces and is the conservative number for canonical pre-reg arithmetic. Effective IS row count is 3.6yr (2022-06-13 to 2025-12-31, 916 pre-filter trades) — the longer span reflects a partial 2022 year. Both numbers are recorded so readers can audit either basis; the Bailey gate uses 2.70, the years_positive_IS K4 uses 4 (full + partial years)."
+    - "If Stage 1 KILLs, the entire 12-lane cohort parks. If Stage 1 PASSes, Stage 2 may test up to 2 additional family heads from the 4 REMAINING family heads (5 active family heads total, this prereg uses 1). The other 7 of 12 active lanes are non-heads and are not Stage-2 candidates by design (one head per family is the strict-Bailey budget rationing principle)."
 
 scope:
   instrument: MGC
@@ -219,6 +220,7 @@ hypotheses:
       entry_models: [E1]
       confirm_bars: [1]
       stop_multipliers: [1.0]
+      stop_multiplier_note: "1.0 only — explicitly excludes _S075 stop-multiplier variants that exist among the 4 remaining family heads. Strategy_id has no _S{n} suffix per make_strategy_id convention (suffix only emitted when stop_multiplier != 1.0)."
       orb_minutes: [30]
     expected_trial_count: 1
     statement: >
@@ -226,7 +228,8 @@ hypotheses:
       orb_outcomes JOIN daily_features with research.filter_utils.filter_signal
       ('ORB_VOL_8K', 'LONDON_METALS') as the fire mask and realized-eod scratch
       accounting, the selected-trade sample produces t_IS >= 3.79, ExpR_IS > 0,
-      N_IS_on >= 100, and years_positive_IS >= 4.
+      N_IS_on >= 100, and years_positive_IS >= 3 of 4 IS years
+      (MGC IS window 2022-06-13 to 2025-12-31, denominator=4 verified live).
     pass_metric:
       metric: t_IS
       formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical Mode-A IS fired trades after canonical filter delegation and realized-eod scratch accounting"
@@ -254,6 +257,7 @@ trial_budget:
     n_trials: 1
     minbtl_years_required: 0.00
     clean_years_available: 2.70
+    clean_years_source: "scripts/tools/minbtl_retro_report.CLEAN_YEARS_BY_INSTRUMENT['MGC'] (doctrine constant; conservative vs the 3.6yr effective IS row span)"
     n_max_at_horizon: 3
     operational_cap: 300
     within_cap: true
