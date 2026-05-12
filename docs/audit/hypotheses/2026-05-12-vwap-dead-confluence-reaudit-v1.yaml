@@ -1,0 +1,111 @@
+version: 1
+status: LOCKED
+date: 2026-05-12
+slug: vwap-dead-confluence-reaudit-v1
+title: "VWAP dead-confluence verdict procedural re-audit v1"
+owner: codex
+
+metadata:
+  name: vwap-dead-confluence-reaudit-v1
+  purpose: >
+    Re-audit the existing VWAP family DOCTRINE-CLOSED verdict from primary
+    prereg/result/script files without rerunning the one-shot OOS family scan.
+  date_locked: "2026-05-12T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: individual
+  research_question_type: conditional_role
+
+authority:
+  primary:
+    - RESEARCH_RULES.md
+    - docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md
+    - docs/institutional/research_pipeline_contract.md
+    - docs/audit/hypotheses/2026-04-18-vwap-comprehensive-family-scan.yaml
+    - docs/audit/results/2026-04-18-vwap-comprehensive-family-scan.md
+    - research/vwap_comprehensive_family_scan.py
+  notes:
+    - "This is a bounded audit of an existing dead-confluence verdict, not a fresh discovery scan."
+    - "The original VWAP scan consumed its Mode A OOS window and explicitly refuses rerun. This prereg must not rerun that scan."
+    - "The audit may run small canonical-layer sanity queries only to verify that primary artifacts are internally coherent."
+
+scope:
+  object: "VWAP_MID_ALIGNED / VWAP_BP_ALIGNED family death verdict"
+  instruments: [MNQ, MES, MGC]
+  sessions: [ALL_FROM_ORIGINAL_SCAN]
+  orb_minutes: [5, 15, 30]
+  role: procedural_reaudit
+  primary_result: docs/audit/results/2026-04-18-vwap-comprehensive-family-scan.md
+  primary_prereg: docs/audit/hypotheses/2026-04-18-vwap-comprehensive-family-scan.yaml
+  primary_runner: research/vwap_comprehensive_family_scan.py
+
+data_policy:
+  mode_a_holdout:
+    locked_boundary: "2026-01-01"
+    constant_source: trading_app.holdout_policy.HOLDOUT_SACRED_FROM
+  allowed_data_access:
+    - "Read primary prereg/result/script files."
+    - "Read canonical source files for temporal-validity checks."
+    - "Run bounded read-only sanity SQL on orb_outcomes JOIN daily_features."
+  forbidden_data_access:
+    - "No rerun of research/vwap_comprehensive_family_scan.py."
+    - "No writes to experimental_strategies, validated_setups, or gold.db."
+    - "No OOS tuning or changed thresholds."
+
+hypotheses:
+  - id: H01_VWAP_DEAD_VERDICT_AUDIT
+    type: primary
+    theory_citation: "RESEARCH_RULES.md; docs/institutional/research_pipeline_contract.md; docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md"
+    scope:
+      instruments: [MNQ, MES, MGC]
+      orb_minutes: [5, 15, 30]
+    role:
+      kind: confluence
+      parent: "VWAP family death verdict from docs/audit/results/2026-04-18-vwap-comprehensive-family-scan.md"
+      comparator: "required-methodology checklist from user prompt and project research rules"
+      primary_metric: "all required procedural checks pass or are caveated-nonfatal"
+      promotion_target: "result-doc only; no strategy promotion"
+    statement: >
+      The 2026-04-18 VWAP family DOCTRINE-CLOSED verdict remains procedurally
+      valid if the primary artifacts show canonical-layer inputs, trade-time
+      knowability, Mode A holdout, K-family/BH-FDR accounting, OOS dir_match
+      handling, and tautology checks versus deployed filters / ORB-cost gates.
+    pass_metric:
+      metric: "all required audit checks pass or are classified as caveated-nonfatal"
+      required_checks:
+        - primary_artifacts_exist
+        - canonical_layers_only
+        - temporal_validity
+        - mode_a_holdout
+        - k_family_bh_fdr
+        - oos_dir_match
+        - tautology_or_overlap_screen
+        - original_dead_verdict_present
+        - no_rerun_of_consumed_oos
+      caveated_nonfatal_allowed:
+        - "Known H3 positive-control specification error if substantive K1 death verdict is independent."
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    n_trials: 1
+    within_cap: true
+    note: "Audit of one already-run family verdict; no discovery write."
+
+decision_rule:
+  pass_if: "All required checks pass, with only documented nonfatal caveats."
+  park_if: "Any required check is inconclusive but not contradicted."
+  kill_if: "Any required check contradicts the original death verdict's methodology."
+
+execution:
+  mode: bounded_runner
+  entrypoint: research/vwap_dead_confluence_reaudit_v1.py
+  default_args: []
+
+outputs_required_after_run:
+  - "docs/audit/results/2026-05-12-vwap-dead-confluence-reaudit-v1.md"
+  - "Checklist verdict table for the user's requested checks."
+  - "Explicit answer: death verdict stands / park / invalid."
+  - "No live/deployment claim."
