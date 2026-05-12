@@ -595,6 +595,37 @@ def _parallel_session_lines() -> list[str]:
     return lines
 
 
+def _literature_corpus_lines() -> list[str]:
+    """One-time nudge that the institutional literature corpus exists and is queryable.
+
+    Without this line the AI has to remember the research-catalog MCP exists; with it,
+    every new session sees the count + exact tool names. Fail-silent if the directory
+    is empty or unreadable (defensive — never blocks session start).
+
+    The count excludes PENDING_ACQUISITION_*.md (placeholders for unfetched papers) so
+    the number reflects the actual ingested corpus.
+    """
+    try:
+        lit_dir = PROJECT_ROOT / "docs" / "institutional" / "literature"
+        if not lit_dir.is_dir():
+            return []
+        extracts = [
+            p for p in lit_dir.glob("*.md") if not p.name.startswith("PENDING_ACQUISITION")
+        ]
+        n = len(extracts)
+        if n == 0:
+            return []
+        return [
+            f"  Literature corpus: {n} verbatim extracts in docs/institutional/literature/.",
+            "    Methodology / mechanism claims must cite these — not training memory.",
+            "    Discover: mcp__research-catalog__list_literature_sources",
+            "    Fetch excerpt: mcp__research-catalog__get_literature_excerpt",
+            "    Keyword search: mcp__research-catalog__search_research_catalog",
+        ]
+    except BaseException:  # pragma: no cover - hook fallback path
+        return []
+
+
 def _crg_context_lines() -> list[str]:
     """One-line CRG graph status: nodes, files, and freshness vs the working tree.
 
@@ -716,6 +747,7 @@ def main() -> None:
         lines.extend(_action_queue_ready_lines())
         lines.extend(_parallel_session_lines())
         lines.extend(_crg_context_lines())
+        lines.extend(_literature_corpus_lines())
         lines.extend(_main_ci_status_lines())
         print("\n".join(lines), file=sys.stderr)
 

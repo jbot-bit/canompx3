@@ -182,7 +182,11 @@ Dalton (*Mind Over Markets*, 1990s-2000s editions) and Steidlmayer (*Markets and
 - 159-day NQ futures study using Databento MBO data (= our exact ingest stack).
 - Provides operational definitions for VAH/VAL/POC/Filter Cases A/B/C and quantitative follow-through hit rates.
 - Strongest signal: "Cross + Miss" veto pattern (48.4pp gap from baseline) — a *don't-trade* gate that is testable on existing deployed lanes with minimal multiple-comparison cost.
-- Cross-citation: `topstep_2026_auction_market_theory_intro.md` for operational vocabulary; `PENDING_ACQUISITION_market_profile.md` tracks Tolušić 2026 (formal mathematical AMT treatment) + Howard 2026 (ES futures companion) + Dalton (theory).
+- Cross-citation: `topstep_2026_auction_market_theory_intro.md` for operational vocabulary.
+
+**Formal model + ES replication landed 2026-05-12** (closes value-area grounding triangle):
+- `tolusic_2026_amt_inventory_dynamics.md` — first formal mathematical AMT treatment. Two-equation stochastic system (Hawkes inventory dynamics + linear price impact) that nests Kyle 1985 + Almgren-Chriss 2001 as special cases. Empirical validation on 44,035 H1 FX bars + 17,716 gap-fade trades / 26 years (zero losing years on counter-trend gap-fade PF 1.59). Magnitude-direction separation theorem formalizes Steidlmayer's "profile reveals structure but not direction" claim. Asset-class general mechanism; FX-only empirical scope.
+- `howard_2026_value_area_breakouts_es.md` — independent ES futures replication (6,284 events, 2025-01 → 2026-01, day-clustered SEs). Pooled mean −2.20 ticks (p=0.17 day-clustered), April outlier removes signal entirely. **Negative result on unfiltered base signal.** Pullback depth ≤0.25 is the strongest cross-sectional predictor (+4.01 ticks, Bonferroni-survived). Price-based stops at structural boundaries destroy EV at all 12 tested distances (selectivity peaks 69% < 75% threshold); time-based exit stack outperforms in 11/13 months (sign test p=0.02).
 
 **Prior project work on this mechanism (2026-Q1, archived):**
 - `research/archive/research_dalton_80_rule.py`, `research_dalton_80_rule_deepdive.py`, `analyze_value_area.py`, `research_dalton_filter_uplift.py`, `research_dalton_filter_anchor_uplift.py`, `research_dalton_mid_monetization.py`, `research_dalton_mnq0900_oos.py`.
@@ -191,12 +195,12 @@ Dalton (*Mind Over Markets*, 1990s-2000s editions) and Steidlmayer (*Markets and
 - **Status: not in NO-GO registry, not in validated_setups. "Ran without literature backbone" — that's why it sat archived.**
 - Yordanov 2026 + the Cross+Miss veto framing are STRUCTURALLY DIFFERENT from these prior tests (veto-on-existing-lane vs new entry signal); a fresh pre-reg can legitimately use the new grounding without colliding with the archived work.
 
-**Operational consequence:** Role R5 (level-target theory) and any value-area-acceptance hypothesis can now invoke Yordanov 2026 as the empirical mechanism citation under Chordia Protocol A pathway (t≥3.00 with theory). Pre-reg writer must explicitly cite the extract file and acknowledge the limitations enumerated in `yordanov_2026_nq_orb_value_area_breakouts.md` § 5. Pure theory claims (mechanism causation, not just correlation) still require Dalton or Tolušić acquisition.
+**Operational consequence:** Role R5 (level-target theory) and any value-area-acceptance hypothesis can now invoke a 3-source mechanism stack — Tolušić 2026 (formal model), Yordanov 2026 (NQ empirical), Howard 2026 (ES empirical) — under Chordia Protocol A pathway (t≥3.00 with theory). Pre-reg writer must cite the relevant extract files AND acknowledge each paper's limitations (Tolušić: FX-only empirical; Yordanov: 159-day single-instrument; Howard: post-hoc filter analysis only). Cross-asset extrapolation to MGC remains the open extrapolation gap — none of the three has MGC empirical evidence. MGC pre-reg requires independent backtest. Dalton acquisition still pending for canonical narrative theory.
 
 **Acquisition priority** (see `docs/institutional/literature/PENDING_ACQUISITION_market_profile.md` for full list):
-1. Tolušić 2026 (SSRN abstract_id=6616280) — first formal mathematical treatment of AMT, 26-year FX validation. **Highest priority** for theory grounding.
-2. Howard 2026 (SSRN abstract_id=6350238) — ES futures companion to Yordanov NQ work.
-3. Dalton *Mind Over Markets* (Wiley Kindle $45) — canonical narrative theory.
+1. ~~Tolušić 2026~~ ✓ INGESTED 2026-05-12 (`tolusic_2026_amt_inventory_dynamics.md`).
+2. ~~Howard 2026~~ ✓ INGESTED 2026-05-12 (`howard_2026_value_area_breakouts_es.md`).
+3. Dalton *Mind Over Markets* (Wiley Kindle $45) — canonical narrative theory. Still pending.
 - Refused: pirate / grey-zone PDF mirrors (break audit chain per source-of-truth rule).
 
 ### Speed-of-trade / turnover-cost scaling

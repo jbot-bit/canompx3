@@ -137,11 +137,12 @@ tier = power_verdict(report["power"])  # CAN_REFUTE | DIRECTIONAL_ONLY | STATIST
 4. For underpowered OOS situations, prefer one of:
    - **Aggregate** across correlated deployed lanes to inflate N (same hypothesis, pooled scope per `pooled-finding-rule.md`)
    - **Harvey-Liu Sharpe haircut** (`docs/institutional/literature/harvey_liu_2015_backtesting.md`) — treat OOS as Sharpe discount multiplier, not veto
-   - **CPCV** (Combinatorial Purged Cross-Validation, `docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md` § 1.4.2) — designed for short OOS data; binary IS/OOS split is misspecified when OOS < ~20% of total sample
+   - **CPCV** (Combinatorial Purged Cross-Validation) — designed for short OOS data; binary IS/OOS split is misspecified when OOS < ~20% of total sample. Primary source: AFML 2018 Ch 12 § 12.4 (`docs/institutional/literature/lopez_de_prado_2018_afml_ch_3_7_8.md`). Secondary summary: LdP 2020 § 1.4.2 (`docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md`). The 2020 sampler describes CPCV's use case; the 2018 book formalizes the algorithm.
 
 **Literature anchors (extracts in `docs/institutional/literature/`):**
 - Harvey & Liu 2015 (`harvey_liu_2015_backtesting.md`) — analytical Sharpe haircut framework; OOS is a discount multiplier, not a binary veto.
-- López de Prado 2020 (`lopez_de_prado_2020_ml_for_asset_managers.md`) — CPCV as the remedy for short OOS data.
+- López de Prado 2018 AFML Ch 12 (`lopez_de_prado_2018_afml_ch_3_7_8.md`) — CPCV algorithm formalization (primary source for the multi-path backtest construction). Uses Ch 7 § 7.4 purging+embargo as building blocks.
+- López de Prado 2020 (`lopez_de_prado_2020_ml_for_asset_managers.md`) — short-form summary; cites AFML 2018 Ch 12 as the implementation reference.
 
 **Reference incident:** 2026-04-20 `bull_short_avoidance_deployed_lane_verify` originally produced REJECTED on OOS dir_match=FALSE at N_per_group=19/20 with power 7.9% to detect the IS effect (Cohen's d = 0.165). Verdict was corrected to CONDITIONAL — UNVERIFIED. Without the power floor, 7 years of IS evidence (p_boot=0.018, 7/7 years positive) would have been prematurely discarded on a statistically-useless OOS slice.
 

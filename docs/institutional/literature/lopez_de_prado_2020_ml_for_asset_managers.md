@@ -191,7 +191,7 @@ The implication is not that our deployed strategies have zero edge — the per-l
 
 ### What Section 1.4.2 requires us to build
 
-CPCV (Combinatorial Purged Cross-Validation) is specifically called out as the remedy for short finite-data problems. Our 2.2 years of clean MNQ data is exactly the scenario CPCV was designed for. AFML chapter 12 has the full implementation — see the reference list in our project for a copy.
+CPCV (Combinatorial Purged Cross-Validation) is specifically called out as the remedy for short finite-data problems. Our 2.2 years of clean MNQ data is exactly the scenario CPCV was designed for. **AFML Ch 12 § 12.4 has the full formalization** — see `lopez_de_prado_2018_afml_ch_3_7_8.md` § Ch 12 (the primary-source extract added 2026-05-12). Ch 12 uses Purged K-Fold + embargo from Ch 7 § 7.4 as building blocks. The 2020 sampler here is the secondary citation; AFML 2018 is primary.
 
 Monte Carlo on synthetic data (AFML chapter 13) is the other remedy for short samples. We do not currently have a data-generating-process estimator for MNQ/MES/MGC that we could sample from. Building one is Phase 4+ work.
 

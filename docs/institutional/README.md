@@ -14,16 +14,47 @@ docs/institutional/
 ├── README.md                                   ← you are here
 ├── HANDOFF.md                                  ← session handoff (SUPERSEDED 2026-04-07)
 ├── literature/                                 ← verbatim passages from resources/*.pdf
-│   ├── bailey_et_al_2013_pseudo_mathematics.md      ← MinBTL theorem (CRITICAL)
-│   ├── bailey_lopez_de_prado_2014_deflated_sharpe.md ← DSR formula (CRITICAL)
-│   ├── lopez_de_prado_bailey_2018_false_strategy.md  ← K>>1 false positive
-│   ├── harvey_liu_2015_backtesting.md                ← BHY haircut / profitability hurdles
-│   ├── chordia_et_al_2018_two_million_strategies.md  ← t=3.79 threshold
-│   ├── pepelyshev_polunchenko_2015_cusum_sr.md       ← live monitoring
-│   ├── lopez_de_prado_2020_ml_for_asset_managers.md  ← theory-first, CPCV
-│   ├── fitschen_2013_path_of_least_resistance.md     ← intraday trend-follow (commodities + stock indices)
-│   ├── carver_2015_volatility_targeting_position_sizing.md ← Kelly-linked sizing + forecast combination for Stage 2+
-│   └── harris_2002_trading_exchanges_microstructure.md   ← MECHANISM source: stop cascade, adverse selection, volatility decomposition, order anticipators (added 2026-05-12)
+│   │  Inventory refreshed 2026-05-12 — query `mcp__research-catalog__list_literature_sources` for the live list.
+│   │  27 extracts (excluding PENDING_ACQUISITION_*.md). Grouped by topic:
+│   │
+│   │  -- Multi-testing / FDR / DSR --
+│   ├── benjamini_hochberg_1995_fdr.md                    ← BH-1995 FDR primary source
+│   ├── bailey_et_al_2013_pseudo_mathematics.md           ← MinBTL theorem (CRITICAL)
+│   ├── bailey_lopez_de_prado_2014_deflated_sharpe.md     ← DSR formula (CRITICAL)
+│   ├── bailey_lopezdeprado_2014_dsr_sample_selection.md  ← DSR sample-selection correction
+│   ├── lopez_de_prado_bailey_2018_false_strategy.md      ← FST: K>>1 false positive
+│   ├── harvey_liu_2015_backtesting.md                    ← BHY haircut / profitability hurdles
+│   ├── harvey_liu_zhu_2015_cross_section.md              ← t ≥ 3.0 cross-section threshold
+│   ├── chordia_et_al_2018_two_million_strategies.md      ← t ≥ 3.79 empirical bound (2M strategies)
+│   ├── aronson_2007_ebta_data_snooping.md                ← Evidence-based TA / data-snooping bias
+│   │
+│   │  -- Backtest method / ML --
+│   ├── lopez_de_prado_2020_ml_for_asset_managers.md      ← theory-first, CPCV summary
+│   ├── lopez_de_prado_2018_afml_ch_3_7_8.md              ← AFML Ch 3 labeling, Ch 7 CV, Ch 8 feat-imp, Ch 12 CPCV
+│   ├── chan_2013_ch1_backtesting_lookahead.md            ← Look-ahead bias prevention
+│   ├── chan_2013_toc_determination.md                    ← Backtest TOC determination
+│   │
+│   │  -- Mechanism / microstructure / auction theory --
+│   ├── harris_2002_trading_exchanges_microstructure.md   ← Stop cascade, adverse selection, volatility decomposition (E2 mechanism anchor)
+│   ├── topstep_2026_auction_market_theory_intro.md       ← AMT introduction
+│   ├── tolusic_2026_amt_inventory_dynamics.md            ← Formal mathematical AMT + inventory dynamics
+│   ├── howard_2026_value_area_breakouts_es.md            ← ES value-area breakout empirics
+│   ├── fitschen_2013_path_of_least_resistance.md         ← Intraday trend-follow (CORE ORB premise)
+│   ├── yordanov_2026_nq_orb_value_area_breakouts.md      ← NQ ORB value-area breakout study
+│   │
+│   │  -- Regime / sessions / momentum / mean-reversion --
+│   ├── chan_2008_ch7_regime_switching.md                 ← Regime-switching models
+│   ├── chan_2009_ch1_intraday_session_handling.md        ← Intraday session handling
+│   ├── chan_2013_ch5_currencies_futures_meanreversion.md ← FX/futures mean-reversion
+│   ├── chan_2013_ch7_intraday_momentum.md                ← Intraday momentum empirics
+│   │
+│   │  -- Sizing / portfolio (Carver) --
+│   ├── carver_2015_volatility_targeting_position_sizing.md ← Vol targeting / Kelly-linked sizing
+│   ├── carver_2015_ch11_portfolios.md                    ← Forecast combination / portfolio construction
+│   ├── carver_2015_ch12_speed_and_size.md                ← Trading speed × size trade-offs
+│   │
+│   │  -- Live monitoring --
+│   └── pepelyshev_polunchenko_2015_cusum_sr.md           ← Shiryaev-Roberts SR-monitor mathematics
 ├── finite_data_framework.md                    ← synthesized approach (v1 + v2 amendment note)
 ├── pre_registered_criteria.md                  ← LOCKED thresholds, v2 with 5 Codex amendments
 ├── hypothesis_registry_template.md             ← template for pre-registered discovery
@@ -78,6 +109,11 @@ Amendment 2.7 on 2026-04-08 per explicit user correction.
 | Fitschen 2013 Ch 3 (added 2026-04-15) | Commodities trend on daily + intraday bars; stock indices trend on intraday (counter-trend on daily); intraday trend-follow beats baseline on hourly data | **Grounds CORE ORB strategy premise** (MNQ/MES/MGC intraday breakout = trend-follow). Does NOT ground level-based filters (prior-day H/L, pivot) — separate literature needed (Dalton/Murphy/Crabel not in `resources/`). |
 | Carver 2015 Ch 9-10 (added 2026-04-15) | Kelly-linked volatility targeting: optimal % vol = expected Sharpe; use Half-Kelly for safety; 0.75× back-tested SR discount; position = (forecast/10) × cash_vol_target / (price × vol × multiplier). | **Unlocks Stage 2+ sophisticated sizing** for our level-based signals. Turns binary filters into continuous forecasts combined via Carver framework. Prop-firm DD maps to ≤25% vol target per Table 20. Does NOT cover target-at-level geometry (Role R5 still needs Dalton/Steidlmayer). |
 | Harris 2002 (added 2026-05-12, draft copy) | Microstructure mechanism source: stop cascade explains breakout momentum; adverse selection dominates spread for short-horizon traders; volatility decomposes into fundamental + transitory; order anticipators are the apex predators of stop-cascade markets; liquidity is bilateral search with priced immediacy. | **Anchors mechanism layer** for `mechanism_priors.md`. E2 stop-market entry is literally an instance of Harris's stop-order cascade class. Cost-model friction's slippage component is Harris's adverse-selection component, not just commission. Regime-HOT sessions match Harris's fundamental-volatility-dominated classification. Falsification corollary: edges without a coherent stop-cascade or fundamental-information mechanism should carry low prior. Local copy is March 2002 draft (113 pp, outline-only on many sub-sections — see extract file's "What's in the draft but NOT yet usable" section before citing). |
+| Benjamini-Hochberg 1995 (added 2026-05-12) | Primary FDR-control procedure: control expected proportion of false rejections by ordering p-values and applying step-up threshold `p_(i) ≤ i·α/m`. Original paper for the BHY haircut math we apply. | **Primary source for RULE 4 multi-testing correction**. Replaces training-memory citations of "BH-1995" — now a verbatim extract with the original step-up algorithm and proof structure. |
+| Aronson 2007 (added 2026-05-12) | Evidence-based TA / data-snooping bias mechanics: subjective TA cannot be falsified; data-snooping inflates apparent edges; need pre-registration + statistical testing + multi-testing correction. | **Grounds discovery-discipline doctrine** in `pre_registered_criteria.md`. Anchors the requirement that any new feature must be pre-registered before testing, not chosen post-hoc from a brute-force grid. |
+| Tolušić 2026 AMT (added 2026-05-12) | Formal mathematical treatment of auction market theory + inventory dynamics. Maps order flow → price discovery → value-area formation via inventory-imbalance ODEs. | **Anchors auction-theory layer** of `mechanism_priors.md`. Value-area breakout edges (NYSE_OPEN, COMEX_SETTLE) inherit a formal mechanism from Tolušić's inventory-dynamics model — they're not just empirical curve-fits. |
+| Howard 2026 ES value-area breakouts (added 2026-05-12) | ES value-area breakout empirical study: range-breakout effect sizes on E-mini S&P at session opens; statistical robustness across multi-year window. | **Independent confirmatory anchor** for MES NYSE_OPEN deployment. Howard's reported effect size is consistent with our MNQ_NYSE_OPEN E2 RR1.0 deployed lane and provides external validation outside our own backtest. |
+| López de Prado 2018 AFML Ch 3+7+8+12 (added 2026-05-12) | Ch 3: triple-barrier labeling for ML labels; Ch 7: CV with purging + embargo for time-series CV; Ch 8: mean-decrease-impurity / accuracy feature importance under serial correlation; Ch 12: **CPCV (Combinatorial Purged Cross-Validation)** primary algorithm formalization. | **Primary source for CPCV** (the 2020 ML for AM book only summarized it). RULE 3.3 OOS power-floor doctrine now cites Ch 12 directly. Ch 7 purging+embargo are the building blocks. Ch 8 feature importance under serial correlation grounds future feature-importance work. |
 
 **Synthesized implication:** The deployed 5 lanes may contain real edge but the discovery methodology was statistically too weak to prove it. The fix is pre-registered hypothesis discovery with a far smaller trial budget (~100-300, not 35,000), applying DSR correctly at the true N, using CPCV for OOS extraction from limited history, and CUSUM/SR monitoring in live deployment.
 
