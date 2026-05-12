@@ -59,7 +59,37 @@ Examples of this rule in action:
 ### 7. Ground in local resources before training memory
 
 - `resources/` has 15+ institutional PDFs (raw sources).
-- **`docs/institutional/literature/`** is the CANONICAL CITATION SOURCE for research methodology claims — it contains verbatim extracts from the resources PDFs with page numbers and metadata. **Cite from there, not from training memory.** Established 2026-04-07 (Phase 0 literature grounding). Covered papers: Bailey et al 2013 (MinBTL), Bailey-LdP 2014 (DSR), LdP-Bailey 2018 (False Strategy Theorem), Harvey-Liu 2015 (BHY haircut), Chordia et al 2018 (t ≥ 3.79), Pepelyshev-Polunchenko 2015 (Shiryaev-Roberts monitoring), LdP 2020 ML for Asset Managers (theory-first, CPCV), Fitschen 2013 Ch 3 (grounds intraday trend-follow for commodities + stock indices — CORE ORB premise), Carver 2015 Ch 9-10 (added 2026-04-15: grounds volatility targeting + Kelly-linked position sizing + forecast combination for Stage 2+ sophisticated signal deployment).
+- **`docs/institutional/literature/`** is the CANONICAL CITATION SOURCE for research methodology claims — it contains verbatim extracts from the resources PDFs with page numbers and metadata. **Cite from there, not from training memory.** Established 2026-04-07 (Phase 0 literature grounding); refreshed 2026-05-12 (27 extracts). **When citing any of these topics, fetch the extract via the `research-catalog` MCP (`mcp__research-catalog__get_literature_excerpt`) — do not paraphrase from memory.** Inventory:
+
+  | Topic | Extract file | What it grounds |
+  |---|---|---|
+  | Multi-testing (FDR) | `benjamini_hochberg_1995_fdr.md` | Primary BH-1995 source for BHY haircut math |
+  | Multi-testing (MinBTL) | `bailey_et_al_2013_pseudo_mathematics.md` | MinBTL bound — caps brute-force at 300 trials |
+  | Multi-testing (DSR) | `bailey_lopez_de_prado_2014_deflated_sharpe.md` | Deflated Sharpe Ratio core formula |
+  | Multi-testing (DSR-selection) | `bailey_lopezdeprado_2014_dsr_sample_selection.md` | DSR sample-selection correction |
+  | Multi-testing (FST) | `lopez_de_prado_bailey_2018_false_strategy.md` | False Strategy Theorem |
+  | Multi-testing (haircut) | `harvey_liu_2015_backtesting.md` | BHY Sharpe haircut method |
+  | Multi-testing (cross-section) | `harvey_liu_zhu_2015_cross_section.md` | t ≥ 3.0 threshold for cross-sectional anomalies |
+  | Multi-testing (empirical) | `chordia_et_al_2018_two_million_strategies.md` | t ≥ 3.79 empirical bound (2M strategies) |
+  | Data-snooping | `aronson_2007_ebta_data_snooping.md` | EBTA / data-snooping bias mechanics |
+  | Backtest method (ML) | `lopez_de_prado_2020_ml_for_asset_managers.md` | Theory-first ML, CPCV for asset managers |
+  | Backtest method (AFML) | `lopez_de_prado_2018_afml_ch_3_7_8.md` | AFML Ch 3 labeling, Ch 7 CV, Ch 8 feature importance, Ch 12 CPCV |
+  | Backtest method (lookahead) | `chan_2013_ch1_backtesting_lookahead.md` | Look-ahead bias prevention |
+  | Backtest method (TOC) | `chan_2013_toc_determination.md` | Backtest TOC determination |
+  | Mechanism (microstructure) | `harris_2002_trading_exchanges_microstructure.md` | Stop-cascade (E2 entry); adverse selection; 17.8× commodity-pool Sharpe deflation |
+  | Mechanism (auction theory) | `topstep_2026_auction_market_theory_intro.md` | AMT introduction (Topstep) |
+  | Mechanism (auction formal) | `tolusic_2026_amt_inventory_dynamics.md` | Formal mathematical AMT + inventory dynamics |
+  | Mechanism (value area) | `howard_2026_value_area_breakouts_es.md` | ES value-area breakout empirics |
+  | Mechanism (ORB premise) | `fitschen_2013_path_of_least_resistance.md` | Fitschen Ch 3 intraday trend-follow — CORE ORB premise |
+  | Mechanism (ORB-NQ) | `yordanov_2026_nq_orb_value_area_breakouts.md` | NQ ORB value-area breakout study |
+  | Regime / sessions | `chan_2009_ch1_intraday_session_handling.md` | Intraday session handling |
+  | Regime switching | `chan_2008_ch7_regime_switching.md` | Regime-switching models |
+  | Regime (currencies/futures) | `chan_2013_ch5_currencies_futures_meanreversion.md` | FX/futures mean-reversion |
+  | Regime (intraday momentum) | `chan_2013_ch7_intraday_momentum.md` | Intraday momentum empirics |
+  | Sizing (vol target) | `carver_2015_volatility_targeting_position_sizing.md` | Volatility targeting / Kelly-linked sizing |
+  | Sizing (portfolio) | `carver_2015_ch11_portfolios.md` | Forecast combination / portfolio construction |
+  | Sizing (speed/size) | `carver_2015_ch12_speed_and_size.md` | Trading speed × size trade-offs |
+  | Monitoring | `pepelyshev_polunchenko_2015_cusum_sr.md` | Shiryaev-Roberts SR-monitor mathematics |
 - **`docs/institutional/mechanism_priors.md`** (added 2026-04-15) is the LIVE TRADING-LOGIC DOCUMENT — captures what we think drives ORB edge, maps each signal to implementation roles (R1 FILTER → R8 PORTFOLIO allocator), and stages deployment (binary → sizing → geometry → portfolio). Read before proposing any new level-based or HTF filter so you don't pigeonhole the test. Priors listed there are testable hypotheses, not validated facts — every claim still requires pre_registered_criteria.md gate pass before deployment.
 - **`docs/institutional/pre_registered_criteria.md`** is the LOCKED threshold file — 12 criteria for strategy validation derived from the literature extracts. No post-hoc relaxation allowed. Read before any discovery or deployment decision.
 - Design decisions resting on literature claims must cite the specific extract file in `docs/institutional/literature/`. If the extract file does not yet exist for a paper you need to cite, write it first (extract the relevant passage from the PDF), then reference it. Training-memory citations must be labeled "from training memory — not verified against local PDF."

@@ -9,12 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** c9ec08f3 — docs(institutional): wire new extracts into backtesting-methodology and mechanism_priors auto-load
-- **Files changed:** 4 files
-  - `.claude/rules/backtesting-methodology.md`
+- **Commit:** 3bc11025 — feat(hooks): add literature-corpus nudge to session-start output
+- **Files changed:** 2 files
+  - `.claude/hooks/session-start.py`
   - `HANDOFF.md`
-  - `docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md`
-  - `docs/institutional/mechanism_priors.md`
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
