@@ -29,7 +29,11 @@ from typing import Any
 
 import yaml
 
-from scripts.research.lhp.literature_index import LiteratureEntry, citation_exists
+from scripts.research.lhp.literature_index import (
+    LiteratureEntry,
+    citation_exists,
+    verify_citation_content,
+)
 
 
 @dataclass(frozen=True)
@@ -425,6 +429,283 @@ def check_sessions_valid(parsed: dict[str, Any]) -> list[CheckFailure]:
     return failures
 
 
+def check_scratch_policy(parsed: dict[str, Any]) -> list[CheckFailure]:
+    """C13 BINDING — scratch_policy must be declared and = realized-eod for capital decisions.
+
+    Per ``feedback_chordia_unlock_deployment_gate_audit_checklist.md`` and
+    ``pre_registered_criteria.md`` C13: every new pre-reg must declare
+    ``scratch_policy`` at the top level. ``realized-eod`` is the required
+    value when results may inform capital decisions; ``include-zero`` or
+    ``drop`` must be explicitly justified.
+
+    Origin: yesterday's 3 LLM-drafted pre-regs all omitted this field. The
+    runner did not block, the rejections came on Criterion 8, and IS
+    baselines were potentially inflated 10-45% by ``WHERE pnl_r IS NOT NULL``
+    silent drops.
+    """
+    failures: list[CheckFailure] = []
+    raw = parsed.get("scratch_policy")
+    if raw is None:
+        failures.append(
+            CheckFailure(
+                code="SCRATCH_POLICY_MISSING",
+                field="scratch_policy",
+                detail=(
+                    "scratch_policy block is required (pre_registered_criteria.md C13 BINDING). "
+                    "Add `scratch_policy: {policy: realized-eod, justification: ...}` at the top level."
+                ),
+                fatal=True,
+            )
+        )
+        return failures
+    if isinstance(raw, str):
+        policy = raw
+        justification: Any = ""
+    elif isinstance(raw, dict):
+        policy = raw.get("policy", "")
+        justification = raw.get("justification", "")
+    else:
+        return [
+            CheckFailure(
+                code="SCRATCH_POLICY_MALFORMED",
+                field="scratch_policy",
+                detail=f"scratch_policy must be a string or mapping, got {type(raw).__name__}",
+                fatal=True,
+            )
+        ]
+    if not isinstance(policy, str) or not policy.strip():
+        failures.append(
+            CheckFailure(
+                code="SCRATCH_POLICY_MISSING",
+                field="scratch_policy.policy",
+                detail="scratch_policy.policy must be a non-empty string",
+                fatal=True,
+            )
+        )
+        return failures
+    allowed = {"realized-eod", "include-zero", "drop"}
+    if policy not in allowed:
+        failures.append(
+            CheckFailure(
+                code="SCRATCH_POLICY_INVALID",
+                field="scratch_policy.policy",
+                detail=f"scratch_policy.policy={policy!r} not in {sorted(allowed)}",
+                fatal=True,
+            )
+        )
+        return failures
+    if policy != "realized-eod" and not (isinstance(justification, str) and justification.strip()):
+        failures.append(
+            CheckFailure(
+                code="SCRATCH_POLICY_UNJUSTIFIED",
+                field="scratch_policy.justification",
+                detail=(
+                    f"scratch_policy.policy={policy!r} (non-default) requires "
+                    "justification: text explaining why realized-eod is inappropriate"
+                ),
+                fatal=True,
+            )
+        )
+    return failures
+
+
+def check_oos_power_floor(parsed: dict[str, Any]) -> list[CheckFailure]:
+    """RULE 3.3 — any binary OOS kill criterion requires a power-floor declaration.
+
+    If ``kill_criteria`` mentions ``OOS ExpR``, ``dir_match``, or any binary
+    OOS gate, the pre-reg MUST declare an OOS power floor (under
+    ``oos_power_floor`` at metadata-level OR per-hypothesis) referencing the
+    tier (CAN_REFUTE / DIRECTIONAL_ONLY / STATISTICALLY_USELESS) the result
+    needs to clear before applying the gate.
+
+    Reference incident: 2026-04-20 ``bull_short_avoidance`` would have been
+    falsely killed on a STATISTICALLY_USELESS OOS (power 7.9%) without this
+    rule.
+    """
+    failures: list[CheckFailure] = []
+    hypotheses = parsed.get("hypotheses")
+    if not isinstance(hypotheses, list):
+        return []
+
+    binary_oos_keywords = ("oos expr", "oos_expr", "dir_match", "sign-flip", "p_oos", "oos ratio")
+
+    def has_binary_oos_kill(hyp: dict[str, Any]) -> bool:
+        kc = hyp.get("kill_criteria") or []
+        if not isinstance(kc, list):
+            kc = [kc]
+        for entry in kc:
+            entry_str = str(entry).lower() if entry is not None else ""
+            if any(kw in entry_str for kw in binary_oos_keywords):
+                return True
+        return False
+
+    meta_pf = (
+        parsed.get("oos_power_floor") or parsed.get("metadata", {}).get("oos_power_floor")
+        if isinstance(parsed.get("metadata"), dict)
+        else parsed.get("oos_power_floor")
+    )
+    meta_has_pf = bool(meta_pf)
+
+    for idx, hyp in enumerate(hypotheses):
+        if not isinstance(hyp, dict):
+            continue
+        if not has_binary_oos_kill(hyp):
+            continue
+        per_hyp_pf = hyp.get("oos_power_floor")
+        if per_hyp_pf or meta_has_pf:
+            continue
+        failures.append(
+            CheckFailure(
+                code="OOS_POWER_FLOOR_MISSING",
+                field=f"hypotheses[{idx}].oos_power_floor",
+                detail=(
+                    "kill_criteria references a binary OOS gate (ExpR<0, dir_match, sign-flip) "
+                    "but no oos_power_floor is declared. Per backtesting-methodology.md RULE 3.3, "
+                    "binary OOS gates require a power-tier declaration (CAN_REFUTE / "
+                    "DIRECTIONAL_ONLY / STATISTICALLY_USELESS) computed via "
+                    "research.oos_power.oos_ttest_power() before kill applies."
+                ),
+                fatal=True,
+            )
+        )
+    return failures
+
+
+def check_sensitivity_test(parsed: dict[str, Any]) -> list[CheckFailure]:
+    """RESEARCH_RULES.md § Sensitivity — parameterised filters need ±N variants.
+
+    If a hypothesis declares a filter with a numeric threshold (ATR_P30,
+    ORB_VOL_16K, OVNRNG_100, etc.), the pre-reg must declare at least 2
+    additional threshold variants under ``sensitivity_test.axes`` so a
+    curve-fit can be detected.
+    """
+    failures: list[CheckFailure] = []
+    hypotheses = parsed.get("hypotheses")
+    if not isinstance(hypotheses, list):
+        return []
+    import re as _re
+
+    has_threshold = _re.compile(r"\d")
+
+    for idx, hyp in enumerate(hypotheses):
+        if not isinstance(hyp, dict):
+            continue
+        filt = hyp.get("filter")
+        if not isinstance(filt, dict):
+            continue
+        ftype = str(filt.get("type") or "")
+        if not has_threshold.search(ftype):
+            continue  # no numeric threshold to be sensitive about
+        sens = hyp.get("sensitivity_test") or filt.get("sensitivity_test") or {}
+        if isinstance(sens, dict):
+            axes = sens.get("axes") or sens.get("variants") or []
+        else:
+            axes = sens
+        if not isinstance(axes, list) or len(axes) < 2:
+            failures.append(
+                CheckFailure(
+                    code="SENSITIVITY_TEST_MISSING",
+                    field=f"hypotheses[{idx}].sensitivity_test.axes",
+                    detail=(
+                        f"filter.type={ftype!r} has a numeric threshold but pre-reg declares "
+                        f"fewer than 2 sensitivity variants. Per RESEARCH_RULES.md "
+                        "(ATR/RSI/MA thresholds especially prone to curve-fitting), declare "
+                        "at least 2 ±N% variants under sensitivity_test.axes."
+                    ),
+                    fatal=True,
+                )
+            )
+    return failures
+
+
+def check_prior_art_block(parsed: dict[str, Any]) -> list[CheckFailure]:
+    """Require a ``prior_art`` block citing the neighbor-scan output.
+
+    The proposer pipeline writes neighbour scan results into the draft;
+    this check confirms the LLM didn't strip the block. A pre-reg without
+    prior_art commitments can re-litigate a documented KILL without
+    acknowledging it.
+    """
+    pa = (
+        parsed.get("prior_art") or parsed.get("metadata", {}).get("prior_art")
+        if isinstance(parsed.get("metadata"), dict)
+        else parsed.get("prior_art")
+    )
+    if pa is None:
+        return [
+            CheckFailure(
+                code="PRIOR_ART_MISSING",
+                field="prior_art",
+                detail=(
+                    "prior_art block is required. Should contain `family_health`, "
+                    "`siblings_killed`, `siblings_blocked_by_graveyard`, and a list "
+                    "of relevant prior audit verdicts (auto-generated by proposer)."
+                ),
+                fatal=True,
+            )
+        ]
+    if isinstance(pa, dict):
+        # Must declare family_health at minimum.
+        if not pa.get("family_health"):
+            return [
+                CheckFailure(
+                    code="PRIOR_ART_INCOMPLETE",
+                    field="prior_art.family_health",
+                    detail="prior_art.family_health required (CLEAN/MIXED/HOSTILE)",
+                    fatal=True,
+                )
+            ]
+    return []
+
+
+def check_citation_content(parsed: dict[str, Any], corpus: Sequence[LiteratureEntry]) -> list[CheckFailure]:
+    """Verify each theory_citation's content actually addresses the economic_basis.
+
+    Uses ``literature_index.verify_citation_content`` (lexical token overlap)
+    to catch fabricated cites and topic-mismatched cites. Cannot catch
+    same-vocabulary category errors (e.g. Carver-sizing → entry-filter) on
+    its own; the proposer-side prompt + the ``passage_quote`` field
+    (declared but not enforced as of v1) close that gap.
+    """
+    hypotheses = parsed.get("hypotheses")
+    if not isinstance(hypotheses, list):
+        return []
+    failures: list[CheckFailure] = []
+    for idx, hyp in enumerate(hypotheses):
+        if not isinstance(hyp, dict):
+            continue
+        cite = hyp.get("theory_citation")
+        basis = hyp.get("economic_basis")
+        if not isinstance(cite, str) or not cite.strip():
+            continue  # check_citations_exist will handle missing cites
+        if not isinstance(basis, str) or not basis.strip():
+            failures.append(
+                CheckFailure(
+                    code="ECONOMIC_BASIS_MISSING",
+                    field=f"hypotheses[{idx}].economic_basis",
+                    detail="economic_basis text required to verify citation content",
+                    fatal=True,
+                )
+            )
+            continue
+        result = verify_citation_content(corpus, cite, basis)
+        if not result["passes"]:
+            failures.append(
+                CheckFailure(
+                    code="CITATION_CONTENT_MISMATCH",
+                    field=f"hypotheses[{idx}].theory_citation",
+                    detail=(
+                        f"{result['reason']}. "
+                        f"Cited files: {result['cited_files']}. "
+                        "Either rewrite economic_basis to actually align with the cited "
+                        "passages, or cite a different file."
+                    ),
+                    fatal=True,
+                )
+            )
+    return failures
+
+
 def run_all(yaml_text: str, corpus: Sequence[LiteratureEntry]) -> tuple[dict[str, Any] | None, list[CheckFailure]]:
     """Run every check. Schema-load runs first; on parse failure we stop.
 
@@ -450,19 +731,29 @@ def run_all(yaml_text: str, corpus: Sequence[LiteratureEntry]) -> tuple[dict[str
     failures.extend(check_holdout_date(parsed))
     failures.extend(check_minbtl_budget(parsed))
     failures.extend(check_citations_exist(parsed, corpus))
+    failures.extend(check_citation_content(parsed, corpus))
     failures.extend(check_instruments_active(parsed))
     failures.extend(check_sessions_valid(parsed))
+    failures.extend(check_scratch_policy(parsed))
+    failures.extend(check_oos_power_floor(parsed))
+    failures.extend(check_sensitivity_test(parsed))
+    failures.extend(check_prior_art_block(parsed))
     return parsed, failures
 
 
 __all__ = [
     "CheckFailure",
     "check_banned_features",
+    "check_citation_content",
     "check_citations_exist",
     "check_holdout_date",
     "check_instruments_active",
     "check_minbtl_budget",
+    "check_oos_power_floor",
+    "check_prior_art_block",
     "check_schema_load",
+    "check_scratch_policy",
+    "check_sensitivity_test",
     "check_sessions_valid",
     "run_all",
 ]
