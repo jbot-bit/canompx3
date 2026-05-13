@@ -96,3 +96,42 @@ if match:
         f.write(content)
 # If no match, do nothing — don't guess where to insert
 " "$HANDOFF" "$NEW_SESSION" "$FILES_CHANGED" 2>/dev/null || true
+
+# -----------------------------------------------------------------------------
+# Pinecone auto-sync (NUGGET 1).
+#
+# Trigger when the just-landed commit touches knowledge-base paths:
+#   - docs/audit/results/        (research verdicts)
+#   - docs/institutional/literature/  (literature extracts)
+#   - docs/runtime/debt-ledger.md     (debt state)
+#   - memory/MEMORY.md                (memory index)
+#
+# Fail-open: never block the commit (we're already post-commit anyway, but
+# also never spam the terminal). Runs detached in background so a slow API
+# call can't make the commit feel laggy. Output goes to logs/pinecone-sync.log.
+# -----------------------------------------------------------------------------
+
+if echo "$FILES_CHANGED" | grep -qE '^(docs/audit/results/|docs/institutional/literature/|docs/runtime/debt-ledger\.md$|memory/MEMORY\.md$)'; then
+    LOG_DIR="$SCRIPT_DIR/logs"
+    mkdir -p "$LOG_DIR" 2>/dev/null || true
+    SYNC_LOG="$LOG_DIR/pinecone-sync.log"
+    SYNC_SCRIPT="$SCRIPT_DIR/scripts/tools/sync_pinecone.py"
+
+    if [ -f "$SYNC_SCRIPT" ]; then
+        TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        {
+            echo ""
+            echo "=== ${TIMESTAMP} | commit ${SHA} ==="
+        } >> "$SYNC_LOG" 2>/dev/null || true
+
+        # Detach: nohup + & + redirected fds so the hook returns immediately
+        # even on slow networks. Fail-silent: if nohup is missing (rare on
+        # MSYS), fall back to plain background.
+        if command -v nohup >/dev/null 2>&1; then
+            nohup "$PYTHON" "$SYNC_SCRIPT" >> "$SYNC_LOG" 2>&1 < /dev/null &
+        else
+            "$PYTHON" "$SYNC_SCRIPT" >> "$SYNC_LOG" 2>&1 < /dev/null &
+        fi
+        disown 2>/dev/null || true
+    fi
+fi
