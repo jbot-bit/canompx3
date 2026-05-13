@@ -9,13 +9,13 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-13
-- **Commit:** 71433097 — feat(cron): LHP weekly runner foundation + dedup index (Nugget 2a)
+- **Commit:** 16032467 — feat(cron): LHP fitness-transition trigger + GHA weekly schedule (Nugget 2b)
 - **Files changed:** 6 files
+  - `.github/workflows/ci.yml`
   - `HANDOFF.md`
-  - `docs/runtime/lhp_dedup_index.json`
+  - `docs/runtime/lhp_fitness_snapshot.json`
   - `docs/runtime/stages/nugget2a-lhp-cron-foundation.md`
-  - `docs/runtime/stages/nugget3-deprecate-recent-fitness.md`
-  - `scripts/cron/__init__.py`
+  - `docs/runtime/stages/nugget2b-lhp-fitness-transition-trigger.md`
   - `scripts/cron/lhp_weekly.py`
 
 ## This Session (2026-05-13 PM)
