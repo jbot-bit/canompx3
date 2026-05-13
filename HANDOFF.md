@@ -9,11 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-13
-- **Commit:** 612bf331 — [judgment] BrokerDispatcher API parity: is_degraded() method + 2 missing overrides
-- **Files changed:** 3 files
+- **Commit:** d67444b7 — handoff: 2026-05-13 PM — Sonnet review + Opus audit + blast-radius corrections (3 commits)
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_tradovate.py`
-  - `trading_app/live/broker_dispatcher.py`
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
