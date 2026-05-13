@@ -1,0 +1,406 @@
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: "2026-05-12"
+slug: "mgc-london-metals-mode-a-k1-revalidation"
+title: "MGC LONDON_METALS Stage 1 — K=1 Mode-A revalidation of family head"
+owner: josh
+parent_spec: "docs/plans/2026-05-12-mgc-london-metals-institutional-validation-pathway.md"
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+  default_args:
+    - "--hypothesis-file"
+    - "docs/audit/hypotheses/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.yaml"
+  note: >
+    Runner is the narrow bounded Pathway-B K=1 replay used for the
+    MNQ COMEX_SETTLE Chordia unlock prereg. It enforces canonical filter
+    delegation (research.filter_utils.filter_signal), Mode-A holdout split via
+    trading_app.holdout_policy.HOLDOUT_SACRED_FROM, and Chordia strict
+    no-theory t>=3.79 evaluation; no writes to validated_setups, edge_families,
+    chordia_audit_log.yaml, or lane_allocation.json. Emits result MD + CSV
+    only.
+
+metadata:
+  name: "mgc_london_metals_mode_a_k1_revalidation"
+  purpose: "Stage 1 of the three-stage triage for the 12-lane MGC LONDON_METALS cohort. Pathway-B K=1 Mode-A revalidation of the single most defensible family head, executed under canonical Mode-A IS to test whether the cohort earns the right to a Stage-2 family scan."
+  date_locked: "2026-05-12T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: individual
+  pathway: B_individual
+  research_question_type: conditional_role
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "d95936bab8d4b8fc1fdf2ea391f458ae76992330"
+  committed_required_before_run: true
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/hypothesis-prereg-discipline.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/conditional-edge-framework.md"
+    - "docs/institutional/research_pipeline_contract.md"
+    - "docs/runtime/chordia_audit_log.yaml"
+  notes:
+    - "Stage 1 of a three-stage triage (plan: docs/plans/2026-05-12-mgc-london-metals-institutional-validation-pathway.md)."
+    - "Cohort is grandfathered research-provisional per pre_registered_criteria.md § Applying to existing validated_setups. Discovery_k=19195 violated Bailey MinBTL when written. All stored ExpR / WFE / DSR numbers are MODE_B-contaminated and are NOT used as evidence in this prereg."
+    - "No theory grant claimed for LONDON_METALS gold breakouts. Chordia strict threshold t >= 3.79 applies (Criterion 4 no-theory)."
+    - "K=1 Bailey budget verified: estimate_k_budget(instrument=MGC, n_trials=1) returned PASS — 2.70yr doctrine clean_years (scripts/tools/minbtl_retro_report.CLEAN_YEARS_BY_INSTRUMENT['MGC']), n_max_at_horizon=3, operational cap 300. This prereg consumes 1 of 3 strict-Bailey slots."
+    - "Bailey horizon vs effective IS horizon: doctrine clean_years=2.70 is the value the K-budget gate enforces and is the conservative number for canonical pre-reg arithmetic. Effective IS row count is 3.6yr (2022-06-13 to 2025-12-31, 916 pre-filter trades) — the longer span reflects a partial 2022 year. Both numbers are recorded so readers can audit either basis; the Bailey gate uses 2.70, the years_positive_IS K4 uses 4 (full + partial years)."
+    - "If Stage 1 KILLs, the entire 12-lane cohort parks. If Stage 1 PASSes, Stage 2 may test up to 2 additional family heads from the 4 REMAINING family heads (5 active family heads total, this prereg uses 1). The other 7 of 12 active lanes are non-heads and are not Stage-2 candidates by design (one head per family is the strict-Bailey budget rationing principle)."
+
+scope:
+  instrument: MGC
+  strategy_id: "MGC_LONDON_METALS_E1_RR1.5_CB1_ORB_VOL_8K_O30"
+  session: LONDON_METALS
+  orb_minutes: 30
+  entry_model: E1
+  confirm_bars: 1
+  rr_target: 1.5
+  direction: pooled
+  filter_type: ORB_VOL_8K
+  filter_source: "trading_app.config.ALL_FILTERS['ORB_VOL_8K']"
+  baseline: "no comparative baseline — Pathway B K=1 tests selected-trade mean_r against absolute Chordia floor, not a delta."
+  candidate_selection_basis: >
+    Of 5 active MGC LONDON_METALS family heads in validated_setups, this is the
+    highest stored expectancy_r (0.5212) family head. All 5 share identical
+    discovery_k=19195, n_trials_at_discovery=25872, last_trade_day=2026-04-23,
+    and all carry wfe_verdict FAILED_RATIO or NEGATIVE_OOS_EXPR — these stored
+    numbers are MODE_B contaminated and used only to pick the candidate, not as
+    evidence. The Mode-A revalidation recomputes IS metrics from canonical
+    orb_outcomes x daily_features.
+  out_of_scope:
+    - "The other 11 MGC LONDON_METALS lanes (deferred to Stage 2 conditional on Stage 1 PASS)."
+    - "Adjacent filters (ORB_VOL_4K, ORB_VOL_8K + stop variants, RR variants)."
+    - "Theory-grant attempt for ORB_VOL_8K on LONDON_METALS."
+    - "Allocator, sizing, deployment, or chordia_audit_log writes."
+    - "DSR scale-fix in trading_app/strategy_discovery.py (filed as tech debt per plan)."
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+    effective_first_day: "2022-06-13"
+    effective_first_day_source: "MIN(trading_day) FROM orb_outcomes WHERE symbol='MGC' AND orb_label='LONDON_METALS' AND orb_minutes=30 AND entry_model='E1' AND rr_target=1.5 AND confirm_bars=1, verified live 2026-05-12"
+    effective_years: 3.6
+    per_year_is_counts: {2022: 144, 2023: 256, 2024: 259, 2025: 257}
+    total_is_trade_count_pre_filter: 916
+  oos_window:
+    description: "HOLDOUT_SACRED_FROM <= trading_day < CURRENT_DATE"
+    policy: "read-only descriptive corroboration only; cannot rescue an IS-kill nor kill an IS-pass except via the explicit dir_match-with-power-floor clause in kill_criteria."
+  tuning_against_oos: false
+  canonical_layers_only: true
+  scratch_policy: "realized-eod"
+  scratch_policy_justification: >
+    Per pre_registered_criteria.md Criterion 13 default after Stage 5
+    outcome_builder fix landed. Excluding scratches via WHERE pnl_r IS NOT NULL
+    inflated ExpR 10-45 percent on MNQ E2 CB1 survivor lanes
+    (memory/feedback_scratch_pnl_null_class_bug.md). LONDON_METALS is a
+    session-bounded lane; scratches at session end MTM count via
+    pipeline.cost_model.pnl_points_to_r. Literature:
+    docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md.
+
+feature_definition:
+  feature_name: ORB_VOL_8K
+  canonical_source_of_truth: "trading_app.config.ALL_FILTERS['ORB_VOL_8K']"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, 'ORB_VOL_8K', 'LONDON_METALS')"
+  column_source: "ORB-window cumulative volume from canonical orb_outcomes / daily_features columns; first complete at ORB end (LONDON_METALS ORB ends 17:30 Brisbane for O30)."
+  trade_time_knowable: true
+  first_complete_time: "ORB end (17:30 Brisbane for LONDON_METALS O30)"
+  temporal_alignment_note: >
+    ORB-window volume is a § 6.1 safe feature — measured strictly within the
+    ORB window (17:00-17:30 Brisbane for LONDON_METALS O30) and complete before
+    E1 entry at ORB close. No § 6.2 conditional-validity feature is read; no
+    overnight_*, session_*, or break-bar feature is consulted at entry time.
+    E1 entry model means range-cross at ORB close, NOT break-bar — § 6.3
+    break-bar-look-ahead concerns do not apply.
+  lookahead_check: "Required PASS before execution. Runner must emit ORB_VOL_8K fire mask vs trading_app.config delegation parity check."
+
+grounding:
+  core_orb_premise:
+    - source_file: "resources/Building_Reliable_Trading_Systems.pdf"
+      extract_proxy: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "Grounds intraday trend-follow / breakout continuation as a strategy class. Fitschen Ch 3 is equity-index-specific; LONDON_METALS gold breakouts are a within-class extension, not a Fitschen-grounded mechanism. No theory grant inherited."
+      with_theory_claim: false
+    - source_file: "resources/Trading_Exchanges_Harris_2002.pdf"
+      extract_proxy: "docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md"
+      use: "Harris Ch 4 § 4.5.2 stop-cascade liquidity-demand mechanism grounds breakout entries in general. Not LONDON_METALS-specific."
+      with_theory_claim: false
+  filter_grounding_status:
+    verdict: NO_THEORY_GRANT
+    basis: >
+      No local literature extract grounds ORB-window cumulative volume as a
+      causal alpha mechanism on LONDON_METALS gold. ORB_VOL_8K is a volume
+      threshold; it survives here as an execution / liquidity gate, not a
+      theory-grounded edge. Therefore Chordia strict no-theory threshold
+      t >= 3.79 applies (Criterion 4, no-theory branch). Per chordia_audit_log.yaml
+      default_has_theory=false, 0 MGC entries exist; this is the first.
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  sources:
+    - "validated_setups row for MGC_LONDON_METALS_E1_RR1.5_CB1_ORB_VOL_8K_O30 (stored expectancy_r=0.5212, sharpe_haircut=-1.0152, sample_size=46, wfe_verdict=FAILED_RATIO, last_trade_day=2026-04-23, discovery_k=19195, n_trials_at_discovery=25872)"
+  upstream_scan_k_framings:
+    discovery_k: 19195
+    n_trials_at_discovery: 25872
+  note: >
+    The upstream discovery scan that produced this strategy_id ran with
+    K=19195 against a 2.70-year clean horizon — a Bailey MinBTL violation of
+    roughly 600x. That is exactly the failure mode this prereg's Mode-A
+    revalidation is designed to test. Those upstream K values describe the
+    discovery scan, NOT this prereg's K. This prereg's K is exactly 1.
+    Stored expectancy_r / sharpe_haircut / wfe_verdict from validated_setups
+    are MODE_B contaminated (last_trade_day=2026-04-23 >= 2026-01-01) and are
+    used here ONLY to identify the candidate strategy_id. They are NOT
+    evidence for this prereg's verdict and are NOT used as a baseline.
+
+primary_schema:
+  family_cells:
+    - id: "MGC_LONDON_METALS_O30_E1_RR1.5_CB1_ORB_VOL_8K"
+      strategy_id: "MGC_LONDON_METALS_E1_RR1.5_CB1_ORB_VOL_8K_O30"
+      instrument: MGC
+      session: LONDON_METALS
+      orb_minutes: 30
+      rr_target: 1.5
+      entry_model: E1
+      confirm_bars: 1
+      filter: ORB_VOL_8K
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  chordia_threshold_basis: "Criterion 4 theory-backed threshold (t >= 3.00); as-authored implicit theory grant — see authoring_lesson below."
+  authoring_lesson: >
+    INSTITUTIONAL TRAP — recorded 2026-05-12 retrospectively per Path-E
+    exposure audit (docs/audit/results/2026-05-12-deployed-lanes-chordia-strict-379-exposure-audit.md).
+    The original author INTENT was no-theory (t >= 3.79). hypotheses[0].theory_citation
+    was set to prose saying "No filter-mechanism theory citation available
+    for ORB_VOL_8K on LONDON_METALS..." — but the trading_app/hypothesis_loader.py
+    field-presence semantics (lines 262-269) interpret ANY truthy string in
+    that field as theory-present. The loader correctly emitted has_theory=True
+    and the runner correctly applied t >= 3.00. To honor the loader's contract
+    and keep this prereg internally consistent with the result MD's "MEASURED
+    threshold applied: 3.00", chordia_threshold_basis is amended from 3.79
+    to 3.00. Substantive verdict (FAIL_STRICT_CHORDIA at t=2.930) survives
+    EITHER threshold — t=2.930 < 3.00 AND < 3.79 — so the MGC LONDON_METALS
+    cohort KILL_COHORT decision is unaffected. New drift check
+    check_chordia_result_threshold_matches_prereg in pipeline/check_drift.py
+    catches this class of authoring error going forward. Prereg-writer prompt
+    updated with explicit guidance to OMIT theory_citation entirely (not set
+    it to "no citation available" prose) for no-theory preregs.
+  promotion_gate: "Stage-1 PASS verdict — opens Stage-2 family scan eligibility ONLY. Does not authorize allocator, deployment, or chordia_audit_log mutation."
+
+testing_discipline:
+  pathway: B_individual
+  k: 1
+  significance_threshold:
+    raw_p_branch: "raw IS p < 0.05 is necessary but not sufficient"
+    severity_branch: "Chordia strict t_IS >= 3.79 (no-theory, Criterion 4)"
+    effect_size: "ExpR_IS > 0 (positive-mean floor) AND N_IS_on >= 100 (deployable-sample floor, Criterion 7)"
+  mandatory_downstream_gates_non_waivable:
+    - "Criterion 6 WFE_modeA >= 0.50 — recomputed under Mode-A IS only (stored WFE is MODE_B-contaminated and disregarded)."
+    - "Criterion 8 OOS dir_match conditional on power-tier per research.oos_power.oos_ttest_power; underpowered OOS cannot kill."
+    - "Criterion 9 era stability — years_positive_IS >= 3 with N>=10 per year (denominator = 4 IS years 2022-2025; MGC Databento coverage starts 2022-06-13, verified live 2026-05-12). Per-year IS counts: 2022=144, 2023=256, 2024=259, 2025=257."
+    - "Criterion 5 DSR (Z-score scale per Amendment 2.1) cross-check only — not a kill criterion at this stage; advisory."
+  theory_citation: >
+    No filter-mechanism theory citation available for ORB_VOL_8K on
+    LONDON_METALS. Strategy-class grounding from Fitschen 2013 Ch 3 (intraday
+    trend-follow on equity indices, not commodities) and Harris 2002 Ch 4
+    (stop-cascade liquidity-demand) covers the BREAKOUT CLASS only. Per
+    backtesting-methodology.md "PATHWAY A THEORY CITATION — filter-mechanism
+    specificity required", these citations are NOT promoted to cover the
+    ORB_VOL_8K filter. Pathway-B K=1 here is justified by the confirmatory-
+    revalidation question type (does this cohort survive Mode-A scrutiny?),
+    not by a positive theory.
+
+hypotheses:
+  - id: 1
+    type: primary
+    name: "MGC LONDON_METALS O30 E1 RR1.5 CB1 ORB_VOL_8K Mode-A K=1 revalidation"
+    theory_citation: >
+      No filter-mechanism theory citation. See testing_discipline.theory_citation.
+      Confirmatory revalidation of a MODE_B-contaminated discovery, Chordia
+      strict no-theory threshold t >= 3.79 binding.
+    economic_basis: >
+      Question is honest: does this stored "validated" lane still clear strict
+      Chordia severity under canonical Mode-A IS with the canonical filter
+      delegation and scratch-realized-eod accounting? The 12-lane cohort was
+      promoted under a pre-Phase-0 brute-force regime (discovery_k=19195 on a
+      2.70-yr horizon, ~600x Bailey violation). If the single best family head
+      cannot clear strict t>=3.79 under Mode-A re-measurement, the cohort has
+      no claim to institutional validation and Stage 2 must not run.
+    role:
+      kind: standalone
+      parent: "Mode-A canonical replay of MGC_LONDON_METALS_E1_RR1.5_CB1_ORB_VOL_8K_O30 on orb_outcomes JOIN daily_features."
+      comparator: "Selected trades vs absolute Chordia floor t>=3.79 and ExpR>0; descriptive OOS sign monitor with power-tier; no sibling rescue, no parameter variation."
+      primary_metric: "selected_trade_mean_r_IS"
+      promotion_target: "stage_2_eligibility_only"
+    filter:
+      type: "ORB_VOL_8K"
+      column: "ORB-window cumulative volume from orb_outcomes / daily_features"
+      thresholds:
+        - "fire_vs_off (canonical delegation only)"
+    scope:
+      instruments: [MGC]
+      sessions: [LONDON_METALS]
+      rr_targets: [1.5]
+      entry_models: [E1]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      stop_multiplier_note: "1.0 only — explicitly excludes _S075 stop-multiplier variants that exist among the 4 remaining family heads. Strategy_id has no _S{n} suffix per make_strategy_id convention (suffix only emitted when stop_multiplier != 1.0)."
+      orb_minutes: [30]
+    expected_trial_count: 1
+    statement: >
+      Under canonical Mode-A IS (trading_day < 2026-01-01) on
+      orb_outcomes JOIN daily_features with research.filter_utils.filter_signal
+      ('ORB_VOL_8K', 'LONDON_METALS') as the fire mask and realized-eod scratch
+      accounting, the selected-trade sample produces t_IS >= 3.79, ExpR_IS > 0,
+      N_IS_on >= 100, and years_positive_IS >= 3 of 4 IS years
+      (MGC IS window 2022-06-13 to 2025-12-31, denominator=4 verified live).
+    pass_metric:
+      metric: t_IS
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical Mode-A IS fired trades after canonical filter delegation and realized-eod scratch accounting"
+      threshold_gte:
+        t_is: 3.79
+        n_is_on: 100
+        expr_is: 0.0
+        years_positive_is: 3
+      threshold_lt: {}
+      extra_gates:
+        - "dir_match_oos = true when oos_ttest_power tier is CAN_REFUTE (power >= 0.80)"
+        - "dir_match_oos advisory only when tier is DIRECTIONAL_ONLY (power in [0.50, 0.80))"
+        - "OOS sign mismatch with power tier STATISTICALLY_USELESS (power < 0.50) does NOT kill"
+        - "adversarial split table emitted (per-year ExpR, t, N, sign)"
+        - "scratch-inclusive accounting required; runner emits scratch_count and realized-eod pnl_r"
+        - "filter delegation parity check vs trading_app.config.ALL_FILTERS['ORB_VOL_8K'] required"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  n_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2 (Bailey et al 2013 Theorem 1)"
+    n_trials: 1
+    minbtl_years_required: 0.00
+    clean_years_available: 2.70
+    clean_years_source: "scripts/tools/minbtl_retro_report.CLEAN_YEARS_BY_INSTRUMENT['MGC'] (doctrine constant; conservative vs the 3.6yr effective IS row span)"
+    n_max_at_horizon: 3
+    operational_cap: 300
+    within_cap: true
+    verdict: PASS
+    cap_reference: "estimate_k_budget(instrument=MGC, n_trials=1, e_max=1.0, proxy_extended=false) -> PASS, 2026-05-12"
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+
+kill_criteria:
+  - id: K1
+    metric: t_IS
+    threshold: "t_IS < 3.79"
+    action: KILL_COHORT
+    note: "Chordia strict no-theory severity floor. Failure parks all 12 MGC LONDON_METALS lanes."
+  - id: K2
+    metric: ExpR_IS
+    threshold: "ExpR_IS <= 0"
+    action: KILL_COHORT
+    note: "Positive-mean floor. Negative selected-trade mean is not edge."
+  - id: K3
+    metric: N_IS_on
+    threshold: "N_IS_on < 100"
+    action: KILL_COHORT
+    note: "Criterion 7 deployable-sample power floor. Cohort cannot be validated on <100 IS trades."
+  - id: K4
+    metric: years_positive_IS
+    threshold: "years_positive_IS < 3 (absolute count, N>=10 per year, denominator=4 — MGC IS window is 2022-06-13 to 2025-12-31, verified live against orb_outcomes 2026-05-12)"
+    action: KILL_COHORT
+    note: "Criterion 9 era stability. Denominator is 4 (not 7) because MGC Databento coverage begins mid-2022; this is the same horizon the Bailey K-budget gate consumed (clean_years=2.70). Requiring 3 of 4 positive years is the strict-Bailey analog of the standard 4-of-7 rule on longer-horizon instruments."
+  - id: K5
+    metric: WFE_modeA
+    threshold: "WFE_modeA < 0.50"
+    action: KILL_COHORT
+    note: "Criterion 6. Stored WFE is MODE_B-contaminated and disregarded; this is a fresh Mode-A WFE computation."
+  - id: K6
+    metric: dir_match_oos
+    threshold: "dir_match_oos = false AND oos_ttest_power tier = CAN_REFUTE (power >= 0.80)"
+    action: KILL_COHORT
+    note: "OOS power-floor-gated dir_match. Underpowered OOS sign mismatch does NOT trigger this kill."
+  - id: K7
+    metric: filter_delegation_parity
+    threshold: "fire-mask divergence from trading_app.config.ALL_FILTERS['ORB_VOL_8K'] > 0 rows"
+    action: ABORT_AND_FIX
+    note: "Canonical filter delegation must match. Abort, fix, rerun (does not count as new trial)."
+  - id: K8
+    metric: scratch_accounting
+    threshold: "runner uses WHERE pnl_r IS NOT NULL or any scratch-drop equivalent"
+    action: ABORT_AND_FIX
+    note: "Criterion 13 scratch_policy=realized-eod is binding. Abort, fix, rerun."
+
+decision_rule:
+  continue_if: "All of K1-K6 cleared with K7-K8 PASS — cohort earns Stage-2 family-scan eligibility (max 2 additional lanes, strict Bailey K_max=3)."
+  park_if: "K1-K5 cleared but K6 fires with power tier DIRECTIONAL_ONLY — Stage-1 verdict UNVERIFIED; cohort parks; revisit when OOS power tier reaches CAN_REFUTE."
+  kill_if: "Any of K1-K5 fires, OR K6 fires with power tier CAN_REFUTE — all 12 MGC LONDON_METALS lanes park as not_revalidated_strict_chordia."
+
+methodology_rules_applied:
+  - rule: "RULE 1 feature temporal alignment"
+    application: "ORB_VOL_8K reads ORB-window volume only; § 6.1 safe. No § 6.2 conditional-validity feature used. E1 entry (range-cross at ORB close) avoids § 6.3 break-bar-look-ahead class entirely."
+  - rule: "RULE 2 filter application timing"
+    application: "Filter fires at ORB end (17:30 Brisbane for LONDON_METALS O30) before E1 entry. Trades skipped on filter=off; not retro-filtered."
+  - rule: "RULE 3 IS/OOS discipline"
+    application: "IS = trading_day < 2026-01-01; OOS read-only descriptive with power-tier gate. No OOS tuning."
+  - rule: "RULE 3.3 OOS power floor"
+    application: "K6 dir_match kill gated by research.oos_power.oos_ttest_power tier; underpowered OOS does not kill."
+  - rule: "RULE 4 multiple testing"
+    application: "K_family = K_global = K_lane = K_session = 1 for this prereg (Pathway B K=1). Upstream discovery K=19195 is recorded under upstream_discovery_provenance.role=PROVENANCE_ONLY and is NOT the K of this test. Per Amendment 3.0, Pathway-B individual does not apply multi-framing K to itself."
+  - rule: "RULE 4.2 MinBTL budget"
+    application: "estimate_k_budget PASS: 0.00yr required, 2.70yr available, n_max_at_horizon=3, operational cap 300. Verdict PASS recorded 2026-05-12."
+  - rule: "RULE 6 trade-time knowability"
+    application: "ORB_VOL_8K first-complete-time = ORB end (17:30 Brisbane). E1 entry fires AFTER ORB close. Trade-time-knowable = true. Lookahead_check required PASS before execution."
+  - rule: "RULE 9 canonical data source"
+    application: "Reads orb_outcomes JOIN daily_features only. No derived-layer (validated_setups stored numbers used only for candidate identification, NOT evidence)."
+  - rule: "research-truth-protocol canonical filter delegation"
+    application: "research.filter_utils.filter_signal mandatory; no inline filter re-encoding. K7 parity check enforces."
+  - rule: "Criterion 13 scratch policy"
+    application: "realized-eod required; WHERE pnl_r IS NOT NULL forbidden. K8 enforces."
+  - rule: "Amendment 2.1 DSR scale"
+    application: "DSR Z-score from trading_app/strategy_discovery.py recorded for cross-check only; not a kill criterion. CDF scale fix is filed tech debt."
+  - rule: "Mode-B grandfathered baseline rule"
+    application: "validated_setups stored expectancy_r=0.5212 NOT used as baseline. Mode-A IS recomputed from canonical orb_outcomes; candidate selected by stored ExpR ranking among family heads only."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md"
+  - "row-level CSV with IS/OOS split, raw + realized-eod pnl_r, scratch flag, filter fire status, trading_day, entry_ts"
+  - "single-cell summary table: N_IS_on, N_IS_scratch, ExpR_IS, Sharpe_IS, t_IS, years_positive_IS, WFE_modeA, DSR_Z, OOS N, OOS ExpR, dir_match, oos_power, oos_power_tier, verdict"
+  - "filter-delegation parity check report (rows divergent vs ALL_FILTERS['ORB_VOL_8K'])"
+  - "per-year adversarial split table (year, N, ExpR, t, sign)"
+  - "explicit statement that no theory grant was applied and strict t>=3.79 governed"
+  - "evidence-auditor sign-off (per .claude/rules/adversarial-audit-gate.md) before any downstream Stage-2 work"
+
+execution_gate:
+  allowed_now: false
+  allowed_after: "user confirmation (authorization ask A in the plan) AND commit_sha stamped"
+  execution_surface: "WSL with .venv-wsl or canonical Windows .venv per repo policy"
+  forbidden_now:
+    - "running the Mode-A scan before user authorization"
+    - "writing to validated_setups, edge_families, lane_allocation.json, or chordia_audit_log.yaml"
+    - "Stage-2 family-scan prereg authorship before Stage-1 result MD and adversarial-audit sign-off"
+    - "theory-grant upgrade without /resources-backed citation specific to ORB_VOL_8K on LONDON_METALS"
+    - "threshold rescue if a kill criterion fires"
+
+not_done_by_this_pre_reg:
+  - "Does not test the other 11 MGC LONDON_METALS lanes (Stage 2 scope, conditional on Stage 1 PASS)."
+  - "Does not test the 1 MGC CME_REOPEN lane (separate scope, not in HANDOFF item 3)."
+  - "Does not test adjacent filters (ORB_VOL_4K, stop-multiplier variants, RR variants)."
+  - "Does not authorize allocator activation, lane deployment, or paper-trading enablement."
+  - "Does not fix DSR Z-vs-CDF scale drift in trading_app/strategy_discovery.py (filed tech debt)."
+  - "Does not write a Chordia audit-log entry (Stage 3 scope, conditional on Stage 2 survivors)."
