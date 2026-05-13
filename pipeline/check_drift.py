@@ -775,6 +775,85 @@ def check_dashboard_readonly(pipeline_dir: Path) -> list[str]:
     return violations
 
 
+def check_dashboard_localhost_only_binding(trading_app_dir: Path) -> list[str]:
+    """Bot dashboard MUST default to localhost-only binding.
+
+    Rationale: bot_dashboard.py serves SSE (live position state) and exposes
+    /api/action/kill (real-money mutation). Binding 0.0.0.0 would expose both
+    over LAN. The runtime guard in run_dashboard() raises on non-localhost,
+    but this drift check catches the SOURCE-of-truth — anyone editing the
+    argparse default to "0.0.0.0" trips this check before commit.
+
+    Scope: file `trading_app/live/bot_dashboard.py`. Looks for the function
+    signature `def run_dashboard(host: str = "..."` and the argparse `--host`
+    default; both must be loopback.
+    """
+    violations: list[str] = []
+    dash = trading_app_dir / "live" / "bot_dashboard.py"
+    if not dash.exists():
+        return violations
+    content = dash.read_text(encoding="utf-8")
+    loopback = {"127.0.0.1", "localhost", "::1"}
+
+    # Defence 1: function signature default
+    fn_match = re.search(r'def\s+run_dashboard\s*\(\s*host\s*:\s*str\s*=\s*"([^"]+)"', content)
+    if not fn_match:
+        violations.append(
+            '  bot_dashboard.py: run_dashboard signature with host: str="..." not found — '
+            "regression on the localhost-only contract."
+        )
+    elif fn_match.group(1) not in loopback:
+        violations.append(
+            f"  bot_dashboard.py: run_dashboard host default {fn_match.group(1)!r} is not "
+            f"a loopback address — SSE + kill endpoint must not bind to LAN."
+        )
+
+    # Defence 2: argparse --host default
+    cli_match = re.search(r'add_argument\(\s*"--host"\s*,\s*default\s*=\s*"([^"]+)"', content)
+    if cli_match and cli_match.group(1) not in loopback:
+        violations.append(
+            f"  bot_dashboard.py: argparse --host default {cli_match.group(1)!r} is not a loopback address."
+        )
+
+    # Defence 3: ensure the RuntimeError guard inside run_dashboard is still present.
+    if "Refusing to start dashboard on non-localhost host" not in content:
+        violations.append(
+            "  bot_dashboard.py: run_dashboard no longer carries the non-localhost RuntimeError "
+            "guard — removed without explicit replacement."
+        )
+    return violations
+
+
+def check_dashboard_sse_single_worker(trading_app_dir: Path) -> list[str]:
+    """Bot dashboard SSE assumes single uvicorn worker.
+
+    Rationale: _SSEBroker subscriber set is in-process. Multi-worker would
+    fragment subscribers across worker processes, breaking ring-buffer replay
+    and the subscriber cap. Catch any future refactor that adds `workers=N`
+    where N>1 or removes the explicit `workers=1` pin.
+    """
+    violations: list[str] = []
+    dash = trading_app_dir / "live" / "bot_dashboard.py"
+    if not dash.exists():
+        return violations
+    content = dash.read_text(encoding="utf-8")
+
+    # Locate `uvicorn.run(...)` invocations and inspect the workers= arg.
+    for match in re.finditer(r"uvicorn\.run\s*\(([^)]+)\)", content, flags=re.DOTALL):
+        call_args = match.group(1)
+        workers_match = re.search(r"workers\s*=\s*(\d+)", call_args)
+        if workers_match is None:
+            violations.append(
+                "  bot_dashboard.py: uvicorn.run(...) call missing explicit workers=1 — "
+                "SSE broker subscriber set is in-process; multi-worker would split it."
+            )
+        elif int(workers_match.group(1)) != 1:
+            violations.append(
+                f"  bot_dashboard.py: uvicorn.run(workers={workers_match.group(1)}) — SSE invariant requires workers=1."
+            )
+    return violations
+
+
 def check_config_filter_sync() -> list[str]:
     """Check that ALL_FILTERS keys match filter_type inside each filter."""
     violations = []
@@ -9179,6 +9258,18 @@ CHECKS = [
     ("Hardcoded absolute paths", lambda: check_hardcoded_paths(PIPELINE_DIR), False, False),
     ("Connection leak detection", lambda: check_connection_leaks(PIPELINE_DIR), False, False),
     ("Dashboard read-only enforcement", lambda: check_dashboard_readonly(PIPELINE_DIR), False, False),
+    (
+        "Bot dashboard localhost-only host binding",
+        lambda: check_dashboard_localhost_only_binding(TRADING_APP_DIR),
+        False,
+        False,
+    ),
+    (
+        "Bot dashboard SSE single-worker invariant",
+        lambda: check_dashboard_sse_single_worker(TRADING_APP_DIR),
+        False,
+        False,
+    ),
     (
         "Pipeline never imports trading_app (one-way dependency)",
         lambda: check_pipeline_never_imports_trading_app(PIPELINE_DIR),

@@ -92,6 +92,13 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
     # ── Shutdown ──
+    # Cancel SSE watcher coroutines first — they own no resources but block
+    # graceful asyncio teardown if left running. Audit Critical #2 (Stage 2,
+    # commit cff1efcd verdict): _sse_tasks were orphaned at lifespan exit.
+    try:
+        await _sse_cancel_watchers()
+    except Exception as exc:
+        log.warning("Shutdown: SSE watcher cancellation failed: %s", exc)
     for name, val in list(_bg_processes.items()):
         if not isinstance(val, subprocess.Popen):
             if hasattr(val, "close"):
@@ -2506,13 +2513,162 @@ async def _signals_watcher() -> None:
         await asyncio.sleep(_SSE_STATE_POLL_INTERVAL_S)
 
 
+async def _alerts_watcher() -> None:
+    """Tail operator_alerts.jsonl; publish alert event per new line.
+
+    Canonical path: data/runtime/operator_alerts.jsonl
+    (alert_engine.ALERTS_PATH:21). Same byte-offset pattern as the signals
+    watcher — single file, no day-roll. Missing file at startup tolerated.
+    """
+    alerts_path = PROJECT_ROOT / "data" / "runtime" / "operator_alerts.jsonl"
+    # Start at EOF so we don't re-emit historical alerts on dashboard boot.
+    offset: int = alerts_path.stat().st_size if alerts_path.exists() else 0
+    while True:
+        try:
+            if alerts_path.exists():
+                size = alerts_path.stat().st_size
+                if size < offset:
+                    log.warning("_alerts_watcher: %s shrank — resetting offset", alerts_path.name)
+                    offset = 0
+                if size > offset:
+                    with open(alerts_path, "rb") as fh:
+                        fh.seek(offset)
+                        chunk = fh.read(size - offset)
+                    text = chunk.decode("utf-8", errors="replace")
+                    last_nl = text.rfind("\n")
+                    if last_nl == -1:
+                        await asyncio.sleep(_SSE_STATE_POLL_INTERVAL_S)
+                        continue
+                    complete = text[: last_nl + 1]
+                    offset += len(complete.encode("utf-8"))
+                    for line in complete.splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            rec = _json.loads(line)
+                        except _json.JSONDecodeError as exc:
+                            log.warning("_alerts_watcher: malformed line: %s", exc)
+                            continue
+                        _sse_broker.publish("alert", rec)
+        except Exception as exc:
+            log.warning("_alerts_watcher tick failed: %s", exc)
+        await asyncio.sleep(_SSE_STATE_POLL_INTERVAL_S)
+
+
+async def _bars_watcher() -> None:
+    """Poll bars_1m for new closed minutes; publish bar event per new row.
+
+    Tracks last-seen ts_utc per instrument; only emits rows strictly newer.
+    Read-only DuckDB connection per poll — opens are cheap, no need to hold
+    a long-lived handle that could race the bot's writer.
+
+    Instrument set is taken from bot_state.json's active lanes so the dashboard
+    only chart-pushes for instruments the operator is actually trading. If no
+    state file, defaults to MNQ (the v1 cockpit instrument).
+    """
+    from trading_app.live.bot_state import read_state
+
+    last_seen: dict[str, datetime] = {}
+    while True:
+        try:
+            state = read_state() or {}
+            lanes = state.get("lanes") or {}
+            instruments: set[str] = set()
+            if isinstance(lanes, dict):
+                for lane in lanes.values():
+                    if isinstance(lane, dict):
+                        inst = lane.get("instrument")
+                        if isinstance(inst, str):
+                            instruments.add(inst)
+            if not instruments:
+                instruments = {"MNQ"}
+
+            if GOLD_DB_PATH.exists():
+                try:
+                    with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+                        configure_connection(con)
+                        for inst in instruments:
+                            since = last_seen.get(inst)
+                            if since is None:
+                                # Bootstrap: skip backfill — chart fetches via
+                                # /api/bars-recent on connect. Just record the
+                                # current latest ts so we only push deltas.
+                                row = con.execute(
+                                    "SELECT max(ts_utc) FROM bars_1m WHERE symbol = ?",
+                                    [inst],
+                                ).fetchone()
+                                if row and row[0] is not None:
+                                    ts = row[0]
+                                    if ts.tzinfo is None:
+                                        ts = ts.replace(tzinfo=UTC)
+                                    last_seen[inst] = ts
+                                continue
+                            rows = con.execute(
+                                "SELECT ts_utc, open, high, low, close, volume "
+                                "FROM bars_1m WHERE symbol = ? AND ts_utc > ? "
+                                "ORDER BY ts_utc ASC",
+                                [inst, since],
+                            ).fetchall()
+                            for ts_utc, o, h, lo, c, v in rows:
+                                if ts_utc.tzinfo is None:
+                                    ts_utc = ts_utc.replace(tzinfo=UTC)
+                                last_seen[inst] = ts_utc
+                                _sse_broker.publish(
+                                    "bar",
+                                    {
+                                        "instrument": inst,
+                                        "time": int(ts_utc.astimezone(UTC).timestamp()),
+                                        "open": float(o),
+                                        "high": float(h),
+                                        "low": float(lo),
+                                        "close": float(c),
+                                        "volume": int(v),
+                                    },
+                                )
+                except duckdb.IOException as exc:
+                    # gold.db transiently locked by another process — retry next tick.
+                    log.warning("_bars_watcher: gold.db locked: %s", exc)
+        except Exception as exc:
+            log.warning("_bars_watcher tick failed: %s", exc)
+        # 2s cadence — bars close at minute boundaries; sub-second polling
+        # wastes CPU. _SSE_BAR_POLL_INTERVAL_S separate from _STATE for clarity.
+        await asyncio.sleep(2.0)
+
+
 async def _sse_start_watchers() -> None:
-    """Lazy-start SSE watcher tasks on first subscriber connect."""
+    """Lazy-start SSE watcher tasks on first subscriber connect.
+
+    Idempotency note: if a prior set of tasks was cancelled (e.g. lifespan
+    shutdown) but the module-level _sse_tasks list still references them,
+    a stale done-task check prevents zombie state. Tests that re-enter the
+    module across event loops exercise this path.
+    """
+    # Drop any cancelled/done tasks left over from a prior lifespan.
+    _sse_tasks[:] = [t for t in _sse_tasks if not t.done()]
     if _sse_tasks:
         return
     _sse_tasks.append(asyncio.create_task(_heartbeat_watcher(), name="sse-heartbeat"))
     _sse_tasks.append(asyncio.create_task(_state_watcher(), name="sse-state"))
     _sse_tasks.append(asyncio.create_task(_signals_watcher(), name="sse-signals"))
+    _sse_tasks.append(asyncio.create_task(_alerts_watcher(), name="sse-alerts"))
+    _sse_tasks.append(asyncio.create_task(_bars_watcher(), name="sse-bars"))
+
+
+async def _sse_cancel_watchers() -> None:
+    """Cancel all SSE watcher tasks and await their finalisation.
+
+    Called from the FastAPI lifespan shutdown so uvicorn graceful-stop does
+    not leave orphan coroutines polling files during teardown. Idempotent:
+    safe to call when _sse_tasks is empty or already cancelled.
+    """
+    for t in _sse_tasks:
+        if not t.done():
+            t.cancel()
+    if _sse_tasks:
+        # Swallow CancelledError; watchers are infinite loops by design.
+        await asyncio.gather(*_sse_tasks, return_exceptions=True)
+    _sse_tasks.clear()
 
 
 # ── HTML Frontend ─────────────────────────────────────────────────────────────
@@ -2644,7 +2800,14 @@ async def api_events_stream(request: Request):
     """
     from sse_starlette.sse import EventSourceResponse
 
-    if _sse_broker.subscriber_count() >= _SSE_MAX_SUBSCRIBERS:
+    # Atomic subscribe-then-check pattern. The naive "check then subscribe"
+    # leaves a window where two concurrent connects at cap-1 can both pass
+    # the guard before either is registered — TOCTOU race surfaced by the
+    # Stage 2 adversarial audit (commit cff1efcd verdict). Subscribing first
+    # then unsubscribing on overflow closes the window.
+    queue = _sse_broker.subscribe()
+    if _sse_broker.subscriber_count() > _SSE_MAX_SUBSCRIBERS:
+        _sse_broker.unsubscribe(queue)
         return JSONResponse(
             status_code=429,
             content={
@@ -2662,8 +2825,6 @@ async def api_events_stream(request: Request):
         last_event_id = int(last_event_id_raw) if last_event_id_raw else 0
     except (ValueError, TypeError):
         last_event_id = 0
-
-    queue = _sse_broker.subscribe()
 
     async def _generator():
         try:

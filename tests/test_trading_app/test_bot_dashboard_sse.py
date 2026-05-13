@@ -200,6 +200,101 @@ def test_orb_levels_for_instrument_delegates_to_state(monkeypatch):
     assert out["session_name"] == "NYSE_OPEN"
 
 
+def test_sse_cancel_watchers_idempotent_when_empty():
+    """Calling cancel before any subscriber must be safe (no tasks created)."""
+    import asyncio
+
+    from trading_app.live import bot_dashboard as bd
+
+    # Ensure no leftover tasks from a prior test
+    bd._sse_tasks.clear()
+    asyncio.get_event_loop_policy().new_event_loop().run_until_complete(bd._sse_cancel_watchers())
+    assert bd._sse_tasks == []
+
+
+def test_sse_cancel_watchers_clears_started_tasks():
+    """After start → cancel, _sse_tasks must be empty and the loop is exit-clean."""
+    import asyncio
+
+    from trading_app.live import bot_dashboard as bd
+
+    async def cycle():
+        bd._sse_tasks.clear()
+        await bd._sse_start_watchers()
+        assert len(bd._sse_tasks) == 5  # heartbeat + state + signals + alerts + bars
+        await bd._sse_cancel_watchers()
+        assert bd._sse_tasks == []
+
+    asyncio.get_event_loop_policy().new_event_loop().run_until_complete(cycle())
+
+
+def test_sse_start_watchers_recovers_after_done_tasks():
+    """Module-level _sse_tasks may carry stale done-tasks across loops.
+
+    The guard in _sse_start_watchers prunes done-tasks before the no-op
+    `if _sse_tasks: return` short-circuit, so a fresh start re-creates them.
+    """
+    import asyncio
+
+    from trading_app.live import bot_dashboard as bd
+
+    async def first_loop():
+        bd._sse_tasks.clear()
+        await bd._sse_start_watchers()
+        await bd._sse_cancel_watchers()
+        # Cancelled tasks are .done() — pruning logic should treat list as empty.
+
+    async def second_loop():
+        # Simulate stale done-tasks lingering: re-populate with completed dummies.
+        async def noop():
+            return None
+
+        # Schedule and immediately await to produce done-tasks.
+        dummies = [asyncio.create_task(noop()) for _ in range(3)]
+        await asyncio.gather(*dummies)
+        bd._sse_tasks[:] = dummies
+        # Now start fresh — done-tasks must be pruned.
+        await bd._sse_start_watchers()
+        assert all(not t.done() for t in bd._sse_tasks), "stale done-tasks not pruned"
+        await bd._sse_cancel_watchers()
+
+    loop1 = asyncio.get_event_loop_policy().new_event_loop()
+    loop1.run_until_complete(first_loop())
+    loop1.close()
+    loop2 = asyncio.get_event_loop_policy().new_event_loop()
+    loop2.run_until_complete(second_loop())
+    loop2.close()
+
+
+def test_api_events_stream_429_cleans_up_subscriber_queue():
+    """TOCTOU-fix verification: rejected over-cap requests must unsubscribe.
+
+    Previously the cap check was check-then-subscribe (racy). New pattern is
+    subscribe-then-check-and-unsubscribe-on-overflow. The cleanup invariant
+    is: after a rejected request, subscriber_count returns to the saturated
+    baseline rather than growing past the cap.
+    """
+    from fastapi.testclient import TestClient
+
+    from trading_app.live import bot_dashboard as bd
+    from trading_app.live.bot_dashboard import _SSE_MAX_SUBSCRIBERS
+
+    fake_queues = [bd._sse_broker.subscribe() for _ in range(_SSE_MAX_SUBSCRIBERS)]
+    try:
+        baseline = bd._sse_broker.subscriber_count()
+        c = TestClient(bd.app)
+        r = c.get("/api/events/stream")
+        assert r.status_code == 429
+        # The TOCTOU fix subscribes then unsubscribes on overflow; after the
+        # rejected response, count must equal the pre-request baseline.
+        assert bd._sse_broker.subscriber_count() == baseline, (
+            f"TOCTOU cleanup broken: count went {baseline} → {bd._sse_broker.subscriber_count()}"
+        )
+    finally:
+        for q in fake_queues:
+            bd._sse_broker.unsubscribe(q)
+
+
 def test_orb_levels_for_instrument_filters_by_instrument(monkeypatch):
     """Multi-lane state: only the matching instrument's ORB is returned."""
     from trading_app.live import bot_dashboard as bd

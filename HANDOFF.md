@@ -9,10 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-14
-- **Commit:** d1a2981f — harden: ASCII-clean CHECKS labels + binding regression-guard drift check
-- **Files changed:** 2 files
-  - `pipeline/check_drift.py`
-  - `tests/test_pipeline/test_check_drift.py`
+- **Commit:** cff1efcd — [judgment] dashboard cockpit-v3 Stage 2: SSE event stream + /api/bars-recent
+- **Files changed:** 3 files
+  - `HANDOFF.md`
+  - `tests/test_trading_app/test_bot_dashboard_sse.py`
+  - `trading_app/live/bot_dashboard.py`
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
