@@ -1,0 +1,545 @@
+{
+  "docs/audit/hypotheses/2026-04-09-mes-comprehensive.yaml": {
+    "size": "5415"
+  },
+  "docs/audit/hypotheses/2026-04-09-mes-final.yaml": {
+    "size": "3123"
+  },
+  "docs/audit/hypotheses/2026-04-09-mes-mode-a-rediscovery.yaml": {
+    "size": "39690"
+  },
+  "docs/audit/hypotheses/2026-04-09-mes-redesign.yaml": {
+    "size": "7521"
+  },
+  "docs/audit/hypotheses/2026-04-09-mgc-comprehensive.yaml": {
+    "size": "4053"
+  },
+  "docs/audit/hypotheses/2026-04-09-mgc-final.yaml": {
+    "size": "3793"
+  },
+  "docs/audit/hypotheses/2026-04-09-mgc-mode-a-rediscovery.yaml": {
+    "size": "29377"
+  },
+  "docs/audit/hypotheses/2026-04-09-mgc-redesign.yaml": {
+    "size": "8017"
+  },
+  "docs/audit/hypotheses/2026-04-09-mnq-comprehensive.yaml": {
+    "size": "7626"
+  },
+  "docs/audit/hypotheses/2026-04-09-mnq-final.yaml": {
+    "size": "4036"
+  },
+  "docs/audit/hypotheses/2026-04-09-mnq-mode-a-rediscovery.yaml": {
+    "size": "35079"
+  },
+  "docs/audit/hypotheses/2026-04-09-mnq-redesign.yaml": {
+    "size": "7842"
+  },
+  "docs/audit/hypotheses/2026-04-09-mnq-rediscovery-2020-boundary.yaml": {
+    "size": "8465"
+  },
+  "docs/audit/hypotheses/2026-04-09-mnq-rr10-individual.yaml": {
+    "size": "6340"
+  },
+  "docs/audit/hypotheses/2026-04-10-gc-proxy-broad-sweep.yaml": {
+    "size": "6797"
+  },
+  "docs/audit/hypotheses/2026-04-10-gc-proxy-era-dependent.yaml": {
+    "size": "7130"
+  },
+  "docs/audit/hypotheses/2026-04-10-gc-proxy-stable-sessions.yaml": {
+    "size": "8579"
+  },
+  "docs/audit/hypotheses/2026-04-10-gc-proxy-wave2-regime-robust.yaml": {
+    "size": "14971"
+  },
+  "docs/audit/hypotheses/2026-04-10-gc-proxy-wave3-expansion.yaml": {
+    "size": "10094"
+  },
+  "docs/audit/hypotheses/2026-04-10-mes-pathway-b.yaml": {
+    "size": "6261"
+  },
+  "docs/audit/hypotheses/2026-04-10-mgc-pathway-b.yaml": {
+    "size": "6589"
+  },
+  "docs/audit/hypotheses/2026-04-10-mnq-multi-rr-individual.yaml": {
+    "size": "6371"
+  },
+  "docs/audit/hypotheses/2026-04-11-adjacent-cross-session-state-matrix.yaml": {
+    "size": "2981"
+  },
+  "docs/audit/hypotheses/2026-04-11-atr-vel-expansion-mes.yaml": {
+    "size": "3570"
+  },
+  "docs/audit/hypotheses/2026-04-11-atr-vel-expansion.yaml": {
+    "size": "5503"
+  },
+  "docs/audit/hypotheses/2026-04-11-cross-session-context-audit.yaml": {
+    "size": "2527"
+  },
+  "docs/audit/hypotheses/2026-04-11-external-context-quarantine.yaml": {
+    "size": "4285"
+  },
+  "docs/audit/hypotheses/2026-04-11-external-context-role-audit.yaml": {
+    "size": "2924"
+  },
+  "docs/audit/hypotheses/2026-04-11-mes-cost-gate.yaml": {
+    "size": "14081"
+  },
+  "docs/audit/hypotheses/2026-04-11-mes-dow.yaml": {
+    "size": "15104"
+  },
+  "docs/audit/hypotheses/2026-04-11-mes-gap.yaml": {
+    "size": "14431"
+  },
+  "docs/audit/hypotheses/2026-04-11-mes-overnight.yaml": {
+    "size": "14606"
+  },
+  "docs/audit/hypotheses/2026-04-11-mes-size-recal.yaml": {
+    "size": "14401"
+  },
+  "docs/audit/hypotheses/2026-04-11-mes-vol-persist.yaml": {
+    "size": "14631"
+  },
+  "docs/audit/hypotheses/2026-04-11-mgc-proxy-overnight.yaml": {
+    "size": "16634"
+  },
+  "docs/audit/hypotheses/2026-04-11-mgc-proxy-vol.yaml": {
+    "size": "30866"
+  },
+  "docs/audit/hypotheses/2026-04-11-ml-v3-pooled-confluence.yaml": {
+    "size": "25835"
+  },
+  "docs/audit/hypotheses/2026-04-11-mnq-cost-gate.yaml": {
+    "size": "14298"
+  },
+  "docs/audit/hypotheses/2026-04-11-mnq-cross-asset.yaml": {
+    "size": "14939"
+  },
+  "docs/audit/hypotheses/2026-04-11-mnq-dow.yaml": {
+    "size": "15031"
+  },
+  "docs/audit/hypotheses/2026-04-11-mnq-gap.yaml": {
+    "size": "14567"
+  },
+  "docs/audit/hypotheses/2026-04-11-mnq-o15-expansion.yaml": {
+    "size": "14295"
+  },
+  "docs/audit/hypotheses/2026-04-11-mnq-overnight.yaml": {
+    "size": "14707"
+  },
+  "docs/audit/hypotheses/2026-04-12-wave5-garch-nyse-open.yaml": {
+    "size": "6534"
+  },
+  "docs/audit/hypotheses/2026-04-13-cross-session-comex-cme-preclose.yaml": {
+    "size": "3714"
+  },
+  "docs/audit/hypotheses/2026-04-13-cross-session-momentum-us-data-1000.yaml": {
+    "size": "4766"
+  },
+  "docs/audit/hypotheses/2026-04-13-cross-session-sgp-europe-flow.yaml": {
+    "size": "3685"
+  },
+  "docs/audit/hypotheses/2026-04-13-directional-context-alignment.yaml": {
+    "size": "6461"
+  },
+  "docs/audit/hypotheses/2026-04-13-ibs-nr7-external-retest.yaml": {
+    "size": "4371"
+  },
+  "docs/audit/hypotheses/2026-04-13-mes-targeted-expansion.yaml": {
+    "size": "21226"
+  },
+  "docs/audit/hypotheses/2026-04-13-mnq-vwap-cme-preclose.yaml": {
+    "size": "3984"
+  },
+  "docs/audit/hypotheses/2026-04-13-mnq-vwap-us-data-1000.yaml": {
+    "size": "5665"
+  },
+  "docs/audit/hypotheses/2026-04-13-mnq-wider-aperture-session-structure.yaml": {
+    "size": "19295"
+  },
+  "docs/audit/hypotheses/2026-04-13-mnq-wider-aperture-vol-regime-v2.yaml": {
+    "size": "13695"
+  },
+  "docs/audit/hypotheses/2026-04-13-wave4-session-rr-expansion.yaml": {
+    "size": "8796"
+  },
+  "docs/audit/hypotheses/2026-04-16-carry-encoding-exploration.yaml": {
+    "size": "14262"
+  },
+  "docs/audit/hypotheses/2026-04-16-cme-fx-futures-orb-pilot.yaml": {
+    "size": "3941"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-a3-confluence-allocator-replay.yaml": {
+    "size": "2843"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-a4-portfolio-ranking-allocator.yaml": {
+    "size": "4454"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-additive-sizing-audit.yaml": {
+    "size": "2933"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-discrete-policy-surface-audit.yaml": {
+    "size": "3482"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-g0-preflight.yaml": {
+    "size": "3890"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-normalized-sizing-audit.yaml": {
+    "size": "2869"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-partner-state-provenance.yaml": {
+    "size": "3895"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-profile-continuous-sizing-replay.yaml": {
+    "size": "2860"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-profile-policy-surface-replay.yaml": {
+    "size": "2209"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-profile-production-replay.yaml": {
+    "size": "2100"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-proxy-native-sizing-audit.yaml": {
+    "size": "3156"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-regime-family-audit.yaml": {
+    "size": "5601"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-self-funded-policy-surface-replay.yaml": {
+    "size": "2040"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-self-funded-production-replay.yaml": {
+    "size": "1889"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-state-distinctness-audit.yaml": {
+    "size": "4609"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-w2-mechanism-pairing.yaml": {
+    "size": "4519"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-w2c-m2-validated-utility.yaml": {
+    "size": "2411"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-w2d-prior-level-conditioning.yaml": {
+    "size": "3926"
+  },
+  "docs/audit/hypotheses/2026-04-16-garch-w2e-prior-session-carry.yaml": {
+    "size": "4608"
+  },
+  "docs/audit/hypotheses/2026-04-17-fx-live-analogue-transfer-test.yaml": {
+    "size": "18614"
+  },
+  "docs/audit/hypotheses/2026-04-17-garch-a4b-binding-budget.yaml": {
+    "size": "10871"
+  },
+  "docs/audit/hypotheses/2026-04-17-garch-a4c-routing-selectivity.yaml": {
+    "size": "10613"
+  },
+  "docs/audit/hypotheses/2026-04-18-h1-mes-london-metals-signal-only-shadow.yaml": {
+    "size": "18540"
+  },
+  "docs/audit/hypotheses/2026-04-18-htf-mes-europe-flow-long-skip-rule-shadow.yaml": {
+    "size": "24207"
+  },
+  "docs/audit/hypotheses/2026-04-18-htf-path-a-prev-month-v1.yaml": {
+    "size": "19701"
+  },
+  "docs/audit/hypotheses/2026-04-18-htf-path-a-prev-week-v1.yaml": {
+    "size": "18820"
+  },
+  "docs/audit/hypotheses/2026-04-18-mf-futures-mnq-supported-surface.yaml": {
+    "size": "7891"
+  },
+  "docs/audit/hypotheses/2026-04-18-phase-d-d0-rel-vol-sizing-mnq-comex-settle.yaml": {
+    "size": "12485"
+  },
+  "docs/audit/hypotheses/2026-04-18-vwap-comprehensive-family-scan.yaml": {
+    "size": "20323"
+  },
+  "docs/audit/hypotheses/2026-04-19-gc-mgc-translation-audit.yaml": {
+    "size": "3566"
+  },
+  "docs/audit/hypotheses/2026-04-19-level-pass-fail-v1.yaml": {
+    "size": "6297"
+  },
+  "docs/audit/hypotheses/2026-04-19-mes-broader-mode-a-rediscovery-v1.yaml": {
+    "size": "10142"
+  },
+  "docs/audit/hypotheses/2026-04-19-mes-comprehensive-mode-a-feature-v1.yaml": {
+    "size": "9246"
+  },
+  "docs/audit/hypotheses/2026-04-19-mes-low-atr-inverse-filter-v1.yaml": {
+    "size": "11079"
+  },
+  "docs/audit/hypotheses/2026-04-19-mes-mnq-mirror-vwap-mid-aligned-us-data-1000-v1.yaml": {
+    "size": "15529"
+  },
+  "docs/audit/hypotheses/2026-04-19-mes-us-data-1000-orbg5-short-signal-only-shadow-v1.yaml": {
+    "size": "4405"
+  },
+  "docs/audit/hypotheses/2026-04-19-mgc-mode-a-rediscovery-orbg5-short-v1.yaml": {
+    "size": "10427"
+  },
+  "docs/audit/hypotheses/2026-04-19-mgc-mode-a-rediscovery-orbg5-v1.yaml": {
+    "size": "14157"
+  },
+  "docs/audit/hypotheses/2026-04-19-mgc-native-low-r-v1.yaml": {
+    "size": "3076"
+  },
+  "docs/audit/hypotheses/2026-04-19-mgc-orbg5-long-signal-only-shadow-v1.yaml": {
+    "size": "4523"
+  },
+  "docs/audit/hypotheses/2026-04-19-mgc-path-accurate-subr-v1.yaml": {
+    "size": "2385"
+  },
+  "docs/audit/hypotheses/2026-04-19-mgc-payoff-compression-audit.yaml": {
+    "size": "3529"
+  },
+  "docs/audit/hypotheses/2026-04-19-mnq-nyse-close-failure-mode-audit.yaml": {
+    "size": "2962"
+  },
+  "docs/audit/hypotheses/2026-04-19-mnq-regime-tailwind-discovery-v1.yaml": {
+    "size": "11863"
+  },
+  "docs/audit/hypotheses/2026-04-19-sweep-reclaim-v1.yaml": {
+    "size": "6782"
+  },
+  "docs/audit/hypotheses/2026-04-20-h04-cmx-short-relvol-q3-f6-shadow-v1.yaml": {
+    "size": "14696"
+  },
+  "docs/audit/hypotheses/2026-04-20-mgc-portfolio-diversifier.yaml": {
+    "size": "8629"
+  },
+  "docs/audit/hypotheses/2026-04-20-mgc-real-slippage-sensitivity.yaml": {
+    "size": "8500"
+  },
+  "docs/audit/hypotheses/2026-04-20-mnq-15m-rr10-unfiltered-lane-discovery-v1.yaml": {
+    "size": "5251"
+  },
+  "docs/audit/hypotheses/2026-04-20-mnq-30m-rr10-unfiltered-lane-discovery-v1.yaml": {
+    "size": "6285"
+  },
+  "docs/audit/hypotheses/2026-04-20-mnq-live-context-overlays-v1.yaml": {
+    "size": "18291"
+  },
+  "docs/audit/hypotheses/2026-04-20-mnq-unfiltered-baseline-cross-family-v1.yaml": {
+    "size": "5319"
+  },
+  "docs/audit/hypotheses/2026-04-20-participation-optimum-mes-universality-v1.yaml": {
+    "size": "6053"
+  },
+  "docs/audit/hypotheses/2026-04-20-participation-optimum-mgc-universality-v1.yaml": {
+    "size": "6638"
+  },
+  "docs/audit/hypotheses/2026-04-20-participation-optimum-universality-v1.yaml": {
+    "size": "11922"
+  },
+  "docs/audit/hypotheses/2026-04-20-participation-shape-cross-instrument-v1.yaml": {
+    "size": "9486"
+  },
+  "docs/audit/hypotheses/2026-04-20-q1-h04-mechanism-shape-validation-v1.yaml": {
+    "size": "12928"
+  },
+  "docs/audit/hypotheses/2026-04-20-q4-band-deployment-shape-v1.yaml": {
+    "size": "13032"
+  },
+  "docs/audit/hypotheses/2026-04-21-l1-europe-flow-pre-break-context-prereg.yaml": {
+    "size": "8469"
+  },
+  "docs/audit/hypotheses/2026-04-21-mnq-comex-unfiltered-overlay-v1.yaml": {
+    "size": "8492"
+  },
+  "docs/audit/hypotheses/2026-04-21-mnq-us-data-1000-f5-below-pdl-v1.yaml": {
+    "size": "6860"
+  },
+  "docs/audit/hypotheses/2026-04-22-mes-e1-rel-vol-family-v1.yaml": {
+    "size": "7835"
+  },
+  "docs/audit/hypotheses/2026-04-22-mgc-singapore-open-f3-near-pivot-15-v1.yaml": {
+    "size": "7351"
+  },
+  "docs/audit/hypotheses/2026-04-22-mgc-us-data-830-to-mnq-nyse-open-context-rr15-v1.yaml": {
+    "size": "6064"
+  },
+  "docs/audit/hypotheses/2026-04-22-mgc-us-data-830-to-mnq-nyse-open-context-v1.yaml": {
+    "size": "6749"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-atr-p50-cross-session-generalization-v1.yaml": {
+    "size": "10421"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-comex-pd-clear-long-take-v1.yaml": {
+    "size": "1921"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-comex-settle-f6-inside-pdr-v1.yaml": {
+    "size": "6910"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-layered-candidate-board-v1.yaml": {
+    "size": "2655"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-tokyo-costlt08-take-v1.yaml": {
+    "size": "1877"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-us-data-1000-o5-auction-close-on-vwap-o15-v1.yaml": {
+    "size": "5839"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-us-data-830-f3-near-pivot-50-v1.yaml": {
+    "size": "6951"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-usdata1000-clear-of-congestion-take-v1.yaml": {
+    "size": "1952"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-usdata1000-directional-state-study-v1.yaml": {
+    "size": "12437"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-usdata1000-downside-displacement-take-v1.yaml": {
+    "size": "1937"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-usdata1000-near-pivot-50-avoid-v1.yaml": {
+    "size": "1752"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-usdata1000-positive-context-union-v1.yaml": {
+    "size": "2098"
+  },
+  "docs/audit/hypotheses/2026-04-22-mnq-usdata1000-rr15-positive-context-union-v1.yaml": {
+    "size": "2044"
+  },
+  "docs/audit/hypotheses/2026-04-22-pr48-conditional-role-implementation-v1.yaml": {
+    "size": "5107"
+  },
+  "docs/audit/hypotheses/2026-04-22-pr48-promotion-shortlist-v1.yaml": {
+    "size": "5735"
+  },
+  "docs/audit/hypotheses/2026-04-22-pr48-role-followthrough-v1.yaml": {
+    "size": "5070"
+  },
+  "docs/audit/hypotheses/2026-04-23-mnq-comex-settle-gate0-microstructure-v1.yaml": {
+    "size": "3290"
+  },
+  "docs/audit/hypotheses/2026-04-23-mnq-nyse-close-orbg8-rr10-prereg.yaml": {
+    "size": "1826"
+  },
+  "docs/audit/hypotheses/2026-04-23-mnq-parent-structure-shadow-buckets-v1.yaml": {
+    "size": "7740"
+  },
+  "docs/audit/hypotheses/2026-04-23-pr48-mes-mgc-sizer-rule-backtest-v1.yaml": {
+    "size": "5606"
+  },
+  "docs/audit/hypotheses/2026-04-24-mnq-usdata1000-f5-below-pdl-rr15-v1.yaml": {
+    "size": "3303"
+  },
+  "docs/audit/hypotheses/2026-04-26-pre-velocity-vol-regime-interaction-descriptive.yaml": {
+    "size": "8831"
+  },
+  "docs/audit/hypotheses/2026-04-27-mnq-mfe-distribution-endogenous-rr-v1.yaml": {
+    "size": "9261"
+  },
+  "docs/audit/hypotheses/2026-04-27-mnq-unfiltered-high-rr-family-v1.yaml": {
+    "size": "10979"
+  },
+  "docs/audit/hypotheses/2026-04-27-sizing-substrate-prereg.yaml": {
+    "size": "19082"
+  },
+  "docs/audit/hypotheses/2026-04-28-mes-europe-flow-ovn-range-pathway-b-v1.yaml": {
+    "size": "17533"
+  },
+  "docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-d5-both-sides-pathway-b-v1.yaml": {
+    "size": "28926"
+  },
+  "docs/audit/hypotheses/2026-04-28-mnq-comex-settle-garch-pathway-b-v1.yaml": {
+    "size": "19929"
+  },
+  "docs/audit/hypotheses/2026-04-28-phase-d-d0-v2-garch-clean-rederivation.yaml": {
+    "size": "31591"
+  },
+  "docs/audit/hypotheses/2026-04-29-mnq-comex-settle-garch-d6-sizing-overlay-pathway-b-v1.yaml": {
+    "size": "38900"
+  },
+  "docs/audit/hypotheses/2026-05-01-aperture-extension-o15-o30-london-usdata.yaml": {
+    "size": "14119"
+  },
+  "docs/audit/hypotheses/2026-05-01-carver-stage2-vol-targeted-sizing.yaml": {
+    "size": "11223"
+  },
+  "docs/audit/hypotheses/2026-05-01-chordia-revalidation-deployed-lanes.yaml": {
+    "size": "18550"
+  },
+  "docs/audit/hypotheses/2026-05-01-mnq-garch-p70-cross-session-companion.yaml": {
+    "size": "15971"
+  },
+  "docs/audit/hypotheses/2026-05-02-mnq-cmepreclose-xmesatr60-chordia-unlock-v1.yaml": {
+    "size": "9038"
+  },
+  "docs/audit/hypotheses/2026-05-02-mnq-comex-costlt12-chordia-unlock-v1.yaml": {
+    "size": "8980"
+  },
+  "docs/audit/hypotheses/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.yaml": {
+    "size": "9037"
+  },
+  "docs/audit/hypotheses/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.yaml": {
+    "size": "9051"
+  },
+  "docs/audit/hypotheses/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.yaml": {
+    "size": "9203"
+  },
+  "docs/audit/hypotheses/2026-05-02-mnq-usdata1000-vwapmid-o15-rr10-chordia-unlock-v1.yaml": {
+    "size": "10309"
+  },
+  "docs/audit/hypotheses/2026-05-03-mnq-comex-settle-xmesatr60-rr10-chordia-unlock-v1.yaml": {
+    "size": "9502"
+  },
+  "docs/audit/hypotheses/2026-05-04-mnq-comexsettle-xmesatr60-chordia-unlock-v1.yaml": {
+    "size": "9959"
+  },
+  "docs/audit/hypotheses/2026-05-05-capital-review-ovnrng100.yaml": {
+    "size": "17653"
+  },
+  "docs/audit/hypotheses/2026-05-05-oos-reconcile-ovnrng100.yaml": {
+    "size": "12835"
+  },
+  "docs/audit/hypotheses/2026-05-07-mnq-nyseopen-costlt12-rr15-chordia-unlock-v1.yaml": {
+    "size": "12367"
+  },
+  "docs/audit/hypotheses/2026-05-07-mnq-yordanov-crossmiss-triage-v1.yaml": {
+    "size": "18030"
+  },
+  "docs/audit/hypotheses/2026-05-08-mnq-yordanov-early-exit-cross-v2.yaml": {
+    "size": "33601"
+  },
+  "docs/audit/hypotheses/2026-05-10-mnq-comexsettle-orbg5-rr10-chordia-unlock-v1.yaml": {
+    "size": "6585"
+  },
+  "docs/audit/hypotheses/2026-05-10-mnq-comexsettle-pdclearlong-rr10-chordia-unlock-v1.yaml": {
+    "size": "6458"
+  },
+  "docs/audit/hypotheses/2026-05-10-mnq-nyseopen-xmesatr60-rr10-chordia-unlock-v1.yaml": {
+    "size": "6882"
+  },
+  "docs/audit/hypotheses/2026-05-10-mnq-usdata1000-pdgolong-rr10-chordia-unlock-v1.yaml": {
+    "size": "6412"
+  },
+  "docs/audit/hypotheses/2026-05-11-llm-cme-preclose-atr-p30-o15.yaml": {
+    "size": "2320"
+  },
+  "docs/audit/hypotheses/2026-05-11-llm-cme-preclose-orb-vol-16k-o15.yaml": {
+    "size": "2226"
+  },
+  "docs/audit/hypotheses/2026-05-11-llm-tokyo-open-atr-vel-ge105.yaml": {
+    "size": "2192"
+  },
+  "docs/audit/hypotheses/2026-05-12-3lane-sr-alarm-diagnosis.yaml": {
+    "size": "28001"
+  },
+  "docs/audit/hypotheses/2026-05-12-mgc-cmereopen-orbg4-chordia-criteria-repair-v1.yaml": {
+    "size": "7778"
+  },
+  "docs/audit/hypotheses/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.yaml": {
+    "size": "25034"
+  },
+  "docs/audit/hypotheses/2026-05-12-vwap-dead-confluence-reaudit-v1.yaml": {
+    "size": "4664"
+  },
+  "docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml": {
+    "size": "24417"
+  }
+}
