@@ -2,7 +2,17 @@
 
 Date: 2026-05-12
 Owner: Codex
-Status: draft implementation plan
+Status: **PARKED 2026-05-13** — see "Park rationale" below.
+
+## Park rationale (2026-05-13)
+
+Per `docs/plans/2026-05-13-ai-mcp-integration-inventory-and-gold-nuggets.md` NUGGET 5: the existing worktree-manager + HANDOFF + 5 MCP servers + 11 subagents + 27 skills + 17 hooks **already constitutes a control plane**. The bottleneck is context-loading at session start (addressed by NUGGET 4, landed in commit `b90c6291`), not coordination across agents. Adding Paperclip / amux / Cogpit / OctoAlly / LONA / reasoning-sidecar layers solves a problem that does not yet exist and consumes evaluation cycles that are better spent on research throughput.
+
+**Reopen trigger:** when measured worktree/branch/PR cleanup time exceeds **2 hours per week** for two consecutive weeks (instead of going into research). Re-evaluate from this plan as the starting point — do not start fresh.
+
+The objective and recommended stack below are preserved as-is for that future re-evaluation.
+
+---
 
 ## Objective
 

@@ -9,14 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-13
-- **Commit:** 16032467 — feat(cron): LHP fitness-transition trigger + GHA weekly schedule (Nugget 2b)
-- **Files changed:** 6 files
-  - `.github/workflows/ci.yml`
+- **Commit:** 0b5a62d3 — chore: close stage 4 — delete stage file (work landed in 16032467)
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/runtime/lhp_fitness_snapshot.json`
-  - `docs/runtime/stages/nugget2a-lhp-cron-foundation.md`
   - `docs/runtime/stages/nugget2b-lhp-fitness-transition-trigger.md`
-  - `scripts/cron/lhp_weekly.py`
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
