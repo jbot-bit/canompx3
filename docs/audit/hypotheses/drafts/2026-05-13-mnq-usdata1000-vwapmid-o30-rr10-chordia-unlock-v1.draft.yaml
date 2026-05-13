@@ -98,6 +98,14 @@ scope:
     - "writes to validated_setups before execution evidence exists"
 
 data_policy:
+  oos_role: "descriptive_for_chordia_unlock; binding_only_for_later_deployment_eligibility"
+  oos_role_rationale: >
+    OOS in THIS pre-reg is descriptive only — the unlock verdict (PASS_CHORDIA / FAIL_CHORDIA)
+    is decided on IS gates alone. Criterion 8 OOS deployment gates (positive OOS ExpR,
+    OOS Sharpe >= 0.40 * IS Sharpe) are binding ONLY for a separate downstream
+    deployment pre-reg authored after PASS_CHORDIA — not here. This resolves the
+    prior template's three-way OOS contradiction (descriptive vs kill-at-0.50 vs
+    refute-at-0.80) per user review 2026-05-13.
   is_window:
     description: "trading_day < HOLDOUT_SACRED_FROM"
     constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
@@ -220,7 +228,9 @@ hypotheses:
       - "IS t-stat < 3.79"
       - "IS ExpR <= 0.0"
       - "N_IS_on < 100"
-      - "If OOS N >= 30 AND OOS power >= 0.50, OOS sign opposes IS sign"
+      # OOS is NOT a kill axis for the unlock verdict — see data_policy.oos_role above.
+      # Criterion 8 OOS deployment gates (positive OOS ExpR, OOS Sharpe >= 0.40 * IS Sharpe)
+      # apply ONLY to a downstream deployment pre-reg authored after PASS_CHORDIA, not here.
       - "Canonical filter delegation diverges from trading_app.config"
       - "Scratch/null handling is not explicit in the measured trade stream"
     statement: >
@@ -236,7 +246,7 @@ hypotheses:
         n_is_on: 100
         expr_is: 0.0
       extra_gates:
-        - "dir_match_oos = true ONLY when OOS power >= 0.50 (RULE 3.3); audit-queue MD measured power = 0.1732 with n_oos=46 -> tier STATISTICALLY_USELESS, so dir_match cannot kill or confirm; default OOS verdict is UNVERIFIED_INSUFFICIENT_POWER."
+        - "OOS dir_match reported descriptively only; NOT a refutation axis at audit-time. Binary OOS refutation requires CAN_REFUTE tier (power >= 0.80) per RULE 3.3; measured power = 0.1732 (tier STATISTICALLY_USELESS, n_oos = 46). Pre-committed OOS verdict: UNVERIFIED_INSUFFICIENT_POWER. See data_policy.oos_role + oos_power_floor below."
         - "adversarial split table emitted; no hidden subgroup collapse"
         - "scratch-inclusive accounting required if scratch rows exist"
     counted_against_trial_budget: true
@@ -275,9 +285,9 @@ budget_check:
     estimator_run_at: "2026-05-13"
 
 decision_rule:
-  continue_if: "H1 clears strict t >= 3.79 with positive IS ExpR and no harness failure"
-  park_if: "H1 clears strict IS gates but OOS power crosses 0.50 by audit-time and OOS sign is ambiguous"
-  kill_if: "H1 fails t or ExpR gates, or execution integrity fails"
+  continue_if: "H1 clears strict t >= 3.79 with positive IS ExpR and no harness failure (= PASS_CHORDIA; deployment is a separate downstream pre-reg)"
+  park_if: "Not used in this pre-reg. OOS is descriptive only per data_policy.oos_role; OOS ambiguity does not trigger PARK at audit-time. PARK reserved for downstream deployment pre-reg if Criterion 8 OOS gates are ambiguous."
+  kill_if: "H1 fails IS t-stat or ExpR gates, canonical filter delegation diverges, scratch/null handling not explicit, or execution integrity fails. OOS is NOT a kill axis."
 
 methodology_rules_applied:
   - rule: "RULE 3 sacred holdout"
@@ -324,6 +334,7 @@ not_done_by_this_pre_reg:
   - "Does not audit the O5 or O15 apertures (O15 RR1.0 already passed 2026-05-02 separately)."
   - "Does not settle the broader VWAP_MID_ALIGNED filter class."
   - "Does not change live deployment or allocator state."
+  - "Does not certify deployment eligibility — Criterion 8 OOS gates (positive OOS ExpR, OOS Sharpe >= 0.40 * IS Sharpe) require a SEPARATE deployment pre-reg authored after PASS_CHORDIA. This unlock pre-reg decides the strict-3.79 IS-only question; live routing is a downstream decision with its own pre-reg."
   - "Does not address correlation between O30 RR1.0 and the deployed VWAP lanes (allocator's correlation gate handles that downstream if and only if this audit passes and a separate deployment pre-reg is then authored)."
   - "Does not address polarity-of-effect for INTRA_ASSET_PERCENTILE (separate next-thread per audit-queue MD ranks 1+2)."
   - "Does not re-litigate the 2026-04-19 MES cross-instrument mirror KILL or the 2026-04-22 O5-confluence overlay KILL."
