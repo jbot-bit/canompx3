@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-14
-- **Commit:** 32c2065d — harden: verdict-vocab drift check — fix runner-crash class + intersection-order + layout-lock
+- **Commit:** d1a2981f — harden: ASCII-clean CHECKS labels + binding regression-guard drift check
 - **Files changed:** 2 files
   - `pipeline/check_drift.py`
   - `tests/test_pipeline/test_check_drift.py`

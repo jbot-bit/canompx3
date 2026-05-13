@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 
 import duckdb
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from pipeline.db_config import configure_connection
@@ -2334,10 +2334,375 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
             return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 
+# ── Stage 2 of cockpit-v3: SSE infrastructure ─────────────────────────────────
+# Dashboard runs as subprocess (line ~2270 launch_dashboard_background) —
+# JSONL files + bot_state.json are the IPC bus. Stage 2 adds NO orchestrator
+# code. Single-uvicorn-worker is asserted in run_dashboard().
+
+import asyncio
+import json as _json
+from collections import deque
+from typing import Any
+
+_SSE_QUEUE_MAXSIZE: int = 256
+_SSE_MAX_SUBSCRIBERS: int = 4
+_SSE_RING_SIZE: int = 100
+_SSE_HEARTBEAT_INTERVAL_S: float = 1.0
+_SSE_STATE_POLL_INTERVAL_S: float = 0.5
+
+
+class _SSEBroker:
+    """In-process pub/sub for dashboard SSE events.
+
+    Ring buffer keeps last ``_SSE_RING_SIZE`` non-heartbeat events for
+    Last-Event-ID replay. Slow-consumer queues are dropped (logged WARNING)
+    rather than blocking publish — institutional-rigor.md § 6.
+    """
+
+    def __init__(self) -> None:
+        self._subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
+        self._ring: deque[dict[str, Any]] = deque(maxlen=_SSE_RING_SIZE)
+        self._next_event_id: int = 0
+
+    def subscriber_count(self) -> int:
+        return len(self._subscribers)
+
+    def subscribe(self) -> asyncio.Queue[dict[str, Any]]:
+        q: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_SSE_QUEUE_MAXSIZE)
+        self._subscribers.add(q)
+        return q
+
+    def unsubscribe(self, q: asyncio.Queue[dict[str, Any]]) -> None:
+        self._subscribers.discard(q)
+
+    def publish(self, event_type: str, data: dict[str, Any]) -> None:
+        envelope: dict[str, Any] = {"event": event_type, "data": data}
+        if event_type != "heartbeat":
+            self._next_event_id += 1
+            envelope["id"] = self._next_event_id
+            self._ring.append(envelope)
+        for q in list(self._subscribers):
+            try:
+                q.put_nowait(envelope)
+            except asyncio.QueueFull:
+                log.warning("SSE queue full — dropping %s event", event_type)
+
+    def replay_since(self, last_event_id: int) -> list[dict[str, Any]]:
+        return [e for e in self._ring if e.get("id", 0) > last_event_id]
+
+
+_sse_broker = _SSEBroker()
+_sse_tasks: list[asyncio.Task[None]] = []
+
+
+def _file_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except FileNotFoundError:
+        return 0.0
+    except OSError as exc:
+        log.warning("_file_mtime: stat failed on %s: %s", path, exc)
+        return 0.0
+
+
+async def _heartbeat_watcher() -> None:
+    """Emit heartbeat every _SSE_HEARTBEAT_INTERVAL_S with feed-liveness."""
+    from trading_app.live.bot_state import read_state
+
+    while True:
+        try:
+            state = read_state() or {}
+            hb_raw = state.get("heartbeat_utc")
+            last_tick_age_s: float | None = None
+            bot_alive = False
+            if isinstance(hb_raw, str):
+                try:
+                    hb_dt = datetime.fromisoformat(hb_raw.replace("Z", "+00:00"))
+                    last_tick_age_s = (datetime.now(UTC) - hb_dt).total_seconds()
+                    bot_alive = last_tick_age_s < HEARTBEAT_STALE_AFTER_S
+                except ValueError:
+                    pass
+            _sse_broker.publish(
+                "heartbeat",
+                {
+                    "ts": datetime.now(UTC).isoformat(),
+                    "bot_alive": bot_alive,
+                    "session_state": state.get("mode"),
+                    "last_tick_age_s": last_tick_age_s,
+                },
+            )
+        except Exception as exc:
+            log.warning("_heartbeat_watcher tick failed: %s", exc)
+        await asyncio.sleep(_SSE_HEARTBEAT_INTERVAL_S)
+
+
+async def _state_watcher() -> None:
+    """Publish state events on bot_state.json mtime change or presence flip."""
+    from trading_app.live.bot_state import STATE_FILE, read_state
+
+    last_mtime: float = 0.0
+    last_present: bool | None = None
+    while True:
+        try:
+            cur_mtime = _file_mtime(STATE_FILE)
+            cur_present = STATE_FILE.exists()
+            if cur_mtime != last_mtime or cur_present != last_present:
+                if cur_present:
+                    _sse_broker.publish("state", {"present": True, "state": read_state() or {}})
+                else:
+                    _sse_broker.publish("state", {"present": False})
+                last_mtime = cur_mtime
+                last_present = cur_present
+        except Exception as exc:
+            log.warning("_state_watcher tick failed: %s", exc)
+        await asyncio.sleep(_SSE_STATE_POLL_INTERVAL_S)
+
+
+async def _signals_watcher() -> None:
+    """Tail today's live_signals JSONL; publish signal event per new line."""
+    from trading_app.live.signal_log_rotator import signals_file_for_day
+
+    cur_day: date | None = None
+    offset: int = 0
+    while True:
+        try:
+            today = datetime.now(UTC).date()
+            if today != cur_day:
+                cur_day = today
+                # Start at EOF so dashboard startup doesn't re-emit history.
+                # Stage 1's /api/signals-recent serves backfill on connect.
+                p0 = signals_file_for_day(SIGNALS_DIR, today)
+                offset = p0.stat().st_size if p0.exists() else 0
+
+            path = signals_file_for_day(SIGNALS_DIR, today)
+            if path.exists():
+                size = path.stat().st_size
+                if size < offset:
+                    log.warning("_signals_watcher: %s shrank — resetting offset", path.name)
+                    offset = 0
+                if size > offset:
+                    with open(path, "rb") as fh:
+                        fh.seek(offset)
+                        chunk = fh.read(size - offset)
+                    text = chunk.decode("utf-8", errors="replace")
+                    last_nl = text.rfind("\n")
+                    if last_nl == -1:
+                        await asyncio.sleep(_SSE_STATE_POLL_INTERVAL_S)
+                        continue
+                    complete = text[: last_nl + 1]
+                    offset += len(complete.encode("utf-8"))
+                    for line in complete.splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            rec = _json.loads(line)
+                        except _json.JSONDecodeError as exc:
+                            log.warning("_signals_watcher: malformed line: %s", exc)
+                            continue
+                        _sse_broker.publish("signal", rec)
+        except Exception as exc:
+            log.warning("_signals_watcher tick failed: %s", exc)
+        await asyncio.sleep(_SSE_STATE_POLL_INTERVAL_S)
+
+
+async def _sse_start_watchers() -> None:
+    """Lazy-start SSE watcher tasks on first subscriber connect."""
+    if _sse_tasks:
+        return
+    _sse_tasks.append(asyncio.create_task(_heartbeat_watcher(), name="sse-heartbeat"))
+    _sse_tasks.append(asyncio.create_task(_state_watcher(), name="sse-state"))
+    _sse_tasks.append(asyncio.create_task(_signals_watcher(), name="sse-signals"))
+
+
 # ── HTML Frontend ─────────────────────────────────────────────────────────────
 
 
 DASHBOARD_HTML = Path(__file__).parent / "bot_dashboard.html"
+
+
+# ── /api/bars-recent (Stage 2 of cockpit-v3) ──────────────────────────────────
+
+
+def _query_bars_recent(
+    instrument: str, lookback_minutes: int, since_ts: str | None
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Read recent 1m bars from gold.db, shaped for Lightweight Charts."""
+    if not GOLD_DB_PATH.exists():
+        return [], f"gold.db not found at {GOLD_DB_PATH}"
+
+    since_dt: datetime | None = None
+    if since_ts:
+        try:
+            since_dt = datetime.fromisoformat(since_ts.replace("Z", "+00:00"))
+        except ValueError:
+            log.warning("_query_bars_recent: bad since_ts %r — ignoring", since_ts)
+
+    try:
+        with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+            configure_connection(con)
+            if since_dt is not None:
+                rows = con.execute(
+                    "SELECT ts_utc, open, high, low, close, volume FROM bars_1m "
+                    "WHERE symbol = ? AND ts_utc > ? ORDER BY ts_utc ASC",
+                    [instrument, since_dt],
+                ).fetchall()
+            else:
+                rows = con.execute(
+                    "SELECT ts_utc, open, high, low, close, volume FROM bars_1m "
+                    "WHERE symbol = ? AND ts_utc > now() - INTERVAL (? || ' minutes') "
+                    "ORDER BY ts_utc ASC",
+                    [instrument, str(lookback_minutes)],
+                ).fetchall()
+    except duckdb.IOException as exc:
+        return [], f"gold.db locked: {exc}"
+    except Exception as exc:
+        log.error("_query_bars_recent: query failed: %s", exc)
+        return [], f"query failed: {exc}"
+
+    bars: list[dict[str, Any]] = []
+    for ts_utc, o, h, lo, c, v in rows:
+        # DuckDB may return Brisbane-tz despite TIMESTAMPTZ column —
+        # normalize to UTC epoch seconds for Lightweight Charts.
+        if ts_utc.tzinfo is None:
+            ts_utc = ts_utc.replace(tzinfo=UTC)
+        bars.append(
+            {
+                "time": int(ts_utc.astimezone(UTC).timestamp()),
+                "open": float(o),
+                "high": float(h),
+                "low": float(lo),
+                "close": float(c),
+                "volume": int(v),
+            }
+        )
+    return bars, None
+
+
+def _orb_levels_for_instrument(instrument: str) -> dict[str, Any]:
+    """Read ORB high/low/complete for ``instrument`` from bot_state.json.
+
+    Reads through canonical ``read_state`` accessor — never re-derives ORB
+    levels (institutional-rigor.md § 4). Returns nulls if no lane has
+    computed ORB yet.
+    """
+    from trading_app.live.bot_state import read_state
+
+    state = read_state() or {}
+    lanes = state.get("lanes") or {}
+    if not isinstance(lanes, dict):
+        return {"orb_high": None, "orb_low": None, "orb_complete": False}
+    for lane in lanes.values():
+        if not isinstance(lane, dict):
+            continue
+        if lane.get("instrument") != instrument:
+            continue
+        oh, ol = lane.get("orb_high"), lane.get("orb_low")
+        if oh is not None and ol is not None:
+            return {
+                "orb_high": oh,
+                "orb_low": ol,
+                "orb_complete": bool(lane.get("orb_complete")),
+                "orb_minutes": lane.get("orb_minutes"),
+                "session_name": lane.get("session_name"),
+            }
+    return {"orb_high": None, "orb_low": None, "orb_complete": False}
+
+
+@app.get("/api/bars-recent")
+async def api_bars_recent(
+    instrument: str = "MNQ",
+    lookback_minutes: int = 90,
+    since: str | None = None,
+):
+    """Return recent 1m bars + ORB levels shaped for Lightweight Charts.
+
+    lookback_minutes capped at 1440 (24h). since= overrides lookback.
+    ORB levels delegated to canonical bot_state.json — never re-derived.
+    """
+    capped_lookback = max(1, min(int(lookback_minutes), 1440))
+    bars, err = _query_bars_recent(instrument, capped_lookback, since)
+    orb = _orb_levels_for_instrument(instrument)
+    payload: dict[str, Any] = {
+        "instrument": instrument,
+        "bars": bars,
+        "server_ts": datetime.now(UTC).isoformat(),
+        **orb,
+    }
+    if err:
+        payload["warning"] = err
+    return payload
+
+
+@app.get("/api/events/stream")
+async def api_events_stream(request: Request):
+    """Server-Sent Events stream feeding the cockpit dashboard.
+
+    Events: heartbeat (1s), state (mtime-driven), signal (JSONL-tailed).
+    Subscriber cap _SSE_MAX_SUBSCRIBERS; over-cap returns 429. Browser
+    Last-Event-ID header triggers replay from the ring buffer.
+    """
+    from sse_starlette.sse import EventSourceResponse
+
+    if _sse_broker.subscriber_count() >= _SSE_MAX_SUBSCRIBERS:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": "SSE subscriber limit reached",
+                "limit": _SSE_MAX_SUBSCRIBERS,
+                "retry_after_s": 5,
+            },
+            headers={"Retry-After": "5"},
+        )
+
+    await _sse_start_watchers()
+
+    last_event_id_raw = request.headers.get("last-event-id")
+    try:
+        last_event_id = int(last_event_id_raw) if last_event_id_raw else 0
+    except (ValueError, TypeError):
+        last_event_id = 0
+
+    queue = _sse_broker.subscribe()
+
+    async def _generator():
+        try:
+            # On-connect state snapshot — covers "operator opens dashboard
+            # mid-night when nothing changes" case.
+            try:
+                from trading_app.live.bot_state import STATE_FILE, read_state
+
+                if STATE_FILE.exists():
+                    yield {
+                        "event": "state",
+                        "data": _json.dumps({"present": True, "state": read_state() or {}}),
+                    }
+                else:
+                    yield {"event": "state", "data": _json.dumps({"present": False})}
+            except Exception as exc:
+                log.warning("SSE on-connect snapshot failed: %s", exc)
+
+            if last_event_id > 0:
+                for env in _sse_broker.replay_since(last_event_id):
+                    yield {
+                        "event": env["event"],
+                        "id": str(env.get("id", "")),
+                        "data": _json.dumps(env["data"]),
+                    }
+
+            while True:
+                env = await queue.get()
+                payload: dict[str, str] = {
+                    "event": env["event"],
+                    "data": _json.dumps(env["data"]),
+                }
+                if "id" in env:
+                    payload["id"] = str(env["id"])
+                yield payload
+        finally:
+            _sse_broker.unsubscribe(queue)
+
+    return EventSourceResponse(_generator())
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -2351,8 +2716,19 @@ async def index():
 
 
 def run_dashboard(host: str = "127.0.0.1", port: int = PORT) -> None:
-    """Run the dashboard server (blocking). For standalone use or subprocess."""
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    """Run the dashboard server (blocking).
+
+    Localhost-only — SSE leaks live position state, /api/action/kill mutates
+    real-money state. Drift check ``check_dashboard_localhost_only_binding``
+    is the first defense; this assertion is the second. workers=1 pinned
+    because the SSE subscriber set is in-process.
+    """
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        raise RuntimeError(
+            f"Refusing to start dashboard on non-localhost host {host!r}: "
+            f"SSE + kill endpoint leak live position state over LAN."
+        )
+    uvicorn.run(app, host=host, port=port, log_level="warning", workers=1)
 
 
 def launch_dashboard_background(port: int = PORT) -> subprocess.Popen | None:
