@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-12
-- **Commit:** 204dc964 — docs(institutional): mark Tolusic + Howard as INGESTED in PENDING_ACQUISITION
+- **Commit:** aee2f2e4 — @ docs(audit): L1 replacement candidate scan — NO_QUALIFIED_REPLACEMENT
 - **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/institutional/literature/PENDING_ACQUISITION_market_profile.md`
+  - `docs/audit/results/2026-05-12-l1-replacement-candidate-scan.md`
 
 ## Current Session Addendum
 - **Tool:** Codex (WSL)
