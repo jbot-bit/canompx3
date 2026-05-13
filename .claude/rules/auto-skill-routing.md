@@ -1,5 +1,12 @@
 # Auto-Skill Routing
 
+> **Hook-fired (2026-05-13):** `.claude/hooks/intent-router.py` matches the
+> user prompt against the Intent Map + CRG section below on every
+> UserPromptSubmit and injects a single-line `additionalContext` cue naming
+> the recommended skill. Editing the rules here changes the documented
+> routing surface; the hook keeps its own compiled regex table in sync.
+> If you change the bullets, also update `INTENT_RULES` in the hook.
+
 The user does not type `/skill` commands. Route by intent.
 
 For non-trivial repo work, scope first with:
