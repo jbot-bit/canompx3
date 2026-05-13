@@ -3373,6 +3373,137 @@ def check_chordia_result_threshold_matches_prereg() -> list[str]:
     return violations
 
 
+def check_verdict_vocabulary_md_matches_code(
+    md_path: Path | None = None,
+) -> list[str]:
+    """Parity check: RESEARCH_RULES.md § Verdict Token Vocabulary <-> code constants.
+
+    Source-of-truth is the Python constants ``_VERDICT_NORMALIZE`` and
+    ``_VERDICT_PRIORITY_TOKENS`` in
+    ``scripts/tools/research_catalog_mcp_server.py``. The doctrine MD section
+    must mirror them exactly. Binding tier — divergence is a doctrine-integrity
+    bug, not advisory.
+
+    Origin: 2026-05-14 promotion of the de-facto verdict registry to
+    ``RESEARCH_RULES.md``. Action-queue item
+    ``research_catalog_verdict_vocabulary_doctrine_2026_05_12``.
+
+    Parameters
+    ----------
+    md_path : Path | None
+        Override path to RESEARCH_RULES.md (test seam). Defaults to the
+        canonical project location.
+    """
+    import re
+
+    violations: list[str] = []
+
+    target = md_path if md_path is not None else PROJECT_ROOT / "RESEARCH_RULES.md"
+    try:
+        text = target.read_text(encoding="utf-8")
+    except Exception as exc:
+        violations.append(f"VERDICT_VOCAB_MD_READ_FAILED: {target} ({type(exc).__name__}: {exc})")
+        return violations
+
+    try:
+        from scripts.tools.research_catalog_mcp_server import (
+            _VERDICT_NORMALIZE,
+            _VERDICT_PRIORITY_TOKENS,
+        )
+    except Exception as exc:
+        violations.append(f"VERDICT_VOCAB_MODULE_IMPORT_FAILED: {type(exc).__name__}: {exc}")
+        return violations
+
+    section_re = re.compile(
+        r"^##\s+Verdict Token Vocabulary\s*$(.*?)(?=^##\s+\S|\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    sec_match = section_re.search(text)
+    if sec_match is None:
+        violations.append("VERDICT_VOCAB_SECTION_MISSING: '## Verdict Token Vocabulary' not found in RESEARCH_RULES.md")
+        return violations
+    section = sec_match.group(1)
+
+    def _slice_table(sub_header_prefix: str) -> str | None:
+        sub_re = re.compile(
+            r"^###\s+" + re.escape(sub_header_prefix) + r"[^\n]*$(.*?)(?=^###\s+|\Z)",
+            re.MULTILINE | re.DOTALL,
+        )
+        m = sub_re.search(section)
+        return m.group(1) if m is not None else None
+
+    row_re = re.compile(r"^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*$", re.MULTILINE)
+    sep_re = re.compile(r"^[\s\-:]+$")
+
+    def _strip_backticks(cell: str) -> str:
+        return cell.strip().strip("`").strip()
+
+    map_slice = _slice_table("Raw-Spelling")
+    if map_slice is None:
+        violations.append("VERDICT_VOCAB_TABLE_MISSING: '### Raw-Spelling' not found within § Verdict Token Vocabulary")
+    else:
+        md_map: dict[str, str] = {}
+        for raw_cell, canon_cell in row_re.findall(map_slice):
+            raw, canon = raw_cell.strip(), canon_cell.strip()
+            if sep_re.match(raw) or sep_re.match(canon):
+                continue
+            if raw.lower() == "raw spelling" and canon.lower() == "canonical tag":
+                continue
+            md_map[_strip_backticks(raw)] = _strip_backticks(canon)
+        code_map = dict(_VERDICT_NORMALIZE)
+        for raw, canonical in code_map.items():
+            if raw not in md_map:
+                violations.append(
+                    f"VERDICT_VOCAB_MISSING_IN_MD: '{raw}' -> '{canonical}' present in code, absent in MD"
+                )
+            elif md_map[raw] != canonical:
+                violations.append(
+                    f"VERDICT_VOCAB_MAPPING_MISMATCH: '{raw}' maps to '{canonical}' in code but '{md_map[raw]}' in MD"
+                )
+        for raw, canonical in md_map.items():
+            if raw not in code_map:
+                violations.append(f"VERDICT_VOCAB_EXTRA_IN_MD: '{raw}' -> '{canonical}' present in MD, absent in code")
+
+    prio_slice = _slice_table("Priority Resolution Order")
+    if prio_slice is None:
+        violations.append(
+            "VERDICT_VOCAB_TABLE_MISSING: '### Priority Resolution Order' not found within § Verdict Token Vocabulary"
+        )
+    else:
+        md_prio: list[str] = []
+        for index_cell, token_cell in row_re.findall(prio_slice):
+            index_s, token = index_cell.strip(), token_cell.strip()
+            if sep_re.match(index_s) or sep_re.match(token):
+                continue
+            if index_s == "#" and token.lower() == "token":
+                continue
+            if not index_s.lstrip("-").isdigit():
+                continue
+            md_prio.append(_strip_backticks(token))
+        code_prio = list(_VERDICT_PRIORITY_TOKENS)
+        md_set = set(md_prio)
+        code_set = set(code_prio)
+        for tok in code_prio:
+            if tok not in md_set:
+                violations.append(
+                    f"VERDICT_PRIORITY_MISSING_IN_MD: '{tok}' (code index "
+                    f"{code_prio.index(tok) + 1}) absent in MD priority list"
+                )
+        for tok in md_prio:
+            if tok not in code_set:
+                violations.append(f"VERDICT_PRIORITY_EXTRA_IN_MD: '{tok}' present in MD priority list, absent in code")
+        if md_set == code_set:
+            for i, (code_tok, md_tok) in enumerate(zip(code_prio, md_prio, strict=True)):
+                if code_tok != md_tok:
+                    violations.append(
+                        f"VERDICT_PRIORITY_ORDER_MISMATCH: first divergence "
+                        f"at index {i + 1}: code='{code_tok}' vs md='{md_tok}'"
+                    )
+                    break
+
+    return violations
+
+
 def check_orphaned_validated_strategies(con=None) -> list[str]:
     """Check #42: Validated strategies must have corresponding outcome data.
 
@@ -9100,6 +9231,12 @@ CHECKS = [
     (
         "Chordia result MD threshold matches prereg chordia_threshold_basis (theory_citation field-presence trap)",
         check_chordia_result_threshold_matches_prereg,
+        False,
+        False,
+    ),
+    (
+        "Verdict-token vocabulary parity (RESEARCH_RULES.md <-> MCP server constants)",
+        check_verdict_vocabulary_md_matches_code,
         False,
         False,
     ),

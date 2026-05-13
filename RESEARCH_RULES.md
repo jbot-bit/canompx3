@@ -174,6 +174,114 @@ This format already exists in the research scripts. Maintain it.
 
 ---
 
+## Verdict Token Vocabulary
+
+Canonical vocabulary for verdict tags emitted by the research-catalog MCP
+server's verdict-filter API (`scripts/tools/research_catalog_mcp_server.py`).
+
+**Source-of-truth:** the Python constants `_VERDICT_NORMALIZE` and
+`_VERDICT_PRIORITY_TOKENS` in the MCP server. This section is kept in
+parity with code by drift check `check_verdict_vocabulary_md_matches_code`
+(binding, `pipeline/check_drift.py`). Additions MUST be made in BOTH
+places in the same commit; the drift check fails otherwise.
+
+The compound-qualifier resolution algorithm (regex word-boundary scan,
+priority-order tie-break, bold-marker stripping) is intentionally not
+duplicated here — see `_normalize_verdict` in the source file.
+
+Verdict tags partition into **kill** outcomes (`NO-GO`, `PARK`, `KILL`,
+`UNSUPPORTED`, `DECAY`, `STALE`, `NULL`) and **non-kill** outcomes
+(everything else). Kill tokens have priority in the resolution scan so
+compound cells like `"INVESTIGATED — NO-GO"` resolve to `NO-GO`.
+
+### Raw-Spelling -> Canonical-Tag (38 entries)
+
+| Raw spelling | Canonical tag |
+| --- | --- |
+| `NO-GO` | `NO-GO` |
+| `NOGO` | `NO-GO` |
+| `DEAD` | `NO-GO` |
+| `PURGED` | `NO-GO` |
+| `RETIRED` | `NO-GO` |
+| `REJECTED` | `NO-GO` |
+| `REFUTED` | `NO-GO` |
+| `GUILTY` | `NO-GO` |
+| `INVESTIGATED` | `NO-GO` |
+| `ARITHMETIC_ONLY` | `NO-GO` |
+| `ARITHMETIC-ONLY` | `NO-GO` |
+| `PARK` | `PARK` |
+| `PARK_PENDING_OOS_POWER` | `PARK` |
+| `PARKPENDINGOOSPOWER` | `PARK` |
+| `KILL` | `KILL` |
+| `KILL_DOWNGRADE` | `KILL` |
+| `KILLDOWNGRADE` | `KILL` |
+| `UNSUPPORTED` | `UNSUPPORTED` |
+| `DECAY` | `DECAY` |
+| `STALE` | `STALE` |
+| `NULL` | `NULL` |
+| `PROMISING` | `PROMISING` |
+| `VALIDATED` | `VALIDATED` |
+| `CONFIRMED` | `CONFIRMED` |
+| `CONDITIONAL` | `CONDITIONAL` |
+| `CONTINUE` | `CONTINUE` |
+| `DOWNSIZE` | `DOWNSIZE` |
+| `HOLDING` | `HOLDING` |
+| `MARGINAL` | `MARGINAL` |
+| `PASS` | `PASS` |
+| `EDGE_WITH_CAVEAT` | `EDGE_WITH_CAVEAT` |
+| `EDGEWITHCAVEAT` | `EDGE_WITH_CAVEAT` |
+| `RESEARCH_PROVISIONAL` | `RESEARCH_PROVISIONAL` |
+| `RESEARCHPROVISIONAL` | `RESEARCH_PROVISIONAL` |
+| `WEAK` | `WEAK` |
+| `REDESIGN` | `REDESIGN` |
+| `FIX` | `FIX` |
+| `CLOSED` | `CLOSED` |
+
+### Priority Resolution Order (38 tokens)
+
+| # | Token |
+| --- | --- |
+| 1 | `NO-GO` |
+| 2 | `NOGO` |
+| 3 | `DEAD` |
+| 4 | `PURGED` |
+| 5 | `RETIRED` |
+| 6 | `REJECTED` |
+| 7 | `REFUTED` |
+| 8 | `KILL_DOWNGRADE` |
+| 9 | `KILLDOWNGRADE` |
+| 10 | `KILL` |
+| 11 | `PARK_PENDING_OOS_POWER` |
+| 12 | `PARKPENDINGOOSPOWER` |
+| 13 | `PARK` |
+| 14 | `UNSUPPORTED` |
+| 15 | `DECAY` |
+| 16 | `STALE` |
+| 17 | `NULL` |
+| 18 | `GUILTY` |
+| 19 | `ARITHMETIC_ONLY` |
+| 20 | `ARITHMETIC-ONLY` |
+| 21 | `INVESTIGATED` |
+| 22 | `EDGE_WITH_CAVEAT` |
+| 23 | `EDGEWITHCAVEAT` |
+| 24 | `RESEARCH_PROVISIONAL` |
+| 25 | `RESEARCHPROVISIONAL` |
+| 26 | `VALIDATED` |
+| 27 | `CONFIRMED` |
+| 28 | `CONDITIONAL` |
+| 29 | `CONTINUE` |
+| 30 | `DOWNSIZE` |
+| 31 | `HOLDING` |
+| 32 | `MARGINAL` |
+| 33 | `PROMISING` |
+| 34 | `REDESIGN` |
+| 35 | `PASS` |
+| 36 | `FIX` |
+| 37 | `CLOSED` |
+| 38 | `WEAK` |
+
+---
+
 ## NO-GO Rules
 
 ### Things That Are Always Wrong

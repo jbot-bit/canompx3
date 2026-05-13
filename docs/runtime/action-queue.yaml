@@ -4,12 +4,13 @@ items:
   - id: research_catalog_verdict_vocabulary_doctrine_2026_05_12
     title: Promote verdict-token vocabulary into a doctrine file (RESEARCH_RULES.md § Verdict tokens)
     class: docs
-    status: open
+    status: closed
     priority: P3
     close_before_new_work: false
     owner_hint: user
-    last_verified_at: 2026-05-12
+    last_verified_at: 2026-05-14
     freshness_sla_days: 90
+    override_note: "Closed 2026-05-14: vocabulary promoted to RESEARCH_RULES.md § Verdict Token Vocabulary; parity enforced by check_verdict_vocabulary_md_matches_code (binding, pipeline/check_drift.py). Spec MD reduced to canonical pointer."
     next_action: |
       `scripts/tools/research_catalog_mcp_server.py` is currently the de-facto
       registry for the project's verdict vocabulary (`_VERDICT_NORMALIZE` +

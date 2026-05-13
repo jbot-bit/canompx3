@@ -14,57 +14,30 @@ Extends the existing `research-catalog` MCP server (`search_research_catalog` to
 
 No new MCP server. No new write path. No external sidecar.
 
-## Recognized verdict tags
+## Verdict tags
 
-Kill class (filterable as kill verdicts):
-`NO-GO`, `PARK`, `KILL`, `UNSUPPORTED`, `DECAY`, `STALE`, `NULL`.
+The canonical vocabulary — raw-spelling -> canonical-tag map, priority
+resolution order, and compound-qualifier rules — lives in
+`RESEARCH_RULES.md § Verdict Token Vocabulary` (promoted 2026-05-14).
+Source-of-truth is the Python constants `_VERDICT_NORMALIZE` /
+`_VERDICT_PRIORITY_TOKENS` in this server; the doctrine MD section is kept
+in parity by drift check `check_verdict_vocabulary_md_matches_code`
+(binding, `pipeline/check_drift.py`). Additions to either constant MUST
+be mirrored in the doctrine MD in the same commit.
 
-Non-kill outcomes (recognized so the body-line scanner does not misclassify
-them as kill via a stray "DEAD" qualifier in narrative text — e.g.,
-`**Verdict:** VALIDATED but DEAD in OOS` reads as VALIDATED, not NO-GO):
-`VALIDATED`, `CONFIRMED`, `CONDITIONAL`, `CONTINUE`, `DOWNSIZE`, `HOLDING`,
-`MARGINAL`, `PROMISING`, `PASS`, `EDGE_WITH_CAVEAT`, `RESEARCH_PROVISIONAL`,
-`WEAK`, `REDESIGN`, `FIX`, `CLOSED`.
+The compound-qualifier resolution algorithm (regex word-boundary scan,
+priority-order tie-break, bold-marker stripping) is owned by
+`_normalize_verdict` in this server and is intentionally not duplicated
+in the doctrine. Unknown tags raise `ValueError` listing the valid set —
+fail-closed.
 
-### Doctrine source
+The artifact's `metadata["raw_verdict"]` field preserves the original
+spelling for traceability; `metadata["verdict"]` carries the normalized
+canonical tag.
 
-The project verdict vocabulary is informally distributed across
-`STRATEGY_BLUEPRINT.md` §5 and `docs/audit/results/*.md` headers — there is
-NO formal canonical taxonomy in `RESEARCH_RULES.md` or
-`pre_registered_criteria.md` as of 2026-05-12. This server is the de-facto
-verdict registry. Tracked as a follow-up to formalize a `RESEARCH_RULES.md
-§ Verdict tokens` section. Until then, additions to `_VERDICT_NORMALIZE`
-MUST be backed by `grep` evidence of production usage (not invented).
-
-The following raw spellings normalize to canonical kill tags so callers do
-not have to enumerate every legacy form:
-
-| Raw spelling | Canonical tag |
-|--------------|---------------|
-| `NO-GO` / `NOGO` | `NO-GO` |
-| `DEAD` / `PURGED` / `RETIRED` / `REJECTED` / `REFUTED` / `GUILTY` | `NO-GO` |
-| `INVESTIGATED` / `ARITHMETIC_ONLY` | `NO-GO` |
-| `PARK` / `PARK_PENDING_OOS_POWER` | `PARK` |
-| `KILL` / `KILL_DOWNGRADE` | `KILL` |
-| `UNSUPPORTED` | `UNSUPPORTED` |
-| `DECAY` / `STALE` / `NULL` | self |
-
-Non-kill tokens (`VALIDATED`, `CONFIRMED`, `CONDITIONAL`, etc.) normalize to
-themselves — see "Recognized verdict tags" above for the full set.
-
-### Compound qualifiers
-
-Verdict cells in `STRATEGY_BLUEPRINT.md` §5 frequently carry parenthetical or em-dash qualifiers:
-`DEAD (impractical)`, `**DEAD — PERMANENT**`, `INVESTIGATED — NO-GO`, `PROMISING (upgraded from observation)`.
-
-`_normalize_verdict` scans for the first known token (in priority order: kill verdicts beat
-neutral verdicts, so `INVESTIGATED — NO-GO` -> `NO-GO`, not `NO-GO` losing to `INVESTIGATED`).
-Bold markdown markers (`**`) are stripped before scanning.
-
-The artifact's `metadata["raw_verdict"]` field preserves the original spelling for traceability;
-`metadata["verdict"]` carries the normalized canonical tag.
-
-Unknown tags raise `ValueError` listing the valid set — fail-closed.
+For implementation detail on how detection precedence (front-matter ->
+body marker -> filename stem) intersects with the vocabulary, see
+§ "Detection precedence" below.
 
 ### Why this matters (silent-gap class)
 

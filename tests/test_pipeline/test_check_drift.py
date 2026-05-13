@@ -29,6 +29,7 @@ from pipeline.check_drift import (
     check_trading_app_connection_leaks,
     check_trading_app_hardcoded_paths,
     check_uv_lock_exists,
+    check_verdict_vocabulary_md_matches_code,
 )
 
 
@@ -2779,3 +2780,63 @@ class TestCheckRoutineTbboSlippageRegistryCoverage:
         assert "MES" in violations[0]
         assert "no `mes-...slippage-pilot-v1.md` doc was found" in violations[0]
         assert "silent over-coverage" in violations[0]
+
+
+class TestVerdictVocabularyDrift:
+    """Doctrine parity between RESEARCH_RULES.md and MCP-server vocab constants.
+
+    Source-of-truth is the Python constants in
+    ``scripts/tools/research_catalog_mcp_server.py``; the MD section is the
+    documented mirror. Promotion landed 2026-05-14 (action-queue item
+    ``research_catalog_verdict_vocabulary_doctrine_2026_05_12``).
+    """
+
+    def _canonical_md(self) -> Path:
+        from pipeline.check_drift import PROJECT_ROOT
+
+        return PROJECT_ROOT / "RESEARCH_RULES.md"
+
+    def test_drift_clean_against_live_repo(self):
+        """Live repo must be parity-clean — doubles as tripwire."""
+        violations = check_verdict_vocabulary_md_matches_code()
+        assert violations == [], "Verdict-vocab drift in live repo:\n  " + "\n  ".join(violations)
+
+    def test_detects_missing_mapping_row(self, tmp_path):
+        """Deleting one mapping row triggers VERDICT_VOCAB_MISSING_IN_MD."""
+        import shutil
+
+        src = self._canonical_md()
+        dst = tmp_path / "RESEARCH_RULES.md"
+        shutil.copy(src, dst)
+        text = dst.read_text(encoding="utf-8")
+        # Delete the canonical NO-GO -> NO-GO row by raw spelling.
+        target_row = "| `NO-GO` | `NO-GO` |\n"
+        assert target_row in text, "fixture row missing — update test if doctrine changed"
+        tampered = text.replace(target_row, "", 1)
+        dst.write_text(tampered, encoding="utf-8")
+
+        violations = check_verdict_vocabulary_md_matches_code(md_path=dst)
+        assert any("VERDICT_VOCAB_MISSING_IN_MD" in v and "'NO-GO'" in v for v in violations), violations
+
+    def test_detects_priority_order_mismatch(self, tmp_path):
+        """Swapping two adjacent priority rows triggers ORDER_MISMATCH."""
+        import shutil
+
+        src = self._canonical_md()
+        dst = tmp_path / "RESEARCH_RULES.md"
+        shutil.copy(src, dst)
+        text = dst.read_text(encoding="utf-8")
+        # Swap rows 1 and 2 of the priority table (NO-GO and NOGO are adjacent
+        # and both retained in code, so swapping them stays a pure ORDER bug).
+        row_1 = "| 1 | `NO-GO` |\n"
+        row_2 = "| 2 | `NOGO` |\n"
+        assert row_1 in text and row_2 in text, "fixture priority rows missing — update test if doctrine reorders"
+        # Use placeholders to avoid the second replace eating the first row.
+        swapped = text.replace(row_1, "<<TMP1>>").replace(row_2, "<<TMP2>>")
+        # Swap the slot contents but keep the index cells intact.
+        swapped = swapped.replace("<<TMP1>>", "| 1 | `NOGO` |\n")
+        swapped = swapped.replace("<<TMP2>>", "| 2 | `NO-GO` |\n")
+        dst.write_text(swapped, encoding="utf-8")
+
+        violations = check_verdict_vocabulary_md_matches_code(md_path=dst)
+        assert any("VERDICT_PRIORITY_ORDER_MISMATCH" in v for v in violations), violations
