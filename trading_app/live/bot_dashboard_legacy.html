@@ -1,0 +1,3715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORB Bot Dashboard</title>
+<link id="favicon" rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23dc2626'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e13;
+    --surface: #0f1419;
+    --surface-2: #151c24;
+    --surface-3: #1a232e;
+    --border: #1e2a38;
+    --border-hi: #2a3a4e;
+    --text: #e4ecf4;
+    --text-2: #b0c0d0;
+    --muted: #6b7f94;
+    --dim: #455568;
+    --green: #00d68f;
+    --green-soft: rgba(0,214,143,0.10);
+    --red: #ff5c5c;
+    --red-soft: rgba(255,92,92,0.10);
+    --yellow: #ffc107;
+    --yellow-soft: rgba(255,193,7,0.08);
+    --blue: #4da6ff;
+    --blue-soft: rgba(77,166,255,0.10);
+    --cyan: #00d4ff;
+    --cyan-soft: rgba(0,212,255,0.08);
+    --orange: #ff9f43;
+    --r: 8px;
+    --r-lg: 12px;
+    --mono: "JetBrains Mono","SF Mono","Cascadia Code","Consolas",monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size: 13px; line-height: 1.4; min-height: 100vh; }
+  .m { font-family: var(--mono); }
+  button, input { font: inherit; }
+
+  /* ── SHELL ──────────────────────────── */
+  .shell { max-width: 1500px; margin: 0 auto; padding: 0 16px 32px; }
+
+  /* ── TOP BAR ────────────────────────── */
+  .topbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg); z-index: 10;
+  }
+  .topbar-brand { font-weight: 800; font-size: 14px; color: var(--cyan); letter-spacing: 0.04em; }
+  .topbar-sep { color: var(--border); }
+  .topbar-acct { font-weight: 600; font-size: 13px; }
+  .topbar-acct-detail { color: var(--muted); font-size: 12px; }
+  .topbar-mode {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .topbar-mode .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .topbar-mode.stopped { background: rgba(71,85,105,0.18); color: var(--dim); }
+  .topbar-mode.signal { background: var(--green-soft); color: var(--green); }
+  .topbar-mode.demo { background: var(--blue-soft); color: var(--blue); }
+  .topbar-mode.live { background: var(--red-soft); color: var(--red); }
+  .topbar-spacer { flex: 1; }
+  .topbar-btn {
+    padding: 5px 12px; border-radius: var(--r); border: 1px solid var(--border);
+    background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 600;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em; transition: all 0.12s;
+  }
+  .topbar-btn:hover { border-color: var(--border-hi); color: var(--text); }
+  .topbar-btn.primary { border-color: rgba(0,212,255,0.20); color: var(--cyan); }
+  .topbar-btn.primary:hover { background: var(--cyan-soft); }
+  .topbar-btn.warn { border-color: rgba(255,193,7,0.20); color: var(--yellow); }
+  .topbar-btn.warn:hover { background: var(--yellow-soft); }
+  .topbar-btn.danger { border-color: rgba(255,92,92,0.25); color: var(--red); }
+  .topbar-btn.danger:hover { background: var(--red-soft); }
+
+  /* ── METRICS STRIP ──────────────────── */
+  .metrics {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px;
+    background: var(--border); border-radius: var(--r-lg); overflow: hidden;
+    margin: 12px 0;
+  }
+  .metric { background: var(--surface); padding: 12px 14px; }
+  .metric:first-child { border-radius: var(--r-lg) 0 0 var(--r-lg); }
+  .metric:last-child { border-radius: 0 var(--r-lg) var(--r-lg) 0; }
+  .metric-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.10em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+  .metric-val { font-family: var(--mono); font-size: 18px; font-weight: 700; line-height: 1.2; }
+  .metric-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .metric-val.sm { font-size: 15px; }
+  .dd-bar-wrap { height: 5px; background: var(--surface-3); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .dd-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--green), #16a34a); transition: width 0.4s; }
+
+  /* ── SESSION TIMELINE ───────────────── */
+  .timeline {
+    display: flex; align-items: center; gap: 0;
+    padding: 10px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r-lg); margin-bottom: 12px; overflow-x: auto;
+  }
+  .tl-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); margin-right: 14px; white-space: nowrap; }
+  .tl-node { display: flex; flex-direction: column; align-items: center; min-width: 80px; position: relative; }
+  .tl-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--border-hi); background: var(--surface); transition: all 0.2s; }
+  .tl-dot.active { background: var(--green); border-color: var(--green); box-shadow: 0 0 8px rgba(0,214,143,0.4); }
+  .tl-dot.next { background: var(--cyan); border-color: var(--cyan); }
+  .tl-dot.past { background: var(--dim); border-color: var(--dim); }
+  .tl-name { font-size: 10px; font-weight: 600; color: var(--text-2); margin-top: 4px; white-space: nowrap; }
+  .tl-time { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .tl-line { flex: 1; height: 2px; background: var(--border); min-width: 12px; margin: 0 -2px; align-self: flex-start; margin-top: 4px; }
+
+  /* ── SECTIONS ───────────────────────── */
+  .sec {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    margin-bottom: 10px; overflow: hidden;
+  }
+  .sec-hd {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; cursor: pointer; user-select: none;
+  }
+  .sec-hd:hover { background: rgba(255,255,255,0.015); }
+  .sec-chv { width: 14px; height: 14px; color: var(--dim); transition: transform 0.15s; flex-shrink: 0; }
+  .sec.collapsed .sec-chv { transform: rotate(-90deg); }
+  .sec.collapsed .sec-bd { display: none; }
+  .sec-ttl { font-size: 13px; font-weight: 700; }
+  .sec-badge { font-size: 11px; color: var(--muted); }
+  .sec-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .sec-bd { padding: 0 14px 12px; }
+
+  /* ── ACCOUNT SPECS ──────────────────── */
+  .specs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+  .spec-item { padding: 8px 10px; background: var(--surface-2); border-radius: var(--r); border: 1px solid var(--border); }
+  .spec-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+  .spec-val { font-size: 13px; font-weight: 600; margin-top: 3px; }
+  .spec-notes { margin-top: 8px; padding: 8px 10px; background: var(--surface-2); border-radius: var(--r); border: 1px solid var(--border); font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+  /* ── POSITIONS TABLE ────────────────── */
+  .pos-table { width: 100%; border-collapse: collapse; }
+  .pos-table th { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .pos-table td { padding: 8px 10px; border-bottom: 1px solid rgba(30,42,56,0.5); font-size: 12px; vertical-align: middle; }
+  .pos-table tr:hover td { background: rgba(255,255,255,0.015); }
+  .pos-table .r { text-align: right; }
+
+  /* ── LIVE SESSION OVERLAY ───────────── */
+  .live-panel { display: none; margin-bottom: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 12px 14px; }
+  .live-panel.on { display: block; }
+  .live-metrics-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; }
+  .live-m { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; }
+  .live-m-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+  .live-m-val { font-family: var(--mono); font-size: 16px; font-weight: 700; margin-top: 6px; line-height: 1.2; }
+
+  /* ── TRADES TABLE ───────────────────── */
+  .tbl-wrap { overflow-x: auto; border-radius: var(--r); border: 1px solid var(--border); background: var(--surface-2); }
+  table.blotter { width: 100%; border-collapse: collapse; min-width: 800px; }
+  .blotter th, .blotter td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px; vertical-align: top; }
+  .blotter th { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+  .blotter tr:hover td { background: rgba(255,255,255,0.015); }
+  .blotter .r { text-align: right; }
+  .trade-lane { font-weight: 600; }
+  .trade-sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .trade-summary { color: var(--muted); font-size: 12px; }
+
+  /* ── PROFILES ───────────────────────── */
+  .profiles-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 8px; }
+  .pf-card { border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--r); padding: 12px 14px; }
+  .pf-card.active-auto { border-left: 3px solid var(--green); }
+  .pf-card.inactive-card { opacity: 0.3; }
+  .pf-head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+  .pf-firm { font-weight: 700; font-size: 14px; }
+  .pf-size { color: var(--muted); font-size: 12px; }
+  .pf-meta { margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .pf-chip { display: inline-flex; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+  .chip-auto { color: var(--green); background: var(--green-soft); }
+  .chip-manual { color: var(--muted); background: rgba(71,85,105,0.15); }
+  .chip-inactive { color: var(--dim); background: rgba(71,85,105,0.10); }
+  .chip-live { color: #fecaca; background: var(--red-soft); }
+  .chip-demo { color: #bfdbfe; background: var(--blue-soft); }
+  .chip-signal { color: #bbf7d0; background: var(--green-soft); }
+  .lane-list { margin-top: 8px; display: grid; gap: 3px; }
+  .lane-row { display: grid; grid-template-columns: 90px 1fr; gap: 6px; padding: 6px 8px; border-radius: 6px; background: rgba(0,0,0,0.15); font-size: 11px; }
+  .lane-time { font-family: var(--mono); color: var(--cyan); font-weight: 600; font-size: 11px; }
+  .lane-title { font-weight: 600; font-size: 11px; }
+  .lane-subtitle { color: var(--muted); font-size: 10px; }
+  .actions-row { display: flex; gap: 5px; margin-top: 10px; }
+  .pf-btn {
+    flex: 1; border-radius: var(--r); padding: 8px 6px; border: 1px solid var(--border);
+    cursor: pointer; font-weight: 700; font-size: 11px;
+    background: var(--surface); color: var(--text); transition: all 0.12s;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.15;
+  }
+  .pf-btn .btn-title { text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; }
+  .pf-btn .btn-sub { font-size: 9px; font-weight: 500; opacity: 0.75; text-transform: none; letter-spacing: 0; }
+  .pf-btn.signal { color: var(--green); border-color: rgba(0,214,143,0.20); }
+  .pf-btn.demo { color: var(--blue); border-color: rgba(77,166,255,0.20); }
+  .pf-btn.live { color: var(--red); border-color: rgba(255,92,92,0.20); }
+  .pf-btn.stop { color: #fff; background: rgba(185,28,28,0.5); border-color: rgba(255,92,92,0.3); text-transform: uppercase; letter-spacing: 0.04em; }
+  .pf-btn:disabled { cursor: not-allowed; opacity: 0.3; }
+  .mode-legend { margin-top: 8px; padding: 6px 8px; background: rgba(0,0,0,0.15); border-radius: 6px; font-size: 10px; color: var(--dim); line-height: 1.5; }
+  .mode-legend b { color: var(--text); font-weight: 600; }
+  .mode-legend .lg-signal { color: var(--green); }
+  .mode-legend .lg-demo { color: var(--blue); }
+  .mode-legend .lg-live { color: var(--red); }
+  .live-gate { margin-top: 6px; }
+  .live-gate label { display: block; font-size: 10px; color: var(--dim); margin-bottom: 3px; }
+  .live-gate input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: var(--text); font-size: 11px; }
+
+  /* ── ACTIVITY ───────────────────────── */
+  .activity { display: none; margin-bottom: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 12px 14px; }
+  .activity-hd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .close-link { border: none; background: none; color: var(--dim); cursor: pointer; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+  pre { margin: 0; padding: 10px; border-radius: var(--r); background: rgba(0,0,0,0.25); border: 1px solid var(--border); overflow: auto; white-space: pre-wrap; word-break: break-word; max-height: 240px; font-family: var(--mono); font-size: 11px; }
+
+  /* ── MISC ────────────────────────────── */
+  .empty { padding: 14px; border-radius: var(--r); border: 1px dashed rgba(100,120,140,0.2); color: var(--dim); text-align: center; font-size: 12px; }
+  .positive { color: var(--green); } .negative { color: var(--red); } .warning { color: var(--yellow); }
+  .muted { color: var(--muted); } .cyan { color: var(--cyan); } .blue { color: var(--blue); }
+  .hidden { display: none !important; }
+  .pulse { animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .toggle-btn { background: none; border: 1px solid var(--border); border-radius: var(--r); color: var(--dim); font-size: 11px; padding: 4px 10px; cursor: pointer; }
+  .toggle-btn:hover { color: var(--muted); border-color: var(--border-hi); }
+  .footer { margin-top: 12px; text-align: center; color: var(--dim); font-size: 10px; }
+  .compat-hidden { display: none; }
+
+  /* ── ERROR BANNER ──────────────────── */
+  .error-banner {
+    display: none; padding: 10px 16px; border-radius: var(--r-lg);
+    background: var(--red-soft); border: 1px solid rgba(255,92,92,0.30);
+    color: var(--red); font-size: 12px; font-weight: 600; margin-bottom: 10px;
+  }
+  .error-banner.on { display: block; }
+  .stale-indicator { border-left: 3px solid var(--yellow) !important; }
+
+  /* ── OPERATOR STATE ───────────────── */
+  .operator-shell {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    margin-bottom: 12px; overflow: hidden;
+  }
+  .operator-shell-top {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .operator-shell-title { font-size: 13px; font-weight: 700; }
+  .operator-state-badge {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .operator-state-badge.pass { background: var(--green-soft); color: var(--green); }
+  .operator-state-badge.warn { background: var(--yellow-soft); color: var(--yellow); }
+  .operator-state-badge.fail { background: var(--red-soft); color: var(--red); }
+  .operator-state-badge.info { background: rgba(77,166,255,0.10); color: var(--blue); }
+  .operator-shell-body { padding: 12px 14px; }
+  .operator-summary {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center;
+    margin-bottom: 12px;
+  }
+  .operator-headline { font-size: 16px; font-weight: 700; line-height: 1.25; }
+  .operator-reason { color: var(--text-2); font-size: 12px; margin-top: 4px; line-height: 1.5; }
+  .operator-profile { color: var(--muted); font-size: 11px; margin-top: 6px; }
+  .operator-primary-btn {
+    border-radius: var(--r); border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+    padding: 10px 14px; font-size: 12px; font-weight: 700; cursor: pointer; min-width: 160px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .operator-primary-btn:hover { border-color: var(--border-hi); }
+  .operator-primary-btn.success { border-color: rgba(0,214,143,0.25); color: var(--green); background: var(--green-soft); }
+  .operator-primary-btn.warn { border-color: rgba(255,193,7,0.25); color: var(--yellow); background: var(--yellow-soft); }
+  .operator-primary-btn.danger { border-color: rgba(255,92,92,0.30); color: var(--red); background: var(--red-soft); }
+  .operator-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+  .operator-check {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 10px 12px;
+  }
+  .operator-check.pass { border-left: 3px solid var(--green); }
+  .operator-check.warn { border-left: 3px solid var(--yellow); }
+  .operator-check.fail { border-left: 3px solid var(--red); }
+  .operator-check.info { border-left: 3px solid var(--blue); }
+  .operator-check-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .operator-check-name { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .operator-check-status { font-size: 10px; color: var(--dim); text-transform: uppercase; font-weight: 700; }
+  .operator-check-detail { font-size: 12px; color: var(--text-2); line-height: 1.45; }
+
+  .alerts-shell {
+    border: 1px solid var(--border); border-radius: 18px;
+    background: linear-gradient(180deg, rgba(11,16,28,0.96), rgba(8,12,22,0.92));
+    box-shadow: var(--shadow-1); overflow: hidden; margin-top: 14px;
+  }
+  .alerts-shell-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 14px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02);
+  }
+  .alerts-shell-title { font-size: 13px; font-weight: 700; }
+  .alerts-shell-sub { font-size: 11px; color: var(--dim); }
+  .alerts-shell-body { padding: 12px 14px; }
+  .alerts-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .alerts-pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px;
+    border: 1px solid var(--border); font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--text-2); background: rgba(255,255,255,0.03);
+  }
+  .alerts-pill.critical { color: var(--red); border-color: rgba(255,92,92,0.24); background: var(--red-soft); }
+  .alerts-pill.warning { color: var(--yellow); border-color: rgba(255,193,7,0.24); background: var(--yellow-soft); }
+  .alerts-pill.info { color: var(--blue); border-color: rgba(77,166,255,0.24); background: rgba(77,166,255,0.10); }
+  .alerts-list { display: grid; gap: 10px; max-height: 340px; overflow-y: auto; padding-right: 4px; }
+  .alert-row {
+    border: 1px solid var(--border); border-left: 3px solid var(--border-hi);
+    border-radius: 14px; padding: 10px 12px; background: rgba(255,255,255,0.025);
+  }
+  .alert-row.critical { border-left-color: var(--red); background: rgba(255,92,92,0.05); }
+  .alert-row.warning { border-left-color: var(--yellow); background: rgba(255,193,7,0.05); }
+  .alert-row.info { border-left-color: var(--blue); background: rgba(77,166,255,0.05); }
+  .alert-row-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px;
+  }
+  .alert-row-meta {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0;
+  }
+  .alert-level { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); }
+  .alert-category { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .alert-time { font-size: 11px; color: var(--dim); white-space: nowrap; }
+  .alert-message { font-size: 13px; line-height: 1.5; color: var(--text-1); }
+  .alert-context { margin-top: 6px; font-size: 11px; color: var(--text-2); }
+  .alerts-empty { padding: 16px 4px; font-size: 12px; color: var(--dim); }
+
+  /* ── ACCOUNT SELECTOR ──────────────── */
+  .acct-select {
+    padding: 3px 8px; border-radius: var(--r); border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: 12px; font-weight: 600;
+    cursor: pointer; max-width: 280px;
+  }
+  .acct-select:hover { border-color: var(--border-hi); }
+  .acct-select option { background: var(--surface); color: var(--text); }
+
+  /* ── BROKER ACCOUNTS CARDS ─────────── */
+  .broker-accounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
+  .broker-acct-card {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 10px 14px; position: relative;
+  }
+  .broker-acct-card.selected { border-color: var(--cyan); border-left: 3px solid var(--cyan); }
+  .broker-acct-card.restricted { border-left: 3px solid var(--yellow); opacity: 0.7; }
+  .broker-acct-card .acct-name { font-weight: 600; font-size: 12px; }
+  .broker-acct-card .acct-balance { font-family: var(--mono); font-size: 16px; font-weight: 700; margin-top: 4px; }
+  .broker-acct-card .acct-detail { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .broker-acct-card .acct-status { display: inline-flex; padding: 2px 6px; border-radius: 999px; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; position: absolute; top: 10px; right: 10px; }
+  .acct-status-tradeable { background: var(--green-soft); color: var(--green); }
+  .acct-status-restricted { background: var(--yellow-soft); color: var(--yellow); }
+
+  /* ── SIGNAL STRIP ───────────────────── */
+  .signal-strip {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    margin-bottom: 10px; overflow: hidden;
+  }
+  .signal-strip-hd { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .signal-strip-title { font-size: 13px; font-weight: 700; }
+  .signal-strip-hint { font-size: 11px; color: var(--dim); margin-left: auto; }
+  .signal-table { width: 100%; border-collapse: collapse; }
+  .signal-table th { font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .signal-table td { padding: 8px 10px; border-bottom: 1px solid rgba(30,42,56,0.3); font-size: 12px; vertical-align: middle; }
+  .signal-table tr:hover td { background: rgba(255,255,255,0.015); }
+  .signal-table .r { text-align: right; font-family: var(--mono); }
+  .sig-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .sig-dot.waiting { background: var(--dim); }
+  .sig-dot.armed { background: var(--cyan); }
+  .sig-dot.signal { background: var(--green); animation: pulse 1s infinite; }
+  .sig-dot.in-trade { background: var(--blue); }
+  .sig-dot.flat { background: var(--dim); opacity: 0.5; }
+  .sig-row-signal { background: rgba(0,214,143,0.05); }
+  .sig-row-armed { background: rgba(0,212,255,0.03); }
+  .sig-no-data { padding: 16px; text-align: center; color: var(--dim); font-size: 12px; }
+
+  /* ── TAB BAR ────────────────────────── */
+  .tab-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .tab-btn {
+    padding: 8px 20px; background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── CONNECTIONS PAGE ──────────────── */
+  .conn-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .conn-header-title { font-size: 16px; font-weight: 700; }
+  .conn-add-btn {
+    padding: 6px 14px; border-radius: var(--r); border: 1px solid rgba(0,212,255,0.25);
+    background: var(--cyan-soft); color: var(--cyan); font-size: 12px; font-weight: 700;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .conn-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    padding: 14px 16px; margin-bottom: 10px;
+  }
+  .conn-card.connected { border-left: 3px solid var(--green); }
+  .conn-card.error { border-left: 3px solid var(--red); }
+  .conn-card.disabled { border-left: 3px solid var(--dim); opacity: 0.6; }
+  .conn-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .conn-name { font-weight: 700; font-size: 14px; }
+  .conn-status { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .conn-status.s-connected { color: var(--green); }
+  .conn-status.s-error { color: var(--red); }
+  .conn-status.s-disabled { color: var(--dim); }
+  .conn-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .conn-error-msg { color: var(--red); font-size: 12px; margin-top: 6px; padding: 8px 10px; background: var(--red-soft); border-radius: var(--r); }
+  .conn-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .conn-btn {
+    padding: 5px 12px; border-radius: var(--r); border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+  .conn-btn:hover { color: var(--text); border-color: var(--border-hi); }
+  .conn-btn.danger { color: var(--red); border-color: rgba(255,92,92,0.20); }
+  .conn-accts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 12px; }
+  .conn-acct {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 10px 12px; cursor: pointer; position: relative;
+  }
+  .conn-acct:hover { border-color: var(--border-hi); }
+  .conn-acct.selected { border-color: var(--cyan); border-left: 3px solid var(--cyan); }
+  .conn-acct.archived { opacity: 0.3; cursor: default; }
+  .conn-acct-name { font-size: 12px; font-weight: 600; }
+  .conn-acct-bal { font-family: var(--mono); font-size: 18px; font-weight: 700; margin-top: 4px; }
+  .conn-acct-detail { font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .conn-acct-chip {
+    position: absolute; top: 8px; right: 8px; font-size: 9px; font-weight: 700;
+    padding: 2px 6px; border-radius: 999px; text-transform: uppercase;
+  }
+  .add-form {
+    display: none; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r-lg); padding: 16px 18px; margin-bottom: 12px;
+  }
+  .add-form.open { display: block; }
+  .add-form-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .add-form-title span { font-size: 14px; font-weight: 700; }
+  .broker-types { display: flex; gap: 8px; margin-bottom: 14px; }
+  .broker-type-btn {
+    flex: 1; padding: 10px; border-radius: var(--r); border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 600;
+    cursor: pointer; text-align: center;
+  }
+  .broker-type-btn.selected { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-soft); }
+  .add-fields { display: grid; gap: 8px; margin-bottom: 12px; }
+  .add-field label { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin-bottom: 4px; }
+  .add-field input { width: 100%; padding: 7px 10px; border-radius: var(--r); border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: var(--text); font-size: 12px; }
+  .add-result { margin: 10px 0; padding: 8px 10px; border-radius: var(--r); font-size: 12px; font-weight: 600; display: none; }
+  .add-result.on { display: block; }
+  .add-result.success { background: var(--green-soft); color: var(--green); }
+  .add-result.fail { background: var(--red-soft); color: var(--red); }
+  .add-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .add-actions button { padding: 7px 16px; border-radius: var(--r); font-size: 12px; font-weight: 700; cursor: pointer; border: 1px solid var(--border); }
+  .add-actions .test-btn { background: var(--surface-2); color: var(--cyan); border-color: rgba(0,212,255,0.25); }
+  .add-actions .save-btn { background: var(--green-soft); color: var(--green); border-color: rgba(0,214,143,0.25); }
+  .add-actions .save-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .add-actions .cancel-btn { background: none; color: var(--muted); border: none; }
+  .conn-empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+  .conn-empty-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+
+  @media (max-width: 1100px) { .metrics { grid-template-columns: repeat(3, 1fr); } .live-metrics-row { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 820px) { .metrics { grid-template-columns: repeat(2, 1fr); } .topbar { flex-wrap: wrap; } .timeline { display: none; } .conn-accts { grid-template-columns: 1fr; } }
+
+  /* ═══════════════════════════════════════════════════════════════
+     TIER 3 POLISH OVERRIDES — additive, non-destructive
+     Design spec: docs/plans/2026-04-15-dashboard-polish-design.md
+     ═══════════════════════════════════════════════════════════════ */
+
+  :root {
+    /* typography tokens */
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    --fs-body: 14px;
+    --fs-small: 12px;
+    --fs-micro: 11px;
+    --fs-label: 10.5px;
+    --fs-title: 15px;
+    --fs-hero: 26px;
+    --fs-hero-sm: 18px;
+    --lh-body: 1.55;
+    --tracking-label: 0.08em;
+    --tracking-body: -0.005em;
+
+    /* surface tokens */
+    --bg: #0b1117;
+    --surface: #101821;
+    --surface-2: #141d28;
+    --surface-3: #1a2430;
+    --border: rgba(148, 163, 184, 0.08);
+    --border-hi: rgba(148, 163, 184, 0.16);
+    --hairline-top: rgba(255, 255, 255, 0.04);
+
+    /* color discipline — cyan primary, green/red reserved for pnl/kill */
+    --text: #e6edf3;
+    --text-2: #9ba8b8;
+    --muted: #6b7889;
+    --dim: #45556a;
+    --accent: #22d3ee;
+    --accent-soft: rgba(34, 211, 238, 0.10);
+    --accent-strong: rgba(34, 211, 238, 0.18);
+    --cyan: #22d3ee;
+    --cyan-soft: rgba(34, 211, 238, 0.08);
+    --blue: #22d3ee;
+    --blue-soft: rgba(34, 211, 238, 0.08);
+    --green: #10b981;
+    --green-soft: rgba(16, 185, 129, 0.10);
+    --red: #ef4444;
+    --red-soft: rgba(239, 68, 68, 0.10);
+    --yellow: #f59e0b;
+    --yellow-soft: rgba(245, 158, 11, 0.08);
+    --orange: #f59e0b;
+
+    /* motion + radius */
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+    --t-fast: 120ms;
+    --t: 180ms;
+    --t-slow: 260ms;
+    --r: 10px;
+    --r-lg: 14px;
+    --r-xl: 18px;
+
+    /* elevation */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.25);
+    --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.35);
+    --shadow-accent: 0 0 0 1px rgba(34, 211, 238, 0.25), 0 8px 24px rgba(34, 211, 238, 0.12);
+  }
+
+  /* ── base ──────────────────────────── */
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    letter-spacing: var(--tracking-body);
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(34, 211, 238, 0.04), transparent 60%), var(--bg);
+    min-height: 100vh;
+  }
+  .m, code, pre, .metric-val, .live-m-val, .lane-time, .topbar-brand, .tl-time {
+    font-family: var(--font-mono);
+    font-feature-settings: 'tnum', 'zero';
+  }
+
+  /* ── shell ──────────────────────────── */
+  .shell { max-width: 1500px; padding: 0 20px 40px; }
+
+  /* ── topbar: glass ──────────────────── */
+  .topbar {
+    padding: 12px 0;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(11, 17, 23, 0.72);
+    backdrop-filter: blur(14px) saturate(1.4);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  }
+  .topbar-brand {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 13px;
+    color: var(--text);
+    letter-spacing: 0.14em;
+    padding: 4px 10px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: var(--r);
+  }
+  .topbar-sep { color: var(--border); opacity: 0.4; }
+  .topbar-acct { font-weight: 600; font-size: 13px; letter-spacing: -0.005em; }
+  .topbar-acct-detail { color: var(--muted); font-size: var(--fs-small); }
+  .topbar-mode {
+    padding: 4px 12px; gap: 6px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
+    border: 1px solid transparent;
+    transition: all var(--t) var(--ease);
+  }
+  .topbar-mode .dot { width: 7px; height: 7px; box-shadow: 0 0 8px currentColor; }
+  .topbar-btn {
+    padding: 7px 14px;
+    border-radius: var(--r);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    transition: all var(--t) var(--ease);
+    box-shadow: var(--shadow-sm);
+  }
+  .topbar-btn:hover {
+    border-color: var(--border-hi);
+    color: var(--text);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+  }
+  .topbar-btn:active { transform: translateY(0) scale(0.98); }
+  .topbar-btn.primary { border-color: var(--accent-strong); color: var(--accent); background: var(--accent-soft); }
+  .topbar-btn.primary:hover { background: var(--accent-strong); box-shadow: var(--shadow-accent); }
+  .topbar-btn.warn { border-color: rgba(245, 158, 11, 0.25); color: var(--yellow); }
+  .topbar-btn.warn:hover { background: var(--yellow-soft); }
+  .topbar-btn.danger { border-color: rgba(239, 68, 68, 0.28); color: var(--red); }
+  .topbar-btn.danger:hover { background: var(--red-soft); }
+
+  /* ── metrics: elevated hero ────────── */
+  .metrics {
+    gap: 1px;
+    background: var(--border);
+    border-radius: var(--r-lg);
+    margin: 16px 0;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .metric {
+    background: var(--surface);
+    padding: 16px 18px;
+    position: relative;
+    transition: background var(--t) var(--ease);
+  }
+  .metric::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: var(--hairline-top);
+  }
+  .metric:hover { background: var(--surface-2); }
+  .metric-lbl {
+    font-size: var(--fs-label);
+    font-weight: 600;
+    letter-spacing: var(--tracking-label);
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .metric-val {
+    font-size: var(--fs-hero);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    color: var(--text);
+  }
+  .metric-val.sm { font-size: var(--fs-hero-sm); }
+  .metric-sub { font-size: var(--fs-small); color: var(--muted); margin-top: 6px; letter-spacing: -0.005em; }
+  .dd-bar-wrap { height: 4px; background: var(--surface-3); border-radius: 2px; margin-top: 10px; }
+  .dd-bar-fill { transition: width var(--t-slow) var(--ease); }
+
+  /* ── sections / cards: depth ──────── */
+  .sec {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    margin-bottom: 14px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--t) var(--ease), border-color var(--t) var(--ease);
+    position: relative;
+    overflow: hidden;
+  }
+  .sec::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: var(--hairline-top); pointer-events: none;
+  }
+  .sec:hover { box-shadow: var(--shadow); border-color: var(--border-hi); }
+  .sec-hd { padding: 14px 18px; gap: 10px; transition: background var(--t) var(--ease); }
+  .sec-hd:hover { background: rgba(255, 255, 255, 0.02); }
+  .sec-ttl { font-size: var(--fs-title); font-weight: 700; letter-spacing: -0.01em; }
+  .sec-badge {
+    font-size: var(--fs-micro);
+    color: var(--muted);
+    background: var(--surface-2);
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-weight: 500;
+  }
+  .sec-bd { padding: 0 18px 16px; }
+  .sec-chv { transition: transform var(--t) var(--ease); }
+
+  /* ── timeline ──────────────────────── */
+  .timeline {
+    padding: 14px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    margin-bottom: 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  .tl-label { font-size: var(--fs-label); letter-spacing: var(--tracking-label); color: var(--muted); margin-right: 18px; }
+  .tl-dot {
+    width: 12px; height: 12px;
+    border: 2px solid var(--border-hi);
+    background: var(--surface);
+    transition: all var(--t) var(--ease);
+  }
+  .tl-dot.active {
+    background: var(--green); border-color: var(--green);
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15), 0 0 16px rgba(16, 185, 129, 0.4);
+  }
+  .tl-dot.next {
+    background: var(--accent); border-color: var(--accent);
+    box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.15);
+  }
+  .tl-name { font-size: var(--fs-micro); font-weight: 600; color: var(--text-2); margin-top: 6px; }
+  .tl-time { font-size: var(--fs-micro); color: var(--muted); }
+  .tl-line { height: 1px; background: var(--border); }
+
+  /* ── specs grid ────────────────────── */
+  .specs-grid { gap: 10px; }
+  .spec-item {
+    padding: 12px 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    transition: all var(--t) var(--ease);
+  }
+  .spec-item:hover { border-color: var(--border-hi); background: var(--surface-3); }
+  .spec-lbl { font-size: var(--fs-label); letter-spacing: var(--tracking-label); color: var(--muted); }
+  .spec-val { font-size: var(--fs-small); font-weight: 600; margin-top: 4px; letter-spacing: -0.005em; }
+  .spec-notes {
+    padding: 12px 14px; font-size: var(--fs-small); color: var(--text-2); line-height: 1.6;
+    background: var(--surface-2); border-radius: var(--r);
+  }
+
+  /* ── tables ────────────────────────── */
+  .pos-table th, .blotter th {
+    font-size: var(--fs-label);
+    letter-spacing: var(--tracking-label);
+    color: var(--muted);
+    padding: 10px 12px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+  }
+  .pos-table td, .blotter td {
+    padding: 10px 12px;
+    font-size: var(--fs-small);
+    border-bottom: 1px solid var(--border);
+    transition: background var(--t-fast) var(--ease);
+  }
+  .pos-table tr:hover td, .blotter tr:hover td { background: rgba(255, 255, 255, 0.025); }
+  .tbl-wrap { border-radius: var(--r); border: 1px solid var(--border); background: var(--surface-2); }
+
+  /* ── live panel ────────────────────── */
+  .live-panel {
+    padding: 16px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .live-panel::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: var(--hairline-top); pointer-events: none;
+  }
+  .live-m {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 12px 14px; transition: all var(--t) var(--ease);
+  }
+  .live-m:hover { border-color: var(--border-hi); }
+  .live-m-lbl { font-size: var(--fs-label); letter-spacing: var(--tracking-label); color: var(--muted); }
+  .live-m-val { font-size: 18px; font-weight: 700; margin-top: 6px; letter-spacing: -0.015em; }
+
+  /* ── profiles ──────────────────────── */
+  .profiles-grid { gap: 12px; }
+  .pf-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--t) var(--ease);
+    position: relative;
+    overflow: hidden;
+  }
+  .pf-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: var(--hairline-top); pointer-events: none;
+  }
+  .pf-card:hover {
+    border-color: var(--border-hi);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+  }
+  .pf-card.active-auto {
+    border-left: 2px solid var(--green);
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.04), transparent 40%), var(--surface-2);
+  }
+  .pf-firm { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .pf-size { color: var(--muted); font-size: var(--fs-small); }
+  .pf-meta { color: var(--muted); font-size: var(--fs-micro); line-height: 1.6; }
+  .pf-chip {
+    padding: 3px 9px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  }
+  .lane-row {
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.18);
+    border-radius: 8px;
+    font-size: var(--fs-micro);
+    transition: background var(--t-fast) var(--ease);
+  }
+  .lane-row:hover { background: rgba(0, 0, 0, 0.28); }
+  .lane-time { color: var(--accent); font-weight: 600; }
+  .lane-title { font-size: var(--fs-micro); font-weight: 600; }
+  .lane-subtitle { color: var(--muted); font-size: 10px; }
+
+  /* ── profile buttons ───────────────── */
+  .pf-btn {
+    border-radius: var(--r);
+    padding: 10px 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    transition: all var(--t) var(--ease);
+    box-shadow: var(--shadow-sm);
+  }
+  .pf-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+    border-color: var(--border-hi);
+  }
+  .pf-btn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+  .pf-btn .btn-title { font-size: 10.5px; letter-spacing: 0.06em; }
+  .pf-btn .btn-sub { font-size: 9px; }
+  .pf-btn.signal { color: var(--green); border-color: rgba(16, 185, 129, 0.22); }
+  .pf-btn.signal:hover:not(:disabled) { background: var(--green-soft); }
+  .pf-btn.demo { color: var(--accent); border-color: var(--accent-strong); }
+  .pf-btn.demo:hover:not(:disabled) { background: var(--accent-soft); }
+  .pf-btn.live { color: var(--red); border-color: rgba(239, 68, 68, 0.28); }
+  .pf-btn.live:hover:not(:disabled) { background: var(--red-soft); }
+  .pf-btn.stop {
+    color: #fff;
+    background: linear-gradient(135deg, #dc2626, #991b1b);
+    border-color: rgba(239, 68, 68, 0.4);
+  }
+  .pf-btn.stop:hover:not(:disabled) { background: linear-gradient(135deg, #ef4444, #b91c1c); box-shadow: 0 8px 20px rgba(239, 68, 68, 0.2); }
+
+  /* ── misc polish ───────────────────── */
+  .empty { padding: 18px; border-radius: var(--r); color: var(--muted); font-size: var(--fs-small); border: 1px dashed var(--border-hi); }
+  .toggle-btn {
+    border: 1px solid var(--border); border-radius: var(--r); color: var(--muted);
+    font-size: var(--fs-micro); padding: 5px 12px; font-weight: 500; letter-spacing: 0.02em;
+    transition: all var(--t) var(--ease);
+  }
+  .toggle-btn:hover { color: var(--text); border-color: var(--border-hi); background: var(--surface-2); }
+  .footer { color: var(--dim); font-size: var(--fs-micro); letter-spacing: 0.04em; }
+  pre {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border);
+    font-size: var(--fs-micro);
+    border-radius: var(--r);
+    line-height: 1.6;
+  }
+
+  /* ── operator shell ────────────────── */
+  .operator-shell {
+    box-shadow: var(--shadow-sm);
+    border-radius: var(--r-lg);
+    position: relative; overflow: hidden;
+  }
+  .operator-shell::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: var(--hairline-top); pointer-events: none;
+  }
+  .operator-shell-top { padding: 16px 18px; border-bottom: 1px solid var(--border); }
+  .operator-shell-title { font-size: var(--fs-title); font-weight: 700; letter-spacing: -0.01em; }
+  .operator-state-badge {
+    padding: 5px 12px; border-radius: 999px;
+    font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.08em;
+  }
+  .operator-shell-body { padding: 16px 18px; }
+
+  /* ── chips / dots uniform ──────────── */
+  .chip-auto { color: var(--green); background: var(--green-soft); }
+  .chip-manual { color: var(--muted); background: rgba(148, 163, 184, 0.08); }
+  .chip-inactive { color: var(--dim); background: rgba(148, 163, 184, 0.06); }
+  .chip-live { color: #fecaca; background: var(--red-soft); }
+  .chip-demo { color: #a5f3fc; background: var(--accent-soft); }
+  .chip-signal { color: #bbf7d0; background: var(--green-soft); }
+
+  /* ── focus ring: uniform ───────────── */
+  button:focus-visible, select:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--r);
+  }
+
+  /* ── scrollbar polish (webkit) ─────── */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 5px; border: 2px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+
+  /* ── error banner ──────────────────── */
+  .error-banner {
+    padding: 14px 18px; border-radius: var(--r-lg);
+    background: linear-gradient(135deg, var(--red-soft), transparent);
+    border: 1px solid rgba(239, 68, 68, 0.28);
+    color: var(--red); font-weight: 600;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ── selection ─────────────────────── */
+  ::selection { background: var(--accent-strong); color: var(--text); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     COLOR-LEAK FIX — close the 6 selector groups that bypassed tokens
+     (code review finding: Section B MEDIUM. Commit 51dbe94d left
+     ~18 inline rgba values on the OLD palette while tokens moved to
+     the new one. These overrides route them back onto var() tokens.)
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* operator state badge — INFO was hardcoded old blue */
+  .operator-state-badge.info {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* operator primary action button — success/warn/danger */
+  .operator-primary-btn.success {
+    border-color: rgba(16, 185, 129, 0.25);
+    color: var(--green);
+    background: var(--green-soft);
+  }
+  .operator-primary-btn.warn {
+    border-color: rgba(245, 158, 11, 0.25);
+    color: var(--yellow);
+    background: var(--yellow-soft);
+  }
+  .operator-primary-btn.danger {
+    border-color: rgba(239, 68, 68, 0.28);
+    color: var(--red);
+    background: var(--red-soft);
+  }
+
+  /* alerts pills — critical / warning / info */
+  .alerts-pill.critical {
+    color: var(--red);
+    border-color: rgba(239, 68, 68, 0.26);
+    background: var(--red-soft);
+  }
+  .alerts-pill.warning {
+    color: var(--yellow);
+    border-color: rgba(245, 158, 11, 0.26);
+    background: var(--yellow-soft);
+  }
+  .alerts-pill.info {
+    color: var(--accent);
+    border-color: var(--accent-strong);
+    background: var(--accent-soft);
+  }
+
+  /* alert rows — critical / warning / info */
+  .alert-row.critical {
+    border-left-color: var(--red);
+    background: rgba(239, 68, 68, 0.05);
+  }
+  .alert-row.warning {
+    border-left-color: var(--yellow);
+    background: rgba(245, 158, 11, 0.05);
+  }
+  .alert-row.info {
+    border-left-color: var(--accent);
+    background: rgba(34, 211, 238, 0.05);
+  }
+
+  /* signal strip rows */
+  .sig-row-signal { background: rgba(16, 185, 129, 0.05); }
+  .sig-row-armed { background: rgba(34, 211, 238, 0.04); }
+
+  /* connections tab buttons */
+  .conn-btn.danger {
+    color: var(--red);
+    border-color: rgba(239, 68, 68, 0.22);
+  }
+  .add-actions .test-btn {
+    background: var(--surface-2);
+    color: var(--accent);
+    border-color: var(--accent-strong);
+  }
+  .add-actions .save-btn {
+    background: var(--green-soft);
+    color: var(--green);
+    border-color: rgba(16, 185, 129, 0.26);
+  }
+
+  /* graceful degradation: if backdrop-filter is unsupported
+     (older browsers), the topbar falls back to the solid
+     rgba background above, which is intentional */
+
+  /* ═══════════════════════════════════════════════════════════════
+     TIER 1 — Trader-value upgrades
+       1.1 Primary Start/Stop CTA in topbar
+       1.2 Alert hierarchy (critical / warning / info sections + dismiss)
+       1.3 Connection health dot in topbar
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* 1.1 — Primary CTA variants (uses existing .topbar-btn.primary from Tier 3) */
+  #btn-primary-cta.stop {
+    border-color: rgba(239, 68, 68, 0.32);
+    color: #fecaca;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.22), rgba(239, 68, 68, 0.10));
+  }
+  #btn-primary-cta.stop:hover {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.32), rgba(239, 68, 68, 0.18));
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3), 0 8px 20px rgba(239, 68, 68, 0.18);
+  }
+  #btn-primary-cta .cta-sub {
+    font-weight: 500;
+    font-size: 9.5px;
+    color: var(--muted);
+    margin-left: 6px;
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
+  #btn-primary-cta.stop .cta-sub { color: rgba(254, 202, 202, 0.65); }
+
+  /* 1.3 — Connection health dot */
+  .conn-health-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--dim);
+    box-shadow: 0 0 0 3px rgba(69, 85, 106, 0.12);
+    transition: all var(--t) var(--ease);
+    cursor: help;
+  }
+  .conn-health-dot.ok {
+    background: var(--green);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15), 0 0 10px rgba(16, 185, 129, 0.5);
+  }
+  .conn-health-dot.warn {
+    background: var(--yellow);
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15), 0 0 10px rgba(245, 158, 11, 0.5);
+  }
+  .conn-health-dot.err {
+    background: var(--red);
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15), 0 0 10px rgba(239, 68, 68, 0.5);
+    animation: conn-pulse 2s infinite;
+  }
+  @keyframes conn-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15), 0 0 10px rgba(239, 68, 68, 0.5); }
+    50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.08), 0 0 16px rgba(239, 68, 68, 0.7); }
+  }
+
+  /* 1.2 — Alert hierarchy */
+  .alerts-group {
+    margin-bottom: 14px;
+  }
+  .alerts-group:last-child { margin-bottom: 0; }
+  .alerts-group-hd {
+    display: flex; align-items: center; gap: 8px;
+    font-size: var(--fs-label);
+    font-weight: 700;
+    letter-spacing: var(--tracking-label);
+    color: var(--muted);
+    margin-bottom: 8px;
+    padding: 0 2px;
+  }
+  .alerts-group-hd .count {
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .alerts-group.critical .alerts-group-hd { color: var(--red); }
+  .alerts-group.critical .alerts-group-hd .count { background: var(--red-soft); color: var(--red); }
+  .alerts-group.warning .alerts-group-hd { color: var(--yellow); }
+  .alerts-group.warning .alerts-group-hd .count { background: var(--yellow-soft); color: var(--yellow); }
+  .alerts-group.info .alerts-group-hd { color: var(--muted); }
+  .alerts-group.info .alerts-group-hd .count { background: var(--surface-2); color: var(--muted); }
+  .alerts-group-body {
+    display: grid;
+    gap: 8px;
+  }
+  .alerts-group.critical .alerts-group-body {
+    gap: 10px;
+  }
+  .alerts-group.info .alerts-group-body {
+    max-height: 180px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .alerts-group-btn {
+    margin-left: auto;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: all var(--t) var(--ease);
+  }
+  .alerts-group-btn:hover {
+    color: var(--text);
+    border-color: var(--border-hi);
+  }
+
+  /* Critical alert rows — prominent */
+  .alert-row.critical {
+    padding: 14px 16px;
+    border-left-width: 3px;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.10), rgba(239, 68, 68, 0.02));
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
+    position: relative;
+  }
+  .alert-row.critical .alert-level {
+    color: var(--red);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .alert-row.critical .alert-message {
+    font-size: var(--fs-body);
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .alert-row.critical .alert-dismiss {
+    position: absolute;
+    top: 10px; right: 10px;
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.26);
+    color: var(--red);
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: all var(--t) var(--ease);
+    opacity: 0.65;
+  }
+  .alert-row.critical .alert-dismiss:hover {
+    opacity: 1;
+    background: var(--red-soft);
+  }
+
+  /* Warning alert rows — standard */
+  .alert-row.warning {
+    padding: 10px 14px;
+    border-left-width: 2px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.06), transparent);
+  }
+
+  /* Info alert rows — compressed */
+  .alert-row.info {
+    padding: 7px 12px;
+    border-left-width: 2px;
+    background: rgba(34, 211, 238, 0.03);
+    font-size: var(--fs-small);
+    opacity: 0.85;
+  }
+  .alert-row.info .alert-message {
+    font-size: var(--fs-small);
+    color: var(--text-2);
+  }
+  .alert-row.info .alert-row-top {
+    margin-bottom: 2px;
+  }
+  .alert-row.info .alert-level {
+    font-size: 9.5px;
+    color: var(--muted);
+  }
+
+  /* Alerts empty state for sub-groups */
+  .alerts-group-empty {
+    padding: 10px 14px;
+    color: var(--dim);
+    font-size: var(--fs-small);
+    font-style: italic;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     COCKPIT — state-adaptive hero + aggressive default-collapse
+     Stage: docs/runtime/stages/dashboard-cockpit.md
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* hide originals that are replaced by hero */
+  .cockpit-hidden { display: none !important; }
+
+  /* collapsed-by-default bodies for operator-shell + alerts-shell */
+  body.cockpit .operator-shell .operator-shell-body,
+  body.cockpit .alerts-shell .alerts-shell-body {
+    display: none;
+  }
+  body.cockpit .operator-shell.open .operator-shell-body,
+  body.cockpit .alerts-shell.open .alerts-shell-body {
+    display: block;
+  }
+  /* clickable headers for collapse/expand */
+  body.cockpit .operator-shell-top,
+  body.cockpit .alerts-shell-top {
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--t) var(--ease);
+  }
+  body.cockpit .operator-shell-top:hover,
+  body.cockpit .alerts-shell-top:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+  /* chevron indicator for collapsed state */
+  body.cockpit .operator-shell-top::after,
+  body.cockpit .alerts-shell-top::after {
+    content: "▸";
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 11px;
+    transition: transform var(--t) var(--ease);
+    opacity: 0.6;
+  }
+  body.cockpit .operator-shell.open .operator-shell-top::after,
+  body.cockpit .alerts-shell.open .alerts-shell-top::after {
+    transform: rotate(90deg);
+  }
+
+  /* HERO CARD ─────────────────────────────────────── */
+  .hero {
+    background: linear-gradient(180deg, rgba(34, 211, 238, 0.025), var(--surface) 40%);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 20px 22px 18px;
+    margin: 14px 0 16px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.28), transparent);
+    pointer-events: none;
+  }
+  .hero[data-state="running"] {
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.04), var(--surface) 50%);
+    box-shadow: var(--shadow), inset 0 0 0 1px rgba(16, 185, 129, 0.10);
+  }
+  .hero[data-state="in_trade"] {
+    background: linear-gradient(180deg, rgba(34, 211, 238, 0.06), var(--surface) 50%);
+    box-shadow: var(--shadow), inset 0 0 0 1px rgba(34, 211, 238, 0.15);
+  }
+
+  .hero-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .hero-head-left { display: flex; align-items: center; gap: 14px; }
+  .hero-profile {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.012em;
+    color: var(--text);
+  }
+  .hero-state-badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    background: var(--surface-2);
+    color: var(--muted);
+    transition: all var(--t) var(--ease);
+  }
+  .hero-state-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .hero[data-state="ready"] .hero-state-badge { color: var(--accent); background: var(--accent-soft); }
+  .hero[data-state="stopped"] .hero-state-badge { color: var(--muted); }
+  .hero[data-state="running"] .hero-state-badge { color: var(--green); background: var(--green-soft); }
+  .hero[data-state="in_trade"] .hero-state-badge { color: var(--accent); background: var(--accent-strong); }
+  .hero[data-state="blocked"] .hero-state-badge,
+  .hero[data-state="error"]   .hero-state-badge { color: var(--red); background: var(--red-soft); }
+  .hero[data-state="warn"]    .hero-state-badge { color: var(--yellow); background: var(--yellow-soft); }
+
+  .hero-head-hint {
+    font-size: var(--fs-small);
+    color: var(--muted);
+    letter-spacing: -0.005em;
+  }
+
+  .hero-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 18px;
+    padding: 4px 0 4px;
+  }
+  .hm { min-width: 0; }
+  .hm-lbl {
+    font-size: var(--fs-label);
+    font-weight: 600;
+    letter-spacing: var(--tracking-label);
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .hm-val {
+    font-family: var(--font-mono);
+    font-feature-settings: 'tnum', 'zero';
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .hm-val.sm { font-size: 20px; }
+  .hm-val.positive { color: var(--green); }
+  .hm-val.negative { color: var(--red); }
+  .hm-val.warning  { color: var(--yellow); }
+  .hm-val.muted    { color: var(--muted); }
+  .hm-sub { font-size: var(--fs-micro); color: var(--muted); margin-top: 6px; letter-spacing: -0.005em; min-height: 14px; }
+  .hm-bar-wrap { height: 4px; background: var(--surface-3); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+  .hm-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--green), #16a34a); transition: width var(--t-slow) var(--ease), background var(--t) var(--ease); }
+
+  .hero-now {
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: rgba(34, 211, 238, 0.05);
+    border: 1px solid rgba(34, 211, 238, 0.18);
+    border-radius: var(--r);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .hero-now-label {
+    font-size: var(--fs-label);
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    padding-right: 12px;
+    border-right: 1px solid rgba(34, 211, 238, 0.2);
+  }
+  .hero-now-body {
+    color: var(--text);
+    font-size: var(--fs-body);
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    flex: 1;
+    min-width: 0;
+  }
+  .hero-now-body .sub { color: var(--muted); }
+  .hero-now-body .mono { font-family: var(--font-mono); font-weight: 700; }
+  .hero-now-body .dir-long  { color: var(--green); font-weight: 700; }
+  .hero-now-body .dir-short { color: var(--red);   font-weight: 700; }
+
+  .hero-book {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 36px;
+  }
+  .hero-book-label {
+    font-size: var(--fs-label);
+    font-weight: 700;
+    letter-spacing: var(--tracking-label);
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .hero-book-lanes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+  }
+  .book-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px 5px 9px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--text-2);
+    transition: all var(--t-fast) var(--ease);
+    white-space: nowrap;
+  }
+  .book-chip:hover { border-color: var(--border-hi); color: var(--text); }
+  .book-chip.next {
+    background: var(--accent-soft);
+    border-color: var(--accent-strong);
+    color: var(--accent);
+  }
+  .book-chip.armed {
+    background: var(--green-soft);
+    border-color: rgba(16, 185, 129, 0.26);
+    color: var(--green);
+  }
+  .book-chip.in-trade {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(34, 211, 238, 0.12));
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #bbf7d0;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+    animation: conn-pulse 1.8s infinite;
+  }
+  .book-chip.blocked {
+    background: rgba(239, 68, 68, 0.06);
+    border-color: rgba(239, 68, 68, 0.18);
+    color: #fca5a5;
+    opacity: 0.85;
+  }
+  .book-chip.paused {
+    background: var(--yellow-soft);
+    border-color: rgba(245, 158, 11, 0.22);
+    color: var(--yellow);
+  }
+  .book-chip .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+    opacity: 0.8;
+  }
+  .book-chip .time {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .book-chip.next .time,
+  .book-chip.armed .time { color: currentColor; opacity: 0.75; }
+  .book-empty { color: var(--dim); font-size: var(--fs-small); font-style: italic; }
+
+  /* default-collapse sections in cockpit mode */
+  body.cockpit #profiles-section:not(.user-expanded),
+  body.cockpit #trades-section:not(.user-expanded) {
+    /* rely on existing .collapsed mechanism — set via JS on init */
+  }
+
+  /* Inline summary inside header when a section is collapsed.
+     Populated by JS. The existing sec-badge slot is used where possible. */
+  body.cockpit .cockpit-summary {
+    font-size: var(--fs-micro);
+    color: var(--muted);
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    margin-left: auto;
+    padding-right: 8px;
+  }
+  body.cockpit .cockpit-summary .pos { color: var(--green); }
+  body.cockpit .cockpit-summary .neg { color: var(--red); }
+  body.cockpit .cockpit-summary .warn { color: var(--yellow); }
+  body.cockpit .cockpit-summary .accent { color: var(--accent); }
+  body.cockpit .sec.collapsed .cockpit-summary { display: inline; }
+  body.cockpit .sec:not(.collapsed) .cockpit-summary { display: none; }
+
+  /* stale-heartbeat indicator — amber pulse next to conn dot */
+  .heartbeat-warn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    background: var(--yellow-soft);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: var(--yellow);
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    cursor: help;
+    animation: conn-pulse 2s infinite;
+  }
+  .heartbeat-warn::before {
+    content: '⏱';
+    font-size: 11px;
+  }
+  body.cockpit #signal-strip { display: none; }
+  body.cockpit #signal-strip.force-show { display: block; }
+
+  /* hero IN_TRADE row emphasis */
+  .hero-now.in-trade {
+    background: rgba(16, 185, 129, 0.06);
+    border-color: rgba(16, 185, 129, 0.24);
+  }
+  .hero-now.in-trade .hero-now-label { color: var(--green); border-right-color: rgba(16, 185, 129, 0.22); }
+
+  /* responsive — hero collapses to 2x2 at mid breakpoint, 1x4 at narrow */
+  @media (max-width: 1100px) {
+    .hero-metrics { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .hm-val { font-size: 26px; }
+  }
+  @media (max-width: 820px) {
+    .hero { padding: 16px 16px 14px; }
+    .hero-metrics { grid-template-columns: 1fr 1fr; }
+    .hero-head { flex-direction: column; align-items: stretch; gap: 8px; }
+    .hm-val { font-size: 22px; }
+    .hero-book { flex-direction: column; align-items: stretch; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <span class="topbar-brand">ORB</span>
+    <span class="topbar-sep">│</span>
+    <select id="acct-select" class="acct-select"><option value="">Loading accounts...</option></select>
+    <span id="topbar-acct" class="topbar-acct"></span>
+    <span id="topbar-acct-detail" class="topbar-acct-detail"></span>
+    <span id="header-mode-badge" class="topbar-mode stopped"><span class="dot"></span> <span id="summary-mode">Stopped</span></span>
+    <span id="conn-health-dot" class="conn-health-dot unknown" title="Broker connections: loading..."></span>
+    <span id="heartbeat-warn" class="heartbeat-warn" style="display:none" title=""></span>
+    <span id="summary-mode-detail" class="compat-hidden"></span>
+    <span id="running-profile" class="compat-hidden">Idle</span>
+    <span id="running-profile-detail" class="compat-hidden"></span>
+    <span class="topbar-spacer"></span>
+    <button id="btn-primary-cta" class="topbar-btn primary" style="display:none" type="button"></button>
+    <button id="btn-trade-book" class="topbar-btn" type="button" onclick="toggleTradeBook()">Trade Book</button>
+    <button id="btn-preflight" class="topbar-btn">Preflight</button>
+    <button id="btn-refresh" class="topbar-btn warn">Refresh</button>
+    <button id="btn-kill" class="topbar-btn danger">Kill All</button>
+  </header>
+
+  <!-- TAB BAR -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab-btn" data-tab="connections" onclick="switchTab('connections')">Connections</button>
+  </nav>
+
+  <!-- ═══ DASHBOARD TAB ═══ -->
+  <div id="tab-dashboard" class="tab-content active">
+
+  <!-- ═══ COCKPIT HERO — state-adaptive top card ═══ -->
+  <section id="hero-card" class="hero" data-state="loading">
+    <div class="hero-head">
+      <div class="hero-head-left">
+        <span id="hero-profile" class="hero-profile">—</span>
+        <span id="hero-state-badge" class="hero-state-badge"><span class="hero-state-dot"></span><span id="hero-state-label">Loading</span></span>
+      </div>
+      <div class="hero-head-right">
+        <span id="hero-head-hint" class="hero-head-hint"></span>
+      </div>
+    </div>
+
+    <!-- HERO METRICS — 4-up row -->
+    <div class="hero-metrics">
+      <div class="hm">
+        <div class="hm-lbl">Balance</div>
+        <div id="hero-balance" class="hm-val">—</div>
+        <div id="hero-balance-sub" class="hm-sub"></div>
+      </div>
+      <div class="hm">
+        <div class="hm-lbl">P&amp;L Today</div>
+        <div id="hero-pnl" class="hm-val">—</div>
+        <div id="hero-pnl-sub" class="hm-sub"></div>
+      </div>
+      <div class="hm">
+        <div class="hm-lbl">DD Used</div>
+        <div id="hero-dd" class="hm-val">0%</div>
+        <div class="hm-bar-wrap"><div id="hero-dd-bar" class="hm-bar-fill"></div></div>
+        <div id="hero-dd-sub" class="hm-sub"></div>
+      </div>
+      <div class="hm">
+        <div class="hm-lbl">Next Session</div>
+        <div id="hero-next" class="hm-val sm">—</div>
+        <div id="hero-next-sub" class="hm-sub"></div>
+      </div>
+    </div>
+
+    <!-- HERO NOW — only shows when session running OR position open -->
+    <div id="hero-now" class="hero-now" style="display:none">
+      <div class="hero-now-label">NOW</div>
+      <div id="hero-now-body" class="hero-now-body">—</div>
+    </div>
+
+    <!-- BOOK ROW — deployed lanes sorted by time-to-fire -->
+    <div id="hero-book" class="hero-book">
+      <div class="hero-book-label">Book</div>
+      <div id="hero-book-lanes" class="hero-book-lanes"><span class="book-empty">Loading deployed lanes…</span></div>
+    </div>
+  </section>
+
+  <!-- METRICS STRIP (hidden by cockpit; kept in DOM for responsive fallback + existing JS bindings) -->
+  <section class="metrics cockpit-hidden">
+    <div class="metric">
+      <div class="metric-lbl">Balance</div>
+      <div id="metric-balance" class="metric-val">—</div>
+      <div id="metric-balance-sub" class="metric-sub">starting capital</div>
+    </div>
+    <div class="metric">
+      <div class="metric-lbl">P&amp;L Today</div>
+      <div id="metric-pnl" class="metric-val">—</div>
+      <div id="metric-pnl-sub" class="metric-sub"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-lbl">DD Used</div>
+      <div id="dd-pct" class="metric-val">0%</div>
+      <div class="dd-bar-wrap"><div id="dd-bar" class="dd-bar-fill"></div></div>
+      <div id="metric-dd-sub" class="metric-sub"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-lbl">DD Remaining</div>
+      <div id="metric-dd-left" class="metric-val positive">—</div>
+      <div id="metric-dd-left-sub" class="metric-sub"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-lbl">Next Session</div>
+      <div id="next-session" class="metric-val sm">Loading...</div>
+      <div id="next-session-detail" class="metric-sub"></div>
+    </div>
+    <div class="metric">
+      <div class="metric-lbl">Data</div>
+      <div id="data-status" class="metric-val sm">Checking...</div>
+      <div id="data-status-detail" class="metric-sub"></div>
+    </div>
+  </section>
+
+  <!-- ERROR BANNER (equity/auth failures) -->
+  <div id="equity-error" class="error-banner"></div>
+
+  <!-- OPERATOR STATE -->
+  <section id="operator-shell" class="operator-shell">
+    <div class="operator-shell-top">
+      <span class="operator-shell-title">Operator State</span>
+      <span id="operator-state-badge" class="operator-state-badge info">Loading</span>
+    </div>
+    <div class="operator-shell-body">
+      <div class="operator-summary">
+        <div>
+          <div id="operator-headline" class="operator-headline">Loading operator state...</div>
+          <div id="operator-reason" class="operator-reason"></div>
+          <div id="operator-profile" class="operator-profile"></div>
+        </div>
+        <button id="operator-primary-action" class="operator-primary-btn" type="button">Run Preflight</button>
+      </div>
+      <div id="operator-checks" class="operator-checks">
+        <div class="operator-check info"><div class="operator-check-detail">Loading readiness checks...</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BROKER ACCOUNTS -->
+  <section id="broker-accounts-section" class="sec collapsed">
+    <div class="sec-hd" onclick="toggleSection('broker')">
+      <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
+      <span class="sec-ttl">Broker Accounts</span>
+      <span id="broker-acct-badge" class="sec-badge"></span>
+      <div class="sec-right">
+        <button id="btn-toggle-archived" class="toggle-btn" onclick="event.stopPropagation();toggleArchived()">Show Archived</button>
+      </div>
+    </div>
+    <div class="sec-bd">
+      <div id="broker-acct-grid" class="broker-accounts"><div class="empty">Loading accounts...</div></div>
+    </div>
+  </section>
+
+  <!-- SESSION TIMELINE (replaced by hero book row in cockpit mode; hidden via class) -->
+  <div id="session-timeline" class="timeline cockpit-hidden">
+    <span class="tl-label">Sessions</span>
+    <span class="muted" style="font-size:11px">Loading schedule...</span>
+  </div>
+
+  <!-- SIGNAL STRIP -->
+  <div id="signal-strip" class="signal-strip">
+    <div class="signal-strip-hd">
+      <span class="signal-strip-title">Signals</span>
+      <span id="signal-strip-badge" class="sec-badge"></span>
+      <span class="signal-strip-hint">Start a Signal session to see live ORB status</span>
+    </div>
+    <div id="signal-strip-body">
+      <div class="sig-no-data">No session running — click Signal on your profile to start monitoring</div>
+    </div>
+  </div>
+
+  <section id="alerts-shell" class="alerts-shell">
+    <div class="alerts-shell-top">
+      <div>
+        <div class="alerts-shell-title">Runtime Alerts</div>
+        <div id="alerts-shell-sub" class="alerts-shell-sub">Loading recent runtime alerts...</div>
+      </div>
+    </div>
+    <div class="alerts-shell-body">
+      <div id="alerts-summary" class="alerts-summary"></div>
+      <div id="alerts-list" class="alerts-list">
+        <div class="alerts-empty">Loading alerts...</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LIVE SESSION (shows when running) -->
+  <section id="session-status-panel" class="live-panel">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-weight:700;font-size:13px;">Live Session</span>
+      <span id="mode-badge" class="topbar-mode stopped">Stopped</span>
+      <span id="mode-copy" class="compat-hidden"></span>
+    </div>
+    <div class="live-metrics-row">
+      <div class="live-m"><div class="live-m-lbl">Account</div><div id="account-info" class="live-m-val" style="font-size:13px">—</div></div>
+      <div class="live-m"><div class="live-m-lbl">Daily P&amp;L</div><div id="daily-pnl" class="live-m-val m">0.00R</div></div>
+      <div class="live-m"><div class="live-m-lbl">Drawdown</div><div id="live-dd" class="live-m-val">0%</div></div>
+      <div class="live-m"><div class="live-m-lbl">Heartbeat</div><div id="heartbeat" class="live-m-val">—</div></div>
+      <div class="live-m"><div class="live-m-lbl">Bars</div><div id="bars-count" class="live-m-val m">0</div></div>
+    </div>
+  </section>
+
+  <!-- ACTIVITY -->
+  <section id="activity-panel" class="activity">
+    <div class="activity-hd">
+      <span id="activity-title" style="font-weight:700;font-size:13px">Activity</span>
+      <button id="btn-close-activity" class="close-link">Close</button>
+    </div>
+    <pre id="activity-output">Ready</pre>
+  </section>
+
+  <!-- POSITIONS / LIVE LANES -->
+  <section id="live-lanes-panel" class="sec hidden">
+    <div class="sec-hd" onclick="toggleSection('lanes')">
+      <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
+      <span class="sec-ttl">Positions</span>
+      <span id="live-lanes-badge" class="sec-badge"></span>
+      <span id="lanes-paused-badge" class="sec-badge" style="display:none; background:rgba(245,158,11,0.15); color:var(--yellow); border-color:rgba(245,158,11,0.30); margin-left:6px"></span>
+    </div>
+    <div class="sec-bd"><div id="live-lanes-grid"></div></div>
+  </section>
+
+  <!-- ACCOUNT SPECS -->
+  <section id="specs-section" class="sec collapsed">
+    <div class="sec-hd" onclick="toggleSection('specs')">
+      <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
+      <span class="sec-ttl">Account Specs</span>
+      <span id="specs-badge" class="sec-badge"></span>
+    </div>
+    <div class="sec-bd">
+      <div id="specs-content" class="specs-grid"></div>
+      <div id="specs-notes" class="spec-notes" style="display:none"></div>
+    </div>
+  </section>
+
+  <!-- TRADE BLOTTER -->
+  <section id="trades-section" class="sec">
+    <div class="sec-hd" onclick="toggleSection('trades')">
+      <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
+      <span class="sec-ttl">Trade Blotter</span>
+      <span id="trades-badge" class="sec-badge">0</span>
+      <div class="sec-right"><span id="trade-summary" class="trade-summary"></span></div>
+    </div>
+    <div class="sec-bd">
+      <div class="tbl-wrap">
+        <table class="blotter">
+          <thead><tr><th>Time</th><th>Lane</th><th>Setup</th><th>Dir</th><th class="r">Entry</th><th class="r">Exit</th><th class="r">P&amp;L</th><th>Status</th></tr></thead>
+          <tbody id="trade-log"><tr><td colspan="8" class="muted">No trades today</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRADE BOOK (lifetime fills + paper trades, separate tables) -->
+  <section id="trade-book-section" class="sec hidden">
+    <div class="sec-hd" onclick="toggleSection('trade-book')">
+      <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
+      <span class="sec-ttl">Trade Book</span>
+      <span id="trade-book-badge" class="sec-badge">·</span>
+      <div class="sec-right"><span id="trade-book-summary" class="trade-summary"></span></div>
+    </div>
+    <div class="sec-bd">
+      <h4 style="margin:8px 0 4px; font-size:12px; letter-spacing:0.04em; text-transform:uppercase;" class="muted">Real broker fills (live_journal.db)</h4>
+      <div id="trade-book-live-note" class="muted" style="font-size:11px; margin-bottom:6px"></div>
+      <div class="tbl-wrap">
+        <table class="blotter">
+          <thead><tr><th>Created</th><th>Day</th><th>Instr</th><th>Strategy</th><th>Dir</th><th>Entry Mdl</th><th class="r">Fill In</th><th class="r">Fill Out</th><th class="r">Actual R</th><th class="r">P&amp;L $</th><th>Exit</th><th>Broker</th></tr></thead>
+          <tbody id="trade-book-live-body"><tr><td colspan="12" class="muted">Loading...</td></tr></tbody>
+        </table>
+      </div>
+      <h4 style="margin:18px 0 4px; font-size:12px; letter-spacing:0.04em; text-transform:uppercase;" class="muted">Paper trades (gold.db)</h4>
+      <div id="trade-book-paper-note" class="muted" style="font-size:11px; margin-bottom:6px"></div>
+      <div class="tbl-wrap">
+        <table class="blotter">
+          <thead><tr><th>Day</th><th>Instr</th><th>Strategy</th><th>Lane</th><th>Dir</th><th>Mdl</th><th>ORB</th><th class="r">RR</th><th>Filter</th><th class="r">Entry</th><th class="r">Exit</th><th class="r">PnL R</th><th class="r">PnL $</th><th>Reason</th><th>Source</th></tr></thead>
+          <tbody id="trade-book-paper-body"><tr><td colspan="15" class="muted">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROFILES -->
+  <section id="profiles-section" class="sec">
+    <div class="sec-hd" onclick="toggleSection('profiles')">
+      <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
+      <span class="sec-ttl">Profiles</span>
+      <span id="profiles-badge" class="sec-badge"></span>
+      <div class="sec-right"><button id="btn-toggle-inactive" class="toggle-btn" onclick="event.stopPropagation();toggleInactive()">Show Inactive</button></div>
+    </div>
+    <div class="sec-bd"><div id="accounts-grid" class="profiles-grid"><div class="empty">Loading...</div></div></div>
+  </section>
+
+  <div class="footer">Auto-refresh 5s &middot; <span id="last-update">-</span></div>
+
+  </div><!-- /tab-dashboard -->
+
+  <!-- ═══ CONNECTIONS TAB ═══ -->
+  <div id="tab-connections" class="tab-content">
+
+    <!-- ADD FORM (hidden by default) -->
+    <div id="add-form" class="add-form">
+      <div class="add-form-title"><span>Add Connection</span><button class="add-actions cancel-btn" onclick="closeAddForm()">Cancel</button></div>
+      <div class="broker-types" id="broker-type-selector"></div>
+      <div class="add-fields" id="add-fields"></div>
+      <div id="add-result" class="add-result"></div>
+      <div class="add-actions">
+        <button class="test-btn" onclick="testConnection()">Test Connection</button>
+        <button class="save-btn" id="btn-save-conn" onclick="saveConnection()" disabled>Save &amp; Connect</button>
+      </div>
+    </div>
+
+    <!-- CONNECTION LIST -->
+    <div class="conn-header">
+      <span class="conn-header-title">Broker Connections</span>
+      <button class="conn-add-btn" onclick="openAddForm()">+ Add Connection</button>
+    </div>
+    <div id="conn-list"></div>
+
+  </div><!-- /tab-connections -->
+
+</div>
+
+<script>
+"use strict";
+
+const FIRM_STYLES = {
+  "Apex Trader Funding":{color:"#fdba74"},"TopStep":{color:"#93c5fd"},"Tradeify":{color:"#86efac"},
+  "Bulenox":{color:"#fca5a5"},"Elite Trader Funding":{color:"#fcd34d"},"MyFundedFutures":{color:"#d8b4fe"},"Self-Funded":{color:"#cbd5e1"},
+};
+
+let sessionCountdowns = {}, refreshPolling = false, autoRefreshTriggered = false;
+let runningProfile = null, showInactive = false, lastAccountsData = [];
+let activeProfileData = null;
+let selectedAccountId = null;  // persisted in localStorage
+let showArchived = false;
+let lastEquityData = null;  // cached for re-renders
+let lastOperatorState = null;
+let lastAlertsData = null;
+
+const $ = id => document.getElementById(id);
+const setText = (id, t) => { const e = $(id); if (e) e.textContent = t; };
+const fmtPrice = v => v == null ? "—" : Number(v).toFixed(2);
+const fmtR = v => v == null ? "—" : `${Number(v) >= 0 ? "+" : ""}${Number(v).toFixed(2)}R`;
+const fmtDollar = v => v == null ? "—" : `$${Number(v).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+const escapeHtml = v => String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+
+function fmtClock(v, sec = true) {
+  if (!v) return "—";
+  try { return new Date(v).toLocaleTimeString("en-AU", {hour12: false, hour: "2-digit", minute: "2-digit", second: sec ? "2-digit" : undefined}); }
+  catch (_) { return "—"; }
+}
+
+function timeSortKey(v) { if (!v || !v.includes(":")) return 9999; const [h, m] = v.split(":").map(Number); return h * 60 + m; }
+function getCountdownText(name) { const m = sessionCountdowns[name]; if (m == null) return ""; if (m <= 0) return "Now"; const h = Math.floor(m / 60); return h > 0 ? `in ${h}h ${m % 60}m` : `in ${m}m`; }
+function setupLabel(meta) { const p = []; if (meta.entry_model) p.push(meta.entry_model); if (meta.rr_target != null) p.push(`RR${Number(meta.rr_target)}`); if (meta.filter_type) p.push(meta.filter_type); return p.join(" | ") || "—"; }
+function modeClass(m) { return m === "LIVE" ? "live" : m === "DEMO" ? "demo" : m === "SIGNAL" ? "signal" : "stopped"; }
+function laneStatusClass(s) { return s === "IN_TRADE" ? "chip-live" : s === "ARMED" ? "chip-demo" : s === "FLAT" ? "chip-signal" : "chip-manual"; }
+function operatorTone(status) { return status === "READY" || status.startsWith("RUNNING_") ? "pass" : status === "DEGRADED" || status === "STALE" ? "warn" : status === "BLOCKED" || status === "ERROR" ? "fail" : "info"; }
+function operatorButtonTone(actionId) { return actionId === "start_signal" ? "success" : actionId === "stop_session" ? "danger" : actionId === "refresh_data" || actionId === "run_preflight" ? "warn" : ""; }
+function alertTone(level) { return level === "critical" ? "critical" : level === "warning" ? "warning" : "info"; }
+function getProfileRecord(profileId) { return (lastAccountsData || []).find(a => a.profile_id === profileId) || activeProfileData || null; }
+function fmtAlertTime(v) {
+  if (!v) return "—";
+  try {
+    return new Date(v).toLocaleString("en-AU", {hour12: false, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"});
+  } catch (_) {
+    return "—";
+  }
+}
+
+/* ── Section Toggle ─────────────────── */
+const SEC_MAP = {profiles: "profiles-section", trades: "trades-section", lanes: "live-lanes-panel", specs: "specs-section", broker: "broker-accounts-section", "trade-book": "trade-book-section"};
+
+function toggleSection(name) {
+  const el = $(SEC_MAP[name]); if (!el) return;
+  el.classList.toggle("collapsed");
+  const st = {};
+  for (const [k, id] of Object.entries(SEC_MAP)) { st[k] = $(id)?.classList.contains("collapsed") || false; }
+  try { localStorage.setItem("orb_sec", JSON.stringify(st)); } catch (_) {}
+}
+
+function restoreSections() {
+  try { const st = JSON.parse(localStorage.getItem("orb_sec") || "{}"); for (const [k, c] of Object.entries(st)) { const el = $(SEC_MAP[k]); if (el && c) el.classList.add("collapsed"); } } catch (_) {}
+}
+
+function toggleInactive() {
+  showInactive = !showInactive;
+  $("btn-toggle-inactive").textContent = showInactive ? "Hide Inactive" : "Show Inactive";
+  renderAccounts(lastAccountsData);
+}
+
+function toggleArchived() {
+  showArchived = !showArchived;
+  if (lastEquityData) renderBrokerAccounts(lastEquityData);
+}
+
+/* ── Account Selector ───────────────── */
+function initAccountSelector() {
+  try { selectedAccountId = parseInt(localStorage.getItem("orb_selected_acct")) || null; } catch (_) {}
+  $("acct-select").addEventListener("change", (e) => {
+    selectedAccountId = parseInt(e.target.value) || null;
+    try { localStorage.setItem("orb_selected_acct", String(selectedAccountId || "")); } catch (_) {}
+    if (lastEquityData) updateMetricsFromEquity(lastEquityData);
+  });
+}
+
+/* ── Favicon ────────────────────────── */
+function updateFavicon(mode) {
+  const c = (mode === "STOPPED" || mode === "OFFLINE") ? "%23dc2626" : "%2322c55e";
+  $("favicon").setAttribute("href", `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='${c}'/></svg>`);
+}
+
+/* ── Account Summary + Specs ────────── */
+function renderAccountSummary(accounts) {
+  const active = accounts.find(a => a.active && (a.auto_trading === "full" || a.auto_trading === "semi"));
+  activeProfileData = active || null;
+
+  if (active) {
+    const fc = (FIRM_STYLES[active.firm] || FIRM_STYLES["Self-Funded"]).color;
+    $("topbar-acct").innerHTML = `<span style="color:${fc}">${active.firm}</span> ${fmtDollar(active.account_size)}`;
+    $("topbar-acct-detail").textContent = `${active.instruments.join("+")} · ${active.lane_count} lanes · ${active.platform || ""}`;
+    $("metric-balance").textContent = fmtDollar(active.account_size);
+    $("metric-balance-sub").textContent = "starting capital";
+    $("metric-dd-sub").textContent = `of ${fmtDollar(active.max_dd)} max`;
+    $("metric-dd-left").textContent = fmtDollar(active.max_dd);
+    $("metric-dd-left-sub").textContent = active.dll ? `DLL ${fmtDollar(active.dll)}/day` : "";
+
+    $("specs-badge").textContent = active.profile_id;
+    const specs = [
+      {l: "Firm", v: active.firm}, {l: "Platform", v: active.platform || "—"}, {l: "Size", v: fmtDollar(active.account_size)},
+      {l: "Max DD", v: fmtDollar(active.max_dd)}, {l: "Daily Loss Limit", v: active.dll ? fmtDollar(active.dll) : "None"},
+      {l: "Stop Multiplier", v: active.stop_multiplier ? `${active.stop_multiplier}x` : "Default"},
+      {l: "Copies", v: String(active.copies)}, {l: "Lanes", v: String(active.lane_count)},
+      {l: "Instruments", v: active.instruments.join(", ") || "All"}, {l: "Automation", v: active.auto_trading || "manual"},
+    ];
+    $("specs-content").innerHTML = specs.map(s => `<div class="spec-item"><div class="spec-lbl">${s.l}</div><div class="spec-val">${s.v}</div></div>`).join("");
+    const notesEl = $("specs-notes");
+    if (active.notes) { notesEl.textContent = active.notes; notesEl.style.display = ""; } else { notesEl.style.display = "none"; }
+  } else {
+    $("topbar-acct").textContent = "No active profile";
+    $("topbar-acct-detail").textContent = "";
+  }
+  // Tier 1.1 — active profile may have changed, refresh CTA
+  try { updatePrimaryCta(); } catch (_) {}
+  // Cockpit — hero + summaries
+  try { renderHero(); } catch (_) {}
+  try { updateCockpitSummaries(); } catch (_) {}
+}
+
+/* ── Session Timeline ───────────────── */
+function renderTimeline(sessions, nextName) {
+  const tl = $("session-timeline");
+  if (!sessions.length) { tl.innerHTML = '<span class="tl-label">Sessions</span><span class="muted" style="font-size:11px">No sessions loaded</span>'; return; }
+  const sorted = [...sessions].sort((a, b) => timeSortKey(a.time) - timeSortKey(b.time));
+  let html = '<span class="tl-label">Today</span>';
+  sorted.forEach((s, i) => {
+    const isNext = s.name === nextName;
+    const isPast = s.minutes_away != null && s.minutes_away < 0;
+    const dotClass = isNext ? "next" : isPast ? "past" : "";
+    html += `<div class="tl-node"><div class="tl-dot ${dotClass}"></div><div class="tl-name">${s.short_name || s.name}</div><div class="tl-time">${s.time || ""}</div></div>`;
+    if (i < sorted.length - 1) html += '<div class="tl-line"></div>';
+  });
+  tl.innerHTML = html;
+}
+
+/* ── Render: Accounts ───────────────── */
+function renderAccounts(accounts) {
+  lastAccountsData = accounts;
+  renderAccountSummary(accounts);
+  const grid = $("accounts-grid");
+  grid.innerHTML = "";
+  if (!accounts.length) { grid.innerHTML = '<div class="empty">No profiles found.</div>'; return; }
+
+  const sorted = [...accounts].sort((a, b) => {
+    if (a.active !== b.active) return b.active - a.active;
+    const aA = a.auto_trading === "full" || a.auto_trading === "semi";
+    const bA = b.auto_trading === "full" || b.auto_trading === "semi";
+    if (aA !== bA) return bA - aA;
+    return b.lane_count - a.lane_count;
+  });
+
+  let activeCount = 0, inactiveCount = 0;
+  for (const acct of sorted) {
+    const isActive = acct.active, isAuto = acct.auto_trading === "full" || acct.auto_trading === "semi";
+    const isRunning = runningProfile === acct.profile_id;
+    if (!isActive) { inactiveCount++; if (!showInactive) continue; } else { activeCount++; }
+
+    const style = FIRM_STYLES[acct.firm] || FIRM_STYLES["Self-Funded"];
+    const card = document.createElement("article");
+    card.className = "pf-card";
+    if (isAuto && isActive) card.classList.add("active-auto");
+    if (!isActive) card.classList.add("inactive-card");
+
+    const lanesHtml = (acct.lanes || []).slice(0, 6).map(l => `
+      <div class="lane-row"><div class="lane-time">${l.session_time_brisbane || "??:??"}</div><div><div class="lane-title">${l.label || `${l.instrument || ""} ${l.session || ""}`.trim()}</div><div class="lane-subtitle">${l.setup_label || "—"}</div></div></div>
+    `).join("");
+    const more = Math.max(0, (acct.lanes || []).length - 6);
+    const chip = !isActive ? '<span class="pf-chip chip-inactive">Inactive</span>' : isAuto ? '<span class="pf-chip chip-auto">Auto</span>' : '<span class="pf-chip chip-manual">Manual</span>';
+
+    card.innerHTML = `
+      <div class="pf-head"><div><div style="display:flex;gap:6px;align-items:baseline"><span class="pf-firm" style="color:${style.color}">${acct.firm}</span><span class="pf-size">$${acct.account_size / 1000}K</span></div>
+      <div class="pf-meta"><span class="m" style="font-size:10px">${acct.profile_id}</span> · ${acct.instruments?.join("+") || "All"} · ${acct.lane_count} lanes · DD ${fmtDollar(acct.max_dd)}${acct.dll ? ` · DLL ${fmtDollar(acct.dll)}` : ""}${acct.copies > 1 ? ` · x${acct.copies}` : ""}</div></div>${chip}</div>
+      <div class="lane-list">${lanesHtml || '<div class="empty">No lanes</div>'}${more > 0 ? `<div class="lane-subtitle" style="text-align:center;padding:3px">+${more} more</div>` : ""}</div>
+    `;
+
+    if (isAuto && isActive && acct.lane_count > 0) {
+      if (isRunning) {
+        const sr = document.createElement("div"); sr.className = "actions-row";
+        sr.innerHTML = '<button class="pf-btn stop pulse">Stop Session</button>';
+        sr.querySelector("button").addEventListener("click", async () => {
+          if (!confirm("Stop session?")) return;
+          try { await fetch("/api/action/kill", {method: "POST"}); showActivity("Stop", "Stopping...", "warning"); }
+          catch (e) { appendActivity("Error: " + e.message); }
+        });
+        card.appendChild(sr);
+      } else {
+        const ar = document.createElement("div"); ar.className = "actions-row";
+        ar.innerHTML =
+          '<button class="pf-btn signal" title="Bot watches the market and sends Telegram alerts when a lane fires. You place orders manually on the TopStep platform. No orders are sent. Safe to run anytime — no money, no Combine impact.">' +
+            '<span class="btn-title">Alerts</span><span class="btn-sub">Telegram only</span>' +
+          '</button>' +
+          '<button class="pf-btn demo" title="Bot places PRACTICE orders on a separate ProjectX demo/sandbox account. No real money. Does NOT trade your Combine — use this only to rehearse the full order round-trip.">' +
+            '<span class="btn-title">Paper</span><span class="btn-sub">Practice, no $$</span>' +
+          '</button>' +
+          '<button class="pf-btn live" disabled title="Bot places REAL orders on your TopStep Combine account. Every trade counts toward your Combine pass/fail metrics. Type LIVE in the box below to unlock this button.">' +
+            '<span class="btn-title">Live</span><span class="btn-sub">Real Combine $$</span>' +
+          '</button>';
+        const [bs, bd, bl] = ar.querySelectorAll("button");
+        const signalBlocked = blockedActionReason("start_signal");
+        const demoBlocked = blockedActionReason("start_demo");
+        const liveBlocked = blockedActionReason("start_live");
+        if (signalBlocked) { bs.disabled = true; bs.title = signalBlocked; }
+        if (demoBlocked) { bd.disabled = true; bd.title = demoBlocked; }
+        if (liveBlocked) { bl.disabled = true; bl.title = liveBlocked; }
+        bs.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "signal"));
+        bd.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "demo"));
+        card.appendChild(ar);
+
+        const legend = document.createElement("div"); legend.className = "mode-legend";
+        legend.innerHTML =
+          '<div><b class="lg-signal">Alerts</b> — Telegram only. You trade manually. <em>Zero risk.</em></div>' +
+          '<div><b class="lg-demo">Paper</b> — fake orders on a practice account. Rehearses the bot without touching your Combine.</div>' +
+          '<div><b class="lg-live">Live</b> — real orders on your Combine. Counts toward pass/fail.</div>';
+        card.appendChild(legend);
+
+        const gate = document.createElement("div"); gate.className = "live-gate";
+        gate.innerHTML = '<label>To enable <b>Live</b>, type <b>LIVE</b> then click the Live button:</label><input type="text" placeholder="Type LIVE here to unlock real trading">';
+        const inp = gate.querySelector("input");
+        inp.addEventListener("input", () => { bl.disabled = !!liveBlocked || inp.value.trim() !== "LIVE"; });
+        bl.addEventListener("click", () => { if (inp.value.trim() !== "LIVE") return; launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "live"); inp.value = ""; bl.disabled = true; });
+        card.appendChild(gate);
+      }
+    } else if (!isActive) {
+      const n = document.createElement("div"); n.className = "pf-meta"; n.style.cssText = "margin-top:8px;font-style:italic"; n.textContent = "Inactive"; card.appendChild(n);
+    } else if (isActive && !isAuto) {
+      const n = document.createElement("div"); n.className = "pf-meta"; n.style.marginTop = "8px"; n.textContent = "Manual only"; card.appendChild(n);
+    }
+    grid.appendChild(card);
+  }
+  $("profiles-badge").textContent = `${activeCount} active`;
+  const tb = $("btn-toggle-inactive");
+  if (inactiveCount > 0) { tb.style.display = ""; tb.textContent = showInactive ? `Hide ${inactiveCount} Inactive` : `Show ${inactiveCount} Inactive`; }
+  else { tb.style.display = "none"; }
+}
+
+/* ── Render: Live Lanes (table) ─────── */
+function renderLiveLanes(lanes) {
+  const panel = $("live-lanes-panel"), grid = $("live-lanes-grid");
+  grid.innerHTML = "";
+  if (!lanes.length) { panel.classList.add("hidden"); return; }
+  panel.classList.remove("hidden");
+  $("live-lanes-badge").textContent = `${lanes.length} lane${lanes.length === 1 ? "" : "s"}`;
+
+  const sorted = [...lanes].sort((a, b) => timeSortKey(a.session_time_brisbane) - timeSortKey(b.session_time_brisbane) || `${a.instrument}`.localeCompare(`${b.instrument}`));
+  let html = '<table class="pos-table"><thead><tr><th>Time</th><th>Session</th><th>Instr</th><th>Status</th><th>Dir</th><th class="r">Entry</th><th class="r">P&L</th><th>Detail</th></tr></thead><tbody>';
+  for (const l of sorted) {
+    const st = l.status || "WAITING";
+    const pnlCls = l.current_pnl_r == null ? "muted" : Number(l.current_pnl_r) >= 0 ? "positive" : "negative";
+    const dir = l.direction ? String(l.direction).toUpperCase() : "—";
+    html += `<tr>
+      <td class="m">${l.session_time_brisbane || "?"}</td>
+      <td>${l.session_name || "?"}</td>
+      <td><strong>${l.instrument || "?"}</strong></td>
+      <td><span class="pf-chip ${laneStatusClass(st)}">${st.replace("_", " ")}</span></td>
+      <td class="${dir === "LONG" ? "positive" : dir === "SHORT" ? "negative" : "muted"}">${dir}</td>
+      <td class="r m">${fmtPrice(l.entry_price)}</td>
+      <td class="r m ${pnlCls}">${fmtR(l.current_pnl_r)}</td>
+      <td class="muted" style="font-size:11px">${l.status_detail || setupLabel(l)}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  grid.innerHTML = html;
+}
+
+/* ── Render: Trades ─────────────────── */
+function renderTrades(trades, meta) {
+  const tbody = $("trade-log"), summary = $("trade-summary");
+  tbody.innerHTML = "";
+  // Locked journal — show friendly message instead of empty table
+  if (meta && meta.locked) {
+    tbody.innerHTML = `<tr><td colspan="8" class="muted">${escapeHtml(meta.note || "Live session is writing the journal — refresh after session close.")}</td></tr>`;
+    summary.textContent = "journal locked";
+    $("trades-badge").textContent = "·";
+    try { updateCockpitSummaries(); } catch (_) {}
+    return;
+  }
+  // Upstream error that isn't a lock
+  if (meta && meta.error && !trades.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="negative">Error: ${escapeHtml(String(meta.error).slice(0, 140))}</td></tr>`;
+    summary.textContent = "error";
+    $("trades-badge").textContent = "!";
+    try { updateCockpitSummaries(); } catch (_) {}
+    return;
+  }
+  if (!trades.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">No trades today</td></tr>';
+    summary.textContent = "";
+    $("trades-badge").textContent = "0";
+    try { updateCockpitSummaries(); } catch (_) {}
+    return;
+  }
+  $("trades-badge").textContent = `${trades.length}`;
+  // NOTE: cockpit mode preserves user collapsed state — do not force-expand.
+
+  let totalR = 0, openCount = 0;
+  for (const t of trades) {
+    if (t.actual_r != null) totalR += Number(t.actual_r);
+    if (!t.exited_at) openCount++;
+    const tr = document.createElement("tr");
+    tr.setAttribute("data-trade", "1");
+    if (t.actual_r != null) tr.setAttribute("data-r", String(t.actual_r));
+    const stTxt = t.exited_at ? (t.exit_reason || "Closed") : "Open";
+    const stCls = t.exited_at ? "muted" : "blue";
+    tr.innerHTML = `
+      <td class="m">${fmtClock(t.created_at)}</td>
+      <td><div class="trade-lane">${t.lane_label || t.strategy_id || "?"}</div><div class="trade-sub">${t.session_time_brisbane ? `${t.session_time_brisbane} Bris` : ""}</div></td>
+      <td><div>${setupLabel(t)}</div><div class="trade-sub m">${t.strategy_id || ""}</div></td>
+      <td class="${t.direction === "long" ? "positive" : t.direction === "short" ? "negative" : "muted"}">${t.direction ? String(t.direction).toUpperCase() : "—"}</td>
+      <td class="r m">${fmtPrice(t.fill_entry || t.engine_entry)}</td>
+      <td class="r m">${fmtPrice(t.fill_exit)}</td>
+      <td class="r m ${t.actual_r == null ? "muted" : Number(t.actual_r) >= 0 ? "positive" : "negative"}">${fmtR(t.actual_r)}</td>
+      <td class="${stCls}">${stTxt}</td>`;
+    tbody.appendChild(tr);
+  }
+  const tr2 = document.createElement("tr");
+  tr2.innerHTML = `<td colspan="5"></td><td class="r"><strong>Total</strong></td><td class="r m ${totalR >= 0 ? "positive" : "negative"}"><strong>${fmtR(totalR)}</strong></td><td class="muted">${trades.length} trade${trades.length === 1 ? "" : "s"}${openCount ? ` | ${openCount} open` : ""}</td>`;
+  tbody.appendChild(tr2);
+  summary.textContent = `${trades.length} trade${trades.length === 1 ? "" : "s"}${openCount ? `, ${openCount} open` : ""}`;
+  try { updateCockpitSummaries(); } catch (_) {}
+}
+
+/* ── Activity ───────────────────────── */
+function showActivity(title, text, tone) {
+  $("activity-panel").style.display = "block";
+  setText("activity-title", title);
+  const o = $("activity-output"); o.textContent = text;
+  o.className = tone === "error" ? "negative" : tone === "success" ? "positive" : tone === "warning" ? "warning" : "cyan";
+}
+function appendActivity(text) { const o = $("activity-output"); o.textContent += `\n${text}`; o.scrollTop = o.scrollHeight; }
+
+function blockedActionReason(actionId) {
+  const blocked = new Set(lastOperatorState?.blocked_action_ids || []);
+  if (!blocked.has(actionId)) {
+    if (actionId.startsWith("start_") && lastOperatorState?.top_state && lastOperatorState.top_state !== "READY") {
+      return lastOperatorState?.reason || "";
+    }
+    return "";
+  }
+  return lastOperatorState?.busy_reason || lastOperatorState?.reason || "Unavailable right now";
+}
+
+async function handleOperatorAction(action, data) {
+  if (!action || !action.id) return;
+
+  if (action.id === "run_preflight") {
+    showActivity("Preflight", "Running checks...", "info");
+    try {
+      const q = new URLSearchParams();
+      if (data?.profile) q.set("profile", data.profile);
+      const d = await (await fetch(`/api/action/preflight?${q.toString()}`, {method: "POST"})).json();
+      const tone = d.status === "pass" ? "success" : d.status === "warn" ? "warning" : "error";
+      showActivity(`Preflight ${String(d.status || "").toUpperCase()}`, d.output || "No output", tone);
+      fetchOperatorState();
+    } catch (e) {
+      showActivity("Preflight", `Failed: ${e.message}`, "error");
+    }
+    return;
+  }
+
+  if (action.id === "open_connections") {
+    switchTab("connections");
+    return;
+  }
+
+  if (action.id === "refresh_data") {
+    $("btn-refresh").click();
+    return;
+  }
+
+  if (action.id === "wait_refresh" || action.id === "wait_cleanup") {
+    showActivity(action.label || "Please wait", data?.reason || "Operation in progress.", "warning");
+    return;
+  }
+
+  if (action.id === "continue_handoff") {
+    const handoff = data?.handoff || {};
+    const acct = getProfileRecord(handoff.target_profile || data?.profile);
+    if (!acct || !handoff.target_mode) {
+      showActivity("Continue Handoff", "Pending handoff target is unavailable.", "error");
+      return;
+    }
+    launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", handoff.target_mode);
+    return;
+  }
+
+  if (action.id === "start_signal") {
+    const acct = getProfileRecord(data?.profile);
+    if (!acct) {
+      showActivity("Start Alerts", "No active profile available to launch.", "error");
+      return;
+    }
+    launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "signal");
+    return;
+  }
+
+  if (action.id === "stop_session") {
+    if (!confirm("Stop session?")) return;
+    try {
+      const d = await (await fetch("/api/action/kill", {method: "POST"})).json();
+      showActivity("Stop Session", d.message || "Stop sent", "warning");
+      setTimeout(fetchOperatorState, 1500);
+    } catch (e) {
+      showActivity("Stop Session", `Failed: ${e.message}`, "error");
+    }
+  }
+}
+
+function renderOperatorState(data) {
+  lastOperatorState = data;
+  try { renderHero(); } catch (_) {}
+  const topState = data?.top_state || "ERROR";
+  const tone = operatorTone(topState);
+  const badge = $("operator-state-badge");
+  badge.className = `operator-state-badge ${tone}`;
+  badge.textContent = topState.replace(/_/g, " ");
+
+  setText("operator-headline", topState === "READY" ? "Ready to start" : topState.replace(/_/g, " "));
+  setText("operator-reason", data?.reason || "No operator summary available.");
+  setText("operator-profile", data?.profile ? `Profile: ${data.profile}` : "Profile: none");
+
+  const btn = $("operator-primary-action");
+  const action = data?.recommended_action || null;
+  if (action && action.id) {
+    btn.style.display = "";
+    btn.textContent = action.label || "Continue";
+    btn.className = `operator-primary-btn ${operatorButtonTone(action.id)}`.trim();
+    btn.onclick = () => { handleOperatorAction(action, data); };
+  } else {
+    btn.style.display = "none";
+    btn.onclick = null;
+  }
+
+  const blocked = new Set(data?.blocked_action_ids || []);
+  $("btn-refresh").disabled = blocked.has("refresh_data") && action?.id !== "refresh_data";
+  $("btn-preflight").disabled = blocked.has("run_preflight") && action?.id !== "run_preflight";
+  $("btn-refresh").title = $("btn-refresh").disabled ? (data?.reason || "Unavailable right now") : "";
+  $("btn-preflight").title = $("btn-preflight").disabled ? (data?.reason || "Unavailable right now") : "";
+
+  const checks = Array.isArray(data?.checks) ? data.checks : [];
+  const wrap = $("operator-checks");
+  if (!checks.length) {
+    wrap.innerHTML = '<div class="operator-check info"><div class="operator-check-detail">No readiness checks available.</div></div>';
+    return;
+  }
+  wrap.innerHTML = checks.map(check => `
+    <div class="operator-check ${check.status || "info"}">
+      <div class="operator-check-top">
+        <span class="operator-check-name">${escapeHtml(check.name || "Check")}</span>
+        <span class="operator-check-status">${escapeHtml(String(check.status || "info").toUpperCase())}</span>
+      </div>
+      <div class="operator-check-detail">${escapeHtml(check.detail || "")}</div>
+    </div>
+  `).join("");
+}
+
+/* Tier 1.2 — alert dismiss helpers (client-side via localStorage) */
+const ALERT_DISMISS_KEY = "orb_dismissed_alerts";
+const ALERT_DISMISS_MAX = 200;  // cap so localStorage doesn't grow forever
+let showDismissedCritical = false;
+
+function alertFingerprint(alert) {
+  const ts = String(alert?.timestamp_utc || "");
+  const msg = String(alert?.message || "").slice(0, 80);
+  return `${ts}|${msg}`;
+}
+function getDismissedAlerts() {
+  try { return new Set(JSON.parse(localStorage.getItem(ALERT_DISMISS_KEY) || "[]")); }
+  catch (_) { return new Set(); }
+}
+function saveDismissedAlerts(set) {
+  try {
+    const arr = Array.from(set).slice(-ALERT_DISMISS_MAX);
+    localStorage.setItem(ALERT_DISMISS_KEY, JSON.stringify(arr));
+  } catch (_) {}
+}
+function dismissAlert(fp) {
+  const set = getDismissedAlerts();
+  set.add(fp);
+  saveDismissedAlerts(set);
+  if (lastAlertsData) renderAlerts(lastAlertsData);
+}
+function toggleDismissedCritical() {
+  showDismissedCritical = !showDismissedCritical;
+  if (lastAlertsData) renderAlerts(lastAlertsData);
+}
+
+function alertRowHtml(alert, dismissed) {
+  const level = String(alert.level || "info").toLowerCase();
+  const tone = alertTone(level);
+  const ctx = [alert.instrument, alert.mode, alert.profile].filter(Boolean).map(escapeHtml).join(" • ");
+  const fp = alertFingerprint(alert);
+  const fpAttr = escapeHtml(fp).replaceAll("'", "&#39;");
+  const dismissBtn = (tone === "critical" && !dismissed)
+    ? `<button class="alert-dismiss" type="button" onclick="dismissAlert('${fpAttr}')" title="Dismiss">Ack</button>`
+    : "";
+  return `
+    <div class="alert-row ${tone}${dismissed ? " dismissed" : ""}">
+      ${dismissBtn}
+      <div class="alert-row-top">
+        <div class="alert-row-meta">
+          <span class="alert-level">${escapeHtml(String(alert.level || "info").toUpperCase())}</span>
+          <span class="alert-category">${escapeHtml(String(alert.category || "runtime_event").replace(/_/g, " "))}</span>
+        </div>
+        <span class="alert-time">${fmtAlertTime(alert.timestamp_utc)}</span>
+      </div>
+      <div class="alert-message">${escapeHtml(alert.message || "No message")}</div>
+      ${ctx ? `<div class="alert-context">${ctx}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderAlerts(data) {
+  lastAlertsData = data;
+  const alerts = Array.isArray(data?.alerts) ? data.alerts : [];
+  const summary = data?.summary || {};
+  const counts = summary?.counts || {};
+  const recentCounts = summary?.recent_counts || {};
+  const recentWindow = Number(summary?.recent_window_minutes || 30);
+  const total = Number(summary?.total || alerts.length || 0);
+  const latest = summary?.latest || alerts[0] || null;
+  const dismissed = getDismissedAlerts();
+
+  const sub = $("alerts-shell-sub");
+  if (latest?.timestamp_utc) {
+    sub.textContent = `Newest event ${fmtAlertTime(latest.timestamp_utc)} • ${total} stored`;
+  } else {
+    sub.textContent = "No runtime alerts recorded yet";
+  }
+
+  $("alerts-summary").innerHTML = `
+    <span class="alerts-pill critical">Critical ${Number(counts.critical || 0)}</span>
+    <span class="alerts-pill warning">Warning ${Number(counts.warning || 0)}</span>
+    <span class="alerts-pill info">Info ${Number(counts.info || 0)}</span>
+    <span class="alerts-pill info">Last ${recentWindow}m: ${Number(recentCounts.critical || 0) + Number(recentCounts.warning || 0) + Number(recentCounts.info || 0)}</span>
+  `;
+
+  // Split into severity buckets
+  const buckets = {critical: [], warning: [], info: []};
+  for (const a of alerts) {
+    const lvl = String(a.level || "info").toLowerCase();
+    if (lvl === "critical") buckets.critical.push(a);
+    else if (lvl === "warning" || lvl === "warn") buckets.warning.push(a);
+    else buckets.info.push(a);
+  }
+
+  const critActive = buckets.critical.filter(a => !dismissed.has(alertFingerprint(a)));
+  const critDismissed = buckets.critical.filter(a => dismissed.has(alertFingerprint(a)));
+
+  const list = $("alerts-list");
+  if (!alerts.length) {
+    list.innerHTML = '<div class="alerts-empty">No runtime alerts yet. When the session emits feed, drift, risk, or operator events, they will appear here.</div>';
+    return;
+  }
+
+  let html = "";
+
+  // Critical section — only render if there are active critical alerts OR user toggled show-dismissed
+  if (critActive.length > 0 || (critDismissed.length > 0 && showDismissedCritical)) {
+    const rows = [
+      ...critActive.map(a => alertRowHtml(a, false)),
+      ...(showDismissedCritical ? critDismissed.map(a => alertRowHtml(a, true)) : []),
+    ].join("");
+    const toggleBtn = critDismissed.length > 0
+      ? `<button class="alerts-group-btn" type="button" onclick="toggleDismissedCritical()">${showDismissedCritical ? "Hide" : "Show"} ${critDismissed.length} dismissed</button>`
+      : "";
+    html += `
+      <div class="alerts-group critical">
+        <div class="alerts-group-hd">Critical<span class="count">${critActive.length}</span>${toggleBtn}</div>
+        <div class="alerts-group-body">${rows || '<div class="alerts-group-empty">No active critical alerts</div>'}</div>
+      </div>
+    `;
+  }
+
+  // Warning section
+  if (buckets.warning.length > 0) {
+    html += `
+      <div class="alerts-group warning">
+        <div class="alerts-group-hd">Warning<span class="count">${buckets.warning.length}</span></div>
+        <div class="alerts-group-body">${buckets.warning.map(a => alertRowHtml(a, false)).join("")}</div>
+      </div>
+    `;
+  }
+
+  // Info section (compressed)
+  if (buckets.info.length > 0) {
+    html += `
+      <div class="alerts-group info">
+        <div class="alerts-group-hd">Info<span class="count">${buckets.info.length}</span></div>
+        <div class="alerts-group-body">${buckets.info.map(a => alertRowHtml(a, false)).join("")}</div>
+      </div>
+    `;
+  }
+
+  list.innerHTML = html || '<div class="alerts-empty">All alerts dismissed or filtered.</div>';
+  try { autoExpandAlertsIfCritical(); } catch (_) {}
+}
+
+/* ── Update Status ──────────────────── */
+function updateStatus(state) {
+  const mode = state.mode || "STOPPED";
+  updateFavicon(mode);
+  setText("summary-mode", mode === "STOPPED" ? "Stopped" : mode);
+  $("header-mode-badge").className = `topbar-mode ${modeClass(mode)}`;
+
+  const acctName = state.account_name || "";
+  const profileId = acctName.startsWith("profile_") ? acctName.slice(8) : null;
+  if (profileId !== runningProfile) { runningProfile = mode === "STOPPED" ? null : profileId; fetchAccounts(); }
+  setText("running-profile", runningProfile || "Idle");
+
+  $("mode-badge").className = `topbar-mode ${modeClass(mode)}`;
+  $("mode-badge").textContent = mode;
+
+  // Tier 1.1 — refresh primary CTA based on new status
+  try { updatePrimaryCta(); } catch (_) {}
+  // Cockpit — hero card reflects new status
+  try { renderHero(); } catch (_) {}
+
+  const panel = $("session-status-panel");
+  if (mode === "STOPPED") { panel.classList.remove("on"); $("live-lanes-panel").classList.add("hidden"); }
+  else { panel.classList.add("on"); }
+
+  const acctLabel = state.account_name ? `${state.account_name} (#${state.account_id || "?"})` : "—";
+  const copyLabel = state.shadow_count ? ` + ${state.shadow_count} shadow${state.shadow_count > 1 ? "s" : ""}` : "";
+  setText("account-info", acctLabel + copyLabel);
+
+  const pnl = Number(state.daily_pnl_r || 0);
+  setText("daily-pnl", fmtR(pnl));
+  $("daily-pnl").className = `live-m-val m ${pnl >= 0 ? "positive" : "negative"}`;
+
+  $("metric-pnl").textContent = fmtR(pnl);
+  $("metric-pnl").className = `metric-val ${pnl >= 0 ? "positive" : pnl < 0 ? "negative" : "muted"}`;
+  $("metric-pnl-sub").textContent = mode !== "STOPPED" ? "session active" : "no session";
+
+  const limit = Math.abs(Number(state.daily_loss_limit_r || 0)) || 1;
+  const used = Math.abs(Math.min(pnl, 0));
+  const pct = Math.min(100, (used / limit) * 100);
+  setText("dd-pct", `${pct.toFixed(0)}%`);
+  $("dd-pct").className = `metric-val ${pct > 80 ? "negative" : pct > 50 ? "warning" : "positive"}`;
+  setText("live-dd", `${pct.toFixed(0)}%`);
+  const ddBar = $("dd-bar");
+  ddBar.style.width = `${pct}%`;
+  ddBar.style.background = pct > 80 ? "linear-gradient(90deg,#fb7185,#dc2626)" : pct > 50 ? "linear-gradient(90deg,#fbbf24,#f59e0b)" : "linear-gradient(90deg,var(--green),#16a34a)";
+
+  if (activeProfileData) {
+    const ddLeft = activeProfileData.max_dd * (1 - pct / 100);
+    $("metric-dd-left").textContent = fmtDollar(ddLeft);
+    $("metric-dd-left").className = `metric-val ${ddLeft < activeProfileData.max_dd * 0.2 ? "negative" : ddLeft < activeProfileData.max_dd * 0.5 ? "warning" : "positive"}`;
+  }
+
+  const hbAge = Number(state.heartbeat_age_s || 9999);
+  const hbEl = $("heartbeat");
+  if (mode === "STOPPED") { hbEl.textContent = "—"; hbEl.className = "live-m-val muted"; }
+  else if (hbAge < 30) { hbEl.textContent = `${hbAge.toFixed(0)}s`; hbEl.className = "live-m-val positive"; }
+  else if (hbAge < 120) { hbEl.textContent = `${hbAge.toFixed(0)}s`; hbEl.className = "live-m-val warning"; }
+  else { hbEl.textContent = `${hbAge.toFixed(0)}s STALE`; hbEl.className = "live-m-val negative pulse"; }
+
+  setText("bars-count", String(state.bars_received || 0));
+  const laneCards = Array.isArray(state.lane_cards) ? state.lane_cards : [];
+  renderLiveLanes(laneCards);
+  renderSignalStrip(laneCards, mode);
+  setText("last-update", fmtClock(new Date(), true));
+}
+
+/* ── Fetchers ───────────────────────── */
+async function fetchStatus() {
+  try {
+    const data = await (await fetch("/api/status")).json();
+    _lastStatusData = data;
+    updateStatus(data);
+    try { updateHeartbeatWarning(data); } catch (_) {}
+  }
+  catch (_) { setText("summary-mode", "Offline"); $("header-mode-badge").className = "topbar-mode stopped"; updateFavicon("OFFLINE"); }
+}
+
+function updateHeartbeatWarning(statusData) {
+  const el = $("heartbeat-warn");
+  if (!el) return;
+  const mode = statusData?.mode || "STOPPED";
+  const age = Number(statusData?.heartbeat_age_s);
+  if (mode === "STOPPED" || mode === "Offline" || !Number.isFinite(age) || age < 60) {
+    el.style.display = "none";
+    return;
+  }
+  el.style.display = "";
+  el.textContent = age < 120 ? `${Math.round(age)}s` : `${Math.round(age/60)}m`;
+  el.title = `Heartbeat ${Math.round(age)}s old — bot may be unresponsive. Check the session terminal.`;
+}
+async function fetchOperatorState() {
+  try {
+    const q = new URLSearchParams();
+    const profile = runningProfile || activeProfileData?.profile_id;
+    if (profile) q.set("profile", profile);
+    renderOperatorState(await (await fetch(`/api/operator-state?${q.toString()}`)).json());
+  } catch (e) {
+    renderOperatorState({top_state: "ERROR", reason: e.message || "Failed to load operator state", checks: []});
+  }
+}
+async function fetchTrades() {
+  try {
+    const data = await (await fetch("/api/trades")).json();
+    renderTrades(data.trades || [], data);
+  } catch (_) {}
+}
+async function fetchAlerts() {
+  try {
+    const q = new URLSearchParams({limit: "20"});
+    const profile = runningProfile || activeProfileData?.profile_id;
+    if (profile) q.set("profile", profile);
+    renderAlerts(await (await fetch(`/api/alerts?${q.toString()}`)).json());
+  } catch (e) {
+    renderAlerts({alerts: [], summary: {total: 0, counts: {}, recent_counts: {}, latest: null}});
+    $("alerts-shell-sub").textContent = e.message || "Failed to load runtime alerts";
+  }
+}
+async function fetchAccounts() { try { renderAccounts((await (await fetch("/api/accounts")).json()).accounts || []); } catch (_) { $("accounts-grid").innerHTML = '<div class="empty">Could not load.</div>'; } }
+
+/* Tier 1.1 — primary CTA in topbar (Start / Stop context-aware) */
+let _primaryCtaBusy = false;
+function updatePrimaryCta() {
+  const btn = $("btn-primary-cta");
+  if (!btn) return;
+  const mode = (lastOperatorState?.top_state || "").toString();
+  const statusMode = ($("summary-mode")?.textContent || "Stopped").toString();
+  const isRunning = statusMode !== "Stopped" && statusMode !== "Offline" && statusMode !== "—";
+  const acct = activeProfileData;
+  const recommended = lastOperatorState?.recommended_action || null;
+
+  if (_primaryCtaBusy) { return; }
+
+  if (isRunning) {
+    btn.style.display = "";
+    btn.className = "topbar-btn primary stop";
+    btn.innerHTML = `Stop <span class="cta-sub">${escapeHtml(statusMode)}</span>`;
+    btn.onclick = async () => {
+      if (!confirm("Stop current session?")) return;
+      _primaryCtaBusy = true;
+      btn.disabled = true;
+      try {
+        const d = await (await fetch("/api/action/kill", {method: "POST"})).json();
+        showActivity("Stop Session", d.message || "Stop sent", "warning");
+        setTimeout(fetchOperatorState, 1500);
+      } catch (e) {
+        showActivity("Stop Session", `Failed: ${e.message}`, "error");
+      } finally {
+        setTimeout(() => { _primaryCtaBusy = false; btn.disabled = false; updatePrimaryCta(); }, 2000);
+      }
+    };
+    return;
+  }
+
+  if (recommended && recommended.id && recommended.id !== "start_signal") {
+    btn.style.display = "";
+    btn.className = `topbar-btn primary ${operatorButtonTone(recommended.id)}`.trim();
+    btn.innerHTML = `${escapeHtml(recommended.label || "Continue")} <span class="cta-sub">${escapeHtml(lastOperatorState?.reason || "")}</span>`;
+    btn.onclick = () => { handleOperatorAction(recommended, lastOperatorState); };
+    return;
+  }
+
+  // Not running — show Start if we have an active profile
+  if (acct && acct.profile_id) {
+    btn.style.display = "";
+    btn.className = "topbar-btn primary";
+    btn.innerHTML = `Start Signal <span class="cta-sub">${escapeHtml(acct.profile_id)}</span>`;
+    btn.onclick = () => {
+      if (_primaryCtaBusy) return;
+      launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "signal");
+    };
+    return;
+  }
+
+  // No active profile, no running session — hide
+  btn.style.display = "none";
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   COCKPIT — state-adaptive hero + default-collapse summaries
+   Extends Tier 1. Pulls from existing globals:
+     lastEquityData, lastOperatorState, activeProfileData, runningProfile,
+     lastAlertsData, sessionCountdowns, lastAccountsData
+   No new fetch endpoints.
+   ════════════════════════════════════════════════════════════════════ */
+
+let _lastSessionsData = null;
+let _lastStatusData = null;  // cached from fetchStatus so hero can read lane_cards/heartbeat
+
+/* derive hero state from current snapshot */
+function _heroDeriveState() {
+  const mode = ($("summary-mode")?.textContent || "Stopped").toString();
+  const op = lastOperatorState?.top_state || "";
+  if (mode === "Stopped" || mode === "Offline" || mode === "—") {
+    if (op === "BLOCKED" || op === "ERROR") return "blocked";
+    if (op === "DEGRADED" || op === "STALE") return "warn";
+    if (op === "READY") return "ready";
+    return "stopped";
+  }
+  if (mode === "LIVE" || mode === "DEMO" || mode === "SIGNAL") return "running";
+  return "stopped";
+}
+
+function _heroStateLabel(state) {
+  return ({
+    loading: "Loading",
+    stopped: "Stopped",
+    ready:   "Ready",
+    warn:    "Warning",
+    blocked: "Blocked",
+    error:   "Error",
+    running: ($("summary-mode")?.textContent || "Running").toString(),
+    in_trade: "In Trade",
+  })[state] || state.toUpperCase();
+}
+
+function renderHero() {
+  const hero = $("hero-card");
+  if (!hero) return;
+
+  // state
+  const state = _heroDeriveState();
+  hero.dataset.state = state;
+  setText("hero-state-label", _heroStateLabel(state));
+
+  // profile label
+  const acct = activeProfileData;
+  if (acct) {
+    const label = `${acct.firm} ${Math.round(acct.account_size/1000)}K · ${(acct.instruments || []).join("+") || "—"}`;
+    setText("hero-profile", label);
+  } else {
+    setText("hero-profile", "No active profile");
+  }
+
+  // Mirror metrics from the existing hidden strip — they share data sources
+  setText("hero-balance", $("metric-balance")?.textContent || "—");
+  setText("hero-balance-sub", $("metric-balance-sub")?.textContent || "");
+
+  const pnlText = $("metric-pnl")?.textContent || "—";
+  const pnlCls = ($("metric-pnl")?.className || "").includes("negative") ? "negative"
+               : ($("metric-pnl")?.className || "").includes("positive") ? "positive" : "muted";
+  const heroPnl = $("hero-pnl");
+  heroPnl.textContent = pnlText;
+  heroPnl.className = `hm-val ${pnlCls}`;
+  setText("hero-pnl-sub", $("metric-pnl-sub")?.textContent || (state === "running" ? "session active" : "no session"));
+
+  const ddText = $("dd-pct")?.textContent || "0%";
+  const ddCls = ($("dd-pct")?.className || "").includes("negative") ? "negative"
+              : ($("dd-pct")?.className || "").includes("warning") ? "warning" : "positive";
+  const heroDd = $("hero-dd");
+  heroDd.textContent = ddText;
+  heroDd.className = `hm-val ${ddCls}`;
+  setText("hero-dd-sub", $("metric-dd-sub")?.textContent || "");
+  const origBar = $("dd-bar");
+  const heroBar = $("hero-dd-bar");
+  if (origBar && heroBar) {
+    heroBar.style.width = origBar.style.width || "0%";
+    heroBar.style.background = origBar.style.background || "";
+  }
+
+  setText("hero-next", $("next-session")?.textContent || "—");
+  setText("hero-next-sub", $("next-session-detail")?.textContent || "");
+
+  // NOW block — prefer authoritative lane_card state from /api/status over
+  // clock-derived guesses. Priority:
+  //   IN_TRADE lane → show position (dir/entry/current pnl)
+  //   ARMED  lane   → show session armed for signal
+  //   upcoming within 30m → "ARMING SESSION in Xm — filter"
+  //   running otherwise → "MODE · Xbars · heartbeat"
+  //   blocked/warn  → operator reason
+  const nowEl = $("hero-now");
+  // Reset classes before re-applying
+  nowEl.className = "hero-now";
+  if (state === "running") {
+    nowEl.style.display = "";
+    const mode = ($("summary-mode")?.textContent || "").toString();
+    const laneCards = (_lastStatusData?.lane_cards) || [];
+
+    // 1. Look for a lane currently IN_TRADE
+    const inTrade = laneCards.find(lc => String(lc.status || "").toUpperCase() === "IN_TRADE");
+    // 2. Look for a lane ARMED (awaiting break)
+    const armed = laneCards.find(lc => String(lc.status || "").toUpperCase() === "ARMED");
+
+    if (inTrade) {
+      nowEl.classList.add("in-trade");
+      const dir = String(inTrade.direction || "").toUpperCase();
+      const dirCls = dir === "LONG" ? "dir-long" : dir === "SHORT" ? "dir-short" : "";
+      const entry = inTrade.entry_price != null ? `@ ${fmtPrice(inTrade.entry_price)}` : "";
+      const pnl = inTrade.current_pnl_r != null
+        ? `<span class="sub">· unreal ${fmtR(inTrade.current_pnl_r)}</span>` : "";
+      const session = (inTrade.session_name || "").replace(/_/g, " ");
+      $("hero-now-body").innerHTML =
+        `<span class="mono">IN TRADE</span> ` +
+        `<span class="${dirCls}">${escapeHtml(inTrade.instrument || "")} ${escapeHtml(dir || "?")}</span> ` +
+        `<span class="mono sub">${escapeHtml(entry)}</span> ${pnl}` +
+        (session ? ` <span class="sub">· ${escapeHtml(session)}</span>` : "");
+    } else if (armed) {
+      const session = (armed.session_name || "").replace(/_/g, " ");
+      const filter = armed.filter_type || "";
+      const entryModel = armed.entry_model || "";
+      $("hero-now-body").innerHTML =
+        `<span class="mono">ARMED</span> <span>${escapeHtml(session)}</span>` +
+        (entryModel ? ` <span class="sub">· ${escapeHtml(entryModel)}</span>` : "") +
+        (filter ? ` <span class="sub">· ${escapeHtml(filter)}</span>` : "");
+    } else {
+      // Fall back to clock-based imminent + generic running state
+      let imminent = null;
+      if (acct && Array.isArray(acct.lanes) && _lastSessionsData?.sessions) {
+        const m = {};
+        for (const s of _lastSessionsData.sessions) m[s.name] = s.minutes_away;
+        const upcoming = acct.lanes
+          .map(l => ({ lane: l, mins: m[l.session || l.orb_label] ?? 999999 }))
+          .filter(x => x.mins > -5 && x.mins <= 30)
+          .sort((a, b) => a.mins - b.mins);
+        if (upcoming.length > 0) imminent = upcoming[0];
+      }
+      if (imminent) {
+        const l = imminent.lane, mins = imminent.mins;
+        const sessionName = (l.session || l.orb_label || "—").replace(/_/g, " ");
+        const filter = l.filter || "";
+        const when = mins <= 0 ? "NOW" : `in ${mins}m`;
+        $("hero-now-body").innerHTML =
+          `<span class="mono">ARMING</span> <span>${escapeHtml(sessionName)}</span> <span class="sub">${escapeHtml(when)}</span>` +
+          (filter ? ` <span class="sub">· ${escapeHtml(filter)}</span>` : "");
+      } else {
+        const bars = Number(_lastStatusData?.bars_received ?? 0);
+        const age = Number(_lastStatusData?.heartbeat_age_s);
+        const ageStr = Number.isFinite(age) ? `${Math.round(age)}s` : "—";
+        const dailyR = $("daily-pnl")?.textContent || "";
+        $("hero-now-body").innerHTML =
+          `<span class="mono">${escapeHtml(mode)}</span> <span class="sub">${bars} bars</span>` +
+          (dailyR ? ` <span class="sub">· daily ${escapeHtml(dailyR)}</span>` : "") +
+          ` <span class="sub">· heartbeat ${escapeHtml(ageStr)}</span>`;
+      }
+    }
+  } else if (state === "blocked" || state === "warn") {
+    nowEl.style.display = "";
+    const reason = lastOperatorState?.reason || _heroStateLabel(state);
+    $("hero-now-body").innerHTML = `<span class="mono">${escapeHtml(_heroStateLabel(state).toUpperCase())}</span> <span class="sub">· ${escapeHtml(String(reason).slice(0, 180))}</span>`;
+  } else {
+    nowEl.style.display = "none";
+  }
+
+  renderHeroBook();
+}
+
+/* Book row: show ONLY deployed lanes of the active profile, filtered to
+   UPCOMING + IMMINENT sessions (past lanes hidden). Sorted by time-to-fire.
+   Chip state: armed (≤30min — strong visual) / next (first upcoming) / default. */
+function renderHeroBook() {
+  const el = $("hero-book-lanes");
+  if (!el) return;
+  const acct = activeProfileData;
+  if (!acct || !Array.isArray(acct.lanes) || acct.lanes.length === 0) {
+    el.innerHTML = '<span class="book-empty">No deployed lanes</span>';
+    return;
+  }
+
+  // Build {session_name -> minutes_away} map from the last sessions fetch
+  const minutesAway = {};
+  if (_lastSessionsData && Array.isArray(_lastSessionsData.sessions)) {
+    for (const s of _lastSessionsData.sessions) minutesAway[s.name] = s.minutes_away;
+  }
+  const nextName = _lastSessionsData?.next?.name || null;
+
+  // Build {session_name -> live_status} map from lane_cards (authoritative)
+  const liveStatus = {};
+  for (const lc of (_lastStatusData?.lane_cards || [])) {
+    const name = lc.session_name;
+    if (!name) continue;
+    // Prefer IN_TRADE > ARMED > FLAT > WAITING if multiple lanes share session
+    const rank = (s) => ({IN_TRADE: 4, ARMED: 3, FLAT: 2, WAITING: 1}[String(s || "").toUpperCase()] || 0);
+    if (!liveStatus[name] || rank(lc.status) > rank(liveStatus[name])) {
+      liveStatus[name] = String(lc.status || "").toUpperCase();
+    }
+  }
+
+  // Filter: hide past sessions (>5min past). Sort ascending by time-to-fire.
+  const visible = acct.lanes
+    .map(l => ({ lane: l, mins: minutesAway[l.session || l.orb_label] ?? 999999 }))
+    .filter(x => x.mins > -5)
+    .sort((a, b) => a.mins - b.mins);
+
+  if (visible.length === 0) {
+    el.innerHTML = '<span class="book-empty">All of today\u2019s lanes have passed</span>';
+    return;
+  }
+
+  const chips = visible.map(({ lane: l, mins }) => {
+    const name = l.session || l.orb_label || "—";
+    const shortName = (l.session_short || name).replace(/_/g, " ");
+    const status = liveStatus[name] || "";
+    let cls = "book-chip";
+    let timeStr = "";
+
+    if (status === "IN_TRADE") {
+      cls += " in-trade armed";
+      timeStr = "live";
+    } else if (status === "ARMED") {
+      cls += " armed";
+      timeStr = "armed";
+    } else if (mins <= 30) {
+      // Clock-derived armed window — strong visual cue (≤30min out)
+      cls += " armed";
+      timeStr = mins <= 0 ? "now" : `${mins}m`;
+    } else if (name === nextName) {
+      cls += " next";
+      timeStr = mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
+    } else {
+      timeStr = mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
+    }
+
+    const tip = status
+      ? `${l.label || shortName} — ${status}`
+      : (l.label || shortName);
+    return `<span class="${cls}" title="${escapeHtml(tip)}"><span class="dot"></span><span>${escapeHtml(shortName)}</span><span class="time">${escapeHtml(timeStr)}</span></span>`;
+  });
+
+  el.innerHTML = chips.join("");
+}
+
+/* Collapsed-section 1-line summaries. Populates a span#<sec>-summary
+   inserted into each section's header once on init. */
+function _ensureSummaryHost(sectionId, headerSelector) {
+  const sec = $(sectionId);
+  if (!sec) return null;
+  let host = sec.querySelector(".cockpit-summary");
+  if (host) return host;
+  const header = sec.querySelector(headerSelector);
+  if (!header) return null;
+  host = document.createElement("span");
+  host.className = "cockpit-summary";
+  header.appendChild(host);
+  return host;
+}
+
+function updateCockpitSummaries() {
+  // Profiles — active profile + lane count
+  const profHost = _ensureSummaryHost("profiles-section", ".sec-hd");
+  if (profHost) {
+    const a = activeProfileData;
+    profHost.innerHTML = a
+      ? `<span class="accent">${escapeHtml(a.profile_id || "")}</span> · ${a.lane_count || 0} lanes`
+      : "no active profile";
+  }
+
+  // Trade Blotter — today's trade count + net R
+  const tradeHost = _ensureSummaryHost("trades-section", ".sec-hd");
+  if (tradeHost) {
+    const badgeText = ($("trades-badge")?.textContent || "").trim();
+    if (badgeText === "·") {
+      tradeHost.innerHTML = `<span class="warn">journal locked — session writing</span>`;
+    } else if (badgeText === "!") {
+      tradeHost.innerHTML = `<span class="neg">load error</span>`;
+    } else {
+      const rows = document.querySelectorAll("#trade-log tr[data-trade]");
+      const n = rows.length;
+      // pnl_r aggregate if present
+      let rSum = 0, rCount = 0;
+      rows.forEach(r => {
+        const rv = parseFloat(r.getAttribute("data-r") || "NaN");
+        if (!Number.isNaN(rv)) { rSum += rv; rCount++; }
+      });
+      if (n === 0) {
+        tradeHost.innerHTML = "no trades today";
+      } else {
+        const cls = rSum > 0 ? "pos" : rSum < 0 ? "neg" : "";
+        const rTxt = rCount ? ` · <span class="${cls}">${rSum >= 0 ? "+" : ""}${rSum.toFixed(2)}R</span>` : "";
+        tradeHost.innerHTML = `${n} trade${n === 1 ? "" : "s"}${rTxt}`;
+      }
+    }
+  }
+
+  // Operator State — "N/M checks pass" 1-line summary when collapsed
+  const opShell = $("operator-shell");
+  if (opShell && document.body.classList.contains("cockpit")) {
+    let opHost = opShell.querySelector(".cockpit-summary");
+    if (!opHost) {
+      opHost = document.createElement("span");
+      opHost.className = "cockpit-summary";
+      const top = opShell.querySelector(".operator-shell-top");
+      if (top) top.appendChild(opHost);
+    }
+    if (opHost) {
+      const checks = (lastOperatorState?.checks) || [];
+      const pass = checks.filter(c => String(c.status || "").toLowerCase() === "pass").length;
+      const fail = checks.filter(c => ["fail","error","blocked"].includes(String(c.status || "").toLowerCase())).length;
+      const warn = checks.filter(c => ["warn","warning","stale","degraded"].includes(String(c.status || "").toLowerCase())).length;
+      if (checks.length === 0) {
+        opHost.innerHTML = "";
+      } else {
+        const parts = [`<span class="pos">${pass}</span>/${checks.length} pass`];
+        if (warn) parts.push(`<span class="warn">${warn} warn</span>`);
+        if (fail) parts.push(`<span class="neg">${fail} fail</span>`);
+        opHost.innerHTML = parts.join(" · ");
+      }
+    }
+  }
+}
+
+/* Operator shell + alerts shell: click-to-expand */
+function toggleCockpitPanel(id) {
+  const el = $(id);
+  if (!el) return;
+  el.classList.toggle("open");
+}
+
+function initCockpit() {
+  // Activate cockpit mode body class (enables CSS rules)
+  document.body.classList.add("cockpit");
+
+  // Collapse Profiles + Trade Blotter by default
+  const sec = (id) => $(id);
+  ["profiles-section","trades-section"].forEach(id => {
+    const el = sec(id);
+    if (el && !el.classList.contains("collapsed")) el.classList.add("collapsed");
+  });
+
+  // Make operator-shell and alerts-shell header clickable
+  const opTop = document.querySelector("#operator-shell .operator-shell-top");
+  if (opTop) opTop.addEventListener("click", () => toggleCockpitPanel("operator-shell"));
+  const alTop = document.querySelector("#alerts-shell .alerts-shell-top");
+  if (alTop) alTop.addEventListener("click", () => toggleCockpitPanel("alerts-shell"));
+
+  // Auto-expand alerts shell if CRITICAL alerts present (will be re-evaluated in renderAlerts)
+}
+
+/* Auto-expand alerts-shell when critical count > 0 */
+function autoExpandAlertsIfCritical() {
+  const shell = $("alerts-shell");
+  if (!shell) return;
+  const counts = lastAlertsData?.summary?.counts || {};
+  const critical = Number(counts.critical || 0);
+  // Check if there are un-dismissed criticals
+  const alerts = Array.isArray(lastAlertsData?.alerts) ? lastAlertsData.alerts : [];
+  const dismissed = getDismissedAlerts();
+  const critActive = alerts.filter(a => String(a.level || "").toLowerCase() === "critical" && !dismissed.has(alertFingerprint(a))).length;
+  if (critActive > 0) shell.classList.add("open");
+}
+
+/* Tier 1.3 — broker connection health dot in topbar */
+let _lastBrokerHealth = null;
+async function fetchBrokerHealth() {
+  try {
+    const d = await (await fetch("/api/broker/list")).json();
+    _lastBrokerHealth = d;
+    renderConnHealthDot(d?.connections || []);
+  } catch (e) {
+    renderConnHealthDot(null, e.message || "failed");
+  }
+}
+function renderConnHealthDot(connections, errorMsg) {
+  const dot = $("conn-health-dot");
+  if (!dot) return;
+  if (errorMsg) {
+    dot.className = "conn-health-dot err";
+    dot.title = `Broker connections: ${errorMsg}`;
+    return;
+  }
+  const list = Array.isArray(connections) ? connections : [];
+  const enabled = list.filter(c => c.enabled !== false);
+  if (enabled.length === 0) {
+    dot.className = "conn-health-dot unknown";
+    dot.title = list.length === 0 ? "No broker connections configured" : "All broker connections disabled";
+    return;
+  }
+  const connected = enabled.filter(c => String(c.status || "").toLowerCase() === "connected");
+  const errored = enabled.filter(c => c.last_error && String(c.status || "").toLowerCase() !== "connected");
+
+  let cls, title;
+  if (connected.length === enabled.length) {
+    cls = "ok";
+    title = `${connected.length}/${enabled.length} broker(s) connected: ${enabled.map(c => c.display_name).join(", ")}`;
+  } else if (errored.length > 0) {
+    cls = "err";
+    const names = errored.map(c => `${c.display_name} (${c.last_error?.slice(0, 60) || "error"})`).join("; ");
+    title = `Broker error: ${names}`;
+  } else {
+    cls = "warn";
+    const disconnected = enabled.filter(c => String(c.status || "").toLowerCase() !== "connected");
+    title = `${connected.length}/${enabled.length} connected. Waiting: ${disconnected.map(c => c.display_name).join(", ")}`;
+  }
+  dot.className = `conn-health-dot ${cls}`;
+  dot.title = title;
+}
+
+async function fetchSessions() {
+  try {
+    const data = await (await fetch("/api/sessions")).json();
+    _lastSessionsData = data;
+    for (const s of (data.sessions || [])) sessionCountdowns[s.name] = s.minutes_away;
+    const tlData = (data.sessions || []).map(s => ({
+      name: s.name,
+      short_name: s.name.replace("_OPEN", "").replace("_SETTLE", "").replace("CME_", "").replace("COMEX_", "").substring(0, 8),
+      time: s.hour != null ? `${String(s.hour).padStart(2, "0")}:${String(s.minute).padStart(2, "0")}` : "",
+      minutes_away: s.minutes_away,
+    }));
+    renderTimeline(tlData, data.next?.name || "");
+    if (!data.next) { setText("next-session", "No upcoming"); setText("next-session-detail", ""); }
+    else {
+      const next = data.next;
+      setText("next-session", `${next.name} · ${String(next.hour).padStart(2, "0")}:${String(next.minute).padStart(2, "0")}`);
+      setText("next-session-detail", getCountdownText(next.name) || "");
+    }
+    try { renderHero(); } catch (_) {}
+  } catch (_) {}
+}
+
+async function fetchDataStatus() {
+  try {
+    const data = await (await fetch("/api/data-status")).json();
+    const btn = $("btn-refresh");
+    if (data.error) {
+      const s = data.error.includes("Cannot open file") ? {h: "DB Busy", d: "gold.db locked"} : {h: "Error", d: data.error};
+      setText("data-status", s.h); setText("data-status-detail", s.d); btn.className = "topbar-btn warn"; return;
+    }
+    const parts = []; for (const [inst, info] of Object.entries(data.instruments || {})) parts.push(`${inst} ${info.last_bar_date || "?"}`);
+    setText("data-status", data.any_stale ? "Stale" : "Current");
+    $("data-status").className = `metric-val sm ${data.any_stale ? "warning" : "positive"}`;
+    setText("data-status-detail", parts.join(" · "));
+    if (data.any_stale) { btn.className = "topbar-btn danger pulse"; if (!autoRefreshTriggered && !refreshPolling) { autoRefreshTriggered = true; btn.click(); } }
+    else { btn.className = "topbar-btn warn"; }
+  } catch (_) {}
+}
+
+/* ── Signal Strip ──────────────────── */
+function renderSignalStrip(lanes, mode) {
+  const body = $("signal-strip-body");
+  const hint = document.querySelector(".signal-strip-hint");
+  const badge = $("signal-strip-badge");
+
+  if (!lanes.length || mode === "STOPPED") {
+    body.innerHTML = '<div class="sig-no-data">No session running — click Signal on your profile to start monitoring</div>';
+    if (hint) hint.style.display = "";
+    badge.textContent = "";
+    return;
+  }
+
+  if (hint) hint.style.display = "none";
+  const sorted = [...lanes].sort((a, b) => timeSortKey(a.session_time_brisbane) - timeSortKey(b.session_time_brisbane));
+
+  let signalCount = 0;
+  let html = '<table class="signal-table"><thead><tr><th>Time</th><th>Session</th><th>Instr</th><th>Status</th><th>Dir</th><th class="r">Entry</th><th class="r">Stop</th><th class="r">Target</th><th>Setup</th></tr></thead><tbody>';
+
+  for (const l of sorted) {
+    const st = l.status || "WAITING";
+    const isSignal = st === "IN_TRADE" || (st === "ARMED" && l.direction);
+    const isArmed = st === "ARMED" && !l.direction;
+    if (isSignal) signalCount++;
+
+    // Status dot class
+    let dotClass = "waiting";
+    if (st === "ARMED") dotClass = l.direction ? "signal" : "armed";
+    else if (st === "IN_TRADE") dotClass = "in-trade";
+    else if (st === "FLAT") dotClass = "flat";
+
+    // Status label
+    let statusLabel = st;
+    if (st === "WAITING") statusLabel = "WAIT";
+    if (st === "ARMED" && l.direction) statusLabel = "SIGNAL";
+
+    const dir = l.direction ? String(l.direction).toUpperCase() : "—";
+    const dirClass = dir === "LONG" ? "positive" : dir === "SHORT" ? "negative" : "muted";
+
+    // Compute stop and target from entry + rr_target + direction
+    let stopPrice = "—", targetPrice = "—";
+    if (l.entry_price != null && l.rr_target != null) {
+      // Estimate stop distance from ORB (entry_price is the breakout level)
+      // For E2: stop = other side of ORB. We don't have orb_high/low here,
+      // but we can show entry ± estimated distance based on instrument tick size
+      stopPrice = fmtPrice(l.stop_price || l.entry_price); // will show entry if no stop
+      const rr = Number(l.rr_target);
+      if (l.direction === "long" && l.stop_price) {
+        const risk = l.entry_price - l.stop_price;
+        targetPrice = fmtPrice(l.entry_price + risk * rr);
+      } else if (l.direction === "short" && l.stop_price) {
+        const risk = l.stop_price - l.entry_price;
+        targetPrice = fmtPrice(l.entry_price - risk * rr);
+      }
+    }
+
+    const setup = `${l.entry_model || "?"} | RR${l.rr_target || "?"} | ${l.filter_type || "?"}`;
+    const rowClass = isSignal ? "sig-row-signal" : isArmed ? "sig-row-armed" : "";
+
+    html += `<tr class="${rowClass}">
+      <td class="m">${l.session_time_brisbane || "?"}</td>
+      <td>${l.session_name || "?"}</td>
+      <td><strong>${l.instrument || "?"}</strong></td>
+      <td><span class="sig-dot ${dotClass}"></span>${statusLabel}</td>
+      <td class="${dirClass}">${dir}</td>
+      <td class="r">${l.entry_price != null ? fmtPrice(l.entry_price) : "—"}</td>
+      <td class="r">${stopPrice}</td>
+      <td class="r">${targetPrice}</td>
+      <td class="muted" style="font-size:11px">${setup}</td>
+    </tr>`;
+  }
+
+  html += '</tbody></table>';
+  body.innerHTML = html;
+  badge.textContent = signalCount > 0 ? `${signalCount} active` : `${lanes.length} lanes`;
+}
+
+/* ── Equity: fetch + render ──────────── */
+function getAllAccounts(data) {
+  const all = [];
+  for (const b of (data.brokers || [])) {
+    if (b.error) continue;
+    for (const a of (b.accounts || [])) all.push(a);
+  }
+  return all;
+}
+
+function getTradeableAccounts(data) {
+  return getAllAccounts(data).filter(a => a.status === "tradeable");
+}
+
+function getSelectedAccount(data) {
+  const tradeable = getTradeableAccounts(data);
+  if (!tradeable.length) return null;
+  if (selectedAccountId) {
+    const match = tradeable.find(a => a.id === selectedAccountId);
+    if (match) return match;
+    // Selected account went non-tradeable (blown/restricted) — warn and fallback
+    showEquityError(`Account ${selectedAccountId} no longer tradeable — switched to ${tradeable[0].name}`);
+    selectedAccountId = tradeable[0].id;
+    try { localStorage.setItem("orb_selected_acct", String(selectedAccountId)); } catch (_) {}
+  }
+  return tradeable[0];
+}
+
+function updateMetricsFromEquity(data) {
+  const acct = getSelectedAccount(data);
+  const balanceEl = $("metric-balance");
+  const balanceSubEl = $("metric-balance-sub");
+
+  if (!acct) {
+    balanceEl.textContent = "—";
+    balanceEl.className = "metric-val muted";
+    balanceSubEl.textContent = "no tradeable accounts";
+    return;
+  }
+
+  balanceEl.textContent = fmtDollar(acct.balance);
+  balanceEl.className = `metric-val ${acct.balance != null && acct.balance > 0 ? "positive" : "muted"}`;
+  balanceSubEl.textContent = `${acct.broker_display} · realized`;
+
+  // DD from HWM (correct trailing DD, not starting balance)
+  if (acct.hwm != null && acct.balance != null) {
+    const ddUsed = Math.max(0, acct.hwm - acct.balance);
+    const ddLeftEl = $("metric-dd-left");
+    // Use profile max_dd if available, otherwise estimate from account name
+    const maxDd = activeProfileData ? activeProfileData.max_dd : 2000;
+    const ddRemaining = Math.max(0, maxDd - ddUsed);
+    ddLeftEl.textContent = fmtDollar(ddRemaining);
+    ddLeftEl.className = `metric-val ${ddRemaining < maxDd * 0.2 ? "negative" : ddRemaining < maxDd * 0.5 ? "warning" : "positive"}`;
+    $("metric-dd-left-sub").textContent = `HWM ${fmtDollar(acct.hwm)}`;
+    $("metric-dd-sub").textContent = `${fmtDollar(ddUsed)} of ${fmtDollar(maxDd)}`;
+  }
+
+  // Update topbar display
+  $("topbar-acct").textContent = acct.broker_display || "";
+  $("topbar-acct-detail").textContent = acct.name || "";
+  try { renderHero(); } catch (_) {}
+}
+
+function renderAccountSelector(data) {
+  const sel = $("acct-select");
+  const tradeable = getTradeableAccounts(data);
+  sel.innerHTML = "";
+  if (!tradeable.length) {
+    sel.innerHTML = '<option value="">No tradeable accounts</option>';
+    return;
+  }
+  for (const a of tradeable) {
+    const opt = document.createElement("option");
+    opt.value = String(a.id);
+    const shortName = a.name.replace(/-V2-\d+-/, " #").substring(0, 30);
+    opt.textContent = `${shortName} · ${fmtDollar(a.balance)}`;
+    if (a.id === selectedAccountId) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  // Auto-select first if none selected
+  if (!selectedAccountId && tradeable.length > 0) {
+    selectedAccountId = tradeable[0].id;
+    sel.value = String(selectedAccountId);
+    try { localStorage.setItem("orb_selected_acct", String(selectedAccountId)); } catch (_) {}
+  }
+}
+
+function renderBrokerAccounts(data) {
+  const grid = $("broker-acct-grid");
+  grid.innerHTML = "";
+  let tradeableCount = 0, archivedCount = 0;
+
+  for (const broker of (data.brokers || [])) {
+    if (broker.error) {
+      grid.innerHTML += `<div class="empty" style="color:var(--red)">${broker.display}: ${broker.error}</div>`;
+      continue;
+    }
+    for (const a of (broker.accounts || [])) {
+      if (a.status === "archived") { archivedCount++; if (!showArchived) continue; }
+      if (a.status === "tradeable") tradeableCount++;
+
+      const card = document.createElement("div");
+      card.className = "broker-acct-card";
+      if (a.id === selectedAccountId) card.classList.add("selected");
+      if (a.status === "restricted") card.classList.add("restricted");
+      if (a.status === "archived") card.style.opacity = "0.3";
+
+      const statusCls = a.status === "tradeable" ? "acct-status-tradeable" : a.status === "restricted" ? "acct-status-restricted" : "";
+      const statusLabel = a.status === "tradeable" ? "LIVE" : a.status === "restricted" ? "RESTRICTED" : "BLOWN";
+
+      card.innerHTML = `
+        <div class="acct-name">${a.name}</div>
+        <div class="acct-balance ${a.balance != null && a.balance > 0 ? "positive" : "negative"}">${a.balance != null ? fmtDollar(a.balance) : "—"}</div>
+        <div class="acct-detail">${a.broker_display} · ID: ${a.id}${a.hwm ? ` · HWM: ${fmtDollar(a.hwm)}` : ""}</div>
+        ${statusCls ? `<span class="acct-status ${statusCls}">${statusLabel}</span>` : `<span class="acct-status" style="background:rgba(71,85,105,0.15);color:var(--dim)">${statusLabel}</span>`}
+      `;
+
+      if (a.status === "tradeable") {
+        card.style.cursor = "pointer";
+        card.addEventListener("click", () => {
+          selectedAccountId = a.id;
+          $("acct-select").value = String(a.id);
+          try { localStorage.setItem("orb_selected_acct", String(a.id)); } catch (_) {}
+          if (lastEquityData) { renderBrokerAccounts(lastEquityData); updateMetricsFromEquity(lastEquityData); }
+        });
+      }
+      grid.appendChild(card);
+    }
+  }
+
+  $("broker-acct-badge").textContent = `${tradeableCount} tradeable`;
+  const archBtn = $("btn-toggle-archived");
+  if (archivedCount > 0) { archBtn.style.display = ""; archBtn.textContent = showArchived ? `Hide ${archivedCount} Archived` : `Show ${archivedCount} Archived`; }
+  else { archBtn.style.display = "none"; }
+}
+
+function showEquityError(msg) {
+  const banner = $("equity-error");
+  banner.textContent = `Equity fetch failed: ${msg}`;
+  banner.classList.add("on");
+  $("metric-balance").parentElement.classList.add("stale-indicator");
+}
+
+function clearEquityError() {
+  $("equity-error").classList.remove("on");
+  $("metric-balance").parentElement.classList.remove("stale-indicator");
+}
+
+async function fetchEquity() {
+  try {
+    const data = await (await fetch("/api/equity")).json();
+
+    // Check for per-broker errors
+    let hasError = false;
+    for (const b of (data.brokers || [])) {
+      if (b.error) { showEquityError(`${b.display}: ${b.error}`); hasError = true; }
+    }
+    if (!hasError && (data.brokers || []).length > 0) clearEquityError();
+
+    // Stale indicator — check fetched_at age
+    if (data.fetched_at) {
+      const age = (Date.now() - new Date(data.fetched_at).getTime()) / 1000;
+      if (age > 90) {
+        $("metric-balance").parentElement.classList.add("stale-indicator");
+        $("metric-balance-sub").textContent += ` · ${Math.floor(age / 60)}m ago`;
+      }
+    }
+
+    lastEquityData = data;
+    renderAccountSelector(data);
+    renderBrokerAccounts(data);
+    updateMetricsFromEquity(data);
+  } catch (e) {
+    showEquityError(e.message || "Network error");
+  }
+}
+
+/* ── Actions ────────────────────────── */
+async function launchSession(pid, firm, instr, mode) {
+  const lbl = {signal: "SIGNAL-ONLY", demo: "DEMO", live: "LIVE"};
+  const warn = mode === "live" ? "\n\nREAL MONEY." : mode === "demo" ? "\n\nPaper orders." : "\n\nSignals only.";
+  if (!confirm(`Start ${lbl[mode]}?\n\n${firm} | ${instr}\n${pid}${warn}`)) return;
+  showActivity(`${lbl[mode]} Start`, `Auto-running readiness checks for ${pid} before launch...`, mode === "live" ? "error" : "info");
+  try {
+    const d = await (await fetch(`/api/action/start?${new URLSearchParams({profile: pid, mode})}`, {method: "POST"})).json();
+    const tone = ["blocked", "handoff_wait"].includes(d.status) ? "warning" : d.status === "started" ? "success" : "info";
+    const detail = d.output ? `${d.message || d.status || "No response"}\n\n${d.output}` : (d.message || d.status || "No response");
+    showActivity(`${lbl[mode]} ${String(d.status || "").toUpperCase()}`, detail, tone);
+    if (d.pid) appendActivity(`PID: ${d.pid}`);
+    setTimeout(fetchOperatorState, 1000);
+  }
+  catch (e) { appendActivity("Error: " + e.message); }
+}
+$("btn-refresh").addEventListener("click", async () => {
+  showActivity("Refresh", "Starting data refresh...", "info");
+  try {
+    const d = await (await fetch("/api/action/refresh", {method: "POST"})).json();
+    const tone = d.status === "blocked" ? "warning" : d.status === "started" ? "success" : "info";
+    showActivity(`Refresh ${String(d.status || "").toUpperCase()}`, d.message || d.status, tone);
+    if ((d.status === "started" || d.status === "running") && !refreshPolling) {
+      refreshPolling = true;
+      const poll = setInterval(async () => {
+        try { const s = await (await fetch("/api/action/refresh-status")).json(); if (s.status === "done") { appendActivity("\nDone."); clearInterval(poll); refreshPolling = false; fetchDataStatus(); } else if (s.status === "failed") { appendActivity("\nFailed:\n" + (s.output || "Unknown")); clearInterval(poll); refreshPolling = false; } } catch (_) {}
+      }, 3000);
+    }
+  } catch (e) { appendActivity("Error: " + e.message); }
+});
+
+$("btn-preflight").addEventListener("click", async () => {
+  showActivity("Preflight", "Running checks...", "info");
+  try {
+    const q = new URLSearchParams();
+    const profile = runningProfile || activeProfileData?.profile_id;
+    if (profile) q.set("profile", profile);
+    const d = await (await fetch(`/api/action/preflight?${q.toString()}`, {method: "POST"})).json();
+    const tone = d.status === "pass" ? "success" : d.status === "warn" || d.status === "blocked" ? "warning" : "error";
+    showActivity(`Preflight ${String(d.status || "").toUpperCase()}`, d.output || "No output", tone);
+    fetchOperatorState();
+  }
+  catch (e) { appendActivity("Error: " + e.message); }
+});
+
+$("btn-kill").addEventListener("click", async () => {
+  if (!confirm("KILL ALL TRADES?\nStops bot, closes positions at market.")) return;
+  if (!confirm("SECOND CONFIRMATION: Are you sure?")) return;
+  try { const d = await (await fetch("/api/action/kill", {method: "POST"})).json(); showActivity("Kill", d.message || "Kill sent", "error"); setTimeout(fetchOperatorState, 1000); }
+  catch (e) { showActivity("Kill", "Failed: " + e.message, "error"); }
+});
+
+$("btn-close-activity").addEventListener("click", () => { $("activity-panel").style.display = "none"; });
+
+/* ── Tab Switching ──────────────────── */
+function switchTab(name) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.toggle("active", c.id === `tab-${name}`));
+  try { localStorage.setItem("orb_active_tab", name); } catch (_) {}
+  if (name === "connections") fetchBrokerList();
+}
+
+function restoreTab() {
+  try { const t = localStorage.getItem("orb_active_tab"); if (t === "connections") switchTab("connections"); } catch (_) {}
+}
+
+/* ── Connections Page ──────────────── */
+let brokerTypes = {};
+let showArchivedConns = {};
+
+async function fetchBrokerList() {
+  try {
+    const data = await (await fetch("/api/broker/list")).json();
+    brokerTypes = data.broker_types || {};
+    renderConnections(data.connections || []);
+  } catch (e) {
+    $("conn-list").innerHTML = `<div class="conn-error-msg">Failed to load connections: ${e.message}</div>`;
+  }
+}
+
+function renderConnections(connections) {
+  const list = $("conn-list");
+  list.innerHTML = "";
+
+  if (!connections.length) {
+    list.innerHTML = '<div class="conn-empty"><div class="conn-empty-title">No broker connections</div><div>Click "+ Add Connection" to connect your first broker</div></div>';
+    return;
+  }
+
+  for (const conn of connections) {
+    const card = document.createElement("div");
+    const statusClass = !conn.enabled ? "disabled" : conn.status === "connected" ? "connected" : "error";
+    card.className = `conn-card ${statusClass}`;
+
+    const statusLabel = !conn.enabled ? "DISABLED" : conn.status.toUpperCase();
+    const statusCls = !conn.enabled ? "s-disabled" : conn.status === "connected" ? "s-connected" : "s-error";
+
+    let meta = `${conn.broker_type} · ${conn.source === "env" ? "from .env" : "added via UI"}`;
+    if (conn.connected_at) meta += ` · since ${conn.connected_at.substring(11, 19)}`;
+    if (conn.account_count > 0) meta += ` · ${conn.account_count} tradeable`;
+
+    let errorHtml = "";
+    if (conn.last_error && conn.enabled) {
+      errorHtml = `<div class="conn-error-msg">${conn.last_error}</div>`;
+    }
+
+    card.innerHTML = `
+      <div class="conn-top">
+        <span class="conn-name">${conn.display_name}</span>
+        <span class="conn-status ${statusCls}">${statusLabel}</span>
+      </div>
+      <div class="conn-meta">${meta}</div>
+      ${errorHtml}
+    `;
+
+    // Action buttons
+    const actions = document.createElement("div");
+    actions.className = "conn-actions";
+    if (conn.enabled) {
+      const disableBtn = document.createElement("button");
+      disableBtn.className = "conn-btn"; disableBtn.textContent = "Disable";
+      disableBtn.addEventListener("click", () => toggleConn(conn.id));
+      actions.appendChild(disableBtn);
+    } else {
+      const enableBtn = document.createElement("button");
+      enableBtn.className = "conn-btn"; enableBtn.textContent = "Enable";
+      enableBtn.addEventListener("click", () => toggleConn(conn.id));
+      actions.appendChild(enableBtn);
+    }
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "conn-btn danger"; removeBtn.textContent = "Remove";
+    removeBtn.addEventListener("click", () => removeConn(conn.id, conn.display_name));
+    actions.appendChild(removeBtn);
+    card.appendChild(actions);
+
+    // Account cards (from equity data)
+    if (conn.enabled && lastEquityData) {
+      const broker = (lastEquityData.brokers || []).find(b => b.connection_id === conn.id);
+      if (broker && broker.accounts && broker.accounts.length > 0) {
+        const acctGrid = document.createElement("div");
+        acctGrid.className = "conn-accts";
+        const showArchived = showArchivedConns[conn.id] || false;
+        let archivedCount = 0;
+
+        for (const a of broker.accounts) {
+          if (a.status === "archived") { archivedCount++; if (!showArchived) continue; }
+          const acctCard = document.createElement("div");
+          acctCard.className = `conn-acct ${a.id === selectedAccountId ? "selected" : ""} ${a.status === "archived" ? "archived" : ""}`;
+
+          const chipBg = a.status === "tradeable" ? "var(--green-soft)" : a.status === "restricted" ? "var(--yellow-soft)" : "rgba(71,85,105,0.15)";
+          const chipColor = a.status === "tradeable" ? "var(--green)" : a.status === "restricted" ? "var(--yellow)" : "var(--dim)";
+          const chipLabel = a.status === "tradeable" ? "LIVE" : a.status === "restricted" ? "RESTRICTED" : "BLOWN";
+          const shortName = a.name.replace(/-V2-\d+-/, " #").substring(0, 25);
+
+          acctCard.innerHTML = `
+            <div class="conn-acct-name">${shortName}</div>
+            <div class="conn-acct-bal ${a.balance > 0 ? "positive" : "negative"}">${a.balance != null ? fmtDollar(a.balance) : "—"}</div>
+            <div class="conn-acct-detail">Realized · HWM: ${a.hwm ? fmtDollar(a.hwm) : "—"}${a.hwm && a.balance ? ` · DD: ${fmtDollar(Math.max(0, a.hwm - a.balance))}` : ""}</div>
+            <span class="conn-acct-chip" style="background:${chipBg};color:${chipColor}">${chipLabel}</span>
+          `;
+
+          if (a.status === "tradeable") {
+            acctCard.addEventListener("click", () => {
+              selectedAccountId = a.id;
+              $("acct-select").value = String(a.id);
+              try { localStorage.setItem("orb_selected_acct", String(a.id)); } catch (_) {}
+              if (lastEquityData) { updateMetricsFromEquity(lastEquityData); }
+              fetchBrokerList(); // re-render to update selection highlight
+            });
+          }
+          acctGrid.appendChild(acctCard);
+        }
+        card.appendChild(acctGrid);
+
+        if (archivedCount > 0) {
+          const toggleBtn = document.createElement("button");
+          toggleBtn.className = "conn-btn";
+          toggleBtn.style.marginTop = "8px";
+          toggleBtn.textContent = showArchived ? `Hide ${archivedCount} archived` : `Show ${archivedCount} archived`;
+          toggleBtn.addEventListener("click", () => { showArchivedConns[conn.id] = !showArchivedConns[conn.id]; fetchBrokerList(); });
+          card.appendChild(toggleBtn);
+        }
+      }
+    }
+
+    list.appendChild(card);
+  }
+}
+
+async function toggleConn(connId) {
+  try {
+    await fetch("/api/broker/toggle", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id: connId})});
+    fetchBrokerList();
+    fetchEquity();
+  } catch (e) { alert("Toggle failed: " + e.message); }
+}
+
+async function removeConn(connId, displayName) {
+  const input = prompt(`Type "${displayName}" to confirm removal:`);
+  if (input !== displayName) return;
+  try {
+    await fetch("/api/broker/remove", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id: connId})});
+    fetchBrokerList();
+    fetchEquity();
+  } catch (e) { alert("Remove failed: " + e.message); }
+}
+
+/* ── Add Connection Form ───────────── */
+let addFormBrokerType = "";
+let addFormTested = false;
+
+function openAddForm() {
+  const form = $("add-form");
+  form.classList.add("open");
+  addFormTested = false;
+  $("btn-save-conn").disabled = true;
+  $("add-result").classList.remove("on");
+
+  // Render broker type selector
+  const selector = $("broker-type-selector");
+  selector.innerHTML = "";
+  for (const [key, spec] of Object.entries(brokerTypes)) {
+    const btn = document.createElement("button");
+    btn.className = "broker-type-btn";
+    btn.textContent = spec.display;
+    btn.addEventListener("click", () => selectBrokerType(key));
+    selector.appendChild(btn);
+  }
+  $("add-fields").innerHTML = '<div class="conn-meta">Select a broker type above</div>';
+}
+
+function closeAddForm() {
+  $("add-form").classList.remove("open");
+  addFormBrokerType = "";
+  addFormTested = false;
+}
+
+function selectBrokerType(type) {
+  addFormBrokerType = type;
+  addFormTested = false;
+  $("btn-save-conn").disabled = true;
+  $("add-result").classList.remove("on");
+
+  document.querySelectorAll(".broker-type-btn").forEach(b => b.classList.toggle("selected", b.textContent === brokerTypes[type]?.display));
+
+  const spec = brokerTypes[type];
+  if (!spec) return;
+
+  let html = '<div class="add-field"><label>Display Name</label><input type="text" id="add-display-name" placeholder="My TopStep Account"></div>';
+  for (const f of spec.fields) {
+    const val = f.default || "";
+    const inputType = f.type === "password" ? "password" : "text";
+    const req = f.required ? " *" : "";
+    html += `<div class="add-field"><label>${f.label}${req}</label><input type="${inputType}" id="add-${f.key}" value="${val}" placeholder="${f.label}"></div>`;
+  }
+  $("add-fields").innerHTML = html;
+}
+
+async function testConnection() {
+  if (!addFormBrokerType) return;
+  const spec = brokerTypes[addFormBrokerType];
+  const credentials = {};
+  for (const f of spec.fields) {
+    const el = $(`add-${f.key}`);
+    if (el) credentials[f.key] = el.value;
+  }
+
+  const result = $("add-result");
+  result.textContent = "Testing...";
+  result.className = "add-result on";
+
+  try {
+    const data = await (await fetch("/api/broker/test", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({broker_type: addFormBrokerType, credentials}),
+    })).json();
+
+    if (data.success) {
+      result.textContent = "Connected successfully";
+      result.className = "add-result on success";
+      addFormTested = true;
+      $("btn-save-conn").disabled = false;
+    } else {
+      result.textContent = `Failed: ${data.message}`;
+      result.className = "add-result on fail";
+      addFormTested = false;
+      $("btn-save-conn").disabled = true;
+    }
+  } catch (e) {
+    result.textContent = `Error: ${e.message}`;
+    result.className = "add-result on fail";
+  }
+}
+
+async function saveConnection() {
+  if (!addFormBrokerType || !addFormTested) return;
+  const spec = brokerTypes[addFormBrokerType];
+  const credentials = {};
+  for (const f of spec.fields) {
+    const el = $(`add-${f.key}`);
+    if (el) credentials[f.key] = el.value;
+  }
+  const displayName = $("add-display-name")?.value || addFormBrokerType;
+
+  try {
+    const data = await (await fetch("/api/broker/add", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({broker_type: addFormBrokerType, display_name: displayName, credentials}),
+    })).json();
+
+    if (data.success) {
+      closeAddForm();
+      fetchBrokerList();
+      fetchEquity();
+    } else {
+      const result = $("add-result");
+      result.textContent = `Save failed: ${data.error}`;
+      result.className = "add-result on fail";
+    }
+  } catch (e) {
+    const result = $("add-result");
+    result.textContent = `Error: ${e.message}`;
+    result.className = "add-result on fail";
+  }
+}
+
+/* ── Trade Book + Paused Lanes ──────────────────────────── */
+function toggleTradeBook() {
+  const sec = document.getElementById("trade-book-section");
+  if (!sec) return;
+  sec.classList.toggle("hidden");
+  if (!sec.classList.contains("hidden")) fetchTradeBook();
+}
+function fmt(v) { return (v === null || v === undefined || v === "") ? "" : v; }
+function fmtNum(v, d) { if (v === null || v === undefined || v === "") return ""; const n = Number(v); return isFinite(n) ? n.toFixed(d ?? 2) : ""; }
+async function fetchTradeBook() {
+  const liveBody = document.getElementById("trade-book-live-body");
+  const paperBody = document.getElementById("trade-book-paper-body");
+  const liveNoteEl = document.getElementById("trade-book-live-note");
+  const paperNoteEl = document.getElementById("trade-book-paper-note");
+  const badge = document.getElementById("trade-book-badge");
+  const summary = document.getElementById("trade-book-summary");
+  try {
+    const data = await (await fetch("/api/trade-book")).json();
+    const live = data.live_trades || [];
+    const paper = data.paper_trades || [];
+    if (liveNoteEl) liveNoteEl.textContent = data.live_note || "";
+    if (paperNoteEl) {
+      const baseNote = data.paper_note || "";
+      if (data.paper_truncated) {
+        const total = data.paper_total_count;
+        paperNoteEl.textContent = baseNote + (baseNote ? " · " : "") + `showing first 5000 of ${total}`;
+      } else {
+        paperNoteEl.textContent = baseNote;
+      }
+    }
+    if (badge) badge.textContent = `${live.length} live · ${paper.length} paper`;
+    if (summary) summary.textContent = `live=${live.length} paper=${paper.length}`;
+    if (liveBody) {
+      liveBody.innerHTML = live.length === 0
+        ? `<tr><td colspan="12" class="muted">No real broker fills</td></tr>`
+        : live.map(t => `<tr>
+            <td>${escapeHtml(fmt(t.created_at))}</td><td>${escapeHtml(fmt(t.trading_day))}</td><td>${escapeHtml(fmt(t.instrument))}</td>
+            <td>${escapeHtml(fmt(t.strategy_id))}</td><td>${escapeHtml(fmt(t.direction))}</td><td>${escapeHtml(fmt(t.entry_model))}</td>
+            <td class="r">${escapeHtml(fmtNum(t.fill_entry, 2))}</td><td class="r">${escapeHtml(fmtNum(t.fill_exit, 2))}</td>
+            <td class="r">${escapeHtml(fmtNum(t.actual_r, 2))}</td><td class="r">${escapeHtml(fmtNum(t.pnl_dollars, 2))}</td>
+            <td>${escapeHtml(fmt(t.exit_reason))}</td><td>${escapeHtml(fmt(t.broker))}</td></tr>`).join("");
+    }
+    if (paperBody) {
+      paperBody.innerHTML = paper.length === 0
+        ? `<tr><td colspan="15" class="muted">No paper trades</td></tr>`
+        : paper.map(t => `<tr>
+            <td>${escapeHtml(fmt(t.trading_day))}</td><td>${escapeHtml(fmt(t.instrument))}</td><td>${escapeHtml(fmt(t.strategy_id))}</td>
+            <td>${escapeHtml(fmt(t.lane_name))}</td><td>${escapeHtml(fmt(t.direction))}</td><td>${escapeHtml(fmt(t.entry_model))}</td>
+            <td>${escapeHtml(fmt(t.orb_label))}</td><td class="r">${escapeHtml(fmtNum(t.rr_target, 1))}</td><td>${escapeHtml(fmt(t.filter_type))}</td>
+            <td class="r">${escapeHtml(fmtNum(t.entry_price, 2))}</td><td class="r">${escapeHtml(fmtNum(t.exit_price, 2))}</td>
+            <td class="r">${escapeHtml(fmtNum(t.pnl_r, 2))}</td><td class="r">${escapeHtml(fmtNum(t.pnl_dollar, 2))}</td>
+            <td>${escapeHtml(fmt(t.exit_reason))}</td><td>${escapeHtml(fmt(t.execution_source))}</td></tr>`).join("");
+    }
+  } catch (e) {
+    if (liveBody) liveBody.innerHTML = `<tr><td colspan="12" class="muted">Fetch failed: ${escapeHtml(String(e))}</td></tr>`;
+    if (paperBody) paperBody.innerHTML = `<tr><td colspan="15" class="muted">Fetch failed: ${escapeHtml(String(e))}</td></tr>`;
+  }
+}
+async function fetchLaneStatus() {
+  const badge = document.getElementById("lanes-paused-badge");
+  if (!badge) return;
+  try {
+    const data = await (await fetch("/api/lane-status")).json();
+    const n = Number(data.paused_count || 0);
+    if (n > 0) {
+      badge.style.display = "";
+      const reasons = (data.paused || []).map(p => `${p.strategy_id}${p.reason ? " — " + p.reason : ""}${p.expires_on ? " (until " + p.expires_on + ")" : ""}`).join("\n");
+      badge.textContent = `${n} paused`;
+      badge.title = reasons || "paused lanes";
+    } else {
+      badge.style.display = "none";
+      badge.textContent = "";
+      badge.title = "";
+    }
+  } catch (_) {
+    badge.style.display = "none";
+  }
+}
+
+/* ── Init ───────────────────────────── */
+restoreSections();
+restoreTab();
+initAccountSelector();
+try { localStorage.removeItem("orb_sections"); } catch (_) {} // migrate old key
+initCockpit();
+fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth(); fetchLaneStatus();
+setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000); setInterval(fetchEquity, 30000); setInterval(fetchOperatorState, 5000); setInterval(fetchAlerts, 5000); setInterval(fetchLaneStatus, 60000);
+// Tier 1.3 — broker health dot (topbar) polled regardless of tab
+setInterval(fetchBrokerHealth, 30000);
+// Auto-refresh broker list when on Connections tab
+setInterval(() => { if ($("tab-connections")?.classList.contains("active")) fetchBrokerList(); }, 30000);
+</script>
+</body>
+</html>

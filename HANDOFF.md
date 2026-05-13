@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-14
-- **Commit:** 2f8b34b8 — docs: sync HANDOFF + park 2026-05-12 control-plane plan
+- **Commit:** 32c2065d — harden: verdict-vocab drift check — fix runner-crash class + intersection-order + layout-lock
 - **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `docs/plans/2026-05-12-agent-control-plane-evaluation.md`
+  - `pipeline/check_drift.py`
+  - `tests/test_pipeline/test_check_drift.py`
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).

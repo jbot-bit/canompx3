@@ -1195,7 +1195,95 @@ def _start_broker_connect_background(connection_manager: object) -> None:
     threading.Thread(target=_worker, name="dashboard-broker-connect", daemon=True).start()
 
 
+# ── Signal-history helpers (Stage 1 of cockpit-v3) ────────────────────────────
+# SIGNALS_DIR pins coupling to session_orchestrator.py:296 — both must derive
+# the same path or the dashboard reads from a different log than the orchestrator
+# writes. Project root = Path(__file__).parent.parent.parent.
+SIGNALS_DIR: Path = PROJECT_ROOT
+
+
+def _read_recent_signals(limit: int = 50, since_ts: str | None = None) -> list[dict]:
+    """Read recent live-signal records from today's partition file.
+
+    Returns at most ``limit`` records, newest first. ``since_ts`` (ISO-8601 UTC)
+    filters to records strictly after that timestamp. Tolerates missing file
+    by returning []. Malformed lines are skipped with WARNING — institutional
+    -rigor.md § 6 forbids silent failures.
+    """
+    import json
+
+    from trading_app.live.signal_log_rotator import signals_file_for_day
+
+    today = datetime.now(UTC).date()
+    path = signals_file_for_day(SIGNALS_DIR, today)
+    if not path.exists():
+        return []
+
+    since_dt: datetime | None = None
+    if since_ts:
+        try:
+            since_dt = datetime.fromisoformat(since_ts.replace("Z", "+00:00"))
+        except ValueError:
+            log.warning("_read_recent_signals: bad since_ts %r — ignoring filter", since_ts)
+            since_dt = None
+
+    records: list[dict] = []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line_num, raw in enumerate(fh, start=1):
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    log.warning(
+                        "_read_recent_signals: skipped malformed line %d in %s: %s",
+                        line_num,
+                        path.name,
+                        exc,
+                    )
+                    continue
+                if since_dt is not None:
+                    rec_ts_raw = rec.get("ts")
+                    if isinstance(rec_ts_raw, str):
+                        try:
+                            rec_ts = datetime.fromisoformat(rec_ts_raw.replace("Z", "+00:00"))
+                            if rec_ts <= since_dt:
+                                continue
+                        except ValueError:
+                            pass
+                records.append(rec)
+    except OSError as exc:
+        log.error("_read_recent_signals: could not read %s: %s", path, exc)
+        return []
+
+    records.reverse()
+    return records[:limit]
+
+
 # ── API Endpoints ─────────────────────────────────────────────────────────────
+
+
+@app.get("/api/signals-recent")
+async def api_signals_recent(limit: int = 50, since: str | None = None):
+    """Return recent live-signal records from today's partition file.
+
+    Query params:
+      limit (int, default 50, max 500) — newest first
+      since (ISO-8601 UTC, optional) — only records strictly after this ts
+
+    Returns {"signals": [...], "server_ts": "...", "trading_day": "YYYY-MM-DD"}.
+    Tolerates missing file by returning empty list. Stage 2 builds SSE push
+    on top of this same data source.
+    """
+    capped_limit = max(1, min(int(limit), 500))
+    signals = _read_recent_signals(limit=capped_limit, since_ts=since)
+    return {
+        "signals": signals,
+        "server_ts": datetime.now(UTC).isoformat(),
+        "trading_day": datetime.now(UTC).date().isoformat(),
+    }
 
 
 @app.get("/api/status")
