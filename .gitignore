@@ -1,6 +1,9 @@
 # Hook runtime state
 .claude/hooks/.data-first-state.json
 
+# Scratch per-chapter text extracts from OCR'd PDFs (regenerable; canonical is the PDF)
+.tmp_chapters/
+
 # Database
 gold.db
 gold.db.wal
