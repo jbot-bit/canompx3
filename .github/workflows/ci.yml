@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Sunday 20:00 UTC = Monday 06:00 Brisbane (sized to land before the
+    # 06:30 LONDON_OPEN session prep). LHP fitness-transition trigger only —
+    # see scripts/cron/lhp_weekly.py and Nugget 2b plan
+    # (docs/plans/2026-05-13-ai-mcp-integration-inventory-and-gold-nuggets.md).
+    - cron: '0 20 * * 0'
 
 jobs:
   checks:
@@ -161,3 +167,33 @@ jobs:
 
       - name: Coverage threshold
         run: uv run coverage report --show-missing --fail-under=35
+
+  lhp_weekly:
+    # Sunday 06:00 Brisbane LHP fitness-transition cron. Gated to main so
+    # PR push events don't fire the job. Read-only on gold.db; the gate is
+    # an aggregate decay+watch+stale count change vs the prior snapshot.
+    # See scripts/cron/lhp_weekly.py and Nugget 2b plan.
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: LHP weekly fitness-transition check
+        # gold.db is not synced to CI by policy (CLAUDE.md "local disk, no
+        # cloud sync"). Without the DB, compute_portfolio_fitness will raise
+        # — runner reports FATAL exit 2. The job stays informational until
+        # the DB is provisioned to the runner (deferred). For now this
+        # validates the schedule wiring fires correctly on cadence.
+        run: uv run python scripts/cron/lhp_weekly.py --check-fitness-transition
+        continue-on-error: true

@@ -9,14 +9,14 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-13
-- **Commit:** 7903f6fe — chore(mcp): deprecate strategy-lab.get_recent_fitness; gold-db is canonical (Nugget 3)
+- **Commit:** 71433097 — feat(cron): LHP weekly runner foundation + dedup index (Nugget 2a)
 - **Files changed:** 6 files
-  - `.claude/rules/mcp-usage.md`
   - `HANDOFF.md`
+  - `docs/runtime/lhp_dedup_index.json`
+  - `docs/runtime/stages/nugget2a-lhp-cron-foundation.md`
   - `docs/runtime/stages/nugget3-deprecate-recent-fitness.md`
-  - `pipeline/check_drift.py`
-  - `scripts/tools/strategy_lab_mcp_server.py`
-  - `tests/test_tools/test_strategy_lab_mcp_server.py`
+  - `scripts/cron/__init__.py`
+  - `scripts/cron/lhp_weekly.py`
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
