@@ -9,9 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-13
-- **Commit:** dcad7185 — @ chore(handoff): freeze MGC LONDON_METALS verdict, point next session at MNQ
-- **Files changed:** 1 files
+- **Commit:** cac84973 — @ docs(plans): AI/MCP project-integration inventory + 7 golden nuggets
+- **Files changed:** 2 files
   - `HANDOFF.md`
+  - `docs/plans/2026-05-13-ai-mcp-integration-inventory-and-gold-nuggets.md`
 
 ## Next Steps — Active
 1. **MGC LONDON_METALS — DO NOT RE-LITIGATE.** Verdict frozen at `docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md`. Reopen only if new evidence clears one of the prereg kill criteria (K1 t_IS≥3.00 with theory grant, or K3 N_IS_on≥100). Do not re-run Phase A on alternative apertures as a back-door — that pattern is the trap.

@@ -32,6 +32,11 @@ try:
 except BaseException:  # pragma: no cover - hook fallback path (catches SystemExit too)
     read_task_route_packet = None
 
+try:
+    from pipeline.system_brief import build_system_brief
+except BaseException:  # pragma: no cover - hook fallback path (catches SystemExit too)
+    build_system_brief = None
+
 
 def _legacy_startup_lines() -> list[str]:
     lines = ["NEW SESSION — Auto-orientation:"]
@@ -626,6 +631,74 @@ def _literature_corpus_lines() -> list[str]:
         return []
 
 
+def _startup_packet_lines() -> list[str]:
+    """Compact summary of the repo-state startup packet (NUGGET 4).
+
+    Calls `pipeline.system_brief.build_system_brief` in-process — the same
+    function `repo-state` MCP `get_startup_packet` exposes. The function is
+    engineered for hook-level usage (222ms typical vs 250ms internal budget)
+    so we avoid the subprocess+timeout dance other helpers use.
+
+    Surfaces only the highest-signal fields: blocking/warning issue counts,
+    task kind, latency, budget compliance. Anything more is noise that
+    competes with /orient on session start.
+
+    Fail-silent on every error path. BaseException intentional — matches
+    the surrounding hook idiom; this line is cosmetic and must never abort
+    session start.
+    """
+    if build_system_brief is None:
+        return []
+    try:
+        brief = build_system_brief(
+            PROJECT_ROOT,
+            task_text=None,
+            task_id=None,
+            briefing_level="read_only",
+            context_name="generic",
+            active_tool="session-start-hook",
+            active_mode="read-only",
+        )
+    except BaseException:  # pragma: no cover - hook fallback path
+        return []
+    if not isinstance(brief, dict):
+        return []
+
+    blocking = brief.get("blocking_issues") or []
+    warnings = brief.get("warning_issues") or []
+    latency_ms = brief.get("startup_latency_ms")
+    budget = brief.get("orientation_cost_budget") or {}
+    within = budget.get("within_budget")
+
+    parts = []
+    if isinstance(blocking, list) and blocking:
+        parts.append(f"{len(blocking)} BLOCKING")
+    if isinstance(warnings, list) and warnings:
+        parts.append(f"{len(warnings)} warning")
+    if not parts:
+        parts.append("no blockers")
+    if isinstance(latency_ms, (int, float)):
+        budget_marker = "" if within is None else (" within budget" if within else " OVER BUDGET")
+        parts.append(f"{int(latency_ms)}ms{budget_marker}")
+
+    lines = [f"  Startup packet: {' | '.join(parts)}"]
+
+    if isinstance(blocking, list):
+        for issue in blocking[:2]:
+            if isinstance(issue, dict):
+                code = issue.get("code", "?")
+                msg = str(issue.get("message", "")).strip().splitlines()[0][:120]
+                lines.append(f"    BLOCK [{code}] {msg}")
+    if isinstance(warnings, list):
+        for issue in warnings[:2]:
+            if isinstance(issue, dict):
+                code = issue.get("code", "?")
+                msg = str(issue.get("message", "")).strip().splitlines()[0][:120]
+                lines.append(f"    warn  [{code}] {msg}")
+
+    return lines
+
+
 def _crg_context_lines() -> list[str]:
     """One-line CRG graph status: nodes, files, and freshness vs the working tree.
 
@@ -746,6 +819,7 @@ def main() -> None:
         lines.extend(_env_drift_lines())
         lines.extend(_action_queue_ready_lines())
         lines.extend(_parallel_session_lines())
+        lines.extend(_startup_packet_lines())
         lines.extend(_crg_context_lines())
         lines.extend(_literature_corpus_lines())
         lines.extend(_main_ci_status_lines())
