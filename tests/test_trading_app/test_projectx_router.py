@@ -92,6 +92,24 @@ def test_projectx_has_queryable_bracket_legs():
     assert router.has_queryable_bracket_legs() is True
 
 
+def test_projectx_supports_sequential_bracket_ids():
+    """ProjectX AutoBracket guarantees entry_id+1 = SL, entry_id+2 = TP.
+
+    The session_orchestrator emergency fallback at lines 2455-2474 reads
+    this flag to decide whether to apply the +1/+2 heuristic on a
+    verify_bracket_legs exception. Regression guard — if this flips to
+    False, the live TopStep+CopyOrderRouter+ProjectX path silently loses
+    its emergency fallback and a transient verify failure leaves
+    bracket_order_ids empty (CRITICAL alarm + no cancel IDs on exit).
+    See the adversarial-audit fix on commit ad346adf.
+    """
+    mock_auth = MagicMock()
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=123, auth=mock_auth)
+    assert router.supports_sequential_bracket_ids() is True
+
+
 def test_projectx_is_broker_router():
     mock_auth = MagicMock()
     from trading_app.live.broker_base import BrokerRouter

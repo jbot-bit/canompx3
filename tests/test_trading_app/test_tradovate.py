@@ -286,20 +286,23 @@ class TestTradovateOrderRouter:
         """Tradovate placeOSO merges bracket1/bracket2 into the entry order."""
         assert router.supports_native_brackets() is True
 
-    def test_has_queryable_bracket_legs_false(self, router):
-        """Tradovate placeOSO DOES create separately-queryable bracket1/bracket2
-        child orders, but the query path is NOT YET IMPLEMENTED in this adapter.
-        Flag is deliberately False to prevent false 'BRACKET LEGS MISSING'
-        critical alarms when Tradovate is activated.
-
-        Regression guard AND activation signal: when Tradovate activation is
-        imminent, implement verify_bracket_legs() to query placeOSO child
-        orders via the order search endpoint AND flip this flag to True. This
-        test will need updating at that point — intentional.
-
-        See trading_app/live/tradovate/order_router.py:189 TODO(tradovate-activation).
+    def test_has_queryable_bracket_legs_true(self, router):
+        """Tradovate placeOSO bracket1/bracket2 legs are now queryable via
+        ``verify_bracket_legs``. Detailed coverage of the identification
+        contract lives in ``test_tradovate_bracket_legs.py``.
         """
-        assert router.has_queryable_bracket_legs() is False
+        assert router.has_queryable_bracket_legs() is True
+
+    def test_supports_sequential_bracket_ids_false(self, router):
+        """Tradovate placeOSO returns API-assigned non-sequential leg IDs.
+
+        Inherits the conservative default from ``BrokerRouter``. The
+        session_orchestrator emergency fallback at lines 2455-2474 reads
+        this flag and skips the ``entry_id+1`` / ``entry_id+2`` guess for
+        Tradovate so the bot does not store IDs that cannot cancel real
+        orders on exit. See the adversarial-audit fix on commit 58abc30a.
+        """
+        assert router.supports_sequential_bracket_ids() is False
 
     def test_bracket_spec_long(self, router):
         bracket = router.build_bracket_spec("long", "MNQM6", 100.0, 99.0, 102.0)
