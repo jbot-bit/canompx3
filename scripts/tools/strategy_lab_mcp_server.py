@@ -283,19 +283,6 @@ def _get_lane_allocation_summary(
     }
 
 
-def _get_recent_fitness(
-    strategy_id: str,
-    rolling_months: int = 18,
-) -> dict[str, Any]:
-    if not strategy_id or not isinstance(strategy_id, str):
-        return {"error": "strategy_id is required."}
-    return {
-        "strategy_id": strategy_id,
-        "rolling_months": rolling_months,
-        "fitness": _compute_fitness_payload(strategy_id, rolling_months),
-    }
-
-
 def _list_promotable_candidates(
     instrument: str | None = None,
     rolling_months: int = 18,
@@ -394,20 +381,6 @@ def _build_server():
                     "additionalProperties": False,
                 },
                 _get_lane_allocation_summary,
-            ),
-            ToolSpec(
-                "get_recent_fitness",
-                "Rolling regime fitness for a single strategy.",
-                {
-                    "type": "object",
-                    "properties": {
-                        "strategy_id": {"type": "string"},
-                        "rolling_months": {"type": "integer", "default": 18},
-                    },
-                    "required": ["strategy_id"],
-                    "additionalProperties": False,
-                },
-                _get_recent_fitness,
             ),
             ToolSpec(
                 "list_promotable_candidates",

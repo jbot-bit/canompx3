@@ -253,22 +253,6 @@ def test_get_lane_allocation_summary_returns_active_and_paused(tmp_path: Path) -
 
 
 # ---------------------------------------------------------------------------
-# get_recent_fitness
-# ---------------------------------------------------------------------------
-
-
-def test_get_recent_fitness_blank_id() -> None:
-    assert "error" in srv._get_recent_fitness("")
-
-
-def test_get_recent_fitness_passes_through_payload() -> None:
-    with patch.object(srv, "_compute_fitness_payload", return_value=_fitness_payload("WATCH")):
-        payload = srv._get_recent_fitness("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", rolling_months=12)
-    assert payload["fitness"]["fitness_status"] == "WATCH"
-    assert payload["rolling_months"] == 12
-
-
-# ---------------------------------------------------------------------------
 # list_promotable_candidates
 # ---------------------------------------------------------------------------
 

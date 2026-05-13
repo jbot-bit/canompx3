@@ -8832,6 +8832,57 @@ def check_canonical_source_review_allowlist_complete() -> list[str]:
     return []
 
 
+def check_strategy_lab_no_fitness_endpoint() -> list[str]:
+    """`scripts/tools/strategy_lab_mcp_server.py` must NOT register a
+    `get_recent_fitness` MCP endpoint.
+
+    Origin: 2026-05-13 Nugget 3 closure. `get_recent_fitness` overlapped
+    `gold-db.get_strategy_fitness` and created two surfaces for the same
+    fact, which the project's MCP doctrine
+    (`.claude/rules/mcp-usage.md`) explicitly designates as canonical on
+    gold-db. The MCP-staleness class bug
+    (`feedback_strategy_lab_mcp_vs_lane_allocation_json_divergence.md`,
+    2026-05-13) is the proof case for why two parallel fitness surfaces
+    cannot exist.
+
+    The check AST-walks ToolSpec(...) call sites; doc/comment mentions
+    of the removed name are intentionally NOT flagged (those are
+    historical references, not registration). `_compute_fitness_payload`
+    is NOT removed — it is still consumed by `_get_strategy_readiness`
+    and `_list_promotable_candidates`.
+    """
+    target = PROJECT_ROOT / "scripts" / "tools" / "strategy_lab_mcp_server.py"
+    if not target.exists():
+        return []
+    try:
+        tree = ast.parse(target.read_text(encoding="utf-8"))
+    except SyntaxError as exc:
+        return [f"  Could not parse {target}: {exc}"]
+
+    offending: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        is_toolspec = (isinstance(func, ast.Name) and func.id == "ToolSpec") or (
+            isinstance(func, ast.Attribute) and func.attr == "ToolSpec"
+        )
+        if not is_toolspec or not node.args:
+            continue
+        first = node.args[0]
+        if isinstance(first, ast.Constant) and first.value == "get_recent_fitness":
+            offending.append(f"  Line {node.lineno}: ToolSpec re-registered 'get_recent_fitness'")
+
+    if offending:
+        return [
+            "  scripts/tools/strategy_lab_mcp_server.py re-registered the "
+            "deprecated 'get_recent_fitness' MCP endpoint. Use "
+            "gold-db.get_strategy_fitness instead (see .claude/rules/mcp-usage.md).",
+            *offending,
+        ]
+    return []
+
+
 def check_literature_extracts_mode_a_b_framing() -> list[str]:
     """Literature extracts that cite internal `research/output/` artifacts
     must carry explicit Mode A / Mode B / holdout-window framing.
@@ -9465,6 +9516,12 @@ CHECKS = [
         "Literature extracts citing research/output/ carry Mode A/B framing",
         check_literature_extracts_mode_a_b_framing,
         False,  # blocking — composite-N / Mode A/B conflation class bug
+        False,
+    ),
+    (
+        "strategy-lab MCP must not re-register deprecated get_recent_fitness endpoint",
+        check_strategy_lab_no_fitness_endpoint,
+        False,  # blocking — MCP overlap with gold-db.get_strategy_fitness
         False,
     ),
 ]  # end CHECKS

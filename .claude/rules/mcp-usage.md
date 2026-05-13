@@ -45,6 +45,10 @@ When the user asks about trading data, match their intent to the right tool:
 - "What queries can I run?" / Not sure which template to use
   → `list_available_queries()` first
 
+## strategy-lab MCP — Scope
+
+`strategy-lab` provides deployment-readiness verdicts via `get_strategy_readiness` only. `get_recent_fitness` is REMOVED (2026-05-13, Nugget 3) — use `gold-db.get_strategy_fitness` instead. Re-registering it is blocked by drift check `check_strategy_lab_no_fitness_endpoint`. Keep deployment-readiness on strategy-lab; keep rolling fitness on gold-db.
+
 ## NEVER Do This
 - Write raw SQL against `gold.db` when a template covers the query
 - Query `orb_outcomes` directly without joining `daily_features` for filter application

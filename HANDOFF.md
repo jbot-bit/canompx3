@@ -9,9 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-13
-- **Commit:** cee16891 — handoff: post-commit hook stamp -> d67444b7
-- **Files changed:** 1 files
+- **Commit:** 3fae62fa — chore(scripts): delete dead agent_prompt_audit script + test (Nugget 6)
+- **Files changed:** 3 files
   - `HANDOFF.md`
+  - `scripts/tools/agent_prompt_audit.py`
+  - `tests/test_tools/test_agent_prompt_audit.py`
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
