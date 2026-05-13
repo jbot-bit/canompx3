@@ -3560,6 +3560,40 @@ def check_verdict_vocabulary_md_matches_code(
     return violations
 
 
+def check_checks_list_labels_are_ascii() -> list[str]:
+    """All CHECKS labels must be pure ASCII (codepoints 0x20-0x7E).
+
+    Origin: 2026-05-14. The drift runner emits each label via
+    ``print(f"Check {i}: {label}...")`` from ``main()``. On Windows the
+    default console encoding is cp1252 and any non-ASCII codepoint raises
+    UnicodeEncodeError mid-loop, taking down the whole drift gate. The
+    crash is order-sensitive — adding a check shifts indices and the FIRST
+    label with a non-ASCII glyph becomes the first one to crash. Five
+    labels carried glyphs (`x`/`<->`/`--` substitutions landed in the same
+    commit). This guard prevents the class from regressing.
+
+    Labels are operator-facing strings; emoji and decorative glyphs add no
+    information. Substitute ASCII conventions: ``x`` for cross-product,
+    ``<->`` for "and back", ``--`` for em-dash, ``->`` for arrow.
+    """
+    violations: list[str] = []
+    checks_list = globals().get("CHECKS")
+    if checks_list is None:
+        # Module not fully initialized — only happens if a test imports
+        # this function before CHECKS is constructed. Fail-open.
+        return violations
+    for label, *_ in checks_list:
+        offenders = [(i, c) for i, c in enumerate(label) if ord(c) > 127]
+        if offenders:
+            hex_codes = ", ".join(f"0x{ord(c):x}" for _, c in offenders)
+            violations.append(
+                f"NON_ASCII_CHECK_LABEL: label contains codepoints "
+                f"{hex_codes}; substitute ASCII (x, <->, --, ->, etc.). "
+                f"Offending label (truncated): {label[:80]!r}"
+            )
+    return violations
+
+
 def check_orphaned_validated_strategies(con=None) -> list[str]:
     """Check #42: Validated strategies must have corresponding outcome data.
 
@@ -9296,6 +9330,12 @@ CHECKS = [
         False,
         False,
     ),
+    (
+        "CHECKS list labels are ASCII-only (Windows cp1252 console crash class)",
+        check_checks_list_labels_are_ascii,
+        False,
+        False,
+    ),
     ("Cost model completeness (COST_SPECS covers all active instruments)", check_cost_model_completeness, False, False),
     ("TRADING_RULES.md authority values match code", check_trading_rules_authority, False, False),
     # ML drift checks removed 2026-04-11 (ML V1/V2/V3 DEAD — V3 sprint Stage 4):
@@ -9319,7 +9359,7 @@ CHECKS = [
         False,
     ),
     (
-        "Daily features row integrity (one row per aperture per trading_day × symbol)",
+        "Daily features row integrity (one row per aperture per trading_day x symbol)",
         check_daily_features_row_integrity,
         False,
         True,
@@ -9331,7 +9371,7 @@ CHECKS = [
         True,
     ),  # requires_db
     (
-        "HTF fields consistent across apertures for each trading_day × symbol",
+        "HTF fields consistent across apertures for each trading_day x symbol",
         check_htf_aperture_consistency,
         False,
         True,
@@ -9371,7 +9411,7 @@ CHECKS = [
     ("Drift check shared DB connection enforcement", check_drift_shared_db_connection, False, False),
     ("No broad rglob in drift checks", check_no_broad_rglob_in_drift_checks, False, False),
     (
-        "Stop multiplier ID-column consistency (_S075 ↔ stop_multiplier)",
+        "Stop multiplier ID-column consistency (_S075 <-> stop_multiplier)",
         check_stop_multiplier_consistency,
         False,
         True,
@@ -9399,7 +9439,7 @@ CHECKS = [
         False,
     ),
     ("Session guard ordering canonical source retained after ML removal", check_session_guard_sync, False, False),
-    ("Noise floor gate removed — no-op since 2026-03-21 canon lock", check_noise_floor_active, False, False),
+    ("Noise floor gate removed -- no-op since 2026-03-21 canon lock", check_noise_floor_active, False, False),
     (
         "No validated strategies below entry-model noise floor (per-strategy null, not global max)",
         check_noise_floor_compliance,
@@ -9652,7 +9692,7 @@ CHECKS = [
         False,
     ),
     (
-        "CRG D2: Canonical-import enforcement — research scripts must not re-implement canonical functions",
+        "CRG D2: Canonical-import enforcement -- research scripts must not re-implement canonical functions",
         check_crg_canonical_import_enforcement,
         True,
         False,
@@ -9751,7 +9791,7 @@ SLOW_CHECK_LABELS = frozenset(
         # ran <0.3s and stays in the fast path. Pre-commit and CI run the full
         # set; only the post-edit hook's --fast path skips.
         "CRG D1: Surprising cross-layer connections between pipeline/ and trading_app/ (bypassing canonical surfaces)",
-        "CRG D2: Canonical-import enforcement — research scripts must not re-implement canonical functions",
+        "CRG D2: Canonical-import enforcement -- research scripts must not re-implement canonical functions",
         "CRG D3: Canonical functions must have at least one import-and-call test (AST-based; CRG tests_for graph proven incomplete)",
         "CRG D5: Top-10 bridge nodes (betweenness-centrality chokepoints) must have TESTED_BY edges",
     }

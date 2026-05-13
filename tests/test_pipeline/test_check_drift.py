@@ -28,6 +28,7 @@ from pipeline.check_drift import (
     check_ruff_rules_minimum,
     check_trading_app_connection_leaks,
     check_trading_app_hardcoded_paths,
+    check_checks_list_labels_are_ascii,
     check_uv_lock_exists,
     check_verdict_vocabulary_md_matches_code,
 )
@@ -2959,3 +2960,51 @@ class TestVerdictVocabularyDrift:
         violations = check_verdict_vocabulary_md_matches_code(md_path=dst)
         assert any("VERDICT_VOCAB_MISSING_IN_MD" in v and "WEAK" in v for v in violations), violations
         assert any("VERDICT_PRIORITY_ORDER_MISMATCH" in v for v in violations), violations
+
+
+class TestChecksListLabelsAreAscii:
+    """All CHECKS labels must be pure ASCII to survive Windows cp1252 console.
+
+    Origin: 2026-05-14. The drift runner crashes mid-loop with
+    UnicodeEncodeError on the first non-ASCII label any time check
+    ordering shifts. This invariant is now binding.
+    """
+
+    def test_live_repo_is_ascii_clean(self):
+        """Live CHECKS list must be pure ASCII -- direct tripwire."""
+        violations = check_checks_list_labels_are_ascii()
+        assert violations == [], "Non-ASCII CHECKS labels in live repo:\n  " + "\n  ".join(violations)
+
+    def test_detects_injected_non_ascii(self, monkeypatch):
+        """Injecting a non-ASCII label into CHECKS triggers NON_ASCII_CHECK_LABEL."""
+        from pipeline import check_drift as drift_mod
+
+        original = list(drift_mod.CHECKS)
+        # Synthetic offender with U+00D7 multiplication sign -- the exact
+        # codepoint that crashed the runner before the 2026-05-14 cleanup.
+        offender = ("Synthetic check with x glyph × and a tail", lambda: [], False, False)
+        monkeypatch.setattr(drift_mod, "CHECKS", original + [offender])
+
+        violations = check_checks_list_labels_are_ascii()
+        assert any("NON_ASCII_CHECK_LABEL" in v and "0xd7" in v for v in violations), violations
+
+    def test_handles_multiple_offending_codepoints(self, monkeypatch):
+        """Multiple non-ASCII chars in one label all reported via hex codes."""
+        from pipeline import check_drift as drift_mod
+
+        original = list(drift_mod.CHECKS)
+        offender = ("label with × and ↔ and —", lambda: [], False, False)
+        monkeypatch.setattr(drift_mod, "CHECKS", original + [offender])
+
+        violations = check_checks_list_labels_are_ascii()
+        offender_violations = [v for v in violations if "NON_ASCII_CHECK_LABEL" in v and "label with" in v]
+        assert len(offender_violations) == 1, offender_violations
+        msg = offender_violations[0]
+        assert "0xd7" in msg and "0x2194" in msg and "0x2014" in msg, msg
+
+    def test_label_prints_under_cp1252_after_cleanup(self):
+        """Sanity: every live label can encode under cp1252 (the underlying property)."""
+        from pipeline.check_drift import CHECKS
+
+        for label, *_ in CHECKS:
+            label.encode("cp1252")  # raises UnicodeEncodeError if not encodable
