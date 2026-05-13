@@ -8,21 +8,14 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-05-12
-- **Commit:** aee2f2e4 — @ docs(audit): L1 replacement candidate scan — NO_QUALIFIED_REPLACEMENT
-- **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `docs/audit/results/2026-05-12-l1-replacement-candidate-scan.md`
-
-## Current Session Addendum
-- **Tool:** Codex (WSL)
-- **Date:** 2026-05-12
-- **Summary:** Fixed `gold-db` MCP WAL replay failure by moving stale orphan `/home/joshd/canompx3/gold.db.wal` to `/tmp/canompx3-gold.db.wal.stale-2026-05-12-setup-debug`; `gold-db` MCP table counts and MGC fitness now work. Wrote and ran bounded prereg `2026-05-12-vwap-dead-confluence-reaudit-v1`; result `PASS_STANDS` confirms VWAP remains closed as a broad confluence family while exact VWAP lanes remain exact-lane facts only. CB Insights remains cached/enabled as a plugin descriptor but not callable until connector/app install completes.
+- **Date:** 2026-05-13
+- **Commit:** 2a70ad93 — feat(research): chordia audit queue v2 methodology + readouts (#281)
+- **Summary:** PR #281 merged (Chordia v2 readouts). PR #275 (commit 9633fee6) already landed MGC LONDON_METALS Stage 1 K=1 strict-Chordia revalidation → `FAIL_STRICT_CHORDIA` / KILL_COHORT (t_IS=2.930 < 3.00, N_IS_on=49 < 100). All 12 MGC LONDON_METALS lanes park as `not_revalidated_strict_chordia`; Stage 2 forbidden per prereg. Canonical result: `docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md`.
 
 ## Next Steps — Active
-1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
-2. Deployment-coverage decision (2026-05-12) — 78 ROUTABLE_DORMANT strategies (sum annual_r=809.4R) blocked behind inactive profile whitelists. See `docs/audit/results/2026-05-12-deployment-coverage-orphans.md`. Audit is read-only; activation/whitelist edits are a separate decision per profile.
-3. Strict 3.79 exposure closeout (2026-05-12) — `docs/audit/results/2026-05-12-deployed-lanes-chordia-strict-379-exposure-audit.md`: zero live-capital exposure to chordia-loader-has-theory-silent-downgrade debt. Debt entry remains open (loader behavior unchanged) but exposure verified clean.
+1. **MGC LONDON_METALS — DO NOT RE-LITIGATE.** Verdict frozen at `docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md`. Reopen only if new evidence clears one of the prereg kill criteria (K1 t_IS≥3.00 with theory grant, or K3 N_IS_on≥100). Do not re-run Phase A on alternative apertures as a back-door — that pattern is the trap.
+2. **Highest-EV next is MNQ.** Live: 2 deployed MNQ E2 RR1.5 lanes (COMEX_SETTLE OVNRNG_100 N=150 annual_r=36.2 + US_DATA_1000 VWAP_MID_ALIGNED_O15 N=112 annual_r=27.1) per `docs/runtime/lane_allocation.json`. L1 NYSE_OPEN_E2_RR1.5_CB1_COST_LT12 paused (PR #271). Concrete candidates: (a) rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring per Chordia v2 readouts, (b) trade-book drift check (MEMORY index lists 3 deployed; canonical lane_allocation.json shows 2 — reconcile).
+3. **Pre-existing carry-over (still open):** Track D MNQ COMEX_SETTLE Gate 0 runner design (Databento top-of-book table + bounded runner for DESIGN_ONLY prereg); deployment-coverage decision on 78 ROUTABLE_DORMANT strategies (`docs/audit/results/2026-05-12-deployment-coverage-orphans.md`).
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
