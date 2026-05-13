@@ -21,6 +21,8 @@
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
+2. Deployment-coverage decision (2026-05-12) — 78 ROUTABLE_DORMANT strategies (sum annual_r=809.4R) blocked behind inactive profile whitelists. See `docs/audit/results/2026-05-12-deployment-coverage-orphans.md`. Audit is read-only; activation/whitelist edits are a separate decision per profile.
+3. Strict 3.79 exposure closeout (2026-05-12) — `docs/audit/results/2026-05-12-deployed-lanes-chordia-strict-379-exposure-audit.md`: zero live-capital exposure to chordia-loader-has-theory-silent-downgrade debt. Debt entry remains open (loader behavior unchanged) but exposure verified clean.
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
