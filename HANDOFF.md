@@ -9,9 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-13
-- **Commit:** b90c6291 — hooks: surface repo-state startup packet on session-start
+- **Commit:** 6a9ed048 — hooks: auto-sync Pinecone on knowledge-base commits
 - **Files changed:** 2 files
-  - `.claude/hooks/session-start.py`
+  - `.githooks/post-commit`
   - `HANDOFF.md`
 
 ## Next Steps — Active
