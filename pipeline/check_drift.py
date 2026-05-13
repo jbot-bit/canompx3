@@ -3424,6 +3424,19 @@ def check_verdict_vocabulary_md_matches_code(
         return violations
     section = sec_match.group(1)
 
+    # Layout lock: only two sub-sections are permitted inside § Verdict Token
+    # Vocabulary. Any additional `### ` sub-header is a doctrine-drift signal
+    # (someone added a side channel that escapes the parity check).
+    allowed_subsection_prefixes = ("Raw-Spelling", "Priority Resolution Order")
+    for header_match in re.finditer(r"^###\s+(.+?)\s*$", section, re.MULTILINE):
+        header = header_match.group(1)
+        if not any(header.startswith(prefix) for prefix in allowed_subsection_prefixes):
+            violations.append(
+                f"VERDICT_VOCAB_UNEXPECTED_SUBSECTION: '### {header}' inside "
+                f"§ Verdict Token Vocabulary; sub-headers must start with one "
+                f"of {list(allowed_subsection_prefixes)}"
+            )
+
     def _slice_table(sub_header_prefix: str) -> str | None:
         sub_re = re.compile(
             r"^###\s+" + re.escape(sub_header_prefix) + r"[^\n]*$(.*?)(?=^###\s+|\Z)",
@@ -3483,6 +3496,23 @@ def check_verdict_vocabulary_md_matches_code(
         code_prio = list(_VERDICT_PRIORITY_TOKENS)
         md_set = set(md_prio)
         code_set = set(code_prio)
+
+        # Duplicate detection MUST run before any zip-based comparison.
+        # Without this, a duplicate row in MD would pass set-equality but
+        # diverge in list length — and any zip(strict=True) here would crash
+        # the entire drift runner because non-DB checks are not wrapped in
+        # try/except by the runner (see main() ~line 9818).
+        if len(md_prio) != len(md_set):
+            seen: set[str] = set()
+            dupes: list[str] = []
+            for tok in md_prio:
+                if tok in seen and tok not in dupes:
+                    dupes.append(tok)
+                seen.add(tok)
+            violations.append(
+                f"VERDICT_PRIORITY_DUPLICATE_IN_MD: token(s) {dupes} appear more than once in MD priority list"
+            )
+
         for tok in code_prio:
             if tok not in md_set:
                 violations.append(
@@ -3492,14 +3522,40 @@ def check_verdict_vocabulary_md_matches_code(
         for tok in md_prio:
             if tok not in code_set:
                 violations.append(f"VERDICT_PRIORITY_EXTRA_IN_MD: '{tok}' present in MD priority list, absent in code")
-        if md_set == code_set:
-            for i, (code_tok, md_tok) in enumerate(zip(code_prio, md_prio, strict=True)):
-                if code_tok != md_tok:
-                    violations.append(
-                        f"VERDICT_PRIORITY_ORDER_MISMATCH: first divergence "
-                        f"at index {i + 1}: code='{code_tok}' vs md='{md_tok}'"
-                    )
-                    break
+
+        # Order check on the intersection of code-side and MD-side tokens —
+        # walk both filtered lists in their respective relative orders and
+        # flag the first position where they disagree. This surfaces order
+        # bugs even when MISSING/EXTRA entries are present, so divergence
+        # events emit complete information in one run instead of cascading
+        # across multiple fix cycles.
+        #
+        # md_prio may contain duplicates (already reported above as
+        # VERDICT_PRIORITY_DUPLICATE_IN_MD); dedupe-preserving-first-occurrence
+        # for the order-check input so the equal-length precondition for
+        # zip(strict=True) holds even on duplicate-MD inputs.
+        intersection = code_set & md_set
+        seen_md: set[str] = set()
+        md_prio_dedup: list[str] = []
+        for tok in md_prio:
+            if tok in seen_md:
+                continue
+            seen_md.add(tok)
+            md_prio_dedup.append(tok)
+        common_code_order = [t for t in code_prio if t in intersection]
+        common_md_order = [t for t in md_prio_dedup if t in intersection]
+        # strict=True is safe here: both lists are filtered through the same
+        # symmetric intersection AND md_prio is deduped before filtering, so
+        # length equality holds for every input shape. Loud-crash preferred
+        # over silent truncation if a future refactor breaks the invariant.
+        for i, (code_tok, md_tok) in enumerate(zip(common_code_order, common_md_order, strict=True)):
+            if code_tok != md_tok:
+                violations.append(
+                    f"VERDICT_PRIORITY_ORDER_MISMATCH: first divergence in "
+                    f"shared tokens at position {i + 1}: code='{code_tok}' "
+                    f"vs md='{md_tok}'"
+                )
+                break
 
     return violations
 

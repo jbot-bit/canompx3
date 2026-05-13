@@ -2840,3 +2840,122 @@ class TestVerdictVocabularyDrift:
 
         violations = check_verdict_vocabulary_md_matches_code(md_path=dst)
         assert any("VERDICT_PRIORITY_ORDER_MISMATCH" in v for v in violations), violations
+
+    def test_detects_extra_mapping_row(self, tmp_path):
+        """Adding a mapping row not present in code triggers EXTRA_IN_MD."""
+        import shutil
+
+        src = self._canonical_md()
+        dst = tmp_path / "RESEARCH_RULES.md"
+        shutil.copy(src, dst)
+        text = dst.read_text(encoding="utf-8")
+        anchor = "| `NO-GO` | `NO-GO` |\n"
+        assert anchor in text
+        tampered = text.replace(anchor, anchor + "| `FABRICATED` | `NO-GO` |\n", 1)
+        dst.write_text(tampered, encoding="utf-8")
+
+        violations = check_verdict_vocabulary_md_matches_code(md_path=dst)
+        assert any("VERDICT_VOCAB_EXTRA_IN_MD" in v and "FABRICATED" in v for v in violations), violations
+
+    def test_detects_mapping_mismatch(self, tmp_path):
+        """Same raw key mapped to a different canonical tag triggers MISMATCH."""
+        import shutil
+
+        src = self._canonical_md()
+        dst = tmp_path / "RESEARCH_RULES.md"
+        shutil.copy(src, dst)
+        text = dst.read_text(encoding="utf-8")
+        dead_row = "| `DEAD` | `NO-GO` |\n"
+        assert dead_row in text
+        tampered = text.replace(dead_row, "| `DEAD` | `PARK` |\n", 1)
+        dst.write_text(tampered, encoding="utf-8")
+
+        violations = check_verdict_vocabulary_md_matches_code(md_path=dst)
+        assert any("VERDICT_VOCAB_MAPPING_MISMATCH" in v and "'DEAD'" in v for v in violations), violations
+
+    def test_detects_section_missing(self, tmp_path):
+        """Deleting the whole § Verdict Token Vocabulary triggers SECTION_MISSING."""
+        import shutil
+
+        src = self._canonical_md()
+        dst = tmp_path / "RESEARCH_RULES.md"
+        shutil.copy(src, dst)
+        text = dst.read_text(encoding="utf-8")
+        tampered = text.replace("## Verdict Token Vocabulary", "## Removed Header")
+        dst.write_text(tampered, encoding="utf-8")
+
+        violations = check_verdict_vocabulary_md_matches_code(md_path=dst)
+        assert any("VERDICT_VOCAB_SECTION_MISSING" in v for v in violations), violations
+
+    def test_detects_priority_duplicate_in_md_does_not_crash(self, tmp_path):
+        """Duplicate priority row must NOT crash the check (was a strict-zip bug).
+
+        Pre-hardening, a duplicate row in the priority table passed
+        ``md_set == code_set`` (sets dedupe) but failed ``zip(strict=True)``
+        because list lengths differed. The ValueError propagated up because
+        non-DB checks have no try/except wrapper in the runner — taking down
+        the whole drift gate.
+        """
+        import shutil
+
+        src = self._canonical_md()
+        dst = tmp_path / "RESEARCH_RULES.md"
+        shutil.copy(src, dst)
+        text = dst.read_text(encoding="utf-8")
+        anchor = "| 1 | `NO-GO` |\n"
+        assert anchor in text
+        tampered = text.replace(anchor, anchor + "| 1 | `NO-GO` |\n", 1)
+        dst.write_text(tampered, encoding="utf-8")
+
+        violations = check_verdict_vocabulary_md_matches_code(md_path=dst)
+        assert any("VERDICT_PRIORITY_DUPLICATE_IN_MD" in v and "NO-GO" in v for v in violations), violations
+
+    def test_detects_unexpected_subsection(self, tmp_path):
+        """Adding a third `### …` block inside the section triggers UNEXPECTED_SUBSECTION."""
+        import shutil
+
+        src = self._canonical_md()
+        dst = tmp_path / "RESEARCH_RULES.md"
+        shutil.copy(src, dst)
+        text = dst.read_text(encoding="utf-8")
+        injection = "\n### Surprise Examples\n\nSome content here.\n"
+        marker = "### Priority Resolution Order"
+        assert marker in text
+        tampered = text.replace(marker, injection + "\n" + marker, 1)
+        dst.write_text(tampered, encoding="utf-8")
+
+        violations = check_verdict_vocabulary_md_matches_code(md_path=dst)
+        assert any("VERDICT_VOCAB_UNEXPECTED_SUBSECTION" in v and "Surprise Examples" in v for v in violations), (
+            violations
+        )
+
+    def test_order_check_runs_despite_missing_entries(self, tmp_path):
+        """Order check must still report a swap even when a different token is missing.
+
+        Regression guard for the pre-hardening behaviour where a single
+        MISSING_IN_MD entry silently suppressed the entire ORDER_MISMATCH
+        scan, forcing two fix cycles per divergence event.
+        """
+        import shutil
+
+        src = self._canonical_md()
+        dst = tmp_path / "RESEARCH_RULES.md"
+        shutil.copy(src, dst)
+        text = dst.read_text(encoding="utf-8")
+
+        weak_row = "| `WEAK` | `WEAK` |\n"
+        assert weak_row in text
+        text = text.replace(weak_row, "", 1)
+
+        row_1 = "| 1 | `NO-GO` |\n"
+        row_2 = "| 2 | `NOGO` |\n"
+        assert row_1 in text and row_2 in text
+        text = text.replace(row_1, "<<TMP1>>").replace(row_2, "<<TMP2>>")
+        text = text.replace("<<TMP1>>", "| 1 | `NOGO` |\n")
+        text = text.replace("<<TMP2>>", "| 2 | `NO-GO` |\n")
+
+        dst.write_text(text, encoding="utf-8")
+
+        violations = check_verdict_vocabulary_md_matches_code(md_path=dst)
+        assert any("VERDICT_VOCAB_MISSING_IN_MD" in v and "WEAK" in v for v in violations), violations
+        assert any("VERDICT_PRIORITY_ORDER_MISMATCH" in v for v in violations), violations
