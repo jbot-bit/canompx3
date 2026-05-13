@@ -170,6 +170,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/intent-router.py",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "Notification": [

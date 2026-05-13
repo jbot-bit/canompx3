@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -601,14 +602,15 @@ def _parallel_session_lines() -> list[str]:
 
 
 def _literature_corpus_lines() -> list[str]:
-    """One-time nudge that the institutional literature corpus exists and is queryable.
+    """One-line nudge that the institutional literature corpus exists.
 
-    Without this line the AI has to remember the research-catalog MCP exists; with it,
-    every new session sees the count + exact tool names. Fail-silent if the directory
-    is empty or unreadable (defensive — never blocks session start).
+    Trimmed 2026-05-13 from a 5-line MCP-tool-name dump (~120 tokens) to a single
+    count line (~25 tokens). MCP tool names are discoverable via `auto-skill-routing.md`
+    and the research-catalog MCP server's own `list_literature_sources` — repeating
+    them every session is pure noise after the first acquaintance. The count itself
+    still load-bearing: it's the visible signal that the corpus exists.
 
-    The count excludes PENDING_ACQUISITION_*.md (placeholders for unfetched papers) so
-    the number reflects the actual ingested corpus.
+    Fail-silent on every error path.
     """
     try:
         lit_dir = PROJECT_ROOT / "docs" / "institutional" / "literature"
@@ -620,13 +622,46 @@ def _literature_corpus_lines() -> list[str]:
         n = len(extracts)
         if n == 0:
             return []
-        return [
-            f"  Literature corpus: {n} verbatim extracts in docs/institutional/literature/.",
-            "    Methodology / mechanism claims must cite these — not training memory.",
-            "    Discover: mcp__research-catalog__list_literature_sources",
-            "    Fetch excerpt: mcp__research-catalog__get_literature_excerpt",
-            "    Keyword search: mcp__research-catalog__search_research_catalog",
-        ]
+        return [f"  Literature: {n} extracts (mcp__research-catalog__* to query)"]
+    except BaseException:  # pragma: no cover - hook fallback path
+        return []
+
+
+def _handoff_next_step_line() -> list[str]:
+    """Extract the first bullet from HANDOFF.md '## Next Steps — Active' as a resume cue.
+
+    Per the intent-router-hooks plan: surfacing the operator's own pre-recorded
+    "where to start" pointer at session start eliminates the cognitive tax of
+    re-reading HANDOFF. Returns a single line (~80-char truncated bullet) or [].
+
+    Fail-silent on every error path — missing file, missing section, malformed
+    markdown, encoding error.
+    """
+    try:
+        handoff = PROJECT_ROOT / "HANDOFF.md"
+        if not handoff.exists():
+            return []
+        lines = handoff.read_text(encoding="utf-8").splitlines()
+        in_section = False
+        bullet_re = re.compile(r"^\s*\d+\.\s+(.*)$")
+        for ln in lines:
+            stripped = ln.strip()
+            if stripped.startswith("## Next Steps"):
+                in_section = True
+                continue
+            if in_section and (stripped.startswith("## ") or stripped.startswith("---")):
+                break  # left the section without finding a numbered bullet
+            if in_section:
+                m = bullet_re.match(ln)
+                if m:
+                    body = m.group(1).strip()
+                    # Strip leading bold markers for compactness.
+                    body = re.sub(r"^\*\*(.+?)\*\*\s*:?\s*", r"\1: ", body)
+                    snippet = body[:90].rstrip()
+                    if len(body) > 90:
+                        snippet += "…"
+                    return [f"  Resume → /next  ·  top: {snippet}"]
+        return []
     except BaseException:  # pragma: no cover - hook fallback path
         return []
 
@@ -823,6 +858,7 @@ def main() -> None:
         lines.extend(_crg_context_lines())
         lines.extend(_literature_corpus_lines())
         lines.extend(_main_ci_status_lines())
+        lines.extend(_handoff_next_step_line())
         print("\n".join(lines), file=sys.stderr)
 
     sys.exit(0)
