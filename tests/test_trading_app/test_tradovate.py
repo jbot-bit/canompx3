@@ -665,6 +665,32 @@ class TestBrokerDispatcher:
         dispatcher = BrokerDispatcher(primary)
         assert dispatcher.supports_native_brackets() is True
 
+    def test_has_queryable_bracket_legs_delegates_true(self):
+        primary = self._make_router()
+        primary.has_queryable_bracket_legs.return_value = True
+        dispatcher = BrokerDispatcher(primary)
+        assert dispatcher.has_queryable_bracket_legs() is True
+        primary.has_queryable_bracket_legs.assert_called_once()
+
+    def test_has_queryable_bracket_legs_delegates_false(self):
+        primary = self._make_router()
+        primary.has_queryable_bracket_legs.return_value = False
+        dispatcher = BrokerDispatcher(primary)
+        assert dispatcher.has_queryable_bracket_legs() is False
+
+    def test_supports_sequential_bracket_ids_delegates_true(self):
+        primary = self._make_router()
+        primary.supports_sequential_bracket_ids.return_value = True
+        dispatcher = BrokerDispatcher(primary)
+        assert dispatcher.supports_sequential_bracket_ids() is True
+        primary.supports_sequential_bracket_ids.assert_called_once()
+
+    def test_supports_sequential_bracket_ids_delegates_false(self):
+        primary = self._make_router()
+        primary.supports_sequential_bracket_ids.return_value = False
+        dispatcher = BrokerDispatcher(primary)
+        assert dispatcher.supports_sequential_bracket_ids() is False
+
     def test_same_broker_fanout_swaps_account_id(self):
         primary = self._make_router(account_id=1)
         secondary = self._make_router(account_id=2)

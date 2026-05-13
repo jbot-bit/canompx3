@@ -1,13 +1,24 @@
 """BrokerDispatcher — route trade signals to multiple brokers simultaneously.
 
-Architecture:
+STATUS (2026-05-13): Not currently constructed in production. Stage 2 of the
+multi-broker deployment plan (`docs/plans/archive/2026-04/2026-04-03-multi-broker-deployment.md`)
+designed BrokerDispatcher as the top-level router fanning out to ProjectX +
+Tradovate, but the wiring in `session_orchestrator.py` was never completed.
+session_orchestrator.py:552-560 assigns CopyOrderRouter or primary_router
+directly to `self.order_router`; BrokerDispatcher has zero construction sites
+outside `tests/test_trading_app/test_tradovate.py`. Treat the class as a
+reserved scaffold — keep capability methods in sync with BrokerRouter base so
+that wiring can land later without silent behavior drift, but understand that
+no live execution currently flows through this class.
+
+Intended architecture (when wired):
     SessionOrchestrator → BrokerDispatcher → [CopyOrderRouter(ProjectX), CopyOrderRouter(Tradovate), ...]
 
     One master signal fires. Dispatcher fans out to ALL active broker routers.
     Primary broker: full result tracking (fills, brackets, errors).
     Secondary brokers: best-effort fire-and-forget with error logging.
 
-    This enables: 1 bot → TopStep x5 + Tradeify x5 + MFFU x5 + Bulenox x3 simultaneously.
+    Goal: 1 bot → TopStep x5 + Tradeify x5 + MFFU x5 + Bulenox x3 simultaneously.
 """
 
 import logging

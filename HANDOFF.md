@@ -9,10 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-13
-- **Commit:** 6a9ed048 — hooks: auto-sync Pinecone on knowledge-base commits
+- **Commit:** a6e79c6b — [judgment] LOW: add supports_sequential_bracket_ids() delegation to BrokerDispatcher
 - **Files changed:** 2 files
-  - `.githooks/post-commit`
   - `HANDOFF.md`
+  - `trading_app/live/broker_dispatcher.py`
 
 ## Next Steps — Active
 1. **MGC LONDON_METALS — DO NOT RE-LITIGATE.** Verdict frozen at `docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md`. Reopen only if new evidence clears one of the prereg kill criteria (K1 t_IS≥3.00 with theory grant, or K3 N_IS_on≥100). Do not re-run Phase A on alternative apertures as a back-door — that pattern is the trap.
