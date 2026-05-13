@@ -187,20 +187,75 @@ class TradovateOrderRouter(BrokerRouter):
         return True
 
     def has_queryable_bracket_legs(self) -> bool:
-        """Tradovate placeOSO DOES create separately-queryable bracket1/bracket2
-        child orders, but the query path is NOT YET IMPLEMENTED in this adapter.
-
-        Returning False here is a deliberate trade-off: it prevents false
-        'BRACKET LEGS MISSING' critical alarms when Tradovate is activated,
-        at the cost of the bot not explicitly tracking bracket leg IDs for
-        cancellation (Tradovate auto-cancels brackets when the exit fires).
-
-        TODO(tradovate-activation): before flipping this to True, implement
-        verify_bracket_legs() to query placeOSO child orders via the Tradovate
-        order search endpoint. Until then, this adapter behaves like a native
-        atomic-bracket broker from the session_orchestrator's perspective.
+        """Tradovate placeOSO creates separately-queryable bracket1/bracket2
+        child orders that can be retrieved via ``query_open_orders`` and
+        identified by ``symbol`` + ``orderType``. See ``verify_bracket_legs``.
         """
-        return False
+        return True
+
+    def verify_bracket_legs(self, entry_order_id: int, contract_id: str) -> tuple[int | None, int | None]:
+        """Verify bracket legs (SL + TP) exist after an entry fill.
+
+        Returns ``(sl_order_id, tp_order_id)``. Either can be None if the
+        broker has not yet acknowledged the bracket leg or if a leg already
+        filled before this query landed.
+
+        Identification strategy (Tradovate-specific):
+        ``query_open_orders`` returns ``order/ldeps?masterid={account_id}`` —
+        every open order on the account. The bracket legs for an entry are
+        identified by:
+
+        - same ``symbol`` as the entry contract,
+        - ``orderType == "Stop"`` for SL (``bracket2`` in placeOSO),
+        - ``orderType == "Limit"`` for TP (``bracket1`` in placeOSO),
+        - order ID strictly greater than ``entry_order_id`` (created after
+          the entry — guards against picking up unrelated pre-existing
+          working orders on the same contract).
+
+        Tradovate does not expose a documented parent-order linkage field on
+        the open-orders payload, so leg attribution falls back to contract +
+        type + creation-order. This mirrors the ProjectX type-match fallback.
+
+        Rate-limit failures propagate (``RateLimitExhausted``) so the caller
+        can distinguish "no legs found yet" from "broker query exhausted".
+        """
+        from .http import RateLimitExhausted
+
+        if self.auth is None:
+            raise RuntimeError("No auth — cannot verify bracket legs")
+
+        try:
+            orders = self.query_open_orders()
+        except RateLimitExhausted:
+            raise
+        except Exception as e:
+            log.error("Bracket verification failed (cannot query open orders): %s", e)
+            return None, None
+
+        sl_id: int | None = None
+        tp_id: int | None = None
+
+        for o in orders:
+            oid = o.get("orderId", o.get("id"))
+            o_symbol = o.get("symbol", o.get("contractSymbol", ""))
+            o_type = o.get("orderType", "")
+
+            if oid is None or o_symbol != contract_id:
+                continue
+            if oid <= entry_order_id:
+                continue
+
+            if o_type == "Stop" and sl_id is None:
+                sl_id = oid
+            elif o_type == "Limit" and tp_id is None:
+                tp_id = oid
+
+        if sl_id is not None:
+            log.info("Bracket SL identified: orderId=%d (contract=%s)", sl_id, contract_id)
+        if tp_id is not None:
+            log.info("Bracket TP identified: orderId=%d (contract=%s)", tp_id, contract_id)
+
+        return sl_id, tp_id
 
     def build_bracket_spec(
         self,

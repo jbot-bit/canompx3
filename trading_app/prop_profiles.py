@@ -687,7 +687,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=5,
         stop_multiplier=0.75,
         max_slots=15,
-        active=False,  # Blocked: Tradovate auth broken
+        active=False,  # Blocked: Chordia-PASS shelf depleted (see notes=)
         allowed_sessions=frozenset(
             {
                 "US_DATA_1000",
@@ -701,10 +701,13 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
-        # Rebuilt from current allocator-backed deployable shelf on 2026-04-19.
-        # Prior config had 8 ghost lanes and 1 valid incumbent displaced by the
-        # current liveness-aware allocator. Keep inactive until explicit account
-        # activation review.
+        # daily_lanes rebuilt 2026-04-19 from allocator-backed shelf. Shelf has
+        # moved since (verified 2026-05-13 via lane_allocation.json rebalance
+        # 2026-05-11): 0 of 5 lanes currently routable -- 3 paused (Chordia
+        # FAIL_BOTH/MISSING), 1 absent from allocator, 1 paused 2026-05-12
+        # SR-alarm. Do NOT refresh from MNQ Chordia-PASS pool (size=2, both on
+        # topstep_50k_mnq_auto, exclusivity-blocked). Activation requires
+        # growing PASS_CHORDIA shelf to >=5 lanes exclusive to Tradeify.
         daily_lanes=(
             DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
             DailyLaneSpec(
@@ -716,10 +719,12 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
         payout_policy_id="tradeify_select_funded",
         notes=(
-            "TYPE-B auto inactive profile rebuilt 2026-04-19 from current allocator-backed shelf. "
-            "Current recommendation = 5 lanes, MNQ-led. Tradovate API (auth broken). "
-            "Bot must be exclusive to Tradeify (no cross-firm sharing). "
-            "Keep inactive pending explicit activation review."
+            "TYPE-B auto profile. Active=False pending Chordia-PASS shelf depth >= 5 "
+            "lanes exclusive to Tradeify (verified 2026-05-13: 0 of 5 listed daily_lanes "
+            "currently routable). Tradovate credentials present in .env; demo-URL auth "
+            "dry-run pending operator. Bot must be exclusive to Tradeify (no cross-firm "
+            "sharing). Re-evaluate after MGC/MES Chordia unlock audits expand the "
+            "deployable shelf for TYPE-B allowed sessions."
         ),
     ),
     # --- TYPE-B: Tradeify 100K (5 accounts via Tradovate API) ---

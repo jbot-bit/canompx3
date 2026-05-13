@@ -2454,18 +2454,29 @@ class SessionOrchestrator:
                             record.bracket_order_ids = [x for x in [sl_id, tp_id] if x]
                     except Exception as e:
                         log.error("Bracket verification failed for %s: %s", event.strategy_id, e)
-                        if order_id is not None:
-                            # Fallback: assume bracket IDs are sequential (best guess)
+                        # The entry+1/entry+2 sequential-ID fallback is a ProjectX-specific
+                        # convention (AutoBracket guarantees that ordering). For brokers
+                        # whose leg IDs are API-assigned and non-sequential (e.g. Tradovate
+                        # placeOSO), guessing produces IDs that do not correspond to real
+                        # orders — leading to silent cancel failures on exit. We gate the
+                        # fallback on the canonical capability bit defined in
+                        # ``BrokerRouter.supports_sequential_bracket_ids``.
+                        sequential_ids_valid = self.order_router.supports_sequential_bracket_ids()
+                        if order_id is not None and sequential_ids_valid:
                             record.bracket_order_ids = [order_id + 1, order_id + 2]
                         else:
                             log.critical(
-                                "BRACKET FALLBACK IMPOSSIBLE: order_id is None for %s — "
-                                "cannot derive bracket leg IDs. Position may be UNPROTECTED.",
+                                "BRACKET FALLBACK UNAVAILABLE: cannot derive bracket leg IDs "
+                                "for %s (order_id=%s, sequential_ids_valid=%s). "
+                                "Position may be UNPROTECTED.",
                                 event.strategy_id,
+                                order_id,
+                                sequential_ids_valid,
                             )
                             self._notify(
-                                f"NAKED POSITION RISK: bracket verification failed and "
-                                f"order_id is None for {event.strategy_id}"
+                                f"NAKED POSITION RISK: bracket verification failed for "
+                                f"{event.strategy_id} and broker does not support "
+                                f"sequential-ID fallback"
                             )
                 self._stats.brackets_submitted += 1
             else:

@@ -202,6 +202,25 @@ class BrokerRouter(ABC):
         """
         return True
 
+    def supports_sequential_bracket_ids(self) -> bool:
+        """Whether this broker assigns sequential IDs to bracket legs.
+
+        True  — when the broker accepts a bracket entry, the resulting legs
+                are guaranteed to carry the IDs ``entry_id+1`` (SL) and
+                ``entry_id+2`` (TP). The session_orchestrator uses this as
+                an emergency fallback when ``verify_bracket_legs`` raises
+                (e.g., transient query failure) so that the bot still has
+                IDs to cancel on exit. Example: ProjectX AutoBracket.
+
+        False — leg IDs are API-assigned and not derivable from the entry
+                ID. The orchestrator must NOT guess; on a verification
+                exception, ``bracket_order_ids`` is left empty and a
+                CRITICAL alert fires. Example: Tradovate placeOSO.
+
+        Default: False (conservative — if you don't know, don't guess).
+        """
+        return False
+
 
 class BrokerContracts(ABC):
     """Resolve accounts and contract symbols."""

@@ -166,6 +166,9 @@ class FakeRouter:
     def has_queryable_bracket_legs(self) -> bool:
         return False
 
+    def supports_sequential_bracket_ids(self) -> bool:
+        return False
+
     def is_degraded(self) -> bool:
         return False
 
@@ -1235,6 +1238,291 @@ class TestKillSwitch:
         # Both positions should be flattened
         assert orch._positions.active_positions() == []
         assert len(orch.order_router.submitted) == 2
+
+
+# ---------------------------------------------------------------------------
+# TRADOVATE F4 emergency-flatten PARITY tests
+#
+# Stage 3a: prove the kill-switch flow is broker-agnostic. The existing
+# emergency-flatten tests above only exercise a ProjectX-shaped FakeRouter.
+# These parity tests mirror each of the 6 scenarios against a Tradovate-shaped
+# router fake, so that signature drift between the orchestrator and the
+# real ``TradovateOrderRouter`` becomes a unit-test failure rather than a
+# silent live-trading failure.
+#
+# Why a concrete fake instead of ``Mock(spec=TradovateOrderRouter)``:
+# the established convention in this file is concrete duck-typed fakes
+# (FakeRouter, FakeAuth, FakePositions). The concrete fake exercises real
+# attribute access at the same call-shape ``_emergency_flatten`` uses, and
+# the routing-orchestrator contract is what we're verifying — not the
+# Tradovate implementation. Mirroring the file's idiom keeps the fixture
+# graph (``_inline_executor_offloads`` autouse, ``build_orchestrator``)
+# composable without monkeypatching new mock plumbing.
+# ---------------------------------------------------------------------------
+
+
+class FakeTradovateRouter:
+    """Tradovate-shaped BrokerRouter fake.
+
+    Mirrors ``trading_app/live/tradovate/order_router.py`` capability flags:
+    - ``supports_native_brackets() == True`` (OSO bracket submission)
+    - ``has_queryable_bracket_legs() == True`` (Stage 1 flip)
+    - ``supports_sequential_bracket_ids() == False`` (Tradovate IDs are
+      assigned out-of-band by the matching engine, not entry_id+1/+2)
+
+    Order IDs use Tradovate's large-int shape (8-9 digits) so any test that
+    accidentally pattern-matches the ProjectX ``order_id=99`` shape will
+    fail loudly rather than silently agree.
+    """
+
+    def __init__(self, fill_price: float | None = None):
+        self._fill_price = fill_price
+        self.account_id = 87654321
+        self.submitted: list[dict] = []
+        self.cancelled: list[int] = []
+        # call_log records the orchestrator's *contract* call order, used by
+        # the bracket-cancel-first invariant test (R2-C4) to assert
+        # cancel(bracket_id) precedes submit(exit_spec). The orchestrator's
+        # bracket-cancel loop runs *outside* the build_exit_spec/submit
+        # try-block (session_orchestrator.py:2682-2692 vs 2695-2724), so a
+        # future refactor that reorders them is exactly what this captures.
+        self.call_log: list[tuple[str, object]] = []
+
+    def build_order_spec(self, **kwargs) -> dict:
+        return {"type": "tradovate_entry", **kwargs}
+
+    def build_exit_spec(self, direction: str, symbol: str, qty: int = 1) -> dict:
+        action = "Sell" if direction == "long" else "Buy"
+        spec = {
+            "accountId": self.account_id,
+            "action": action,
+            "symbol": symbol,
+            "orderQty": qty,
+            "orderType": "Market",
+            "isAutomated": True,
+        }
+        self.call_log.append(("build_exit_spec", spec))
+        return spec
+
+    def submit(self, spec: dict) -> dict:
+        self.submitted.append(spec)
+        self.call_log.append(("submit", spec))
+        return {
+            "order_id": 234567890,
+            "status": "submitted",
+            "fill_price": self._fill_price,
+        }
+
+    def supports_native_brackets(self) -> bool:
+        return True
+
+    def has_queryable_bracket_legs(self) -> bool:
+        return True
+
+    def supports_sequential_bracket_ids(self) -> bool:
+        return False
+
+    def is_degraded(self) -> bool:
+        return False
+
+    def degraded_accounts(self) -> dict:
+        return {}
+
+    def cancel(self, order_id: int) -> None:
+        self.cancelled.append(order_id)
+        self.call_log.append(("cancel", order_id))
+
+    def build_bracket_spec(self, **kwargs) -> dict | None:
+        return {"bracket1": {}, "bracket2": {}}
+
+    def query_order_status(self, order_id: int) -> dict:
+        raise NotImplementedError
+
+
+def _build_tradovate_orch(fill_price: float | None = 2350.0, signal_only: bool = False):
+    """Orchestrator wired to a FakeTradovateRouter (or signal-only)."""
+    components = FakeBrokerComponents(signal_only=signal_only)
+    if not signal_only:
+        components.router = FakeTradovateRouter(fill_price=fill_price)
+    return build_orchestrator(components)
+
+
+class TestEmergencyFlattenTradovateParity:
+    """F4 kill-switch parity: same orchestrator contract against a
+    Tradovate-shaped router. Each test is a parity of an existing
+    ProjectX-shaped emergency-flatten test (line numbers cited inline)."""
+
+    async def test_emergency_flatten_tradovate_signal_only_logs_manual_close(self):
+        """Parity for line 972: signal-only mode logs MANUAL CLOSE, no broker calls.
+
+        Even with a Tradovate router shape declared by configuration, when
+        ``signal_only=True`` the orchestrator short-circuits at line 2663
+        before any router method is touched.
+        """
+        orch = _build_tradovate_orch(signal_only=True)
+        orch._positions.on_signal_entry(STRATEGY_ID, 2350.0, "long")
+        orch._last_bar_at = datetime.now(UTC)
+
+        await orch._emergency_flatten()
+
+        orch._write_signal_record.assert_called()
+        call_args = orch._write_signal_record.call_args[0][0]
+        assert call_args["type"] == "KILL_SWITCH"
+        # Position NOT flattened (signal-only branch returns at line 2667)
+        assert len(orch._positions.active_positions()) == 1
+
+    async def test_emergency_flatten_tradovate_retries_on_failure(self):
+        """Parity for line 987: broker failure → 3 retries, 3rd succeeds.
+
+        Mutation proof: first 2 ``submit`` calls raise, 3rd returns.
+        Asserts the retry loop at session_orchestrator.py:2695-2724 invokes
+        ``submit`` exactly 3 times against a Tradovate router shape.
+        """
+        orch = _build_tradovate_orch(fill_price=2350.0)
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=234567000)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        call_count = 0
+        original_submit = orch.order_router.submit
+
+        def failing_submit(spec):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ConnectionError("tradovate 503")
+            return original_submit(spec)
+
+        orch.order_router.submit = failing_submit
+
+        # Match the existing ProjectX-shaped retry test (line 987-1009): no
+        # ``asyncio.sleep`` patch. Backoff is 2**attempt = 1s+2s before the
+        # 3rd attempt succeeds; same wall-clock cost as the existing test.
+        await orch._emergency_flatten()
+
+        assert call_count == 3
+        assert orch._positions.active_positions() == []
+
+    async def test_emergency_flatten_tradovate_all_retries_fail_logs_manual(self):
+        """Parity for line 1011: all 3 retries fail → MANUAL CLOSE REQUIRED.
+
+        Asserts the ``for...else`` block at session_orchestrator.py:2725-2728
+        is reached against a Tradovate router shape (the position stays
+        active because no submit succeeded).
+        """
+        orch = _build_tradovate_orch(fill_price=2350.0)
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=234567000)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        orch.order_router.submit = MagicMock(side_effect=ConnectionError("tradovate dead"))
+
+        # Match the existing ProjectX-shaped all-fail test (line 1011-1025):
+        # no sleep patch. Backoff 1s+2s+4s ≈ 7s wall clock, tolerable.
+        await orch._emergency_flatten()
+
+        assert orch.order_router.submit.call_count == 3
+        # Position still active — couldn't flatten
+        assert len(orch._positions.active_positions()) == 1
+
+    async def test_emergency_flatten_tradovate_uses_correct_qty(self):
+        """Parity for line 1192: ``build_exit_spec`` called with ``record.contracts``.
+
+        Mutation proof: changing the orchestrator to pass ``qty=1`` instead
+        of ``qty=record.contracts`` would make this assertion fail.
+        Asserts session_orchestrator.py:2701-2705 against a Tradovate
+        router shape, where ``orderQty`` is the Tradovate field name.
+        """
+        orch = _build_tradovate_orch(fill_price=2350.0)
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=234567000, contracts=3)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        await orch._emergency_flatten()
+
+        assert len(orch.order_router.submitted) == 1
+        # ``orderQty`` is Tradovate's wire name for the contract count;
+        # ``build_exit_spec`` above maps the orchestrator's ``qty=`` kwarg
+        # to it. If the orchestrator regressed to a hardcoded 1, this would
+        # be 1 not 3.
+        assert orch.order_router.submitted[0]["orderQty"] == 3
+
+    async def test_emergency_flatten_tradovate_multiple_positions(self):
+        """Parity for line 1204: flattens ALL open positions, not just first.
+
+        Asserts the ``for record in active`` loop at
+        session_orchestrator.py:2670 fans out across the active set against
+        a Tradovate router shape.
+        """
+        orch = _build_tradovate_orch(fill_price=2350.0)
+
+        # Add a second strategy to the map so on_entry_filled is satisfied.
+        s2 = PortfolioStrategy(
+            strategy_id="TEST_STRAT_002",
+            instrument="MGC",
+            orb_label="TOKYO_OPEN",
+            entry_model="E2",
+            rr_target=1.5,
+            confirm_bars=1,
+            filter_type="ORB_G4",
+            expectancy_r=0.15,
+            win_rate=0.38,
+            sample_size=150,
+            sharpe_ratio=1.2,
+            max_drawdown_r=4.0,
+            median_risk_points=3.5,
+            stop_multiplier=1.0,
+            source="test",
+            weight=1.0,
+        )
+        orch._strategy_map["TEST_STRAT_002"] = s2
+
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=234567000)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+        orch._positions.on_entry_sent("TEST_STRAT_002", "short", 2360.0, order_id=234567001)
+        orch._positions.on_entry_filled("TEST_STRAT_002", 2360.0)
+
+        await orch._emergency_flatten()
+
+        assert orch._positions.active_positions() == []
+        assert len(orch.order_router.submitted) == 2
+
+    async def test_emergency_flatten_tradovate_cancels_bracket_legs_before_exit(self):
+        """Parity for R2-C4 (session_orchestrator.py:2680-2706): bracket-cancel BEFORE exit.
+
+        Kill-switch invariant: when ``record.bracket_order_ids`` is
+        populated, every bracket leg MUST be cancelled before the exit
+        ``submit`` runs. Otherwise the exit closes the position while the
+        bracket legs remain working at the broker, and the next bar can
+        fill an orphaned leg into a fresh naked position — the very
+        failure mode the kill-switch is supposed to prevent (audit
+        finding C1 / 2026-04-25).
+
+        Mutation proof: reordering the orchestrator so ``submit`` runs
+        before the ``cancel`` loop would make this assertion fail.
+        """
+        orch = _build_tradovate_orch(fill_price=2350.0)
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=234567000)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        # Stage 1 path: queryable legs populate bracket_order_ids on the
+        # position record. Set them directly to simulate post-verify state.
+        record = orch._positions._positions[STRATEGY_ID]
+        record.bracket_order_ids = [234567001, 234567002]
+
+        await orch._emergency_flatten()
+
+        # Both bracket legs cancelled.
+        assert orch.order_router.cancelled == [234567001, 234567002]
+        # Exit submitted.
+        assert len(orch.order_router.submitted) == 1
+
+        # Call-order invariant: every cancel precedes the first submit.
+        first_submit_idx = next(i for i, (name, _) in enumerate(orch.order_router.call_log) if name == "submit")
+        cancel_indices = [i for i, (name, _) in enumerate(orch.order_router.call_log) if name == "cancel"]
+        assert cancel_indices, "bracket cancels never ran"
+        assert max(cancel_indices) < first_submit_idx, (
+            f"R2-C4 invariant violated: cancel order={cancel_indices}, "
+            f"submit at={first_submit_idx} — bracket legs must be cancelled "
+            f"BEFORE exit submit to prevent orphaned-leg re-entry"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -3181,6 +3469,41 @@ class FakeBracketRouter(FakeRouter):
         self.cancelled_ids.append(order_id)
 
 
+class FakeSequentialIdBracketRouter(FakeBracketRouter):
+    """Router whose bracket-leg IDs are guaranteed sequential from the entry ID.
+
+    Mirrors ProjectX AutoBracket semantics. ``verify_bracket_legs`` raises so
+    that the session_orchestrator emergency fallback fires; the fake reports
+    ``supports_sequential_bracket_ids() == True`` so the fallback applies the
+    ``entry_id+1`` / ``entry_id+2`` heuristic.
+    """
+
+    def supports_sequential_bracket_ids(self) -> bool:
+        return True
+
+    def verify_bracket_legs(self, order_id: int, contract_symbol: str) -> tuple[int, int]:
+        self.verify_bracket_legs_call_count += 1
+        raise RuntimeError("simulated transient verify failure (sequential-ID broker)")
+
+
+class FakeNonSequentialIdBracketRouter(FakeBracketRouter):
+    """Router whose bracket-leg IDs are API-assigned and non-sequential.
+
+    Mirrors Tradovate placeOSO semantics. ``verify_bracket_legs`` raises so the
+    session_orchestrator emergency fallback path is reached; the fake reports
+    ``supports_sequential_bracket_ids() == False`` (inherited from
+    ``BrokerRouter`` base) so the orchestrator MUST NOT apply the
+    ``entry_id+1`` / ``entry_id+2`` heuristic and MUST emit the
+    NAKED-POSITION-RISK notification instead.
+    """
+
+    # supports_sequential_bracket_ids() inherits False from BrokerRouter base.
+
+    def verify_bracket_legs(self, order_id: int, contract_symbol: str) -> tuple[int, int]:
+        self.verify_bracket_legs_call_count += 1
+        raise RuntimeError("simulated transient verify failure (non-sequential broker)")
+
+
 class FakeAtomicBracketRouter(FakeBracketRouter):
     """Router that simulates Rithmic/Tradovate-style native atomic brackets.
 
@@ -3289,6 +3612,73 @@ class TestBracketOrders:
 
         # Position should be cleaned up despite "already flat" error
         assert orch._positions.get(STRATEGY_ID) is None
+
+    async def test_bracket_fallback_applies_for_sequential_id_broker(self):
+        """Verify exception + sequential-ID-capable broker -> entry+1/+2 fallback.
+
+        Per the adversarial-audit fix on commit 58abc30a, the
+        session_orchestrator emergency fallback at lines 2455-2474 reads
+        ``supports_sequential_bracket_ids()`` and applies the
+        ``entry_id+1`` / ``entry_id+2`` guess ONLY when the broker
+        guarantees sequential leg IDs (ProjectX AutoBracket convention).
+
+        This test guards the preserved ProjectX path: a verify failure on a
+        sequential-ID broker still produces usable cancel IDs on exit.
+        """
+        router = FakeSequentialIdBracketRouter(fill_price=2351.0)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+
+        notifications: list[str] = []
+        orch._notify = notifications.append
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        record = orch._positions.get(STRATEGY_ID)
+        assert record is not None
+        # FakeRouter.submit returns order_id=99; fallback applies +1/+2 -> [100, 101].
+        assert record.bracket_order_ids == [100, 101], (
+            f"Sequential-ID broker exception fallback should produce "
+            f"[entry_id+1, entry_id+2]; got {record.bracket_order_ids}"
+        )
+        assert router.verify_bracket_legs_call_count == 1
+        naked_alarms = [n for n in notifications if "NAKED POSITION RISK" in n]
+        assert naked_alarms == [], f"Sequential-ID broker must not raise NAKED POSITION RISK; got: {naked_alarms}"
+
+    async def test_bracket_fallback_blocked_for_non_sequential_id_broker(self):
+        """Verify exception + non-sequential broker -> NO fallback, CRITICAL alert.
+
+        Per the adversarial-audit fix on commit 58abc30a: when
+        ``verify_bracket_legs`` raises and the broker is NOT a sequential-ID
+        broker (Tradovate placeOSO, etc.), the orchestrator MUST NOT store
+        guessed IDs (they cannot cancel real orders on exit) and MUST emit
+        a NAKED POSITION RISK notification.
+
+        Before the fix, the orchestrator silently stored ``[entry+1, entry+2]``
+        on every broker — including Tradovate, whose IDs are API-assigned
+        and not derivable from the entry.
+        """
+        router = FakeNonSequentialIdBracketRouter(fill_price=2351.0)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+
+        notifications: list[str] = []
+        orch._notify = notifications.append
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        record = orch._positions.get(STRATEGY_ID)
+        assert record is not None
+        assert record.bracket_order_ids == [], (
+            f"Non-sequential broker MUST NOT receive guessed bracket IDs; got {record.bracket_order_ids}"
+        )
+        assert router.verify_bracket_legs_call_count == 1
+        naked_alarms = [n for n in notifications if "NAKED POSITION RISK" in n]
+        assert len(naked_alarms) == 1, f"Exactly one NAKED POSITION RISK notification expected; got: {naked_alarms}"
 
     async def test_bracket_verify_skipped_for_atomic_native_broker(self):
         """REGRESSION GUARD for the has_queryable_bracket_legs() skip path.

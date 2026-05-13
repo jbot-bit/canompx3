@@ -215,6 +215,16 @@ class CopyOrderRouter(BrokerRouter):
         """Delegate to primary — wrapper inherits the primary's bracket model."""
         return self.primary.has_queryable_bracket_legs()
 
+    def supports_sequential_bracket_ids(self) -> bool:
+        """Delegate to primary.
+
+        Without this delegate, calls fall through to ``BrokerRouter``'s
+        default (False), which would silently disable the sequential-ID
+        emergency fallback for the active TopStep+CopyOrderRouter+ProjectX
+        path — even though the underlying ProjectX primary supports it.
+        """
+        return self.primary.supports_sequential_bracket_ids()
+
     def query_order_status(self, order_id: int) -> dict:
         """Query primary only (shadows are best-effort, not polled)."""
         return self.primary.query_order_status(order_id)

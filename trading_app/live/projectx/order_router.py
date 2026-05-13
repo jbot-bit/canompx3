@@ -249,6 +249,15 @@ class ProjectXOrderRouter(BrokerRouter):
         """
         return True
 
+    def supports_sequential_bracket_ids(self) -> bool:
+        """ProjectX AutoBracket guarantees ``entry_id+1`` = SL, ``entry_id+2`` = TP.
+
+        See ``has_queryable_bracket_legs`` and ``verify_bracket_legs`` — the
+        primary verification path queries searchOpen, but the orchestrator
+        keeps this as an emergency fallback when the query call raises.
+        """
+        return True
+
     def build_bracket_spec(
         self,
         direction: str,

@@ -263,6 +263,35 @@ class TestDelegation:
         assert copy.has_queryable_bracket_legs() is False
         primary.has_queryable_bracket_legs.assert_called_once()
 
+    def test_supports_sequential_bracket_ids_delegates_to_primary_true(self):
+        """Wrapper must inherit primary's sequential-ID capability.
+
+        For the active TopStep+CopyOrderRouter+ProjectX path, primary is
+        ProjectX (returns True). Without this delegate, calls would fall
+        through to BrokerRouter.supports_sequential_bracket_ids default
+        (False) and the session_orchestrator emergency fallback would
+        silently skip the ProjectX +1/+2 heuristic on the live path.
+        Regression guard for the adversarial-audit fix (commit ad346adf).
+        """
+        primary = _make_mock_router(1)
+        primary.supports_sequential_bracket_ids.return_value = True
+
+        copy = CopyOrderRouter(primary, [])
+        assert copy.supports_sequential_bracket_ids() is True
+        primary.supports_sequential_bracket_ids.assert_called_once()
+
+    def test_supports_sequential_bracket_ids_delegates_to_primary_false(self):
+        """When wrapping a non-sequential-ID broker (Tradovate, Rithmic), the
+        wrapper must return False so the orchestrator does NOT apply the
+        +1/+2 guess (which would target nonexistent orders on those brokers).
+        """
+        primary = _make_mock_router(1)
+        primary.supports_sequential_bracket_ids.return_value = False
+
+        copy = CopyOrderRouter(primary, [])
+        assert copy.supports_sequential_bracket_ids() is False
+        primary.supports_sequential_bracket_ids.assert_called_once()
+
 
 # ─── F-2b: Cross-account divergence detection ───────────────────────────
 # @canonical-source docs/research-input/topstep/topstep_cross_account_hedging.md
