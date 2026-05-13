@@ -557,7 +557,7 @@ class TestBrokerDispatcher:
         secondary.build_order_spec.side_effect = RuntimeError("secondary down")
 
         dispatcher = BrokerDispatcher(primary, [secondary])
-        assert not dispatcher.is_degraded
+        assert not dispatcher.is_degraded()
 
         spec = {
             "action": "Buy",
@@ -565,7 +565,7 @@ class TestBrokerDispatcher:
         }
         dispatcher.submit(spec)
 
-        assert dispatcher.is_degraded
+        assert dispatcher.is_degraded()
         assert "submit:" in dispatcher.secondary_failure_summary
         assert "RuntimeError" in dispatcher.secondary_failure_summary
 
@@ -578,7 +578,7 @@ class TestBrokerDispatcher:
         dispatcher = BrokerDispatcher(primary, [secondary])
         dispatcher.cancel_bracket_orders("MNQM6")
 
-        assert dispatcher.is_degraded
+        assert dispatcher.is_degraded()
         assert "cancel_bracket:" in dispatcher.secondary_failure_summary
 
     def test_update_market_price_failure_marks_degraded(self):
@@ -589,7 +589,7 @@ class TestBrokerDispatcher:
         dispatcher = BrokerDispatcher(primary, [secondary])
         dispatcher.update_market_price(100.5)
 
-        assert dispatcher.is_degraded
+        assert dispatcher.is_degraded()
         assert "update_market_price:" in dispatcher.secondary_failure_summary
 
     def test_healthy_dispatcher_not_degraded(self):
@@ -606,7 +606,7 @@ class TestBrokerDispatcher:
         }
         dispatcher.submit(spec)
 
-        assert not dispatcher.is_degraded
+        assert not dispatcher.is_degraded()
         assert "all secondaries healthy" in dispatcher.secondary_failure_summary
 
     def test_exit_spec_attaches_exit_intent(self):
@@ -690,6 +690,59 @@ class TestBrokerDispatcher:
         primary.supports_sequential_bracket_ids.return_value = False
         dispatcher = BrokerDispatcher(primary)
         assert dispatcher.supports_sequential_bracket_ids() is False
+
+    def test_is_degraded_is_callable_method_not_property(self):
+        # API parity with BrokerRouter base + CopyOrderRouter: session_orchestrator
+        # calls is_degraded() with parentheses. If this regresses to @property,
+        # the bool result becomes uncallable and orchestrator raises TypeError.
+        primary = self._make_router()
+        dispatcher = BrokerDispatcher(primary)
+        assert callable(dispatcher.is_degraded)
+        assert dispatcher.is_degraded() is False
+
+    def test_degraded_accounts_empty_when_healthy(self):
+        primary = self._make_router(account_id=42)
+        dispatcher = BrokerDispatcher(primary)
+        assert dispatcher.degraded_accounts() == {}
+
+    def test_degraded_accounts_maps_to_primary_id_on_failure(self):
+        # Without this override, session_orchestrator divergence-halt path
+        # would see is_degraded()=True but empty degraded_accounts -> silent
+        # "0 shadow account(s) out of sync" diagnostic.
+        primary = self._make_router(account_id=42)
+        secondary = self._make_router(account_id=2)
+        primary.submit.return_value = {"order_id": 100}
+        secondary.build_order_spec.side_effect = RuntimeError("secondary down")
+
+        dispatcher = BrokerDispatcher(primary, [secondary])
+        spec = {
+            "action": "Buy",
+            "_intent": {"direction": "long", "entry_model": "E1", "entry_price": 0, "symbol": "X", "qty": 1},
+        }
+        dispatcher.submit(spec)
+
+        accounts = dispatcher.degraded_accounts()
+        assert isinstance(accounts, dict)
+        assert 42 in accounts
+        assert "submit:" in accounts[42]
+        assert "RuntimeError" in accounts[42]
+
+    def test_verify_bracket_legs_delegates_to_primary(self):
+        # Without this override, base returns (None, None) and orchestrator
+        # at session_orchestrator.py:2431 misreads as MISSING legs CRITICAL.
+        primary = self._make_router()
+        primary.verify_bracket_legs.return_value = (123, 124)
+        dispatcher = BrokerDispatcher(primary)
+        assert dispatcher.verify_bracket_legs(100, "MNQM6") == (123, 124)
+        primary.verify_bracket_legs.assert_called_once_with(100, "MNQM6")
+
+    def test_verify_bracket_legs_passes_through_none_from_primary(self):
+        # If primary correctly reports no legs (e.g. server-side bracket
+        # broker), dispatcher must pass that through, not silently flip.
+        primary = self._make_router()
+        primary.verify_bracket_legs.return_value = (None, None)
+        dispatcher = BrokerDispatcher(primary)
+        assert dispatcher.verify_bracket_legs(100, "MNQM6") == (None, None)
 
     def test_same_broker_fanout_swaps_account_id(self):
         primary = self._make_router(account_id=1)

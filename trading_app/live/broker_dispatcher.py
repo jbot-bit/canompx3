@@ -158,10 +158,47 @@ class BrokerDispatcher(BrokerRouter):
                 )
         return cancelled
 
-    @property
     def is_degraded(self) -> bool:
-        """True if any secondary broker has failed an operation this session."""
+        """True if any secondary broker has failed an operation this session.
+
+        API parity: overrides `BrokerRouter.is_degraded()` (method) — must NOT
+        be a property. session_orchestrator.py:1247,1683 calls
+        `self.order_router.is_degraded()`; with `@property` the bool result
+        is returned from attribute access and the `()` invocation raises
+        `TypeError: 'bool' object is not callable`. Verified bug.
+        """
         return bool(self._secondary_failures)
+
+    def degraded_accounts(self) -> dict[int, str]:
+        """Return {primary_account_id: failure_summary} when any secondary failed.
+
+        API parity: overrides `BrokerRouter.degraded_accounts()`. Base returns
+        `{}` unconditionally; without this override, session_orchestrator's
+        divergence-halt path (line 1684) would see `is_degraded() == True`
+        but an empty `degraded_accounts()` map and report `"0 shadow
+        account(s) out of sync"` — silently wrong diagnostic.
+
+        BrokerDispatcher's failure map is keyed by `"ClassName(account=N)"`
+        strings (line 71); the base contract is `dict[int, str]`. Collapse
+        all secondary failures under the primary's account_id so callers
+        get a non-empty map; full per-secondary detail remains available
+        via `secondary_failure_summary` (which already preserves the
+        original keys).
+        """
+        if not self._secondary_failures:
+            return {}
+        return {self.primary.account_id: self.secondary_failure_summary}
+
+    def verify_bracket_legs(self, entry_order_id: int, contract_id: str) -> tuple[int | None, int | None]:
+        """Delegate to primary — dispatcher inherits the primary's bracket model.
+
+        Without this override, the base default `(None, None)` would make
+        session_orchestrator.py:2431 read MISSING legs and raise a CRITICAL
+        alarm even when the primary (e.g. ProjectX AutoBracket) actually
+        returns real leg IDs. Mirror the already-delegating
+        `has_queryable_bracket_legs()` above — the two MUST agree.
+        """
+        return self.primary.verify_bracket_legs(entry_order_id, contract_id)
 
     @property
     def secondary_failure_summary(self) -> str:

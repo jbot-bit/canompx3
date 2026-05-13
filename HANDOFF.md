@@ -9,9 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-13
-- **Commit:** a6e79c6b — [judgment] LOW: add supports_sequential_bracket_ids() delegation to BrokerDispatcher
-- **Files changed:** 2 files
+- **Commit:** aef0cf2e — [judgment] correction to a6e79c6b: dead-class docstring + missing delegation tests
+- **Files changed:** 3 files
   - `HANDOFF.md`
+  - `tests/test_trading_app/test_tradovate.py`
   - `trading_app/live/broker_dispatcher.py`
 
 ## Next Steps — Active
