@@ -9,8 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-13
-- **Commit:** 2a70ad93 — feat(research): chordia audit queue v2 methodology + readouts (#281)
-- **Summary:** PR #281 merged (Chordia v2 readouts). PR #275 (commit 9633fee6) already landed MGC LONDON_METALS Stage 1 K=1 strict-Chordia revalidation → `FAIL_STRICT_CHORDIA` / KILL_COHORT (t_IS=2.930 < 3.00, N_IS_on=49 < 100). All 12 MGC LONDON_METALS lanes park as `not_revalidated_strict_chordia`; Stage 2 forbidden per prereg. Canonical result: `docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md`.
+- **Commit:** dcad7185 — @ chore(handoff): freeze MGC LONDON_METALS verdict, point next session at MNQ
+- **Files changed:** 1 files
+  - `HANDOFF.md`
 
 ## Next Steps — Active
 1. **MGC LONDON_METALS — DO NOT RE-LITIGATE.** Verdict frozen at `docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md`. Reopen only if new evidence clears one of the prereg kill criteria (K1 t_IS≥3.00 with theory grant, or K3 N_IS_on≥100). Do not re-run Phase A on alternative apertures as a back-door — that pattern is the trap.
