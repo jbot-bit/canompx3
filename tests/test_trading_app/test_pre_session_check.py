@@ -10,6 +10,7 @@ import pytest
 
 from trading_app.pre_session_check import (
     _conditional_overlay_from_lifecycle,
+    _opportunity_awareness_from_lifecycle,
     _resolve_session_lane,
     _resolve_session_lanes,
     check_consistency_rule,
@@ -256,6 +257,52 @@ class TestDailyEquityDLLFallback:
         assert "WARNING" in stderr
         assert "bad_profile" in stderr
         assert "fallback" in stderr or "$1,000" in stderr
+
+
+def test_opportunity_awareness_from_lifecycle_reports_prime_shadow():
+    ok, msg = _opportunity_awareness_from_lifecycle(
+        {
+            "opportunity_awareness": {
+                "available": True,
+                "valid": True,
+                "summary": {
+                    "lane_count": 3,
+                    "prime_shadow_count": 2,
+                    "watch_count": 1,
+                    "blocked_count": 0,
+                },
+                "lanes": [
+                    {
+                        "instrument": "MNQ",
+                        "orb_label": "COMEX_SETTLE",
+                        "opportunity_tier": "PRIME_SHADOW",
+                    }
+                ],
+            }
+        }
+    )
+
+    assert ok is True
+    assert "Opportunity awareness" in msg
+    assert "2 PRIME_SHADOW" in msg
+    assert "1 WATCH" in msg
+    assert "prime: COMEX_SETTLE/MNQ" in msg
+
+
+def test_opportunity_awareness_from_lifecycle_warns_invalid_state():
+    ok, msg = _opportunity_awareness_from_lifecycle(
+        {
+            "opportunity_awareness": {
+                "available": True,
+                "valid": False,
+                "reason": "code fingerprint mismatch",
+            }
+        }
+    )
+
+    assert ok is True
+    assert "WARN" in msg
+    assert "code fingerprint mismatch" in msg
 
     def test_profile_lookup_success_uses_real_dll(self, tmp_path):
         """When profile lookup succeeds, function uses the real DLL from ACCOUNT_TIERS."""

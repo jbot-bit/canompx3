@@ -1002,13 +1002,17 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
 
     operator_profile = _choose_operator_profile(profile, state)
     overlay_summary = None
+    opportunity_summary = None
     if operator_profile:
         try:
             from trading_app.lifecycle_state import read_lifecycle_state
 
-            overlay_summary = read_lifecycle_state(operator_profile).get("conditional_overlays")
+            lifecycle = read_lifecycle_state(operator_profile)
+            overlay_summary = lifecycle.get("conditional_overlays")
+            opportunity_summary = lifecycle.get("opportunity_awareness")
         except Exception as exc:
             overlay_summary = {"available": False, "error": str(exc)}
+            opportunity_summary = {"available": False, "error": str(exc)}
     broker_summary = _collect_broker_status()
     data_summary = _collect_data_status()
     alert_summary = _collect_alert_summary(profile=operator_profile, mode=None if raw_mode == "STOPPED" else raw_mode)
@@ -1140,6 +1144,20 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
             }
         )
 
+    if opportunity_summary and opportunity_summary.get("available"):
+        from trading_app.opportunity_awareness import describe_opportunity_awareness
+
+        status, detail = describe_opportunity_awareness(opportunity_summary)
+        checks.append({"name": "Opportunity awareness", "status": status, "detail": detail})
+    elif opportunity_summary and opportunity_summary.get("error"):
+        checks.append(
+            {
+                "name": "Opportunity awareness",
+                "status": "warn",
+                "detail": f"Opportunity state unavailable: {opportunity_summary['error']}",
+            }
+        )
+
     if alert_summary.get("status") == "error":
         checks.append(
             {
@@ -1182,6 +1200,7 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
         "data_summary": data_summary,
         "alert_summary": alert_summary,
         "conditional_overlays": overlay_summary,
+        "opportunity_awareness": opportunity_summary,
     }
 
 
