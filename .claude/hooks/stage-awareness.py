@@ -26,8 +26,17 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-STAGE_STATE = Path("docs/runtime/STAGE_STATE.md")
-STAGES_DIR = Path("docs/runtime/stages")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+    from pipeline.system_context import list_active_stages
+except BaseException:  # pragma: no cover - hook fallback path
+    list_active_stages = None
+
+STAGE_STATE = PROJECT_ROOT / "docs" / "runtime" / "STAGE_STATE.md"
+STAGES_DIR = PROJECT_ROOT / "docs" / "runtime" / "stages"
 
 # Rotating directives for "stage: none" — prevents habituation.
 # Picked by minute % len(NONE_DIRECTIVES) so they vary across interactions.
@@ -104,9 +113,13 @@ def main():
     except (json.JSONDecodeError, Exception):
         sys.exit(0)
 
-    # ── Collect all stage files (stages/ first, legacy STAGE_STATE.md last) ──
+    # ── Collect active stage files (stages/ first, legacy STAGE_STATE.md last) ──
     stage_files = []
-    if STAGES_DIR.is_dir():
+    if list_active_stages is not None:
+        for stage in list_active_stages(PROJECT_ROOT):
+            fpath = Path(stage.path)
+            stage_files.append((fpath.stem, fpath))
+    elif STAGES_DIR.is_dir():
         for f in sorted(STAGES_DIR.glob("*.md")):
             agent_name = f.stem  # e.g., "codex", "auto_trivial", "mcp_server_fix"
             stage_files.append((agent_name, f))

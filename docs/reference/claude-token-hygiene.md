@@ -16,6 +16,16 @@ highest reasoning tier on every prompt.
 High reasoning can improve difficult reasoning. It does not replace reading the
 right files, querying the right truth source, or running verification.
 
+Official grounding:
+
+- Anthropic's Claude Code cost guidance says Sonnet handles most coding tasks
+  well and Opus should be reserved for complex architecture or multi-step
+  reasoning. Use `/model` or `/config` for main-session model changes.
+- Prompt hooks should not pretend to change the active model. Hook input exposes
+  effort for tool-use contexts, and only `SessionStart` receives a model field.
+  Use hooks for capped guidance, and use subagent frontmatter for cheap
+  task-specific agents.
+
 ## Cheap Execution, Expensive Verification
 
 Use a two-tier operating model:
@@ -63,6 +73,20 @@ Bad subagent use:
 - Commit small logical checkpoints. They usually reduce ambiguity and repeated
   review rather than increasing token usage.
 
+## Prompt Hooks
+
+Keep `UserPromptSubmit` hooks sparse. Claude Code injects successful stdout from
+that event into model context, so duplicated reminders become recurring tokens.
+Use one capped broker for prompt-time reminders:
+
+- classify risk and intent once
+- set tiny state flags for follow-on tool guards
+- emit JSON `hookSpecificOutput.additionalContext`
+- avoid dumping stage files, active queues, or long rationale
+
+Keep heavier enforcement in `PreToolUse`/`PostToolUse` hooks where stdout is not
+normally added to the model transcript.
+
 ## Worktrees And Private Context
 
 Gitignored repo-root files such as `SOUL.md`, `USER.md`, and `memory/` are a
@@ -91,6 +115,7 @@ What it checks:
 - current Claude reasoning defaults
 - whether agent teams are enabled
 - whether the prompt-tier escalation hook is configured
+- prompt-time hook count and whether the broker is present
 - startup doc size in characters and lines
 - always-on versus path-scoped rule count
 - active stage-file count

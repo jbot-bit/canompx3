@@ -10,10 +10,16 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from pipeline.system_context import list_active_stages  # noqa: E402
+
 RULES_DIR = PROJECT_ROOT / ".claude" / "rules"
 STAGES_DIR = PROJECT_ROOT / "docs" / "runtime" / "stages"
 SETTINGS_PATH = PROJECT_ROOT / ".claude" / "settings.json"
@@ -68,9 +74,20 @@ def _has_risk_tier_hook(settings: dict) -> bool:
     for entry in prompt_hooks:
         for hook in entry.get("hooks") or []:
             command = str(hook.get("command") or "")
-            if "risk-tier-guard.py" in command:
+            if "risk-tier-guard.py" in command or "prompt-broker.py" in command:
                 return True
     return False
+
+
+def _prompt_hook_commands(settings: dict) -> list[str]:
+    hooks = settings.get("hooks") or {}
+    commands: list[str] = []
+    for entry in hooks.get("UserPromptSubmit") or []:
+        for hook in entry.get("hooks") or []:
+            command = str(hook.get("command") or "").strip()
+            if command:
+                commands.append(command)
+    return commands
 
 
 def _home_claude_candidates() -> list[Path]:
@@ -97,6 +114,8 @@ def main() -> int:
     always_thinking = settings.get("alwaysThinkingEnabled", "unknown")
     teams_enabled = _has_agent_teams_enabled(settings)
     risk_tier_hook = _has_risk_tier_hook(settings)
+    prompt_hook_commands = _prompt_hook_commands(settings)
+    broker_path = PROJECT_ROOT / ".claude" / "hooks" / "prompt-broker.py"
 
     startup_files = [
         _file_metric(PROJECT_ROOT / "CLAUDE.md"),
@@ -113,7 +132,7 @@ def main() -> int:
     always_on = [metric for metric in rule_metrics if not metric.scoped]
     scoped = [metric for metric in rule_metrics if metric.scoped]
 
-    stage_files = sorted(path for path in STAGES_DIR.glob("*.md") if path.name != ".gitkeep")
+    stage_files = [Path(stage.path) for stage in list_active_stages(PROJECT_ROOT)]
     home_candidates = _home_claude_candidates()
     existing_home = [path for path in home_candidates if path.exists()]
 
@@ -125,6 +144,10 @@ def main() -> int:
     print(f"- alwaysThinkingEnabled: {always_thinking}")
     print(f"- experimental agent teams enabled: {'yes' if teams_enabled else 'no'}")
     print(f"- risk-tier hook configured: {'yes' if risk_tier_hook else 'no'}")
+    print(f"- UserPromptSubmit hook commands: {len(prompt_hook_commands)}")
+    for command in prompt_hook_commands:
+        print(f"  - {command}")
+    print(f"- prompt broker present: {'yes' if broker_path.exists() else 'no'}")
     print(f"- startup docs measured: {len(startup_files)}")
     for metric in startup_files:
         rel = metric.path.relative_to(PROJECT_ROOT)
@@ -168,6 +191,18 @@ def main() -> int:
         print(
             "- Add a tiny prompt-tier hook so risky prompts escalate without paying a max-reasoning tax on every turn."
         )
+    if len(prompt_hook_commands) > 2:
+        print(
+            "- Consolidate prompt-time reminders into one broker. UserPromptSubmit stdout is injected into context, so repeated prompt hooks compound overhead."
+        )
+    elif prompt_hook_commands:
+        print("- Prompt-time hook count is compact. Keep additionalContext capped and selective.")
+    if any("data-first-guard.py" in command for command in prompt_hook_commands):
+        print(
+            "- Remove UserPromptSubmit wiring for data-first-guard.py; prompt handling belongs in prompt-broker.py and the guard is PreToolUse-only."
+        )
+    if any("prompt-broker.py" in command for command in prompt_hook_commands) and not broker_path.exists():
+        print("- Restore .claude/hooks/prompt-broker.py; settings reference it but the file is missing.")
     if len(always_on) > 3:
         print("- Trim or split always-on rules. Move long examples and rationale into appendices or skills.")
     else:
@@ -191,6 +226,9 @@ def main() -> int:
     )
     print(
         "- The most reliable savings come from fresh sessions, narrower prompts, smaller always-on context, and disciplined subagent use."
+    )
+    print(
+        "- Hooks can inject concise guidance, but model switching should stay explicit via /model, /config, or scoped subagent frontmatter."
     )
     print(
         "- For live measurement, compare fresh-session `/context` before and after touching a high-doctrine path like `pipeline/`."

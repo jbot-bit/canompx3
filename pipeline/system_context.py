@@ -563,7 +563,14 @@ def _stage_file_is_closed(text: str, metadata: dict[object, object]) -> bool:
     return re.search(r"(?m)^##\s+Execution Outcome\s*$", text) is not None
 
 
-def _list_active_stages(root: Path) -> list[ActiveStage]:
+def list_active_stages(root: Path) -> list[ActiveStage]:
+    """Return stage files that still represent active work.
+
+    Historical stage files may remain in the directory for provenance. Treat
+    only parseable, non-closed top-level stage markdown files as active so all
+    startup/reporting surfaces share one classification.
+    """
+
     stage_dir = root / "docs" / "runtime" / "stages"
     if not stage_dir.exists():
         return []
@@ -573,6 +580,10 @@ def _list_active_stages(root: Path) -> list[ActiveStage]:
         if stage is not None:
             stages.append(stage)
     return stages
+
+
+def _list_active_stages(root: Path) -> list[ActiveStage]:
+    return list_active_stages(root)
 
 
 def _build_authority_context(db_path: Path) -> AuthorityContext:

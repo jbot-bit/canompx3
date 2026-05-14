@@ -132,6 +132,22 @@ class TestBuildSystemContext:
                 ]
             ),
         )
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "stages" / "loose-template.md",
+            "task: Template\nmode: IMPLEMENTATION\n",
+        )
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "stages" / "archive" / "old-stage.md",
+            "\n".join(
+                [
+                    "---",
+                    "task: Archived stage",
+                    "mode: IMPLEMENTATION",
+                    "---",
+                    "# Stage",
+                ]
+            ),
+        )
 
         with (
             patch.object(system_context, "_canonical_repo_root", return_value=(tmp_path, tmp_path / ".git")),

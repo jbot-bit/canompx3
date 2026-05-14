@@ -83,6 +83,27 @@ class TestClaudeSuperpowerBrief:
 
         assert "Compact rule: re-check live files before trusting prior context." in brief
 
+    def test_build_brief_only_renders_active_stage_files(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "stages" / "active.md",
+            "---\ntask: Active work\nmode: IMPLEMENTATION\n---\n",
+        )
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "stages" / "closed.md",
+            "---\ntask: Closed work\nmode: IMPLEMENTATION\nstatus: closed\n---\n",
+        )
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "stages" / "loose-template.md",
+            "task: Loose template\nmode: IMPLEMENTATION\n",
+        )
+
+        with patch("scripts.tools.claude_superpower_brief.build_pulse", return_value=_sample_report()):
+            brief = build_brief(root=tmp_path, mode="session-start")
+
+        assert "Stage [active]: Active work — IMPLEMENTATION" in brief
+        assert "Closed work" not in brief
+        assert "Loose template" not in brief
+
     def test_stale_notes_are_marked_stale_not_recent(self, tmp_path: Path) -> None:
         _mkfile(tmp_path / "memory" / "2026-01-01.md", "old")
 

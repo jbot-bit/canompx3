@@ -1,3 +1,14 @@
+---
+task: Browser-side smoke check for feat/live-app-ux dashboard wiring
+mode: VERIFICATION
+slug: feat-live-app-ux-smoke
+status: pending_operator
+scope_lock:
+  - docs/runtime/stages/feat-live-app-ux-smoke.md
+  - trading_app/live/bot_dashboard.html
+  - trading_app/live/bot_dashboard.py
+---
+
 # feat/live-app-ux — operator smoke check
 
 Browser-side verification that JS event wiring (Trade Book toggle, paused-lanes

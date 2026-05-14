@@ -28,6 +28,12 @@ Trivial work skips branch/design/stage ceremony. Non-trivial work keeps the full
 - No summaries >3 lines, no unnecessary type annotations or "improvements"
 - Direct questions → direct answers. Tasks → do it, report result.
 
+## Context Budget — MANDATORY
+- Use `/clear` before unrelated tasks or when context is high; stale context charges every later turn.
+- Use `/compact` with explicit preservation instructions when continuing long work.
+- Put verbose scans, logs, docs fetches, and broad test output in a focused subagent or filtered CLI output.
+- Keep default model/effort cheap; escalate only for risky decisions or final review.
+
 ## No Performative Self-Correction — MANDATORY
 Do the right thing without narrating obvious internal process. Guardrail rules apply to code changes, not casual discussion.
 

@@ -33,6 +33,11 @@ except BaseException:  # pragma: no cover - hook fallback path (catches SystemEx
     read_task_route_packet = None
 
 try:
+    from pipeline.system_context import list_active_stages
+except BaseException:  # pragma: no cover - hook fallback path (catches SystemExit too)
+    list_active_stages = None
+
+try:
     from pipeline.system_brief import build_system_brief
 except BaseException:  # pragma: no cover - hook fallback path (catches SystemExit too)
     build_system_brief = None
@@ -41,22 +46,32 @@ except BaseException:  # pragma: no cover - hook fallback path (catches SystemEx
 def _legacy_startup_lines() -> list[str]:
     lines = ["NEW SESSION — Auto-orientation:"]
 
-    # Read all stage files (stages/*.md + legacy STAGE_STATE.md)
-    stages_dir = PROJECT_ROOT / "docs" / "runtime" / "stages"
+    # Read active stage files (stages/*.md + legacy STAGE_STATE.md)
     legacy_file = PROJECT_ROOT / "docs" / "runtime" / "STAGE_STATE.md"
     found_any = False
 
-    if stages_dir.is_dir():
-        for sf in sorted(stages_dir.glob("*.md")):
-            if sf.name == ".gitkeep":
-                continue
-            content = sf.read_text(encoding="utf-8")
-            for field in ("mode", "task"):
-                for line in content.splitlines():
-                    if line.strip().startswith(f"{field}:"):
-                        lines.append(f"  Active stage [{sf.stem}]: {line.strip()}")
-                        found_any = True
-                        break
+    if list_active_stages is not None:
+        for stage in list_active_stages(PROJECT_ROOT):
+            sf = Path(stage.path)
+            if stage.mode:
+                lines.append(f"  Active stage [{sf.stem}]: mode: {stage.mode}")
+                found_any = True
+            if stage.task:
+                lines.append(f"  Active stage [{sf.stem}]: task: {stage.task}")
+                found_any = True
+    else:
+        stages_dir = PROJECT_ROOT / "docs" / "runtime" / "stages"
+        if stages_dir.is_dir():
+            for sf in sorted(stages_dir.glob("*.md")):
+                if sf.name == ".gitkeep":
+                    continue
+                content = sf.read_text(encoding="utf-8")
+                for field in ("mode", "task"):
+                    for line in content.splitlines():
+                        if line.strip().startswith(f"{field}:"):
+                            lines.append(f"  Active stage [{sf.stem}]: {line.strip()}")
+                            found_any = True
+                            break
 
     if legacy_file.exists():
         content = legacy_file.read_text(encoding="utf-8")
