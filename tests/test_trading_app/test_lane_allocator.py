@@ -59,6 +59,10 @@ def _make_score(**overrides) -> LaneScore:
         status_reason="Test default",
         chordia_verdict="PASS_PROTOCOL_A",
         chordia_audit_age_days=0,
+        # C8 defaults: PASSED so every existing test passes under the new
+        # c8 gate without forcing each call site to specify c8 kwargs.
+        # Tests that exercise the gate explicitly override this field.
+        c8_oos_status="PASSED",
     )
     defaults.update(overrides)
     return LaneScore(**defaults)
@@ -86,7 +90,8 @@ def test_db(tmp_path):
             stop_multiplier DOUBLE,
             sample_size INTEGER,
             sharpe_ratio DOUBLE,
-            status VARCHAR
+            status VARCHAR,
+            c8_oos_status VARCHAR
         )
     """)
 
@@ -142,11 +147,12 @@ def _seed_strategy(
     sample_size=100,
     sharpe_ratio=0.10,  # default; t = 0.10 * sqrt(100) = 1.0 -> FAIL_BOTH unless overridden
     status="active",
+    c8_oos_status="PASSED",
 ):
     """Insert a validated strategy into test DB."""
     con = duckdb.connect(str(db_path))
     con.execute(
-        "INSERT INTO validated_setups VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO validated_setups VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             strategy_id,
             instrument,
@@ -160,6 +166,7 @@ def _seed_strategy(
             sample_size,
             sharpe_ratio,
             status,
+            c8_oos_status,
         ],
     )
     con.close()
@@ -1380,6 +1387,162 @@ class TestChordiaGate:
         assert "STALE_FAIL" in stale
         assert stale["STALE_FAIL"]["status"] == "STALE"
         assert stale["STALE_FAIL"]["chordia_verdict"] == "FAIL_BOTH"
+
+
+class TestC8Gate:
+    """Allocator Criterion 8 OOS-status gate — refuse DEPLOY for non-PASSED
+    non-NULL c8_oos_status labels.
+
+    Stage: docs/runtime/stages/c8-allocator-gate-bug.md.
+    Verdict labels are emitted by trading_app/strategy_validator.py lines
+    1061-1138; the gate sits in lane_allocator.apply_c8_gate, which
+    build_allocation invokes inline AFTER apply_chordia_gate. Doctrine:
+    pre_registered_criteria.md §162 (rule), §752 (Amendment 3.0 mandatory
+    non-waivable), §950 (Amendment 3.1 INSUFFICIENT_* = UNVERIFIED).
+    """
+
+    def test_passed_unchanged(self):
+        """A score with c8_oos_status='PASSED' is left at DEPLOY."""
+        from trading_app.lane_allocator import apply_c8_gate
+
+        s = _make_score(strategy_id="A", c8_oos_status="PASSED")
+        result = apply_c8_gate([s])
+        assert len(result) == 1
+        assert result[0].status == "DEPLOY"
+        assert result[0].c8_oos_status == "PASSED"
+
+    def test_null_grandfather_unchanged(self):
+        """A score with c8_oos_status=None (Phase-4 grandfather) passes through."""
+        from trading_app.lane_allocator import apply_c8_gate
+
+        s = _make_score(strategy_id="A", c8_oos_status=None)
+        result = apply_c8_gate([s])
+        assert result[0].status == "DEPLOY"
+        assert result[0].c8_oos_status is None
+
+    def test_failed_ratio_demoted_to_pause(self):
+        """FAILED_RATIO (OOS Sharpe < 0.40 * IS Sharpe) is demoted to PAUSE."""
+        from trading_app.lane_allocator import apply_c8_gate
+
+        s = _make_score(strategy_id="A", c8_oos_status="FAILED_RATIO")
+        result = apply_c8_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "FAILED_RATIO" in result[0].status_reason
+        assert result[0].c8_oos_status == "FAILED_RATIO"  # field preserved for traceability
+
+    def test_negative_oos_expr_demoted_to_pause(self):
+        """NEGATIVE_OOS_EXPR is demoted to PAUSE."""
+        from trading_app.lane_allocator import apply_c8_gate
+
+        s = _make_score(strategy_id="A", c8_oos_status="NEGATIVE_OOS_EXPR")
+        result = apply_c8_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "NEGATIVE_OOS_EXPR" in result[0].status_reason
+
+    def test_no_oos_data_demoted_to_pause(self):
+        """NO_OOS_DATA is demoted to PAUSE (zero OOS trades, not deployable)."""
+        from trading_app.lane_allocator import apply_c8_gate
+
+        s = _make_score(strategy_id="A", c8_oos_status="NO_OOS_DATA")
+        result = apply_c8_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "NO_OOS_DATA" in result[0].status_reason
+
+    def test_insufficient_n_pathway_b_demoted_to_pause(self):
+        """INSUFFICIENT_N_PATHWAY_B_REJECT (Pathway B power floor) is demoted."""
+        from trading_app.lane_allocator import apply_c8_gate
+
+        s = _make_score(strategy_id="A", c8_oos_status="INSUFFICIENT_N_PATHWAY_B_REJECT")
+        result = apply_c8_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "INSUFFICIENT_N_PATHWAY_B_REJECT" in result[0].status_reason
+
+    def test_insufficient_n_pathway_a_pass_through_demoted_to_pause(self):
+        """INSUFFICIENT_N_PATHWAY_A_PASS_THROUGH is UNVERIFIED → demote to PAUSE
+        (Amendment 3.1 §950: not KILL because power floor not met)."""
+        from trading_app.lane_allocator import apply_c8_gate
+
+        s = _make_score(strategy_id="A", c8_oos_status="INSUFFICIENT_N_PATHWAY_A_PASS_THROUGH")
+        result = apply_c8_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "INSUFFICIENT_N_PATHWAY_A_PASS_THROUGH" in result[0].status_reason
+
+    def test_empty_string_demoted_to_pause(self):
+        """Empty-string c8_oos_status is demoted (not Phase-4 grandfather)."""
+        from trading_app.lane_allocator import apply_c8_gate
+
+        s = _make_score(strategy_id="A", c8_oos_status="")
+        result = apply_c8_gate([s])
+        assert result[0].status == "PAUSE"
+
+    def test_existing_pause_unchanged(self):
+        """An already-PAUSE score is left as-is (c8 gate is additive)."""
+        from trading_app.lane_allocator import apply_c8_gate
+
+        s = _make_score(
+            strategy_id="A",
+            status="PAUSE",
+            status_reason="chordia gate: PARK",
+            c8_oos_status="FAILED_RATIO",
+        )
+        result = apply_c8_gate([s])
+        assert result[0].status == "PAUSE"
+        assert result[0].status_reason == "chordia gate: PARK"  # not overwritten
+
+    def test_existing_stale_unchanged(self):
+        """An already-STALE score is left as-is."""
+        from trading_app.lane_allocator import apply_c8_gate
+
+        s = _make_score(
+            strategy_id="A",
+            status="STALE",
+            status_reason="No trades in trailing window",
+            c8_oos_status="FAILED_RATIO",
+        )
+        result = apply_c8_gate([s])
+        assert result[0].status == "STALE"
+
+    def test_unknown_label_defensively_demoted(self):
+        """Future label not in the allowlist defensively demoted (matches
+        apply_chordia_gate's defensive branch for unknown verdicts)."""
+        from trading_app.lane_allocator import apply_c8_gate
+
+        s = _make_score(strategy_id="A", c8_oos_status="SOME_FUTURE_LABEL")
+        result = apply_c8_gate([s])
+        assert result[0].status == "PAUSE"
+        assert "SOME_FUTURE_LABEL" in result[0].status_reason
+
+    def test_build_allocation_parity_chordia_then_c8(self):
+        """Parity: build_allocation applies BOTH chordia and c8 gates inline.
+
+        A score that passes chordia but fails c8 must be demoted to PAUSE
+        and excluded from the deployable set. Mirror failure case (passes
+        c8, fails chordia) is covered by TestChordiaGate.
+        """
+        from trading_app.lane_allocator import build_allocation
+
+        good = _make_score(
+            strategy_id="A",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=0,
+            c8_oos_status="PASSED",
+        )
+        c8_bad = _make_score(
+            strategy_id="B",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=0,
+            c8_oos_status="FAILED_RATIO",
+        )
+        chordia_bad = _make_score(
+            strategy_id="C",
+            chordia_verdict="FAIL_BOTH",
+            chordia_audit_age_days=0,
+            c8_oos_status="PASSED",
+        )
+
+        result = build_allocation([good, c8_bad, chordia_bad], max_slots=5)
+        selected_ids = {s.strategy_id for s in result}
+        assert selected_ids == {"A"}, f"Only the chordia+c8 PASSED strategy should be selected; got {selected_ids}"
 
 
 class TestCrossAssetATRInjection:

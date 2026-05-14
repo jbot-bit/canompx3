@@ -114,6 +114,13 @@ class LaneScore:
     chordia_verdict: str | None = None  # PASS_CHORDIA/PASS_PROTOCOL_A/FAIL_CHORDIA/FAIL_BOTH/MISSING
     chordia_audit_age_days: int | None = None  # days since audit_date in doctrine YAML
     entry_model: str = "E2"
+    # Criterion 8 OOS-status verdict from validated_setups (written by
+    # strategy_validator.py:1061-1138). Labels: PASSED, FAILED_RATIO,
+    # NEGATIVE_OOS_EXPR, NO_OOS_DATA, INSUFFICIENT_N_PATHWAY_B_REJECT,
+    # INSUFFICIENT_N_PATHWAY_A_PASS_THROUGH. None = Phase-4-grandfather
+    # (pre-c8-write-path row), passes through the gate. apply_c8_gate()
+    # demotes every non-PASSED non-None value to PAUSE.
+    c8_oos_status: str | None = None
 
 
 def _month_range(rebalance_date: date, months_back: int) -> tuple[date, date]:
@@ -290,10 +297,15 @@ def compute_lane_scores(
         # derive verdicts from validated_setups; strict replay audit rows in
         # docs/runtime/chordia_audit_log.yaml are the gate truth.
         shelf_relation = deployable_validated_relation(con, alias="vs")
+        # c8_oos_status loaded for the allocator Criterion 8 gate
+        # (apply_c8_gate). NULL is the Phase-4 grandfather marker for rows
+        # written before c8 became a validator write target; the gate passes
+        # NULL through. See docs/runtime/stages/c8-allocator-gate-bug.md.
         strategies = con.execute(
             f"""
             SELECT strategy_id, instrument, orb_label, orb_minutes, entry_model,
-                   rr_target, confirm_bars, filter_type, stop_multiplier
+                   rr_target, confirm_bars, filter_type, stop_multiplier,
+                   c8_oos_status
             FROM {shelf_relation}
             ORDER BY instrument, orb_label, orb_minutes
             """
@@ -301,7 +313,7 @@ def compute_lane_scores(
 
         scores = []
         session_regime_cache: dict[tuple[str, str, date], float | None] = {}
-        for sid, inst, orb, om, em, rr, cb, ft, sm in strategies:
+        for sid, inst, orb, om, em, rr, cb, ft, sm, c8_status in strategies:
             chordia_verdict_value = audit_log.verdict(sid) or "MISSING"
             chordia_age = audit_log.audit_age_days(sid, rebalance_date)
             if em == "E2" and is_e2_deployment_unsafe_filter(str(ft)):
@@ -329,6 +341,7 @@ def compute_lane_scores(
                         chordia_verdict=chordia_verdict_value,
                         chordia_audit_age_days=chordia_age,
                         entry_model=em,
+                        c8_oos_status=c8_status,
                     )
                 )
                 continue
@@ -371,6 +384,7 @@ def compute_lane_scores(
                         chordia_verdict=chordia_verdict_value,
                         chordia_audit_age_days=chordia_age,
                         entry_model=em,
+                        c8_oos_status=c8_status,
                     )
                 )
                 continue
@@ -465,6 +479,7 @@ def compute_lane_scores(
                     chordia_verdict=chordia_verdict_value,
                     chordia_audit_age_days=chordia_age,
                     entry_model=em,
+                    c8_oos_status=c8_status,
                 )
             )
 
@@ -746,6 +761,117 @@ def apply_chordia_gate(
                 chordia_verdict=verdict,
                 chordia_audit_age_days=age,
                 entry_model=s.entry_model,
+                c8_oos_status=s.c8_oos_status,
+            )
+        )
+    return out
+
+
+def apply_c8_gate(scores: list[LaneScore]) -> list[LaneScore]:
+    """Refuse DEPLOY for strategies failing Criterion 8 (OOS deployment gate).
+
+    Mirrors apply_chordia_gate. For each input score, returns a new LaneScore
+    with status mutated to "PAUSE" and status_reason describing the C8
+    failure when c8_oos_status is in:
+      - "FAILED_RATIO"                       (OOS Sharpe < 0.40 * IS Sharpe)
+      - "NEGATIVE_OOS_EXPR"                  (OOS ExpR <= 0)
+      - "NO_OOS_DATA"                        (Pathway A row with zero OOS trades)
+      - "INSUFFICIENT_N_PATHWAY_B_REJECT"    (Pathway B power floor not met)
+      - "INSUFFICIENT_N_PATHWAY_A_PASS_THROUGH"
+                                             (Pathway A row with sub-floor OOS N —
+                                              Amendment 3.1 §950: treat as
+                                              UNVERIFIED-not-DEAD, demote to
+                                              PAUSE pending re-validation)
+      - "REJECTED"                           (defensive — any future label)
+      - "" / empty                           (treated as missing on a non-grandfather row)
+
+    `c8_oos_status is None` is the Phase-4 grandfather marker for rows
+    written before validator c8 became a write target (or for
+    `validation_status='SKIPPED'` aliases that the validator explicitly
+    clears to NULL at strategy_validator.py:1778). NULL passes through.
+
+    Strategies that already have status PAUSE or STALE are left unchanged
+    (c8 gate is additive; never rescues a stale strategy nor changes an
+    existing PAUSE reason). PASSED strategies are returned unchanged.
+
+    Ordering: this gate runs AFTER apply_chordia_gate inside
+    build_allocation(). Chordia (Criterion 4) is the broader strict-replay
+    gate; C8 (Criterion 8) is the narrower OOS Sharpe-ratio gate. Either
+    one demoting first is fine — both look at `status in (PAUSE, STALE)`
+    first and skip.
+
+    Doctrine anchors:
+      - pre_registered_criteria.md §162 (C8 rule)
+      - pre_registered_criteria.md §752 (Amendment 3.0 mandatory non-waivable)
+      - pre_registered_criteria.md §950 (Amendment 3.1 N>=50+FAIL=>KILL;
+        INSUFFICIENT_* is UNVERIFIED, demoted to PAUSE here)
+      - strategy_validator.py:1061-1138 (c8_oos_status label producer)
+    """
+    # Set of c8 labels that mean "not deployable" per Criterion 8 + Amendment 3.1.
+    # PASSED and None (grandfather) are the only pass-through values.
+    _C8_FAIL_LABELS = {
+        "FAILED_RATIO",
+        "NEGATIVE_OOS_EXPR",
+        "NO_OOS_DATA",
+        "INSUFFICIENT_N_PATHWAY_B_REJECT",
+        "INSUFFICIENT_N_PATHWAY_A_PASS_THROUGH",
+        "REJECTED",
+    }
+
+    out: list[LaneScore] = []
+    for s in scores:
+        # Don't override an existing PAUSE/STALE — c8 gate is additive.
+        if s.status in ("PAUSE", "STALE"):
+            out.append(s)
+            continue
+
+        c8 = s.c8_oos_status
+
+        reason: str | None = None
+        if c8 is None:
+            # Phase-4 grandfather row — pass through. Drift check
+            # check_lane_allocation_c8_gate enforces the same allowlist on
+            # the JSON output; a brand-new strategy that somehow lands with
+            # c8 unset would fail downstream at the drift check, which is
+            # the intended fail-closed layer.
+            out.append(s)
+            continue
+        if c8 == "PASSED":
+            out.append(s)
+            continue
+        if c8 == "" or c8 in _C8_FAIL_LABELS:
+            reason = f"c8 gate: c8_oos_status={c8!r} (Criterion 8 OOS deployment gate)"
+        else:
+            # Defensive: any future label not in the allowlist treated as
+            # non-deployable. Matches apply_chordia_gate's defensive branch.
+            reason = f"c8 gate: c8_oos_status={c8!r} does not permit DEPLOY"
+
+        out.append(
+            LaneScore(
+                strategy_id=s.strategy_id,
+                instrument=s.instrument,
+                orb_label=s.orb_label,
+                orb_minutes=s.orb_minutes,
+                rr_target=s.rr_target,
+                filter_type=s.filter_type,
+                confirm_bars=s.confirm_bars,
+                stop_multiplier=s.stop_multiplier,
+                trailing_expr=s.trailing_expr,
+                trailing_n=s.trailing_n,
+                trailing_months=s.trailing_months,
+                annual_r_estimate=s.annual_r_estimate,
+                trailing_wr=s.trailing_wr,
+                session_regime_expr=s.session_regime_expr,
+                months_negative=s.months_negative,
+                months_positive_since_last_neg_streak=s.months_positive_since_last_neg_streak,
+                status="PAUSE",
+                status_reason=reason,
+                recent_3mo_expr=s.recent_3mo_expr,
+                sr_status=s.sr_status,
+                chordia_verdict=s.chordia_verdict,
+                chordia_audit_age_days=s.chordia_audit_age_days,
+                entry_model=s.entry_model,
+                c8_oos_status=c8,
             )
         )
     return out
@@ -785,6 +911,7 @@ def apply_live_tradeability_gate(scores: list[LaneScore]) -> list[LaneScore]:
                     chordia_verdict=s.chordia_verdict,
                     chordia_audit_age_days=s.chordia_audit_age_days,
                     entry_model=s.entry_model,
+                    c8_oos_status=s.c8_oos_status,
                 )
             )
             continue
@@ -824,8 +951,15 @@ def build_allocation(
     idempotent.
     """
     # Apply hard gates first — refuse FAIL_BOTH / FAIL_CHORDIA / MISSING /
-    # stale-audit and deployment-unsafe E2 strategies before any ranking.
+    # stale-audit, c8 OOS-deployment failures, and deployment-unsafe E2
+    # strategies before any ranking. Ordering: Chordia (Criterion 4) first
+    # because it's the broader strict-replay gate; C8 (Criterion 8) next
+    # because it's the narrower OOS Sharpe-ratio gate; live-tradeability
+    # last because it handles E2-only filter-shape concerns. All three
+    # gates short-circuit on existing PAUSE/STALE, so order is robust to
+    # multiple-gate failures.
     scores = apply_chordia_gate(scores)
+    scores = apply_c8_gate(scores)
     scores = apply_live_tradeability_gate(scores)
 
     # Filter to deployable
@@ -928,7 +1062,7 @@ def generate_report(
     """Generate human-readable rebalance report with diff and collapsed paused list."""
     from collections import Counter
 
-    gated_scores = apply_chordia_gate(scores)
+    gated_scores = apply_c8_gate(apply_chordia_gate(scores))
 
     lines = [
         f"# Lane Allocation Report — {rebalance_date}",
@@ -1075,7 +1209,7 @@ def save_allocation(
     orb_size_stats: {(instrument, orb_label, orb_minutes): (avg_orb_pts, p90_orb_pts)}.
     If None, ORB size fields are omitted from the output.
     """
-    gated_scores = apply_chordia_gate(scores)
+    gated_scores = apply_c8_gate(apply_chordia_gate(scores))
     path = Path(output_path) if output_path else DEFAULT_LANE_ALLOCATION_PATH
     path = normalize_writable_path(path)
 
@@ -1086,6 +1220,7 @@ def save_allocation(
             "reason": s.status_reason,
             "chordia_verdict": s.chordia_verdict,
             "chordia_audit_age_days": s.chordia_audit_age_days,
+            "c8_oos_status": s.c8_oos_status,
         }
 
     lanes_data = []
@@ -1116,6 +1251,10 @@ def save_allocation(
             # audit_age_days exceeds the doctrine freshness threshold.
             "chordia_verdict": s.chordia_verdict,
             "chordia_audit_age_days": s.chordia_audit_age_days,
+            # C8 (Criterion 8) OOS-status gate state — drift check
+            # check_lane_allocation_c8_gate refuses lanes[] whose value is
+            # not PASSED or NULL (Phase-4 grandfather).
+            "c8_oos_status": s.c8_oos_status,
         }
         if orb_size_stats:
             orb_key = (s.instrument, s.orb_label, s.orb_minutes)
