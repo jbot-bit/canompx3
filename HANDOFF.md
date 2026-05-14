@@ -9,12 +9,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-14
-- **Commit:** fc8cceea — harden(session-isolation): auto-recover stale Claude session locks + pre-commit staleness BLOCK
-- **Files changed:** 4 files
-  - `.claude/hooks/session-start.py`
-  - `.githooks/pre-commit`
+- **Commit:** f142e048 — [judgment] dashboard cockpit-v3 Stage 4: drawer + retire/gate redundant pollers
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `tests/test_hooks/test_session_start_mutex.py`
+  - `trading_app/live/bot_dashboard.html`
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
