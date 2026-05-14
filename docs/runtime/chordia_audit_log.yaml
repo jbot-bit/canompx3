@@ -630,3 +630,25 @@ audits:
       No theory grant claimed; strict no-theory threshold t>=3.79 applies.
       IS gates clear: t=3.865, ExpR=0.2151, N=412; BUT 2026 OOS sign opposes IS at N_OOS>=30 (descriptive monitor). Allocator MUST refuse DEPLOY.
       Result MD: `docs/audit/results/2026-05-15-20-mnq-comexsettle-x-mgc-atr70-o15-rr15-chordia-unlock.md`
+
+  # ---- 2026-05-13 MNQ US_DATA_1000 VWAP_MID_ALIGNED O30 RR1.0 ----------
+  # Pre-reg: docs/audit/hypotheses/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.yaml
+  # Result MD: docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md
+  # Branch: research/vwap-mid-aligned-o30-prereg (commits 14711a06 prereg + 4d62885a result MD)
+  # Sibling-aperture variant of 2026-05-02 O15 RR1.0 PASS_CHORDIA (deployed lane).
+  # Excluded from 2026-05-15 K=20 batch by max-2-per-(session,RR,orb_minutes) rule;
+  # remained the rank-3 candidate from 2026-05-12 audit-queue and was audited
+  # standalone post-crash-recovery on 2026-05-14.
+
+  - strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30
+    audit_date: 2026-05-14
+    verdict: PASS_CHORDIA
+    t_stat: 4.450
+    threshold: 3.79
+    sample_size: 866
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear strict: t=4.450 (clears 3.79 by 0.66), ExpR=0.1332, N=866. OOS sign matches IS at N_OOS=46 (both positive ExpR), descriptive corroboration only — OOS power=0.17 STATISTICALLY_USELESS tier per RULE 3.3, pre-committed UNVERIFIED_INSUFFICIENT_POWER for binary OOS gate. Long-short symmetry: IS Long t=3.34 (n=467), IS Short t=2.94 (n=399); both individually clear t>=2.9 audit floor (not directional artifact). Sibling-aperture variant of deployed `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15`. Allocator dry-run 2026-05-14 (canonical `scripts/tools/rebalance_lanes.py`) confirms O30 dropped at correlation/ranking gate vs same-session sibling — does not deploy with current 4-slot lineup; remains highest-EV in-bullpen replacement candidate for the US_DATA_1000 VWAP_MID_ALIGNED family.
+      Result MD: `docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md`
