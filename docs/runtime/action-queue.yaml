@@ -675,3 +675,114 @@ items:
       - docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md
     notes_ref: docs/audit/results/2026-05-05-oos-reconcile-ovnrng100.md
     override_note: "K=1 confirmatory diligence on already-validated deployed lane; no new pre-reg required by Phase 0 § 'Confirmatory audits do NOT require new pre-reg'. Pre-reg yaml written for audit-trail completeness. Acceptance criterion 4 was mis-specified against scratch-EXCLUSIVE validated_setups.expectancy_r; correction documented in result MD per no-post-hoc-rescue rule. Pre-reg yaml left as-locked."
+
+  - id: c8_oos_status_allocator_doctrine_2026_05_14
+    title: Trace whether allocator consults c8_oos_status; document accept-with-risk if non-blocking
+    class: capital-doctrine
+    status: open
+    priority: P1
+    close_before_new_work: true
+    owner_hint: user-or-claude
+    last_verified_at: 2026-05-14
+    freshness_sla_days: 30
+    next_action: |
+      Capital-review of the proposed 2026-05-14 lane_allocation rebalance
+      surfaced that two of the proposed-or-deployed lanes carry
+      `c8_oos_status = FAILED_RATIO`:
+        - MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K  (proposed ADD; K=20 PASS_CHORDIA t=4.678)
+        - MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25   (currently DEPLOYED, proposed DROP)
+      Per `pre_registered_criteria.md` Criterion 8 (OOS deployment gates),
+      FAILED_RATIO means OOS Sharpe < 0.40 * IS Sharpe. The currently-deployed
+      OVNRNG_25 lane carrying this status without lifecycle action establishes
+      an implicit precedent that C8 is non-blocking at the allocator layer --
+      but no doctrine note exists confirming this. Capital-class doctrine
+      ambiguity.
+
+      Three resolutions possible:
+      (1) BUG: trace `scripts/tools/rebalance_lanes.py` + `trading_app/lane_allocator.py`
+          and confirm whether c8_oos_status is read at all. If not read, that
+          is a fail-closed-failure-mode bug -- Criterion 8 says C8 is binding
+          for deployment eligibility.
+      (2) DOCTRINE: if C8 is intentionally advisory at allocator layer (only
+          binding for downstream deployment pre-regs), append explicit note to
+          pre_registered_criteria.md Criterion 8 + add allocator-source comment
+          confirming the non-binding scope.
+      (3) PARTIAL: if C8 should block NEW deployments but grandfather existing
+          ones, allocator needs a `prior_deployment_grandfather` flag -- write
+          that as a separate stage with its own pre-reg.
+
+      Steps:
+        1. Read `trading_app/lane_allocator.py` and grep for `c8_oos_status`
+           (read-only, no edits).
+        2. Read `scripts/tools/rebalance_lanes.py` similarly.
+        3. Read `pre_registered_criteria.md` Criterion 8 for the exact binding
+           statement.
+        4. Pick (1)/(2)/(3) and write the doctrine note OR the bug-fix stage.
+    exit_criteria: |
+      Either (a) doctrine amendment landed in pre_registered_criteria.md
+      Criterion 8 + allocator source comment, OR (b) drift check added that
+      blocks promotion of FAILED_RATIO strategies into validated_setups via
+      strategy_discovery, OR (c) explicit accept-with-risk decision-ledger
+      entry approving the current pattern. ANY future lane_allocation.json
+      mutation must reference this resolution.
+    blocked_by: []
+    decision_refs:
+      - docs/institutional/pre_registered_criteria.md
+      - docs/audit/results/2026-05-12-deployment-coverage-orphans.md
+    evidence_refs:
+      - scripts/tools/rebalance_lanes.py
+      - trading_app/lane_allocator.py
+      - validated_setups.c8_oos_status (canonical column)
+    notes_ref: ""
+
+  - id: lane_allocation_rebalance_2026_05_14_pending_capital_review_blockers
+    title: Pending lane_allocation.json rebalance - 4 lanes total (3 swaps), HOLD on C8 + SR-warmup
+    class: capital
+    status: open
+    priority: P2
+    close_before_new_work: false
+    owner_hint: user
+    last_verified_at: 2026-05-14
+    freshness_sla_days: 14
+    next_action: |
+      Dry-run rebalance of `topstep_50k_mnq_auto` profile (canonical
+      `scripts/tools/rebalance_lanes.py --output <tmp>`) on 2026-05-14
+      proposes:
+        DROP: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K              (annual_r 31.40)
+        DROP: MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15    (annual_r 24.60)
+        DROP: MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25               (annual_r 10.60)
+        ADD : MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100              (annual_r 31.80)
+        ADD : MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15    (annual_r 27.10)
+        ADD : MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K              (annual_r 10.50)
+        KEEP: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12                  (annual_r 22.90)
+      Net: +2.80 R/yr (~$84/yr/contract). Below noise floor for a 3-of-4
+      lane churn.
+
+      Capital-review verdict: VERIFY_MORE. Blockers:
+        (a) C8 doctrine ambiguity on ORB_VOL_8K (see
+            c8_oos_status_allocator_doctrine_2026_05_14).
+        (b) SR-tripwire blind spot on all 3 ADD candidates - no live history;
+            paper-trade warmup status undetermined for newly-promoted lanes.
+        (c) Live-control checks not exercised (kill/flatten/risk-limit not
+            traced for new lanes).
+      Do NOT mutate `docs/runtime/lane_allocation.json` while these are open.
+    exit_criteria: |
+      All three blockers closed:
+        (a) c8_oos_status_allocator_doctrine_2026_05_14 closed with concrete
+            resolution verdict.
+        (b) Paper-trade warmup either verified to exist for new lanes OR
+            explicitly waived in writing.
+        (c) Live-control trace landed (session-orchestrator + risk-manager
+            tests run for the new lane set).
+      Then re-run rebalance_lanes.py and apply if dry-run still shows the
+      same proposed set. Otherwise re-evaluate.
+    blocked_by:
+      - c8_oos_status_allocator_doctrine_2026_05_14
+    decision_refs:
+      - decision-ledger.md (o30-pass-chordia-audit-not-deployed-2026-05-14)
+    evidence_refs:
+      - docs/runtime/lane_allocation.json
+      - docs/runtime/chordia_audit_log.yaml
+      - docs/audit/results/2026-05-15-mnq-chordia-batch-k20.md
+      - docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md
+    notes_ref: ""

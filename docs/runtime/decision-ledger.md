@@ -4,6 +4,41 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
+- `o30-pass-chordia-audit-not-deployed-2026-05-14` — MNQ
+  `US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30` cleared strict no-theory
+  Chordia hurdle (t=4.450, N=866, ExpR=0.1332; clears 3.79 by 0.66) per
+  bounded canonical replay (`research/chordia_strict_unlock_v1.py`) under
+  pre-reg `docs/audit/hypotheses/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.yaml`.
+  Result MD `docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md`;
+  audit-log entry committed to canonical `docs/runtime/chordia_audit_log.yaml`
+  on main as commit `2cf2c9cc`. Pre-reg + result MD + handoff dedup committed
+  on `research/vwap-mid-aligned-o30-prereg` as `14711a06`, `4d62885a`,
+  `f84261d4`. **Audit verdict independently verified SOUND** via end-to-end
+  evidence trace: Chordia 2018 verbatim threshold quote
+  (`docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md:20`),
+  loader field-presence trap logic
+  (`trading_app/hypothesis_loader.py:267-268`),
+  scratch policy (runner line 269 `fillna(0.0)`, no NULL drops in CSV; 167 IS
+  scratches counted as R=0; the 5% delta vs `validated_setups.t=4.230` is the
+  documented wins+losses-only-vs-wins+losses+scratches denominator difference,
+  not inflation), independent CSV recompute matches t=4.450 to 3 decimals,
+  cohort lower bound `WF_START_OVERRIDE["MNQ"] = date(2020, 1, 1)`
+  (`trading_app/config.py:379`), K-budget gate PASS at N=1, no fresher
+  KILL/NO-GO supersedes. **Allocator dry-run on the same date shows O30 does
+  NOT enter the deployed 4-slot set** (canonical
+  `scripts/tools/rebalance_lanes.py --output <tmp>` to temp file, no live
+  mutation): O30 is sibling-aperture variant of already-deployed
+  `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15` and ranks below
+  ORB_VOL_8K (annual_r 10.5) at the marginal slot. **O30 is bullpen
+  replacement** if any deployed VWAP_MID_ALIGNED-family lane degrades. No
+  capital state changed. Two action-queue items opened from this work:
+  `c8_oos_status_allocator_doctrine_2026_05_14` (P1, blocking) and
+  `lane_allocation_rebalance_2026_05_14_pending_capital_review_blockers` (P2,
+  blocked-by C8). Capital-review verdict on the broader rebalance: VERIFY_MORE
+  (live-control checks not exercised; kill/flatten not traced; SR-tripwire
+  blind spot on all 3 NEW candidates; +2.80 R/yr below noise floor for a
+  3-of-4 lane churn).
+
 - `mnq-live-readiness-gap-fill-2026-05-11` — Live-readiness pass found and
   fixed a real blocker at the evidence-metadata layer, not by weakening proof.
   Canonical MNQ E2 TBBO routine-slippage evidence already covers 9 deployed
