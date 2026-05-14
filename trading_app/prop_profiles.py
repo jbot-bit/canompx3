@@ -1010,21 +1010,43 @@ def get_profile_lane_definitions(profile_id: str | None = None) -> list[dict]:
     return lane_defs
 
 
-def get_lane_registry(profile_id: str | None = None) -> dict[tuple[str, str], dict]:
-    """Return a (session, instrument)-keyed lane map.
+def get_lane_registry(profile_id: str | None = None) -> dict[tuple[str, str, int], dict]:
+    """Return a (session, instrument, orb_minutes)-keyed lane map.
 
-    Multi-RR profiles have multiple lanes per session, and multi-instrument
-    profiles can legitimately carry different ORB caps for the same wall-clock
-    session. The ORB cap (``max_orb_size_pts``) therefore belongs to the
-    ``(orb_label, instrument)`` pair, not the session alone. This function
-    returns one representative lane dict per pair and fails closed only when
-    lanes on the same ``(session, instrument)`` disagree on
-    ``max_orb_size_pts``.
+    The ORB cap (``max_orb_size_pts``) is a per-trade stop-distance ceiling
+    enforced at entry time (see ``SessionOrchestrator._orb_caps`` and the
+    ORB_CAP gate in ``_handle_event``). Stop-distance distributions are a
+    function of ORB aperture: a 15-minute ORB structurally produces wider
+    stops than a 5-minute ORB on the same wall-clock session, so caps
+    derived from the per-lane P90 (see ``rebalance_lanes.py`` writer)
+    legitimately differ across apertures even when session and instrument
+    match.
+
+    Key dimensions added historically:
+    - 2026-04-19 (PP-167): added ``instrument`` after multi-instrument
+      sessions hit a false-conflict ValueError on ``self_funded_tradovate``.
+    - 2026-05-14 (A.6): added ``orb_minutes`` after the post-2026-05-14
+      rebalance co-deployed an O5 and an O15 lane on the same
+      session/instrument with distinct per-aperture P90 caps — both
+      correct for their aperture cohort. Concrete cap values live in
+      ``docs/runtime/lane_allocation.json`` (the canonical writer
+      output), not in this docstring.
+
+    This function fails closed only when lanes on the same
+    ``(orb_label, instrument, orb_minutes)`` triple disagree on
+    ``max_orb_size_pts``. A true conflict at that grain is a writer bug
+    (`rebalance_lanes.py` emitting two different P90s for the same cohort).
     """
-    registry: dict[tuple[str, str], dict] = {}
-    cap_conflicts: dict[tuple[str, str], set[float | None]] = {}
+    registry: dict[tuple[str, str, int], dict] = {}
+    cap_conflicts: dict[tuple[str, str, int], set[float | None]] = {}
     for lane in get_profile_lane_definitions(profile_id):
-        key = (lane["orb_label"], lane["instrument"])
+        orb_minutes = lane.get("orb_minutes")
+        if orb_minutes is None:
+            raise ValueError(
+                f"Lane {lane.get('strategy_id')!r} missing 'orb_minutes' — "
+                "cannot key ORB cap registry. Fix the lane definition source."
+            )
+        key = (lane["orb_label"], lane["instrument"], orb_minutes)
         cap = lane.get("max_orb_size_pts")
         if key not in registry:
             registry[key] = lane
@@ -1035,12 +1057,12 @@ def get_lane_registry(profile_id: str | None = None) -> dict[tuple[str, str], di
 
     if cap_conflicts:
         details = ", ".join(
-            f"{label}/{instrument}={sorted(caps, key=lambda c: (c is None, c))}"
-            for (label, instrument), caps in sorted(cap_conflicts.items())
+            f"{label}/{instrument}/O{orb_minutes}={sorted(caps, key=lambda c: (c is None, c))}"
+            for (label, instrument, orb_minutes), caps in sorted(cap_conflicts.items())
         )
         raise ValueError(
             "Profile has inconsistent max_orb_size_pts across lanes on the "
-            f"same (session, instrument): {details}. Reconcile the "
+            f"same (session, instrument, orb_minutes): {details}. Reconcile the "
             "DailyLaneSpec entries in prop_profiles.py."
         )
 

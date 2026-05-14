@@ -349,9 +349,11 @@ class SessionOrchestrator:
         # Strategy lookup map for resolving entry_model from strategy_id on TradeEvents
         self._strategy_map: dict[str, PortfolioStrategy] = {s.strategy_id: s for s in self.portfolio.strategies}
 
-        # ORB cap map: (orb_label, instrument) -> max risk in points.
+        # ORB cap map: (orb_label, instrument, orb_minutes) -> max risk in points.
         # Values are compared against event.risk_points (stop distance, NOT raw ORB size).
-        self._orb_caps: dict[tuple[str, str], float] = {}
+        # Aperture is in the key because per-lane P90 stop distances differ by ORB minutes
+        # (see prop_profiles.get_lane_registry docstring for the A.6 2026-05-14 rationale).
+        self._orb_caps: dict[tuple[str, str, int], float] = {}
         _is_profile = portfolio is not None and portfolio.strategies and portfolio.strategies[0].source == "profile"
         profile_id = None
         if portfolio is not None and portfolio.name.startswith("profile_"):
@@ -359,11 +361,17 @@ class SessionOrchestrator:
         try:
             from trading_app.prop_profiles import get_lane_registry
 
-            for (label, instrument), info in get_lane_registry(profile_id=profile_id).items():
+            for (label, instrument, orb_minutes), info in get_lane_registry(profile_id=profile_id).items():
                 cap = info.get("max_orb_size_pts")
                 if cap is not None:
-                    self._orb_caps[(label, instrument)] = cap
-                    log.info("ORB cap loaded: %s/%s max=%.1f pts risk", label, instrument, cap)
+                    self._orb_caps[(label, instrument, orb_minutes)] = cap
+                    log.info(
+                        "ORB cap loaded: %s/%s/O%d max=%.1f pts risk",
+                        label,
+                        instrument,
+                        orb_minutes,
+                        cap,
+                    )
         except Exception:
             if _is_profile:
                 raise  # Fail-closed: prop accounts MUST have working cap loading
@@ -2149,14 +2157,16 @@ class SessionOrchestrator:
             # ORB cap check — risk management gate (prevents oversized trades).
             # event.risk_points = stop distance in points (abs(entry - stop)), set
             # by ExecutionEngine. With 0.75x stops, risk_points ~ 0.75 * ORB range.
-            # Cap at 150 pts risk = $300 max loss per trade on MNQ ($2/pt).
-            orb_cap = self._orb_caps.get((strategy.orb_label, strategy.instrument))
+            # Keyed by (orb_label, instrument, orb_minutes) because stop-distance
+            # distributions differ by ORB aperture on the same session+instrument.
+            orb_cap = self._orb_caps.get((strategy.orb_label, strategy.instrument, strategy.orb_minutes))
             if orb_cap is not None and event.risk_points is not None:
                 if event.risk_points >= orb_cap:
                     log.info(
-                        "ORB_CAP_SKIP: %s/%s risk=%.1f pts >= cap=%.1f pts. Trade skipped.",
+                        "ORB_CAP_SKIP: %s/%s/O%d risk=%.1f pts >= cap=%.1f pts. Trade skipped.",
                         strategy.orb_label,
                         strategy.instrument,
+                        strategy.orb_minutes,
                         event.risk_points,
                         orb_cap,
                     )

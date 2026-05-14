@@ -259,13 +259,15 @@ class TestLaneRegistryOrbCap:
 
     def test_registry_has_max_orb_field(self):
         registry = get_lane_registry()
-        for (label, instrument), info in registry.items():
-            assert "max_orb_size_pts" in info, f"{label}/{instrument} missing max_orb_size_pts"
+        for (label, instrument, orb_minutes), info in registry.items():
+            assert "max_orb_size_pts" in info, f"{label}/{instrument}/O{orb_minutes} missing max_orb_size_pts"
 
     def test_tokyo_open_cap_in_registry(self):
         registry = get_lane_registry()
         tokyo_caps = [
-            info["max_orb_size_pts"] for (label, _instrument), info in registry.items() if label == "TOKYO_OPEN"
+            info["max_orb_size_pts"]
+            for (label, _instrument, _orb_minutes), info in registry.items()
+            if label == "TOKYO_OPEN"
         ]
         for cap in tokyo_caps:
             assert cap is not None and cap > 0, "TOKYO_OPEN cap must be positive"
@@ -275,10 +277,10 @@ class TestLaneRegistryOrbCap:
         caps are per-session P90 from allocator JSON (not hardcoded flat values).
         """
         registry = get_lane_registry()
-        for (label, instrument), info in registry.items():
+        for (label, instrument, orb_minutes), info in registry.items():
             cap = info.get("max_orb_size_pts")
-            assert cap is not None, f"{label}/{instrument} missing ORB cap"
-            assert cap > 0, f"{label}/{instrument} cap must be positive"
+            assert cap is not None, f"{label}/{instrument}/O{orb_minutes} missing ORB cap"
+            assert cap > 0, f"{label}/{instrument}/O{orb_minutes} cap must be positive"
 
     def test_multi_instrument_session_profile_keeps_distinct_caps(self):
         """Different instruments on the same session must keep their own cap."""
@@ -295,13 +297,56 @@ class TestLaneRegistryOrbCap:
         ACCOUNT_PROFILES["multi_instrument_profile"] = multi_instrument
         try:
             registry = get_lane_registry("multi_instrument_profile")
-            assert registry[("NYSE_OPEN", "MNQ")]["max_orb_size_pts"] == 117.8
-            assert registry[("NYSE_OPEN", "MES")]["max_orb_size_pts"] == 30.0
+            assert registry[("NYSE_OPEN", "MNQ", 5)]["max_orb_size_pts"] == 117.8
+            assert registry[("NYSE_OPEN", "MES", 5)]["max_orb_size_pts"] == 30.0
         finally:
             ACCOUNT_PROFILES.pop("multi_instrument_profile", None)
 
+    def test_per_aperture_caps_coexist_on_same_session_instrument(self):
+        """A.6 (2026-05-14): two lanes on the same (orb_label, instrument)
+        but different orb_minutes must each keep their own cap.
+
+        Reproduces the production blocker — US_DATA_1000/MNQ had two
+        co-deployed lanes with caps 142.3 (O15 VWAP_MID_ALIGNED) and 89.2
+        (O5 OVNRNG_25). Pre-A.6 the registry conflated them and the loader
+        raised a false-positive ValueError; post-A.6 each aperture cohort
+        owns its own cap.
+        """
+        per_aperture = AccountProfile(
+            profile_id="per_aperture_profile",
+            firm="topstep",
+            account_size=50_000,
+            active=False,
+            daily_lanes=(
+                DailyLaneSpec(
+                    "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15",
+                    "MNQ",
+                    "US_DATA_1000",
+                    max_orb_size_pts=142.3,
+                ),
+                DailyLaneSpec(
+                    "MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25",
+                    "MNQ",
+                    "US_DATA_1000",
+                    max_orb_size_pts=89.2,
+                ),
+            ),
+        )
+        ACCOUNT_PROFILES["per_aperture_profile"] = per_aperture
+        try:
+            registry = get_lane_registry("per_aperture_profile")
+            assert registry[("US_DATA_1000", "MNQ", 15)]["max_orb_size_pts"] == 142.3
+            assert registry[("US_DATA_1000", "MNQ", 5)]["max_orb_size_pts"] == 89.2
+        finally:
+            ACCOUNT_PROFILES.pop("per_aperture_profile", None)
+
     def test_duplicate_session_instrument_profile_raises_on_registry(self):
-        """get_lane_registry must still fail closed on true cap conflicts."""
+        """get_lane_registry must still fail closed on a TRUE cap conflict —
+        two lanes on the same (session, instrument, orb_minutes) with
+        different caps. That grain is a writer bug (rebalance_lanes.py
+        emitting two different P90s for the same cohort), not a legitimate
+        per-aperture difference.
+        """
         conflict = AccountProfile(
             profile_id="dup_conflict_profile",
             firm="topstep",
@@ -314,7 +359,7 @@ class TestLaneRegistryOrbCap:
         )
         ACCOUNT_PROFILES["dup_conflict_profile"] = conflict
         try:
-            with pytest.raises(ValueError, match="same \\(session, instrument\\)"):
+            with pytest.raises(ValueError, match=r"same \(session, instrument, orb_minutes\)"):
                 get_lane_registry("dup_conflict_profile")
         finally:
             ACCOUNT_PROFILES.pop("dup_conflict_profile", None)
@@ -326,20 +371,18 @@ class TestLaneRegistryOrbCap:
         bot's ORB-cap loader path and was a latent production bug before
         2026-04-12 — session_orchestrator.__init__ would crash.
 
-        Structure-based: the test asserts that the three core multi-RR
-        sessions (EUROPE_FLOW, TOKYO_OPEN) have registry entries and the
-        caps they carry. Which additional single-lane sessions are present
-        (COMEX_SETTLE, CME_PRECLOSE, etc.) varies as profit expansions
+        Structure-based: asserts every registry entry has a positive cap.
+        Which sessions/apertures are present varies as profit expansions
         add and retire lanes, so we don't pin them here.
         """
         registry = get_lane_registry("topstep_50k_mnq_auto")
         # Since 2026-04-13, caps are per-session P90 from allocator JSON.
         # Assert structure (caps exist and are positive), not exact values.
         assert len(registry) >= 1, "expected at least one session in registry"
-        for (label, instrument), info in registry.items():
+        for (label, instrument, orb_minutes), info in registry.items():
             cap = info.get("max_orb_size_pts")
-            assert cap is not None, f"{label}/{instrument} registry entry missing max_orb_size_pts"
-            assert cap > 0, f"{label}/{instrument} cap must be positive"
+            assert cap is not None, f"{label}/{instrument}/O{orb_minutes} registry entry missing max_orb_size_pts"
+            assert cap > 0, f"{label}/{instrument}/O{orb_minutes} cap must be positive"
 
     def test_duplicate_session_profile_preserves_all_lane_definitions(self):
         duplicate = AccountProfile(

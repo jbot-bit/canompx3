@@ -26,7 +26,7 @@ def _build_lanes() -> list[dict]:
     """Build lane list from canonical registry (MNQ lanes only for slippage)."""
     registry = get_lane_registry()
     lanes = []
-    for (label, instrument), lane in sorted(registry.items()):
+    for (label, instrument, _orb_minutes), lane in sorted(registry.items()):
         if instrument != "MNQ":
             continue  # slippage scenario is MNQ-specific
         lanes.append(

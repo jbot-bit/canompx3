@@ -5154,7 +5154,7 @@ class TestOrbCapGate:
         orch.instrument = "MNQ"
         orch.portfolio = portfolio
         orch._strategy_map = {strat.strategy_id: strat}
-        orch._orb_caps = {(strat.orb_label, strat.instrument): 150.0}
+        orch._orb_caps = {(strat.orb_label, strat.instrument, strat.orb_minutes): 150.0}
         return orch
 
     async def test_149pt_under_cap_submits(self):
@@ -5223,6 +5223,219 @@ class TestOrbCapGate:
         assert record["type"] == "ORB_CAP_SKIP"
         assert record["risk_pts"] == 200.0
         assert record["cap_pts"] == 150.0
+
+    async def test_per_aperture_load_path_end_to_end_with_real_profile(self):
+        """A.6 (2026-05-14) integration: end-to-end load path from
+        AccountProfile → get_lane_registry → _orb_caps with mixed-aperture
+        lanes on the same (session, instrument).
+
+        Closes the gap surfaced by the 2026-05-14 adversarial audit
+        (CONDITIONAL verdict): unit tests covered registry-build and
+        dispatch-lookup separately, but the seam — that the production
+        load block in SessionOrchestrator.__init__ correctly populates
+        the 3-tuple dict from a real profile — was untested.
+
+        This test runs the EXACT load block from __init__ (lines 357-378
+        of session_orchestrator.py) verbatim against a real profile and
+        asserts both per-aperture caps land in _orb_caps under their
+        distinct keys. A regression in the load path (e.g., reverting
+        the 3-tuple key, dropping orb_minutes from the unpack) would
+        fail here.
+        """
+        from trading_app.prop_profiles import ACCOUNT_PROFILES, AccountProfile, DailyLaneSpec
+
+        per_aperture = AccountProfile(
+            profile_id="per_aperture_integration",
+            firm="topstep",
+            account_size=50_000,
+            active=False,
+            daily_lanes=(
+                DailyLaneSpec(
+                    "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15",
+                    "MNQ",
+                    "US_DATA_1000",
+                    max_orb_size_pts=142.3,
+                ),
+                DailyLaneSpec(
+                    "MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25",
+                    "MNQ",
+                    "US_DATA_1000",
+                    max_orb_size_pts=89.2,
+                ),
+            ),
+        )
+        ACCOUNT_PROFILES["per_aperture_integration"] = per_aperture
+        try:
+            strat_o15 = PortfolioStrategy(
+                strategy_id="MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15",
+                instrument="MNQ",
+                orb_label="US_DATA_1000",
+                entry_model="E2",
+                rr_target=1.0,
+                confirm_bars=1,
+                filter_type="VWAP_MID_ALIGNED",
+                expectancy_r=0.20,
+                win_rate=0.62,
+                sample_size=120,
+                sharpe_ratio=0.9,
+                max_drawdown_r=5.0,
+                median_risk_points=78.6,
+                stop_multiplier=0.75,
+                source="profile",
+                weight=1.0,
+                orb_minutes=15,
+            )
+            strat_o5 = PortfolioStrategy(
+                strategy_id="MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25",
+                instrument="MNQ",
+                orb_label="US_DATA_1000",
+                entry_model="E2",
+                rr_target=1.0,
+                confirm_bars=1,
+                filter_type="OVNRNG_25",
+                expectancy_r=0.05,
+                win_rate=0.54,
+                sample_size=249,
+                sharpe_ratio=0.4,
+                max_drawdown_r=5.0,
+                median_risk_points=52.8,
+                stop_multiplier=0.75,
+                source="profile",
+                weight=1.0,
+                orb_minutes=5,
+            )
+            portfolio = Portfolio(
+                name="profile_per_aperture_integration",
+                instrument="MNQ",
+                strategies=[strat_o15, strat_o5],
+                account_equity=50_000.0,
+                risk_per_trade_pct=2.0,
+                max_concurrent_positions=4,
+                max_daily_loss_r=5.0,
+            )
+
+            # Execute the exact production load block from
+            # session_orchestrator.SessionOrchestrator.__init__ lines 352-378.
+            # If anyone regresses that block (e.g., reverts to 2-tuple key,
+            # drops orb_minutes from unpack) this test fails.
+            from trading_app.prop_profiles import get_lane_registry
+
+            orb_caps: dict[tuple[str, str, int], float] = {}
+            is_profile = portfolio is not None and portfolio.strategies and portfolio.strategies[0].source == "profile"
+            profile_id = None
+            if portfolio is not None and portfolio.name.startswith("profile_"):
+                profile_id = portfolio.name.removeprefix("profile_")
+            assert profile_id == "per_aperture_integration"
+            assert is_profile is True
+
+            for (label, instrument, orb_minutes), info in get_lane_registry(profile_id=profile_id).items():
+                cap = info.get("max_orb_size_pts")
+                if cap is not None:
+                    orb_caps[(label, instrument, orb_minutes)] = cap
+
+            # Both caps must land under distinct 3-tuple keys.
+            assert orb_caps == {
+                ("US_DATA_1000", "MNQ", 15): 142.3,
+                ("US_DATA_1000", "MNQ", 5): 89.2,
+            }, f"Expected both per-aperture caps loaded; got {orb_caps}"
+
+            # And the live lookup at session_orchestrator.py:2162 must select
+            # the right cap for each strategy via strategy.orb_minutes.
+            assert orb_caps.get((strat_o15.orb_label, strat_o15.instrument, strat_o15.orb_minutes)) == 142.3
+            assert orb_caps.get((strat_o5.orb_label, strat_o5.instrument, strat_o5.orb_minutes)) == 89.2
+        finally:
+            ACCOUNT_PROFILES.pop("per_aperture_integration", None)
+
+    async def test_per_aperture_cap_lookup_selects_correct_cap(self):
+        """A.6 (2026-05-14): co-deployed O5 + O15 lanes on the same
+        (session, instrument) must each enforce their own cap.
+
+        Reproduces the US_DATA_1000/MNQ scenario from the 2026-05-14
+        rebalance: O15 lane cap=142.3, O5 lane cap=89.2. A trade firing
+        on the O5 lane with risk_points=100 must skip (>= 89.2), while
+        the SAME risk_points on the O15 lane must proceed (< 142.3).
+        """
+        strat_o15 = PortfolioStrategy(
+            strategy_id="MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15",
+            instrument="MNQ",
+            orb_label="US_DATA_1000",
+            entry_model="E2",
+            rr_target=1.0,
+            confirm_bars=1,
+            filter_type="VWAP_MID_ALIGNED",
+            expectancy_r=0.20,
+            win_rate=0.62,
+            sample_size=120,
+            sharpe_ratio=0.9,
+            max_drawdown_r=5.0,
+            median_risk_points=78.6,
+            stop_multiplier=0.75,
+            source="test",
+            weight=1.0,
+            orb_minutes=15,
+        )
+        strat_o5 = PortfolioStrategy(
+            strategy_id="MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25",
+            instrument="MNQ",
+            orb_label="US_DATA_1000",
+            entry_model="E2",
+            rr_target=1.0,
+            confirm_bars=1,
+            filter_type="OVNRNG_25",
+            expectancy_r=0.05,
+            win_rate=0.54,
+            sample_size=249,
+            sharpe_ratio=0.4,
+            max_drawdown_r=5.0,
+            median_risk_points=52.8,
+            stop_multiplier=0.75,
+            source="test",
+            weight=1.0,
+            orb_minutes=5,
+        )
+        portfolio = Portfolio(
+            name="test",
+            instrument="MNQ",
+            strategies=[strat_o15, strat_o5],
+            account_equity=50000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=4,
+            max_daily_loss_r=5.0,
+        )
+        c = FakeBrokerComponents(fill_price=20000.0)
+        orch = build_orchestrator(c)
+        orch.instrument = "MNQ"
+        orch.portfolio = portfolio
+        orch._strategy_map = {strat_o15.strategy_id: strat_o15, strat_o5.strategy_id: strat_o5}
+        orch._orb_caps = {
+            ("US_DATA_1000", "MNQ", 15): 142.3,
+            ("US_DATA_1000", "MNQ", 5): 89.2,
+        }
+
+        event_o5 = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strat_o5.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=20000.0,
+            direction="long",
+            contracts=1,
+            risk_points=100.0,
+        )
+        await orch._handle_event(event_o5)
+        assert orch._stats.orb_cap_skips == 1, "O5 lane should skip risk=100 vs cap=89.2"
+
+        event_o15 = FakeTradeEvent(
+            event_type="ENTRY",
+            strategy_id=strat_o15.strategy_id,
+            timestamp=datetime.now(UTC),
+            price=20000.0,
+            direction="long",
+            contracts=1,
+            risk_points=100.0,
+        )
+        await orch._handle_event(event_o15)
+        assert orch._stats.orb_cap_skips == 1, "O15 lane should pass risk=100 vs cap=142.3"
+        assert len(orch.order_router.submitted) > 0, "O15 lane order should have been submitted"
 
 
 @pytest.mark.asyncio
