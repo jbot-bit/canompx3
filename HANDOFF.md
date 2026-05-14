@@ -9,8 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-14
-- **Commit:** b9711281 — @ feat(chordia): MNQ batch K=20 strict-replay audits + lane rebalance
-- **Files changed:** 1 files
+- **Commit:** 7f44a781 — [judgment] dashboard cockpit-v3 Stage 3: chart + SSE wiring + hold-to-kill
+- **Files changed:** 2 files
+  - `HANDOFF.md`
   - `trading_app/live/bot_dashboard.html`
 
 ## This Session (2026-05-13 PM)

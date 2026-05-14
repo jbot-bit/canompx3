@@ -1,0 +1,193 @@
+metadata:
+  name: "mnq_usdata1000_orb_vol_8k_rr10_chordia_unlock"
+  purpose: "Bounded exact-lane Chordia unlock audit for MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K. No theory grant is claimed."
+  date_locked: "2026-05-15T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "family"
+  research_question_type: "conditional_role"
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/runtime/chordia_audit_log.yaml"
+    - "docs/plans/2026-05-12-deployment-throughput-leverage.md"
+  notes:
+    - "Pathway-B K=1 unlock audit for one already-validated shelf candidate, not fresh discovery."
+    - "Criterion 4 strict threshold t >= 3.79 applies because no theory citation is claimed."
+    - "Mode A holdout sacred from 2026-01-01."
+    - "Pre-reg #8/20 in 2026-05-15 MNQ Chordia batch (per docs/plans/2026-05-12-deployment-throughput-leverage.md Lever 1)."
+
+scope:
+  instrument: MNQ
+  strategy_id: "MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K"
+  session: US_DATA_1000
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  direction: pooled
+  filter_type: ORB_VOL_8K
+  filter_source: "trading_app.config.ALL_FILTERS['ORB_VOL_8K']"
+  out_of_scope:
+    - "ORB_VOL_8K siblings at other RR targets, sessions, or apertures"
+    - "theory-grant upgrade for the US_DATA_1000 session-filter combination"
+    - "allocator, sizing, schema, or live-execution changes"
+    - "writes to validated_setups or chordia_audit_log.yaml before execution evidence exists"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only descriptive corroboration only; never used to tune the lane"
+  tuning_against_oos: false
+  canonical_layers_only: true
+  scratch_policy: "realized-eod"
+  scratch_handling: "COALESCE(pnl_r, 0.0) — never WHERE pnl_r IS NOT NULL (per memory/feedback_scratch_pnl_null_class_bug.md)"
+
+grounding:
+  core_orb_premise:
+    - source_file: "resources/Building_Reliable_Trading_Systems.pdf"
+      extract_proxy: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "grounds intraday breakout continuation generally"
+      with_theory_claim: false
+  filter_grounding_status:
+    verdict: "UNSUPPORTED"
+    basis: >
+      ORB_VOL_8K is a project-confirmed gate, but this file does not claim a
+      specific literature-backed mechanism for the US_DATA_1000 session.
+      Strict no-theory Chordia threshold (t >= 3.79) applies.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - "validated_setups (status=active) snapshot 2026-05-14: annual_r_proxy=27.65, sample_size=1395, sharpe_ann=1.901"
+    - "docs/plans/2026-05-12-deployment-throughput-leverage.md Lever 1 (771 MNQ MISSING from chordia_audit_log)"
+  note: >
+    The validated_setups row motivates inclusion in the batch; per pre-reg-writer
+    discipline its statistics are NOT the verdict evidence. The strict-replay
+    audit this pre-reg authorizes IS the verdict evidence.
+
+primary_schema:
+  family_cells:
+    - id: "MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K"
+      strategy_id: "MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K"
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 5
+      rr_target: 1.0
+      filter: ORB_VOL_8K
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  chordia_threshold_basis: "Criterion 4 no-theory strict threshold (t >= 3.79)"
+  promotion_gate: "PASS_CHORDIA only; PASS_PROTOCOL_A is not available in this prereg"
+
+hypotheses:
+  - id: 1
+    name: "MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K exact-lane strict unlock"
+    economic_basis: >
+      Bounded exact-lane replay of a pre-existing validated shelf candidate. The audit
+      asks whether the configured lane still clears the strict no-theory Chordia hurdle
+      under canonical Mode A replay.
+    role:
+      kind: "standalone"
+      parent: "Exact MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K canonical lane replay on orb_outcomes x daily_features."
+      comparator: "Strict Chordia threshold and descriptive OOS sign monitor; no sibling rescue or parameter variation."
+      primary_metric: "selected_trade_mean_r"
+      promotion_target: "chordia_audit_unlock_only"
+    filter:
+      type: "ORB_VOL_8K"
+      thresholds:
+        - "fire_vs_off"
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [5]
+    expected_trial_count: 1
+    kill_criteria:
+      - "IS t-stat < 3.79"
+      - "IS ExpR <= 0.0"
+      - "N_IS_on < 100"
+      - "If OOS N >= 30, OOS sign opposes IS sign (descriptive monitor)"
+      - "Canonical filter delegation diverges from trading_app.config"
+      - "Scratch/null handling not explicit in measured trade stream"
+    statement: >
+      On the fixed MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K lane using the canonical ORB_VOL_8K filter, the IS
+      sample remains positive and strong enough to clear the strict no-theory Chordia
+      severity gate when recomputed honestly on canonical Mode-A data.
+    pass_metric:
+      metric: "t_IS"
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical IS fired trades after canonical filter delegation"
+      threshold_gte:
+        t_is: 3.79
+        n_is_on: 100
+        expr_is: 0.0
+      extra_gates:
+        - "dir_match_oos descriptive only when OOS N is sufficient"
+        - "adversarial split table emitted"
+        - "scratch-inclusive accounting required"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound: "MinBTL = 2*ln(1)/1 = 0.0 years; N=1 within Bailey 2013 cap (300 clean) and 6.65yr MNQ horizon"
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+
+decision_rule:
+  continue_if: "H1 clears strict t >= 3.79 with positive IS ExpR and no harness failure"
+  park_if: "H1 clears strict IS gates but OOS directional corroboration is ambiguous"
+  kill_if: "H1 fails t or ExpR gates, or execution integrity fails"
+
+methodology_rules_applied:
+  rule_1_temporal_alignment:
+    application: "Filter ORB_VOL_8K computes from daily_features columns known pre-ORB; canonical filter delegation enforces."
+  rule_3_is_oos_discipline:
+    application: "HOLDOUT_SACRED_FROM=2026-01-01 enforced by canonical loader; OOS descriptive only."
+  rule_4_multi_framing:
+    application: "Pathway B K=1 confirmatory pilot; multi-framing K applies to upstream discovery only (validated_setups promotion). This pre-reg own K=1."
+  rule_9_canonical_layers:
+    application: "Reads only orb_outcomes JOIN daily_features per chordia_strict_unlock_v1.py."
+  rule_10_pre_registration:
+    application: "This file IS the pre-reg, committed before any strict-replay run."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-15-08-mnq-usdata1000-orb-vol-8k-rr10-chordia-unlock.md"
+  - "row-level CSV with IS/OOS split, raw/effective pnl_r, and scratch/null handling"
+  - "single-cell summary table with N_IS_on, ExpR_IS, Sharpe_IS, t_IS, OOS sign check, and verdict"
+  - "explicit statement that no theory grant was used"
+
+execution_gate:
+  allowed_now: true
+  execution_surface: "Windows PowerShell with .venv"
+  forbidden_now:
+    - "theory-grant upgrade without new resources-backed citation"
+    - "sibling-cell rescue"
+    - "auto-writing PASS rows into chordia_audit_log.yaml without execution evidence"
+
+not_done_by_this_pre_reg:
+  - "Allocator deployment decision (separate gate)"
+  - "Theory grant assignment (would require new literature extract)"
+  - "Sibling-RR or sibling-aperture audits (each requires its own pre-reg)"

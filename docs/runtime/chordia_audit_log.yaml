@@ -359,3 +359,274 @@ audits:
       (audited 2026-05-02, verdict PARK on OOS pooled sign-flip): the two
       strategies share filter class but produce different OOS behavior, so
       the PRECLOSE PARK does not transfer to COMEX_SETTLE.
+
+  # ---- 2026-05-15 MNQ Chordia batch (K=20) -----------------------------
+  # Pre-regs: docs/audit/hypotheses/2026-05-15-NN-mnq-*-chordia-unlock.yaml
+  # Result MDs: docs/audit/results/2026-05-15-NN-mnq-*-chordia-unlock.md
+  # Batch summary: docs/audit/results/2026-05-15-mnq-chordia-batch-k20.md
+  # Driver doc: docs/plans/2026-05-12-deployment-throughput-leverage.md (Lever 1)
+  # No theory grants claimed for any of the 20.
+  # Canonical verdict mapping per trading_app/chordia.py:115-120:
+  #   runner FAIL_STRICT_CHORDIA + t<3.00 -> FAIL_BOTH
+  #   runner FAIL_STRICT_CHORDIA + 3.00<=t<3.79 -> FAIL_CHORDIA
+  #   runner PASS_CHORDIA -> PASS_CHORDIA  ;  runner PARK -> PARK
+
+  - strategy_id: MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_COST_LT12_O30
+    audit_date: 2026-05-15
+    verdict: FAIL_CHORDIA
+    t_stat: 3.072
+    threshold: 3.79
+    sample_size: 1387
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-01-01-mnq-singaporeopen-cost-lt12-o30-rr40-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates fail strict: t=3.072 < 3.79, ExpR=0.1661, N=1387. Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-01-mnq-singaporeopen-cost-lt12-o30-rr40-chordia-unlock.md`
+
+  - strategy_id: MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_COST_LT12_O15
+    audit_date: 2026-05-15
+    verdict: FAIL_BOTH
+    t_stat: 2.976
+    threshold: 3.79
+    sample_size: 1114
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-02-02-mnq-singaporeopen-cost-lt12-o15-rr40-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates fail strict: t=2.976 < 3.79, ExpR=0.1799, N=1114. Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-02-mnq-singaporeopen-cost-lt12-o15-rr40-chordia-unlock.md`
+
+  - strategy_id: MNQ_SINGAPORE_OPEN_E2_RR3.0_CB1_COST_LT12_O30
+    audit_date: 2026-05-15
+    verdict: FAIL_CHORDIA
+    t_stat: 3.074
+    threshold: 3.79
+    sample_size: 1387
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-03-03-mnq-singaporeopen-cost-lt12-o30-rr30-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates fail strict: t=3.074 < 3.79, ExpR=0.1421, N=1387. Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-03-mnq-singaporeopen-cost-lt12-o30-rr30-chordia-unlock.md`
+
+  - strategy_id: MNQ_SINGAPORE_OPEN_E2_RR3.0_CB1_ORB_G8_O15
+    audit_date: 2026-05-15
+    verdict: FAIL_BOTH
+    t_stat: 2.992
+    threshold: 3.79
+    sample_size: 1337
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-04-04-mnq-singaporeopen-orb-g8-o15-rr30-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates fail strict: t=2.992 < 3.79, ExpR=0.1390, N=1337. Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-04-mnq-singaporeopen-orb-g8-o15-rr30-chordia-unlock.md`
+
+  - strategy_id: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_NO_FILTER
+    audit_date: 2026-05-15
+    verdict: PARK
+    t_stat: 4.691
+    threshold: 3.79
+    sample_size: 1479
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-05-05-mnq-cmepreclose-no-filter-rr10-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear: t=4.691, ExpR=0.1051, N=1479; BUT 2026 OOS sign opposes IS at N_OOS>=30 (descriptive monitor). Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-05-mnq-cmepreclose-no-filter-rr10-chordia-unlock.md`
+
+  - strategy_id: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G4
+    audit_date: 2026-05-15
+    verdict: PARK
+    t_stat: 4.677
+    threshold: 3.79
+    sample_size: 1478
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-06-06-mnq-cmepreclose-orb-g4-rr10-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear: t=4.677, ExpR=0.1049, N=1478; BUT 2026 OOS sign opposes IS at N_OOS>=30 (descriptive monitor). Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-06-mnq-cmepreclose-orb-g4-rr10-chordia-unlock.md`
+
+  - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K
+    audit_date: 2026-05-15
+    verdict: PASS_CHORDIA
+    t_stat: 3.956
+    threshold: 3.79
+    sample_size: 1437
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-07-07-mnq-comexsettle-orb-vol-2k-rr15-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear: t=3.956, ExpR=0.1197, N=1437; OOS sign matches IS in descriptive 2026 window.
+      Result MD: `docs/audit/results/2026-05-15-07-mnq-comexsettle-orb-vol-2k-rr15-chordia-unlock.md`
+
+  - strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K
+    audit_date: 2026-05-15
+    verdict: PASS_CHORDIA
+    t_stat: 4.678
+    threshold: 3.79
+    sample_size: 1406
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-08-08-mnq-usdata1000-orb-vol-8k-rr10-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear: t=4.678, ExpR=0.1179, N=1406; OOS sign matches IS in descriptive 2026 window.
+      Result MD: `docs/audit/results/2026-05-15-08-mnq-usdata1000-orb-vol-8k-rr10-chordia-unlock.md`
+
+  - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_COST_LT15
+    audit_date: 2026-05-15
+    verdict: PASS_CHORDIA
+    t_stat: 3.988
+    threshold: 3.79
+    sample_size: 1372
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-09-09-mnq-comexsettle-cost-lt15-rr15-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear: t=3.988, ExpR=0.1241, N=1372; OOS sign matches IS in descriptive 2026 window.
+      Result MD: `docs/audit/results/2026-05-15-09-mnq-comexsettle-cost-lt15-rr15-chordia-unlock.md`
+
+  - strategy_id: MNQ_NYSE_OPEN_E2_RR1.5_CB1_OVNRNG_25
+    audit_date: 2026-05-15
+    verdict: PASS_CHORDIA
+    t_stat: 3.802
+    threshold: 3.79
+    sample_size: 1524
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-10-10-mnq-nyseopen-ovnrng-25-rr15-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear: t=3.802, ExpR=0.1156, N=1524; OOS sign matches IS in descriptive 2026 window.
+      Result MD: `docs/audit/results/2026-05-15-10-mnq-nyseopen-ovnrng-25-rr15-chordia-unlock.md`
+
+  - strategy_id: MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_G4
+    audit_date: 2026-05-15
+    verdict: FAIL_CHORDIA
+    t_stat: 3.709
+    threshold: 3.79
+    sample_size: 1547
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-11-11-mnq-nyseopen-orb-g4-rr15-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates fail strict: t=3.709 < 3.79, ExpR=0.1118, N=1547. Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-11-mnq-nyseopen-orb-g4-rr15-chordia-unlock.md`
+
+  - strategy_id: MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_VOL_8K
+    audit_date: 2026-05-15
+    verdict: PARK
+    t_stat: 3.838
+    threshold: 3.79
+    sample_size: 1406
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-12-12-mnq-usdata1000-orb-vol-8k-rr15-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear: t=3.838, ExpR=0.1213, N=1406; BUT 2026 OOS sign opposes IS at N_OOS>=30 (descriptive monitor). Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-12-mnq-usdata1000-orb-vol-8k-rr15-chordia-unlock.md`
+
+  - strategy_id: MNQ_NYSE_OPEN_E2_RR2.0_CB1_X_MGC_ATR70
+    audit_date: 2026-05-15
+    verdict: FAIL_CHORDIA
+    t_stat: 3.373
+    threshold: 3.79
+    sample_size: 427
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-13-13-mnq-nyseopen-x-mgc-atr70-rr20-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates fail strict: t=3.373 < 3.79, ExpR=0.2276, N=427. Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-13-mnq-nyseopen-x-mgc-atr70-rr20-chordia-unlock.md`
+
+  - strategy_id: MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10
+    audit_date: 2026-05-15
+    verdict: FAIL_CHORDIA
+    t_stat: 3.604
+    threshold: 3.79
+    sample_size: 1487
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-14-14-mnq-usdata1000-cost-lt10-rr15-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates fail strict: t=3.604 < 3.79, ExpR=0.1106, N=1487. Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-14-mnq-usdata1000-cost-lt10-rr15-chordia-unlock.md`
+
+  - strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25
+    audit_date: 2026-05-15
+    verdict: PASS_CHORDIA
+    t_stat: 4.103
+    threshold: 3.79
+    sample_size: 1523
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-15-15-mnq-usdata1000-ovnrng-25-rr10-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear: t=4.103, ExpR=0.0991, N=1523; OOS sign matches IS in descriptive 2026 window.
+      Result MD: `docs/audit/results/2026-05-15-15-mnq-usdata1000-ovnrng-25-rr10-chordia-unlock.md`
+
+  - strategy_id: MNQ_NYSE_OPEN_E2_RR2.5_CB1_X_MGC_ATR70
+    audit_date: 2026-05-15
+    verdict: FAIL_CHORDIA
+    t_stat: 3.424
+    threshold: 3.79
+    sample_size: 427
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-16-16-mnq-nyseopen-x-mgc-atr70-rr25-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates fail strict: t=3.424 < 3.79, ExpR=0.2579, N=427. Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-16-mnq-nyseopen-x-mgc-atr70-rr25-chordia-unlock.md`
+
+  - strategy_id: MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G8
+    audit_date: 2026-05-15
+    verdict: FAIL_BOTH
+    t_stat: 2.988
+    threshold: 3.79
+    sample_size: 1291
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-17-17-mnq-europeflow-orb-g8-rr20-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates fail strict: t=2.988 < 3.79, ExpR=0.1121, N=1291. Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-17-mnq-europeflow-orb-g8-rr20-chordia-unlock.md`
+
+  - strategy_id: MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G5
+    audit_date: 2026-05-15
+    verdict: FAIL_BOTH
+    t_stat: 2.783
+    threshold: 3.79
+    sample_size: 1485
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-18-18-mnq-europeflow-orb-g5-rr20-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates fail strict: t=2.783 < 3.79, ExpR=0.0961, N=1485. Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-18-mnq-europeflow-orb-g5-rr20-chordia-unlock.md`
+
+  - strategy_id: MNQ_COMEX_SETTLE_E2_RR2.0_CB1_COST_LT12
+    audit_date: 2026-05-15
+    verdict: FAIL_CHORDIA
+    t_stat: 3.252
+    threshold: 3.79
+    sample_size: 1252
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-19-19-mnq-comexsettle-cost-lt12-rr20-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates fail strict: t=3.252 < 3.79, ExpR=0.1245, N=1252. Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-19-mnq-comexsettle-cost-lt12-rr20-chordia-unlock.md`
+
+  - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_X_MGC_ATR70_O15
+    audit_date: 2026-05-15
+    verdict: PARK
+    t_stat: 3.865
+    threshold: 3.79
+    sample_size: 412
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-15-20-20-mnq-comexsettle-x-mgc-atr70-o15-rr15-chordia-unlock.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear: t=3.865, ExpR=0.2151, N=412; BUT 2026 OOS sign opposes IS at N_OOS>=30 (descriptive monitor). Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-15-20-mnq-comexsettle-x-mgc-atr70-o15-rr15-chordia-unlock.md`
