@@ -8,6 +8,19 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--
+  Lightweight Charts v5.2.0 (TradingView, Apache-2.0).
+  SRI computed 2026-05-14 against unpkg's standalone production build (196203 bytes).
+  If unpkg rebuilds 5.2.0 the hash will mismatch and the browser refuses the script;
+  ChartCockpit detects window.LightweightCharts === undefined and shows an operator-
+  visible "chart unavailable" notice instead of crashing the page
+  (institutional-rigor § 6: no silent failures).
+-->
+<script
+  src="https://unpkg.com/lightweight-charts@5.2.0/dist/lightweight-charts.standalone.production.js"
+  integrity="sha384-q1KYLSKHgBnW5tWYGGR8+6YV4/iPy31dILoF2I1OD7XiVUvHEp/TaxIQVmB0j3R2"
+  crossorigin="anonymous"
+  defer></script>
 <style>
   :root {
     --bg: #0a0e13;
@@ -345,6 +358,143 @@
   .broker-acct-card .acct-status { display: inline-flex; padding: 2px 6px; border-radius: 999px; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; position: absolute; top: 10px; right: 10px; }
   .acct-status-tradeable { background: var(--green-soft); color: var(--green); }
   .acct-status-restricted { background: var(--yellow-soft); color: var(--yellow); }
+
+  /* ── CHART COCKPIT ──────────────────── */
+  /* Lightweight Charts v5.2.0 host. Container height is pinned so the chart
+     has a layout box on first paint; the chart resizes via ResizeObserver in JS. */
+  .chart-cockpit {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    margin-bottom: 10px; overflow: hidden; position: relative;
+  }
+  .chart-cockpit-hd {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .chart-cockpit-title { font-weight: 700; color: var(--text); letter-spacing: 0.02em; }
+  .chart-cockpit-instr { font-family: var(--mono); font-weight: 600; color: var(--cyan); }
+  .chart-cockpit-orb {
+    margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .chart-cockpit-orb .pending { color: var(--yellow); }
+  .chart-cockpit-orb .complete { color: var(--green); }
+  /* Canvas host. 360px is the documented honest minimum — Lightweight Charts
+     refuses to render usefully below ~200px and below 360 the entry/SL/TP
+     price-lines collide with each other on RR=1.5 strategies. */
+  .chart-cockpit-body { position: relative; height: 360px; }
+  #chart-host { position: absolute; inset: 0; }
+  /* ORB box overlay — Lightweight Charts has no native filled rect in v5
+     (Stage doc honesty section). CSS absolute-positioned box reads coordinates
+     from chart.timeScale() + priceScale() projection on every redraw. */
+  .chart-orb-box {
+    position: absolute; pointer-events: none;
+    background: rgba(0, 212, 255, 0.06);
+    border: 1px dashed rgba(0, 212, 255, 0.45);
+    border-radius: 2px;
+    transition: opacity 120ms ease;
+  }
+  .chart-orb-box.hidden { display: none; }
+  /* CDN-load failure / SRI mismatch fallback. Visible to operator. */
+  .chart-cockpit-fallback {
+    position: absolute; inset: 0; display: none;
+    align-items: center; justify-content: center; padding: 24px;
+    text-align: center; color: var(--yellow);
+    background: var(--surface);
+    font-size: 12px; line-height: 1.6;
+  }
+  .chart-cockpit.fallback-active .chart-cockpit-fallback { display: flex; }
+  .chart-cockpit.fallback-active #chart-host { display: none; }
+
+  /* ── P&L STRIP ──────────────────────── */
+  .pnl-strip {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    margin-bottom: 10px; padding: 10px 14px;
+  }
+  .pnl-cell { display: flex; flex-direction: column; gap: 2px; }
+  .pnl-cell-lbl { font-size: 10px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+  .pnl-cell-val { font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--text); }
+  .pnl-cell-val.pos { color: var(--green); }
+  .pnl-cell-val.neg { color: var(--red); }
+  .pnl-cell-sub { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
+  /* ── HEARTBEAT DOT ──────────────────── */
+  /* Drives off SSE heartbeat event's last_tick_age_s + bot_alive. Thresholds:
+     <2s = cyan (fresh), <5s = green (alive), <15s = yellow (stale),
+     >=15s OR bot_alive=false = red (dead). Same span lives inside #hero-state-badge. */
+  .hb-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); margin-right: 6px;
+    box-shadow: 0 0 0 0 transparent;
+    transition: background-color 200ms ease, box-shadow 600ms ease;
+  }
+  .hb-dot.fresh { background: var(--cyan); box-shadow: 0 0 6px 0 rgba(0, 212, 255, 0.6); }
+  .hb-dot.alive { background: var(--green); }
+  .hb-dot.stale { background: var(--yellow); }
+  .hb-dot.dead { background: var(--red); }
+  .hb-dot.dead { animation: hb-pulse 1.6s ease-in-out infinite; }
+  @keyframes hb-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 92, 92, 0.6); }
+    50%      { box-shadow: 0 0 6px 2px rgba(255, 92, 92, 0.0); }
+  }
+
+  /* ── HOLD-TO-KILL RING ──────────────── */
+  /* Replaces click-to-kill on #btn-kill. Pointerdown starts a 1500ms fill;
+     pointerup before completion cancels. After completion, fires the existing
+     /api/action/kill POST — same endpoint, no new write paths. */
+  #btn-kill { position: relative; overflow: hidden; }
+  #btn-kill .hold-ring {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(90deg, var(--red) 0%, var(--red) var(--hold-pct, 0%), transparent var(--hold-pct, 0%));
+    opacity: 0.35;
+    transition: none;  /* JS sets --hold-pct in real time */
+  }
+  #btn-kill.holding { color: #fff; }
+  #btn-kill.kill-confirming { animation: kill-flash 220ms ease 3; }
+  @keyframes kill-flash {
+    0%, 100% { background: var(--red); }
+    50%      { background: #ff8a8a; }
+  }
+
+  /* ── KILL CONFIRM MODAL (open positions only) ─ */
+  .kill-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  .kill-modal-backdrop.open { display: flex; }
+  .kill-modal {
+    background: var(--surface-2); border: 1px solid var(--red);
+    border-radius: var(--r-lg); padding: 18px 22px; max-width: 420px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  }
+  .kill-modal h3 { font-size: 14px; font-weight: 700; color: var(--red); margin-bottom: 8px; }
+  .kill-modal p  { font-size: 12px; color: var(--text-2); margin-bottom: 14px; line-height: 1.5; }
+  .kill-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .kill-modal-btn {
+    padding: 6px 14px; border-radius: var(--r); border: 1px solid var(--border-hi);
+    background: var(--surface); color: var(--text); font-size: 12px; font-weight: 600;
+    cursor: pointer;
+  }
+  .kill-modal-btn.confirm { background: var(--red); color: #fff; border-color: var(--red); }
+  .kill-modal-btn:hover { filter: brightness(1.1); }
+
+  /* ── NOTIFICATION ENABLE BUTTON ─────── */
+  /* Persistent click-to-enable banner. Hidden when Notification.permission=granted
+     or when user dismissed within 24h (localStorage key dashboard.notif.dismissed_at). */
+  .notif-banner {
+    display: none; align-items: center; gap: 10px;
+    background: var(--blue-soft); border: 1px solid var(--blue);
+    border-radius: var(--r); padding: 8px 12px;
+    margin-bottom: 10px; font-size: 12px;
+  }
+  .notif-banner.show { display: flex; }
+  .notif-banner-msg { color: var(--text); flex: 1; }
+  .notif-banner-enable { padding: 4px 10px; border-radius: var(--r);
+    background: var(--blue); color: #fff; border: none;
+    font-size: 11px; font-weight: 700; cursor: pointer; }
+  .notif-banner-dismiss { padding: 4px 8px; border-radius: var(--r);
+    background: transparent; color: var(--muted); border: 1px solid var(--border);
+    font-size: 11px; cursor: pointer; }
 
   /* ── SIGNAL STRIP ───────────────────── */
   .signal-strip {
@@ -1522,7 +1672,7 @@
     <div class="hero-head">
       <div class="hero-head-left">
         <span id="hero-profile" class="hero-profile">—</span>
-        <span id="hero-state-badge" class="hero-state-badge"><span class="hero-state-dot"></span><span id="hero-state-label">Loading</span></span>
+        <span id="hero-state-badge" class="hero-state-badge"><span id="hero-hb-dot" class="hb-dot"></span><span id="hero-state-label">Loading</span></span>
       </div>
       <div class="hero-head-right">
         <span id="hero-head-hint" class="hero-head-hint"></span>
@@ -1566,6 +1716,67 @@
       <div id="hero-book-lanes" class="hero-book-lanes"><span class="book-empty">Loading deployed lanes…</span></div>
     </div>
   </section>
+
+  <!-- NOTIFICATION ENABLE BANNER — Stage 3.6 -->
+  <div id="notif-banner" class="notif-banner">
+    <span class="notif-banner-msg">Enable browser notifications for signal alerts when the tab is in the background.</span>
+    <button id="notif-enable" class="notif-banner-enable" type="button">Enable</button>
+    <button id="notif-dismiss" class="notif-banner-dismiss" type="button">Not now</button>
+  </div>
+
+  <!-- CHART COCKPIT — Stage 3.2 / 3.3 -->
+  <section id="chart-cockpit" class="chart-cockpit">
+    <div class="chart-cockpit-hd">
+      <span class="chart-cockpit-title">Live Chart</span>
+      <span id="chart-cockpit-instr" class="chart-cockpit-instr">—</span>
+      <span id="chart-cockpit-orb" class="chart-cockpit-orb"></span>
+    </div>
+    <div class="chart-cockpit-body">
+      <div id="chart-host"></div>
+      <div id="chart-orb-box" class="chart-orb-box hidden"></div>
+      <div id="chart-cockpit-fallback" class="chart-cockpit-fallback">
+        Chart unavailable — Lightweight Charts failed to load.<br>
+        Verify CDN reachability (unpkg.com) or that the SRI hash matches the
+        upstream build. Dashboard continues to function via /api/* endpoints.
+      </div>
+    </div>
+  </section>
+
+  <!-- P&L STRIP — Stage 3.2 (lives below chart; below-the-fold drawers absorb everything else) -->
+  <section id="pnl-strip" class="pnl-strip">
+    <div class="pnl-cell">
+      <span class="pnl-cell-lbl">Day P&amp;L</span>
+      <span id="pnl-day" class="pnl-cell-val">—</span>
+      <span id="pnl-day-sub" class="pnl-cell-sub"></span>
+    </div>
+    <div class="pnl-cell">
+      <span class="pnl-cell-lbl">Open P&amp;L</span>
+      <span id="pnl-open" class="pnl-cell-val">—</span>
+      <span id="pnl-open-sub" class="pnl-cell-sub"></span>
+    </div>
+    <div class="pnl-cell">
+      <span class="pnl-cell-lbl">Trades Today</span>
+      <span id="pnl-trades" class="pnl-cell-val">—</span>
+      <span id="pnl-trades-sub" class="pnl-cell-sub"></span>
+    </div>
+    <div class="pnl-cell">
+      <span class="pnl-cell-lbl">SSE</span>
+      <span id="pnl-sse" class="pnl-cell-val"><span class="hb-dot"></span><span id="pnl-sse-lbl">—</span></span>
+      <span id="pnl-sse-sub" class="pnl-cell-sub"></span>
+    </div>
+  </section>
+
+  <!-- KILL-CONFIRM MODAL (only opens when hold-to-kill completes with open positions) -->
+  <div id="kill-modal" class="kill-modal-backdrop">
+    <div class="kill-modal">
+      <h3>Flatten open positions?</h3>
+      <p id="kill-modal-body">There <span id="kill-modal-count">are open</span> position(s) across all connected brokers. Confirm to send /api/action/kill — this cancels working orders and submits market flatten on every position.</p>
+      <div class="kill-modal-actions">
+        <button id="kill-modal-cancel" class="kill-modal-btn" type="button">Cancel</button>
+        <button id="kill-modal-confirm" class="kill-modal-btn confirm" type="button">Flatten now</button>
+      </div>
+    </div>
+  </div>
 
   <!-- METRICS STRIP (hidden by cockpit; kept in DOM for responsive fallback + existing JS bindings) -->
   <section class="metrics cockpit-hidden">
@@ -3705,11 +3916,580 @@ initAccountSelector();
 try { localStorage.removeItem("orb_sections"); } catch (_) {} // migrate old key
 initCockpit();
 fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth(); fetchLaneStatus();
-setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000); setInterval(fetchEquity, 30000); setInterval(fetchOperatorState, 5000); setInterval(fetchAlerts, 5000); setInterval(fetchLaneStatus, 60000);
-// Tier 1.3 — broker health dot (topbar) polled regardless of tab
-setInterval(fetchBrokerHealth, 30000);
-// Auto-refresh broker list when on Connections tab
-setInterval(() => { if ($("tab-connections")?.classList.contains("active")) fetchBrokerList(); }, 30000);
+// Pollers are tracked so SSE-OPEN can pause them and SSE-CLOSED-for-10s resumes them
+// (Stage 3.4 fallback). Existing 11 pollers preserved as-is for the no-SSE path.
+const _COCKPIT_POLLERS = [
+  setInterval(fetchStatus, 5000),
+  setInterval(fetchTrades, 10000),
+  setInterval(fetchAccounts, 60000),
+  setInterval(fetchDataStatus, 30000),
+  setInterval(fetchSessions, 30000),
+  setInterval(fetchEquity, 30000),
+  setInterval(fetchOperatorState, 5000),
+  setInterval(fetchAlerts, 5000),
+  setInterval(fetchLaneStatus, 60000),
+  // Tier 1.3 — broker health dot (topbar) polled regardless of tab
+  setInterval(fetchBrokerHealth, 30000),
+  // Auto-refresh broker list when on Connections tab
+  setInterval(() => { if ($("tab-connections")?.classList.contains("active")) fetchBrokerList(); }, 30000),
+];
+
+/* ─────────────────────────────────────────────────────────────────
+   COCKPIT MODULE — Stage 3.3 / 3.4 / 3.5 / 3.6
+   Lightweight Charts + SSE EventSource + hero state machine
+   + Notification API + hold-to-kill.
+
+   Backend contract (frozen by Stage 2 commit cff1efcd + audit response 636c16ca):
+     GET  /api/bars-recent?instrument=&lookback_minutes=&since=
+       -> { instrument, bars[{time,o,h,l,c,v}], orb_high, orb_low,
+            orb_complete, orb_minutes, session_name, server_ts, warning? }
+     GET  /api/events/stream  (EventSource; subscriber cap 4 -> HTTP 429)
+       Events:
+         heartbeat   { ts, bot_alive, session_state, last_tick_age_s }   (every 1s)
+         state       { present, state? }                                  (mtime-driven)
+         signal      <raw live_signals JSONL record>
+         alert       <raw operator_alerts.jsonl record>
+         bar         { instrument, time(epoch_s), open, high, low, close, volume }
+
+   No new write paths — kill still routes through POST /api/action/kill.
+   ─────────────────────────────────────────────────────────────── */
+
+const ChartCockpit = (() => {
+  const HOST_ID = "chart-host";
+  const FALLBACK_PARENT = "chart-cockpit";
+  const ORB_BOX_ID = "chart-orb-box";
+  const LOOKBACK_MIN = 90;
+
+  let chart = null;
+  let series = null;
+  let orbHighLine = null;
+  let orbLowLine = null;
+  let entryLines = [];     // [{line, kind: "entry"|"sl"|"tp"}, ...]
+  let currentInstrument = null;
+  let orbState = { high: null, low: null, complete: false, minutes: null };
+  let initialized = false;
+  let firstBarTime = null;  // for ORB-box x1 anchor when ORB straddles session
+
+  function _showFallback(msg) {
+    const host = document.getElementById(FALLBACK_PARENT);
+    if (!host) return;
+    host.classList.add("fallback-active");
+    const fallback = document.getElementById("chart-cockpit-fallback");
+    if (fallback && msg) fallback.textContent = msg;
+  }
+
+  function init() {
+    if (initialized) return true;
+    if (typeof window.LightweightCharts === "undefined") {
+      _showFallback("Chart unavailable — Lightweight Charts failed to load (CDN unreachable or SRI mismatch). Dashboard continues via /api/* endpoints.");
+      return false;
+    }
+    const host = document.getElementById(HOST_ID);
+    if (!host) return false;
+    try {
+      chart = window.LightweightCharts.createChart(host, {
+        layout: { background: { color: "transparent" }, textColor: "#b0c0d0", fontFamily: "JetBrains Mono, monospace" },
+        grid:   { vertLines: { color: "rgba(30,42,56,0.6)" }, horzLines: { color: "rgba(30,42,56,0.6)" } },
+        timeScale: { timeVisible: true, secondsVisible: false, borderColor: "#1e2a38" },
+        rightPriceScale: { borderColor: "#1e2a38" },
+        crosshair: { mode: window.LightweightCharts.CrosshairMode.Normal },
+        autoSize: true,
+      });
+      series = chart.addCandlestickSeries({
+        upColor: "#00d68f", downColor: "#ff5c5c",
+        wickUpColor: "#00d68f", wickDownColor: "#ff5c5c",
+        borderUpColor: "#00d68f", borderDownColor: "#ff5c5c",
+      });
+      // Re-anchor ORB CSS overlay whenever the chart layout changes.
+      chart.timeScale().subscribeVisibleTimeRangeChange(_renderOrbBox);
+      chart.subscribeCrosshairMove(() => {});  // no-op subscription keeps coordinate API warm
+      const ro = new ResizeObserver(() => _renderOrbBox());
+      ro.observe(host);
+      initialized = true;
+      return true;
+    } catch (e) {
+      console.error("ChartCockpit.init failed", e);
+      _showFallback("Chart initialization failed: " + (e && e.message ? e.message : "unknown error"));
+      return false;
+    }
+  }
+
+  async function loadInitial(instrument) {
+    if (!init()) return;
+    currentInstrument = instrument;
+    document.getElementById("chart-cockpit-instr").textContent = instrument;
+    try {
+      const r = await fetch(`/api/bars-recent?instrument=${encodeURIComponent(instrument)}&lookback_minutes=${LOOKBACK_MIN}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      if (Array.isArray(d.bars) && d.bars.length) {
+        series.setData(d.bars.map(b => ({
+          time: b.time, open: b.open, high: b.high, low: b.low, close: b.close,
+        })));
+        firstBarTime = d.bars[0].time;
+      }
+      _applyOrb({ high: d.orb_high, low: d.orb_low, complete: !!d.orb_complete, minutes: d.orb_minutes, session_name: d.session_name });
+      if (d.warning) console.warn("bars-recent warning:", d.warning);
+    } catch (e) {
+      console.error("ChartCockpit.loadInitial failed", e);
+      _showFallback("Chart data unavailable: " + (e.message || "fetch failed"));
+    }
+  }
+
+  function pushBar(bar) {
+    if (!initialized || !series) return;
+    if (currentInstrument && bar.instrument && bar.instrument !== currentInstrument) return;
+    series.update({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close });
+  }
+
+  function _applyOrb(s) {
+    orbState = { high: s.high, low: s.low, complete: !!s.complete, minutes: s.minutes };
+    // Header label
+    const hdr = document.getElementById("chart-cockpit-orb");
+    if (hdr) {
+      if (s.high != null && s.low != null) {
+        const range = (s.high - s.low).toFixed(2);
+        hdr.innerHTML = `ORB${s.minutes ? s.minutes : ""} <span class="${s.complete ? "complete" : "pending"}">${s.high.toFixed(2)} / ${s.low.toFixed(2)} (${range})</span>`;
+      } else {
+        hdr.innerHTML = `<span class="pending">ORB pending</span>`;
+      }
+    }
+    // Price-lines on chart
+    if (orbHighLine) { try { series.removePriceLine(orbHighLine); } catch (_) {} orbHighLine = null; }
+    if (orbLowLine)  { try { series.removePriceLine(orbLowLine);  } catch (_) {} orbLowLine  = null; }
+    if (series && s.high != null) {
+      orbHighLine = series.createPriceLine({
+        price: s.high, color: "#00d4ff", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "ORB H",
+      });
+    }
+    if (series && s.low != null) {
+      orbLowLine = series.createPriceLine({
+        price: s.low, color: "#00d4ff", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "ORB L",
+      });
+    }
+    _renderOrbBox();
+  }
+
+  function _renderOrbBox() {
+    const box = document.getElementById(ORB_BOX_ID);
+    if (!box) return;
+    if (orbState.high == null || orbState.low == null || !chart || !series) {
+      box.classList.add("hidden");
+      return;
+    }
+    try {
+      const yHi = series.priceToCoordinate(orbState.high);
+      const yLo = series.priceToCoordinate(orbState.low);
+      if (yHi == null || yLo == null) { box.classList.add("hidden"); return; }
+      const top    = Math.min(yHi, yLo);
+      const height = Math.abs(yHi - yLo);
+      // X-extent: from the earliest visible bar through the right edge — the
+      // session ORB defines a level, not a time window the operator cares about
+      // visualizing precisely. Plan honesty section line 130: this is an
+      // approximation, not a pixel-perfect rect.
+      const host = document.getElementById(HOST_ID);
+      const width = host ? host.clientWidth : 0;
+      box.style.left = "0px";
+      box.style.top = `${top}px`;
+      box.style.width = `${width}px`;
+      box.style.height = `${height}px`;
+      box.classList.remove("hidden");
+    } catch (e) {
+      box.classList.add("hidden");
+    }
+  }
+
+  function markSignal(sig) {
+    if (!initialized || !series) return;
+    if (currentInstrument && sig.instrument && sig.instrument !== currentInstrument) return;
+    const t = sig.bar_time_utc || sig.entry_ts || sig.ts;
+    if (!t) return;
+    let time;
+    if (typeof t === "number") time = t;
+    else { const d = new Date(t); if (isNaN(d)) return; time = Math.floor(d.getTime() / 1000); }
+    const direction = (sig.direction || "").toUpperCase();
+    const isLong = direction === "LONG" || direction === "BUY";
+    try {
+      // v5: createSeriesMarkers replaces v4's series.setMarkers().
+      if (window.LightweightCharts.createSeriesMarkers) {
+        window.LightweightCharts.createSeriesMarkers(series, [{
+          time, position: isLong ? "belowBar" : "aboveBar",
+          color: isLong ? "#00d68f" : "#ff5c5c",
+          shape: isLong ? "arrowUp" : "arrowDown",
+          text: `${direction}${sig.strategy_id ? " · " + sig.strategy_id : ""}`,
+        }]);
+      } else if (series.setMarkers) {
+        series.setMarkers([{ time, position: isLong ? "belowBar" : "aboveBar",
+          color: isLong ? "#00d68f" : "#ff5c5c",
+          shape: isLong ? "arrowUp" : "arrowDown",
+          text: direction }]);
+      }
+    } catch (e) { console.warn("markSignal failed", e); }
+    // Entry / SL / TP price-lines.
+    entryLines.forEach(l => { try { series.removePriceLine(l); } catch (_) {} });
+    entryLines = [];
+    const addLine = (price, color, title) => {
+      if (price == null || !isFinite(price)) return;
+      const line = series.createPriceLine({ price, color, lineWidth: 1, lineStyle: 0, axisLabelVisible: true, title });
+      entryLines.push(line);
+    };
+    addLine(sig.entry_price, "#ffc107", "ENTRY");
+    addLine(sig.sl_price,    "#ff5c5c", "SL");
+    addLine(sig.tp_price,    "#00d68f", "TP");
+  }
+
+  function setInstrument(instrument) {
+    if (instrument && instrument !== currentInstrument) { loadInitial(instrument); }
+  }
+
+  function applyOrbFromState(state) {
+    if (!state || typeof state !== "object") return;
+    const lanes = state.lanes || {};
+    for (const lane of Object.values(lanes)) {
+      if (lane && lane.instrument === currentInstrument && lane.orb_high != null && lane.orb_low != null) {
+        _applyOrb({ high: lane.orb_high, low: lane.orb_low, complete: !!lane.orb_complete, minutes: lane.orb_minutes });
+        return;
+      }
+    }
+  }
+
+  return { init, loadInitial, pushBar, markSignal, setInstrument, applyOrbFromState };
+})();
+
+/* ── Hero state-machine extension (Stage 3.5) ─────────────────────── */
+/* The original hero supports loading|ready|stopped|running|in_trade|blocked|error|warn.
+   Stage 3 adds idle|watching|armed|fired — they overlay onto the existing semantic
+   states via CSS classes so legacy paths still work. Mapping rule:
+     no bot present                                          -> idle
+     bot present, no active session yet                      -> watching
+     active session, ORB complete, no fired signal           -> armed
+     fired signal within last 5min, no open position         -> fired
+     open position(s)                                        -> in-trade  (renames "in_trade")
+*/
+const HeroStateMachine = (() => {
+  let lastSignalAt = 0;
+  function applySignal() { lastSignalAt = Date.now(); evaluate(); }
+  function evaluate(state) {
+    const hero = document.getElementById("hero-card");
+    if (!hero) return;
+    state = state || window._lastSseState || null;
+    let next = null;
+    if (!state || !state.present) {
+      next = "idle";
+    } else {
+      const s = state.state || {};
+      const lanes = s.lanes || {};
+      const anyOpen = Object.values(lanes).some(l => l && (l.open_position || l.position_qty));
+      const anyOrbComplete = Object.values(lanes).some(l => l && l.orb_complete);
+      const sessionActive = s.mode && String(s.mode).toUpperCase().includes("RUN");
+      const firedRecent = (Date.now() - lastSignalAt) < 5 * 60 * 1000;
+      if (anyOpen) next = "in_trade";
+      else if (firedRecent) next = "fired";
+      else if (sessionActive && anyOrbComplete) next = "armed";
+      else if (sessionActive) next = "watching";
+      else next = "idle";
+    }
+    hero.setAttribute("data-state", next);
+    const lbl = document.getElementById("hero-state-label");
+    if (lbl) lbl.textContent = ({ idle: "Idle", watching: "Watching", armed: "Armed", fired: "Fired", in_trade: "In Trade" })[next] || "—";
+  }
+  return { applySignal, evaluate };
+})();
+
+/* ── Heartbeat dot (Stage 3.5) ────────────────────────────────────── */
+function applyHeartbeat(payload) {
+  const cls = (() => {
+    if (!payload || payload.bot_alive === false) return "dead";
+    const age = payload.last_tick_age_s;
+    if (age == null || !isFinite(age)) return "stale";
+    if (age < 2)  return "fresh";
+    if (age < 5)  return "alive";
+    if (age < 15) return "stale";
+    return "dead";
+  })();
+  document.querySelectorAll(".hb-dot").forEach(el => {
+    el.classList.remove("fresh", "alive", "stale", "dead");
+    el.classList.add(cls);
+  });
+  const sseLbl = document.getElementById("pnl-sse-lbl");
+  if (sseLbl) {
+    const age = payload?.last_tick_age_s;
+    sseLbl.textContent = age == null ? "—" : (age < 60 ? `${age.toFixed(1)}s` : `${(age/60).toFixed(1)}m`);
+  }
+  const sub = document.getElementById("pnl-sse-sub");
+  if (sub) sub.textContent = payload?.session_state ? String(payload.session_state).toLowerCase() : "";
+}
+
+/* ── SSE wiring + polling fallback (Stage 3.4) ────────────────────── */
+const SseClient = (() => {
+  let es = null;
+  let lastEventId = 0;
+  let closedSince = 0;
+  let pollersActive = true;  // pollers initialized at boot; SSE pauses them when OPEN
+  let fallbackTimer = null;
+  let backoff = 1000;
+
+  function _pausePollers() {
+    if (!pollersActive) return;
+    _COCKPIT_POLLERS.forEach(id => clearInterval(id));
+    pollersActive = false;
+    console.info("[SSE] OPEN — pollers paused");
+  }
+  function _resumePollers() {
+    if (pollersActive) return;
+    // Rebuild the same interval set — IDs returned but not retained since
+    // the OPEN path will clear them again on reconnect.
+    _COCKPIT_POLLERS.length = 0;
+    _COCKPIT_POLLERS.push(
+      setInterval(fetchStatus, 5000),
+      setInterval(fetchTrades, 10000),
+      setInterval(fetchAccounts, 60000),
+      setInterval(fetchDataStatus, 30000),
+      setInterval(fetchSessions, 30000),
+      setInterval(fetchEquity, 30000),
+      setInterval(fetchOperatorState, 5000),
+      setInterval(fetchAlerts, 5000),
+      setInterval(fetchLaneStatus, 60000),
+      setInterval(fetchBrokerHealth, 30000),
+      setInterval(() => { if ($("tab-connections")?.classList.contains("active")) fetchBrokerList(); }, 30000),
+    );
+    pollersActive = true;
+    console.warn("[SSE] CLOSED >10s — pollers resumed (fallback active)");
+  }
+
+  function connect() {
+    if (typeof window.EventSource === "undefined") {
+      console.warn("[SSE] EventSource unsupported — polling-only mode");
+      return;
+    }
+    try {
+      es = new EventSource("/api/events/stream");
+    } catch (e) {
+      console.warn("[SSE] connect failed", e); return;
+    }
+    es.onopen = () => {
+      closedSince = 0; backoff = 1000;
+      if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+      _pausePollers();
+    };
+    es.onerror = () => {
+      // EventSource auto-reconnects, but if it stays CLOSED we need pollers.
+      if (es && es.readyState === EventSource.CLOSED) {
+        if (!closedSince) closedSince = Date.now();
+        if (!fallbackTimer) {
+          fallbackTimer = setTimeout(() => { _resumePollers(); }, 10000);
+        }
+        // Exponential backoff manual reconnect (cap 30s) — EventSource's own
+        // retry doesn't reliably fire when the server returned 429 over-cap.
+        const wait = Math.min(backoff, 30000); backoff *= 2;
+        setTimeout(connect, wait);
+      }
+    };
+    const onTyped = (type) => (ev) => {
+      if (ev.lastEventId) { const n = parseInt(ev.lastEventId, 10); if (!isNaN(n)) lastEventId = n; }
+      let data; try { data = JSON.parse(ev.data); } catch (_) { return; }
+      handle(type, data);
+    };
+    ["heartbeat", "state", "signal", "alert", "bar"].forEach(t => es.addEventListener(t, onTyped(t)));
+  }
+
+  function handle(type, data) {
+    switch (type) {
+      case "heartbeat":
+        applyHeartbeat(data);
+        break;
+      case "state":
+        window._lastSseState = data;
+        HeroStateMachine.evaluate(data);
+        if (data && data.present && data.state) {
+          // Pick first instrument from lanes as chart focus.
+          const lanes = data.state.lanes || {};
+          for (const lane of Object.values(lanes)) {
+            if (lane && lane.instrument) { ChartCockpit.setInstrument(lane.instrument); break; }
+          }
+          ChartCockpit.applyOrbFromState(data.state);
+        }
+        break;
+      case "signal":
+        HeroStateMachine.applySignal();
+        ChartCockpit.markSignal(data);
+        Notifier.notify(data);
+        break;
+      case "alert":
+        // Existing alerts shell is polled-driven; nudge it on next interval.
+        try { fetchAlerts(); } catch (_) {}
+        break;
+      case "bar":
+        ChartCockpit.pushBar(data);
+        break;
+    }
+  }
+
+  return { connect };
+})();
+
+/* ── Notification API (Stage 3.6) ─────────────────────────────────── */
+const Notifier = (() => {
+  const DISMISS_KEY = "dashboard.notif.dismissed_at";
+  const DISMISS_TTL_MS = 24 * 60 * 60 * 1000;
+  function _shouldShowBanner() {
+    if (!("Notification" in window)) return false;
+    if (Notification.permission === "granted") return false;
+    if (Notification.permission === "denied")  return false;  // browser-level denial; can't override
+    try {
+      const last = parseInt(localStorage.getItem(DISMISS_KEY) || "0", 10);
+      if (last && (Date.now() - last) < DISMISS_TTL_MS) return false;
+    } catch (_) {}
+    return true;
+  }
+  function refresh() {
+    const banner = document.getElementById("notif-banner");
+    if (!banner) return;
+    banner.classList.toggle("show", _shouldShowBanner());
+  }
+  function init() {
+    const enable  = document.getElementById("notif-enable");
+    const dismiss = document.getElementById("notif-dismiss");
+    if (enable) enable.addEventListener("click", async () => {
+      if (!("Notification" in window)) return;
+      try { await Notification.requestPermission(); } catch (_) {}
+      refresh();
+    });
+    if (dismiss) dismiss.addEventListener("click", () => {
+      try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (_) {}
+      refresh();
+    });
+    refresh();
+  }
+  function notify(signal) {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    if (document.visibilityState === "visible") return;  // tab focused; UI is enough
+    try {
+      const dir = (signal.direction || "").toUpperCase();
+      const inst = signal.instrument || "—";
+      const title = `${dir} ${inst}${signal.strategy_id ? " · " + signal.strategy_id : ""}`;
+      const body  = `Entry ${signal.entry_price ?? "?"} · SL ${signal.sl_price ?? "?"} · TP ${signal.tp_price ?? "?"}`;
+      new Notification(title, { body, silent: false, tag: `sig-${signal.bar_time_utc || signal.ts || Date.now()}` });
+    } catch (e) { console.warn("Notifier.notify failed", e); }
+  }
+  return { init, notify, refresh };
+})();
+
+/* ── Hold-to-kill 1500ms ring (Stage 3.6) ─────────────────────────── */
+const HoldToKill = (() => {
+  const DURATION_MS = 1500;
+  let raf = null, startedAt = 0, ring = null, btn = null, completed = false;
+
+  function _start(ev) {
+    if (ev && ev.button !== undefined && ev.button !== 0) return;
+    if (raf) return;
+    completed = false;
+    startedAt = performance.now();
+    btn.classList.add("holding");
+    ring.style.setProperty("--hold-pct", "0%");
+    const tick = () => {
+      const elapsed = performance.now() - startedAt;
+      const pct = Math.min(100, (elapsed / DURATION_MS) * 100);
+      ring.style.setProperty("--hold-pct", `${pct}%`);
+      if (elapsed >= DURATION_MS) {
+        completed = true;
+        _fire();
+      } else {
+        raf = requestAnimationFrame(tick);
+      }
+    };
+    raf = requestAnimationFrame(tick);
+  }
+  function _cancel() {
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    btn.classList.remove("holding");
+    if (!completed) ring.style.setProperty("--hold-pct", "0%");
+  }
+  async function _fire() {
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    btn.classList.remove("holding");
+    btn.classList.add("kill-confirming");
+    setTimeout(() => btn.classList.remove("kill-confirming"), 700);
+    // If any open positions, require a confirm modal (plan line 96).
+    const openCount = _countOpenPositions();
+    if (openCount > 0) {
+      _openModal(openCount);
+      return;
+    }
+    _sendKill();
+  }
+  function _countOpenPositions() {
+    const s = window._lastSseState;
+    if (!s || !s.present || !s.state) return 0;
+    const lanes = s.state.lanes || {};
+    let n = 0;
+    for (const l of Object.values(lanes)) {
+      if (!l) continue;
+      const q = l.position_qty || l.open_position || 0;
+      if (typeof q === "number" && q !== 0) n += Math.abs(q);
+      else if (l.open_position === true) n += 1;
+    }
+    return n;
+  }
+  function _openModal(n) {
+    const modal = document.getElementById("kill-modal");
+    const lbl = document.getElementById("kill-modal-count");
+    if (lbl) lbl.textContent = `${n} open`;
+    if (modal) modal.classList.add("open");
+  }
+  function _closeModal() {
+    const modal = document.getElementById("kill-modal");
+    if (modal) modal.classList.remove("open");
+  }
+  async function _sendKill() {
+    try {
+      const d = await (await fetch("/api/action/kill", { method: "POST" })).json();
+      try { showActivity("Kill", d.message || "Kill sent", "error"); } catch (_) {}
+      setTimeout(() => { try { fetchOperatorState(); } catch (_) {} }, 1000);
+    } catch (e) {
+      try { showActivity("Kill", "Kill failed: " + e.message, "error"); } catch (_) {}
+    }
+  }
+  function init() {
+    btn = document.getElementById("btn-kill");
+    if (!btn) return;
+    // Replace click handler with hold-to-kill. Build the ring element.
+    btn.replaceWith(btn.cloneNode(true));
+    btn = document.getElementById("btn-kill");
+    ring = document.createElement("span");
+    ring.className = "hold-ring";
+    btn.appendChild(ring);
+    btn.title = "Hold 1.5s to kill";
+    btn.addEventListener("pointerdown", _start);
+    btn.addEventListener("pointerup", _cancel);
+    btn.addEventListener("pointerleave", _cancel);
+    btn.addEventListener("pointercancel", _cancel);
+    // Modal wiring
+    const cancel  = document.getElementById("kill-modal-cancel");
+    const confirm = document.getElementById("kill-modal-confirm");
+    if (cancel)  cancel.addEventListener("click", _closeModal);
+    if (confirm) confirm.addEventListener("click", () => { _closeModal(); _sendKill(); });
+  }
+  return { init };
+})();
+
+/* ── Cockpit bootstrap ────────────────────────────────────────────── */
+(function bootstrapCockpit() {
+  // Defer until script-tag (deferred) + initial DOM are ready.
+  function go() {
+    HoldToKill.init();
+    Notifier.init();
+    // Chart inits lazily on first instrument resolution; start with MNQ as the
+    // v1 default (matches _bars_watcher fallback in bot_dashboard.py:2585).
+    ChartCockpit.loadInitial("MNQ");
+    SseClient.connect();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", go, { once: true });
+  } else {
+    go();
+  }
+})();
 </script>
 </body>
 </html>

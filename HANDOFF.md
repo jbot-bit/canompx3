@@ -9,11 +9,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-14
-- **Commit:** cff1efcd — [judgment] dashboard cockpit-v3 Stage 2: SSE event stream + /api/bars-recent
-- **Files changed:** 3 files
-  - `HANDOFF.md`
-  - `tests/test_trading_app/test_bot_dashboard_sse.py`
-  - `trading_app/live/bot_dashboard.py`
+- **Commit:** b9711281 — @ feat(chordia): MNQ batch K=20 strict-replay audits + lane rebalance
+- **Files changed:** 1 files
+  - `trading_app/live/bot_dashboard.html`
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
