@@ -141,6 +141,91 @@ class TestSessionLockMutex:
         assert "BLOCKED" in joined
         assert "(corrupted lock file)" in joined
 
+    def test_stale_dead_pid_lock_auto_recovers(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Lock from a dead PID older than STALE_LOCK_RECLAIM_HOURS must be
+        atomically replaced — never leaves the user with a sticky lock that
+        silently disables protection.
+
+        Reproduces the 2026-05-14 incident: lock from 2026-05-11 sat on disk
+        for 3 days while two concurrent sessions wrote to the same .git/index
+        and one nearly clobbered the other's staged commit. The original
+        `_session_lock_lines()` had no liveness check; both sessions exited
+        the function without re-acquiring the lock.
+        """
+        _init_git(tmp_path)
+        lock = tmp_path / ".git" / ".claude.pid"
+        held_pid = 999_999_001  # arbitrary; we mock _pid_is_alive below
+        lock.write_text(
+            json.dumps(
+                {
+                    "pid": held_pid,
+                    "ppid": 1,
+                    "iso_started": "2026-05-11T05:43:18.252397+00:00",
+                    "worktree": str(tmp_path),
+                    "branch_at_start": "main",
+                }
+            ),
+            encoding="utf-8",
+        )
+        hook = _load_hook(monkeypatch, tmp_path)
+        # Pin "now" so the lock age check is deterministic across CI clocks.
+        from datetime import UTC, datetime
+
+        fixed_now = datetime(2026, 5, 14, 5, 43, 18, tzinfo=UTC)
+
+        class _PinnedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return fixed_now if tz is None else fixed_now.astimezone(tz)
+
+        monkeypatch.setattr(hook, "datetime", _PinnedDateTime, raising=True)
+        # Stub PID liveness — production behaviour is OS-dependent (POSIX
+        # uses os.kill(pid,0); Windows conservatively treats unknown errors
+        # as alive). The contract under test is the recovery branch itself.
+        monkeypatch.setattr(hook, "_pid_is_alive", lambda pid: pid != held_pid, raising=True)
+
+        lines, should_block = hook._session_lock_lines()
+
+        assert should_block is False, "stale dead-PID lock must NOT block — auto-recover"
+        # New lock must reflect THIS session, not the stale one.
+        new_payload = json.loads(lock.read_text(encoding="utf-8"))
+        assert new_payload["pid"] == os.getpid()
+        assert new_payload["pid"] != 2
+        assert new_payload["worktree"] == str(tmp_path)
+        # Surface the recovery so the user knows a stale lock was cleaned.
+        joined = "\n".join(lines)
+        assert "stale" in joined.lower()
+
+    def test_held_lock_with_live_pid_in_other_worktree_still_blocks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A live PID in another worktree must always BLOCK — auto-recovery
+        only applies to dead PIDs. This guards against a too-aggressive
+        reclaim that would clobber a real concurrent session.
+        """
+        _init_git(tmp_path)
+        lock = tmp_path / ".git" / ".claude.pid"
+        # Use os.getpid() — guaranteed live (it's us). Different worktree.
+        lock.write_text(
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "ppid": 1,
+                    "iso_started": "2026-05-11T05:43:18.252397+00:00",
+                    "worktree": "/some/other/worktree",
+                    "branch_at_start": "main",
+                }
+            ),
+            encoding="utf-8",
+        )
+        hook = _load_hook(monkeypatch, tmp_path)
+
+        lines, should_block = hook._session_lock_lines()
+
+        assert should_block is True, "live PID in other worktree must BLOCK even if old"
+        joined = "\n".join(lines)
+        assert "BLOCKED" in joined
+
     def test_oserror_on_write_warns_but_does_not_block(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _init_git(tmp_path)
         hook = _load_hook(monkeypatch, tmp_path)

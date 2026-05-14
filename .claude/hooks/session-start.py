@@ -385,27 +385,84 @@ def _main_ci_status_lines() -> list[str]:
     return _format_ci_line(payload)
 
 
+# Stale-lock auto-recovery threshold. Locks held by a dead PID are reclaimed
+# only after this many hours, so a momentarily-dead-then-restarted session
+# (e.g. /clear) cannot accidentally reclaim a fresh sibling's lock. The 12h
+# floor matches the documented "leave it overnight" pattern; the dead-PID
+# requirement is the actual safety property. Origin: 2026-05-14 incident
+# where a 3-day-stale lock from a dead PID silently disabled mutex protection
+# while two concurrent live Claude sessions wrote to the same .git/index.
+_STALE_LOCK_RECLAIM_HOURS = 12
+
+
+def _pid_is_alive(pid: int) -> bool:
+    """Cross-platform best-effort PID liveness check.
+
+    POSIX: ``os.kill(pid, 0)`` raises ProcessLookupError on dead PIDs and
+    PermissionError on PIDs that are alive but owned by another user. Both
+    "alive" and "permission denied" mean "do not reclaim the lock."
+
+    Windows: ``os.kill`` is partially supported. Use it when available;
+    fall back to a conservative True (assume alive) on any error so we
+    NEVER reclaim a lock we cannot prove dead. This deliberately favours
+    false BLOCKs over false reclaims — clobbering a live session's lock
+    is the catastrophic failure mode we are guarding against.
+    """
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # PID exists, owned by another user — treat as alive
+    except (OSError, AttributeError):
+        return True  # conservative: cannot prove dead, do not reclaim
+
+
+def _lock_age_hours(iso_started: str) -> float | None:
+    """Hours since ``iso_started`` per the SAME-class clock the writer used.
+
+    Uses ``hook.datetime`` rather than a direct import so the test suite
+    can monkey-patch a pinned clock; using a pinned clock for tests is the
+    only way to deterministically exercise the stale-recovery branch.
+    Returns None when the timestamp is unparseable (treat as not-stale).
+    """
+    try:
+        # Strip a trailing Z for fromisoformat tolerance.
+        ts = datetime.fromisoformat(iso_started.replace("Z", "+00:00"))
+    except (ValueError, AttributeError, TypeError):
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    delta = datetime.now(UTC) - ts
+    return delta.total_seconds() / 3600.0
+
+
 def _session_lock_lines() -> tuple[list[str], bool]:
     """Detect concurrent Claude sessions in THIS worktree. Hard-block if found.
 
     Mechanism: write a PID file at `<git-dir>/.claude.pid` on session startup.
-    On the next startup, if the file already exists, BLOCK with cleanup
-    instructions (returns block=True so main() exits non-zero).
+    On the next startup, if the file already exists, check whether the holder
+    is still alive (``_pid_is_alive``); reclaim the lock atomically when it is
+    proven dead AND older than ``_STALE_LOCK_RECLAIM_HOURS`` hours. Otherwise
+    BLOCK with cleanup instructions (returns block=True so main() exits
+    non-zero).
 
-    Cleanup is intentionally MANUAL: if Claude crashed without releasing the
-    lock, the user deletes the file. Auto-cleanup via PID liveness was
-    considered and rejected — Windows process trees (Claude → bash → python
-    hook) make `os.getppid()` ambiguous, and parsing `tasklist` for Claude's
-    actual PID is brittle. Manual delete is the safe default; the BLOCK
-    message includes the exact `rm` command.
+    Reclaim conditions are strict by design:
+      - PID must be PROVEN dead (not "could not check" — see _pid_is_alive)
+      - Lock must be older than _STALE_LOCK_RECLAIM_HOURS hours
+    Either failing -> BLOCK. This deliberately favours false BLOCKs over
+    false reclaims; clobbering a live session's lock is the catastrophic
+    failure mode we are guarding against.
 
     Why this exists: per `feedback_shared_worktree_concurrent_commits.md`,
     two Claude sessions in the SAME worktree corrupt `.git/index` and produce
-    `cannot lock ref 'HEAD'` mid-commit. This is the dominant collision
-    pattern (per 2026-04-26 incident) — clones don't fix it; only a mutex
-    does. Aligns with 2026 industry consensus on AI-agent runtime isolation:
-    git-level isolation is necessary but not sufficient; per-runtime locks
-    are required to make parallel agents safe.
+    `cannot lock ref 'HEAD'` mid-commit. This was reproduced 2026-05-14 when
+    a 3-day-stale lock from a dead PID silently disabled mutex protection
+    while two concurrent live Claude sessions wrote to the same index — one
+    session's `git reset HEAD <file>` un-staged the other's mid-commit work.
 
     Returns: (lines_to_print, should_block).
     """
@@ -459,6 +516,44 @@ def _session_lock_lines() -> tuple[list[str], bool]:
                 ],
                 False,
             )
+
+        # Stale-lock auto-recovery: reclaim ONLY when the holder PID is proven
+        # dead AND the lock is older than _STALE_LOCK_RECLAIM_HOURS. Both must
+        # hold; either alone is insufficient (a live PID at any age must
+        # block; a dead PID within the freshness window may be a /clear-and-
+        # restart of the same shell and should still block to surface the
+        # transition).
+        held_pid = existing.get("pid")
+        held_iso = existing.get("iso_started", "")
+        age_hours = _lock_age_hours(held_iso)
+        is_dead = isinstance(held_pid, int) and not _pid_is_alive(held_pid)
+        is_old_enough = age_hours is not None and age_hours >= _STALE_LOCK_RECLAIM_HOURS
+        if is_dead and is_old_enough:
+            try:
+                # Atomic replace via O_TRUNC (lock_path already exists; we are
+                # the only writer because the prior holder is proven dead).
+                fd = os.open(str(lock_path), os.O_WRONLY | os.O_TRUNC)
+                try:
+                    os.write(fd, payload)
+                finally:
+                    os.close(fd)
+            except OSError as exc:
+                return (
+                    [
+                        f"  WARNING: failed to reclaim stale Claude lock at {lock_path}: {exc}",
+                        f"    Holder PID {held_pid} is dead and lock is {age_hours:.1f}h old.",
+                        f"    Manual recovery: rm '{lock_path}' and restart.",
+                    ],
+                    False,
+                )
+            return (
+                [
+                    f"  Recovered stale session lock: PID {held_pid} dead, age {age_hours:.1f}h",
+                    f"    (threshold: PID must be dead AND age >= {_STALE_LOCK_RECLAIM_HOURS}h)",
+                ],
+                False,
+            )
+
         pass  # genuine conflict — fall through to BLOCK message
     except OSError as e:
         # Transient FS issue (perms, disk full, etc.). Warn loudly but don't

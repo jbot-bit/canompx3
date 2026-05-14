@@ -57,6 +57,45 @@ except Exception:
         echo "  Fix: git checkout $BRANCH_AT_START  OR  rm '$GIT_DIR_PATH/.claude.pid' and restart"
         exit 1
     fi
+
+    # 0c-bis. Stale-lock guard — BLOCK when the session lock is older than
+    # the session-start auto-recovery threshold (12h). A stale lock means
+    # the session-start hook has not refreshed it, which means either:
+    #   - This commit is from a session that bypassed session-start entirely
+    #     (concurrent-session collision, exact 2026-05-14 incident), or
+    #   - The repo has not been re-entered for 12+ hours and lock liveness
+    #     has decayed below the safe-write threshold.
+    # Either way, restart the session so session-start.py runs and either
+    # reclaims the lock (dead PID branch) or BLOCKs (live PID branch).
+    LOCK_AGE_HOURS=$(python -c "
+import json, sys
+from datetime import datetime, timezone
+try:
+    d = json.load(open('$GIT_DIR_PATH/.claude.pid'))
+    iso = d.get('iso_started','')
+    ts = datetime.fromisoformat(iso.replace('Z','+00:00'))
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    delta = datetime.now(timezone.utc) - ts
+    print(f'{delta.total_seconds()/3600:.1f}')
+except Exception:
+    print('')
+" 2>/dev/null || true)
+    if [ -n "$LOCK_AGE_HOURS" ]; then
+        # bash arithmetic can't do floats; use python again for the comparison
+        IS_STALE=$(python -c "print('1' if float('$LOCK_AGE_HOURS') >= 12 else '0')" 2>/dev/null || echo "0")
+        if [ "$IS_STALE" = "1" ]; then
+            echo "BLOCKED: Claude session lock is ${LOCK_AGE_HOURS}h old (>= 12h)."
+            echo "  Lock file: $GIT_DIR_PATH/.claude.pid"
+            echo "  A stale lock means session-start.py did not refresh it,"
+            echo "  which on 2026-05-14 caused a concurrent-session collision"
+            echo "  (one session's git reset HEAD un-staged another's mid-commit work)."
+            echo "  Fix: restart the Claude session — session-start.py auto-recovers"
+            echo "       stale-but-dead-PID locks atomically. If you confirmed no"
+            echo "       other session is alive: rm '$GIT_DIR_PATH/.claude.pid' and restart."
+            exit 1
+        fi
+    fi
 fi
 
 # Quick venv health — catches dev deps wiped by interrupted uv sync.
