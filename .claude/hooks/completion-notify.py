@@ -124,8 +124,10 @@ def _is_cue_cooling(state: dict) -> bool:
 def _maybe_emit_cue() -> None:
     """Emit the pre-commit cue as Stop-hook JSON when all conditions hold.
 
-    Stop hooks emit additionalContext via the same envelope shape as
-    UserPromptSubmit (per Claude Code 2026 hook spec).
+    Stop's schema does NOT accept `hookSpecificOutput.additionalContext`
+    (that surface exists only for UserPromptSubmit/PostToolUse/PostToolBatch).
+    The valid Stop-event channel for advisory text is the top-level
+    `systemMessage` field.
     """
     state = _load_cue_state()
     if _is_cue_cooling(state):
@@ -134,12 +136,7 @@ def _maybe_emit_cue() -> None:
         return
     if not _has_implementation_stage():
         return
-    payload = {
-        "hookSpecificOutput": {
-            "hookEventName": "Stop",
-            "additionalContext": CUE_TEXT,
-        }
-    }
+    payload = {"systemMessage": CUE_TEXT}
     print(json.dumps(payload))
     state["last_at"] = datetime.now(UTC).isoformat()
     _save_cue_state(state)
