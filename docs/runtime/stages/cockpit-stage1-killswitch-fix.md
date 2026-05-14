@@ -37,5 +37,12 @@ Audit CRITICAL #2 (Gap #4 in plan adversarial table) discovered that `position_q
 - `python pipeline/check_drift.py` → all guardrails pass
 - Adversarial-audit dispatched on the commit (evidence-auditor — kill-switch is exposure-creating per `.claude/rules/adversarial-audit-gate.md`)
 
-## Stage close
-Toggle `[ ]` → `[x]` for **Stage 1** in the cockpit-v4 plan ledger. /clear-safe to stop here; Stage 2 (CSRF middleware) is independent.
+## Stage close — LANDED 2026-05-14
+
+- Commit `60ea756d` — Stage 1 fix (HoldToKill canonical-field + Python helper + 12 tests).
+- Commit `17c45711` — audit-gap closure (state=None branch coverage).
+- Adversarial-audit (evidence-auditor) verdict: **CONDITIONAL PASS** → **PASS** after gap closure. No critical issues. Core bug claim verified: `position_qty`/`open_position` confirmed absent across all of `trading_app/` (only mentioned in docstring + Rithmic protocol field names). Fix is complete; no orphaned callsites.
+- Branch: `feat/cockpit-v4-stage1-killswitch-fix` (not yet pushed/PR'd — user controls integration cadence).
+- All 8 pre-commit gates pass on both commits (drift 131/131, 13/13 helper tests, behavioral audit, syntax, lint, format).
+
+**Stage 1 of cockpit-v4 plan = `[x]`.** Stage 2 (CSRF middleware) is the next capital-class fix and is independent — separate worktree recommended.
