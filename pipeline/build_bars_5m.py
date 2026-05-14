@@ -39,6 +39,20 @@ from pipeline.paths import GOLD_DB_PATH
 logger = get_logger(__name__)
 
 
+def _scalar(con: duckdb.DuckDBPyConnection, sql: str, params: list) -> int:
+    """Execute a single-column aggregate query and return its first value as int.
+
+    DuckDB's `fetchone()` is typed `Optional[Tuple]` because no-row results are
+    representable. The aggregates in this module (COUNT, SELECT-from-CTE) always
+    return exactly one row; if that contract is ever violated we want a loud
+    `ValueError`, not an opaque subscript-of-None TypeError.
+    """
+    row = con.execute(sql, params).fetchone()
+    if row is None:
+        raise ValueError(f"DuckDB returned no row for aggregate query: {sql[:80]}...")
+    return int(row[0])
+
+
 def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date, end_date: date, dry_run: bool) -> int:
     """
     Build bars_5m from bars_1m for the given symbol and date range.
@@ -63,7 +77,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
         AND ts_utc >= ?::TIMESTAMPTZ
         AND ts_utc < ?::TIMESTAMPTZ
     """
-    source_count = con.execute(count_query, [symbol, start_ts, end_ts]).fetchone()[0]
+    source_count = _scalar(con, count_query, [symbol, start_ts, end_ts])
     logger.info(f"  Source bars_1m rows: {source_count:,}")
 
     if source_count == 0:
@@ -139,7 +153,8 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
 
     if dry_run:
         # Count how many 5m bars would be built
-        count_result = con.execute(
+        count_result = _scalar(
+            con,
             """
             SELECT COUNT(DISTINCT time_bucket(INTERVAL '5 minutes', ts_utc))
             FROM bars_1m
@@ -148,7 +163,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
             AND ts_utc < ?::TIMESTAMPTZ
         """,
             [symbol, start_ts, end_ts],
-        ).fetchone()[0]
+        )
         logger.info(f"  DRY RUN: Would build {count_result:,} bars_5m rows")
         return count_result
 
@@ -157,7 +172,8 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
 
     try:
         # Delete existing 5m bars in range
-        delete_count = con.execute(
+        delete_count = _scalar(
+            con,
             """
             SELECT COUNT(*) FROM bars_5m
             WHERE symbol = ?
@@ -165,7 +181,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
             AND ts_utc < ?::TIMESTAMPTZ
         """,
             [symbol, start_ts, end_ts],
-        ).fetchone()[0]
+        )
 
         con.execute(
             """
@@ -190,7 +206,8 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
         )
 
         # Count inserted
-        new_count = con.execute(
+        new_count = _scalar(
+            con,
             """
             SELECT COUNT(*) FROM bars_5m
             WHERE symbol = ?
@@ -198,7 +215,7 @@ def build_5m_bars(con: duckdb.DuckDBPyConnection, symbol: str, start_date: date,
             AND ts_utc < ?::TIMESTAMPTZ
         """,
             [symbol, start_ts, end_ts],
-        ).fetchone()[0]
+        )
 
         con.execute("COMMIT")
 
@@ -229,7 +246,8 @@ def verify_5m_integrity(
     end_ts = f"{end_date + timedelta(days=1)}T00:00:00+00:00"
 
     # Check 1: duplicates
-    dupe_count = con.execute(
+    dupe_count = _scalar(
+        con,
         """
         SELECT COUNT(*) FROM (
             SELECT symbol, ts_utc FROM bars_5m
@@ -241,13 +259,14 @@ def verify_5m_integrity(
         )
     """,
         [symbol, start_ts, end_ts],
-    ).fetchone()[0]
+    )
 
     if dupe_count > 0:
         failures.append(f"Duplicate (symbol, ts_utc) in bars_5m: {dupe_count}")
 
     # Check 2: 5-minute alignment
-    misaligned = con.execute(
+    misaligned = _scalar(
+        con,
         """
         SELECT COUNT(*) FROM bars_5m
         WHERE symbol = ?
@@ -256,13 +275,14 @@ def verify_5m_integrity(
         AND EXTRACT(EPOCH FROM ts_utc)::BIGINT % 300 != 0
     """,
         [symbol, start_ts, end_ts],
-    ).fetchone()[0]
+    )
 
     if misaligned > 0:
         failures.append(f"Misaligned timestamps (not 5m boundary): {misaligned}")
 
     # Check 3: OHLCV sanity
-    ohlcv_bad = con.execute(
+    ohlcv_bad = _scalar(
+        con,
         """
         SELECT COUNT(*) FROM bars_5m
         WHERE symbol = ?
@@ -271,13 +291,14 @@ def verify_5m_integrity(
         AND (high < low OR high < open OR high < close OR low > open OR low > close)
     """,
         [symbol, start_ts, end_ts],
-    ).fetchone()[0]
+    )
 
     if ohlcv_bad > 0:
         failures.append(f"OHLCV sanity failures (high/low violations): {ohlcv_bad}")
 
     # Check 4: volume
-    vol_bad = con.execute(
+    vol_bad = _scalar(
+        con,
         """
         SELECT COUNT(*) FROM bars_5m
         WHERE symbol = ?
@@ -286,7 +307,7 @@ def verify_5m_integrity(
         AND volume < 0
     """,
         [symbol, start_ts, end_ts],
-    ).fetchone()[0]
+    )
 
     if vol_bad > 0:
         failures.append(f"Negative volume: {vol_bad}")
