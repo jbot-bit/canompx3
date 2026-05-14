@@ -7,11 +7,12 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Claude Code (autonomous 2hr run)
 - **Date:** 2026-05-14
-- **Commit:** 2cf2c9cc — audit(log): MNQ US_DATA_1000 VWAP_MID_ALIGNED O30 RR1.0 PASS_CHORDIA
-- **Files changed:** 1 files
-  - `docs/runtime/chordia_audit_log.yaml`
+- **Shipped:** PR #286 (C8 allocator-gate fix, BUG-class) + PR #287 (3 stage-file retirements)
+  - PR #286 `fix/allocator-c8-gate` — adds `apply_c8_gate()` + drift Check 147 + 12 tests; closes fail-open architectural gap (chordia-gate class pattern, n=2). OVNRNG_25 demotes to PAUSE on next rebalance. Local: 132 drift PASS, 72 lane_allocator tests PASS. CI: **known Windows-runner flake on test_work_capsule** (per `feedback_ci_windows_runner_hang_test_work_capsule.md`) — local clean, admin-merge candidate.
+  - PR #287 `chore/post-c8-cleanup` — retires 3 stage files (`fix-hypothesis-filter-type-clean-mode-validation`, `allocator-gate-audit`, `r3-validated-setups-trade-window-refresh`), all already shipped in prior commits. Doc-only.
+- **Deferred (needs user judgment):** lane allocation rebalance (capital state, blocked on user); Chordia audit queue v2 (research-class); MNQ VWAP_MID_ALIGNED_O30 pre-reg authoring; Track D Gate 0 runner design.
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
