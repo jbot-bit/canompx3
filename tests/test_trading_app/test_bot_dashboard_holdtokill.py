@@ -29,8 +29,15 @@ def test_present_false_returns_none() -> None:
 
 
 def test_present_but_no_inner_state_returns_none() -> None:
-    """Malformed payload (``state`` missing or non-dict) → unknown."""
+    """Malformed payload (``state`` missing, None, or non-dict) → unknown.
+
+    Three distinct upstream failure modes — ALL must return None to keep
+    operator confirmation fail-CLOSED. The ``state: None`` branch is the
+    one a future refactor is most likely to coalesce with "empty lanes"
+    and silently downgrade to a 0-count direct kill.
+    """
     assert _count_open_positions_from_state({"present": True}) is None
+    assert _count_open_positions_from_state({"present": True, "state": None}) is None
     assert _count_open_positions_from_state({"present": True, "state": "broken"}) is None
 
 
