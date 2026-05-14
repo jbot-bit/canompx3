@@ -9,24 +9,12 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-14
-- **Commit:** 6bf0942f — feat(chordia): MNQ batch K=20 strict-replay audits + lane rebalance
-- **Files changed:** 20 files
+- **Commit:** fc8cceea — harden(session-isolation): auto-recover stale Claude session locks + pre-commit staleness BLOCK
+- **Files changed:** 4 files
+  - `.claude/hooks/session-start.py`
+  - `.githooks/pre-commit`
   - `HANDOFF.md`
-  - `docs/audit/hypotheses/2026-05-15-01-mnq-singaporeopen-cost-lt12-o30-rr40-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-02-mnq-singaporeopen-cost-lt12-o15-rr40-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-03-mnq-singaporeopen-cost-lt12-o30-rr30-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-04-mnq-singaporeopen-orb-g8-o15-rr30-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-05-mnq-cmepreclose-no-filter-rr10-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-06-mnq-cmepreclose-orb-g4-rr10-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-07-mnq-comexsettle-orb-vol-2k-rr15-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-08-mnq-usdata1000-orb-vol-8k-rr10-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-09-mnq-comexsettle-cost-lt15-rr15-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-10-mnq-nyseopen-ovnrng-25-rr15-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-11-mnq-nyseopen-orb-g4-rr15-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-12-mnq-usdata1000-orb-vol-8k-rr15-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-13-mnq-nyseopen-x-mgc-atr70-rr20-chordia-unlock.yaml`
-  - `docs/audit/hypotheses/2026-05-15-14-mnq-usdata1000-cost-lt10-rr15-chordia-unlock.yaml`
-  - ... and 5 more
+  - `tests/test_hooks/test_session_start_mutex.py`
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
