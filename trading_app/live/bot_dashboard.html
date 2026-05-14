@@ -4288,7 +4288,7 @@ const HeroStateMachine = (() => {
     } else {
       const s = state.state || {};
       const lanes = s.lanes || {};
-      const anyOpen = Object.values(lanes).some(l => l && (l.open_position || l.position_qty));
+      const anyOpen = Object.values(lanes).some(l => l && l.status === "IN_TRADE");
       const anyOrbComplete = Object.values(lanes).some(l => l && l.orb_complete);
       const sessionActive = s.mode && String(s.mode).toUpperCase().includes("RUN");
       const firedRecent = (Date.now() - lastSignalAt) < 5 * 60 * 1000;
@@ -4533,9 +4533,14 @@ const HoldToKill = (() => {
     btn.classList.remove("holding");
     btn.classList.add("kill-confirming");
     setTimeout(() => btn.classList.remove("kill-confirming"), 700);
-    // If any open positions, require a confirm modal (plan line 96).
+    // Confirm-modal policy (fail-CLOSED on operator confirmation):
+    //   null  → state missing/stale, position count UNKNOWN → show modal
+    //   0     → state present, no IN_TRADE lanes → safe to kill directly
+    //   n > 0 → n lanes IN_TRADE → show modal with count
+    // Mirrors trading_app.live.bot_dashboard._count_open_positions_from_state
+    // (canonical Python, exercised by tests/test_trading_app/test_bot_dashboard_holdtokill.py).
     const openCount = _countOpenPositions();
-    if (openCount > 0) {
+    if (openCount === null || openCount > 0) {
       _openModal(openCount);
       return;
     }
@@ -4543,21 +4548,19 @@ const HoldToKill = (() => {
   }
   function _countOpenPositions() {
     const s = window._lastSseState;
-    if (!s || !s.present || !s.state) return 0;
-    const lanes = s.state.lanes || {};
+    if (!s || !s.present || !s.state) return null;
+    const lanes = s.state.lanes;
+    if (!lanes || typeof lanes !== "object") return 0;
     let n = 0;
     for (const l of Object.values(lanes)) {
-      if (!l) continue;
-      const q = l.position_qty || l.open_position || 0;
-      if (typeof q === "number" && q !== 0) n += Math.abs(q);
-      else if (l.open_position === true) n += 1;
+      if (l && l.status === "IN_TRADE") n += 1;
     }
     return n;
   }
   function _openModal(n) {
     const modal = document.getElementById("kill-modal");
     const lbl = document.getElementById("kill-modal-count");
-    if (lbl) lbl.textContent = `${n} open`;
+    if (lbl) lbl.textContent = (n === null || n === undefined) ? "state unknown" : `${n} open`;
     if (modal) modal.classList.add("open");
   }
   function _closeModal() {
