@@ -7,13 +7,15 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
-- **Tool:** Claude Code
-- **Date:** 2026-05-16
-- **Commit:** bf6cda7a — docs: Monday pre-session checklist — path fixes + corrected HWM diagnosis
+- **Tool:** Claude Code (Opus 4.7)
+- **Date:** 2026-05-16 PM
+- **Commit:** e697b5e9 — docs: close MEMORY/canonical reconcile + add live-debut carry-over capture list
 - **Files changed:** 2 files
-  - `HANDOFF.md`
-  - `docs/runtime/next-session-go-live-plan.md`
-- **Prior:** e5c5292c (post-live-debut handoff + Stage 2 NQ-mini plumbing-gap design note)
+  - `HANDOFF.md` (Next Step 2 sub-item closed)
+  - `docs/runtime/next-session-go-live-plan.md` (new carry-over capture list section)
+- **Prior:** bf6cda7a (Monday pre-session checklist — path fixes + corrected HWM diagnosis)
+- **Session summary:** Sat 2026-05-16 PM, markets closed weekend. Picked up from `35a13e86`: (a) HWM DEFERRED unchanged, (b) live preflight cannot run (markets closed), (c) carry-over operationalized via capture list, (d) confirmed already DONE in `bf6cda7a`. Bonus: closed stale "MEMORY 3 vs canonical 2 reconcile" sub-item — live-verified both surfaces agree at 4 deployed MNQ lanes. Memory: added `feedback_auto_loaded_rules_context_spike_on_read.md` (~30K-token rule injection on file Read).
+- **Did NOT start:** rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring (deferred to next session — CTX hit 47% from rule auto-load before design work could begin).
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
