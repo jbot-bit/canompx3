@@ -3184,9 +3184,7 @@ class TestCheckDashboardLocalhostOnlyBinding:
 
     def test_detects_absent_argparse_host(self, tmp_path):
         """Removing --host argparse line entirely must fire a violation (T3-W1 fix)."""
-        bad = "\n".join(
-            line for line in self._GOOD.splitlines() if "--host" not in line
-        )
+        bad = "\n".join(line for line in self._GOOD.splitlines() if "--host" not in line)
         violations = self._check(tmp_path, bad)
         assert any("argparse" in v for v in violations), violations
 

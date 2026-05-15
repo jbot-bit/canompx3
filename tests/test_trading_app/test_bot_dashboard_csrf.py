@@ -31,12 +31,14 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 # ── Case 1: safe method (GET) passes without any Origin ──────────────────────
 
+
 def test_get_no_origin_passes(client: TestClient) -> None:
     resp = client.get("/api/action/kill")
     assert resp.status_code != 403
 
 
 # ── Case 2: POST same-origin passes ──────────────────────────────────────────
+
 
 def test_post_same_origin_passes(client: TestClient) -> None:
     resp = client.post(
@@ -48,6 +50,7 @@ def test_post_same_origin_passes(client: TestClient) -> None:
 
 # ── Case 3: POST cross-origin blocked ────────────────────────────────────────
 
+
 def test_post_cross_origin_blocked(client: TestClient) -> None:
     resp = client.post(
         "/api/action/kill",
@@ -58,9 +61,8 @@ def test_post_cross_origin_blocked(client: TestClient) -> None:
 
 # ── Case 4: POST no-Origin no-Referer blocked in prod-like env ───────────────
 
-def test_post_no_origin_no_referer_blocked_in_prod(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+
+def test_post_no_origin_no_referer_blocked_in_prod(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dashboard, "STOP_FILE", tmp_path / "live_session.stop")
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     # Build a fresh client after env mutation so middleware sees the change
@@ -70,6 +72,7 @@ def test_post_no_origin_no_referer_blocked_in_prod(
 
 
 # ── Case 5: POST no-Origin allowed when PYTEST_CURRENT_TEST is set ───────────
+
 
 def test_post_no_origin_allowed_under_pytest(client: TestClient) -> None:
     # PYTEST_CURRENT_TEST is set automatically by pytest — standard TestClient
@@ -81,6 +84,7 @@ def test_post_no_origin_allowed_under_pytest(client: TestClient) -> None:
 
 # ── Case 6: Referer-only same-origin passes ──────────────────────────────────
 
+
 def test_post_referer_only_same_origin_passes(client: TestClient) -> None:
     resp = client.post(
         "/api/action/kill",
@@ -91,9 +95,8 @@ def test_post_referer_only_same_origin_passes(client: TestClient) -> None:
 
 # ── Case 7: Cross-origin Referer blocked ─────────────────────────────────────
 
-def test_post_cross_origin_referer_blocked(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+
+def test_post_cross_origin_referer_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dashboard, "STOP_FILE", tmp_path / "live_session.stop")
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     prod_client = TestClient(dashboard.app, raise_server_exceptions=False)
@@ -106,9 +109,8 @@ def test_post_cross_origin_referer_blocked(
 
 # ── Case 8: PUT cross-origin blocked (non-POST mutating method) ───────────────
 
-def test_put_cross_origin_blocked(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+
+def test_put_cross_origin_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dashboard, "STOP_FILE", tmp_path / "live_session.stop")
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     prod_client = TestClient(dashboard.app, raise_server_exceptions=False)
@@ -120,6 +122,7 @@ def test_put_cross_origin_blocked(
 
 
 # ── Case 9: POST 127.0.0.1 origin passes (loopback variant) ──────────────────
+
 
 def test_post_127_origin_passes(client: TestClient) -> None:
     resp = client.post(
@@ -135,9 +138,8 @@ def test_post_127_origin_passes(client: TestClient) -> None:
 # can set env vars on the dashboard process (but cannot execute code to
 # import pytest) must NOT be able to flip CSRF off.
 
-def test_post_pytest_env_without_module_blocked(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+
+def test_post_pytest_env_without_module_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import sys
 
     monkeypatch.setattr(dashboard, "STOP_FILE", tmp_path / "live_session.stop")
@@ -147,6 +149,5 @@ def test_post_pytest_env_without_module_blocked(
     prod_client = TestClient(dashboard.app, raise_server_exceptions=False)
     resp = prod_client.post("/api/action/kill")
     assert resp.status_code == 403, (
-        "Env-var-only PYTEST_CURRENT_TEST must NOT bypass CSRF — bypass "
-        "requires pytest actually loaded in interpreter."
+        "Env-var-only PYTEST_CURRENT_TEST must NOT bypass CSRF — bypass requires pytest actually loaded in interpreter."
     )

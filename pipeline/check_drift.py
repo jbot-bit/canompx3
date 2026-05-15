@@ -814,8 +814,7 @@ def check_dashboard_localhost_only_binding(trading_app_dir: Path) -> list[str]:
     cli_match = re.search(r'add_argument\(\s*"--host"\s*,\s*default\s*=\s*"([^"]+)"', content)
     if not cli_match:
         violations.append(
-            "  bot_dashboard.py: argparse --host argument not found — "
-            "CLI-level localhost restriction has been removed."
+            "  bot_dashboard.py: argparse --host argument not found — CLI-level localhost restriction has been removed."
         )
     elif cli_match.group(1) not in loopback:
         violations.append(
