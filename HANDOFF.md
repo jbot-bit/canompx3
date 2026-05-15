@@ -8,18 +8,11 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-05-15
-- **Commit:** 82510553 — @ fix(prop_profiles): key ORB caps by (orb_label, instrument, orb_minutes)
-- **Files changed:** 9 files
+- **Date:** 2026-05-16
+- **Commit:** e5c5292c — docs: post-live-debut handoff + Stage 2 NQ-mini plumbing-gap design note
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/deferred-findings.md`
-  - `docs/runtime/stages/a6-orb-cap-per-aperture.md`
-  - `scripts/tools/forward_monitor.py`
-  - `scripts/tools/slippage_scenario.py`
-  - `tests/test_trading_app/test_prop_profiles.py`
-  - `tests/test_trading_app/test_session_orchestrator.py`
-  - `trading_app/live/session_orchestrator.py`
-  - `trading_app/prop_profiles.py`
+  - `docs/plans/2026-05-16-stage2-nq-mini-plumbing-gap-finding.md`
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
@@ -28,18 +21,24 @@
 - Net: 9 new tradovate tests (63→72), all 126 drift checks pass, 247 sibling tests (`session_orchestrator` + `copy_order_router`) green. Class now fully API-aligned with `BrokerRouter` base + `CopyOrderRouter` peer. Production unaffected — `BrokerDispatcher` has zero live callsites.
 - Memory: `feedback_code_review_dead_class_detection.md` added (grep for `ClassName\(` construction sites before grading dead-code severity).
 
-## Current Session Addendum
-- **Tool:** Codex (WSL)
-- **Date:** 2026-05-13
-- **Summary:** Implemented a shadow-only opportunity awareness overlay that ranks active profile lanes as `PRIME_SHADOW`, `WATCH`, `BLOCKED`, or `NORMAL` from lifecycle state, lane allocation, regime, Chordia/protocol gates, and trailing expression. Wired it into lifecycle state, pre-session checks, the bot dashboard, deployability audit rendering, and session-start lifecycle logging without changing broker, allocator, DB, sizing, or execution behavior. Follow-up review added lane names/reasons to operator detail and removed the module import-time state-directory write.
-- **Status:** Focused tests and lint pass. CLI smoke for `topstep_50k_mnq_auto` on 2026-05-13 reported 2 `PRIME_SHADOW`, 1 `WATCH`, 0 `BLOCKED`; the watch lane was provisional allocation status.
-- **Verification:** `pytest` focused overlay/lifecycle/pre-session/dashboard/deployability suite passed (`83 passed`), targeted session-orchestrator lifecycle block tests passed, ruff check/format passed, py_compile passed, behavioral audit passed, integrity audit passed, and full `pipeline/check_drift.py` passed with no blocking drift (`126 checks passed`, `20 advisory`). CodeRabbit CLI review could not run because the CLI was missing and its installer requires `unzip`; installing `unzip` via apt required an interactive sudo password.
+## This Session (2026-05-16)
+- **Tool:** Claude Code (Opus 4.7)
+- **Date:** 2026-05-16 (Sat BNE / Fri 15:22 CT)
+- **Summary:** First real-money `topstep_50k_mnq_auto` MNQ live session. Preflight 7/7 (broker auth, portfolio load, daily features, contract resolution, notifications, journal, copy-trading dry-run). Bot connected to ProjectX Market Hub, subscribed to MNQ quotes, ran ~38min in wait-for-bar before `Ctrl+C`. Zero trades — all 4 lane session windows had passed by start time; 3/4 lanes also BLOCKED by Criterion 12 SR alarms (1 PRIME_SHADOW: US_DATA_1000).
+- **Status:** Rig wired correctly end-to-end. No exceptions, no broker drops, no risk-manager fires, clean shutdown. Capital outcome: $0 P&L.
+- **Verification:** Preflight self-tests `notifications PASS / brackets PASS / fill_poller PASS`. `is_market_open_at` correctly resolved Friday RTH-late as OPEN. `Daily features row: atr_20=321.875, atr_vel=Stable`. F-1 XFA scaling active.
+- **Observations for next session:** (a) Dashboard `/api/bars-recent?instrument=MNQ` returned `"bars":[]` — chart panel renders empty despite feed connected; likely tick→1m aggregation handoff bug. NOT capital-control. (b) HWM file 20.6d old — approaches 30d fail-closed. (c) Bot did not write a `logs/live/live_<ts>.log` file — output was stdout-only; canonical plan's "tail the log file" instruction was never validated against a real `--live` run.
 
 ## Next Steps — Active
 1. **MGC LONDON_METALS — DO NOT RE-LITIGATE.** Verdict frozen at `docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md`. Reopen only if new evidence clears one of the prereg kill criteria (K1 t_IS≥3.00 with theory grant, or K3 N_IS_on≥100). Do not re-run Phase A on alternative apertures as a back-door — that pattern is the trap.
-2. **Highest-EV next is MNQ.** Live: 2 deployed MNQ E2 RR1.5 lanes (COMEX_SETTLE OVNRNG_100 N=150 annual_r=36.2 + US_DATA_1000 VWAP_MID_ALIGNED_O15 N=112 annual_r=27.1) per `docs/runtime/lane_allocation.json`. L1 NYSE_OPEN_E2_RR1.5_CB1_COST_LT12 paused (PR #271). Concrete candidates: (a) rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring per Chordia v2 readouts, (b) trade-book drift check (MEMORY index lists 3 deployed; canonical lane_allocation.json shows 2 — reconcile).
+2. **Highest-EV next is MNQ.** Live: 4 deployed MNQ lanes per `docs/runtime/lane_allocation.json`. Concrete candidates: (a) rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring per Chordia v2 readouts, (b) trade-book drift check (MEMORY index lists 3 deployed; canonical lane_allocation.json shows 2 — reconcile).
 3. **Pre-existing carry-over (still open):** Track D MNQ COMEX_SETTLE Gate 0 runner design (Databento top-of-book table + bounded runner for DESIGN_ONLY prereg); deployment-coverage decision on 78 ROUTABLE_DORMANT strategies (`docs/audit/results/2026-05-12-deployment-coverage-orphans.md`).
 4. **NUGGET 5 PARKED 2026-05-13.** Agent-control-plane evaluation (Paperclip / amux / Cogpit / OctoAlly / LONA / reasoning sidecar) marked PARKED in `docs/plans/2026-05-12-agent-control-plane-evaluation.md`. Reopen only if worktree/branch/PR cleanup exceeds 2 hrs/week for two consecutive weeks. Existing worktree-manager + 5 MCPs + 11 subagents + 27 skills + 17 hooks already constitutes a control plane; NUGGET 4 (commit `b90c6291`) addressed the actual bottleneck (session-start context load). Do not re-evaluate without the reopen trigger firing.
+5. **Monday pre-session checklist (BEFORE first real MNQ trade window opens):**
+   (a) Refresh HWM tracker for account 21944866 (currently 20.6d old; fail-closed at 30d).
+   (b) Re-run `python scripts/run_live_session.py --instrument MNQ --profile topstep_50k_mnq_auto --preflight --signal-only` — expect "Preflight: 7/7 passed".
+   (c) Investigate two log-surface gaps from 2026-05-16 debut: (i) `/api/bars-recent` returns `[]` despite feed connected (chart panel empty — tick→1m aggregation), (ii) bot did not write `logs/live/live_<ts>.log` to disk under `--live`. Non-blocking for trading.
+   (d) Patch `docs/runtime/next-session-go-live-plan.md` for the 3 audit-caught path errors (GAP 1 `data/lane_allocation.json` → `docs/runtime/`; GAP 2 `logs/session.log` → none-written-this-run; GAP 3 stale commit anchor).
 
 ## Durable References
 - `docs/runtime/action-queue.yaml`
