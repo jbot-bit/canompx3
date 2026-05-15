@@ -67,8 +67,11 @@ except Exception:
     #     has decayed below the safe-write threshold.
     # Either way, restart the session so session-start.py runs and either
     # reclaims the lock (dead PID branch) or BLOCKs (live PID branch).
-    LOCK_AGE_HOURS=$(python -c "
-import json, sys
+    # Stale-lock guard: BLOCK only when lock is old AND the holder PID is dead.
+    # Mirror session-start.py's is_dead AND is_old_enough contract so legitimate
+    # long-running sessions (>12h) are not blocked while they are still alive.
+    STALE_CHECK=$(python -c "
+import json, os, sys
 from datetime import datetime, timezone
 try:
     d = json.load(open('$GIT_DIR_PATH/.claude.pid'))
@@ -76,25 +79,36 @@ try:
     ts = datetime.fromisoformat(iso.replace('Z','+00:00'))
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=timezone.utc)
-    delta = datetime.now(timezone.utc) - ts
-    print(f'{delta.total_seconds()/3600:.1f}')
+    age_h = (datetime.now(timezone.utc) - ts).total_seconds() / 3600.0
+    pid = d.get('pid')
+    is_old = age_h >= 12
+    is_dead = False
+    if isinstance(pid, int) and pid > 0:
+        try:
+            os.kill(pid, 0)
+            is_dead = False   # process exists
+        except ProcessLookupError:
+            is_dead = True    # PID gone
+        except (PermissionError, OSError):
+            is_dead = False   # conservative: cannot prove dead
+    if is_old and is_dead:
+        print(f'STALE:{age_h:.1f}:{pid}')
+    else:
+        print('OK')
 except Exception:
-    print('')
-" 2>/dev/null || true)
-    if [ -n "$LOCK_AGE_HOURS" ]; then
-        # bash arithmetic can't do floats; use python again for the comparison
-        IS_STALE=$(python -c "print('1' if float('$LOCK_AGE_HOURS') >= 12 else '0')" 2>/dev/null || echo "0")
-        if [ "$IS_STALE" = "1" ]; then
-            echo "BLOCKED: Claude session lock is ${LOCK_AGE_HOURS}h old (>= 12h)."
-            echo "  Lock file: $GIT_DIR_PATH/.claude.pid"
-            echo "  A stale lock means session-start.py did not refresh it,"
-            echo "  which on 2026-05-14 caused a concurrent-session collision"
-            echo "  (one session's git reset HEAD un-staged another's mid-commit work)."
-            echo "  Fix: restart the Claude session — session-start.py auto-recovers"
-            echo "       stale-but-dead-PID locks atomically. If you confirmed no"
-            echo "       other session is alive: rm '$GIT_DIR_PATH/.claude.pid' and restart."
-            exit 1
-        fi
+    print('OK')
+" 2>/dev/null || echo "OK")
+    if [[ "$STALE_CHECK" == STALE:* ]]; then
+        LOCK_AGE_HOURS="${STALE_CHECK#STALE:}"
+        LOCK_AGE_HOURS="${LOCK_AGE_HOURS%%:*}"
+        LOCK_PID="${STALE_CHECK##*:}"
+        echo "BLOCKED: Claude session lock is ${LOCK_AGE_HOURS}h old and PID ${LOCK_PID} is dead."
+        echo "  Lock file: $GIT_DIR_PATH/.claude.pid"
+        echo "  A stale-dead lock means the prior session ended without cleaning up."
+        echo "  Fix: restart the Claude session — session-start.py auto-recovers"
+        echo "       stale-but-dead-PID locks atomically. If you confirmed no"
+        echo "       other session is alive: rm '$GIT_DIR_PATH/.claude.pid' and restart."
+        exit 1
     fi
 fi
 

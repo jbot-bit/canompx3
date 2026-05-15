@@ -11,8 +11,10 @@ Design:
 - Cooldown-gated (30s global, 5min per skill) — same pattern as
   discovery-loop-guard.py:36.
 - Token budget: ≤ 100 chars per fire.
-- Reads `auto-skill-routing.md` live (60s in-process cache); the rules file
-  is the single source of truth for the keyword→skill table.
+- `auto-skill-routing.md` existence is checked as an on/off kill-switch
+  (RULES_FILE.exists()); the INTENT_RULES table is compiled from the
+  hardcoded list below, not parsed from the file at runtime. Keep
+  INTENT_RULES in sync with the rules file manually when either changes.
 """
 
 from __future__ import annotations
@@ -20,7 +22,6 @@ from __future__ import annotations
 import json
 import re
 import sys
-import time
 from datetime import UTC, datetime
 from pathlib import Path
 
