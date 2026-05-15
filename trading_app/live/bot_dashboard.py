@@ -166,8 +166,12 @@ class OriginAllowlistMiddleware(BaseHTTPMiddleware):
                 if referer.startswith(allowed + "/") or referer == allowed:
                     return await call_next(request)
             return Response(status_code=403, content="cross-origin request blocked")
-        # No Origin and no Referer. pytest TestClient omits both — allow under pytest.
-        if os.environ.get("PYTEST_CURRENT_TEST"):
+        # No Origin and no Referer. pytest TestClient omits both — allow under
+        # pytest ONLY when pytest is actually loaded in this interpreter. The
+        # env-var alone is operator-mutable; requiring `pytest in sys.modules`
+        # forces an attacker to also achieve code execution (at which point
+        # CSRF protection is already moot), closing the env-var-only bypass.
+        if os.environ.get("PYTEST_CURRENT_TEST") and "pytest" in sys.modules:
             return await call_next(request)
         return Response(status_code=403, content="missing Origin/Referer on mutating request")
 

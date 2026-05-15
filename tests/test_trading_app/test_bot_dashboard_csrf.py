@@ -1,6 +1,6 @@
 """CSRF middleware tests — OriginAllowlistMiddleware on /api/action/kill.
 
-Nine cases covering the allow/block decision tree:
+Ten cases covering the allow/block decision tree:
   1. GET with no Origin passes (safe method)
   2. POST same-origin (http://localhost:8080) passes
   3. POST cross-origin (http://evil.example) blocked 403
@@ -10,6 +10,8 @@ Nine cases covering the allow/block decision tree:
   7. POST cross-origin Referer blocked 403 (Origin absent, Referer present but wrong)
   8. PUT cross-origin blocked 403 (non-POST mutating method also gated)
   9. POST 127.0.0.1 origin passes (loopback variant in allowed set)
+ 10. PYTEST_CURRENT_TEST env-var alone (without pytest in sys.modules) BLOCKED
+     — closes the env-var-only bypass surfaced by Batch 3 code review
 """
 
 import os
@@ -125,3 +127,26 @@ def test_post_127_origin_passes(client: TestClient) -> None:
         headers={"Origin": f"http://127.0.0.1:{dashboard.PORT}"},
     )
     assert resp.status_code != 403
+
+
+# ── Case 10: PYTEST_CURRENT_TEST env-var alone cannot bypass CSRF ────────────
+# Regression for batch-3 finding: the pytest bypass branch must require BOTH
+# the env var AND `pytest` actually loaded in sys.modules. An attacker who
+# can set env vars on the dashboard process (but cannot execute code to
+# import pytest) must NOT be able to flip CSRF off.
+
+def test_post_pytest_env_without_module_blocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+
+    monkeypatch.setattr(dashboard, "STOP_FILE", tmp_path / "live_session.stop")
+    # Simulate the attack: env var SET, but pytest NOT in sys.modules.
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "fake::test_id")
+    monkeypatch.delitem(sys.modules, "pytest", raising=False)
+    prod_client = TestClient(dashboard.app, raise_server_exceptions=False)
+    resp = prod_client.post("/api/action/kill")
+    assert resp.status_code == 403, (
+        "Env-var-only PYTEST_CURRENT_TEST must NOT bypass CSRF — bypass "
+        "requires pytest actually loaded in interpreter."
+    )
