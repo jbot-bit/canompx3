@@ -85,6 +85,35 @@ Pre-commit to the kill conditions BEFORE the first real trade fills:
 - Do NOT add new strategies before the first live day completes.
 - Do NOT mutate `docs/runtime/lane_allocation.json` without re-running the rebalance script and clearing blockers (b) and (c).
 
+## Carry-over capture list (from 2026-05-16 debut — collect during next live run)
+
+Two log-surface gaps from the 2026-05-16 debut are CARRY-OVER per `HANDOFF.md` § Next Steps 5(c). Both need ≥1 more live run to characterize before a fix stage is justified. When you start the next `--live` session, capture the evidence below so the post-session handoff can promote (or close) each item from "carry-over open" → concrete finding.
+
+### (c-i) `/api/bars-recent?instrument=MNQ` returns `"bars":[]`
+
+Working hypothesis: tick → 1m aggregation handoff isn't flushing into whatever the dashboard endpoint reads. Capture during the live session:
+
+1. A wall-clock timestamp where the feed log line shows a tick arriving (e.g., `Subscribed to MNQ quotes` + first `tick` log entry).
+2. ≥3 minutes after step 1, hit `curl http://<dashboard-host>:<port>/api/bars-recent?instrument=MNQ` and paste the full response body (not just the empty `bars` field — include any error/meta fields).
+3. From the same window, the last 5 lines of any `1m`/`aggregator`/`bar_builder` log entries (grep stdout — there is no log file per c-ii). If zero matches, that itself is evidence: the aggregator never ran.
+4. Whether the chart panel is empty in the dashboard UI at the same wall-clock as the curl call.
+
+Do NOT touch `/api/bars-recent` server-side code yet — the trace above narrows root cause (tick layer vs aggregator vs endpoint reader) before any edits.
+
+### (c-ii) No `logs/live/live_<ts>.log` written under `--live`
+
+Working hypothesis: `logging.basicConfig` is stdout-only at the script entry; the live mode doesn't add a `FileHandler` rooted at `logs/live/`. Capture during the live session:
+
+1. `ls logs/live/` immediately after `python scripts/run_live_session.py … --live` starts. Note whether a `live_<ts>.log` is created at session start (handler initialized but not flushed?) OR never appears (no handler).
+2. The first 10 stdout lines after `Type CONFIRM` — look for any line resembling `logging` / `handler` / `FileHandler` / `OSError` / `PermissionError`.
+3. If `logs/live/` does not exist as a directory: that's the root cause (missing `mkdir -p` on session start). Capture `ls logs/` to confirm.
+
+Do NOT add a `FileHandler` yet — the dashboard log surfacing (separate stage) may want a specific format; gather evidence first.
+
+### Where to put the captures
+
+Drop the curl response body + log excerpts into a fresh `docs/runtime/sessions/<YYYY-MM-DD>-live-debut-followup.md`, then update `HANDOFF.md` § Next Steps 5(c) with "characterized" status + a one-line root-cause sentence per item. After that, each (c-i)/(c-ii) becomes a normal stage candidate.
+
 ## Files to read first when picking up
 
 1. `HANDOFF.md`
