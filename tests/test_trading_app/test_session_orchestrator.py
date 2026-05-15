@@ -5535,7 +5535,7 @@ class TestRegimeGate:
         assert len(orch.order_router.submitted) == 0
         orch._write_signal_record.assert_called()
         record = orch._write_signal_record.call_args[0][0]
-        assert record["type"] == "REGIME_PAUSED"
+        assert record["type"] == "ALLOCATOR_BLOCKED"
         assert record["strategy_id"] == sid
 
     async def test_non_paused_strategy_proceeds(self):

@@ -1995,10 +1995,24 @@ class SessionOrchestrator:
 
         record = self._positions.get(strategy_id)
         if record is None or not record.bracket_order_ids:
+            # Two distinct cases reach this branch:
+            # 1. has_queryable_bracket_legs() is False — broker manages
+            #    atomic-bracket linkage (e.g. Tradovate placeOSO auto-cancels
+            #    the sibling leg when one fills); no leg IDs are tracked
+            #    locally by design and broker-side protection is intact.
+            # 2. verify_bracket_legs returned empty AND sequential-ID fallback
+            #    was unavailable — the entry is potentially naked at the
+            #    broker. A CRITICAL log + operator notify already fired at
+            #    the entry path (see _handle_event line ~2477).
+            # Either way, there are no local IDs to cancel; the warning is
+            # informational, not an alert.
+            queryable = self.order_router.has_queryable_bracket_legs() if self.order_router is not None else False
             log.warning(
                 "No bracket order IDs stored for %s — skipping bracket cancel "
-                "(position may have engine-only stop/target management)",
+                "(queryable_legs=%s; broker-side bracket may still be active "
+                "via atomic OSO linkage, or naked-position alert fired at entry)",
                 strategy_id,
+                queryable,
             )
             return
 
@@ -2228,7 +2242,7 @@ class SessionOrchestrator:
                     "ALLOCATOR_BLOCKED: %s — allocator marked strategy non-deployable. Entry blocked.",
                     event.strategy_id,
                 )
-                self._write_signal_record({"type": "REGIME_PAUSED", "strategy_id": event.strategy_id})
+                self._write_signal_record({"type": "ALLOCATOR_BLOCKED", "strategy_id": event.strategy_id})
                 return
 
             if self.signal_only:
