@@ -228,6 +228,67 @@ def test_sse_cancel_watchers_clears_started_tasks():
     asyncio.get_event_loop_policy().new_event_loop().run_until_complete(cycle())
 
 
+def test_sse_lazy_stop_cancels_watchers_when_last_subscriber_unsubscribes():
+    """Ref-counted stop: when the final subscriber disconnects the five
+    file-polling watchers must be cancelled, not left running until the
+    FastAPI lifespan shutdown.
+
+    Mirrors `_sse_start_watchers` (lazy-start on first connect). Without
+    this behaviour the watchers (heartbeat 1s, state 0.5s, signals JSONL
+    tail, alerts tail, bars 2s) keep polling files indefinitely after the
+    last browser tab closes — the zombie-stream surface this Pass 3 closes.
+    """
+    import asyncio
+
+    from trading_app.live import bot_dashboard as bd
+
+    async def cycle():
+        bd._sse_tasks.clear()
+        # Two subscribers.
+        q1 = bd._sse_broker.subscribe()
+        q2 = bd._sse_broker.subscribe()
+        await bd._sse_start_watchers()
+        assert len(bd._sse_tasks) == 5
+        assert bd._sse_broker.subscriber_count() == 2
+
+        # First unsubscribe must NOT stop watchers — second subscriber still
+        # consuming. This is the ref-count guard at subscriber_count > 0.
+        bd._sse_broker.unsubscribe(q1)
+        await bd._sse_lazy_stop_if_idle()
+        assert bd._sse_broker.subscriber_count() == 1
+        assert len(bd._sse_tasks) == 5, "lazy-stop fired with surviving subscriber"
+
+        # Second (last) unsubscribe -> watchers cancelled.
+        bd._sse_broker.unsubscribe(q2)
+        await bd._sse_lazy_stop_if_idle()
+        assert bd._sse_broker.subscriber_count() == 0
+        assert bd._sse_tasks == [], "watchers still running after last unsubscribe"
+
+    asyncio.get_event_loop_policy().new_event_loop().run_until_complete(cycle())
+
+
+def test_sse_lazy_stop_noop_when_no_watchers():
+    """Idempotency: calling lazy-stop with no watchers running must be safe.
+
+    The TOCTOU-rejection path at the SSE endpoint subscribes then
+    unsubscribes BEFORE `_sse_start_watchers` is called. The lazy-stop
+    finally-block must be safe in that path (no AttributeError, no
+    spurious cancellation).
+    """
+    import asyncio
+
+    from trading_app.live import bot_dashboard as bd
+
+    async def cycle():
+        bd._sse_tasks.clear()
+        assert bd._sse_broker.subscriber_count() == 0
+        assert bd._sse_tasks == []
+        await bd._sse_lazy_stop_if_idle()  # must not raise
+        assert bd._sse_tasks == []
+
+    asyncio.get_event_loop_policy().new_event_loop().run_until_complete(cycle())
+
+
 def test_sse_start_watchers_recovers_after_done_tasks():
     """Module-level _sse_tasks may carry stale done-tasks across loops.
 

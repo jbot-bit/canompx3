@@ -2728,6 +2728,27 @@ async def _sse_cancel_watchers() -> None:
     _sse_tasks.clear()
 
 
+async def _sse_lazy_stop_if_idle() -> None:
+    """Cancel watcher tasks when the last subscriber disconnects.
+
+    Called from the SSE endpoint's finally-block after a real subscriber
+    drop. Mirrors `_sse_start_watchers` (lazy-start on first connect) so
+    the five file-polling watchers do not run indefinitely once no browser
+    tab is consuming events. Idempotent: a re-connecting subscriber will
+    relaunch via `_sse_start_watchers` on the next `/api/events/stream`
+    GET.
+
+    Skips when `subscriber_count > 0` so this remains safe to call from any
+    unsubscribe path (including the TOCTOU-rejection cleanup at the
+    endpoint, which already has live subscribers under the cap).
+    """
+    if _sse_broker.subscriber_count() > 0:
+        return
+    if not _sse_tasks:
+        return
+    await _sse_cancel_watchers()
+
+
 # ── HTML Frontend ─────────────────────────────────────────────────────────────
 
 
@@ -2952,6 +2973,7 @@ async def api_events_stream(request: Request):
                 yield payload
         finally:
             _sse_broker.unsubscribe(queue)
+            await _sse_lazy_stop_if_idle()
 
     return EventSourceResponse(_generator())
 
