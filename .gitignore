@@ -272,6 +272,9 @@ config/
 
 # PDF resources (large, not for VCS)
 resources/*.pdf
+# Source artifacts for OCR'd literature (canonical extract committed under docs/institutional/literature/)
+resources/*.epub
+resources/harris_ocr/
 
 # Temp script output
 scripts/tmp_lit_results.txt
