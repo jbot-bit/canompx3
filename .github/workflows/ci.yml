@@ -175,6 +175,11 @@ jobs:
     # See scripts/cron/lhp_weekly.py and Nugget 2b plan.
     if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
     runs-on: windows-latest
+    # OpenRouter API key for LHP LLM proposals (scripts/research/lhp/llm_client.py:157).
+    # GHA masks the value in logs automatically. Scoped to lhp_weekly only — not
+    # exposed to the `checks` job. Repo secret set 2026-05-13.
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
