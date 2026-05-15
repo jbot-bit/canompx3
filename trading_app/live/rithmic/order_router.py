@@ -82,7 +82,7 @@ class RithmicOrderRouter(BrokerRouter):
         """Build a Rithmic-compatible order spec.
 
         Returns a dict consumed by submit(). Contains both Rithmic-specific
-        fields and a broker-agnostic _intent dict for BrokerDispatcher routing.
+        fields and a broker-agnostic _intent dict for cross-broker routing.
         """
         # async_rithmic TransactionType: BUY=1, SELL=2
         transaction_type = 1 if direction == "long" else 2

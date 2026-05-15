@@ -88,7 +88,7 @@ class TradovateOrderRouter(BrokerRouter):
         else:
             raise ValueError(f"Entry model '{entry_model}' not supported live. Use E1 or E2.")
 
-        # Attach broker-agnostic intent for cross-broker routing (BrokerDispatcher)
+        # Attach broker-agnostic intent for cross-broker routing
         base["_intent"] = {
             "direction": direction,
             "entry_model": entry_model,
