@@ -8,11 +8,18 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-05-14
-- **Commit:** 83ec7b48 — docs: log 2026-05-14 autonomous run (PR #286 C8 fix + PR #287 cleanup)
-- **Files changed:** 2 files
+- **Date:** 2026-05-15
+- **Commit:** 82510553 — @ fix(prop_profiles): key ORB caps by (orb_label, instrument, orb_minutes)
+- **Files changed:** 9 files
   - `HANDOFF.md`
-  - `docs/runtime/decision-ledger.md`
+  - `docs/ralph-loop/deferred-findings.md`
+  - `docs/runtime/stages/a6-orb-cap-per-aperture.md`
+  - `scripts/tools/forward_monitor.py`
+  - `scripts/tools/slippage_scenario.py`
+  - `tests/test_trading_app/test_prop_profiles.py`
+  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `trading_app/live/session_orchestrator.py`
+  - `trading_app/prop_profiles.py`
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).

@@ -4104,7 +4104,8 @@ const ChartCockpit = (() => {
         crosshair: { mode: window.LightweightCharts.CrosshairMode.Normal },
         autoSize: true,
       });
-      series = chart.addCandlestickSeries({
+      // v5 API: addSeries(seriesDef, options). v4's addCandlestickSeries was removed.
+      series = chart.addSeries(window.LightweightCharts.CandlestickSeries, {
         upColor: "#00d68f", downColor: "#ff5c5c",
         wickUpColor: "#00d68f", wickDownColor: "#ff5c5c",
         borderUpColor: "#00d68f", borderDownColor: "#ff5c5c",
