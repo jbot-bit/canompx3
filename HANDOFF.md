@@ -9,10 +9,11 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-16
-- **Commit:** e5c5292c — docs: post-live-debut handoff + Stage 2 NQ-mini plumbing-gap design note
+- **Commit:** bf6cda7a — docs: Monday pre-session checklist — path fixes + corrected HWM diagnosis
 - **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/plans/2026-05-16-stage2-nq-mini-plumbing-gap-finding.md`
+  - `docs/runtime/next-session-go-live-plan.md`
+- **Prior:** e5c5292c (post-live-debut handoff + Stage 2 NQ-mini plumbing-gap design note)
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
