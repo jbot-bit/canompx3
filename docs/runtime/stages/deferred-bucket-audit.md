@@ -216,3 +216,98 @@ captures the remaining 53 errors. Reasoning for splitting:
 The cluster is not blocking any other work — schedule when (a) operator
 surfaces a real bug rooted in one of these classes, or (b) a code-review
 batch covers these files.
+
+### Pass 5 — verify_bracket_legs AUDIT (READ-ONLY, no code change)
+
+**Function:** `trading_app/live/tradovate/order_router.py:196-258`.
+
+**Heuristic under audit:** Tradovate has no documented parent-order
+linkage field on `query_open_orders` payloads. The implementation
+identifies bracket legs by:
+
+1. `symbol == contract_id` (same instrument as entry).
+2. `orderId > entry_order_id` (created after the entry — guards against
+   picking up unrelated pre-existing working orders on the same contract).
+3. `orderType == "Stop"` -> SL leg; `orderType == "Limit"` -> TP leg.
+4. First match wins (lines 248-251: `sl_id is None` / `tp_id is None`).
+
+**Reachability of the function under current deployment:** dormant.
+Current live broker is ProjectX (TopStep XFA) — 4 deployed MNQ lanes as
+of 2026-05-14. `session_orchestrator.py:2450` gates the verify call on
+`self.order_router.has_queryable_bracket_legs()`; on the active
+CopyOrderRouter -> ProjectX chain this returns True, and the
+ProjectX implementation at `projectx/order_router.py:366` is the one
+that runs. The Tradovate path becomes hot only after Tradeify/MFFU/direct
+activation.
+
+**Edge cases verified clean:**
+
+- RateLimit propagation (`RateLimitExhausted` re-raise, line 229-230) is
+  correct per the broker_base contract; consumer
+  (`session_orchestrator.py:2479`) catches the generic Exception path
+  separately.
+- Auth-missing raises (`order_router.py:224-225`), not silent None —
+  tested by `test_missing_auth_raises`.
+- Type-ordering contract (Stop->sl_id, Limit->tp_id) is correctness-
+  guarded by `test_does_not_swap_stop_and_target`. Per the
+  adversarial-audit note on commit 58abc30a, a swap does NOT produce
+  naked exposure (both legs are cancelled by iteration in
+  `_cancel_bracket_orders`; `record.bracket_order_ids` is never index-
+  accessed), but it WOULD mis-label SL/TP in operator-visible logs.
+- "Order ID strictly greater than entry_order_id" survives non-sequential
+  Tradovate IDs because child orders are submitted AFTER the entry, so
+  their account-wide auto-incremented IDs are strictly greater. Matches
+  `supports_sequential_bracket_ids() -> False` for Tradovate (Tradovate
+  IDs are non-sequential within the bracket, but the entry-then-bracket
+  monotonic-arrival property holds).
+
+**Known limitation (documented in tests, not a bug):**
+
+`test_picks_first_matching_leg_when_duplicates` (line 140) makes
+explicit that if two open Stop orders on the same contract have
+`orderId > entry_order_id`, the FIRST encountered wins. This is a real
+edge case if:
+
+- Two strategies on the same instrument (e.g., two MNQ lanes) fire entry
+  brackets concurrently inside one SessionOrchestrator; AND
+- The first strategy's `_submit_bracket` yields to the asyncio loop
+  between `submit` and `verify_bracket_legs`; AND
+- The second strategy's bracket lands during that yield with
+  `child.orderId > first_entry.orderId`.
+
+The heuristic would then mis-assign the second strategy's Stop as the
+first strategy's SL. Current 4-lane MNQ deployment has time-disjoint
+sessions (COMEX_SETTLE, US_DATA_1000, NYSE_OPEN) and uses ProjectX, so
+the path is unreachable. The audit surface activates the moment Tradovate
+goes live.
+
+**Pass 5 verdict: CLOSE finding with named verification, no code change
+in this stage.**
+
+**Recommendation for the named follow-up** (NOT scheduled — open later):
+
+Before activating Tradovate (Tradeify/MFFU/direct via paper trade),
+prefer the canonical fix:
+
+1. **Submit-time ID capture.** `placeOSO` returns the bracket leg IDs in
+   the response payload. Verified against official Tradovate sources
+   2026-05-15 (community forum threads 4446 + 10272 + 6187): the
+   response shape is `{"orderId": <entry>, "oso1Id": <bracket1>,
+   "oso2Id": <bracket2>}`. Storing them directly on `PositionRecord`
+   from the submit response eliminates the post-fill query altogether.
+   The broker's submit response IS the source of truth —
+   `query_open_orders` is a fallback, not a primary.
+2. (Fallback if option 1 isn't viable for some leg shape) Concurrency
+   lock in `_submit_bracket` so two same-contract bracket submits on the
+   same orchestrator serialize across the verify call.
+
+The current heuristic is a **fail-conservative scaffold**: false
+positives trigger CRITICAL operator alerts (line 2475
+`BRACKET LEGS MISSING ... POSITION MAY BE UNPROTECTED`), no false
+negatives that would let a naked position run unprotected. It is safe
+to ship in its current shape for the dormant Tradovate path.
+
+Sibling implementations checked: `projectx/order_router.py:366` (active),
+`copy_order_router.py:204` (delegates to primary), `broker_base.py:162`
+(base default returns `(None, None)`). All three are aligned with the
+same `tuple[int | None, int | None]` contract.
