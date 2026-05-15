@@ -300,7 +300,7 @@ class SessionOrchestrator:
         instrument: str,
         broker: str | None = None,
         demo: bool = True,
-        account_id: int = 0,
+        account_id: int | None = 0,
         signal_only: bool = False,
         force_orphans: bool = False,
         portfolio: Portfolio | None = None,
@@ -539,7 +539,7 @@ class SessionOrchestrator:
             self.positions = None
             log.info("Signal-only mode: order router skipped")
         else:
-            if account_id == 0:
+            if account_id is None or account_id == 0:
                 account_id = contracts.resolve_account_id()
             router_cls = components["router_class"]
             primary_router = router_cls(

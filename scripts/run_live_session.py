@@ -423,7 +423,7 @@ def main() -> None:
     parser.add_argument(
         "--account-id",
         type=int,
-        default=0,
+        default=None,
         help="Numeric account ID (default: auto-discover from API)",
     )
     parser.add_argument(

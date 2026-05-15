@@ -38,7 +38,7 @@ class MultiInstrumentRunner:
         broker: str | None = None,
         demo: bool = True,
         signal_only: bool = True,
-        account_id: int = 0,
+        account_id: int | None = 0,
         force_orphans: bool = False,
         profile_id: str | None = None,
     ):
