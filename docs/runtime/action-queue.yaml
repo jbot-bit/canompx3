@@ -786,3 +786,60 @@ items:
       - docs/audit/results/2026-05-15-mnq-chordia-batch-k20.md
       - docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md
     notes_ref: ""
+
+  - id: nq_mini_stage2_wiring_2026_05_15
+    title: Wire NQ-mini symbol substitution (Stage 2 of 3) — session_orchestrator + webhook_server + populated profile
+    class: feature
+    status: open
+    priority: P2
+    close_before_new_work: false
+    owner_hint: joshd
+    last_verified_at: 2026-05-15
+    freshness_sla_days: 30
+    next_action: |
+      PR #158 (commit 8bef5eb1, 2026-04-27) landed Stage 1 — the
+      AccountProfile.execution_symbol_map + execution_qty_divisor contract
+      and resolve_execution_symbol() helper. Stage 2 was supposed to wire
+      the helper into the live order-routing path but never landed. The
+      Batch 4 code-review pass closed the silent-mis-route hole with a
+      defensive drift check (check_nq_mini_substitution_wired_or_unused
+      in pipeline/check_drift.py — fails if any ACCOUNT_PROFILES row
+      populates execution_symbol_map while no production callsite exists
+      under trading_app/live/). The check is inert today because no
+      profile populates the field.
+
+      Stage 2 work, in a SEPARATE branch (do not graft onto Batch 4):
+
+        1. Wire resolve_execution_symbol(profile, strategy_symbol) into
+           trading_app/live/session_orchestrator.py at the build_order_spec
+           call site (~L2317) and any webhook_server.py order-emit path.
+        2. Apply execution_qty_divisor at qty calculation (MNQ qty 4 →
+           NQ qty 1 etc.); error-on-non-integer-result is mandatory.
+        3. Populate execution_symbol_map={"MNQ":"NQ"} on at least one
+           ACCOUNT_PROFILES row (gated behind a profile flag, not on by
+           default — see driver memo for prop-firm policy interaction).
+        4. Add integration test exercising substitution + qty-divisor
+           math + non-integer-result error path.
+        5. Re-run pipeline/check_drift.py — check_nq_mini_substitution_wired_or_unused
+           must still PASS (i.e. callsite now exists, so populated
+           profile row is allowed).
+        6. Code-review pass on the Stage 2 commit before merge —
+           capital-class change, full review per institutional-rigor.
+
+      Driver memo: memory/mini_vs_micro_commission_fix.md
+      (~77% commission reduction = $26K → $52K/yr per contract;
+      mini vs micro spread / slippage interactions documented).
+    exit_criteria: |
+      Stage 2 commit landed on main. check_nq_mini_substitution_wired_or_unused
+      continues to PASS with at least one ACCOUNT_PROFILES row populating
+      execution_symbol_map= (proves the callsite under trading_app/live/
+      landed alongside the profile data). Integration test covers happy
+      path + non-integer qty error path.
+    blocked_by: []
+    decision_refs:
+      - docs/runtime/stages/code-review-batch4-fixes.md
+    evidence_refs:
+      - memory/mini_vs_micro_commission_fix.md
+      - trading_app/prop_profiles.py
+      - pipeline/check_drift.py
+    notes_ref: docs/runtime/stages/code-review-catchup-batch4-resume.md

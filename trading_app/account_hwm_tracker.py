@@ -203,6 +203,11 @@ _MAX_CONSECUTIVE_POLL_FAILURES = 3
 # resolution: operator archives or deletes the state file.
 _STATE_STALENESS_FAIL_DAYS = 30
 
+# Public alias — exported for sibling modules that gate on the SAME 30-day
+# boundary applied to the SAME state files (e.g., pre_session_check inactivity
+# window). Single source of truth per institutional-rigor § 4. Do not redefine.
+STATE_STALENESS_FAIL_DAYS = _STATE_STALENESS_FAIL_DAYS
+
 # UNGROUNDED — operational suppression floor.
 # Rationale: 24h floor blocks restart-cycle noise. Under 24h silent;
 # 24h–30 days warn + notify; >= 30 days raises via _STATE_STALENESS_FAIL_DAYS.

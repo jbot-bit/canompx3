@@ -43,14 +43,28 @@ from trading_app.strategy_discovery import _inject_cross_asset_atrs
 from trading_app.validated_shelf import deployable_validated_relation
 
 
-def _normalize_writable_path(path: Path) -> Path:
+def normalize_writable_path(path: Path) -> Path:
+    """Canonical WSL path-case normalization for cross-tool writability.
+
+    Some Windows-side helpers create files under `/mnt/c/Users/...` (capital U)
+    while WSL-native fs sees them under `/mnt/c/users/...` (lowercase) — the
+    same directory, two case-different prefixes. Tools that opened a handle
+    via the capitalized path lose write permission on subsequent stat() under
+    the lowercase variant. Normalize all writable paths to lowercase to
+    converge.
+
+    Single canonical home (this function) per institutional-rigor § 4. Two
+    other modules import this rather than re-encoding the rule:
+      - trading_app.pre_session_check (lane-mismatch gate path)
+      - trading_app.prop_profiles (load_allocation_lanes path)
+    """
     text = str(path)
     if text.startswith("/mnt/c/Users/"):
         return Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
     return path
 
 
-_REPO_ROOT = _normalize_writable_path(Path(__file__).resolve().parents[1])
+_REPO_ROOT = normalize_writable_path(Path(__file__).resolve().parents[1])
 DEFAULT_LANE_ALLOCATION_PATH = _REPO_ROOT / "docs" / "runtime" / "lane_allocation.json"
 
 # ---------------------------------------------------------------------------
@@ -1063,7 +1077,7 @@ def save_allocation(
     """
     gated_scores = apply_chordia_gate(scores)
     path = Path(output_path) if output_path else DEFAULT_LANE_ALLOCATION_PATH
-    path = _normalize_writable_path(path)
+    path = normalize_writable_path(path)
 
     def _blocked_entry(s: LaneScore) -> dict[str, object]:
         return {
@@ -1146,7 +1160,7 @@ def check_allocation_staleness(
     days_old = -1 if file not found.
     """
     if allocation_path:
-        path = _normalize_writable_path(Path(allocation_path))
+        path = normalize_writable_path(Path(allocation_path))
     else:
         path = DEFAULT_LANE_ALLOCATION_PATH
     if not path.exists():

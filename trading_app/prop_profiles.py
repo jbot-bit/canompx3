@@ -1099,6 +1099,15 @@ def load_allocation_lanes(
     """
     import json
 
+    # NOTE: canonical helper lives in trading_app.lane_allocator
+    # (normalize_writable_path / DEFAULT_LANE_ALLOCATION_PATH) per
+    # institutional-rigor § 4. We cannot import it here because
+    # prop_profiles.py runs validate_dd_budget() at module load (line 1254),
+    # which transitively reaches load_allocation_lanes -> lane_allocator
+    # while lane_allocator is still partway through importing
+    # lane_correlation -> prop_profiles. A function-level import does NOT
+    # break the cycle because the function is invoked at module-load time.
+    # Inlining the two lines below is the documented exception.
     def _normalize_writable_path(path: Path) -> Path:
         text = str(path)
         if text.startswith("/mnt/c/Users/"):

@@ -7431,16 +7431,22 @@ def check_pooled_finding_annotations() -> list[str]:
 
 
 def check_magic_number_rationale(trading_app_dir: Path) -> list[str]:
-    """Pass Three: magic-number rationale audit on trading_app/live/.
+    """Pass Three: magic-number rationale audit on capital-class trading_app paths.
 
-    Every UPPER_SNAKE_CASE assignment (class-body or module-level) in
-    trading_app/live/ whose value is a numeric literal with
+    Every UPPER_SNAKE_CASE assignment (class-body or module-level) in the
+    scoped paths below whose value is a numeric literal with
     abs(value) > RATIONALE_THRESHOLD must have either:
       (a) a comment containing "Rationale:" or "rationale" (case-insensitive)
           within +/- 10 lines of the assignment (covers multi-paragraph
           comment blocks where the explicit "Rationale:" tag lands a few
           lines above the literal), OR
       (b) the constant name appears in RATIONALE_WHITELIST below.
+
+    Scope (single canonical list — extend carefully, every new path is a
+    new gate that fails commits with bare magic numbers):
+      - trading_app/live/ — order routing, kill switch, dashboards, webhook
+      - trading_app/account_hwm_tracker.py — DD tier boundaries, staleness gates
+      - trading_app/pre_session_check.py — pre-flight gate constants
 
     Why: parameter-justification discipline per Robert Carver,
     "Systematic Trading" Ch. 4 (resources/Robert Carver - Systematic
@@ -7450,6 +7456,9 @@ def check_magic_number_rationale(trading_app_dir: Path) -> list[str]:
     track of why a timeout / threshold / cap was set.
 
     Introduced: 2026-04-26 as part of v6.1 open-work burndown (Pass Three).
+    Scope extended 2026-05-15 (Batch 4 review) to cover HWM tracker +
+    pre_session_check — both carry capital-class boundaries (30-day
+    staleness, DD warn/block, inactivity window) outside trading_app/live/.
     """
     import ast
 
@@ -7459,14 +7468,25 @@ def check_magic_number_rationale(trading_app_dir: Path) -> list[str]:
     RATIONALE_WHITELIST: set[str] = set()
 
     violations: list[str] = []
+
+    # Capital-class path scope. live/ is recursive; the two sibling files
+    # are explicit because they are not under live/ but carry DD/inactivity
+    # gates with the same operator-safety profile.
+    scoped_files: list[Path] = []
     live_dir = trading_app_dir / "live"
     if not live_dir.exists():
         return [f"  trading_app/live/ not found at {live_dir}"]
+    scoped_files.extend(sorted(live_dir.rglob("*.py")))
+    for sibling in ("account_hwm_tracker.py", "pre_session_check.py"):
+        sib_path = trading_app_dir / sibling
+        if not sib_path.exists():
+            return [f"  trading_app/{sibling} not found at {sib_path}"]
+        scoped_files.append(sib_path)
 
     name_re = re.compile(r"[A-Z][A-Z0-9_]+")
     rationale_re = re.compile(r"#.*\brationale\b", re.IGNORECASE)
 
-    for fpath in sorted(live_dir.rglob("*.py")):
+    for fpath in scoped_files:
         try:
             content = fpath.read_text(encoding="utf-8")
         except Exception:
@@ -7509,6 +7529,114 @@ def check_magic_number_rationale(trading_app_dir: Path) -> list[str]:
                 f"'Rationale:' comment within +/- 10 lines (Carver Ch. 4)"
             )
     return violations
+
+
+def check_nq_mini_substitution_wired_or_unused(trading_app_dir: Path) -> list[str]:
+    """Fail-open guard: NQ-mini symbol-substitution must be wired before use.
+
+    The contract added in PR #158 (commit 8bef5eb1, 2026-04-27) introduced
+    AccountProfile.execution_symbol_map + .execution_qty_divisor to allow a
+    profile to declare e.g. {"MNQ": "NQ"} so a strategy generated against
+    the micro is executed on the mini for ~77% commission reduction. Stage
+    1 of 3 was the contract; Stage 2 was supposed to wire the call sites in
+    trading_app/live/session_orchestrator.py and webhook_server.py via
+    resolve_execution_symbol(profile, strategy_symbol) but never landed.
+
+    Failure mode this check closes: if any ACCOUNT_PROFILES entry in
+    trading_app/prop_profiles.py populates `execution_symbol_map=...` while
+    no production callsite of resolve_execution_symbol() exists in
+    trading_app/live/, the broker silently receives the strategy_symbol
+    unchanged and original qty — wrong-instrument fills sized for the wrong
+    contract. Capital-class silent failure per integrity-guardian § 3.
+
+    Invariant enforced:
+      - No ACCOUNT_PROFILES row populates execution_symbol_map: PASS regardless
+      - At least one ACCOUNT_PROFILES row populates execution_symbol_map AND
+        at least one resolve_execution_symbol() callsite exists under
+        trading_app/live/: PASS (Stage 2 wired)
+      - Any ACCOUNT_PROFILES row populates execution_symbol_map AND no
+        resolve_execution_symbol() callsite exists under trading_app/live/:
+        FAIL (Stage 1 active without Stage 2 — silent mis-route trap)
+
+    Test fixtures (tests/) are intentionally exempt — they validate the
+    contract surface and SHOULD populate the field to exercise the
+    happy path + 8 invalid configurations.
+
+    Introduced: 2026-05-15 (Batch 4 code review). Companion to
+    feedback_code_review_dead_class_detection.md (Sonnet missed the dead
+    BrokerDispatcher; this check forecloses the equivalent NQ-mini hole).
+    """
+    import ast
+
+    profiles_path = trading_app_dir / "prop_profiles.py"
+    live_dir = trading_app_dir / "live"
+    if not profiles_path.exists():
+        return [f"  trading_app/prop_profiles.py not found at {profiles_path}"]
+    if not live_dir.exists():
+        return [f"  trading_app/live/ not found at {live_dir}"]
+
+    try:
+        profiles_src = profiles_path.read_text(encoding="utf-8")
+    except Exception as exc:
+        return [f"  could not read {profiles_path}: {exc}"]
+
+    try:
+        tree = ast.parse(profiles_src)
+    except SyntaxError as exc:
+        return [f"  could not parse {profiles_path}: {exc}"]
+
+    # Find every keyword arg `execution_symbol_map=<expr>` in the source
+    # whose <expr> is not the literal None. Restrict to AccountProfile
+    # constructions (call_func.id == "AccountProfile") to avoid spurious
+    # matches elsewhere in the module.
+    populated_lines: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        # AccountProfile(...) — Name node form
+        if not isinstance(func, ast.Name) or func.id != "AccountProfile":
+            continue
+        for kw in node.keywords:
+            if kw.arg != "execution_symbol_map":
+                continue
+            # Literal None means "identity behaviour" — fine.
+            if isinstance(kw.value, ast.Constant) and kw.value.value is None:
+                continue
+            # Empty dict matches loader's identity-behaviour interpretation
+            # (AccountProfile.__post_init__ short-circuits on empty maps).
+            if isinstance(kw.value, ast.Dict) and len(kw.value.keys) == 0:
+                continue
+            populated_lines.append(node.lineno)
+
+    if not populated_lines:
+        # No profile populates the field — Stage 1 dead infrastructure but
+        # not a silent-mis-route hazard. PASS.
+        return []
+
+    # Profile is populated — Stage 2 wiring MUST exist somewhere under live/.
+    callsite_re = re.compile(r"\bresolve_execution_symbol\s*\(")
+    for fpath in sorted(live_dir.rglob("*.py")):
+        try:
+            text = fpath.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        if callsite_re.search(text):
+            # Stage 2 wired — PASS.
+            return []
+
+    # Populated AND not wired — fail-open trap.
+    profiles_rel = profiles_path.relative_to(trading_app_dir.parent)
+    line_list = ", ".join(f"{profiles_rel}:{ln}" for ln in populated_lines)
+    return [
+        f"  NQ-mini fail-open trap: ACCOUNT_PROFILES populates "
+        f"execution_symbol_map at [{line_list}] but no production callsite of "
+        f"resolve_execution_symbol() exists under trading_app/live/. Stage 2 "
+        f"wiring (session_orchestrator + webhook_server) is missing — broker "
+        f"would receive strategy_symbol unchanged. See PR #158 driver memo "
+        f"memory/mini_vs_micro_commission_fix.md and the Stage 2 design doc "
+        f"docs/runtime/stages/nq-mini-execution-stage1-account-profile.md."
+    ]
 
 
 def check_orb_outcomes_scratch_pnl(con=None) -> list[str]:
@@ -9729,8 +9857,14 @@ CHECKS = [
         False,
     ),
     (
-        "Magic-number rationale audit on trading_app/live/ (Carver Ch. 4)",
+        "Magic-number rationale audit on trading_app/live/ + HWM tracker + pre_session_check (Carver Ch. 4)",
         lambda: check_magic_number_rationale(TRADING_APP_DIR),
+        False,
+        False,
+    ),
+    (
+        "NQ-mini symbol-substitution: ACCOUNT_PROFILES populated implies live wiring (PR #158 Stage 2 gate)",
+        lambda: check_nq_mini_substitution_wired_or_unused(TRADING_APP_DIR),
         False,
         False,
     ),

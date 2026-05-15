@@ -370,12 +370,19 @@ def check_topstep_inactivity_window(profile_id: str | None = None) -> tuple[bool
     if not hwm_files:
         return True, "No account state files (first session — inactivity gate not applicable)"
 
+    # BLOCK boundary is the canonical 30-day state-staleness threshold from
+    # account_hwm_tracker. Same boundary, same state files — one constant
+    # per institutional-rigor § 4 (no parallel models). Importing keeps
+    # the two gates locked together: a future raise to 45 / lower to 21 /
+    # whatever lands once and propagates.
+    from trading_app.account_hwm_tracker import STATE_STALENESS_FAIL_DAYS
+
+    _INACTIVITY_BLOCK_DAYS = float(STATE_STALENESS_FAIL_DAYS)
     # UNGROUNDED — operational buffer.
     # Rationale: 5-day buffer between WARNING and BLOCK gives the operator
     # advance notice to either resume bot trading, manually rotate the state
     # file, or accept the upcoming block. No literature citation.
-    _INACTIVITY_WARN_DAYS = 25.0
-    _INACTIVITY_BLOCK_DAYS = 30.0
+    _INACTIVITY_WARN_DAYS = _INACTIVITY_BLOCK_DAYS - 5.0
 
     results = []
     any_block = False
@@ -628,15 +635,9 @@ def check_lane_mismatch(session: str, lane: dict) -> tuple[bool, str]:
     Non-blocking (warning only) — user decides whether to follow recommendation.
     """
 
-    def _normalize_writable_path(path: Path) -> Path:
-        text = str(path)
-        if text.startswith("/mnt/c/Users/"):
-            return Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
-        return path
+    from trading_app.lane_allocator import DEFAULT_LANE_ALLOCATION_PATH
 
-    alloc_path = _normalize_writable_path(
-        Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
-    )
+    alloc_path = DEFAULT_LANE_ALLOCATION_PATH
     if not alloc_path.exists():
         return True, "No allocation file — cannot compare"
 
