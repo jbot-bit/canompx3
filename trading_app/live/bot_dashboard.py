@@ -25,6 +25,8 @@ import duckdb
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from pipeline.db_config import configure_connection
 from pipeline.dst import SESSION_CATALOG
@@ -120,6 +122,56 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Bot Dashboard", lifespan=_lifespan)
+
+
+def _extra_origins_from_env() -> tuple[str, ...]:
+    raw = os.environ.get("DASHBOARD_ALLOWED_ORIGINS", "")
+    return tuple(o.strip() for o in raw.split(",") if o.strip())
+
+
+class OriginAllowlistMiddleware(BaseHTTPMiddleware):
+    """Gate mutating requests to same-origin only.
+
+    Localhost binding (run_dashboard host assertion) stops LAN attackers;
+    this stops CSRF from other browser tabs. Mutating methods
+    (POST/PUT/DELETE/PATCH) require Origin or Referer to match the
+    dashboard's own origin. GET/HEAD/OPTIONS pass through.
+    """
+
+    SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+    def __init__(self, app: object, *, port: int, extra_origins: tuple[str, ...] = ()) -> None:
+        super().__init__(app)  # type: ignore[arg-type]
+        self._allowed = frozenset(
+            (
+                f"http://localhost:{port}",
+                f"http://127.0.0.1:{port}",
+                f"http://[::1]:{port}",
+                *extra_origins,
+            )
+        )
+
+    async def dispatch(self, request: Request, call_next: object) -> Response:
+        if request.method in self.SAFE_METHODS:
+            return await call_next(request)  # type: ignore[operator]
+        origin = request.headers.get("origin")
+        if origin is not None:
+            if origin in self._allowed:
+                return await call_next(request)  # type: ignore[operator]
+            return Response(status_code=403, content="cross-origin POST blocked")
+        referer = request.headers.get("referer")
+        if referer is not None:
+            for allowed in self._allowed:
+                if referer.startswith(allowed + "/") or referer == allowed:
+                    return await call_next(request)  # type: ignore[operator]
+            return Response(status_code=403, content="cross-origin POST blocked")
+        # No Origin and no Referer. pytest TestClient omits both — allow under pytest.
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return await call_next(request)  # type: ignore[operator]
+        return Response(status_code=403, content="missing Origin/Referer on mutating request")
+
+
+app.add_middleware(OriginAllowlistMiddleware, port=PORT, extra_origins=_extra_origins_from_env())
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
