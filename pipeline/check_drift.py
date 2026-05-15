@@ -3434,9 +3434,12 @@ def check_chordia_result_threshold_matches_prereg() -> list[str]:
             continue
 
         binding = _is_binding(stem)
+        # Format with .2f so the violation message mirrors the literal phrasing
+        # in the MD (e.g., "3.00" not Python's float repr "3.0"). Operator
+        # greps the violation against the prereg + result file contents.
         msg = (
-            f"  {prereg_path.name}: prereg declares t>={prereg_threshold} "
-            f"but result MD applied t>={result_threshold}. "
+            f"  {prereg_path.name}: prereg declares t>={prereg_threshold:.2f} "
+            f"but result MD applied t>={result_threshold:.2f}. "
             "Likely cause: hypotheses[i].theory_citation contains a truthy "
             "string for a no-theory prereg (the loader treats field-presence "
             "as the boolean). Omit theory_citation entirely for no-theory "

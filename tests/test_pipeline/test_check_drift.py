@@ -30,6 +30,7 @@ from pipeline.check_drift import (
     check_trading_app_connection_leaks,
     check_trading_app_hardcoded_paths,
     check_checks_list_labels_are_ascii,
+    check_chordia_result_threshold_matches_prereg,
     check_uv_lock_exists,
     check_verdict_vocabulary_md_matches_code,
 )
@@ -3009,6 +3010,135 @@ class TestChecksListLabelsAreAscii:
 
         for label, *_ in CHECKS:
             label.encode("cp1252")  # raises UnicodeEncodeError if not encodable
+
+
+class TestChordiaResultThresholdMatchesPrereg:
+    """Paired-file parity: prereg `chordia_threshold_basis` <-> result `MEASURED threshold applied`.
+
+    Origin: 2026-05-12 MGC LONDON_METALS Stage 1 run — prereg declared
+    t>=3.79 strict, runner applied t>=3.00 due to theory_citation field-presence
+    trap in the loader. Drift check landed in commit 9633fee6 without injection
+    tests; this class closes the immune-system-immune-system gap.
+    """
+
+    @staticmethod
+    def _seed_pair(
+        root: Path,
+        stem: str,
+        *,
+        prereg_threshold: str | None,
+        result_threshold: str | None,
+    ) -> None:
+        """Write a minimal prereg + result MD pair under `root`."""
+        hyp_dir = root / "docs" / "audit" / "hypotheses"
+        res_dir = root / "docs" / "audit" / "results"
+        hyp_dir.mkdir(parents=True, exist_ok=True)
+        res_dir.mkdir(parents=True, exist_ok=True)
+        if prereg_threshold is not None:
+            (hyp_dir / f"{stem}.yaml").write_text(
+                textwrap.dedent(
+                    f"""\
+                    hypotheses:
+                      - id: test_fixture
+                        chordia_threshold_basis: "Criterion 4 theory-backed threshold (t >= {prereg_threshold})"
+                    """
+                ),
+                encoding="utf-8",
+            )
+        if result_threshold is not None:
+            (res_dir / f"{stem}.md").write_text(
+                f"# Test fixture result\n\n**MEASURED threshold applied:** `{result_threshold}`\n",
+                encoding="utf-8",
+            )
+
+    def test_drift_clean_against_live_repo(self):
+        """Live repo prereg/result pairs must be parity-clean — direct tripwire."""
+        violations = check_chordia_result_threshold_matches_prereg()
+        assert violations == [], "Chordia threshold drift in live repo:\n  " + "\n  ".join(violations)
+
+    def test_detects_mismatch_on_binding_date(self, monkeypatch, tmp_path):
+        """A pair dated >= 2026-05-12 with threshold divergence becomes a binding violation."""
+        from pipeline import check_drift as cd
+
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        self._seed_pair(
+            tmp_path,
+            "2026-05-12-fixture-binding",
+            prereg_threshold="3.79",
+            result_threshold="3.00",
+        )
+        violations = check_chordia_result_threshold_matches_prereg()
+        assert len(violations) == 1, violations
+        assert "2026-05-12-fixture-binding.yaml" in violations[0]
+        assert "t>=3.79" in violations[0] and "t>=3.00" in violations[0]
+        assert "theory_citation" in violations[0]
+
+    def test_pre_sentinel_pair_is_advisory_not_violation(self, monkeypatch, tmp_path, capsys):
+        """A pair dated before 2026-05-12 with the same mismatch routes to advisory, not violation."""
+        from pipeline import check_drift as cd
+
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        self._seed_pair(
+            tmp_path,
+            "2026-05-01-fixture-grandfathered",
+            prereg_threshold="3.79",
+            result_threshold="3.00",
+        )
+        violations = check_chordia_result_threshold_matches_prereg()
+        assert violations == [], (
+            "Pre-sentinel mismatch must NOT escalate to binding violation (was grandfathered): " + repr(violations)
+        )
+        captured = capsys.readouterr()
+        assert "Chordia threshold mismatch advisory" in captured.out
+        assert "2026-05-01-fixture-grandfathered.yaml" in captured.out
+
+    def test_matching_threshold_passes(self, monkeypatch, tmp_path):
+        """No mismatch on a binding-date pair with identical thresholds — no false positive."""
+        from pipeline import check_drift as cd
+
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        self._seed_pair(
+            tmp_path,
+            "2026-05-15-fixture-clean",
+            prereg_threshold="3.00",
+            result_threshold="3.00",
+        )
+        violations = check_chordia_result_threshold_matches_prereg()
+        assert violations == [], violations
+
+    def test_prereg_without_result_md_silent_skip(self, monkeypatch, tmp_path):
+        """A prereg without a matching result MD is pre-run state — silent skip, no violation."""
+        from pipeline import check_drift as cd
+
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        self._seed_pair(
+            tmp_path,
+            "2026-05-15-fixture-pre-run",
+            prereg_threshold="3.79",
+            result_threshold=None,
+        )
+        violations = check_chordia_result_threshold_matches_prereg()
+        assert violations == [], violations
+
+    def test_non_chordia_prereg_silent_skip(self, monkeypatch, tmp_path):
+        """A prereg without chordia_threshold_basis is out-of-scope — no false positive."""
+        from pipeline import check_drift as cd
+
+        monkeypatch.setattr(cd, "PROJECT_ROOT", tmp_path)
+        hyp_dir = tmp_path / "docs" / "audit" / "hypotheses"
+        res_dir = tmp_path / "docs" / "audit" / "results"
+        hyp_dir.mkdir(parents=True)
+        res_dir.mkdir(parents=True)
+        (hyp_dir / "2026-05-15-fixture-non-chordia.yaml").write_text(
+            "hypotheses:\n  - id: not_a_chordia_run\n    notes: nothing to compare\n",
+            encoding="utf-8",
+        )
+        (res_dir / "2026-05-15-fixture-non-chordia.md").write_text(
+            "# Result with no measured threshold line\n",
+            encoding="utf-8",
+        )
+        violations = check_chordia_result_threshold_matches_prereg()
+        assert violations == [], violations
 
 
 class TestCheckDashboardLocalhostOnlyBinding:
