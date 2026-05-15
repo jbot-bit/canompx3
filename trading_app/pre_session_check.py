@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.lifecycle_state import read_lifecycle_state
+from trading_app.opportunity_awareness import describe_opportunity_awareness
 
 # Module logger — granular operator-log reasons on fail-closed paths
 # (institutional-rigor.md § 6: every fail-closed branch records the reason).
@@ -609,6 +610,14 @@ def _conditional_overlay_from_lifecycle(lifecycle: dict) -> tuple[bool, str]:
     return True, f"Shadow overlay: {details}"
 
 
+def _opportunity_awareness_from_lifecycle(lifecycle: dict) -> tuple[bool, str]:
+    """Interpret shadow-only opportunity awareness from a shared lifecycle snapshot."""
+    status, detail = describe_opportunity_awareness(lifecycle.get("opportunity_awareness", {}))
+    if status == "warn" and not detail.startswith("Opportunity awareness:"):
+        return True, f"WARN: {detail}"
+    return True, detail
+
+
 def check_allocation_staleness_gate() -> tuple[bool, str]:
     """Check if lane allocation is stale (>35d warn, >60d block).
 
@@ -787,6 +796,9 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
 
         ok, msg = _conditional_overlay_from_lifecycle(lifecycle)
         results.append(("Conditional overlays", ok, msg))
+
+        ok, msg = _opportunity_awareness_from_lifecycle(lifecycle)
+        results.append(("Opportunity awareness", ok, msg))
 
     # DD budget check (from daily_lanes)
     try:

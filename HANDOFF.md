@@ -28,6 +28,13 @@
 - Net: 9 new tradovate tests (63→72), all 126 drift checks pass, 247 sibling tests (`session_orchestrator` + `copy_order_router`) green. Class now fully API-aligned with `BrokerRouter` base + `CopyOrderRouter` peer. Production unaffected — `BrokerDispatcher` has zero live callsites.
 - Memory: `feedback_code_review_dead_class_detection.md` added (grep for `ClassName\(` construction sites before grading dead-code severity).
 
+## Current Session Addendum
+- **Tool:** Codex (WSL)
+- **Date:** 2026-05-13
+- **Summary:** Implemented a shadow-only opportunity awareness overlay that ranks active profile lanes as `PRIME_SHADOW`, `WATCH`, `BLOCKED`, or `NORMAL` from lifecycle state, lane allocation, regime, Chordia/protocol gates, and trailing expression. Wired it into lifecycle state, pre-session checks, the bot dashboard, deployability audit rendering, and session-start lifecycle logging without changing broker, allocator, DB, sizing, or execution behavior. Follow-up review added lane names/reasons to operator detail and removed the module import-time state-directory write.
+- **Status:** Focused tests and lint pass. CLI smoke for `topstep_50k_mnq_auto` on 2026-05-13 reported 2 `PRIME_SHADOW`, 1 `WATCH`, 0 `BLOCKED`; the watch lane was provisional allocation status.
+- **Verification:** `pytest` focused overlay/lifecycle/pre-session/dashboard/deployability suite passed (`83 passed`), targeted session-orchestrator lifecycle block tests passed, ruff check/format passed, py_compile passed, behavioral audit passed, integrity audit passed, and full `pipeline/check_drift.py` passed with no blocking drift (`126 checks passed`, `20 advisory`). CodeRabbit CLI review could not run because the CLI was missing and its installer requires `unzip`; installing `unzip` via apt required an interactive sudo password.
+
 ## Next Steps — Active
 1. **MGC LONDON_METALS — DO NOT RE-LITIGATE.** Verdict frozen at `docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md`. Reopen only if new evidence clears one of the prereg kill criteria (K1 t_IS≥3.00 with theory grant, or K3 N_IS_on≥100). Do not re-run Phase A on alternative apertures as a back-door — that pattern is the trap.
 2. **Highest-EV next is MNQ.** Live: 2 deployed MNQ E2 RR1.5 lanes (COMEX_SETTLE OVNRNG_100 N=150 annual_r=36.2 + US_DATA_1000 VWAP_MID_ALIGNED_O15 N=112 annual_r=27.1) per `docs/runtime/lane_allocation.json`. L1 NYSE_OPEN_E2_RR1.5_CB1_COST_LT12 paused (PR #271). Concrete candidates: (a) rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring per Chordia v2 readouts, (b) trade-book drift check (MEMORY index lists 3 deployed; canonical lane_allocation.json shows 2 — reconcile).

@@ -316,6 +316,48 @@ def test_unreviewed_sr_alarm_blocks_runtime():
     assert any(issue.id == "sr_alarm_unreviewed" for issue in result.issues)
 
 
+def test_render_deployability_text_includes_opportunity_awareness():
+    report = {
+        "scope": "profile",
+        "profile_id": "topstep_50k_mnq_auto",
+        "db_path": "/tmp/gold.db",
+        "instruments": ["MNQ"],
+        "summary": {
+            "total_candidates": 1,
+            "deployable_candidates": 1,
+            "institutional_language_allowed": 1,
+            "verdict_counts": {"DEPLOYABLE_CANDIDATE": 1},
+            "hard_issue_counts": {},
+        },
+        "instrument_summary": {},
+        "promotion_queue": {},
+        "strategies": [],
+        "opportunity_awareness": {
+            "available": True,
+            "valid": True,
+            "summary": {
+                "lane_count": 1,
+                "prime_shadow_count": 1,
+                "watch_count": 0,
+                "blocked_count": 0,
+            },
+            "lanes": [
+                {
+                    "instrument": "MNQ",
+                    "orb_label": "COMEX_SETTLE",
+                    "opportunity_tier": "PRIME_SHADOW",
+                }
+            ],
+        },
+    }
+
+    text = dep.render_deployability_text(report)
+
+    assert "Opportunity awareness (info):" in text
+    assert "1 PRIME_SHADOW" in text
+    assert "prime: COMEX_SETTLE/MNQ" in text
+
+
 def test_all_active_scope_does_not_invent_account_failure_for_non_profile_row():
     result = _classify(scope="all-active", profile_lane_ids=set())
 

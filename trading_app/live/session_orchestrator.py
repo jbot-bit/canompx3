@@ -978,8 +978,16 @@ class SessionOrchestrator:
             return
         try:
             from trading_app.lifecycle_state import read_lifecycle_state
+            from trading_app.opportunity_awareness import describe_opportunity_awareness
 
             lifecycle = read_lifecycle_state(profile_id=self._profile_id_for_lane_ctl, today=self.trading_day)
+            opportunity = lifecycle.get("opportunity_awareness")
+            if opportunity and opportunity.get("available"):
+                status, detail = describe_opportunity_awareness(opportunity)
+                if status == "warn":
+                    log.warning("Session-start %s", detail)
+                else:
+                    log.info("Session-start %s", detail)
             blocked_ids = lifecycle["blocked_strategy_ids"]
             blocked_reasons = lifecycle["blocked_reason_by_strategy"]
             for strategy_id in blocked_ids:

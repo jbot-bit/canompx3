@@ -370,6 +370,43 @@ def test_build_operator_payload_warns_on_invalid_overlay_status_even_when_envelo
     assert "missing breakpoint row" in overlay_check["detail"]
 
 
+def test_build_operator_payload_includes_opportunity_awareness_check(monkeypatch):
+    _patch_operator_payload_base(monkeypatch, "topstep_50k_mnq_auto")
+
+    opportunity_state = {
+        "available": True,
+        "valid": True,
+        "summary": {
+            "lane_count": 3,
+            "prime_shadow_count": 1,
+            "watch_count": 1,
+            "blocked_count": 1,
+        },
+        "lanes": [],
+    }
+    opportunity_state["lanes"] = [
+        {
+            "instrument": "MNQ",
+            "orb_label": "COMEX_SETTLE",
+            "opportunity_tier": "PRIME_SHADOW",
+        }
+    ]
+    lifecycle = {
+        "conditional_overlays": {"available": False, "valid": True, "overlays": []},
+        "opportunity_awareness": opportunity_state,
+    }
+    with patch("trading_app.lifecycle_state.read_lifecycle_state", return_value=lifecycle):
+        payload = _build_operator_payload("topstep_50k_mnq_auto")
+
+    opp_check = next(check for check in payload["checks"] if check["name"] == "Opportunity awareness")
+    assert opp_check["status"] == "warn"
+    assert "1 PRIME_SHADOW" in opp_check["detail"]
+    assert "1 WATCH" in opp_check["detail"]
+    assert "1 BLOCKED" in opp_check["detail"]
+    assert "prime: COMEX_SETTLE/MNQ" in opp_check["detail"]
+    assert payload["opportunity_awareness"] == opportunity_state
+
+
 def test_api_alerts_returns_recent_runtime_alerts(monkeypatch):
     monkeypatch.setattr(
         bot_dashboard,

@@ -26,6 +26,7 @@ from trading_app.derived_state import (
     validate_state_envelope,
 )
 from trading_app.lane_ctl import get_lane_override, get_paused_strategy_ids
+from trading_app.opportunity_awareness import read_opportunity_state
 from trading_app.prop_profiles import get_profile, get_profile_lane_definitions, resolve_profile_id
 from trading_app.sr_review_registry import get_sr_alarm_review
 
@@ -267,12 +268,31 @@ def read_lifecycle_state(
             blocked_strategy_ids.append(strategy_id)
             blocked_reason_by_strategy[strategy_id] = block_reason
 
+    partial_state = {
+        "profile_id": resolved_profile_id,
+        "lane_ids": lane_ids,
+        "criterion11": criterion11,
+        "criterion12": criterion12,
+        "conditional_overlays": conditional_overlays,
+        "pauses": pauses,
+        "strategy_states": strategy_states,
+        "blocked_strategy_ids": sorted(blocked_strategy_ids),
+        "blocked_reason_by_strategy": blocked_reason_by_strategy,
+    }
+    opportunity_awareness = read_opportunity_state(
+        resolved_profile_id,
+        db_path=db_path,
+        today=today,
+        lifecycle=partial_state,
+    )
+
     return {
         "profile_id": resolved_profile_id,
         "lane_ids": lane_ids,
         "criterion11": criterion11,
         "criterion12": criterion12,
         "conditional_overlays": conditional_overlays,
+        "opportunity_awareness": opportunity_awareness,
         "pauses": pauses,
         "strategy_states": strategy_states,
         "blocked_strategy_ids": sorted(blocked_strategy_ids),

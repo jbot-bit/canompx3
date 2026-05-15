@@ -23,6 +23,7 @@ from pipeline.paths import GOLD_DB_PATH
 from trading_app.chordia import chordia_verdict_allows_deploy, chordia_verdict_label
 from trading_app.config import ALL_FILTERS, is_e2_deployment_unsafe_filter
 from trading_app.lifecycle_state import read_lifecycle_state
+from trading_app.opportunity_awareness import describe_opportunity_awareness
 from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
 from trading_app.strategy_fitness import _load_strategy_outcomes
 from trading_app.strategy_validator import _evaluate_criterion_8_oos, benjamini_hochberg
@@ -1078,7 +1079,10 @@ def build_deployability_audit(
             "fdr_source": "experimental_strategies current full canonical session pool via trading_app.strategy_validator.benjamini_hochberg",
             "oos_source": "trading_app.strategy_validator._evaluate_criterion_8_oos",
             "account_source": "trading_app.lifecycle_state.read_lifecycle_state['criterion11']",
-            "runtime_control_source": "trading_app.lifecycle_state.read_lifecycle_state including Criterion 12 SR state",
+            "runtime_control_source": (
+                "trading_app.lifecycle_state.read_lifecycle_state including Criterion 12 SR state "
+                "and shadow opportunity awareness"
+            ),
         },
         "resource_lit": {
             "multiple_testing": "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md; docs/institutional/literature/harvey_liu_2015_backtesting.md",
@@ -1107,6 +1111,7 @@ def build_deployability_audit(
         "instrument_summary": _build_instrument_summary(strategy_reports),
         "promotion_queue": _build_promotion_queue(strategy_reports),
         "account_state": account_state,
+        "opportunity_awareness": lifecycle_state.get("opportunity_awareness") if lifecycle_state else None,
         "strategies": [report.to_dict() for report in strategy_reports],
     }
 
@@ -1127,6 +1132,10 @@ def render_deployability_text(report: dict[str, Any], *, max_rows: int = 30) -> 
         f"Hard issues: {summary['hard_issue_counts']}",
         "Instrument summary:",
     ]
+    opportunity_awareness = report.get("opportunity_awareness")
+    if isinstance(opportunity_awareness, dict):
+        status, detail = describe_opportunity_awareness(opportunity_awareness)
+        lines.append(f"Opportunity awareness ({status}): {detail}")
     for instrument, row in report.get("instrument_summary", {}).items():
         lines.append(
             f"  - {instrument}: total={row['total']} deployable={row['deployable']} "

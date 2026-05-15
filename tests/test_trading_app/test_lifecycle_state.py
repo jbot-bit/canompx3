@@ -78,3 +78,52 @@ def test_read_lifecycle_state_includes_conditional_overlays(monkeypatch):
     state = lifecycle_state.read_lifecycle_state("topstep_50k", today=date(2026, 4, 23))
 
     assert state["conditional_overlays"] == overlay_state
+
+
+def test_read_lifecycle_state_includes_opportunity_awareness(monkeypatch):
+    opportunity_state = {
+        "profile_id": "topstep_50k",
+        "available": True,
+        "valid": True,
+        "summary": {"prime_shadow_count": 1, "watch_count": 0, "blocked_count": 0, "lane_count": 1},
+        "lanes": [],
+    }
+
+    monkeypatch.setattr(
+        lifecycle_state,
+        "read_criterion11_state",
+        lambda *args, **kwargs: {"profile_id": "topstep_50k", "available": False, "valid": True, "reason": None},
+    )
+    monkeypatch.setattr(
+        lifecycle_state,
+        "read_criterion12_state",
+        lambda *args, **kwargs: {
+            "profile_id": "topstep_50k",
+            "available": False,
+            "valid": True,
+            "reason": None,
+            "status_by_strategy": {},
+            "alarm_strategy_ids": [],
+            "no_data_strategy_ids": [],
+        },
+    )
+    monkeypatch.setattr(
+        lifecycle_state,
+        "read_pause_state",
+        lambda *args, **kwargs: {
+            "profile_id": "topstep_50k",
+            "paused_count": 0,
+            "paused_strategy_ids": [],
+            "paused_details": {},
+        },
+    )
+    monkeypatch.setattr(
+        lifecycle_state,
+        "read_overlay_states",
+        lambda *args, **kwargs: {"profile_id": "topstep_50k", "available": False, "valid": True, "overlays": []},
+    )
+    monkeypatch.setattr(lifecycle_state, "read_opportunity_state", lambda *args, **kwargs: opportunity_state)
+
+    state = lifecycle_state.read_lifecycle_state("topstep_50k", today=date(2026, 5, 13))
+
+    assert state["opportunity_awareness"] == opportunity_state
