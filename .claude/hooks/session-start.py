@@ -530,13 +530,19 @@ def _session_lock_lines() -> tuple[list[str], bool]:
         is_old_enough = age_hours is not None and age_hours >= _STALE_LOCK_RECLAIM_HOURS
         if is_dead and is_old_enough:
             try:
-                # Atomic replace via O_TRUNC (lock_path already exists; we are
-                # the only writer because the prior holder is proven dead).
-                fd = os.open(str(lock_path), os.O_WRONLY | os.O_TRUNC)
+                # Atomic replace via write-to-temp + os.replace (POSIX rename(2)
+                # semantics; on Windows NTFS, os.replace uses MoveFileExW with
+                # MOVEFILE_REPLACE_EXISTING which is atomic within the same
+                # volume). O_WRONLY|O_TRUNC was NOT atomic: two simultaneous
+                # restarts could both truncate and overwrite, reintroducing the
+                # race the mutex guards against.
+                tmp_path = lock_path.with_suffix(".pid.tmp")
+                fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
                 try:
                     os.write(fd, payload)
                 finally:
                     os.close(fd)
+                os.replace(str(tmp_path), str(lock_path))
             except OSError as exc:
                 return (
                     [

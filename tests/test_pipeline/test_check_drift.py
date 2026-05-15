@@ -5,6 +5,7 @@ Tests each drift check catches violations and passes clean code.
 """
 
 import tempfile
+import textwrap
 from datetime import date
 from pathlib import Path
 
@@ -3008,3 +3009,113 @@ class TestChecksListLabelsAreAscii:
 
         for label, *_ in CHECKS:
             label.encode("cp1252")  # raises UnicodeEncodeError if not encodable
+
+
+class TestCheckDashboardLocalhostOnlyBinding:
+    """check_dashboard_localhost_only_binding — pass, fail, and mutation proofs."""
+
+    _GOOD = textwrap.dedent("""\
+        def run_dashboard(host: str = "127.0.0.1", port: int = 8765):
+            if host not in {"127.0.0.1", "localhost", "::1"}:
+                raise RuntimeError("Refusing to start dashboard on non-localhost host")
+            pass
+
+        parser.add_argument("--host", default="127.0.0.1")
+    """)
+
+    def _check(self, tmp_path: Path, content: str) -> list[str]:
+        from pipeline.check_drift import check_dashboard_localhost_only_binding
+
+        dash = tmp_path / "live" / "bot_dashboard.py"
+        dash.parent.mkdir(parents=True, exist_ok=True)
+        dash.write_text(content, encoding="utf-8")
+        return check_dashboard_localhost_only_binding(tmp_path)
+
+    def test_clean_file_passes(self, tmp_path):
+        assert self._check(tmp_path, self._GOOD) == []
+
+    def test_live_repo_passes(self):
+        """Direct tripwire against the real bot_dashboard.py."""
+        from pipeline.check_drift import check_dashboard_localhost_only_binding
+        from pipeline.paths import PROJECT_ROOT
+
+        violations = check_dashboard_localhost_only_binding(PROJECT_ROOT / "trading_app")
+        assert violations == [], "\n".join(violations)
+
+    def test_detects_non_loopback_signature_default(self, tmp_path):
+        bad = self._GOOD.replace('host: str = "127.0.0.1"', 'host: str = "0.0.0.0"')
+        violations = self._check(tmp_path, bad)
+        assert any("0.0.0.0" in v for v in violations), violations
+
+    def test_detects_missing_signature(self, tmp_path):
+        bad = self._GOOD.replace('def run_dashboard(host: str = "127.0.0.1"', "def run_dashboard(")
+        violations = self._check(tmp_path, bad)
+        assert any("signature" in v for v in violations), violations
+
+    def test_detects_absent_argparse_host(self, tmp_path):
+        """Removing --host argparse line entirely must fire a violation (T3-W1 fix)."""
+        bad = "\n".join(
+            line for line in self._GOOD.splitlines() if "--host" not in line
+        )
+        violations = self._check(tmp_path, bad)
+        assert any("argparse" in v for v in violations), violations
+
+    def test_detects_non_loopback_argparse_default(self, tmp_path):
+        bad = self._GOOD.replace('default="127.0.0.1"', 'default="0.0.0.0"')
+        violations = self._check(tmp_path, bad)
+        assert any("0.0.0.0" in v for v in violations), violations
+
+    def test_detects_missing_runtime_error_guard(self, tmp_path):
+        bad = self._GOOD.replace("Refusing to start dashboard on non-localhost host", "nope")
+        violations = self._check(tmp_path, bad)
+        assert any("RuntimeError" in v for v in violations), violations
+
+    def test_missing_file_returns_clean(self, tmp_path):
+        from pipeline.check_drift import check_dashboard_localhost_only_binding
+
+        violations = check_dashboard_localhost_only_binding(tmp_path)
+        assert violations == []
+
+
+class TestCheckDashboardSseSingleWorker:
+    """check_dashboard_sse_single_worker — pass, fail, and mutation proofs."""
+
+    _GOOD = textwrap.dedent("""\
+        import uvicorn
+        uvicorn.run(app, host=host, port=port, workers=1)
+    """)
+
+    def _check(self, tmp_path: Path, content: str) -> list[str]:
+        from pipeline.check_drift import check_dashboard_sse_single_worker
+
+        dash = tmp_path / "live" / "bot_dashboard.py"
+        dash.parent.mkdir(parents=True, exist_ok=True)
+        dash.write_text(content, encoding="utf-8")
+        return check_dashboard_sse_single_worker(tmp_path)
+
+    def test_clean_file_passes(self, tmp_path):
+        assert self._check(tmp_path, self._GOOD) == []
+
+    def test_live_repo_passes(self):
+        """Direct tripwire against the real bot_dashboard.py."""
+        from pipeline.check_drift import check_dashboard_sse_single_worker
+        from pipeline.paths import PROJECT_ROOT
+
+        violations = check_dashboard_sse_single_worker(PROJECT_ROOT / "trading_app")
+        assert violations == [], "\n".join(violations)
+
+    def test_detects_workers_greater_than_one(self, tmp_path):
+        bad = self._GOOD.replace("workers=1", "workers=4")
+        violations = self._check(tmp_path, bad)
+        assert any("workers=4" in v for v in violations), violations
+
+    def test_detects_missing_workers_pin(self, tmp_path):
+        bad = "uvicorn.run(app, host=host, port=port)\n"
+        violations = self._check(tmp_path, bad)
+        assert any("missing explicit workers=1" in v for v in violations), violations
+
+    def test_missing_file_returns_clean(self, tmp_path):
+        from pipeline.check_drift import check_dashboard_sse_single_worker
+
+        violations = check_dashboard_sse_single_worker(tmp_path)
+        assert violations == []

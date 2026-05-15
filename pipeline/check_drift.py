@@ -808,9 +808,16 @@ def check_dashboard_localhost_only_binding(trading_app_dir: Path) -> list[str]:
             f"a loopback address — SSE + kill endpoint must not bind to LAN."
         )
 
-    # Defence 2: argparse --host default
+    # Defence 2: argparse --host default must exist and be loopback.
+    # Absence of the --host argument is also a violation: removing it silently
+    # disables CLI-level host restriction without any other guard firing.
     cli_match = re.search(r'add_argument\(\s*"--host"\s*,\s*default\s*=\s*"([^"]+)"', content)
-    if cli_match and cli_match.group(1) not in loopback:
+    if not cli_match:
+        violations.append(
+            "  bot_dashboard.py: argparse --host argument not found — "
+            "CLI-level localhost restriction has been removed."
+        )
+    elif cli_match.group(1) not in loopback:
         violations.append(
             f"  bot_dashboard.py: argparse --host default {cli_match.group(1)!r} is not a loopback address."
         )
