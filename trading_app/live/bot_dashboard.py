@@ -2735,6 +2735,39 @@ def _query_bars_recent(
     return bars, None
 
 
+def _count_open_positions_from_state(state: dict[str, Any] | None) -> int | None:
+    """Count lanes currently IN_TRADE in a ``bot_state`` payload.
+
+    Returns ``None`` when state is missing/stale (caller should treat as
+    "unknown → show confirmation modal" — fail-CLOSED on operator
+    confirmation per institutional-rigor.md § 6). Returns ``0`` when state
+    is present but no lane has ``status == "IN_TRADE"``. Returns ``n``
+    (positive int) when n lanes are IN_TRADE.
+
+    Canonical lane-status taxonomy lives in
+    ``trading_app.live.bot_state.build_state_snapshot`` (values:
+    WAITING / ARMED / IN_TRADE / FLAT). The non-existent fields
+    ``position_qty`` / ``open_position`` referenced by the pre-2026-05-14
+    cockpit HTML are NOT in the canonical shape — relying on them caused
+    the kill-switch confirmation modal to be skipped unconditionally.
+    """
+    if not isinstance(state, dict):
+        return None
+    if not state.get("present", False):
+        return None
+    inner = state.get("state")
+    if not isinstance(inner, dict):
+        return None
+    lanes = inner.get("lanes")
+    if not isinstance(lanes, dict):
+        return 0
+    count = 0
+    for lane in lanes.values():
+        if isinstance(lane, dict) and lane.get("status") == "IN_TRADE":
+            count += 1
+    return count
+
+
 def _orb_levels_for_instrument(instrument: str) -> dict[str, Any]:
     """Read ORB high/low/complete for ``instrument`` from bot_state.json.
 
