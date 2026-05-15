@@ -22,7 +22,7 @@ git status --short
 python pipeline/check_drift.py | tail -5
 ```
 
-Confirm `origin/main` matches local. Read `HANDOFF.md` top section. Verify `data/lane_allocation.json` still shows 4 deployed MNQ lanes (live state may have moved overnight).
+Confirm `origin/main` matches local. Read `HANDOFF.md` top section. Verify `docs/runtime/lane_allocation.json` still shows 4 deployed MNQ lanes (live state may have moved overnight).
 
 ### 2. Run real preflight against the active profile (10 min)
 
@@ -42,7 +42,7 @@ If preflight reports anything other than 7/7: STOP. The new check is real-API an
 
 Launch the dashboard and click "Start Live" on `topstep_50k_mnq_auto`. Confirm:
 - `SessionOrchestrator.__init__` reaches steady state without `RuntimeError` from `_select_primary_and_shadow_accounts`.
-- `logs/session.log` shows `Copy trading: primary=..., shadows=[...]`.
+- `logs/live/live_<ts>.log` shows `Copy trading: primary=..., shadows=[...]`.
 - No `--account-id 0 is not in the broker's discovered accounts` line.
 
 This is the regression check for `a0b3c24b`. If it crashes again, the sentinel fix is incomplete and the path forward is to read the actual log line, not re-litigate the design.
@@ -54,7 +54,7 @@ The remaining blockers from action-queue item `lane_allocation_rebalance_2026_05
 - **(b) SR-tripwire blind spot** on newly-promoted lanes — paper-trade warmup status undetermined.
 - **(c) Live-control trace** — kill/flatten/risk-limit not traced for new lane set.
 
-For go-live on the CURRENT 4 lanes (already deployed per `lane_allocation.json`), blockers (b) and (c) apply to the proposed rebalance, NOT the existing set. The existing 4 MNQ lanes have been live-routable since their respective add dates.
+For go-live on the CURRENT 4 lanes (already deployed per `docs/runtime/lane_allocation.json`), blockers (b) and (c) apply to the proposed rebalance, NOT the existing set. The existing 4 MNQ lanes have been live-routable since their respective add dates.
 
 **Decision needed:** trade the existing 4 lanes today, OR wait for the rebalance verification. The rebalance net delta is +2.80 R/yr (~$84/yr/contract), below noise floor — go-live with existing lanes is the higher-EV path.
 
@@ -65,7 +65,7 @@ python scripts/run_live_session.py --instrument MNQ --profile topstep_50k_mnq_au
 # Type CONFIRM when prompted.
 ```
 
-Tail `logs/session.log` in another terminal. Watch for:
+Tail `logs/live/live_<ts>.log` in another terminal. Watch for:
 - First bar processed without exception.
 - `OrderRouter` connection healthy.
 - `kill_switch` armed, `risk_manager` reporting state.
@@ -74,7 +74,7 @@ Tail `logs/session.log` in another terminal. Watch for:
 
 Pre-commit to the kill conditions BEFORE the first real trade fills:
 - 1 R loss on day → flat and stop.
-- Any `RuntimeError`/`AssertionError` in `logs/session.log` → flat and stop.
+- Any `RuntimeError`/`AssertionError` in `logs/live/live_<ts>.log` → flat and stop.
 - Broker connection drop > 2 min → flat and stop.
 - Any unexpected position vs portfolio expectation → flat and stop.
 
@@ -83,18 +83,18 @@ Pre-commit to the kill conditions BEFORE the first real trade fills:
 - Do NOT re-litigate MGC LONDON_METALS (frozen verdict per HANDOFF #1).
 - Do NOT touch Stage 2 NQ-mini wiring (parked, dormant infrastructure, 0 P&L today). See `docs/plans/2026-05-16-stage2-nq-mini-plumbing-gap-finding.md`.
 - Do NOT add new strategies before the first live day completes.
-- Do NOT mutate `lane_allocation.json` without re-running the rebalance script and clearing blockers (b) and (c).
+- Do NOT mutate `docs/runtime/lane_allocation.json` without re-running the rebalance script and clearing blockers (b) and (c).
 
 ## Files to read first when picking up
 
 1. `HANDOFF.md`
 2. This file (`docs/runtime/next-session-go-live-plan.md`)
-3. `data/lane_allocation.json` (live state truth)
+3. `docs/runtime/lane_allocation.json` (live state truth)
 4. `docs/plans/2026-05-16-stage2-nq-mini-plumbing-gap-finding.md` (only if asked about NQ-mini)
 
 ## Branch state at end of session
 
 - Branch: `main`
-- Last commit: `5dd1a822`
+- Last commit: `8c7786cb`
 - `origin/main` matches local.
 - 1 untracked file: `docs/plans/2026-05-16-stage2-nq-mini-plumbing-gap-finding.md` (parked, do not commit unless reopening Stage 2).
