@@ -1,12 +1,15 @@
 """CSRF middleware tests — OriginAllowlistMiddleware on /api/action/kill.
 
-Six cases covering the allow/block decision tree:
+Nine cases covering the allow/block decision tree:
   1. GET with no Origin passes (safe method)
   2. POST same-origin (http://localhost:8080) passes
   3. POST cross-origin (http://evil.example) blocked 403
   4. POST no-Origin no-Referer blocked 403 when PYTEST_CURRENT_TEST is unset
   5. POST no-Origin allowed when PYTEST_CURRENT_TEST is set (normal pytest env)
   6. POST Referer-only same-origin passes (Origin absent, Referer present + matching)
+  7. POST cross-origin Referer blocked 403 (Origin absent, Referer present but wrong)
+  8. PUT cross-origin blocked 403 (non-POST mutating method also gated)
+  9. POST 127.0.0.1 origin passes (loopback variant in allowed set)
 """
 
 import os
@@ -80,5 +83,45 @@ def test_post_referer_only_same_origin_passes(client: TestClient) -> None:
     resp = client.post(
         "/api/action/kill",
         headers={"Referer": f"http://localhost:{dashboard.PORT}/"},
+    )
+    assert resp.status_code != 403
+
+
+# ── Case 7: Cross-origin Referer blocked ─────────────────────────────────────
+
+def test_post_cross_origin_referer_blocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(dashboard, "STOP_FILE", tmp_path / "live_session.stop")
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    prod_client = TestClient(dashboard.app, raise_server_exceptions=False)
+    resp = prod_client.post(
+        "/api/action/kill",
+        headers={"Referer": "http://evil.example/page"},
+    )
+    assert resp.status_code == 403
+
+
+# ── Case 8: PUT cross-origin blocked (non-POST mutating method) ───────────────
+
+def test_put_cross_origin_blocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(dashboard, "STOP_FILE", tmp_path / "live_session.stop")
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    prod_client = TestClient(dashboard.app, raise_server_exceptions=False)
+    resp = prod_client.put(
+        "/api/action/kill",
+        headers={"Origin": "http://evil.example"},
+    )
+    assert resp.status_code == 403
+
+
+# ── Case 9: POST 127.0.0.1 origin passes (loopback variant) ──────────────────
+
+def test_post_127_origin_passes(client: TestClient) -> None:
+    resp = client.post(
+        "/api/action/kill",
+        headers={"Origin": f"http://127.0.0.1:{dashboard.PORT}"},
     )
     assert resp.status_code != 403
