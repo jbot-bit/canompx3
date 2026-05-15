@@ -216,3 +216,35 @@ execution:
         violations = check_drift.check_doc_hygiene_contracts()
 
         assert violations == []
+
+    def test_catches_commit_sha_unstamped(self, tmp_path: Path, monkeypatch) -> None:
+        # Sibling token in the regex alternation alongside PENDING / TO_FILL_* /
+        # TO_BE_STAMPED. Without this injection a regex-refactor could silently
+        # drop UNSTAMPED detection and CI would stay green.
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/sha_unstamped.yaml",
+            'metadata:\n  name: foo\n  commit_sha: "UNSTAMPED"\n',
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        joined = "\n".join(violations)
+        assert "commit_sha=UNSTAMPED" in joined
+
+    def test_catches_commit_sha_to_be_stamped(self, tmp_path: Path, monkeypatch) -> None:
+        # Sibling token in the regex alternation alongside PENDING / TO_FILL_* /
+        # UNSTAMPED. Without this injection a regex-refactor could silently
+        # drop TO_BE_STAMPED detection and CI would stay green.
+        _patch_dirs(monkeypatch, tmp_path)
+        _mk_generated_docs(tmp_path)
+        _mkfile(
+            tmp_path / "docs/audit/hypotheses/sha_tobestamped.yaml",
+            "metadata:\n  name: foo\n  commit_sha: TO_BE_STAMPED\n",
+        )
+
+        violations = check_drift.check_doc_hygiene_contracts()
+
+        joined = "\n".join(violations)
+        assert "commit_sha=TO_BE_STAMPED" in joined
