@@ -311,3 +311,80 @@ Sibling implementations checked: `projectx/order_router.py:366` (active),
 `copy_order_router.py:204` (delegates to primary), `broker_base.py:162`
 (base default returns `(None, None)`). All three are aligned with the
 same `tuple[int | None, int | None]` contract.
+
+### Pass 6 — F8/F6/F2 test refactor: ALREADY DONE (no code change)
+
+**Audit revealed the plan's premise was stale.** The plan listed:
+
+> Source-string-grep tautology (`open(so.__file__).read()` + `assert "..." in src`) survives any refactor that preserves literal strings.
+
+Reading `test_session_orchestrator.py` line 2346 onward shows the F8/F6/F2
+tests are already behavioral — they import three top-level helpers
+extracted from `__init__` and assert real side effects:
+
+| Helper (production)                       | Test (lines)        | Asserts                       |
+|-------------------------------------------|---------------------|-------------------------------|
+| `_cleanup_orphan_brackets`                | 2357, 2380, 2400    | raise / no-raise / count notify |
+| `_notify_journal_unhealthy_demo`          | 2421, 2439          | notify-on-unhealthy / silence  |
+| `_notify_f1_silent_block_if_active`       | 2456, 2471          | notify-on-XFA / silence-non-XFA |
+
+The class docstring at line 2349 explicitly says the helpers were
+extracted *because* "Each helper is unit-tested for real BEHAVIOR (not
+source-marker regex)". The plan's premise — that the F8/F6/F2 tests are
+source-string-grep tautologies — was correct **before** the helper
+extraction landed but is no longer accurate.
+
+**Production helpers confirmed:** `_cleanup_orphan_brackets`
+(`session_orchestrator.py:141`), `_notify_journal_unhealthy_demo`
+(`session_orchestrator.py:191`), `_notify_f1_silent_block_if_active`
+(`session_orchestrator.py:216`).
+
+**Tests pass:** 12 / 12 in `TestOvernightResilienceHardening`.
+
+**Remaining source-string-grep tests:** two unrelated to F8/F6/F2:
+- `test_r1_source_markers_present` (line 3018) — guards
+  `_wall_clock_rollover_loop` presence + canonical
+  `compute_trading_day_utc_range` usage + absence of hardcoded `'09:00'`.
+  This is a **drift guard**, not a behavior test — and it's defensible:
+  it catches a class of refactor that would silently revert to hardcoded
+  session timing, which IS a capital-class regression class.
+- `test_f4_source_markers_present` (line 4543) — guards three F4 error-
+  path tag markers ("F4-1", "F4-2", "F4-3") and the institutional pattern
+  `_fire_kill_switch + _emergency_flatten`. Also a drift guard for tag
+  preservation; the actual behavior is tested separately (e.g.
+  `test_c1_second_entry_blocked_after_kill_switch` at 4571).
+
+Both are intentional drift guards with companion behavioral tests, not
+tautologies. They stay.
+
+**Pass 6 verdict: CLOSE with named verification, no code change.**
+
+---
+
+## End-of-stage verification
+
+1. **Drift:** `python pipeline/check_drift.py` -> 132/132 PASS, 0
+   skipped, 20 advisory. ✓
+2. **Tests:** see below per pass; final full suite pending background
+   job `bdzd49gys`.
+3. **Dead-code:** `grep -rn "BrokerDispatcher" trading_app/ tests/` ->
+   zero production matches; remaining hits are docs + historical
+   citations. ✓
+4. **Pyright on scope files:** session_orchestrator.py -> 0 errors. The
+   remaining 53 errors on `check_drift.py` + `bot_dashboard.py` +
+   `test_session_orchestrator.py` are tracked in
+   `docs/runtime/stages/pyright-cluster-mechanical.md` (zero-behavior-
+   change mechanical fixes, non-blocking).
+5. **Deferred bucket = 0 items remaining:**
+   - BrokerDispatcher dead class -> DELETED (Pass 1).
+   - NQ-mini "Stage 2" wiring -> DROPPED with the drift check as the
+     fail-closed bridge; Phase 4 bigger-contracts plan unchanged (Pass 2).
+   - SSE lazy-stop -> IMPLEMENTED with two new tests (Pass 3).
+   - Pyright cluster -> 4a (F7 capital-class) IMPLEMENTED + remaining
+     53 mechanical errors spun off to named stage (Pass 4).
+   - verify_bracket_legs ID heuristic -> AUDITED clean for dormant
+     Tradovate path; submit-time-ID-capture recommendation grounded in
+     official Tradovate API response shape `{orderId, oso1Id, oso2Id}`
+     (Pass 5).
+   - F8/F6/F2 source-string-grep refactor -> ALREADY DONE before this
+     audit; behavioral helpers + tests in place (Pass 6).
