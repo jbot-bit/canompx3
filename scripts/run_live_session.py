@@ -90,6 +90,9 @@ class PreflightContext:
     portfolio: Any  # Portfolio | None — typed loosely to avoid runtime import cycle
     components: dict[str, Any] | None = None
     components_all_pass: bool = True
+    # Copy-trading dry-run inputs (A.6.5 — preflight gap fix 2026-05-16)
+    profile_id: str | None = None
+    requested_account_id: int | None = None
 
 
 @dataclass
@@ -240,11 +243,47 @@ def _check_trade_journal(ctx: PreflightContext) -> CheckResult:
         return CheckResult(False, f"FAILED: {e}")
 
 
+def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
+    """Copy-trading account resolution (dry run).
+
+    Closes A.6.5 preflight gap (see fix-account-id-sentinel-mismatch.md).
+    Mirrors the live-start branch at run_live_session.py:672-693 but never
+    constructs a router or places an order — broker account list is fetched
+    read-only and the selection helper is invoked dry-run.
+    """
+    if ctx.profile_id is None:
+        return CheckResult(True, "SKIPPED (no profile — raw-baseline path)")
+    try:
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        prof = ACCOUNT_PROFILES.get(ctx.profile_id)
+        if prof is None:
+            return CheckResult(False, f"FAILED: profile {ctx.profile_id!r} not in ACCOUNT_PROFILES")
+        if prof.copies <= 1:
+            return CheckResult(True, f"SKIPPED (profile.copies={prof.copies})")
+        if ctx.components is None:
+            return CheckResult(False, "SKIPPED (auth failed)")
+        contracts_cls = ctx.components["contracts_class"]
+        contracts = contracts_cls(auth=ctx.components["auth"], demo=ctx.demo)
+        all_accounts = contracts.resolve_all_account_ids()
+        # Dry-run the exact selection helper that runs at live-start (line 688).
+        _select_primary_and_shadow_accounts(
+            all_accounts=all_accounts,
+            n_copies=prof.copies,
+            requested_account_id=ctx.requested_account_id,
+        )
+        n = len(all_accounts)
+        return CheckResult(True, f"OK (copies={prof.copies}, {n} accounts discovered)")
+    except Exception as e:
+        return CheckResult(False, f"FAILED: {e}")
+
+
 # Ordered list of checks. State coupling: _check_auth populates
-# ctx.components (consumed by _check_contracts and _check_notifications);
-# _check_notifications sets ctx.components_all_pass (read by the summary
-# branch in _run_preflight). Reordering breaks the contract — see stage
-# doc preflight-checks-total-hardcode.md § risk register.
+# ctx.components (consumed by _check_contracts, _check_notifications, and
+# _check_copy_trading_accounts); _check_notifications sets
+# ctx.components_all_pass (read by the summary branch in _run_preflight).
+# Reordering breaks the contract — see stage doc
+# preflight-checks-total-hardcode.md § risk register.
 PREFLIGHT_CHECKS: list[CheckFn] = [
     _check_auth,
     _check_portfolio,
@@ -252,15 +291,27 @@ PREFLIGHT_CHECKS: list[CheckFn] = [
     _check_contracts,
     _check_notifications,
     _check_trade_journal,
+    _check_copy_trading_accounts,
 ]
 
 
-def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=None) -> bool:
+def _run_preflight(
+    instrument: str,
+    broker: str | None,
+    demo: bool,
+    portfolio=None,
+    profile_id: str | None = None,
+    requested_account_id: int | None = None,
+) -> bool:
     """Pre-flight validation. Returns True if all checks pass.
 
     Counts derive from len(PREFLIGHT_CHECKS) — adding or removing a check
     auto-updates the [i/N] header and the final summary. Closes
     debt-ledger entry `preflight-checks-total-hardcode`.
+
+    `profile_id` and `requested_account_id` (added 2026-05-16, A.6.5) feed the
+    copy-trading dry-run check. Both default to None so non-profile callers
+    (raw-baseline) and existing fixtures continue to work unchanged.
     """
     from trading_app.live.broker_factory import get_broker_name
 
@@ -269,6 +320,8 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
         broker_name=broker or get_broker_name(),
         demo=demo,
         portfolio=portfolio,
+        profile_id=profile_id,
+        requested_account_id=requested_account_id,
     )
 
     checks_total = len(PREFLIGHT_CHECKS)
@@ -565,12 +618,26 @@ def main() -> None:
                 print(f"Preflight: {inst}")
                 print(f"{'=' * 50}")
                 inst_portfolio = build_profile_portfolio(profile_id=args.profile, instrument=inst)
-                ok = _run_preflight(inst, args.broker, demo, portfolio=inst_portfolio)
+                ok = _run_preflight(
+                    inst,
+                    args.broker,
+                    demo,
+                    portfolio=inst_portfolio,
+                    profile_id=args.profile,
+                    requested_account_id=args.account_id,
+                )
                 if not ok:
                     all_ok = False
             sys.exit(0 if all_ok else 1)
         else:
-            ok = _run_preflight(args.instrument, args.broker, demo, portfolio=raw_portfolio)
+            ok = _run_preflight(
+                args.instrument,
+                args.broker,
+                demo,
+                portfolio=raw_portfolio,
+                profile_id=args.profile,
+                requested_account_id=args.account_id,
+            )
             sys.exit(0 if ok else 1)
 
     # Default to signal-only if no mode specified (safest default)
