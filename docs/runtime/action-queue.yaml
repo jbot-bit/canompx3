@@ -679,12 +679,23 @@ items:
   - id: c8_oos_status_allocator_doctrine_2026_05_14
     title: Trace whether allocator consults c8_oos_status; document accept-with-risk if non-blocking
     class: capital-doctrine
-    status: open
+    status: closed
     priority: P1
     close_before_new_work: true
     owner_hint: user-or-claude
     last_verified_at: 2026-05-14
     freshness_sla_days: 30
+    override_note: |
+      Resolved BUG (not DOCTRINE, not PARTIAL). Pre-implementation gate
+      confirmed not-grandfather: OVNRNG_25 entered lane_allocation.json on
+      commit 95fe44c3 (2026-05-14), 20 days AFTER c8_oos_status write path
+      landed at 6887632f (2026-04-24). Fix mirrors PR #197 chordia gate:
+      new apply_c8_gate() in trading_app/lane_allocator.py demotes
+      non-PASSED non-NULL labels to PAUSE; second-layer drift check #147
+      (check_lane_allocation_c8_gate) fails the build on JSON divergence.
+      See decision-ledger entry c8-allocator-gate-resolution-2026-05-14
+      and stage docs/runtime/stages/c8-allocator-gate-bug.md. OVNRNG_25 +
+      ORB_VOL_8K auto-PAUSE on next rebalance. No live capital mutation.
     next_action: |
       Capital-review of the proposed 2026-05-14 lane_allocation rebalance
       surfaced that two of the proposed-or-deployed lanes carry
@@ -759,13 +770,14 @@ items:
       lane churn.
 
       Capital-review verdict: VERIFY_MORE. Blockers:
-        (a) C8 doctrine ambiguity on ORB_VOL_8K (see
-            c8_oos_status_allocator_doctrine_2026_05_14).
+        (a) [CLOSED 2026-05-14] C8 doctrine ambiguity on ORB_VOL_8K resolved
+            as BUG; apply_c8_gate() now auto-demotes FAILED_RATIO. See
+            decision-ledger c8-allocator-gate-resolution-2026-05-14.
         (b) SR-tripwire blind spot on all 3 ADD candidates - no live history;
             paper-trade warmup status undetermined for newly-promoted lanes.
         (c) Live-control checks not exercised (kill/flatten/risk-limit not
             traced for new lanes).
-      Do NOT mutate `docs/runtime/lane_allocation.json` while these are open.
+      Do NOT mutate `docs/runtime/lane_allocation.json` while (b)/(c) are open.
     exit_criteria: |
       All three blockers closed:
         (a) c8_oos_status_allocator_doctrine_2026_05_14 closed with concrete

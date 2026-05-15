@@ -4,6 +4,34 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
+- `c8-allocator-gate-resolution-2026-05-14` — **BUG verdict** (not DOCTRINE, not
+  PARTIAL): the lane allocator never read `validated_setups.c8_oos_status`,
+  so two MNQ lanes carrying `FAILED_RATIO` reached the proposed-rebalance set
+  unchallenged (`OVNRNG_25` currently DEPLOYED, `ORB_VOL_8K` proposed ADD).
+  Pre-implementation gate confirmed not-grandfather: OVNRNG_25 entered
+  `lane_allocation.json` on commit `95fe44c3` (2026-05-14) — 20 days AFTER
+  `c8_oos_status` writes landed at `6887632f` (2026-04-24). Fix mirrors PR #197
+  chordia gate doctrine. New `apply_c8_gate()` in `trading_app/lane_allocator.py`
+  demotes non-PASSED non-NULL labels to PAUSE (`FAILED_RATIO`, `NEGATIVE_OOS_EXPR`,
+  `NO_OOS_DATA`, `INSUFFICIENT_N_PATHWAY_B_REJECT`,
+  `INSUFFICIENT_N_PATHWAY_A_PASS_THROUGH`, `REJECTED`); NULL passes through as
+  Phase-4 grandfather (matches validator's `strategy_validator.py:1778` SKIPPED
+  NULL emission). `c8_oos_status` now surfaces in lane JSON, `paused[]`, and
+  `stale[]`. Second-layer drift check #147 `check_lane_allocation_c8_gate`
+  fails the build if any `lanes[]` entry carries a non-PASSED non-NULL c8 label.
+  Ordering inside `build_allocation()`: chordia (C4) first, c8 (C8) second,
+  live-tradeability last. 13 new unit tests + parity test verifying both gates
+  fire under `build_allocation`; `TestC8Gate` covers every c8 label, the
+  grandfather pass-through, the existing-PAUSE/STALE additive guard, and a
+  defensive-unknown-label branch. Drift suite 132 checks PASSED. Lane impact:
+  OVNRNG_25 and ORB_VOL_8K auto-PAUSE on the next rebalance; the
+  +2.80 R/yr rebalance proposal that gated this decision collapses to the
+  surviving c8-clean set. No live capital mutation in this commit
+  (`lane_allocation.json` unchanged until next rebalance run). Closes
+  action-queue P1 `c8_oos_status_allocator_doctrine_2026_05_14`; unblocks P2
+  `lane_allocation_rebalance_2026_05_14_pending_capital_review_blockers`
+  blocker (a).
+
 - `o30-pass-chordia-audit-not-deployed-2026-05-14` — MNQ
   `US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30` cleared strict no-theory
   Chordia hurdle (t=4.450, N=866, ExpR=0.1332; clears 3.79 by 0.66) per
