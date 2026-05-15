@@ -135,6 +135,9 @@ Before writing ANY code on a non-trivial change, present: (1) **What** and why, 
 
 Wait for user confirmation before writing code. Exceptions: trivial changes, "just do it", git ops, read-only exploration.
 
+### Context Budget (automatic — no action required)
+A per-turn `[CTX: N%]` gauge is injected by `.claude/hooks/context-gauge.py`; follow its tier directives. Past Tier 4 (~100% of cap), subagent spawns are hard-blocked by `.claude/hooks/subagent-budget-guard.py` — `/clear` is the only path forward. Detail → `.claude/rules/subagent-budget.md`.
+
 ---
 
 ## Strategy Classification — Behavioral Rules

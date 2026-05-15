@@ -94,6 +94,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/subagent-budget-guard.py",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -177,6 +187,16 @@
           {
             "type": "command",
             "command": "python C:/Users/joshd/canompx3/.claude/hooks/intent-router.py",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/context-gauge.py",
             "timeout": 3
           }
         ]
