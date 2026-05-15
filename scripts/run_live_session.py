@@ -262,7 +262,10 @@ def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
         if prof.copies <= 1:
             return CheckResult(True, f"SKIPPED (profile.copies={prof.copies})")
         if ctx.components is None:
-            return CheckResult(False, "SKIPPED (auth failed)")
+            # auth_check already failed; we cannot verify copy-trading without
+            # broker contracts. Report FAILED (not SKIPPED) so the operator sees
+            # the unverified state for a profile that requires copy trading.
+            return CheckResult(False, "FAILED: auth failed (cannot verify copy-trading)")
         contracts_cls = ctx.components["contracts_class"]
         contracts = contracts_cls(auth=ctx.components["auth"], demo=ctx.demo)
         all_accounts = contracts.resolve_all_account_ids()
