@@ -158,3 +158,61 @@ Two concurrent unsubscribes from the same loop are serialized by Python's
 event-loop scheduling — no race within a single FastAPI worker. The
 single-uvicorn-worker assertion in `run_dashboard()` upholds that
 invariant; multi-worker would need a different model.
+
+### Pass 4 — Pyright cluster RESOLVE (4a only; 4b/4c spun off)
+
+**Audit revealed scope was larger than planned:** Pyright on the four
+scope files surfaced **55 distinct errors** across three independent root
+causes:
+
+1. **session_orchestrator.py:2942,2959** — `self.order_router` Optional
+   access inside `_handle_fill_timeout`. F7 capital-class path.
+2. **check_drift.py 18 errors** — all `Optional[tuple]` unpacks from
+   DuckDB `fetchone()[0]` on `SELECT COUNT(*)` where the developer knows
+   the result is not None.
+3. **bot_dashboard.py 35 errors** — three subclasses: loose `state.get()`
+   typing, `Popen | file_handle` union, `subprocess.run().stdout`
+   bytes-vs-str.
+
+Plus 5 test-double-typing errors in `test_session_orchestrator.py`
+(FakeRouter/FakePositions don't subclass the base classes).
+
+**Pass 4a (DONE, this commit) — F7 invariant assertion:**
+
+Pyright was correctly flagging `self.order_router.cancel(...)` /
+`.query_order_status(...)` in `_handle_fill_timeout` (line 2942, 2959) —
+`order_router` is `Optional[BrokerRouter]`. Runtime analysis showed the
+handler is unreachable with `order_router is None`: PENDING_ENTRY
+records only acquire an entry_order_id via `_submit_entry_order` (which
+requires order_router), and the fill-poll loop short-circuits records
+with `entry_order_id is None` at line 3092.
+
+Fix: explicit `assert self.order_router is not None` with the reachability
+invariant cited in the assertion message. This satisfies Pyright AND
+fails-loud on any future refactor that breaks the invariant
+(institutional-rigor.md § 3 fail-closed). Per
+`feedback_iso_utc_silent_none_class_pattern.md`, the right shape for
+capital-class invariants is loud-fail, not silent-narrow.
+
+Verification: F7-touching tests 11/11 pass; pyright on
+session_orchestrator.py drops to 0 errors.
+
+**Pass 4b/4c (SPUN OFF) — mechanical cluster:**
+
+New stage file `docs/runtime/stages/pyright-cluster-mechanical.md`
+captures the remaining 53 errors. Reasoning for splitting:
+
+- None of the 53 errors are capital-class. They're type-system pedantry
+  on operator-visible read paths and test fakes — fixing them is `~3
+  hours of mechanical type annotations with zero behavior change`.
+- Bundling 53 mechanical edits into one commit violates the per-pass
+  discipline the plan was designed around. `subagent-budget.md` and the
+  parent plan's "treat each pyright finding individually" clause both
+  point to splitting.
+- Stop condition #5 of the parent plan explicitly allows this:
+  "Deferred bucket = 0 items OR explicitly named follow-up stage file
+  per remaining item". The new stage file is that explicit pointer.
+
+The cluster is not blocking any other work — schedule when (a) operator
+surfaces a real bug rooted in one of these classes, or (b) a code-review
+batch covers these files.

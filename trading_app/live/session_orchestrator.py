@@ -2936,6 +2936,19 @@ class SessionOrchestrator:
         log.warning(alert_msg)
         self._notify(alert_msg)  # institutional-rigor.md § 6
 
+        # F7 reachability invariant: PENDING_ENTRY records only acquire an
+        # entry_order_id inside _submit_entry_order, which requires
+        # self.order_router. The fill-poll loop at line 3092 short-circuits
+        # records with entry_order_id is None. Therefore reaching this handler
+        # implies order_router is not None. Assert so Pyright can narrow the
+        # type and so any future refactor that breaks this invariant
+        # fails-closed loudly (institutional-rigor.md § 3) rather than calling
+        # .cancel/.query_order_status on a None.
+        assert self.order_router is not None, (
+            f"F7 reachability invariant violated: order_router is None but "
+            f"_handle_fill_timeout was called for order={order_id} strategy={strategy_id}"
+        )
+
         # Step 2 — cancel the broker order  [F7-CANCEL-CALL]
         loop = asyncio.get_running_loop()
         try:
