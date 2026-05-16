@@ -116,7 +116,7 @@ def _probe_brackets(components: dict[str, Any] | None) -> bool:
             return False
         log.info("Bracket probe PASS")
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — router construction failure = probe failure
         log.critical("BRACKET PROBE FAILED: %s", e)
         return False
 

@@ -900,15 +900,6 @@ def _connection_readiness(broker_summary: dict[str, object]) -> dict[str, object
             "enabled_count": enabled_count,
         }
 
-    if not connections and connected_count > 0:
-        return {
-            "status": "connected",
-            "message": f"{connected_count}/{enabled_count} enabled broker connection(s) connected.",
-            "action": "none",
-            "connected_count": connected_count,
-            "enabled_count": enabled_count,
-        }
-
     if not connections:
         return {
             "status": "missing",
