@@ -335,6 +335,22 @@ EOF
 fi
 echo "  PASSED"
 
+# 2b. Auto-sync validated_setups trade windows — idempotent, fail-open.
+# New trade data (daily pipeline runs) advances last_trade_day in orb_outcomes
+# without updating validated_setups. Drift check #45 catches this mismatch and
+# blocks the commit. Running the fixer unconditionally before drift means the
+# DB is always clean when drift runs — mirrors the 0b CRLF auto-fix pattern.
+echo "[2b/8] Trade window sync..."
+set +e
+"$PYTHON" "$SCRIPT_DIR/scripts/migrations/backfill_validated_trade_windows.py" 2>/dev/null
+BACKFILL_RC=$?
+set -e
+if [ "$BACKFILL_RC" -ne 0 ]; then
+    echo "  ADVISORY: trade-window backfill failed (rc=$BACKFILL_RC) — drift check may catch residual mismatches (non-blocking)"
+else
+    echo "  PASSED"
+fi
+
 # 3. Drift check (~2 seconds)
 # Commit-time coverage must remain the FULL drift set. The post-edit hook's
 # debounce file only suppresses repeated FAST drift runs while editing; it must
