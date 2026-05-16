@@ -1,0 +1,199 @@
+---
+slug: 2026-05-16-chordia-queue-false-exclusion-audit
+date: 2026-05-16
+author: claude-opus-4-7
+testing_mode: confirmatory_audit
+pathway: B
+commit_sha: "TO_FILL_AFTER_COMMIT"
+
+# Per research-truth-protocol § 10: this is a thin pre-reg for a confirmatory
+# audit of an existing artifact (2026-05-12 Chordia queue CSV), NOT new
+# discovery. No writes to experimental_strategies or validated_setups.
+# Multiple-testing budget governed by BHY FDR at the audit-level K below.
+
+# Per institutional-rigor § 7: every methodology claim grounds to a literature
+# extract in docs/institutional/literature/.
+literature_grounding:
+  - file: docs/institutional/literature/harvey_liu_2015_backtesting.md
+    role: governs audit-level BHY FDR control at q=0.05; gate-level rescue
+      claims survive BHY at K_audit=33 before "false-exclusion" verdict.
+  - file: docs/institutional/literature/lopez_de_prado_2018_afml_ch_3_7_8.md
+    role: AFML Ch 12 § 12.4 CPCV is the OOS-power remedy for rescued rows
+      downstream (per-strategy prereg, not this audit's scope).
+  - file: docs/institutional/literature/carver_2015_ch11_portfolios.md
+    role: correlation scope is the 4 currently-DEPLOYED MNQ lanes; subsystem
+      correlation ≈ 0.7 × instrument correlation (p.167-8).
+
+# Null hypothesis declared BEFORE the audit runs.
+null_hypothesis: |
+  H0 = The May 12 Chordia funnel (research/chordia_queue_recompute.py) applies
+  its stated exclusion rules correctly. For each gate audited, the count of
+  rows excluded by the gate equals the count of rows that would be excluded by
+  a canonical recompute of the same predicate. Zero false exclusions.
+
+pre_committed_exit_conditions:
+  - rescue_count == 0 :
+      verdict: FUNNEL_VALIDATED
+      action: write null-result audit MD, no quarantine CSV
+  - rescue_count in [1, 20] :
+      verdict: FUNNEL_BUGS_FOUND
+      action: produce quarantine CSV, queue per-strategy CPCV preregs downstream
+  - rescue_count > 20 :
+      verdict: FUNNEL_SYSTEMIC_BIAS
+      action: HALT audit, escalate to user
+
+# Audit-level multiplicity control per Harvey-Liu 2015 BHY.
+audit_level_multiplicity:
+  K_audit: 33  # 11 gates × 3 sub-tests (count-match, sample-recompute, mutation-probe)
+  fdr_control: BHY at q=0.05
+  citation: docs/institutional/literature/harvey_liu_2015_backtesting.md
+
+# Gates to audit, in order of blast radius.
+gates_audited:
+  - id: G1_DEFERRED_FILTER_EXCLUDED
+    source: research/chordia_queue_recompute.py:116-122,472-473
+    intended_rule: |
+      Filter families in {COST_LT, OVNRNG, ORB_VOL, ORB_G, NO_FILTER} are
+      policy-excluded from the queue per v2 plan Criterion 3.
+    expected_excluded_count: 593
+    sub_tests: [count_match, sample_recompute, mutation_probe]
+
+  - id: G2_sample_size_below_deploy_threshold
+    source: research/chordia_queue_recompute.py:403-404
+    intended_rule: sample_size_stored < 100 blocks the row (Criterion 7).
+    expected_excluded_count: 60
+    sub_tests: [count_match, sample_recompute, mutation_probe]
+
+  - id: G3_MODE_A_IS_EMPTY
+    source: research/chordia_queue_recompute.py:415-416
+    intended_rule: n_is_mode_a < 50 blocks the row (Mode A IS power floor).
+    expected_excluded_count: 77
+    sub_tests: [count_match, sample_recompute, mutation_probe]
+
+  - id: G4_c8_not_passed
+    source: research/chordia_queue_recompute.py:412-413
+    intended_rule: c8_oos_status in {NEGATIVE_OOS_EXPR, FAILED_RATIO} blocks (Criterion 8).
+    expected_excluded_count: 256
+    sub_tests: [count_match, sample_recompute, mutation_probe]
+
+  - id: G5_chordia_passes_strict
+    source: trading_app/chordia.py:53-100; queue script:427-431
+    intended_rule: |
+      chordia_t >= 3.79 (no theory) or >= 3.00 (with theory) for strict-pass.
+      Field-presence trap: has_theory is field-presence-based per
+      feedback_chordia_theory_citation_field_presence_trap.md.
+    expected_excluded_count: tier_determinant_not_blocker
+    sub_tests: [count_match, sample_recompute, mutation_probe]
+
+  - id: G6_oos_power_tier
+    source: research/oos_power.py; queue script:434-448
+    intended_rule: |
+      one_sample_power(d, n_oos) maps to CAN_REFUTE (>=0.80) /
+      DIRECTIONAL_ONLY (>=0.50) / STATISTICALLY_USELESS (<0.50).
+    expected_excluded_count: tier_determinant_not_blocker
+    sub_tests: [count_match, sample_recompute, mutation_probe]
+
+  - id: G7_NOT_IN_LANE_ALLOC
+    source: research/chordia_queue_recompute.py:383
+    intended_rule: allocator_status defaults to NOT_IN_LANE_ALLOC if strategy
+      not in docs/runtime/lane_allocation.json.lanes[].
+    expected_excluded_count: metadata_column_not_blocker
+    sub_tests: [count_match, sample_recompute]
+
+  - id: G8_family_purged_or_singleton
+    source: research/chordia_queue_recompute.py:407-410
+    intended_rule: |
+      JSON-derived from 2026-05-11 MNQ deployability snapshot. family_status
+      in {PURGED, SINGLETON} blocks the row.
+    expected_excluded_count: 18 (purged) + 6 (singleton) = 24
+    sub_tests: [count_match, sample_recompute, mutation_probe]
+
+  - id: G9_hard_issues_json
+    source: research/chordia_queue_recompute.py:418-423; _CANONICAL_HARD_ISSUES set
+    intended_rule: |
+      replay_mismatch / slippage_missing / e2_deployment_unsafe_filter etc.
+      from MNQ JSON snapshot block the row.
+    expected_excluded_count: 19+12 (observed in CSV)
+    sub_tests: [count_match, sample_recompute]
+
+  - id: G10_INSTRUMENT_REGIME_COLD_OR_WARM_dead_code
+    source: research/chordia_queue_recompute.py:163 (declared, NOT applied in _apply_gates)
+    intended_rule: declared in _NEW_GAP_CODES but never written to gate.blockers.
+    expected_excluded_count: 0 (never produced)
+    sub_tests: [dead_code_confirmation]
+
+  - id: G11_audit_age_staleness
+    source: trading_app/chordia.py doctrine; chordia_audit_log.yaml schema;
+      feedback_chordia_unlock_deployment_gate_audit_checklist.md
+    intended_rule: |
+      audit_age_days > 90 -> PAUSED per doctrine, but queue script reports
+      chordia_log_age_days WITHOUT surfacing a stale-audit tier.
+    expected_excluded_count: gap_in_funnel_not_in_excluded_counts
+    sub_tests: [count_match, drift_from_doctrine]
+
+# Per-gate methodology (uniform across all 11 gates).
+per_gate_methodology:
+  1_intended_rule: one-sentence statement + cite source file:line.
+  2_source_trace: pin implementation to file:line via grep/Read.
+  3_canonical_recompute: |
+    Re-run the predicate against canonical tables (orb_outcomes triple-join
+    daily_features on (trading_day, symbol, orb_minutes) per
+    daily-features-joins.md). Apply canonical filter via
+    research.filter_utils.filter_signal — NEVER re-encode filter logic.
+  4_count_before_after: |
+    Report n_excluded_by_gate, n_recomputed_excluded, delta. Delta != 0 is
+    the false-exclusion signal.
+  5_sample_excluded_rows: |
+    Stratified random sample (NOT head-N) with random_seed=20260516 fixed
+    in this pre-reg. Strata = (instrument × entry_model × filter_family).
+    N=10 per stratum or full population, whichever smaller.
+  6_identify_pass_if_fixed: |
+    For each excluded row, simulate "if gate predicate were corrected, would
+    this row enter AUDIT_GAP_ONLY or READY?" Report count.
+  7_classify: |
+    POLICY_EXCLUSION (gate matches stated intent, NOT a bug)
+    | IMPLEMENTATION_BUG (gate diverges from stated intent)
+    | CANONICAL_DRIFT (gate uses derived layer that drifted)
+
+# Doctrine pre-flight (binding before audit step runs).
+preflight:
+  - python pipeline/check_drift.py exit 0
+  - MAX(orb_outcomes.trading_day) within 2 trading days of today
+  - validated_setups active count within ±5 of 845 (CSV baseline);
+    delta -1 (currently 844) -> within tolerance, audit May 12 CSV directly
+  - date-convention pin: queue script uses today=2026-05-12 for audit-age;
+    this audit honors that to avoid spurious staleness flags
+  - git status clean before any write artifact
+
+# Random seed (reproducibility).
+random_seed: 20260516
+
+# Cost discipline: COST_SPECS from pipeline.cost_model — no zero-cost backtest.
+cost_source: pipeline.cost_model.COST_SPECS
+
+# Quarantine doctrine (binding).
+quarantine_doctrine: |
+  Any rescued row is QUARANTINE-ONLY. No write to validated_setups, no
+  chordia_audit_log append, no lane_allocation.json mutation. Rescued rows
+  require fresh per-strategy CPCV pre-reg per pre_registered_criteria.md
+  Criteria 1-12 before any deployment consideration.
+
+# Limits of audit (honest declaration).
+out_of_scope:
+  - bugs in validated_setups itself (treated as universe truth)
+  - bugs in orb_outcomes itself (treated as canonical trade truth)
+  - bugs in daily_features upstream
+  - bugs in filter_signal / matches_df itself (mutation probe is gate-level only)
+  - multi-strategy interaction (correlation / allocator routing)
+
+# Verification gates before claiming "done".
+verification:
+  - drift_checks: python pipeline/check_drift.py exit 0
+  - recompute_soundness: spot-check 3 random rows per gate vs independent SQL
+  - mutation_probe: flip 1 row's blocker column in temp copy, re-run gate audit
+  - rescue_smoke_test: every quarantine CSV strategy_id matches validated_setups.strategy_id exactly
+  - no_allocator_mutation: git diff --stat for docs/runtime/lane_allocation.json + chordia_audit_log.yaml = 0
+  - quarantine_doctrine: rescued rows are pointers, not promotions
+  - self_review: /code-review on artifacts before commit
+  - adversarial_audit: if rescue_count > 0, spawn evidence-auditor in independent context
+---
