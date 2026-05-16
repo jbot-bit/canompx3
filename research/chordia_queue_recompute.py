@@ -159,11 +159,11 @@ _CANONICAL_HARD_ISSUES = {
     "sample_size_below_deploy_threshold",
     "slippage_missing",
 }
-_NEW_GAP_CODES = {
-    "NO_CHORDIA_AUDIT_LOG_ENTRY",
-    "INSTRUMENT_REGIME_COLD_OR_WARM",
-    "MODE_A_IS_EMPTY",
-}
+# NB: prior _NEW_GAP_CODES set was declarative-only and not referenced anywhere.
+# Removed 2026-05-16 after audit confirmed INSTRUMENT_REGIME_COLD_OR_WARM was
+# never written by _apply_gates (per institutional-rigor § 5 "no dead code").
+# The two real gap codes (NO_CHORDIA_AUDIT_LOG_ENTRY, MODE_A_IS_EMPTY) are
+# appended by _apply_gates as string literals.
 
 
 # ---------------------------------------------------------------------------
@@ -408,14 +408,22 @@ def _apply_gates(
         gate.blockers.append("family_purged")
     elif cand.family_status == "SINGLETON":
         gate.blockers.append("family_singleton")
-    # (e) c8_oos_status not in {NEGATIVE_OOS_EXPR, FAILED_RATIO}
+    # (e) c8_not_passed enters via TWO paths:
+    #     Path A: c8_oos_status in {NEGATIVE_OOS_EXPR, FAILED_RATIO} (direct predicate).
+    #     Path B: JSON hard_issues_json contains "c8_not_passed" (lines 418-423 below;
+    #             c8_not_passed is a member of _CANONICAL_HARD_ISSUES at line 154).
+    #     Surfaced by the 2026-05-16 false-exclusion audit; see
+    #     docs/audit/results/2026-05-16-chordia-queue-false-exclusion-audit.md.
     if cand.c8_oos_status in {"NEGATIVE_OOS_EXPR", "FAILED_RATIO"}:
         gate.blockers.append("c8_not_passed")
     # (f) Mode-A n_is >= 50 deployable-sample floor
     if gate.n_is_mode_a < 50:
         gate.blockers.append("MODE_A_IS_EMPTY")
 
-    # JSON-derived hard_issues (replay_mismatch / slippage_missing / e2_deployment_unsafe_filter)
+    # JSON-derived hard_issues from _CANONICAL_HARD_ISSUES (line 153). Includes
+    # c8_not_passed (Path B above), replay_mismatch, slippage_missing,
+    # e2_deployment_unsafe_filter, sample_size_below_deploy_threshold,
+    # family_purged, family_singleton.
     if cand.hard_issues_json:
         for issue in cand.hard_issues_json.split(","):
             issue = issue.strip()
