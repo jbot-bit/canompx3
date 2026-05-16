@@ -55,6 +55,26 @@ Amendment 2.7 Rule: any ``holdout_date`` later than ``HOLDOUT_SACRED_FROM``
 means the discovery would touch sacred data, which is banned. ``None`` is
 silently upgraded to ``HOLDOUT_SACRED_FROM`` so that running discovery with
 no explicit flag still respects Mode A.
+
+EARLY_HOLDOUT_REDISCOVERY (EHR) probe-mode constants
+----------------------------------------------------
+
+``EARLY_HOLDOUT_BOUNDARY`` is a SEPARATE probe-mode constant for the
+``EARLY_HOLDOUT_REDISCOVERY`` validation mode (PASS 2, 2026-05-17). It is NOT
+an alias, replacement, or weakening of ``HOLDOUT_SACRED_FROM`` — Mode A
+sacredness is invariant under this module. EHR is a research/probe mode that
+runs discovery on ``trading_day < EARLY_HOLDOUT_BOUNDARY`` and labels
+``EARLY_HOLDOUT_BOUNDARY <= trading_day < HOLDOUT_SACRED_FROM`` as
+``PSEUDO_OOS_ROBUSTNESS`` evidence only. EHR survivors are NEVER deployable
+(verdict ceiling ``RESEARCH_PROVISIONAL``); the true forward OOS window
+(``trading_day >= HOLDOUT_SACRED_FROM``, still accumulating) remains the only
+path to ``CLEAN_OOS`` and capital deployment.
+
+Authority: ``EARLY_HOLDOUT_REDISCOVERY — Narrow Guarded PASS 2 Plan`` dated
+2026-05-17, invariants 1-6 (top-of-plan). The plan is grounded in
+``docs/institutional/literature/`` extracts that explicitly oppose relabeling
+previously-experienced data as ``CLEAN_OOS`` (Chan 2013 Ch1 p.4; Harvey-Liu
+2015 pp.15-17; Bailey-Lopez de Prado 2014 pp.2-3; Harris 2002 pp.471-472).
 """
 
 from __future__ import annotations
@@ -93,6 +113,36 @@ HOLDOUT_GRANDFATHER_CUTOFF: datetime = datetime(2026, 4, 8, 0, 0, 0, tzinfo=UTC)
 # CHECK integrity assertion on the DISCOVERY-side SHA stamping added in Stage
 # 4.1. The two cutoffs are one day apart to give Stage 4.1 a grace window.
 PHASE_4_1_SHIP_DATE: datetime = datetime(2026, 4, 9, 0, 0, 0, tzinfo=UTC)
+
+# EARLY_HOLDOUT_REDISCOVERY (EHR) probe-mode boundary — PASS 2 plan, 2026-05-17.
+#
+# NOT an alias of HOLDOUT_SACRED_FROM. EHR is a research/probe validation mode
+# that runs discovery on data ending before EARLY_HOLDOUT_BOUNDARY (so the
+# 2025 calendar year becomes a PSEUDO-OOS measurement window) WITHOUT
+# touching the sacred 2026+ window. Mode A discovery and capital deployment
+# continue to be gated by HOLDOUT_SACRED_FROM exclusively.
+#
+# The plan locks this constant at 2025-01-01 because: (a) a 5-year EHR IS
+# window (2020-01-01 → 2024-12-31) gives MinBTL ≤ 45 trials for MNQ/MES per
+# Bailey 2013 Fig 2, which is 3.75× the 12-trial Mode A family; (b) the
+# resulting 2025 PSEUDO-OOS spans ~250 trading days, sufficient for OOS power
+# computation per backtesting-methodology.md § RULE 3.3; and (c) the
+# alternative 2024-01-01 boundary would shrink MinBTL to ~30 trials while
+# doubling regime overlap with original Mode A discovery — worse on both
+# axes. Changing this date requires a NEW pre-reg file (it cannot be tuned
+# after results are seen — anti-Chan 2013 Ch1 p.4).
+EARLY_HOLDOUT_BOUNDARY: date = date(2025, 1, 1)
+
+# String literal identifying the EHR validation mode. Used as the
+# ``validation_mode`` value written to ``validated_setups`` rows discovered
+# under EHR, and as the input to ``is_ehr_mode()``. Deliberately verbose:
+# short names ("EHR") get casually misapplied; the literal embeds the
+# semantics directly in the data layer.
+EHR_MODE_LABEL: str = "EARLY_HOLDOUT_REDISCOVERY"
+
+# Default validation_mode for all non-EHR discovery (Mode A and earlier
+# research-provisional). Schema column default in Stage 2 of the PASS 2 plan.
+STANDARD_MODE_LABEL: str = "STANDARD"
 
 # Hard-gate override token (added 2026-04-08 per explicit user instruction
 # "we need to ensure strictly x 100000 that discovery NEVER RUNS 2026 EVER
@@ -194,10 +244,94 @@ def enforce_holdout_date(
     return holdout_date
 
 
+def is_ehr_mode(mode: str | None) -> bool:
+    """Return True iff ``mode`` is the exact EHR validation-mode literal.
+
+    Case-sensitive and strict — no normalization, no aliases. EHR survivors
+    are non-deployable per plan invariant #2; callers that branch on
+    ``is_ehr_mode(row["validation_mode"])`` to block lane writes (Stage 5)
+    or cap verdicts at ``RESEARCH_PROVISIONAL`` (Stage 3) MUST get a stable,
+    exact predicate. Soft matching (``.upper()``, ``in`` lookup) would let a
+    typo like ``"early_holdout_rediscovery"`` silently fall through to the
+    STANDARD path and bypass the EHR guards.
+
+    Parameters
+    ----------
+    mode
+        Value from ``validated_setups.validation_mode`` (or any caller
+        passing a mode label). ``None`` is the legitimate pre-Stage-2
+        default for rows that predate the schema migration.
+
+    Returns
+    -------
+    bool
+        ``True`` only when ``mode == EHR_MODE_LABEL`` exactly. All other
+        inputs (including ``None``, empty string, lower-case variants,
+        STANDARD, future labels) return ``False``.
+    """
+    return mode == EHR_MODE_LABEL
+
+
+def enforce_early_holdout_date(holdout_date: date | None) -> date:
+    """Validate a ``--early-holdout-date`` argument for EHR discovery.
+
+    Parallel to ``enforce_holdout_date()`` but gated on
+    ``EARLY_HOLDOUT_BOUNDARY`` instead of ``HOLDOUT_SACRED_FROM``. Used by
+    EHR discovery paths added in Stage 4. Mode A discovery continues to
+    call ``enforce_holdout_date()`` unchanged.
+
+    There is deliberately NO override token here. The plan's invariant #1
+    forbids any softening of the boundary; if a future need to peek past
+    2025-01-01 inside EHR mode emerges, it requires a new amendment to
+    the PASS 2 plan and a separate pre-reg, not a runtime escape hatch.
+
+    Parameters
+    ----------
+    holdout_date
+        The EHR holdout cutoff supplied by the caller, or ``None`` if
+        omitted. ``None`` is silently upgraded to ``EARLY_HOLDOUT_BOUNDARY``
+        so an EHR discovery run with no explicit flag still respects the
+        2025-01-01 boundary.
+
+    Returns
+    -------
+    date
+        The effective EHR holdout cutoff. Always a real ``date``,
+        guaranteed ``<= EARLY_HOLDOUT_BOUNDARY``.
+
+    Raises
+    ------
+    ValueError
+        If ``holdout_date > EARLY_HOLDOUT_BOUNDARY``. The error cites the
+        PASS 2 plan and reminds the caller that EHR cannot be tuned by
+        moving the boundary after results are seen.
+    """
+    if holdout_date is None:
+        return EARLY_HOLDOUT_BOUNDARY
+    if holdout_date > EARLY_HOLDOUT_BOUNDARY:
+        raise ValueError(
+            f"--early-holdout-date {holdout_date.isoformat()} violates the "
+            f"EARLY_HOLDOUT_REDISCOVERY boundary "
+            f"({EARLY_HOLDOUT_BOUNDARY.isoformat()}). EHR discovery must use "
+            f"trading_day < {EARLY_HOLDOUT_BOUNDARY.isoformat()}; the 2025 "
+            f"calendar year is reserved for PSEUDO-OOS measurement. "
+            f"Moving the boundary after seeing results is forbidden "
+            f"(plan invariant #1, Chan 2013 Ch1 p.4). A new boundary "
+            f"requires a separate pre-reg and a new amendment to the "
+            f"PASS 2 plan. Canonical source: trading_app.holdout_policy"
+        )
+    return holdout_date
+
+
 __all__ = [
     "HOLDOUT_SACRED_FROM",
     "HOLDOUT_GRANDFATHER_CUTOFF",
     "HOLDOUT_OVERRIDE_TOKEN",
     "PHASE_4_1_SHIP_DATE",
+    "EARLY_HOLDOUT_BOUNDARY",
+    "EHR_MODE_LABEL",
+    "STANDARD_MODE_LABEL",
     "enforce_holdout_date",
+    "enforce_early_holdout_date",
+    "is_ehr_mode",
 ]
