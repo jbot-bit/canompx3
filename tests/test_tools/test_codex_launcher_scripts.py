@@ -101,11 +101,10 @@ def test_start_bot_prints_checkout_identity_before_launching() -> None:
     root = Path(__file__).resolve().parents[2]
     start_bot = (root / "START_BOT.bat").read_text(encoding="utf-8")
 
-    banner = start_bot.index("branch=%GIT_BRANCH% commit=%GIT_HEAD%")
+    banner = start_bot.index("This shortcut runs the Windows checkout above")
     launch = start_bot.index(".venv\\Scripts\\python.exe -m trading_app.live.bot_dashboard")
 
     assert banner < launch
-    assert "git branch --show-current" in start_bot
-    assert "git rev-parse --short HEAD" in start_bot
-    assert "git rev-list --left-right --count HEAD...@{u}" in start_bot
-    assert "Codex WSL branch work does not change this Windows shortcut" in start_bot
+    assert "WSL/Codex branch pushes do not change this app until merged or pulled here" in start_bot
+    assert "git branch --show-current" not in start_bot
+    assert "git rev-list --left-right --count" not in start_bot

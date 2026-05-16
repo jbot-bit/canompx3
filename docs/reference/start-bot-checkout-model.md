@@ -20,16 +20,26 @@ check the startup banner printed by `START_BOT.bat`:
 
 ```text
 [Repo] C:\Users\joshd\canompx3
-[Repo] branch=<branch> commit=<commit> upstream=<upstream> ahead=<n> behind=<n>
+[Repo] This shortcut runs the Windows checkout above.
+[Repo] WSL/Codex branch pushes do not change this app until merged or pulled here.
 ```
 
 Interpretation:
 
-- `branch` and `commit` are the exact code the shortcut is serving.
-- `behind > 0` means the shortcut checkout does not include newer upstream
-  commits.
 - A Codex branch such as `codex/opportunity-awareness-overlay` will not affect
   the shortcut while the shortcut checkout remains on `main`.
+- To inspect the exact branch and commit, run these from the Windows checkout:
+
+```bat
+cd /d C:\Users\joshd\canompx3
+git branch --show-current
+git rev-parse --short HEAD
+git status --short --branch
+```
+
+The batch launcher intentionally does not run these Git commands itself. It
+must keep double-click startup reliable even if Git is slow, missing from PATH,
+or the checkout has unusual upstream state.
 
 Operator rule: when a dashboard/UI change is meant to affect the desktop
 shortcut immediately, either merge/pull it into `C:\Users\joshd\canompx3` or

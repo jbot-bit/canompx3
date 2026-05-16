@@ -9,7 +9,7 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-16
-- **Summary:** Fixed Codex launcher startup drift, flattened the START_BOT dashboard branch, and added checkout visibility docs/banner so the Windows shortcut shows its active branch/commit.
+- **Summary:** Fixed Codex launcher startup drift, flattened the START_BOT dashboard branch, and replaced the risky dynamic START_BOT checkout probe with a safe static checkout note.
 
 ## Next Steps — Active
 1. Track D MNQ COMEX_SETTLE Gate 0 runner design — Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
