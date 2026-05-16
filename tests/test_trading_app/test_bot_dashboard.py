@@ -731,11 +731,16 @@ def test_preflight_helper_opens_no_duckdb_connection(monkeypatch):
     Commit 45f50916 fixed a Windows lock leak where _run_preflight constructed
     a SessionOrchestrator that owned the journal DB connection and never
     released it. F1-F2 in commit bad97445 stripped orchestrator construction
-    entirely, leaving the helper as a notifications-only probe.
+    entirely, leaving the helper as a notifications + broker-probe surface.
 
     Regression guard: intercept duckdb.connect and fail immediately if the
     helper attempts any connection. Catches the leak pattern regardless of
     which path (LIVE_JOURNAL_DB_PATH, GOLD_DB_PATH, etc.) the regression hits.
+
+    2026-05-16 update: helper now also runs real bracket + fill-poller probes
+    via the `components` kwarg (was hardcoded True before). Thread a stub
+    `components` dict so the probes execute against an in-memory router and
+    the DB-free guarantee covers the new probe path too.
     """
     import duckdb
 
@@ -755,7 +760,38 @@ def test_preflight_helper_opens_no_duckdb_connection(monkeypatch):
 
     monkeypatch.setattr(duckdb, "connect", spy_connect)
 
-    results = _run_lightweight_component_self_tests(instrument="MNQ")
+    # Stub router class — exercises the probe path without any real broker /
+    # network / DB call. Mirrors the in-memory routers used by
+    # test_run_live_session_preflight.py.
+    class _StubAuth:
+        def get_token(self) -> str:
+            return "tk_stub"
+
+    class _StubRouter:
+        def __init__(self, account_id, auth, **_kw):
+            self.account_id = account_id
+            self.auth = auth
+
+        def supports_native_brackets(self) -> bool:
+            return True
+
+        def build_bracket_spec(self, **_kw) -> dict:
+            return {"stop": 1, "target": 2}
+
+        def query_order_status(self, _order_id):
+            # Mirror the "endpoint exists, returned validation error for sentinel"
+            # case used by the canonical probe.
+            raise RuntimeError("404 expected for sentinel order_id=0")
+
+    components = {
+        "auth": _StubAuth(),
+        "router_class": _StubRouter,
+        "feed_class": None,
+        "contracts_class": None,
+        "positions_class": None,
+    }
+
+    results = _run_lightweight_component_self_tests(instrument="MNQ", components=components)
 
     assert connect_calls == []
     assert results["notifications"] is True

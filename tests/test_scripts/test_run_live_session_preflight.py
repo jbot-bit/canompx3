@@ -91,7 +91,7 @@ def test_checks_total_equals_len_checks(monkeypatch, capsys, all_pass_components
     monkeypatch.setattr(
         rls,
         "_run_lightweight_component_self_tests",
-        lambda *, instrument: {"notifications": True, "brackets": True, "fill_poller": True},
+        lambda *, instrument, components=None: {"notifications": True, "brackets": True, "fill_poller": True},
     )
 
     # Stub TradeJournal so check_trade_journal returns OK without filesystem.
@@ -124,7 +124,7 @@ def test_known_failing_check_counted_toward_total(monkeypatch, capsys, all_pass_
     monkeypatch.setattr(
         rls,
         "_run_lightweight_component_self_tests",
-        lambda *, instrument: {"notifications": True, "brackets": True, "fill_poller": True},
+        lambda *, instrument, components=None: {"notifications": True, "brackets": True, "fill_poller": True},
     )
     import trading_app.live.trade_journal as tj
 
@@ -151,7 +151,7 @@ def test_all_pass_smoke(monkeypatch, capsys, all_pass_components, stub_daily_fea
     monkeypatch.setattr(
         rls,
         "_run_lightweight_component_self_tests",
-        lambda *, instrument: {"notifications": True, "brackets": True, "fill_poller": True},
+        lambda *, instrument, components=None: {"notifications": True, "brackets": True, "fill_poller": True},
     )
     import trading_app.live.trade_journal as tj
 
@@ -386,3 +386,222 @@ def test_dashboard_auto_launch_disabled_for_dashboard_origin(monkeypatch):
 def test_dashboard_auto_launch_enabled_for_cli_origin(monkeypatch):
     monkeypatch.delenv("CANOMPX3_DASHBOARD_ORIGIN", raising=False)
     assert rls._should_launch_dashboard() is True
+
+
+# ---------- 2026-05-16: bracket + fill-poller probes (real, not stubbed) ----------
+#
+# Background: preflight historically hardcoded results["brackets"] = True and
+# results["fill_poller"] = True. That produced a misleading "7/7 PASS" line
+# even when the bracket/fill-poller paths would have failed at live-start.
+# These tests lock in the new behaviour: the probes exercise the real router
+# class and surface PASS/FAIL in the summary so an operator sees the gap
+# before clicking Start Live.
+
+
+class _BracketSupportingRouter:
+    """Router stub that advertises bracket support and returns a spec."""
+
+    def __init__(self, account_id, auth, **_kw):
+        self.account_id = account_id
+        self.auth = auth
+
+    def supports_native_brackets(self) -> bool:
+        return True
+
+    def build_bracket_spec(self, **_kw) -> dict:
+        return {"stop": 1, "target": 2}
+
+    def query_order_status(self, _order_id):
+        # Emulate "endpoint exists, returned validation error for sentinel" —
+        # mirrors ProjectX returning 404/422 for order_id=0.
+        raise RuntimeError("404: order not found (expected for sentinel order_id=0)")
+
+
+class _BrokenBracketRouter(_BracketSupportingRouter):
+    def build_bracket_spec(self, **_kw):
+        return None  # broker advertised support but cannot build — production verifier flags this
+
+
+class _RaisingBracketRouter(_BracketSupportingRouter):
+    def build_bracket_spec(self, **_kw):
+        raise RuntimeError("auth not loaded for bracket build")
+
+
+class _NoPollRouter(_BracketSupportingRouter):
+    def query_order_status(self, _order_id):
+        raise NotImplementedError("broker does not support order status polling")
+
+
+class _BracketUnsupportedRouter(_BracketSupportingRouter):
+    """Broker does not advertise bracket support — probe must return True
+    (matches production `_verify_brackets` `if not supports_native_brackets`
+    branch)."""
+
+    def supports_native_brackets(self) -> bool:
+        return False
+
+
+def _components_with_router(router_cls):
+    """Build the same shape `create_broker_components` returns: dict with
+    `auth` (instance) and `router_class` (class)."""
+    auth = SimpleNamespace(get_token=lambda: "tk_probe1234567890")
+    return {
+        "auth": auth,
+        "router_class": router_cls,
+        "feed_class": None,
+        "contracts_class": SimpleNamespace,
+        "positions_class": SimpleNamespace,
+    }
+
+
+def test_probe_brackets_passes_when_spec_is_built():
+    """Working bracket spec → PASS. The happy path that prior to this fix was
+    silently rubber-stamped True regardless of what the broker would do."""
+    components = _components_with_router(_BracketSupportingRouter)
+    assert rls._probe_brackets(components) is True
+
+
+def test_probe_brackets_passes_when_broker_has_no_native_brackets():
+    """Production `_verify_brackets` returns True when the broker advertises
+    no bracket support (signal-only / Tradovate-without-brackets case). The
+    probe must mirror that contract."""
+    components = _components_with_router(_BracketUnsupportedRouter)
+    assert rls._probe_brackets(components) is True
+
+
+def test_probe_brackets_fails_when_spec_is_none():
+    """Broker advertised support but `build_bracket_spec` returned None —
+    production verifier flags this as a FAIL because the entry would land
+    without crash protection. Preflight must surface it the same way."""
+    components = _components_with_router(_BrokenBracketRouter)
+    assert rls._probe_brackets(components) is False
+
+
+def test_probe_brackets_fails_when_build_raises():
+    """Any exception during the bracket build is fail-closed."""
+    components = _components_with_router(_RaisingBracketRouter)
+    assert rls._probe_brackets(components) is False
+
+
+def test_probe_brackets_fails_when_components_none():
+    """No broker components (auth failed upstream) → bracket probe must
+    surface FAIL, not silently pass."""
+    assert rls._probe_brackets(None) is False
+
+
+def test_probe_fill_poller_passes_on_endpoint_error():
+    """Production `_verify_fill_poller` treats any non-NotImplementedError as
+    "endpoint exists, returned an expected error for sentinel order_id=0".
+    The probe must mirror that contract."""
+    components = _components_with_router(_BracketSupportingRouter)
+    assert rls._probe_fill_poller(components) is True
+
+
+def test_probe_fill_poller_fails_on_not_implemented():
+    """`NotImplementedError` is the ONLY signal that the broker genuinely
+    cannot poll for fills. Production sets `_poller_active = False` and
+    raises; the probe surfaces this as FAIL so the operator sees it."""
+    components = _components_with_router(_NoPollRouter)
+    assert rls._probe_fill_poller(components) is False
+
+
+def test_probe_fill_poller_fails_when_components_none():
+    assert rls._probe_fill_poller(None) is False
+
+
+def test_self_tests_threads_components_into_probes(monkeypatch):
+    """The new contract: `_check_notifications` MUST forward `ctx.components`
+    into `_run_lightweight_component_self_tests` so the probes hit a real
+    router. Regression guard against future refactors dropping the kwarg."""
+    captured = {}
+
+    def _spy(*, instrument, components=None):
+        captured["instrument"] = instrument
+        captured["components"] = components
+        return {"notifications": True, "brackets": True, "fill_poller": True}
+
+    monkeypatch.setattr(rls, "_run_lightweight_component_self_tests", _spy)
+    components = _components_with_router(_BracketSupportingRouter)
+    ctx = rls.PreflightContext(
+        instrument="MNQ",
+        broker_name="topstep",
+        demo=True,
+        portfolio=None,
+        components=components,
+    )
+    result = rls._check_notifications(ctx)
+    assert result.passed is True
+    assert captured["instrument"] == "MNQ"
+    assert captured["components"] is components, "components dict must be forwarded by reference"
+
+
+def test_check_notifications_summary_surfaces_per_component_status(monkeypatch):
+    """The inline summary string must spell out every probe (PASS or FAIL),
+    not just lump them under "WARNINGS". This is the operator-visibility
+    contract that motivated the fix."""
+    monkeypatch.setattr(
+        rls,
+        "_run_lightweight_component_self_tests",
+        lambda *, instrument, components=None: {
+            "notifications": True,
+            "brackets": False,
+            "fill_poller": False,
+        },
+    )
+    components = _components_with_router(_BracketSupportingRouter)
+    ctx = rls.PreflightContext(
+        instrument="MNQ",
+        broker_name="topstep",
+        demo=True,
+        portfolio=None,
+        components=components,
+    )
+    result = rls._check_notifications(ctx)
+    # Preflight is not blocking — the live SessionOrchestrator re-runs the
+    # verifiers and that path is authoritative. But the failure MUST be visible.
+    assert "brackets:FAIL" in result.message
+    assert "fill_poller:FAIL" in result.message
+    assert "notifications:PASS" in result.message
+
+
+def test_check_notifications_summary_lists_all_pass_components(monkeypatch):
+    """Even on the happy path, every component is listed by name with PASS so
+    the operator can scan the line and confirm each subsystem was exercised."""
+    monkeypatch.setattr(
+        rls,
+        "_run_lightweight_component_self_tests",
+        lambda *, instrument, components=None: {
+            "notifications": True,
+            "brackets": True,
+            "fill_poller": True,
+        },
+    )
+    components = _components_with_router(_BracketSupportingRouter)
+    ctx = rls.PreflightContext(
+        instrument="MNQ",
+        broker_name="topstep",
+        demo=True,
+        portfolio=None,
+        components=components,
+    )
+    result = rls._check_notifications(ctx)
+    assert result.passed is True
+    assert "brackets:PASS" in result.message
+    assert "fill_poller:PASS" in result.message
+    assert "notifications:PASS" in result.message
+
+
+def test_no_hardcoded_self_test_stubs():
+    """Source-level grep — the literal `results["brackets"] = True` /
+    `results["fill_poller"] = True` lines MUST be gone. Surfaces accidental
+    reintroduction during a future merge."""
+    src = (ROOT / "scripts" / "run_live_session.py").read_text(encoding="utf-8")
+    assert 'results["brackets"] = True' not in src, (
+        "preflight is rubber-stamping bracket self-test results again"
+    )
+    assert 'results["fill_poller"] = True' not in src, (
+        "preflight is rubber-stamping fill-poller self-test results again"
+    )
+    # And the new probe functions must exist.
+    assert "_probe_brackets" in src
+    assert "_probe_fill_poller" in src

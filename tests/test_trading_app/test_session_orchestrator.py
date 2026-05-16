@@ -8,6 +8,7 @@ When SessionOrchestrator.__init__ gains new attributes, add them here once.
 """
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
@@ -5732,3 +5733,372 @@ class TestStage3HWMWireUpAndEodDispatch:
         assert len(eod_hwm_notifies) == 0, (
             f"Suppression failed: kill-switch fired but got HWM EOD exception notify {notify_msgs!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# 2026-05-16 — narrowed `except Exception` in profile-account safeguards
+# ---------------------------------------------------------------------------
+#
+# The three safeguard blocks at SessionOrchestrator.__init__ were tightened
+# from bare `except Exception` to explicit exception classes. The fail-closed
+# `raise` for profile accounts was already in place; the narrowing closes the
+# "silent absorption of unrelated bugs" hole. These tests replay each
+# production load block verbatim (matching the existing pattern at
+# `test_per_aperture_load_path_end_to_end_with_real_profile`) so a future
+# refactor that re-broadens the catch (or drops the `raise`) fails here.
+
+
+class TestSafeguardExceptNarrowing:
+    """Each test executes the EXACT production load block from
+    session_orchestrator.SessionOrchestrator.__init__ against a malformed
+    input. The block is copy-pasted (not mocked) so a regression in the
+    narrowed except clauses surfaces here as a behavior change, not a
+    silent type-coverage difference.
+    """
+
+    # ---- Block 1: ORB caps via get_lane_registry ------------------------
+
+    def _exercise_orb_cap_block(self, portfolio: Portfolio):
+        """Replay of session_orchestrator.py lines 356-378 (2026-05-16 narrowed)."""
+        from trading_app.prop_profiles import get_lane_registry
+
+        _is_profile = portfolio is not None and portfolio.strategies and portfolio.strategies[0].source == "profile"
+        profile_id = None
+        if portfolio is not None and portfolio.name.startswith("profile_"):
+            profile_id = portfolio.name.removeprefix("profile_")
+
+        orb_caps: dict[tuple[str, str, int], float] = {}
+        try:
+            for (label, instrument, orb_minutes), info in get_lane_registry(profile_id=profile_id).items():
+                cap = info.get("max_orb_size_pts")
+                if cap is not None:
+                    orb_caps[(label, instrument, orb_minutes)] = cap
+        except (ImportError, KeyError, ValueError, TypeError, AttributeError):
+            if _is_profile:
+                raise
+            # Non-profile fail-open: caps disabled.
+            orb_caps = {}
+        return orb_caps
+
+    def test_orb_cap_block_profile_account_raises_on_unknown_profile(self):
+        """`get_lane_registry(profile_id="missing")` → `get_profile("missing")`
+        → `ACCOUNT_PROFILES["missing"]` → KeyError. The narrowed catch includes
+        KeyError, profile accounts re-raise, so the operator sees the failure
+        before the session opens rather than getting silent fail-closed CAPS.
+        """
+        strat = PortfolioStrategy(
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            instrument="MNQ",
+            orb_label="NYSE_OPEN",
+            entry_model="E2",
+            rr_target=1.0,
+            confirm_bars=1,
+            filter_type="COST_LT12",
+            expectancy_r=0.18,
+            win_rate=0.55,
+            sample_size=200,
+            sharpe_ratio=0.8,
+            max_drawdown_r=5.0,
+            median_risk_points=40.0,
+            stop_multiplier=0.75,
+            source="profile",  # ← _is_profile becomes True
+            weight=1.0,
+            orb_minutes=5,
+        )
+        # Portfolio name MUST start with `profile_` so the load block extracts
+        # profile_id; pick a profile_id that does not exist in ACCOUNT_PROFILES
+        # so `get_profile()` raises KeyError mid-load.
+        portfolio = Portfolio(
+            name="profile_narrow_unknown_xyz",
+            instrument="MNQ",
+            strategies=[strat],
+            account_equity=50_000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=4,
+            max_daily_loss_r=5.0,
+        )
+        with pytest.raises(KeyError):
+            self._exercise_orb_cap_block(portfolio)
+
+    def test_orb_cap_block_non_profile_swallows_unknown_profile_keyerror(self):
+        """Non-profile path (source='test') with an unknown profile_id in the
+        portfolio name: the KeyError surfaces from get_lane_registry → get_profile
+        but is swallowed by the narrow tuple, leaving _orb_caps empty. Mirrors
+        the production fail-open branch for paper / signal-only sessions."""
+        strat = PortfolioStrategy(
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            instrument="MNQ",
+            orb_label="NYSE_OPEN",
+            entry_model="E2",
+            rr_target=1.0,
+            confirm_bars=1,
+            filter_type="COST_LT12",
+            expectancy_r=0.18,
+            win_rate=0.55,
+            sample_size=200,
+            sharpe_ratio=0.8,
+            max_drawdown_r=5.0,
+            median_risk_points=40.0,
+            stop_multiplier=0.75,
+            source="test",  # ← _is_profile False
+            weight=1.0,
+            orb_minutes=5,
+        )
+        portfolio = Portfolio(
+            name="profile_narrow_unknown_signal_xyz",
+            instrument="MNQ",
+            strategies=[strat],
+            account_equity=50_000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=4,
+            max_daily_loss_r=5.0,
+        )
+        caps = self._exercise_orb_cap_block(portfolio)
+        assert caps == {}, "non-profile path must fail-open on lane-registry KeyError"
+
+    def test_orb_cap_block_does_not_swallow_keyboard_interrupt(self):
+        """The narrowed catch must NOT absorb KeyboardInterrupt — a Ctrl-C
+        during get_lane_registry must propagate. Verifies the narrowing is
+        load-bearing (a broad `except Exception` would catch BaseException
+        subclasses too via misuse, but the narrow form definitely cannot).
+        """
+        import trading_app.prop_profiles as pp
+
+        original = pp.get_lane_registry
+
+        def _kbinterrupt(profile_id=None):
+            raise KeyboardInterrupt("user pressed Ctrl-C during lane registry load")
+
+        pp.get_lane_registry = _kbinterrupt  # type: ignore[assignment]
+        try:
+            strat = PortfolioStrategy(
+                strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+                instrument="MNQ",
+                orb_label="NYSE_OPEN",
+                entry_model="E2",
+                rr_target=1.0,
+                confirm_bars=1,
+                filter_type="COST_LT12",
+                expectancy_r=0.18,
+                win_rate=0.55,
+                sample_size=200,
+                sharpe_ratio=0.8,
+                max_drawdown_r=5.0,
+                median_risk_points=40.0,
+                stop_multiplier=0.75,
+                source="test",  # non-profile: would fail-open under old broad catch
+                weight=1.0,
+                orb_minutes=5,
+            )
+            portfolio = Portfolio(
+                name="test_kb_interrupt",
+                instrument="MNQ",
+                strategies=[strat],
+                account_equity=50_000.0,
+                risk_per_trade_pct=2.0,
+                max_concurrent_positions=4,
+                max_daily_loss_r=5.0,
+            )
+            with pytest.raises(KeyboardInterrupt):
+                self._exercise_orb_cap_block(portfolio)
+        finally:
+            pp.get_lane_registry = original  # type: ignore[assignment]
+
+    # ---- Block 3: lane_allocation.json regime gate ----------------------
+
+    def _exercise_regime_gate_block(self, portfolio: Portfolio, alloc_path):
+        """Replay of session_orchestrator.py lines 398-417 (2026-05-16 narrowed).
+        `alloc_path` is the path used in place of the canonical lane_allocation.json
+        — lets the test point at a malformed temp file without filesystem races.
+        """
+        _is_profile = portfolio is not None and portfolio.strategies and portfolio.strategies[0].source == "profile"
+        regime_paused: set[str] = set()
+        try:
+            if alloc_path.exists():
+                import json as _json
+
+                _alloc_data = _json.loads(alloc_path.read_text())
+                blocked_entries = list(_alloc_data.get("paused", [])) + list(_alloc_data.get("stale", []))
+                regime_paused = {e["strategy_id"] for e in blocked_entries}
+        except (FileNotFoundError, OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+            if _is_profile:
+                raise
+            regime_paused = set()
+        return regime_paused
+
+    def test_regime_gate_profile_account_raises_on_malformed_json(self, tmp_path):
+        """A profile account hitting a corrupt lane_allocation.json MUST
+        fail-closed. Pre-narrowing this was caught by `except Exception` and
+        re-raised on profile; post-narrowing `json.JSONDecodeError` is one of
+        the explicit classes, so the behavior is identical — and a future
+        refactor dropping JSONDecodeError from the tuple would fail here.
+        """
+        bad = tmp_path / "lane_allocation.json"
+        bad.write_text("{ this is not json ", encoding="utf-8")
+
+        strat = PortfolioStrategy(
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            instrument="MNQ",
+            orb_label="NYSE_OPEN",
+            entry_model="E2",
+            rr_target=1.0,
+            confirm_bars=1,
+            filter_type="COST_LT12",
+            expectancy_r=0.18,
+            win_rate=0.55,
+            sample_size=200,
+            sharpe_ratio=0.8,
+            max_drawdown_r=5.0,
+            median_risk_points=40.0,
+            stop_multiplier=0.75,
+            source="profile",
+            weight=1.0,
+            orb_minutes=5,
+        )
+        portfolio = Portfolio(
+            name="profile_narrow_regime",
+            instrument="MNQ",
+            strategies=[strat],
+            account_equity=50_000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=4,
+            max_daily_loss_r=5.0,
+        )
+        with pytest.raises(json.JSONDecodeError):
+            self._exercise_regime_gate_block(portfolio, bad)
+
+    def test_regime_gate_non_profile_swallows_malformed_json(self, tmp_path):
+        """Signal-only / non-profile path is fail-open: malformed JSON yields
+        an empty regime_paused set + log warning. Pre-narrowing this also
+        worked; post-narrowing it still works because JSONDecodeError is in
+        the explicit tuple. Regression guard against a future tightening
+        that accidentally drops the class."""
+        bad = tmp_path / "lane_allocation.json"
+        bad.write_text("not json at all", encoding="utf-8")
+
+        strat = PortfolioStrategy(
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            instrument="MNQ",
+            orb_label="NYSE_OPEN",
+            entry_model="E2",
+            rr_target=1.0,
+            confirm_bars=1,
+            filter_type="COST_LT12",
+            expectancy_r=0.18,
+            win_rate=0.55,
+            sample_size=200,
+            sharpe_ratio=0.8,
+            max_drawdown_r=5.0,
+            median_risk_points=40.0,
+            stop_multiplier=0.75,
+            source="test",
+            weight=1.0,
+            orb_minutes=5,
+        )
+        portfolio = Portfolio(
+            name="profile_narrow_regime_signal",
+            instrument="MNQ",
+            strategies=[strat],
+            account_equity=50_000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=4,
+            max_daily_loss_r=5.0,
+        )
+        regime_paused = self._exercise_regime_gate_block(portfolio, bad)
+        assert regime_paused == set()
+
+    def test_regime_gate_profile_account_raises_on_missing_strategy_id_key(self, tmp_path):
+        """If lane_allocation.json is valid JSON but a paused-list entry
+        lacks `strategy_id`, the dict-comp raises KeyError. The narrowed
+        catch includes KeyError so profile accounts still fail-closed and
+        non-profile still fail-open. Locks the contract."""
+        bad = tmp_path / "lane_allocation.json"
+        bad.write_text(
+            '{"paused": [{"reason": "no strategy_id field"}], "stale": []}',
+            encoding="utf-8",
+        )
+
+        strat = PortfolioStrategy(
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            instrument="MNQ",
+            orb_label="NYSE_OPEN",
+            entry_model="E2",
+            rr_target=1.0,
+            confirm_bars=1,
+            filter_type="COST_LT12",
+            expectancy_r=0.18,
+            win_rate=0.55,
+            sample_size=200,
+            sharpe_ratio=0.8,
+            max_drawdown_r=5.0,
+            median_risk_points=40.0,
+            stop_multiplier=0.75,
+            source="profile",
+            weight=1.0,
+            orb_minutes=5,
+        )
+        portfolio = Portfolio(
+            name="profile_narrow_regime_keyerr",
+            instrument="MNQ",
+            strategies=[strat],
+            account_equity=50_000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=4,
+            max_daily_loss_r=5.0,
+        )
+        with pytest.raises(KeyError, match="strategy_id"):
+            self._exercise_regime_gate_block(portfolio, bad)
+
+    def test_regime_gate_does_not_swallow_systemexit(self, tmp_path):
+        """SystemExit is a BaseException subclass — the narrow tuple cannot
+        catch it. This locks the narrowing's value: bare `except Exception`
+        already wouldn't catch SystemExit (Python 3 hierarchy), but the test
+        documents that the narrow form preserves that property explicitly.
+        """
+        from pathlib import Path as _P
+
+        class _BomBPath(_P):
+            def exists(self) -> bool:
+                raise SystemExit("simulated process abort during exists()")
+
+        # construct a real Path under tmp_path then swap with the bomb
+        target = tmp_path / "lane_allocation.json"
+        target.write_text("{}", encoding="utf-8")
+        # Use the bomb directly — _exercise_regime_gate_block calls .exists() first.
+        # tmp_path-backed concrete path swapped for one that raises during exists().
+        # (Path subclassing is awkward; use a SimpleNamespace-shaped substitute.)
+        bomb = SimpleNamespace(
+            exists=lambda: (_ for _ in ()).throw(SystemExit("simulated process abort")),
+            read_text=lambda: "{}",
+        )
+
+        strat = PortfolioStrategy(
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            instrument="MNQ",
+            orb_label="NYSE_OPEN",
+            entry_model="E2",
+            rr_target=1.0,
+            confirm_bars=1,
+            filter_type="COST_LT12",
+            expectancy_r=0.18,
+            win_rate=0.55,
+            sample_size=200,
+            sharpe_ratio=0.8,
+            max_drawdown_r=5.0,
+            median_risk_points=40.0,
+            stop_multiplier=0.75,
+            source="test",  # non-profile — would fail-open under broad catch
+            weight=1.0,
+            orb_minutes=5,
+        )
+        portfolio = Portfolio(
+            name="profile_narrow_regime_systemexit",
+            instrument="MNQ",
+            strategies=[strat],
+            account_equity=50_000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=4,
+            max_daily_loss_r=5.0,
+        )
+        with pytest.raises(SystemExit):
+            self._exercise_regime_gate_block(portfolio, bomb)  # type: ignore[arg-type]

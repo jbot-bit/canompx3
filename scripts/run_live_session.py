@@ -46,13 +46,17 @@ from trading_app.live.session_orchestrator import SessionOrchestrator
 def _run_lightweight_component_self_tests(
     *,
     instrument: str,
+    components: dict[str, Any] | None = None,
 ) -> dict[str, bool]:
-    """Probe notifications without opening runtime-owned DuckDB files.
+    """Probe notifications + broker bracket/fill-poller endpoints.
 
-    Preflight runs signal-only — broker bracket / fill-poller endpoints are deferred
-    to live/demo startup where a real SessionOrchestrator exercises them. The
-    rubber-stamped bracket/fill_poller entries preserve the historical contract
-    that surfaced in dashboard payloads.
+    Mirrors the production verifiers in `SessionOrchestrator._verify_brackets`
+    and `SessionOrchestrator._verify_fill_poller` so preflight reports the
+    same PASS/FAIL the live session would compute. `components` is the dict
+    returned by `create_broker_components` (populated by `_check_auth` and
+    threaded through `PreflightContext`). When `components` is None
+    (auth failed upstream), broker probes are recorded as False so the
+    summary line surfaces the gap instead of stubbing True.
     """
 
     results: dict[str, bool] = {}
@@ -71,9 +75,78 @@ def _run_lightweight_component_self_tests(
         print(f"!!! NOTIFICATIONS ARE BROKEN: {e} !!!")
         results["notifications"] = False
 
-    results["brackets"] = True
-    results["fill_poller"] = True
+    results["brackets"] = _probe_brackets(components)
+    results["fill_poller"] = _probe_fill_poller(components)
     return results
+
+
+def _probe_brackets(components: dict[str, Any] | None) -> bool:
+    """Probe broker bracket support without placing an order.
+
+    Mirrors `SessionOrchestrator._verify_brackets` (session_orchestrator.py).
+    Returns True when the broker advertises bracket support AND
+    `build_bracket_spec` produces a non-None spec; False when the broker
+    advertises support but the builder returns None or raises. Returns True
+    in the "broker has no bracket support" case (matches the production
+    verifier's signal-only / unsupported branch).
+    """
+    if components is None:
+        return False
+    try:
+        router_cls = components["router_class"]
+        auth = components["auth"]
+        # account_id=0 is the canonical preflight sentinel — same value
+        # _verify_fill_poller passes to query_order_status. No order is placed.
+        router = router_cls(account_id=0, auth=auth)
+        if not router.supports_native_brackets():
+            log.info("Broker does not support native brackets — preflight reports PASS (no bracket required)")
+            return True
+        spec = router.build_bracket_spec(
+            direction="long",
+            symbol="TEST",
+            entry_price=100.0,
+            stop_price=99.0,
+            target_price=102.0,
+            qty=1,
+        )
+        if spec is None:
+            log.warning(
+                "BRACKET PROBE FAILED: build_bracket_spec returned None despite supports_native_brackets=True"
+            )
+            return False
+        log.info("Bracket probe PASS")
+        return True
+    except Exception as e:
+        log.critical("BRACKET PROBE FAILED: %s", e)
+        return False
+
+
+def _probe_fill_poller(components: dict[str, Any] | None) -> bool:
+    """Probe broker fill-poller endpoint without consuming an order id.
+
+    Mirrors `SessionOrchestrator._verify_fill_poller`: the only failure
+    that flips the verdict is `NotImplementedError` (broker genuinely cannot
+    poll). Any other exception means the endpoint exists and returned an
+    expected error for the sentinel order_id=0 (typically 404/auth/validation).
+    """
+    if components is None:
+        return False
+    try:
+        router_cls = components["router_class"]
+        auth = components["auth"]
+        router = router_cls(account_id=0, auth=auth)
+        try:
+            router.query_order_status(0)
+        except NotImplementedError:
+            log.warning("Broker does not support query_order_status — fill poller will be inactive")
+            return False
+        except Exception as e:  # noqa: BLE001 — endpoint-exists confirmation, not a real failure
+            log.info("Fill poller endpoint exists (sentinel call returned non-fatal: %s)", e)
+        log.info("Fill poller probe PASS")
+        return True
+    except Exception as e:
+        log.critical("FILL POLLER PROBE FAILED (router construction): %s", e)
+        return False
 
 
 @dataclass
@@ -212,18 +285,33 @@ def _check_contracts(ctx: PreflightContext) -> CheckResult:
 
 
 def _check_notifications(ctx: PreflightContext) -> CheckResult:
-    """Notifications probe"""
-    # Broker bracket / fill-poller probes deferred to live/demo startup.
+    """Notifications + broker bracket/fill-poller probes.
+
+    Threads `ctx.components` (set by `_check_auth`) into the self-test helper
+    so the bracket and fill-poller probes exercise the real router class
+    rather than rubber-stamping True. Failed probes surface explicitly in
+    the inline message (e.g. `OK · brackets:FAIL · fill_poller:FAIL`) so an
+    operator scanning the preflight tail sees the gap before clicking Start.
+    """
     try:
         if ctx.components is None:
             raise RuntimeError("auth failed")
-        test_results = _run_lightweight_component_self_tests(instrument=ctx.instrument)
+        test_results = _run_lightweight_component_self_tests(
+            instrument=ctx.instrument,
+            components=ctx.components,
+        )
         ctx.components_all_pass = all(test_results.values())
+        # Build a deterministic per-component status suffix so the summary line
+        # always lists every probe (PASS or FAIL), not just the failures.
+        status_suffix = " · ".join(
+            f"{name}:{'PASS' if ok else 'FAIL'}" for name, ok in test_results.items()
+        )
         if ctx.components_all_pass:
-            return CheckResult(True, "OK (notifications probed; broker probes deferred to live/demo)")
-        # Don't fail preflight for component warnings — they're informational.
-        failed = [k for k, v in test_results.items() if not v]
-        return CheckResult(True, f"WARNINGS: {', '.join(failed)}")
+            return CheckResult(True, f"OK ({status_suffix})")
+        # Probes are surfaced but non-blocking at preflight time; the live
+        # SessionOrchestrator re-runs `run_self_tests` at startup and that path
+        # is the authoritative gate.
+        return CheckResult(True, f"WARNINGS ({status_suffix})")
     except Exception as e:
         return CheckResult(False, f"FAILED: {e}")
 

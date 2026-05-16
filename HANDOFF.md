@@ -45,6 +45,30 @@
    (e) **Monday coverage strategy = A (single long-running session)** per baton plan `C:\Users\joshd\.claude\plans\get-going-on-this-whimsical-rain.md` § 0.4. Launch `python scripts/run_live_session.py --instrument MNQ --profile topstep_50k_mnq_auto --live` before 23:25 BNE Mon, leave running through ~03:40 BNE Tue. Covers all 3 windows in one process. Paste the one-liner from `docs/runtime/next-session-go-live-plan.md` § One-shot Monday evidence-capture at T+3min and on any anomaly.
 6. **Phase 1 entry condition (post-Monday).** Phase 0 grounding (this weekend) is COMPLETE: lanes verified, ProjectX spec extract at `resources/projectx_api_spec_2026_05_16.md` written, TopStep rules confirmed, evidence-capture one-liner appended. **Before starting Phase 1 implementation: `/clear` first**, then read in order — (1) `C:\Users\joshd\.claude\plans\get-going-on-this-whimsical-rain.md`, (2) this HANDOFF.md, (3) `docs/runtime/sessions/<Monday-date>-live-debut-followup.md` (Monday evidence), (4) `resources/projectx_api_spec_2026_05_16.md`, (5) `resources/prop-firm-official-rules.md` § TopStep. Then write `docs/runtime/stages/phase1-live-pipeline-hardening.md` and begin Phase 1.1 (D2 file logging — HIGH, the lead item).
 
+## This Session (2026-05-16 PM v2) — START_BOT preflight reliability fix
+
+- **Tool:** Claude Code (Opus 4.7)
+- **Status:** UNCOMMITTED, READY TO COMMIT. 272/272 pass on touched surface. Drift unchanged at 6 pre-existing (none mine).
+- **Stage:** `docs/runtime/stages/start-bot-reliability-minimal.md` — IMPLEMENTATION, 5-file scope-lock.
+- **Files modified (5):**
+  - `scripts/run_live_session.py` — replaced stubbed `results["brackets"]=True`/`results["fill_poller"]=True` with `_probe_brackets(components)` / `_probe_fill_poller(components)`. Mirrors `SessionOrchestrator._verify_brackets` / `_verify_fill_poller` line-by-line (account_id=0 sentinel, NotImplementedError = only FAIL signal). `_check_notifications` threads `ctx.components` and surfaces `brackets:PASS/FAIL · fill_poller:PASS/FAIL` in inline summary.
+  - `trading_app/live/session_orchestrator.py` — narrowed three `except Exception` blocks (lines 361-378 ORB caps; 383-392 max_risk_per_trade; 399-417 lane_allocation regime gate) to explicit class tuples; preserved profile-account `raise`. Block 1 post-audit expanded to include `FileNotFoundError, OSError, json.JSONDecodeError` for future-proofing against `load_allocation_lanes` refactors.
+  - `tests/test_scripts/test_run_live_session_preflight.py` — +12 tests (probe paths + summary visibility + no-hardcoded-stubs source grep).
+  - `tests/test_trading_app/test_session_orchestrator.py` — +7 tests in `TestSafeguardExceptNarrowing` using load-block-replay pattern (matches existing `test_per_aperture_load_path_end_to_end_with_real_profile`). Profile/non-profile KeyError + malformed JSON + missing strategy_id + KeyboardInterrupt/SystemExit propagation. Added `import json` at top.
+  - `tests/test_trading_app/test_bot_dashboard.py` — single test updated for new `components` kwarg contract. DB-free guarantee preserved.
+- **Audit:** `evidence-auditor` (independent context, per `.claude/rules/adversarial-audit-gate.md`) verdict CONDITIONAL → CLOSED. Critical finding (Block 1 missing JSON/OS classes) addressed; other claims (probe semantics, router `__init__` safety at account_id=0, no hidden callers, `raise` preservation, test quality) passed.
+- **Suggested commit:** `fix(preflight): real bracket/fill-poller probes + narrow safeguard excepts` — judgment classification, audit already ran.
+- **Phase 2 (dashboard polish) was gated on this audit verdict. Green to start after commit + `/clear`.**
+- **Nuggets noted (NOT actioned, drift-risk avoidance):**
+  1. Drift check: probe ↔ verifier parity diff.
+  2. Drift check: Block 1 except tuple ⊇ `get_lane_registry` transitive raise classes.
+  3. Operator-visibility: `WARNINGS (…)` still counts as `passed=True`; bump to `False` for profile accounts only.
+  4. **Trading-edge (`resources/`-grounded, hypothesis-only):**
+     - Fill-poller as live slippage telemetry (Harris 2002 Ch 14 §14.2) — `SessionStats.fill_polls_*` counters exist, unsurfaced.
+     - `_regime_paused` is read-once at `__init__` — Carver Ch 11 treats allocation as continuous signal; periodic re-read on mtime.
+     - `_orb_caps` symmetric long/short — Fitschen Ch 3 + Yordanov NQ ORB suggest directional asymmetry; one-shot P90 scan.
+     - Broker-reachability discrimination (Aronson EBTA) — `query_order_status(0)` failure-class surface to dashboard.
+
 ## Durable References
 - `docs/runtime/action-queue.yaml`
 - `docs/runtime/decision-ledger.md`

@@ -372,10 +372,31 @@ class SessionOrchestrator:
                         orb_minutes,
                         cap,
                     )
-        except Exception:
+        # Narrowed from `except Exception` (2026-05-16): the actual failure
+        # surface is the prop_profiles import + get_lane_registry's documented
+        # ValueError raises (inactive profile, no lanes, missing orb_minutes,
+        # cap-conflict across same-cohort lanes) plus malformed-lane dict access
+        # errors. KeyboardInterrupt / SystemExit / unrelated typos must propagate.
+        #
+        # Future-proof (2026-05-16 audit follow-up): include JSON/OS classes
+        # too. `get_lane_registry` transitively calls `load_allocation_lanes`,
+        # which today is internally fail-closed (catches JSON/OS errors and
+        # returns ()). If that helper is ever refactored to propagate, this
+        # block stays correct — Block 3 already carries the same tuple for the
+        # direct lane_allocation.json read.
+        except (
+            ImportError,
+            KeyError,
+            ValueError,
+            TypeError,
+            AttributeError,
+            FileNotFoundError,
+            OSError,
+            json.JSONDecodeError,
+        ) as e:
             if _is_profile:
                 raise  # Fail-closed: prop accounts MUST have working cap loading
-            log.warning("Could not load ORB caps from lane registry — caps DISABLED")
+            log.warning("Could not load ORB caps from lane registry — caps DISABLED: %s", e)
 
         # Per-trade max risk in dollars (account-level cap, None = no limit)
         self._max_risk_per_trade: float | None = None
@@ -388,7 +409,12 @@ class SessionOrchestrator:
                 if prof is not None and prof.max_risk_per_trade is not None:
                     self._max_risk_per_trade = prof.max_risk_per_trade
                     log.info("Max risk per trade: $%.0f", self._max_risk_per_trade)
-            except Exception:
+            # Narrowed from `except Exception: raise` (2026-05-16). The block
+            # already re-raises; the narrow form documents the only failure
+            # modes (import gone, AccountProfile dataclass field renamed) so
+            # an unrelated bug in this try-block surfaces with its own type
+            # rather than being mistaken for a profile-config failure.
+            except (ImportError, AttributeError):
                 raise  # Fail-closed: profile accounts MUST have working risk cap loading
 
         # Allocator block gate: load non-deployable strategies from allocator output.
@@ -411,10 +437,15 @@ class SessionOrchestrator:
                     )
             else:
                 log.info("No lane_allocation.json — regime gate disabled")
-        except Exception:
+        # Narrowed from `except Exception` (2026-05-16). The block does a
+        # filesystem read (`Path.read_text`) + JSON decode + dict/key access on
+        # the decoded structure. Anything outside this surface (typo,
+        # KeyboardInterrupt) must propagate so the profile-account fail-closed
+        # guarantee covers the real failure, not "we silently caught a typo".
+        except (FileNotFoundError, OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
             if _is_profile:
                 raise  # Fail-closed: prop accounts MUST have working regime gate
-            log.warning("Failed to load lane_allocation.json — regime gate disabled (fail-open)")
+            log.warning("Failed to load lane_allocation.json — regime gate disabled (fail-open): %s", e)
 
         # Execution stack
         self.cost_spec: CostSpec = get_cost_spec(instrument)
