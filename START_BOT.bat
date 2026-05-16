@@ -8,6 +8,14 @@ echo   ORB TRADING BOT - STARTING UP
 echo ============================================
 echo.
 
+:: Keep this banner static. Dynamic Git probing in this launcher can break
+:: double-click startup on Windows; use docs/reference/start-bot-checkout-model.md
+:: for the branch/merge model instead.
+echo [Repo] %CD%
+echo [Repo] This shortcut runs the Windows checkout above.
+echo [Repo] WSL/Codex branch pushes do not change this app until merged or pulled here.
+echo.
+
 :: Weekend guard — don't start on Saturday (7) or Sunday (1)
 for /f "tokens=1" %%d in ('powershell -command "(Get-Date).DayOfWeek.value__"') do set DOW=%%d
 if "%DOW%"=="0" (
