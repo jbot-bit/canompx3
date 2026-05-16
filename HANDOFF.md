@@ -8,14 +8,15 @@
 
 ## Last Session
 - **Tool:** Claude Code (Opus 4.7)
-- **Date:** 2026-05-16 PM
-- **Commit:** e697b5e9 — docs: close MEMORY/canonical reconcile + add live-debut carry-over capture list
-- **Files changed:** 2 files
-  - `HANDOFF.md` (Next Step 2 sub-item closed)
-  - `docs/runtime/next-session-go-live-plan.md` (new carry-over capture list section)
-- **Prior:** bf6cda7a (Monday pre-session checklist — path fixes + corrected HWM diagnosis)
-- **Session summary:** Sat 2026-05-16 PM, markets closed weekend. Picked up from `35a13e86`: (a) HWM DEFERRED unchanged, (b) live preflight cannot run (markets closed), (c) carry-over operationalized via capture list, (d) confirmed already DONE in `bf6cda7a`. Bonus: closed stale "MEMORY 3 vs canonical 2 reconcile" sub-item — live-verified both surfaces agree at 4 deployed MNQ lanes. Memory: added `feedback_auto_loaded_rules_context_spike_on_read.md` (~30K-token rule injection on file Read).
-- **Did NOT start:** rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring (deferred to next session — CTX hit 47% from rule auto-load before design work could begin).
+- **Date:** 2026-05-17 AM
+- **Commit:** c6c190a3 — chore(gitignore): ignore tmp/ scratch directory
+- **Prior:** 091a03e9 (research(chordia): ATR_P50 unlock UNVERIFIED_INSUFFICIENT_POWER + P70 draft + stage closeout)
+- **Files changed:** 6 files across 2 commits
+  - 5 files in 091a03e9: 2 draft yaml + 1 result md + 1 result csv + 1 stage closeout
+  - 1 file in c6c190a3: `.gitignore` (+ `tmp/` glob)
+- **Session summary:** Resumed pre-existing stage `atr-p50-p70-chordia-unlock-prereg-authoring` (P50 + P70 drafts authored 2026-05-16 22:36, P50 prereg-loop already executed 2026-05-17 07:50 prior to session start). Verified all 4 acceptance criteria (theory_citation omission, NO_THEORY_GRANT verdict, Chordia 3.79 basis, exact strategy_ids match recommendation MD), ran K-budget gate (PASS both, 6.65yr headroom), ran drift check (130/130 PASS, 20 advisory), appended stage Completion section, and committed in 2 logical units. P50 result is MEASURED PASS_CHORDIA but ROLE-DECISION UNVERIFIED_INSUFFICIENT_POWER per RULE 3.3 (OOS power 22.9% pooled / 15.1% long / 11.9% short — all STATISTICALLY_USELESS tier; long-side WR drop 62.2%→54.8% verified not outlier-driven via 5 leave-out subsets). Same discipline as 88a03d19 VWAP_MID_ALIGNED O30 override two days prior. No allocator, experimental_strategies, validated_setups, or chordia_audit_log.yaml mutation.
+- **Carry-over:** ATR_P70 draft is authored but prereg-loop has NOT been executed — next authorized thread should run `bash scripts/infra/prereg-loop.sh docs/audit/hypotheses/drafts/2026-05-16-mnq-comex-settle-e2-rr10-atr-p70-chordia-unlock-v1.draft.yaml`. Single-lane K=1 confirmatory replay; expected MinBTL budget already cleared.
+- **Did NOT start:** rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring (still deferred — separate stage from this one).
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
