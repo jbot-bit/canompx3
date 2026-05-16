@@ -814,6 +814,88 @@ def _collect_broker_status() -> dict[str, object]:
         }
 
 
+def _connection_readiness(broker_summary: dict[str, object]) -> dict[str, object]:
+    """Return operator-facing broker connection readiness.
+
+    This is the single dashboard read model for the "am I connected?" question.
+    It deliberately stays above broker-specific account/order details: those
+    remain in /api/broker/list and /api/equity.
+    """
+    connections = list(broker_summary.get("connections") or [])
+    enabled_count = int(broker_summary.get("enabled_count", 0) or 0)
+    connected_count = int(broker_summary.get("connected_count", 0) or 0)
+    error_count = int(broker_summary.get("error_count", 0) or 0)
+
+    if broker_summary.get("status") == "error":
+        message = str(broker_summary.get("error") or "Broker connection state is unavailable.")
+        return {
+            "status": "error",
+            "message": message,
+            "action": "open_connections",
+            "connected_count": connected_count,
+            "enabled_count": enabled_count,
+        }
+
+    if not connections and connected_count > 0:
+        return {
+            "status": "connected",
+            "message": f"{connected_count}/{enabled_count} enabled broker connection(s) connected.",
+            "action": "none",
+            "connected_count": connected_count,
+            "enabled_count": enabled_count,
+        }
+
+    if not connections:
+        return {
+            "status": "missing",
+            "message": "No broker connection configured. Add a connection before starting.",
+            "action": "open_connections",
+            "connected_count": 0,
+            "enabled_count": 0,
+        }
+
+    if enabled_count == 0:
+        return {
+            "status": "disabled",
+            "message": "Broker connections exist, but all are disabled. Enable one before starting.",
+            "action": "open_connections",
+            "connected_count": 0,
+            "enabled_count": 0,
+        }
+
+    if connected_count > 0:
+        return {
+            "status": "connected",
+            "message": f"{connected_count}/{enabled_count} enabled broker connection(s) connected.",
+            "action": "none",
+            "connected_count": connected_count,
+            "enabled_count": enabled_count,
+        }
+
+    if error_count > 0:
+        errors = [
+            str(conn.get("last_error") or "").strip()
+            for conn in connections
+            if conn.get("enabled", True) and conn.get("status") == "error"
+        ]
+        detail = next((msg for msg in errors if msg), "Enabled broker connection failed.")
+        return {
+            "status": "error",
+            "message": detail,
+            "action": "open_connections",
+            "connected_count": 0,
+            "enabled_count": enabled_count,
+        }
+
+    return {
+        "status": "connecting",
+        "message": "Broker connection is enabled but not connected yet.",
+        "action": "wait",
+        "connected_count": 0,
+        "enabled_count": enabled_count,
+    }
+
+
 def _collect_alert_summary(limit: int = 25, profile: str | None = None, mode: str | None = None) -> dict[str, object]:
     try:
         alerts = read_operator_alerts(limit=limit, profile=profile, mode=mode)
@@ -922,9 +1004,9 @@ def _derive_operator_state(
     data_summary: dict[str, object],
     preflight_summary: dict[str, object] | None,
 ) -> tuple[str, str, dict[str, str]]:
-    enabled_count = int(broker_summary.get("enabled_count", 0) or 0)
     connected_count = int(broker_summary.get("connected_count", 0) or 0)
     any_stale = bool(data_summary.get("any_stale", True))
+    connection = _connection_readiness(broker_summary)
 
     if raw_mode in {"SIGNAL", "DEMO", "LIVE"}:
         if heartbeat_age_s >= HEARTBEAT_STALE_AFTER_S:
@@ -944,17 +1026,17 @@ def _derive_operator_state(
             {"id": "stop_session", "label": "Stop Session"},
         )
 
-    if enabled_count == 0:
+    if connection["status"] in {"missing", "disabled"}:
         return (
             "BLOCKED",
-            "No broker connection is enabled.",
+            str(connection["message"]),
             {"id": "open_connections", "label": "Connect Broker"},
         )
 
     if connected_count == 0:
         return (
             "BLOCKED",
-            "No enabled broker connection is currently connected.",
+            str(connection["message"]),
             {"id": "open_connections", "label": "Fix Broker Connection"},
         )
 
@@ -1014,6 +1096,7 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
             overlay_summary = {"available": False, "error": str(exc)}
             opportunity_summary = {"available": False, "error": str(exc)}
     broker_summary = _collect_broker_status()
+    connection_summary = _connection_readiness(broker_summary)
     data_summary = _collect_data_status()
     alert_summary = _collect_alert_summary(profile=operator_profile, mode=None if raw_mode == "STOPPED" else raw_mode)
     with _state_lock:
@@ -1030,6 +1113,9 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
         data_summary=data_summary,
         preflight_summary=preflight_summary,
     )
+    blocked_action_ids = list(guard["blocked_action_ids"])
+    if raw_mode == "STOPPED" and connection_summary["status"] != "connected":
+        blocked_action_ids.extend(["start_signal", "start_demo", "start_live"])
     if guard["top_state"]:
         top_state = str(guard["top_state"])
         reason = str(guard["reason"])
@@ -1037,13 +1123,8 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
 
     checks: list[dict[str, str]] = []
 
-    enabled_count = int(broker_summary.get("enabled_count", 0) or 0)
     connected_count = int(broker_summary.get("connected_count", 0) or 0)
-    broker_detail = (
-        f"{connected_count}/{enabled_count} enabled broker connection(s) connected"
-        if enabled_count
-        else "No broker connections enabled"
-    )
+    broker_detail = str(connection_summary["message"])
     broker_status = "pass" if connected_count > 0 else "fail"
     checks.append({"name": "Broker", "status": broker_status, "detail": broker_detail})
 
@@ -1191,12 +1272,13 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
         "recommended_action": action,
         "checks": checks,
         "heartbeat_age_s": heartbeat_age_s,
-        "blocked_action_ids": guard["blocked_action_ids"],
+        "blocked_action_ids": sorted(set(blocked_action_ids)),
         "busy_reason": guard["busy_reason"],
         "resource_locks": guard["resource_locks"],
         "handoff": guard["handoff"],
         "preflight": preflight_summary,
         "broker_summary": broker_summary,
+        "connection_readiness": connection_summary,
         "data_summary": data_summary,
         "alert_summary": alert_summary,
         "conditional_overlays": overlay_summary,
@@ -2194,6 +2276,15 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
     if bool(data_summary.get("any_stale", True)):
         return {"status": "blocked", "message": "Market data is stale. Refresh data before starting."}
 
+    broker_summary = _collect_broker_status()
+    connection = _connection_readiness(broker_summary)
+    if connection["status"] != "connected":
+        return {
+            "status": "blocked",
+            "message": str(connection["message"]),
+            "connection_readiness": connection,
+        }
+
     prepared = await _prepare_profile_for_start(profile)
     prep_status = str(prepared.get("status") or "error")
     if prep_status in {"fail", "error", "timeout"}:
@@ -2245,7 +2336,7 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 cwd=str(PROJECT_ROOT),
-                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                env={**os.environ, "PYTHONIOENCODING": "utf-8", "CANOMPX3_DASHBOARD_ORIGIN": "1"},
             )
             _bg_processes["session"] = proc
             _bg_processes["_session_logfile"] = log_file  # type: ignore[assignment]

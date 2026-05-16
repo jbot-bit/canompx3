@@ -47,7 +47,7 @@ def test_wsl_launcher_scripts_call_mount_guard() -> None:
     assert "setup_shared_codex_home" in project
     assert 'append_codex_profile_arg "$PROFILE" CODEX_ARGS' in project
     assert 'wsl_mount_guard.py" --root "$ROOT"' in project
-    assert 'PROFILE="${CANOMPX3_CODEX_PROFILE:-}"' in project
+    assert 'PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3}"' in project
     assert 'source "$SHARED_CODEX_HOME_HELPER"' in search
     assert "setup_shared_codex_home" in search
     assert 'append_codex_profile_arg "$PROFILE" CODEX_ARGS' in search

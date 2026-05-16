@@ -207,3 +207,13 @@ def test_no_hardcoded_checks_total_constant():
     src = (ROOT / "scripts" / "run_live_session.py").read_text(encoding="utf-8")
     assert "checks_total = 6" not in src
     assert "checks_total = len(PREFLIGHT_CHECKS)" in src
+
+
+def test_dashboard_auto_launch_disabled_for_dashboard_origin(monkeypatch):
+    monkeypatch.setenv("CANOMPX3_DASHBOARD_ORIGIN", "1")
+    assert rls._should_launch_dashboard() is False
+
+
+def test_dashboard_auto_launch_enabled_for_cli_origin(monkeypatch):
+    monkeypatch.delenv("CANOMPX3_DASHBOARD_ORIGIN", raising=False)
+    assert rls._should_launch_dashboard() is True

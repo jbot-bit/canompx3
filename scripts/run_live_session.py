@@ -26,6 +26,7 @@ Examples:
 import argparse
 import asyncio
 import logging
+import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -253,6 +254,11 @@ PREFLIGHT_CHECKS: list[CheckFn] = [
     _check_notifications,
     _check_trade_journal,
 ]
+
+
+def _should_launch_dashboard() -> bool:
+    """Return False when this session was launched by the dashboard itself."""
+    return os.environ.get("CANOMPX3_DASHBOARD_ORIGIN") != "1"
 
 
 def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=None) -> bool:
@@ -650,14 +656,17 @@ def main() -> None:
     acquire_instance_lock(args.instrument)
     _print_mode_banner("signal" if signal_only else ("demo" if demo else "live"), args.instrument)
 
-    # Launch dashboard as background subprocess (non-fatal if it fails)
+    # Launch dashboard as background subprocess for CLI starts only. Dashboard
+    # button starts set CANOMPX3_DASHBOARD_ORIGIN=1 so the bot does not open a
+    # second identical browser window.
     _dashboard_proc = None
-    try:
-        from trading_app.live.bot_dashboard import launch_dashboard_background
+    if _should_launch_dashboard():
+        try:
+            from trading_app.live.bot_dashboard import launch_dashboard_background
 
-        _dashboard_proc = launch_dashboard_background()
-    except Exception as e:
-        log.warning("Dashboard launch failed (non-fatal): %s", e)
+            _dashboard_proc = launch_dashboard_background()
+        except Exception as e:
+            log.warning("Dashboard launch failed (non-fatal): %s", e)
 
     # Multi-account copy trading: discover shadow accounts
     shadow_account_ids = None
