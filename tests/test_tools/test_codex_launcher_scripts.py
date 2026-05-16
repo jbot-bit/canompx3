@@ -95,3 +95,17 @@ def test_linux_modes_route_to_wsl_home_clone() -> None:
     py_launcher = (root / "scripts" / "infra" / "windows_agent_launch.py").read_text(encoding="utf-8")
 
     assert py_launcher.count("use_linux_home=True") >= 2
+
+
+def test_start_bot_prints_checkout_identity_before_launching() -> None:
+    root = Path(__file__).resolve().parents[2]
+    start_bot = (root / "START_BOT.bat").read_text(encoding="utf-8")
+
+    banner = start_bot.index("branch=%GIT_BRANCH% commit=%GIT_HEAD%")
+    launch = start_bot.index(".venv\\Scripts\\python.exe -m trading_app.live.bot_dashboard")
+
+    assert banner < launch
+    assert "git branch --show-current" in start_bot
+    assert "git rev-parse --short HEAD" in start_bot
+    assert "git rev-list --left-right --count HEAD...@{u}" in start_bot
+    assert "Codex WSL branch work does not change this Windows shortcut" in start_bot
