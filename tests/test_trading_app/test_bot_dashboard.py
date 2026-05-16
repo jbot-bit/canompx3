@@ -10,6 +10,7 @@ from trading_app.live import bot_dashboard
 from trading_app.live.bot_dashboard import (
     _build_operator_payload,
     _choose_operator_profile,
+    _connection_readiness,
     _derive_operator_state,
     _legacy_lanes_to_lane_cards,
     _parse_preflight_output,
@@ -276,6 +277,68 @@ def test_build_operator_payload_includes_recent_alert_check(monkeypatch):
     alerts_check = next(check for check in payload["checks"] if check["name"] == "Alerts")
     assert alerts_check["status"] == "warn"
     assert "FEED STALE" in alerts_check["detail"]
+
+
+def test_connection_readiness_reports_missing_connection():
+    broker_summary = {
+        "status": "ok",
+        "connections": [],
+        "enabled_count": 0,
+        "connected_count": 0,
+        "error_count": 0,
+    }
+
+    result = _connection_readiness(broker_summary)
+
+    assert result == {
+        "status": "missing",
+        "message": "No broker connection configured. Add a connection before starting.",
+        "action": "open_connections",
+        "connected_count": 0,
+        "enabled_count": 0,
+    }
+
+
+def test_build_operator_payload_exposes_connection_readiness_and_blocks_starts(monkeypatch):
+    monkeypatch.setattr(
+        bot_dashboard,
+        "read_state",
+        lambda: {"mode": "STOPPED", "heartbeat_age_s": 9999, "account_name": "profile_topstep_50k_mnq_auto"},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_broker_status",
+        lambda: {"status": "ok", "connections": [], "enabled_count": 0, "connected_count": 0, "error_count": 0},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_data_status",
+        lambda: {"status": "ok", "any_stale": False, "instruments": {}},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_alert_summary",
+        lambda **_: {
+            "status": "ok",
+            "alerts": [],
+            "total": 0,
+            "counts": {"critical": 0, "warning": 0, "info": 0},
+            "recent_window_minutes": 30,
+            "recent_counts": {"critical": 0, "warning": 0, "info": 0},
+            "latest": None,
+        },
+    )
+
+    payload = _build_operator_payload("topstep_50k_mnq_auto")
+
+    assert payload["top_state"] == "BLOCKED"
+    assert payload["recommended_action"]["id"] == "open_connections"
+    assert payload["connection_readiness"]["status"] == "missing"
+    assert "No broker connection configured" in payload["connection_readiness"]["message"]
+    assert {"start_signal", "start_demo", "start_live"}.issubset(set(payload["blocked_action_ids"]))
+    broker_check = next(check for check in payload["checks"] if check["name"] == "Broker")
+    assert broker_check["status"] == "fail"
+    assert "Add a connection" in broker_check["detail"]
 
 
 def _patch_operator_payload_base(monkeypatch, profile_id: str) -> None:
@@ -555,6 +618,38 @@ def test_action_start_initiates_handoff_for_conflicting_running_session(monkeypa
     assert result["handoff"]["status"] == "stopping"
     assert bot_dashboard._handoff_state["target_mode"] == "demo"
     bot_dashboard._clear_handoff()
+
+
+def test_action_start_blocks_when_no_broker_connection(monkeypatch):
+    bot_dashboard._clear_handoff()
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_session_snapshot",
+        lambda: {
+            "running": False,
+            "raw_mode": "STOPPED",
+            "heartbeat_age_s": 9999.0,
+            "profile": None,
+            "tracked_alive": False,
+        },
+    )
+    monkeypatch.setattr(bot_dashboard, "_refresh_snapshot", lambda: {"running": False})
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_data_status",
+        lambda: {"status": "ok", "any_stale": False, "instruments": {}},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_broker_status",
+        lambda: {"status": "ok", "connections": [], "enabled_count": 0, "connected_count": 0, "error_count": 0},
+    )
+
+    result = asyncio.run(bot_dashboard.action_start(profile="topstep_50k_mnq_auto", mode="live"))
+
+    assert result["status"] == "blocked"
+    assert "No broker connection configured" in result["message"]
+    assert result["connection_readiness"]["action"] == "open_connections"
 
 
 def test_handoff_snapshot_walks_state_machine_to_ready(monkeypatch):

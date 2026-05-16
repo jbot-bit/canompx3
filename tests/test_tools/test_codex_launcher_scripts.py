@@ -47,7 +47,7 @@ def test_wsl_launcher_scripts_call_mount_guard() -> None:
     assert "setup_shared_codex_home" in project
     assert 'append_codex_profile_arg "$PROFILE" CODEX_ARGS' in project
     assert 'wsl_mount_guard.py" --root "$ROOT"' in project
-    assert 'PROFILE="${CANOMPX3_CODEX_PROFILE:-}"' in project
+    assert 'PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3}"' in project
     assert 'source "$SHARED_CODEX_HOME_HELPER"' in search
     assert "setup_shared_codex_home" in search
     assert 'append_codex_profile_arg "$PROFILE" CODEX_ARGS' in search
@@ -95,3 +95,16 @@ def test_linux_modes_route_to_wsl_home_clone() -> None:
     py_launcher = (root / "scripts" / "infra" / "windows_agent_launch.py").read_text(encoding="utf-8")
 
     assert py_launcher.count("use_linux_home=True") >= 2
+
+
+def test_start_bot_prints_checkout_identity_before_launching() -> None:
+    root = Path(__file__).resolve().parents[2]
+    start_bot = (root / "START_BOT.bat").read_text(encoding="utf-8")
+
+    banner = start_bot.index("This shortcut runs the Windows checkout above")
+    launch = start_bot.index(".venv\\Scripts\\python.exe -m trading_app.live.bot_dashboard")
+
+    assert banner < launch
+    assert "WSL/Codex branch pushes do not change this app until merged or pulled here" in start_bot
+    assert "git branch --show-current" not in start_bot
+    assert "git rev-list --left-right --count" not in start_bot

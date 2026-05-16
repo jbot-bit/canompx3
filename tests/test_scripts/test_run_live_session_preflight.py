@@ -376,3 +376,13 @@ def test_copy_trading_check_fails_when_auth_failed():
         pp.ACCOUNT_PROFILES = original  # type: ignore[misc]
     assert result.passed is False
     assert "auth failed" in result.message
+
+
+def test_dashboard_auto_launch_disabled_for_dashboard_origin(monkeypatch):
+    monkeypatch.setenv("CANOMPX3_DASHBOARD_ORIGIN", "1")
+    assert rls._should_launch_dashboard() is False
+
+
+def test_dashboard_auto_launch_enabled_for_cli_origin(monkeypatch):
+    monkeypatch.delenv("CANOMPX3_DASHBOARD_ORIGIN", raising=False)
+    assert rls._should_launch_dashboard() is True

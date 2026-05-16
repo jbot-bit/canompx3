@@ -4,7 +4,7 @@ set -euo pipefail
 DEFAULT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROOT="${CANOMPX3_ROOT:-$DEFAULT_ROOT}"
 VENV="$ROOT/.venv-wsl"
-PROFILE="${CANOMPX3_CODEX_PROFILE:-}"
+PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3}"
 TASK_TEXT="${CANOMPX3_STARTUP_TASK:-}"
 ROUTER="$ROOT/scripts/tools/session_router.py"
 SHARED_CODEX_HOME_HELPER="$ROOT/scripts/infra/codex_shared_home.sh"
