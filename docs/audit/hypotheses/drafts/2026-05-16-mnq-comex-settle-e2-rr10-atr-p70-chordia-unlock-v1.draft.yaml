@@ -1,0 +1,287 @@
+metadata:
+  name: "mnq_comex_settle_e2_rr10_atr_p70_chordia_unlock_v1"
+  purpose: "Bounded exact-lane Chordia-strict (has_theory: false) unlock audit for MNQ COMEX_SETTLE O5 RR1.0 CB1 ATR_P70. No theory grant is claimed."
+  date_locked: "2026-05-16T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "family"
+  research_question_type: "conditional_role"
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+  default_args:
+    - "--hypothesis-file"
+    - "docs/audit/hypotheses/drafts/2026-05-16-mnq-comex-settle-e2-rr10-atr-p70-chordia-unlock-v1.draft.yaml"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/hypothesis-prereg-discipline.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/conditional-edge-framework.md"
+    - "docs/institutional/research_pipeline_contract.md"
+    - "docs/runtime/chordia_audit_log.yaml"
+    - "docs/audit/results/2026-05-12-chordia-audit-queue-top3-prereg-recommendation.md"
+  notes:
+    - "This prereg is an unlock audit for one rank-2 chordia-audit-queue candidate, not a fresh discovery scan."
+    - "No theory grant is claimed for ATR_P70 in this file (theory_citation field intentionally OMITTED per feedback_chordia_theory_citation_field_presence_trap.md + feedback_lhp_validator_vs_field_presence_trap_n1_2026_05_13.md)."
+    - "Quarantine path: this draft lives under docs/audit/hypotheses/drafts/ precisely because scripts/research/lhp/static_checks.py::check_citations_exist rejects no-theory pre-regs; runner is invoked directly on the draft path."
+    - "Criterion 4 strict threshold t >= 3.79 applies (Chordia 2018 2-million-strategies empirical bound)."
+    - "Mode A holdout remains sacred from 2026-01-01."
+    - "Same-author governance note (per recommendation MD Caveat 5 line 218): ATR_P50 sibling is being authored in the same session by the same author. Both share session/instrument/RR/CB/aperture and differ only in the ATR percentile threshold (50 vs 70). Sequential authorship is intentional; SR-review-registry governance gap is disclosed."
+
+scope:
+  instrument: MNQ
+  strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR_P70"
+  session: COMEX_SETTLE
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  direction: pooled
+  filter_type: ATR_P70
+  filter_source: "trading_app.config.ALL_FILTERS['ATR_P70']"
+  baseline: "same geometry, exact canonical lane replay"
+  out_of_scope:
+    - "ATR_P30 / ATR_P50 sibling cells (ATR_P50 has its own paired prereg authored same day)"
+    - "RR1.5 or RR2.0 siblings"
+    - "O15 / O30 aperture siblings"
+    - "theory-grant attempt for ATR_P70 or INTRA_ASSET_PERCENTILE family"
+    - "cross-instrument mirrors (MES, MGC)"
+    - "allocator, sizing, or deployment changes"
+    - "writes to validated_setups before execution evidence exists"
+    - "writes to chordia_audit_log.yaml without separate post-verdict authorization"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only descriptive corroboration only; never used to rescue or kill the IS verdict; OOS power floor per research/oos_power.py::POWER_TIERS applies."
+  cohort_lower_bound:
+    description: "trading_day >= WF_START_OVERRIDE['MNQ']"
+    constant_source: "trading_app.config.WF_START_OVERRIDE"
+    locked_boundary: "2020-01-01"
+    rationale: "Match canonical promoter cohort (strategy_discovery._load_outcomes_bulk). Without this, audit fires on pre-2020 micro-launch trades the promoter excludes."
+  tuning_against_oos: false
+  canonical_layers_only: true
+
+scratch_policy:
+  policy: "realized-eod"
+  justification: >
+    Capital-routing-class decision (downstream allocator-gate audit consumes the verdict).
+    Per pre_registered_criteria.md Criterion 13 (BINDING) and feedback_scratch_pnl_null_class_bug.md,
+    realized-eod is required for any capital-impact pre-reg to ensure scratch rows are not
+    silently dropped via `WHERE pnl_r IS NOT NULL`.
+
+feature_definition:
+  feature_name: ATR_P70
+  canonical_source_of_truth: "trading_app.config.OwnATRPercentileFilter (registered at trading_app.config.ALL_FILTERS['ATR_P70'])"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, 'ATR_P70', 'COMEX_SETTLE')"
+  trade_time_knowable: true
+  first_complete_time: "session start (ATR_20 is computed from prior-day close per pipeline/build_daily_features.py)"
+  temporal_alignment_note: >
+    `atr_20_pct` is the asset's own ATR(20) expressed as a percentile of its own historical
+    distribution, computed at prior-day close. ATR_P70 fires when atr_20_pct >= 70. The filter
+    is trade-time-knowable at session open and predates ORB end. This prereg does NOT claim
+    the filter has a Pathway-B-quality theory basis (see grounding.filter_grounding_status).
+  lookahead_check: "Required PASS before execution. atr_20_pct is in `safe (always trade-time-knowable) features` per backtesting-methodology.md RULE 6.1."
+
+grounding:
+  core_orb_premise:
+    - source_file: "resources/Building_Reliable_Trading_Systems.pdf"
+      extract_proxy: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "grounds intraday trend-follow / breakout continuation on equity-index class"
+      with_theory_claim: false
+    - source_file: "resources/Algorithmic_Trading_Chan.pdf"
+      extract_proxy: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      use: "grounds stop-cascade / intraday momentum base for ORB breakout entries"
+      with_theory_claim: false
+  filter_grounding_status:
+    verdict: "NO_THEORY_GRANT"
+    basis: >
+      INTRA_ASSET_PERCENTILE filter family is CLASS_GROUNDED_POLARITY_PENDING per
+      docs/audit/results/2026-05-12-chordia-audit-queue-top3-prereg-recommendation.md lines 169-202.
+      Fitschen Ch 6 grounds the volatility-percentile filter CLASS but his empirically-positive
+      direction is skip-high-vol; ATR_P70 fires include-high-vol (opposite polarity). The
+      include-high-vol polarity mechanism ("high realized ATR -> larger stop cluster -> larger
+      post-cascade momentum window for E2 to harvest") is a PLAUSIBLE_SYNTHESIS drawn from
+      Harris 2002 Ch 28 cascade mechanics and Ch 20 volatility decomposition combined with
+      Chan 2013 Ch 7 intraday momentum framing. Verbatim Harris OCR text (resources/harris_ocr/
+      full_text.txt verified 2026-05-16) does NOT assert the volatility-magnitude ->
+      cascade-magnitude monotonicity on any verified page. Therefore this prereg makes
+      NO_THEORY_GRANT claim and the strict no-theory Chordia threshold (t >= 3.79) applies.
+      Strict threshold absorbs the synthesis weakness: if the edge survives t >= 3.79 it
+      survives without the polarity grant either way.
+  mechanism_status: "plausible_synthesis_not_locally_verified"
+  mechanism_status_explanation: >
+    The mechanism narrative above is internally coherent and consistent with adjacent
+    Harris+Chan material, but the load-bearing monotonicity claim is NOT directly quoted
+    from any local /resources source. Labeling honestly per institutional-rigor.md § 7 and
+    feedback_literature_before_prereg.md. The same mechanism narrative applies to the paired
+    ATR_P50 prereg authored same day; the only difference is the percentile threshold (70 vs 50).
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - "docs/audit/results/2026-05-12-chordia-audit-queue-top3-prereg-recommendation.md (line 45: Rank 2, chordia_t=4.582, N_mode_a=602, mode_a_expr=0.1761)"
+    - "docs/runtime/action-queue.yaml (chordia_audit_unlock_pass_chordia_strategies if present)"
+  note: >
+    The top-3 recommendation MD identified this exact strategy as rank-2 of 8 AUDIT_GAP_ONLY
+    candidates by chordia_t descending. Per recommendation MD § "Honest framing" lines 204-211
+    and Caveat 6 line 219, the Mode-A statistics (chordia_t=4.582, N=602, mode_a_expr=0.1761)
+    are the canonical reference for prior-evidence; the validated_setups stored row has a
+    small `stored_minus_mode_a` delta (-0.0037 ExpR for this strategy per Caveat 6) within
+    the 0.05R self-consistency gate. These statistics motivate this audit but are NOT the
+    evidence for this prereg's verdict. Fresh execution against canonical layers is required.
+
+prior_evidence:
+  mode_a_chordia_t: 4.582
+  mode_a_n_is: 602
+  mode_a_expr: 0.1761
+  source: "docs/audit/results/2026-05-12-chordia-audit-queue-top3-prereg-recommendation.md (line 45)"
+  oos_power_tier_at_recommendation_time: "STATISTICALLY_USELESS (per recommendation MD Caveat 3 line 216 — all 8 AUDIT_GAP_ONLY rows including top-3)"
+  c8_oos_status_at_recommendation_time: "PASSED (per recommendation MD § Verdict line 48: n_oos in {46,47,58})"
+
+primary_schema:
+  family_cells:
+    - id: "MNQ_COMEX_SETTLE_O5_RR1.0_ATR_P70"
+      strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR_P70"
+      instrument: MNQ
+      session: COMEX_SETTLE
+      orb_minutes: 5
+      rr_target: 1.0
+      filter: ATR_P70
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  chordia_threshold_basis: "Criterion 4 no-theory strict threshold (t >= 3.79) — Chordia et al 2018 2-million-strategies empirical bound."
+  promotion_gate: "PASS_CHORDIA only; PASS_PROTOCOL_A is NOT available in this prereg (no theory grant)."
+
+hypotheses:
+  - id: 1
+    name: "MNQ COMEX_SETTLE O5 RR1.0 CB1 ATR_P70 exact-lane strict (has_theory: false) unlock"
+    economic_basis: >
+      MECHANISM_STATUS: plausible_synthesis_not_locally_verified.
+      The include-high-vol polarity for ATR_P70 (fires when daily ATR_20 >= 70th percentile of
+      MNQ asset-own distribution at session-start) is hypothesised to coincide with larger
+      stop-cluster cascades per Harris Ch 28 § 28.1.1 cascade mechanics + Ch 20 § 20.1
+      volatility decomposition, combined with Chan Ch 7 intraday-momentum framing. Verbatim
+      Harris OCR (resources/harris_ocr/) does NOT state volatility-magnitude ->
+      cascade-magnitude monotonicity on any verified page; the chain is synthesis, not
+      extraction. LITERATURE_CITATION_STATUS: omitted (theory_citation field intentionally
+      absent per field-presence trap). THRESHOLD_RATIONALE: chordia_strict_t>=3.79 default
+      loader path (has_theory: false). FALSIFICATION: if bounded-runner verify produces
+      chordia_t < 3.79 OR (dir_match=FALSE with OOS power >= 0.50 per research/oos_power.py::
+      POWER_TIERS), this single-cell hypothesis is refuted (verdict = PARK or FAIL_CHORDIA).
+      Portfolio-EV motivation: COMEX_SETTLE MNQ is currently underrepresented in deployed
+      lanes; ATR_P70 is the rank-2 chordia-audit-queue candidate by chordia_t. Selectivity
+      tradeoff vs paired ATR_P50: ATR_P70 fires ~30% less often (N=602 vs N=886) but with
+      higher conditional ExpR (0.1761 vs 0.1363) — both ranks are independently testable.
+    role:
+      kind: "standalone"
+      parent: "Exact MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR_P70 canonical lane replay on orb_outcomes x daily_features (O5)."
+      comparator: "Replay-selected trades versus the strict Chordia threshold and descriptive OOS sign monitor; no sibling rescue or parameter variation."
+      primary_metric: "selected_trade_mean_r"
+      promotion_target: "chordia_audit_unlock_only"
+    filter:
+      type: "ATR_P70"
+      column: "atr_20_pct (daily_features)"
+      thresholds:
+        - "atr_20_pct >= 70.0"
+    scope:
+      instruments: [MNQ]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [5]
+    expected_trial_count: 1
+    kill_criteria:
+      - "IS t-stat < 3.79"
+      - "IS ExpR <= 0.0"
+      - "N_IS_on < 100"
+      - "If OOS N >= 30 AND OOS power tier >= DIRECTIONAL_ONLY per research/oos_power.py::POWER_TIERS, OOS sign opposes IS sign"
+      - "Canonical filter delegation diverges from trading_app.config.ALL_FILTERS['ATR_P70']"
+      - "Scratch/null handling is not explicit in the measured trade stream (scratch_policy: realized-eod must be honored)"
+      - "Lookahead check fails (atr_20_pct must be confirmed trade-time-knowable at session start)"
+    statement: >
+      On the fixed MNQ COMEX_SETTLE O5 E2 CB1 RR1.0 lane using the canonical ATR_P70 filter,
+      the IS sample remains positive and strong enough to clear the strict no-theory Chordia
+      severity gate (t >= 3.79) when recomputed honestly on canonical Mode-A data with
+      adversarial split reporting.
+    pass_metric:
+      metric: "t_IS"
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical IS fired trades after canonical filter delegation"
+      threshold_gte:
+        t_is: 3.79
+        n_is_on: 100
+        expr_is: 0.0
+      extra_gates:
+        - "dir_match_oos = true when OOS N is sufficient AND OOS power tier >= DIRECTIONAL_ONLY"
+        - "adversarial split table emitted; no hidden subgroup collapse"
+        - "scratch-inclusive accounting required if scratch rows exist (realized-eod policy)"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+  minbtl_note: "K=1 Pathway-B confirmatory verify; estimate_k_budget.py n_trials <= 1 short-circuit at line 126-128 returns required_years = 0.0 (auto-pass)."
+
+decision_rule:
+  continue_if: "H1 clears strict t >= 3.79 with positive IS ExpR and no harness failure; OOS verdict labeled UNVERIFIED_INSUFFICIENT_POWER if power < 0.50."
+  park_if: "H1 clears strict IS gates but OOS directional corroboration is ambiguous AND OOS power tier == STATISTICALLY_USELESS"
+  kill_if: "H1 fails t or ExpR gates, or execution integrity fails, or OOS sign opposes IS sign with OOS power >= DIRECTIONAL_ONLY"
+
+methodology_rules_applied:
+  - rule: "RULE 3 sacred holdout"
+    application: "IS and OOS are partitioned by HOLDOUT_SACRED_FROM only."
+  - rule: "RULE 3.3 OOS power floor"
+    application: "research/oos_power.py::oos_ttest_power computed before any binary OOS kill; dir_match cannot kill an underpowered OOS."
+  - rule: "RULE 4 multiple testing"
+    application: "Current family K is exactly 1; no multiplicity correction required."
+  - rule: "RULE 6 trade-time knowability"
+    application: "atr_20_pct must be shown trade-time-knowable at session start; included in RULE 6.1 safe-features list."
+  - rule: "RULE 9 canonical data source"
+    application: "Reads only canonical layers (bars_1m, daily_features, orb_outcomes); no derived-layer proof."
+  - rule: "research-truth-protocol canon filter delegation"
+    application: "Filter fire mask must come from canonical delegation (trading_app.config.ALL_FILTERS['ATR_P70']), never inline re-implementation."
+  - rule: "Criterion 13 (BINDING) scratch policy"
+    application: "scratch_policy: realized-eod declared above; runner must honor."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-16-mnq-comex-settle-e2-rr10-atr-p70-chordia-unlock-v1.md"
+  - "row-level CSV with IS/OOS split, raw/effective pnl_r, and scratch/null handling"
+  - "single-cell summary table with N_IS_on, ExpR_IS, Sharpe_IS, t_IS, OOS sign check, OOS power tier, and verdict"
+  - "explicit statement that NO theory grant was used (threshold: 3.79, has_theory: false)"
+
+execution_gate:
+  allowed_now: true
+  execution_surface: "WSL with .venv-wsl OR Windows with .venv (runner is platform-agnostic)"
+  forbidden_now:
+    - "theory-grant upgrade without new /resources-backed citation that directly asserts include-high-vol -> larger cascade polarity"
+    - "RR widening, aperture widening (O15/O30), or sibling-cell (ATR_P30/ATR_P50) rescue"
+    - "auto-writing PASS rows into chordia_audit_log.yaml without separate post-verdict authorization"
+    - "promotion out of drafts/ quarantine before runner produces verdict MD"
+
+not_done_by_this_pre_reg:
+  - "Does not audit ATR_P30 or ATR_P50 siblings (ATR_P50 has its own paired prereg authored same day)."
+  - "Does not settle the broader INTRA_ASSET_PERCENTILE filter class polarity question."
+  - "Does not extract or commit any new literature source for the include-high-vol polarity."
+  - "Does not change live deployment or allocator state."
+  - "Does not address correlation between ATR_P70 and any deployed lane (allocator's correlation gate handles that downstream)."
+  - "Does not append to docs/runtime/chordia_audit_log.yaml (separate authorized step post-verdict)."
