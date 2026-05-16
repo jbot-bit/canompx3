@@ -1,0 +1,179 @@
+# REJECTED LLM DRAFT — fatal static checks failed.
+# This file is NOT a valid hypothesis. Do not rename to .yaml.
+# Failure summary:
+#   [CITATION_MISSING] hypotheses[0].theory_citation: theory_citation is required and must be non-empty
+#   [CITATION_NOT_FOUND] hypotheses: Zero hypotheses cite a real on-disk literature file
+#
+prior_art:
+  family_health: HOSTILE
+  siblings_tested: 2
+  siblings_evaluable: 2
+  siblings_killed: 0
+  siblings_blocked_by_graveyard: 2
+  notes:
+  - 'NO-GO: BLUEPRINT NO-GO: VWAP_BP_ALIGNED on MNQ CME_PRECLOSE O5 (specific cell)'
+  - 'KILL: MES mirror of MNQ US_DATA_1000 VWAP_MID_ALIGNED long — K=2 scan'
+  - 'KILL: MNQ US_DATA_1000 O15 VWAP lane — O5 auction-close confluence v1'
+  graveyard_summary: 'BLOCKING: 3 candidate-applying verdict(s) on MNQ US_DATA_1000
+    VWAP'
+  neighbor_scan_summary: 'HOSTILE: 2 siblings enumerated (2 evaluable, 0 not in registry);
+    0 fail Mode A, 2 blocked by graveyard'
+
+metadata:
+  name: "mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1"
+  purpose: "Pathway-B K=1 Chordia-strict confirmatory unlock of MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30 (rank-3 of 2026-05-12 audit queue); sibling-aperture variant of already-passed O15 RR1.0 unlock."
+  date_locked: "2026-05-13T10:00:00+10:00"
+  data_horizon_years_clean: 6.65
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  primary_selection_trials: 1
+  research_question_type: "standalone_edge"
+  testing_mode: "family"
+  output_subdir: "drafts/"
+  review_only: true
+
+grounding:
+  core_orb_premise:
+    - source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      with_theory_claim: false
+      note: "ORB premise — path-of-least-resistance breakout class."
+    - source: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      with_theory_claim: false
+      note: "Intraday momentum / stop-cascade class grounding."
+
+filter_grounding_status:
+  verdict: "NO_THEORY_GRANT"
+  rationale: |
+    VWAP_MID_ALIGNED is class-grounded via Chan 2013 Ch 7 (intraday momentum
+    alignment), but the rank-3 audit recommendation elects no-theory
+    strict-3.79 default. theory_citation field is OMITTED on the hypothesis
+    per memory/feedback_chordia_theory_citation_field_presence_trap.md and
+    docs/prompts/prereg-writer-prompt.md rule 0.
+
+scratch_policy:
+  policy: "realized-eod"
+  justification: "Capital-decision-relevant; per feedback_chordia_unlock_deployment_gate_audit_checklist.md C13."
+
+is_oos_policy:
+  holdout_sacred_from: "2026-01-01"
+  source: "trading_app.holdout_policy"
+  cohort_lower_bound:
+    trading_day_gte: "2020-01-01"
+    source: "trading_app.WF_START_OVERRIDE['MNQ']"
+    note: "Copied verbatim from O15 RR1.0 template (2026-05-02 unlock)."
+
+oos_power_floor:
+  required_tier: "STATISTICALLY_USELESS"
+  source: "research.oos_power.oos_ttest_power"
+  measured_power: 0.1732
+  measured_n_oos: 46
+  rule: |
+    OOS power = 0.1732 with n_oos=46 is STATISTICALLY_USELESS. Binary OOS
+    gates (dir_match, OOS ExpR sign) cannot kill or confirm. Default OOS
+    verdict is UNVERIFIED_INSUFFICIENT_POWER per RULE 3.3. Capital decision
+    rests on IS gates only.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  source: "docs/audit/results/2026-05-12-chordia-audit-queue-top3-prereg-recommendation.md"
+  rank: 3
+
+prior_art:
+  family_health: "HOSTILE"
+  siblings_killed: 0
+  siblings_blocked_by_graveyard: 2
+  closest_template: "docs/audit/hypotheses/2026-05-02-mnq-usdata1000-vwapmid-o15-rr10-chordia-unlock-v1.yaml"
+  notes:
+    - "Sibling O5 VWAP_MID_ALIGNED: passes Mode A (n_oos=34) but graveyard-blocked."
+    - "Sibling O15 VWAP_MID_ALIGNED: passes Mode A (n_oos=47) but graveyard-blocked at sibling level; HOWEVER the O15 RR1.0 BARE base PASSED Chordia strict 2026-05-02 (t=4.266 N=806)."
+    - "Candidate Mode A: passes_criterion_8=true, oos_is_ratio=0.6818, n_oos=46."
+    - "Graveyard surfaced 3 hits, ALL non-applying (see reopen_argument)."
+  reopen_argument: |
+    All 3 surfaced graveyard hits are non-applying false positives:
+
+    (1) NO-GO 'VWAP_BP_ALIGNED on MNQ CME_PRECLOSE O5' — different filter
+        (BP not MID), different session (CME_PRECLOSE not US_DATA_1000),
+        different aperture (O5 not O30). String-prefix false positive on
+        the 'VWAP' substring.
+
+    (2) KILL 'MES mirror of MNQ US_DATA_1000 VWAP_MID_ALIGNED long'
+        (2026-04-19 scan) — ruled out CROSS-INSTRUMENT MES portability.
+        This pre-reg is MNQ-only; mirror question not re-litigated.
+
+    (3) KILL 'MNQ US_DATA_1000 O15 VWAP lane — O5 auction-close confluence
+        v1' (2026-04-22) — killed an O5-CONFLUENCE OVERLAY on O15 base.
+        Bare O15 RR1.0 base SUBSEQUENTLY PASSED Chordia strict on
+        2026-05-02 (PASS_CHORDIA t=4.266 N=806 OOS dir_match). O30 RR1.0
+        is a sibling-aperture variant of an already-passed unlock with
+        NO confluence overlay. Mechanism path is bare VWAP-aligned
+        breakout, not the killed confluence design.
+
+    New evidence justifying reopen: (a) the O15 bare-base Chordia PASS
+    on 2026-05-02 establishes the lane is alive at sibling aperture;
+    (b) Mode A pre-screen confirms candidate passes Criterion 8 with
+    oos_is_ratio=0.68; (c) HOSTILE family_health is driven entirely by
+    overlay/cross-instrument false positives, not by mechanism failure.
+
+hypotheses:
+  - id: 1
+    name: "MNQ US_DATA_1000 O30 E2 CB1 RR1.0 VWAP_MID_ALIGNED — Chordia strict unlock"
+    economic_basis: |
+      Sibling-aperture variant (O30) of the 2026-05-02 PASS_CHORDIA O15
+      RR1.0 bare-base unlock on the same instrument/session/filter. ORB
+      premise grounded class-only via Fitschen 2013 (path of least
+      resistance) and Chan 2013 Ch 7 (intraday momentum). No theory grant
+      claimed for the VWAP_MID_ALIGNED filter; Chordia no-theory strict
+      threshold t>=3.79 applies.
+    filter:
+      type: "VWAP_MID_ALIGNED"
+      column: "VWAP_MID_ALIGNED"
+    feature_definition:
+      name: "VWAP_MID_ALIGNED"
+      canonical_source_of_truth: "trading_app.config.VWAPBreakDirectionFilter"
+      delegation_wrapper: "research.filter_utils.filter_signal(df, 'VWAP_MID_ALIGNED', 'US_DATA_1000')"
+      first_complete_time: "ORB_END (O30 = 10:30 session-local)"
+      trade_time_knowable: true
+    scope:
+      strategy_id: "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30"
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [30]
+    pass_gates:
+      t_IS_min: 3.79
+      N_IS_on_min: 100
+      ExpR_IS_min_exclusive: 0.0
+      rule: "t_IS >= 3.79 AND N_IS_on >= 100 AND ExpR_IS > 0.0"
+    oos_verdict_default: "UNVERIFIED_INSUFFICIENT_POWER"
+    expected_trial_count: 1
+    kill_criteria:
+      - "t_IS < 3.79"
+      - "ExpR_IS <= 0.0"
+      - "N_IS_on < 100"
+      - "Canonical filter delegation diverges from trading_app.config.VWAPBreakDirectionFilter"
+      - "Scratch handling not explicit (realized-eod) OR null handling not explicit"
+      - "BH FDR q=0.05 fails on K=1 family"
+      - "WFE < 0.50"
+      - "Any era N>=50 ExpR < -0.05"
+
+execution_gate:
+  allowed_now: true
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+  invocation: "python research/chordia_strict_unlock_v1.py --hypothesis-file docs/audit/hypotheses/drafts/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.yaml"
+  mirrors_template: "docs/audit/hypotheses/2026-05-02-mnq-usdata1000-vwapmid-o15-rr10-chordia-unlock-v1.yaml"
+  promotion: false
+  auto_run: false
+
+not_done_by_this_pre_reg:
+  - "RR1.5 / RR2.0 siblings (separate pre-reg required)"
+  - "Other VWAP variants (BP_ALIGNED, alternate alignment definitions)"
+  - "Allocator / sizing / deployment changes"
+  - "INTRA_ASSET_PERCENTILE polarity claims"
+  - "Cross-instrument mirrors (MES, MGC)"
+  - "Confluence overlays of any kind"
+
+total_hypothesis_count: 1
+total_expected_trials: 1

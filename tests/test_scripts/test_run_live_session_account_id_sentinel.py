@@ -41,8 +41,7 @@ def test_argparse_default_account_id_is_none():
     block = src[idx : idx + 250]
     assert "default=None" in block, f"Expected default=None in --account-id block, got: {block!r}"
     assert "default=0" not in block, (
-        "Regression: --account-id default=0 re-introduced. "
-        "Dashboard 'Start Live' will crash on copies>1 profiles."
+        "Regression: --account-id default=0 re-introduced. Dashboard 'Start Live' will crash on copies>1 profiles."
     )
 
 
