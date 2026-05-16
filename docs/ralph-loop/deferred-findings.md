@@ -17,6 +17,48 @@
 | A6-GAP3 | A.6 2026-05-14 | LOW | trading_app/pre_session_check.py:833 | Truthy-falsy cap display: `if orb_cap` evaluates `0.0` as falsy and shows `"NONE"` instead of `"0 pts"`. Display-only; enforcement path uses `is not None` correctly. Zero-cap is a degenerate writer-side condition (would over-block all trades on that lane), so operator misread cannot increase capital risk. Pre-existing, not introduced by A.6. | Re-check trigger: any change to `pre_session_check.py` cap display, or any writer that could legitimately emit `0.0`. Replace with `is not None` check when touched. |
 | A6-GAP4 | A.6 2026-05-14 | LOW | trading_app/derived_state.py:36-44 | Per-lane fingerprint dict omits `orb_minutes` as an explicit field. Currently safe because `strategy_id` (which IS in the fingerprint) encodes the aperture as the `_O15` suffix, so any aperture change invalidates the fingerprint via the strategy_id field. Would become a real staleness blind spot only if a profile's strategy_id were ever reused across apertures (not current practice). Pre-existing, not introduced by A.6. | Re-check trigger: any change to strategy_id naming convention or to derived_state fingerprint structure. Add `orb_minutes` explicitly to fingerprint when touched. |
 
+## Adversarial Audit 2026-05-16 — sentinel+signal_only (4ba76818)
+
+Scope: `scripts/run_live_session.py` Fix 1 (sentinel normalization `0→None`) and
+Fix 2 (`signal_only` gate placement in `_check_copy_trading_accounts`).
+Commits: a0b3c24b + bb0619d2 + 4ba76818.
+
+**Q1 — Sentinel coherence:** `multi_runner.py` never calls
+`_select_primary_and_shadow_accounts`. The only production call sites are
+`run_live_session.py:276` (preflight dry-run) and `run_live_session.py:767`
+(live-start), both receiving `args.account_id` whose argparse default is `None`
+(not `0`). A user-supplied `--account-id 0` hits the normalization at line 392
+before any broker-ID validation. No bypass path exists. **MEASURED/OK.**
+
+**Q2 — multi_runner.py default `0`:** `multi_runner.py:41` default confirmed `0`.
+`session_orchestrator.py:542` guard confirmed `is None or == 0`, inside the
+`not signal_only` branch only. `multi_runner.py` default is `signal_only=True`
+(line 40), so the router-construction block is unreachable in normal usage. When
+`signal_only=False`, the `== 0` sentinel triggers `resolve_account_id()` before
+any router is constructed. **MEASURED/OK.**
+
+**Q3 — signal_only gate ordering:** Gate sequence is `profile_id is None` →
+`copies <= 1` → `signal_only` → `components is None` → broker API. With
+`signal_only=True, copies=1`: gate 3 fires first (SKIPPED). With `signal_only=True,
+copies=2`: gate 4 fires (SKIPPED, no broker call). With `signal_only=False,
+components is None`: gate 5 fires (FAILED, explicit operator message). Ordering is
+cheaper-first and semantically correct. **MEASURED/OK.**
+
+**Q4 — `None`/`0` reaching a broker call:** Post-normalization `None` routes to
+`account_ids[0]` (a real broker integer from freshly-fetched `all_accounts`). No
+path produces a `None` `primary_id`. If `all_accounts` is empty, `IndexError` fires
+— hard fail-closed, not silent. **MEASURED/OK.**
+
+**Pre-existing LOW (not introduced by these fixes):** `all_accounts=[]` produces
+unfriendly `IndexError` rather than a named `RuntimeError`. Operator is warned when
+`len < n_copies` (line 760) but not when `== 0`. No capital risk; fail-closed.
+Re-check trigger: any change to the broker account-discovery path.
+
+**Overall verdict: PASS.** Both fixes are sound. No new failure modes introduced.
+One pre-existing LOW noted for ledger completeness.
+
+---
+
 ## Won't Fix (ACCEPTABLE)
 
 | ID | Iter | Target | Description | Reasoning |
