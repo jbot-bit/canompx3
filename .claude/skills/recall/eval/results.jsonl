@@ -1,0 +1,1 @@
+{"iteration": 0, "timestamp": "2026-05-16T00:00:00Z", "pass_rate": 1.0, "total": 9, "passed": 9, "change": "baseline — no edits made", "kept": true, "per_test": {"rc-01": {"total": 4, "passed": 4}, "rc-02": {"total": 3, "passed": 3}, "rc-03": {"total": 2, "passed": 2}}, "baseline_commit": "70ca6f1b64f0c7ceef401d765c8d63ffc79e2692"}
