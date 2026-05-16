@@ -32,6 +32,13 @@ QueueClass = Literal[
     # tracked alongside its docs/runtime/stages/<slug>.md file.
     "audit",
     "stage",
+    # 2026-05-16: extended to match action-queue.yaml entries added for
+    # capital-doctrine (allocation doctrine decisions), capital (lane rebalance
+    # decisions requiring capital review), and feature (non-research pipeline
+    # additions).
+    "capital-doctrine",
+    "capital",
+    "feature",
 ]
 QueueStatus = Literal[
     "ready",
