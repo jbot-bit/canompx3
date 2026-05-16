@@ -114,6 +114,10 @@ Do NOT add a `FileHandler` yet — the dashboard log surfacing (separate stage) 
 
 Drop the curl response body + log excerpts into a fresh `docs/runtime/sessions/<YYYY-MM-DD>-live-debut-followup.md`, then update `HANDOFF.md` § Next Steps 5(c) with "characterized" status + a one-line root-cause sentence per item. After that, each (c-i)/(c-ii) becomes a normal stage candidate.
 
+### One-shot Monday evidence-capture (paste at T+3min after first tick + on any anomaly)
+
+`date -u +%FT%TZ; ls -la logs/live/ 2>/dev/null | tail -5; curl -s http://localhost:8088/api/bars-recent?instrument=MNQ | head -c 500; echo; ls -la data/state/account_hwm_*.json 2>/dev/null; python -c "import sys,json,glob; [print(p,'->',json.load(open(p)).get('hwm_dollars'),'/ last_eq=',json.load(open(p)).get('last_equity')) for p in glob.glob('data/state/account_hwm_*.json')]"` — captures D2/D3/D4 surfaces in one line; baton plan is `C:\Users\joshd\.claude\plans\get-going-on-this-whimsical-rain.md`; ProjectX spec extract is `resources/projectx_api_spec_2026_05_16.md`.
+
 ## Files to read first when picking up
 
 1. `HANDOFF.md`
