@@ -93,6 +93,7 @@ class PreflightContext:
     # Copy-trading dry-run inputs (A.6.5 — preflight gap fix 2026-05-16)
     profile_id: str | None = None
     requested_account_id: int | None = None
+    signal_only: bool = False
 
 
 @dataclass
@@ -261,6 +262,8 @@ def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
             return CheckResult(False, f"FAILED: profile {ctx.profile_id!r} not in ACCOUNT_PROFILES")
         if prof.copies <= 1:
             return CheckResult(True, f"SKIPPED (profile.copies={prof.copies})")
+        if ctx.signal_only:
+            return CheckResult(True, "SKIPPED (signal-only — no account resolution needed)")
         if ctx.components is None:
             # auth_check already failed; we cannot verify copy-trading without
             # broker contracts. Report FAILED (not SKIPPED) so the operator sees
@@ -305,6 +308,7 @@ def _run_preflight(
     portfolio=None,
     profile_id: str | None = None,
     requested_account_id: int | None = None,
+    signal_only: bool = False,
 ) -> bool:
     """Pre-flight validation. Returns True if all checks pass.
 
@@ -325,6 +329,7 @@ def _run_preflight(
         portfolio=portfolio,
         profile_id=profile_id,
         requested_account_id=requested_account_id,
+        signal_only=signal_only,
     )
 
     checks_total = len(PREFLIGHT_CHECKS)
@@ -384,6 +389,8 @@ def _select_primary_and_shadow_accounts(
         (primary_id, shadow_account_ids) where shadow_account_ids is a list of
         zero-or-more shadow account IDs (None if no shadows).
     """
+    if requested_account_id == 0:
+        requested_account_id = None
     all_account_ids = [aid for aid, _name in all_accounts]
     if requested_account_id is not None:
         if requested_account_id not in all_account_ids:
@@ -628,6 +635,7 @@ def main() -> None:
                     portfolio=inst_portfolio,
                     profile_id=args.profile,
                     requested_account_id=args.account_id,
+                    signal_only=args.signal_only,
                 )
                 if not ok:
                     all_ok = False
@@ -640,6 +648,7 @@ def main() -> None:
                 portfolio=raw_portfolio,
                 profile_id=args.profile,
                 requested_account_id=args.account_id,
+                signal_only=args.signal_only,
             )
             sys.exit(0 if ok else 1)
 

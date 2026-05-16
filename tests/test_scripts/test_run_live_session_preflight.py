@@ -325,6 +325,29 @@ def test_copy_trading_check_passes_with_none_account_id(monkeypatch):
     assert "2 accounts" in result.message
 
 
+def test_copy_trading_check_skipped_when_signal_only(monkeypatch):
+    """copies=2, signal_only=True → SKIPPED (no broker account-resolution call).
+
+    When --preflight --signal-only is used, the live-start path skips all
+    copy-trading account resolution, so the preflight check must match.
+    """
+    fake_profile = SimpleNamespace(copies=2)
+    monkeypatch.setattr(
+        "trading_app.prop_profiles.ACCOUNT_PROFILES",
+        {"multi_copy_profile": fake_profile},
+    )
+    ctx = _make_copy_trading_ctx(
+        profile_id="multi_copy_profile",
+        requested_account_id=None,
+        all_accounts=[(21944866, "PA-XFA-001"), (21944867, "PA-XFA-002")],
+    )
+    ctx.signal_only = True
+    result = rls._check_copy_trading_accounts(ctx)
+    assert result.passed is True
+    assert "SKIPPED" in result.message
+    assert "signal-only" in result.message
+
+
 def test_copy_trading_check_fails_when_auth_failed():
     """If _check_auth already failed (ctx.components is None), copy-trading
     check cannot run — must report SKIPPED with passed=False so the operator

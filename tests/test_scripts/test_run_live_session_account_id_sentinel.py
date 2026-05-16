@@ -58,26 +58,22 @@ def test_select_primary_and_shadow_accounts_with_none_auto_discovers():
     assert shadows == [21944867]
 
 
-def test_select_primary_and_shadow_accounts_treats_zero_as_real_id():
-    """ASYMMETRIC TOLERANCE — documented gotcha.
+def test_select_primary_and_shadow_accounts_treats_zero_as_auto_discover():
+    """0 is normalized to None (auto-discover) inside the helper.
 
     `session_orchestrator.py:542` treats both `None` and `0` as auto-discover.
-    But `_select_primary_and_shadow_accounts` treats only `None` as auto;
-    `0` falls into the `requested_account_id is not None` branch and gets
-    rejected as "not at broker". This is INTENTIONAL: the helper is reached
-    only from the argparse-default path (now `None`), so the `0` case here
-    is a legacy/programmatic-caller error, not a normal flow.
-
-    If a future refactor makes this helper accept `0` as auto, update both
-    this test and the commit message for a0b3c24b.
+    This test verifies the helper now matches that convention — `0` no longer
+    falls into the `requested_account_id is not None` branch and gets rejected.
+    Fix landed in follow-up to commit a0b3c24b.
     """
-    all_accounts = [(21944866, "PA-XFA-001")]
-    with pytest.raises(RuntimeError, match="not in the broker's discovered"):
-        rls._select_primary_and_shadow_accounts(
-            all_accounts=all_accounts,
-            n_copies=1,
-            requested_account_id=0,
-        )
+    all_accounts = [(21944866, "PA-XFA-001"), (21944867, "PA-XFA-002")]
+    primary, shadows = rls._select_primary_and_shadow_accounts(
+        all_accounts=all_accounts,
+        n_copies=2,
+        requested_account_id=0,
+    )
+    assert primary == 21944866
+    assert shadows == [21944867]
 
 
 def test_multi_runner_passes_account_id_through_to_orchestrators():
