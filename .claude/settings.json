@@ -138,6 +138,16 @@
             "async": true
           }
         ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/new-skill-eval-nudge.py",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [

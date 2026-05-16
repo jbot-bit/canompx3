@@ -1,0 +1,78 @@
+{
+  "skill": "recall",
+  "version": 1,
+  "tests": [
+    {
+      "id": "rc-01",
+      "prompt": "/recall E2 break-bar look-ahead",
+      "assertions": [
+        {
+          "id": "rc-01-a1",
+          "type": "regex_match",
+          "pattern": "(nogo|research-catalog|search_research_catalog)",
+          "description": "Delegates kill-verdict slice to /nogo or research-catalog MCP"
+        },
+        {
+          "id": "rc-01-a2",
+          "type": "regex_match",
+          "pattern": "(docs/audit/results|2026-04-28-e2-lookahead)",
+          "description": "References canonical audit results directory or specific E2 contamination registry"
+        },
+        {
+          "id": "rc-01-a3",
+          "type": "regex_match",
+          "pattern": "(HOLDS|STALE|SUPERSEDED|INSUFFICIENT_EVIDENCE)",
+          "description": "Outputs Verdict-on-verdict using locked taxonomy"
+        },
+        {
+          "id": "rc-01-a4",
+          "type": "regex_not_match",
+          "pattern": "(I recall|from memory|I remember)",
+          "description": "Does not cite from memory — must live-query"
+        }
+      ]
+    },
+    {
+      "id": "rc-02",
+      "prompt": "/recall NYSE_OPEN RR1.5",
+      "assertions": [
+        {
+          "id": "rc-02-a1",
+          "type": "regex_match",
+          "pattern": "(get_strategy_fitness|gold-db|validated_setups)",
+          "description": "Queries gold-db for current fitness on strategy-shaped topic"
+        },
+        {
+          "id": "rc-02-a2",
+          "type": "regex_match",
+          "pattern": "(FIT|WATCH|DECAY|STALE|PROVISIONAL|not.*deployed|N/A)",
+          "description": "Reports current state token from canonical fitness vocab"
+        },
+        {
+          "id": "rc-02-a3",
+          "type": "regex_match",
+          "pattern": "(Decision trail|Current truth|Verdict on the verdict)",
+          "description": "Uses the locked output structure"
+        }
+      ]
+    },
+    {
+      "id": "rc-03",
+      "prompt": "/recall completely-fictional-strategy-xyz123",
+      "assertions": [
+        {
+          "id": "rc-03-a1",
+          "type": "regex_match",
+          "pattern": "(no record|INSUFFICIENT_EVIDENCE|not found|zero hits)",
+          "description": "Honestly reports absence when no canonical record exists"
+        },
+        {
+          "id": "rc-03-a2",
+          "type": "regex_not_match",
+          "pattern": "(based on.*similar|inferring|likely.*because)",
+          "description": "Does not confabulate a verdict for a topic with no record"
+        }
+      ]
+    }
+  ]
+}
