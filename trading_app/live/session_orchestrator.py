@@ -28,7 +28,7 @@ from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.live.bar_aggregator import Bar
 from trading_app.live.bar_persister import BarPersister
-from trading_app.live.bot_state import _iso_utc
+from trading_app.live.bot_state import _iso_utc, write_live_health
 from trading_app.live.broker_factory import create_broker_components, get_broker_name
 from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
@@ -804,6 +804,11 @@ class SessionOrchestrator:
             "dead": False,
         }
         self._poller_active = False  # set True once fill poller runs a cycle
+        # Probe results captured by run_self_tests() so the heartbeat snapshot
+        # can surface bracket/fill_poller PASS/FAIL state to the dashboard.
+        # Empty dict = self-tests have not yet run; the snapshot reports None
+        # rather than a false PASS.
+        self._probe_results: dict[str, bool] = {}
         # F7/R3: generation counter incremented on each broker reconnect so the
         # fill poller can detect reconnects and reset its per-order timeout anchors.
         self._fill_reconnect_gen: int = 0
@@ -1442,6 +1447,73 @@ class SessionOrchestrator:
             log.info("Fill poller endpoint exists (non-fatal error: %s)", e)
         return True
 
+    def _build_live_health_snapshot(self) -> dict:
+        """Build the broker-edge health snapshot for the operator dashboard.
+
+        Read-only contract: collects state already in memory; does NOT call
+        the broker API, does NOT touch trading state, does NOT make any
+        scheduling decisions. Fields with unknown source are emitted as None
+        (fail-closed — never fabricate a value).
+        """
+        # Auth health — None when the broker components do not expose .is_healthy.
+        auth_healthy: bool | None
+        auth_obj = getattr(self, "auth", None)
+        if auth_obj is None or not hasattr(auth_obj, "is_healthy"):
+            auth_healthy = None
+        else:
+            try:
+                auth_healthy = bool(auth_obj.is_healthy)
+            except Exception:  # noqa: BLE001 — property must never crash the snapshot
+                auth_healthy = None
+
+        probes = self._probe_results
+        # Preflight probes; None if run_self_tests has not yet executed in this session.
+        brackets_probe = probes["brackets"] if "brackets" in probes else None
+        fill_poller_probe = probes["fill_poller"] if "fill_poller" in probes else None
+
+        # Counters on SessionStats (in-memory; reset per session).
+        stats = self._stats
+        snapshot: dict = {
+            "auth_healthy": auth_healthy,
+            "brackets_probe": brackets_probe,
+            "fill_poller_probe": fill_poller_probe,
+            "poller_active": bool(self._poller_active),
+            "fill_polls_run": int(stats.fill_polls_run),
+            "fill_polls_confirmed": int(stats.fill_polls_confirmed),
+            "fill_polls_failed": int(stats.fill_polls_failed),
+            "broker_name": self._broker_name,
+            "mode": "SIGNAL" if self.signal_only else ("DEMO" if self.demo else "LIVE"),
+        }
+
+        # broker_status: fail-closed when any required signal is unknown.
+        if auth_healthy is None or brackets_probe is None or fill_poller_probe is None:
+            snapshot["broker_status"] = "unknown"
+        elif auth_healthy and brackets_probe and fill_poller_probe:
+            snapshot["broker_status"] = "ok"
+        else:
+            snapshot["broker_status"] = "degraded"
+
+        # Realized-slippage placeholder: only emit the key when at least one
+        # trade has been recorded. Avoids surfacing the init-state 0.0 (which
+        # would read as "0 slippage on 0 fills" — misleading on the operator
+        # dashboard before any fills land).
+        monitor = getattr(self, "monitor", None)
+        if monitor is not None:
+            trade_count = getattr(monitor, "trade_count", 0)
+            total_slip = getattr(monitor, "total_slippage_pts", None)
+            # isinstance guard: fixtures use MagicMock for monitor, which
+            # returns MagicMock for any attr — these are truthy but not
+            # comparable to int / castable to float. Only emit when both
+            # values are real numbers and at least one trade has been seen.
+            if (
+                isinstance(trade_count, int)
+                and trade_count > 0
+                and isinstance(total_slip, (int, float))
+            ):
+                snapshot["realized_slippage_pts"] = float(total_slip)
+
+        return snapshot
+
     def run_self_tests(self) -> dict[str, bool]:
         """Run all component self-tests. Returns {component: passed}."""
         results = {}
@@ -1457,6 +1529,9 @@ class SessionOrchestrator:
         print()
 
         self._notifications_broken = not results["notifications"]
+        # Persist for the heartbeat snapshot writer; dashboard reads these
+        # via runtime/state/live_health.json (read-only operator visibility).
+        self._probe_results = dict(results)
         return results
 
     def _write_signal_record(self, extra: dict) -> None:
@@ -2813,6 +2888,12 @@ class SessionOrchestrator:
                 self._notify(
                     f"Heartbeat: {self._bar_count} bars, {n_trades} trades, {active} active, poller={poller_status}"
                 )
+                # Read-only operator visibility: write broker-edge health snapshot
+                # for the dashboard. Best-effort — never raise into the heartbeat loop.
+                try:
+                    write_live_health(self._build_live_health_snapshot())
+                except Exception:  # noqa: BLE001 — snapshot must never break heartbeat
+                    log.warning("live_health snapshot write failed", exc_info=True)
                 # R5: periodic re-notify while engine circuit-breaker is tripped.
                 # The initial trip fires once at trip time (line ~1678). If the operator
                 # misses that single Telegram (sleeping, phone off), the engine may stay

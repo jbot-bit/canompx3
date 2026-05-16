@@ -257,6 +257,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
         "dead": False,
     }
     orch._poller_active = False
+    orch._probe_results = {}  # Populated by run_self_tests; consumed by live_health snapshot.
     orch._fill_reconnect_gen = 0  # F7/R3: reconnect generation counter
     orch.contract_symbol = "MGCJ6"
 
@@ -5732,3 +5733,84 @@ class TestStage3HWMWireUpAndEodDispatch:
         assert len(eod_hwm_notifies) == 0, (
             f"Suppression failed: kill-switch fired but got HWM EOD exception notify {notify_msgs!r}"
         )
+
+
+# --- live_health snapshot writer (Phase 2 read-only operator visibility) ---------------
+
+
+class TestLiveHealthSnapshot:
+    """Snapshot builder is read-only; it never calls broker APIs or mutates state."""
+
+    def test_snapshot_reports_ok_when_all_probes_pass(self, orch):
+        orch.auth = SimpleNamespace(is_healthy=True)
+        orch._probe_results = {"brackets": True, "fill_poller": True, "notifications": True}
+        orch._stats.fill_polls_run = 11
+        orch._stats.fill_polls_confirmed = 3
+        orch._stats.fill_polls_failed = 0
+
+        snapshot = orch._build_live_health_snapshot()
+
+        assert snapshot["broker_status"] == "ok"
+        assert snapshot["auth_healthy"] is True
+        assert snapshot["brackets_probe"] is True
+        assert snapshot["fill_poller_probe"] is True
+        assert snapshot["fill_polls_run"] == 11
+        assert snapshot["fill_polls_confirmed"] == 3
+        assert snapshot["fill_polls_failed"] == 0
+
+    def test_snapshot_reports_degraded_when_any_probe_fails(self, orch):
+        orch.auth = SimpleNamespace(is_healthy=True)
+        orch._probe_results = {"brackets": False, "fill_poller": True, "notifications": True}
+
+        snapshot = orch._build_live_health_snapshot()
+
+        assert snapshot["broker_status"] == "degraded"
+        assert snapshot["brackets_probe"] is False
+
+    def test_snapshot_reports_unknown_when_probes_not_run(self, orch):
+        """Before run_self_tests fires, probe results are empty → fail-closed."""
+        orch.auth = SimpleNamespace(is_healthy=True)
+        orch._probe_results = {}
+
+        snapshot = orch._build_live_health_snapshot()
+
+        assert snapshot["broker_status"] == "unknown"
+        assert snapshot["brackets_probe"] is None
+        assert snapshot["fill_poller_probe"] is None
+
+    def test_snapshot_reports_unknown_when_auth_missing_is_healthy(self, orch):
+        """Auth object without is_healthy → snapshot reports None, broker unknown."""
+        orch.auth = SimpleNamespace()  # no is_healthy attribute
+        orch._probe_results = {"brackets": True, "fill_poller": True}
+
+        snapshot = orch._build_live_health_snapshot()
+
+        assert snapshot["auth_healthy"] is None
+        assert snapshot["broker_status"] == "unknown"
+
+    def test_snapshot_omits_slippage_when_no_data(self, orch):
+        """Realized slippage placeholder only emitted when monitor exposes a value."""
+        orch.auth = SimpleNamespace(is_healthy=True)
+        orch._probe_results = {"brackets": True, "fill_poller": True}
+        # FakeBrokerComponents-derived monitor has no total_slippage_pts.
+        snapshot = orch._build_live_health_snapshot()
+        assert "realized_slippage_pts" not in snapshot
+
+    def test_run_self_tests_captures_probe_results_for_snapshot(self, orch):
+        """After run_self_tests, self._probe_results is populated for the heartbeat snapshot."""
+        # The build_orchestrator fixture replaces run_self_tests with a MagicMock
+        # to keep init lightweight. Call the real implementation directly so we
+        # exercise the new `_probe_results = dict(results)` capture line.
+        orch._verify_notifications = lambda: True
+        orch._verify_brackets = lambda: True
+        orch._verify_fill_poller = lambda: True
+
+        results = SessionOrchestrator.run_self_tests(orch)
+
+        assert results == {"notifications": True, "brackets": True, "fill_poller": True}
+        assert orch._probe_results == results
+        # Verify the snapshot then reflects the captured probe state.
+        orch.auth = SimpleNamespace(is_healthy=True)
+        snap = orch._build_live_health_snapshot()
+        assert snap["brackets_probe"] is True
+        assert snap["fill_poller_probe"] is True
