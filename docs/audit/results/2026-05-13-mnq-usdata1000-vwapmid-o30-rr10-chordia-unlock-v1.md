@@ -11,8 +11,12 @@ Strict-Chordia unlock audit for the exact lane `MNQ_US_DATA_1000_E2_RR1.0_CB1_VW
 ## Verdict
 
 **MEASURED verdict:** `PASS_CHORDIA`
+**FINAL verdict (power-floor override):** `UNVERIFIED_INSUFFICIENT_POWER`
 
 IS clears strict threshold 3.79 with N=866 and ExpR=0.1332; OOS sign matches at N_OOS=46.
+
+**OOS power override (per `feedback_chordia_oos_park_vs_unverified_power_floor.md` + backtesting-methodology.md RULE 3.3):**
+OOS N=46 (27 long + 19 short) is STATISTICALLY_USELESS tier. Power = 7.8% to detect the IS effect (Cohen's d = 0.151, N_per_group_needed_for_80pct = 688). A positive OOS sign-match at this N is noise-consistent — it cannot distinguish "IS edge alive", "IS edge dead", or "IS edge reversed". Binary OOS gate does NOT apply. Verdict overridden from PASS_CHORDIA to UNVERIFIED_INSUFFICIENT_POWER. Not PARK (which implies borderline evidence); UNVERIFIED means the OOS sample is too small to render any verdict. IS result stands (t=4.450, p=0.00001); OOS confirmation is deferred until N_OOS reaches ≥ 688 per group (current OOS accumulation rate: ~72 universe days per year, ~46 fired → would require ~15 years at current pace — pooled cross-lane aggregation is the practical path per RULE 3.3 option 1).
 
 **MEASURED theory mode:** `NO_THEORY_GRANT`
 **MEASURED threshold applied:** `3.79`
