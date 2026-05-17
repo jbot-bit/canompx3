@@ -6004,10 +6004,7 @@ def check_phase_4_validator_gates_present() -> list[str]:
 
 
 _SHA_MIGRATION_MANIFEST_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "docs"
-    / "audit"
-    / "check_107_sha_migrations.yaml"
+    Path(__file__).resolve().parent.parent / "docs" / "audit" / "check_107_sha_migrations.yaml"
 )
 
 
@@ -6048,22 +6045,16 @@ def _load_sha_migration_manifest(
         with path.open("r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh) or {}
     except Exception as exc:
-        errors.append(
-            f"SHA MIGRATION MANIFEST PARSE ERROR: {path} — {exc}"
-        )
+        errors.append(f"SHA MIGRATION MANIFEST PARSE ERROR: {path} — {exc}")
         return accepted, errors, entries_out
 
     if not isinstance(data, dict):
-        errors.append(
-            f"SHA MIGRATION MANIFEST: {path} root is not a mapping"
-        )
+        errors.append(f"SHA MIGRATION MANIFEST: {path} root is not a mapping")
         return accepted, errors, entries_out
 
     entries = data.get("entries", [])
     if not isinstance(entries, list):
-        errors.append(
-            f"SHA MIGRATION MANIFEST: {path} `entries` is not a list"
-        )
+        errors.append(f"SHA MIGRATION MANIFEST: {path} `entries` is not a list")
         return accepted, errors, entries_out
 
     required = {
@@ -6077,21 +6068,15 @@ def _load_sha_migration_manifest(
     }
     for i, entry in enumerate(entries):
         if not isinstance(entry, dict):
-            errors.append(
-                f"SHA MIGRATION MANIFEST: entry[{i}] is not a mapping"
-            )
+            errors.append(f"SHA MIGRATION MANIFEST: entry[{i}] is not a mapping")
             continue
         missing = required - set(entry.keys())
         if missing:
-            errors.append(
-                f"SHA MIGRATION MANIFEST: entry[{i}] missing fields: {sorted(missing)}"
-            )
+            errors.append(f"SHA MIGRATION MANIFEST: entry[{i}] missing fields: {sorted(missing)}")
             continue
         sha = entry["orphan_sha"]
         if not isinstance(sha, str) or len(sha) != 64:
-            errors.append(
-                f"SHA MIGRATION MANIFEST: entry[{i}] orphan_sha is not a 64-char hex string"
-            )
+            errors.append(f"SHA MIGRATION MANIFEST: entry[{i}] orphan_sha is not a 64-char hex string")
             continue
         accepted.add(sha)
         entries_out.append(entry)
@@ -6273,9 +6258,7 @@ def check_phase_4_sha_migration_manifest_integrity(
 
         file_path = (repo_root / rel).resolve()
         if not file_path.exists():
-            violations.append(
-                f"  SHA MIGRATION MANIFEST: entry[{i}] current_file does not exist on disk: {rel}"
-            )
+            violations.append(f"  SHA MIGRATION MANIFEST: entry[{i}] current_file does not exist on disk: {rel}")
             continue
 
         try:
@@ -6283,9 +6266,7 @@ def check_phase_4_sha_migration_manifest_integrity(
 
             on_disk_sha = hashlib.sha256(file_path.read_bytes()).hexdigest()
         except Exception as exc:
-            violations.append(
-                f"  SHA MIGRATION MANIFEST: entry[{i}] failed to read {rel}: {exc}"
-            )
+            violations.append(f"  SHA MIGRATION MANIFEST: entry[{i}] failed to read {rel}: {exc}")
             continue
 
         if on_disk_sha != declared_current:
@@ -6299,8 +6280,7 @@ def check_phase_4_sha_migration_manifest_integrity(
             result = _git(["cat-file", "-e", commit])
             if result.returncode != 0:
                 violations.append(
-                    f"  SHA MIGRATION MANIFEST: entry[{i}] {label} {commit[:12]}... "
-                    f"does not exist in this repository"
+                    f"  SHA MIGRATION MANIFEST: entry[{i}] {label} {commit[:12]}... does not exist in this repository"
                 )
 
         # migration_commit must touch current_file. Use --name-only on the
@@ -6308,9 +6288,7 @@ def check_phase_4_sha_migration_manifest_integrity(
         result = _git(["show", "--name-only", "--pretty=format:", mig])
         if result.returncode == 0:
             touched = {
-                line.strip()
-                for line in result.stdout.decode("utf-8", errors="replace").splitlines()
-                if line.strip()
+                line.strip() for line in result.stdout.decode("utf-8", errors="replace").splitlines() if line.strip()
             }
             if rel not in touched:
                 violations.append(
@@ -6340,9 +6318,7 @@ def check_phase_4_sha_migration_manifest_integrity(
 
         audit_path = (repo_root / audit_ref).resolve()
         if not audit_path.exists():
-            violations.append(
-                f"  SHA MIGRATION MANIFEST: entry[{i}] audit_ref does not exist on disk: {audit_ref}"
-            )
+            violations.append(f"  SHA MIGRATION MANIFEST: entry[{i}] audit_ref does not exist on disk: {audit_ref}")
 
     return violations
 
@@ -9500,8 +9476,7 @@ def check_lane_allocation_displaced_bucket() -> list[str]:
         gate = entry.get("rejection_gate")
         if gate not in ALLOWED_GATES:
             violations.append(
-                f"  {sid}: rejection_gate={gate!r} not in {sorted(ALLOWED_GATES)}; "
-                f"extend allowlist or fix writer"
+                f"  {sid}: rejection_gate={gate!r} not in {sorted(ALLOWED_GATES)}; extend allowlist or fix writer"
             )
             continue
         if gate == "missing_cost_spec":

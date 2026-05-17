@@ -508,8 +508,7 @@ class TestBuildAllocation:
             orb_minutes=15,
             annual_r_estimate=33.0,
         )
-        corr = {("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER",
-                 "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER_O15"): 0.0}
+        corr = {("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER", "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER_O15"): 0.0}
         displaced: list[dict] = []
         result = build_allocation(
             [incumbent_o5, challenger_o15],
@@ -522,8 +521,7 @@ class TestBuildAllocation:
         # Cross-aperture pair: NOT a hysteresis displacement.
         hysteresis_entries = [e for e in displaced if e["rejection_gate"] == "hysteresis"]
         assert hysteresis_entries == [], (
-            "Cross-aperture O5/O15 must not enter hysteresis branch — "
-            f"got {hysteresis_entries}"
+            f"Cross-aperture O5/O15 must not enter hysteresis branch — got {hysteresis_entries}"
         )
         # Both lanes selected (uncorrelated, ample DD budget).
         selected_ids = {s.strategy_id for s in result}
@@ -1673,9 +1671,7 @@ class TestDisplacedOutCapture:
         loser = _make_score(strategy_id="LOSER", orb_label="COMEX_SETTLE", annual_r_estimate=40.0)
         corr = {("LOSER", "WINNER"): 0.95}  # high rho → LOSER rejected
         displaced: list[dict] = []
-        result = build_allocation(
-            [winner, loser], max_slots=5, correlation_matrix=corr, displaced_out=displaced
-        )
+        result = build_allocation([winner, loser], max_slots=5, correlation_matrix=corr, displaced_out=displaced)
         assert {s.strategy_id for s in result} == {"WINNER"}
         assert len(displaced) == 1
         entry = displaced[0]
@@ -1757,9 +1753,7 @@ class TestDisplacedOutCapture:
         other = _make_score(strategy_id="OTHER", instrument="MNQ", orb_label="EUROPE_FLOW", annual_r_estimate=45.0)
         corr = {("ORPHAN", "OTHER"): 0.0}
         displaced: list[dict] = []
-        result = build_allocation(
-            [lane, other], max_slots=5, correlation_matrix=corr, displaced_out=displaced
-        )
+        result = build_allocation([lane, other], max_slots=5, correlation_matrix=corr, displaced_out=displaced)
         # Neither MNQ lane should be selected — both hit missing_cost_spec.
         assert len(result) == 0
         # Both ORPHAN and OTHER appear in displaced[].
