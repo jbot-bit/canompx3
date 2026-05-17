@@ -8,14 +8,26 @@
 
 ## Last Session
 - **Tool:** Claude Code (Opus 4.7)
-- **Date:** 2026-05-17 evening
-- **Commit:** (this commit) — feat(check107): SHA migration manifest + sibling integrity check; Check 107 orphan-SHA violations 11 → 0 with zero DB mutation
-- **Prior:** 9425d285 — audit(check107): enumerate + classify 11 orphan hypothesis_file_sha values
-- **Files changed:** pipeline/check_drift.py (manifest loader + acceptance path + new sibling check + runner registration), docs/audit/check_107_sha_migrations.yaml (new manifest, 11 evidence-grounded entries), tests/test_pipeline/test_check_drift.py (+11 TestPhase4ShaMigrationManifest tests).
-- **Session summary:** Audited the 11 Check 107 orphans via git archaeology (replay every historical version of every YAML in docs/audit/hypotheses/ and SHA-match against the orphan set). All 11 mapped cleanly: each orphan SHA = the SHA-256 of a real hypothesis YAML file as of a specific introducing_commit (`7aaf256c` for April / `82ab4c06` for May 11), and was invalidated by Amendment 3.3 (`8ab4fe13`) which added `metadata.theory_grant: false` to 203 files. Built migration manifest with introducing_commit / migration_commit / current_sha for every entry; modified Check 107 to consult manifest; added sibling check that proves each entry (commits exist, migration touched the file, blob SHA at introducing_commit equals orphan_sha, current_sha matches disk). 207/207 test_check_drift tests pass. Full drift run: 131 checks pass, 0 orphan-SHA violations (was 11).
-- **No DB mutation. No allowlist amendment. No experimental_strategies edits.** Manifest is the bridge between discovery-time SHA evidence and current-state file content.
+- **Date:** 2026-05-17 late evening
+- **Tip:** c0fb8a19 (audit deployment-coverage rebalance refresh 2026-05-17, annual_r rerank)
+- **Prior unpushed → pushed this session:** ff1f13ee (hysteresis aperture DD bug + canonical paused-set parser + fail-closed precondition on corrupt JSON) and 7624656b (work_queue render-handoff --write requires --force; pulse warning no longer recommends footgun). Both code-reviewed (Grade A-) before push.
+- **Live preflight result (real broker APIs):** `python scripts/run_live_session.py --instrument MNQ --profile topstep_50k_mnq_auto --preflight --signal-only` → 7/7 PASS. Token acquired, 4 lanes loaded, daily features fresh (atr_20=323.675, vel=Stable, dow=6), contract resolved `CON.F.US.MNQ.M26` (MNQM6 = June 2026 front month), bracket+fill-poller probes PASS, TradeJournal opens. Step 7 SKIPPED (signal-only mode bypasses copy-trading account resolution — needs non-signal-only run before clicking Start Live).
+- **Capital-class hardening landed (ff1f13ee):** session_orchestrator now delegates paused+stale parsing to `prop_profiles.load_paused_strategy_ids` (single drift surface vs lanes[] parser); profile_* accounts hard-fail on missing OR corrupt `lane_allocation.json` instead of silently routing blocked strategies live; hysteresis session_key in lane_allocator includes orb_minutes (was charging dd_used with wrong-aperture lane_dd across O5/O15/O30 swaps).
+- **No DB mutation. No allocator file mutation.** Code + tests + push only.
 
-## Prior Session (2026-05-17 PM)
+## Next Session — Start here (2026-05-18)
+- **Step A — non-signal-only preflight (5 min):** `python scripts/run_live_session.py --instrument MNQ --profile topstep_50k_mnq_auto --preflight` (no `--signal-only`). This exercises Step 7 copy-trading account resolution against real broker — the only gate not exercised tonight. Must show `[7/7] OK (copies=N, M accounts discovered)`.
+- **Step B — dashboard smoke (5 min):** launch dashboard, click Start Live on `topstep_50k_mnq_auto`. Confirm `SessionOrchestrator.__init__` reaches steady state without `_select_primary_and_shadow_accounts` RuntimeError, log shows `Copy trading: primary=..., shadows=[...]`. Regression check for `a0b3c24b`.
+- **Step C — go-live decision on existing 4 MNQ lanes** (`docs/runtime/next-session-go-live-plan.md` step 5). Pre-commit kill conditions (step 6 of that plan) BEFORE first real fill.
+- **Carry-over to capture during first live session:** dashboard `/api/bars-recent?instrument=MNQ` returns `"bars":[]` — capture tick log + 3-min-later curl + last 5 aggregator log lines per plan c-i. Without ≥1 live run's evidence no fix stage is justified.
+- **Do NOT:** mutate `docs/runtime/lane_allocation.json`, add new strategies, or re-litigate MGC LONDON_METALS before the first live day completes.
+- **Hygiene note:** untracked draft `docs/audit/hypotheses/drafts/2026-05-17-mnq-usdata1000-vwapmid-family-pooled-oos-v1.draft.yaml` is from a parallel session — leave alone unless owner identifies.
+
+## Prior Session (2026-05-17 evening — Check 107 SHA cleanup)
+- **Commit:** feat(check107) SHA migration manifest + sibling integrity check; Check 107 orphan-SHA 11 → 0 with zero DB mutation.
+- **Detail (compressed):** Git-archaeology audit of 11 orphans → all mapped to Amendment 3.3 (`8ab4fe13`) `theory_grant: false` stamp; manifest at `docs/audit/check_107_sha_migrations.yaml` with introducing_commit / migration_commit / current_sha per entry; sibling check `check_phase_4_sha_migration_manifest_integrity` guards against fabricated entries. 207/207 tests pass. Full detail in `docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md`.
+
+## Older Session (2026-05-17 PM — ATR_P70 chordia unlock)
 - **Tool:** Claude Code (Opus 4.7)
 - **Commit:** a080967b — research(chordia): ATR_P70 unlock UNVERIFIED_INSUFFICIENT_POWER (PASS_CHORDIA / OOS power tier STATISTICALLY_USELESS)
 - **Prior:** c6c190a3 (chore(gitignore): ignore tmp/ scratch directory)
