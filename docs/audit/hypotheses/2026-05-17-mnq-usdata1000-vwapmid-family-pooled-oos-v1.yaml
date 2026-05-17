@@ -1,0 +1,603 @@
+# DRAFT — quarantine route per memory/feedback_lhp_validator_vs_field_presence_trap_n1.md.
+# Awaiting human review before promotion to docs/audit/hypotheses/.
+#
+# Authoring provenance:
+#   - Plan file: C:/Users/joshd/.claude/plans/say-something-like-merry-newt.md (v4)
+#   - Two rounds of adversarial review: research-methodologist + evidence-auditor (2026-05-17).
+#   - Round-1 produced v2->v3 corrections; round-2 produced v3->v4 (BLOCKING-A audit-log
+#     inversion + BLOCKING-B pooled_t_role enforcement gap + MAJOR-1 PASS_PARTIAL_HOLM
+#     orphan + MAJOR-2 Carver mis-attribution + 3 minor fixes).
+#   - Closest committed template: docs/audit/hypotheses/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.yaml
+#     (O30 RR1.0 sibling — PASSED Chordia strict 2026-05-14; this draft extends to family-pooled
+#     framing with 3 prior PASSes + 1 unaudited cell under K=4 Holm + clustered SE).
+#
+# K-budget gate (Bailey 2013 MinBTL):
+#   PASS at N=4: MinBTL required 2.77yr vs clean MNQ horizon 6.65yr (3.88yr headroom).
+#   `python scripts/tools/estimate_k_budget.py --instrument MNQ --n-trials 4 --e-max 1.0` 2026-05-17.
+#   K_effective accounting: 3 prior Pathway-B PASSes on overlapping data + 4 new declared
+#   = 7 cumulative trials. MinBTL ~3.50yr at K=7 vs 6.65yr horizon = ~3.15yr headroom. INFORMATIONAL
+#   only; check_hypothesis_minbtl_compliance reads total_expected_trials (=4) which PASSES.
+#   L4 doctrine candidate per plan § 9.
+#
+# Graveyard override:
+#   (1) KILL 'MES mirror of MNQ US_DATA_1000 VWAP_MID_ALIGNED' (2026-04-19) — out of scope.
+#   (2) KILL 'O5-confluence overlay' (2026-04-22) — out of scope (no overlays here).
+#   (3) Three prior PASS_CHORDIA verdicts (3 of 4 cells) — NOT a graveyard hit; this pre-reg
+#       is a stricter K=4 Holm re-framing of the same evidence + 1 un-audited cell.
+#
+# BLOCKING-B compensating control: pooled_t_role_assert sentinel is the SOLE protection
+# against author-drift between B1 (this draft) and B2 (Stage B2 runner) until L2 drift
+# check lands. Runner contract MUST assert at startup and result MD frontmatter MUST echo.
+
+metadata:
+  theory_grant: false
+  name: "mnq_usdata1000_vwapmid_family_pooled_oos_v1"
+  purpose: "Family-pooled Holm-Bonferroni audit of MNQ US_DATA_1000 VWAP_MID_ALIGNED 4-cell family (O15/O30 x RR1.0/RR1.5) with clustered SE. No theory grant. Pooled t is descriptive-only; sole verdict-driving test is per-cell Holm-Bonferroni FWER under clustered SE."
+  date_locked: "2026-05-17T20:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 4
+  testing_mode: "family"
+  research_question_type: "family_pooled_aggregation"
+  notes:
+    - "K=4 declared trials (k_family/k_global/k_lane/k_session). K_effective=7 informational (3 prior Pathway-B PASSes counted per Lopez de Prado false-strategy Eq.1)."
+    - "theory_citation is INTENTIONALLY OMITTED on every hypothesis per memory/feedback_chordia_theory_citation_field_presence_trap.md — any truthy value flips loader has_theory=True and downgrades strict threshold 3.79->3.00."
+    - "Carver 2015 Ch 11 was MIS-ATTRIBUTED in v3 of the plan as a heterogeneity anchor; v4 corrected — Carver Ch 11 extract is about portfolio weights/diversification multiplier/position inertia, NOT pooling/exchangeability. Heterogeneity grounding here is project-doctrine (pooled-finding-rule.md + 3-incident precedent commit aa3399b3) + operator feedback + Harris Ch 4 structural backdrop. No external-literature heterogeneity anchor exists in resources/."
+    - "Petersen 2009 / Thompson 2011 clustered-SE citations are TRAINING_MEMORY_ONLY; not present in resources/ or docs/institutional/literature/. Methodology survives because statsmodels cov_type='cluster' is an implementation choice not a theory claim; structural argument grounded in Harris Ch 4."
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/vwap_mid_family_pooled_oos_v1.py"  # NOT YET AUTHORED; Stage B2 deliverable.
+  default_args:
+    - "--hypothesis-file"
+    - "docs/audit/hypotheses/2026-05-17-mnq-usdata1000-vwapmid-family-pooled-oos-v1.yaml"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/pooled-finding-rule.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/runtime/chordia_audit_log.yaml"  # PROVENANCE_ONLY: prior PASS_CHORDIA t_stat values (populated numeric field, v4 verified).
+    # Prior PASS_CHORDIA sibling pre-regs (cited as PROVENANCE_ONLY; per-cell t-stats re-computed fresh under clustered SE in this audit):
+    - "docs/audit/hypotheses/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.yaml"
+    - "docs/audit/hypotheses/2026-05-02-mnq-usdata1000-vwapmid-o15-rr10-chordia-unlock-v1.yaml"
+    - "docs/audit/hypotheses/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.yaml"
+    # Result MDs (derivation record + adversarial splits; per § 1 reconciliation rule, audit log is the canonical anchor):
+    - "docs/audit/results/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.md"
+    - "docs/audit/results/2026-05-02-mnq-usdata1000-vwapmid-o15-rr10-chordia-unlock-v1.md"
+    - "docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md"
+    # Discovery provenance:
+    - "docs/audit/results/2026-04-18-vwap-comprehensive-family-scan.md"
+    # Out-of-scope graveyard reference:
+    - "docs/audit/results/2026-04-19-mes-mnq-mirror-vwap-mid-aligned-us-data-1000-v1-scan.md"
+  literature_grounded_in_resources:
+    - source_file: "resources/Pseudo-mathematics-and-financial-charlatanism.pdf"
+      extract_proxy: "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+      use: "MinBTL bound for K-budget gate (Eq.6 RHS)"
+    - source_file: "resources/Two_Million_Trading_Strategies_FDR.pdf"
+      extract_proxy: "docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md"
+      use: "strict no-theory threshold t >= 3.79"
+    - source_file: "resources/backtesting_dukepeople_liu.pdf"
+      extract_proxy: "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+      use: "Sharpe haircut (IS deflation only; NOT an OOS validation substitute — see data_policy.oos_role)"
+    - source_file: "resources/benjamini-and-Hochberg-1995-fdr.pdf"
+      extract_proxy: "docs/institutional/literature/benjamini_hochberg_1995_fdr.md"
+      use: "FDR multi-testing baseline; Holm-Bonferroni chosen here over BH for capital-protection rationale — see methodology_rules_applied.holm_over_bh_rationale"
+    - source_file: "resources/false-strategy-lopez.pdf"
+      extract_proxy: "docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md"
+      use: "K_effective=7 informational accounting per Eq.1 prior-trial Sharpe inflation"
+    - source_file: "resources/Harris_Trading_Exchanges_Market_Microstructure.ocr.pdf"
+      extract_proxy: "docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md"
+      use: "Ch 4 § 4.5.2 stop-cascade anchors E2 entry; Ch 14 adverse selection. Structural backdrop for clustered SE (intraday trade-state dependence within trading_day)."
+    - source_file: "resources/Building_Reliable_Trading_Systems.pdf"
+      extract_proxy: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "core ORB premise (with_theory_claim: false)"
+    - source_file: "resources/Algorithmic_Trading_Chan.pdf"
+      extract_proxy: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      use: "intraday momentum base for ORB breakout (with_theory_claim: false)"
+  training_memory_only_citations:
+    - name: "Petersen 2009 panel-data clustered standard errors"
+      source: "TRAINING_MEMORY_ONLY"
+      reason: "Not present in resources/ or docs/institutional/literature/. Cited as implementation-method pointer only; statsmodels cov_type='cluster' is an API call not a theory claim. Structural argument grounded in Harris Ch 4."
+    - name: "Thompson 2011 multi-way clustering"
+      source: "TRAINING_MEMORY_ONLY"
+      reason: "Same as Petersen 2009. Not literature-grant-required because variance-estimator choice is methods convention not theory claim."
+  operator_doctrine_anchors:
+    - "memory/feedback_pooled_not_lane_specific.md"
+    - "memory/feedback_per_lane_breakdown_required.md"
+    - "memory/feedback_clustered_se_trading_day_pooled_finding_guard.md"
+    - "memory/feedback_pooled_t_verdict_role_disambiguation.md"
+    - "memory/feedback_harvey_liu_haircut_not_correlation_gate_substitute.md"
+    - "memory/feedback_harvey_liu_haircut_not_oos_validation_substitute.md"
+    - "memory/feedback_k_effective_prior_trial_accounting_minbtl.md"
+    - "memory/feedback_n_unique_trading_days_floor_clustered_se.md"
+    - "memory/feedback_holm_over_bh_requires_explicit_rationale.md"
+    - "memory/feedback_chordia_theory_citation_field_presence_trap.md"
+    - "memory/feedback_chordia_unlock_deployment_gate_audit_checklist.md"
+  notes:
+    - "This pre-reg is a stricter Holm-Bonferroni K=4 re-framing of three prior-PASS Chordia unlocks + one un-audited cell."
+    - "Pooled t is DESCRIPTIVE_ONLY (see primary_schema.pooled_t_role + pooled_t_role_assert sentinel)."
+    - "Per-cell breakdown is mandatory per pooled-finding-rule.md. Frontmatter requirements echoed in outputs_required_after_run."
+    - "Mode A holdout remains sacred from 2026-01-01 (HOLDOUT_SACRED_FROM)."
+
+scope:
+  instrument: MNQ
+  session: US_DATA_1000
+  filter_type: VWAP_MID_ALIGNED
+  filter_source: "trading_app.config.ALL_FILTERS['VWAP_MID_ALIGNED']"
+  entry_model: E2
+  confirm_bars: 1
+  apertures: [15, 30]
+  rr_targets: [1.0, 1.5]
+  direction: pooled  # long + short combined per cell, as in sibling templates.
+  out_of_scope:
+    - "RR2.0 sibling strategies — no prior IS audit anchor; including would inflate K without evidence basis (RULE 5.3 in reverse: widening requires a pre-IS-passing cell)."
+    - "MES cross-instrument mirror (KILL 2026-04-19, docs/audit/results/2026-04-19-mes-mnq-mirror-vwap-mid-aligned-us-data-1000-v1-scan.md)."
+    - "MGC cross-instrument mirror."
+    - "O5 aperture."
+    - "theory-grant attempt for VWAP_MID_ALIGNED."
+    - "Confluence overlays of any kind (2026-04-22 O5-confluence overlay KILL)."
+    - "Allocator state changes / correlation-gate changes / ranking-gate changes."
+    - "writes to validated_setups (read-only)."
+    - "Stage B2 runner authoring (this pre-reg specifies the contract only)."
+    - "Stage B3 deployment pre-reg (downstream; applies BOTH Harvey-Liu IS-Sharpe haircut AND allocator correlation gating)."
+    - "Modification of prior PASS_CHORDIA chordia_audit_log.yaml entries."
+
+data_policy:
+  oos_role: "descriptive_for_audit_verdict; deployment_eligibility_uses_separate_haircut_gate"
+  oos_role_rationale: >
+    Per Harvey-Liu 2015 Eq.5 (resources/backtesting_dukepeople_liu.pdf p.14), the haircut
+    formula deflates IS Sharpe by N-trial inflation. It is an IS-side correction, NOT an
+    OOS substitute. At pooled N_OOS ~180 with expected family effect size ~0.15 Sharpe,
+    OOS power is below 0.50 (STATISTICALLY_USELESS tier per backtesting-methodology.md
+    RULE 3.3). The audit verdict here is decided on IS gates alone (clustered-SE Holm).
+    Deployment eligibility is a SEPARATE downstream Stage B3 pre-reg that applies BOTH
+    (a) Harvey-Liu IS Sharpe haircut AND (b) allocator correlation gating; the two are
+    orthogonal gates and both must clear.
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only descriptive corroboration only; never used to rescue or kill the IS verdict."
+  cohort_lower_bound:
+    description: "trading_day >= WF_START_OVERRIDE['MNQ']"
+    constant_source: "trading_app.config.WF_START_OVERRIDE"
+    locked_boundary: "2020-01-01"
+    rationale: "Match canonical promoter cohort (strategy_discovery._load_outcomes_bulk)."
+  tuning_against_oos: false
+  canonical_layers_only: true
+  scratch_policy: "realized-eod"
+  scratch_policy_justification: "Capital-decision-relevant; C13 BINDING per pre_registered_criteria.md and feedback_chordia_unlock_deployment_gate_audit_checklist.md. Scratches counted as R=0 in trade stream."
+
+feature_definition:
+  feature_name: VWAP_MID_ALIGNED
+  canonical_source_of_truth: "trading_app.config.VWAPBreakDirectionFilter"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, 'VWAP_MID_ALIGNED', 'US_DATA_1000')"
+  trade_time_knowable: true
+  first_complete_time: "ORB end (O15 or O30 per cell)"
+  temporal_alignment_note: >
+    Pre-session VWAP plus ORB-level geometry are known by ORB close, so the filter is
+    trade-time-knowable. This prereg does not claim the filter has Pathway-B-quality
+    theory basis.
+  lookahead_check: "Required PASS before execution."
+
+grounding:
+  core_orb_premise:
+    - source_file: "resources/Building_Reliable_Trading_Systems.pdf"
+      extract_proxy: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "grounds intraday trend-follow / breakout continuation on equity-index class"
+      with_theory_claim: false
+    - source_file: "resources/Algorithmic_Trading_Chan.pdf"
+      extract_proxy: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      use: "grounds stop-cascade / intraday momentum base for ORB breakout entries"
+      with_theory_claim: false
+  filter_grounding_status:
+    verdict: "NO_THEORY_GRANT"
+    basis: >
+      Three prior PASS_CHORDIA Pathway-B unlocks on this filter (chordia_audit_log.yaml
+      lines 107/123/646; verified 2026-05-17 — log stores numeric t_stat values, NOT
+      None as a corrupted memory feedback file briefly claimed) elected no-theory
+      strict-3.79 default. This family-pooled audit inherits that no-theory framing
+      and applies it under K=4 Holm-Bonferroni FWER with clustered SE.
+      theory_citation is OMITTED on every hypothesis per memory/feedback_chordia_theory_citation_field_presence_trap.md;
+      any truthy theory_citation value would silently flip loader has_theory=True and
+      downgrade the runtime threshold to 3.00 via trading_app/hypothesis_loader.py:262-274.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - "docs/audit/results/2026-04-18-vwap-comprehensive-family-scan.md (initial family discovery)"
+    - "docs/runtime/chordia_audit_log.yaml:107 (RR1.5 O15 prior PASS_CHORDIA, t_stat=5.158)"
+    - "docs/runtime/chordia_audit_log.yaml:123 (RR1.0 O15 prior PASS_CHORDIA, t_stat=4.362)"
+    - "docs/runtime/chordia_audit_log.yaml:646 (RR1.0 O30 prior PASS_CHORDIA, t_stat=4.450)"
+    - "docs/audit/results/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.md (RR1.5 O15 derivation record)"
+    - "docs/audit/results/2026-05-02-mnq-usdata1000-vwapmid-o15-rr10-chordia-unlock-v1.md (RR1.0 O15 derivation record)"
+    - "docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md (RR1.0 O30 derivation record)"
+  note: >
+    Three of four cells have prior PASS_CHORDIA verdicts. This pre-reg is a stricter
+    Holm-Bonferroni K=4 re-framing of the same evidence plus the one un-audited cell
+    (O30 RR1.5 — Sharpe 0.094, OOS_ExpR 0.099, haircut -1.908 from validated_setups).
+    Prior t-stats live in BOTH chordia_audit_log.yaml (canonical, populated numeric
+    t_stat field) AND result MDs (derivation record). Both are valid PROVENANCE
+    references; the audit log is the more compact citation source. Fresh execution
+    under clustered SE is required for the pre-reg verdict regardless. See
+    reconciliation rule under outputs_required_after_run.
+  reconciliation_rule:
+    canonical_anchor: "chordia_audit_log.yaml t_stat field (NOT result MD; result MD is secondary cross-check)."
+    tolerance_bands:
+      pass_silent: "|delta_t| <= 0.10 (no MD block needed)"
+      pass_with_block: "0.10 < |delta_t| <= 0.50 (result MD MUST emit reconciliation block naming source: scratch convention, date boundary, cohort change, statsmodels API revision; verdict proceeds on fresh value)"
+      audit_integrity_failure: "|delta_t| > 0.50 (halt + re-run + investigate upstream BEFORE verdict)"
+
+primary_schema:
+  family_cells:
+    - id: "MNQ_US_DATA_1000_O15_RR1.0_VWAP_MID_ALIGNED"
+      strategy_id: "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15"
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 15
+      rr_target: 1.0
+      filter: VWAP_MID_ALIGNED
+      prior_chordia_status: PASS_CHORDIA
+      prior_t_stat: 4.362
+      expected_N_IS: 744
+      prior_audit_log_ref: "chordia_audit_log.yaml:123"
+    - id: "MNQ_US_DATA_1000_O15_RR1.5_VWAP_MID_ALIGNED"
+      strategy_id: "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15"
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 15
+      rr_target: 1.5
+      filter: VWAP_MID_ALIGNED
+      prior_chordia_status: PASS_CHORDIA
+      prior_t_stat: 5.158
+      expected_N_IS: 701
+      prior_audit_log_ref: "chordia_audit_log.yaml:107"
+    - id: "MNQ_US_DATA_1000_O30_RR1.0_VWAP_MID_ALIGNED"
+      strategy_id: "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30"
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 30
+      rr_target: 1.0
+      filter: VWAP_MID_ALIGNED
+      prior_chordia_status: PASS_CHORDIA
+      prior_t_stat: 4.450
+      expected_N_IS: 699
+      prior_audit_log_ref: "chordia_audit_log.yaml:646"
+    - id: "MNQ_US_DATA_1000_O30_RR1.5_VWAP_MID_ALIGNED"
+      strategy_id: "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O30"
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 30
+      rr_target: 1.5
+      filter: VWAP_MID_ALIGNED
+      prior_chordia_status: UNAUDITED
+      prior_t_stat: null
+      expected_N_IS: 584
+      prior_audit_log_ref: null
+
+  k_family: 4
+  k_global: 4
+  k_lane: 4
+  k_session: 4
+  k_effective_informational: 7  # 3 prior Pathway-B PASSes on overlapping data + 4 new declared (Lopez de Prado false-strategy Eq.1; L4 doctrine candidate per plan § 9; check_hypothesis_minbtl_compliance reads total_expected_trials=4 which PASSES).
+
+  chordia_threshold_basis: "TWO INDEPENDENT gates per cell: (gate A) Chordia 2018 no-theory strict t-hurdle t_clustered >= 3.79 (absolute, K-independent); (gate B) Holm-Bonferroni FWER on p_clustered at alpha=0.05 across K=4 (relative, K-dependent). Both gates must pass. Neither subsumes the other."  # ASCII >= mandatory; Unicode would silently pass check_chordia_result_threshold_matches_prereg regex at pipeline/check_drift.py:3388-3391 without validating.
+
+  holm_bonferroni_thresholds:
+    method: "Holm-Bonferroni FWER at alpha=0.05 across K=4"
+    ranking_rule: "rank cells by p_clustered ascending before assigning alpha'_i (B2 runner MUST follow this direction; descending rank would pass wrong cells)"
+    thresholds:
+      alpha_prime_1: 0.0125  # alpha / (K - 1 + 1) = 0.05 / 4
+      alpha_prime_2: 0.0167  # alpha / (K - 2 + 1) = 0.05 / 3
+      alpha_prime_3: 0.025   # alpha / (K - 3 + 1) = 0.05 / 2
+      alpha_prime_4: 0.05    # alpha / (K - 4 + 1) = 0.05 / 1
+    applied_to: "p_clustered (NOT p_naive). See clustered_se_guard below."
+
+  clustered_se_guard:
+    estimator: "statsmodels.regression.linear_model.OLS with cov_type='cluster', cluster=trading_day"
+    rationale: >
+      Multiple trades within the same trading_day share intraday volatility regime, gap
+      context, news flow, session-spillover. Pooled cell collapses across apertures x RRs
+      so a single trading_day can contribute up to 4 cell-trades. Naive i.i.d. SE
+      understates variance / overstates t-stat. Structural argument grounded in
+      Harris 2002 Ch 4 § 4.5.2 (resources/Harris_Trading_Exchanges_Market_Microstructure.ocr.pdf
+      + extract docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md).
+      Petersen 2009 / Thompson 2011 statistical canon labelled TRAINING_MEMORY_ONLY
+      (not in local literature); methodology survives because variance-estimator choice
+      is implementation not theory.
+    required_reporting:
+      - "For every cell and the pooled cell: N_trades, N_unique_trading_days, cluster_size_mean, cluster_size_max"
+      - "t_naive (i.i.d.) and t_clustered side-by-side"
+      - "If t_clustered < t_naive by >= 0.5 then result MD frontmatter MUST set clustering_inflation_warning: true"
+      - "Holm thresholds applied against p_clustered only"
+    kill_clauses:
+      naive_flip_kill: "If a cell would PASS at t_naive >= 3.79 but FAIL at t_clustered < 3.79, the cell FAILS. No mid-run methodology flip."
+      cluster_skew_kill_threshold: 30  # operator-chosen; no external literature anchor; see plan § 5.8a L5 doctrine candidate
+      cluster_skew_kill_rule: "If N_unique_trading_days < 30 for any cell, that cell's clustered-SE estimator is unreliable (effective cluster count below conventional rule-of-thumb reliability; Bailey 2013 IID assumption violated at cluster level). Cell verdict = UNVERIFIED regardless of t_clustered value."
+
+  verdict_test: "Holm-Bonferroni per-cell at alpha=0.05; per-cell raw-p computed with clustered SE — sole verdict-driving test."
+
+  pooled_t_role: "DESCRIPTIVE_ONLY"  # Pooled t reported next to per-cell breakdown for transparency, but cannot override a Holm fail and cannot rescue a Holm pass.
+
+  pooled_t_role_assert: "DESCRIPTIVE_ONLY"  # BLOCKING-B v4 compensating control. Machine-readable sentinel. Stage B2 runner contract MUST assert at startup: `assert hypothesis['primary_schema']['pooled_t_role_assert'] == 'DESCRIPTIVE_ONLY'`, fail-closed on mismatch. Result MD frontmatter MUST echo verbatim under key pooled_t_role. Until L2 drift check (check_pooled_finding_annotations extended to require pooled_t_role in {VERDICT_DRIVING, DESCRIPTIVE_ONLY}) lands, the sentinel + runner-startup assert + frontmatter echo is the SOLE protection against author-drift between B1 (this pre-reg) and B2 (Stage B2 runner). Honestly labelled compensating-control-protected, NOT enforced.
+
+  promotion_gate: >
+    PASS_FAMILY_HOLM if ALL 4 cells clear their Holm-adjusted per-cell p_clustered AND
+    every cell's t_clustered >= 3.79 (no-theory Chordia hurdle) AND ALL 4 cells satisfy
+    N_unique_trading_days >= 30. FAIL_FAMILY otherwise. K=4 is all-or-nothing — there is
+    NO PASS_PARTIAL_HOLM verdict (v4 decision 2026-05-17: 3-of-4 PASS routes to
+    FAIL_FAMILY, and per-cell deployment of any passing cell requires a fresh
+    single-cell pre-reg from scratch, NOT a partial-pass shortcut).
+    flip_rate_pct is NOT a Stage B1 verdict input — H2 is descriptive-only per
+    pooled-finding-rule.md (heterogeneity_ack is a result-MD frontmatter discipline,
+    NOT a verdict gate). flip_rate_pct >= 25 constrains downstream Stage B3
+    deployment shape (per-cell only, no family-block deployment), it does not change
+    the Stage B1 PASS/FAIL verdict.
+
+hypotheses:
+  # NOTE: theory_citation is INTENTIONALLY OMITTED on every hypothesis per
+  # memory/feedback_chordia_theory_citation_field_presence_trap.md.
+  - id: 1
+    name: "Per-cell Holm-Bonferroni under clustered SE (verdict-driving)"
+    economic_basis: >
+      On the locked 4-cell MNQ US_DATA_1000 VWAP_MID_ALIGNED family, each cell's
+      clustered-SE t-stat clears its Holm-Bonferroni-adjusted threshold at alpha=0.05
+      across K=4 with no theory grant, AND each cell satisfies N_unique_trading_days >= 30.
+      This is the SOLE verdict-driving hypothesis. Holm ranking rule per
+      primary_schema.holm_bonferroni_thresholds.ranking_rule (ascending p_clustered).
+    role:
+      kind: "family_pooled_aggregation"
+      parent: "K=4 family of (O15, O30) x (RR1.0, RR1.5) cells on MNQ US_DATA_1000 VWAP_MID_ALIGNED."
+      comparator: "Per-cell clustered-SE t-stat vs Holm-Bonferroni alpha'_i sequence."
+      primary_metric: "t_clustered per cell + holm_adjusted_p_clustered per cell"
+      promotion_target: "family_holm_unlock_only"
+    filter:
+      type: "VWAP_MID_ALIGNED"
+      column: "orb_US_DATA_1000_vwap, orb_US_DATA_1000_break_dir"
+      thresholds:
+        - "fire_vs_off (per-cell canonical delegation)"
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.0, 1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [15, 30]
+    expected_trial_count: 4
+    kill_criteria:
+      - "Any cell's p_clustered > its Holm-adjusted alpha'_i (per ranking rule) — this is the FWER kill"
+      - "Any cell's t_clustered < 3.79 — this is the no-theory Chordia hurdle kill (separate from Holm; both must pass independently)"
+      - "Any cell's N_unique_trading_days < 30 (cluster-skew kill -> cell UNVERIFIED -> family FAIL)"
+      - "Naive-flip kill: any cell PASS at t_naive >= 3.79 but FAIL at t_clustered < 3.79 (Chordia hurdle), OR cell PASS at p_naive <= alpha'_i but FAIL at p_clustered > alpha'_i (Holm gate)"
+      - "Canonical filter delegation diverges from trading_app.config"
+      - "Scratch/null handling not explicit in measured trade stream"
+      - "Section 1 reconciliation divergence > 0.50 t-units on any prior-PASS cell (audit-execution-integrity failure)"
+      # OOS is NOT a kill axis at audit-time per RULE 3.3 power-tier mandate.
+    statement: >
+      Each of the 4 cells in the MNQ US_DATA_1000 VWAP_MID_ALIGNED family
+      INDEPENDENTLY clears TWO separate gates under clustered SE at trading_day level
+      on canonical Mode-A IS data: (gate A) per-cell t_clustered >= 3.79 — the
+      Chordia 2018 no-theory strict t-hurdle, and (gate B) per-cell
+      holm_adjusted_p_clustered <= alpha'_i — the Holm-Bonferroni FWER p-correction
+      at K=4, alpha=0.05. Both gates are necessary; neither subsumes the other (t >=
+      3.79 is a fixed absolute t-threshold from Chordia, Holm is a relative p-rank
+      adjustment that varies with K). Every cell must also satisfy N_unique_trading_days
+      >= 30 (clustered-SE reliability floor) and ExpR_IS > 0 (sign sanity).
+    pass_metric:
+      metric: "t_clustered and holm_adjusted_p_clustered per cell (TWO INDEPENDENT gates; both must pass)"
+      formula: "OLS with cov_type='cluster', cluster=trading_day, on canonical IS fired trades after canonical filter delegation. t_clustered = coef/se_clustered; p_clustered = two-sided p from cluster-robust t. holm_adjusted_p_clustered assigned per primary_schema.holm_bonferroni_thresholds.ranking_rule."
+      threshold_gte:
+        # Gate A — Chordia 2018 no-theory strict t-hurdle (absolute t-threshold):
+        all_cells_t_clustered_chordia_strict: 3.79
+        # Gate B — Holm-Bonferroni FWER (relative p-rank correction at K=4, alpha=0.05):
+        all_cells_holm_adjusted_p_clustered_pass: true
+        # Cluster-reliability + sign-sanity floors:
+        all_cells_n_unique_trading_days: 30
+        all_cells_expr_is_positive: true
+      extra_gates:
+        - "OOS dir_match reported descriptively only; NOT a refutation axis at audit-time (RULE 3.3 power-tier mandate; pooled measured power expected STATISTICALLY_USELESS pre-run; computed at run-time)."
+        - "Adversarial split table emitted: per-cell long-only vs short-only vs pooled, per-cell year-by-year"
+        - "Scratch-inclusive accounting required (realized-eod)"
+    counted_against_trial_budget: true
+
+  - id: 2
+    name: "Heterogeneity descriptive (flip-rate; frontmatter + Stage B3 shape input)"
+    economic_basis: >
+      Per .claude/rules/pooled-finding-rule.md (RULE 14, committed aa3399b3 2026-04-20
+      after retroactive heterogeneity audit found 3 historical pooled audits passed
+      BH-global at K_global while >=25% of underlying cells flipped sign), pooled
+      framings hide opposite-sign per-cell behaviour. flip_rate_pct >= 25 triggers
+      heterogeneity_ack frontmatter requirement (matching
+      pipeline/check_drift.py:7666 check_pooled_finding_annotations strict >=
+      inequality) AND constrains downstream Stage B3 deployment shape to per-cell
+      only (no family-block deployment). It does NOT change the Stage B1 verdict —
+      pooled-finding-rule.md scope is result-MD discipline + deployment shape, not
+      audit verdict math. At K=4, 25% threshold equals <=1 cell sign-flip before ack
+      required. Operator-chosen threshold pinned to 3-incident project precedent; no
+      external-literature anchor.
+    role:
+      kind: "heterogeneity_descriptive"
+      parent: "Reports alongside H1; constrains downstream Stage B3 deployment shape."
+      primary_metric: "flip_rate_pct"
+      promotion_target: "frontmatter_annotation_and_stage_b3_shape_input"
+    expected_trial_count: 0  # descriptive; NOT counted against trial budget.
+    counted_against_trial_budget: false
+    statement: >
+      OOS sign-flip rate across the 4 cells (flip_rate_pct) is reported in result-MD
+      frontmatter regardless of value; heterogeneity_ack: true required if
+      flip_rate_pct >= 25. H2 does NOT pass/fail. The Stage B1 audit verdict is
+      decided solely by H1 (and H3 as robustness check). H2's downstream consequence
+      is Stage B3 deployment shape per decision_rule.deployment_shape_constraint.
+    pass_metric:
+      metric: "reporting_only"
+      reported_field: "flip_rate_pct"
+      reporting: "Always reported; heterogeneity_ack: true required if flip_rate_pct >= 25 (frontmatter discipline). H2 is descriptive — no Stage B1 pass/fail; Stage B1 verdict drives only via H1. Stage B3 deployment shape is constrained per decision_rule.deployment_shape_constraint."
+
+  - id: 3
+    name: "Unaudited-cell isolation (O30 RR1.5)"
+    economic_basis: >
+      The sole un-audited cell (O30 RR1.5; Sharpe 0.094, haircut -1.908) is the family
+      weak link by every prior metric. Including it pre-reg-honestly avoids cherry-picking
+      the three strong cells. Need to verify it does not single-handedly drive the family
+      verdict.
+    role:
+      kind: "robustness_check"
+      parent: "Sub-analysis of H1."
+      primary_metric: "K=3 Holm verdict on prior-PASS cells alone vs K=4 verdict"
+      promotion_target: "robustness_annotation_only"
+    expected_trial_count: 0  # robustness check on H1; NOT counted against trial budget.
+    counted_against_trial_budget: false
+    statement: >
+      O30 RR1.5 cell does not single-handedly drive the family — defined operationally as:
+      K=3 Holm run restricted to the 3 prior-PASS cells produces the same per-cell PASS/FAIL
+      verdict at the K=3-adjusted thresholds as the K=4 run, AND all 3 cells retain
+      positive ExpR_IS. Both conditions required.
+
+oos_power_floor:
+  required_tier_for_kill: "CAN_REFUTE (power >= 0.80)"
+  measured_pooled_power: null  # MEASURED at run-time by Stage B2 runner via research.oos_power.oos_ttest_power; if calculator unavailable, runner MUST label INFERRED and route cell to UNVERIFIED tier.
+  measured_per_cell_power: null  # Same as above, per cell.
+  pre_run_estimate_tier: "STATISTICALLY_USELESS (based on per-cell ~7.8% in docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md; pooled uplift uncertain without calc)."
+  pre_committed_verdict_on_binary_oos_kill: "UNVERIFIED_INSUFFICIENT_POWER (binary OOS gate not applicable at audit-time per RULE 3.3)"
+  source: "research.oos_power.oos_ttest_power (canonical helper; Stage B2 runner MUST call this, not re-implement)"
+  deployment_eligibility_pathway: >
+    Downstream Stage B3 deployment pre-reg applies Harvey-Liu Sharpe-haircut to IS Sharpe
+    (NOT as OOS substitute; haircut is IS-side deflation per resources/backtesting_dukepeople_liu.pdf
+    Eq.5 p.14) AND allocator correlation/ranking gating. Both gates orthogonal; both must clear.
+
+trial_budget:
+  primary_selection_trials: 4
+  schema_locked_before_any_metric: true
+
+total_hypothesis_count: 3  # H1 verdict-driving + H2 descriptive heterogeneity + H3 robustness. NOT a trial-budget count.
+total_expected_trials: 4  # K-budget gate (drift check 59) reads THIS field. = 4 cells in H1's family; H2 + H3 carry expected_trial_count: 0 and counted_against_trial_budget: false. The two counts are intentionally distinct: hypothesis_count = YAML hypothesis entries (any role); total_expected_trials = MinBTL-relevant trials only.
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+  minbtl_check:
+    instrument: MNQ
+    clean_horizon_years: 6.65
+    n_declared: 4
+    e_max: 1.0
+    minbtl_required_years: 2.77
+    headroom_years: 3.88
+    n_max_at_horizon: 27
+    verdict: "PASS"
+    estimator_command: "python scripts/tools/estimate_k_budget.py --instrument MNQ --n-trials 4 --e-max 1.0"
+    estimator_run_at: "2026-05-17"
+  k_effective_informational:
+    n_prior_pathway_b_trials: 3  # 3 prior PASS_CHORDIA cells (chordia_audit_log.yaml lines 107/123/646)
+    n_new_declared: 4
+    k_effective_cumulative: 7
+    minbtl_required_at_k_effective: 3.50
+    headroom_at_k_effective: 3.15
+    k_effective_verdict: "PASS"
+    note: "Informational only per Lopez de Prado false-strategy Eq.1. check_hypothesis_minbtl_compliance reads total_expected_trials=4 which is the gate."
+
+decision_rule:
+  continue_if: >
+    H1 clears (every cell satisfies: holm_adjusted_p_clustered <= alpha'_i AND
+    t_clustered >= 3.79 AND N_unique_trading_days >= 30 AND ExpR_IS > 0) AND
+    H3 isolation check holds -> PASS_FAMILY_HOLM -> downstream Stage B3 deployment
+    pre-reg authorized. Stage B3 deployment shape is then constrained by H2
+    flip_rate_pct (see deployment_shape_constraint below), but the PASS_FAMILY_HOLM
+    verdict itself does not depend on H2.
+  kill_if: >
+    H1 fails (any cell fails Holm-adjusted p_clustered, OR any cell t_clustered < 3.79,
+    OR cluster-skew kill triggers UNVERIFIED on any cell, OR naive-flip kill triggers)
+    OR canonical delegation diverges OR scratch handling unexplicit OR execution
+    integrity fails OR Section 1 reconciliation divergence > 0.50 t-units on any
+    prior-PASS cell.
+  deployment_shape_constraint: >
+    Stage B3 (separate downstream pre-reg) MUST honour H2 flip_rate_pct as a
+    deployment-shape input per pooled-finding-rule.md "queuing a trading decision on
+    a pooled p-value... actively misleads" above 25%. Specifically: if H1 = PASS and
+    flip_rate_pct >= 25, Stage B3 may only deploy per-cell (one allocator slot per
+    Holm-passing cell), NEVER as a family-block. If flip_rate_pct < 25, Stage B3 may
+    consider family-block deployment subject to its own correlation-gate + Harvey-Liu
+    haircut decisions. This constraint binds Stage B3, not Stage B1's verdict.
+  # H2 flip_rate_pct is a result-MD frontmatter ack + Stage B3 deployment-shape
+  #   input, NOT a Stage B1 verdict gate.
+  # Pooled t is NEVER an input to continue/kill (descriptive_only; sentinel-protected).
+  # OOS is NOT a kill axis at audit-time per RULE 3.3 power-tier mandate.
+  # PASS_PARTIAL_HOLM does NOT exist as a verdict (v4 decision: K=4 all-or-nothing).
+  # PARK_FAMILY_HETEROGENEOUS does NOT exist as a Stage B1 verdict (v5 fix
+  #   2026-05-17: H2 cannot move Stage B1 verdict per pooled-finding-rule.md scope —
+  #   the rule governs result-MD discipline + deployment shape, not audit verdicts).
+
+methodology_rules_applied:
+  - rule: "RULE 3 sacred holdout"
+    application: "IS and OOS partitioned by HOLDOUT_SACRED_FROM=2026-01-01."
+  - rule: "RULE 3.3 OOS power floor"
+    application: "Measured pooled power computed at run-time; pre-run estimate STATISTICALLY_USELESS. Binary OOS gate not applicable at audit-time; default verdict UNVERIFIED_INSUFFICIENT_POWER."
+  - rule: "RULE 4 multiple testing"
+    application: "K=4 Holm-Bonferroni FWER verdict-driving. Bailey 2013 MinBTL PASS at N=4. Holm chosen over BH for capital-protection rationale (see holm_over_bh_rationale below)."
+  - rule: "RULE 6 trade-time knowability"
+    application: "VWAP_MID_ALIGNED trade-time-knowable at O15 and O30 ORB close (per sibling pre-reg lookahead_check)."
+  - rule: "RULE 9 canonical data source"
+    application: "Reads only canonical layers (bars_1m, daily_features, orb_outcomes)."
+  - rule: "research-truth-protocol canonical filter delegation"
+    application: "Filter fire mask via research.filter_utils.filter_signal, never inline re-implementation."
+  - rule: ".claude/rules/pooled-finding-rule.md (RULE 14)"
+    application: "pooled_finding: true in result MD frontmatter; per_cell_breakdown_path mandatory; flip_rate_pct reported; heterogeneity_ack: true required if flip_rate_pct >= 25."
+  - rule: "Clustered SE at trading_day level"
+    application: "Applied to every reported t-stat (per-cell + descriptive pooled). Structural argument grounded in Harris 2002 Ch 4 § 4.5.2. Petersen 2009 / Thompson 2011 labelled TRAINING_MEMORY_ONLY (not in local literature; methodology survives as implementation choice not theory claim)."
+
+holm_over_bh_rationale: >
+  Plan uses Holm-Bonferroni FWER instead of BH 1995 / Harvey-Liu 2015 FDR baseline.
+  Rationale: any false discovery in a 4-cell family that would inform capital-allocation
+  decision is a capital-protection failure mode. FWER (Holm) controls probability of
+  ANY false discovery; FDR (BH) controls expected RATE. At K=4 these differ by factor
+  ~4x in stringency. Choosing stricter framing is a deliberate capital-protection bias
+  toward Type II over Type I. Documented explicitly so a reviewer cannot legitimately
+  demand BH instead. Satisfies feedback_holm_over_bh_requires_explicit_rationale.md.
+
+outputs_required_after_run:
+  - "Result markdown at docs/audit/results/2026-05-17-mnq-usdata1000-vwapmid-family-pooled-oos-v1.md"
+  - "Per-cell breakdown CSV at docs/audit/results/2026-05-17-mnq-usdata1000-vwapmid-family-pooled-oos-v1.per-cell.csv (one row per cell x IS/OOS split; columns: cell_id, period, N_trades, N_unique_trading_days, cluster_size_mean, cluster_size_max, ExpR, Sharpe, t_naive, t_clustered, p_naive, p_clustered, holm_adjusted_p_clustered, pass_fail_flag, direction_split, oos_dir_match, oos_power_tier)"
+  - "Year-by-year adversarial CSV at docs/audit/results/2026-05-17-mnq-usdata1000-vwapmid-family-pooled-oos-v1.by-year.csv (columns: cell_id, year, N_trades, N_unique_trading_days, ExpR, t_naive, t_clustered, p_clustered, direction; coverage: all calendar years with >= 10 trades in IS window)"
+  - "Long-only vs short-only adversarial split per cell (RULE 12)"
+  - "Descriptive pooled summary table in result MD: pooled t_clustered, pooled N_trades, pooled N_unique_trading_days, pooled ExpR, flip_rate_pct, heterogeneity_ack, pooled_t_role: descriptive_only tag"
+  - "Result MD frontmatter MUST include: pooled_finding: true; verdict_test: holm_bonferroni_per_cell_clustered_se; pooled_t_role: descriptive_only (verbatim echo of pooled_t_role_assert sentinel); per_cell_breakdown_path: <exact CSV path>; measured_pooled_power: <float computed at run-time>; clustering_inflation_warning: <bool>"
+  - "MEASURED THRESHOLD line for drift check check_chordia_result_threshold_matches_prereg MUST read 3.79 ASCII (NOT 3.0 and NOT Unicode-decorated)"
+  - "Explicit boundary statement in result MD prose: Harvey-Liu Sharpe-haircut deflates IS Sharpe for multiple-testing inflation; NOT an OOS validation substitute. Deployment eligibility decided by downstream Stage B3 pre-reg applying haircut AND allocator correlation gating — both orthogonal, both must clear."
+  - "Reconciliation block per cell IF |delta_t| > 0.10 vs prior audit-log t_stat value (per primary_schema reconciliation_rule)"
+
+execution_gate:
+  allowed_now: false  # DRAFT in quarantine; promotion to docs/audit/hypotheses/ (non-drafts/) requires human review AND Stage B2 runner script existing.
+  promoted_at: null
+  promoted_by: null
+  execution_surface: "WSL with .venv-wsl, OR Windows .venv (Scripts/python.exe)"
+  forbidden_now:
+    - "theory-grant upgrade without a new resources/-backed citation"
+    - "adding any truthy value to hypotheses[].theory_citation (would silently flip runtime threshold to 3.00)"
+    - "promoting pooled_t_role from DESCRIPTIVE_ONLY to VERDICT_DRIVING (would invert primary_schema.pooled_t_role + sentinel)"
+    - "applying Holm thresholds to p_naive instead of p_clustered (would invert clustered_se_guard)"
+    - "substituting Harvey-Liu Sharpe-haircut for allocator correlation gating (would invert not_done_by_this_pre_reg.allocator_correlation_gate boundary)"
+    - "substituting Harvey-Liu Sharpe-haircut for OOS validation (would invert data_policy.oos_role; haircut is IS-side deflation only)"
+    - "using Unicode '>=' (U+2265) in chordia_threshold_basis (silent drift-check bypass; ASCII '>=' MANDATORY)"
+    - "RR widening (RR2.0 out of scope)"
+    - "aperture widening (O5 out of scope)"
+    - "cross-instrument mirror (MES/MGC out of scope; 2026-04-19 KILL on MES already)"
+    - "allocator state changes / correlation-gate changes / ranking-gate changes"
+    - "validated_setups writes"
+    - "modification of prior PASS_CHORDIA chordia_audit_log.yaml entries"
+    - "reintroducing PASS_PARTIAL_HOLM as a verdict (v4 decision: K=4 all-or-nothing)"
+    - "reintroducing PARK_FAMILY_HETEROGENEOUS as a Stage B1 verdict (v5 fix 2026-05-17: H2 is descriptive only; flip_rate_pct constrains Stage B3 deployment shape, NOT Stage B1 verdict, per pooled-finding-rule.md scope)"
+    - "using flip_rate_pct as a Stage B1 continue/kill input (would invert decision_rule + H2 role)"
+
+not_done_by_this_pre_reg:
+  - "Does NOT certify deployment (Criterion 8 OOS gates require separate downstream pre-reg per Harvey-Liu haircut framework)."
+  - "Does NOT re-litigate the 3 prior Chordia unlock verdicts — those remain canonical evidence; this pre-reg only constructs the K=4 Holm framing and aggregates them with the 4th cell."
+  - "Does NOT widen to RR2.0, MES mirror, MGC mirror, or O5 aperture."
+  - "Does NOT use Harvey-Liu haircut as a verdict input within Stage B1 — the haircut is named only as a Stage B3 deployment-eligibility tool."
+  - "Does NOT replace allocator correlation/ranking gating with Harvey-Liu Sharpe-haircut. The two are orthogonal: haircut = IS-Sharpe deflation for multiple-testing inflation (resources/backtesting_dukepeople_liu.pdf Eq.5 p.14; NOT an OOS-validation substitute); allocator correlation gate = portfolio-construction constraint (scripts/tools/rebalance_lanes.py)."
+  - "Does NOT promote any of the L1-L5 doctrine candidates (plan § 9) to canonical drift checks or new doctrine files. Those are listed for post-Stage-B2 review."
+  - "Does NOT change live deployment or allocator state."
+  - "Does NOT carry external-literature anchor for the heterogeneity-warning argument specifically (no such anchor exists in resources/; grounding is project-doctrine pooled-finding-rule.md + operator feedback + Harris Ch 4 structural backdrop)."
