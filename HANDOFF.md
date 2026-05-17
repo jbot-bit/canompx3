@@ -8,7 +8,16 @@
 
 ## Last Session
 - **Tool:** Claude Code (Opus 4.7)
-- **Date:** 2026-05-17 PM
+- **Date:** 2026-05-17 evening
+- **Commit:** (this commit) — feat(check107): SHA migration manifest + sibling integrity check; Check 107 orphan-SHA violations 11 → 0 with zero DB mutation
+- **Prior:** 9425d285 — audit(check107): enumerate + classify 11 orphan hypothesis_file_sha values
+- **Files changed:** pipeline/check_drift.py (manifest loader + acceptance path + new sibling check + runner registration), docs/audit/check_107_sha_migrations.yaml (new manifest, 11 evidence-grounded entries), tests/test_pipeline/test_check_drift.py (+11 TestPhase4ShaMigrationManifest tests).
+- **Session summary:** Audited the 11 Check 107 orphans via git archaeology (replay every historical version of every YAML in docs/audit/hypotheses/ and SHA-match against the orphan set). All 11 mapped cleanly: each orphan SHA = the SHA-256 of a real hypothesis YAML file as of a specific introducing_commit (`7aaf256c` for April / `82ab4c06` for May 11), and was invalidated by Amendment 3.3 (`8ab4fe13`) which added `metadata.theory_grant: false` to 203 files. Built migration manifest with introducing_commit / migration_commit / current_sha for every entry; modified Check 107 to consult manifest; added sibling check that proves each entry (commits exist, migration touched the file, blob SHA at introducing_commit equals orphan_sha, current_sha matches disk). 207/207 test_check_drift tests pass. Full drift run: 131 checks pass, 0 orphan-SHA violations (was 11).
+- **No DB mutation. No allowlist amendment. No experimental_strategies edits.** Manifest is the bridge between discovery-time SHA evidence and current-state file content.
+- **Carry-over:** rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring (still deferred).
+
+## Prior Session (2026-05-17 PM)
+- **Tool:** Claude Code (Opus 4.7)
 - **Commit:** a080967b — research(chordia): ATR_P70 unlock UNVERIFIED_INSUFFICIENT_POWER (PASS_CHORDIA / OOS power tier STATISTICALLY_USELESS)
 - **Prior:** c6c190a3 (chore(gitignore): ignore tmp/ scratch directory)
 - **Files changed:** 4 files in a080967b — 1 draft yaml (Amendment 3.3 `theory_grant: false` stamp) + 1 result MD + 1 result CSV + 1 stage closeout (`docs/runtime/stages/atr-p70-chordia-unlock-prereg-loop.md`).
@@ -18,7 +27,8 @@
 - **Hygiene:** `.coverage` shows as `M` in working tree on every session — it must NOT be staged (test-runtime artifact, contains absolute paths). Verify `git status` before `git add -A` style commits.
 
 ## Next Session — Active
-- **Check 107 orphan-SHA cleanup (AUDIT-FIRST, no DB mutation, no allowlist).** 11 orphaned `hypothesis_file_sha` values in `experimental_strategies` (rebased/deleted hypothesis files) cost a drift-check noise scan every commit. Resolution path: query each SHA → enumerate referenced `strategy_id` + `created_at` + row counts → classify each (test-fixture leak vs orphaned-real-discovery needing hypothesis-file backfill) → write closeout MD with decision per SHA → ONLY THEN propose remediation (delete vs backfill vs justified allowlist with rationale). Do NOT mutate `experimental_strategies` rows or amend Check 107 allowlist until audit MD is reviewed. Budget ~30-60min for audit phase; remediation is a separate stage.
+- **Check 107 orphan-SHA cleanup CLOSED (2026-05-17 evening).** Audit MD `docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md` + migration manifest `docs/audit/check_107_sha_migrations.yaml` shipped; Check 107 now reports 0 orphans with no DB mutation. Sibling check `check_phase_4_sha_migration_manifest_integrity` guards against fabricated manifest entries (cited commits must exist, migration_commit must touch the file, introducing_commit blob SHA-256 must equal orphan_sha). Future hypothesis-YAML migrations (any subsequent in-place edit) generate new orphans — append manifest entries with git evidence rather than re-running this audit.
+- **Next concrete carry-over:** rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring (separate stage; still deferred).
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
