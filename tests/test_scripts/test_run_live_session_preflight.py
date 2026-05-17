@@ -596,9 +596,7 @@ def test_no_hardcoded_self_test_stubs():
     `results["fill_poller"] = True` lines MUST be gone. Surfaces accidental
     reintroduction during a future merge."""
     src = (ROOT / "scripts" / "run_live_session.py").read_text(encoding="utf-8")
-    assert 'results["brackets"] = True' not in src, (
-        "preflight is rubber-stamping bracket self-test results again"
-    )
+    assert 'results["brackets"] = True' not in src, "preflight is rubber-stamping bracket self-test results again"
     assert 'results["fill_poller"] = True' not in src, (
         "preflight is rubber-stamping fill-poller self-test results again"
     )

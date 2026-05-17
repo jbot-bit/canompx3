@@ -26,9 +26,7 @@ def test_nyse_rr15_costlt12_sr_alarm_has_code_backed_watch_review() -> None:
 
 
 def test_comex_settle_orb_vol_2k_sr_alarm_has_code_backed_watch_review() -> None:
-    review = get_sr_alarm_review(
-        "topstep_50k_mnq_auto", "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K"
-    )
+    review = get_sr_alarm_review("topstep_50k_mnq_auto", "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K")
 
     assert review is not None
     assert review.outcome == "watch"
@@ -64,9 +62,7 @@ def test_comex_settle_orb_vol_2k_sr_alarm_has_code_backed_watch_review() -> None
 
 
 def test_nyse_open_costlt12_rr10_sr_alarm_has_code_backed_watch_review() -> None:
-    review = get_sr_alarm_review(
-        "topstep_50k_mnq_auto", "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
-    )
+    review = get_sr_alarm_review("topstep_50k_mnq_auto", "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12")
 
     assert review is not None
     assert review.outcome == "watch"
@@ -100,9 +96,7 @@ def test_nyse_open_costlt12_rr10_sr_alarm_has_code_backed_watch_review() -> None
 
 
 def test_us_data_1000_ovnrng_25_rr10_sr_alarm_has_code_backed_pause_review() -> None:
-    review = get_sr_alarm_review(
-        "topstep_50k_mnq_auto", "MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25"
-    )
+    review = get_sr_alarm_review("topstep_50k_mnq_auto", "MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25")
 
     assert review is not None
     # outcome is PAUSE per K=2/K=8 conservative-wins rule (audit MD line 12).

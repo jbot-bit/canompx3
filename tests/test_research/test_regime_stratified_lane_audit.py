@@ -62,14 +62,30 @@ def _fixture_lane_allocation(tmp_path: Path, strategy_ids: list[dict]) -> Path:
 
 def test_load_deployed_mnq_lanes_count_4(tmp_path: Path) -> None:
     raw_lanes = [
-        {"strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K", "instrument": "MNQ",
-         "orb_minutes": 5, "filter_type": "ORB_VOL_2K"},
-        {"strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15", "instrument": "MNQ",
-         "orb_minutes": 15, "filter_type": "VWAP_MID_ALIGNED"},
-        {"strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "instrument": "MNQ",
-         "orb_minutes": 5, "filter_type": "COST_LT12"},
-        {"strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25", "instrument": "MNQ",
-         "orb_minutes": 5, "filter_type": "OVNRNG_25"},
+        {
+            "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K",
+            "instrument": "MNQ",
+            "orb_minutes": 5,
+            "filter_type": "ORB_VOL_2K",
+        },
+        {
+            "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15",
+            "instrument": "MNQ",
+            "orb_minutes": 15,
+            "filter_type": "VWAP_MID_ALIGNED",
+        },
+        {
+            "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            "instrument": "MNQ",
+            "orb_minutes": 5,
+            "filter_type": "COST_LT12",
+        },
+        {
+            "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25",
+            "instrument": "MNQ",
+            "orb_minutes": 5,
+            "filter_type": "OVNRNG_25",
+        },
     ]
     path = _fixture_lane_allocation(tmp_path, raw_lanes)
     lanes = _load_deployed_mnq_lanes(path, PREREG_STRATEGY_IDS)
@@ -79,12 +95,24 @@ def test_load_deployed_mnq_lanes_count_4(tmp_path: Path) -> None:
 
 def test_load_deployed_mnq_lanes_count_mismatch_raises(tmp_path: Path) -> None:
     raw_lanes = [
-        {"strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K", "instrument": "MNQ",
-         "orb_minutes": 5, "filter_type": "ORB_VOL_2K"},
-        {"strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15", "instrument": "MNQ",
-         "orb_minutes": 15, "filter_type": "VWAP_MID_ALIGNED"},
-        {"strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "instrument": "MNQ",
-         "orb_minutes": 5, "filter_type": "COST_LT12"},
+        {
+            "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K",
+            "instrument": "MNQ",
+            "orb_minutes": 5,
+            "filter_type": "ORB_VOL_2K",
+        },
+        {
+            "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15",
+            "instrument": "MNQ",
+            "orb_minutes": 15,
+            "filter_type": "VWAP_MID_ALIGNED",
+        },
+        {
+            "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            "instrument": "MNQ",
+            "orb_minutes": 5,
+            "filter_type": "COST_LT12",
+        },
     ]  # 3 lanes, not 4
     path = _fixture_lane_allocation(tmp_path, raw_lanes)
     with pytest.raises(SystemExit, match="count drift"):
@@ -93,15 +121,31 @@ def test_load_deployed_mnq_lanes_count_mismatch_raises(tmp_path: Path) -> None:
 
 def test_load_deployed_mnq_lanes_strategy_id_drift_raises(tmp_path: Path) -> None:
     raw_lanes = [
-        {"strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K", "instrument": "MNQ",
-         "orb_minutes": 5, "filter_type": "ORB_VOL_2K"},
-        {"strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15", "instrument": "MNQ",
-         "orb_minutes": 15, "filter_type": "VWAP_MID_ALIGNED"},
-        {"strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "instrument": "MNQ",
-         "orb_minutes": 5, "filter_type": "COST_LT12"},
+        {
+            "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K",
+            "instrument": "MNQ",
+            "orb_minutes": 5,
+            "filter_type": "ORB_VOL_2K",
+        },
+        {
+            "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15",
+            "instrument": "MNQ",
+            "orb_minutes": 15,
+            "filter_type": "VWAP_MID_ALIGNED",
+        },
+        {
+            "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            "instrument": "MNQ",
+            "orb_minutes": 5,
+            "filter_type": "COST_LT12",
+        },
         # WRONG: drifted strategy_id
-        {"strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_DRIFTED", "instrument": "MNQ",
-         "orb_minutes": 5, "filter_type": "OVNRNG_25"},
+        {
+            "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_DRIFTED",
+            "instrument": "MNQ",
+            "orb_minutes": 5,
+            "filter_type": "OVNRNG_25",
+        },
     ]
     path = _fixture_lane_allocation(tmp_path, raw_lanes)
     with pytest.raises(SystemExit, match="strategy_id drift"):
@@ -115,18 +159,30 @@ def test_load_deployed_mnq_lanes_strategy_id_drift_raises(tmp_path: Path) -> Non
 
 def _is_buckets() -> list[RegimeBucket]:
     return [
-        RegimeBucket(id="R0", start=date(2019, 1, 1), end=date(2019, 12, 31),
-                     role="INFORMATIONAL_EXCLUDED", label="MICRO_LAUNCH"),
-        RegimeBucket(id="R2", start=date(2020, 1, 1), end=date(2021, 12, 31),
-                     role="IS_TEST_INPUT", label="COVID_REOPENING"),
-        RegimeBucket(id="R3", start=date(2022, 1, 1), end=date(2022, 12, 31),
-                     role="IS_TEST_INPUT", label="INFLATION_RATE_HIKES"),
-        RegimeBucket(id="R4", start=date(2023, 1, 1), end=date(2024, 12, 31),
-                     role="IS_TEST_INPUT", label="POST_HIKE"),
-        RegimeBucket(id="R5", start=date(2025, 1, 1), end=date(2025, 12, 31),
-                     role="CURRENT_REGIME_DECISION_INPUT", label="CURRENT_REGIME"),
-        RegimeBucket(id="R6", start=date(2026, 1, 1), end=date(2099, 12, 31),
-                     role="FORWARD_MONITOR_ONLY_SACRED_HOLDOUT", label="SACRED_HOLDOUT"),
+        RegimeBucket(
+            id="R0", start=date(2019, 1, 1), end=date(2019, 12, 31), role="INFORMATIONAL_EXCLUDED", label="MICRO_LAUNCH"
+        ),
+        RegimeBucket(
+            id="R2", start=date(2020, 1, 1), end=date(2021, 12, 31), role="IS_TEST_INPUT", label="COVID_REOPENING"
+        ),
+        RegimeBucket(
+            id="R3", start=date(2022, 1, 1), end=date(2022, 12, 31), role="IS_TEST_INPUT", label="INFLATION_RATE_HIKES"
+        ),
+        RegimeBucket(id="R4", start=date(2023, 1, 1), end=date(2024, 12, 31), role="IS_TEST_INPUT", label="POST_HIKE"),
+        RegimeBucket(
+            id="R5",
+            start=date(2025, 1, 1),
+            end=date(2025, 12, 31),
+            role="CURRENT_REGIME_DECISION_INPUT",
+            label="CURRENT_REGIME",
+        ),
+        RegimeBucket(
+            id="R6",
+            start=date(2026, 1, 1),
+            end=date(2099, 12, 31),
+            role="FORWARD_MONITOR_ONLY_SACRED_HOLDOUT",
+            label="SACRED_HOLDOUT",
+        ),
     ]
 
 
@@ -221,10 +277,10 @@ def test_h1_chi_square_small_cell_fallback_fisher() -> None:
     # be lopsided enough that the row * column / grand_total < 5.
     # R4 has just 8 sessions; with a ~3% pooled fire-rate, expected R4 fired ≈ 0.24
     fire_masks = {
-        "R2": np.array([1] * 3 + [0] * 247),   # 3 fired / 250
-        "R3": np.array([1] * 4 + [0] * 246),   # 4 fired / 250
-        "R4": np.array([1] * 1 + [0] * 7),     # 1 fired / 8 (tiny)
-        "R5": np.array([1] * 2 + [0] * 248),   # 2 fired / 250
+        "R2": np.array([1] * 3 + [0] * 247),  # 3 fired / 250
+        "R3": np.array([1] * 4 + [0] * 246),  # 4 fired / 250
+        "R4": np.array([1] * 1 + [0] * 7),  # 1 fired / 8 (tiny)
+        "R5": np.array([1] * 2 + [0] * 248),  # 2 fired / 250
     }
     eligible = {rid: pd.DataFrame({"x": np.ones(len(m))}) for rid, m in fire_masks.items()}
     res = _h1_chi_square(eligible, fire_masks)
@@ -245,8 +301,8 @@ def test_bonferroni_k8_caps_at_1() -> None:
 
 def test_bonferroni_k8_tier_boundaries() -> None:
     cells = {
-        ("a", "H1"): 0.04 / 8,   # adj_p = 0.04 -> WATCH
-        ("b", "H1"): 0.05 / 8,   # adj_p = 0.05 -> PASS
+        ("a", "H1"): 0.04 / 8,  # adj_p = 0.04 -> WATCH
+        ("b", "H1"): 0.05 / 8,  # adj_p = 0.05 -> PASS
         ("c", "H1"): 0.009 / 8,  # adj_p = 0.009 -> FAIL
     }
     out = _bonferroni_k8(cells)

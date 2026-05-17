@@ -110,9 +110,7 @@ def _probe_brackets(components: dict[str, Any] | None) -> bool:
             qty=1,
         )
         if spec is None:
-            log.warning(
-                "BRACKET PROBE FAILED: build_bracket_spec returned None despite supports_native_brackets=True"
-            )
+            log.warning("BRACKET PROBE FAILED: build_bracket_spec returned None despite supports_native_brackets=True")
             return False
         log.info("Bracket probe PASS")
         return True
@@ -303,9 +301,7 @@ def _check_notifications(ctx: PreflightContext) -> CheckResult:
         ctx.components_all_pass = all(test_results.values())
         # Build a deterministic per-component status suffix so the summary line
         # always lists every probe (PASS or FAIL), not just the failures.
-        status_suffix = " · ".join(
-            f"{name}:{'PASS' if ok else 'FAIL'}" for name, ok in test_results.items()
-        )
+        status_suffix = " · ".join(f"{name}:{'PASS' if ok else 'FAIL'}" for name, ok in test_results.items())
         if ctx.components_all_pass:
             return CheckResult(True, f"OK ({status_suffix})")
         # Probes are surfaced but non-blocking at preflight time; the live

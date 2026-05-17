@@ -4,6 +4,7 @@ Run manually or via Windows Task Scheduler. Single-writer pipeline so a
 file-level copy is safe; SHA-256 verifies integrity. Keeps the most recent
 4 snapshots, prunes the rest.
 """
+
 from __future__ import annotations
 
 import gzip
