@@ -115,6 +115,7 @@ def main() -> None:
         corr_matrix = compute_pairwise_correlation(deployable)
         print(f"  {len(corr_matrix)} pairs computed")
 
+        displaced: list[dict] = []
         allocation = build_allocation(
             scores,
             max_slots=profile.max_slots,
@@ -124,13 +125,19 @@ def main() -> None:
             stop_multiplier=profile.stop_multiplier,
             orb_size_stats=orb_stats,
             correlation_matrix=corr_matrix,
+            displaced_out=displaced,
         )
 
         report = generate_report(scores, allocation, args.date, pid)
         print(report)
+        if displaced:
+            print(f"Displaced (soft-gate rejected): {len(displaced)} lanes")
 
         # Save allocation
-        out_path = save_allocation(scores, allocation, args.date, pid, args.output, orb_size_stats=orb_stats)
+        out_path = save_allocation(
+            scores, allocation, args.date, pid, args.output,
+            orb_size_stats=orb_stats, displaced=displaced,
+        )
         print(f"Allocation saved to: {out_path}")
 
 

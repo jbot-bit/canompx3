@@ -1599,3 +1599,130 @@ class TestCrossAssetATRInjection:
         )
         assert len(monthly) > 0
         assert total_wins >= 0 and total_wins <= total_trades
+
+
+class TestDisplacedOutCapture:
+    """Tests for the displaced_out diagnostic bucket (F6 fix, 2026-05-17).
+
+    `build_allocation` silently `continue`s candidates that clear all hard
+    gates (chordia/c8/live-tradeability) but lose a soft gate (correlation /
+    dd_budget / hysteresis / missing_cost_spec). When the caller passes a
+    list to `displaced_out`, those rejections are captured for auditability.
+
+    Each test isolates one rejection_gate value per
+    feedback_regex_alternation_sibling_coverage.md (one injection probe per
+    token in the enum).
+    """
+
+    def test_displaced_out_captures_correlation_rejection(self):
+        """Correlation-displaced candidate is appended with rejection_gate='correlation'."""
+        winner = _make_score(strategy_id="WINNER", orb_label="COMEX_SETTLE", annual_r_estimate=50.0)
+        loser = _make_score(strategy_id="LOSER", orb_label="COMEX_SETTLE", annual_r_estimate=40.0)
+        corr = {("LOSER", "WINNER"): 0.95}  # high rho → LOSER rejected
+        displaced: list[dict] = []
+        result = build_allocation(
+            [winner, loser], max_slots=5, correlation_matrix=corr, displaced_out=displaced
+        )
+        assert {s.strategy_id for s in result} == {"WINNER"}
+        assert len(displaced) == 1
+        entry = displaced[0]
+        assert entry["strategy_id"] == "LOSER"
+        assert entry["rejection_gate"] == "correlation"
+        assert entry["displaced_by"] == "WINNER"
+        assert entry["rho"] == 0.95
+        assert entry["status_at_rejection"] == "DEPLOY"
+
+    def test_displaced_out_captures_dd_budget_rejection(self):
+        """DD-budget-rejected candidate is appended with rejection_gate='dd_budget'."""
+        # Two MNQ lanes (different sessions to avoid correlation gate), tight DD budget.
+        # MNQ point_value=2.0, default P90 ORB ≈ 100, stop_multiplier=0.75 → lane_dd ≈ 150.
+        a = _make_score(strategy_id="A", orb_label="COMEX_SETTLE", annual_r_estimate=50.0)
+        b = _make_score(strategy_id="B", orb_label="EUROPE_FLOW", annual_r_estimate=45.0)
+        # Provide a corr matrix so both candidates compete via correlation path (not fallback).
+        corr = {("A", "B"): 0.0}
+        displaced: list[dict] = []
+        # max_dd=200 fits A (~150) but not A+B (~300).
+        result = build_allocation(
+            [a, b],
+            max_slots=5,
+            max_dd=200.0,
+            correlation_matrix=corr,
+            displaced_out=displaced,
+        )
+        assert {s.strategy_id for s in result} == {"A"}
+        assert len(displaced) == 1
+        entry = displaced[0]
+        assert entry["strategy_id"] == "B"
+        assert entry["rejection_gate"] == "dd_budget"
+        assert entry["displaced_by"] is None
+        assert "lane_dd" in entry
+        assert entry["max_dd"] == 200.0
+
+    def test_displaced_out_captures_hysteresis_rejection(self):
+        """Hysteresis-rejected candidate is appended with rejection_gate='hysteresis'."""
+        prior = _make_score(
+            strategy_id="INCUMBENT",
+            orb_label="COMEX_SETTLE",
+            annual_r_estimate=40.0,
+            status="DEPLOY",
+        )
+        challenger = _make_score(
+            strategy_id="CHALLENGER",
+            orb_label="COMEX_SETTLE",
+            annual_r_estimate=42.0,  # only 5% better — below HYSTERESIS_PCT (20%)
+            status="DEPLOY",
+        )
+        corr = {("CHALLENGER", "INCUMBENT"): 0.0}  # uncorrelated → hysteresis branch reached
+        displaced: list[dict] = []
+        result = build_allocation(
+            [prior, challenger],
+            max_slots=5,
+            prior_allocation=["INCUMBENT"],
+            correlation_matrix=corr,
+            displaced_out=displaced,
+        )
+        # Incumbent retained (hysteresis), challenger rejected.
+        result_sids = {s.strategy_id for s in result}
+        assert "INCUMBENT" in result_sids
+        # CHALLENGER appears in displaced[] with hysteresis gate.
+        hysteresis_entries = [e for e in displaced if e["rejection_gate"] == "hysteresis"]
+        assert len(hysteresis_entries) == 1
+        entry = hysteresis_entries[0]
+        assert entry["strategy_id"] == "CHALLENGER"
+        assert entry["displaced_by"] == "INCUMBENT"
+        assert "improvement_pct" in entry
+
+    def test_displaced_out_captures_missing_cost_spec(self, monkeypatch):
+        """Missing cost spec (config drift) is appended with rejection_gate='missing_cost_spec'."""
+        from trading_app import lane_allocator as la
+
+        # Drop MNQ from COST_SPECS to force the missing_cost_spec branch.
+        original = la.COST_SPECS
+        monkeypatch.setattr(la, "COST_SPECS", {k: v for k, v in original.items() if k != "MNQ"})
+
+        lane = _make_score(strategy_id="ORPHAN", instrument="MNQ", annual_r_estimate=50.0)
+        other = _make_score(strategy_id="OTHER", instrument="MNQ", orb_label="EUROPE_FLOW", annual_r_estimate=45.0)
+        corr = {("ORPHAN", "OTHER"): 0.0}
+        displaced: list[dict] = []
+        result = build_allocation(
+            [lane, other], max_slots=5, correlation_matrix=corr, displaced_out=displaced
+        )
+        # Neither MNQ lane should be selected — both hit missing_cost_spec.
+        assert len(result) == 0
+        # Both ORPHAN and OTHER appear in displaced[].
+        assert {e["strategy_id"] for e in displaced} == {"ORPHAN", "OTHER"}
+        for entry in displaced:
+            assert entry["rejection_gate"] == "missing_cost_spec"
+            assert entry["instrument"] == "MNQ"
+
+    def test_displaced_out_none_means_silent_skip(self):
+        """When displaced_out=None (default), rejections leave no trace — preserves
+        backwards-compat for all 8 non-rebalance callers."""
+        a = _make_score(strategy_id="A", orb_label="COMEX_SETTLE", annual_r_estimate=50.0)
+        b = _make_score(strategy_id="B", orb_label="COMEX_SETTLE", annual_r_estimate=40.0)
+        corr = {("A", "B"): 0.95}
+        # No displaced_out kwarg → silent (current production behavior of 8 callers).
+        result = build_allocation([a, b], max_slots=5, correlation_matrix=corr)
+        assert {s.strategy_id for s in result} == {"A"}
+        # Pre-existing tests rely on this contract. If this fails, the
+        # signature changed in a backwards-incompatible way.

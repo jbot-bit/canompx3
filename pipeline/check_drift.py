@@ -9430,6 +9430,82 @@ def check_lane_allocation_c8_gate() -> list[str]:
     return violations
 
 
+def check_lane_allocation_displaced_bucket() -> list[str]:
+    """`displaced` array in lane_allocation.json must have valid entries.
+
+    Rationale: 2026-05-17 audit of MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30
+    found the allocator silently drops candidates that cleared all hard gates
+    (chordia, c8, live-tradeability) but lost a soft gate (correlation,
+    dd_budget, hysteresis). The JSON had no `displaced[]` bucket so a future
+    auditor could not distinguish "never had a chordia audit" from "passed
+    chordia, beaten by correlation". This check enforces the new bucket's
+    structural contract once the rebalancer has written it.
+
+    Grandfather: if `displaced` key is absent, return no violations — the
+    canonical JSON may pre-date this field. Once the first post-fix
+    rebalance commits, the key is present and the check enforces.
+
+    Fail conditions (only when `displaced` key present):
+      - any entry missing `strategy_id` or with non-string strategy_id
+      - any entry with `rejection_gate` not in the locked enum
+      - any entry with `rejection_gate == "missing_cost_spec"` (LOUD FAIL —
+        config drift trip-wire; this should never fire in production)
+
+    Pass conditions:
+      - `displaced` key absent (grandfather)
+      - `displaced` is an empty list (no soft-gate rejections this rebalance)
+      - every entry has valid strategy_id + rejection_gate in the enum and
+        no entry trips the missing_cost_spec trip-wire
+
+    @canonical-source: trading_app/lane_allocator.build_allocation (displaced_out)
+    @canonical-source: docs/runtime/stages/lane-allocator-displaced-bucket.md
+    """
+    import json
+
+    ALLOWED_GATES = {"correlation", "dd_budget", "hysteresis", "missing_cost_spec"}
+
+    allocation_path = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
+    if not allocation_path.exists():
+        return []
+
+    try:
+        data = json.loads(allocation_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"  BAD lane_allocation.json: {exc}"]
+
+    if "displaced" not in data:
+        return []
+
+    displaced = data.get("displaced") or []
+    if not isinstance(displaced, list):
+        return [f"  lane_allocation.json: 'displaced' must be a list, got {type(displaced).__name__}"]
+
+    violations: list[str] = []
+    for i, entry in enumerate(displaced):
+        if not isinstance(entry, dict):
+            violations.append(f"  displaced[{i}]: not a dict")
+            continue
+        sid = entry.get("strategy_id")
+        if not isinstance(sid, str) or not sid:
+            violations.append(f"  displaced[{i}]: missing or invalid strategy_id")
+            continue
+        gate = entry.get("rejection_gate")
+        if gate not in ALLOWED_GATES:
+            violations.append(
+                f"  {sid}: rejection_gate={gate!r} not in {sorted(ALLOWED_GATES)}; "
+                f"extend allowlist or fix writer"
+            )
+            continue
+        if gate == "missing_cost_spec":
+            violations.append(
+                f"  {sid}: rejection_gate='missing_cost_spec' fired — "
+                f"pipeline.cost_model.COST_SPECS is missing instrument "
+                f"{entry.get('instrument')!r}; config drift, fix immediately"
+            )
+
+    return violations
+
+
 def check_strategy_lab_no_fitness_endpoint() -> list[str]:
     """`scripts/tools/strategy_lab_mcp_server.py` must NOT register a
     `get_recent_fitness` MCP endpoint.
@@ -10204,6 +10280,12 @@ CHECKS = [
         "lane_allocation.json lanes[] must pass C8 OOS-status gate (PASSED or NULL grandfather)",
         check_lane_allocation_c8_gate,
         False,  # blocking — capital-class gate, mirrors chordia gate doctrine
+        False,
+    ),
+    (
+        "lane_allocation.json displaced[] entries must have valid rejection_gate",
+        check_lane_allocation_displaced_bucket,
+        False,  # blocking — schema contract for soft-gate provenance bucket
         False,
     ),
     (

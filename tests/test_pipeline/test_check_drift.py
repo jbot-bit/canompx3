@@ -2257,6 +2257,199 @@ class TestLaneAllocationChordiaGate:
         assert "audit threshold unverified" in violations[0]
 
 
+class TestLaneAllocationDisplacedBucket:
+    """check_lane_allocation_displaced_bucket enforces displaced[] structure.
+
+    The check is grandfather-permissive when the `displaced` key is absent
+    (old JSON written before the field existed), and structurally strict
+    when present. The `missing_cost_spec` rejection_gate value is a LOUD
+    FAIL trip-wire (config-drift indicator).
+
+    Stage: docs/runtime/stages/lane-allocator-displaced-bucket.md.
+    Companion to trading_app.lane_allocator.build_allocation (displaced_out).
+
+    One injection probe per allowed rejection_gate token per
+    feedback_regex_alternation_sibling_coverage.md.
+    """
+
+    def _write_alloc(self, tmp_path: Path, displaced: list[dict] | None) -> None:
+        import json
+
+        runtime = tmp_path / "docs" / "runtime"
+        runtime.mkdir(parents=True)
+        body = {
+            "rebalance_date": "2026-05-17",
+            "trailing_window_months": 12,
+            "profile_id": "test_profile",
+            "lanes": [],
+            "paused": [],
+            "stale": [],
+            "all_scores_count": 0,
+        }
+        if displaced is not None:
+            body["displaced"] = displaced
+        (runtime / "lane_allocation.json").write_text(json.dumps(body))
+
+    def _patch_root(self, monkeypatch, tmp_path: Path) -> None:
+        from pipeline import check_drift
+
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+
+    def test_advisory_when_displaced_key_absent(self, tmp_path, monkeypatch):
+        """Grandfather: JSON without `displaced` key returns no violations."""
+        from pipeline.check_drift import check_lane_allocation_displaced_bucket
+
+        self._write_alloc(tmp_path, displaced=None)
+        self._patch_root(monkeypatch, tmp_path)
+        assert check_lane_allocation_displaced_bucket() == []
+
+    def test_passes_empty_displaced_list(self, tmp_path, monkeypatch):
+        """An empty `displaced: []` is a valid state — no soft-gate rejections."""
+        from pipeline.check_drift import check_lane_allocation_displaced_bucket
+
+        self._write_alloc(tmp_path, displaced=[])
+        self._patch_root(monkeypatch, tmp_path)
+        assert check_lane_allocation_displaced_bucket() == []
+
+    def test_passes_valid_correlation_entry(self, tmp_path, monkeypatch):
+        """A well-formed correlation-rejected entry passes the structural check."""
+        from pipeline.check_drift import check_lane_allocation_displaced_bucket
+
+        self._write_alloc(
+            tmp_path,
+            displaced=[
+                {
+                    "strategy_id": "MNQ_X_RR1.0_VWAP_O30",
+                    "rejection_gate": "correlation",
+                    "displaced_by": "MNQ_X_RR1.5_VWAP_O15",
+                    "rho": 0.95,
+                    "status_at_rejection": "DEPLOY",
+                }
+            ],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        assert check_lane_allocation_displaced_bucket() == []
+
+    def test_passes_valid_dd_budget_entry(self, tmp_path, monkeypatch):
+        """A well-formed dd_budget-rejected entry passes the structural check."""
+        from pipeline.check_drift import check_lane_allocation_displaced_bucket
+
+        self._write_alloc(
+            tmp_path,
+            displaced=[
+                {
+                    "strategy_id": "MNQ_X_RR1.0_FOO",
+                    "rejection_gate": "dd_budget",
+                    "displaced_by": None,
+                    "lane_dd": 150.0,
+                    "max_dd": 200.0,
+                    "status_at_rejection": "DEPLOY",
+                }
+            ],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        assert check_lane_allocation_displaced_bucket() == []
+
+    def test_passes_valid_hysteresis_entry(self, tmp_path, monkeypatch):
+        """A well-formed hysteresis-rejected entry passes the structural check."""
+        from pipeline.check_drift import check_lane_allocation_displaced_bucket
+
+        self._write_alloc(
+            tmp_path,
+            displaced=[
+                {
+                    "strategy_id": "MNQ_X_CHALLENGER",
+                    "rejection_gate": "hysteresis",
+                    "displaced_by": "MNQ_X_INCUMBENT",
+                    "improvement_pct": 0.05,
+                    "status_at_rejection": "DEPLOY",
+                }
+            ],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        assert check_lane_allocation_displaced_bucket() == []
+
+    def test_fails_on_unknown_rejection_gate(self, tmp_path, monkeypatch):
+        """An entry with rejection_gate not in the locked enum triggers a violation."""
+        from pipeline.check_drift import check_lane_allocation_displaced_bucket
+
+        self._write_alloc(
+            tmp_path,
+            displaced=[
+                {
+                    "strategy_id": "MNQ_BAD",
+                    "rejection_gate": "bogus_gate",
+                    "displaced_by": None,
+                }
+            ],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        violations = check_lane_allocation_displaced_bucket()
+        assert len(violations) == 1
+        assert "MNQ_BAD" in violations[0]
+        assert "bogus_gate" in violations[0]
+
+    def test_fails_loud_on_missing_cost_spec(self, tmp_path, monkeypatch):
+        """missing_cost_spec is a LOUD FAIL trip-wire — config drift caught."""
+        from pipeline.check_drift import check_lane_allocation_displaced_bucket
+
+        self._write_alloc(
+            tmp_path,
+            displaced=[
+                {
+                    "strategy_id": "MNQ_ORPHAN",
+                    "rejection_gate": "missing_cost_spec",
+                    "instrument": "MNQ",
+                    "status_at_rejection": "DEPLOY",
+                }
+            ],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        violations = check_lane_allocation_displaced_bucket()
+        assert len(violations) == 1
+        assert "MNQ_ORPHAN" in violations[0]
+        assert "missing_cost_spec" in violations[0]
+        assert "MNQ" in violations[0]
+
+    def test_fails_on_missing_strategy_id(self, tmp_path, monkeypatch):
+        """An entry without strategy_id is malformed."""
+        from pipeline.check_drift import check_lane_allocation_displaced_bucket
+
+        self._write_alloc(
+            tmp_path,
+            displaced=[{"rejection_gate": "correlation"}],
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        violations = check_lane_allocation_displaced_bucket()
+        assert len(violations) == 1
+        assert "missing or invalid strategy_id" in violations[0]
+
+    def test_fails_when_displaced_not_a_list(self, tmp_path, monkeypatch):
+        """If `displaced` is present but not a list, the check fails."""
+        import json
+
+        from pipeline.check_drift import check_lane_allocation_displaced_bucket
+
+        runtime = tmp_path / "docs" / "runtime"
+        runtime.mkdir(parents=True)
+        (runtime / "lane_allocation.json").write_text(
+            json.dumps(
+                {
+                    "rebalance_date": "2026-05-17",
+                    "lanes": [],
+                    "paused": [],
+                    "stale": [],
+                    "displaced": "not a list",
+                    "all_scores_count": 0,
+                }
+            )
+        )
+        self._patch_root(monkeypatch, tmp_path)
+        violations = check_lane_allocation_displaced_bucket()
+        assert len(violations) == 1
+        assert "must be a list" in violations[0]
+
+
 class TestStageAcceptanceParser:
     """Tests for stage-file acceptance command parsing (Check #121 Mode A)."""
 

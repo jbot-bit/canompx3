@@ -930,6 +930,7 @@ def build_allocation(
     prior_allocation: list[str] | None = None,
     orb_size_stats: dict[tuple[str, str, int], tuple[float, float]] | None = None,
     correlation_matrix: dict[tuple[str, str], float] | None = None,
+    displaced_out: list[dict] | None = None,
 ) -> list[LaneScore]:
     """Select top lanes for a profile, respecting constraints.
 
@@ -1002,6 +1003,8 @@ def build_allocation(
         # Correlation gate: reject if rho > threshold with any selected lane
         if correlation_matrix is not None:
             corr_reject = False
+            corr_winner_sid: str | None = None
+            corr_winner_rho: float = 0.0
             for sel in selected:
                 key = (
                     (lane.strategy_id, sel.strategy_id)
@@ -1011,13 +1014,30 @@ def build_allocation(
                 rho = correlation_matrix.get(key, 0.0)
                 if rho > RHO_REJECT_THRESHOLD:
                     corr_reject = True
+                    corr_winner_sid = sel.strategy_id
+                    corr_winner_rho = rho
                     break
             if corr_reject:
+                if displaced_out is not None:
+                    displaced_out.append({
+                        "strategy_id": lane.strategy_id,
+                        "rejection_gate": "correlation",
+                        "displaced_by": corr_winner_sid,
+                        "rho": corr_winner_rho,
+                        "status_at_rejection": lane.status,
+                    })
                 continue
 
         # Estimate worst-case DD contribution using per-session P90
         cost = COST_SPECS.get(lane.instrument)
         if cost is None:
+            if displaced_out is not None:
+                displaced_out.append({
+                    "strategy_id": lane.strategy_id,
+                    "rejection_gate": "missing_cost_spec",
+                    "instrument": lane.instrument,
+                    "status_at_rejection": lane.status,
+                })
             continue
         if orb_size_stats:
             orb_key = (lane.instrument, lane.orb_label, lane.orb_minutes)
@@ -1029,6 +1049,16 @@ def build_allocation(
         lane_dd = p90_orb * stop_multiplier * cost.point_value
 
         if dd_used + lane_dd > max_dd:
+            if displaced_out is not None:
+                displaced_out.append({
+                    "strategy_id": lane.strategy_id,
+                    "rejection_gate": "dd_budget",
+                    "displaced_by": None,
+                    "lane_dd": lane_dd,
+                    "dd_used_at_rejection": dd_used,
+                    "max_dd": max_dd,
+                    "status_at_rejection": lane.status,
+                })
             continue
 
         # Hysteresis: only replace a prior lane if new candidate is >20% better
@@ -1042,6 +1072,14 @@ def build_allocation(
                 if best_prior.annual_r_estimate > 0:
                     improvement = (lane.annual_r_estimate - best_prior.annual_r_estimate) / best_prior.annual_r_estimate
                     if improvement < HYSTERESIS_PCT:
+                        if displaced_out is not None:
+                            displaced_out.append({
+                                "strategy_id": lane.strategy_id,
+                                "rejection_gate": "hysteresis",
+                                "displaced_by": best_prior.strategy_id,
+                                "improvement_pct": improvement,
+                                "status_at_rejection": lane.status,
+                            })
                         if best_prior.status in ("DEPLOY", "RESUME", "PROVISIONAL"):
                             selected.append(best_prior)
                             dd_used += lane_dd
@@ -1203,6 +1241,7 @@ def save_allocation(
     profile_id: str,
     output_path: str | Path | None = None,
     orb_size_stats: dict[tuple[str, str, int], tuple[float, float]] | None = None,
+    displaced: list[dict] | None = None,
 ) -> Path:
     """Save allocation to JSON file.
 
@@ -1271,6 +1310,7 @@ def save_allocation(
         "lanes": lanes_data,
         "paused": [_blocked_entry(s) for s in gated_scores if s.status == "PAUSE"],
         "stale": [_blocked_entry(s) for s in gated_scores if s.status == "STALE"],
+        "displaced": list(displaced) if displaced else [],
         "all_scores_count": len(gated_scores),
     }
 
