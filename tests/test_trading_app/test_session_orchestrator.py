@@ -5973,6 +5973,49 @@ class TestSafeguardExceptNarrowing:
         with pytest.raises(RuntimeError, match="FAIL-CLOSED.*parseable"):
             self._exercise_regime_gate_block(portfolio, bad)
 
+    def test_regime_gate_profile_account_raises_on_missing_file(self, tmp_path):
+        """A profile account with NO lane_allocation.json MUST fail-closed.
+
+        Audit gap (evidence-auditor 2026-05-17, commit ff1f13ee Property C):
+        the missing-file branch in session_orchestrator.py:440-443 was
+        structurally correct but untested. Without this test, a future
+        refactor could silently delete the guard, letting profile_* accounts
+        run with regime_paused=empty when the allocator file is absent.
+        """
+        missing = tmp_path / "definitely_not_there.json"
+        assert not missing.exists()
+
+        strat = PortfolioStrategy(
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            instrument="MNQ",
+            orb_label="NYSE_OPEN",
+            entry_model="E2",
+            rr_target=1.0,
+            confirm_bars=1,
+            filter_type="COST_LT12",
+            expectancy_r=0.18,
+            win_rate=0.55,
+            sample_size=200,
+            sharpe_ratio=0.8,
+            max_drawdown_r=5.0,
+            median_risk_points=40.0,
+            stop_multiplier=0.75,
+            source="profile",
+            weight=1.0,
+            orb_minutes=5,
+        )
+        portfolio = Portfolio(
+            name="profile_narrow_regime",
+            instrument="MNQ",
+            strategies=[strat],
+            account_equity=50_000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=4,
+            max_daily_loss_r=5.0,
+        )
+        with pytest.raises(RuntimeError, match="FAIL-CLOSED.*requires lane_allocation"):
+            self._exercise_regime_gate_block(portfolio, missing)
+
     def test_regime_gate_non_profile_swallows_malformed_json(self, tmp_path):
         """Signal-only / non-profile path is fail-open: malformed JSON yields
         an empty regime_paused set + log warning. Pre-narrowing this also
