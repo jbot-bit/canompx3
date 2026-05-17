@@ -4,6 +4,37 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
+- `mnq-nyse-close-k1-prereg-blocked-by-loader-2026-05-17` — locked
+  `docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml`
+  (Stage 1 of the 3-stage NYSE_CLOSE triage in
+  `docs/plans/2026-05-12-mnq-nyse-close-institutional-validation-pathway.md`) is
+  **non-executable** due to a doctrine collision between
+  `memory/feedback_chordia_theory_citation_field_presence_trap.md` (OMIT
+  `theory_citation` entirely for strict no-theory `t>=3.79` Chordia preregs —
+  any truthy value silently downgrades the hurdle to 3.00) and
+  `trading_app/hypothesis_loader.py:288-295` (Amendment 3.0 requires
+  `theory_citation` on EVERY hypothesis when `testing_mode: individual`).
+  Runner `research/chordia_strict_unlock_v1.py` fails fast with
+  `HypothesisLoaderError` at load time; zero writes to result/CSV/registry.
+  Verdict on the 78 ROUTABLE_DORMANT cohort (`docs/audit/results/2026-05-17-deployment-coverage-orphans.md`)
+  stays **BLOCK** — no activations, including the two MNQ NYSE_CLOSE rows
+  (X_MES_ATR70 25.3R, ATR_P50 23.2R), since the cohort-park triage rule
+  binds them to the K=1 head's verdict and the K=1 head cannot run.
+  Unblock paths (any single one suffices, all out of scope this session):
+  (a) loader amendment to allow `theory_citation: null` or sentinel
+  `NONE_NO_THEORY_GRANT` for `testing_mode: individual` strict-3.79 cases,
+  (b) prereg edit stamping a `theory_citation` value and flipping
+  `chordia_threshold_basis` to `t>=3.00 with theory grant` (alters the
+  locked statistical hurdle — requires explicit reauthorization since the
+  prereg is `date_locked: 2026-05-13`),
+  (c) reframe as `testing_mode: family` with `expected_trial_count: 1`
+  (Bonferroni K=1) — different multiple-testing math, requires user
+  sign-off and re-lock. Recommended next move is (a) via a design
+  proposal under `docs/plans/` — lands the no-theory Pathway-B path
+  cleanly for all future preregs, not just this one. No
+  `lane_allocation.json` or `prop_profiles.py` mutation. Cross-ref:
+  HANDOFF.md Next Step #2 (MNQ highest-EV branch).
+
 - `c8-allocator-gate-resolution-2026-05-14` — **BUG verdict** (not DOCTRINE, not
   PARTIAL): the lane allocator never read `validated_setups.c8_oos_status`,
   so two MNQ lanes carrying `FAILED_RATIO` reached the proposed-rebalance set
