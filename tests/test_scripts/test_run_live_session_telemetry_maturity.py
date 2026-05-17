@@ -92,7 +92,9 @@ def test_check_is_registered_exactly_once_and_distinct_from_copy_gate():
     """Doctrine: maturity check is registered, distinct from copy-trading gate, not duplicated."""
     occurrences = [c for c in PREFLIGHT_CHECKS if c is _check_telemetry_maturity]
     assert len(occurrences) == 1, "_check_telemetry_maturity must be registered exactly once"
-    assert _check_telemetry_maturity is not _check_copy_trading_accounts, "maturity gate must NOT be conflated with copy-trading gate"
+    assert _check_telemetry_maturity is not _check_copy_trading_accounts, (
+        "maturity gate must NOT be conflated with copy-trading gate"
+    )
     # Both must be in the registry; positional adjacency is desired but not asserted (refactor-tolerant).
     assert _check_copy_trading_accounts in PREFLIGHT_CHECKS
 

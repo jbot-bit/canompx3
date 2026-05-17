@@ -50,8 +50,7 @@ def _sanitize_for_state(value: Any, path: str = "<root>") -> Any:
     """
     if _is_mock_object(value):
         raise TypeError(
-            f"bot_state contamination: {path} = {type(value).__name__} "
-            f"(unittest.mock object); refuse to serialize"
+            f"bot_state contamination: {path} = {type(value).__name__} (unittest.mock object); refuse to serialize"
         )
     if value is None or isinstance(value, (bool, int, float, str)):
         return value

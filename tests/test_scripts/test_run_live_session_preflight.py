@@ -83,8 +83,13 @@ def stub_telemetry_mature(monkeypatch, tmp_path):
     sig_dir.mkdir()
     for i in range(MIN_TELEMETRY_TRADING_DAYS):
         day = (datetime(2026, 5, 1, tzinfo=UTC) + timedelta(days=i)).date().isoformat()
-        rec = {"ts": f"{day}T20:00:00+00:00", "instrument": "MNQ", "type": "SESSION_START",
-               "contract": "CON.F.US.MNQ.M26", "mode": "signal_only"}
+        rec = {
+            "ts": f"{day}T20:00:00+00:00",
+            "instrument": "MNQ",
+            "type": "SESSION_START",
+            "contract": "CON.F.US.MNQ.M26",
+            "mode": "signal_only",
+        }
         (sig_dir / f"live_signals_{day}.jsonl").write_text(json.dumps(rec) + "\n", encoding="utf-8")
     monkeypatch.setattr(rls.SessionOrchestrator, "SIGNALS_DIR", sig_dir)
 
@@ -92,7 +97,9 @@ def stub_telemetry_mature(monkeypatch, tmp_path):
 # ---------- LOAD-BEARING tests for the LOW-1 close-out ----------
 
 
-def test_checks_total_equals_len_checks(monkeypatch, capsys, all_pass_components, stub_daily_features, stub_telemetry_mature):
+def test_checks_total_equals_len_checks(
+    monkeypatch, capsys, all_pass_components, stub_daily_features, stub_telemetry_mature
+):
     """Inject an extra check; the [i/N] header MUST reflect the new count.
 
     This is the canonical LOW-1 evidence: removing the manual checks_total
@@ -129,7 +136,9 @@ def test_checks_total_equals_len_checks(monkeypatch, capsys, all_pass_components
     assert f"Preflight: {new_total}/{new_total} passed" in out
 
 
-def test_known_failing_check_counted_toward_total(monkeypatch, capsys, all_pass_components, stub_daily_features, stub_telemetry_mature):
+def test_known_failing_check_counted_toward_total(
+    monkeypatch, capsys, all_pass_components, stub_daily_features, stub_telemetry_mature
+):
     """Inject a fail-always check; total = baseline+1, passed = baseline, return False.
 
     Baseline is `len(rls.PREFLIGHT_CHECKS)` to honor the dynamic-count contract

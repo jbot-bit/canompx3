@@ -94,7 +94,9 @@ def test_other_instrument_records_do_not_count_for_mnq(tmp_path):
     # Add 5 real MNQ days
     for i in range(5):
         day_iso = (datetime(2026, 6, 1, tzinfo=UTC) + timedelta(days=i)).date().isoformat()
-        records_by_day[day_iso] = records_by_day.get(day_iso, []) + [_session_start_record("MNQ", i, "2026-06-01T20:00:00+00:00")]
+        records_by_day[day_iso] = records_by_day.get(day_iso, []) + [
+            _session_start_record("MNQ", i, "2026-06-01T20:00:00+00:00")
+        ]
     _write_signals(tmp_path, records_by_day)
 
     report = evaluate_telemetry_maturity(tmp_path, instrument="MNQ")
@@ -116,9 +118,11 @@ def test_malformed_lines_are_skipped(tmp_path):
     path = tmp_path / "live_signals_2026-05-15.jsonl"
     path.write_text(
         "this is not json\n"
-        + json.dumps(_session_start_record("MNQ", 0)) + "\n"
+        + json.dumps(_session_start_record("MNQ", 0))
+        + "\n"
         + "{partial json...\n"
-        + json.dumps(_session_start_record("MNQ", 1)) + "\n",
+        + json.dumps(_session_start_record("MNQ", 1))
+        + "\n",
         encoding="utf-8",
     )
     report = evaluate_telemetry_maturity(tmp_path, instrument="MNQ")

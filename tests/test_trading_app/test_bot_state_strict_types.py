@@ -35,10 +35,12 @@ def test_write_state_refuses_top_level_magicmock(isolated_state_file, caplog):
         bot_state.write_state(payload)
 
     assert not isolated_state_file.exists(), "contaminated state file must not be created"
-    assert any("bot_state contamination" in r.message for r in caplog.records), \
+    assert any("bot_state contamination" in r.message for r in caplog.records), (
         "operator-visible CRITICAL log must name the contamination"
-    assert any("daily_pnl_r" in r.message for r in caplog.records), \
+    )
+    assert any("daily_pnl_r" in r.message for r in caplog.records), (
         "log must include the dotted field path so operators can locate the contamination source"
+    )
 
 
 def test_write_state_refuses_nested_magicmock(isolated_state_file, caplog):
@@ -58,8 +60,7 @@ def test_write_state_refuses_nested_magicmock(isolated_state_file, caplog):
     assert not isolated_state_file.exists()
     msgs = " | ".join(r.message for r in caplog.records)
     assert "bot_state contamination" in msgs
-    assert "lanes.TEST_STRAT_001.orb_break_direction" in msgs, \
-        f"dotted path must locate the nested mock; got: {msgs}"
+    assert "lanes.TEST_STRAT_001.orb_break_direction" in msgs, f"dotted path must locate the nested mock; got: {msgs}"
 
 
 def test_write_state_accepts_clean_payload_with_datetime_date_path(isolated_state_file):
@@ -90,5 +91,6 @@ def test_write_state_accepts_clean_payload_with_datetime_date_path(isolated_stat
     assert content["trading_day"] == "2026-05-17", "date must serialize to ISO string"
     assert content["session_start_utc"].startswith("2026-05-17T20:30:00")
     assert "heartbeat_utc" in content, "heartbeat_utc must be auto-stamped on write"
-    assert "MagicMock" not in isolated_state_file.read_text(encoding="utf-8"), \
+    assert "MagicMock" not in isolated_state_file.read_text(encoding="utf-8"), (
         "clean payload must never produce MagicMock literals in the file"
+    )
