@@ -486,7 +486,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             {
                 "EUROPE_FLOW",
                 "TOKYO_OPEN",
+                "LONDON_METALS",
                 "NYSE_OPEN",
+                "NYSE_CLOSE",
                 "COMEX_SETTLE",
                 "CME_PRECLOSE",
                 "SINGAPORE_OPEN",
@@ -510,11 +512,16 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         daily_lanes=(),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "7-lane MNQ auto profile — DYNAMIC (allocator-managed). "
+            "9-session MNQ auto profile — DYNAMIC (allocator-managed). "
             "Lanes loaded from lane_allocation.json at runtime. "
             "Prior 6-lane profile reconstructed 2026-04-13 via "
             "correlation audit (max rho=0.060, +41% ExpR). "
             "7th lane: US_DATA_1000 VWAP (ExpR=+0.210, N=701). "
+            "Whitelist expanded 2026-05-17 — PREVENTIVE: zero current MNQ "
+            "paused[] entries in NYSE_CLOSE/LONDON_METALS cite profile gating "
+            "(all 15 gated upstream by chordia_verdict=MISSING). Expansion "
+            "ensures future Chordia/regime/doctrine unlocks in those sessions "
+            "will not be silently vetoed by the profile allowlist. "
             "Each lane is the best-ExpR strategy from its session's "
             "independent correlation family. Audit script: "
             "scripts/research/portfolio_correlation_audit.py. "

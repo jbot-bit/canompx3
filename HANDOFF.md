@@ -7,6 +7,12 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
+- **Tool:** Codex (GPT-5.3-Codex)
+- **Date:** 2026-05-17 UTC
+- **Commit:** (this commit) — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
+- **Files changed:** `trading_app/prop_profiles.py` (active MNQ profile session allowlist + notes metadata)
+- **Session summary:** Preventive allowlist housekeeping — expanded `topstep_50k_mnq_auto.allowed_sessions` to include `NYSE_CLOSE` and `LONDON_METALS` so that future Chordia/regime/doctrine unlocks in those sessions will not be silently vetoed by the profile allowlist. **Verified: zero MNQ NYSE_CLOSE/LONDON_METALS entries currently in `docs/runtime/lane_allocation.json::lanes[]`; 15 paused entries gated upstream by `chordia_verdict=MISSING`, not by profile.** Net new tradeable strategies today: 0. No DB mutation, no lane_allocation mutation, no broker/live process changes.
+
 - **Tool:** Claude Code (Opus 4.7)
 - **Date:** 2026-05-17 late evening
 - **Tip:** c0fb8a19 (audit deployment-coverage rebalance refresh 2026-05-17, annual_r rerank)
