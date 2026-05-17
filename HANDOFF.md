@@ -22,6 +22,7 @@
 - **Carry-over to capture during first live session:** dashboard `/api/bars-recent?instrument=MNQ` returns `"bars":[]` — capture tick log + 3-min-later curl + last 5 aggregator log lines per plan c-i. Without ≥1 live run's evidence no fix stage is justified.
 - **Do NOT:** mutate `docs/runtime/lane_allocation.json`, add new strategies, or re-litigate MGC LONDON_METALS before the first live day completes.
 - **Hygiene note:** untracked draft `docs/audit/hypotheses/drafts/2026-05-17-mnq-usdata1000-vwapmid-family-pooled-oos-v1.draft.yaml` is from a parallel session — leave alone unless owner identifies.
+- **Non-blocking cleanup (defer):** `.env` has dotenv parse warnings on ~25 lines in the 246–296 range (cosmetic — every preflight + live session run emits them). Not gating anything; quick pass with `python -c "from dotenv import dotenv_values; dotenv_values('.env')"` + fix the malformed lines. Do AFTER first successful live day, not before.
 
 ## Prior Session (2026-05-17 evening — Check 107 SHA cleanup)
 - **Commit:** feat(check107) SHA migration manifest + sibling integrity check; Check 107 orphan-SHA 11 → 0 with zero DB mutation.
