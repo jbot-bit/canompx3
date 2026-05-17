@@ -570,9 +570,9 @@ outputs_required_after_run:
   - "Reconciliation block per cell IF |delta_t| > 0.10 vs prior audit-log t_stat value (per primary_schema reconciliation_rule)"
 
 execution_gate:
-  allowed_now: false  # DRAFT in quarantine; promotion to docs/audit/hypotheses/ (non-drafts/) requires human review AND Stage B2 runner script existing.
-  promoted_at: null
-  promoted_by: null
+  allowed_now: true  # Stage B3 promotion 2026-05-17 after runner hardening (one-sample power API, scratch-null fail-closed assert, explicit anchor fallback) and clean dry-run (4/4 PASS_CELL, family PASS_FAMILY_HOLM, H3 isolation pass, clustering inflation false).
+  promoted_at: "2026-05-17T23:22+10:00"
+  promoted_by: "joshdlees@gmail.com"
   execution_surface: "WSL with .venv-wsl, OR Windows .venv (Scripts/python.exe)"
   forbidden_now:
     - "theory-grant upgrade without a new resources/-backed citation"

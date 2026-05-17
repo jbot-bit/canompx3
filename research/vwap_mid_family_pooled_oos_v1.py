@@ -54,7 +54,7 @@ from scipy import stats as scipy_stats
 
 from pipeline.paths import GOLD_DB_PATH
 from research.filter_utils import filter_signal
-from research.oos_power import oos_ttest_power, power_verdict
+from research.oos_power import one_sample_power, power_verdict
 from trading_app.chordia import CHORDIA_T_WITHOUT_THEORY, compute_chordia_t
 from trading_app.config import ALL_FILTERS, WF_START_OVERRIDE, VWAPBreakDirectionFilter
 from trading_app.eligibility.builder import parse_strategy_id
@@ -482,6 +482,15 @@ def _frame_metrics(df: pd.DataFrame) -> dict[str, Any]:
             "short_expr": short_expr,
         }
     )
+    # Fail-closed on the silent-coercion class bug
+    # (feedback_scratch_pnl_null_class_bug.md): non-scratch NULL pnl_r rows
+    # must never reach pnl_eff via fillna(0). Realized-eod policy permits
+    # NULL only on outcome=='scratch'; any other NULL is corrupt input.
+    _assert(
+        int(out["null_non_scratch_n"]) == 0,
+        f"non-scratch NULL pnl_r rows in frame: "
+        f"{int(out['null_non_scratch_n'])} (must be 0 under realized-eod policy)",
+    )
     return out
 
 
@@ -558,7 +567,9 @@ def _evaluate_cell(
             (is_metrics["expr"] > 0) == (oos_metrics["expr"] > 0)
         )
 
-    # OOS power tier on the IS effect size (per-cell).
+    # OOS power tier on the IS effect size (per-cell). One-sample t-test power
+    # on the OOS replay of the IS effect; delegates to canonical
+    # `research.oos_power.one_sample_power` (NCP = d * sqrt(n)).
     oos_power_tier = "INSUFFICIENT_DATA"
     oos_power = float("nan")
     if (
@@ -568,22 +579,10 @@ def _evaluate_cell(
         and math.isfinite(is_metrics["std_r"])
         and is_metrics["std_r"] > 0
     ):
-        # One-sample power proxy: re-use oos_ttest_power's two-sample form by
-        # splitting OOS in half. Pre-reg defers exact form to the canonical
-        # helper; for a one-sample-flavoured per-cell tier, we use the OOS N
-        # divided between two synthetic groups so the helper's signature holds.
-        n_oos = oos_metrics["n_trades"]
-        n_a = max(2, n_oos // 2)
-        n_b = max(2, n_oos - n_a)
+        d_is = float(is_metrics["expr"]) / float(is_metrics["std_r"])
+        n_oos = int(oos_metrics["n_trades"])
         try:
-            report = oos_ttest_power(
-                is_delta=float(is_metrics["expr"]),
-                is_pooled_std=float(is_metrics["std_r"]),
-                n_oos_a=n_a,
-                n_oos_b=n_b,
-                alpha=0.05,
-            )
-            oos_power = float(report["power"])
+            oos_power = float(one_sample_power(d_is, n_oos, alpha=0.05))
             oos_power_tier = power_verdict(oos_power)
         except ValueError:
             oos_power_tier = "INSUFFICIENT_DATA"
@@ -912,20 +911,23 @@ def _pooled_oos_power(cell_evals: list[dict[str, Any]], pooled_is: dict[str, Any
     pooled_std = float(pooled_pnl.std(ddof=1)) if len(pooled_pnl) >= 2 else float("nan")
     if not math.isfinite(pooled_std) or pooled_std <= 0:
         return {"measured_pooled_power": float("nan"), "pooled_power_tier": "INSUFFICIENT_DATA"}
-    n_a = max(2, n_oos_total // 2)
-    n_b = max(2, n_oos_total - n_a)
+    # One-sample power on the pooled IS effect size replayed on n_oos_total
+    # observations; delegates to canonical `research.oos_power.one_sample_power`
+    # (NCP = d * sqrt(n)). Previous two-sample-halved proxy understated power
+    # by ~2x for one-sample comparisons.
+    d_pooled = float(pooled_is["expr"]) / pooled_std
     try:
-        rep = oos_ttest_power(
-            is_delta=float(pooled_is["expr"]),
-            is_pooled_std=pooled_std,
-            n_oos_a=n_a,
-            n_oos_b=n_b,
-            alpha=0.05,
-        )
+        power_value = float(one_sample_power(d_pooled, int(n_oos_total), alpha=0.05))
         return {
-            "measured_pooled_power": float(rep["power"]),
-            "pooled_power_tier": power_verdict(float(rep["power"])),
-            "power_report": rep,
+            "measured_pooled_power": power_value,
+            "pooled_power_tier": power_verdict(power_value),
+            "power_report": {
+                "cohen_d": d_pooled,
+                "n_oos": int(n_oos_total),
+                "power": power_value,
+                "alpha": 0.05,
+                "form": "one_sample",
+            },
         }
     except ValueError:
         return {"measured_pooled_power": float("nan"), "pooled_power_tier": "INSUFFICIENT_DATA"}
@@ -1236,7 +1238,7 @@ def _write_result_md(
         "- Clustered SE: `statsmodels.regression.linear_model.OLS` intercept-only fit with "
         "`cov_type='cluster'`, `cov_kwds={'groups': trading_day}`.",
         "- Holm-Bonferroni ranking: cells sorted ascending on `p_clustered`, alpha'_i applied by rank index.",
-        "- OOS power tier: per-cell and pooled via `research.oos_power.oos_ttest_power`; descriptive only (RULE 3.3).",
+        "- OOS power tier: per-cell and pooled via `research.oos_power.one_sample_power` (NCP = d * sqrt(n)); descriptive only (RULE 3.3).",
         "- No writes to `validated_setups`, `experimental_strategies`, `lane_allocation.json`, "
         "`chordia_audit_log.yaml`, `bot_state.json`, or `live_config.json`.",
         "",
@@ -1345,10 +1347,15 @@ def main() -> int:
         )
         for recon in recon_blocks:
             if recon["halt"]:
+                # Explicit `is not None` check — never use `or` here because
+                # audit_log_t_stat == 0.0 is a legitimate (if degenerate)
+                # anchor; `or` would silently swap in prior_t_stat instead.
+                audit_log_t = recon.get("audit_log_t_stat")
+                anchor = audit_log_t if audit_log_t is not None else recon["prior_t_stat"]
                 sys.stderr.write(
                     f"        {recon['strategy_id']}: anchor "
                     f"{recon.get('audit_log_t_stat')}, this-run "
-                    f"t={recon['delta_t'] + (recon.get('audit_log_t_stat') or recon['prior_t_stat']):.3f}, "
+                    f"t={recon['delta_t'] + anchor:.3f}, "
                     f"delta={recon['delta_t']:+.3f}\n"
                 )
         return 2
