@@ -1019,25 +1019,29 @@ def build_allocation(
                     break
             if corr_reject:
                 if displaced_out is not None:
-                    displaced_out.append({
-                        "strategy_id": lane.strategy_id,
-                        "rejection_gate": "correlation",
-                        "displaced_by": corr_winner_sid,
-                        "rho": corr_winner_rho,
-                        "status_at_rejection": lane.status,
-                    })
+                    displaced_out.append(
+                        {
+                            "strategy_id": lane.strategy_id,
+                            "rejection_gate": "correlation",
+                            "displaced_by": corr_winner_sid,
+                            "rho": corr_winner_rho,
+                            "status_at_rejection": lane.status,
+                        }
+                    )
                 continue
 
         # Estimate worst-case DD contribution using per-session P90
         cost = COST_SPECS.get(lane.instrument)
         if cost is None:
             if displaced_out is not None:
-                displaced_out.append({
-                    "strategy_id": lane.strategy_id,
-                    "rejection_gate": "missing_cost_spec",
-                    "instrument": lane.instrument,
-                    "status_at_rejection": lane.status,
-                })
+                displaced_out.append(
+                    {
+                        "strategy_id": lane.strategy_id,
+                        "rejection_gate": "missing_cost_spec",
+                        "instrument": lane.instrument,
+                        "status_at_rejection": lane.status,
+                    }
+                )
             continue
         if orb_size_stats:
             orb_key = (lane.instrument, lane.orb_label, lane.orb_minutes)
@@ -1050,15 +1054,17 @@ def build_allocation(
 
         if dd_used + lane_dd > max_dd:
             if displaced_out is not None:
-                displaced_out.append({
-                    "strategy_id": lane.strategy_id,
-                    "rejection_gate": "dd_budget",
-                    "displaced_by": None,
-                    "lane_dd": lane_dd,
-                    "dd_used_at_rejection": dd_used,
-                    "max_dd": max_dd,
-                    "status_at_rejection": lane.status,
-                })
+                displaced_out.append(
+                    {
+                        "strategy_id": lane.strategy_id,
+                        "rejection_gate": "dd_budget",
+                        "displaced_by": None,
+                        "lane_dd": lane_dd,
+                        "dd_used_at_rejection": dd_used,
+                        "max_dd": max_dd,
+                        "status_at_rejection": lane.status,
+                    }
+                )
             continue
 
         # Hysteresis: only replace a prior lane if new candidate is >20% better
@@ -1069,9 +1075,9 @@ def build_allocation(
             # lane_dd. Keep the swap within identical-aperture lanes only.
             session_key = (lane.instrument, lane.orb_label, lane.orb_minutes)
             prior_in_session = [
-                s for s in scores
-                if s.strategy_id in prior_allocation
-                and (s.instrument, s.orb_label, s.orb_minutes) == session_key
+                s
+                for s in scores
+                if s.strategy_id in prior_allocation and (s.instrument, s.orb_label, s.orb_minutes) == session_key
             ]
             if prior_in_session:
                 best_prior = max(prior_in_session, key=lambda s: s.annual_r_estimate)
@@ -1079,13 +1085,15 @@ def build_allocation(
                     improvement = (lane.annual_r_estimate - best_prior.annual_r_estimate) / best_prior.annual_r_estimate
                     if improvement < HYSTERESIS_PCT:
                         if displaced_out is not None:
-                            displaced_out.append({
-                                "strategy_id": lane.strategy_id,
-                                "rejection_gate": "hysteresis",
-                                "displaced_by": best_prior.strategy_id,
-                                "improvement_pct": improvement,
-                                "status_at_rejection": lane.status,
-                            })
+                            displaced_out.append(
+                                {
+                                    "strategy_id": lane.strategy_id,
+                                    "rejection_gate": "hysteresis",
+                                    "displaced_by": best_prior.strategy_id,
+                                    "improvement_pct": improvement,
+                                    "status_at_rejection": lane.status,
+                                }
+                            )
                         if best_prior.status in ("DEPLOY", "RESUME", "PROVISIONAL"):
                             selected.append(best_prior)
                             dd_used += lane_dd

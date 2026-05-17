@@ -1,0 +1,9 @@
+cell_id,period,N_trades,N_unique_trading_days,cluster_size_mean,cluster_size_max,ExpR,Sharpe,t_naive,t_clustered,p_naive,p_clustered,holm_adjusted_p_clustered,holm_alpha_prime,pass_fail_flag,direction_split,oos_dir_match,oos_power_tier
+MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15,IS,806,806,1.0000,1,0.1416,0.1536,4.362,4.362,0.00001,0.00001,0.00001,0.0500,PASS_CELL,"long_n=452,long_expr=0.1044;short_n=354,short_expr=0.1890",,
+MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15,OOS,47,47,1.0000,1,0.2857,0.3126,2.143,2.143,0.03741,0.03741,,,descriptive,"long_n=26,long_expr=0.2667;short_n=21,short_expr=0.3092",true,STATISTICALLY_USELESS
+MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15,IS,806,806,1.0000,1,0.2075,0.1817,5.158,5.158,0.00000,0.00000,0.00000,0.0125,PASS_CELL,"long_n=452,long_expr=0.1686;short_n=354,short_expr=0.2572",,
+MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15,OOS,47,47,1.0000,1,0.2709,0.2355,1.614,1.614,0.11330,0.11330,,,descriptive,"long_n=26,long_expr=0.3386;short_n=21,short_expr=0.1870",true,STATISTICALLY_USELESS
+MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30,IS,866,866,1.0000,1,0.1332,0.1512,4.450,4.450,0.00001,0.00001,0.00001,0.0250,PASS_CELL,"long_n=467,long_expr=0.1360;short_n=399,short_expr=0.1299",,
+MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30,OOS,46,46,1.0000,1,0.1049,0.1268,0.860,0.860,0.39447,0.39447,,,descriptive,"long_n=27,long_expr=0.0457;short_n=19,short_expr=0.1891",true,STATISTICALLY_USELESS
+MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O30,IS,866,866,1.0000,1,0.1687,0.1621,4.772,4.772,0.00000,0.00000,0.00000,0.0167,PASS_CELL,"long_n=467,long_expr=0.1886;short_n=399,short_expr=0.1453",,
+MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O30,OOS,46,46,1.0000,1,0.0576,0.0602,0.409,0.409,0.68484,0.68484,,,descriptive,"long_n=27,long_expr=-0.0533;short_n=19,short_expr=0.2151",true,STATISTICALLY_USELESS

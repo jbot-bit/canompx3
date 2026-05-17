@@ -17,3 +17,18 @@
 #
 # Origin: HANDOFF item O-CRLF, landed 2026-04-25.
 *.py text eol=lf
+
+# Pin specific hypothesis YAMLs to LF so SHA manifest (docs/audit/check_107_sha_migrations.yaml,
+# enforced by check_drift.py Check 108) stays stable across platforms.
+# Without this, Windows CI runners with default core.autocrlf=true check out these
+# LF-indexed files as CRLF, producing a different SHA than the manifest records.
+#
+# Scope is intentionally per-file, NOT directory-wide: 65 sibling YAMLs in
+# docs/audit/hypotheses/ are CRLF-committed and a broad `eol=lf` rule would
+# silently renormalize them on the next checkout, breaking the same manifest
+# for those files. Add per-file pins only for hypotheses recorded in the SHA
+# manifest as LF.
+# Origin: PR #298+#299 merge surfaced this via Check 108 (2026-05-17).
+docs/audit/hypotheses/2026-05-11-llm-cme-preclose-atr-p30-o15.yaml   text eol=lf
+docs/audit/hypotheses/2026-05-11-llm-cme-preclose-orb-vol-16k-o15.yaml text eol=lf
+docs/audit/hypotheses/2026-05-11-llm-tokyo-open-atr-vel-ge105.yaml   text eol=lf
