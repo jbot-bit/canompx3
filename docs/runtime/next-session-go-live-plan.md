@@ -16,14 +16,19 @@ Drift: 133 PASS. Preflight tests: 11 PASS. Session-orchestrator: 222 PASS.
 ## 2026-05-17 alignment update (routing + doctrine)
 
 - `topstep_50k_mnq_auto.allowed_sessions` now includes `NYSE_CLOSE` and
-  `LONDON_METALS` in addition to the prior 7-session set. This removes the
-  profile-level routing block for allocator-selected MNQ lanes in those
-  sessions.
+  `LONDON_METALS` in addition to the prior 7-session set. This ensures
+  future Chordia/regime/doctrine unlocks in those sessions will not be
+  silently vetoed by the profile allowlist.
+- **Net new tradeable strategies today: zero. Beneficiaries: future-only.**
+  Verified vs `docs/runtime/lane_allocation.json`: 0 active MNQ lanes in
+  NYSE_CLOSE/LONDON_METALS; 15 paused MNQ entries in those sessions, all
+  15 gated upstream by `chordia_verdict=MISSING` — none gated by the
+  profile allowlist.
 - This does **not** override doctrine gates. The locked NYSE_CLOSE hypothesis
   loader failure (`trading_app/hypothesis_loader.py:291`, theory_citation ×
   Amendment 3.0 collision) still parks the NYSE_CLOSE cohort until that
   doctrine issue is resolved.
-- Operational implication: treat this as a **routing prerequisite complete**,
+- Operational implication: treat this as **preventive routing housekeeping**,
   not a promotion/deployment approval.
 
 ## Pick-up sequence (do in order, do NOT skip)

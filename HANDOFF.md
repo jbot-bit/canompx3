@@ -9,9 +9,9 @@
 ## Last Session
 - **Tool:** Codex (GPT-5.3-Codex)
 - **Date:** 2026-05-17 UTC
-- **Commit:** (this commit) — feat(profile): unblock MNQ session routing by adding NYSE_CLOSE + LONDON_METALS to active topstep_50k_mnq_auto allowlist
+- **Commit:** (this commit) — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
 - **Files changed:** `trading_app/prop_profiles.py` (active MNQ profile session allowlist + notes metadata)
-- **Session summary:** Implemented the highest-signal deployment-coverage unlock from 2026-05-17 audit by expanding `topstep_50k_mnq_auto.allowed_sessions` to include `NYSE_CLOSE` and `LONDON_METALS`. This removes profile-level routing blockage for allocator-selected MNQ lanes in those sessions (subject to existing doctrine/risk gates). No DB mutation, no lane_allocation mutation, no broker/live process changes.
+- **Session summary:** Preventive allowlist housekeeping — expanded `topstep_50k_mnq_auto.allowed_sessions` to include `NYSE_CLOSE` and `LONDON_METALS` so that future Chordia/regime/doctrine unlocks in those sessions will not be silently vetoed by the profile allowlist. **Verified: zero MNQ NYSE_CLOSE/LONDON_METALS entries currently in `docs/runtime/lane_allocation.json::lanes[]`; 15 paused entries gated upstream by `chordia_verdict=MISSING`, not by profile.** Net new tradeable strategies today: 0. No DB mutation, no lane_allocation mutation, no broker/live process changes.
 
 - **Tool:** Claude Code (Opus 4.7)
 - **Date:** 2026-05-17 late evening
