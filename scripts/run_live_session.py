@@ -329,6 +329,57 @@ def _check_trade_journal(ctx: PreflightContext) -> CheckResult:
         return CheckResult(False, f"FAILED: {e}")
 
 
+def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
+    """Telemetry maturity (signal-log distinct trading_days >= 30).
+
+    Reads the canonical signal log files at repo root via
+    trading_app.live.telemetry_maturity.evaluate_telemetry_maturity. The
+    gate is orthogonal to the copy-trading gate (which checks broker-side
+    account topology); this one checks measurement adequacy of the
+    canonical signal-log telemetry per Criterion 8 + RULE 3.2/3.3.
+
+    Mode-dependent verdict:
+    - signal_only: passed=True with informational count/threshold message.
+      The whole point of a paper run is to ACCUMULATE distinct trading_days,
+      so blocking would prevent the gate from ever clearing.
+    - demo/live: passed=False until n>=30 for the instrument under test.
+      Capital-touching modes refuse to launch on under-powered telemetry.
+    - --all (no single instrument fixed): ctx.instrument may be a single
+      symbol or a sentinel like "ALL"; we evaluate against MNQ as the
+      primary canonical instrument when ctx.instrument is unrecognized.
+    """
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from trading_app.live.session_orchestrator import SessionOrchestrator
+        from trading_app.live.telemetry_maturity import (
+            VERDICT_MATURE,
+            evaluate_telemetry_maturity,
+        )
+
+        signals_dir = SessionOrchestrator.SIGNALS_DIR
+        target_instrument = ctx.instrument if ctx.instrument in ACTIVE_ORB_INSTRUMENTS else "MNQ"
+        report = evaluate_telemetry_maturity(signals_dir, instrument=target_instrument)
+
+        n = report.n_unique_trading_days
+        floor = report.min_required
+        if report.verdict == VERDICT_MATURE:
+            return CheckResult(True, f"OK ({n}/{floor} distinct {target_instrument} trading_days; gate clear)")
+
+        # Below floor: branch on capital-risk mode.
+        if ctx.signal_only:
+            return CheckResult(
+                True,
+                f"OK (signal-only: {n}/{floor} distinct {target_instrument} trading_days; auto-clears at {floor})",
+            )
+        return CheckResult(
+            False,
+            f"FAILED: UNVERIFIED_INSUFFICIENT_TELEMETRY ({n}/{floor} distinct "
+            f"{target_instrument} trading_days; run --signal-only until {floor})",
+        )
+    except Exception as e:
+        return CheckResult(False, f"FAILED: {e}")
+
+
 def _check_copy_trading_accounts(ctx: PreflightContext) -> CheckResult:
     """Copy-trading account resolution (dry run).
 
@@ -382,6 +433,7 @@ PREFLIGHT_CHECKS: list[CheckFn] = [
     _check_contracts,
     _check_notifications,
     _check_trade_journal,
+    _check_telemetry_maturity,
     _check_copy_trading_accounts,
 ]
 

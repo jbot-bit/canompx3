@@ -3,6 +3,13 @@
 Atomic JSON write (write to .tmp, os.replace) prevents partial reads.
 Dashboard reads this file on each poll cycle (every 5s).
 Bot writes on each bar and on each trade event.
+
+Strict-type contamination guard (2026-05-17): write_state refuses to serialize
+unittest.mock.Mock/MagicMock/AsyncMock or any non-JSON-native type. The prior
+``json.dumps(default=str, ...)`` silently coerced mocks to literal
+``<MagicMock name='...'>`` strings, polluting data/bot_state.json with fake
+TEST_STRAT_001 lane state. See docs/runtime/diagnostics/2026-05-17-live-
+throughput-triage.md and the companion test in test_bot_state_strict_types.py.
 """
 
 import json
@@ -18,14 +25,82 @@ log = logging.getLogger(__name__)
 
 STATE_FILE = Path(__file__).parent.parent.parent / "data" / "bot_state.json"
 
+_MOCK_CLASS_NAMES = frozenset({"Mock", "MagicMock", "AsyncMock", "NonCallableMock", "NonCallableMagicMock"})
+
+
+def _is_mock_object(value: Any) -> bool:
+    """True if value is an instance of unittest.mock.* — detected by class name.
+
+    Avoids importing unittest.mock in production. Mock subclasses are caught
+    because mro inspection includes their class names.
+    """
+    for cls in type(value).__mro__:
+        if cls.__name__ in _MOCK_CLASS_NAMES:
+            return True
+    return False
+
+
+def _sanitize_for_state(value: Any, path: str = "<root>") -> Any:
+    """Recursively validate ``value`` is JSON-safe for bot_state serialization.
+
+    Raises ``TypeError`` on Mock-class objects or any non-(JSON-native|datetime|
+    date|Path) leaf. dict / list / tuple are walked. tuple is converted to list.
+
+    Path argument is dotted-path context for the error message.
+    """
+    if _is_mock_object(value):
+        raise TypeError(
+            f"bot_state contamination: {path} = {type(value).__name__} (unittest.mock object); refuse to serialize"
+        )
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (datetime, date, Path)):
+        return value
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for k, v in value.items():
+            if not isinstance(k, str):
+                raise TypeError(f"bot_state contamination: {path} dict key {k!r} is {type(k).__name__}, not str")
+            out[k] = _sanitize_for_state(v, f"{path}.{k}")
+        return out
+    if isinstance(value, (list, tuple)):
+        return [_sanitize_for_state(v, f"{path}[{i}]") for i, v in enumerate(value)]
+    raise TypeError(
+        f"bot_state contamination: {path} = {type(value).__module__}.{type(value).__name__} "
+        f"is not JSON-safe (allowed: dict, list, tuple, str, int, float, bool, None, datetime, date, Path)"
+    )
+
+
+def _json_default(value: Any) -> str:
+    """Strict json.dumps default: serialize datetime/date/Path; raise otherwise."""
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    raise TypeError(f"bot_state json encoder: refusing {type(value).__module__}.{type(value).__name__}")
+
 
 def write_state(data: dict[str, Any]) -> None:
-    """Atomically write bot state to JSON file."""
-    data["heartbeat_utc"] = datetime.now(UTC).isoformat()
+    """Atomically write bot state to JSON file.
+
+    Strict-type guarded: refuses to serialize Mock objects or non-JSON-safe
+    leaves (see ``_sanitize_for_state``). On contamination, logs CRITICAL and
+    does NOT write. Fail-open on disk/encoder errors per the original
+    contract — trade execution must not block on a dashboard write failure.
+    """
+    try:
+        sanitized = _sanitize_for_state(data)
+    except TypeError as exc:
+        log.critical(
+            "bot_state write REFUSED — contamination detected; not overwriting canonical state: %s",
+            exc,
+        )
+        return
+    sanitized["heartbeat_utc"] = datetime.now(UTC).isoformat()
     tmp = STATE_FILE.with_suffix(".json.tmp")
     try:
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(json.dumps(data, default=str, indent=2), encoding="utf-8")
+        tmp.write_text(json.dumps(sanitized, default=_json_default, indent=2), encoding="utf-8")
         os.replace(str(tmp), str(STATE_FILE))
     except Exception:
         log.warning("bot_state write failed — dashboard state may be stale", exc_info=True)
