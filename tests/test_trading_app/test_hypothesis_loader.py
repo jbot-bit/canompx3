@@ -913,8 +913,8 @@ class TestTestingMode:
         meta = load_hypothesis_metadata(p)
         assert meta["testing_mode"] == "family"
 
-    def test_individual_requires_theory(self, tmp_path):
-        """testing_mode: individual without theory_citation raises."""
+    def test_individual_without_theory_citation_allowed_with_explicit_no_theory_grant(self, tmp_path):
+        """Amendment 3.3: individual mode allows no-theory when theory_grant=false."""
         p = tmp_path / "hyp.yaml"
         body = {
             "metadata": {
@@ -923,6 +923,7 @@ class TestTestingMode:
                 "holdout_date": "2026-01-01",
                 "total_expected_trials": 1,
                 "testing_mode": "individual",
+                "theory_grant": False,
             },
             "hypotheses": [
                 {
@@ -934,8 +935,16 @@ class TestTestingMode:
             ],
         }
         p.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
-        with pytest.raises(HypothesisLoaderError, match="theory_citation"):
-            load_hypothesis_metadata(p)
+        meta = load_hypothesis_metadata(p)
+        assert meta["testing_mode"] == "individual"
+        assert meta["has_theory"] is False
+
+    def test_real_k1_nyse_close_prereg_loads_no_theory_pathway_b(self):
+        """Regression: locked 2026-05-13 K=1 NYSE_CLOSE prereg must load as no-theory individual mode."""
+        prereg = Path("docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml")
+        meta = load_hypothesis_metadata(prereg)
+        assert meta["testing_mode"] == "individual"
+        assert meta["has_theory"] is False
 
 
 class TestAmendment33TheoryGrant:

@@ -7,6 +7,12 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
+- **Tool:** Codex (GPT-5.3-Codex)
+- **Date:** 2026-05-17 UTC
+- **Commit:** (this commit) — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
+- **Files changed:** `trading_app/prop_profiles.py` (active MNQ profile session allowlist + notes metadata)
+- **Session summary:** Preventive allowlist housekeeping — expanded `topstep_50k_mnq_auto.allowed_sessions` to include `NYSE_CLOSE` and `LONDON_METALS` so that future Chordia/regime/doctrine unlocks in those sessions will not be silently vetoed by the profile allowlist. **Verified: zero MNQ NYSE_CLOSE/LONDON_METALS entries currently in `docs/runtime/lane_allocation.json::lanes[]`; 15 paused entries gated upstream by `chordia_verdict=MISSING`, not by profile.** Net new tradeable strategies today: 0. No DB mutation, no lane_allocation mutation, no broker/live process changes.
+
 - **Tool:** Claude Code (Opus 4.7)
 - **Date:** 2026-05-17 late evening
 - **Tip:** c0fb8a19 (audit deployment-coverage rebalance refresh 2026-05-17, annual_r rerank)
@@ -127,3 +133,12 @@
 - `docs/runtime/decision-ledger.md`
 - `docs/runtime/debt-ledger.md`
 - `docs/plans/2026-04-22-handoff-baton-compaction.md`
+
+## This Session (2026-05-17 Codex)
+- User request: "get it sorted for Claude to audit" on the NYSE_CLOSE K=1 quality blocker.
+- Aligned tests with Amendment 3.3 semantics: `testing_mode: individual` is now valid without per-hypothesis `theory_citation` when `metadata.theory_grant: false` is explicit. Updated stale legacy test in `tests/test_trading_app/test_hypothesis_loader.py` that still enforced the pre-Amendment-3.3 rule.
+- Verification: `pytest -q tests/test_trading_app/test_hypothesis_loader.py` -> 69 passed.
+- No trading logic mutation, no DB mutation, no lane/profile mutation.
+
+- Follow-up hardening: added regression test `test_real_k1_nyse_close_prereg_loads_no_theory_pathway_b` to pin the real locked prereg (`docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml`) to Amendment 3.3 semantics (`testing_mode=individual`, `has_theory=False`) so audits cannot regress to stale pre-3.3 assumptions.
+- Extended verification: `pytest -q tests/test_trading_app/test_hypothesis_loader.py tests/test_llm_hypothesis_proposer.py` -> 111 passed.

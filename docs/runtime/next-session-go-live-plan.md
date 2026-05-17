@@ -1,6 +1,7 @@
 # Next Session — Go-Live Plan (MNQ topstep_50k_mnq_auto)
 
 **Written:** 2026-05-16, end of session.
+**Updated:** 2026-05-17 (post profile-routing unlock)
 **Goal:** Get the live MNQ app trading real capital ASAP on `topstep_50k_mnq_auto`.
 
 ## What's already done (this session, on origin/main)
@@ -11,6 +12,24 @@
 - `5dd1a822` — Review closure (preflight message wording).
 
 Drift: 133 PASS. Preflight tests: 11 PASS. Session-orchestrator: 222 PASS.
+
+## 2026-05-17 alignment update (routing + doctrine)
+
+- `topstep_50k_mnq_auto.allowed_sessions` now includes `NYSE_CLOSE` and
+  `LONDON_METALS` in addition to the prior 7-session set. This ensures
+  future Chordia/regime/doctrine unlocks in those sessions will not be
+  silently vetoed by the profile allowlist.
+- **Net new tradeable strategies today: zero. Beneficiaries: future-only.**
+  Verified vs `docs/runtime/lane_allocation.json`: 0 active MNQ lanes in
+  NYSE_CLOSE/LONDON_METALS; 15 paused MNQ entries in those sessions, all
+  15 gated upstream by `chordia_verdict=MISSING` — none gated by the
+  profile allowlist.
+- This does **not** override doctrine gates. The locked NYSE_CLOSE hypothesis
+  loader failure (`trading_app/hypothesis_loader.py:291`, theory_citation ×
+  Amendment 3.0 collision) still parks the NYSE_CLOSE cohort until that
+  doctrine issue is resolved.
+- Operational implication: treat this as **preventive routing housekeeping**,
+  not a promotion/deployment approval.
 
 ## Pick-up sequence (do in order, do NOT skip)
 
@@ -55,6 +74,14 @@ The remaining blockers from action-queue item `lane_allocation_rebalance_2026_05
 - **(c) Live-control trace** — kill/flatten/risk-limit not traced for new lane set.
 
 For go-live on the CURRENT 4 lanes (already deployed per `docs/runtime/lane_allocation.json`), blockers (b) and (c) apply to the proposed rebalance, NOT the existing set. The existing 4 MNQ lanes have been live-routable since their respective add dates.
+
+**Route discipline after the 2026-05-17 allowlist expansion:**
+- Keep live trading on the current 4 lanes unless/until a fresh rebalance
+  explicitly promotes additional lanes.
+- Do not manually inject NYSE_CLOSE/LONDON_METALS lanes into live state solely
+  because profile routing now allows them.
+- If the next rebalance surfaces NYSE_CLOSE candidates, require doctrine-loader
+  fix evidence first.
 
 **Decision needed:** trade the existing 4 lanes today, OR wait for the rebalance verification. The rebalance net delta is +2.80 R/yr (~$84/yr/contract), below noise floor — go-live with existing lanes is the higher-EV path.
 
