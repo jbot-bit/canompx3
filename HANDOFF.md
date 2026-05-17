@@ -7,11 +7,17 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
-- **Tool:** Codex (GPT-5.3-Codex)
-- **Date:** 2026-05-17 UTC
-- **Commit:** (this commit) — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
+- **Tool:** Claude Code (Opus 4.7)
+- **Date:** 2026-05-18 (Sun BNE — Monday-eve)
+- **Commits:** `7877f47b` refresh lane_allocation.json (4→3 MNQ lanes, fresh rebalance), `ae3cee57` close stage file.
+- **Files changed:** `docs/runtime/lane_allocation.json` regenerated via canonical allocator script.
+- **Session summary:** User invoked `/next` asking for "more than 4 lanes for Monday". Investigation rejected three misframes (add sessions to profile, batch-chordia 715 paused lanes, lower MIN_TRAILING_N=20). Ran fresh canonical rebalance (rebalance_date 2026-05-14 → 2026-05-18). **Lane count went DOWN: 4 → 3.** Removed: ORB_VOL_2K, VWAP_MID_RR1.0_O15, COST_LT12, OVNRNG_25. Added: OVNRNG_100 (ExpR 0.2159), VWAP_MID_RR1.5_O15 (ExpR 0.2416), COST_LT12 (kept). **Criterion 8 OOS gate (drift check #149) caught a silent failure on `MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25` that the stale 2026-05-14 file was masking** — would have routed real capital at an unsafe lane Monday. All 3 deployed lanes are PASS_CHORDIA/PASS_PROTOCOL_A, status_reason="Session HOT". 133/133 drift checks pass.
+- **Honest answer to "more lanes":** the allocator's truthful number today is 3, not 4. Going to 4+ requires either fresh chordia replays on selected paused MNQ lanes (slow doctrine path, hours per pre-reg) or gate relaxations (capital-class doctrine violation, refused). Per-lane EV × correctness > lane count.
+
+## Prior Session (2026-05-17 Codex — preventive allowlist)
+- **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
 - **Files changed:** `trading_app/prop_profiles.py` (active MNQ profile session allowlist + notes metadata)
-- **Session summary:** Preventive allowlist housekeeping — expanded `topstep_50k_mnq_auto.allowed_sessions` to include `NYSE_CLOSE` and `LONDON_METALS` so that future Chordia/regime/doctrine unlocks in those sessions will not be silently vetoed by the profile allowlist. **Verified: zero MNQ NYSE_CLOSE/LONDON_METALS entries currently in `docs/runtime/lane_allocation.json::lanes[]`; 15 paused entries gated upstream by `chordia_verdict=MISSING`, not by profile.** Net new tradeable strategies today: 0. No DB mutation, no lane_allocation mutation, no broker/live process changes.
+- **Session summary:** Preventive allowlist housekeeping — expanded `topstep_50k_mnq_auto.allowed_sessions` to include `NYSE_CLOSE` and `LONDON_METALS` so that future Chordia/regime/doctrine unlocks in those sessions will not be silently vetoed by the profile allowlist. Verified: zero MNQ NYSE_CLOSE/LONDON_METALS entries currently in `docs/runtime/lane_allocation.json::lanes[]`. Net new tradeable strategies that day: 0.
 
 - **Tool:** Claude Code (Opus 4.7)
 - **Date:** 2026-05-17 late evening
@@ -21,14 +27,36 @@
 - **Capital-class hardening landed (ff1f13ee):** session_orchestrator now delegates paused+stale parsing to `prop_profiles.load_paused_strategy_ids` (single drift surface vs lanes[] parser); profile_* accounts hard-fail on missing OR corrupt `lane_allocation.json` instead of silently routing blocked strategies live; hysteresis session_key in lane_allocator includes orb_minutes (was charging dd_used with wrong-aperture lane_dd across O5/O15/O30 swaps).
 - **No DB mutation. No allocator file mutation.** Code + tests + push only.
 
-## Next Session — Start here (2026-05-18)
-- **Step A — non-signal-only preflight (5 min):** `python scripts/run_live_session.py --instrument MNQ --profile topstep_50k_mnq_auto --preflight` (no `--signal-only`). This exercises Step 7 copy-trading account resolution against real broker — the only gate not exercised tonight. Must show `[7/7] OK (copies=N, M accounts discovered)`.
-- **Step B — dashboard smoke (5 min):** launch dashboard, click Start Live on `topstep_50k_mnq_auto`. Confirm `SessionOrchestrator.__init__` reaches steady state without `_select_primary_and_shadow_accounts` RuntimeError, log shows `Copy trading: primary=..., shadows=[...]`. Regression check for `a0b3c24b`.
-- **Step C — go-live decision on existing 4 MNQ lanes** (`docs/runtime/next-session-go-live-plan.md` step 5). Pre-commit kill conditions (step 6 of that plan) BEFORE first real fill.
-- **Carry-over to capture during first live session:** dashboard `/api/bars-recent?instrument=MNQ` returns `"bars":[]` — capture tick log + 3-min-later curl + last 5 aggregator log lines per plan c-i. Without ≥1 live run's evidence no fix stage is justified.
-- **Do NOT:** mutate `docs/runtime/lane_allocation.json`, add new strategies, or re-litigate MGC LONDON_METALS before the first live day completes.
-- **Hygiene note:** untracked draft `docs/audit/hypotheses/drafts/2026-05-17-mnq-usdata1000-vwapmid-family-pooled-oos-v1.draft.yaml` is from a parallel session — leave alone unless owner identifies.
-- **Non-blocking cleanup (defer):** `.env` has dotenv parse warnings on ~25 lines in the 246–296 range (cosmetic — every preflight + live session run emits them). Not gating anything; quick pass with `python -c "from dotenv import dotenv_values; dotenv_values('.env')"` + fix the malformed lines. Do AFTER first successful live day, not before.
+## Next Session — Start here (2026-05-19, Monday BNE)
+
+**Current truth (verified end of 2026-05-18 session):**
+- `docs/runtime/lane_allocation.json`: rebalance_date `2026-05-18`, **3 MNQ deployed lanes** (OVNRNG_100, VWAP_MID_RR1.5_O15, COST_LT12), 833 paused, 8 displaced.
+- Monday capital decision: **STILL RED (BLOCK_LAUNCH_COPY_SET_UNVERIFIED)** until Option A/B/C below. The lane refresh did NOT change the broker mismatch; it only changed which lanes would route IF launched.
+
+### Highest-EV pending operator action (do FIRST)
+- **Option A — Provision the second TopstepX account** (still the cleanest unblock; full detail at "Monday-morning decision" block further down).
+  - Log into TopstepX → activate a second funded account under the same API credentials.
+  - Re-run `python scripts/run_live_session.py --instrument MNQ --profile topstep_50k_mnq_auto --preflight` (non-signal-only). Expect `OK (copies=2, 2 accounts discovered)`.
+  - Then launch dashboard → Start Live on `topstep_50k_mnq_auto`. Confirm `Copy trading: primary=<id>, shadows=[<id>]` log line.
+  - Result: GREEN, three lanes route Monday 23:25 BNE onward.
+- **Option B fallback** if Option A not provisioned by 23:00 BNE: edit `trading_app/prop_profiles.py:481` `copies=2` → `copies=1` (stage file required, production code edit). YELLOW launch on single account, lose copy-trading regression coverage until Option A later.
+- **Option C** (launch as-is, copies=2 with 1 account): not recommended — silent degrade, institutional-rigor § 4 + § 6 violation.
+
+### What to NOT do
+- Mutate `docs/runtime/lane_allocation.json` further (just refreshed today; next refresh on operator demand or after Monday session).
+- Try to "get to 4 lanes" by relaxing gates. The 3-lane number is what the canonical allocator + Chordia + C8 + correlation pruning produced; chase quality not count.
+- Re-litigate MGC LONDON_METALS (verdict frozen — see "Next Steps — Active" item 1 further down).
+- Re-litigate the 78 ROUTABLE_DORMANT deployment-coverage decision before first live day.
+
+### Open carry-overs (not actioned today)
+- **Amendment 3.0 loader collision blocking NYSE_CLOSE prereg authoring** — `docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml` fails to load at `trading_app/hypothesis_loader.py:291` (theory_citation × Amendment 3.0). All 10 NYSE_CLOSE lanes remain PARKED. Decision-ledger: `mnq-nyse-close-k1-prereg-blocked-by-loader-2026-05-17`.
+- **Dashboard `/api/bars-recent?instrument=MNQ` returns `"bars":[]`** — uncharacterized since 2026-05-16 debut. Needs ≥1 live run evidence (tick log + 3-min-later curl + last 5 aggregator log lines) before fix stage justified.
+- **HWM tracker `hwm_dollars=0.0` on account 21944866** — shell exists, never populated. Defer until ≥1 real Monday session; revisit only if still 0.0 after broker activity.
+- **`logs/live/live_<ts>.log` not written under `--live`** — output stdout-only on 2026-05-16 debut. Needs ≥1 more run to characterize.
+
+### Hygiene
+- Untracked draft `docs/audit/hypotheses/drafts/2026-05-17-mnq-usdata1000-vwapmid-short-only-k1-v1.draft.yaml` is from a parallel session — leave alone unless owner identifies.
+- `.coverage` shows `M` every session — test-runtime artifact, contains absolute paths, do NOT stage.
 
 ## Next Session — Preflight Gate Outcome (2026-05-17 ~21:19 BNE)
 - **Step A result:** PASS 7/7. `python scripts/run_live_session.py --instrument MNQ --profile topstep_50k_mnq_auto --preflight` clean. Token acquired, 4 lanes loaded, contract `CON.F.US.MNQ.M26`, bracket+fill+notifications PASS, journal opens. **Step 7 executed (not SKIPPED) — exercised `_select_primary_and_shadow_accounts` against real broker without RuntimeError. a0b3c24b + bb0619d2 regression surface CLEAN.**
@@ -93,7 +121,7 @@
 
 ## Next Steps — Active
 1. **MGC LONDON_METALS — DO NOT RE-LITIGATE.** Verdict frozen at `docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md`. Reopen only if new evidence clears one of the prereg kill criteria (K1 t_IS≥3.00 with theory grant, or K3 N_IS_on≥100). Do not re-run Phase A on alternative apertures as a back-door — that pattern is the trap.
-2. **Highest-EV next is MNQ.** Live: 4 deployed MNQ lanes per `docs/runtime/lane_allocation.json` (verified 2026-05-16). Concrete candidate: rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring per Chordia v2 readouts. (Prior "MEMORY 3 vs canonical 2 — reconcile" sub-item RESOLVED 2026-05-16: both surfaces now agree at 4 post-Chordia-K=20 rebalance per `memory/live_lanes_2026_05_14_four_deployed_post_chordia_k20.md`.) **2026-05-17 NYSE_CLOSE branch BLOCKED:** locked `docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml` fails to load at `trading_app/hypothesis_loader.py:291` (theory_citation × Amendment 3.0 collision); cohort-park rule keeps all 10 NYSE_CLOSE lanes PARKED until doctrine amendment lands. Decision-ledger entry: `mnq-nyse-close-k1-prereg-blocked-by-loader-2026-05-17`.
+2. **Highest-EV next is MNQ.** Live: **3 deployed MNQ lanes** per `docs/runtime/lane_allocation.json` (rebalance_date 2026-05-18, refreshed end of 2026-05-18 session: OVNRNG_100, VWAP_MID_RR1.5_O15, COST_LT12). Previously 4 lanes (verified 2026-05-16); C8 OOS gate caught silent failure on OVNRNG_25 during fresh rebalance. Concrete candidate: rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring per Chordia v2 readouts. (Prior "MEMORY 3 vs canonical 2 — reconcile" sub-item RESOLVED 2026-05-16: both surfaces now agree at 4 post-Chordia-K=20 rebalance per `memory/live_lanes_2026_05_14_four_deployed_post_chordia_k20.md`.) **2026-05-17 NYSE_CLOSE branch BLOCKED:** locked `docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml` fails to load at `trading_app/hypothesis_loader.py:291` (theory_citation × Amendment 3.0 collision); cohort-park rule keeps all 10 NYSE_CLOSE lanes PARKED until doctrine amendment lands. Decision-ledger entry: `mnq-nyse-close-k1-prereg-blocked-by-loader-2026-05-17`.
 3. **Pre-existing carry-over (still open):** Track D MNQ COMEX_SETTLE Gate 0 runner design (Databento top-of-book table + bounded runner for DESIGN_ONLY prereg); **deployment-coverage decision on 78 ROUTABLE_DORMANT strategies — REFRESHED 2026-05-17**, fresh snapshot at `docs/audit/results/2026-05-17-deployment-coverage-orphans.md` (counts unchanged: 78 DORMANT / 0 ORPHAN / 809.4 R blocked-capital; ROUTABLE_ACTIVE annual_r −103.3 R after refresh of 296 stale `last_trade_day` rows). **Activation-vs-PARK decision DEFERRED to next session** per user stance "refresh first, decide after fresh numbers". No `prop_profiles.py` or `lane_allocation.json` mutation this session. Prior 2026-05-12 snapshot retained for evidence trail.
 4. **NUGGET 5 PARKED 2026-05-13.** Agent-control-plane evaluation (Paperclip / amux / Cogpit / OctoAlly / LONA / reasoning sidecar) marked PARKED in `docs/plans/2026-05-12-agent-control-plane-evaluation.md`. Reopen only if worktree/branch/PR cleanup exceeds 2 hrs/week for two consecutive weeks. Existing worktree-manager + 5 MCPs + 11 subagents + 27 skills + 17 hooks already constitutes a control plane; NUGGET 4 (commit `b90c6291`) addressed the actual bottleneck (session-start context load). Do not re-evaluate without the reopen trigger firing.
 5. **Monday pre-session checklist (BEFORE first real MNQ trade window opens):**
