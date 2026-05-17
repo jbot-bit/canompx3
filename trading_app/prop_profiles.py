@@ -507,8 +507,10 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # in pre_session_check.py (BLOCK after 60 days, WARNING after 35).
         #
         # Prior hardcoded lanes (2026-04-13 reconstruction) moved to
-        # allocator output. History: 6 unique sessions, max pairwise
-        # rho=0.060. Now 7 sessions with US_DATA_1000 VWAP addition.
+        # allocator output. History: 6 sessions (rho<=0.060) -> 7 with
+        # US_DATA_1000 VWAP -> 9 with NYSE_CLOSE + LONDON_METALS
+        # (2026-05-17, preventive unblock — no deployed lanes use these
+        # sessions yet; allocator+Chordia+regime gates remain authoritative).
         daily_lanes=(),
         payout_policy_id="topstep_express_standard",
         notes=(
@@ -518,8 +520,10 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             "correlation audit (max rho=0.060, +41% ExpR). "
             "7th lane: US_DATA_1000 VWAP (ExpR=+0.210, N=701). "
             "Whitelist expanded 2026-05-17 to include NYSE_CLOSE + "
-            "LONDON_METALS so allocator-approved lanes in those sessions are "
-            "not profile-blocked once doctrine gates clear. "
+            "LONDON_METALS as a preventive unblock: no MNQ candidates "
+            "are currently in these sessions, but if Chordia + regime "
+            "audits later promote one the profile will not silently veto "
+            "it (lane_allocator.py filters non-allowlisted sessions). "
             "Each lane is the best-ExpR strategy from its session's "
             "independent correlation family. Audit script: "
             "scripts/research/portfolio_correlation_audit.py. "

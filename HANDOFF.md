@@ -14,7 +14,6 @@
 - **Session summary:** Implemented the highest-signal deployment-coverage unlock from 2026-05-17 audit by expanding `topstep_50k_mnq_auto.allowed_sessions` to include `NYSE_CLOSE` and `LONDON_METALS`. This removes profile-level routing blockage for allocator-selected MNQ lanes in those sessions (subject to existing doctrine/risk gates). No DB mutation, no lane_allocation mutation, no broker/live process changes.
 
 - **Tool:** Claude Code (Opus 4.7)
-- **Tool:** Claude Code (Opus 4.7)
 - **Date:** 2026-05-17 late evening
 - **Tip:** c0fb8a19 (audit deployment-coverage rebalance refresh 2026-05-17, annual_r rerank)
 - **Prior unpushed → pushed this session:** ff1f13ee (hysteresis aperture DD bug + canonical paused-set parser + fail-closed precondition on corrupt JSON) and 7624656b (work_queue render-handoff --write requires --force; pulse warning no longer recommends footgun). Both code-reviewed (Grade A-) before push.
