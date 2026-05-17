@@ -781,7 +781,11 @@ def evaluate_system_policy(snapshot: SystemContext, action: PolicyAction) -> Pol
                 "warning",
                 "handoff_queue_mismatch",
                 "HANDOFF.md no longer matches the canonical action queue render.",
-                detail="Run python scripts/tools/work_queue.py render-handoff --write",
+                detail=(
+                    "Compare: python scripts/tools/work_queue.py render-handoff "
+                    "(no flags) prints the canonical queue baton to stdout; "
+                    "hand-patch the queue section in HANDOFF.md to match."
+                ),
             )
         )
     if not snapshot.work_queue.exists:

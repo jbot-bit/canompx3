@@ -86,6 +86,15 @@ def cmd_status(_args: argparse.Namespace) -> int:
 def cmd_render_handoff(args: argparse.Namespace) -> int:
     root = _root()
     if args.write:
+        if not args.force:
+            print(
+                "refusing to overwrite HANDOFF.md: render-handoff --write replaces the entire file "
+                "with the thin queue baton, deleting session-prose blocks. Re-run with --force if "
+                "that is intended, or omit --write to print to stdout and hand-patch the queue "
+                "section.",
+                file=sys.stderr,
+            )
+            return 2
         path = write_rendered_handoff(root, tool=args.tool, date=args.date, summary=args.summary)
         print(path.relative_to(root).as_posix())
         return 0
@@ -159,7 +168,16 @@ def build_parser() -> argparse.ArgumentParser:
     status.set_defaults(func=cmd_status)
 
     render = sub.add_parser("render-handoff", help="Render the thin baton from the queue")
-    render.add_argument("--write", action="store_true", help="Write to HANDOFF.md instead of stdout")
+    render.add_argument(
+        "--write",
+        action="store_true",
+        help="Overwrite HANDOFF.md with the thin render. DESTRUCTIVE — deletes session prose. Requires --force.",
+    )
+    render.add_argument(
+        "--force",
+        action="store_true",
+        help="Confirm the destructive HANDOFF.md overwrite when paired with --write.",
+    )
     render.add_argument("--tool", default=None)
     render.add_argument("--date", default=None)
     render.add_argument("--summary", default=None)

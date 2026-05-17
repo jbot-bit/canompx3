@@ -338,6 +338,19 @@ class TestEvaluateSystemPolicy:
         assert any(issue.code == "handoff_queue_mismatch" for issue in decision.warnings)
         assert any(issue.code == "close_first_carryover" for issue in decision.warnings)
 
+        # 2026-05-17 footgun guard: the handoff_queue_mismatch warning must NOT
+        # recommend `--write` — that flag is destructive (overwrites HANDOFF.md
+        # and deletes session prose). The pulse hint should point operators at
+        # the safe stdout-render-then-hand-patch path instead.
+        mismatch_warning = next(
+            issue for issue in decision.warnings if issue.code == "handoff_queue_mismatch"
+        )
+        assert mismatch_warning.detail is not None, "handoff_queue_mismatch must carry a detail hint"
+        assert "--write" not in mismatch_warning.detail, (
+            "handoff_queue_mismatch detail must not recommend `render-handoff --write` "
+            "— that command silently destroys HANDOFF.md session prose"
+        )
+
     def test_orientation_distinguishes_status_unavailable_from_dirty(self, tmp_path: Path) -> None:
         _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")
 

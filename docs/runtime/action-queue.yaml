@@ -474,7 +474,7 @@ items:
     priority: P3
     close_before_new_work: false
     owner_hint: codex-or-claude
-    last_verified_at: 2026-05-10
+    last_verified_at: 2026-05-17
     freshness_sla_days: 7
     next_action: Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
     exit_criteria: The branch has an executable runner/table design or is explicitly deferred with a measured reason.
