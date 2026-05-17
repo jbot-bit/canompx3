@@ -939,15 +939,13 @@ class TestTestingMode:
         assert meta["testing_mode"] == "individual"
         assert meta["has_theory"] is False
 
-
-
-
     def test_real_k1_nyse_close_prereg_loads_no_theory_pathway_b(self):
         """Regression: locked 2026-05-13 K=1 NYSE_CLOSE prereg must load as no-theory individual mode."""
         prereg = Path("docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml")
         meta = load_hypothesis_metadata(prereg)
         assert meta["testing_mode"] == "individual"
         assert meta["has_theory"] is False
+
 
 class TestAmendment33TheoryGrant:
     """Amendment 3.3 (2026-05-17): explicit metadata.theory_grant, fail-closed."""
