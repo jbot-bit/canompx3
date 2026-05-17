@@ -4,6 +4,7 @@ date: 2026-04-19
 status: locked
 
 metadata:
+  theory_grant: false
   intent: >
     Rebuild the 5 surviving native MGC low-R families from actual 1-minute bar
     path so the sub-1R signal is tested under canonical target/stop sequencing

@@ -34,6 +34,7 @@
 # B expand survivors). Budget: ~69 trials total, well under MinBTL 300.
 
 metadata:
+  theory_grant: false
   name: "directional-context-alignment"
   purpose: |
     Comprehensive research program for the meta-signal: "when prior context

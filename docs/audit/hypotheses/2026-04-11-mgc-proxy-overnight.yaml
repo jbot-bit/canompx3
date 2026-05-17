@@ -13,6 +13,7 @@
 # 9 sessions x 3 RR = 27 trials.
 
 metadata:
+  theory_grant: true
   name: "mgc-proxy-overnight"
   purpose: |
     Test whether large overnight range (>= $10) predicts stronger MGC

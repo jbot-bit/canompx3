@@ -4,6 +4,7 @@ date: 2026-04-19
 status: locked
 
 metadata:
+  theory_grant: false
   intent: >
     Audit the unresolved GC -> MGC translation gap using canonical overlap-era
     truth only. This is an audit/diagnostic pass, not a discovery run, not a

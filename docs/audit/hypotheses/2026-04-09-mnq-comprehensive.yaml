@@ -5,6 +5,7 @@
 # E2 CB1 O5 throughout. RR per mechanism (spike-settle=1.0, info-flow=2.0)
 
 metadata:
+  theory_grant: true
   name: "mnq-comprehensive"
   date_locked: "2026-04-09T18:00:00+10:00"
   holdout_date: "2026-01-01"

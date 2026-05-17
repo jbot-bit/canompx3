@@ -8,6 +8,10 @@
 # Execution status: DESIGN_ONLY — runner and Databento tables are not built yet.
 
 metadata:
+  legacy_unlinked_citations:
+    - "Cont, Kukanov, Stoikov (2014); Gould and Bonart (2016)"
+  theory_corpus_pending: true
+  theory_grant: false
   name: "mnq_comex_settle_gate0_microstructure_v1"
   purpose: "Microstructure Gate 0 falsification study for MNQ COMEX_SETTLE using top-of-book imbalance."
   date_locked: "2026-04-23T12:00:00+10:00"
@@ -20,7 +24,6 @@ metadata:
 hypotheses:
   - id: 1
     name: "Pre-break top-of-book imbalance predicts MNQ COMEX_SETTLE breakout follow-through"
-    theory_citation: "Cont, Kukanov, Stoikov (2014); Gould and Bonart (2016)"
     economic_basis: |
       Short-horizon price changes and breakout follow-through are more robustly 
       linked to order-flow imbalance (OFI) and queue imbalance than to raw 

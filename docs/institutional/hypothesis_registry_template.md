@@ -37,6 +37,12 @@ metadata:
   holdout_date: "2026-01-01"
   total_expected_trials: 0   # sum across all hypotheses; must be ≤ 300 (clean) or 2000 (proxy)
   research_question_type: "standalone_edge"   # or "conditional_role"
+  theory_grant: false        # REQUIRED bool per Amendment 3.3 (2026-05-17). No default.
+                             #   true  = theory-grounded; every hypothesis MUST have theory_citation
+                             #           matching docs/institutional/literature/; Chordia t>=3.00.
+                             #   false = no-theory; hypotheses MUST NOT carry theory_citation;
+                             #           Chordia t>=3.79. Historical academic refs (if preserved)
+                             #           go under metadata.legacy_unlinked_citations as a list of strings.
 
   # ---- Phase 4 Stage 4.1b: MinBTL proxy-mode opt-in (OPTIONAL) ----
   # By default, Criterion 2's clean-data bound of 300 trials applies.

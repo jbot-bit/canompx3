@@ -7,6 +7,7 @@
 # Intended discovery holdout: 2026-01-01
 
 metadata:
+  theory_grant: true
   name: "pr48_role_followthrough_v1"
   purpose: "Bounded follow-through study for PR48 role candidates using daily policy deltas, drawdown, and executable drag diagnostics."
   date_locked: "2026-04-22T15:30:00+10:00"

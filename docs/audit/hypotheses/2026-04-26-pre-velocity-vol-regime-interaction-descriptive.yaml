@@ -19,6 +19,7 @@
 # 2026-04-26 framework just caught.
 
 metadata:
+  theory_grant: false
   name: "pre_velocity_vol_regime_interaction_descriptive"
   purpose: |
     Test whether pre-velocity-alignment edge (binary, aligned vs opposed) is

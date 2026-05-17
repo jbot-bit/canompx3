@@ -19,6 +19,7 @@
 # See docs/plans/2026-04-09-discovery-redesign.md for full design rationale.
 
 metadata:
+  theory_grant: true
   name: "mnq-redesign"
   purpose: |
     Mechanism-grounded MNQ discovery. 5 hypotheses testing 5 distinct

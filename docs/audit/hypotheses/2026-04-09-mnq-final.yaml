@@ -5,6 +5,7 @@
 # RR per session: structural (spike-settle=1.0, continuation=2.0)
 
 metadata:
+  theory_grant: true
   name: "mnq-final"
   date_locked: "2026-04-09T16:00:00+10:00"
   holdout_date: "2026-01-01"

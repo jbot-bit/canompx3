@@ -13,6 +13,11 @@
 # RR2.0 tests continuation, RR1.0 tests minimum directional follow-through.
 
 metadata:
+  legacy_unlinked_citations:
+    - "Crabel (1990) ch. 3"
+    - "Andersen, Bollerslev, Diebold, Vega (2003) AER"
+  theory_corpus_pending: true
+  theory_grant: false
   name: "mes-pathway-b"
   purpose: |
     Individual hypothesis testing for MES under Pathway B (Amendment 3.0).
@@ -35,7 +40,6 @@ metadata:
 hypotheses:
   - id: 1
     name: "MES NYSE_OPEN G5 RR2.0 — Crabel on S&P benchmark"
-    theory_citation: "Crabel (1990) ch. 3"
     economic_basis: |
       The S&P 500 is the deepest equity index. NYSE cash open concentrates
       institutional order flow. A meaningful ORB (G5) broken at cash open
@@ -62,7 +66,6 @@ hypotheses:
 
   - id: 2
     name: "MES NYSE_OPEN G6 RR2.0 — Crabel monotonic filter"
-    theory_citation: "Crabel (1990) ch. 3"
     economic_basis: |
       G6 is a stricter ORB size filter than G5 — it requires a larger
       opening range, implying stronger commitment from institutional flow.
@@ -89,7 +92,6 @@ hypotheses:
 
   - id: 3
     name: "MES NYSE_OPEN G5 RR1.0 — Crabel minimum continuation"
-    theory_citation: "Crabel (1990) ch. 3"
     economic_basis: |
       At RR=1.0, the prediction is minimal: the breakout travels at least
       1x the ORB range. This is the strongest baseline prediction (highest
@@ -115,7 +117,6 @@ hypotheses:
 
   - id: 4
     name: "MES NYSE_OPEN G6 RR1.0 — monotonic at minimum continuation"
-    theory_citation: "Crabel (1990) ch. 3"
     economic_basis: |
       G6 + RR1.0 combines the stricter ORB filter with the minimum
       continuation target. Predicts that larger opening ranges have
@@ -141,7 +142,6 @@ hypotheses:
 
   - id: 5
     name: "MES US_DATA_1000 G5 RR1.0 — macro minimum continuation"
-    theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER"
     economic_basis: |
       10:00 AM ET releases (ISM, Consumer Confidence) drive S&P 500
       repricing. At RR=1.0, the prediction is that the macro-driven

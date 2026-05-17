@@ -5,6 +5,7 @@
 # Purpose: replay expanded raw discrete policy surface on the active Topstep profile
 
 metadata:
+  theory_grant: true
   name: "garch-profile-policy-surface-replay"
   purpose: "Translate the verified raw discrete garch policies into actual Topstep-profile actions under canonical account rules."
   date_locked: "2026-04-16T23:59:00+10:00"

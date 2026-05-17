@@ -12,6 +12,7 @@
 # Monday gap risk creates noisy opens.
 
 metadata:
+  theory_grant: true
   name: "mnq-dow"
   purpose: |
     Test whether day-of-week exclusions (no-Friday, no-Monday) with G5

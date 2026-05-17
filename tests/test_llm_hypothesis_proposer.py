@@ -169,6 +169,19 @@ def test_check_citations_exist_catches_fabrication(corpus):
     assert any(f.code == "CITATION_NOT_FOUND" and f.fatal for f in failures)
 
 
+def test_check_citations_exist_short_circuits_on_theory_grant_false(corpus):
+    """Amendment 3.3: theory_grant=false short-circuits citation enforcement.
+
+    The loader enforces the cross-rule (no prose-in-field) at load time; the
+    static check has nothing to verify for honest no-theory preregs.
+    """
+    parsed = {
+        "metadata": {"theory_grant": False},
+        "hypotheses": [{"id": 1, "name": "h1"}],
+    }
+    assert check_citations_exist(parsed, corpus) == []
+
+
 # ---------- instruments / sessions ----------
 
 

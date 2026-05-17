@@ -53,6 +53,7 @@ status:
     - docs/audit/results/2026-04-17-fx-orb-closure.md
 
 metadata:
+  theory_grant: false
   name: fx-live-analogue-transfer-test
   owner: claude
   created_at: 2026-04-17

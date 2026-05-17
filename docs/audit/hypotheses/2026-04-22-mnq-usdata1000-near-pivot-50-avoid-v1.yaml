@@ -1,4 +1,5 @@
 metadata:
+  theory_grant: true
   name: "mnq-usdata1000-near-pivot-50-avoid-v1"
   purpose: "Exact bridge prereg for MNQ US_DATA_1000 O5 E2 RR1.0 long F3_NEAR_PIVOT_50 as an avoid overlay"
   date_locked: "2026-04-22T20:45:00+10:00"

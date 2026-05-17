@@ -259,14 +259,27 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
     if not isinstance(hypotheses, list) or len(hypotheses) == 0:
         raise HypothesisLoaderError(f"Hypothesis file {path} 'hypotheses' must be a non-empty list.")
 
-    # has_theory is True iff at least one hypothesis cites a theory_citation
-    # field. Used by the Chordia gate to pick the 3.00 (with theory) vs 3.79
-    # (without theory) threshold per Criterion 4.
-    has_theory = False
-    for h in hypotheses:
-        if isinstance(h, dict) and h.get("theory_citation"):
-            has_theory = True
-            break
+    # Amendment 3.3 (2026-05-17): theory_grant is an EXPLICIT bool. No
+    # field-presence inference, no legacy shim, no default. Missing or non-bool
+    # fails closed. Replaces the field-presence trap (prose in theory_citation
+    # silently flipping the Chordia threshold gate) and Amendment 3.0's
+    # testing_mode-coupled citation requirement (which blocked honest no-theory
+    # Pathway-B preregs).
+    if "theory_grant" not in metadata:
+        raise HypothesisLoaderError(
+            f"Hypothesis file {path} metadata.theory_grant is REQUIRED "
+            f"(Amendment 3.3, 2026-05-17). Must be an explicit bool: true "
+            f"(theory-grounded, theory_citation required on every hypothesis) "
+            f"or false (no-theory Pathway-B, strict Chordia t>=3.79). "
+            f"No default permitted."
+        )
+    theory_grant = metadata["theory_grant"]
+    if not isinstance(theory_grant, bool):
+        raise HypothesisLoaderError(
+            f"Hypothesis file {path} metadata.theory_grant must be a bool, "
+            f"got {type(theory_grant).__name__} ({theory_grant!r})."
+        )
+    has_theory = theory_grant
 
     # Amendment 3.0: testing_mode — "individual" (Pathway B, raw p < 0.05)
     # or "family" (Pathway A, BH FDR). Default = "family" for backward compat.
@@ -283,15 +296,41 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
             f"{sorted(_ALLOWED_RESEARCH_QUESTION_TYPES)}, got {research_question_type!r}."
         )
 
-    # Amendment 3.0 condition 1: individual mode requires theory_citation on
-    # EVERY hypothesis — no theory, no Pathway B.
-    if testing_mode == "individual":
+    # Amendment 3.3: theory_grant=true requires theory_citation on every
+    # hypothesis (carries forward Amendment 3.0's intent; now triggered by
+    # the explicit bool, not by testing_mode).
+    if theory_grant:
         for i, h in enumerate(hypotheses):
-            if not (isinstance(h, dict) and h.get("theory_citation")):
+            if not isinstance(h, dict):
                 raise HypothesisLoaderError(
-                    f"Hypothesis file {path} uses testing_mode='individual' (Pathway B) but "
+                    f"Hypothesis file {path} declares theory_grant=true but "
+                    f"hypothesis {i + 1} is not a mapping ({type(h).__name__}). "
+                    f"Amendment 3.3: non-dict hypotheses cannot carry a citation."
+                )
+            cite = h.get("theory_citation")
+            if not (isinstance(cite, str) and cite.strip()):
+                raise HypothesisLoaderError(
+                    f"Hypothesis file {path} declares theory_grant=true but "
                     f"hypothesis {i + 1} is missing theory_citation. "
-                    f"Amendment 3.0 requires theory_citation on EVERY hypothesis for Pathway B."
+                    f"Amendment 3.3: theory_grant=true requires theory_citation "
+                    f"on every hypothesis."
+                )
+
+    # Amendment 3.3 cross-rule: theory_grant=false MUST NOT carry any
+    # non-empty theory_citation on a hypothesis (defends against prose-in-field
+    # reopening the trap). Historical citations preserved separately via
+    # metadata.legacy_unlinked_citations are allowed.
+    if not theory_grant:
+        for i, h in enumerate(hypotheses):
+            cite = h.get("theory_citation") if isinstance(h, dict) else None
+            if isinstance(cite, str) and cite.strip():
+                raise HypothesisLoaderError(
+                    f"Hypothesis file {path} declares theory_grant=false but "
+                    f"hypothesis {i + 1} carries a non-empty theory_citation. "
+                    f"Either set theory_grant=true and cite a real on-disk "
+                    f"literature extract, or remove the theory_citation field "
+                    f"(preserve historical claim in metadata.legacy_unlinked_citations "
+                    f"if needed)."
                 )
 
     if research_question_type == "conditional_role":

@@ -6,6 +6,7 @@
 #          further economics / classifier work
 
 metadata:
+  theory_grant: true
   name: "garch-g0-preflight"
   purpose: "Verify the env, data, feature timing, exact population rebuild, holdout boundary, and falsification controls for the garch institutional utilization program."
   date_locked: "2026-04-16T21:20:00+10:00"

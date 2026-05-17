@@ -12,6 +12,11 @@
 # larger ORBs that clear MES's relatively high friction.
 
 metadata:
+  legacy_unlinked_citations:
+    - "Bollerslev (1986) JBES GARCH; Engle (1982) Econometrica ARCH"
+    - "Bollerslev (1986) JBES; Engle (1982) Econometrica"
+  theory_corpus_pending: true
+  theory_grant: false
   name: "mes-vol-persist"
   purpose: |
     Test whether high volatility regime (ATR(20) pctl >= 70) predicts
@@ -35,7 +40,6 @@ metadata:
 hypotheses:
   - id: 1
     name: "MES TOKYO_OPEN ATR_P70 RR1.0"
-    theory_citation: "Bollerslev (1986) JBES GARCH; Engle (1982) Econometrica ARCH"
     economic_basis: |
       GARCH volatility clustering: high-vol regimes persist over multiple
       days. When ATR(20) percentile >= 70, the current vol regime produces
@@ -62,7 +66,6 @@ hypotheses:
 
   - id: 2
     name: "MES SINGAPORE_OPEN ATR_P70 RR1.0"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism. All sessions tested for honesty."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [SINGAPORE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -71,7 +74,6 @@ hypotheses:
 
   - id: 3
     name: "MES LONDON_METALS ATR_P70 RR1.0"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -80,7 +82,6 @@ hypotheses:
 
   - id: 4
     name: "MES EUROPE_FLOW ATR_P70 RR1.0"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -89,7 +90,6 @@ hypotheses:
 
   - id: 5
     name: "MES CME_REOPEN ATR_P70 RR1.0"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -98,7 +98,6 @@ hypotheses:
 
   - id: 6
     name: "MES US_DATA_830 ATR_P70 RR1.0"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -107,7 +106,6 @@ hypotheses:
 
   - id: 7
     name: "MES NYSE_OPEN ATR_P70 RR1.0"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -116,7 +114,6 @@ hypotheses:
 
   - id: 8
     name: "MES US_DATA_1000 ATR_P70 RR1.0"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -125,7 +122,6 @@ hypotheses:
 
   - id: 9
     name: "MES COMEX_SETTLE ATR_P70 RR1.0"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -134,7 +130,6 @@ hypotheses:
 
   - id: 10
     name: "MES NYSE_CLOSE ATR_P70 RR1.0"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [NYSE_CLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -143,7 +138,6 @@ hypotheses:
 
   - id: 11
     name: "MES CME_PRECLOSE ATR_P70 RR1.0"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -152,7 +146,6 @@ hypotheses:
 
   - id: 12
     name: "MES BRISBANE_1025 ATR_P70 RR1.0"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [BRISBANE_1025], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -161,7 +154,6 @@ hypotheses:
 
   - id: 13
     name: "MES TOKYO_OPEN ATR_P70 RR1.5"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR for continuation."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -170,7 +162,6 @@ hypotheses:
 
   - id: 14
     name: "MES SINGAPORE_OPEN ATR_P70 RR1.5"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [SINGAPORE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -179,7 +170,6 @@ hypotheses:
 
   - id: 15
     name: "MES LONDON_METALS ATR_P70 RR1.5"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -188,7 +178,6 @@ hypotheses:
 
   - id: 16
     name: "MES EUROPE_FLOW ATR_P70 RR1.5"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -197,7 +186,6 @@ hypotheses:
 
   - id: 17
     name: "MES CME_REOPEN ATR_P70 RR1.5"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -206,7 +194,6 @@ hypotheses:
 
   - id: 18
     name: "MES US_DATA_830 ATR_P70 RR1.5"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -215,7 +202,6 @@ hypotheses:
 
   - id: 19
     name: "MES NYSE_OPEN ATR_P70 RR1.5"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -224,7 +210,6 @@ hypotheses:
 
   - id: 20
     name: "MES US_DATA_1000 ATR_P70 RR1.5"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -233,7 +218,6 @@ hypotheses:
 
   - id: 21
     name: "MES COMEX_SETTLE ATR_P70 RR1.5"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -242,7 +226,6 @@ hypotheses:
 
   - id: 22
     name: "MES NYSE_CLOSE ATR_P70 RR1.5"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [NYSE_CLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -251,7 +234,6 @@ hypotheses:
 
   - id: 23
     name: "MES CME_PRECLOSE ATR_P70 RR1.5"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -260,7 +242,6 @@ hypotheses:
 
   - id: 24
     name: "MES BRISBANE_1025 ATR_P70 RR1.5"
-    theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
     scope: { instruments: [MES], sessions: [BRISBANE_1025], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }

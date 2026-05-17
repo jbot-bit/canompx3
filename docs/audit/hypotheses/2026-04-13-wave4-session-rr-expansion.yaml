@@ -32,6 +32,17 @@
 # - X_MES_ATR60 at US_DATA_1000 RR2.0: exploratory t=1.08. DROPPED.
 
 metadata:
+  legacy_unlinked_citations:
+    - "Crabel 1990 ORB size gate. Exploratory ORB_G8 t=3.29, p=0.0005, N=720, 6/7 years positive. 93% pass rate = real filter."
+    - "Cost gate proven at 4 sessions (7 active strategies). Exploratory COST_LT12 at NYSE_CLOSE RR1.0: t=1.31, N=703, 80% pass rate."
+    - "X_MES_ATR60 proven at 3 sessions (6 active strategies). Exploratory at NYSE_CLOSE RR1.0: t=1.37, N=345, 43% pass rate (strong filter)."
+    - "US_DATA_1000 has 2 active strategies at RR1.0/1.5. Exploratory RR2.0 ORB_G5: t=2.75, p=0.003, N=1624, 5/7 years positive."
+    - "COST_LT12 exploratory at US_DATA_1000 RR2.0: t=2.03, p=0.021, N=698."
+    - "NYSE_OPEN has 6 active strategies at RR1.0/1.5. Exploratory RR2.0 ORB_G5: t=2.39, p=0.008, N=1596."
+    - "X_MES_ATR60 exploratory at NYSE_OPEN RR2.0: t=1.92, p=0.027, N=684."
+    - "LONDON_METALS 0 active strategies. Exploratory ORB_G8: RR1.5 t=2.10, p=0.018; RR1.0 t=1.70, p=0.045. 87% pass rate. OVN/ATR p=0.011 (clean feature, Asia complete before session). Marginal but motivated."
+  theory_corpus_pending: true
+  theory_grant: false
   name: "wave4-session-rr-expansion"
   purpose: |
     Extend validated MNQ ORB strategies to NYSE_CLOSE (untapped session),
@@ -45,9 +56,6 @@ metadata:
 hypotheses:
   - id: 1
     name: "NYSE_CLOSE ORB size gate"
-    theory_citation: |
-      Crabel 1990 ORB size gate. Exploratory ORB_G8 t=3.29, p=0.0005,
-      N=720, 6/7 years positive. 93% pass rate = real filter.
     economic_basis: |
       NYSE_CLOSE at 16:00 ET. MOC institutional rebalancing drives
       momentum. Larger ORBs signal institutional commitment.
@@ -71,9 +79,6 @@ hypotheses:
 
   - id: 2
     name: "NYSE_CLOSE cost gate"
-    theory_citation: |
-      Cost gate proven at 4 sessions (7 active strategies). Exploratory
-      COST_LT12 at NYSE_CLOSE RR1.0: t=1.31, N=703, 80% pass rate.
     economic_basis: |
       On low-volatility days, ORB risk is small relative to friction.
       Cost gate removes these unprofitable days.
@@ -96,9 +101,6 @@ hypotheses:
 
   - id: 3
     name: "NYSE_CLOSE cross-asset vol"
-    theory_citation: |
-      X_MES_ATR60 proven at 3 sessions (6 active strategies). Exploratory
-      at NYSE_CLOSE RR1.0: t=1.37, N=345, 43% pass rate (strong filter).
     economic_basis: |
       MES ATR >= 60 selects days with broad equity index volatility.
       Cross-asset vol regime predicts breakout follow-through.
@@ -121,9 +123,6 @@ hypotheses:
 
   - id: 4
     name: "US_DATA_1000 RR2.0 ORB size gate"
-    theory_citation: |
-      US_DATA_1000 has 2 active strategies at RR1.0/1.5. Exploratory
-      RR2.0 ORB_G5: t=2.75, p=0.003, N=1624, 5/7 years positive.
     economic_basis: |
       10:00 ET data releases. Edge proven at narrower RR. RR2.0 captures
       extended post-release trend.
@@ -146,8 +145,6 @@ hypotheses:
 
   - id: 5
     name: "US_DATA_1000 RR2.0 cost gate"
-    theory_citation: |
-      COST_LT12 exploratory at US_DATA_1000 RR2.0: t=2.03, p=0.021, N=698.
     economic_basis: |
       Same friction-gate mechanism. At wider RR targets, friction is
       proportionally smaller but cost gate still removes worst days.
@@ -170,9 +167,6 @@ hypotheses:
 
   - id: 6
     name: "NYSE_OPEN RR2.0 ORB size gate"
-    theory_citation: |
-      NYSE_OPEN has 6 active strategies at RR1.0/1.5. Exploratory RR2.0
-      ORB_G5: t=2.39, p=0.008, N=1596.
     economic_basis: |
       NYSE open 09:30 ET. Highest volume. Stop cascades per Chan Ch.7.
       RR2.0 captures continuation of breakout trend.
@@ -196,8 +190,6 @@ hypotheses:
 
   - id: 7
     name: "NYSE_OPEN RR2.0 cross-asset vol"
-    theory_citation: |
-      X_MES_ATR60 exploratory at NYSE_OPEN RR2.0: t=1.92, p=0.027, N=684.
     economic_basis: |
       Cross-asset MES volatility selects high-conviction breakout days.
     filter:
@@ -220,10 +212,6 @@ hypotheses:
 
   - id: 8
     name: "LONDON_METALS ORB size gate"
-    theory_citation: |
-      LONDON_METALS 0 active strategies. Exploratory ORB_G8: RR1.5 t=2.10,
-      p=0.018; RR1.0 t=1.70, p=0.045. 87% pass rate. OVN/ATR p=0.011
-      (clean feature, Asia complete before session). Marginal but motivated.
     economic_basis: |
       London Metals Exchange open 07:00 UTC. Asian session sets context.
       ORB_G8 selects days with wider opening range = stronger flow.

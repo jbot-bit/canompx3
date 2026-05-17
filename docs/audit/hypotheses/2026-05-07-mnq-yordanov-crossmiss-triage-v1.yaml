@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 status: PRE_REGISTERED_DRAFT
 date: "2026-05-07"
@@ -100,8 +103,6 @@ scratch_policy:
     inflation risk is shared with the deployed lane baseline, not introduced by
     this triage.
   literature_ref: "docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md"
-
-theory_citation:
   source_file: "docs/institutional/literature/yordanov_2026_nq_orb_value_area_breakouts.md"
   section: "§ 3.8"
   verbatim_extract: >
@@ -207,7 +208,6 @@ testing_discipline:
     - "C6_WFE: walk-forward efficiency >= 0.50 (only invoked on confirmatory pre-reg next session)"
     - "C8_OOS: OOS-power-gated dir_match per backtesting-methodology.md § 3.3"
     - "C9_era_stability: no era ExpR < -0.05 at N>=50 on the veto-signal subset"
-  theory_citation: "see top-level theory_citation block"
 
 pooled_finding_protocol:
   applies: true

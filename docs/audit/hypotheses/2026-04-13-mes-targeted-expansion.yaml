@@ -25,6 +25,7 @@
 # COST_LT08 tested (41% pass NYSE_OPEN). COST_LT10 untested (60% pass).
 
 metadata:
+  theory_grant: true
   name: "mes-targeted-expansion"
   purpose: |
     Find MES edges on sessions beyond CME_PRECLOSE for daily PnL decorrelation

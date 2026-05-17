@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 status: LOCKED
 date: 2026-04-19
@@ -110,9 +113,6 @@ upstream_discovery_provenance:
 hypotheses:
   - id: H1_LONDON_METALS
     type: primary
-    theory_citation:
-      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
-      extract: "Table 3.9 (p.41) commodity intraday trend-follow. Symmetric to long direction — Fitschen framework grounds both sides."
     statement: "MGC LONDON_METALS O5 RR1.5 short ORB-G5 breakouts produce positive Mode A IS ExpR materially above the unfiltered baseline (-0.155)."
     pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
     gate:
@@ -125,9 +125,6 @@ hypotheses:
     counted_against_trial_budget: true
   - id: H2_COMEX_SETTLE
     type: primary
-    theory_citation:
-      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
-      extract: "Same as H1."
     statement: "Same as H1 for COMEX_SETTLE. Unfiltered baseline -0.195."
     pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
     gate:
@@ -140,9 +137,6 @@ hypotheses:
     counted_against_trial_budget: true
   - id: H3_US_DATA_1000
     type: primary
-    theory_citation:
-      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
-      extract: "Same as H1."
     statement: "Same as H1 for US_DATA_1000. Unfiltered baseline -0.049."
     pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
     gate:
@@ -155,9 +149,6 @@ hypotheses:
     counted_against_trial_budget: true
   - id: H4_EUROPE_FLOW
     type: primary
-    theory_citation:
-      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
-      extract: "Same as H1."
     statement: "Same as H1 for EUROPE_FLOW. Unfiltered baseline -0.138."
     pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
     gate:

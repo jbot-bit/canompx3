@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 pre_reg_id: "mnq-30m-rr10-unfiltered-lane-discovery-v1"
 date: "2026-04-20"
 testing_mode: "individual"

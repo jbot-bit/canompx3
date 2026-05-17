@@ -45,6 +45,7 @@
 # forward-time adaptivity the research did not have.
 
 metadata:
+  theory_grant: false
   name: "wave5-garch-nyse-open-low"
   purpose: |
     Pre-register the GARCH_VOL_PCT_LT20 filter (Wave 4 Phase B T2-T8
@@ -70,7 +71,6 @@ metadata:
 hypotheses:
   - id: 1
     name: "MNQ NYSE_OPEN E2 RR1.5 GARCH_VOL_PCT_LT20 — low-vol-regime breakout gate"
-    theory_citation: "scripts/research/wave4_presession_t2t8.py (2026-04-11 T2-T8 result): MNQ NYSE_OPEN RR1.5 LOW garch_forecast_vol in_ExpR=+0.240 WFE=1.00 T6 p=0.042. Strongest survivor across 20 shortlist combos; 50 other configs KILLED at T3/T4/T6/T7."
     economic_basis: |
       Low GARCH forecast vol at NYSE_OPEN identifies mornings where the
       1-step-ahead conditional vol is in the bottom 20% of the rolling 252-

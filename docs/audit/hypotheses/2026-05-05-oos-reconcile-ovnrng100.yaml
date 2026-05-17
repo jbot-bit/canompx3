@@ -1,4 +1,5 @@
 metadata:
+  theory_grant: true
   name: "oos_reconcile_ovnrng100_rr15_v1"
   purpose: "Canonical OOS reconciliation diligence audit for the deployed lane MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100. Three pre-existing OOS values disagree: validated_setups.oos_exp_r=+0.2029, strict-unlock CSV +0.166, ad-hoc raw query +0.069. Goal is one canonical recompute under Mode A using canonical machinery (filter_signal + HOLDOUT_SACRED_FROM + WF_START_OVERRIDE) and an explicit provenance diff. This is K=1 confirmatory diligence on an already-validated lane; not new discovery."
   date_locked: "2026-05-05T00:00:00+10:00"

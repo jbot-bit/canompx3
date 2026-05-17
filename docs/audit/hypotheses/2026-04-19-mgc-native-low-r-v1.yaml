@@ -4,6 +4,7 @@ date: 2026-04-19
 status: locked
 
 metadata:
+  theory_grant: false
   intent: >
     Test whether the apparent 5-minute MGC target-shape issue becomes a real,
     statistically defensible native opportunity under conservative lower-R

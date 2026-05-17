@@ -997,3 +997,42 @@ The pre-reg writer chooses between `CONDITIONAL_DEPLOY` and `KEEP_PARKED_INDEFIN
 **Cross-reference:** the D4 cell originally PARKED 2026-04-28 under Amendment 3.1 should be re-classified under Amendment 3.2 in any successor pre-reg (e.g. the D5 conditional-sizing pre-reg landing alongside this amendment). The D4 result file itself is not retroactively edited; the doctrine applies forward.
 
 **Stop conditions for Amendment 3.2 itself:** if a successor cell is classified `CONDITIONAL_DEPLOY` and Shiryaev-Roberts (Criterion 12) flags drift within 60 trading days, the live-shadow branch is closed and the cell reverts to `KEEP_PARKED_INDEFINITELY`. If empirical accrual rate diverges materially (>30%) from the pre-reg estimate after 6 months of live shadow, the writer must re-compute `min_trl_years` and re-classify.
+
+---
+
+## Amendment 3.3 — Explicit `theory_grant` declaration (added 2026-05-17, binding)
+
+**Date:** 2026-05-17
+**Trigger:** Two opposing failure modes of the implicit `has_theory` field-presence inference in `trading_app/hypothesis_loader.py:265-269`:
+
+1. **Prose-flips-strict-to-lenient (2026-05-12 MGC LONDON_METALS):** an author wrote narrative prose into `theory_citation` (`"No filter-mechanism theory citation available, this is empirical..."`). The loader read non-empty string → `has_theory=True` → silently relaxed the Chordia threshold from `t>=3.79` to `t>=3.00`. The post-run drift check `check_chordia_result_threshold_matches_prereg` (commit `79f94508`, 2026-05-12) caught the prereg↔result mismatch after the fact, but the prereg itself still committed under the wrong gate.
+2. **Omission-blocks-load (2026-05-13 K=1 prereg):** an author correctly omitted `theory_citation` to claim the strict 3.79 threshold for an honest no-theory Pathway-B test (MNQ_USDATA1000 VWAPMID O30 RR1.0 Chordia unlock). Amendment 3.0's individual-mode citation requirement + `scripts/research/lhp/static_checks.check_citations_exist` fired fatal `CITATION_MISSING`, sending the file to `drafts/*.rejected.txt`. The locked test could not execute as-authored.
+
+**Rule:** Every prereg `metadata` block MUST declare `theory_grant: bool` **explicitly**. No default. No legacy shim. No grandfather inference. The loader fails closed if the field is missing or non-bool.
+
+- `theory_grant: true` — theory-grounded. Every hypothesis MUST carry a non-empty `theory_citation` (carrying forward Amendment 3.0's intent; now triggered by the explicit bool, not by `testing_mode`). Citation must match a real on-disk literature extract via `static_checks.check_citations_exist`. Strict Chordia threshold `t >= 3.00` applies per Criterion 4.
+- `theory_grant: false` — no-theory. Hypotheses MUST NOT carry any non-empty `theory_citation` (cross-rule defends against prose-in-field reopening the trap). Strict Chordia threshold `t >= 3.79` applies per Criterion 4. Historical academic citations may be preserved out-of-band under `metadata.legacy_unlinked_citations` (informational only — has no gating effect).
+
+**Loader rejection cases (all fatal):**
+
+1. `metadata.theory_grant` missing → `HypothesisLoaderError`.
+2. `metadata.theory_grant` non-bool (string, int, None) → `HypothesisLoaderError`.
+3. `theory_grant=true` and any hypothesis missing/blank `theory_citation` → `HypothesisLoaderError`.
+4. `theory_grant=false` and any hypothesis carries non-empty `theory_citation` → `HypothesisLoaderError`.
+
+**Static check change:** `scripts/research/lhp/static_checks.check_citations_exist` short-circuits to `[]` when `metadata.theory_grant is False` — the loader enforces the cross-rule (no prose-in-field), so no citation enforcement is needed at static-check time for honest no-theory preregs.
+
+**Drift check:** `check_chordia_result_threshold_matches_prereg` (unchanged) remains the post-run backstop. Amendment 3.3 makes the **declared** threshold unambiguous; the drift check verifies the **applied** threshold matches.
+
+**Migration of historical preregs:** All preexisting preregs under `docs/audit/hypotheses/*.yaml` (203 files as of 2026-05-17) were migrated to add explicit `theory_grant` in the same change set that landed this amendment. Classification rule:
+
+- At least one hypothesis cited a real on-disk literature extract → `theory_grant: true` (78 files).
+- No hypothesis carried any `theory_citation` field → `theory_grant: false` (112 files).
+- Citation present but did NOT match any on-disk extract AND the citation looked academic (e.g. `"Crabel (1990)"`, `"Bessembinder & Seguin (1993) JF"`) → `theory_grant: false` with `theory_corpus_pending: true` and `legacy_unlinked_citations: [...]` preserving the historical claim (13 files). The corpus extracts for these papers were never written; future re-classification to `theory_grant: true` requires writing the extract first.
+- Citation present but internal (script paths, result-MD refs, doctrine docs) → `theory_grant: false`, citation stripped (subset of the 112 false files).
+
+No grandfather window. The migration script (`scripts/tools/migrate_preregs_amendment_3_3.py`) was a one-shot tool deleted after use in the same commit.
+
+**Why this exists:** Amendment 3.0 coupled the citation requirement to `testing_mode='individual'`, which created the doctrinal bug that an honest no-theory Pathway-B prereg could not exist. The field-presence inference at `hypothesis_loader.py:265-269` simultaneously created the trap that any truthy string in `theory_citation` silently flipped `has_theory=True`. Both bugs share one root cause: implicit inference from a string field. The fix is to make the semantic flag **explicit** (a boolean) and to fail closed on every ambiguous case.
+
+**Cross-reference:** Design proposal at `docs/plans/2026-05-17-hypothesis-loader-no-theory-pathway-b-amendment.md`. Memory anchors: `feedback_chordia_theory_citation_field_presence_trap.md`, `feedback_lhp_validator_vs_field_presence_trap_n1.md`.

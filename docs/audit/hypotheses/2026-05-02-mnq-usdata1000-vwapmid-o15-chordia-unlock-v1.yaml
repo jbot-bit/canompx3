@@ -1,4 +1,5 @@
 metadata:
+  theory_grant: false
   name: "mnq_usdata1000_vwapmid_o15_chordia_unlock_v1"
   purpose: "Bounded exact-lane Chordia unlock audit for MNQ US_DATA_1000 O15 RR1.5 VWAP_MID_ALIGNED. No theory grant is claimed."
   date_locked: "2026-05-02T00:00:00+10:00"

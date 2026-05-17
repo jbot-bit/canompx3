@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 2
 status: PRE_REGISTERED_DRAFT
 date: "2026-05-08"
@@ -119,8 +122,6 @@ scratch_policy:
     A trade with pnl_r=NULL is excluded from the paired-ΔR sample entirely
     (R_baseline_i is undefined). It cannot be cross-seen, not-cross-seen, or
     intervened on — the canonical exit was never resolved.
-
-theory_citation:
   source_file: "docs/institutional/literature/yordanov_2026_nq_orb_value_area_breakouts.md"
   section: "§ 3.8"
   verbatim_extract: >
@@ -384,7 +385,6 @@ testing_discipline:
     - "C6_WFE: walk-forward efficiency >= 0.50 (only invoked on confirmatory pre-reg next session)"
     - "C8_OOS: OOS-power-gated dir_match per backtesting-methodology.md § 3.3 (RULE 3.3) — DIRECTIONAL_ONLY tier expected and accepted"
     - "C9_era_stability: no era ΔR < -0.05 at N_cross_seen >= 50 on the cross-seen subset"
-  theory_citation: "see top-level theory_citation block"
 
 pooled_finding_protocol:
   applies: true

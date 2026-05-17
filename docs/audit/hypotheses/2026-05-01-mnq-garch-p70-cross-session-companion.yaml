@@ -6,6 +6,9 @@
 # AUTHORITY: .claude/rules/pooled-finding-rule.md
 # Companion to: docs/audit/hypotheses/2026-04-29-mnq-comex-settle-garch-d6-sizing-overlay-pathway-b-v1.yaml
 
+metadata:
+  theory_grant: false
+
 pre_reg_id: 2026-05-01-mnq-garch-p70-cross-session-companion
 locked_at: 2026-05-01
 status: DESIGN_LOCKED_AWAITING_GO
@@ -179,8 +182,7 @@ hypotheses:
 methodology:
   data_sources:
     bars: bars_1m
-    daily_features: daily_features (TRIPLE-JOIN on trading_day, symbol, orb_minutes
-      per .claude/rules/daily-features-joins.md; CTE guard: WHERE orb_minutes=5)
+    daily_features: "daily_features (TRIPLE-JOIN on trading_day, symbol, orb_minutes per .claude/rules/daily-features-joins.md; CTE guard: WHERE orb_minutes=5)"
     outcomes: orb_outcomes
   banned_data_sources:
     - validated_setups

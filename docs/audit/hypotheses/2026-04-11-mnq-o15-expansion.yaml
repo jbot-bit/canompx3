@@ -11,6 +11,7 @@
 # potentially better for slower sessions where 5-min is too narrow.
 
 metadata:
+  theory_grant: true
   name: "mnq-o15-expansion"
   purpose: |
     Test whether wider 15-minute ORB aperture with G5 size gate improves

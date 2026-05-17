@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 status: LOCKED
 date: 2026-04-19
@@ -113,9 +116,6 @@ upstream_discovery_provenance:
 hypotheses:
   - id: H1_RR1.5
     type: primary
-    theory_citation:
-      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
-      extract: "Table 3.8 (p.41) — stock indices show intraday trend-follow tendency. ORB breakout is intraday trend-follow entry. VWAP_MID_ALIGNED specifies the ORB formed on the same side of pre-session institutional anchor as the eventual break direction, concentrating the trend-follow signal on days where pre-ORB and ORB agree."
     statement: "MES (S&P 500) US_DATA_1000 O15 long RR1.5 entries, filtered by VWAP_MID_ALIGNED at definition='orb_mid', produce a positive ExpR materially above the unfiltered same-cell baseline. Equity-index intraday trend-follow (Fitschen Ch 3) should port from MNQ to MES on the same session."
     pass_metric:
       metric: "ExpR_on_IS"
@@ -132,9 +132,6 @@ hypotheses:
     counted_against_trial_budget: true
   - id: H2_RR2.0
     type: primary
-    theory_citation:
-      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
-      extract: "Same as H1. Higher RR (2.0) tests whether the VWAP alignment signal carries through to a larger profit objective, per Fitschen's intraday trend-follow premise."
     statement: "Same as H1 but rr_target=2.0. Tests whether the signal is robust to profit-objective scaling."
     pass_metric:
       metric: "ExpR_on_IS"

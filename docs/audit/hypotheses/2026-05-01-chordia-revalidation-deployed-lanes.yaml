@@ -6,6 +6,9 @@
 # Per-lane breakdown rule: memory/feedback_per_lane_breakdown_required.md
 # Lane source: docs/runtime/lane_allocation.json (rebalance_date 2026-04-18, profile topstep_50k_mnq_auto)
 
+metadata:
+  theory_grant: false
+
 pre_reg_id: 2026-05-01-chordia-revalidation-deployed-lanes
 locked_at: 2026-05-01
 status: EXECUTED_2026-05-01_VERDICT_4OF4_FAIL

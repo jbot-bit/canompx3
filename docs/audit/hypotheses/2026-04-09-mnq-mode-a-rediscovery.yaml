@@ -50,6 +50,7 @@
 #   count as ONE portfolio bet, not two.
 
 metadata:
+  theory_grant: true
   name: "mnq-mode-a-rediscovery"
   purpose: |
     First Mode-A-clean MNQ discovery run under strict Bailey E=1.0 MinBTL

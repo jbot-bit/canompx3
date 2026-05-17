@@ -5,6 +5,7 @@
 # Purpose: production-style replay for the active Topstep profile
 
 metadata:
+  theory_grant: true
   name: "garch-profile-production-replay"
   purpose: "Translate the best regime maps into discrete live actions on the active execution profile under real account rules."
   date_locked: "2026-04-16T23:45:00+10:00"

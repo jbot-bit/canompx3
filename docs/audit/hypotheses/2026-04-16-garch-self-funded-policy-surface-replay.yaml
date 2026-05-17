@@ -5,6 +5,7 @@
 # Purpose: replay expanded raw discrete policy surface on the canonical self-funded profile
 
 metadata:
+  theory_grant: true
   name: "garch-self-funded-policy-surface-replay"
   purpose: "Translate the verified raw discrete garch policies into actual self-funded-profile actions under canonical account rules."
   date_locked: "2026-04-17T00:05:00+10:00"

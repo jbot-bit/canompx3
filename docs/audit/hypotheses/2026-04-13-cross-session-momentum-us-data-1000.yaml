@@ -45,6 +45,7 @@
 # at runtime (same pattern as other cross-session features).
 
 metadata:
+  theory_grant: false
   name: "cross-session-momentum-us-data-1000"
   purpose: |
     Pre-register cross-session momentum filter for MNQ US_DATA_1000.

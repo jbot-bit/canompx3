@@ -5,6 +5,9 @@
 # AUTHORITY: docs/prompts/prereg-writer-prompt.md (output schema)
 # AUTHORITY: .claude/rules/institutional-rigor.md (8 non-skip rules)
 
+metadata:
+  theory_grant: false
+
 version: 1
 status: PRE_REGISTERED_DRAFT
 date: 2026-04-29
@@ -367,27 +370,6 @@ hypotheses:
       mean per-trade R on the gate-on subset is materially higher than on the
       gate-off subset, by a margin that survives the binding gates listed
       under pass_metric.
-    theory_citation:
-      - source: docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md
-        passage: "Ch 9 — annualised cash volatility target driven by daily volatility forecast"
-        relevance: |
-          Daily GARCH forecast → intraday vol-target sizing is the canonical
-          Carver framework. The garch>70 regime is the upper tail of forecast
-          where vol-targeted sizing would normally REDUCE size (defensive).
-          Empirical observation here is that on this specific lane the
-          breakout-momentum mechanism INCREASES per-trade R conditional on
-          the regime — a non-trivial finding that requires the explicit
-          forecast-combination framework Carver Ch 10 documents to interpret
-          coherently as a sizing-overlay role.
-      - source: docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
-        passage: "p.155-157 stop-cascade mechanism on intraday breakouts in volatile regimes"
-        relevance: |
-          High-vol regimes increase stop-density above and below ORB levels;
-          breakouts that fire under high-vol regimes encounter denser stop-loss
-          cascades, which the intraday momentum literature predicts will drive
-          larger absolute moves. The mechanism is documented for 5-30min
-          breakouts, which matches the 5m ORB / E2 / RR1.5 lane's holding-period
-          horizon (Carver Ch 12 p.192 horizon-stop match).
     pass_metric:
       metric_1:
         name: IS_t_lift
@@ -580,13 +562,9 @@ methodology_rules_applied:
     application: "N/A — single cell, single lane, single side. No pooled framing."
 
 outputs_required_after_run:
-  - docs/audit/results/2026-XX-XX-mnq-comex-settle-garch-d6-sizing-overlay-pathway-b-v1-result.md
-      (contains: full IS+OOS partitioned table; Welch t recomputation; C6 WFE result;
-       C9 per-year breakdown with N>=50 and N>=10 split; C8 status under Amendment 3.2;
-       SR-monitor calibration target for the post-lock 60-day window; Phase 2 gating
-       decision (PASS/PARK/KILL); pressure-test result.)
-  - decision-ledger entry: d6-mnq-comex-settle-garch-overlay-{verdict}
-  - if PASS: a Phase 2 pre-reg DRAFT slug is logged under upcoming_work; not in this scope.
+  - "docs/audit/results/2026-XX-XX-mnq-comex-settle-garch-d6-sizing-overlay-pathway-b-v1-result.md (contains: full IS+OOS partitioned table; Welch t recomputation; C6 WFE result; C9 per-year breakdown with N>=50 and N>=10 split; C8 status under Amendment 3.2; SR-monitor calibration target for the post-lock 60-day window; Phase 2 gating decision (PASS/PARK/KILL); pressure-test result.)"
+  - "decision-ledger entry: d6-mnq-comex-settle-garch-overlay-{verdict}"
+  - "if PASS: a Phase 2 pre-reg DRAFT slug is logged under upcoming_work; not in this scope."
   - if PARK or KILL: status recorded; no Phase 2 work permitted.
 
 execution_gate:

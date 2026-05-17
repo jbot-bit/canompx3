@@ -21,6 +21,7 @@
 # Feb 2026 friction analysis.
 
 metadata:
+  theory_grant: true
   name: "mgc-redesign"
   purpose: |
     Mechanism-grounded MGC discovery. 5 hypotheses testing 5 distinct

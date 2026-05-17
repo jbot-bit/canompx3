@@ -1,4 +1,5 @@
 metadata:
+  theory_grant: true
   name: mnq-rediscovery-2020-boundary
   date_locked: "2026-04-09"
   holdout_date: "2026-01-01"

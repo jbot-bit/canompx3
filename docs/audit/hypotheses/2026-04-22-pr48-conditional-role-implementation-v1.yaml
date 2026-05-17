@@ -7,6 +7,7 @@
 # Intended discovery holdout: 2026-01-01
 
 metadata:
+  theory_grant: true
   name: "pr48_conditional_role_implementation_v1"
   purpose: "Bounded conditional-role implementation study for PR48 participation shape across MNQ, MES, MGC."
   date_locked: "2026-04-22T12:00:00+10:00"

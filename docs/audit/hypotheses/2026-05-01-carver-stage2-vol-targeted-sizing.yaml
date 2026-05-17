@@ -6,6 +6,9 @@
 # Pooled-finding rule: .claude/rules/pooled-finding-rule.md
 # Honesty note: see § literature_grounding_correction below
 
+metadata:
+  theory_grant: false
+
 pre_reg_id: 2026-05-01-carver-stage2-vol-targeted-sizing
 locked_at: 2026-05-01
 status: DESIGN_LOCKED_AWAITING_GO_AND_CHORDIA_PASS

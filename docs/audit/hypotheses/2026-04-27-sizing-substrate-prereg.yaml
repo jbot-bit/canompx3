@@ -10,6 +10,7 @@
 # sizing-model pre-reg, they do not authorize live changes.
 
 metadata:
+  theory_grant: false
   name: "sizing_substrate_diagnostic_stage1"
   purpose: |
     Test whether the 6 deployed lanes' binary filters have continuous

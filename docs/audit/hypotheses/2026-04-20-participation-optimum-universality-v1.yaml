@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 status: LOCKED
 date: 2026-04-20
@@ -126,17 +129,6 @@ data_policy:
 primary_hypothesis:
   id: H_PARTICIPATION_OPTIMUM_UNIVERSAL
   type: primary_individual
-  theory_citation: |
-    Fitschen 2013 Ch 3 grounds ORB breakout continuation as a
-    participation-dependent mechanism: adequate order-flow at breakout
-    is required to sustain directional move. Aronson 2007 Ch 7
-    (non-random price motion / EMH literature) + order-flow
-    microstructure priors (mechanism-priors.md, untested section on
-    exhaustion at extreme participation) predict extreme-tail
-    participation coincides with exhaustion / reversal events where
-    the breakout-continuation pattern breaks down. This combined
-    prediction is a non-monotonic inverted-U: peak at moderate
-    participation, attenuation at extreme participation.
   statement: |
     Pooled across MNQ active sessions × both directions × 5m ORB × E2
     × CB1 × RR1.5, UNFILTERED, IS (trading_day < 2026-01-01):

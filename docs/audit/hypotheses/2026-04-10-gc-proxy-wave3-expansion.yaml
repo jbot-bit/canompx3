@@ -14,6 +14,15 @@
 # Bailey: N=15, MinBTL = 5.42yr << 15.5yr. Cumulative ~59.
 
 metadata:
+  legacy_unlinked_citations:
+    - "Crabel (1990); ABDL (2003) Econometrica"
+    - "Crabel (1990); ABDL (2003)"
+    - "ABDV (2003); ABDL (2003)"
+    - "O'Hara (1995); ABDL (2003)"
+    - "Crabel (1990); Ito, Engle, Lin (1992)"
+    - "French & Roll (1986); ABDL (2003)"
+  theory_corpus_pending: true
+  theory_grant: false
   name: "gc-proxy-wave3-expansion"
   purpose: |
     Expand validated filters to additional RR targets and stricter thresholds.
@@ -40,7 +49,6 @@ hypotheses:
 
   - id: 1
     name: "GC NYSE_OPEN ATR_P70 RR1.0 — Crabel in high vol"
-    theory_citation: "Crabel (1990); ABDL (2003) Econometrica"
     economic_basis: "ATR above 70th percentile = top 30% volatility days. Breakout follow-through most reliable in elevated vol."
     filter: {type: ATR_P70, column: atr_20}
     scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -49,7 +57,6 @@ hypotheses:
 
   - id: 2
     name: "GC NYSE_OPEN ATR_P70 RR2.0 — Crabel in high vol, continuation"
-    theory_citation: "Crabel (1990); ABDL (2003)"
     economic_basis: "High vol + 2x continuation. Top 30% vol days have largest directional moves."
     filter: {type: ATR_P70, column: atr_20}
     scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -58,7 +65,6 @@ hypotheses:
 
   - id: 3
     name: "GC US_DATA_1000 ATR_P70 RR1.0 — macro in high vol"
-    theory_citation: "ABDV (2003); ABDL (2003)"
     economic_basis: "Macro releases in top 30% vol regime produce strongest information incorporation."
     filter: {type: ATR_P70, column: atr_20}
     scope: {instruments: [GC], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -67,7 +73,6 @@ hypotheses:
 
   - id: 4
     name: "GC US_DATA_1000 ATR_P70 RR2.0 — macro in high vol, continuation"
-    theory_citation: "ABDV (2003); ABDL (2003)"
     economic_basis: "Macro in high vol at 2x continuation."
     filter: {type: ATR_P70, column: atr_20}
     scope: {instruments: [GC], sessions: [US_DATA_1000], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -76,7 +81,6 @@ hypotheses:
 
   - id: 5
     name: "GC LONDON_METALS ATR_P70 RR1.0 — London gold in high vol"
-    theory_citation: "O'Hara (1995); ABDL (2003)"
     economic_basis: "London gold pricing in top 30% vol. Physical gold flow strongest in active markets."
     filter: {type: ATR_P70, column: atr_20}
     scope: {instruments: [GC], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -85,7 +89,6 @@ hypotheses:
 
   - id: 6
     name: "GC LONDON_METALS ATR_P70 RR2.0 — London gold in high vol, continuation"
-    theory_citation: "O'Hara (1995); ABDL (2003)"
     economic_basis: "London gold pricing in high vol at 2x continuation."
     filter: {type: ATR_P70, column: atr_20}
     scope: {instruments: [GC], sessions: [LONDON_METALS], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -96,7 +99,6 @@ hypotheses:
 
   - id: 7
     name: "GC NYSE_OPEN ATR_P50 RR1.5 — vol regime intermediate continuation"
-    theory_citation: "Crabel (1990); ABDL (2003)"
     economic_basis: "ATR_P50 validated at RR1.0 (Sharpe 1.76). Test RR1.5 for stronger continuation."
     filter: {type: ATR_P50, column: atr_20}
     scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -105,7 +107,6 @@ hypotheses:
 
   - id: 8
     name: "GC NYSE_OPEN ATR_P50 RR2.0 — vol regime full continuation"
-    theory_citation: "Crabel (1990); ABDL (2003)"
     economic_basis: "ATR_P50 at 2x continuation."
     filter: {type: ATR_P50, column: atr_20}
     scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -114,7 +115,6 @@ hypotheses:
 
   - id: 9
     name: "GC US_DATA_1000 ATR_P50 RR2.0 — macro + vol at 2x"
-    theory_citation: "ABDV (2003); ABDL (2003)"
     economic_basis: "US_DATA_1000 ATR_P50 validated at RR1.0 (Sharpe 1.36). Test 2x continuation."
     filter: {type: ATR_P50, column: atr_20}
     scope: {instruments: [GC], sessions: [US_DATA_1000], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -123,7 +123,6 @@ hypotheses:
 
   - id: 10
     name: "GC NYSE_OPEN OVNRNG_50 RR1.5 — overnight + intermediate continuation"
-    theory_citation: "Crabel (1990); Ito, Engle, Lin (1992)"
     economic_basis: "NYSE_OPEN OVNRNG_50 validated at RR1.0 (WFE=1.07). Test RR1.5."
     filter: {type: OVNRNG_50, column: overnight_range}
     scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -134,7 +133,6 @@ hypotheses:
 
   - id: 11
     name: "GC LONDON_METALS ATR_P50 RR1.0 — London gold + vol regime"
-    theory_citation: "O'Hara (1995); ABDL (2003)"
     economic_basis: "ATR_P50 on London gold at minimum continuation."
     filter: {type: ATR_P50, column: atr_20}
     scope: {instruments: [GC], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -143,7 +141,6 @@ hypotheses:
 
   - id: 12
     name: "GC EUROPE_FLOW ATR_P50 RR1.0 — cross-border + vol regime"
-    theory_citation: "French & Roll (1986); ABDL (2003)"
     economic_basis: "ATR_P50 on European flow at minimum continuation."
     filter: {type: ATR_P50, column: atr_20}
     scope: {instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -152,7 +149,6 @@ hypotheses:
 
   - id: 13
     name: "GC EUROPE_FLOW ATR_P50 RR2.0 — cross-border + vol at 2x"
-    theory_citation: "French & Roll (1986); ABDL (2003)"
     economic_basis: "ATR_P50 on European flow at 2x continuation."
     filter: {type: ATR_P50, column: atr_20}
     scope: {instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -163,7 +159,6 @@ hypotheses:
 
   - id: 14
     name: "GC NYSE_OPEN OVNRNG_25 RR1.0 — strong overnight + Crabel"
-    theory_citation: "Crabel (1990); Ito, Engle, Lin (1992)"
     economic_basis: "OVNRNG_25 selects top 25% overnight range. Stricter than OVNRNG_50 — more selective, potentially stronger signal."
     filter: {type: OVNRNG_25, column: overnight_range}
     scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
@@ -172,7 +167,6 @@ hypotheses:
 
   - id: 15
     name: "GC NYSE_OPEN OVNRNG_25 RR2.0 — strong overnight + Crabel continuation"
-    theory_citation: "Crabel (1990); Ito, Engle, Lin (1992)"
     economic_basis: "Top 25% overnight range at 2x continuation."
     filter: {type: OVNRNG_25, column: overnight_range}
     scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}

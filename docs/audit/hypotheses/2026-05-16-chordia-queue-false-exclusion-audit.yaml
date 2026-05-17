@@ -1,4 +1,7 @@
 ---
+metadata:
+  theory_grant: false
+
 slug: 2026-05-16-chordia-queue-false-exclusion-audit
 date: 2026-05-16
 author: claude-opus-4-7
@@ -159,10 +162,8 @@ per_gate_methodology:
 preflight:
   - python pipeline/check_drift.py exit 0
   - MAX(orb_outcomes.trading_day) within 2 trading days of today
-  - validated_setups active count within ±5 of 845 (CSV baseline);
-    delta -1 (currently 844) -> within tolerance, audit May 12 CSV directly
-  - date-convention pin: queue script uses today=2026-05-12 for audit-age;
-    this audit honors that to avoid spurious staleness flags
+  - "validated_setups active count within ±5 of 845 (CSV baseline); delta -1 (currently 844) -> within tolerance, audit May 12 CSV directly"
+  - "date-convention pin: queue script uses today=2026-05-12 for audit-age; this audit honors that to avoid spurious staleness flags"
   - git status clean before any write artifact
 
 # Random seed (reproducibility).
@@ -196,4 +197,3 @@ verification:
   - quarantine_doctrine: rescued rows are pointers, not promotions
   - self_review: /code-review on artifacts before commit
   - adversarial_audit: if rescue_count > 0, spawn evidence-auditor in independent context
----

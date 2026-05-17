@@ -77,6 +77,7 @@
 #   Volume-based filters: require post-2023 MGC micro volume, too short
 
 metadata:
+  theory_grant: true
   name: "mgc-mode-a-rediscovery"
   purpose: |
     Mode-A-clean MGC discovery run under strict Bailey E=1.0 compliance

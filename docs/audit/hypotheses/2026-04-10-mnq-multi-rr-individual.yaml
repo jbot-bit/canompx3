@@ -19,6 +19,12 @@
 #   is the structural sweet spot between 1.0 and 2.0.
 
 metadata:
+  legacy_unlinked_citations:
+    - "French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS"
+    - "Ito, Engle, Lin (1992) JIE"
+    - "Crabel (1990) ch. 3"
+  theory_corpus_pending: true
+  theory_grant: false
   name: "mnq-multi-rr-individual"
   purpose: |
     Multi-RR continuation hypotheses for MNQ sessions with positive raw
@@ -43,7 +49,6 @@ metadata:
 hypotheses:
   - id: 1
     name: "MNQ EUROPE_FLOW G5 RR1.5 — gradual cross-border continuation"
-    theory_citation: "French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS"
     economic_basis: |
       European information spillover into NQ is gradual — price discovery
       takes longer than 1x ORB range. RR1.5 captures the sweet spot
@@ -69,7 +74,6 @@ hypotheses:
 
   - id: 2
     name: "MNQ EUROPE_FLOW G5 RR2.0 — full cross-border continuation"
-    theory_citation: "French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS"
     economic_basis: |
       Full information incorporation from European session spillover.
       RR2.0 tests whether the directional follow-through extends to
@@ -95,7 +99,6 @@ hypotheses:
 
   - id: 3
     name: "MNQ TOKYO_OPEN G5 RR1.5 — Asian momentum continuation"
-    theory_citation: "Ito, Engle, Lin (1992) JIE"
     economic_basis: |
       Asian session meteor-shower persistence + physical demand flow
       creates sustained directional moves. RR1.5 captures medium
@@ -120,7 +123,6 @@ hypotheses:
 
   - id: 4
     name: "MNQ TOKYO_OPEN G5 RR2.0 — full Asian momentum"
-    theory_citation: "Ito, Engle, Lin (1992) JIE"
     economic_basis: |
       Full extension of Asian momentum. Physical commodity flows
       (gold/energy) spillover into equity futures creates persistent
@@ -145,7 +147,6 @@ hypotheses:
 
   - id: 5
     name: "MNQ NYSE_OPEN G5 RR1.5 — Crabel extended commitment"
-    theory_citation: "Crabel (1990) ch. 3"
     economic_basis: |
       NYSE cash open commitment is front-loaded but strong enough
       to sustain 1.5x continuation. Raw ExpR=+0.075 — nearly as

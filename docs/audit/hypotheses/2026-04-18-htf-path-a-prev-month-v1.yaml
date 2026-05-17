@@ -1,4 +1,5 @@
 metadata:
+  theory_grant: false
   name: htf-path-a-prev-month-v1
   slug: 2026-04-18-htf-path-a-prev-month-v1
   owner: canompx3
@@ -346,9 +347,10 @@ pass_criteria:
   - "cell passes all per_cell_gates G1..G9"
   - "cell passes primary_promotion_gate (BH-FDR family K=24 q=0.05)"
   - "no family_kill_criteria fires"
-  next_stage_if_passed:
-    - "signal-only shadow pre-reg per the H1 Apr-18 exemplar pattern"
-    - "NO capital deployment without Criterion 11 Monte Carlo + Criterion 12 SR monitor"
+
+next_stage_if_passed:
+  - "signal-only shadow pre-reg per the H1 Apr-18 exemplar pattern"
+  - "NO capital deployment without Criterion 11 Monte Carlo + Criterion 12 SR monitor"
 
 park_criteria:
   - "cell passes G1..G9 on IS but fails primary BH-FDR at K_family"

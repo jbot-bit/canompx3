@@ -14,6 +14,7 @@
 # Bailey: N=10, MinBTL = 2*ln(10)/1.0^2 = 4.61yr << 15.5yr. PASS.
 
 metadata:
+  theory_grant: true
   name: "gc-proxy-broad-sweep"
   purpose: |
     Exploratory sweep across additional filter families and sessions

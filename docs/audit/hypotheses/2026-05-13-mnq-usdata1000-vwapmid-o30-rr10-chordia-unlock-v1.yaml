@@ -39,6 +39,7 @@
 #   2026-05-13.
 
 metadata:
+  theory_grant: false
   name: "mnq_usdata1000_vwapmid_o30_rr10_chordia_unlock_v1"
   purpose: "Bounded exact-lane Chordia unlock audit for MNQ US_DATA_1000 O30 RR1.0 VWAP_MID_ALIGNED. No theory grant is claimed."
   date_locked: "2026-05-13T10:00:00+10:00"

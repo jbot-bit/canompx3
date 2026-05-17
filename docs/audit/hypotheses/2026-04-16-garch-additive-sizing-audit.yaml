@@ -6,6 +6,7 @@
 #          session-sizing scaffold
 
 metadata:
+  theory_grant: true
   name: "garch-additive-sizing-audit"
   purpose: "Test whether garch adds portfolio utility beyond ATR and overnight-range proxies under the same clipped session-sizing scaffold."
   date_locked: "2026-04-16T22:25:00+10:00"

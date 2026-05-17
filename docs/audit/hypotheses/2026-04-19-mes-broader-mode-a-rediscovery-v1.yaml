@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 status: LOCKED
 date: 2026-04-19
@@ -104,7 +107,6 @@ upstream_discovery_provenance:
 hypotheses:
   - id: H1_CMX_PRE_ORB_G8_L_RR1
     type: primary
-    theory_citation: {source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md", extract: "Table 3.8 equity-index intraday trend-follow. ORB_G8 = top 2-quintile size filter, within-class refinement on an already-grounded strategy."}
     statement: "MES CME_PRECLOSE O5 RR1.0 long ORB_G8 breakouts produce materially positive Mode A IS ExpR."
     pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
     gate:
@@ -117,35 +119,30 @@ hypotheses:
     counted_against_trial_budget: true
   - id: H2_CMX_PRE_COST_LT12_L_RR1
     type: primary
-    theory_citation: {source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md", extract: "Same as H1. COST_LT12 = friction-screened (friction<12% of raw risk) within-class refinement."}
     statement: "MES CME_PRECLOSE O5 RR1.0 long COST_LT12 same-session alternative-filter hypothesis."
     pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
     gate: ["bh_pass_family", "abs(t_IS) >= 3.00", "N_IS_on >= 100", "years_positive_IS >= 4", "bootstrap_p < 0.10", "ExpR_on_IS > 0"]
     counted_against_trial_budget: true
   - id: H3_CMX_PRE_ATR_P70_L_RR1
     type: primary
-    theory_citation: {source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md", extract: "Same as H1. ATR_P70 = atr_20 percentile >= 70 — vol-regime filter."}
     statement: "MES CME_PRECLOSE O5 RR1.0 long ATR_P70 vol-regime filter hypothesis."
     pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
     gate: ["bh_pass_family", "abs(t_IS) >= 3.00", "N_IS_on >= 100", "years_positive_IS >= 4", "bootstrap_p < 0.10", "ExpR_on_IS > 0"]
     counted_against_trial_budget: true
   - id: H4_USD1k_ORB_G5_S_RR15
     type: primary
-    theory_citation: {source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md", extract: "Fitschen Table 3.8 covers both long and short intraday trend-follow on equity indices. ORB_G5 top-quintile size."}
     statement: "MES US_DATA_1000 O5 RR1.5 short ORB_G5 — new-territory test at a session where MES has no validated lane."
     pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
     gate: ["bh_pass_family", "abs(t_IS) >= 3.00", "N_IS_on >= 100", "years_positive_IS >= 4", "bootstrap_p < 0.10", "ExpR_on_IS > 0"]
     counted_against_trial_budget: true
   - id: H5_USD1k_ORB_G5_S_RR2
     type: primary
-    theory_citation: {source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md", extract: "Same as H4, RR=2.0 variant."}
     statement: "MES US_DATA_1000 O5 RR2.0 short ORB_G5."
     pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
     gate: ["bh_pass_family", "abs(t_IS) >= 3.00", "N_IS_on >= 100", "years_positive_IS >= 4", "bootstrap_p < 0.10", "ExpR_on_IS > 0"]
     counted_against_trial_budget: true
   - id: H6_USD1k_COST_LT12_S_RR15
     type: primary
-    theory_citation: {source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md", extract: "Same as H4, COST_LT12 friction-screened variant."}
     statement: "MES US_DATA_1000 O5 RR1.5 short COST_LT12."
     pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
     gate: ["bh_pass_family", "abs(t_IS) >= 3.00", "N_IS_on >= 100", "years_positive_IS >= 4", "bootstrap_p < 0.10", "ExpR_on_IS > 0"]

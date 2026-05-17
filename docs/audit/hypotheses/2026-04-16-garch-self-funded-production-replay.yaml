@@ -5,6 +5,7 @@
 # Purpose: self-funded deployment replay for the same regime maps
 
 metadata:
+  theory_grant: true
   name: "garch-self-funded-production-replay"
   purpose: "Compare the surviving regime maps under the canonical self-funded profile so prop-firm constraints are not mistaken for market truth."
   date_locked: "2026-04-17T00:10:00+10:00"

@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 status: LOCKED
 date: 2026-04-22
@@ -88,10 +91,6 @@ calibration:
 hypotheses:
   - id: H01_SOURCE_ORB_SIZE_NORM_HIGH_Q3
     type: primary
-    theory_citation: |
-      RESEARCH_RULES.md states that MGC US_DATA_830 size should be interpreted as
-      a volatility-transmission state for later equity-index ORBs, not as a
-      directional predictor.
     statement: |
       On the unfiltered MNQ NYSE_OPEN O5 E2 RR1.0 CB1 lane, days when same-day
       MGC US_DATA_830 source_orb_size_norm is in the IS-derived upper quartile

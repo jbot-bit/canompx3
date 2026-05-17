@@ -22,6 +22,7 @@
 #    direction held across the gap = stronger institutional conviction.
 
 metadata:
+  theory_grant: false
   name: "cross-session-sgp-europe-flow"
   purpose: |
     Pre-register CROSS_SGP_MOMENTUM filter for MNQ EUROPE_FLOW.
@@ -52,7 +53,6 @@ hypotheses:
       entry_models: [E2]
       confirm_bars: [1]
       stop_multipliers: [1.0]
-    theory_citation: "Cross-session momentum — SINGAPORE_OPEN establishes Asian direction, EUROPE_FLOW inherits across 7hr gap. IS p=0.132, symmetric, stacks with OVNRNG (+0.119R incremental). Apr 13 directional alignment scan."
     expected_trial_count: 1
     kill_criteria:
       - "BH FDR q=0.05 fails at K=3"
@@ -61,7 +61,6 @@ hypotheses:
 
   - id: 2
     name: "MNQ EUROPE_FLOW CROSS_SGP_MOMENTUM RR1.5 O5"
-    theory_citation: "Same mechanism as H1 at wider RR target. Asian-to-European flow memory."
     filter:
       type: CROSS_SGP_MOMENTUM
     scope:
@@ -79,7 +78,6 @@ hypotheses:
 
   - id: 3
     name: "MNQ EUROPE_FLOW CROSS_SGP_MOMENTUM RR2.0 O5"
-    theory_citation: "Same mechanism as H1 at wider RR target. Asian-to-European flow memory."
     filter:
       type: CROSS_SGP_MOMENTUM
     scope:
