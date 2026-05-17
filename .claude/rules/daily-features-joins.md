@@ -21,8 +21,9 @@ AND o.orb_minutes = d.orb_minutes
 Missing the `orb_minutes` join triples row count and creates fake correlations.
 
 ## Look-Ahead Columns
-- `double_break` is LOOK-AHEAD — checks if both ORB sides were hit during the FULL session (after trade entry). Cannot be used as a real-time filter.
-- NODBL filter was REMOVED Feb 2026 after 6 validated strategies proved to be artifacts.
+→ See `.claude/rules/backtesting-methodology.md` § 1.1 and § 6.3 for the canonical banned-column list (`double_break`, `mae_r`/`mfe_r`/`outcome`/`pnl_r`, plus the E2 break-bar suffixes `*_break_ts` / `*_break_delay_min` / `*_break_bar_*` / `rel_vol_*`). That section is the single source of truth — do not maintain a parallel list here (2026-05-17 dedup).
+
+Historical note: NODBL filter was REMOVED Feb 2026 after 6 validated strategies proved to be artifacts.
 
 ## CTE / Subquery Guard (added Apr 2026 — caught 3x N-inflation bug)
 When a CTE or subquery reads daily_features for non-ORB-specific columns (prev_day_close, prev_day_range, overnight_range_pct, atr_vel_ratio, etc.), ALWAYS add `WHERE d.orb_minutes = 5` to deduplicate. Without this, the CTE produces 3 rows per (day, symbol) and any subsequent JOIN to orb_outcomes triples N, inflating t-stats by sqrt(3)=1.73x.

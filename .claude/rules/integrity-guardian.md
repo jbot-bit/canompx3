@@ -18,21 +18,11 @@ Defer to the governing document — never restate its content:
 - Feature specs: `docs/specs/*.md` (check BEFORE building)
 
 ## 2. Canonical Sources — Never Hardcode
-Import from the single source of truth. Never inline lists or magic numbers.
-| Data | Source |
-|------|--------|
-| Active instruments | `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS` |
-| All instrument configs | `pipeline.asset_configs.ASSET_CONFIGS` |
-| Session catalog | `pipeline.dst.SESSION_CATALOG` |
-| ORB window timing (UTC) | `pipeline.dst.orb_utc_window(trading_day, orb_label, orb_minutes)` |
-| Entry models / filters | `trading_app.config` |
-| Cost specs | `pipeline.cost_model.COST_SPECS` |
-| DB path | `pipeline.paths.GOLD_DB_PATH` |
-| Holdout policy (Mode A) | `trading_app.holdout_policy` — `HOLDOUT_SACRED_FROM`, `HOLDOUT_GRANDFATHER_CUTOFF`, `enforce_holdout_date()` |
+→ Canonical-source authority table moved to `institutional-rigor.md` § 10 (single source of truth, 2026-05-17 dedup). Behavioral rule retained here: import from the canonical module, never inline lists / magic numbers / timing constants.
 
-**`orb_utc_window` authority:** single source of truth for "compute ORB window end UTC" shared by backtest (`outcome_builder`), live engine (`execution_engine`), and feature builder (`build_daily_features`). Any divergence between these paths is a look-ahead bias risk per Chan Ch 1 p4. Never re-implement in another file; never fall back to `break_ts` when canonical inputs are missing — raise `ValueError` instead. See `docs/postmortems/2026-04-07-e2-canonical-window-fix.md`.
-
-**`holdout_policy` authority:** single source of truth for Mode A sacred-window constants. Consumed by `pipeline.check_drift.check_holdout_contamination()` (contamination detector), `pipeline.check_drift.check_holdout_policy_declaration_consistency()` (docs ↔ code drift detector), `trading_app.strategy_discovery.main()` (CLI enforcement via `enforce_holdout_date()`), and `trading_app.strategy_validator._check_mode_a_holdout_integrity()` (pre-promotion gate). Never inline `date(2026, 1, 1)` or `datetime(2026, 4, 8, ...)` in any downstream file. Changing the canonical values requires a new amendment to `docs/institutional/pre_registered_criteria.md` and a matching update to `RESEARCH_RULES.md`; the declaration-consistency drift check catches any such drift. See `docs/plans/archive/2026-04/2026-04-07-holdout-policy-decision.md` for the Mode B → Mode A correction audit trail.
+Specific authorities preserved here for grep-ability:
+- **`orb_utc_window` authority** — single source for ORB window end UTC across `outcome_builder`, `execution_engine`, `build_daily_features`. Never re-implement; never fall back to `break_ts`; raise `ValueError` instead. See `docs/postmortems/2026-04-07-e2-canonical-window-fix.md`.
+- **`holdout_policy` authority** — Mode A sacred-window constants; never inline `date(2026, 1, 1)` or `datetime(2026, 4, 8, ...)` anywhere downstream. Declaration-consistency drift check (`check_holdout_policy_declaration_consistency`) enforces docs ↔ code parity. See `docs/plans/archive/2026-04/2026-04-07-holdout-policy-decision.md`.
 
 ## 3. Fail-Closed Mindset
 - Never report success after an exception or timeout
@@ -57,14 +47,10 @@ Provide verifiable output, not claims. Show command output, row counts, test res
 Check `docs/specs/` before building ANY feature. If a spec exists, follow it exactly.
 
 ## 7. Never Trust Metadata — Always Verify
-Metadata, comments, docstrings, bundle fields, and config labels are NOT evidence.
-- Never trust a model bundle's `rr_target_lock` field without querying what data it trained on
-- Never trust a check's `PASSED` label without confirming the check actually tests what it claims
-- Never trust a function docstring's description of behavior without reading the code
-- Never trust row counts from memory — execute the query and read the output
-- When inspecting ML models, trace FROM the database query THROUGH the code TO the model output
-- When verifying drift checks, inject a known violation and confirm it's caught
-- **Reading code is not verifying code. Verifying requires execution + output inspection.**
+→ Full doctrine moved to `institutional-rigor.md` § 11 (single source of truth, 2026-05-17 dedup). Behavioral checklist retained:
+- Bundle fields, check labels, docstrings, row-count memory — none are evidence.
+- Verify drift checks via known-violation injection.
+- **Reading code is not verifying code.** Verifying requires execution + output inspection.
 
 ## 8. Research Finding Staleness — Never Inline Stats
 Never inline research stats (p-values, N counts) in code. Use `@research-source` + `@revalidated-for` annotations. Full rules → `.claude/rules/research-truth-protocol.md`.

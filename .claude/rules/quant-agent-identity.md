@@ -1,43 +1,34 @@
 ---
 paths:
-  - "pipeline/**"
-  - "trading_app/**"
   - "research/**"
-  - "scripts/**"
+  - "trading_app/strategy_*"
+  - "docs/audit/**"
 ---
-# Quant Agent Identity — Bias Defense
+# Quant Agent Identity — Seven-Sins Bias-Class Index
 
-This agent defends the pipeline against the Seven Sins of Quantitative Investing.
-For mechanical enforcement (hardcoding, fail-closed, audits), see `integrity-guardian.md`.
-For statistical standards and research methodology, see `RESEARCH_RULES.md`.
+**Narrowed 2026-05-17:** this file auto-loads ONLY on research / strategy_* / audit edits — the paths where Seven-Sins bias defense actually applies. Production pipeline + scripts edits no longer trigger this rule; they pick up canonical-source + fail-closed discipline via `integrity-guardian.md` and the Seven-Sins reminder via `institutional-rigor.md` § 12.
 
-## Seven Sins Awareness
+## Seven Sins quick-table
 
-When reviewing or writing research/strategy code, actively scan for:
-
-| Sin | What to Watch For |
+| Sin | What to watch for |
 |-----|-------------------|
-| **Look-ahead bias** | Using future data as a predictor. `double_break` is look-ahead. Any LAG() without `WHERE orb_minutes = 5` |
-| **Data snooping** | Claiming significance after testing 50+ hypotheses without BH FDR correction |
-| **Overfitting** | Strategy with high Sharpe but N < 30, or passing only one year |
-| **Survivorship bias** | Ignoring dead instruments (MCL/SIL/M6E/MBT/M2K) or purged entry models (E0) when drawing conclusions |
-| **Storytelling bias** | Crafting a narrative around noise. If p > 0.05, it's an observation, not a finding |
-| **Outlier distortion** | Single extreme day driving aggregate stats. Check year-by-year breakdown |
-| **Transaction cost illusion** | Ignoring spread + slippage + commission. Always use `COST_SPECS` from `pipeline/cost_model.py` |
-
-## Epistemological Rule
-
-Reading code is NOT verifying code. Never claim a script works or a check passes without:
-1. Executing it (`python <script>`)
-2. Reading the terminal output
-3. Confirming exit code 0
-
-A silent pass is worse than a hard crash. If unsure whether something ran, run it again.
+| **Look-ahead bias** | Future data as predictor. Banned columns + E2 break-bar suffixes → see `backtesting-methodology.md` § 1.1 + § 6.3 |
+| **Data snooping** | Claiming significance after testing N+ hypotheses without BH FDR correction at the appropriate K framing |
+| **Overfitting** | High Sharpe with N < 30, or passing only one year. MinBTL ceiling from Bailey 2013 |
+| **Survivorship bias** | Dropping dead instruments (MCL/SIL/M6E/MBT/M2K) or purged entry models (E0) from base rates |
+| **Storytelling bias** | Narrative around noise. p > 0.05 → observation, not finding |
+| **Outlier distortion** | One extreme day driving aggregate. Year-by-year breakdown required |
+| **Transaction cost illusion** | Always use `COST_SPECS` from `pipeline/cost_model.py` |
 
 ## Data Snooping Quarantine
 
-The AI agent is itself a vector for data leakage. When debugging or analyzing strategies:
-- Do NOT optimize parameters against walk-forward holdout windows
-- Do NOT cherry-pick strategies by peeking at OOS performance, then retroactively justifying IS metrics
-- If a user asks "which strategy should I trade?" — answer with FDR-validated, fitness-assessed (FIT/WATCH) strategies only, never raw experimental results
-- The pipeline's statistical guardrails (BH FDR, min samples, regime classification) exist because human intuition cannot substitute for them
+The AI agent is itself a vector for data leakage:
+- Never optimize parameters against the OOS / holdout window
+- Never cherry-pick strategies by peeking at OOS, then retroactively justify IS
+- "Which strategy should I trade?" → answer with FDR-validated FIT/WATCH only
+
+## Related authority
+
+- `institutional-rigor.md` § 9 — Seven-Sins awareness as a behavioral check on every change (canonical home of the reminder)
+- `integrity-guardian.md` § 5 (Evidence Over Assertion) — generation is not validation; reading code ≠ verifying code
+- `backtesting-methodology.md` — operational rules; this file is the *bias-class index*

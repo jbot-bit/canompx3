@@ -9536,6 +9536,78 @@ def check_literature_extracts_mode_a_b_framing() -> list[str]:
     return violations
 
 
+def check_intent_router_routing_parity() -> list[str]:
+    """Verify .claude/rules/auto-skill-routing.md ↔ .claude/hooks/intent-router.py parity.
+
+    The hook compiles a hardcoded INTENT_RULES regex table, while the rule file
+    documents the same routing surface as human-readable bullets. If they drift,
+    routing cues point to skills the rule says aren't routed (or vice versa).
+
+    Compares the set of slash-command targets on both sides. Fail-closed:
+    any divergence is a drift violation.
+
+    Added 2026-05-17 per operating-layer audit plan §G.1 (mutation probe).
+    """
+    rule_file = PROJECT_ROOT / ".claude" / "rules" / "auto-skill-routing.md"
+    hook_file = PROJECT_ROOT / ".claude" / "hooks" / "intent-router.py"
+    if not rule_file.exists() or not hook_file.exists():
+        return []  # if either is missing, the hook itself fails-open — no drift to detect
+
+    try:
+        rule_text = rule_file.read_text(encoding="utf-8")
+        hook_text = hook_file.read_text(encoding="utf-8")
+    except OSError as e:
+        return [f"check_intent_router_routing_parity: read error: {e}"]
+
+    # Collect skill targets from the rule file. Matches both arrow styles:
+    #   `-> \`/skill-name\``   (Intent Map / CRG bullets)
+    #   `→ \`/skill-name\``    (unicode arrow if introduced)
+    rule_targets: set[str] = set()
+    for match in re.finditer(r"(?:->|→)\s*`(/[a-z][a-z0-9 _-]*?)`", rule_text):
+        rule_targets.add(match.group(1).strip())
+
+    # Skill targets from the hook's INTENT_RULES list.
+    hook_targets: set[str] = set()
+    try:
+        start = hook_text.index("INTENT_RULES: list[")
+        end = hook_text.index("\n]", start)
+        rules_block = hook_text[start:end]
+    except ValueError:
+        return ["check_intent_router_routing_parity: could not locate INTENT_RULES block in intent-router.py"]
+    for match in re.finditer(r',\s*"(/[a-z][a-z0-9 _-]*?)"\s*,', rules_block):
+        hook_targets.add(match.group(1).strip())
+
+    violations: list[str] = []
+
+    # Direction 1: every hook target must appear in the rule file (no orphan routes).
+    rule_missing = sorted(hook_targets - rule_targets)
+    if rule_missing:
+        violations.append(
+            f"intent-router.py routes to skills not documented in auto-skill-routing.md: "
+            f"{rule_missing}. Either add a bullet to the rule file's Intent Map / CRG "
+            f"section, or remove the hook entry. Class-bug protection: hook + rule must "
+            f"agree on the routing surface (plan 2026-05-17 §G.1)."
+        )
+
+    # Direction 2: every rule target SHOULD appear in the hook (otherwise the cue
+    # never fires). Some rule entries are intentionally documentary and never
+    # bind to a single literal trigger.
+    DOCUMENTED_RULE_ONLY = {
+        "/code-review",  # rule documents the route; hook regex line not unique
+        "/crg-context",  # rule § CRG line — meta-routing, not a single literal trigger
+    }
+    hook_missing = sorted(rule_targets - hook_targets - DOCUMENTED_RULE_ONLY)
+    if hook_missing:
+        violations.append(
+            f"auto-skill-routing.md documents skill routes not present in intent-router.py "
+            f"INTENT_RULES: {hook_missing}. Either add a regex pattern to the hook, or "
+            f"add the skill to DOCUMENTED_RULE_ONLY allow-list in this check with a "
+            f"justification. Class-bug protection: silent rule additions never fire."
+        )
+
+    return violations
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -10144,6 +10216,12 @@ CHECKS = [
         "strategy-lab MCP must not re-register deprecated get_recent_fitness endpoint",
         check_strategy_lab_no_fitness_endpoint,
         False,  # blocking — MCP overlap with gold-db.get_strategy_fitness
+        False,
+    ),
+    (
+        "intent-router.py routing table matches auto-skill-routing.md documented skills",
+        check_intent_router_routing_parity,
+        False,  # blocking — silent drift between hook + rule = unreachable routes
         False,
     ),
 ]  # end CHECKS

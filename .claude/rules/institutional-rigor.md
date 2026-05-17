@@ -112,6 +112,48 @@ Examples of this rule in action:
 
 Enforced by `.claude/hooks/pre-edit-discovery-marker.py` (PreToolUse, fail-open). Manual escape: `.claude/scratch/discovery-marker.json` with `{"valid_until": "<ISO timestamp>"}`. See `docs/plans/discovery-loop-hardening.md` for the full forcing-function design.
 
+### 10. Canonical Sources — Authority Table (merged from integrity-guardian.md § 2, 2026-05-17)
+
+Import from the single source of truth. Never inline lists or magic numbers.
+
+| Data | Source |
+|------|--------|
+| Active instruments | `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS` |
+| All instrument configs | `pipeline.asset_configs.ASSET_CONFIGS` |
+| Session catalog | `pipeline.dst.SESSION_CATALOG` |
+| ORB window timing (UTC) | `pipeline.dst.orb_utc_window(trading_day, orb_label, orb_minutes)` |
+| Entry models / filters | `trading_app.config` |
+| Cost specs | `pipeline.cost_model.COST_SPECS` |
+| DB path | `pipeline.paths.GOLD_DB_PATH` |
+| Holdout policy (Mode A) | `trading_app.holdout_policy` — `HOLDOUT_SACRED_FROM`, `HOLDOUT_GRANDFATHER_CUTOFF`, `enforce_holdout_date()` |
+
+### 11. Never Trust Metadata — Always Verify (merged from integrity-guardian.md § 7, 2026-05-17)
+
+Metadata, comments, docstrings, bundle fields, and config labels are NOT evidence.
+- Never trust a model bundle's `rr_target_lock` field without querying what data it trained on
+- Never trust a check's `PASSED` label without confirming the check actually tests what it claims
+- Never trust a function docstring's description of behavior without reading the code
+- Never trust row counts from memory — execute the query and read the output
+- When inspecting ML models, trace FROM the database query THROUGH the code TO the model output
+- When verifying drift checks, inject a known violation and confirm it's caught
+- **Reading code is not verifying code. Verifying requires execution + output inspection.**
+
+### 12. Seven-Sins Bias Defense (reminder from quant-agent-identity.md, 2026-05-17)
+
+Behavioral reminder on every change. Full bias-class index lives in `quant-agent-identity.md` (now auto-loads only on research / strategy_* / audit edits). Quick reference:
+
+| Sin | What to watch for |
+|-----|-------------------|
+| Look-ahead bias | Future data as predictor; see `backtesting-methodology.md` § 1.1 + § 6.3 banned-column list |
+| Data snooping | Multiple-testing without BH-FDR at the appropriate K framing |
+| Overfitting | High Sharpe, low N (< 30) or one good year |
+| Survivorship bias | Dropping dead instruments (MCL/SIL/M6E/MBT/M2K) or E0 from base rates |
+| Storytelling bias | Narrative around noise; p > 0.05 is observation, not finding |
+| Outlier distortion | One extreme day driving aggregate; year-by-year breakdown required |
+| Transaction cost illusion | Always use `pipeline.cost_model.COST_SPECS` |
+
+---
+
 ## The Treadmill Signal
 
 If you find yourself saying "oh and also fix X" more than twice in a session, stop. The architecture is wrong. Propose a refactor. Do not keep patching.

@@ -94,7 +94,7 @@ If 2+ domains but tightly coupled with clear joint acceptance → proceed. Note 
 |------|--------|
 | REBASE/RESUME | → /resume-rebase |
 | TRUTH AUDIT | → dispatch preflight-auditor agent (standalone) |
-| DESIGN (quick, ≤2 stages) | → dispatch planner agent → present plan → **wait for approval** |
+| DESIGN (quick, ≤2 stages) | → dispatch `/design` skill (plan mode) → present plan → **wait for approval** |
 | DESIGN (full architecture) | → /design (writes STAGE_STATE on approval) |
 | IMPLEMENTATION | → preflight-auditor → if CLEAR → Step 6 |
 | VERIFICATION (stage checkpoint) | → /verify done (reads acceptance from STAGE_STATE) |
@@ -104,15 +104,15 @@ If 2+ domains but tightly coupled with clear joint acceptance → proceed. Note 
 
 ### DESIGN → APPROVAL → STATE WRITE
 
-1. Planner returns structured stage output (not prose)
-2. Present Stage 1 to user exactly as planner structured it
+1. `/design` returns structured stage output (not prose)
+2. Present Stage 1 to user exactly as `/design` structured it
 3. **Wait.** User must say "go", "approved", "do it", "looks good", or equivalent.
 4. **IMMEDIATELY on approval:** write the approved stage to `docs/runtime/stages/<slug>.md` using full schema:
    - `mode: IMPLEMENTATION`
-   - `stage_purpose:` from planner output
-   - `scope_lock:` from planner's file list — exact paths
-   - `acceptance:` from planner's acceptance criteria — exact commands
-   - `proven:` / `unproven:` / `blockers:` carried from planner output
+   - `stage_purpose:` from `/design` output
+   - `scope_lock:` from the file list — exact paths
+   - `acceptance:` from the acceptance criteria — exact commands
+   - `proven:` / `unproven:` / `blockers:` carried from `/design` output
 5. Confirm: "Stage [N] approved and locked in stages/<slug>.md. Scope: [files]. Running preflight."
 6. Dispatch preflight-auditor. If CLEAR → proceed to execution. If BLOCKED → stop, report.
 

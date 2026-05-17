@@ -6,6 +6,12 @@
 > the recommended skill. Editing the rules here changes the documented
 > routing surface; the hook keeps its own compiled regex table in sync.
 > If you change the bullets, also update `INTENT_RULES` in the hook.
+>
+> **Load policy (2026-05-17):** this file does NOT auto-load on edits — the
+> hook injects the routing cue at prompt-time, so the rule never needs to
+> ship as per-edit context. Read on demand when modifying `INTENT_RULES`.
+> Parity with the hook is enforced by
+> `check_intent_router_routing_parity` in `pipeline/check_drift.py`.
 
 The user does not type `/skill` commands. Route by intent.
 
