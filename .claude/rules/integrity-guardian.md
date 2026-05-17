@@ -8,7 +8,7 @@ paths:
 
 # Integrity Guardian — Behavioral Rules
 
-Seven non-negotiable rules for every change. Violations are caught by `scripts/tools/audit_behavioral.py`.
+Eight non-negotiable rules for every change. Violations are caught by `scripts/tools/audit_behavioral.py`.
 
 ## 1. Authority Hierarchy
 Defer to the governing document — never restate its content:
