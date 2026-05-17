@@ -5995,6 +5995,102 @@ def check_phase_4_validator_gates_present() -> list[str]:
     return violations
 
 
+_SHA_MIGRATION_MANIFEST_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "docs"
+    / "audit"
+    / "check_107_sha_migrations.yaml"
+)
+
+
+def _load_sha_migration_manifest(
+    manifest_path: Path | None = None,
+) -> tuple[set[str], list[str], list[dict]]:
+    """Load the SHA migration manifest. Returns (accepted_orphan_shas, errors, entries).
+
+    The manifest at ``docs/audit/check_107_sha_migrations.yaml`` records
+    orphan SHAs that have been verified as legitimate re-stamping artifacts
+    (e.g., a doctrine migration like Amendment 3.3 that edited the
+    hypothesis YAML in place after discovery). Each entry must carry:
+
+    - ``orphan_sha``: 64-char hex; the stale SHA still stamped in experimental_strategies
+    - ``current_file``: path to the file whose content used to hash to that SHA
+    - ``current_sha``: the file's current on-disk SHA (informational)
+    - ``migration_commit``: git commit that re-stamped the file
+    - ``introducing_commit``: git commit at which the file content hashed to ``orphan_sha``
+    - ``rationale``: short prose justification
+    - ``audit_ref``: path to the audit MD that documents this entry
+
+    Fail-closed on syntax errors: returns empty set + error list, so
+    Check 107 keeps flagging the underlying orphans. Semantic verification
+    (commits exist, blob SHA matches the orphan, etc.) is performed by
+    ``check_phase_4_sha_migration_manifest_integrity``.
+    """
+    path = manifest_path if manifest_path is not None else _SHA_MIGRATION_MANIFEST_PATH
+    errors: list[str] = []
+    accepted: set[str] = set()
+    entries_out: list[dict] = []
+
+    if not path.exists():
+        return accepted, errors, entries_out
+
+    try:
+        import yaml
+
+        with path.open("r", encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except Exception as exc:
+        errors.append(
+            f"SHA MIGRATION MANIFEST PARSE ERROR: {path} — {exc}"
+        )
+        return accepted, errors, entries_out
+
+    if not isinstance(data, dict):
+        errors.append(
+            f"SHA MIGRATION MANIFEST: {path} root is not a mapping"
+        )
+        return accepted, errors, entries_out
+
+    entries = data.get("entries", [])
+    if not isinstance(entries, list):
+        errors.append(
+            f"SHA MIGRATION MANIFEST: {path} `entries` is not a list"
+        )
+        return accepted, errors, entries_out
+
+    required = {
+        "orphan_sha",
+        "current_file",
+        "current_sha",
+        "migration_commit",
+        "introducing_commit",
+        "rationale",
+        "audit_ref",
+    }
+    for i, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            errors.append(
+                f"SHA MIGRATION MANIFEST: entry[{i}] is not a mapping"
+            )
+            continue
+        missing = required - set(entry.keys())
+        if missing:
+            errors.append(
+                f"SHA MIGRATION MANIFEST: entry[{i}] missing fields: {sorted(missing)}"
+            )
+            continue
+        sha = entry["orphan_sha"]
+        if not isinstance(sha, str) or len(sha) != 64:
+            errors.append(
+                f"SHA MIGRATION MANIFEST: entry[{i}] orphan_sha is not a 64-char hex string"
+            )
+            continue
+        accepted.add(sha)
+        entries_out.append(entry)
+
+    return accepted, errors, entries_out
+
+
 def check_phase_4_sha_integrity(con=None) -> list[str]:
     """Verify every stamped hypothesis_file_sha references a real file on disk.
 
@@ -6005,7 +6101,13 @@ def check_phase_4_sha_integrity(con=None) -> list[str]:
     the INTEGRITY guard: any row whose SHA does NOT resolve to a real file
     in ``docs/audit/hypotheses/`` indicates either (a) tampering (the file
     was deleted after the run), (b) a rebase that dropped the hypothesis
-    commit, or (c) a test-fixture leak into gold.db.
+    commit, (c) a test-fixture leak into gold.db, or (d) a legitimate
+    in-place edit of the hypothesis YAML after discovery (e.g., bulk
+    doctrine migration). Class (d) is recorded in
+    ``docs/audit/check_107_sha_migrations.yaml`` and accepted by this
+    check via ``_load_sha_migration_manifest``; the sibling check
+    ``check_phase_4_sha_migration_manifest_integrity`` proves each
+    manifest entry is well-formed and evidence-grounded.
 
     Scope: rows with ``created_at >= PHASE_4_1_SHIP_DATE`` AND
     ``hypothesis_file_sha IS NOT NULL``. Rows created BEFORE the ship date
@@ -6048,6 +6150,13 @@ def check_phase_4_sha_integrity(con=None) -> list[str]:
         from trading_app.holdout_policy import PHASE_4_1_SHIP_DATE
         from trading_app.hypothesis_loader import find_hypothesis_file_by_sha
 
+        # Migration-manifest-accepted orphan SHAs (class (d) in the docstring).
+        # Manifest parse errors propagate as violations so a malformed
+        # manifest never silently grants acceptance.
+        accepted_orphans, manifest_errors, _entries = _load_sha_migration_manifest()
+        for err in manifest_errors:
+            violations.append(f"  PHASE 4 SHA INTEGRITY: {err}")
+
         # Fetch every stamped SHA that is subject to integrity enforcement.
         # Pre-ship-date rows are grandfathered (legacy). Post-ship rows with
         # NULL SHA are legacy-mode (out of scope — see docstring). Post-ship
@@ -6070,28 +6179,163 @@ def check_phase_4_sha_integrity(con=None) -> list[str]:
                 )
                 continue
             resolved = find_hypothesis_file_by_sha(sha)
-            if resolved is None:
-                # Count rows affected for operator context.
-                row_count = con.execute(
-                    """SELECT COUNT(*) FROM experimental_strategies
-                       WHERE hypothesis_file_sha = ?""",
-                    [sha],
-                ).fetchone()[0]
-                violations.append(
-                    f"  PHASE 4 SHA INTEGRITY: orphaned SHA {sha[:12]}... "
-                    f"({row_count} row(s)) — no file in "
-                    f"docs/audit/hypotheses/ matches this SHA. Either the "
-                    f"hypothesis file was deleted/rebased after discovery, "
-                    f"or a test fixture leaked into gold.db. Investigate "
-                    f"via: SELECT strategy_id, created_at FROM "
-                    f"experimental_strategies WHERE hypothesis_file_sha = "
-                    f"'{sha[:12]}...' LIMIT 5;"
-                )
+            if resolved is not None:
+                continue
+            if sha in accepted_orphans:
+                # Verified migration artifact — not a violation. The sibling
+                # check ``check_phase_4_sha_migration_manifest_integrity``
+                # proves the manifest entry is evidence-grounded.
+                continue
+            # Count rows affected for operator context.
+            row_count = con.execute(
+                """SELECT COUNT(*) FROM experimental_strategies
+                   WHERE hypothesis_file_sha = ?""",
+                [sha],
+            ).fetchone()[0]
+            violations.append(
+                f"  PHASE 4 SHA INTEGRITY: orphaned SHA {sha[:12]}... "
+                f"({row_count} row(s)) — no file in "
+                f"docs/audit/hypotheses/ matches this SHA, and the SHA is "
+                f"not recorded in docs/audit/check_107_sha_migrations.yaml. "
+                f"Likely causes: (a) hypothesis file deleted/rebased after "
+                f"discovery, (b) test fixture leaked into gold.db, or (d) "
+                f"legitimate in-place edit — if (d), add an entry to the "
+                f"migration manifest with introducing_commit/migration_commit. "
+                f"Investigate via: SELECT strategy_id, created_at FROM "
+                f"experimental_strategies WHERE hypothesis_file_sha = "
+                f"'{sha[:12]}...' LIMIT 5;"
+            )
     except Exception as exc:
         violations.append(f"  PHASE 4 SHA INTEGRITY CHECK FAILED: {exc}")
     finally:
         if _own_con and con is not None:
             con.close()
+    return violations
+
+
+def check_phase_4_sha_migration_manifest_integrity(
+    manifest_path: Path | None = None,
+) -> list[str]:
+    """Verify ``docs/audit/check_107_sha_migrations.yaml`` is evidence-grounded.
+
+    The manifest grants Check 107 acceptance to orphan SHAs that are
+    legitimate re-stamping artifacts. Without this sibling check, a
+    malformed or fabricated entry could silence the orphan detector
+    without proof. This check fails closed on each:
+
+    1. ``current_file`` must exist on disk.
+    2. ``current_sha`` must equal the file's current SHA-256 (informational
+       field; recomputed here for parity).
+    3. ``migration_commit`` and ``introducing_commit`` must exist as
+       resolvable git revisions.
+    4. ``migration_commit`` must have touched ``current_file``.
+    5. The blob SHA-256 of ``current_file`` at ``introducing_commit``
+       must equal ``orphan_sha`` (the entry's central claim).
+    6. ``audit_ref`` must exist on disk.
+
+    No fallbacks. Each failed assertion is one violation line. Manifest
+    parse-level errors (already surfaced by Check 107) are NOT
+    re-reported here; this check only runs the semantic checks on
+    well-formed entries.
+    """
+    violations: list[str] = []
+    import subprocess
+
+    _accepted, parse_errors, entries = _load_sha_migration_manifest(manifest_path)
+    if parse_errors and not entries:
+        # Manifest unparseable — Check 107 already surfaced the parse error.
+        return violations
+
+    repo_root = Path(__file__).resolve().parent.parent
+
+    def _git(args: list[str]) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            cwd=str(repo_root),
+        )
+
+    for i, entry in enumerate(entries):
+        orphan = entry["orphan_sha"]
+        rel = entry["current_file"]
+        declared_current = entry["current_sha"]
+        mig = entry["migration_commit"]
+        intro = entry["introducing_commit"]
+        audit_ref = entry["audit_ref"]
+
+        file_path = (repo_root / rel).resolve()
+        if not file_path.exists():
+            violations.append(
+                f"  SHA MIGRATION MANIFEST: entry[{i}] current_file does not exist on disk: {rel}"
+            )
+            continue
+
+        try:
+            import hashlib
+
+            on_disk_sha = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        except Exception as exc:
+            violations.append(
+                f"  SHA MIGRATION MANIFEST: entry[{i}] failed to read {rel}: {exc}"
+            )
+            continue
+
+        if on_disk_sha != declared_current:
+            violations.append(
+                f"  SHA MIGRATION MANIFEST: entry[{i}] current_sha mismatch — "
+                f"manifest says {declared_current[:12]}..., on-disk is {on_disk_sha[:12]}... "
+                f"for {rel}"
+            )
+
+        for label, commit in (("migration_commit", mig), ("introducing_commit", intro)):
+            result = _git(["cat-file", "-e", commit])
+            if result.returncode != 0:
+                violations.append(
+                    f"  SHA MIGRATION MANIFEST: entry[{i}] {label} {commit[:12]}... "
+                    f"does not exist in this repository"
+                )
+
+        # migration_commit must touch current_file. Use --name-only on the
+        # commit and check for the path in the changed-file list.
+        result = _git(["show", "--name-only", "--pretty=format:", mig])
+        if result.returncode == 0:
+            touched = {
+                line.strip()
+                for line in result.stdout.decode("utf-8", errors="replace").splitlines()
+                if line.strip()
+            }
+            if rel not in touched:
+                violations.append(
+                    f"  SHA MIGRATION MANIFEST: entry[{i}] migration_commit {mig[:12]}... "
+                    f"did not touch {rel} — the cited migration cannot be the cause "
+                    f"of this orphan."
+                )
+
+        # introducing_commit's blob SHA-256 of current_file must equal orphan_sha.
+        result = _git(["show", f"{intro}:{rel}"])
+        if result.returncode != 0:
+            violations.append(
+                f"  SHA MIGRATION MANIFEST: entry[{i}] cannot read {rel} at "
+                f"introducing_commit {intro[:12]}... — git show failed."
+            )
+        else:
+            import hashlib as _hashlib
+
+            blob_sha = _hashlib.sha256(result.stdout).hexdigest()
+            if blob_sha != orphan:
+                violations.append(
+                    f"  SHA MIGRATION MANIFEST: entry[{i}] orphan_sha {orphan[:12]}... "
+                    f"does not match the SHA-256 of {rel} at introducing_commit "
+                    f"{intro[:12]}... (got {blob_sha[:12]}...). The entry's central "
+                    f"claim is FALSE."
+                )
+
+        audit_path = (repo_root / audit_ref).resolve()
+        if not audit_path.exists():
+            violations.append(
+                f"  SHA MIGRATION MANIFEST: entry[{i}] audit_ref does not exist on disk: {audit_ref}"
+            )
+
     return violations
 
 
@@ -9669,6 +9913,12 @@ CHECKS = [
     (
         "Phase 4 discovery SHA integrity (stamped hypothesis_file_sha must reference real file)",
         check_phase_4_sha_integrity,
+        False,
+        False,
+    ),
+    (
+        "Phase 4 SHA migration manifest integrity (every check_107_sha_migrations.yaml entry is evidence-grounded)",
+        check_phase_4_sha_migration_manifest_integrity,
         False,
         False,
     ),

@@ -1619,6 +1619,255 @@ class TestPhase4ShaIntegrity:
         con.close()
 
 
+class TestPhase4ShaMigrationManifest:
+    """SHA migration manifest behavior — both the loader and the sibling
+    integrity check. Loader is fail-closed; sibling check fails closed on
+    cited-commit / cited-file / blob-SHA mismatches.
+    """
+
+    _VALID_ENTRY_TEMPLATE = """
+version: 1
+entries:
+  - orphan_sha: "{sha}"
+    current_file: "{current_file}"
+    current_sha: "{current_sha}"
+    migration_commit: "{migration}"
+    introducing_commit: "{introducing}"
+    rationale: "test entry"
+    audit_ref: "{audit_ref}"
+"""
+
+    def test_missing_manifest_returns_empty(self, tmp_path):
+        from pipeline import check_drift
+
+        accepted, errors, entries = check_drift._load_sha_migration_manifest(
+            tmp_path / "absent.yaml"
+        )
+        assert accepted == set()
+        assert errors == []
+        assert entries == []
+
+    def test_malformed_yaml_returns_parse_error(self, tmp_path):
+        from pipeline import check_drift
+
+        p = tmp_path / "bad.yaml"
+        p.write_text("not: valid: yaml: :", encoding="utf-8")
+        accepted, errors, entries = check_drift._load_sha_migration_manifest(p)
+        assert accepted == set()
+        assert len(errors) == 1
+        assert "PARSE ERROR" in errors[0]
+        assert entries == []
+
+    def test_entry_missing_required_field_is_rejected(self, tmp_path):
+        from pipeline import check_drift
+
+        p = tmp_path / "missing.yaml"
+        p.write_text(
+            "version: 1\nentries:\n  - orphan_sha: \"" + "a" * 64 + "\"\n",
+            encoding="utf-8",
+        )
+        accepted, errors, entries = check_drift._load_sha_migration_manifest(p)
+        assert accepted == set()
+        assert len(errors) == 1
+        assert "missing fields" in errors[0]
+        assert entries == []
+
+    def test_short_sha_is_rejected(self, tmp_path):
+        from pipeline import check_drift
+
+        p = tmp_path / "short.yaml"
+        p.write_text(
+            self._VALID_ENTRY_TEMPLATE.format(
+                sha="deadbeef",  # too short
+                current_file="x.yaml",
+                current_sha="f" * 64,
+                migration="abc123",
+                introducing="def456",
+                audit_ref="x.md",
+            ),
+            encoding="utf-8",
+        )
+        accepted, errors, _entries = check_drift._load_sha_migration_manifest(p)
+        assert accepted == set()
+        assert any("not a 64-char hex" in e for e in errors)
+
+    def test_well_formed_entry_is_accepted(self, tmp_path):
+        from pipeline import check_drift
+
+        p = tmp_path / "good.yaml"
+        p.write_text(
+            self._VALID_ENTRY_TEMPLATE.format(
+                sha="a" * 64,
+                current_file="x.yaml",
+                current_sha="b" * 64,
+                migration="abc1234",
+                introducing="def5678",
+                audit_ref="x.md",
+            ),
+            encoding="utf-8",
+        )
+        accepted, errors, entries = check_drift._load_sha_migration_manifest(p)
+        assert accepted == {"a" * 64}
+        assert errors == []
+        assert len(entries) == 1
+
+    def test_check_107_accepts_manifest_orphan(self, tmp_path, monkeypatch):
+        """A post-ship orphan SHA is silenced when it appears in the manifest."""
+        from datetime import UTC, datetime
+
+        from pipeline import check_drift
+
+        orphan = "c" * 64
+        manifest = tmp_path / "manifest.yaml"
+        manifest.write_text(
+            self._VALID_ENTRY_TEMPLATE.format(
+                sha=orphan,
+                current_file="x.yaml",
+                current_sha="d" * 64,
+                migration="abc1234",
+                introducing="def5678",
+                audit_ref="x.md",
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            check_drift, "_SHA_MIGRATION_MANIFEST_PATH", manifest
+        )
+
+        con = TestPhase4ShaIntegrity._make_experimental_db()
+        con.execute(
+            "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+            ["s1", orphan, datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC)],
+        )
+        violations = check_drift.check_phase_4_sha_integrity(con=con)
+        assert violations == [], f"expected pass, got {violations}"
+        con.close()
+
+    def test_check_107_still_flags_unrecorded_orphans(self, tmp_path, monkeypatch):
+        """A post-ship orphan NOT in the manifest must still violate."""
+        from datetime import UTC, datetime
+
+        from pipeline import check_drift
+
+        manifest = tmp_path / "manifest.yaml"
+        manifest.write_text(
+            self._VALID_ENTRY_TEMPLATE.format(
+                sha="e" * 64,  # different SHA from what we insert
+                current_file="x.yaml",
+                current_sha="f" * 64,
+                migration="abc1234",
+                introducing="def5678",
+                audit_ref="x.md",
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            check_drift, "_SHA_MIGRATION_MANIFEST_PATH", manifest
+        )
+
+        con = TestPhase4ShaIntegrity._make_experimental_db()
+        # Insert a different orphan SHA that is NOT in the manifest
+        not_in_manifest = "1" * 64
+        con.execute(
+            "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+            ["s1", not_in_manifest, datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC)],
+        )
+        violations = check_drift.check_phase_4_sha_integrity(con=con)
+        assert len(violations) == 1
+        assert "orphaned SHA" in violations[0]
+        # The new message references the manifest path
+        assert "check_107_sha_migrations.yaml" in violations[0]
+        con.close()
+
+    def test_check_107_propagates_manifest_parse_errors(self, tmp_path, monkeypatch):
+        """A malformed manifest must surface a violation even when no orphans exist."""
+        from pipeline import check_drift
+
+        manifest = tmp_path / "bad.yaml"
+        manifest.write_text(": : : not yaml ::", encoding="utf-8")
+        monkeypatch.setattr(
+            check_drift, "_SHA_MIGRATION_MANIFEST_PATH", manifest
+        )
+
+        con = TestPhase4ShaIntegrity._make_experimental_db()
+        violations = check_drift.check_phase_4_sha_integrity(con=con)
+        assert any("PARSE ERROR" in v for v in violations)
+        con.close()
+
+    def test_sibling_check_passes_for_real_canonical_manifest(self):
+        """The shipped manifest at docs/audit/check_107_sha_migrations.yaml
+        must pass the integrity check on every entry. This is the live-canon
+        regression test: if a future commit corrupts the manifest, this test
+        fires before the commit lands.
+        """
+        from pipeline import check_drift
+
+        violations = check_drift.check_phase_4_sha_migration_manifest_integrity()
+        assert violations == [], (
+            f"canonical manifest failed integrity check: {violations}"
+        )
+
+    def test_sibling_check_flags_nonexistent_file(self, tmp_path, monkeypatch):
+        from pipeline import check_drift
+
+        manifest = tmp_path / "manifest.yaml"
+        manifest.write_text(
+            self._VALID_ENTRY_TEMPLATE.format(
+                sha="a" * 64,
+                current_file="does/not/exist.yaml",
+                current_sha="b" * 64,
+                migration="abc1234",
+                introducing="def5678",
+                audit_ref="also/does/not/exist.md",
+            ),
+            encoding="utf-8",
+        )
+        violations = check_drift.check_phase_4_sha_migration_manifest_integrity(
+            manifest_path=manifest
+        )
+        # current_file absent short-circuits this entry (cannot verify SHA or
+        # audit_ref without the file). The check fires loudly on the
+        # missing file.
+        joined = "\n".join(violations)
+        assert "current_file does not exist" in joined
+
+    def test_sibling_check_flags_fabricated_sha(self, tmp_path):
+        """Fabricated orphan_sha (does not match the file's blob SHA at
+        introducing_commit) must trip the central-claim assertion.
+
+        Uses a real entry from the canonical manifest as the substrate, then
+        rewrites the SHA to a value that cannot match the real blob.
+        """
+        from pipeline import check_drift
+
+        # Pull the first real entry, mutate its orphan_sha to a fake value
+        _accepted, _errs, real_entries = check_drift._load_sha_migration_manifest()
+        if not real_entries:
+            import pytest
+
+            pytest.skip("canonical manifest empty — cannot probe fabrication path")
+        sample = real_entries[0]
+        fake_sha = "f" * 64
+        manifest = tmp_path / "fabricated.yaml"
+        manifest.write_text(
+            self._VALID_ENTRY_TEMPLATE.format(
+                sha=fake_sha,
+                current_file=sample["current_file"],
+                current_sha=sample["current_sha"],
+                migration=sample["migration_commit"],
+                introducing=sample["introducing_commit"],
+                audit_ref=sample["audit_ref"],
+            ),
+            encoding="utf-8",
+        )
+        violations = check_drift.check_phase_4_sha_migration_manifest_integrity(
+            manifest_path=manifest
+        )
+        assert any(
+            "central\n" in v or "central claim is FALSE" in v for v in violations
+        ), f"expected fabricated-SHA violation, got {violations}"
+
+
 class TestPropProfilesValidatedSetupsAlignment:
     """Drift check #95: every DailyLaneSpec in an ``active=True`` AccountProfile
     must exist in ``validated_setups`` with ``status='active'``.

@@ -1,0 +1,135 @@
+# Check 107 — Hypothesis-file SHA migration manifest
+#
+# PURPOSE
+# Some hypothesis YAML files under docs/audit/hypotheses/ are legitimately
+# edited in place after discovery (e.g., bulk doctrine migrations like
+# Amendment 3.3, which added `metadata.theory_grant` to 203 files). When
+# this happens, every `experimental_strategies.hypothesis_file_sha` row
+# that was stamped against the pre-edit content becomes orphaned —
+# `find_hypothesis_file_by_sha` returns None, and Check 107
+# (`pipeline.check_drift.check_phase_4_sha_integrity`) flags the row.
+#
+# The strategies themselves are real; only the SHA pointer is stale. This
+# manifest preserves the evidence trail: each entry asserts
+#
+#   "orphan SHA X was the content SHA of file F as of `introducing_commit`,
+#    and was invalidated by `migration_commit` which produced `current_sha`."
+#
+# Check 107 reads this manifest and accepts orphan SHAs that resolve to a
+# verified manifest entry. A sibling check
+# (`check_phase_4_sha_migration_manifest_integrity`) verifies every entry
+# in this file is well-formed: the cited commits exist, the migration
+# commit touched the cited file, the introducing commit's blob SHA of the
+# file matches `orphan_sha`, and `current_sha` matches the file's on-disk
+# SHA today.
+#
+# AUTHORITY
+# - Drift check that consumes this:
+#     pipeline/check_drift.py :: check_phase_4_sha_integrity
+# - Drift check that audits this manifest:
+#     pipeline/check_drift.py :: check_phase_4_sha_migration_manifest_integrity
+# - Audit MD that justifies each entry:
+#     docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md
+#
+# RULES
+# - NEVER add an entry without an audit MD citation justifying it.
+# - NEVER add an entry whose `migration_commit` did not touch the cited
+#   `current_file` (sibling check fails closed if this drifts).
+# - NEVER backfill or mutate `experimental_strategies.hypothesis_file_sha`.
+#   The original (orphan) SHA is preserved AS-IS as discovery-time evidence;
+#   this manifest is the bridge to current-state.
+# - If a future migration produces new orphans, append entries here; do not
+#   delete or edit existing entries (audit-trail immutability).
+# - Field `current_sha` is informational/operator-facing; the sibling drift
+#   check recomputes it from the file on every run.
+
+version: 1
+entries:
+
+  - orphan_sha: "62e7631661f1453e5143f4c8f8a1a6b3728b35df965f901ab953c5788a9c44b6"
+    current_file: "docs/audit/hypotheses/2026-04-10-gc-proxy-broad-sweep.yaml"
+    current_sha: "e1d2414b03b0824d81d7de19ac543eac98a4d5aaae75b0f55f85296b977d3693"
+    migration_commit: "8ab4fe1358a5933d474a96deb91ae401cd543ace"
+    introducing_commit: "7aaf256cc5a542d44ddc89c2ebe157b483e38b35"
+    rationale: "Amendment 3.3 added metadata.theory_grant to 203 YAML files; pre-migration SHA stamped during discovery 2026-04-10."
+    audit_ref: "docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md"
+
+  - orphan_sha: "ee87f887f2714749db806b60fcfa201220f718800173f78ef824a4e6b5d254bc"
+    current_file: "docs/audit/hypotheses/2026-04-10-gc-proxy-stable-sessions.yaml"
+    current_sha: "5dedfda11f8d9bffaf9b3325d197a3c8c30558eea476e31c010efc6de3f3148f"
+    migration_commit: "8ab4fe1358a5933d474a96deb91ae401cd543ace"
+    introducing_commit: "7aaf256cc5a542d44ddc89c2ebe157b483e38b35"
+    rationale: "Amendment 3.3 added metadata.theory_grant to 203 YAML files; pre-migration SHA stamped during discovery 2026-04-10."
+    audit_ref: "docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md"
+
+  - orphan_sha: "e78ada335aae5d21a518489999fb0db62de2805a4ef808370c3c744bf2127efc"
+    current_file: "docs/audit/hypotheses/2026-04-10-gc-proxy-wave2-regime-robust.yaml"
+    current_sha: "5e4ca8df758e72d89160993126cea7fbb3c095c5a82ed4ad81e3726a65c59ab6"
+    migration_commit: "8ab4fe1358a5933d474a96deb91ae401cd543ace"
+    introducing_commit: "7aaf256cc5a542d44ddc89c2ebe157b483e38b35"
+    rationale: "Amendment 3.3 added metadata.theory_grant to 203 YAML files; pre-migration SHA stamped during discovery 2026-04-10."
+    audit_ref: "docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md"
+
+  - orphan_sha: "7777e5f4f18ddbf7f6b6989b7cdc0b385dc9d075fd12ff1c7b4dd7af3f03cb00"
+    current_file: "docs/audit/hypotheses/2026-04-10-gc-proxy-wave3-expansion.yaml"
+    current_sha: "974545065e1d825c3f14df1cd4901aff2e7a7f8a9aa4e1fb7992f2c4426ed654"
+    migration_commit: "8ab4fe1358a5933d474a96deb91ae401cd543ace"
+    introducing_commit: "7aaf256cc5a542d44ddc89c2ebe157b483e38b35"
+    rationale: "Amendment 3.3 added metadata.theory_grant to 203 YAML files; pre-migration SHA stamped during discovery 2026-04-10."
+    audit_ref: "docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md"
+
+  - orphan_sha: "946e7ba29ef14516dcbdce6ff2cbe53715c64216ac9ba9110e83ccbfe135b890"
+    current_file: "docs/audit/hypotheses/2026-04-11-mgc-proxy-overnight.yaml"
+    current_sha: "2d29be078eadf76e90be7c91fdb6c6d2d72e3f8f2cbe722f05cb7e1874487e5c"
+    migration_commit: "8ab4fe1358a5933d474a96deb91ae401cd543ace"
+    introducing_commit: "7aaf256cc5a542d44ddc89c2ebe157b483e38b35"
+    rationale: "Amendment 3.3 added metadata.theory_grant to 203 YAML files; pre-migration SHA stamped during discovery 2026-04-11."
+    audit_ref: "docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md"
+
+  - orphan_sha: "29c87962c4bf34bcf232d928151df7e5d143827f7a54b5dde4d24c5d97c6a255"
+    current_file: "docs/audit/hypotheses/2026-04-11-mgc-proxy-vol.yaml"
+    current_sha: "48ffbd37399c0d18f6029d83d28de1e720ebe8e434c43f473a5300c81ab1f807"
+    migration_commit: "8ab4fe1358a5933d474a96deb91ae401cd543ace"
+    introducing_commit: "7aaf256cc5a542d44ddc89c2ebe157b483e38b35"
+    rationale: "Amendment 3.3 added metadata.theory_grant to 203 YAML files; pre-migration SHA stamped during discovery 2026-04-11."
+    audit_ref: "docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md"
+
+  - orphan_sha: "d047546988dca6e8aeb6519355d9719a733ebf9842dd9c2f041c34839c4a63fb"
+    current_file: "docs/audit/hypotheses/2026-04-11-mnq-dow.yaml"
+    current_sha: "5999b5f5db718913fe748289cfb52ea79f81982060c2aeddb45bf6db10dda3a7"
+    migration_commit: "8ab4fe1358a5933d474a96deb91ae401cd543ace"
+    introducing_commit: "7aaf256cc5a542d44ddc89c2ebe157b483e38b35"
+    rationale: "Amendment 3.3 added metadata.theory_grant to 203 YAML files; pre-migration SHA stamped during discovery 2026-04-11."
+    audit_ref: "docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md"
+
+  - orphan_sha: "5e37d9381c23f370562bb1e243279d9c55991d9baed96661049b95fb67db720a"
+    current_file: "docs/audit/hypotheses/2026-04-11-mnq-gap.yaml"
+    current_sha: "500b2062e253430986d3737667bb4e85916b2a994900f8d191223e9aa55d0ef0"
+    migration_commit: "8ab4fe1358a5933d474a96deb91ae401cd543ace"
+    introducing_commit: "7aaf256cc5a542d44ddc89c2ebe157b483e38b35"
+    rationale: "Amendment 3.3 added metadata.theory_grant to 203 YAML files; pre-migration SHA stamped during discovery 2026-04-11."
+    audit_ref: "docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md"
+
+  - orphan_sha: "f505cf7982c27a8bb1b0747f43bd814abfcf220592f3ad91d8f1d22c6bfcf457"
+    current_file: "docs/audit/hypotheses/2026-05-11-llm-cme-preclose-atr-p30-o15.yaml"
+    current_sha: "b9fe2e64d1033b843f9dddfbf7dffc34742a1023b4c213341cc2bc78174a862c"
+    migration_commit: "8ab4fe1358a5933d474a96deb91ae401cd543ace"
+    introducing_commit: "82ab4c062b5993e14a11de70e57e9734c2ac4cf4"
+    rationale: "Amendment 3.3 added metadata.theory_grant to 203 YAML files; pre-migration SHA stamped during discovery 2026-05-11."
+    audit_ref: "docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md"
+
+  - orphan_sha: "4a639daeeeb71e1548ceb69ae3b666735a73910af0e2019871d0a02a3b2ce4a6"
+    current_file: "docs/audit/hypotheses/2026-05-11-llm-cme-preclose-orb-vol-16k-o15.yaml"
+    current_sha: "24c9e4c7ee3ecc7d05f4b4932b5776876ab3b5f975b9ba27690dedfbe632ea5b"
+    migration_commit: "8ab4fe1358a5933d474a96deb91ae401cd543ace"
+    introducing_commit: "82ab4c062b5993e14a11de70e57e9734c2ac4cf4"
+    rationale: "Amendment 3.3 added metadata.theory_grant to 203 YAML files; pre-migration SHA stamped during discovery 2026-05-11."
+    audit_ref: "docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md"
+
+  - orphan_sha: "51c4d3e90d8f0a193cff23357c60f312d07ab4c285dd81ce4ebc5eaa2b4dbf5d"
+    current_file: "docs/audit/hypotheses/2026-05-11-llm-tokyo-open-atr-vel-ge105.yaml"
+    current_sha: "78c0e376d1a06e7e557a5491a5914be91674650604d92c58aad574c6a971a381"
+    migration_commit: "8ab4fe1358a5933d474a96deb91ae401cd543ace"
+    introducing_commit: "82ab4c062b5993e14a11de70e57e9734c2ac4cf4"
+    rationale: "Amendment 3.3 added metadata.theory_grant to 203 YAML files; pre-migration SHA stamped during discovery 2026-05-11."
+    audit_ref: "docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md"
