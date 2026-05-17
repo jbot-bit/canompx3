@@ -7,6 +7,13 @@
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
 ## Last Session
+- **Tool:** Codex (GPT-5.3-Codex)
+- **Date:** 2026-05-17 UTC
+- **Commit:** (this commit) — feat(profile): unblock MNQ session routing by adding NYSE_CLOSE + LONDON_METALS to active topstep_50k_mnq_auto allowlist
+- **Files changed:** `trading_app/prop_profiles.py` (active MNQ profile session allowlist + notes metadata)
+- **Session summary:** Implemented the highest-signal deployment-coverage unlock from 2026-05-17 audit by expanding `topstep_50k_mnq_auto.allowed_sessions` to include `NYSE_CLOSE` and `LONDON_METALS`. This removes profile-level routing blockage for allocator-selected MNQ lanes in those sessions (subject to existing doctrine/risk gates). No DB mutation, no lane_allocation mutation, no broker/live process changes.
+
+- **Tool:** Claude Code (Opus 4.7)
 - **Tool:** Claude Code (Opus 4.7)
 - **Date:** 2026-05-17 late evening
 - **Tip:** c0fb8a19 (audit deployment-coverage rebalance refresh 2026-05-17, annual_r rerank)
