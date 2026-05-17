@@ -438,15 +438,11 @@ class SessionOrchestrator:
             # parse path; duplicate parser is not reintroduced because the
             # probe discards its result.
             if not _alloc_path.exists():
-                raise RuntimeError(
-                    f"FAIL-CLOSED: profile account requires lane_allocation.json at {_alloc_path}"
-                )
+                raise RuntimeError(f"FAIL-CLOSED: profile account requires lane_allocation.json at {_alloc_path}")
             try:
                 json.loads(_alloc_path.read_text())
             except (json.JSONDecodeError, OSError) as e:
-                raise RuntimeError(
-                    f"FAIL-CLOSED: profile account requires parseable lane_allocation.json: {e}"
-                ) from e
+                raise RuntimeError(f"FAIL-CLOSED: profile account requires parseable lane_allocation.json: {e}") from e
         self._regime_paused: set[str] = set(load_paused_strategy_ids(_alloc_path))
         if self._regime_paused:
             log.warning(

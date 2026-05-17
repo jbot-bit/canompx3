@@ -342,9 +342,7 @@ class TestEvaluateSystemPolicy:
         # recommend `--write` — that flag is destructive (overwrites HANDOFF.md
         # and deletes session prose). The pulse hint should point operators at
         # the safe stdout-render-then-hand-patch path instead.
-        mismatch_warning = next(
-            issue for issue in decision.warnings if issue.code == "handoff_queue_mismatch"
-        )
+        mismatch_warning = next(issue for issue in decision.warnings if issue.code == "handoff_queue_mismatch")
         assert mismatch_warning.detail is not None, "handoff_queue_mismatch must carry a detail hint"
         assert "--write" not in mismatch_warning.detail, (
             "handoff_queue_mismatch detail must not recommend `render-handoff --write` "
