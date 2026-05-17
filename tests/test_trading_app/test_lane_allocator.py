@@ -477,6 +477,59 @@ class TestBuildAllocation:
         selected_ids = [s.strategy_id for s in result]
         assert new_strat_big.strategy_id in selected_ids
 
+    def test_hysteresis_does_not_swap_across_apertures(self):
+        """Regression: hysteresis session_key must include orb_minutes.
+
+        Prior bug pathology (pre-fix `session_key = (instrument, orb_label)`):
+        1. O5 incumbent selected first (`dd_used += lane_dd_o5`).
+        2. O15 challenger matches (instr, label) → enters hysteresis branch.
+        3. 10% improvement < HYSTERESIS_PCT (20%) → keeps `best_prior` (the
+           same O5 already selected) AND silently runs `dd_used += lane_dd`
+           where `lane_dd` is the O15 candidate's (`build_allocation:1091`).
+           Result: O15 missing from `result`, displaced[] grows a phantom
+           `hysteresis` entry, and DD budget is double-charged.
+
+        Post-fix: O15 falls through to normal ranking; both lanes selected,
+        zero `hysteresis` displaced[] entries. The two assertions below are
+        jointly sufficient to falsify the prior bug class.
+        """
+        incumbent_o5 = _make_score(
+            strategy_id="MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER",
+            orb_label="COMEX_SETTLE",
+            orb_minutes=5,
+            annual_r_estimate=30.0,
+        )
+        # O15 candidate, 10% better (< 20% hysteresis threshold).
+        # If session_key still ignored orb_minutes this would enter the
+        # hysteresis branch; with the fix it must not.
+        challenger_o15 = _make_score(
+            strategy_id="MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER_O15",
+            orb_label="COMEX_SETTLE",
+            orb_minutes=15,
+            annual_r_estimate=33.0,
+        )
+        corr = {("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER",
+                 "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER_O15"): 0.0}
+        displaced: list[dict] = []
+        result = build_allocation(
+            [incumbent_o5, challenger_o15],
+            max_slots=5,
+            max_dd=100000.0,
+            prior_allocation=[incumbent_o5.strategy_id],
+            correlation_matrix=corr,
+            displaced_out=displaced,
+        )
+        # Cross-aperture pair: NOT a hysteresis displacement.
+        hysteresis_entries = [e for e in displaced if e["rejection_gate"] == "hysteresis"]
+        assert hysteresis_entries == [], (
+            "Cross-aperture O5/O15 must not enter hysteresis branch — "
+            f"got {hysteresis_entries}"
+        )
+        # Both lanes selected (uncorrelated, ample DD budget).
+        selected_ids = {s.strategy_id for s in result}
+        assert incumbent_o5.strategy_id in selected_ids
+        assert challenger_o15.strategy_id in selected_ids
+
     def test_annual_r_ranking(self):
         """Test 9: High-N medium-ExpR beats low-N high-ExpR via annual_r."""
         # Strategy A: lots of trades, moderate ExpR → high annual R

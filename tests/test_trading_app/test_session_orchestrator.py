@@ -5907,31 +5907,37 @@ class TestSafeguardExceptNarrowing:
     # ---- Block 3: lane_allocation.json regime gate ----------------------
 
     def _exercise_regime_gate_block(self, portfolio: Portfolio, alloc_path):
-        """Replay of session_orchestrator.py lines 398-417 (2026-05-16 narrowed).
-        `alloc_path` is the path used in place of the canonical lane_allocation.json
-        — lets the test point at a malformed temp file without filesystem races.
-        """
-        _is_profile = portfolio is not None and portfolio.strategies and portfolio.strategies[0].source == "profile"
-        regime_paused: set[str] = set()
-        try:
-            if alloc_path.exists():
-                import json as _json
+        """Replay of session_orchestrator.py regime-gate block (2026-05-17
+        refactor — canonical reader + profile_* probe-parse precondition).
 
-                _alloc_data = _json.loads(alloc_path.read_text())
-                blocked_entries = list(_alloc_data.get("paused", [])) + list(_alloc_data.get("stale", []))
-                regime_paused = {e["strategy_id"] for e in blocked_entries}
-        except (FileNotFoundError, OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
-            if _is_profile:
-                raise
-            regime_paused = set()
+        `alloc_path` is the path used in place of the canonical
+        lane_allocation.json. Profile accounts raise RuntimeError when the
+        file is missing OR unparseable; non-profile accounts fail-open via
+        the loader's empty-set return on JSON/OS errors.
+        """
+        from trading_app.prop_profiles import load_paused_strategy_ids
+
+        _is_profile = portfolio is not None and portfolio.strategies and portfolio.strategies[0].source == "profile"
+        if _is_profile:
+            if not alloc_path.exists():
+                raise RuntimeError(
+                    f"FAIL-CLOSED: profile account requires lane_allocation.json at {alloc_path}"
+                )
+            try:
+                json.loads(alloc_path.read_text())
+            except (json.JSONDecodeError, OSError) as e:
+                raise RuntimeError(
+                    f"FAIL-CLOSED: profile account requires parseable lane_allocation.json: {e}"
+                ) from e
+        regime_paused: set[str] = set(load_paused_strategy_ids(alloc_path))
         return regime_paused
 
     def test_regime_gate_profile_account_raises_on_malformed_json(self, tmp_path):
         """A profile account hitting a corrupt lane_allocation.json MUST
-        fail-closed. Pre-narrowing this was caught by `except Exception` and
-        re-raised on profile; post-narrowing `json.JSONDecodeError` is one of
-        the explicit classes, so the behavior is identical — and a future
-        refactor dropping JSONDecodeError from the tuple would fail here.
+        fail-closed. 2026-05-17: refactor to canonical reader required a
+        profile_* probe-parse precondition because the loader fail-closes
+        AS-EMPTY (correct for paper accounts). The probe re-wraps the
+        JSONDecodeError into a RuntimeError carrying the FAIL-CLOSED tag.
         """
         bad = tmp_path / "lane_allocation.json"
         bad.write_text("{ this is not json ", encoding="utf-8")
@@ -5964,7 +5970,7 @@ class TestSafeguardExceptNarrowing:
             max_concurrent_positions=4,
             max_daily_loss_r=5.0,
         )
-        with pytest.raises(json.JSONDecodeError):
+        with pytest.raises(RuntimeError, match="FAIL-CLOSED.*parseable"):
             self._exercise_regime_gate_block(portfolio, bad)
 
     def test_regime_gate_non_profile_swallows_malformed_json(self, tmp_path):
@@ -6007,11 +6013,16 @@ class TestSafeguardExceptNarrowing:
         regime_paused = self._exercise_regime_gate_block(portfolio, bad)
         assert regime_paused == set()
 
-    def test_regime_gate_profile_account_raises_on_missing_strategy_id_key(self, tmp_path):
-        """If lane_allocation.json is valid JSON but a paused-list entry
-        lacks `strategy_id`, the dict-comp raises KeyError. The narrowed
-        catch includes KeyError so profile accounts still fail-closed and
-        non-profile still fail-open. Locks the contract."""
+    def test_regime_gate_profile_account_tolerates_missing_strategy_id_key(self, tmp_path):
+        """2026-05-17 refactor: valid JSON with malformed paused[] entries
+        (missing strategy_id) no longer raises — the canonical loader
+        `load_paused_strategy_ids` skips entries without a string sid
+        (defense-in-depth against allocator schema drift). Profile probe
+        passes because the file IS parseable JSON. The displaced[]+paused
+        drift check `check_lane_allocation_displaced_bucket` is the
+        upstream gate that catches malformed allocator output before this
+        code ever runs; here we lock loader-tolerance behavior.
+        """
         bad = tmp_path / "lane_allocation.json"
         bad.write_text(
             '{"paused": [{"reason": "no strategy_id field"}], "stale": []}',
@@ -6046,30 +6057,33 @@ class TestSafeguardExceptNarrowing:
             max_concurrent_positions=4,
             max_daily_loss_r=5.0,
         )
-        with pytest.raises(KeyError, match="strategy_id"):
-            self._exercise_regime_gate_block(portfolio, bad)
+        regime_paused = self._exercise_regime_gate_block(portfolio, bad)
+        assert regime_paused == set(), (
+            "Malformed entry (no strategy_id) must be skipped, not raised — "
+            f"got {regime_paused}"
+        )
 
-    def test_regime_gate_does_not_swallow_systemexit(self, tmp_path):
-        """SystemExit is a BaseException subclass — the narrow tuple cannot
-        catch it. This locks the narrowing's value: bare `except Exception`
-        already wouldn't catch SystemExit (Python 3 hierarchy), but the test
-        documents that the narrow form preserves that property explicitly.
+    def test_regime_gate_does_not_swallow_systemexit(self, tmp_path, monkeypatch):
+        """SystemExit is a BaseException subclass — neither the profile probe
+        (try/except JSONDecodeError/OSError) nor the canonical loader's
+        try/except can catch it. Locks the property: a process-level abort
+        signal during regime-gate loading propagates rather than being
+        misclassified as fail-open.
+
+        2026-05-17: post-refactor, the SystemExit must propagate through
+        both the probe-parse precondition AND the canonical loader. We
+        patch `load_paused_strategy_ids` to raise SystemExit when invoked
+        — proves the replay does not wrap it in any broad except.
         """
-        from pathlib import Path as _P
+        good = tmp_path / "lane_allocation.json"
+        good.write_text("{}", encoding="utf-8")
 
-        class _BomBPath(_P):
-            def exists(self) -> bool:
-                raise SystemExit("simulated process abort during exists()")
+        def _explode(*args, **kwargs):
+            raise SystemExit("simulated process abort during loader")
 
-        # construct a real Path under tmp_path then swap with the bomb
-        target = tmp_path / "lane_allocation.json"
-        target.write_text("{}", encoding="utf-8")
-        # Use the bomb directly — _exercise_regime_gate_block calls .exists() first.
-        # tmp_path-backed concrete path swapped for one that raises during exists().
-        # (Path subclassing is awkward; use a SimpleNamespace-shaped substitute.)
-        bomb = SimpleNamespace(
-            exists=lambda: (_ for _ in ()).throw(SystemExit("simulated process abort")),
-            read_text=lambda: "{}",
+        monkeypatch.setattr(
+            "trading_app.prop_profiles.load_paused_strategy_ids",
+            _explode,
         )
 
         strat = PortfolioStrategy(
@@ -6101,4 +6115,49 @@ class TestSafeguardExceptNarrowing:
             max_daily_loss_r=5.0,
         )
         with pytest.raises(SystemExit):
-            self._exercise_regime_gate_block(portfolio, bomb)  # type: ignore[arg-type]
+            self._exercise_regime_gate_block(portfolio, good)
+
+    # ---- Block 3b: canonical loader probe regression --------------------
+
+    def test_canonical_loader_fail_closes_as_empty_on_corrupt_json(self, tmp_path):
+        """Direct test of trading_app.prop_profiles.load_paused_strategy_ids.
+
+        Locks the loader's documented fail-closed-AS-EMPTY behavior on
+        corrupt JSON. This is what makes the session_orchestrator profile
+        probe-parse precondition LOAD-BEARING — without the probe, profile
+        accounts would silently see an empty regime_paused set and route
+        allocator-blocked strategies to live.
+        """
+        from trading_app.prop_profiles import load_paused_strategy_ids
+
+        bad = tmp_path / "lane_allocation.json"
+        bad.write_text("{ totally not json ", encoding="utf-8")
+        result = load_paused_strategy_ids(bad)
+        assert result == frozenset(), (
+            "Loader must fail-closed-as-empty on corrupt JSON. The probe in "
+            "session_orchestrator is what converts this into a hard fail for "
+            "profile_* accounts."
+        )
+
+    def test_canonical_loader_returns_empty_on_missing_file(self, tmp_path):
+        """Missing file -> empty set. The session_orchestrator missing-file
+        precondition (RuntimeError on profile_*) is what makes this safe.
+        """
+        from trading_app.prop_profiles import load_paused_strategy_ids
+
+        missing = tmp_path / "definitely_not_there.json"
+        assert load_paused_strategy_ids(missing) == frozenset()
+
+    def test_canonical_loader_parses_paused_and_stale_strategy_ids(self, tmp_path):
+        """Happy-path: valid JSON with paused[] + stale[] yields the union of
+        their strategy_ids. Documents the loader's data contract.
+        """
+        from trading_app.prop_profiles import load_paused_strategy_ids
+
+        good = tmp_path / "lane_allocation.json"
+        good.write_text(
+            '{"paused": [{"strategy_id": "A"}, {"strategy_id": "B"}], '
+            '"stale": [{"strategy_id": "C"}]}',
+            encoding="utf-8",
+        )
+        assert load_paused_strategy_ids(good) == frozenset({"A", "B", "C"})

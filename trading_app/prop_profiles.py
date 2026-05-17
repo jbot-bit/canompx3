@@ -1167,6 +1167,55 @@ def load_allocation_lanes(
     return tuple(specs)
 
 
+def load_paused_strategy_ids(
+    allocation_path: str | Path | None = None,
+) -> frozenset[str]:
+    """Load the set of strategy_ids the allocator has blocked (paused+stale).
+
+    Canonical reader for the `paused[]` and `stale[]` arrays in
+    lane_allocation.json. SessionOrchestrator consumes this to gate live
+    entries by allocator regime decisions.
+
+    Fail-closed: returns empty frozenset on missing file, corrupt JSON, or
+    any parse error. The caller decides whether empty = open or closed
+    based on account class (profile_* fails closed elsewhere).
+    """
+    import json
+
+    def _normalize_writable_path(path: Path) -> Path:
+        text = str(path)
+        if text.startswith("/mnt/c/Users/"):
+            return Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
+        return path
+
+    if allocation_path:
+        path = _normalize_writable_path(Path(allocation_path))
+    else:
+        path = _normalize_writable_path(
+            Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+        )
+
+    if not path.exists():
+        return frozenset()
+
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return frozenset()
+
+    blocked: set[str] = set()
+    for key in ("paused", "stale"):
+        entries = data.get(key) or []
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if isinstance(entry, dict):
+                sid = entry.get("strategy_id")
+                if isinstance(sid, str) and sid:
+                    blocked.add(sid)
+    return frozenset(blocked)
+
+
 def effective_daily_lanes(profile: AccountProfile) -> tuple[DailyLaneSpec, ...]:
     """Return effective lanes for a profile — hardcoded or JSON-sourced.
 

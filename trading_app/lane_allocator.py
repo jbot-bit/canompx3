@@ -1063,9 +1063,15 @@ def build_allocation(
 
         # Hysteresis: only replace a prior lane if new candidate is >20% better
         if prior_allocation and lane.strategy_id not in prior_allocation:
-            session_key = (lane.instrument, lane.orb_label)
+            # Include orb_minutes: O5/O15/O30 P90 ORB ranges differ ~50-60%
+            # (see compute_orb_size_stats docstring), so swapping across
+            # apertures under hysteresis would charge dd_used with the wrong
+            # lane_dd. Keep the swap within identical-aperture lanes only.
+            session_key = (lane.instrument, lane.orb_label, lane.orb_minutes)
             prior_in_session = [
-                s for s in scores if s.strategy_id in prior_allocation and (s.instrument, s.orb_label) == session_key
+                s for s in scores
+                if s.strategy_id in prior_allocation
+                and (s.instrument, s.orb_label, s.orb_minutes) == session_key
             ]
             if prior_in_session:
                 best_prior = max(prior_in_session, key=lambda s: s.annual_r_estimate)

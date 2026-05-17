@@ -421,31 +421,40 @@ class SessionOrchestrator:
         # Strategies blocked by the allocator (session regime COLD, stale, or
         # Chordia gate) are blocked at entry time. Fail-closed for profile
         # accounts, fail-open for paper/signal.
-        self._regime_paused: set[str] = set()
-        try:
-            _alloc_path = Path(__file__).resolve().parents[2] / "docs" / "runtime" / "lane_allocation.json"
-            if _alloc_path.exists():
-                import json as _json
+        # Delegates to the canonical reader in trading_app.prop_profiles
+        # (institutional-rigor § 4 — single JSON parser for paused[]+stale[]).
+        # The loader is internally fail-closed-as-empty on JSON/OS errors.
+        # For profile_* accounts we require the file to actually exist; an
+        # empty result on a missing file would silently disable the gate.
+        from trading_app.prop_profiles import load_paused_strategy_ids
 
-                _alloc_data = _json.loads(_alloc_path.read_text())
-                blocked_entries = list(_alloc_data.get("paused", [])) + list(_alloc_data.get("stale", []))
-                self._regime_paused = {e["strategy_id"] for e in blocked_entries}
-                if self._regime_paused:
-                    log.warning(
-                        "ALLOCATOR GATE: %d blocked strategies — entries will be blocked",
-                        len(self._regime_paused),
-                    )
-            else:
-                log.info("No lane_allocation.json — regime gate disabled")
-        # Narrowed from `except Exception` (2026-05-16). The block does a
-        # filesystem read (`Path.read_text`) + JSON decode + dict/key access on
-        # the decoded structure. Anything outside this surface (typo,
-        # KeyboardInterrupt) must propagate so the profile-account fail-closed
-        # guarantee covers the real failure, not "we silently caught a typo".
-        except (FileNotFoundError, OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
-            if _is_profile:
-                raise  # Fail-closed: prop accounts MUST have working regime gate
-            log.warning("Failed to load lane_allocation.json — regime gate disabled (fail-open): %s", e)
+        _alloc_path = Path(__file__).resolve().parents[2] / "docs" / "runtime" / "lane_allocation.json"
+        if _is_profile:
+            # Fail-closed precondition: profile accounts require a present AND
+            # parseable allocation file. The canonical loader fail-closes-as-
+            # empty on JSON/OS errors (correct for paper accounts), so we must
+            # probe-parse here to surface corruption as a hard fail for
+            # profile_*. Probe is read-only and identical to the loader's own
+            # parse path; duplicate parser is not reintroduced because the
+            # probe discards its result.
+            if not _alloc_path.exists():
+                raise RuntimeError(
+                    f"FAIL-CLOSED: profile account requires lane_allocation.json at {_alloc_path}"
+                )
+            try:
+                json.loads(_alloc_path.read_text())
+            except (json.JSONDecodeError, OSError) as e:
+                raise RuntimeError(
+                    f"FAIL-CLOSED: profile account requires parseable lane_allocation.json: {e}"
+                ) from e
+        self._regime_paused: set[str] = set(load_paused_strategy_ids(_alloc_path))
+        if self._regime_paused:
+            log.warning(
+                "ALLOCATOR GATE: %d blocked strategies — entries will be blocked",
+                len(self._regime_paused),
+            )
+        elif not _alloc_path.exists():
+            log.info("No lane_allocation.json — regime gate disabled")
 
         # Execution stack
         self.cost_spec: CostSpec = get_cost_spec(instrument)
