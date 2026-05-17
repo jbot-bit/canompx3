@@ -10,6 +10,11 @@
 # Same mechanism as MNQ gap file, applied to MES.
 
 metadata:
+  legacy_unlinked_citations:
+    - "Bessembinder & Seguin (1993) JF price volatility and information; French & Roll (1986) JFE"
+    - "Bessembinder & Seguin (1993) JF"
+  theory_corpus_pending: true
+  theory_grant: false
   name: "mes-gap"
   purpose: |
     Test whether large opening gaps (abs(gap)/atr >= 0.015) predict
@@ -33,7 +38,6 @@ metadata:
 hypotheses:
   - id: 1
     name: "MES TOKYO_OPEN GAP_R015 RR1.0"
-    theory_citation: "Bessembinder & Seguin (1993) JF price volatility and information; French & Roll (1986) JFE"
     economic_basis: |
       Large opening gap (abs(gap)/atr >= 1.5%) signals overnight information
       arrival. Bessembinder & Seguin (1993) show volume-volatility relationship
@@ -59,7 +63,6 @@ hypotheses:
 
   - id: 2
     name: "MES SINGAPORE_OPEN GAP_R015 RR1.0"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Same gap-information mechanism. All sessions tested for honesty."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [SINGAPORE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -68,7 +71,6 @@ hypotheses:
 
   - id: 3
     name: "MES LONDON_METALS GAP_R015 RR1.0"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Same gap-information mechanism."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -77,7 +79,6 @@ hypotheses:
 
   - id: 4
     name: "MES EUROPE_FLOW GAP_R015 RR1.0"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Same gap-information mechanism."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -86,7 +87,6 @@ hypotheses:
 
   - id: 5
     name: "MES CME_REOPEN GAP_R015 RR1.0"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Same gap-information mechanism."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -95,7 +95,6 @@ hypotheses:
 
   - id: 6
     name: "MES US_DATA_830 GAP_R015 RR1.0"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Same gap-information mechanism."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -104,7 +103,6 @@ hypotheses:
 
   - id: 7
     name: "MES NYSE_OPEN GAP_R015 RR1.0"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Same gap-information mechanism."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -113,7 +111,6 @@ hypotheses:
 
   - id: 8
     name: "MES US_DATA_1000 GAP_R015 RR1.0"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Same gap-information mechanism."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -122,7 +119,6 @@ hypotheses:
 
   - id: 9
     name: "MES COMEX_SETTLE GAP_R015 RR1.0"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Same gap-information mechanism."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -131,7 +127,6 @@ hypotheses:
 
   - id: 10
     name: "MES NYSE_CLOSE GAP_R015 RR1.0"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Same gap-information mechanism."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [NYSE_CLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -140,7 +135,6 @@ hypotheses:
 
   - id: 11
     name: "MES CME_PRECLOSE GAP_R015 RR1.0"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Same gap-information mechanism."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -149,7 +143,6 @@ hypotheses:
 
   - id: 12
     name: "MES BRISBANE_1025 GAP_R015 RR1.0"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Same gap-information mechanism."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [BRISBANE_1025], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -158,7 +151,6 @@ hypotheses:
 
   - id: 13
     name: "MES TOKYO_OPEN GAP_R015 RR1.5"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Gap-information mechanism + higher RR for continuation."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -167,7 +159,6 @@ hypotheses:
 
   - id: 14
     name: "MES SINGAPORE_OPEN GAP_R015 RR1.5"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Gap-information mechanism + higher RR."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [SINGAPORE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -176,7 +167,6 @@ hypotheses:
 
   - id: 15
     name: "MES LONDON_METALS GAP_R015 RR1.5"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Gap-information mechanism + higher RR."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -185,7 +175,6 @@ hypotheses:
 
   - id: 16
     name: "MES EUROPE_FLOW GAP_R015 RR1.5"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Gap-information mechanism + higher RR."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -194,7 +183,6 @@ hypotheses:
 
   - id: 17
     name: "MES CME_REOPEN GAP_R015 RR1.5"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Gap-information mechanism + higher RR."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -203,7 +191,6 @@ hypotheses:
 
   - id: 18
     name: "MES US_DATA_830 GAP_R015 RR1.5"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Gap-information mechanism + higher RR."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -212,7 +199,6 @@ hypotheses:
 
   - id: 19
     name: "MES NYSE_OPEN GAP_R015 RR1.5"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Gap-information mechanism + higher RR."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -221,7 +207,6 @@ hypotheses:
 
   - id: 20
     name: "MES US_DATA_1000 GAP_R015 RR1.5"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Gap-information mechanism + higher RR."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -230,7 +215,6 @@ hypotheses:
 
   - id: 21
     name: "MES COMEX_SETTLE GAP_R015 RR1.5"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Gap-information mechanism + higher RR."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -239,7 +223,6 @@ hypotheses:
 
   - id: 22
     name: "MES NYSE_CLOSE GAP_R015 RR1.5"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Gap-information mechanism + higher RR."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [NYSE_CLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -248,7 +231,6 @@ hypotheses:
 
   - id: 23
     name: "MES CME_PRECLOSE GAP_R015 RR1.5"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Gap-information mechanism + higher RR."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -257,7 +239,6 @@ hypotheses:
 
   - id: 24
     name: "MES BRISBANE_1025 GAP_R015 RR1.5"
-    theory_citation: "Bessembinder & Seguin (1993) JF"
     economic_basis: "Gap-information mechanism + higher RR."
     filter: { type: GAP_R015, column: gap_atr_ratio, thresholds: [0.015] }
     scope: { instruments: [MES], sessions: [BRISBANE_1025], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }

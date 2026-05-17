@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 status: LOCKED
 date: 2026-04-20
@@ -75,13 +78,6 @@ data_policy:
 primary_hypothesis:
   id: H_MES_PARTICIPATION_OPTIMUM
   type: primary_individual
-  theory_citation: |
-    Fitschen 2013 Ch 3 predicts the participation-optimum mechanism in
-    ORB breakout continuation. MNQ universality run (parent commit 677bf381)
-    empirically confirmed this with t=-5.189 at p≈0 and 87.5% per-lane
-    agreement. MES is a directly-analogous equity-index micro-future with
-    similar microstructure (cash-index arb, session/calendar drivers). The
-    mechanism should replicate.
   statement: |
     Pooled across MES active sessions × both directions × 5m × E2 × CB1
     × RR1.5, UNFILTERED, IS (trading_day < 2026-01-01):

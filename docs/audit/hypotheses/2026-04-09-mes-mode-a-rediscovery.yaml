@@ -74,6 +74,7 @@
 #   count as ONE portfolio bet, not two.
 
 metadata:
+  theory_grant: true
   name: "mes-mode-a-rediscovery"
   purpose: |
     First Mode-A-clean MES discovery run under strict Bailey E=1.0 MinBTL

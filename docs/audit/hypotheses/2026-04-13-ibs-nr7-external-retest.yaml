@@ -41,6 +41,9 @@
 #   NR7: Direction flips persist across >=3 sessions per instrument, OR
 #        fire rate >25% (Crabel designed for ~14%)
 
+metadata:
+  theory_grant: false
+
 testing_mode: family
 total_expected_trials: 96
 

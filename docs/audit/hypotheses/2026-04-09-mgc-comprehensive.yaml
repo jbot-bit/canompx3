@@ -12,6 +12,7 @@
 # Small N throughout — data-length limited at 3.55 calendar years.
 
 metadata:
+  theory_grant: true
   name: "mgc-comprehensive"
   date_locked: "2026-04-09T18:00:00+10:00"
   holdout_date: "2026-01-01"

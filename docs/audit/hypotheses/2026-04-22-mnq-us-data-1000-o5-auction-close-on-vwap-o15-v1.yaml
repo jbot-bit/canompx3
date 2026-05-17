@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 title: "MNQ US_DATA_1000 O15 VWAP lane — O5 auction-close confluence v1"
 status: "LOCKED_PREREG_PENDING_SHA"
 owner: "codex"

@@ -100,6 +100,15 @@ The pre-reg file must include these sections (YAML keys):
 - not_done_by_this_pre_reg: explicit non-claims
 
 FORBIDDEN IN ANY PRE-REG
+- Omitting `metadata.theory_grant` (Amendment 3.3, 2026-05-17 — loader fails closed)
+- Writing prose into any `theory_citation` field when `metadata.theory_grant: false`
+  (loader fails closed; preserve historical academic refs under
+  `metadata.legacy_unlinked_citations` as a list of strings instead)
+- Citing extracts in hypothesis `theory_citation` when `metadata.theory_grant: false`
+  (loader fails closed; if you have a real citation, set `theory_grant: true`)
+- Setting `metadata.theory_grant: true` without ensuring every hypothesis carries a
+  non-empty `theory_citation` matching a real file under `docs/institutional/literature/`
+  (loader fails closed; static_checks.check_citations_exist enforces corpus match)
 - "Reconsider", "investigate", "revisit" as a kill action
 - Thresholds that depend on OOS (Mode A sacred holdout)
 - Secondary hypotheses counted against the primary trial budget
@@ -300,7 +309,9 @@ Paste the prompt above, supply these 4 inputs, and the output is a committed pre
 | Single-K headline (Rule 4 violation) | OUTPUT RULE 5 |
 | Upstream scan K confused with current-test K | OUTPUT RULE 5 + `upstream_discovery_provenance.role: PROVENANCE_ONLY` schema |
 | Pathway A/B not declared | INPUT CONTRACT item 5 + SCHEMA `testing_mode` + `pathway` fields |
-| Pathway B without theory_citation | SCHEMA `hypotheses[].theory_citation` required |
+| Pathway B with `theory_grant=true` but missing citation | LOADER fail-closed (Amendment 3.3) |
+| Any prereg missing `metadata.theory_grant` | LOADER fail-closed (Amendment 3.3) |
+| `theory_grant=false` with prose in `theory_citation` | LOADER fail-closed (Amendment 3.3 cross-rule) |
 | Pathway B without C6/C8/C9 downstream gate declaration | SCHEMA `testing_discipline.mandatory_downstream_gates_non_waivable` |
 | MinBTL budget un-computed | OUTPUT RULE 6 |
 | Vague kill criteria | FORBIDDEN + OUTPUT RULE 7 |

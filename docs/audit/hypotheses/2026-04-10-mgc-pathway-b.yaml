@@ -13,6 +13,7 @@
 # MinBTL for N=5: 2*Ln(5)/1.0^2 = 3.22yr < 3.81yr -> PASS (18% headroom)
 
 metadata:
+  theory_grant: true
   name: "mgc-pathway-b"
   purpose: |
     Individual hypothesis testing for MGC under Pathway B (Amendment 3.0).

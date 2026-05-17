@@ -27,6 +27,7 @@
 # Criterion 8 until N_oos >= 30. File now, run discovery when OOS accumulates.
 
 metadata:
+  theory_grant: false
   name: "mnq-vwap-cme-preclose-o5"
   purpose: |
     Pre-register VWAP_BP_ALIGNED filter for MNQ CME_PRECLOSE at O5 aperture.

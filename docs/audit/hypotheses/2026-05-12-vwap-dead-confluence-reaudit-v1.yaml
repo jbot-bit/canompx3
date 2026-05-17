@@ -6,6 +6,7 @@ title: "VWAP dead-confluence verdict procedural re-audit v1"
 owner: codex
 
 metadata:
+  theory_grant: false
   name: vwap-dead-confluence-reaudit-v1
   purpose: >
     Re-audit the existing VWAP family DOCTRINE-CLOSED verdict from primary
@@ -55,7 +56,6 @@ data_policy:
 hypotheses:
   - id: H01_VWAP_DEAD_VERDICT_AUDIT
     type: primary
-    theory_citation: "RESEARCH_RULES.md; docs/institutional/research_pipeline_contract.md; docs/prompts/INSTITUTIONAL_DISCOVERY_PROTOCOL.md"
     scope:
       instruments: [MNQ, MES, MGC]
       orb_minutes: [5, 15, 30]

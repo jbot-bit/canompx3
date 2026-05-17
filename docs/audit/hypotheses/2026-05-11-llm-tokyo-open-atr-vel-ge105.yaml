@@ -15,6 +15,7 @@
 #   scripts/infra/prereg-loop.sh --hypothesis-file <published-path> --execute
 #
 metadata:
+  theory_grant: true
   name: "mnq-tokyo-atr-vel"
   purpose: "Revalidate MNQ TOKYO_OPEN E2 RR1.0 CB1 with ATR_VEL_GE105 filter"
   date_locked: "2026-05-11T22:00:00+10:00"

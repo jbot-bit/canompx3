@@ -11,6 +11,7 @@
 # Threshold calibrated to MES price scale (MES ~5000 vs MNQ ~20000).
 
 metadata:
+  theory_grant: true
   name: "mes-overnight"
   purpose: |
     Test whether large overnight range (>= 25 pts) predicts stronger

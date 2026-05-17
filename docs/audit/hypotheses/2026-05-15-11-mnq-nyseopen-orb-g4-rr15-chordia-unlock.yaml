@@ -1,4 +1,5 @@
 metadata:
+  theory_grant: false
   name: "mnq_nyseopen_orb_g4_rr15_chordia_unlock"
   purpose: "Bounded exact-lane Chordia unlock audit for MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_G4. No theory grant is claimed."
   date_locked: "2026-05-15T00:00:00+10:00"

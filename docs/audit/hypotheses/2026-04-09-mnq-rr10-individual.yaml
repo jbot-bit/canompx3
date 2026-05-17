@@ -17,6 +17,7 @@
 # This is the cleanest strategy profile in the project.
 
 metadata:
+  theory_grant: true
   name: "mnq-rr10-individual"
   purpose: |
     RR=1.0 minimum continuation hypotheses for MNQ under Pathway B

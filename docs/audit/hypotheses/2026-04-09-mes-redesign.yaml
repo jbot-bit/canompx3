@@ -19,6 +19,12 @@
 # are CONFIRMATION, not independent evidence.
 
 metadata:
+  legacy_unlinked_citations:
+    - "Crabel (1990) ch. 3"
+    - "Andersen et al (2003) AER; Ederington & Lee (1993) JF"
+    - "French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS"
+  theory_corpus_pending: true
+  theory_grant: false
   name: "mes-redesign"
   purpose: |
     Mechanism-grounded MES discovery. 5 hypotheses testing Crabel
@@ -42,7 +48,6 @@ metadata:
 hypotheses:
   - id: 1
     name: "Crabel commitment G5 at NYSE_OPEN"
-    theory_citation: "Crabel (1990) ch. 3"
     economic_basis: |
       S&P 500 futures are THE benchmark equity index — the instrument
       Crabel's thesis was written about. NYSE_OPEN concentrates the
@@ -71,7 +76,6 @@ hypotheses:
 
   - id: 2
     name: "Crabel commitment G6 at NYSE_OPEN (monotonic prediction)"
-    theory_citation: "Crabel (1990) ch. 3"
     economic_basis: |
       Same Crabel mechanism as H1, higher commitment threshold. G6 =
       $30 committed capital per contract. Tests the monotonic prediction:
@@ -99,7 +103,6 @@ hypotheses:
 
   - id: 3
     name: "Post-equity macro flow at US_DATA_1000"
-    theory_citation: "Andersen et al (2003) AER; Ederington & Lee (1993) JF"
     economic_basis: |
       10:00 AM ET data releases (ISM, Consumer Confidence, JOLTS) arrive
       into an already-active equity market. S&P 500 as the benchmark
@@ -127,7 +130,6 @@ hypotheses:
 
   - id: 4
     name: "Pre-equity macro announcement at US_DATA_830"
-    theory_citation: "Andersen et al (2003) AER; Ederington & Lee (1993) JF"
     economic_basis: |
       08:30 ET macro releases on the benchmark equity index. CPI, NFP,
       PPI directly move S&P 500 via rate expectations. The opening range
@@ -155,7 +157,6 @@ hypotheses:
 
   - id: 5
     name: "Cross-border information spillover at EUROPE_FLOW"
-    theory_citation: "French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS"
     economic_basis: |
       European participants trade S&P 500 futures during their session.
       European macro releases and equity moves (FTSE, DAX) incorporate

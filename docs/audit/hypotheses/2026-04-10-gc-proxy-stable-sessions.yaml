@@ -14,6 +14,13 @@
 # Bailey: N=8, MinBTL = 2*ln(8)/1.0^2 = 4.16yr << 15.5yr. PASS.
 
 metadata:
+  legacy_unlinked_citations:
+    - "Crabel (1990) ch. 3"
+    - "Crabel (1990) ch. 3; Andersen, Bollerslev, Diebold, Labys (2003) Econometrica"
+    - "Andersen, Bollerslev, Diebold, Vega (2003) AER"
+    - "Andersen, Bollerslev, Diebold, Vega (2003) AER; ABDL (2003) Econometrica"
+  theory_corpus_pending: true
+  theory_grant: false
   name: "gc-proxy-stable-sessions"
   purpose: |
     Test gold ORB edge at the two most stable sessions using GC proxy
@@ -38,7 +45,6 @@ metadata:
 hypotheses:
   - id: 1
     name: "GC NYSE_OPEN unfiltered RR1.0 — Crabel commitment baseline"
-    theory_citation: "Crabel (1990) ch. 3"
     economic_basis: |
       NYSE cash open concentrates institutional order flow into gold futures.
       Unfiltered baseline test: does the breakout edge exist AT ALL over 16
@@ -62,7 +68,6 @@ hypotheses:
 
   - id: 2
     name: "GC NYSE_OPEN unfiltered RR2.0 — Crabel continuation"
-    theory_citation: "Crabel (1990) ch. 3"
     economic_basis: |
       At RR2.0, testing whether NYSE open gold breakouts produce sustained
       continuation (2x the ORB range). 16yr average ExpR +0.108 at RR2.0
@@ -86,7 +91,6 @@ hypotheses:
 
   - id: 3
     name: "GC NYSE_OPEN PDR_R080 RR1.0 — Crabel + vol persistence"
-    theory_citation: "Crabel (1990) ch. 3; Andersen, Bollerslev, Diebold, Labys (2003) Econometrica"
     economic_basis: |
       Vol persistence (ABDL 2003): days following high-range days have
       elevated continuation potential. PDR_R080 selects the top 20% of
@@ -111,7 +115,6 @@ hypotheses:
 
   - id: 4
     name: "GC NYSE_OPEN PDR_R080 RR2.0 — Crabel + vol persistence continuation"
-    theory_citation: "Crabel (1990) ch. 3; Andersen, Bollerslev, Diebold, Labys (2003) Econometrica"
     economic_basis: |
       Vol persistence + continuation. High prior-day range selects for
       active markets where 2x continuation is more likely. Regime-robust
@@ -135,7 +138,6 @@ hypotheses:
 
   - id: 5
     name: "GC US_DATA_1000 unfiltered RR1.0 — macro info baseline"
-    theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER"
     economic_basis: |
       10:00 AM ET macro releases (ISM, Consumer Confidence) drive gold
       repricing. 16yr unfiltered baseline shows +0.037 ExpR with
@@ -159,7 +161,6 @@ hypotheses:
 
   - id: 6
     name: "GC US_DATA_1000 unfiltered RR2.0 — macro continuation"
-    theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER"
     economic_basis: |
       Macro-driven gold repricing at 2x continuation. ABDV 2003 shows
       macro announcements produce gradual information incorporation
@@ -183,7 +184,6 @@ hypotheses:
 
   - id: 7
     name: "GC US_DATA_1000 PDR_R080 RR1.0 — macro + vol persistence"
-    theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER; ABDL (2003) Econometrica"
     economic_basis: |
       Macro releases on high-volatility days produce stronger
       directional moves. PDR_R080 selects top-quintile prior-day
@@ -207,7 +207,6 @@ hypotheses:
 
   - id: 8
     name: "GC US_DATA_1000 PDR_R080 RR2.0 — macro + vol persistence continuation"
-    theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER; ABDL (2003) Econometrica"
     economic_basis: |
       Macro + vol persistence at 2x continuation. High-vol days after
       high-range prior days have the strongest expected directional

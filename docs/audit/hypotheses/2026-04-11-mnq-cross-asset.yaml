@@ -11,6 +11,11 @@
 # are stronger. Prior validated: US_DATA_1000 X_MES_ATR60 is deployed Lane 5.
 
 metadata:
+  legacy_unlinked_citations:
+    - "Asness, Moskowitz & Pedersen (2013) JF value and momentum everywhere; Forbes & Rigobon (2002) JF contagion"
+    - "Asness, Moskowitz & Pedersen (2013) JF"
+  theory_corpus_pending: true
+  theory_grant: false
   name: "mnq-cross-asset"
   purpose: |
     Test whether cross-market volatility (MES ATR pctl >= 60) predicts
@@ -34,7 +39,6 @@ metadata:
 hypotheses:
   - id: 1
     name: "MNQ TOKYO_OPEN X_MES_ATR60 RR1.0"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF value and momentum everywhere; Forbes & Rigobon (2002) JF contagion"
     economic_basis: |
       Cross-market volatility spillover: when S&P 500 (MES) is in a high-vol
       regime (ATR pctl >= 60), equity index momentum transmits across markets.
@@ -61,7 +65,6 @@ hypotheses:
 
   - id: 2
     name: "MNQ SINGAPORE_OPEN X_MES_ATR60 RR1.0"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Same cross-market vol spillover mechanism. All sessions tested for honesty."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -70,7 +73,6 @@ hypotheses:
 
   - id: 3
     name: "MNQ LONDON_METALS X_MES_ATR60 RR1.0"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Same cross-market vol spillover mechanism."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -79,7 +81,6 @@ hypotheses:
 
   - id: 4
     name: "MNQ EUROPE_FLOW X_MES_ATR60 RR1.0"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Same cross-market vol spillover mechanism."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -88,7 +89,6 @@ hypotheses:
 
   - id: 5
     name: "MNQ CME_REOPEN X_MES_ATR60 RR1.0"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Same cross-market vol spillover mechanism."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -97,7 +97,6 @@ hypotheses:
 
   - id: 6
     name: "MNQ US_DATA_830 X_MES_ATR60 RR1.0"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Same cross-market vol spillover mechanism."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -106,7 +105,6 @@ hypotheses:
 
   - id: 7
     name: "MNQ NYSE_OPEN X_MES_ATR60 RR1.0"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Same cross-market vol spillover mechanism."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -115,7 +113,6 @@ hypotheses:
 
   - id: 8
     name: "MNQ US_DATA_1000 X_MES_ATR60 RR1.0"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Same cross-market vol spillover mechanism."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -124,7 +121,6 @@ hypotheses:
 
   - id: 9
     name: "MNQ COMEX_SETTLE X_MES_ATR60 RR1.0"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Same cross-market vol spillover mechanism."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -133,7 +129,6 @@ hypotheses:
 
   - id: 10
     name: "MNQ NYSE_CLOSE X_MES_ATR60 RR1.0"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Same cross-market vol spillover mechanism."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [NYSE_CLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -142,7 +137,6 @@ hypotheses:
 
   - id: 11
     name: "MNQ CME_PRECLOSE X_MES_ATR60 RR1.0"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Same cross-market vol spillover mechanism."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -151,7 +145,6 @@ hypotheses:
 
   - id: 12
     name: "MNQ BRISBANE_1025 X_MES_ATR60 RR1.0"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Same cross-market vol spillover mechanism."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [BRISBANE_1025], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -160,7 +153,6 @@ hypotheses:
 
   - id: 13
     name: "MNQ TOKYO_OPEN X_MES_ATR60 RR1.5"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Cross-market vol spillover + higher RR for continuation."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -169,7 +161,6 @@ hypotheses:
 
   - id: 14
     name: "MNQ SINGAPORE_OPEN X_MES_ATR60 RR1.5"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Cross-market vol spillover + higher RR."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -178,7 +169,6 @@ hypotheses:
 
   - id: 15
     name: "MNQ LONDON_METALS X_MES_ATR60 RR1.5"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Cross-market vol spillover + higher RR."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -187,7 +177,6 @@ hypotheses:
 
   - id: 16
     name: "MNQ EUROPE_FLOW X_MES_ATR60 RR1.5"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Cross-market vol spillover + higher RR."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -196,7 +185,6 @@ hypotheses:
 
   - id: 17
     name: "MNQ CME_REOPEN X_MES_ATR60 RR1.5"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Cross-market vol spillover + higher RR."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -205,7 +193,6 @@ hypotheses:
 
   - id: 18
     name: "MNQ US_DATA_830 X_MES_ATR60 RR1.5"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Cross-market vol spillover + higher RR."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -214,7 +201,6 @@ hypotheses:
 
   - id: 19
     name: "MNQ NYSE_OPEN X_MES_ATR60 RR1.5"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Cross-market vol spillover + higher RR."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -223,7 +209,6 @@ hypotheses:
 
   - id: 20
     name: "MNQ US_DATA_1000 X_MES_ATR60 RR1.5"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Cross-market vol spillover + higher RR."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -232,7 +217,6 @@ hypotheses:
 
   - id: 21
     name: "MNQ COMEX_SETTLE X_MES_ATR60 RR1.5"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Cross-market vol spillover + higher RR."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -241,7 +225,6 @@ hypotheses:
 
   - id: 22
     name: "MNQ NYSE_CLOSE X_MES_ATR60 RR1.5"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Cross-market vol spillover + higher RR."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [NYSE_CLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -250,7 +233,6 @@ hypotheses:
 
   - id: 23
     name: "MNQ CME_PRECLOSE X_MES_ATR60 RR1.5"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Cross-market vol spillover + higher RR."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
@@ -259,7 +241,6 @@ hypotheses:
 
   - id: 24
     name: "MNQ BRISBANE_1025 X_MES_ATR60 RR1.5"
-    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
     economic_basis: "Cross-market vol spillover + higher RR."
     filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
     scope: { instruments: [MNQ], sessions: [BRISBANE_1025], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }

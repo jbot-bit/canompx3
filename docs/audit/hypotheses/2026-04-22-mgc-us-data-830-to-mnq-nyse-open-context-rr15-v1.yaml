@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 status: LOCKED
 date: 2026-04-22
@@ -76,10 +79,6 @@ calibration:
 hypotheses:
   - id: H01_SOURCE_ORB_SIZE_NORM_HIGH_Q3_RR15
     type: primary
-    theory_citation: |
-      Same mechanism class as the RR1.0 study, but a different target lane.
-      The RR1.0 result does not bind this lane because the target-lane payoff
-      geometry differs materially.
     statement: |
       On the unfiltered MNQ NYSE_OPEN O5 E2 RR1.5 CB1 lane, days when same-day
       MGC US_DATA_830 source_orb_size_norm is in the IS-derived upper quartile

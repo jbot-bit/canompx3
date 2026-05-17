@@ -7,6 +7,7 @@
 # the isolated worktree and is NOT being used for a mutating discovery run.
 
 metadata:
+  theory_grant: true
   name: "external-context-quarantine"
   purpose: "Read-only audit of timestamp-safe external-context analogues already present in canonical data"
   date_locked: "2026-04-11T10:45:00+10:00"

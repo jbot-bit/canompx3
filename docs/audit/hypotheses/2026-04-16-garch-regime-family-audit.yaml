@@ -6,6 +6,7 @@
 # Holdout: 2026-01-01 (Mode A)
 
 metadata:
+  theory_grant: true
   name: "garch-regime-family-audit"
   purpose: "Audit whether garch behaves as a structured market-state variable under natural session-side families rather than a universal binary overlay."
   date_locked: "2026-04-16T19:30:00+10:00"

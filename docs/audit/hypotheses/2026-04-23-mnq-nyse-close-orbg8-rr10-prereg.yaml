@@ -1,4 +1,5 @@
 metadata:
+  theory_grant: false
   name: "mnq-nyse-close-orbg8-rr10-prereg"
   purpose: "Exact native governance prereg for MNQ NYSE_CLOSE O5 E2 RR1.0 ORB_G8, promoted from the 2026-04-23 failure-mode follow-up as the highest-EV unresolved path"
   date_locked: "2026-04-23T23:59:00+10:00"
@@ -9,12 +10,6 @@ metadata:
 hypotheses:
   - id: 1
     name: "MNQ NYSE_CLOSE RR1.0 ORB_G8 take"
-    theory_citation: |
-      Repo-local grounding:
-      - docs/audit/results/2026-04-19-mnq-nyse-close-failure-mode-audit.md
-      - docs/audit/results/2026-04-23-mnq-nyse-close-rr10-followup.md
-      - docs/audit/hypotheses/2026-04-09-mnq-comprehensive.yaml
-      - docs/audit/hypotheses/2026-04-13-wave4-session-rr-expansion.yaml
     economic_basis: |
       NYSE closing-auction flow is the native mechanism already established for
       MNQ NYSE_CLOSE RR1.0. The honest unresolved question is not whether some

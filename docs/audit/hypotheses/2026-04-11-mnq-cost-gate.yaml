@@ -12,6 +12,7 @@
 # COST_LT12 provides genuine selectivity that G-filters cannot.
 
 metadata:
+  theory_grant: true
   name: "mnq-cost-gate"
   purpose: |
     Test whether direct cost-ratio gating (friction/risk < 12%) improves

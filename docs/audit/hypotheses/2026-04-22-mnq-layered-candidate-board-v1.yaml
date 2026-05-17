@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 hypothesis_id: 2026-04-22-mnq-layered-candidate-board-v1
 title: MNQ layered candidate board on positive parent lanes

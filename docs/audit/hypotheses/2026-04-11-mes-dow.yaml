@@ -11,6 +11,7 @@
 # Each across 12 sessions x 1 RR = 24 total.
 
 metadata:
+  theory_grant: true
   name: "mes-dow"
   purpose: |
     Test whether day-of-week exclusions (no-Friday, no-Monday) with G8

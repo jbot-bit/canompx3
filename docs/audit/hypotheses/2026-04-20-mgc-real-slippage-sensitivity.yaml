@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 status: LOCKED
 date: 2026-04-20
@@ -40,8 +43,6 @@ motivation: |
 
   This test recomputes per-cell IS ExpR across a grid of slippage values
   and reports which (if any) cells change classification.
-
-theory_citation:
   - "Lopez de Prado (2020) ML for Asset Managers — sensitivity analysis is a required component of any backtest reporting framework (Ch 1 extract: docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md)."
   - "Bailey et al 2013 pseudo-mathematics — single-parameter backtest conclusions are backtest-overfitting-vulnerable; sensitivity curves are the required honest presentation."
   - "pipeline/cost_model.py:228-232 already acknowledges: 'Backtest uses FLAT slippage per instrument. Real slippage likely correlates with ORB size and session liquidity.'"

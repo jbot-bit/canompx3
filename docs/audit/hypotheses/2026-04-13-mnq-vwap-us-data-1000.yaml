@@ -33,6 +33,7 @@
 # provides a more stable VWAP-relative position measurement.
 
 metadata:
+  theory_grant: false
   name: "mnq-vwap-us-data-1000-o15"
   purpose: |
     Pre-register VWAP_MID_ALIGNED filter for MNQ US_DATA_1000 at O15 aperture.
@@ -67,7 +68,6 @@ hypotheses:
       confirm_bars: [1]
       stop_multipliers: [1.0]
     expected_trial_count: 1
-    theory_citation: "scripts/tmp/exhaustive_audit.py (2026-04-13 cross-family BH FDR K=425): MNQ US_DATA_1000 O15 VWAP_MID_ALIGNED RR1.0 — tested as part of 425-test battery. RR2.0 p=0.00008, RR1.5 p=0.0002, RR1.0 included for completeness."
     economic_basis: |
       Pre-session VWAP represents the volume-weighted institutional average
       price. When the ORB midpoint forms above VWAP and breaks long, the
@@ -93,7 +93,6 @@ hypotheses:
       confirm_bars: [1]
       stop_multipliers: [1.0]
     expected_trial_count: 1
-    theory_citation: "scripts/tmp/exhaustive_audit.py (2026-04-13 cross-family BH FDR K=425): MNQ US_DATA_1000 O15 VWAP_MID_ALIGNED RR1.5 p=0.0002 — 2nd strongest survivor."
     economic_basis: |
       Same VWAP institutional flow mechanism as RR1.0. The 1.5x target
       captures more of the continuation move when flow is aligned.
@@ -116,7 +115,6 @@ hypotheses:
       confirm_bars: [1]
       stop_multipliers: [1.0]
     expected_trial_count: 1
-    theory_citation: "scripts/tmp/exhaustive_audit.py (2026-04-13 cross-family BH FDR K=425): MNQ US_DATA_1000 O15 VWAP_MID_ALIGNED RR2.0 p=0.00008 — strongest cross-family survivor."
     economic_basis: |
       Same VWAP institutional flow mechanism. The 2.0x target captures the
       full trend-day extension when institutional flow aligns with breakout.

@@ -4,6 +4,9 @@
 # AUTHORITY: .claude/rules/research-truth-protocol.md (Phase 0 literature grounding)
 # AUTHORITY: docs/prompts/prereg-writer-prompt.md (output schema)
 
+metadata:
+  theory_grant: false
+
 version: 1
 status: PRE_REGISTERED_DRAFT
 date: 2026-04-28
@@ -145,19 +148,6 @@ testing_discipline:
     - C6_walk_forward_efficiency_gte_0p50_when_n_oos_powered
     - C8_oos_positive_when_n_oos_powered
     - C9_era_stability_no_era_lt_neg_0p05_with_n_era_gte_20
-  theory_citation:
-    - source: docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md
-      claim: "Position size should be conditioned on forecast confidence; high-confidence forecasts warrant full size, low-confidence forecasts warrant reduced size. Daily vol forecast → intraday position sizing is the framework."
-      role: filter-mechanism citation (the actual prediction's theory grounding) — for the SIZING TRANSFORMATION specifically, not the binary on-vs-off question of D4
-    - source: docs/institutional/literature/carver_2015_ch12_speed_and_size.md
-      claim: "Holding-period × stop-level matching: signal horizon must match the implied holding period of the position-sizing decision. (Addendum 2026-04-28 self-corrected as cell-specific, not universal.)"
-      role: aperture-mechanism grounding
-    - source: docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
-      claim: "Stop-cascade mechanism on 5-30-min horizon following high-vol regimes — supports the residual edge in the on-cohort."
-      role: mechanism for WHY the on-cohort carries the residual edge that the off-cohort lacks
-    - source: docs/institutional/literature/bailey_lopezdeprado_2014_dsr_sample_selection.md
-      claim: "Sharpe-ratio confidence intervals are sample-size-dependent; risk-adjusted return improvements via variance reduction are first-order portfolio metric per de Prado / Bailey."
-      role: metric-choice grounding (Sharpe diff, not ExpR diff, is the right gate for a risk-overlay test)
   filter_mechanism_grounding: |
     The D5 cut is grounded in Carver Ch 9-10 vol-targeting (position size ∝
     forecast confidence). D4 evidence shows the on-cohort (garch>70) carries

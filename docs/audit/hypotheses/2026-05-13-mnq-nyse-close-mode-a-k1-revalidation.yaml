@@ -23,6 +23,7 @@ execution:
     only.
 
 metadata:
+  theory_grant: false
   name: "mnq_nyse_close_mode_a_k1_revalidation"
   purpose: "Stage 1 of the three-stage triage for the 10-lane MNQ NYSE_CLOSE cohort. Pathway-B K=1 Mode-A revalidation of the single most defensible family head, executed under canonical Mode-A IS to test whether the cohort earns the right to a Stage-2 family scan. Cohort-park rule binding: Stage 1 KILL parks all 10 lanes."
   date_locked: "2026-05-13T00:00:00+10:00"

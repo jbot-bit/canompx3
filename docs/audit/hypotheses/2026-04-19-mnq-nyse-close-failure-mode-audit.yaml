@@ -4,6 +4,7 @@ date: 2026-04-19
 status: locked
 
 metadata:
+  theory_grant: false
   intent: >
     Audit why MNQ NYSE_CLOSE remains unvalidated and undeployed despite a
     positive canonical broad baseline, without drifting into a new discovery

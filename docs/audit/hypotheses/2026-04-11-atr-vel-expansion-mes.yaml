@@ -16,6 +16,7 @@
 # - pipeline/build_daily_features.py lines 1114-1138 (no-lookahead verification)
 
 metadata:
+  theory_grant: false
   name: "wave5-atr-vel-expansion-mes"
   purpose: |
     MES-only split of the atr-vel-expansion hypothesis. Registers the
@@ -41,7 +42,6 @@ metadata:
 hypotheses:
   - id: 1
     name: "MES US_DATA_1000 E2 RR1.5 ATR_VEL_GE105 — US macro vol expansion gate"
-    theory_citation: "scripts/research/wave4_presession_t2t8.py (2026-04-11 T2-T8 result): MES US_DATA_1000 RR1.5 in_ExpR=+0.103 out_ExpR=-0.040 WR spread +8.1pp WFE 0.96 T6 p=0.044 T7 5/6 years (83%) dominance 38%."
     economic_basis: |
       US 10:00 AM data release (ISM, consumer confidence, ASM) is a high-
       information-content window. Expanding-vol days produce larger ORBs

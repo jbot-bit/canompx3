@@ -5,6 +5,7 @@
 # Purpose: compare raw discrete trading policies for garch as a deployment input
 
 metadata:
+  theory_grant: true
   name: "garch-discrete-policy-surface-audit"
   purpose: "Test the main real-action trading policies for garch using canonical raw trade rows rather than stored metadata."
   date_locked: "2026-04-16T23:58:00+10:00"

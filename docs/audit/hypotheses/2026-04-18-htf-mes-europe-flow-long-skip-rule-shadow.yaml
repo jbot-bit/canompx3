@@ -1,4 +1,5 @@
 metadata:
+  theory_grant: false
   name: htf-mes-europe-flow-long-skip-rule-shadow
   slug: 2026-04-18-htf-mes-europe-flow-long-skip-rule-shadow
   owner: canompx3

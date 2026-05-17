@@ -1,4 +1,5 @@
 metadata:
+  theory_grant: true
   name: "lhp-fixture-bad-minbtl"
   date_locked: "2026-05-11T10:00:00+10:00"
   holdout_date: "2026-01-01"

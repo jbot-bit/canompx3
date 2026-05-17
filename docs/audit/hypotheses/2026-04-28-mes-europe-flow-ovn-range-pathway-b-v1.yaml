@@ -4,6 +4,9 @@
 # AUTHORITY: .claude/rules/research-truth-protocol.md (Phase 0 literature grounding)
 # AUTHORITY: docs/prompts/prereg-writer-prompt.md (output schema)
 
+metadata:
+  theory_grant: false
+
 version: 1
 status: PRE_REGISTERED_DRAFT
 date: 2026-04-28
@@ -120,13 +123,6 @@ testing_discipline:
     - C6_walk_forward_efficiency_gte_0p50_when_n_oos_powered  # see Amendment 3.2 power-floor handling
     - C8_oos_positive_when_n_oos_powered
     - C9_era_stability_no_era_lt_neg_0p05_with_n_era_gte_20
-  theory_citation:
-    - source: docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
-      claim: "Intraday continuation premium after high-overnight-participation regimes."
-      role: strategy-class grounding (ORB-style intraday momentum)
-    - source: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
-      claim: "Path-of-least-resistance / breakout edge on equity-index intraday horizons."
-      role: ORB premise grounding
   filter_mechanism_grounding: |
     The overnight_range_pct > 80 cut is treated as a within-class refinement
     of the Fitschen-grounded ORB strategy class, NOT as a separately-cited

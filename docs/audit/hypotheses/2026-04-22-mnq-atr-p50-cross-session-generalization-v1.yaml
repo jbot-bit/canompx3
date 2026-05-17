@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 status: LOCKED
 date: 2026-04-22
@@ -142,13 +145,6 @@ data_policy:
 
 primary_hypothesis:
   id: H_ATR_P50_CLASS_GENERALIZES
-  theory_citation: |
-    docs/institutional/mechanism_priors.md defines ATR_P50 as an own-vol
-    regime gate rather than a size or cross-asset proxy. The merged L2
-    stability audit says the feature is instrument-wide, not a sparse-session
-    artifact. If that interpretation is correct, ATR_P50 should show positive
-    discrimination on more than one MNQ session on the already-live ATR_P50
-    aperture surface.
   statement: |
     Across the 12 MNQ sessions at fixed E2 / CB1 / RR1.5 geometry within each
     frozen aperture (`O15`, `O30`), canonical ATR_P50 produces same-sign

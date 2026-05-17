@@ -7,6 +7,7 @@
 #   Both overrides follow "ORB Size = The Edge" thesis — filter creates positivity.
 
 metadata:
+  theory_grant: true
   name: "mgc-final"
   date_locked: "2026-04-09T16:00:00+10:00"
   holdout_date: "2026-01-01"

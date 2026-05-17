@@ -6,6 +6,7 @@
 # TOKYO_OPEN G8 N=90 (below N>=100 deployment threshold — noted)
 
 metadata:
+  theory_grant: true
   name: "mes-final"
   date_locked: "2026-04-09T16:00:00+10:00"
   holdout_date: "2026-01-01"

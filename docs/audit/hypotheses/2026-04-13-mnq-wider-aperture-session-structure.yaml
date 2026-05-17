@@ -52,6 +52,7 @@
 #   FROM TRAINING MEMORY — not verified against local PDF.
 
 metadata:
+  theory_grant: true
   name: "mnq-wider-aperture-session-structure"
   purpose: |
     Test whether 15m and 30m ORB apertures produce tradeable edges on

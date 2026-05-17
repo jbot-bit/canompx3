@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 date: 2026-04-16
 title: Garch A3 simple confluence allocator replay
 status: active

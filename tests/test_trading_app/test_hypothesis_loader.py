@@ -32,6 +32,7 @@ def _write_minimal_hypothesis(path: Path, total_trials: int = 60, with_theory: b
             "date_locked": "2026-04-08",
             "holdout_date": "2026-01-01",
             "total_expected_trials": total_trials,
+            "theory_grant": bool(with_theory),  # Amendment 3.3 — explicit bool
         },
         "hypotheses": [
             {
@@ -55,6 +56,7 @@ def _write_conditional_role_hypothesis(path: Path) -> None:
             "holdout_date": "2026-01-01",
             "total_expected_trials": 9,
             "research_question_type": "conditional_role",
+            "theory_grant": True,
         },
         "hypotheses": [
             {
@@ -234,6 +236,7 @@ class TestLoadHypothesisMetadata:
             "  date_locked: 2026-04-08\n"
             "  holdout_date: 2026-01-01\n"
             "  total_expected_trials: 10\n"
+            "  theory_grant: false\n"
             "hypotheses:\n"
             "  - id: 1\n",
             encoding="utf-8",
@@ -862,6 +865,7 @@ class TestTestingMode:
                 "holdout_date": "2026-01-01",
                 "total_expected_trials": 1,
                 "testing_mode": "individual",
+                "theory_grant": True,
             },
             "hypotheses": [
                 {
@@ -894,6 +898,7 @@ class TestTestingMode:
                 "holdout_date": "2026-01-01",
                 "total_expected_trials": 5,
                 "testing_mode": "family",
+                "theory_grant": False,
             },
             "hypotheses": [
                 {
@@ -931,3 +936,139 @@ class TestTestingMode:
         p.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
         with pytest.raises(HypothesisLoaderError, match="theory_citation"):
             load_hypothesis_metadata(p)
+
+
+class TestAmendment33TheoryGrant:
+    """Amendment 3.3 (2026-05-17): explicit metadata.theory_grant, fail-closed."""
+
+    def _build(self, tmp_path: Path, **metadata_overrides) -> Path:
+        """Write a minimal-but-complete prereg with optional metadata overrides."""
+        meta = {
+            "name": "amendment_3_3_test",
+            "date_locked": "2026-05-17",
+            "holdout_date": "2026-01-01",
+            "total_expected_trials": 5,
+        }
+        meta.update(metadata_overrides)
+        body = {
+            "metadata": meta,
+            "hypotheses": [
+                {
+                    "id": 1,
+                    "name": "h1",
+                    "filter": {"type": "ORB_G5", "column": "orb_size", "thresholds": [5]},
+                    "scope": {"sessions": ["NYSE_OPEN"]},
+                }
+            ],
+        }
+        p = tmp_path / "h.yaml"
+        p.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+        return p
+
+    def test_missing_theory_grant_rejected(self, tmp_path):
+        p = self._build(tmp_path)  # no theory_grant
+        with pytest.raises(HypothesisLoaderError, match="theory_grant is REQUIRED"):
+            load_hypothesis_metadata(p)
+
+    def test_non_bool_theory_grant_rejected(self, tmp_path):
+        for bad_value in ["true", 1, 0, None]:
+            p = self._build(tmp_path, theory_grant=bad_value)
+            with pytest.raises(HypothesisLoaderError, match="must be a bool"):
+                load_hypothesis_metadata(p)
+
+    def test_theory_grant_true_requires_citation(self, tmp_path):
+        # theory_grant=true but hypothesis lacks citation
+        p = self._build(tmp_path, theory_grant=True)
+        with pytest.raises(HypothesisLoaderError, match="theory_grant=true.*missing theory_citation"):
+            load_hypothesis_metadata(p)
+
+    def test_theory_grant_false_forbids_citation(self, tmp_path):
+        body = {
+            "metadata": {
+                "name": "tg_false_with_prose",
+                "date_locked": "2026-05-17",
+                "holdout_date": "2026-01-01",
+                "total_expected_trials": 5,
+                "theory_grant": False,
+            },
+            "hypotheses": [
+                {
+                    "id": 1,
+                    "name": "h1",
+                    "theory_citation": "No real citation, just prose",
+                    "filter": {"type": "ORB_G5", "column": "orb_size", "thresholds": [5]},
+                    "scope": {"sessions": ["NYSE_OPEN"]},
+                }
+            ],
+        }
+        p = tmp_path / "h.yaml"
+        p.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+        with pytest.raises(HypothesisLoaderError, match="theory_grant=false.*non-empty theory_citation"):
+            load_hypothesis_metadata(p)
+
+    def test_theory_grant_true_with_citation_loads(self, tmp_path):
+        body = {
+            "metadata": {
+                "name": "tg_true_ok",
+                "date_locked": "2026-05-17",
+                "holdout_date": "2026-01-01",
+                "total_expected_trials": 5,
+                "theory_grant": True,
+            },
+            "hypotheses": [
+                {
+                    "id": 1,
+                    "name": "h1",
+                    "theory_citation": "docs/institutional/literature/x.md",
+                    "filter": {"type": "ORB_G5", "column": "orb_size", "thresholds": [5]},
+                    "scope": {"sessions": ["NYSE_OPEN"]},
+                }
+            ],
+        }
+        p = tmp_path / "h.yaml"
+        p.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+        meta = load_hypothesis_metadata(p)
+        assert meta["has_theory"] is True
+
+    def test_theory_grant_true_with_non_dict_hypothesis_rejected(self, tmp_path):
+        """Amendment 3.3 hardening: non-dict hypothesis on theory_grant=true fails closed."""
+        body = {
+            "metadata": {
+                "name": "tg_true_non_dict",
+                "date_locked": "2026-05-17",
+                "holdout_date": "2026-01-01",
+                "total_expected_trials": 1,
+                "theory_grant": True,
+            },
+            "hypotheses": ["bare string hypothesis — should be rejected"],
+        }
+        p = tmp_path / "h.yaml"
+        p.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+        with pytest.raises(HypothesisLoaderError, match="not a mapping"):
+            load_hypothesis_metadata(p)
+
+    def test_theory_grant_false_no_citation_loads(self, tmp_path):
+        # The honest no-theory Pathway-B case (formerly blocked by Amendment 3.0)
+        body = {
+            "metadata": {
+                "name": "tg_false_ok",
+                "date_locked": "2026-05-17",
+                "holdout_date": "2026-01-01",
+                "total_expected_trials": 5,
+                "theory_grant": False,
+                "testing_mode": "individual",  # no-theory Pathway B — admitted under Amendment 3.3
+            },
+            "hypotheses": [
+                {
+                    "id": 1,
+                    "name": "h1",
+                    "filter": {"type": "ORB_G5", "column": "orb_size", "thresholds": [5]},
+                    "scope": {"sessions": ["NYSE_OPEN"]},
+                }
+            ],
+        }
+        p = tmp_path / "h.yaml"
+        p.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+        meta = load_hypothesis_metadata(p)
+        assert meta["has_theory"] is False
+        assert meta.get("testing_mode") == "individual"

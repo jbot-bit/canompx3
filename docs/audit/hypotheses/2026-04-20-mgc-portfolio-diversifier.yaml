@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 status: LOCKED
 date: 2026-04-20
@@ -37,8 +40,6 @@ motivation: |
   This test answers: is the "MGC is dead for ORB" closure really killing
   potential book-level value, or is the portfolio independent of whether
   MGC has positive ExpR?
-
-theory_citation:
   - "Markowitz (1952) — mean-variance portfolio theory. Zero-alpha asset with correlation ρ < 1 to existing portfolio adds diversification benefit proportional to (1-ρ)."
   - "Carver 2015 Ch 9 (docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md) — diversification multiplier in systematic trading."
   - "Harvey-Liu 2015 (docs/institutional/literature/harvey_liu_2015_backtesting.md) — confirmatory test discipline applies even when test is portfolio-theory-tied, not new-edge-discovery."

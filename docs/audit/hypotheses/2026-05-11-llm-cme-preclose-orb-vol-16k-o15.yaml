@@ -15,6 +15,7 @@
 #   scripts/infra/prereg-loop.sh --hypothesis-file <published-path> --execute
 #
 metadata:
+  theory_grant: true
   name: "mnq-cme-preclose-vol16k-revalidation"
   purpose: "Revalidate MNQ CME_PRECLOSE E2 RR1.0 CB1 ORB_VOL_16K O15"
   date_locked: "2026-05-11T22:00:00+10:00"

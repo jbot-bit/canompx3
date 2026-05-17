@@ -12,6 +12,7 @@
 # G8 is the economically meaningful size gate for MES given its tick value.
 
 metadata:
+  theory_grant: true
   name: "mes-size-recal"
   purpose: |
     Test whether recalibrated size gate (G8 instead of G5) improves MES

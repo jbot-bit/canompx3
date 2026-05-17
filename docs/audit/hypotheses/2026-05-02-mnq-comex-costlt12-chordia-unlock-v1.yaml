@@ -1,4 +1,5 @@
 metadata:
+  theory_grant: false
   name: "mnq_comex_costlt12_chordia_unlock_v1"
   purpose: "Bounded exact-lane Chordia unlock audit for MNQ COMEX_SETTLE O5 RR1.0 COST_LT12. No theory grant is claimed."
   date_locked: "2026-05-02T00:00:00+10:00"

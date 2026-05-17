@@ -12,6 +12,7 @@
 # producing higher-quality ORB breakouts during the subsequent session.
 
 metadata:
+  theory_grant: true
   name: "mnq-overnight"
   purpose: |
     Test whether large overnight range (>= 100 pts) predicts stronger

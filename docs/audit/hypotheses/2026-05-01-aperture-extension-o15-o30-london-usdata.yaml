@@ -7,6 +7,9 @@
 # Failure log: .claude/rules/backtesting-methodology-failure-log.md
 # Honesty note: see § literature_grounding_correction below
 
+metadata:
+  theory_grant: false
+
 pre_reg_id: 2026-05-01-aperture-extension-o15-o30-london-usdata
 locked_at: 2026-05-01
 status: DESIGN_LOCKED_AWAITING_GO

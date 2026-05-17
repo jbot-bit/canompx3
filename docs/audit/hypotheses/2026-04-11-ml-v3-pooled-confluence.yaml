@@ -170,6 +170,7 @@
 # ================================================================
 
 metadata:
+  theory_grant: true
   name: "ml-v3-pooled-confluence"
   version: 2
   version_rationale: "v1 pre-execution adversarial self-audit revision; closes 22 gaps before any Stage 3 code runs"

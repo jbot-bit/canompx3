@@ -23,6 +23,7 @@
 #    When COMEX is losing and same direction = doubling down on losers.
 
 metadata:
+  theory_grant: true
   name: "cross-session-comex-cme-preclose"
   purpose: |
     Pre-register CROSS_COMEX_MOMENTUM filter for MNQ CME_PRECLOSE.

@@ -322,7 +322,18 @@ def check_minbtl_budget(parsed: dict[str, Any]) -> list[CheckFailure]:
 
 
 def check_citations_exist(parsed: dict[str, Any], corpus: Sequence[LiteratureEntry]) -> list[CheckFailure]:
-    """Every ``theory_citation`` must match a real corpus entry."""
+    """Every ``theory_citation`` must match a real corpus entry.
+
+    Amendment 3.3 (2026-05-17): if ``metadata.theory_grant`` is explicitly
+    ``False`` (no-theory Pathway-B), this check short-circuits — the loader
+    enforces the cross-rule (no prose-in-field) and no citation enforcement
+    is needed at static-check time. For ``theory_grant=true`` and missing
+    field (legacy / not-yet-migrated drafts), existing fatal enforcement
+    applies unchanged.
+    """
+    metadata = parsed.get("metadata", {}) or {}
+    if isinstance(metadata, dict) and metadata.get("theory_grant") is False:
+        return []
     hypotheses = parsed.get("hypotheses")
     if not isinstance(hypotheses, list):
         return []

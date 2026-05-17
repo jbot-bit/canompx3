@@ -4,6 +4,7 @@ date: 2026-04-19
 status: locked
 
 metadata:
+  theory_grant: false
   intent: >
     Diagnose whether the remaining GC->MGC translation gap on the warm 5-minute
     MGC families is recoverable via narrower exit handling, or whether the

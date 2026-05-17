@@ -1,3 +1,6 @@
+metadata:
+  theory_grant: false
+
 version: 1
 status: LOCKED
 date: 2026-04-20
@@ -114,16 +117,6 @@ is_recomputation_contract:
 primary_hypothesis:
   id: H_MECH_SHAPE
   type: primary_individual
-  theory_citation: |
-    Fitschen 2013 Ch 3 (breakout-continuation requires both participation and
-    non-compressed prior context) grounds ORB short continuation as requiring
-    elevated order-flow participation at ORB end. Compressed range with
-    elevated participation (F6_INSIDE_PDR=TRUE AND rel_vol_HI) is the
-    mechanism-priors trapped-liquidity subset: the market has sustained
-    pressure to break the prior-day range boundary. Compressed range with
-    LOW participation is dead-range chop. Non-compressed range (F6=FALSE) is
-    already breakout-directional so participation matters less. This predicts
-    the interaction shape defined in scope.unit_under_test above.
   statement: |
     On the deployed lane, E[pnl_r | rel_vol_quintile, F6] is monotonically
     increasing in rel_vol_quintile WITHIN the F6_INSIDE_PDR=TRUE subset, and

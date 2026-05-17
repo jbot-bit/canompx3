@@ -17,6 +17,7 @@
 # Bailey: N=6, MinBTL = 2*ln(6)/1.0^2 = 3.58yr << 15.5yr. PASS.
 
 metadata:
+  theory_grant: true
   name: "gc-proxy-era-dependent"
   purpose: |
     Test whether relative filters stabilize era-dependent gold ORB edges

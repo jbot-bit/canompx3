@@ -1,4 +1,5 @@
 metadata:
+  theory_grant: false
   name: carry-encoding-exploration
   owner: claude-code
   created_at: 2026-04-16
@@ -155,8 +156,7 @@ encodings:
       - feature collapses to E1 on early-day sessions (expected — not a failure per se)
       - WR flat (ARITHMETIC_ONLY)
     anti_overfit_risks:
-      - lambda is a free parameter despite being pre-committed — sensitivity check
-        is mandatory (RULE 4 equivalent: +-50% on lambda)
+      - "lambda is a free parameter despite being pre-committed — sensitivity check is mandatory (RULE 4 equivalent: +-50% on lambda)"
       - K=1 for this encoding
 
   - id: E3

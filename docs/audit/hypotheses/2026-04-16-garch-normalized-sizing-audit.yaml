@@ -5,6 +5,7 @@
 # Purpose: evaluate normalized R3 sizing uses of garch without ad hoc map tuning
 
 metadata:
+  theory_grant: true
   name: "garch-normalized-sizing-audit"
   purpose: "Test whether garch improves portfolio utility as a normalized size modifier rather than a binary gate."
   date_locked: "2026-04-16T21:55:00+10:00"

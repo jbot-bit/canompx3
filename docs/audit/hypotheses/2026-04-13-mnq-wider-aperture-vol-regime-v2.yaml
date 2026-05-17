@@ -72,6 +72,7 @@
 #     ORB beats 5m (+0.208R premium, 90% of pairs improve)." @canonical-source.
 
 metadata:
+  theory_grant: true
   name: "mnq-wider-aperture-vol-regime-v2"
   purpose: |
     Test whether vol-regime filters (ATR_P50, ATR_P70, X_MES_ATR60) produce
