@@ -18,6 +18,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history required for SHA-pinned drift checks
+          # (e.g. check_107 SHA migration manifest uses `git show <sha>:<path>`).
+          fetch-depth: 0
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v5
@@ -190,6 +194,10 @@ jobs:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history for parity with `checks` job — drift checks called
+          # from research/cron scripts also need SHA-pinned history.
+          fetch-depth: 0
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v5

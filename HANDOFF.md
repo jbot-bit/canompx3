@@ -24,6 +24,35 @@
 - **Hygiene note:** untracked draft `docs/audit/hypotheses/drafts/2026-05-17-mnq-usdata1000-vwapmid-family-pooled-oos-v1.draft.yaml` is from a parallel session — leave alone unless owner identifies.
 - **Non-blocking cleanup (defer):** `.env` has dotenv parse warnings on ~25 lines in the 246–296 range (cosmetic — every preflight + live session run emits them). Not gating anything; quick pass with `python -c "from dotenv import dotenv_values; dotenv_values('.env')"` + fix the malformed lines. Do AFTER first successful live day, not before.
 
+## Next Session — Preflight Gate Outcome (2026-05-17 ~21:19 BNE)
+- **Step A result:** PASS 7/7. `python scripts/run_live_session.py --instrument MNQ --profile topstep_50k_mnq_auto --preflight` clean. Token acquired, 4 lanes loaded, contract `CON.F.US.MNQ.M26`, bracket+fill+notifications PASS, journal opens. **Step 7 executed (not SKIPPED) — exercised `_select_primary_and_shadow_accounts` against real broker without RuntimeError. a0b3c24b + bb0619d2 regression surface CLEAN.**
+- **Step A anomaly (capital-class):** Step 7 returned `OK (copies=2, 1 accounts discovered)`. Profile `topstep_50k_mnq_auto.copies = 2` (`prop_profiles.py:481`); broker discovered 1 active account (id=21944866, `EXPRESS-V2-451890-53179846`). bb0619d2 fix degrades gracefully — no error — but `_select_primary_and_shadow_accounts(n_copies=2, accounts=[1 acct])` returns `(primary, shadows=[])`. At runtime `session_orchestrator.py:593` `if shadow_account_ids:` is FALSY, so single-account router is wired (line 607-608) and the `Copy trading: primary=..., shadows=[...]` log line at line 601-606 is NEVER emitted.
+- **Step B result:** NOT EXECUTED — evidence rule satisfied from Step A alone. Operator-supplied rule: `if copies=2 AND discovered_accounts<2 → BLOCK_LAUNCH_COPY_SET_UNVERIFIED`. Running dashboard cannot produce required `shadows=[...]` evidence on current broker state.
+- **Capital decision for Monday Strategy-A: RED (BLOCK_LAUNCH_COPY_SET_UNVERIFIED)** until ONE of the three options below is actioned. Code state itself is healthy (Step A proves it); the block is on the broker/profile mismatch, not on the fix regression.
+
+### Monday-morning decision (pick ONE before 23:25 BNE Strategy-A launch)
+
+**Option A — Provision the second TopstepX account (cleanest):**
+  - Log into TopstepX → activate a second funded account under the same API credentials.
+  - Re-run Step A. Expect `OK (copies=2, 2 accounts discovered)`.
+  - Then run Step B (dashboard Start Live on `topstep_50k_mnq_auto`); confirm log line `Copy trading: primary=<id>, shadows=[<id>]` emitted from `session_orchestrator.py:601-606`.
+  - Result: GREEN.
+
+**Option B — Drop profile to `copies=1` (make profile match reality):**
+  - Edit `trading_app/prop_profiles.py:481` → `copies=1`. Stage file required (production code edit).
+  - Re-run Step A. Step 7 will SKIP per `run_live_session.py:348` `prof.copies <= 1` gate.
+  - Loses copy-trading regression coverage but unblocks Monday on truthful single-account spec.
+  - Result: YELLOW (single-account launched, copy-trading path uncovered until Option A is provisioned later).
+
+**Option C — Explicit override, launch as-is (highest risk):**
+  - Accept that `copies=2` in profile + `copies=1` at runtime is a silent degrade.
+  - Write override justification here under "decision-ledger.md" and proceed.
+  - Reviewer/auditor reading `prop_profiles.py:481` will see `copies=2` and form a wrong mental model.
+  - **Not recommended** — institutional-rigor § 4 (canonical sources must be truthful) + § 6 (no silent failures).
+
+### Carry-over (unchanged from line 22)
+- `/api/bars-recent?instrument=MNQ` returning `"bars":[]` still uncharacterized; capture evidence during first live session per Phase 0 D3.
+
 ## Prior Session (2026-05-17 evening — Check 107 SHA cleanup)
 - **Commit:** feat(check107) SHA migration manifest + sibling integrity check; Check 107 orphan-SHA 11 → 0 with zero DB mutation.
 - **Detail (compressed):** Git-archaeology audit of 11 orphans → all mapped to Amendment 3.3 (`8ab4fe13`) `theory_grant: false` stamp; manifest at `docs/audit/check_107_sha_migrations.yaml` with introducing_commit / migration_commit / current_sha per entry; sibling check `check_phase_4_sha_migration_manifest_integrity` guards against fabricated entries. 207/207 tests pass. Full detail in `docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md`.

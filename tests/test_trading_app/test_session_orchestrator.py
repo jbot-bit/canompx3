@@ -5920,15 +5920,11 @@ class TestSafeguardExceptNarrowing:
         _is_profile = portfolio is not None and portfolio.strategies and portfolio.strategies[0].source == "profile"
         if _is_profile:
             if not alloc_path.exists():
-                raise RuntimeError(
-                    f"FAIL-CLOSED: profile account requires lane_allocation.json at {alloc_path}"
-                )
+                raise RuntimeError(f"FAIL-CLOSED: profile account requires lane_allocation.json at {alloc_path}")
             try:
                 json.loads(alloc_path.read_text())
             except (json.JSONDecodeError, OSError) as e:
-                raise RuntimeError(
-                    f"FAIL-CLOSED: profile account requires parseable lane_allocation.json: {e}"
-                ) from e
+                raise RuntimeError(f"FAIL-CLOSED: profile account requires parseable lane_allocation.json: {e}") from e
         regime_paused: set[str] = set(load_paused_strategy_ids(alloc_path))
         return regime_paused
 
@@ -6102,8 +6098,7 @@ class TestSafeguardExceptNarrowing:
         )
         regime_paused = self._exercise_regime_gate_block(portfolio, bad)
         assert regime_paused == set(), (
-            "Malformed entry (no strategy_id) must be skipped, not raised — "
-            f"got {regime_paused}"
+            f"Malformed entry (no strategy_id) must be skipped, not raised — got {regime_paused}"
         )
 
     def test_regime_gate_does_not_swallow_systemexit(self, tmp_path, monkeypatch):
@@ -6199,8 +6194,7 @@ class TestSafeguardExceptNarrowing:
 
         good = tmp_path / "lane_allocation.json"
         good.write_text(
-            '{"paused": [{"strategy_id": "A"}, {"strategy_id": "B"}], '
-            '"stale": [{"strategy_id": "C"}]}',
+            '{"paused": [{"strategy_id": "A"}, {"strategy_id": "B"}], "stale": [{"strategy_id": "C"}]}',
             encoding="utf-8",
         )
         assert load_paused_strategy_ids(good) == frozenset({"A", "B", "C"})

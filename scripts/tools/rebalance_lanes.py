@@ -135,8 +135,13 @@ def main() -> None:
 
         # Save allocation
         out_path = save_allocation(
-            scores, allocation, args.date, pid, args.output,
-            orb_size_stats=orb_stats, displaced=displaced,
+            scores,
+            allocation,
+            args.date,
+            pid,
+            args.output,
+            orb_size_stats=orb_stats,
+            displaced=displaced,
         )
         print(f"Allocation saved to: {out_path}")
 
