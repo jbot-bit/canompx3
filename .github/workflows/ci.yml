@@ -81,6 +81,7 @@ jobs:
         run: uv run coverage erase
 
       - name: Tests with coverage (repo core)
+        timeout-minutes: 10
         run: >
           uv run pytest tests/ -q
           --ignore=tests/test_trader_logic.py
@@ -94,6 +95,7 @@ jobs:
           --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (tools and research)
+        timeout-minutes: 10
         run: >
           uv run pytest
           tests/test_research
@@ -105,11 +107,13 @@ jobs:
           --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (pipeline drift)
+        timeout-minutes: 10
         run: |
           $paths = Get-ChildItem tests/test_pipeline -File -Filter "test_check_drift*.py" | ForEach-Object { $_.FullName }
           uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (pipeline core)
+        timeout-minutes: 10
         run: >
           uv run pytest tests/test_pipeline -q
           --ignore=tests/test_pipeline/test_check_drift.py
@@ -126,6 +130,7 @@ jobs:
           --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (trading app A-L)
+        timeout-minutes: 10
         run: |
           $patterns = @("test_a*.py", "test_b*.py", "test_c*.py", "test_d*.py", "test_e*.py", "test_h*.py", "test_i*.py", "test_l*.py")
           $paths = @()
@@ -136,6 +141,7 @@ jobs:
           uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (trading app M-P)
+        timeout-minutes: 10
         run: |
           $patterns = @("test_m*.py", "test_n*.py", "test_o*.py", "test_p*.py")
           $paths = @()
@@ -146,6 +152,7 @@ jobs:
           uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (trading app R-S)
+        timeout-minutes: 10
         run: |
           $patterns = @("test_r*.py", "test_s*.py")
           $paths = @()
@@ -157,6 +164,7 @@ jobs:
           uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (trading app T-Z)
+        timeout-minutes: 10
         run: |
           $patterns = @("test_t*.py", "test_v*.py", "test_w*.py")
           $paths = @()

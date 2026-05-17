@@ -440,6 +440,16 @@ def _lock_age_hours(iso_started: str) -> float | None:
     return delta.total_seconds() / 3600.0
 
 
+def _acquire_lock_fd(lock_path: Path) -> int:
+    # Atomic create-or-fail. O_EXCL closes the TOCTOU race that a check-then-
+    # write pattern would have: two simultaneous startups can't both believe
+    # they hold the lock.
+    #
+    # Extracted as a seam so tests can simulate FS errors (ENOSPC, EACCES)
+    # by patching this single function instead of the singleton ``os.open``.
+    return os.open(str(lock_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+
+
 def _session_lock_lines() -> tuple[list[str], bool]:
     """Detect concurrent Claude sessions in THIS worktree. Hard-block if found.
 
@@ -483,11 +493,8 @@ def _session_lock_lines() -> tuple[list[str], bool]:
         indent=2,
     ).encode("utf-8")
 
-    # Atomic create-or-fail. O_EXCL closes the TOCTOU race that a check-then-
-    # write pattern would have: two simultaneous startups can't both believe
-    # they hold the lock.
     try:
-        fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        fd = _acquire_lock_fd(lock_path)
         try:
             os.write(fd, payload)
         finally:

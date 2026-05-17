@@ -41,7 +41,13 @@ def _load_hook(monkeypatch: pytest.MonkeyPatch, fake_root: Path) -> ModuleType:
 
 
 def _init_git(repo: Path) -> None:
-    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "init", "-q"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        timeout=15,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -230,15 +236,14 @@ class TestSessionLockMutex:
         _init_git(tmp_path)
         hook = _load_hook(monkeypatch, tmp_path)
 
-        original_open = os.open
+        def raise_enospc(_lock_path: Path) -> int:
+            raise OSError(28, "No space left on device")
 
-        def selective_open(path, flags, *args, **kwargs):
-            # Break only the lock-write path (which uses O_EXCL).
-            if flags & os.O_EXCL:
-                raise OSError(28, "No space left on device")
-            return original_open(path, flags, *args, **kwargs)
-
-        monkeypatch.setattr(hook.os, "open", selective_open)
+        # Patch the lock-acquire seam directly rather than the singleton
+        # ``os.open``. Patching ``hook.os.open`` mutates the global ``os``
+        # module for the test's duration, which can interact unpredictably
+        # with pytest/coverage teardown machinery on Windows CI runners.
+        monkeypatch.setattr(hook, "_acquire_lock_fd", raise_enospc)
 
         lines, should_block = hook._session_lock_lines()
 
@@ -250,6 +255,30 @@ class TestSessionLockMutex:
         assert "No space left on device" in joined
         # Lock file must NOT exist after a write failure.
         assert not (tmp_path / ".git" / ".claude.pid").exists()
+
+    def test_acquire_lock_fd_seam_is_not_globally_patched_after_test(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression guard: after the OSError test runs, ``os.open`` must
+        not remain shadowed at the singleton level. Confirms the seam stays
+        scoped to ``hook._acquire_lock_fd``.
+        """
+        _init_git(tmp_path)
+        hook = _load_hook(monkeypatch, tmp_path)
+
+        # Sentinel: capture the unpatched os.open before the seam swap.
+        baseline_open = os.open
+        baseline_hook_open = hook.os.open
+
+        def raise_enospc(_lock_path: Path) -> int:
+            raise OSError(28, "No space left on device")
+
+        monkeypatch.setattr(hook, "_acquire_lock_fd", raise_enospc)
+        hook._session_lock_lines()
+
+        # ``os.open`` (both views) must be the same callable we captured.
+        assert os.open is baseline_open
+        assert hook.os.open is baseline_hook_open
 
 
 # ---------------------------------------------------------------------------
