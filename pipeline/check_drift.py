@@ -2113,6 +2113,14 @@ def check_doc_hygiene_contracts() -> list[str]:
             if not isinstance(entrypoint, str):
                 violations.append(f"  {rel}: execution.entrypoint must be a string or null")
                 continue
+            # Deferred-authoring exemption: preregs with execution_gate.allowed_now=false
+            # are B1 contracts whose B2 runner script is intentionally pending. The
+            # entrypoint is a forward reference, not yet load-bearing. When allowed_now
+            # flips to true, this check resumes path-existence enforcement.
+            execution_gate = body.get("execution_gate")
+            allowed_now = execution_gate.get("allowed_now") if isinstance(execution_gate, dict) else None
+            if allowed_now is False:
+                continue
             entry_path = _entrypoint_path(entrypoint)
             if entry_path is not None and not entry_path.exists():
                 violations.append(

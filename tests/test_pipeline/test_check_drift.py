@@ -3517,3 +3517,68 @@ class TestCheckDashboardSseSingleWorker:
 
         violations = check_dashboard_sse_single_worker(tmp_path)
         assert violations == []
+
+
+class TestDocHygieneDeferredAuthoringPrereg:
+    """check_doc_hygiene_contracts must honor execution_gate.allowed_now=false.
+
+    Deferred-authoring preregs (B1 contract authored, B2 runner pending) are
+    allowed to reference a not-yet-existing entrypoint while their
+    execution_gate.allowed_now is False. Once the gate flips, the existence
+    check resumes.
+    """
+
+    _PREREG_DEFERRED = textwrap.dedent("""\
+        metadata:
+          name: "test_deferred"
+        execution:
+          mode: "bounded_runner"
+          entrypoint: "research/not_yet_authored.py"
+        execution_gate:
+          allowed_now: false
+    """)
+
+    _PREREG_ACTIVE = textwrap.dedent("""\
+        metadata:
+          name: "test_active"
+        execution:
+          mode: "bounded_runner"
+          entrypoint: "research/not_yet_authored.py"
+        execution_gate:
+          allowed_now: true
+    """)
+
+    _PREREG_NO_GATE = textwrap.dedent("""\
+        metadata:
+          name: "test_no_gate"
+        execution:
+          mode: "bounded_runner"
+          entrypoint: "research/not_yet_authored.py"
+    """)
+
+    def _setup(self, tmp_path: Path, content: str, monkeypatch) -> list[str]:
+        from pipeline import check_drift
+
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        hyp_dir = tmp_path / "docs" / "audit" / "hypotheses"
+        hyp_dir.mkdir(parents=True, exist_ok=True)
+        (hyp_dir / "test.yaml").write_text(content, encoding="utf-8")
+        return check_drift.check_doc_hygiene_contracts()
+
+    def test_deferred_authoring_skips_path_check(self, tmp_path, monkeypatch):
+        """allowed_now=false + missing entrypoint must NOT violate."""
+        violations = self._setup(tmp_path, self._PREREG_DEFERRED, monkeypatch)
+        path_violations = [v for v in violations if "references missing path" in v]
+        assert path_violations == [], path_violations
+
+    def test_active_prereg_still_enforces_path(self, tmp_path, monkeypatch):
+        """allowed_now=true + missing entrypoint MUST violate (fail-closed)."""
+        violations = self._setup(tmp_path, self._PREREG_ACTIVE, monkeypatch)
+        path_violations = [v for v in violations if "references missing path" in v]
+        assert len(path_violations) == 1, violations
+
+    def test_missing_gate_still_enforces_path(self, tmp_path, monkeypatch):
+        """No execution_gate block + missing entrypoint MUST violate."""
+        violations = self._setup(tmp_path, self._PREREG_NO_GATE, monkeypatch)
+        path_violations = [v for v in violations if "references missing path" in v]
+        assert len(path_violations) == 1, violations
