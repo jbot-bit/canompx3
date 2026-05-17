@@ -6,6 +6,7 @@ metadata:
   total_expected_trials: 1
   testing_mode: "family"
   research_question_type: "conditional_role"
+  theory_grant: false  # Amendment 3.3 (2026-05-17): no-theory Pathway-B, strict Chordia t>=3.79; theory_citation intentionally OMITTED per feedback_chordia_theory_citation_field_presence_trap.md
 
 execution:
   mode: "bounded_runner"
