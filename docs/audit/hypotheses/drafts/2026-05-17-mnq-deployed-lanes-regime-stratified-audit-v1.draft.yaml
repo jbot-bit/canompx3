@@ -1,0 +1,474 @@
+metadata:
+  name: "mnq_deployed_lanes_regime_stratified_audit_v1"
+  purpose: >
+    Era-stability audit (Criterion 9) of the 4 currently-deployed MNQ lanes in
+    docs/runtime/lane_allocation.json. Tests whether per-trade ExpR (H2 ANOVA)
+    and per-eligible-session fire-rate (H1 chi-square + logistic GLM) are
+    stable across calendar-year regime buckets R2/R3/R4/R5. R0 is informational
+    only (pre-2020 micro-launch); R6 is forward-monitor-only sacred holdout.
+    Strictly an audit of already-deployed lanes — no new discovery, no theory
+    grant, no allocator mutation, no validated_setups write.
+  date_locked: "2026-05-17T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 2
+  testing_mode: "family"
+  research_question_type: "era_stability_audit"
+  research_question_type_note: >
+    Novel taxonomy value: 'era_stability_audit' is a first-use label for the
+    Criterion 9 era-stability question on already-deployed lanes. If the lhp
+    validator or the prereg parser rejects this value (it currently accepts
+    'conditional_role', 'conditional_edge', 'standalone_edge'), the fallback is
+    'conditional_role' per the ATR_P70 sibling pattern at
+    docs/audit/hypotheses/drafts/2026-05-16-mnq-comex-settle-e2-rr10-atr-p70-chordia-unlock-v1.draft.yaml.
+    No behavior depends on the label beyond catalog routing.
+  theory_citation_omitted_intentionally: >
+    Per feedback_chordia_theory_citation_field_presence_trap.md and
+    feedback_lhp_validator_vs_field_presence_trap_n1_2026_05_13.md the
+    theory_citation field is intentionally OMITTED at every level of this
+    pre-reg. This audit makes NO theory grant — Criterion 9 era-stability is a
+    locked-threshold check, not a mechanism claim. Quarantine path
+    docs/audit/hypotheses/drafts/ is deliberate because
+    scripts/research/lhp/static_checks.py::check_citations_exist rejects
+    no-theory pre-regs; the runner is invoked directly on this draft path.
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/regime_stratified_lane_audit_v1.py"
+  default_args:
+    - "--hypothesis-file"
+    - "docs/audit/hypotheses/drafts/2026-05-17-mnq-deployed-lanes-regime-stratified-audit-v1.draft.yaml"
+  runner_status: "NOT_YET_IMPLEMENTED — Stage 4 hand-off at docs/runtime/stages/regime-stratified-lane-audit-runner.md"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/hypothesis-prereg-discipline.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+    - "docs/runtime/lane_allocation.json"
+    - "trading_app/holdout_policy.py"
+    - "trading_app/config.py"
+  notes:
+    - "Criterion 9 era-stability is the primary doctrinal anchor for this audit."
+    - "Criterion 13 (BINDING) scratch policy realized-eod is required because this audit's verdict feeds capital-class decisions on deployed lanes."
+    - "RULE 3 sacred holdout: R6 (>= HOLDOUT_SACRED_FROM) is forward-monitor-only descriptive corroboration, NEVER selection evidence."
+    - "RULE 4 multiple testing: K_family = 2 (H1 chi-square + H2 ANOVA); K_lane_informational = 8 reported separately."
+    - "Bailey 2013 MinBTL: with n_trials=2 the required years = 2*ln(2)/1.0^2 = 1.39yr; MNQ clean horizon (2020+ post-WF_START_OVERRIDE) = 6.4yr; headroom ~5.0yr."
+    - "Mode A holdout remains sacred from 2026-01-01."
+
+scope:
+  instrument: MNQ
+  instruments: [MNQ]  # canonical inline-list form required by scripts/tools/estimate_k_budget.py::_extract_instruments regex
+  audit_type: "regime_stratified_era_stability_on_deployed_lanes"
+  deployed_lanes:
+    - strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K"
+      session: COMEX_SETTLE
+      orb_minutes: 5
+      entry_model: E2
+      confirm_bars: 1
+      rr_target: 1.5
+      filter_type: ORB_VOL_2K
+      lane_allocation_json_line: 7
+    - strategy_id: "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15"
+      session: US_DATA_1000
+      orb_minutes: 15
+      entry_model: E2
+      confirm_bars: 1
+      rr_target: 1.0
+      filter_type: VWAP_MID_ALIGNED
+      lane_allocation_json_line: 27
+    - strategy_id: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+      session: NYSE_OPEN
+      orb_minutes: 5
+      entry_model: E2
+      confirm_bars: 1
+      rr_target: 1.0
+      filter_type: COST_LT12
+      lane_allocation_json_line: 47
+    - strategy_id: "MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25"
+      session: US_DATA_1000
+      orb_minutes: 5
+      entry_model: E2
+      confirm_bars: 1
+      rr_target: 1.0
+      filter_type: OVNRNG_25
+      lane_allocation_json_line: 67
+  out_of_scope:
+    - "paused MNQ lanes (only currently-deployed lanes_[] entries)"
+    - "non-MNQ instruments (MES, MGC)"
+    - "any allocator / lane_allocation.json mutation"
+    - "any validated_setups write or chordia_audit_log.yaml append"
+    - "any prop_profiles.py change"
+    - "new discovery scans / new strategy promotion"
+    - "theory grants for the deployed lanes' filters"
+    - "correlation between lanes (allocator's correlation gate handles that downstream)"
+    - "literature extraction (cites only existing extracts)"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM AND trading_day >= WF_START_OVERRIDE['MNQ']"
+    locked_boundary_low: "2020-01-01"
+    locked_boundary_high: "2026-01-01"
+    locked_boundary_low_source: "trading_app.config.WF_START_OVERRIDE['MNQ']"
+    locked_boundary_high_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    note: "Excludes 2019 per Mod 1 (matches WF_START_OVERRIDE['MNQ'] cohort lower bound)."
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+    policy: >
+      Forward-monitor-only descriptive corroboration. R6 ExpR / N / Sharpe is
+      reported in a dedicated section labelled exactly
+      'NOT SELECTION EVIDENCE per pre_registered_criteria.md Amendment 2.7 sacred holdout'.
+      Never used to rescue, kill, or rank any lane.
+  cohort_lower_bound:
+    description: "trading_day >= WF_START_OVERRIDE['MNQ']"
+    constant_source: "trading_app.config.WF_START_OVERRIDE"
+    locked_boundary: "2020-01-01"
+    rationale: >
+      Mod 1: exclude 2019 micro-launch period. Matches canonical promoter
+      cohort (strategy_discovery._load_outcomes_bulk). Without this the audit
+      would fire on pre-2020 micro-launch trades the promoter excludes.
+  tuning_against_oos: false
+  canonical_layers_only: true
+  canonical_sources_for_audit:
+    - "orb_outcomes (per-trade pnl_r, scratch flags, fired/not_fired)"
+    - "daily_features (filter inputs; triple-join discipline on orb_minutes per daily-features-joins.md)"
+
+scratch_policy:
+  policy: "realized-eod"
+  justification: >
+    Per Criterion 13 (BINDING) and feedback_scratch_pnl_non_null_class_bug.md,
+    any audit whose verdict feeds a capital-class decision (and a per-lane R5
+    ExpR<-0.10 kill clause IS a capital-class decision) MUST use realized-eod
+    so scratch rows are not silently dropped via WHERE pnl_r IS NOT NULL. The
+    runner MUST populate pnl_r_effective and emit null_pnl_non_scratch count.
+
+regime_definitions:
+  numbering_note: >
+    R1 is deliberately ABSENT — the original R1 pre-COVID slice was collapsed
+    into R0 by Mod 1. Numbering R0, R2, R3, R4, R5, R6 is preserved from the
+    prior session's rubric for traceability against the captured-verbally
+    modifications.
+  per_regime_power_floor:
+    rule: "any (lane, regime) cell with N < 30 is dropped from THAT lane's ANOVA / chi-square input set"
+    log_field: "dropped_regimes_per_lane"
+    log_format: "dropped_regimes_per_lane: { strategy_id: [R3, ...], ... }"
+    rationale: >
+      CLT and chi-square expected-cell-count both rely on N >= 30 for the
+      stated distributional approximations. Dropping is per-lane (a lane keeps
+      regimes where N>=30 even if a sibling lane loses one). NEVER widen a
+      bucket to rescue an underpowered cell — widening silently merges
+      regimes and corrupts the stability claim.
+  buckets:
+    - id: R0
+      start: "2019-01-01"
+      end: "2019-12-31"
+      duration_years: 1
+      label: "MICRO_LAUNCH"
+      role: "INFORMATIONAL_EXCLUDED"
+      rationale: >
+        MNQ micro-contract launch period (launched 2019-05-06; pre-COVID
+        regime). Excluded per Mod 1 + matches WF_START_OVERRIDE['MNQ'] =
+        2020-01-01. Reported informational-only in the result MD; NOT a test
+        input for either hypothesis.
+    - id: R2
+      start: "2020-01-01"
+      end: "2021-12-31"
+      duration_years: 2
+      label: "COVID_REOPENING"
+      role: "IS_TEST_INPUT"
+      rationale: >
+        COVID volatility shock + post-vaccine reopening. 2 years pooled
+        because no clean macro break separates 2020 from 2021 in MNQ
+        microstructure.
+    - id: R3
+      start: "2022-01-01"
+      end: "2022-12-31"
+      duration_years: 1
+      label: "INFLATION_RATE_HIKES"
+      role: "IS_TEST_INPUT"
+      rationale: >
+        2022 inflation shock + Fed rate-hike cycle is distinct enough from
+        2020-2021 reopening and 2023-2024 post-hike to isolate as its own
+        regime. If N<30 for any lane in R3, drop R3 from THAT lane's input
+        set with logged note; do NOT widen the bucket.
+    - id: R4
+      start: "2023-01-01"
+      end: "2024-12-31"
+      duration_years: 2
+      label: "POST_HIKE_CONSOLIDATION_AND_RALLY"
+      role: "IS_TEST_INPUT"
+      rationale: >
+        Post-hike consolidation (2023) + 2024 rally. Pooled as one regime
+        because no canonical macro break separates them and N-power benefits
+        from the 2-year pool.
+    - id: R5
+      start: "2025-01-01"
+      end: "2025-12-31"
+      duration_years: 1
+      label: "CURRENT_REGIME"
+      role: "CURRENT_REGIME_DECISION_INPUT"
+      rationale: >
+        Mod 2: current-regime gate is R5 only (R6 dropped). Isolated
+        single-year window is the basis for the R5 ExpR<-0.10R kill clause
+        in H2's decision_rule. Also the most-recent IS evidence informing
+        the H1 chi-square / GLM fire-rate stability claim.
+    - id: R6
+      start: "2026-01-01"
+      end: "cutoff (current date)"
+      duration_years: "fractional, depends on run-date"
+      label: "SACRED_HOLDOUT_FORWARD_MONITOR"
+      role: "FORWARD_MONITOR_ONLY_SACRED_HOLDOUT"
+      rationale: >
+        Mod 3: explicit forward-monitoring section. Reported per-lane (ExpR,
+        Sharpe, N) in a dedicated forward_monitoring block labelled exactly
+        'NOT SELECTION EVIDENCE per pre_registered_criteria.md Amendment 2.7
+        sacred holdout — descriptive corroboration only'. NEVER used to
+        rescue, kill, or rank any lane.
+
+hypotheses:
+  - id: 1
+    name: "H1: fire-rate stability across regimes R2/R3/R4/R5 (chi-square + logistic GLM)"
+    statement: >
+      For each deployed MNQ lane, the per-eligible-session fire-rate is
+      stable across the IS regime buckets R2/R3/R4/R5 (i.e., the filter does
+      not silently turn into a different selectivity profile in any single
+      regime). Tested per-lane via chi-square test of independence on the
+      (regime x fired/not_fired) 4x2 contingency table; logistic GLM emitted
+      as confirmatory robustness check for small-cell zero-firing edge cases.
+    role:
+      kind: "standalone"
+      parent: "Per-lane (regime x fired/not_fired) 4x2 contingency table"
+      comparator: "Pooled fire-rate across R2..R5 (weighted by eligible_sessions_in_era)"
+      primary_metric: "regime_stability_pvalue (chi-square p-value)"
+      promotion_target: "audit_only_no_promotion"
+    test_specification:
+      primary_test: "scipy.stats.chi2_contingency on (regime x fired/not_fired) 4x2 table"
+      confirmatory_robustness_check: "statsmodels.formula.api.logit('fired ~ C(regime)', data=...)"
+      small_cell_fallback: "if any expected cell count < 5, use scipy.stats.fisher_exact (2x2 pairs) OR scipy.stats.chi2_contingency with Yates correction"
+      eligible_session_definition: >
+        eligible_sessions_in_era = count of (trading_day, orb_label) rows
+        from canonical orb_outcomes filtered to the lane's (instrument,
+        orb_label, orb_minutes, entry_model, confirm_bars, rr_target) tuple
+        over the era window, WITHOUT applying the lane's filter. This is the
+        universe of sessions where the strategy COULD have fired had the
+        filter passed.
+      fired_definition: >
+        fired = 1 when research.filter_utils.filter_signal(df, filter_type, session)
+        returns true for that (trading_day, orb_label) row, else fired = 0.
+      input_regimes: ["R2", "R3", "R4", "R5"]
+      input_regimes_excluded:
+        - "R0 (INFORMATIONAL_EXCLUDED — pre-2020 micro-launch)"
+        - "R6 (FORWARD_MONITOR_ONLY_SACRED_HOLDOUT — sacred holdout)"
+    kill_criteria:
+      - "chi-square p < 0.01 AND any-regime fire-rate proportional delta > 30% relative to weighted-pooled fire-rate"
+    post_hoc_tests:
+      on_omnibus_reject: "pairwise 2x2 chi-square or Fisher's exact on each (regime_i vs regime_j) pair (6 pairs) with Bonferroni correction"
+      multiplicity_note: "Internal post-hoc correction to H1; does NOT add new trials to K_family"
+    expected_trial_count: 1
+    counted_against_trial_budget: true
+    economic_basis: >
+      Fire-rate is a Bernoulli per-eligible-session outcome (fired = 1/0), not
+      a continuous per-trade metric. ANOVA would be misspecified — it violates
+      normality + variance-stability assumptions on aggregated proportions.
+      Chi-square test of independence is the correct test for the
+      (regime x fired/not_fired) contingency table. Logistic GLM
+      (statsmodels.formula.api.logit) reported as confirmatory robustness
+      check handles small-cell zero-firing edge cases the chi-square
+      mishandles. Mechanism question: a filter whose fire-rate drifts >30%
+      across regimes is functionally a different strategy in the drifted
+      regime than in the others — the lane's deployment evidence does not
+      generalize across that drift.
+  - id: 2
+    name: "H2: ExpR stability across regimes R2/R3/R4/R5 (one-way ANOVA)"
+    statement: >
+      For each deployed MNQ lane, the per-trade pnl_r_effective distribution
+      is stable across the IS regime buckets R2/R3/R4/R5 (i.e., the lane's
+      edge does not silently die or invert in any single regime). Tested
+      per-lane via one-way ANOVA on per-trade pnl_r_effective.
+    role:
+      kind: "standalone"
+      parent: "Per-lane per-trade pnl_r_effective grouped by regime"
+      comparator: "Pooled per-trade ExpR across R2..R5"
+      primary_metric: "regime_stability_pvalue (F-test p-value)"
+      promotion_target: "audit_only_no_promotion"
+    test_specification:
+      primary_test: "scipy.stats.f_oneway on per-trade pnl_r_effective grouped by regime"
+      input_regimes: ["R2", "R3", "R4", "R5"]
+      input_regimes_excluded:
+        - "R0 (INFORMATIONAL_EXCLUDED — pre-2020 micro-launch)"
+        - "R6 (FORWARD_MONITOR_ONLY_SACRED_HOLDOUT — sacred holdout)"
+    kill_criteria:
+      - "ANOVA p < 0.01 AND any-regime ExpR < -0.10 with N >= 30 (Mod 4 unchanged)"
+    post_hoc_tests:
+      on_omnibus_reject: "pairwise Tukey-HSD on per-trade pnl_r_effective across regimes"
+      multiplicity_note: >
+        Tukey-HSD is built-in multiplicity-corrected for pairwise
+        comparisons per Tukey 1949 and LdP 2020 § 1.4.2 omnibus-then-pairwise
+        pattern; does NOT add new trials to K_family.
+    expected_trial_count: 1
+    counted_against_trial_budget: true
+    economic_basis: >
+      Per-trade pnl_r_effective is a continuous metric; ANOVA is appropriate
+      at N >= 30 per regime per CLT. Mechanism question: a lane whose ExpR
+      drifts across regimes (or inverts negative in R5) is a lane whose
+      deployment thesis does not survive the current regime — the
+      capital-class kill clause at R5 ExpR < -0.10R is the operational
+      consequence of an unstable lane.
+
+decision_rule:
+  continue_if: >
+    Both H1 chi-square AND H2 ANOVA omnibus tests PASS (p >= 0.01) AND R5
+    current-regime per-trade ExpR > 0 for all 4 lanes.
+  park_if: >
+    Any lane R5 ExpR <= 0 with N >= 30 OR H1 chi-square / H2 ANOVA omnibus
+    p < 0.01 but no per-regime kill trigger fires.
+  kill_if_per_lane: >
+    R5 ExpR < -0.10R with N >= 30 on any lane (per-lane kill; other lanes
+    survive). Mod 4 threshold unchanged from prior session.
+  per_lane_kill_escalation_rule:
+    rule: >
+      Any per-lane R5 kill clause IS a per-lane selection decision (downstream
+      allocator-pause is the natural consequence). The per-lane kill clause
+      SHALL NOT be acted on by any downstream consumer (allocator runner,
+      manual pause, capital reallocation) until the runner has emitted the
+      K=8 sensitivity table AND the K=8 Bonferroni-adjusted per-lane p-value
+      for that lane has been examined. If the K=8 verdict differs from the
+      K=2 verdict for the lane in question, the K=8 verdict wins (more
+      conservative).
+    rationale: >
+      Fail-closed wiring of Option 3. Binds the K=8 escalation rule to the
+      only point where per-lane evidence drives capital action.
+
+forward_monitoring:
+  section_label: "NOT SELECTION EVIDENCE per pre_registered_criteria.md Amendment 2.7 sacred holdout — descriptive corroboration only"
+  reported_per_lane:
+    - "R6 N (count of trades in 2026 sacred holdout)"
+    - "R6 per-trade ExpR (descriptive)"
+    - "R6 Sharpe (descriptive)"
+    - "R6 fire-rate (descriptive)"
+  forbidden_uses:
+    - "ranking lanes"
+    - "killing or pausing a lane"
+    - "rescuing a lane that failed IS R5 kill clause"
+    - "re-running the audit with different thresholds to rescue an R6 outcome"
+
+primary_schema:
+  k_family: 2
+  k_global: 2
+  k_lane_informational: 8
+  k_lane_informational_note: >
+    Per-lane x per-hypothesis decomposition (4 lanes x 2 hypotheses = 8 cells).
+    REPORTED ONLY for transparency in the K=8 sensitivity table; NOT used for
+    selection. K=2 (omnibus H1 + omnibus H2) is the family-level verdict
+    driver.
+  promotion_gate: "audit_only_no_promotion"
+  promotion_gate_note: >
+    NO writes to validated_setups, chordia_audit_log.yaml, lane_allocation.json,
+    or prop_profiles.py from this audit. Result MD only.
+  multiplicity_escalation_rule:
+    rule: >
+      If ANY per-lane chi-square or ANOVA p-value is used for selection,
+      promotion, lane-pause, or capital-allocation decision downstream of this
+      audit, multiplicity correction MUST be rerun at K=8 (per-lane x
+      per-hypothesis Bonferroni or BH-FDR) and the result MD MUST be
+      re-published with the K=8 verdict tier. The runner MUST emit a K=8
+      sensitivity table alongside the K=2 primary verdict so the escalation
+      cost is visible from the first verdict MD.
+    rationale: >
+      Fail-closed wiring of Option 3 (per user direction): makes the K=8
+      escalation cost visible upfront and forecloses the "we only used K=2 in
+      the headline, so K=8 doesn't apply" loophole. Mirrors the
+      omnibus-then-pairwise discipline in LdP 2020 § 1.4.2 — once you cross
+      from omnibus to per-cell decisions, the multiplicity unit changes.
+
+trial_budget:
+  primary_selection_trials: 2
+  schema_locked_before_any_metric: true
+
+total_hypothesis_count: 2
+total_expected_trials: 2
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "PASS (verified 2026-05-17 via scripts/tools/estimate_k_budget.py)"
+  minbtl_note: >
+    Bailey 2013 MinBTL: required_years = 2 * ln(n_trials) / E[max_N]^2 =
+    2 * ln(2) / 1.0^2 = 1.39 yr at unit Sharpe. MNQ clean horizon (per
+    scripts/tools/minbtl_retro_report.CLEAN_YEARS_BY_INSTRUMENT) = 6.65 yr.
+    Headroom = 5.26 yr. N_max at this horizon = 27 (strict Bailey @ E=1.0).
+    Operational cap = 300. The script's n_trials<=1 short-circuit at
+    estimate_k_budget.py:126-128 does NOT apply (n_trials=2), so the
+    standard MinBTL calculation runs.
+  verified_verdict_line: "PASS — N=2 fits within 6.65yr horizon (requires 1.39yr, 5.26yr headroom)."
+
+methodology_rules_applied:
+  - rule: "Criterion 9 era stability (primary anchor)"
+    application: >
+      H1 and H2 are direct era-stability tests across R2/R3/R4/R5 buckets per
+      pre_registered_criteria.md Criterion 9.
+  - rule: "Criterion 13 (BINDING) scratch policy"
+    application: >
+      scratch_policy: realized-eod declared above; runner MUST honor and emit
+      pnl_r_effective + null_pnl_non_scratch count.
+  - rule: "RULE 3 sacred holdout"
+    application: >
+      R6 (>= HOLDOUT_SACRED_FROM = 2026-01-01) is forward-monitor-only.
+      Excluded from both H1 chi-square and H2 ANOVA test inputs by data_policy
+      AND by a runtime hard assertion (Stage 4 runner spec).
+  - rule: "RULE 4 multiple testing"
+    application: >
+      K_family = 2 within-family (H1 omnibus + H2 omnibus). K_lane_informational
+      = 8 reported separately with explicit multiplicity-escalation rule for
+      any downstream selection use.
+  - rule: "RULE 6 trade-time knowability"
+    application: >
+      All filter computations delegate to research.filter_utils.filter_signal
+      which uses canonical trade-time-knowable feature columns per
+      backtesting-methodology.md § 6.1.
+  - rule: "RULE 9 canonical data source"
+    application: >
+      Reads only canonical layers (orb_outcomes JOIN daily_features keyed on
+      trading_day + symbol + orb_minutes per daily-features-joins.md triple-join
+      discipline); no derived-layer proof; no validated_setups read for truth.
+  - rule: "research-truth-protocol canon filter delegation"
+    application: >
+      All fire-mask computations MUST come from canonical delegation
+      (research.filter_utils.filter_signal); never inline re-implementation.
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-17-mnq-deployed-lanes-regime-stratified-audit-v1.md"
+  - "row-level CSV with per-lane x per-regime: N_eligible_sessions, N_fired, fire_rate, N_trades, ExpR, Sharpe, pooled_pnl_r_effective_mean"
+  - "H1 chi-square contingency tables (one per lane) with expected-cell-count check column"
+  - "H1 small-cell fallback notes (Fisher's exact / Yates) for any lane with expected cell < 5"
+  - "H1 logistic GLM coefficient table per lane (confirmatory robustness)"
+  - "H2 ANOVA F-statistic + p-value per lane"
+  - "H2 post-hoc Tukey-HSD pairwise table per lane (where omnibus rejects)"
+  - "forward_monitoring R6 section per lane with the exact label 'NOT SELECTION EVIDENCE per pre_registered_criteria.md Amendment 2.7 sacred holdout'"
+  - "explicit per-lane verdict list (CONTINUE / PARK / KILL with rationale)"
+  - "K=8 sensitivity table (per-lane x per-hypothesis Bonferroni-adjusted p-values) alongside K=2 primary verdict"
+  - "dropped_regimes_per_lane log block (per-regime power floor application)"
+  - "scratch_policy compliance: null_pnl_non_scratch count must be 0; if >0, audit FAILS execution-integrity gate"
+
+execution_gate:
+  allowed_now: false
+  allowed_now_reason: "runner research/regime_stratified_lane_audit_v1.py does not exist yet — Stage 4 hand-off"
+  execution_surface: "WSL with .venv-wsl OR Windows with .venv (runner will be platform-agnostic)"
+  forbidden_now:
+    - "any promotion / lane_allocation.json mutation / validated_setups write / chordia_audit_log.yaml append"
+    - "using R6 (sacred holdout) data as decision evidence"
+    - "rerunning with different regime boundaries to rescue an outcome"
+    - "widening any R-bucket to rescue an underpowered (N<30) cell"
+    - "writing per-lane p-values as selection evidence without K=8 multiplicity escalation"
+
+not_done_by_this_pre_reg:
+  - "Does NOT write to docs/runtime/lane_allocation.json, validated_setups, chordia_audit_log.yaml, or prop_profiles.py."
+  - "Does NOT promote or pause any lane (a verdict is informational input for a future authorized step)."
+  - "Does NOT test paused MNQ lanes or any non-MNQ instrument."
+  - "Does NOT address correlation between the 4 lanes (allocator's correlation gate is downstream)."
+  - "Does NOT extract or commit any new literature source — cites only existing extracts in docs/institutional/literature/."
+  - "Does NOT promote out of drafts/ quarantine."
+  - "Does NOT re-audit the 4 captured-verbally modifications (exclude 2019, R5-only current-regime gate, R6 forward-monitor-only, -0.10R kill threshold) — they are locked from the prior session per user's explicit /clear hand-off."
