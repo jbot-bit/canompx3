@@ -8,15 +8,17 @@
 
 ## Last Session
 - **Tool:** Claude Code (Opus 4.7)
-- **Date:** 2026-05-17 AM
-- **Commit:** c6c190a3 — chore(gitignore): ignore tmp/ scratch directory
-- **Prior:** 091a03e9 (research(chordia): ATR_P50 unlock UNVERIFIED_INSUFFICIENT_POWER + P70 draft + stage closeout)
-- **Files changed:** 6 files across 2 commits
-  - 5 files in 091a03e9: 2 draft yaml + 1 result md + 1 result csv + 1 stage closeout
-  - 1 file in c6c190a3: `.gitignore` (+ `tmp/` glob)
-- **Session summary:** Resumed pre-existing stage `atr-p50-p70-chordia-unlock-prereg-authoring` (P50 + P70 drafts authored 2026-05-16 22:36, P50 prereg-loop already executed 2026-05-17 07:50 prior to session start). Verified all 4 acceptance criteria (theory_citation omission, NO_THEORY_GRANT verdict, Chordia 3.79 basis, exact strategy_ids match recommendation MD), ran K-budget gate (PASS both, 6.65yr headroom), ran drift check (130/130 PASS, 20 advisory), appended stage Completion section, and committed in 2 logical units. P50 result is MEASURED PASS_CHORDIA but ROLE-DECISION UNVERIFIED_INSUFFICIENT_POWER per RULE 3.3 (OOS power 22.9% pooled / 15.1% long / 11.9% short — all STATISTICALLY_USELESS tier; long-side WR drop 62.2%→54.8% verified not outlier-driven via 5 leave-out subsets). Same discipline as 88a03d19 VWAP_MID_ALIGNED O30 override two days prior. No allocator, experimental_strategies, validated_setups, or chordia_audit_log.yaml mutation.
-- **Carry-over:** ATR_P70 draft is authored but prereg-loop has NOT been executed — next authorized thread should run `bash scripts/infra/prereg-loop.sh docs/audit/hypotheses/drafts/2026-05-16-mnq-comex-settle-e2-rr10-atr-p70-chordia-unlock-v1.draft.yaml`. Single-lane K=1 confirmatory replay; expected MinBTL budget already cleared.
-- **Did NOT start:** rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring (still deferred — separate stage from this one).
+- **Date:** 2026-05-17 PM
+- **Commit:** a080967b — research(chordia): ATR_P70 unlock UNVERIFIED_INSUFFICIENT_POWER (PASS_CHORDIA / OOS power tier STATISTICALLY_USELESS)
+- **Prior:** c6c190a3 (chore(gitignore): ignore tmp/ scratch directory)
+- **Files changed:** 4 files in a080967b — 1 draft yaml (Amendment 3.3 `theory_grant: false` stamp) + 1 result MD + 1 result CSV + 1 stage closeout (`docs/runtime/stages/atr-p70-chordia-unlock-prereg-loop.md`).
+- **Session summary:** Resumed pre-existing TRIVIAL stage `atr-p70-chordia-unlock-prereg-loop`. Prereg-loop had already executed prior to session start — verified acceptance via output inspection (result MD with `PASS_CHORDIA`, IS N=578 / ExpR=0.1731 / t=4.62 vs strict 3.79; OOS pooled sign-match N=47). Role-decision overridden to `UNVERIFIED_INSUFFICIENT_POWER` per backtesting-methodology RULE 3.3 — OOS power 15.2% pooled / 10.6% long / 9.2% short (all STATISTICALLY_USELESS tier; numbers match result MD body verbatim — earlier 12.8/11.1/9.9 draft was a transposition, corrected on amend). Long-side OOS sign flip (-0.041 vs IS +0.178) noise-consistent at this power, NOT refutational. Same discipline as P50 sibling (091a03e9) and 88a03d19 VWAP_MID_ALIGNED O30. No allocator, experimental_strategies, validated_setups, or chordia_audit_log.yaml mutation.
+- **Drift noise:** 11 pre-existing Check 107 (Phase 4 SHA integrity) orphan-SHA violations in `experimental_strategies` — confirmed via `git stash` baseline that count is unchanged with/without P70 stage diff. Zero new violations introduced by this commit.
+- **Carry-over:** rank-3 AUDIT_GAP_ONLY VWAP_MID_ALIGNED_O30 pre-reg authoring (still deferred — separate stage).
+- **Hygiene:** `.coverage` shows as `M` in working tree on every session — it must NOT be staged (test-runtime artifact, contains absolute paths). Verify `git status` before `git add -A` style commits.
+
+## Next Session — Active
+- **Check 107 orphan-SHA cleanup (AUDIT-FIRST, no DB mutation, no allowlist).** 11 orphaned `hypothesis_file_sha` values in `experimental_strategies` (rebased/deleted hypothesis files) cost a drift-check noise scan every commit. Resolution path: query each SHA → enumerate referenced `strategy_id` + `created_at` + row counts → classify each (test-fixture leak vs orphaned-real-discovery needing hypothesis-file backfill) → write closeout MD with decision per SHA → ONLY THEN propose remediation (delete vs backfill vs justified allowlist with rationale). Do NOT mutate `experimental_strategies` rows or amend Check 107 allowlist until audit MD is reviewed. Budget ~30-60min for audit phase; remediation is a separate stage.
 
 ## This Session (2026-05-13 PM)
 - Token-efficient code review (Sonnet) found a LOW `BrokerDispatcher.supports_sequential_bracket_ids()` delegation gap — committed `a6e79c6b`. Also refreshed 316 `validated_setups.last_trade_day` rows (2026-05-07 → 2026-05-12) via inline python (Sonnet violated integrity-guardian § 2; canonical migration `scripts/migrations/backfill_validated_trade_windows.py` reproduces identical state; `--dry-run` shows `drifted=0`).
