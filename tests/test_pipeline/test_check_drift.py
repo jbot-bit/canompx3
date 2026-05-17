@@ -1640,9 +1640,7 @@ entries:
     def test_missing_manifest_returns_empty(self, tmp_path):
         from pipeline import check_drift
 
-        accepted, errors, entries = check_drift._load_sha_migration_manifest(
-            tmp_path / "absent.yaml"
-        )
+        accepted, errors, entries = check_drift._load_sha_migration_manifest(tmp_path / "absent.yaml")
         assert accepted == set()
         assert errors == []
         assert entries == []
@@ -1663,7 +1661,7 @@ entries:
 
         p = tmp_path / "missing.yaml"
         p.write_text(
-            "version: 1\nentries:\n  - orphan_sha: \"" + "a" * 64 + "\"\n",
+            'version: 1\nentries:\n  - orphan_sha: "' + "a" * 64 + '"\n',
             encoding="utf-8",
         )
         accepted, errors, entries = check_drift._load_sha_migration_manifest(p)
@@ -1730,9 +1728,7 @@ entries:
             ),
             encoding="utf-8",
         )
-        monkeypatch.setattr(
-            check_drift, "_SHA_MIGRATION_MANIFEST_PATH", manifest
-        )
+        monkeypatch.setattr(check_drift, "_SHA_MIGRATION_MANIFEST_PATH", manifest)
 
         con = TestPhase4ShaIntegrity._make_experimental_db()
         con.execute(
@@ -1761,9 +1757,7 @@ entries:
             ),
             encoding="utf-8",
         )
-        monkeypatch.setattr(
-            check_drift, "_SHA_MIGRATION_MANIFEST_PATH", manifest
-        )
+        monkeypatch.setattr(check_drift, "_SHA_MIGRATION_MANIFEST_PATH", manifest)
 
         con = TestPhase4ShaIntegrity._make_experimental_db()
         # Insert a different orphan SHA that is NOT in the manifest
@@ -1785,9 +1779,7 @@ entries:
 
         manifest = tmp_path / "bad.yaml"
         manifest.write_text(": : : not yaml ::", encoding="utf-8")
-        monkeypatch.setattr(
-            check_drift, "_SHA_MIGRATION_MANIFEST_PATH", manifest
-        )
+        monkeypatch.setattr(check_drift, "_SHA_MIGRATION_MANIFEST_PATH", manifest)
 
         con = TestPhase4ShaIntegrity._make_experimental_db()
         violations = check_drift.check_phase_4_sha_integrity(con=con)
@@ -1803,9 +1795,7 @@ entries:
         from pipeline import check_drift
 
         violations = check_drift.check_phase_4_sha_migration_manifest_integrity()
-        assert violations == [], (
-            f"canonical manifest failed integrity check: {violations}"
-        )
+        assert violations == [], f"canonical manifest failed integrity check: {violations}"
 
     def test_sibling_check_flags_nonexistent_file(self, tmp_path, monkeypatch):
         from pipeline import check_drift
@@ -1822,9 +1812,7 @@ entries:
             ),
             encoding="utf-8",
         )
-        violations = check_drift.check_phase_4_sha_migration_manifest_integrity(
-            manifest_path=manifest
-        )
+        violations = check_drift.check_phase_4_sha_migration_manifest_integrity(manifest_path=manifest)
         # current_file absent short-circuits this entry (cannot verify SHA or
         # audit_ref without the file). The check fires loudly on the
         # missing file.
@@ -1860,12 +1848,10 @@ entries:
             ),
             encoding="utf-8",
         )
-        violations = check_drift.check_phase_4_sha_migration_manifest_integrity(
-            manifest_path=manifest
+        violations = check_drift.check_phase_4_sha_migration_manifest_integrity(manifest_path=manifest)
+        assert any("central\n" in v or "central claim is FALSE" in v for v in violations), (
+            f"expected fabricated-SHA violation, got {violations}"
         )
-        assert any(
-            "central\n" in v or "central claim is FALSE" in v for v in violations
-        ), f"expected fabricated-SHA violation, got {violations}"
 
 
 class TestPropProfilesValidatedSetupsAlignment:
@@ -3517,3 +3503,68 @@ class TestCheckDashboardSseSingleWorker:
 
         violations = check_dashboard_sse_single_worker(tmp_path)
         assert violations == []
+
+
+class TestDocHygieneDeferredAuthoringPrereg:
+    """check_doc_hygiene_contracts must honor execution_gate.allowed_now=false.
+
+    Deferred-authoring preregs (B1 contract authored, B2 runner pending) are
+    allowed to reference a not-yet-existing entrypoint while their
+    execution_gate.allowed_now is False. Once the gate flips, the existence
+    check resumes.
+    """
+
+    _PREREG_DEFERRED = textwrap.dedent("""\
+        metadata:
+          name: "test_deferred"
+        execution:
+          mode: "bounded_runner"
+          entrypoint: "research/not_yet_authored.py"
+        execution_gate:
+          allowed_now: false
+    """)
+
+    _PREREG_ACTIVE = textwrap.dedent("""\
+        metadata:
+          name: "test_active"
+        execution:
+          mode: "bounded_runner"
+          entrypoint: "research/not_yet_authored.py"
+        execution_gate:
+          allowed_now: true
+    """)
+
+    _PREREG_NO_GATE = textwrap.dedent("""\
+        metadata:
+          name: "test_no_gate"
+        execution:
+          mode: "bounded_runner"
+          entrypoint: "research/not_yet_authored.py"
+    """)
+
+    def _setup(self, tmp_path: Path, content: str, monkeypatch) -> list[str]:
+        from pipeline import check_drift
+
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        hyp_dir = tmp_path / "docs" / "audit" / "hypotheses"
+        hyp_dir.mkdir(parents=True, exist_ok=True)
+        (hyp_dir / "test.yaml").write_text(content, encoding="utf-8")
+        return check_drift.check_doc_hygiene_contracts()
+
+    def test_deferred_authoring_skips_path_check(self, tmp_path, monkeypatch):
+        """allowed_now=false + missing entrypoint must NOT violate."""
+        violations = self._setup(tmp_path, self._PREREG_DEFERRED, monkeypatch)
+        path_violations = [v for v in violations if "references missing path" in v]
+        assert path_violations == [], path_violations
+
+    def test_active_prereg_still_enforces_path(self, tmp_path, monkeypatch):
+        """allowed_now=true + missing entrypoint MUST violate (fail-closed)."""
+        violations = self._setup(tmp_path, self._PREREG_ACTIVE, monkeypatch)
+        path_violations = [v for v in violations if "references missing path" in v]
+        assert len(path_violations) == 1, violations
+
+    def test_missing_gate_still_enforces_path(self, tmp_path, monkeypatch):
+        """No execution_gate block + missing entrypoint MUST violate."""
+        violations = self._setup(tmp_path, self._PREREG_NO_GATE, monkeypatch)
+        path_violations = [v for v in violations if "references missing path" in v]
+        assert len(path_violations) == 1, violations
