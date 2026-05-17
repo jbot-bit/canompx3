@@ -335,21 +335,26 @@ EOF
 fi
 echo "  PASSED"
 
-# 2b. Auto-sync validated_setups trade windows — idempotent, fail-open.
+# 2b. Auto-sync validated_setups trade windows — idempotent, FAIL-STOP.
 # New trade data (daily pipeline runs) advances last_trade_day in orb_outcomes
-# without updating validated_setups. Drift check #45 catches this mismatch and
-# blocks the commit. Running the fixer unconditionally before drift means the
-# DB is always clean when drift runs — mirrors the 0b CRLF auto-fix pattern.
+# without updating validated_setups. Drift check #45 catches the symptom
+# (validated_setups vs trade_windows mismatch) but does NOT guarantee detection
+# of every backfill failure mode (partial writes, transient DuckDB locks).
+# Since validator/builder code already trusts validated_setups, silent backfill
+# failure is a data-integrity risk — fail-stop here per silent-rot T1
+# (docs/runtime/stages/silent-rot-precommit-hygiene.md, 2026-05-17).
 echo "[2b/8] Trade window sync..."
 set +e
 "$PYTHON" "$SCRIPT_DIR/scripts/migrations/backfill_validated_trade_windows.py" 2>/dev/null
 BACKFILL_RC=$?
 set -e
 if [ "$BACKFILL_RC" -ne 0 ]; then
-    echo "  ADVISORY: trade-window backfill failed (rc=$BACKFILL_RC) — drift check may catch residual mismatches (non-blocking)"
-else
-    echo "  PASSED"
+    echo "BLOCKED: trade-window backfill failed (rc=$BACKFILL_RC) — validated_setups may be stale."
+    echo "  Run: $PYTHON scripts/migrations/backfill_validated_trade_windows.py"
+    echo "  To inspect: re-run with stderr visible (drop the 2>/dev/null in .githooks/pre-commit line 345)."
+    exit 1
 fi
+echo "  PASSED"
 
 # 3. Drift check (~2 seconds)
 # Commit-time coverage must remain the FULL drift set. The post-edit hook's
@@ -384,6 +389,17 @@ echo "  PASSED"
 # into per-worktree 4-file partials. Same sibling-detection logic as the
 # dev-deps probe above.
 echo "[3b/8] CRG update..."
+# Failure policy (silent-rot T1, 2026-05-17): single failure stays ADVISORY
+# because CRG is a non-truth navigation surface (per feedback_crg_no_graph_storm.md)
+# and transient flake is real (per feedback_mcp_partial_install_state_2026_05_01.md).
+# But 3 consecutive failures = sustained drift; that BLOCKS so the graph cannot
+# rot silently across many commits. Counter lives in $GIT_DIR_PATH/.crg-update-failures
+# (per-worktree, plaintext integer, reset on first success).
+CRG_COUNTER_FILE=""
+if [ -n "$GIT_DIR_PATH" ]; then
+    CRG_COUNTER_FILE="$GIT_DIR_PATH/.crg-update-failures"
+fi
+CRG_FAILURE_THRESHOLD=3
 if command -v code-review-graph >/dev/null 2>&1; then
     CRG_TARGET_ROOT="$SCRIPT_DIR"
     if [ -n "$CANONICAL_VENV_PY" ]; then
@@ -398,9 +414,33 @@ if command -v code-review-graph >/dev/null 2>&1; then
     CRG_OUT="$(CRG_REPO_ROOT="$CRG_TARGET_ROOT" code-review-graph update --base "$CRG_BASE" 2>&1)"
     CRG_RC=$?
     if [ $CRG_RC -ne 0 ]; then
-        echo "  ADVISORY: CRG update failed (rc=$CRG_RC) — graph may be stale (non-blocking)"
-        echo "$CRG_OUT" | tail -3 | sed 's/^/    /'
+        CRG_FAIL_COUNT=0
+        if [ -n "$CRG_COUNTER_FILE" ] && [ -f "$CRG_COUNTER_FILE" ]; then
+            CRG_FAIL_COUNT=$(cat "$CRG_COUNTER_FILE" 2>/dev/null || echo 0)
+            # Sanitize: must be a non-negative integer.
+            case "$CRG_FAIL_COUNT" in
+                ''|*[!0-9]*) CRG_FAIL_COUNT=0 ;;
+            esac
+        fi
+        CRG_FAIL_COUNT=$((CRG_FAIL_COUNT + 1))
+        if [ -n "$CRG_COUNTER_FILE" ]; then
+            echo "$CRG_FAIL_COUNT" > "$CRG_COUNTER_FILE"
+        fi
+        # Loud-WARN to stderr so CI logs and operator terminals surface it distinctly.
+        echo "  ADVISORY: CRG update failed (rc=$CRG_RC) — graph may be stale (consecutive failures: $CRG_FAIL_COUNT/$CRG_FAILURE_THRESHOLD)" >&2
+        echo "$CRG_OUT" | tail -3 | sed 's/^/    /' >&2
+        if [ "$CRG_FAIL_COUNT" -ge "$CRG_FAILURE_THRESHOLD" ]; then
+            echo "BLOCKED: $CRG_FAIL_COUNT consecutive CRG update failures — graph drift no longer tolerable." >&2
+            echo "  Diagnose: CRG_REPO_ROOT=\"$CRG_TARGET_ROOT\" code-review-graph update --base \"$CRG_BASE\"" >&2
+            echo "  Reset (after fix): rm \"$CRG_COUNTER_FILE\"" >&2
+            exit 1
+        fi
     else
+        # Success — reset the counter so a single intermittent failure doesn't
+        # accumulate toward the threshold over weeks of green commits.
+        if [ -n "$CRG_COUNTER_FILE" ] && [ -f "$CRG_COUNTER_FILE" ]; then
+            rm -f "$CRG_COUNTER_FILE"
+        fi
         # Surface the incremental summary line (e.g. "Incremental: 5 files updated, ...")
         CRG_SUMMARY="$(echo "$CRG_OUT" | grep -E '^Incremental:' | tail -1)"
         echo "  PASSED (graph: $CRG_TARGET_ROOT, base: $CRG_BASE)"
