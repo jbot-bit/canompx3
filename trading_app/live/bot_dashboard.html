@@ -222,6 +222,23 @@
   .activity-hd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
   .close-link { border: none; background: none; color: var(--dim); cursor: pointer; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
   pre { margin: 0; padding: 10px; border-radius: var(--r); background: rgba(0,0,0,0.25); border: 1px solid var(--border); overflow: auto; white-space: pre-wrap; word-break: break-word; max-height: 240px; font-family: var(--mono); font-size: 11px; }
+  /* ── TOAST + BUSY ────────────────────── */
+  #toast-stack { position: fixed; top: 14px; right: 14px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; max-width: 380px; }
+  .toast { pointer-events: auto; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--dim); border-radius: var(--r); padding: 10px 14px 10px 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.45); display: flex; align-items: flex-start; gap: 10px; font-size: 12px; min-width: 240px; animation: toast-in 0.18s ease-out; }
+  .toast.info    { border-left-color: var(--cyan, #38bdf8); }
+  .toast.success { border-left-color: var(--green, #00d68f); }
+  .toast.warning { border-left-color: var(--yellow, #f59e0b); }
+  .toast.error   { border-left-color: var(--red, #ef4444); }
+  .toast.busy    { border-left-color: var(--yellow, #f59e0b); }
+  .toast-body    { flex: 1; line-height: 1.35; }
+  .toast-title   { font-weight: 700; font-size: 12px; margin-bottom: 2px; }
+  .toast-msg     { color: var(--dim); font-size: 11px; white-space: pre-wrap; }
+  .toast-close   { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 0 0 4px; }
+  .toast-spin    { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.18); border-top-color: var(--yellow, #f59e0b); animation: toast-spin 0.7s linear infinite; margin-top: 2px; flex-shrink: 0; }
+  @keyframes toast-in   { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes toast-spin { to { transform: rotate(360deg); } }
+  button.is-busy { position: relative; opacity: 0.75; pointer-events: none; }
+  button.is-busy::after { content: ""; display: inline-block; width: 9px; height: 9px; margin-left: 6px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; animation: toast-spin 0.7s linear infinite; vertical-align: -1px; }
 
   /* ── MISC ────────────────────────────── */
   .empty { padding: 14px; border-radius: var(--r); border: 1px dashed rgba(100,120,140,0.2); color: var(--dim); text-align: center; font-size: 12px; }
@@ -1990,6 +2007,7 @@
 </style>
 </head>
 <body>
+<div id="toast-stack" aria-live="polite" aria-atomic="false"></div>
 <div class="shell">
 
   <!-- TOP BAR -->
@@ -2724,6 +2742,49 @@ function renderTrades(trades, meta) {
   try { updateCockpitSummaries(); } catch (_) {}
 }
 
+/* ── Toast + Busy ───────────────────── */
+const TOAST_AUTOCLOSE_MS = { success: 5000, info: 5000, warning: 8000, busy: 0, error: 0 };
+function showToast(title, msg, tone, opts) {
+  tone = tone || "info";
+  opts = opts || {};
+  const stack = $("toast-stack");
+  if (!stack) return null;
+  const id = opts.id || ("t" + Date.now() + Math.random().toString(36).slice(2,6));
+  let el = opts.id ? document.getElementById("toast-" + opts.id) : null;
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "toast-" + id;
+    el.className = "toast " + tone;
+    el.innerHTML =
+      '<div class="toast-spin" style="display:none"></div>' +
+      '<div class="toast-body"><div class="toast-title"></div><div class="toast-msg"></div></div>' +
+      '<button class="toast-close" type="button" aria-label="dismiss">&times;</button>';
+    el.querySelector(".toast-close").addEventListener("click", () => el.remove());
+    stack.appendChild(el);
+  } else {
+    el.className = "toast " + tone;
+  }
+  el.querySelector(".toast-spin").style.display = (tone === "busy") ? "block" : "none";
+  el.querySelector(".toast-title").textContent = title || "";
+  el.querySelector(".toast-msg").textContent = msg || "";
+  if (el._timer) { clearTimeout(el._timer); el._timer = null; }
+  const ttl = TOAST_AUTOCLOSE_MS[tone] || 0;
+  if (ttl > 0) el._timer = setTimeout(() => el.remove(), ttl);
+  return id;
+}
+function setBusy(btnId, label) {
+  const b = $(btnId); if (!b) return null;
+  if (!b.dataset.origText) b.dataset.origText = b.textContent;
+  b.classList.add("is-busy");
+  if (label) b.textContent = label;
+  return b.dataset.origText;
+}
+function clearBusy(btnId) {
+  const b = $(btnId); if (!b) return;
+  b.classList.remove("is-busy");
+  if (b.dataset.origText) { b.textContent = b.dataset.origText; delete b.dataset.origText; }
+}
+
 /* ── Activity ───────────────────────── */
 function showActivity(title, text, tone) {
   $("activity-panel").style.display = "block";
@@ -2748,15 +2809,19 @@ async function handleOperatorAction(action, data) {
   if (!action || !action.id) return;
 
   if (action.id === "run_preflight") {
+    showToast("Preflight", "Running checks...", "busy", {id: "preflight"});
     showActivity("Preflight", "Running checks...", "info");
     try {
       const q = new URLSearchParams();
       if (data?.profile) q.set("profile", data.profile);
       const d = await (await fetch(`/api/action/preflight?${q.toString()}`, {method: "POST"})).json();
       const tone = d.status === "pass" ? "success" : d.status === "warn" ? "warning" : "error";
+      const summary = (d.output || "No output").split("\n").slice(0, 4).join("\n");
+      showToast(`Preflight ${String(d.status || "").toUpperCase()}`, summary, tone, {id: "preflight"});
       showActivity(`Preflight ${String(d.status || "").toUpperCase()}`, d.output || "No output", tone);
       fetchOperatorState();
     } catch (e) {
+      showToast("Preflight FAILED", e.message, "error", {id: "preflight"});
       showActivity("Preflight", `Failed: ${e.message}`, "error");
     }
     return;
@@ -2800,11 +2865,14 @@ async function handleOperatorAction(action, data) {
 
   if (action.id === "stop_session") {
     if (!confirm("Stop session?")) return;
+    showToast("Stop Session", "Sending stop signal...", "busy", {id: "stop"});
     try {
       const d = await (await fetch("/api/action/kill", {method: "POST"})).json();
+      showToast("Stop SENT", d.message || "Stop sent", "warning", {id: "stop"});
       showActivity("Stop Session", d.message || "Stop sent", "warning");
       setTimeout(fetchOperatorState, 1500);
     } catch (e) {
+      showToast("Stop FAILED", e.message, "error", {id: "stop"});
       showActivity("Stop Session", `Failed: ${e.message}`, "error");
     }
   }
@@ -3930,33 +3998,64 @@ async function launchSession(pid, firm, instr, mode) {
   const lbl = {signal: "SIGNAL-ONLY", demo: "DEMO", live: "LIVE"};
   const warn = mode === "live" ? "\n\nREAL MONEY." : mode === "demo" ? "\n\nPaper orders." : "\n\nSignals only.";
   if (!confirm(`Start ${lbl[mode]}?\n\n${firm} | ${instr}\n${pid}${warn}`)) return;
+  const toastTone = mode === "live" ? "error" : "busy";
+  showToast(`${lbl[mode]} starting`, `Running readiness checks for ${pid}...`, toastTone, {id: "launch"});
   showActivity(`${lbl[mode]} Start`, `Auto-running readiness checks for ${pid} before launch...`, mode === "live" ? "error" : "info");
   try {
     const d = await (await fetch(`/api/action/start?${new URLSearchParams({profile: pid, mode})}`, {method: "POST"})).json();
     const tone = ["blocked", "handoff_wait"].includes(d.status) ? "warning" : d.status === "started" ? "success" : "info";
     const detail = d.output ? `${d.message || d.status || "No response"}\n\n${d.output}` : (d.message || d.status || "No response");
     showActivity(`${lbl[mode]} ${String(d.status || "").toUpperCase()}`, detail, tone);
+    const toastMsg = (d.message || d.status || "no response") + (d.pid ? `\nPID: ${d.pid}` : "");
+    showToast(`${lbl[mode]} ${String(d.status || "").toUpperCase()}`, toastMsg, tone, {id: "launch"});
     if (d.pid) appendActivity(`PID: ${d.pid}`);
     setTimeout(fetchOperatorState, 1000);
   }
-  catch (e) { appendActivity("Error: " + e.message); }
+  catch (e) {
+    appendActivity("Error: " + e.message);
+    showToast(`${lbl[mode]} ERROR`, e.message, "error", {id: "launch"});
+  }
 }
 $("btn-refresh").addEventListener("click", async () => {
+  showToast("Refresh", "Starting data refresh...", "busy", {id: "refresh"});
+  setBusy("btn-refresh", "Refreshing...");
   showActivity("Refresh", "Starting data refresh...", "info");
   try {
     const d = await (await fetch("/api/action/refresh", {method: "POST"})).json();
     const tone = d.status === "blocked" ? "warning" : d.status === "started" ? "success" : "info";
+    showToast(`Refresh ${String(d.status || "").toUpperCase()}`, d.message || d.status || "(no message)", tone, {id: "refresh"});
     showActivity(`Refresh ${String(d.status || "").toUpperCase()}`, d.message || d.status, tone);
     if ((d.status === "started" || d.status === "running") && !refreshPolling) {
       refreshPolling = true;
+      setBusy("btn-refresh", "Working...");
+      showToast("Refresh running", "Polling for completion...", "busy", {id: "refresh"});
       const poll = setInterval(async () => {
-        try { const s = await (await fetch("/api/action/refresh-status")).json(); if (s.status === "done") { appendActivity("\nDone."); clearInterval(poll); refreshPolling = false; fetchDataStatus(); } else if (s.status === "failed") { appendActivity("\nFailed:\n" + (s.output || "Unknown")); clearInterval(poll); refreshPolling = false; } } catch (_) {}
+        try {
+          const s = await (await fetch("/api/action/refresh-status")).json();
+          if (s.status === "done") {
+            appendActivity("\nDone.");
+            showToast("Refresh DONE", "Data current.", "success", {id: "refresh"});
+            clearInterval(poll); refreshPolling = false; clearBusy("btn-refresh"); fetchDataStatus();
+          } else if (s.status === "failed") {
+            appendActivity("\nFailed:\n" + (s.output || "Unknown"));
+            showToast("Refresh FAILED", s.output || "Unknown", "error", {id: "refresh"});
+            clearInterval(poll); refreshPolling = false; clearBusy("btn-refresh");
+          }
+        } catch (_) {}
       }, 3000);
+    } else {
+      clearBusy("btn-refresh");
     }
-  } catch (e) { appendActivity("Error: " + e.message); }
+  } catch (e) {
+    appendActivity("Error: " + e.message);
+    showToast("Refresh ERROR", e.message, "error", {id: "refresh"});
+    clearBusy("btn-refresh");
+  }
 });
 
 $("btn-preflight").addEventListener("click", async () => {
+  showToast("Preflight", "Running checks...", "busy", {id: "preflight"});
+  setBusy("btn-preflight", "Checking...");
   showActivity("Preflight", "Running checks...", "info");
   try {
     const q = new URLSearchParams();
@@ -3964,17 +4063,34 @@ $("btn-preflight").addEventListener("click", async () => {
     if (profile) q.set("profile", profile);
     const d = await (await fetch(`/api/action/preflight?${q.toString()}`, {method: "POST"})).json();
     const tone = d.status === "pass" ? "success" : d.status === "warn" || d.status === "blocked" ? "warning" : "error";
+    const summary = (d.output || "No output").split("\n").slice(0, 4).join("\n");
+    showToast(`Preflight ${String(d.status || "").toUpperCase()}`, summary, tone, {id: "preflight"});
     showActivity(`Preflight ${String(d.status || "").toUpperCase()}`, d.output || "No output", tone);
     fetchOperatorState();
+  } catch (e) {
+    appendActivity("Error: " + e.message);
+    showToast("Preflight ERROR", e.message, "error", {id: "preflight"});
+  } finally {
+    clearBusy("btn-preflight");
   }
-  catch (e) { appendActivity("Error: " + e.message); }
 });
 
 $("btn-kill").addEventListener("click", async () => {
   if (!confirm("KILL ALL TRADES?\nStops bot, closes positions at market.")) return;
   if (!confirm("SECOND CONFIRMATION: Are you sure?")) return;
-  try { const d = await (await fetch("/api/action/kill", {method: "POST"})).json(); showActivity("Kill", d.message || "Kill sent", "error"); setTimeout(fetchOperatorState, 1000); }
-  catch (e) { showActivity("Kill", "Failed: " + e.message, "error"); }
+  showToast("Kill", "Sending kill signal...", "busy", {id: "kill"});
+  setBusy("btn-kill", "Killing...");
+  try {
+    const d = await (await fetch("/api/action/kill", {method: "POST"})).json();
+    showActivity("Kill", d.message || "Kill sent", "error");
+    showToast("Kill SENT", d.message || "Kill sent", "warning", {id: "kill"});
+    setTimeout(fetchOperatorState, 1000);
+  } catch (e) {
+    showActivity("Kill", "Failed: " + e.message, "error");
+    showToast("Kill FAILED", e.message, "error", {id: "kill"});
+  } finally {
+    clearBusy("btn-kill");
+  }
 });
 
 $("btn-close-activity").addEventListener("click", () => { $("activity-panel").style.display = "none"; });
@@ -4453,21 +4569,45 @@ const ChartCockpit = (() => {
     if (!init()) return;
     currentInstrument = instrument;
     document.getElementById("chart-cockpit-instr").textContent = instrument;
-    try {
-      const r = await fetch(`/api/bars-recent?instrument=${encodeURIComponent(instrument)}&lookback_minutes=${LOOKBACK_MIN}`);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const d = await r.json();
-      if (Array.isArray(d.bars) && d.bars.length) {
-        series.setData(d.bars.map(b => ({
-          time: b.time, open: b.open, high: b.high, low: b.low, close: b.close,
-        })));
-        firstBarTime = d.bars[0].time;
+    // Try a tight window first; widen to the last 24h if nothing recent (weekend / overnight / paused session).
+    const windows = [LOOKBACK_MIN, 60 * 24];
+    let loaded = false;
+    let lastResp = null;
+    for (const win of windows) {
+      try {
+        const r = await fetch(`/api/bars-recent?instrument=${encodeURIComponent(instrument)}&lookback_minutes=${win}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        lastResp = d;
+        if (Array.isArray(d.bars) && d.bars.length) {
+          series.setData(d.bars.map(b => ({
+            time: b.time, open: b.open, high: b.high, low: b.low, close: b.close,
+          })));
+          firstBarTime = d.bars[0].time;
+          loaded = true;
+          if (win !== LOOKBACK_MIN) {
+            // Surface that we widened the window — operator should know data is stale.
+            const ageMin = Math.round((Date.now() / 1000 - d.bars[d.bars.length - 1].time) / 60);
+            if (typeof showToast === "function") {
+              showToast("Chart: stale data", `Last bar ${ageMin}m ago. Run Refresh + start a session for live bars.`, "warning");
+            }
+          }
+          _applyOrb({ high: d.orb_high, low: d.orb_low, complete: !!d.orb_complete, minutes: d.orb_minutes, session_name: d.session_name });
+          if (d.warning) console.warn("bars-recent warning:", d.warning);
+          return;
+        }
+      } catch (e) {
+        console.error("ChartCockpit.loadInitial failed (window=" + win + ")", e);
+        _showFallback("Chart data unavailable: " + (e.message || "fetch failed"));
+        return;
       }
-      _applyOrb({ high: d.orb_high, low: d.orb_low, complete: !!d.orb_complete, minutes: d.orb_minutes, session_name: d.session_name });
-      if (d.warning) console.warn("bars-recent warning:", d.warning);
-    } catch (e) {
-      console.error("ChartCockpit.loadInitial failed", e);
-      _showFallback("Chart data unavailable: " + (e.message || "fetch failed"));
+    }
+    if (!loaded) {
+      _showFallback(
+        "No recent bars for " + instrument + ".\n" +
+        "Last 24h is empty — start a Signal session or run Refresh to backfill.\n" +
+        (lastResp && lastResp.warning ? "Server: " + lastResp.warning : "")
+      );
     }
   }
 
