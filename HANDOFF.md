@@ -6,7 +6,24 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## This Session (2026-05-19 — Cherry-pick research loop landed: ranker + bridge + journal, drift checks #160+#161)
+## This Session (2026-05-19 — Chart cockpit ORB rectangle as ISeriesPrimitive, terminal 2)
+
+- **Tool:** Claude Code (Opus 4.7)
+- **Date:** 2026-05-19
+- **Commits pushed to origin/main:** `fabd2dc7` ORB rectangle as ISeriesPrimitive (canonical Lightweight Charts v5 path); `71b49624` close stage. Both on origin; tip now `5b41815d` (cherry-pick terminal landed two commits on top).
+- **Files changed:** `trading_app/live/bot_dashboard.html` (+116 / -64). No backend/Python changed — payload contract unchanged.
+- **Symptom:** User reported "shaded box but its same size as the two lines and they are on top and bottom of 5min" — the ORB box rendered as a thin edge-to-edge strip identical to the H/L price-lines instead of a bounded rectangle around the 5m ORB candle.
+- **Root cause:** Two structural bugs in the prior CSS-overlay approach (commit `8e2735ba`): (1) `priceToCoordinate`/`timeToCoordinate` return chart-pane-local pixels but the box `<div>` was positioned relative to `.chart-cockpit-body` — the two coordinate spaces only align when chart axis padding == 0 (never the case). (2) When backend's `orb_window_start_utc/end_utc` were null/missing, code latched `xLeft=0; width=host.clientWidth` — drew the box edge-to-edge between H/L lines, visually identical to a third horizontal line.
+- **Fix:** Replaced CSS overlay with `ISeriesPrimitive` painted on the chart's own canvas — the canonical Lightweight Charts v5 path verified via Context7 against `tradingview.github.io/lightweight-charts/docs/5.0/plugins/intro` + `pixel-perfect-rendering`. Uses `target.useBitmapCoordinateSpace` + official `positionsBox` helper for HiDPI-correct dimensions. Null-guard fail-closed: returns early if any of `hi/lo/wStart/wEnd` is null — the full-width fallback class no longer exists.
+- **Removed (dead code per institutional-rigor § 5):** `<div id="chart-orb-box">`, `.chart-orb-box` CSS, `_renderOrbBox` function (~45 lines), `subscribeVisibleTimeRangeChange` + `ResizeObserver` re-render hooks (chart lifecycle drives primitive automatically), `firstBarTime` variable, `ORB_BOX_ID` constant.
+- **Self-review pass (MEDIUM findings caught + fixed in same patch):** Dropped `chart.applyOptions({})` repaint-nudge (undocumented v5 behavior; H/L price-line mutation already triggers chart render cycle). Removed dead `firstBarTime`.
+- **Tests:** 28/28 dashboard tests pass (`test_orb_window_payload.py` 7/7 + `test_bot_dashboard_sse.py` 21/21). No backend changed, so no new tests required. Drift: 1 pre-existing MGC `validated_setups` violation only (carry-over from prior baton; not introduced).
+- **Visual verification:** Served-HTML grep confirmed `OrbRectanglePrimitive` shipping (6 hits) + zero `chart-orb-box` references. Live `bot_state.json` had `orb_high=None` (no active bot session) so no in-browser rectangle to inspect; reload dashboard when next live session arms an ORB.
+- **Cross-session cleanup:** Caught and reverted accidental inclusion of cherry-pick terminal's `2026-05-19-fast-lane-to-heavyweight-bridge.md` stage file in close-stage commit. Re-staged cleanly so the other terminal could commit it (it now lives in `b3bb9bdf`).
+- **Adversarial-audit gate:** Touches `trading_app/live/` per `.claude/rules/adversarial-audit-gate.md`, but classified as `[feature]` not `[CRIT/HIGH fix]` — no kill-switch / risk-path / broker behavior change. Gate does NOT require evidence-auditor dispatch. Skipped.
+- **Carry-overs:** None from this work. Pre-existing MGC `validated_setups` window drift still carry-over (orthogonal).
+
+## Prior Session (2026-05-19 — Cherry-pick research loop landed: ranker + bridge + journal, drift checks #160+#161)
 
 - **Tool:** Claude Code (Opus 4.7) — autonomous session per user "spin it up for a few hours ill brb"
 - **Date:** 2026-05-19
