@@ -135,7 +135,12 @@ class TestBrokerEquityStale:
         assert positions.calls == 0
 
     def test_adapter_without_query_equity_with_age_fails_open(self):
-        # Stock FakePositions has no query_equity_with_age — simulates Rithmic.
+        # Stage 5 typed contract: stock FakePositions returns
+        # EquityReading(value=None, age_s=0.0, source="missing"), simulating
+        # Rithmic / Tradovate-today (no real query_equity_with_age impl). The
+        # orchestrator's _broker_equity_stale recognises source="missing" and
+        # fails OPEN — institutionally equivalent to the pre-Stage-5 ducktype
+        # branch ("hasattr fell through, return False").
         orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
         orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
         orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)

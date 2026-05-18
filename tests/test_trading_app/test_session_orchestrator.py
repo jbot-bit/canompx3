@@ -140,6 +140,13 @@ class FakePositions:
     def query_open(self, account_id: int) -> list[dict]:
         return self._orphans
 
+    def query_equity_with_age(self, account_id: int):
+        # Stage 5 typed contract: adapters without a real implementation return
+        # source="missing" (Rithmic / Tradovate today). Imported lazily to keep
+        # the fake module-import cost minimal.
+        from trading_app.live.http_client import EquityReading
+        return EquityReading(value=None, age_s=0.0, source="missing")
+
 
 class FakeRouter:
     def __init__(self, fill_price: float | None = None):

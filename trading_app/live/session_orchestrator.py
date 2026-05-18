@@ -2939,18 +2939,16 @@ class SessionOrchestrator:
             return False, ""
         if not self._positions.active_positions():
             return False, ""
-        query_with_age = getattr(self.positions, "query_equity_with_age", None)
-        if query_with_age is None:
-            # Broker adapter does not expose query_equity_with_age (e.g. Rithmic);
-            # SLA gate cannot apply — fail OPEN to preserve existing behaviour.
-            # Stage 5 will track adapter coverage; for now ProjectX is the only
-            # adapter where this incident class was observed.
-            return False, ""
         try:
-            reading = query_with_age(self.order_router.account_id)
+            reading = self.positions.query_equity_with_age(self.order_router.account_id)
         except BrokerHTTPError as exc:
             return True, f"broker_unreachable ({exc.error_class}): {exc}"
         if reading.source == "live":
+            return False, ""
+        if reading.source == "missing":
+            # Adapter does not implement query_equity_with_age (Rithmic, Tradovate today);
+            # base class returns the typed missing sentinel. SLA gate cannot apply —
+            # fail OPEN to preserve Stage 3 behaviour. Stage 5 closed the ducktype gap.
             return False, ""
         if reading.age_s > self.EQUITY_AGE_SLA_SECS:
             return True, (
