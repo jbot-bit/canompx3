@@ -1,0 +1,226 @@
+metadata:
+  theory_grant: false
+  name: "mgc_londonmetals_e2_rr20_cb1_orbvol8k_pooled_o30_fast_lane_v1"
+  purpose: >
+    FAST_LANE v5.1 triage screen on MGC LONDON_METALS E2 O30 RR2.0 ORB_VOL_8K (pooled).
+    K=1 individual screen — sample_size=45, win_rate=0.600, expectancy_r=0.7327,
+    sharpe_ann=4.03, fdr_significant=TRUE in validated_setups (status=active,
+    2026-05-18 snapshot). ORB_VOL_8K is a volume-band filter (8K-contract ORB-volume
+    threshold) measured AT ORB END — knowable on E2 before any break bar. ORB_VOL_*
+    is NOT in E2_EXCLUDED_FILTER_PREFIXES (trading_app/config.py:3540-3568); only
+    VOL_RV and ATR70_VOL prefixes are gated on E2.
+  date_locked: "2026-05-18T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "individual"
+  research_question_type: "conditional_role"
+  template_version: "fast_lane_v5.1"
+  template_path: "docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml"
+  is_triage_screen: true
+  promotion_target: "heavyweight_chordia_prereg"
+  validation_status_explicit: >
+    NOT_VALIDATED — this is a cheap queue-prioritisation screen, not calibrated.
+    PROMOTE means "worth heavyweight Chordia review", never deploy. Never capital.
+  nogo_check:
+    result: "NOT_FOUND"
+    method: >
+      Greped chordia_audit_log.yaml (33 entries, zero MGC) and docs/audit/results/
+      for any KILL/PARK on MGC_LONDON_METALS_E2_RR2.0_CB1_ORB_VOL_8K_O30 on 2026-05-18.
+      Adjacent MGC chordia work exists (mgc_cmereopen_orbg4_criteria_repair) but on
+      a different session+filter.
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml"
+    - "docs/institutional/literature/benjamini_hochberg_1995_fdr.md"
+  notes:
+    - "v5.1 triage screen — PROMOTE if t >= 3.0; needs-more 2.5-3.0; kill < 2.5."
+    - "PROMOTE authorizes heavyweight Chordia review only, NOT capital."
+
+scope:
+  instrument: MGC
+  strategy_id: "MGC_LONDON_METALS_E2_RR2.0_CB1_ORB_VOL_8K_O30"
+  session: LONDON_METALS
+  orb_minutes: 30
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 2.0
+  direction: pooled
+  filter_type: ORB_VOL_8K
+  filter_source: "trading_app.config.ALL_FILTERS['ORB_VOL_8K']"
+  out_of_scope:
+    - "ORB_VOL_8K siblings at other RR targets, sessions, apertures, entry models, or confirm_bars"
+    - "theory-grant upgrade — no literature mechanism claimed here"
+    - "allocator, sizing, schema, or live-execution changes"
+    - "any write to validated_setups, chordia_audit_log.yaml, or lane_allocation.json"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only descriptive; v5.1 holdout-boundary proof asserts max_IS < boundary <= min_OOS"
+  tuning_against_oos: false
+  canonical_layers_only: true
+  scratch_policy: "realized-eod"
+  scratch_handling: "COALESCE(pnl_r, 0.0) — never WHERE pnl_r IS NOT NULL"
+  lookahead_banned_always: [mae_r, mfe_r, outcome, pnl_r, double_break]
+  lookahead_class_for_entry_model: >
+    E2 entry: ORB_VOL_8K reads ORB-volume at ORB END (knowable before any break bar).
+    Filter is NOT in E2_EXCLUDED_FILTER_PREFIXES per trading_app/config.py:3540-3568.
+    Break-bar columns are NOT used.
+
+grounding:
+  core_orb_premise:
+    - source_file: "resources/Building_Reliable_Trading_Systems.pdf"
+      extract_proxy: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "grounds intraday breakout continuation"
+      with_theory_claim: false
+  filter_grounding_status:
+    verdict: "UNSUPPORTED"
+    basis: >
+      ORB_VOL_8K is a project-engineered ORB-volume gate (>=8K contracts on ORB bar).
+      No specific literature mechanism cited for MGC LONDON_METALS E2 O30. v5.1
+      triage does NOT require theory citation.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - >
+      validated_setups (status=active) snapshot 2026-05-18: sample_size=45,
+      win_rate=0.600, expectancy_r=0.7327, sharpe_ann=4.03, fdr_significant=TRUE,
+      all_years_positive=TRUE.
+  note: >
+    The validated_setups row motivates inclusion in the screen; its statistics are
+    NOT the verdict evidence. The v5.1 .summary.csv emission IS.
+
+primary_schema:
+  family_cells:
+    - id: "MGC_LONDON_METALS_E2_RR2.0_CB1_ORB_VOL_8K_O30"
+      strategy_id: "MGC_LONDON_METALS_E2_RR2.0_CB1_ORB_VOL_8K_O30"
+      instrument: MGC
+      session: LONDON_METALS
+      orb_minutes: 30
+      rr_target: 2.0
+      filter: ORB_VOL_8K
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  chordia_threshold_basis: >
+    v5.1 triage screen: promote_threshold=2.5 + needs_more_band=0.5 (PROMOTE iff t >= 3.0).
+  promotion_gate: "FAST_LANE PROMOTE only authorizes heavyweight Chordia review."
+
+hypotheses:
+  - id: 1
+    name: "MGC_LONDON_METALS_E2_RR2.0_CB1_ORB_VOL_8K_O30 fast-lane v5.1 triage screen"
+    economic_basis: >
+      Triage-stage screen on whether the high-Sharpe ORB_VOL_8K MGC London-metals
+      cell clears v5.1 PROMOTE gates under canonical Mode A replay. N=45 is the
+      smallest sample in the 5-pick batch — fire-rate gate and N_IS_on>=50 floor
+      are real risks here.
+    role:
+      kind: "standalone"
+      parent: "Exact MGC_LONDON_METALS_E2_RR2.0_CB1_ORB_VOL_8K_O30 canonical lane replay."
+      comparator: "v5.1 triage thresholds."
+      primary_metric: "selected_trade_mean_r"
+      promotion_target: "heavyweight_chordia_prereg_authorization_only"
+    filter:
+      type: "ORB_VOL_8K"
+      thresholds:
+        - "fire_vs_off"
+    scope:
+      instruments: [MGC]
+      sessions: [LONDON_METALS]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [30]
+    expected_trial_count: 1
+    kill_criteria:
+      - "IS t-stat < 2.5 (KILL — below triage floor)"
+      - "IS ExpR <= 0.0 (KILL)"
+      - "N_IS_on < 50 (KILL — below v5.1 sample floor)"
+      - "Fire-rate outside [0.05, 0.95] (KILL — extreme)"
+      - "Holdout boundary proof FALSE (KILL — leakage)"
+      - "Canonical filter delegation diverges from trading_app.config"
+    needs_more_band:
+      - "t in [2.5, 3.0) -> NEEDS-MORE"
+      - "Holdout proof FALSE on otherwise-passing cell -> NEEDS-MORE"
+      - "Pooled direction lacks per-direction long/short ExpR breakdown -> NEEDS-MORE"
+    statement: >
+      On the fixed MGC_LONDON_METALS_E2_RR2.0_CB1_ORB_VOL_8K_O30 lane using canonical
+      ORB_VOL_8K delegation, IS t-stat clears the v5.1 PROMOTE floor (3.0) with positive
+      ExpR, fire-rate in [0.05, 0.95], holdout-boundary proof TRUE, per-direction
+      sign-check satisfied, and N_IS_on >= 50.
+    pass_metric:
+      metric: "t_IS"
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical IS fired trades"
+      threshold_gte:
+        t_is: 3.0
+        n_is_on: 50
+        expr_is: 0.0
+      extra_gates:
+        - "fire_rate in [0.05, 0.95]"
+        - "holdout_boundary_proof TRUE"
+        - "direction=pooled requires long_ExpR/short_ExpR emitted AND same sign"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound: "MinBTL = 2*ln(1)/1 = 0.0 years; MGC WF_START=2022-01-01 horizon"
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+
+decision_rule:
+  promote_if: "t_IS >= 3.0 AND ExpR_IS > 0 AND N_IS_on >= 50 AND fire_rate in [0.05, 0.95] AND holdout_boundary_proof AND (direction != 'pooled' OR (long_ExpR is not null AND short_ExpR is not null AND sign(long_ExpR) == sign(short_ExpR)))"
+  needs_more_if: "t_IS in [2.5, 3.0) OR holdout_boundary_proof FALSE on otherwise-passing cell OR (direction == 'pooled' AND (long_ExpR is null OR short_ExpR is null OR sign(long_ExpR) != sign(short_ExpR)))"
+  kill_if: "t_IS < 2.5 OR ExpR_IS <= 0 OR fire_rate outside [0.05, 0.95] OR N_IS_on < 50"
+
+methodology_rules_applied:
+  rule_1_temporal_alignment:
+    application: "ORB_VOL_8K reads ORB-volume at ORB end — knowable on E2."
+  rule_3_is_oos_discipline:
+    application: "HOLDOUT_SACRED_FROM=2026-01-01 enforced; OOS descriptive only."
+  rule_4_multi_framing:
+    application: "Pathway B K=1 triage screen."
+  rule_9_canonical_layers:
+    application: "Reads only orb_outcomes JOIN daily_features."
+  rule_10_pre_registration:
+    application: "This file IS the pre-reg, committed before the fast-lane run."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-18-mgc-londonmetals-e2-rr20-cb1-orbvol8k-pooled-o30-fast-lane-v1.md"
+  - "row-level CSV with IS/OOS split"
+  - "v5.1 summary.csv with the 19 columns"
+  - "applied v5.1 verdict (PROMOTE / KILL / NEEDS-MORE)"
+
+execution_gate:
+  allowed_now: true
+  execution_surface: "Windows PowerShell with .venv"
+  forbidden_now:
+    - "auto-writing PROMOTE rows into chordia_audit_log.yaml"
+    - "any deployment action"
+    - "sibling-cell rescue"
+
+not_done_by_this_pre_reg:
+  - "Allocator deployment decision"
+  - "Theory grant assignment"
+  - "Sibling-RR / sibling-CB / sibling-session / sibling-aperture audits"
+  - "Heavyweight Chordia replay"

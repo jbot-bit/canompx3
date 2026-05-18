@@ -9753,6 +9753,115 @@ def check_fast_lane_template_doctrine_fields() -> list[str]:
     return violations
 
 
+def check_fast_lane_runner_template_routing() -> list[str]:
+    """Verify FAST_LANE v5.1 preregs route through the runner's v5.1 branch.
+
+    Any prereg under ``docs/audit/hypotheses/`` whose ``metadata.template_version``
+    is ``fast_lane_v5.1`` MUST have a corresponding result MD that carries BOTH
+    the automated FAST_LANE block AND the heavyweight Chordia verdict line.
+
+    This catches two failure classes:
+    1. Operator runs a pre-v5.1-aware copy of ``chordia_strict_unlock_v1.py``
+       against a v5.1 prereg — heavyweight verdict appears but FAST_LANE block
+       does not (silent bypass of the v5.1 gate table).
+    2. Operator hand-edits a result MD and accidentally deletes the FAST_LANE
+       block, leaving only the heavyweight verdict that does not represent
+       the prereg's actual screening verdict.
+
+    Sentinel-date gate: only applies to prereg files dated >= 2026-05-20.
+    This grandfathers the existing manual v5.1 instance
+    ``2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1`` whose
+    FAST_LANE verdict block was operator-written before the runner branch
+    landed. Matches the date-sentinel pattern used by
+    ``check_hypothesis_minbtl_compliance`` and
+    ``check_chordia_result_threshold_matches_prereg``.
+
+    Sentinel string ``## FAST_LANE v5.1 verdict (automated)`` and the line
+    ``**FAST_LANE verdict:** `<VERDICT>``` are produced by
+    ``research/chordia_strict_unlock_v1.py::_fast_lane_block_lines``. Renaming
+    the heading there requires updating this check (paired by design).
+
+    Added 2026-05-18 alongside the FAST_LANE runner-branch automation
+    (stage ``fast-lane-runner-automation``).
+    """
+    import datetime as _dt
+
+    hypotheses_dir = PROJECT_ROOT / "docs" / "audit" / "hypotheses"
+    results_dir = PROJECT_ROOT / "docs" / "audit" / "results"
+    if not hypotheses_dir.is_dir() or not results_dir.is_dir():
+        return []
+
+    sentinel = _dt.date(2026, 5, 20)
+    fname_date = re.compile(r"^(\d{4})-(\d{2})-(\d{2})-")
+    violations: list[str] = []
+
+    for prereg_path in sorted(hypotheses_dir.glob("*.yaml")):
+        stem = prereg_path.stem
+        if stem.startswith("TEMPLATE-"):
+            continue
+        m = fname_date.match(stem)
+        if m is None:
+            continue
+        try:
+            file_date = _dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            continue
+        if file_date < sentinel:
+            continue
+        try:
+            text = prereg_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        # Cheap line-level scan — avoids loading PyYAML for a ~100 KB sweep.
+        if not re.search(
+            r"^\s*template_version:\s*[\"']?fast_lane_v5\.1[\"']?\s*(?:#.*)?$",
+            text,
+            re.MULTILINE,
+        ):
+            continue
+        result_md = results_dir / f"{stem}.md"
+        if not result_md.exists():
+            # Prereg landed but runner has not been invoked yet — operator task,
+            # not a runner-bypass. Skip rather than block.
+            continue
+        try:
+            md_text = result_md.read_text(encoding="utf-8")
+        except OSError as e:
+            violations.append(
+                f"check_fast_lane_runner_template_routing: cannot read {result_md.relative_to(PROJECT_ROOT)}: {e}"
+            )
+            continue
+        if "## FAST_LANE v5.1 verdict (automated)" not in md_text:
+            violations.append(
+                f"{result_md.relative_to(PROJECT_ROOT).as_posix()}: prereg declares "
+                f"`template_version: fast_lane_v5.1` but result MD missing automated "
+                f"FAST_LANE block (`## FAST_LANE v5.1 verdict (automated)`). "
+                f"Re-run `research/chordia_strict_unlock_v1.py --hypothesis-file "
+                f"{prereg_path.relative_to(PROJECT_ROOT).as_posix()}` to regenerate."
+            )
+            continue
+        if not re.search(
+            r"^\*\*FAST_LANE verdict:\*\*\s+`(PROMOTE|NEEDS-MORE|KILL)`",
+            md_text,
+            re.MULTILINE,
+        ):
+            violations.append(
+                f"{result_md.relative_to(PROJECT_ROOT).as_posix()}: FAST_LANE block "
+                f"present but verdict line missing or value not in "
+                f"{{PROMOTE, NEEDS-MORE, KILL}}. Operator may have hand-edited; "
+                f"re-run the runner to regenerate."
+            )
+            continue
+        if "**MEASURED verdict:**" not in md_text:
+            violations.append(
+                f"{result_md.relative_to(PROJECT_ROOT).as_posix()}: heavyweight "
+                f"Chordia verdict line missing. Heavyweight and FAST_LANE must "
+                f"coexist; neither overrides the other per "
+                f"TEMPLATE-fast-lane-v5.1.yaml line 8-9."
+            )
+    return violations
+
+
 def check_intent_router_routing_parity() -> list[str]:
     """Verify .claude/rules/auto-skill-routing.md ↔ .claude/hooks/intent-router.py parity.
 
@@ -10457,6 +10566,12 @@ CHECKS = [
         "FAST_LANE templates carry doctrine self-labels (v5 deprecated, v5.1 triage+not-validated)",
         check_fast_lane_template_doctrine_fields,
         False,  # blocking — doctrine drift toward treating PROMOTE as deploy is capital-class risk
+        False,
+    ),
+    (
+        "FAST_LANE v5.1 preregs route through runner v5.1 branch (sentinel >= 2026-05-20)",
+        check_fast_lane_runner_template_routing,
+        False,  # blocking — silent bypass of v5.1 gate table is capital-relevant when PROMOTE feeds heavyweight queue
         False,
     ),
 ]  # end CHECKS

@@ -1,18 +1,18 @@
-# Chordia strict unlock audit — MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+# Chordia strict unlock audit — MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K
 
-**Prereq file:** `docs\audit\hypotheses\2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml`
-**Result CSV:** `docs\audit\results\2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.csv`
+**Prereq file:** `docs\audit\hypotheses\2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.yaml`
+**Result CSV:** `docs\audit\results\2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.csv`
 **Canonical DB:** `C:\Users\joshd\canompx3\gold.db`
 
 ## Scope
 
-Strict-Chordia unlock audit for the exact lane `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30`. Tests whether the bounded canonical replay clears Chordia's strict t-stat hurdle (3.79, has_theory=False) on canonical IS data, with descriptive OOS sign-match as a secondary gate. Single-lane K=1 confirmatory replay; no parameter sweeps, no filter variants, no instrument extensions.
+Strict-Chordia unlock audit for the exact lane `MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K`. Tests whether the bounded canonical replay clears Chordia's strict t-stat hurdle (3.79, has_theory=False) on canonical IS data, with descriptive OOS sign-match as a secondary gate. Single-lane K=1 confirmatory replay; no parameter sweeps, no filter variants, no instrument extensions.
 
 ## Verdict
 
 **MEASURED verdict:** `FAIL_STRICT_CHORDIA`
 
-IS t=3.064 < 3.79.
+IS t=3.300 < 3.79.
 
 **MEASURED theory mode:** `UNSUPPORTED`
 **MEASURED threshold applied:** `3.79`
@@ -22,35 +22,35 @@ IS t=3.064 < 3.79.
 
 | Split | N_universe | N_fired | Fire% | Scratch | Null non-scratch | ExpR | Policy EV/opp | Sharpe | t | p_two |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| IS | 1539 | 226 | 14.68% | 60 | 5 | 0.1708 | 0.0251 | 0.2038 | 3.064 | 0.00218 |
-| OOS | 72 | 14 | 19.44% | 4 | 0 | -0.0233 | -0.0045 | -0.0263 | -0.099 | 0.92151 |
+| IS | 1494 | 97 | 6.49% | 10 | 0 | 0.4676 | 0.0304 | 0.3350 | 3.300 | 0.00097 |
+| OOS | 77 | 18 | 23.38% | 2 | 0 | 0.4387 | 0.1025 | 0.3109 | 1.319 | 0.18710 |
 
 ## Directional breakdown
 
 | Split | Long N | Long ExpR | Long t | Short N | Short ExpR | Short t |
 |---|---:|---:|---:|---:|---:|---:|
-| IS | 221 | 0.1747 | 3.065 | 5 | 0.0000 | nan |
-| OOS | 14 | -0.0233 | -0.099 | 0 | nan | nan |
+| IS | 47 | 0.4427 | 2.120 | 50 | 0.4909 | 2.525 |
+| OOS | 9 | 0.2632 | 0.586 | 9 | 0.6141 | 1.203 |
 
 ## Method notes
 
 - Canonical source only: `orb_outcomes` joined to `daily_features` on `(trading_day, symbol, orb_minutes)`.
 - Sacred holdout boundary: `trading_day < 2026-01-01` for IS, `>=` for descriptive OOS.
 - Cohort lower bound: `WF_START_OVERRIDE['MNQ']=2020-01-01` applied to match canonical promoter (`trading_app/strategy_discovery._load_outcomes_bulk`).
-- Canonical filter delegation: `filter_signal(..., 'PD_CLEAR_LONG', 'US_DATA_1000')`.
+- Canonical filter delegation: `filter_signal(..., 'ORB_VOL_16K', 'COMEX_SETTLE')`.
 - Scratch handling: `pnl_r NULL -> 0.0` in the measured trade stream; scratch and null-non-scratch counts are reported separately.
 - No writes to `experimental_strategies`, `validated_setups`, or `docs/runtime/chordia_audit_log.yaml`.
 
 ## Reproduction
 
 ```
-python research/chordia_strict_unlock_v1.py --hypothesis-file docs\audit\hypotheses\2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml
+python research/chordia_strict_unlock_v1.py --hypothesis-file docs\audit\hypotheses\2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.yaml
 ```
 
 Outputs (overwritten in place):
 
-- `docs\audit\results\2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md`
-- `docs\audit\results\2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.csv`
+- `docs\audit\results\2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.md`
+- `docs\audit\results\2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.csv`
 
 ## Caveats
 
@@ -63,7 +63,7 @@ Outputs (overwritten in place):
 
 **FAST_LANE verdict:** `PROMOTE`
 
-t=3.064 clears 3.0 PROMOTE band; all gates pass.
+t=3.300 clears 3.0 PROMOTE band; all gates pass.
 
 Computed by `_fast_lane_verdict_v5_1()` per `docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml` § screen + § outcomes. This block is automated; the heavyweight Chordia verdict above is independent and unchanged.
 
@@ -72,11 +72,11 @@ Computed by `_fast_lane_verdict_v5_1()` per `docs/audit/hypotheses/TEMPLATE-fast
 | # | Gate | Threshold | Observed | Pass |
 |---|---|---|---|---|
 | 1 | Holdout boundary proof | max_IS < 2026-01-01 ≤ min_OOS | max_IS=2025-12-31 < 2026-01-01 ≤ min_OOS=2026-01-02 | yes |
-| 2 | Fire-rate band | 0.05 ≤ fire ≤ 0.95 | 0.1468 | yes |
-| 3 | ExpR_IS strict positive | > 0.00 | 0.1708 | yes |
-| 4 | N_IS_on triage min | ≥ 50 | 226 | yes |
-| 5 | Per-direction sign-check (pooled) | n/a — single-direction lane bypass | direction='long' | bypass |
-| 6 | t-stat band | ≥ 3.0 PROMOTE / [2.5, 3.0) NEEDS-MORE / < 2.5 KILL | t=3.064 → PROMOTE | PROMOTE |
+| 2 | Fire-rate band | 0.05 ≤ fire ≤ 0.95 | 0.0649 | yes |
+| 3 | ExpR_IS strict positive | > 0.00 | 0.4676 | yes |
+| 4 | N_IS_on triage min | ≥ 50 | 97 | yes |
+| 5 | Per-direction sign-check (pooled) | sign(long_ExpR) == sign(short_ExpR) AND both present | sign(long_ExpR=0.4427)=+, sign(short_ExpR=0.4909)=+ | yes |
+| 6 | t-stat band | ≥ 3.0 PROMOTE / [2.5, 3.0) NEEDS-MORE / < 2.5 KILL | t=3.300 → PROMOTE | PROMOTE |
 
 ### What PROMOTE authorizes
 
@@ -90,4 +90,4 @@ Computed by `_fast_lane_verdict_v5_1()` per `docs/audit/hypotheses/TEMPLATE-fast
 - Sibling-cell rescue (other RR / CB / aperture / session variants need their own pre-reg).
 - Treating the FAST_LANE verdict as a substitute for paper-trade + SR-monitor validation.
 
-_Scope direction at screen: `'long'`. Pooled lanes require both per-direction ExpRs and same-sign to PROMOTE; single-direction lanes bypass that gate._
+_Scope direction at screen: `'pooled'`. Pooled lanes require both per-direction ExpRs and same-sign to PROMOTE; single-direction lanes bypass that gate._

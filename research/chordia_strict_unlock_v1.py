@@ -47,6 +47,18 @@ from trading_app.strategy_discovery import parse_stop_multiplier
 OOS_DESCRIPTIVE_MIN_N = 30
 DEFAULT_STOP_MULTIPLIER = 1.0
 
+# FAST_LANE v5.1 gate thresholds — sourced from
+# docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml § screen + § outcomes.
+# Change these only by amending the template and bumping template_version.
+FAST_LANE_V5_1_PROMOTE_T = 3.0       # screen.promote_threshold (2.5) + needs_more_band (0.5)
+FAST_LANE_V5_1_NEEDS_MORE_T = 2.5    # screen.promote_threshold
+FAST_LANE_V5_1_EXPR_MIN = 0.0        # screen.expr_min
+FAST_LANE_V5_1_N_MIN = 50            # screen.n_IS_on_min
+FAST_LANE_V5_1_FIRE_LO = 0.05        # screen.fire_rate_gate
+FAST_LANE_V5_1_FIRE_HI = 0.95
+
+SUPPORTED_TEMPLATE_VERSIONS = frozenset({"fast_lane_v5.1"})
+
 
 def _normalize_writable_path(path: Path) -> Path:
     text = str(path)
@@ -75,6 +87,11 @@ class Cell:
     result_md: Path
     result_csv: Path
     result_summary_csv: Path
+    # FAST_LANE v5.1 awareness. None for legacy heavyweight prereg (preserves
+    # back-compat with every prereg authored before 2026-05-18). Unknown values
+    # are rejected at load time (fail-closed per institutional-rigor § 6).
+    template_version: str | None
+    direction: str | None
 
 
 def _resolve_output_paths(hypothesis_path: Path) -> tuple[Path, Path, Path]:
@@ -126,6 +143,39 @@ def _load_cell(hypothesis_path: Path) -> Cell:
         raise SystemExit(2)
 
     filter_status = grounding.get("filter_grounding_status", {}) if isinstance(grounding, dict) else {}
+    # FAST_LANE v5.1: metadata.template_version routes the runner to a second
+    # verdict branch. Missing field => None => heavyweight-only (back-compat).
+    # Unknown non-None value => fail-closed (no silent fall-through).
+    raw_template = meta.get("metadata", {}).get("template_version") if isinstance(meta.get("metadata"), dict) else None
+    if raw_template is None:
+        raw_template = body.get("metadata", {}).get("template_version")
+    template_version: str | None
+    if raw_template in (None, ""):
+        template_version = None
+    else:
+        tv = str(raw_template).strip()
+        if tv not in SUPPORTED_TEMPLATE_VERSIONS:
+            sys.stderr.write(
+                f"REFUSE: prereg metadata.template_version={tv!r} is not in supported set "
+                f"{sorted(SUPPORTED_TEMPLATE_VERSIONS)}. Fail-closed per institutional-rigor § 6 "
+                "(no silent fall-through to heavyweight when operator declared a template).\n"
+            )
+            raise SystemExit(2)
+        template_version = tv
+    direction = scope.get("direction")
+    direction_str: str | None = str(direction).strip().lower() if direction is not None else None
+    # Direction-enum guard. Template line 78 accepts only {pooled, long, short}.
+    # Without this, an unknown direction silently bypasses gate 5 (per-direction
+    # sign-check) via the non-pooled "else" branch, which would let an operator
+    # accidentally PROMOTE a pooled cell that lacks per-direction sign evidence.
+    # Fail-closed on unknown value per institutional-rigor § 6 (no silent failures).
+    if template_version == "fast_lane_v5.1" and direction_str not in {"pooled", "long", "short"}:
+        sys.stderr.write(
+            f"REFUSE: prereg scope.direction={direction!r} (normalized {direction_str!r}) "
+            f"is not in supported set {{pooled, long, short}}. FAST_LANE v5.1 gate 5 "
+            "requires a known direction to route the per-direction sign-check.\n"
+        )
+        raise SystemExit(2)
     result_md, result_csv, result_summary_csv = _resolve_output_paths(hypothesis_path)
     return Cell(
         hypothesis_file=hypothesis_path,
@@ -143,6 +193,8 @@ def _load_cell(hypothesis_path: Path) -> Cell:
         result_md=result_md,
         result_csv=result_csv,
         result_summary_csv=result_summary_csv,
+        template_version=template_version,
+        direction=direction_str,
     )
 
 
@@ -367,6 +419,164 @@ def _verdict(is_result: dict[str, Any], oos_result: dict[str, Any], threshold: f
     )
 
 
+def _fast_lane_verdict_v5_1(
+    is_result: dict[str, Any],
+    boundary: dict[str, Any],
+    direction: str | None,
+) -> tuple[str, str, list[dict[str, Any]]]:
+    """Compute FAST_LANE v5.1 verdict per TEMPLATE-fast-lane-v5.1.yaml gates.
+
+    Gate order matches the template's outcomes precedence:
+        1. Holdout boundary proof — any failure forces NEEDS-MORE (line 130-131).
+        2-4. Fire-rate / ExpR / N gates — KILL band.
+        5. Per-direction sign-check (pooled only) — NEEDS-MORE if missing or flipped.
+        6. t-stat band — PROMOTE / NEEDS-MORE / KILL.
+
+    First failing gate determines the verdict; later gates are recorded as
+    "not evaluated" in the gate-rows table for operator audit.
+
+    Returns
+    -------
+    verdict
+        One of ``PROMOTE``, ``NEEDS-MORE``, ``KILL``.
+    reason
+        One-sentence rationale referencing the deciding gate.
+    gate_rows
+        List of dicts ``{name, threshold, observed, pass}`` for the result MD.
+    """
+    rows: list[dict[str, Any]] = []
+    decided: tuple[str, str] | None = None
+
+    def _record(name: str, threshold_text: str, observed_text: str, passed: bool | str) -> None:
+        rows.append({
+            "name": name,
+            "threshold": threshold_text,
+            "observed": observed_text,
+            "pass": passed,
+        })
+
+    # Gate 1 — holdout boundary proof.
+    proof = bool(boundary.get("holdout_boundary_proof"))
+    proof_text = (
+        f"max_IS={boundary.get('max_IS_trading_day') or '∅'} < "
+        f"{boundary.get('holdout_boundary_value') or '2026-01-01'} ≤ "
+        f"min_OOS={boundary.get('min_OOS_trading_day') or '∅'}"
+    )
+    _record("Holdout boundary proof", "max_IS < 2026-01-01 ≤ min_OOS", proof_text, proof)
+    if not proof:
+        decided = (
+            "NEEDS-MORE",
+            "Holdout boundary not proven — evidence uninterpretable (template § outcomes precedence: any holdout problem forces NEEDS-MORE).",
+        )
+
+    # Gate 2 — fire-rate band.
+    fire = is_result.get("fire_rate")
+    fire_ok = (
+        isinstance(fire, (int, float))
+        and math.isfinite(fire)
+        and FAST_LANE_V5_1_FIRE_LO <= fire <= FAST_LANE_V5_1_FIRE_HI
+    )
+    fire_text = f"{fire:.4f}" if isinstance(fire, (int, float)) and math.isfinite(fire) else "nan"
+    _record(
+        "Fire-rate band",
+        f"{FAST_LANE_V5_1_FIRE_LO:.2f} ≤ fire ≤ {FAST_LANE_V5_1_FIRE_HI:.2f}",
+        fire_text,
+        fire_ok if decided is None else "not evaluated",
+    )
+    if decided is None and not fire_ok:
+        decided = (
+            "KILL",
+            f"Fire-rate {fire_text} outside [{FAST_LANE_V5_1_FIRE_LO:.2f}, {FAST_LANE_V5_1_FIRE_HI:.2f}] — degenerate filter, not a t-stat failure.",
+        )
+
+    # Gate 3 — ExpR_IS > 0.
+    expr = is_result.get("expr")
+    expr_ok = isinstance(expr, (int, float)) and math.isfinite(expr) and expr > FAST_LANE_V5_1_EXPR_MIN
+    expr_text = f"{expr:.4f}" if isinstance(expr, (int, float)) and math.isfinite(expr) else "nan"
+    _record(
+        "ExpR_IS strict positive",
+        f"> {FAST_LANE_V5_1_EXPR_MIN:.2f}",
+        expr_text,
+        expr_ok if decided is None else "not evaluated",
+    )
+    if decided is None and not expr_ok:
+        decided = ("KILL", f"ExpR_IS={expr_text} ≤ {FAST_LANE_V5_1_EXPR_MIN:.2f}.")
+
+    # Gate 4 — N_IS_on ≥ 50.
+    n_is = int(is_result.get("n_fired") or 0)
+    n_ok = n_is >= FAST_LANE_V5_1_N_MIN
+    _record(
+        "N_IS_on triage min",
+        f"≥ {FAST_LANE_V5_1_N_MIN}",
+        str(n_is),
+        n_ok if decided is None else "not evaluated",
+    )
+    if decided is None and not n_ok:
+        decided = ("KILL", f"N_IS_on={n_is} < {FAST_LANE_V5_1_N_MIN}.")
+
+    # Gate 5 — per-direction sign-check (pooled lanes only).
+    if direction == "pooled":
+        long_raw = is_result.get("long_expr")
+        short_raw = is_result.get("short_expr")
+        long_f = float(long_raw) if isinstance(long_raw, (int, float)) and math.isfinite(float(long_raw)) else None
+        short_f = float(short_raw) if isinstance(short_raw, (int, float)) and math.isfinite(float(short_raw)) else None
+        if long_f is None or short_f is None:
+            sign_pass: bool = False
+            sign_obs = f"long_ExpR={long_raw!r}, short_ExpR={short_raw!r} (missing)"
+        else:
+            sign_pass = (long_f > 0.0) == (short_f > 0.0)
+            sign_obs = (
+                f"sign(long_ExpR={long_f:.4f})={'+' if long_f > 0.0 else '-'}, "
+                f"sign(short_ExpR={short_f:.4f})={'+' if short_f > 0.0 else '-'}"
+            )
+        _record(
+            "Per-direction sign-check (pooled)",
+            "sign(long_ExpR) == sign(short_ExpR) AND both present",
+            sign_obs,
+            sign_pass if decided is None else "not evaluated",
+        )
+        if decided is None and not sign_pass:
+            decided = (
+                "NEEDS-MORE",
+                "Pooled direction without per-direction sign-match; would bounce at pooled-finding-rule heavyweight stage — gated at triage.",
+            )
+    else:
+        # single-direction lanes bypass per template line 128 (`single_direction_lanes` rule).
+        _record(
+            "Per-direction sign-check (pooled)",
+            "n/a — single-direction lane bypass",
+            f"direction={direction!r}",
+            "bypass",
+        )
+
+    # Gate 6 — t-stat band.
+    t_raw = is_result.get("t")
+    t_f: float | None = float(t_raw) if isinstance(t_raw, (int, float)) and math.isfinite(float(t_raw)) else None
+    t_text = f"{t_f:.3f}" if t_f is not None else "nan"
+    if t_f is not None and t_f >= FAST_LANE_V5_1_PROMOTE_T:
+        t_band = "PROMOTE"
+    elif t_f is not None and t_f >= FAST_LANE_V5_1_NEEDS_MORE_T:
+        t_band = "NEEDS-MORE"
+    else:
+        t_band = "KILL"
+    _record(
+        "t-stat band",
+        f"≥ {FAST_LANE_V5_1_PROMOTE_T:.1f} PROMOTE / [{FAST_LANE_V5_1_NEEDS_MORE_T:.1f}, {FAST_LANE_V5_1_PROMOTE_T:.1f}) NEEDS-MORE / < {FAST_LANE_V5_1_NEEDS_MORE_T:.1f} KILL",
+        f"t={t_text} → {t_band}",
+        t_band if decided is None else "not evaluated",
+    )
+    if decided is None:
+        if t_band == "PROMOTE":
+            decided = ("PROMOTE", f"t={t_text} clears {FAST_LANE_V5_1_PROMOTE_T:.1f} PROMOTE band; all gates pass.")
+        elif t_band == "NEEDS-MORE":
+            decided = ("NEEDS-MORE", f"t={t_text} in NEEDS-MORE band [{FAST_LANE_V5_1_NEEDS_MORE_T:.1f}, {FAST_LANE_V5_1_PROMOTE_T:.1f}).")
+        else:
+            decided = ("KILL", f"t={t_text} < {FAST_LANE_V5_1_NEEDS_MORE_T:.1f}.")
+
+    verdict, reason = decided
+    return verdict, reason, rows
+
+
 def _as_iso_day(value: Any) -> str:
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return ""
@@ -543,6 +753,83 @@ def _summary_row(label: str, result: dict[str, Any]) -> str:
     )
 
 
+def _fast_lane_block_lines(
+    fl_verdict: str,
+    fl_reason: str,
+    fl_rows: list[dict[str, Any]],
+    direction: str | None,
+) -> list[str]:
+    """Render the FAST_LANE v5.1 result-MD block.
+
+    Sentinel-string ``## FAST_LANE v5.1 verdict (automated)`` is load-bearing:
+    ``pipeline/check_drift.py::check_fast_lane_runner_template_routing`` greps
+    for this exact heading and the ``**FAST_LANE verdict:**`` line to verify
+    the runner did not silently bypass the v5.1 branch. Do not rename without
+    updating that drift check.
+    """
+    lines = [
+        "## FAST_LANE v5.1 verdict (automated)",
+        "",
+        f"**FAST_LANE verdict:** `{fl_verdict}`",
+        "",
+        fl_reason,
+        "",
+        "Computed by `_fast_lane_verdict_v5_1()` per "
+        "`docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml` § screen + § outcomes. "
+        "This block is automated; the heavyweight Chordia verdict above is independent and unchanged.",
+        "",
+        "### Gate table",
+        "",
+        "| # | Gate | Threshold | Observed | Pass |",
+        "|---|---|---|---|---|",
+    ]
+    for idx, row in enumerate(fl_rows, start=1):
+        passed = row["pass"]
+        if isinstance(passed, bool):
+            pass_text = "yes" if passed else "no"
+        else:
+            pass_text = str(passed)
+        lines.append(
+            f"| {idx} | {row['name']} | {row['threshold']} | {row['observed']} | {pass_text} |"
+        )
+    lines.append("")
+    # Diagnostic note when the deciding gate is fire-rate (gate 2). This surfaces
+    # the "degenerate filter, not t-stat failure" class that heavyweight Chordia
+    # currently has no gate for. Per stage design § 7 self-check.
+    fire_row = fl_rows[1] if len(fl_rows) >= 2 else None
+    if (
+        fire_row is not None
+        and fire_row.get("name") == "Fire-rate band"
+        and fire_row.get("pass") is False
+    ):
+        lines.extend([
+            "> **Diagnostic note:** the fire-rate gate decided this verdict, not the t-stat band. "
+            "A fire rate outside [0.05, 0.95] indicates a degenerate filter (firing on nearly every "
+            "session or almost never) rather than a weak edge. The heavyweight Chordia verdict above "
+            "does not currently apply a fire-rate gate — operator should not treat its t-stat verdict "
+            "as the diagnostic signal here.",
+            "",
+        ])
+    lines.extend([
+        "### What PROMOTE authorizes",
+        "",
+        "- Authoring a heavyweight Chordia pre-reg for this lane (theory grant + clustered SE at trading_day + OOS power floor + era-stability section + DSR + Harvey-Liu haircut).",
+        "- Nothing else.",
+        "",
+        "### What PROMOTE does NOT authorize",
+        "",
+        "- Capital allocation.",
+        "- Writing this cell into `chordia_audit_log.yaml` as `PASS_CHORDIA`.",
+        "- Sibling-cell rescue (other RR / CB / aperture / session variants need their own pre-reg).",
+        "- Treating the FAST_LANE verdict as a substitute for paper-trade + SR-monitor validation.",
+        "",
+        f"_Scope direction at screen: `{direction!r}`. "
+        "Pooled lanes require both per-direction ExpRs and same-sign to PROMOTE; single-direction lanes bypass that gate._",
+        "",
+    ])
+    return lines
+
+
 def _write_markdown(
     cell: Cell,
     threshold: float,
@@ -550,6 +837,7 @@ def _write_markdown(
     verdict_reason: str,
     is_result: dict[str, Any],
     oos_result: dict[str, Any],
+    fast_lane: tuple[str, str, list[dict[str, Any]]] | None = None,
 ) -> None:
     cell.result_md.parent.mkdir(parents=True, exist_ok=True)
     wf_start = WF_START_OVERRIDE.get(cell.instrument)
@@ -640,6 +928,9 @@ def _write_markdown(
         "directly comparable.",
         "",
     ]
+    if fast_lane is not None:
+        fl_verdict, fl_reason, fl_rows = fast_lane
+        lines.extend(_fast_lane_block_lines(fl_verdict, fl_reason, fl_rows, cell.direction))
     cell.result_md.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -676,14 +967,22 @@ def main() -> int:
     verdict, verdict_reason = _verdict(is_result, oos_result, threshold, cell.has_theory)
     boundary = _split_boundary_metadata(is_df, oos_df)
 
+    fast_lane: tuple[str, str, list[dict[str, Any]]] | None = None
+    if cell.template_version == "fast_lane_v5.1":
+        fast_lane = _fast_lane_verdict_v5_1(is_result, boundary, cell.direction)
+
     _write_csv(cell.result_csv, [("IS", is_fired), ("OOS", oos_fired)])
     _write_summary_csv(cell.result_summary_csv, is_result, oos_result, boundary)
-    _write_markdown(cell, threshold, verdict, verdict_reason, is_result, oos_result)
+    _write_markdown(cell, threshold, verdict, verdict_reason, is_result, oos_result, fast_lane=fast_lane)
 
     print(f"Strategy: {cell.strategy_id}")
     print(f"Prereg: {cell.hypothesis_file.relative_to(ROOT)}")
-    print(f"Verdict: {verdict}")
-    print(f"Reason: {verdict_reason}")
+    print(f"Heavyweight Chordia verdict: {verdict}")
+    print(f"Heavyweight reason: {verdict_reason}")
+    if fast_lane is not None:
+        fl_verdict, fl_reason, _ = fast_lane
+        print(f"FAST_LANE v5.1 verdict: {fl_verdict}")
+        print(f"FAST_LANE reason: {fl_reason}")
     print(f"Result MD: {cell.result_md.relative_to(ROOT)}")
     print(f"Result CSV: {cell.result_csv.relative_to(ROOT)}")
     print(f"Result Summary CSV: {cell.result_summary_csv.relative_to(ROOT)}")
