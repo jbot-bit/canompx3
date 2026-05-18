@@ -15,7 +15,7 @@ no park), then scores each by transparent components:
   reasonable clustered-SE-floor reference (``N_unique_trading_days >= 30``
   per ``feedback_n_unique_trading_days_floor_clustered_se.md``; pooled_n is
   trade count, so the target is set above the floor).
-- oos_power_readiness: result of ``research.oos_power.oos_ttest_power``
+- oos_power_readiness: result of ``research.oos_power.one_sample_power``
   evaluated against the OOS row parsed from the result MD. Returns 0.0 when
   N_OOS < OOS_N_FLOOR (the same N>=30 floor cited in RULE 3.3); otherwise
   the computed power value in [0, 1].
