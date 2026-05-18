@@ -1,0 +1,182 @@
+# FAST_LANE triage screen — Pathway-B K=1.
+#
+# ROLE: triage SCREEN. NOT a deploy gate.
+# OUTCOMES: PROMOTE (worth heavyweight pre-reg) | KILL (don't pursue) | NEEDS-MORE
+#           (evidence borderline OR uninterpretable). DEPLOY only emerges from
+#           downstream heavyweight Chordia pre-reg + paper-trading + SR-monitor.
+#
+# THE BARGAIN: trade per-pre-reg rigor for throughput. Process 10-20x more candidate
+# lanes per unit time, accept a higher per-screen false-positive rate because
+# downstream stages (heavyweight pre-reg, paper-trading, SR-monitor) catch the FPs.
+# FAST_LANE's FPs cost researcher time, not capital.
+#
+# GROUNDING (literature extracts in docs/institutional/literature/):
+#   - benjamini_hochberg_1995_fdr.md:158 — project synthesis applying BH's screening
+#     framework to ORB lane discovery (project mapping consistent with FDR-BH
+#     philosophy; NOT a BH 1995 verbatim endorsement of ORB triage).
+#   - chordia_et_al_2018_two_million_strategies.md:78 — implied-t band at FDR q=0.05
+#     is ~1.96-2.5; the strict t>=3.79 hurdle is for multi-test-adjusted SINGLE-
+#     STRATEGY claims, NOT triage screening.
+#   - harvey_liu_2015_backtesting.md:21 — Sharpe haircut applies at heavyweight stage.
+#   - chan_2013_ch1_backtesting_lookahead.md:46 — paper-trading is the canonical
+#     post-screen gate.
+#
+# WHAT THIS TEMPLATE CUTS vs HEAVYWEIGHT (honestly enumerated under `what_is_cut`):
+#   strict t>=3.79, per-direction consensus, OOS power tier, era stability,
+#   DSR/PBO, clustered SE, theory grant, walk-forward, 5-verdict matrix,
+#   SHADOW lifecycle.
+#
+# WHAT THIS TEMPLATE PRESERVES (load-bearing — cannot be cut):
+#   holdout enforcement + boundary proof, scratch policy realized-eod default,
+#   E2 look-ahead column ban, MinBTL K=1 declaration (Check 57), canonical layers
+#   only, pooled-direction sign check (G-A2 RESTORED), fire-rate gate (G-A3
+#   RESTORED), NO-GO check (G-A5 RESTORED), universal banned-predictor list (G-A6).
+
+metadata:
+  name: "<lane_slug>_fast_lane"
+  purpose: "<one-line research question>"
+  date_locked: "<ISO8601 +10:00>"
+  pathway: "B_individual"                          # Amendment 3.0
+  testing_mode: "individual"
+  n_trials: 1                                      # Check 57 compliance; MinBTL trivially 0 for K=1
+  template_version: "fast_lane_v5"
+  is_triage_screen: true                           # NOT a deploy gate (advisory flag; no drift check enforces in v5)
+  is_triage_screen_advisory_note: "doctrine claim; downstream consumers must respect; no drift check enforces in v5"
+  promotion_target: "heavyweight_chordia_prereg"
+  nogo_check:                                      # G-A5 — avoid re-litigating buried verdicts
+    result: "<NOT_FOUND | FOUND_AT_<cite>>"
+    method: "ran /nogo on <slug> before locking this pre-reg"
+
+scope:
+  instrument: <MNQ|MES|MGC>
+  strategy_id: "<canonical_id>"
+  session: <SESSION_CATALOG_member>                # pipeline.dst.SESSION_CATALOG
+  orb_minutes: <5|15|30>
+  entry_model: <E1|E2|E3>
+  confirm_bars: <int>
+  rr_target: <float>
+  filter_type: "<filter_name | NONE>"
+  filter_source: "trading_app.config.ALL_FILTERS['<name>']"
+  direction: <pooled|long|short>
+
+# LOAD-BEARING — holdout enforcement cannot be cut. A screen that peeks at OOS
+# is worse than no screen: it manufactures false confidence at industrial scale.
+holdout:
+  holdout_date: "2026-01-01"                       # trading_app.holdout_policy.HOLDOUT_SACRED_FROM
+  enforce_via: "trading_app.holdout_policy.enforce_holdout_date"   # called at line :108
+  # Holdout violation = evidence UNINTERPRETABLE, NOT proof of no-edge.
+  # ANY of {override token used, holdout_date missing, IS query lacked hard
+  # filter, max_IS_trading_day >= min_OOS_trading_day} forces outcome=NEEDS-MORE.
+  # Never KILL on holdout grounds — KILL claims evidence shows no edge; holdout
+  # violation means evidence cannot be read either way.
+  violation_outcome: "NEEDS-MORE"
+  holdout_clean_definition: "max_IS_trading_day < min_OOS_trading_day AND min_OOS_trading_day >= holdout_date AND no override token in runner invocation"
+
+# LOAD-BEARING — Criterion 13 default. Silent scratch dropout inflates ExpR 10-45%.
+# Cheap to get right; no "fast" excuse for skipping.
+data_policy:
+  scratch_policy: "realized-eod"
+  canonical_layers_only: true                      # bars_1m, daily_features, orb_outcomes only
+  # Universal look-ahead ban (RULE 1.1 — backtesting-methodology.md § 6.3)
+  lookahead_banned_always: [mae_r, mfe_r, outcome, pnl_r]
+  # E2-specific banned set (RULE § 6.3) when entry_model: E2
+  lookahead_banned_if_e2:
+    - "orb_<N>_break_ts"
+    - "orb_<N>_break_delay_min"
+    - "orb_<N>_break_bar_continues"
+    - "orb_<N>_break_bar_volume"
+    - "orb_<N>_break_dir (when used as predictor)"
+    - "rel_vol_<SESSION> (numerator is break_bar_volume — same look-ahead class)"
+  e2_lookahead_banned_if_e2: true
+
+# The single criterion that drives outcome. Triage operates at FDR-floor severity;
+# severity belongs at heavyweight stage.
+screen:
+  metric: "t_IS"                                   # pooled, naive OK at triage
+  promote_threshold: 2.5
+  promote_threshold_basis: |
+    Project triage heuristic, intentionally above the implied-t band at q=0.05
+    (~1.96-2.5 per chordia_et_al_2018_two_million_strategies.md:78 — the project's
+    own observation of validated_setups.fdr_adjusted_p<0.05 implied-t range, NOT a
+    BH 1995-defined threshold) and intentionally below the Chordia 3.79 single-
+    strategy hurdle. The value 2.5 is chosen as the upper end of the implied-t
+    band; calibration backtest (see post_promote_action.calibration_required) may
+    move it.
+  expr_min: 0.0
+  n_IS_on_min: 50                                  # triage tolerance vs heavyweight 100
+  needs_more_band: 0.5                             # t in [2.5, 3.0) AND otherwise-clean -> NEEDS-MORE
+  # G-A2 RESTORED — pooled-direction sign check. Closes Explorer-C's documented
+  # failure mode (pooled-t hiding opposite-sign per-direction cells).
+  per_direction_sign_check:
+    required_if: "direction == 'pooled'"
+    rule: "sign(long_ExpR) == sign(short_ExpR), else KILL"
+  # G-A3 RESTORED — fire-rate gate. RULE 8.1 grounded.
+  fire_rate_gate:
+    kill_if: "fire_rate < 0.05 OR fire_rate > 0.95"
+
+# Three-state, deterministic. Holdout-violation precedence: ANY holdout problem
+# forces NEEDS-MORE. The lane's evidence is uninterpretable — NOT the same as "no edge."
+outcomes:
+  PROMOTE:
+    if: "holdout_clean AND t_IS >= promote_threshold + needs_more_band AND ExpR_IS > expr_min AND N_IS_on >= n_IS_on_min AND fire_rate in [0.05, 0.95] AND (direction != 'pooled' OR sign(long_ExpR) == sign(short_ExpR))"
+    then: "send to heavyweight Chordia pre-reg; this file becomes its provenance"
+  KILL:
+    if: "holdout_clean AND (t_IS < promote_threshold OR ExpR_IS <= 0 OR fire_rate not in [0.05, 0.95] OR (direction == 'pooled' AND sign(long_ExpR) != sign(short_ExpR)))"
+    then: "do not pursue further; evidence interpretable and not edge"
+  NEEDS-MORE:
+    if: "NOT holdout_clean OR (holdout_clean AND promote_threshold <= t_IS < promote_threshold + needs_more_band)"
+    then: "evidence uninterpretable (holdout violation) OR borderline severity; rerun with larger N or accumulate forward observations; do not promote yet"
+    resolution_paths:                              # S-A1 — NEEDS-MORE has a defined next action
+      - "wait for heavyweight to run naturally on this lane"
+      - "rerun after 3 months OR doubled N forward observations"
+    do_not_re_screen_until: "<calendar date OR N threshold>"
+
+# Mechanical leak-check. Runner MUST emit these so the result MD can prove
+# holdout integrity in one inequality.
+runner_emissions:
+  - t_IS                                           # naive OK at triage
+  - ExpR_IS
+  - N_IS_on
+  - long_ExpR                                      # G-A2 — emitted when direction: pooled
+  - short_ExpR                                     # G-A2 — emitted when direction: pooled
+  - fire_rate                                      # G-A3
+  - max_IS_trading_day
+  - min_OOS_trading_day                            # if any OOS rows visible
+  - holdout_boundary_proof                         # bool: max_IS_trading_day < min_OOS_trading_day AND min_OOS_trading_day >= 2026-01-01
+
+# Honest accounting. Each cut is the heavyweight pre-reg's job, not silently dropped.
+what_is_cut:
+  - "Chordia strict t>=3.79 -> screen at t>=2.5"
+  - "Per-direction long/short consensus statistic (sign check retained as kill rule)"
+  - "OOS power tier + dir_match power floor"
+  - "Era stability per-year ExpR"
+  - "Clustered SE at trading_day"
+  - "DSR / PBO cross-checks"
+  - "Theory grant + literature extract path"
+  - "Walk-forward (N/A for K=1)"
+  - "5-verdict matrix -> 3 outcomes"
+  - "SHADOW lifecycle (lives at heavyweight)"
+  - "Era-stability mandatory result MD section"
+
+what_is_NOT_cut:
+  - "Holdout enforcement + boundary proof"
+  - "Scratch policy realized-eod default"
+  - "E2 look-ahead column ban + universal banned-predictor list"
+  - "MinBTL K=1 declaration (Check 57)"
+  - "Canonical layers only (bars_1m, daily_features, orb_outcomes)"
+  - "Pooled-direction sign check (G-A2 RESTORED)"
+  - "Fire-rate gate (G-A3 RESTORED)"
+  - "NO-GO check before lock (G-A5 RESTORED)"
+
+post_promote_action:
+  next_step: "instantiate heavyweight Chordia pre-reg using this scope; that pre-reg owns severity, power, era, theory, paper-trade lifecycle"
+  this_file_role_after_promote: "provenance only — not the deploy gate"
+  # B-A3 — batch PROMOTEs into family pre-regs (Pathway-A pattern), not 1-per-PROMOTE.
+  promote_target_pattern: "family_pre_reg"
+  promote_target_description: "batch N PROMOTEd lanes into one heavyweight Pathway-A family pre-reg, not N separate pre-regs — otherwise the screen creates a queue, not throughput"
+  # B-A2, G-A4 — bargain math is an assumption to be validated BEFORE first live use.
+  calibration_required:
+    status: "<NOT_RUN | PASSED | FAILED>"
+    method: "instantiate v5 on a balanced sample (known-PROMOTE + known-KILL + known-NEEDS-MORE) across instruments; measure (a) PROMOTE-to-heavyweight-PASS concordance, (b) researcher time saved per lane, (c) downstream FP cost"
+    discordance_kill_threshold: 0.25               # >25% discordance -> tune promote_threshold before live use
+    note: "throughput multiplier UNKNOWN until calibration backtest measures BOTH screen accuracy AND time saved per lane vs heavyweight; survivor-only sampling is biased — balance the cohort"
