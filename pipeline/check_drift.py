@@ -10178,6 +10178,59 @@ def check_intent_router_routing_parity() -> list[str]:
     return violations
 
 
+def check_no_direct_requests_to_broker_endpoints(trading_app_dir: Path) -> list[str]:
+    """Broker adapters MUST route HTTP through trading_app.live.http_client.BrokerHTTPClient.
+
+    Stage 5 doctrine. Stages 1+2 of feat/live-broker-resilience migrated every
+    broker call site through the canonical client; this check prevents the next
+    "let me just curl this real quick" PR from silently re-introducing a bespoke
+    HTTP path that bypasses the retry budget, idempotency keys, AND the
+    circuit-breaker failure_hook wired in Stage 4.
+
+    Scope: any file under `trading_app/live/projectx/` or `trading_app/live/tradovate/`.
+    Allowed surface: the canonical client itself (`trading_app/live/http_client.py`)
+    is NOT scanned. The scanned files must not call ``requests.get(`` /
+    ``requests.post(`` / ``requests.request(`` / ``requests.put(`` / ``requests.delete(``
+    / ``requests.patch(``. Importing ``requests`` for type hints / exception
+    classes (``requests.RequestException``) is allowed; only the call syntax is
+    flagged.
+    """
+    violations: list[str] = []
+    if not trading_app_dir.exists():
+        return violations
+
+    broker_dirs = [
+        trading_app_dir / "live" / "projectx",
+        trading_app_dir / "live" / "tradovate",
+    ]
+    forbidden_call_re = re.compile(
+        r"\brequests\.(get|post|request|put|delete|patch)\s*\("
+    )
+
+    for broker_dir in broker_dirs:
+        if not broker_dir.exists():
+            continue
+        for fpath in broker_dir.rglob("*.py"):
+            if fpath.name == "__init__.py":
+                continue
+            content = fpath.read_text(encoding="utf-8")
+            for line_num, line in enumerate(content.splitlines(), 1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                m = forbidden_call_re.search(line)
+                if m:
+                    rel = fpath.relative_to(trading_app_dir.parent).as_posix()
+                    violations.append(
+                        f"  {rel}:{line_num}: direct requests.{m.group(1)}( call — "
+                        f"must route through trading_app.live.http_client.BrokerHTTPClient "
+                        f"(retry + idempotency + circuit-breaker failure_hook). "
+                        f"Line: {stripped[:120]}"
+                    )
+
+    return violations
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -13832,6 +13885,12 @@ CHECKS = [
         "Action-queue YAML validates against canonical WorkQueue schema: docs/runtime/action-queue.yaml must load via pipeline.work_queue.load_queue() without ValidationError (project_pulse.py / next.py orient surfaces depend on this)",
         check_action_queue_loads_cleanly,
         False,  # blocking -- drift silently breaks /orient and /next
+        False,
+    ),
+    (
+        "Broker adapters route HTTP through canonical BrokerHTTPClient (no direct requests.*)",
+        lambda: check_no_direct_requests_to_broker_endpoints(TRADING_APP_DIR),
+        False,  # blocking — bypass surfaces lose retry+idempotency+circuit-breaker (capital-class)
         False,
     ),
 ]  # end CHECKS
