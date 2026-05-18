@@ -218,6 +218,30 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
             "Criterion 4 is ever amended."
         ),
     ),
+    InlineCopyPair(
+        name="bridge_methodology_rules_applied",
+        inline_site="scripts/research/fast_lane_to_heavyweight_bridge.py",
+        canonical_source=(
+            ".claude/rules/backtesting-methodology.md (`## RULE N:` headings)"
+        ),
+        gated_constants=("METHODOLOGY_RULES_APPLIED",),
+        parity_check="check_bridge_methodology_rules_parity",
+        test_file=(
+            "tests/test_pipeline/"
+            "test_check_drift_bridge_methodology_rules_parity.py"
+        ),
+        bug_class_anchor=(
+            "memory/feedback_canonical_inline_copy_parity_bug_class.md "
+            "(6th confirmed instance, 2026-05-19)"
+        ),
+        notes=(
+            "Bridge embeds methodology-rule slugs as boilerplate in every "
+            "generated heavyweight prereg draft. Each slug must map to a "
+            "real `## RULE N:` heading in the canonical methodology doc; "
+            "otherwise the bridge propagates fake or stale rule citations "
+            "into operator-reviewed drafts."
+        ),
+    ),
 ]
 
 

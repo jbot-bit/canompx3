@@ -10299,6 +10299,110 @@ def check_cherry_pick_ranker_threshold_parity(
     return []
 
 
+def check_bridge_methodology_rules_parity(
+    rules_path: Path | None = None,
+) -> list[str]:
+    """Parity check: bridge METHODOLOGY_RULES_APPLIED vs backtesting-methodology.md.
+
+    The fast-lane -> heavyweight bridge at
+    ``scripts/research/fast_lane_to_heavyweight_bridge.py`` inlines a tuple
+    of methodology-rule slugs (``rule_1_temporal_alignment``,
+    ``rule_3_is_oos_discipline``, etc.) and uses them as keys in the
+    ``methodology_rules_applied`` block of every emitted draft heavyweight
+    prereg. The slugs must correspond to real RULE headings in the canonical
+    methodology doc; an extra slug here means the bridge emits a fake rule
+    citation that no doctrine backs, a removed canonical rule means a stale
+    citation lingers in every draft (6th confirmed instance of the
+    [[canonical-inline-copy-parity-bug-class]] -- see
+    ``memory/feedback_canonical_inline_copy_parity_bug_class.md``).
+
+    This check parses ``.claude/rules/backtesting-methodology.md`` for
+    ``## RULE N: ...`` headings, derives a canonical set of slug stems
+    (``rule_<N>_*``), and asserts every bridge slug is a subset of that
+    canonical set.
+
+    Authority: ``.claude/rules/backtesting-methodology.md`` is the single
+    source of truth for methodology RULE numbering.
+
+    Parameters
+    ----------
+    rules_path : Path | None
+        Override path to the methodology doc (test seam). Defaults to the
+        canonical project location.
+
+    Returns
+    -------
+    list[str]
+        Violation strings -- empty when every bridge slug maps to a real RULE.
+        Fail-closed when the doc cannot be read or no RULE headings parse.
+    """
+    try:
+        from scripts.research import fast_lane_to_heavyweight_bridge as bridge
+    except Exception as exc:
+        return [
+            f"check_bridge_methodology_rules_parity: bridge import failed: {exc}"
+        ]
+
+    target = (
+        rules_path
+        if rules_path is not None
+        else PROJECT_ROOT / ".claude" / "rules" / "backtesting-methodology.md"
+    )
+
+    if not target.exists():
+        return [
+            f"check_bridge_methodology_rules_parity: canonical doctrine missing at "
+            f"{target} (bridge methodology parity cannot be verified -- fail-closed)"
+        ]
+
+    try:
+        text = target.read_text(encoding="utf-8")
+    except Exception as exc:
+        return [
+            f"check_bridge_methodology_rules_parity: failed to read {target.name}: "
+            f"{type(exc).__name__}: {exc}"
+        ]
+
+    # Parse ``## RULE <N>:`` headings. Each match produces an integer rule
+    # number; the canonical slug stem is ``rule_<N>_``.
+    rule_numbers: set[int] = set()
+    for m in re.finditer(r"^##\s+RULE\s+(\d+)\b", text, re.MULTILINE):
+        try:
+            rule_numbers.add(int(m.group(1)))
+        except ValueError:
+            continue
+
+    if not rule_numbers:
+        return [
+            f"check_bridge_methodology_rules_parity: no `## RULE N:` headings "
+            f"parsed from {target.name} (doctrine structure drifted -- "
+            "investigate before promoting the check)"
+        ]
+
+    violations: list[str] = []
+    for slug in bridge.METHODOLOGY_RULES_APPLIED:
+        m = re.match(r"^rule_(\d+)_", slug)
+        if m is None:
+            violations.append(
+                f"check_bridge_methodology_rules_parity: bridge slug "
+                f"{slug!r} does not match the canonical rule_<N>_<name> "
+                "shape (expected `rule_1_temporal_alignment`, etc.)"
+            )
+            continue
+        n = int(m.group(1))
+        if n not in rule_numbers:
+            violations.append(
+                f"check_bridge_methodology_rules_parity: bridge slug "
+                f"{slug!r} cites RULE {n}, which is not present in "
+                f"{target.name} (canonical rule set: "
+                f"{sorted(rule_numbers)!r}). Inline-copy drift -- see "
+                "[[canonical-inline-copy-parity-bug-class]]; "
+                "update METHODOLOGY_RULES_APPLIED or amend the doctrine."
+            )
+
+    return violations
+
+
 def check_canonical_inline_copies_have_parity_check() -> list[str]:
     """Meta-check: every CANONICAL_INLINE_COPIES entry has a live parity guard.
 
@@ -11081,6 +11185,12 @@ CHECKS = [
         "Cherry-pick ranker HEAVYWEIGHT_T_THRESHOLD matches pre_registered_criteria.md Criterion 4 (canonical-inline-copy parity)",
         check_cherry_pick_ranker_threshold_parity,
         False,  # blocking — silent drift would mis-score deflation_headroom and bias which candidates the operator escalates
+        False,
+    ),
+    (
+        "Bridge METHODOLOGY_RULES_APPLIED slugs map to real RULE headings in backtesting-methodology.md (canonical-inline-copy parity)",
+        check_bridge_methodology_rules_parity,
+        False,  # blocking — stale rule citations in generated drafts would propagate into every heavyweight prereg the operator authors
         False,
     ),
     (
