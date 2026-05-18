@@ -30,6 +30,7 @@ from trading_app.live.bar_aggregator import Bar
 from trading_app.live.bar_persister import BarPersister
 from trading_app.live.bot_state import _iso_utc, write_live_health
 from trading_app.live.broker_factory import create_broker_components, get_broker_name
+from trading_app.live.http_client import BrokerHTTPError
 from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
 from trading_app.live.position_tracker import PositionState, PositionTracker
@@ -2802,6 +2803,16 @@ class SessionOrchestrator:
     KILL_SWITCH_TIMEOUT = 300.0  # seconds without a bar before emergency flatten
     KILL_SWITCH_CHECK_INTERVAL = 30.0  # how often the watchdog checks
 
+    # Rationale: broker-state-unknown SLA. 90 s = HTTP client READ_POLICY
+    # deadline (~12 s) + ProjectX nominal latency (~3 s) + four retry-cycle
+    # budget + re-auth grace. Above any single transient read failure, so a
+    # one-off slow response cannot flatten the book. Below KILL_SWITCH_TIMEOUT
+    # (300 s) so an equity-stall with open positions trips faster than a
+    # fully-dead feed. Empirically motivated by the 2026-05-18 TopStepX
+    # equity-fetch incident where reads stopped for 90+ s while the connection
+    # remained nominally up (institutional-rigor.md § 6).
+    EQUITY_AGE_SLA_SECS = 90.0
+
     async def _emergency_flatten(self) -> None:
         """Nuclear option: market-close every open position immediately.
 
@@ -2890,11 +2901,53 @@ class SessionOrchestrator:
                 log.critical(msg)
                 self._notify(msg)
 
+    def _broker_equity_stale(self) -> tuple[bool, str]:
+        """Check whether the broker has stopped acknowledging equity reads.
+
+        Stage 3 broker-state-unknown SLA. Returns (is_stale, reason). Stale
+        means: we have an active position AND either (a) the most recent
+        equity read is older than EQUITY_AGE_SLA_SECS, or (b) the read
+        raised BrokerHTTPError past the client's retry budget.
+
+        Signal-only and no-order-router cases short-circuit to (False, "")
+        because there can be no live position to flatten.
+
+        Read-only side effect: invokes positions.query_equity_with_age,
+        which updates last_good_equity on success.
+        """
+        if self.signal_only or self.order_router is None or self.positions is None:
+            return False, ""
+        if not self._positions.active_positions():
+            return False, ""
+        query_with_age = getattr(self.positions, "query_equity_with_age", None)
+        if query_with_age is None:
+            # Broker adapter does not expose query_equity_with_age (e.g. Rithmic);
+            # SLA gate cannot apply — fail OPEN to preserve existing behaviour.
+            # Stage 5 will track adapter coverage; for now ProjectX is the only
+            # adapter where this incident class was observed.
+            return False, ""
+        try:
+            reading = query_with_age(self.order_router.account_id)
+        except BrokerHTTPError as exc:
+            return True, f"broker_unreachable ({exc.error_class}): {exc}"
+        if reading.source == "live":
+            return False, ""
+        if reading.age_s > self.EQUITY_AGE_SLA_SECS:
+            return True, (
+                f"equity_age={reading.age_s:.0f}s exceeds SLA "
+                f"{self.EQUITY_AGE_SLA_SECS:.0f}s (source={reading.source})"
+            )
+        return False, ""
+
     async def _watchdog(self) -> None:
-        """Independent watchdog task — fires kill switch if feed goes silent.
+        """Independent watchdog task — fires kill switch if feed goes silent
+        OR if the broker stops acknowledging equity reads with positions open.
 
         Runs on its own asyncio schedule, not dependent on bar arrival.
-        This is the fail-safe that protects against the feed dying silently.
+        This is the fail-safe that protects against the feed dying silently
+        AND against the broker accepting our connection while ceasing to
+        answer reads (the TopStepX 2026-05-18 incident class).
+
         The watchdog MUST NOT die — it wraps everything in try/except so that
         a transient error doesn't kill the last line of defense.
         """
@@ -2905,11 +2958,29 @@ class SessionOrchestrator:
                 if self._kill_switch_fired:
                     continue  # already fired, don't spam
 
-                if self._last_bar_at is None:
-                    continue  # haven't received any bars yet
+                # Branch 1 — feed-dead (existing behaviour).
+                if self._last_bar_at is not None:
+                    gap = (datetime.now(UTC) - self._last_bar_at).total_seconds()
+                    if gap > self.KILL_SWITCH_TIMEOUT and self._positions.active_positions():
+                        log.critical(
+                            "Watchdog: feed silent %.0fs > %.0fs with %d open positions — "
+                            "firing kill switch.",
+                            gap,
+                            self.KILL_SWITCH_TIMEOUT,
+                            len(self._positions.active_positions()),
+                        )
+                        self._fire_kill_switch()
+                        await self._emergency_flatten()
+                        continue  # don't double-fire on equity branch
 
-                gap = (datetime.now(UTC) - self._last_bar_at).total_seconds()
-                if gap > self.KILL_SWITCH_TIMEOUT and self._positions.active_positions():
+                # Branch 2 — broker-state-unknown (Stage 3).
+                stale, reason = self._broker_equity_stale()
+                if stale:
+                    log.critical(
+                        "Watchdog: broker equity stale — %s — firing kill switch.",
+                        reason,
+                    )
+                    self._notify(f"KILL SWITCH: broker equity stale — {reason}")
                     self._fire_kill_switch()
                     await self._emergency_flatten()
             except asyncio.CancelledError:
