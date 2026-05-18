@@ -4,7 +4,28 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
-- `mnq-nyse-close-k1-prereg-blocked-by-loader-2026-05-17` — locked
+- `mnq-nyse-close-k1-prereg-blocked-by-loader-2026-05-17` —
+  ⚠️ **SUPERSEDED → UNBLOCKED (Amendment 3.3, PR #292, commit `8ab4fe13`, 2026-05-17)**
+  > Path (a) — the loader amendment recommended in the original entry —
+  > landed as Amendment 3.3 (explicit `metadata.theory_grant: false` for
+  > no-theory Pathway B, fail-closed loader). The locked prereg
+  > `docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml`
+  > already carries `theory_grant: false` + `testing_mode: individual` and
+  > now loads cleanly under the post-3.3 loader (verified 2026-05-18:
+  > `load_hypothesis_metadata` returns `has_theory=False`, `testing_mode=individual`,
+  > `n_hypotheses=1`, `total_expected_trials=1`, sha `f6e1f97716cdf929…`).
+  > The locked statistical hurdle (`t >= 3.79` strict no-theory Chordia)
+  > is preserved — no chordia_threshold_basis flip required.
+  > Runner `research/chordia_strict_unlock_v1.py:92` calls the same loader
+  > path; the Stage 1 K=1 head is now executable. Cohort-park binding on
+  > the 78 ROUTABLE_DORMANT cohort (`docs/audit/results/2026-05-17-deployment-coverage-orphans.md`)
+  > can be released for the two MNQ NYSE_CLOSE rows once the K=1 head
+  > runs and writes a verdict. Cross-refs: `feedback_chordia_theory_citation_field_presence_trap.md`
+  > (still operative — theory_citation OMITTED on this prereg, no
+  > downgrade risk), HANDOFF.md "Open carry-overs" entry (also being
+  > updated this session).
+
+  **Original entry (preserved for audit trail, 2026-05-17):**
   `docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml`
   (Stage 1 of the 3-stage NYSE_CLOSE triage in
   `docs/plans/2026-05-12-mnq-nyse-close-institutional-validation-pathway.md`) is
