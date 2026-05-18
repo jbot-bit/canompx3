@@ -1,0 +1,230 @@
+metadata:
+  theory_grant: false
+  name: "mnq_usdata1000_e1_rr10_pd_clear_long_o30_fast_lane_v1"
+  purpose: >
+    First real FAST_LANE v5.1 instantiation. K=1 triage screen on the E1+PD_CLEAR_LONG
+    candidate from validated_setups (sample_size=161, expectancy_r=0.193). E1 entry means
+    break-bar / break_dir features align with entry timing (no E2 look-ahead class).
+    Filter PD_CLEAR_LONG on E1 is canonically clean per trading_app/config.py:4045-4057
+    (PD_ is in E2_DIRECTION_SELECTOR_FILTER_PREFIXES, not E2_EXCLUDED_FILTER_PREFIXES).
+  date_locked: "2026-05-18T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "individual"
+  research_question_type: "conditional_role"
+  template_version: "fast_lane_v5.1"
+  template_path: "docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml"
+  is_triage_screen: true
+  promotion_target: "heavyweight_chordia_prereg"
+  validation_status_explicit: >
+    NOT_VALIDATED — this is a cheap queue-prioritisation screen, not calibrated.
+    PROMOTE means "worth heavyweight Chordia review", never deploy. Never capital.
+  nogo_check:
+    result: "NOT_FOUND"
+    method: >
+      Grepped docs/audit/hypotheses/, docs/audit/results/, docs/runtime/chordia_audit_log.yaml
+      and docs/runtime/nogo_registry.yaml for this exact lane on 2026-05-18 — zero hits on
+      chordia-style verdicts. The PD_* family appears in routing/triage/allocator audits only.
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml"
+    - "docs/institutional/literature/benjamini_hochberg_1995_fdr.md"
+  notes:
+    - "v5.1 triage screen — gate is t >= 2.5 + needs-more-band 0.5 (PROMOTE if t >= 3.0)."
+    - "PROMOTE here authorizes heavyweight Chordia review only, NOT capital."
+    - "PR #300 emissions consumed: long_expr/short_expr/holdout_boundary_proof via .summary.csv."
+    - "First v5.1 instantiation — smoke test of the screen pipeline end-to-end."
+
+scope:
+  instrument: MNQ
+  strategy_id: "MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30"
+  session: US_DATA_1000
+  orb_minutes: 30
+  entry_model: E1
+  confirm_bars: 2
+  rr_target: 1.0
+  direction: long
+  filter_type: PD_CLEAR_LONG
+  filter_source: "trading_app.config.ALL_FILTERS['PD_CLEAR_LONG']"
+  out_of_scope:
+    - "PD_CLEAR_LONG siblings at other RR targets, sessions, apertures, entry models, or confirm_bars"
+    - "theory-grant upgrade — no literature mechanism claimed here"
+    - "allocator, sizing, schema, or live-execution changes"
+    - "any write to validated_setups, chordia_audit_log.yaml, or lane_allocation.json"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only descriptive; v5.1 holdout-boundary proof asserts max_IS < boundary <= min_OOS"
+  tuning_against_oos: false
+  canonical_layers_only: true
+  scratch_policy: "realized-eod"
+  scratch_handling: "COALESCE(pnl_r, 0.0) — never WHERE pnl_r IS NOT NULL"
+  lookahead_banned_always: [mae_r, mfe_r, outcome, pnl_r, double_break]
+  lookahead_class_for_entry_model: >
+    E1 entry: break-bar features (break_ts/break_delay_min/break_bar_*/break_dir/rel_vol_*)
+    are aligned with entry timing (E1 enters on the close-confirmed break bar itself), so
+    they are NOT post-entry data on E1. The E2-specific lookahead_banned_if_e2 list in v5.1
+    does not apply to this cell.
+
+grounding:
+  core_orb_premise:
+    - source_file: "resources/Building_Reliable_Trading_Systems.pdf"
+      extract_proxy: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "grounds intraday breakout continuation generally"
+      with_theory_claim: false
+  filter_grounding_status:
+    verdict: "UNSUPPORTED"
+    basis: >
+      PD_CLEAR_LONG is a project-confirmed prior-day-geometry filter (clean prior-day
+      structure favors long continuation). No specific literature mechanism cited for the
+      US_DATA_1000 session on MNQ. v5.1 triage screen does NOT require theory citation
+      (cf. TEMPLATE-fast-lane-v5.1.yaml: triage tier, downstream paper-trade + SR-monitor
+      are the validation gates).
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - >
+      validated_setups (status=active) snapshot 2026-05-18: sample_size=161,
+      expectancy_r=0.1929, sharpe_ratio=0.2011, fdr_significant=TRUE.
+  note: >
+    The validated_setups row motivates inclusion in the screen; its statistics are NOT
+    the verdict evidence. The v5.1 .summary.csv emission from this run IS the verdict
+    evidence.
+
+primary_schema:
+  family_cells:
+    - id: "MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30"
+      strategy_id: "MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30"
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 30
+      rr_target: 1.0
+      filter: PD_CLEAR_LONG
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  chordia_threshold_basis: >
+    v5.1 triage screen: promote_threshold=2.5 + needs_more_band=0.5 (PROMOTE iff t >= 3.0).
+    This is BELOW the Chordia strict t>=3.79 hurdle by design — triage stage, not deploy.
+  promotion_gate: "FAST_LANE PROMOTE only authorizes heavyweight Chordia review (separate pre-reg)."
+
+hypotheses:
+  - id: 1
+    name: "MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30 fast-lane v5.1 triage screen"
+    economic_basis: >
+      Triage-stage screen: does the validated cell still clear t >= 3.0 under canonical
+      Mode A replay, with positive ExpR, fire-rate in [0.05, 0.95], and a clean holdout
+      boundary proof. PROMOTE here does NOT claim mechanism — it claims the cell is worth
+      heavyweight review.
+    role:
+      kind: "standalone"
+      parent: "Exact MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30 canonical lane replay."
+      comparator: "v5.1 triage thresholds (cheaper than Chordia strict)."
+      primary_metric: "selected_trade_mean_r"
+      promotion_target: "heavyweight_chordia_prereg_authorization_only"
+    filter:
+      type: "PD_CLEAR_LONG"
+      thresholds:
+        - "fire_vs_off"
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.0]
+      entry_models: [E1]
+      confirm_bars: [2]
+      stop_multipliers: [1.0]
+      orb_minutes: [30]
+    expected_trial_count: 1
+    kill_criteria:
+      - "IS t-stat < 2.5 (KILL — below triage floor)"
+      - "IS ExpR <= 0.0 (KILL)"
+      - "N_IS_on < 50 (KILL — below v5.1 sample floor)"
+      - "Fire-rate outside [0.05, 0.95] (KILL — extreme)"
+      - "Holdout boundary proof FALSE (KILL — leakage)"
+      - "Canonical filter delegation diverges from trading_app.config"
+    needs_more_band:
+      - "t in [2.5, 3.0) -> NEEDS-MORE (rerun with larger N or accumulate forward)"
+      - "Holdout proof FALSE on otherwise-passing cell -> NEEDS-MORE (evidence uninterpretable)"
+    statement: >
+      On the fixed MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30 lane using canonical
+      PD_CLEAR_LONG delegation, IS t-stat clears the v5.1 PROMOTE floor (3.0) with positive
+      ExpR, fire-rate in [0.05, 0.95], and holdout-boundary proof TRUE.
+    pass_metric:
+      metric: "t_IS"
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical IS fired trades"
+      threshold_gte:
+        t_is: 3.0
+        n_is_on: 50
+        expr_is: 0.0
+      extra_gates:
+        - "fire_rate in [0.05, 0.95]"
+        - "holdout_boundary_proof TRUE"
+        - "direction=long bypasses pooled per-direction sign check (v5.1: single-direction lanes)"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound: "MinBTL = 2*ln(1)/1 = 0.0 years; N=1 within Bailey 2013 cap and MNQ horizon"
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+
+decision_rule:
+  promote_if: "t_IS >= 3.0 AND ExpR_IS > 0 AND N_IS_on >= 50 AND fire_rate in [0.05, 0.95] AND holdout_boundary_proof"
+  needs_more_if: "t_IS in [2.5, 3.0) OR holdout_boundary_proof FALSE on otherwise-passing cell"
+  kill_if: "t_IS < 2.5 OR ExpR_IS <= 0 OR fire_rate outside [0.05, 0.95]"
+
+methodology_rules_applied:
+  rule_1_temporal_alignment:
+    application: >
+      Filter PD_CLEAR_LONG reads prev_day_* columns (knowable pre-ORB). E1 entry on
+      close-confirmed break aligns with daily_features.orb_*_break_* definition — no
+      post-entry data class for this cell.
+  rule_3_is_oos_discipline:
+    application: "HOLDOUT_SACRED_FROM=2026-01-01 enforced by canonical loader; OOS descriptive only."
+  rule_4_multi_framing:
+    application: "Pathway B K=1 triage screen; K=1 own framing."
+  rule_9_canonical_layers:
+    application: "Reads only orb_outcomes JOIN daily_features per chordia_strict_unlock_v1.py."
+  rule_10_pre_registration:
+    application: "This file IS the pre-reg, committed before the fast-lane run."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md"
+  - "row-level CSV with IS/OOS split"
+  - "v5.1 summary.csv with the 19 columns (PR #300 emissions)"
+  - "applied v5.1 verdict (PROMOTE / KILL / NEEDS-MORE) based on summary.csv row 1 (IS)"
+
+execution_gate:
+  allowed_now: true
+  execution_surface: "Windows PowerShell with .venv"
+  forbidden_now:
+    - "auto-writing PROMOTE rows into chordia_audit_log.yaml"
+    - "any deployment action (PROMOTE here authorizes heavyweight review only)"
+    - "sibling-cell rescue"
+
+not_done_by_this_pre_reg:
+  - "Allocator deployment decision"
+  - "Theory grant assignment"
+  - "Sibling-RR / sibling-CB / sibling-session / sibling-aperture audits"
+  - "Heavyweight Chordia replay (separate pre-reg required if v5.1 PROMOTEs)"
