@@ -58,6 +58,9 @@ metadata:
   testing_mode: "individual"
   n_trials: 1                                      # Check 57 compliance; MinBTL trivially 0 for K=1
   template_version: "fast_lane_v5"
+  deprecated: true                                 # superseded by fast_lane_v5.1; see banner at file top
+  deprecated_by: "fast_lane_v5.1"
+  deprecation_date: "2026-05-18"
   is_triage_screen: true                           # NOT a deploy gate (advisory flag; no drift check enforces in v5)
   is_triage_screen_advisory_note: "doctrine claim; downstream consumers must respect; no drift check enforces in v5"
   promotion_target: "heavyweight_chordia_prereg"
