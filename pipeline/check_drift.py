@@ -6419,6 +6419,83 @@ def check_prop_profiles_validated_alignment(con=None) -> list[str]:
     return violations
 
 
+def check_account_profiles_declare_is_express_funded() -> list[str]:
+    """Every ACCOUNT_PROFILES entry in trading_app/prop_profiles.py must
+    explicitly declare ``is_express_funded=`` rather than rely on the
+    dataclass default.
+
+    Rationale: AccountProfile.is_express_funded defaults to False (fail-closed
+    after 2026-05-18 — see telemetry_maturity.py module docstring DOCTRINE
+    NOTE). A new profile that forgets the field is silently classified as
+    real-capital, so safety gates (e.g. telemetry-maturity preflight) refuse
+    to demote to advisory WARN. That default is the safe direction, but only
+    works if every profile entry forces the author to think about the field
+    explicitly. This drift check asserts each AccountProfile(...) call inside
+    the ACCOUNT_PROFILES dict literal contains the keyword.
+
+    Fail mode: AST-parses prop_profiles.py, walks the ACCOUNT_PROFILES
+    assignment, and reports any AccountProfile(...) call that omits
+    ``is_express_funded=``.
+
+    @canonical-source: trading_app/prop_profiles.py
+    """
+    import ast
+
+    violations: list[str] = []
+    target = TRADING_APP_DIR / "prop_profiles.py"
+    if not target.exists():
+        return [f"  prop_profiles.py not found at {target} — drift check cannot run"]
+
+    try:
+        tree = ast.parse(target.read_text(encoding="utf-8"))
+    except SyntaxError as exc:
+        return [f"  prop_profiles.py parse failed: {exc}"]
+
+    profiles_dict: ast.Dict | None = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "ACCOUNT_PROFILES":
+            if isinstance(node.value, ast.Dict):
+                profiles_dict = node.value
+                break
+        if isinstance(node, ast.Assign):
+            for tgt in node.targets:
+                if isinstance(tgt, ast.Name) and tgt.id == "ACCOUNT_PROFILES" and isinstance(node.value, ast.Dict):
+                    profiles_dict = node.value
+                    break
+            if profiles_dict is not None:
+                break
+
+    if profiles_dict is None:
+        return [
+            "  ACCOUNT_PROFILES dict literal not found in prop_profiles.py — "
+            "drift check cannot verify is_express_funded declarations"
+        ]
+
+    for key_node, value_node in zip(profiles_dict.keys, profiles_dict.values, strict=False):
+        if not isinstance(value_node, ast.Call):
+            continue
+        if not (isinstance(value_node.func, ast.Name) and value_node.func.id == "AccountProfile"):
+            continue
+        declared = any(kw.arg == "is_express_funded" for kw in value_node.keywords)
+        if declared:
+            continue
+        profile_id = "<unknown>"
+        if isinstance(key_node, ast.Constant) and isinstance(key_node.value, str):
+            profile_id = key_node.value
+        else:
+            for kw in value_node.keywords:
+                if kw.arg == "profile_id" and isinstance(kw.value, ast.Constant):
+                    profile_id = str(kw.value.value)
+                    break
+        violations.append(
+            f"  prop_profiles.ACCOUNT_PROFILES[{profile_id!r}]: AccountProfile(...) "
+            f"omits is_express_funded=. Default is False (fail-closed real-capital); "
+            f"declare True only for Express-Funded prop accounts (Topstep XFA) where "
+            f"the funded-account wrapper insulates real capital."
+        )
+    return violations
+
+
 def check_validated_setups_writer_allowlist() -> list[str]:
     """Only canonical validator/maintenance paths may mutate validated_setups."""
     violations: list[str] = []
@@ -9595,6 +9672,87 @@ def check_literature_extracts_mode_a_b_framing() -> list[str]:
     return violations
 
 
+def check_fast_lane_template_doctrine_fields() -> list[str]:
+    """Verify FAST_LANE templates carry doctrine self-labels honestly.
+
+    v5 (superseded) must carry `deprecated: true` so a future operator copying
+    from it gets a loud signal. v5.1 (live) must carry `is_triage_screen: true`,
+    `validation_status_explicit` starting with `NOT_VALIDATED`, and
+    `promotion_target: heavyweight_chordia_prereg`. These are the doctrine
+    claims that downstream consumers rely on to refuse capital paths.
+
+    Doctrine source: TEMPLATE-fast-lane-v5.1.yaml `validation_status_explicit`
+    field; commit 277b643b (2026-05-18) supersession of v5.
+
+    Fail-closed: missing field or unexpected value is a drift violation.
+    Templates that no longer exist are skipped — the check has nothing to
+    enforce.
+
+    Added 2026-05-18 per FAST_LANE v6 backlog item L1 (code-review follow-up).
+    """
+    hypotheses = PROJECT_ROOT / "docs" / "audit" / "hypotheses"
+    v5_path = hypotheses / "TEMPLATE-fast-lane-v5.yaml"
+    v51_path = hypotheses / "TEMPLATE-fast-lane-v5.1.yaml"
+
+    violations: list[str] = []
+
+    if v5_path.exists():
+        try:
+            v5_text = v5_path.read_text(encoding="utf-8")
+        except OSError as e:
+            return [f"check_fast_lane_template_doctrine_fields: read error v5: {e}"]
+        # v5 must self-label as deprecated. We grep for the exact YAML line
+        # rather than parsing the file because templates use `<MNQ|MES|MGC>`
+        # placeholder syntax that pyyaml accepts but instantiated linters reject.
+        # Tolerate trailing comments (YAML allows `key: value  # comment`).
+        if not re.search(r"^\s*deprecated:\s*true\s*(?:#.*)?$", v5_text, re.MULTILINE):
+            violations.append(
+                "TEMPLATE-fast-lane-v5.yaml missing `deprecated: true` in metadata. "
+                "v5 was superseded by v5.1 (commit 277b643b, 2026-05-18). Add "
+                "`deprecated: true` so a future operator copying from v5 gets a "
+                "loud signal. See docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml."
+            )
+
+    if v51_path.exists():
+        try:
+            v51_text = v51_path.read_text(encoding="utf-8")
+        except OSError as e:
+            return [f"check_fast_lane_template_doctrine_fields: read error v5.1: {e}"]
+
+        if not re.search(r"^\s*is_triage_screen:\s*true\s*(?:#.*)?$", v51_text, re.MULTILINE):
+            violations.append(
+                "TEMPLATE-fast-lane-v5.1.yaml missing `is_triage_screen: true` in "
+                "metadata. This flag is the doctrine claim downstream consumers "
+                "rely on to refuse capital paths."
+            )
+
+        if not re.search(
+            r"^\s*validation_status_explicit:\s*\"?NOT_VALIDATED[^\"\n#]*\"?\s*(?:#.*)?$",
+            v51_text,
+            re.MULTILINE,
+        ):
+            violations.append(
+                "TEMPLATE-fast-lane-v5.1.yaml `validation_status_explicit` field "
+                "missing or does not start with `NOT_VALIDATED`. FAST_LANE is a "
+                "triage screen, not validated; the explicit self-label is the "
+                "strongest anti-narrative guard against future drift toward "
+                "treating PROMOTE as a deploy verdict."
+            )
+
+        if not re.search(
+            r"^\s*promotion_target:\s*\"?heavyweight_chordia_prereg\"?\s*(?:#.*)?$",
+            v51_text,
+            re.MULTILINE,
+        ):
+            violations.append(
+                "TEMPLATE-fast-lane-v5.1.yaml `promotion_target` field must equal "
+                "`heavyweight_chordia_prereg`. PROMOTE outcome routes to heavyweight "
+                "pre-reg, never to capital — the field encodes this contract."
+            )
+
+    return violations
+
+
 def check_intent_router_routing_parity() -> list[str]:
     """Verify .claude/rules/auto-skill-routing.md ↔ .claude/hooks/intent-router.py parity.
 
@@ -10071,6 +10229,12 @@ CHECKS = [
         False,
         True,
     ),
+    (
+        "ACCOUNT_PROFILES entries must declare is_express_funded explicitly (fail-closed default)",
+        check_account_profiles_declare_is_express_funded,
+        False,
+        False,
+    ),
     ("Shared profile fingerprint helper is canonical", check_shared_profile_fingerprint_canonical, False, False),
     ("SR state writer uses derived-state contract envelope", check_sr_state_contract_writer, False, False),
     ("SR state reader validates envelope before trust", check_sr_state_contract_reader, False, False),
@@ -10287,6 +10451,12 @@ CHECKS = [
         "intent-router.py routing table matches auto-skill-routing.md documented skills",
         check_intent_router_routing_parity,
         False,  # blocking — silent drift between hook + rule = unreachable routes
+        False,
+    ),
+    (
+        "FAST_LANE templates carry doctrine self-labels (v5 deprecated, v5.1 triage+not-validated)",
+        check_fast_lane_template_doctrine_fields,
+        False,  # blocking — doctrine drift toward treating PROMOTE as deploy is capital-class risk
         False,
     ),
 ]  # end CHECKS

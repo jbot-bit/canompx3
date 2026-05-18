@@ -102,9 +102,14 @@ class AccountProfile:
     # @canonical-source docs/research-input/topstep/topstep_mll_article.md
     # @audit-finding F-5 (HWM freeze formula must differentiate XFA vs TC starting balance).
     # XFA accounts start at $0 broker equity; TC accounts start at account_size.
-    # Default True because the active deployment topstep_50k_mnq_auto is XFA-shaped.
-    # Set to False only for Trading Combine practice profiles.
-    is_express_funded: bool = True
+    # Default False (fail-closed): a new profile that forgets to set this is
+    # treated as real-capital, so safety gates (e.g. telemetry-maturity in
+    # scripts/run_live_session.py::_check_telemetry_maturity) refuse to demote
+    # to advisory WARN. Set to True explicitly for Express-Funded prop
+    # accounts (e.g. Topstep XFA) where the funded-account wrapper insulates
+    # real capital. Drift check check_account_profiles_declare_is_express_funded
+    # asserts every ACCOUNT_PROFILES entry declares this field explicitly.
+    is_express_funded: bool = False
     notes: str = ""
     # Execution-layer symbol-substitution contract (Stage 1 of NQ-mini feature).
     # Both fields default None for identity behaviour. When populated, downstream
@@ -407,6 +412,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         profile_id="tradeify_50k",
         firm="tradeify",
         account_size=50_000,
+        is_express_funded=True,  # Tradeify funded — XFA-shaped wrapper
         copies=5,  # 5 identical accounts — PRIMARY MNQ scaling lane
         stop_multiplier=0.75,
         max_slots=6,
@@ -438,6 +444,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         profile_id="topstep_50k",
         firm="topstep",
         account_size=50_000,
+        is_express_funded=True,  # Topstep XFA
         copies=5,  # 5 Express accounts — MGC morning lane
         stop_multiplier=0.75,
         max_slots=4,
@@ -476,6 +483,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
     # =========================================================================
     "topstep_50k_mnq_auto": AccountProfile(
         profile_id="topstep_50k_mnq_auto",
+        is_express_funded=True,  # Topstep XFA — active deployment
         firm="topstep",
         account_size=50_000,
         copies=2,  # Start with 1-2 Express, scale to 5 after proving loop
@@ -554,6 +562,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
     # =========================================================================
     "topstep_50k_mes_auto": AccountProfile(
         profile_id="topstep_50k_mes_auto",
+        is_express_funded=True,  # Topstep XFA
         firm="topstep",
         account_size=50_000,
         copies=1,  # Start with 1 Express — prove MES loop, then scale
@@ -612,6 +621,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
     # --- TYPE-A: TopStep 50K (5 Express accounts via ProjectX) ---
     "topstep_50k_type_a": AccountProfile(
         profile_id="topstep_50k_type_a",
+        is_express_funded=True,  # Topstep XFA
         firm="topstep",
         account_size=50_000,
         copies=5,
@@ -654,6 +664,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         profile_id="topstep_100k_type_a",
         firm="topstep",
         account_size=100_000,
+        is_express_funded=True,  # Topstep XFA
         copies=5,
         stop_multiplier=0.75,
         max_slots=16,
@@ -691,6 +702,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         profile_id="tradeify_50k_type_b",
         firm="tradeify",
         account_size=50_000,
+        is_express_funded=True,  # Tradeify funded — XFA-shaped wrapper
         copies=5,
         stop_multiplier=0.75,
         max_slots=15,
@@ -739,6 +751,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         profile_id="tradeify_100k_type_b",
         firm="tradeify",
         account_size=100_000,
+        is_express_funded=True,  # Tradeify funded — XFA-shaped wrapper
         copies=5,
         stop_multiplier=0.75,
         max_slots=15,
@@ -781,6 +794,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         profile_id="bulenox_50k",
         firm="bulenox",
         account_size=50_000,
+        is_express_funded=True,  # Bulenox funded — XFA-shaped wrapper
         copies=3,  # Max 3 simultaneous Master accounts (official: bulenox.com/help/master-account)
         stop_multiplier=0.75,
         max_slots=5,
@@ -821,6 +835,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
     "self_funded_tradovate": AccountProfile(
         profile_id="self_funded_tradovate",
         firm="self_funded",
+        is_express_funded=False,  # self-funded = real capital at risk
         account_size=30_000,
         copies=1,
         stop_multiplier=0.75,  # Same as prop — validated, don't change without re-testing
