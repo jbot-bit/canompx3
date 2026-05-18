@@ -10184,6 +10184,138 @@ def check_fast_lane_promote_threshold_parity(template_path: Path | None = None) 
     return violations
 
 
+def check_canonical_inline_copies_have_parity_check() -> list[str]:
+    """Meta-check: every CANONICAL_INLINE_COPIES entry has a live parity guard.
+
+    Layer 2 of the canonical-inline-copy-parity-bug-class defense
+    (see ``memory/feedback_canonical_inline_copy_parity_bug_class.md``).
+    Iterates ``pipeline.canonical_inline_copies.CANONICAL_INLINE_COPIES``
+    and for each registered ``InlineCopyPair`` asserts:
+
+      (a) ``entry.parity_check`` exists in ``pipeline.check_drift`` module
+          globals and is callable.
+      (b) ``entry.test_file`` exists on disk and is non-empty.
+      (c) The test file contains at least ``len(entry.gated_constants)``
+          ``def test_`` functions (sibling-coverage doctrine per
+          ``feedback_regex_alternation_sibling_coverage.md``).
+
+    Fail-closed: a missing ``pipeline.canonical_inline_copies`` module,
+    an unreadable test file, or an entry whose ``parity_check`` is not
+    a callable are all violations -- never a silent pass.
+
+    The check does NOT execute the per-pair parity functions itself; those
+    run via their own CHECKS entries. This is structural enforcement only:
+    the registry must not list orphan entries, and registered entries must
+    carry sibling-coverage tests.
+    """
+    try:
+        from pipeline.canonical_inline_copies import (
+            CANONICAL_INLINE_COPIES,
+            InlineCopyPair,
+        )
+    except Exception as exc:
+        return [
+            "check_canonical_inline_copies_have_parity_check: "
+            f"could not import pipeline.canonical_inline_copies: "
+            f"{type(exc).__name__}: {exc} "
+            "(Layer 2 registry missing — Stage 2 not landed?)"
+        ]
+
+    if not isinstance(CANONICAL_INLINE_COPIES, list):
+        return [
+            "check_canonical_inline_copies_have_parity_check: "
+            "CANONICAL_INLINE_COPIES is not a list "
+            f"(got {type(CANONICAL_INLINE_COPIES).__name__})"
+        ]
+
+    if len(CANONICAL_INLINE_COPIES) == 0:
+        return [
+            "check_canonical_inline_copies_have_parity_check: "
+            "CANONICAL_INLINE_COPIES is empty -- registry must seed at least "
+            "the fast_lane_promote_threshold pair (Check #158 anchor). "
+            "If you intentionally cleared it, remove this check too."
+        ]
+
+    violations: list[str] = []
+    module_globals = globals()
+
+    for idx, entry in enumerate(CANONICAL_INLINE_COPIES):
+        # Build prefix defensively — entry may not have `.name` if the
+        # type check below fires (caller passed a dict by accident).
+        entry_name = getattr(entry, "name", None)
+        prefix = (
+            f"check_canonical_inline_copies_have_parity_check: "
+            f"entry[{idx}] name={entry_name!r}"
+        )
+
+        if not isinstance(entry, InlineCopyPair):
+            violations.append(
+                f"{prefix}: not an InlineCopyPair (got "
+                f"{type(entry).__name__})"
+            )
+            continue
+
+        # (a) parity_check must exist in module globals and be callable.
+        check_fn = module_globals.get(entry.parity_check)
+        if check_fn is None:
+            violations.append(
+                f"{prefix}: parity check {entry.parity_check!r} not found "
+                "in pipeline.check_drift module globals (registry entry "
+                "orphaned -- add the parity-check function or remove the "
+                "entry)"
+            )
+        elif not callable(check_fn):
+            violations.append(
+                f"{prefix}: parity check {entry.parity_check!r} exists but "
+                f"is not callable (type={type(check_fn).__name__})"
+            )
+
+        # (b) test_file must exist and be non-empty.
+        test_path = PROJECT_ROOT / entry.test_file
+        if not test_path.exists():
+            violations.append(
+                f"{prefix}: injection-test file {entry.test_file!r} "
+                "not found (sibling-coverage doctrine requires "
+                "tests/test_pipeline/<slug>.py for every registered pair)"
+            )
+            continue
+        try:
+            test_text = test_path.read_text(encoding="utf-8")
+        except Exception as exc:
+            violations.append(
+                f"{prefix}: could not read injection-test file "
+                f"{entry.test_file!r}: {type(exc).__name__}: {exc}"
+            )
+            continue
+        if not test_text.strip():
+            violations.append(
+                f"{prefix}: injection-test file {entry.test_file!r} is empty"
+            )
+            continue
+
+        # (c) sibling-coverage: >= one test function per gated constant.
+        expected_n = max(1, len(entry.gated_constants))
+        # Robust count: any line where a stripped `def test_` appears.
+        # We do NOT parse the AST here -- regex on stripped lines is
+        # sufficient and matches the cheap-grep convention used by
+        # neighbouring checks in this file.
+        test_fn_count = sum(
+            1
+            for line in test_text.splitlines()
+            if line.lstrip().startswith("def test_")
+        )
+        if test_fn_count < expected_n:
+            violations.append(
+                f"{prefix}: expected >= {expected_n} test functions "
+                f"in {entry.test_file!r} (one per gated constant: "
+                f"{', '.join(entry.gated_constants)}), found {test_fn_count} "
+                "-- sibling-coverage doctrine violation "
+                "(see memory/feedback_regex_alternation_sibling_coverage.md)"
+            )
+
+    return violations
+
+
 CHECKS = [
     (
         "Hardcoded 'MGC' SQL literals in generic pipeline code",
@@ -10828,6 +10960,12 @@ CHECKS = [
         "FAST_LANE promote-queue scanner thresholds match TEMPLATE-fast-lane-v5.1.yaml (canonical-inline-copy parity)",
         check_fast_lane_promote_threshold_parity,
         False,  # blocking — silent drift between scanner constants and v5.1 template would mis-promote heavyweight candidates
+        False,
+    ),
+    (
+        "Canonical-inline-copy registry: every InlineCopyPair has a live parity check + sibling-coverage tests (Layer 2 meta-check)",
+        check_canonical_inline_copies_have_parity_check,
+        False,  # blocking — an orphan registry entry means a class-pattern fix has silently rotted
         False,
     ),
 ]  # end CHECKS
