@@ -62,13 +62,9 @@ HEAVYWEIGHT_T_THRESHOLD_PROSE: str = (
 )
 
 # Allowlist of scope-block fields propagated into the heavyweight draft.
-# Audit-fix (2026-05-19, post-review of commit b3bb9bdf): prior implementation
-# used `dict(scope)` to copy the source-YAML scope block wholesale, which
-# would silently propagate any future ``theory_citation`` (or any other
-# unintended) key from a source YAML into the heavyweight draft, defeating
-# the field-presence-trap defense. Closing with an explicit allowlist. New
-# fast-lane scope fields require an explicit addition here -- silent
-# field-name drift fails closed.
+# Explicit rather than dict(scope) wholesale: new fast-lane scope fields require
+# a conscious addition here, so theory_citation (field-presence-trap) cannot
+# silently leak into the heavyweight draft and flip the Chordia threshold.
 _ALLOWED_SCOPE_FIELDS: tuple[str, ...] = (
     "instrument",
     "strategy_id",

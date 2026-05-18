@@ -106,11 +106,20 @@ Canonical implementation: `research/comprehensive_deployed_lane_scan.py::test_ce
 
 `N_on_OOS ≥ 30` is necessary but not sufficient. A binary OOS gate (`dir_match`, sign-flip, p_oos threshold) is only refutational evidence when the OOS sample has enough statistical power to detect the IS effect size. An underpowered OOS produces noise-consistent results that cannot distinguish "signal alive", "signal dead", or "signal reversed" — treating any of them as refutation is a methodological error.
 
-**Compute power BEFORE applying any binary OOS kill criterion:**
+**Compute power BEFORE applying any binary OOS kill criterion.**
+
+Two helpers in `research/oos_power.py` — pick based on test framing:
 
 ```python
-from research.oos_power import oos_ttest_power, power_verdict, format_power_report
+from research.oos_power import one_sample_power, oos_ttest_power, power_verdict
 
+# ONE-SAMPLE framing (pooled IS trades tested via t = mean*sqrt(N)/std):
+# cohen_d = |t_IS| / sqrt(N_IS)  — IS std cancels out of the ratio
+cohen_d = abs(t_is) / (n_is ** 0.5)
+power = one_sample_power(cohen_d, n_oos, alpha=0.05)
+tier = power_verdict(power)  # CAN_REFUTE | DIRECTIONAL_ONLY | STATISTICALLY_USELESS
+
+# TWO-SAMPLE framing (separate OOS bull/bear groups):
 report = oos_ttest_power(
     is_delta=is_stats["delta"],
     is_pooled_std=is_stats["pooled_std"],
@@ -118,8 +127,10 @@ report = oos_ttest_power(
     n_oos_b=n_oos_group_b,
     alpha=0.05,
 )
-tier = power_verdict(report["power"])  # CAN_REFUTE | DIRECTIONAL_ONLY | STATISTICALLY_USELESS
+tier = power_verdict(report["power"])
 ```
+
+Use `one_sample_power` when the IS runner emits a one-sample t on pooled trade pnl_r (fast-lane and heavyweight runners). Use `oos_ttest_power` when comparing two OOS directional groups (bull vs bear).
 
 **Tier table (canonical thresholds — `research/oos_power.py::POWER_TIERS`):**
 
@@ -131,7 +142,7 @@ tier = power_verdict(report["power"])  # CAN_REFUTE | DIRECTIONAL_ONLY | STATIST
 
 **Required practice:**
 
-1. Every verify script with a `dir_match`, sign-flip, or p_oos gate MUST compute OOS power as a prerequisite check via `research.oos_power.oos_ttest_power()`. Re-implementing the power calc in another script is a canonical-delegation violation per `integrity-guardian.md` § 2.
+1. Every verify script with a `dir_match`, sign-flip, or p_oos gate MUST compute OOS power as a prerequisite check via `research.oos_power` (one-sample or two-sample per framing above). Re-implementing the power calc in another script is a canonical-delegation violation per `integrity-guardian.md` § 2.
 2. Pre-registered criteria that reference `dir_match` as a kill clause MUST specify the power floor: e.g., `dir_match=TRUE required IF OOS_per_group_N ≥ 30 AND power ≥ 0.80`.
 3. Every result doc MUST report the power number and tier explicitly next to the dir_match status. No `dir_match` claim may appear without its power context. Use `format_power_report()` for stdout; cite both fields in the result file.
 4. For underpowered OOS situations, prefer one of:

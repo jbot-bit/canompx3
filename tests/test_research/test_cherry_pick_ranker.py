@@ -131,6 +131,29 @@ class TestOOSPowerReadiness:
             f"large-IS-N + small-OOS-N must not inflate power; got {val}"
         )
 
+    def test_pooled_expr_zero_with_nonzero_t_computes_power_from_t(self):
+        """Audit second-pass open item: pooled_expr=0 AND pooled_t!=0 edge case.
+
+        Pre-fix behavior returned 0.0 (silent fail-safe). Post-fix:
+        Cohen's d derives from t and N only, so the function computes a
+        non-zero power consistent with what t implies. Algebraically
+        incoherent on well-formed data (t = mean*sqrt(N)/std forces t=0
+        when mean=0), but the new path is the honest computation. Pinned
+        here so the deliberate behavior change cannot regress unnoticed.
+        """
+        oos = cpr.OOSStats(n_oos=100, expr_oos=0.05, t_oos=1.5)
+        # pooled_expr=0 -- algebraically incoherent with pooled_t=3.06 but the
+        # function must not silently zero out; it should compute power from
+        # the t-stat the runner emitted.
+        val = cpr.compute_oos_power_readiness(0.0, 3.06, 226, oos)
+        # Same cohen_d as test_matches_canonical_one_sample_helper.
+        from research.oos_power import one_sample_power
+
+        expected = float(
+            one_sample_power(abs(3.06) / (226**0.5), 100, alpha=0.05)
+        )
+        assert val == pytest.approx(expected, abs=1e-9)
+
 
 # ----- Score breakdown total -----
 

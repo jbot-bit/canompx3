@@ -217,27 +217,11 @@ def compute_oos_power_readiness(
     """One-sample power of the OOS sample to detect the IS effect at alpha=0.05.
 
     Returns 0.0 if OOS is unavailable, OOS N < OOS_N_FLOOR, or pooled IS stats
-    are degenerate. Otherwise delegates to
-    ``research.oos_power.one_sample_power`` -- the canonical helper for the
-    one-sample t-test power calc that matches what the fast-lane and
-    heavyweight runners emit (one-sample t on pooled ExpR, NOT two-sample
-    Welch between IS and OOS groups).
+    are degenerate. Otherwise delegates to ``research.oos_power.one_sample_power``.
 
-    Cohen's d derivation: the canonical runner emits one-sample
-    ``t = mean * sqrt(N) / std`` on pooled trade pnl_r. Solving for std gives
-    ``std = |mean| * sqrt(N) / |t|``; Cohen's d is then
-    ``|mean| / std = |t| / sqrt(N)``. This is the standardized effect size
-    the OOS sample must detect -- the IS std cancels out of the ratio, so
-    only IS t and IS N are needed.
-
-    Audit-fix note (2026-05-19, post-review of commit 81da1099): prior
-    implementation passed ``n_oos_a=pooled_n`` (IS trade count) into
-    ``oos_ttest_power`` which treats both arguments as OOS groups. The
-    resulting df = pooled_n + oos_n - 2 inflated power for any candidate
-    with large IS N and small OOS N. evidence-auditor pass surfaced the
-    framing error; fix replaces the two-sample call with the canonical
-    one-sample helper, which matches how the fast-lane and heavyweight
-    runners actually compute t at execution time.
+    Cohen's d = |t_IS| / sqrt(N_IS). Derivation: canonical runner emits
+    one-sample t = mean * sqrt(N) / std, so std = mean * sqrt(N) / t and
+    d = |mean| / std = |t| / sqrt(N). The IS std cancels; only IS t and N needed.
     """
     if oos_stats is None:
         return 0.0
@@ -247,12 +231,7 @@ def compute_oos_power_readiness(
         return 0.0
     if abs(pooled_t) < 1e-9:
         return 0.0
-    # Cohen's d for a one-sample t-test: |t| / sqrt(N). Derives directly from
-    # the canonical one-sample t-stat the runner emits. No IS std reconstruction
-    # needed; the std cancels out of the standardized effect size.
     cohen_d = abs(pooled_t) / math.sqrt(pooled_n)
-    if cohen_d <= 0:
-        return 0.0
     try:
         from research.oos_power import one_sample_power
     except ImportError:
