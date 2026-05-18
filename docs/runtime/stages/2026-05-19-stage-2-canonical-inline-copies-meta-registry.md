@@ -89,3 +89,72 @@ Read memory/feedback_canonical_inline_copy_parity_bug_class.md + feedback_n3_sam
 Then: (1) grep audit per the table above, (2) implement, (3) run evidence-auditor, (4) commit + push, (5) close stage file.
 Bundle Stage 2.5 (Pyright cleanup) unless told otherwise.
 ```
+
+---
+
+## Checkpoint — 2026-05-19 (truth audit STARTED, code NOT touched)
+
+Operator paused implementation pending proper planning per "no gaps or bias or adhoc"
+direction. Plan locked, truth audit begun, then context cleared.
+
+### Confirmed baseline (verified this session)
+- `len(CHECKS) = 158` on main (matches stage file's 158 → 159 claim).
+- 1 pre-existing drift violation BEFORE any Stage 2 work:
+  - **Check #52** validated_setups recompute: native MGC strategy
+    `MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4` stored window
+    `(2022-06-13, 2026-05-14, N=238)` vs canonical recompute
+    `(2022-06-13, 2026-05-17, N=239)`.
+  - **Class:** validated_setups staleness — needs recompute, NOT a Stage 2 task.
+  - **Action:** flag for separate triage; do NOT silently fix as part of Stage 2.
+- Saved full output: `.claude/scratch/drift_baseline_2026_05_19.txt` (line 540
+  has the FAILED line; full dump retained for reference).
+
+### Triage of 12 grep hits (single-regex pass — biased toward opt-in comment cite)
+4 CANDIDATEs need per-site inspection BEFORE seeding:
+  1. `pipeline/check_drift.py:9458` "Mirrors apply_c8_gate._C8_FAIL_LABELS"
+  2. `trading_app/config.py:4201` "Canonical source: pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS"
+  3. `scripts/tools/calibrate_null_sigma.py:50` "Canonical source: run_null_batch.py INSTRUMENT_NULL_PARAMS"
+  4. `trading_app/regime/schema.py:47` "Mirrors experimental_strategies + run_label..."
+
+Each must be verified as a **value-parity** inline (not a doc-mirror or pattern-mirror)
+before going into `CANONICAL_INLINE_COPIES`. Bias risk: tempting to seed all 4 to look
+thorough; do NOT — read inline + canonical, prove value parity, then seed.
+
+### Additional grep passes still owed (zero blind-spot bias)
+1. `grep -rEn "(0\.18|0\.39|0\.22)\s*#.*cost"` — cost-spec values inlined w/o cite.
+2. `grep -rn "from pipeline.cost_model import COST_SPECS"` — find legitimate readers;
+   anything that uses cost values WITHOUT this import is suspect.
+3. `grep -rn "3\.79\|3\.00" scripts/ pipeline/` — Chordia thresholds outside canonical readers.
+
+### Decisions locked
+- Audit row 3 (allocator-gate class) is a **different bug class**
+  (producer/consumer parity, not value parity). OUT OF SCOPE this stage.
+- Stage 2.5 (Pyright cleanup) = **PARK, do not bundle**. Bundling muddies the
+  adversarial-audit signal on the registry itself.
+- Meta-check must use `vars(check_drift)` string lookup (NOT `getattr` fallback)
+  so aliased imports cannot satisfy the gate.
+- Test file requires mutation-probe per entry constant + ≥7 negative tests.
+- Adversarial-audit-gate dispatch is **mandatory** — this is `[judgment]`-class
+  on `pipeline/check_drift.py` (truth layer).
+
+### Files NOT touched this session
+- `pipeline/canonical_inline_copies.py` — does not exist yet (design ready).
+- `pipeline/check_drift.py` — untouched.
+- `tests/test_pipeline/test_canonical_inline_copies_registry.py` — does not exist.
+- `docs/runtime/decision-ledger.md` — untouched.
+
+### Next session opener (REVISED)
+
+```
+/clear
+Read this stage file (this Checkpoint section + everything above it).
+Resume from "Additional grep passes still owed" — complete the 3 extra greps + inspect
+the 4 CANDIDATEs from the Triage table. Each candidate gets a VERIFY note (read inline,
+read canonical, decide value-parity Y/N) before any code is written.
+THEN implement per the locked design. THEN dispatch evidence-auditor.
+
+Do NOT silently absorb the pre-existing Check #52 validated_setups violation — flag
+separately or note as known-pre-existing in the commit.
+
+Do NOT bundle Stage 2.5 Pyright cleanup.
+```
