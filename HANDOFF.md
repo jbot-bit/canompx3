@@ -48,6 +48,7 @@
 **Current truth (verified end of 2026-05-18 session):**
 - `docs/runtime/lane_allocation.json`: rebalance_date `2026-05-18`, **3 MNQ deployed lanes** (OVNRNG_100, VWAP_MID_RR1.5_O15, COST_LT12), 833 paused, 8 displaced.
 - Monday capital decision: **STILL RED (BLOCK_LAUNCH_COPY_SET_UNVERIFIED)** until Option A/B/C below. The lane refresh did NOT change the broker mismatch; it only changed which lanes would route IF launched.
+- **FAST_LANE PROMOTE queue (new this session):** 1 QUEUED (`MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30`, candidate-pack label `UNVERIFIED_OOS_POWER` — OOS N=14 → 10.9% power → STATISTICALLY_USELESS; needs N=191 for 80% power), 1 REVOKED (`MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K`, pooling artifact). `python scripts/research/fast_lane_promote_queue.py` for current state. Drift check #157 enforces no-orphan-PROMOTE. Candidate pack: `docs/audit/results/2026-05-18-heavyweight-candidate-pack.md`.
 
 ### Highest-EV pending operator action (do FIRST)
 - **Option A — Provision the second TopstepX account** (still the cleanest unblock; full detail at "Monday-morning decision" block further down).

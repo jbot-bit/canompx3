@@ -91,3 +91,7 @@ Computed by `_fast_lane_verdict_v5_1()` per `docs/audit/hypotheses/TEMPLATE-fast
 - Treating the FAST_LANE verdict as a substitute for paper-trade + SR-monitor validation.
 
 _Scope direction at screen: `'pooled'`. Pooled lanes require both per-direction ExpRs and same-sign to PROMOTE; single-direction lanes bypass that gate._
+
+---
+
+**REVOKED 2026-05-18:** see `2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.revocation.md` — pooled t=3.30 is a sample-doubling artifact; per-direction L:t=2.12 KILL + S:t=2.53 KILL on fire-rate <5% extreme. PROMOTE block above retained for audit trail; not deployable.

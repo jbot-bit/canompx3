@@ -4,6 +4,28 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
+- `mnq-comexsettle-orbvol16k-fast-lane-promote-revoked-2026-05-18` —
+  **REVOKED FAST_LANE PROMOTE on lane `MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K`.**
+  Pooled t=3.30 was a sample-doubling artifact. Per-direction breakdown
+  already in the result MD (long t=2.12 N=47, short t=2.53 N=50) shows both
+  directions KILL_AS_STANDALONE under v5.1 thresholds (t<2.5 floor AND
+  fire-rate <5% extreme on both sides). Heavyweight Chordia authoring is
+  NOT authorized. Sibling cells (other RR/CB/aperture/session/instrument
+  variants) are out of scope of this revocation. Evidence:
+  `docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.revocation.md`.
+  Scanner status: REVOKED. Spent K: 0 (re-inspection of existing emissions).
+
+- `fast-lane-promote-queue-scanner-landed-2026-05-18` —
+  Built `scripts/research/fast_lane_promote_queue.py` (read-only scanner +
+  derived-state cache `docs/runtime/promote_queue.yaml`) and drift check
+  `check_fast_lane_promote_orphans` (Check #157, registered in `CHECKS` list
+  of `pipeline/check_drift.py`). Closes the missing-pipe gap between
+  FAST_LANE v5.1 PROMOTE results and follow-up. Status enum is exhaustive
+  (QUEUED / ESCALATED / REVOKED / PARKED / ERROR — no UNKNOWN). Per-direction
+  sanity gate catches pooling-inflation artifacts before heavyweight K is
+  spent. Promote_queue.yaml is derived state — drift check reconstructs
+  from on-disk artifacts on every run.
+
 - `mnq-nyse-close-k1-prereg-blocked-by-loader-2026-05-17` —
   ⚠️ **SUPERSEDED → UNBLOCKED (Amendment 3.3, PR #292, commit `8ab4fe13`, 2026-05-17)**
   > Path (a) — the loader amendment recommended in the original entry —

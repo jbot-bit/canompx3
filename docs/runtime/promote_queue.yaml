@@ -1,0 +1,54 @@
+schema_version: 1
+source: scripts/research/fast_lane_promote_queue.py
+warning: 'DERIVED STATE - do not hand-edit. Rebuilt from result MDs + revocation sidecars
+  + heavyweight preregs + action-queue.yaml on every scanner run. Drift check #157
+  reconstructs and diffs.'
+entries:
+- result_md: docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.md
+  strategy_id: MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K
+  direction: pooled
+  pooled_t: 3.3
+  pooled_expr: 0.4676
+  pooled_n: 97
+  pooled_fire: 0.0649
+  long_n: 47
+  long_expr: 0.4427
+  long_t: 2.12
+  short_n: 50
+  short_expr: 0.4909
+  short_t: 2.525
+  pooled_universe_n: 1494
+  long_fire: 0.03145917001338688
+  short_fire: 0.03346720214190094
+  long_side_verdict: KILL_AS_STANDALONE
+  short_side_verdict: KILL_AS_STANDALONE
+  pooling_artifact: true
+  revocation_sidecar: docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.revocation.md
+  heavyweight_prereg: null
+  park_entry: null
+  status: REVOKED
+  error_reason: null
+- result_md: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
+  strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+  direction: long
+  pooled_t: 3.064
+  pooled_expr: 0.1708
+  pooled_n: 226
+  pooled_fire: 0.14679999999999999
+  long_n: 221
+  long_expr: 0.1747
+  long_t: 3.065
+  short_n: 5
+  short_expr: 0.0
+  short_t: null
+  pooled_universe_n: 1539
+  long_fire: 0.14359974009096815
+  short_fire: 0.003248862897985705
+  long_side_verdict: PROMOTE_AS_STANDALONE
+  short_side_verdict: N_A
+  pooling_artifact: false
+  revocation_sidecar: null
+  heavyweight_prereg: null
+  park_entry: null
+  status: QUEUED
+  error_reason: null

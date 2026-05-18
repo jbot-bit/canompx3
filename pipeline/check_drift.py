@@ -9940,6 +9940,63 @@ def check_intent_router_routing_parity() -> list[str]:
 
 # Tuple format: (description, callable, is_advisory, requires_db)
 # requires_db=True means check can return "SKIPPED" if DB unavailable
+def check_fast_lane_promote_orphans() -> list[str]:
+    """Reconstruct the FAST_LANE PROMOTE queue and diff against the cache.
+
+    Three failure classes caught:
+
+    1. ERROR entry — a PROMOTE result MD whose per-direction sanity gate
+       flags pooling-artifact (both directions KILL_AS_STANDALONE) without
+       a revocation sidecar. Pooling-inflation PROMOTEs cannot be left in
+       the queue — the deployment claim is structurally invalid.
+    2. Cache drift — ``docs/runtime/promote_queue.yaml`` exists but its
+       entries disagree with the reconstruction. Either the cache is
+       stale or someone hand-edited it (e.g. to flip REVOKED back to
+       QUEUED). Either way, operator must rerun ``--write`` to refresh.
+    3. Orphan PROMOTE — a result MD with FAST_LANE verdict PROMOTE that
+       would not appear in the queue at all (e.g. malformed title line).
+       The scanner returns it as ERROR; this check forwards that.
+
+    Added 2026-05-18 alongside ``scripts/research/fast_lane_promote_queue.py``
+    and the stage ``2026-05-18-fast-lane-promote-queue-scanner.md``.
+    """
+    try:
+        from scripts.research.fast_lane_promote_queue import (
+            QUEUE_CACHE,
+            diff_against_cache,
+            scan,
+        )
+    except Exception as exc:
+        return [f"check_fast_lane_promote_orphans: import error: {exc}"]
+
+    try:
+        entries = scan()
+    except Exception as exc:
+        return [f"check_fast_lane_promote_orphans: scan failure: {exc}"]
+
+    violations: list[str] = []
+
+    for e in entries:
+        if e.status == "ERROR":
+            violations.append(
+                f"FAST_LANE PROMOTE in ERROR state: {e.strategy_id} -> {e.error_reason} "
+                f"(file: {e.result_md})"
+            )
+
+    if QUEUE_CACHE.exists():
+        diff_lines = diff_against_cache(entries, QUEUE_CACHE)
+        for line in diff_lines:
+            stripped = line.strip()
+            if stripped in {"(cache up to date)", "(no cache file on disk; first run)"}:
+                continue
+            violations.append(
+                f"FAST_LANE PROMOTE queue cache out of sync: {stripped} "
+                f"(rerun `python scripts/research/fast_lane_promote_queue.py --write`)"
+            )
+
+    return violations
+
+
 CHECKS = [
     (
         "Hardcoded 'MGC' SQL literals in generic pipeline code",
@@ -10572,6 +10629,12 @@ CHECKS = [
         "FAST_LANE v5.1 preregs route through runner v5.1 branch (sentinel >= 2026-05-20)",
         check_fast_lane_runner_template_routing,
         False,  # blocking — silent bypass of v5.1 gate table is capital-relevant when PROMOTE feeds heavyweight queue
+        False,
+    ),
+    (
+        "FAST_LANE PROMOTE queue: no orphan PROMOTEs, no ERROR entries, cache up to date",
+        check_fast_lane_promote_orphans,
+        False,  # blocking — orphan PROMOTE is the missing-pipe class we just closed
         False,
     ),
 ]  # end CHECKS
