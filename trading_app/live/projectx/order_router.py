@@ -64,13 +64,20 @@ class ProjectXOrderRouter(BrokerRouter):
         self._last_known_price: float | None = None
         # ProjectX auth may be None in test harness scenarios; only construct
         # the http client when we have a real auth (for refresh_token hook).
+        # Stage 4: failure_hook is the orchestrator's CircuitBreaker, set on
+        # auth before this component is built. None outside an orchestrator
+        # (tests, ad-hoc scripts) — the HTTP client falls back to _NoopFailureHook.
         self._http: BrokerHTTPClient | None = None
         if auth is not None:
-            self._http = BrokerHTTPClient(
-                base_url=BASE_URL,
-                refresh_token=auth.refresh_if_needed,
-                name="projectx-orders",
-            )
+            failure_hook = getattr(auth, "failure_hook", None)
+            kwargs_for_client: dict = {
+                "base_url": BASE_URL,
+                "refresh_token": auth.refresh_if_needed,
+                "name": "projectx-orders",
+            }
+            if failure_hook is not None:
+                kwargs_for_client["failure_hook"] = failure_hook
+            self._http = BrokerHTTPClient(**kwargs_for_client)
 
     def _client(self) -> BrokerHTTPClient:
         if self._http is None:

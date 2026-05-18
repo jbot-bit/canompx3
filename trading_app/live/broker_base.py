@@ -12,7 +12,20 @@ from .bar_aggregator import Bar
 
 
 class BrokerAuth(ABC):
-    """Authenticate with a broker and manage session tokens."""
+    """Authenticate with a broker and manage session tokens.
+
+    ``failure_hook`` is the orchestrator's CircuitBreaker (or any object with
+    record_failure/record_success/should_allow_request). Set by SessionOrchestrator
+    immediately after auth construction and BEFORE any broker component is built,
+    so each component can wire its BrokerHTTPClient through the same breaker.
+    None when running outside an orchestrator (tests, ad-hoc scripts) — the
+    HTTP client falls back to its internal _NoopFailureHook.
+    """
+
+    failure_hook: Any = None
+
+    def __init__(self) -> None:
+        self.failure_hook = None
 
     @abstractmethod
     def get_token(self) -> str:

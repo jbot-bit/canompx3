@@ -272,3 +272,60 @@ def test_policy_defaults_construct():
     assert READ_POLICY.max_attempts == 5
     assert ORDER_POLICY.max_attempts == 4
     assert AUTH_POLICY.max_attempts == 3
+
+
+# ─── Stage 4 — failure_hook receives the classified error letter ───────────
+
+
+class _RecordingHook:
+    """Hook stub that captures every call so we can assert on (class, count)."""
+
+    def __init__(self):
+        self.failures: list[str] = []
+        self.successes: int = 0
+        self.allow: bool = True
+
+    def record_failure(self, error_class: str) -> None:
+        self.failures.append(error_class)
+
+    def record_success(self) -> None:
+        self.successes += 1
+
+    def should_allow_request(self) -> bool:
+        return self.allow
+
+
+def test_failure_hook_receives_class_d_on_5xx():
+    """5xx storm — hook records 'D' for each attempt before exhaustion."""
+    session = _ScriptedSession([_make_resp(503), _make_resp(503)])
+    hook = _RecordingHook()
+    client = BrokerHTTPClient(base_url="https://x.test", session=session, name="t", failure_hook=hook)
+    with pytest.raises(BrokerTransientError):
+        client.request("POST", "/p", policy=RetryPolicy(max_attempts=2, deadline_s=2.0, base_backoff_s=0.01))
+    # Each 5xx response invokes record_failure("D"); two attempts → two D's.
+    assert hook.failures == ["D", "D"]
+    assert hook.successes == 0
+
+
+def test_failure_hook_receives_class_b_on_timeout():
+    """Read-timeout (class B) propagates to the hook."""
+    session = _ScriptedSession([requests.Timeout("slow"), _make_resp(200, {"ok": True})])
+    hook = _RecordingHook()
+    client = BrokerHTTPClient(base_url="https://x.test", session=session, name="t", failure_hook=hook)
+    client.post_json("/p", {}, {}, policy=RetryPolicy(max_attempts=2, deadline_s=2.0, base_backoff_s=0.01))
+    # First attempt is class-B timeout, then success.
+    assert "B" in hook.failures
+    assert hook.successes == 1
+
+
+def test_failure_hook_should_allow_request_blocks_call(fast_policy):
+    """When hook.should_allow_request() is False, client raises before any HTTP."""
+    session = _ScriptedSession([])  # no responses scripted — should never be called
+    hook = _RecordingHook()
+    hook.allow = False
+    client = BrokerHTTPClient(base_url="https://x.test", session=session, name="t", failure_hook=hook)
+    with pytest.raises(BrokerTransientError) as excinfo:
+        client.post_json("/p", {}, {}, policy=fast_policy)
+    assert "circuit breaker open" in str(excinfo.value).lower()
+    # No HTTP attempted.
+    assert session.calls == []

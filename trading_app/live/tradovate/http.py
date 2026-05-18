@@ -30,15 +30,23 @@ def request_with_retry(
     headers: dict,
     json_body: dict | None = None,
     timeout: float = 10,
+    failure_hook: object | None = None,
 ) -> requests.Response:
     """HTTP request with classified retry. Compatibility wrapper.
 
     Internally delegates to a per-call BrokerHTTPClient configured with
     READ_POLICY. Callers should migrate to BrokerHTTPClient directly for
     new code paths.
+
+    ``failure_hook`` (Stage 4): orchestrator-wired CircuitBreaker. When the
+    caller has access to ``auth.failure_hook`` (set by SessionOrchestrator),
+    pass it through; otherwise the client uses _NoopFailureHook.
     """
     # Tradovate URLs are always absolute; base_url is unused at this seam.
-    client = BrokerHTTPClient(base_url="", name="tradovate")
+    kwargs_for_client: dict = {"base_url": "", "name": "tradovate"}
+    if failure_hook is not None:
+        kwargs_for_client["failure_hook"] = failure_hook
+    client = BrokerHTTPClient(**kwargs_for_client)
     return client.request(
         method,
         url,

@@ -35,11 +35,18 @@ USER_HUB_URL = BASE_URL.replace("://api.", "://rtc.") + "/hubs/user"
 
 class ProjectXAuth(BrokerAuth):
     def __init__(self):
+        super().__init__()
         self._token: str | None = None
         self._acquired_at: float = 0
         self._token_lifetime: float = 23 * 3600  # refresh after 23h (token lasts 24h)
         self._auth_healthy = True
         # Auth bootstrap has no refresh hook — login IS the refresh.
+        # Auth's own HTTP client is intentionally NOT wired to the circuit
+        # breaker (Stage 4 wiring): one-time login at startup happens before
+        # the orchestrator's breaker is constructed, and a login failure is
+        # already a fail-loud RuntimeError. Continuous broker reads
+        # (positions/contracts/orders) DO get the breaker — they read
+        # ``self.failure_hook`` (set by orchestrator) at their own __init__.
         self._http = BrokerHTTPClient(base_url=BASE_URL, name="projectx-auth")
 
     def get_token(self) -> str:

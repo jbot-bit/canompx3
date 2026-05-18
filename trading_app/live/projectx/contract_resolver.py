@@ -26,11 +26,17 @@ class ProjectXContracts(BrokerContracts):
     def __init__(self, auth: BrokerAuth, **kwargs):
         super().__init__(auth, **kwargs)
         self._contract_cache: dict[str, str] = {}
-        self._http = BrokerHTTPClient(
-            base_url=BASE_URL,
-            refresh_token=auth.refresh_if_needed,
-            name="projectx-contracts",
-        )
+        # Stage 4: read auth.failure_hook (orchestrator-wired CircuitBreaker)
+        # and pass through. None outside an orchestrator → _NoopFailureHook fallback.
+        failure_hook = getattr(auth, "failure_hook", None)
+        kwargs_for_client: dict = {
+            "base_url": BASE_URL,
+            "refresh_token": auth.refresh_if_needed,
+            "name": "projectx-contracts",
+        }
+        if failure_hook is not None:
+            kwargs_for_client["failure_hook"] = failure_hook
+        self._http = BrokerHTTPClient(**kwargs_for_client)
 
     def resolve_account_id(self) -> int:
         data = self._http.post_json(

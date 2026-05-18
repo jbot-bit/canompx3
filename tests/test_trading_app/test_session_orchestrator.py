@@ -474,6 +474,11 @@ class TestOperatorStateExport:
             "signal_only": False,
             "demo": True,
             "account_name": "profile_test",
+            # Stage 4: circuit-breaker state surfaced to operator dashboard.
+            # Clean orchestrator → breaker closed, zero failures, no class.
+            "circuit_open": False,
+            "consecutive_failures": 0,
+            "last_error_class": None,
         }
 
     def test_publish_state_passes_operator_payloads(self, orch):

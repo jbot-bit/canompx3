@@ -326,6 +326,18 @@ class SessionOrchestrator:
         contracts_cls = components["contracts_class"]
         self._positions_cls = components["positions_class"]
 
+        # Stage 4: construct the circuit breaker BEFORE broker components and
+        # wire it to auth so each component's BrokerHTTPClient threads through
+        # the same breaker. Components read getattr(auth, "failure_hook", None)
+        # at their __init__ — wiring after construction would not retroactively
+        # update their already-built http clients. Auth's own bootstrap HTTP
+        # client is intentionally NOT wired (login is fail-loud at startup
+        # before the breaker matters).
+        from trading_app.live.circuit_breaker import CircuitBreaker
+
+        self._circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=30.0)
+        self.auth.failure_hook = self._circuit_breaker
+
         # Portfolio MUST be injected — build_live_portfolio is DEPRECATED (resolves to 0 strategies)
         if portfolio is None:
             raise RuntimeError(
@@ -881,10 +893,9 @@ class SessionOrchestrator:
         self._blocked_strategies: set[str] = set(self._safety_state.blocked_strategies.keys())
         self._blocked_strategy_reasons: dict[str, str] = dict(self._safety_state.blocked_strategies)
 
-        # Circuit breaker: blocks order submission after 5 consecutive broker failures
-        from trading_app.live.circuit_breaker import CircuitBreaker
-
-        self._circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=30.0)
+        # Circuit breaker is constructed earlier (Stage 4: before broker
+        # components so auth.failure_hook is wired before they instantiate
+        # their BrokerHTTPClients). Do not duplicate here.
 
         # Resolve front-month contract symbol (needed even in signal-only for logging)
         self.contract_symbol = contracts.resolve_front_month(instrument)
@@ -1340,12 +1351,21 @@ class SessionOrchestrator:
         }
 
     def _broker_status_payload(self) -> dict[str, object]:
+        # Stage 4: surface circuit-breaker state to the operator dashboard.
+        # circuit_open=True means the next entry-submit will be skipped at
+        # session_orchestrator.py:2339 and the next HTTP call refused by the
+        # client at http_client.py:224. Operator sees the gate close before
+        # any order is attempted.
+        breaker = getattr(self, "_circuit_breaker", None)
         return {
             "broker_name": self._broker_name,
             "contract_symbol": self.contract_symbol,
             "signal_only": self.signal_only,
             "demo": self.demo,
             "account_name": getattr(self, "_account_name", ""),
+            "circuit_open": bool(breaker.is_open) if breaker is not None else False,
+            "consecutive_failures": int(breaker.consecutive_failures) if breaker is not None else 0,
+            "last_error_class": breaker.last_error_class if breaker is not None else None,
         }
 
     def _notify(self, message: str) -> None:
