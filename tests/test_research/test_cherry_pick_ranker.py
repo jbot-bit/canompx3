@@ -95,6 +95,42 @@ class TestOOSPowerReadiness:
         val = cpr.compute_oos_power_readiness(0.17, 3.06, 226, oos)
         assert 0.0 <= val <= 1.0
 
+    def test_matches_canonical_one_sample_helper(self):
+        """Audit-fix regression: ranker power must equal research.oos_power.one_sample_power.
+
+        Per evidence-auditor finding (2026-05-19), the ranker was using
+        ``oos_ttest_power`` two-sample helper with IS N passed as a second
+        OOS group, inflating power. Fix delegates to ``one_sample_power``;
+        this test pins the delegation.
+        """
+        from research.oos_power import one_sample_power
+
+        pooled_t = 3.06
+        pooled_n = 226
+        oos_n = 100
+        cohen_d = abs(pooled_t) / (pooled_n**0.5)
+        expected = float(one_sample_power(cohen_d, oos_n, alpha=0.05))
+        oos = cpr.OOSStats(n_oos=oos_n, expr_oos=0.05, t_oos=1.5)
+        actual = cpr.compute_oos_power_readiness(0.17, pooled_t, pooled_n, oos)
+        assert actual == pytest.approx(expected, abs=1e-9)
+
+    def test_no_inflation_at_large_IS_N_small_OOS_N(self):
+        """Audit-fix regression: large IS N must NOT inflate OOS power.
+
+        Pre-fix: passing IS N=500 as n_oos_a gave df=500+35-2=533 and a
+        non-central t with ncp scaled by sqrt((500*35)/(500+35)), yielding
+        spuriously high power. Post-fix: power depends only on OOS N (35)
+        and cohen_d=|t|/sqrt(IS N), which is small for any pooled_t<3.79
+        with N>>100, so power must stay modest.
+        """
+        oos = cpr.OOSStats(n_oos=35, expr_oos=0.05, t_oos=1.5)
+        # IS pooled_t=3.06, N=500 -> cohen_d=3.06/sqrt(500)=0.137 (small effect).
+        # One-sample power at d=0.137, n=35 is well below 0.50.
+        val = cpr.compute_oos_power_readiness(0.17, 3.06, 500, oos)
+        assert val < 0.50, (
+            f"large-IS-N + small-OOS-N must not inflate power; got {val}"
+        )
+
 
 # ----- Score breakdown total -----
 

@@ -214,17 +214,30 @@ def compute_n_adequacy(pooled_n: int) -> float:
 def compute_oos_power_readiness(
     pooled_expr: float, pooled_t: float, pooled_n: int, oos_stats: OOSStats | None
 ) -> float:
-    """Power of OOS to detect the IS effect at alpha=0.05, two-sided.
+    """One-sample power of the OOS sample to detect the IS effect at alpha=0.05.
 
     Returns 0.0 if OOS is unavailable, OOS N < OOS_N_FLOOR, or pooled IS stats
-    are degenerate. Otherwise delegates to ``research.oos_power.oos_ttest_power``
-    -- the canonical helper for RULE 3.3 power calculations.
+    are degenerate. Otherwise delegates to
+    ``research.oos_power.one_sample_power`` -- the canonical helper for the
+    one-sample t-test power calc that matches what the fast-lane and
+    heavyweight runners emit (one-sample t on pooled ExpR, NOT two-sample
+    Welch between IS and OOS groups).
 
-    Treats the pooled IS sample as group A and the OOS sample as group B in a
-    two-sample Welch test framing. The IS pooled_std is reverse-engineered from
-    pooled_t = pooled_expr * sqrt(N) / pooled_std => pooled_std = pooled_expr *
-    sqrt(N) / pooled_t -- exact when the canonical runner emits one-sample t on
-    pooled_expr.
+    Cohen's d derivation: the canonical runner emits one-sample
+    ``t = mean * sqrt(N) / std`` on pooled trade pnl_r. Solving for std gives
+    ``std = |mean| * sqrt(N) / |t|``; Cohen's d is then
+    ``|mean| / std = |t| / sqrt(N)``. This is the standardized effect size
+    the OOS sample must detect -- the IS std cancels out of the ratio, so
+    only IS t and IS N are needed.
+
+    Audit-fix note (2026-05-19, post-review of commit 81da1099): prior
+    implementation passed ``n_oos_a=pooled_n`` (IS trade count) into
+    ``oos_ttest_power`` which treats both arguments as OOS groups. The
+    resulting df = pooled_n + oos_n - 2 inflated power for any candidate
+    with large IS N and small OOS N. evidence-auditor pass surfaced the
+    framing error; fix replaces the two-sample call with the canonical
+    one-sample helper, which matches how the fast-lane and heavyweight
+    runners actually compute t at execution time.
     """
     if oos_stats is None:
         return 0.0
@@ -232,35 +245,23 @@ def compute_oos_power_readiness(
         return 0.0
     if math.isnan(pooled_expr) or math.isnan(pooled_t) or pooled_n <= 0:
         return 0.0
-    if abs(pooled_t) < 1e-9 or pooled_expr == 0.0:
+    if abs(pooled_t) < 1e-9:
         return 0.0
-    # Reverse-engineer pooled_std from the canonical one-sample t emitted by
-    # the fast-lane runner. This is exact for one-sample t and gives the
-    # right scale for the two-sample Welch power calc.
+    # Cohen's d for a one-sample t-test: |t| / sqrt(N). Derives directly from
+    # the canonical one-sample t-stat the runner emits. No IS std reconstruction
+    # needed; the std cancels out of the standardized effect size.
+    cohen_d = abs(pooled_t) / math.sqrt(pooled_n)
+    if cohen_d <= 0:
+        return 0.0
     try:
-        pooled_std = abs(pooled_expr) * math.sqrt(pooled_n) / abs(pooled_t)
-    except (ValueError, ZeroDivisionError):
-        return 0.0
-    if pooled_std <= 0:
-        return 0.0
-    # Delegate to canonical helper. Two groups: IS as A, OOS as B. The function
-    # measures power to detect the IS effect at the OOS sample size. We bound
-    # the IS group at a large floor so the OOS-side dominates the power calc.
-    try:
-        from research.oos_power import oos_ttest_power
+        from research.oos_power import one_sample_power
     except ImportError:
         return 0.0
     try:
-        report = oos_ttest_power(
-            is_delta=pooled_expr,
-            is_pooled_std=pooled_std,
-            n_oos_a=pooled_n,
-            n_oos_b=max(oos_stats.n_oos, 2),
-            alpha=0.05,
-        )
+        power = one_sample_power(cohen_d, oos_stats.n_oos, alpha=0.05)
     except (ValueError, ZeroDivisionError):
         return 0.0
-    power = float(report.get("power", 0.0))
+    power = float(power)
     if math.isnan(power):
         return 0.0
     return max(0.0, min(1.0, power))

@@ -61,6 +61,28 @@ HEAVYWEIGHT_T_THRESHOLD_PROSE: str = (
     "Chordia 2018 verbatim Tier 1)"
 )
 
+# Allowlist of scope-block fields propagated into the heavyweight draft.
+# Audit-fix (2026-05-19, post-review of commit b3bb9bdf): prior implementation
+# used `dict(scope)` to copy the source-YAML scope block wholesale, which
+# would silently propagate any future ``theory_citation`` (or any other
+# unintended) key from a source YAML into the heavyweight draft, defeating
+# the field-presence-trap defense. Closing with an explicit allowlist. New
+# fast-lane scope fields require an explicit addition here -- silent
+# field-name drift fails closed.
+_ALLOWED_SCOPE_FIELDS: tuple[str, ...] = (
+    "instrument",
+    "strategy_id",
+    "session",
+    "orb_minutes",
+    "entry_model",
+    "confirm_bars",
+    "rr_target",
+    "direction",
+    "filter_type",
+    "filter_source",
+    "out_of_scope",
+)
+
 # Methodology rules boilerplate. Each entry MUST correspond to a real RULE
 # block in ``.claude/rules/backtesting-methodology.md``. Parity enforced by
 # Check #161 (``check_bridge_methodology_rules_parity``): the canonical rule
@@ -237,7 +259,11 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
                 "Mode A holdout remains sacred from 2026-01-01.",
             ],
         },
-        "scope": dict(scope),
+        "scope": {
+            k: scope[k]
+            for k in _ALLOWED_SCOPE_FIELDS
+            if k in scope
+        },
         "data_policy": {
             "is_window": {
                 "description": "trading_day < HOLDOUT_SACRED_FROM",

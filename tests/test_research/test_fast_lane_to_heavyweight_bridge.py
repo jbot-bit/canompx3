@@ -160,6 +160,44 @@ class TestBuildHeavyweightPrereg:
         assert scope["entry_model"] == "E1"
         assert scope["filter_type"] == "PD_CLEAR_LONG"
 
+    def test_source_scope_theory_citation_does_NOT_leak(self, tmp_path):
+        """Audit-fix regression: source scope theory_citation must not propagate.
+
+        Per evidence-auditor finding (2026-05-19), the bridge previously
+        used ``dict(scope)`` to copy the source scope wholesale, which
+        would silently propagate any future ``theory_citation`` key from
+        a source YAML into the heavyweight draft, defeating the field-
+        presence-trap defense. Fix: explicit allowlist.
+        """
+        import re
+
+        md, yml, hyp = _write_fast_lane_pair(tmp_path)
+        payload = yaml.safe_load(yml.read_text(encoding="utf-8"))
+        # Inject a hostile theory_citation in the source scope block
+        payload["scope"]["theory_citation"] = "Hostile prose -- must NOT leak"
+        # Also inject a totally-novel key that isn't allowlisted
+        payload["scope"]["unknown_future_field"] = "should not leak"
+        yml.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+        src = bridge.load_fast_lane_source(md, hypotheses_dir=hyp)
+        assert src is not None
+        prereg = bridge.build_heavyweight_prereg(src, today="2026-05-19")
+
+        # Allowlist enforced: theory_citation absent from emitted scope
+        assert "theory_citation" not in prereg["scope"], (
+            "source-scope theory_citation MUST NOT leak into emitted draft"
+        )
+        # Allowlist enforced: unknown future fields absent too
+        assert "unknown_future_field" not in prereg["scope"]
+        # Round-trip through YAML serialization: theory_citation key absent
+        text = yaml.safe_dump(prereg, sort_keys=False)
+        assert re.search(r"^\s*theory_citation:", text, re.MULTILINE) is None
+        # But canonical scope fields still inherited
+        assert prereg["scope"]["instrument"] == "MNQ"
+        assert prereg["scope"]["strategy_id"] == (
+            "MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30"
+        )
+
     def test_execution_gate_starts_closed(self, tmp_path):
         md, _, hyp = _write_fast_lane_pair(tmp_path)
         src = bridge.load_fast_lane_source(md, hypotheses_dir=hyp)
