@@ -1,12 +1,32 @@
 ---
 date: 2026-05-18
 scope: fast_lane_v5_template_calibration
-status: BLOCKED_ON_PREREQUISITES
-verdict: TEMPLATE_INERT_PENDING_PREREQS
+status: SUPERSEDED_BY_DESCOPE
+verdict: SUPERSEDED_BY_V5_1
+superseded_by: docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml
 template_path: docs/audit/hypotheses/TEMPLATE-fast-lane-v5.yaml
 ---
 
-# FAST_LANE v5 Template — Calibration BLOCKED on Prerequisites
+# SUPERSEDED 2026-05-18 — v5.1 Removes the Calibration Block
+
+This record documented v5's calibration prerequisites. Self-review concluded
+v5's calibration-required + 30-cell-cohort + sign-check-KILL stack was
+heavyweight-creep imported from Chordia-style rigor, contradicting the
+BH-FDR triage bargain at benjamini_hochberg_1995_fdr.md:158 (downstream
+paper-trade + SR-monitor are the canonical validation gates, NOT pre-screen
+calibration).
+
+**v5.1** (`TEMPLATE-fast-lane-v5.1.yaml`) restores the original "cheap
+queue-prioritisation screen" bargain. Calibration is NOT a blocker. PROMOTE
+remains "worth heavyweight review", never deploy. The prerequisites described
+below are no longer prerequisites — PR-A (runner per-direction emission) is
+still useful infra but does NOT gate FAST_LANE first use.
+
+Original text preserved below for audit trail.
+
+---
+
+# FAST_LANE v5 Template — Calibration BLOCKED on Prerequisites (HISTORICAL)
 
 ## Outcome
 

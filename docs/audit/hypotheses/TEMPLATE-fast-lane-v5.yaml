@@ -1,3 +1,21 @@
+# ============================================================================
+# SUPERSEDED 2026-05-18 — see TEMPLATE-fast-lane-v5.1.yaml
+# ============================================================================
+# v5 introduced calibration-required + 30-cell labeled-cohort + sign-check-KILL
+# as prerequisites. Self-review concluded this was heavyweight-creep imported
+# from Chordia-style rigor, contradicting the BH-FDR triage bargain at
+# benjamini_hochberg_1995_fdr.md:158 (downstream paper-trade + SR-monitor
+# are the canonical validation gates, NOT pre-screen calibration).
+#
+# v5.1 restores the original "cheap queue-prioritisation screen" bargain:
+# calibration removed as blocker, 30-cell cohort removed, sign-check
+# downgraded to NEEDS-MORE (deterministic on missing per-direction fields).
+#
+# This v5 file is PRESERVED AS HISTORICAL CONTEXT per doctrine-supersession
+# pattern (feedback_doctrine_supersession_banner_pattern.md). Do not
+# instantiate FAST_LANE pre-regs from v5. Use v5.1.
+# ============================================================================
+#
 # FAST_LANE triage screen — Pathway-B K=1.
 #
 # ROLE: triage SCREEN. NOT a deploy gate.
