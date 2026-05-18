@@ -191,6 +191,33 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
             "Drift check landed in commit d88a5465 (2026-05-19)."
         ),
     ),
+    InlineCopyPair(
+        name="cherry_pick_ranker_heavyweight_t_threshold",
+        inline_site="scripts/research/cherry_pick_ranker.py",
+        canonical_source=(
+            "docs/institutional/pre_registered_criteria.md "
+            "Criterion 4 (no-theory threshold, Chordia 2018 Tier 1 at "
+            "literature/chordia_et_al_2018_two_million_strategies.md:20)"
+        ),
+        gated_constants=("HEAVYWEIGHT_T_THRESHOLD",),
+        parity_check="check_cherry_pick_ranker_threshold_parity",
+        test_file=(
+            "tests/test_pipeline/"
+            "test_check_drift_cherry_pick_ranker_threshold_parity.py"
+        ),
+        bug_class_anchor=(
+            "memory/feedback_canonical_inline_copy_parity_bug_class.md "
+            "(5th confirmed instance, 2026-05-19)"
+        ),
+        notes=(
+            "Cherry-pick ranker inlines the Chordia strict no-theory "
+            "t-threshold (3.79) as HEAVYWEIGHT_T_THRESHOLD. Mirrors "
+            "pre_registered_criteria.md Criterion 4 line citing "
+            "Chordia et al 2018 verbatim. Parity required so the ranker's "
+            "deflation_headroom component does not silently drift if "
+            "Criterion 4 is ever amended."
+        ),
+    ),
 ]
 
 

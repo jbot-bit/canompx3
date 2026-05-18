@@ -10184,6 +10184,121 @@ def check_fast_lane_promote_threshold_parity(template_path: Path | None = None) 
     return violations
 
 
+def check_cherry_pick_ranker_threshold_parity(
+    criteria_path: Path | None = None,
+) -> list[str]:
+    """Parity check: cherry_pick_ranker.HEAVYWEIGHT_T_THRESHOLD vs pre_registered_criteria.md Criterion 4.
+
+    The cherry-pick ranker at ``scripts/research/cherry_pick_ranker.py``
+    inlines the Chordia strict no-theory t-threshold as
+    ``HEAVYWEIGHT_T_THRESHOLD`` with a prose-comment cite to
+    ``pre_registered_criteria.md`` Criterion 4. Comment-cited inlines
+    silently drift when the doctrine is amended (5th confirmed instance of
+    the [[canonical-inline-copy-parity-bug-class]] -- see
+    ``memory/feedback_canonical_inline_copy_parity_bug_class.md``).
+
+    This check parses the Criterion 4 section of the doctrine and asserts
+    the ranker's threshold equals the no-theory value cited verbatim from
+    ``literature/chordia_et_al_2018_two_million_strategies.md:20``.
+
+    Authority: ``docs/institutional/pre_registered_criteria.md`` Criterion 4
+    is the single source of truth for the heavyweight Chordia threshold.
+
+    Parameters
+    ----------
+    criteria_path : Path | None
+        Override path to the doctrine doc (test seam for missing-doctrine
+        and parse-failure injection tests). Defaults to canonical location.
+
+    Returns
+    -------
+    list[str]
+        Violation strings -- empty when ranker constant matches canonical.
+        Fail-closed when the doctrine cannot be read or parsed.
+    """
+    try:
+        from scripts.research import cherry_pick_ranker as cpr
+    except Exception as exc:
+        return [
+            f"check_cherry_pick_ranker_threshold_parity: ranker import failed: {exc}"
+        ]
+
+    target = (
+        criteria_path
+        if criteria_path is not None
+        else PROJECT_ROOT
+        / "docs"
+        / "institutional"
+        / "pre_registered_criteria.md"
+    )
+
+    if not target.exists():
+        return [
+            f"check_cherry_pick_ranker_threshold_parity: canonical doctrine missing at "
+            f"{target} (ranker threshold parity cannot be verified -- fail-closed)"
+        ]
+
+    try:
+        text = target.read_text(encoding="utf-8")
+    except Exception as exc:
+        return [
+            f"check_cherry_pick_ranker_threshold_parity: failed to read {target.name}: "
+            f"{type(exc).__name__}: {exc}"
+        ]
+
+    # Locate the Criterion 4 section. Use the canonical heading exactly as
+    # written in the doctrine; supersession-banner amendments do not move it
+    # (per feedback_doctrine_supersession_banner_pattern.md).
+    crit4_marker = "## Criterion 4 — Chordia t-statistic threshold"
+    idx = text.find(crit4_marker)
+    if idx < 0:
+        return [
+            "check_cherry_pick_ranker_threshold_parity: Criterion 4 section not found "
+            f"in {target.name} (heading drifted or doctrine restructured -- "
+            "investigate before promoting the check)"
+        ]
+    # Bound the search to the section body (until the next H2 or EOF).
+    next_h2 = text.find("\n## ", idx + len(crit4_marker))
+    section = text[idx : next_h2 if next_h2 > 0 else len(text)]
+
+    # Match the no-theory threshold. The doctrine wording (line 116 at landing
+    # time) is verbatim: "Require t >= 3.79 (Chordia et al 2018, ...) for
+    # strategies without such theoretical support." We anchor on the phrase
+    # "t >= <FLOAT>" close to "without".
+    no_theory_match = re.search(
+        r"t\s*[>=≥]+\s*(\d+\.\d+)[^.]*?(?:without|no.?theory)",
+        section,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if no_theory_match is None:
+        return [
+            "check_cherry_pick_ranker_threshold_parity: could not parse no-theory "
+            f"threshold from Criterion 4 in {target.name} (doctrine wording drifted)"
+        ]
+
+    try:
+        canonical = float(no_theory_match.group(1))
+    except ValueError:
+        return [
+            "check_cherry_pick_ranker_threshold_parity: parsed no-theory threshold "
+            f"{no_theory_match.group(1)!r} is not a valid float"
+        ]
+
+    actual = float(cpr.HEAVYWEIGHT_T_THRESHOLD)
+    TOL = 1e-9
+    if abs(actual - canonical) > TOL:
+        return [
+            f"check_cherry_pick_ranker_threshold_parity: ranker "
+            f"HEAVYWEIGHT_T_THRESHOLD={actual!r} does not match canonical "
+            f"{canonical!r} from pre_registered_criteria.md Criterion 4 "
+            "(no-theory threshold). Inline-copy drift -- see "
+            "[[canonical-inline-copy-parity-bug-class]]; update "
+            "scripts/research/cherry_pick_ranker.py or amend the doctrine."
+        ]
+
+    return []
+
+
 def check_canonical_inline_copies_have_parity_check() -> list[str]:
     """Meta-check: every CANONICAL_INLINE_COPIES entry has a live parity guard.
 
@@ -10960,6 +11075,12 @@ CHECKS = [
         "FAST_LANE promote-queue scanner thresholds match TEMPLATE-fast-lane-v5.1.yaml (canonical-inline-copy parity)",
         check_fast_lane_promote_threshold_parity,
         False,  # blocking — silent drift between scanner constants and v5.1 template would mis-promote heavyweight candidates
+        False,
+    ),
+    (
+        "Cherry-pick ranker HEAVYWEIGHT_T_THRESHOLD matches pre_registered_criteria.md Criterion 4 (canonical-inline-copy parity)",
+        check_cherry_pick_ranker_threshold_parity,
+        False,  # blocking — silent drift would mis-score deflation_headroom and bias which candidates the operator escalates
         False,
     ),
     (
