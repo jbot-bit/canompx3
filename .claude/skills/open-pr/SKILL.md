@@ -1,6 +1,8 @@
 ---
 name: open-pr
-description: Open a PR with full preflight gating (branch-discipline diff-scope, stacked-base detection, dirty-tree abort, protected-path scan). Dry-run by default; --push to actually push. Never uses gh pr merge --auto. Use when user says "open pr", "create pr", "raise pr", "/open-pr", or asks to push and PR a ready branch.
+description: Open a PR with full preflight gating (branch-discipline diff-scope, stacked-base detection, dirty-tree abort, protected-path scan). Dry-run by default; --push to actually push. Never uses gh pr merge --auto.
+when_to_use: User says "open pr", "create pr", "raise pr", "/open-pr", or asks to push and PR a ready branch.
+disable-model-invocation: true
 allowed-tools: Bash
 ---
 

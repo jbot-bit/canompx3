@@ -1,11 +1,10 @@
 ---
 name: orient
 description: Project awareness — synthesize project state, blueprint routing, and recommend next action
+when_to_use: User says "orient", "what's going on", "what's broken", "status", "where are we", "session start", "catch me up".
 allowed-tools: Bash, Read, Grep, Glob
 ---
 Orient me on the current project state: $ARGUMENTS
-
-Use when: "orient", "what's going on", "what's broken", "status", "where are we", "session start", "catch me up"
 
 ## Step 0: Check active stage
 

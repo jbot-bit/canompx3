@@ -1,6 +1,8 @@
 ---
 name: ship
-description: Ship a branch — alias for /open-pr. Opens a PR with full preflight gating (branch-discipline diff-scope, stacked-base detection, dirty-tree abort, protected-path scan). Dry-run by default; --push to actually push. Never uses gh pr merge --auto. Use when user says "ship", "ship it", "/ship", or asks to wrap up + PR a ready branch.
+description: Ship a branch — alias for /open-pr. Opens a PR with full preflight gating (branch-discipline diff-scope, stacked-base detection, dirty-tree abort, protected-path scan). Dry-run by default; --push to actually push. Never uses gh pr merge --auto.
+when_to_use: User says "ship", "ship it", "/ship", or asks to wrap up + PR a ready branch.
+disable-model-invocation: true
 allowed-tools: Bash
 ---
 
