@@ -136,9 +136,7 @@ def test_below_floor_live_xfa_profile_returns_warn(synthetic_signals_dir):
     _write_n_distinct_days(synthetic_signals_dir, n=MIN_TELEMETRY_TRADING_DAYS - 1)
     # topstep_50k_mnq_auto is the active deployment profile; per
     # prop_profiles.AccountProfile default at line 107, is_express_funded=True.
-    result = _check_telemetry_maturity(
-        _ctx(signal_only=False, demo=False, profile_id="topstep_50k_mnq_auto")
-    )
+    result = _check_telemetry_maturity(_ctx(signal_only=False, demo=False, profile_id="topstep_50k_mnq_auto"))
     assert result.passed is True, "Express-Funded prop must not block on advisory gate"
     assert result.message.startswith("WARN:"), "must emit WARN status for dashboard parser"
     assert "Express-Funded prop" in result.message
@@ -148,9 +146,7 @@ def test_below_floor_live_xfa_profile_returns_warn(synthetic_signals_dir):
 def test_below_floor_live_unknown_profile_returns_failed(synthetic_signals_dir):
     """--live + unknown profile_id stays FAIL (conservative default; can't verify XFA shape)."""
     _write_n_distinct_days(synthetic_signals_dir, n=MIN_TELEMETRY_TRADING_DAYS - 1)
-    result = _check_telemetry_maturity(
-        _ctx(signal_only=False, demo=False, profile_id="not_a_real_profile_xyz")
-    )
+    result = _check_telemetry_maturity(_ctx(signal_only=False, demo=False, profile_id="not_a_real_profile_xyz"))
     assert result.passed is False, "unknown profile on live mode must FAIL conservatively"
     assert "FAILED" in result.message
     assert "UNVERIFIED_INSUFFICIENT_TELEMETRY" in result.message
@@ -171,9 +167,7 @@ def test_below_floor_live_real_capital_profile_returns_failed(synthetic_signals_
     )
     try:
         _write_n_distinct_days(synthetic_signals_dir, n=MIN_TELEMETRY_TRADING_DAYS - 1)
-        result = _check_telemetry_maturity(
-            _ctx(signal_only=False, demo=False, profile_id=fake_id)
-        )
+        result = _check_telemetry_maturity(_ctx(signal_only=False, demo=False, profile_id=fake_id))
         assert result.passed is False, "real-capital live below floor must FAIL"
         assert "FAILED" in result.message
         assert "UNVERIFIED_INSUFFICIENT_TELEMETRY" in result.message
