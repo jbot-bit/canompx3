@@ -58,3 +58,40 @@ Outputs (overwritten in place):
 - IS sample size in this audit reports `N_fired` (wins+losses+scratches with R=0). `validated_setups.sample_size` reports wins+losses only. Comparing the two t-stats directly is not like-for-like; reconcile via the scratch count reported above.
 - OOS window is descriptive only. Sign-match at `N_OOS >= 30` is a confirmatory gate, not a deployment criterion. PARK on OOS sign-flip means insufficient confirmation, not falsification.
 - Cross-asset enrichment (e.g., `cross_atr_MES_pct` for `X_MES_ATR60`) is computed in this runner from `daily_features.atr_20_pct` of the source instrument; verify the canonical promoter's enrichment path agrees before treating verdicts as directly comparable.
+
+## FAST_LANE v5.1 verdict (operator-applied)
+
+The runner's `Verdict:` line above (`FAIL_STRICT_CHORDIA`) uses the heavyweight Chordia threshold (t >= 3.79) — that is the runner's native gate, not this pre-reg's gate.
+
+This pre-reg is a **FAST_LANE v5.1 triage screen** (`docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml`). v5.1 is a cheaper screen that promotes cells to heavyweight Chordia review, NOT to capital. The runner emits the v5.1 inputs in the sibling `.summary.csv`; this section applies the v5.1 mapping by hand because no automated post-processor exists yet (link gap tracked for follow-up).
+
+### v5.1 gate table (IS row of `.summary.csv`)
+
+| v5.1 gate | Threshold | Observed | Pass |
+|---|---|---|---|
+| Holdout boundary proof | `max_IS < 2026-01-01 <= min_OOS` | `2025-12-31 < 2026-01-01 <= 2026-01-02`, proof=True | yes |
+| `t_IS >= promote_threshold (2.5) + needs_more_band (0.5) = 3.0` | t >= 3.0 for PROMOTE | t = 3.064 | yes (margin = 0.064) |
+| `ExpR_IS > 0` | > 0 | 0.171 | yes |
+| `N_IS_on >= 50` | >= 50 | n_fired = 226 | yes |
+| `fire_rate in [0.05, 0.95]` | inside band | 0.147 | yes |
+| Per-direction sign-check | `direction=long` lanes BYPASS per v5.1 `single_direction_lanes` rule | n/a (long_n=221, short_n=5 is structural artefact of long-only filter) | bypass |
+
+### Verdict: **PROMOTE**
+
+Per the v5.1 template: "worth heavyweight Chordia review — NOT a deploy verdict." The cell sits in the screen-PROMOTE / heavyweight-FAIL band (t = 3.064 clears the 3.0 fast-lane floor but not the 3.79 Chordia hurdle), which is exactly the design intent of the v5.1 triage screen — surface candidates for heavyweight scrutiny without paying the heavyweight cost upfront.
+
+### What PROMOTE authorizes
+
+- Authoring a heavyweight Chordia pre-reg for this lane (theory grant + clustered SE at trading_day + OOS power floor + era-stability section + DSR + Harvey-Liu haircut).
+- Nothing else.
+
+### What PROMOTE does NOT authorize
+
+- Capital allocation.
+- Writing this cell into `chordia_audit_log.yaml` as PASS_CHORDIA.
+- Sibling-cell rescue (other RR / CB / aperture / session variants need their own pre-reg).
+- Treating the fast-lane verdict as a substitute for paper-trade + SR-monitor validation.
+
+### OOS row (descriptive only)
+
+OOS `n_fired = 14`, `t = -0.099`. Per v5.1 § `outcomes.NEEDS-MORE` precedence, OOS power is well below the 30-cluster floor for clustered-SE interpretation; the OOS row cannot refute or confirm the IS finding. Holdout proof is TRUE — evidence boundary is intact, the OOS slice is simply too small to be informative yet.
