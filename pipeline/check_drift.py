@@ -10184,6 +10184,435 @@ def check_fast_lane_promote_threshold_parity(template_path: Path | None = None) 
     return violations
 
 
+# ---------------------------------------------------------------------------
+# Stage 2 canonical-inline-copy parity surfaces (3 seeded pairs + meta-check).
+# Doctrine registry lives at pipeline/canonical_inline_copies.py.
+# ---------------------------------------------------------------------------
+
+
+def check_c8_fail_labels_parity() -> list[str]:
+    """Parity: pipeline.check_drift c8_fail_labels set == trading_app.lane_allocator._C8_FAIL_LABELS.
+
+    The C8 OOS-deployment-gate label set is duplicated as a local in
+    ``check_lane_allocation_c8_oos_gate`` (this file) and as a local in
+    ``trading_app.lane_allocator.apply_c8_oos_gate``. Both must contain the
+    same set of fail labels — otherwise an allocator that recognizes a new
+    fail label (e.g., NO_CANONICAL_BASELINE) escapes the drift check that
+    is meant to enforce the gate.
+
+    See ``memory/feedback_allocator_gate_class_pattern_fail_open.md`` for
+    the recurring bug class (n=2: chordia 2026-05-01, c8 2026-05-14).
+    Strategy: read both source files literally, extract the set bodies,
+    compare. We do NOT import the allocator (its module imports trigger
+    DB/path config that may cause drift_check to load a heavyweight
+    dependency graph). Literal-source comparison keeps the gate cheap and
+    independent.
+    """
+    import re
+
+    drift_path = PROJECT_ROOT / "pipeline" / "check_drift.py"
+    alloc_path = PROJECT_ROOT / "trading_app" / "lane_allocator.py"
+
+    if not drift_path.exists():
+        return [
+            "check_c8_fail_labels_parity: pipeline/check_drift.py missing "
+            "(impossible — this check runs from that file; fail-closed)"
+        ]
+    if not alloc_path.exists():
+        return [
+            "check_c8_fail_labels_parity: trading_app/lane_allocator.py missing "
+            "(parity cannot be verified — fail-closed)"
+        ]
+
+    def _extract_set(path: Path, anchor_comment: str) -> set[str] | str:
+        """Extract a string literal set body following an anchor comment.
+
+        Returns set on success, or a string violation message on failure.
+        """
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            return f"could not read {path}: {exc}"
+        idx = text.find(anchor_comment)
+        if idx < 0:
+            return (
+                f"{path.name}: anchor comment {anchor_comment!r} not found "
+                "(refactor renamed comment — update parity check anchor)"
+            )
+        # Find next `{` after the anchor and the matching `}`.
+        open_brace = text.find("{", idx)
+        if open_brace < 0:
+            return f"{path.name}: no `{{` after anchor {anchor_comment!r}"
+        close_brace = text.find("}", open_brace)
+        if close_brace < 0:
+            return f"{path.name}: no closing `}}` after `{{` at offset {open_brace}"
+        body = text[open_brace + 1 : close_brace]
+        # Extract double-quoted strings as set members.
+        members = set(re.findall(r'"([^"]+)"', body))
+        if not members:
+            return f"{path.name}: no string literals between `{{...}}` at offset {open_brace}"
+        return members
+
+    drift_set = _extract_set(drift_path, "Mirrors apply_c8_gate._C8_FAIL_LABELS")
+    if isinstance(drift_set, str):
+        return [f"check_c8_fail_labels_parity: {drift_set}"]
+
+    alloc_set = _extract_set(
+        alloc_path,
+        'Set of c8 labels that mean "not deployable" per Criterion 8 + Amendment 3.1.',
+    )
+    if isinstance(alloc_set, str):
+        return [f"check_c8_fail_labels_parity: {alloc_set}"]
+
+    violations: list[str] = []
+    only_drift = drift_set - alloc_set
+    only_alloc = alloc_set - drift_set
+    if only_drift:
+        violations.append(
+            f"check_c8_fail_labels_parity: labels in check_drift.py not in "
+            f"lane_allocator.py: {sorted(only_drift)} — drift check covers "
+            "labels the allocator does not recognize. Inline-copy class bug; "
+            "see [[canonical-inline-copy-parity-bug-class]]."
+        )
+    if only_alloc:
+        violations.append(
+            f"check_c8_fail_labels_parity: labels in lane_allocator.py not in "
+            f"check_drift.py: {sorted(only_alloc)} — allocator has fail labels "
+            "the drift check does not enforce (fail-open). Inline-copy class bug; "
+            "see [[canonical-inline-copy-parity-bug-class]]."
+        )
+    return violations
+
+
+def check_calibrate_null_sigmas_parity() -> list[str]:
+    """Parity: scripts/tools/calibrate_null_sigma.py CURRENT_SIGMAS == run_null_batch.py INSTRUMENT_NULL_PARAMS sigmas.
+
+    ``CURRENT_SIGMAS`` is a literal byte copy of the per-instrument ``sigma``
+    values declared in ``INSTRUMENT_NULL_PARAMS``. Drift hazard: a sigma
+    recalibration updates the producer but the calibrate script's "current
+    value" display lies — operator sees a false no-change-needed.
+
+    Strategy: read both source files literally; extract the values. We do
+    NOT import the modules (they pull DuckDB / pipeline.paths at import
+    time which would balloon the drift-check cost). Literal source
+    comparison is sufficient.
+    """
+    import re
+
+    cal_path = PROJECT_ROOT / "scripts" / "tools" / "calibrate_null_sigma.py"
+    src_path = PROJECT_ROOT / "scripts" / "tests" / "run_null_batch.py"
+
+    if not cal_path.exists():
+        return [f"check_calibrate_null_sigmas_parity: {cal_path} missing — fail-closed"]
+    if not src_path.exists():
+        return [f"check_calibrate_null_sigmas_parity: {src_path} missing — fail-closed"]
+
+    def _extract_current_sigmas(path: Path) -> dict[str, float] | str:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            return f"could not read {path}: {exc}"
+        anchor = "CURRENT_SIGMAS:"
+        idx = text.find(anchor)
+        if idx < 0:
+            return f"{path.name}: anchor {anchor!r} not found (was the constant renamed?)"
+        open_brace = text.find("{", idx)
+        close_brace = text.find("}", open_brace)
+        if open_brace < 0 or close_brace < 0:
+            return f"{path.name}: malformed dict literal after {anchor!r}"
+        body = text[open_brace + 1 : close_brace]
+        # Match `"KEY": NUMBER,`
+        out: dict[str, float] = {}
+        for k, v in re.findall(r'"([^"]+)"\s*:\s*([0-9]+(?:\.[0-9]+)?)', body):
+            out[k] = float(v)
+        if not out:
+            return f"{path.name}: no key/value pairs parsed from CURRENT_SIGMAS"
+        return out
+
+    def _extract_canonical_sigmas(path: Path) -> dict[str, float] | str:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            return f"could not read {path}: {exc}"
+        anchor = "INSTRUMENT_NULL_PARAMS:"
+        idx = text.find(anchor)
+        if idx < 0:
+            return f"{path.name}: anchor {anchor!r} not found (was the constant renamed?)"
+        open_brace = text.find("{", idx)
+        if open_brace < 0:
+            return f"{path.name}: no `{{` after anchor {anchor!r}"
+        # Brace-counting walk to find the OUTER closing brace — the dict
+        # value-of-dict shape means a naive find("}") closes the wrong scope.
+        depth = 0
+        close_brace = -1
+        for i in range(open_brace, len(text)):
+            ch = text[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    close_brace = i
+                    break
+        if close_brace < 0:
+            return f"{path.name}: malformed dict literal after {anchor!r}"
+        body = text[open_brace + 1 : close_brace]
+        # Match `"KEY": {"sigma": NUMBER, ...}`
+        out: dict[str, float] = {}
+        for k, v in re.findall(
+            r'"([^"]+)"\s*:\s*\{[^}]*"sigma"\s*:\s*([0-9]+(?:\.[0-9]+)?)', body
+        ):
+            out[k] = float(v)
+        if not out:
+            return f"{path.name}: no sigma values parsed from INSTRUMENT_NULL_PARAMS"
+        return out
+
+    cal = _extract_current_sigmas(cal_path)
+    if isinstance(cal, str):
+        return [f"check_calibrate_null_sigmas_parity: {cal}"]
+    src = _extract_canonical_sigmas(src_path)
+    if isinstance(src, str):
+        return [f"check_calibrate_null_sigmas_parity: {src}"]
+
+    violations: list[str] = []
+    for key in sorted(set(cal) | set(src)):
+        if key not in cal:
+            violations.append(
+                f"check_calibrate_null_sigmas_parity: {key!r} in canonical "
+                f"INSTRUMENT_NULL_PARAMS but missing from CURRENT_SIGMAS "
+                f"(inline copy out of date; canonical sigma={src[key]!r})"
+            )
+            continue
+        if key not in src:
+            violations.append(
+                f"check_calibrate_null_sigmas_parity: {key!r} in CURRENT_SIGMAS "
+                f"but missing from canonical INSTRUMENT_NULL_PARAMS "
+                f"(stale inline copy; sigma={cal[key]!r})"
+            )
+            continue
+        if abs(cal[key] - src[key]) > 1e-9:
+            violations.append(
+                f"check_calibrate_null_sigmas_parity: {key!r} CURRENT_SIGMAS="
+                f"{cal[key]!r} != canonical INSTRUMENT_NULL_PARAMS sigma="
+                f"{src[key]!r}. Inline-copy drift; see "
+                "[[canonical-inline-copy-parity-bug-class]]; sync "
+                "scripts/tools/calibrate_null_sigma.py."
+            )
+    return violations
+
+
+def check_criterion_ladder_chordia_thresholds_parity(
+    criteria_path: Path | None = None,
+) -> list[str]:
+    """Parity: criterion_ladder_check.py Chordia constants == pre_registered_criteria.md Criterion 4 row.
+
+    The acceptance-matrix row at ``pre_registered_criteria.md`` line 300 is
+    the canonical source for the strict Chordia thresholds (t >= 3.00 with
+    theory; t >= 3.79 without theory). ``criterion_ladder_check.py:43-44``
+    inlines these as module constants ``T_THRESHOLD_WITH_THEORY`` and
+    ``T_THRESHOLD_NO_THEORY``.
+
+    By the doctrine-supersession-layer-trap rule (see
+    ``memory/feedback_chordia_threshold_doctrine_supersession_layer_trap.md``),
+    this check MUST PARSE the canonical row at runtime — hardcoding 3.00 /
+    3.79 here would relocate the same inline-copy bug class one layer up.
+
+    Strategy: parse the acceptance-matrix row matching pattern
+    ``| 4 Chordia t-stat | t >= X (with theory) or Y (without) |``. Compare
+    the inlined constants to the parsed values.
+    """
+    import re
+
+    if criteria_path is None:
+        criteria_path = PROJECT_ROOT / "docs" / "institutional" / "pre_registered_criteria.md"
+
+    ladder_path = PROJECT_ROOT / "scripts" / "tools" / "criterion_ladder_check.py"
+
+    if not criteria_path.exists():
+        return [
+            f"check_criterion_ladder_chordia_thresholds_parity: canonical "
+            f"{criteria_path} missing — fail-closed"
+        ]
+    if not ladder_path.exists():
+        return [
+            f"check_criterion_ladder_chordia_thresholds_parity: inline site "
+            f"{ladder_path} missing — fail-closed"
+        ]
+
+    try:
+        criteria_text = criteria_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [
+            f"check_criterion_ladder_chordia_thresholds_parity: could not "
+            f"read {criteria_path}: {exc}"
+        ]
+
+    # Tolerant parse: `| 4 Chordia t-stat | t ≥ 3.00 (with theory) or 3.79 (without) | YES |`
+    # The ≥ glyph in the source is Unicode U+2265; accept >=, ≥, or > .
+    pattern = re.compile(
+        r"\|\s*4\s+Chordia\s+t-stat\s*\|\s*t\s*[≥>=]+\s*([0-9]+(?:\.[0-9]+)?)\s*"
+        r"\(with\s+theory\)\s*or\s*([0-9]+(?:\.[0-9]+)?)\s*\(without\)\s*\|",
+        re.IGNORECASE,
+    )
+    m = pattern.search(criteria_text)
+    if m is None:
+        return [
+            "check_criterion_ladder_chordia_thresholds_parity: Criterion 4 "
+            "acceptance-matrix row not found in pre_registered_criteria.md "
+            "(expected `| 4 Chordia t-stat | t ≥ X (with theory) or Y (without) |`). "
+            "The canonical doc structure has drifted — investigate before "
+            "promoting the check. Fail-closed."
+        ]
+    canonical_with_theory = float(m.group(1))
+    canonical_no_theory = float(m.group(2))
+
+    # Parse the inline constants from criterion_ladder_check.py literally
+    # (don't import — keeps the check side-effect free).
+    try:
+        ladder_text = ladder_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [
+            f"check_criterion_ladder_chordia_thresholds_parity: could not "
+            f"read {ladder_path}: {exc}"
+        ]
+
+    inline_pattern = re.compile(
+        r"^T_THRESHOLD_(WITH_THEORY|NO_THEORY)\s*=\s*([0-9]+(?:\.[0-9]+)?)",
+        re.MULTILINE,
+    )
+    inlined: dict[str, float] = {}
+    for tag, val in inline_pattern.findall(ladder_text):
+        inlined[tag] = float(val)
+    if "WITH_THEORY" not in inlined or "NO_THEORY" not in inlined:
+        return [
+            "check_criterion_ladder_chordia_thresholds_parity: could not parse "
+            "T_THRESHOLD_WITH_THEORY / T_THRESHOLD_NO_THEORY from "
+            "scripts/tools/criterion_ladder_check.py (constant renamed or "
+            "refactored). Fail-closed."
+        ]
+
+    violations: list[str] = []
+    TOL = 1e-9
+    if abs(inlined["WITH_THEORY"] - canonical_with_theory) > TOL:
+        violations.append(
+            f"check_criterion_ladder_chordia_thresholds_parity: "
+            f"T_THRESHOLD_WITH_THEORY={inlined['WITH_THEORY']!r} != canonical "
+            f"{canonical_with_theory!r} from pre_registered_criteria.md "
+            "Criterion 4 row. Inline-copy drift; see "
+            "[[canonical-inline-copy-parity-bug-class]]."
+        )
+    if abs(inlined["NO_THEORY"] - canonical_no_theory) > TOL:
+        violations.append(
+            f"check_criterion_ladder_chordia_thresholds_parity: "
+            f"T_THRESHOLD_NO_THEORY={inlined['NO_THEORY']!r} != canonical "
+            f"{canonical_no_theory!r} from pre_registered_criteria.md "
+            "Criterion 4 row. Inline-copy drift; see "
+            "[[canonical-inline-copy-parity-bug-class]]."
+        )
+    return violations
+
+
+def check_canonical_inline_copies_have_parity_check() -> list[str]:
+    """Meta-check #159: every registered canonical→inline pair has parity coverage.
+
+    For each entry in ``pipeline.canonical_inline_copies.CANONICAL_INLINE_COPIES``
+    this asserts:
+      (a) ``entry.parity_check_func`` exists in ``pipeline.check_drift``
+          module globals (via ``vars()`` — no ``getattr`` fallback so that
+          aliased imports cannot satisfy the gate);
+      (b) the resolved attribute is callable;
+      (c) a test file exists at ``tests/test_pipeline/<entry.test_slug>.py``;
+      (d) the test file contains ``>=len(entry.gated_constants)`` test
+          functions (sibling-coverage doctrine — see
+          ``memory/feedback_regex_alternation_sibling_coverage.md``).
+
+    Fail-closed on any registry import error.
+    """
+    import re
+
+    try:
+        from pipeline.canonical_inline_copies import CANONICAL_INLINE_COPIES
+    except Exception as exc:
+        return [
+            f"check_canonical_inline_copies_have_parity_check: failed to import "
+            f"registry: {type(exc).__name__}: {exc}"
+        ]
+
+    # vars() lookup — aliased imports must NOT satisfy the gate. We look up in
+    # this module's own globals, which is the same dict at runtime.
+    module_globals = globals()
+
+    violations: list[str] = []
+    for entry in CANONICAL_INLINE_COPIES:
+        func_name = entry.parity_check_func
+
+        # (a) function exists in module globals
+        if func_name not in module_globals:
+            violations.append(
+                f"check_canonical_inline_copies_have_parity_check: registry "
+                f"entry {entry.slug!r} declares parity_check_func={func_name!r} "
+                "but that name is NOT in pipeline.check_drift module globals "
+                "(orphaned registry entry — write the function or remove the entry)."
+            )
+            continue
+
+        # (b) callable
+        func = module_globals[func_name]
+        if not callable(func):
+            violations.append(
+                f"check_canonical_inline_copies_have_parity_check: registry "
+                f"entry {entry.slug!r} parity_check_func={func_name!r} resolves "
+                f"to a non-callable ({type(func).__name__})."
+            )
+            continue
+
+        # (c) test file exists
+        test_path = (
+            PROJECT_ROOT / "tests" / "test_pipeline" / f"{entry.test_slug}.py"
+        )
+        if not test_path.exists():
+            violations.append(
+                f"check_canonical_inline_copies_have_parity_check: registry "
+                f"entry {entry.slug!r} declares test_slug={entry.test_slug!r} "
+                f"but {test_path} does not exist (sibling-coverage doctrine "
+                "requires a dedicated test file per registered pair)."
+            )
+            continue
+
+        # (d) >=N test functions for gated_constants. We count tests whose
+        # name mentions the entry slug — this is the sibling-coverage
+        # contract: per-constant injection tests must be discoverable from
+        # the test name, not buried inside a parametrize block (parametrize
+        # would let one collected test silently cover all variants if the
+        # test body itself is buggy).
+        try:
+            test_text = test_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            violations.append(
+                f"check_canonical_inline_copies_have_parity_check: could not "
+                f"read {test_path}: {exc}"
+            )
+            continue
+        # Count `def test_*_<slug>_*` functions to require slug-specific tests.
+        slug_pattern = re.compile(
+            rf"^def\s+(test_\w*{re.escape(entry.slug)}\w*)\s*\(",
+            re.MULTILINE,
+        )
+        slug_tests = slug_pattern.findall(test_text)
+        needed = len(entry.gated_constants)
+        if len(slug_tests) < needed:
+            violations.append(
+                f"check_canonical_inline_copies_have_parity_check: registry "
+                f"entry {entry.slug!r} has {len(entry.gated_constants)} gated "
+                f"constants {list(entry.gated_constants)} but {test_path.name} "
+                f"contains only {len(slug_tests)} test function(s) matching "
+                f"`test_*{entry.slug}*` (sibling-coverage doctrine requires "
+                f">={needed})."
+            )
+
+    return violations
+
+
 CHECKS = [
     (
         "Hardcoded 'MGC' SQL literals in generic pipeline code",
@@ -10828,6 +11257,30 @@ CHECKS = [
         "FAST_LANE promote-queue scanner thresholds match TEMPLATE-fast-lane-v5.1.yaml (canonical-inline-copy parity)",
         check_fast_lane_promote_threshold_parity,
         False,  # blocking — silent drift between scanner constants and v5.1 template would mis-promote heavyweight candidates
+        False,
+    ),
+    (
+        "c8_fail_labels set parity: check_drift.py <-> lane_allocator.py (canonical-inline-copy parity)",
+        check_c8_fail_labels_parity,
+        False,  # blocking -- divergence opens allocator-class fail-open per feedback_allocator_gate_class_pattern_fail_open.md
+        False,
+    ),
+    (
+        "calibrate_null_sigma CURRENT_SIGMAS parity: <-> run_null_batch INSTRUMENT_NULL_PARAMS (canonical-inline-copy parity)",
+        check_calibrate_null_sigmas_parity,
+        False,  # blocking -- stale display lies to operator about live null sigma calibration
+        False,
+    ),
+    (
+        "criterion_ladder_check Chordia thresholds parity: <-> pre_registered_criteria.md Criterion 4 (canonical-inline-copy parity, doctrine-class)",
+        check_criterion_ladder_chordia_thresholds_parity,
+        False,  # blocking -- Chordia threshold drift would silently mis-classify validated_setups
+        False,
+    ),
+    (
+        "canonical_inline_copies registry meta-check: every entry has parity check + sibling-covered tests",
+        check_canonical_inline_copies_have_parity_check,
+        False,  # blocking — orphaned registry entries make the layer-2 hardening fictional
         False,
     ),
 ]  # end CHECKS

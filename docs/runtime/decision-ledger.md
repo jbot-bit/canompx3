@@ -4,7 +4,40 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
-- `fast-lane-promote-threshold-parity-drift-check-landed-2026-05-19` —
+- `canonical-inline-copies-meta-registry-landed-2026-05-19` --
+  Stage 2 of the 3-layer canonical-inline-copy hardening landed.
+  Added `pipeline/canonical_inline_copies.py` with frozen `InlineCopyPair`
+  dataclass and `CANONICAL_INLINE_COPIES` registry seeded with 3 verified
+  pairs: (1) `c8_fail_labels` (6 constants, check_drift.py:9459 <->
+  lane_allocator.py:812), (2) `calibrate_null_sigmas` (3 constants MGC/MNQ/MES,
+  calibrate_null_sigma.py:51 <-> run_null_batch.py:42), (3)
+  `criterion_ladder_chordia_thresholds` (2 constants, criterion_ladder_check.py:43-44
+  <-> pre_registered_criteria.md Criterion 4 row; doctrine-class -- parses
+  canonical at runtime per
+  `memory/feedback_chordia_threshold_doctrine_supersession_layer_trap.md`).
+  Two grep candidates rejected on value-parity grounds (documented in
+  registry docstring): `trading_app/config.py:4203` TRADEABLE_INSTRUMENTS
+  (runtime re-export, not value copy); `trading_app/regime/schema.py:47`
+  (DDL prose comment, no Python literal in scope). Drift count 158 -> 162
+  (3 new parity checks + 1 meta-check). Meta-check
+  `check_canonical_inline_copies_have_parity_check` asserts every registry
+  entry has (a) parity function in `vars(check_drift)` (no `getattr`
+  fallback -- aliased imports cannot satisfy), (b) callable, (c) test file
+  at `tests/test_pipeline/<test_slug>.py`, (d) >=N slug-matching test
+  functions where N = len(gated_constants). 36 tests pass: 7
+  registry-integrity, 6 meta mutation probes (clean state, missing
+  function, non-callable, missing test file, insufficient sibling coverage,
+  registry import failure fail-closed), 6 c8_fail_labels sibling-coverage +
+  3 mutation probes, 3 sigmas sibling-coverage + 3 mutation probes, 2
+  ladder sibling-coverage + 4 mutation probes (with-theory drift,
+  no-theory drift, doctrine-amendment-propagates, missing-canonical-row
+  fail-closed). Stage 2.5 Pyright cleanup PARKED per stage file decision.
+  Class anchors: `[[canonical-inline-copy-parity-bug-class]]`,
+  `[[n3-same-class-doctrine-threshold]]`. Layer 3 (PreToolUse hook
+  flagging new inline literals at edit time) remains PARKED for fresh-context
+  design proposal.
+
+- `fast-lane-promote-threshold-parity-drift-check-landed-2026-05-19` --
   Added `check_fast_lane_promote_threshold_parity` (Check #158, registered in
   `CHECKS` list of `pipeline/check_drift.py`). Asserts the six gated constants
   in `scripts/research/fast_lane_promote_queue.py` (T_KILL_FLOOR=2.5,

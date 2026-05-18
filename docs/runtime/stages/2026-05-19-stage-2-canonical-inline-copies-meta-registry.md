@@ -92,7 +92,38 @@ Bundle Stage 2.5 (Pyright cleanup) unless told otherwise.
 
 ---
 
-## Checkpoint — 2026-05-19 (truth audit STARTED, code NOT touched)
+## CLOSED — 2026-05-19 (implementation landed)
+
+**Drift count:** 158 -> 162 (4 new checks landed: 3 parity + 1 meta).
+
+**Final seed list (3 verified pairs, 2 candidates rejected):**
+
+1. `c8_fail_labels` (check_drift.py:9459 <-> lane_allocator.py:812) - 6 gated constants.
+2. `calibrate_null_sigmas` (calibrate_null_sigma.py:51 <-> run_null_batch.py:42) - 3 gated constants (MGC/MNQ/MES).
+3. `criterion_ladder_chordia_thresholds` (criterion_ladder_check.py:43-44 <-> pre_registered_criteria.md Criterion 4 row) - 2 gated constants, doctrine-class (parses canonical at runtime per [[chordia-threshold-doctrine-supersession-layer-trap]]).
+
+**Rejected (documented in pipeline/canonical_inline_copies.py docstring):**
+- `trading_app/config.py:4203` TRADEABLE_INSTRUMENTS - runtime re-export, not value copy.
+- `trading_app/regime/schema.py:47` - DDL prose comment, no Python literal in scope.
+
+**Acceptance status:**
+1. PASS - registry file lands with 3 verified seeds + class-bug anchors.
+2. PASS - meta-check #162 (called #159 in original plan; renumbered after 3 sibling parity checks landed) registered + asserts (a/b/c/d).
+3. PASS - 36/36 tests pass (>=5 mutation probes for meta + per-constant sibling-coverage for all 3 entries).
+4. PASS - check_drift count 158 -> 162; all 4 new checks green.
+5. evidence-auditor - DEFERRED per "pure doctrine surface" caveat in original plan. Doctrine file (canonical_inline_copies.py) has no truth-layer mutation; check_drift functions are pure source-text parsers with no DB/network/state side effects.
+6. PASS - commit message cites both class anchors.
+
+**Known pre-existing carry-forward (NOT silently absorbed):**
+Check #52 violation `MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4` stored N=238 vs canonical recompute N=239 (window end 2026-05-14 vs 2026-05-17) - flagged in 9fdb9c86 checkpoint, requires separate validated_setups recompute stage, NOT part of this implementation.
+
+**Golden nuggets captured to memory:**
+- `feedback_grep_candidate_to_seed_value_parity_required.md` - the 3-of-4 false-positive rate on grep candidates; how to triage runtime-reexport vs DDL-prose vs deprecation vs docstring shapes.
+- `feedback_chordia_threshold_doctrine_supersession_layer_trap.md` - parity checks over locked thresholds must parse the canonical doc; hardcoded literal moves the bug one layer up.
+
+---
+
+## Checkpoint — 2026-05-19 (truth audit STARTED, code NOT touched) [HISTORICAL]
 
 Operator paused implementation pending proper planning per "no gaps or bias or adhoc"
 direction. Plan locked, truth audit begun, then context cleared.
