@@ -9997,6 +9997,193 @@ def check_fast_lane_promote_orphans() -> list[str]:
     return violations
 
 
+def check_fast_lane_promote_threshold_parity(template_path: Path | None = None) -> list[str]:
+    """Parity check: fast_lane_promote_queue scanner constants vs TEMPLATE-fast-lane-v5.1.yaml.
+
+    The PROMOTE-queue scanner at ``scripts/research/fast_lane_promote_queue.py``
+    inlines six gating constants (T_KILL_FLOOR, T_PROMOTE_FLOOR, EXPR_FLOOR,
+    N_FLOOR, FIRE_MIN, FIRE_MAX) with a prose-comment cite to the canonical
+    FAST_LANE v5.1 template. Comment-cited inlines silently drift when the
+    template is amended (4th confirmed instance of the
+    [[canonical-inline-copy-parity-bug-class]] — see
+    ``memory/feedback_canonical_inline_copy_parity_bug_class.md``).
+
+    This check asserts each scanner constant equals its template-derived value:
+
+      - T_KILL_FLOOR     == screen.promote_threshold
+      - T_PROMOTE_FLOOR  == screen.promote_threshold + screen.needs_more_band
+      - EXPR_FLOOR       == screen.expr_min
+      - N_FLOOR          == screen.n_IS_on_min
+      - FIRE_MIN, FIRE_MAX parsed from screen.fire_rate_gate.kill_if string
+
+    Authority: ``docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml`` lines
+    102-145 are the single source of truth for FAST_LANE v5.1 promotion
+    thresholds. Scanner inlines must mirror.
+
+    Parameters
+    ----------
+    template_path : Path | None
+        Override path to the v5.1 template (test seam for the missing-template
+        injection test). Defaults to the canonical project location.
+
+    Returns
+    -------
+    list[str]
+        Violation strings — empty when all six constants match canonical.
+        Fail-closed when the template cannot be read or parsed.
+    """
+    import re
+
+    try:
+        import yaml  # local import — yaml is already a project dep but keep optional surface tight
+    except Exception as exc:  # pragma: no cover — yaml is a hard dep
+        return [f"check_fast_lane_promote_threshold_parity: PyYAML import failed: {exc}"]
+
+    try:
+        from scripts.research import fast_lane_promote_queue as flpq
+    except Exception as exc:
+        return [f"check_fast_lane_promote_threshold_parity: scanner import failed: {exc}"]
+
+    target = (
+        template_path
+        if template_path is not None
+        else PROJECT_ROOT / "docs" / "audit" / "hypotheses" / "TEMPLATE-fast-lane-v5.1.yaml"
+    )
+
+    if not target.exists():
+        return [
+            f"check_fast_lane_promote_threshold_parity: canonical template missing at {target} "
+            "(scanner threshold parity cannot be verified — fail-closed)"
+        ]
+
+    try:
+        spec = yaml.safe_load(target.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [
+            f"check_fast_lane_promote_threshold_parity: failed to parse {target.name}: "
+            f"{type(exc).__name__}: {exc}"
+        ]
+
+    if not isinstance(spec, dict) or "screen" not in spec:
+        return [
+            f"check_fast_lane_promote_threshold_parity: {target.name} missing top-level `screen:` "
+            "block (template structure has drifted — investigate before promoting the check)"
+        ]
+
+    screen = spec["screen"]
+    violations: list[str] = []
+
+    def _require(key: str) -> float | int | None:
+        if key not in screen:
+            violations.append(
+                f"check_fast_lane_promote_threshold_parity: canonical template missing "
+                f"`screen.{key}` (FAST_LANE v5.1 contract broken)"
+            )
+            return None
+        value = screen[key]
+        # Distinguish "key absent" (above) from "key present but null/non-numeric"
+        # — YAML `key:` with no value parses as None, and `key: [0.5]` parses as
+        # a list. Both would crash `float(value)` downstream — fail-closed with
+        # a structural violation instead.
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            violations.append(
+                f"check_fast_lane_promote_threshold_parity: canonical template "
+                f"`screen.{key}` is {type(value).__name__} ({value!r}); expected numeric "
+                "(FAST_LANE v5.1 contract broken)"
+            )
+            return None
+        return value
+
+    promote_threshold = _require("promote_threshold")
+    needs_more_band = _require("needs_more_band")
+    expr_min = _require("expr_min")
+    n_is_on_min = _require("n_IS_on_min")
+
+    fire_min_canonical: float | None = None
+    fire_max_canonical: float | None = None
+    gate = screen.get("fire_rate_gate")
+    if not isinstance(gate, dict) or "kill_if" not in gate:
+        violations.append(
+            "check_fast_lane_promote_threshold_parity: canonical template missing "
+            "`screen.fire_rate_gate.kill_if`"
+        )
+    else:
+        kill_if = str(gate["kill_if"])
+        m = re.search(r"<\s*(\d+\.\d+).*?>\s*(\d+\.\d+)", kill_if)
+        if m is None:
+            violations.append(
+                f"check_fast_lane_promote_threshold_parity: could not parse fire-rate bounds "
+                f"from kill_if={kill_if!r} (expected `fire_rate < X OR fire_rate > Y`)"
+            )
+        else:
+            fire_min_canonical = float(m.group(1))
+            fire_max_canonical = float(m.group(2))
+
+    # If structural parse already failed, stop — comparing partial values
+    # would emit misleading "constant != None" violations.
+    if violations:
+        return violations
+
+    # Type guards — _require / fire-rate parse have already populated these
+    # to non-None when violations is empty, but assert to make Pyright happy
+    # and to fail loudly if a future refactor breaks the invariant.
+    assert promote_threshold is not None
+    assert needs_more_band is not None
+    assert expr_min is not None
+    assert n_is_on_min is not None
+    assert fire_min_canonical is not None
+    assert fire_max_canonical is not None
+
+    expected_t_kill = float(promote_threshold)
+    expected_t_promote = float(promote_threshold) + float(needs_more_band)
+    expected_expr = float(expr_min)
+    expected_n = int(n_is_on_min)
+    expected_fire_min = float(fire_min_canonical)
+    expected_fire_max = float(fire_max_canonical)
+
+    # Tolerance: scanner values are typed as float; equality with .yaml-decoded
+    # floats is exact when the template uses literal `2.5`/`0.5`/etc.
+    TOL = 1e-9
+
+    def _flag(name: str, actual: float | int, expected: float | int, canonical_source: str) -> None:
+        violations.append(
+            f"check_fast_lane_promote_threshold_parity: scanner {name}={actual!r} "
+            f"does not match canonical {expected!r} (source: {canonical_source}). "
+            f"Inline-copy drift — see [[canonical-inline-copy-parity-bug-class]]; "
+            f"update scripts/research/fast_lane_promote_queue.py or amend the template."
+        )
+
+    if abs(float(flpq.T_KILL_FLOOR) - expected_t_kill) > TOL:
+        _flag("T_KILL_FLOOR", flpq.T_KILL_FLOOR, expected_t_kill, "screen.promote_threshold")
+    if abs(float(flpq.T_PROMOTE_FLOOR) - expected_t_promote) > TOL:
+        _flag(
+            "T_PROMOTE_FLOOR",
+            flpq.T_PROMOTE_FLOOR,
+            expected_t_promote,
+            "screen.promote_threshold + screen.needs_more_band",
+        )
+    if abs(float(flpq.EXPR_FLOOR) - expected_expr) > TOL:
+        _flag("EXPR_FLOOR", flpq.EXPR_FLOOR, expected_expr, "screen.expr_min")
+    if int(flpq.N_FLOOR) != expected_n:
+        _flag("N_FLOOR", flpq.N_FLOOR, expected_n, "screen.n_IS_on_min")
+    if abs(float(flpq.FIRE_MIN) - expected_fire_min) > TOL:
+        _flag(
+            "FIRE_MIN",
+            flpq.FIRE_MIN,
+            expected_fire_min,
+            "screen.fire_rate_gate.kill_if (lower bound)",
+        )
+    if abs(float(flpq.FIRE_MAX) - expected_fire_max) > TOL:
+        _flag(
+            "FIRE_MAX",
+            flpq.FIRE_MAX,
+            expected_fire_max,
+            "screen.fire_rate_gate.kill_if (upper bound)",
+        )
+
+    return violations
+
+
 CHECKS = [
     (
         "Hardcoded 'MGC' SQL literals in generic pipeline code",
@@ -10635,6 +10822,12 @@ CHECKS = [
         "FAST_LANE PROMOTE queue: no orphan PROMOTEs, no ERROR entries, cache up to date",
         check_fast_lane_promote_orphans,
         False,  # blocking — orphan PROMOTE is the missing-pipe class we just closed
+        False,
+    ),
+    (
+        "FAST_LANE promote-queue scanner thresholds match TEMPLATE-fast-lane-v5.1.yaml (canonical-inline-copy parity)",
+        check_fast_lane_promote_threshold_parity,
+        False,  # blocking — silent drift between scanner constants and v5.1 template would mis-promote heavyweight candidates
         False,
     ),
 ]  # end CHECKS

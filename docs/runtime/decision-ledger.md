@@ -4,6 +4,24 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
+- `fast-lane-promote-threshold-parity-drift-check-landed-2026-05-19` —
+  Added `check_fast_lane_promote_threshold_parity` (Check #158, registered in
+  `CHECKS` list of `pipeline/check_drift.py`). Asserts the six gated constants
+  in `scripts/research/fast_lane_promote_queue.py` (T_KILL_FLOOR=2.5,
+  T_PROMOTE_FLOOR=3.0, EXPR_FLOOR=0.0, N_FLOOR=50, FIRE_MIN=0.05, FIRE_MAX=0.95)
+  match the canonical YAML at `docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml`
+  `screen:` block (lines 102-115). Closes Layer 1 of the 3-layer canonical-inline-copy
+  hardening — this is the 4th confirmed instance of the
+  `canonical-inline-copy-parity-bug-class` (see
+  `memory/feedback_canonical_inline_copy_parity_bug_class.md`). 8 mutation-probe
+  injection tests in `tests/test_pipeline/test_check_drift_fast_lane_promote_threshold_parity.py`
+  cover: clean-state pass, missing-template fail-closed, per-constant drift for
+  T_KILL_FLOOR / T_PROMOTE_FLOOR / N_FLOOR / FIRE_MIN / FIRE_MAX (sibling
+  coverage per `regex-alternation-sibling-coverage`), and template-side amend
+  drift. Drift count 157 → 158. Layer 2 (`CANONICAL_INLINE_COPIES` meta-registry)
+  + Layer 3 (PreToolUse hook flagging new inline literals) PARKED for fresh-context
+  design proposal.
+
 - `mnq-comexsettle-orbvol16k-fast-lane-promote-revoked-2026-05-18` —
   **REVOKED FAST_LANE PROMOTE on lane `MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K`.**
   Pooled t=3.30 was a sample-doubling artifact. Per-direction breakdown
