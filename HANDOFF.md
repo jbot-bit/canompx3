@@ -6,7 +6,15 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## This Session (2026-05-18 PM — dashboard Start-Signal preflight mode threading)
+## This Session (2026-05-18 late PM — fast-lane v5.1 runner + 5 new triage screens)
+- **Tool:** Claude Code (Opus 4.7)
+- **Date:** 2026-05-18 (Sun BNE — Monday-eve)
+- **Commit:** `9c7324b2` feat(fast-lane): v5.1 runner branch + 5 new triage screens. Stage closure commit follows.
+- **Files changed:** `research/chordia_strict_unlock_v1.py` (+305), `pipeline/check_drift.py` (+115, Check 156 sentinel 2026-05-20), `tests/test_research/test_chordia_strict_unlock_v1_fast_lane.py` (NEW 355 lines, 45 tests), 5 new prereg YAMLs, 6 result MD/CSV/summary-CSV triplets (incl. v1 re-run).
+- **Session summary:** User asked to "spin up fast-lane a few times automated". Implementation route: (1) verified uncommitted runner stage work (template_version routing, fail-closed unknowns, v5.1 verdict block) — 56/56 tests pass, drift clean apart from pre-existing MGC_CME_REOPEN_ORB_G4 trade-window violation orthogonal to this work; (2) end-to-end smoke on existing v1 prereg confirmed both heavyweight + FAST_LANE verdicts emit side-by-side; (3) surveyed 315 viable triage candidates from validated_setups (active + FDR-sig + AYP + N≥50, not in chordia_audit_log, not deployed); (4) authored 5 new v5.1 preregs spanning MNQ/MES/MGC × CME_PRECLOSE/COMEX_SETTLE/LONDON_METALS × E1/E2; (5) K-budget gate PASS all 6; (6) ran each through runner end-to-end. **Verdict roll-up: 2 PROMOTE (MNQ US_DATA_1000 PD_CLEAR_LONG t=3.06; MNQ COMEX_SETTLE ORB_VOL_16K t=3.30), 1 NEEDS-MORE (MNQ CME_PRECLOSE VOL_RV20_N20 t=2.55 in band), 3 KILL (MES PRECLOSE ORB_G5 fire 0.98; MGC LONDON_METALS ORB_VOL_8K N=49<50; MES PRECLOSE COST_LT15 fire 1.00).** Both PROMOTEs ALSO FAIL heavyweight Chordia strict t≥3.79 — expected at triage tier per BH-FDR doctrine bargain. PROMOTE authorizes heavyweight Chordia prereg ONLY, never deploy, never capital. Stage criteria 1-5 all met; stage file deleted.
+- **Carry-overs:** (a) Pre-existing drift `MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4 trade-window recompute mismatch` (canonical recompute extends N=238→239 vs stored, dates 2026-05-14→2026-05-17). Unrelated to this commit. (b) `chordia_audit_log.yaml` does not yet have an entry for `MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4` although `2026-05-12-mgc-cmereopen-orbg4-chordia-criteria-repair-v1.md` result MD records `FAIL_STRICT_CHORDIA` — orthogonal audit-log canonical-integrity gap, separate session. (c) Next-session candidates: if any of the 2 PROMOTEs deserves heavyweight pre-reg authoring, author with explicit power/severity/era-stability/clustered-SE/dir-match power-floor blocks per `pre_registered_criteria.md` Amendment 3.0.
+
+## Prior Session (2026-05-18 PM — dashboard Start-Signal preflight mode threading)
 - **Tool:** Claude Code (Opus 4.7)
 - **Date:** 2026-05-18 (Sun BNE — Monday-eve)
 - **Commits pushed this session:** `45c1ffb4` skills frontmatter migration (was unpushed locally — rode this push), `bd229c67` fix(dashboard): thread mode into Start preflight so signal-only path is not gated by live telemetry maturity. Tip is now `bd229c67`. Origin clean (0/0) at session end.
