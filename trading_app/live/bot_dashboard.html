@@ -441,6 +441,10 @@
   }
   .chart-cockpit-orb .pending { color: var(--yellow); }
   .chart-cockpit-orb .complete { color: var(--green); }
+  .chart-tf-group { margin-left: auto; display: inline-flex; gap: 2px; background: rgba(0,0,0,0.25); border: 1px solid var(--border); border-radius: 6px; padding: 2px; }
+  .chart-tf-btn { background: transparent; border: none; color: var(--dim); font: 600 10px/1 var(--mono); letter-spacing: 0.04em; padding: 4px 9px; border-radius: 4px; cursor: pointer; text-transform: uppercase; }
+  .chart-tf-btn:hover { color: var(--text); }
+  .chart-tf-btn.active { background: var(--cyan-soft, rgba(0,212,255,0.12)); color: var(--cyan, #00d4ff); }
   /* Canvas host. 360px is the documented honest minimum — Lightweight Charts
      refuses to render usefully below ~200px and below 360 the entry/SL/TP
      price-lines collide with each other on RR=1.5 strategies. */
@@ -2112,6 +2116,11 @@
       <span class="chart-cockpit-title">Live Chart</span>
       <span id="chart-cockpit-instr" class="chart-cockpit-instr">—</span>
       <span id="chart-cockpit-orb" class="chart-cockpit-orb"></span>
+      <span class="chart-tf-group" role="group" aria-label="Timeframe">
+        <button type="button" class="chart-tf-btn" data-tf="1m" onclick="ChartCockpit.setTimeframe('1m')">1m</button>
+        <button type="button" class="chart-tf-btn active" data-tf="5m" onclick="ChartCockpit.setTimeframe('5m')">5m</button>
+        <button type="button" class="chart-tf-btn" data-tf="15m" onclick="ChartCockpit.setTimeframe('15m')">15m</button>
+      </span>
     </div>
     <div class="chart-cockpit-body">
       <div id="chart-host"></div>
@@ -4509,6 +4518,9 @@ const ChartCockpit = (() => {
   const FALLBACK_PARENT = "chart-cockpit";
   const ORB_BOX_ID = "chart-orb-box";
   const LOOKBACK_MIN = 90;
+  // Timeframe interval (seconds). 60=1m raw, 300=5m, 900=15m. 5m default per ORB doctrine.
+  const INTERVAL_SEC = { "1m": 60, "5m": 300, "15m": 900 };
+  const DEFAULT_TF = "5m";
 
   let chart = null;
   let series = null;
@@ -4516,9 +4528,49 @@ const ChartCockpit = (() => {
   let orbLowLine = null;
   let entryLines = [];     // [{line, kind: "entry"|"sl"|"tp"}, ...]
   let currentInstrument = null;
+  let currentTf = DEFAULT_TF;          // active timeframe label
+  let rawBars = [];                    // canonical 1m bars (UTC epoch sec, sorted asc, dedup by time)
   let orbState = { high: null, low: null, complete: false, minutes: null };
   let initialized = false;
   let firstBarTime = null;  // for ORB-box x1 anchor when ORB straddles session
+
+  /**
+   * Pure OHLC aggregator. Pre-conditions: bars sorted ascending by UTC epoch
+   * seconds; no duplicate `time`. Aligns each output bar to the interval
+   * boundary (epoch_sec - epoch_sec % intervalSec) — same UTC-only
+   * convention as the pipeline. Volume sums; open=first.open;
+   * close=last.close; high=max; low=min. Gaps in input propagate (no
+   * fabrication). The trailing bucket may be partial and is the live bar.
+   */
+  function aggregateBars(bars, intervalSec) {
+    if (!Array.isArray(bars) || !bars.length) return [];
+    if (intervalSec <= 60) return bars.slice();  // 1m passthrough — input is already 1m
+    const out = [];
+    let cur = null;
+    for (const b of bars) {
+      const bucket = Math.floor(b.time / intervalSec) * intervalSec;
+      if (cur === null || cur.time !== bucket) {
+        if (cur !== null) out.push(cur);
+        cur = { time: bucket, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume || 0 };
+      } else {
+        if (b.high > cur.high) cur.high = b.high;
+        if (b.low  < cur.low)  cur.low  = b.low;
+        cur.close = b.close;
+        cur.volume += (b.volume || 0);
+      }
+    }
+    if (cur !== null) out.push(cur);
+    return out;
+  }
+
+  function _intervalSec() { return INTERVAL_SEC[currentTf] || INTERVAL_SEC[DEFAULT_TF]; }
+
+  function _renderFromRaw() {
+    if (!series) return;
+    const agg = aggregateBars(rawBars, _intervalSec());
+    series.setData(agg.map(b => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close })));
+    if (agg.length) firstBarTime = agg[0].time;
+  }
 
   function _showFallback(msg) {
     const host = document.getElementById(FALLBACK_PARENT);
@@ -4580,10 +4632,8 @@ const ChartCockpit = (() => {
         const d = await r.json();
         lastResp = d;
         if (Array.isArray(d.bars) && d.bars.length) {
-          series.setData(d.bars.map(b => ({
-            time: b.time, open: b.open, high: b.high, low: b.low, close: b.close,
-          })));
-          firstBarTime = d.bars[0].time;
+          rawBars = d.bars.slice();
+          _renderFromRaw();
           loaded = true;
           if (win !== LOOKBACK_MIN) {
             // Surface that we widened the window — operator should know data is stale.
@@ -4614,7 +4664,48 @@ const ChartCockpit = (() => {
   function pushBar(bar) {
     if (!initialized || !series) return;
     if (currentInstrument && bar.instrument && bar.instrument !== currentInstrument) return;
-    series.update({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close });
+    // Maintain canonical 1m raw buffer; idempotent on duplicate time.
+    if (rawBars.length && rawBars[rawBars.length - 1].time === bar.time) {
+      rawBars[rawBars.length - 1] = { time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume || 0 };
+    } else if (!rawBars.length || bar.time > rawBars[rawBars.length - 1].time) {
+      rawBars.push({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume || 0 });
+    } else {
+      // Out-of-order bar — full re-sort + re-aggregate (rare).
+      rawBars.push({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume || 0 });
+      rawBars.sort((a, b) => a.time - b.time);
+      _renderFromRaw();
+      return;
+    }
+    // Live-update: compute the bucket this bar falls into, aggregate ONLY that bucket
+    // from rawBars (cheaper than re-aggregating all history), and series.update() it.
+    const iv = _intervalSec();
+    const bucket = Math.floor(bar.time / iv) * iv;
+    let agg = { time: bucket, open: null, high: -Infinity, low: Infinity, close: null, volume: 0 };
+    for (let i = rawBars.length - 1; i >= 0; i--) {
+      const b = rawBars[i];
+      if (b.time < bucket) break;
+      if (b.time >= bucket + iv) continue;
+      if (agg.open === null || b.time < agg.bucketFirst) { agg.open = b.open; agg.bucketFirst = b.time; }
+      if (agg.close === null || b.time > agg.bucketLast) { agg.close = b.close; agg.bucketLast = b.time; }
+      if (b.high > agg.high) agg.high = b.high;
+      if (b.low  < agg.low)  agg.low  = b.low;
+      agg.volume += (b.volume || 0);
+    }
+    if (agg.open !== null) {
+      series.update({ time: agg.time, open: agg.open, high: agg.high, low: agg.low, close: agg.close });
+    }
+  }
+
+  function setTimeframe(tf) {
+    if (!INTERVAL_SEC[tf]) return;
+    if (tf === currentTf) return;
+    currentTf = tf;
+    // Re-render aggregate from canonical 1m buffer (no re-fetch).
+    _renderFromRaw();
+    // Sync toggle UI.
+    document.querySelectorAll(".chart-tf-btn").forEach(b => {
+      b.classList.toggle("active", b.dataset.tf === tf);
+    });
   }
 
   function _applyOrb(s) {
@@ -4728,7 +4819,7 @@ const ChartCockpit = (() => {
     }
   }
 
-  return { init, loadInitial, pushBar, markSignal, setInstrument, applyOrbFromState };
+  return { init, loadInitial, pushBar, markSignal, setInstrument, applyOrbFromState, setTimeframe, aggregateBars };
 })();
 
 /* ── Hero state-machine extension (Stage 3.5) ─────────────────────── */
