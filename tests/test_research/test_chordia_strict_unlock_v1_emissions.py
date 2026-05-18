@@ -150,8 +150,7 @@ def test_split_boundary_metadata_holdout_value_is_canonical_constant() -> None:
 
     assert meta["holdout_boundary_value"] == HOLDOUT_SACRED_FROM.isoformat()
     assert HOLDOUT_SACRED_FROM == dt.date(2026, 1, 1), (
-        "Canonical holdout boundary moved — update the fast-lane template + this test "
-        "in lockstep."
+        "Canonical holdout boundary moved — update the fast-lane template + this test in lockstep."
     )
 
 

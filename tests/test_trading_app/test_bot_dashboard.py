@@ -840,18 +840,14 @@ def test_run_preflight_subprocess_threads_signal_only_in_signal_mode(monkeypatch
 
     monkeypatch.setattr(bot_dashboard.subprocess, "run", fake_run)
 
-    result = bot_dashboard._run_preflight_subprocess(
-        "topstep_50k_mnq_auto", mode="signal"
-    )
+    result = bot_dashboard._run_preflight_subprocess("topstep_50k_mnq_auto", mode="signal")
 
     assert result["returncode"] == 0
     assert "--signal-only" in captured["cmd"]
     assert "--preflight" in captured["cmd"]
     # Ordering invariant: --signal-only appended after --preflight (not before
     # the --profile arg) so it never shadows the profile binding.
-    assert captured["cmd"].index("--signal-only") > captured["cmd"].index(
-        "--preflight"
-    )
+    assert captured["cmd"].index("--signal-only") > captured["cmd"].index("--preflight")
 
 
 def test_prepare_profile_for_start_propagates_mode_to_subprocess(monkeypatch):
@@ -869,20 +865,14 @@ def test_prepare_profile_for_start_propagates_mode_to_subprocess(monkeypatch):
     # _prepare_profile_for_start runs the subprocess helper via
     # asyncio.to_thread; patching the helper directly captures the threaded
     # call without needing a subprocess.run stub.
-    monkeypatch.setattr(
-        bot_dashboard, "_run_preflight_subprocess", fake_subprocess
-    )
+    monkeypatch.setattr(bot_dashboard, "_run_preflight_subprocess", fake_subprocess)
     monkeypatch.setattr(
         bot_dashboard,
         "_run_control_refresh_subprocess",
         lambda profile: {"status": "pass", "output": "ok"},
     )
 
-    result = asyncio.run(
-        bot_dashboard._prepare_profile_for_start(
-            "topstep_50k_mnq_auto", mode="signal"
-        )
-    )
+    result = asyncio.run(bot_dashboard._prepare_profile_for_start("topstep_50k_mnq_auto", mode="signal"))
 
     assert captured["profile"] == "topstep_50k_mnq_auto"
     assert captured["mode"] == "signal"
