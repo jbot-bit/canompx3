@@ -1,10 +1,24 @@
-"""ProjectX position queries for crash recovery."""
+"""ProjectX position queries for crash recovery.
+
+All HTTP traffic flows through trading_app.live.http_client.BrokerHTTPClient.
+
+query_equity preserves its float | None contract for back-compat with existing
+HWM/dashboard callers, BUT no longer swallows transient errors silently — it
+relies on BrokerHTTPClient's classified retry. A sibling query_equity_with_age()
+returns an EquityReading consumed by Stage 3's broker-health-tick to enforce
+the kill-switch SLA.
+"""
 
 import logging
-
-import requests
+import time
 
 from ..broker_base import BrokerAuth, BrokerPositions
+from ..http_client import (
+    READ_POLICY,
+    BrokerHTTPClient,
+    BrokerHTTPError,
+    EquityReading,
+)
 from .auth import BASE_URL
 
 log = logging.getLogger(__name__)
@@ -13,20 +27,22 @@ log = logging.getLogger(__name__)
 class ProjectXPositions(BrokerPositions):
     def __init__(self, auth: BrokerAuth, **kwargs):
         super().__init__(auth, **kwargs)
+        self._http = BrokerHTTPClient(
+            base_url=BASE_URL,
+            refresh_token=auth.refresh_if_needed,
+            name="projectx-positions",
+        )
+        # Stage 3 wires from here: last_good_equity per account_id, with timestamp.
+        self._last_good_equity: dict[int, tuple[float, float]] = {}  # account_id -> (value, monotonic_ts)
 
     def query_open(self, account_id: int) -> list[dict]:
-        resp = requests.post(
-            f"{BASE_URL}/api/Position/searchOpen",
-            json={"accountId": account_id},
+        data = self._http.post_json(
+            "/api/Position/searchOpen",
             headers=self.auth.headers(),
+            body={"accountId": account_id},
+            policy=READ_POLICY,
             timeout=10,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        # Validate application-level success — orphan detection that silently
-        # returns nothing is worse than no orphan detection at all.
-        if isinstance(data, dict) and data.get("success") is False:
-            raise RuntimeError(f"ProjectX position query failed: {data.get('errorMessage', data)}")
         # Response might be a list directly or have a "positions" key
         positions = data if isinstance(data, list) else data.get("positions", [])
         result = []
@@ -49,40 +65,73 @@ class ProjectXPositions(BrokerPositions):
         Uses POST /api/Account/search to find account by id, returns balance.
         The /api/Account/{id} GET endpoint returns 404 on TopStepX — use search instead.
 
+        Behavior change (2026-05-18 resilience baseline):
+        - Transient errors (A/B/C/D/E) raise BrokerHTTPError — no silent None.
+        - Permanent miss (account not found / no balance field) returns None.
+        - Callers that need age-aware reads should use query_equity_with_age().
+
         KNOWN LIMITATION: Returns realized balance. May not include unrealized PnL
         from open positions. EOD readings (when flat) are accurate for prop firm DD.
         """
+        reading = self.query_equity_with_age(account_id)
+        if reading.source == "live":
+            return reading.value
+        if reading.source == "missing":
+            return None
+        # Source is "cache" — caller asked for current equity; surface staleness as None.
+        # Callers needing the staleness data should call query_equity_with_age directly.
+        return None
+
+    def query_equity_with_age(self, account_id: int) -> EquityReading:
+        """Equity reading with age-since-last-successful-fetch.
+
+        Stage 3 broker-health-tick uses this to drive the kill-switch SLA.
+
+        Return semantics:
+          - source="live", age_s=0.0 — fresh successful read.
+          - source="cache", age_s>0 — transient error; returning last-good for the UI.
+          - source="missing" — account not found / no balance field (permanent miss).
+        Raises BrokerHTTPError on classified retry exhaustion ONLY when no
+        last-good cache exists; otherwise the cache is returned with age_s set.
+        """
         try:
-            resp = requests.post(
-                f"{BASE_URL}/api/Account/search",
-                json={"onlyActiveAccounts": True},
+            data = self._http.post_json(
+                "/api/Account/search",
                 headers=self.auth.headers(),
+                body={"onlyActiveAccounts": True},
+                policy=READ_POLICY,
                 timeout=10,
             )
-            resp.raise_for_status()
-            data = resp.json()
-            accounts = data if isinstance(data, list) else data.get("accounts", [])
-            for acct in accounts:
-                acct_id = acct.get("id") or acct.get("accountId")
-                if acct_id is not None and int(acct_id) == account_id:
-                    # Use explicit None check, not `or`: a $0.00 balance is a
-                    # legitimate value (day-1 XFA, fresh accounts) — falsy `or`
-                    # collapses 0.0 to None and falsely reports "not found".
-                    balance = acct.get("balance")
-                    if balance is None:
-                        balance = acct.get("cashBalance")
-                    if balance is not None:
-                        return float(balance)
-                    log.warning(
-                        "ProjectX account %d found but no balance/cashBalance field",
-                        account_id,
-                    )
-                    return None
-            log.warning("ProjectX account %d not found in search results", account_id)
-            return None
-        except Exception as e:
-            log.warning("Failed to query ProjectX equity: %s", e)
-            return None
+        except BrokerHTTPError as exc:
+            cached = self._last_good_equity.get(account_id)
+            if cached is not None:
+                value, ts = cached
+                age = time.monotonic() - ts
+                log.warning(
+                    "ProjectX equity transient error (%s) — serving cache age=%.1fs",
+                    exc.error_class, age,
+                )
+                return EquityReading(value=value, age_s=age, source="cache")
+            raise
+
+        accounts = data if isinstance(data, list) else data.get("accounts", [])
+        for acct in accounts:
+            acct_id = acct.get("id") or acct.get("accountId")
+            if acct_id is not None and int(acct_id) == account_id:
+                balance = acct.get("balance")
+                if balance is None:
+                    balance = acct.get("cashBalance")
+                if balance is not None:
+                    value = float(balance)
+                    self._last_good_equity[account_id] = (value, time.monotonic())
+                    return EquityReading(value=value, age_s=0.0, source="live")
+                log.warning(
+                    "ProjectX account %d found but no balance/cashBalance field",
+                    account_id,
+                )
+                return EquityReading(value=None, age_s=0.0, source="missing")
+        log.warning("ProjectX account %d not found in search results", account_id)
+        return EquityReading(value=None, age_s=0.0, source="missing")
 
     def query_account_metadata(self, account_id: int) -> dict | None:
         """Return the full account metadata dict for account_id, or None on miss.
@@ -92,21 +141,20 @@ class ProjectXPositions(BrokerPositions):
         TC accounts have 'TC' in the name (e.g. '50KTC-V2-451890-20372221').
         """
         try:
-            resp = requests.post(
-                f"{BASE_URL}/api/Account/search",
-                json={"onlyActiveAccounts": True},
+            data = self._http.post_json(
+                "/api/Account/search",
                 headers=self.auth.headers(),
+                body={"onlyActiveAccounts": True},
+                policy=READ_POLICY,
                 timeout=10,
             )
-            resp.raise_for_status()
-            data = resp.json()
-            accounts = data if isinstance(data, list) else data.get("accounts", [])
-            for acct in accounts:
-                acct_id = acct.get("id") or acct.get("accountId")
-                if acct_id is not None and int(acct_id) == account_id:
-                    return dict(acct)
-            log.warning("ProjectX account %d metadata not found", account_id)
+        except BrokerHTTPError as exc:
+            log.warning("Failed to query ProjectX account metadata: %s", exc)
             return None
-        except Exception as e:
-            log.warning("Failed to query ProjectX account metadata: %s", e)
-            return None
+        accounts = data if isinstance(data, list) else data.get("accounts", [])
+        for acct in accounts:
+            acct_id = acct.get("id") or acct.get("accountId")
+            if acct_id is not None and int(acct_id) == account_id:
+                return dict(acct)
+        log.warning("ProjectX account %d metadata not found", account_id)
+        return None

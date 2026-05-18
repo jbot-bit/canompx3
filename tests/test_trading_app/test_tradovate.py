@@ -462,37 +462,54 @@ class TestTradovatePositions:
 
 
 class TestRequestWithRetry:
-    @patch("trading_app.live.tradovate.http.time.sleep")
-    @patch("trading_app.live.tradovate.http.requests.post")
-    def test_429_retry_then_success(self, mock_post, mock_sleep):
+    """Tradovate request_with_retry is a thin shim over BrokerHTTPClient (2026-05-18).
+
+    Behavior change: 5xx is now class-D and retried (per the failure-mode taxonomy).
+    Pre-2026-05-18 contract was "non-429 returns immediately" — that gap is what the
+    resilience baseline closes.
+    """
+
+    @patch("trading_app.live.http_client.time.sleep")
+    @patch("requests.Session.request")
+    def test_429_retry_then_success(self, mock_req, mock_sleep):
         resp_429 = MagicMock()
         resp_429.status_code = 429
+        resp_429.headers = {}
         resp_ok = MagicMock()
         resp_ok.status_code = 200
-        mock_post.side_effect = [resp_429, resp_ok]
+        resp_ok.headers = {}
+        mock_req.side_effect = [resp_429, resp_ok]
 
         result = request_with_retry("POST", "http://test/api", {})
         assert result.status_code == 200
-        mock_sleep.assert_called_once()
+        assert mock_sleep.call_count >= 1
 
-    @patch("trading_app.live.tradovate.http.requests.post")
-    def test_429_exhausted_raises(self, mock_post):
+    @patch("trading_app.live.http_client.time.sleep")
+    @patch("requests.Session.request")
+    def test_429_exhausted_raises(self, mock_req, mock_sleep):
         resp_429 = MagicMock()
         resp_429.status_code = 429
-        mock_post.return_value = resp_429
+        resp_429.headers = {}
+        mock_req.return_value = resp_429
 
-        with patch("trading_app.live.tradovate.http.time.sleep"), pytest.raises(RateLimitExhausted):
+        with pytest.raises(RateLimitExhausted):
             request_with_retry("POST", "http://test/api", {})
 
-    @patch("trading_app.live.tradovate.http.requests.get")
-    def test_non_429_returns_immediately(self, mock_get):
-        resp = MagicMock()
-        resp.status_code = 500
-        mock_get.return_value = resp
+    @patch("trading_app.live.http_client.time.sleep")
+    @patch("requests.Session.request")
+    def test_5xx_retries_per_resilience_baseline(self, mock_req, mock_sleep):
+        """5xx is class-D — the client retries (2026-05-18 baseline change)."""
+        resp_500 = MagicMock()
+        resp_500.status_code = 500
+        resp_500.headers = {}
+        resp_ok = MagicMock()
+        resp_ok.status_code = 200
+        resp_ok.headers = {}
+        mock_req.side_effect = [resp_500, resp_ok]
 
         result = request_with_retry("GET", "http://test/api", {})
-        assert result.status_code == 500
-        mock_get.assert_called_once()
+        assert result.status_code == 200
+        assert mock_req.call_count == 2
 
 
 # ---------------------------------------------------------------------------

@@ -1,10 +1,13 @@
-"""ProjectX contract resolution and account discovery."""
+"""ProjectX contract resolution and account discovery.
+
+All HTTP traffic flows through trading_app.live.http_client.BrokerHTTPClient
+(READ_POLICY — idempotent reads with bounded retry).
+"""
 
 import logging
 
-import requests
-
 from ..broker_base import BrokerAuth, BrokerContracts
+from ..http_client import READ_POLICY, BrokerHTTPClient
 from .auth import BASE_URL
 
 log = logging.getLogger(__name__)
@@ -23,20 +26,20 @@ class ProjectXContracts(BrokerContracts):
     def __init__(self, auth: BrokerAuth, **kwargs):
         super().__init__(auth, **kwargs)
         self._contract_cache: dict[str, str] = {}
+        self._http = BrokerHTTPClient(
+            base_url=BASE_URL,
+            refresh_token=auth.refresh_if_needed,
+            name="projectx-contracts",
+        )
 
     def resolve_account_id(self) -> int:
-        resp = requests.post(
-            f"{BASE_URL}/api/Account/search",
-            json={"onlyActiveAccounts": True},
+        data = self._http.post_json(
+            "/api/Account/search",
             headers=self.auth.headers(),
+            body={"onlyActiveAccounts": True},
+            policy=READ_POLICY,
             timeout=10,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        # Validate application-level success (HTTP 200 is not enough)
-        if isinstance(data, dict) and data.get("success") is False:
-            raise RuntimeError(f"ProjectX account search failed: {data.get('errorMessage', data)}")
-        # Response might be a list directly or have an "accounts" key
         accounts = data if isinstance(data, list) else data.get("accounts", [])
         if not accounts:
             raise RuntimeError("No active ProjectX accounts found")
@@ -56,16 +59,13 @@ class ProjectXContracts(BrokerContracts):
         Uses same /api/Account/search endpoint as resolve_account_id().
         One API key covers all linked accounts per ProjectX docs.
         """
-        resp = requests.post(
-            f"{BASE_URL}/api/Account/search",
-            json={"onlyActiveAccounts": True},
+        data = self._http.post_json(
+            "/api/Account/search",
             headers=self.auth.headers(),
+            body={"onlyActiveAccounts": True},
+            policy=READ_POLICY,
             timeout=10,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, dict) and data.get("success") is False:
-            raise RuntimeError(f"ProjectX account search failed: {data.get('errorMessage', data)}")
         accounts = data if isinstance(data, list) else data.get("accounts", [])
         if not accounts:
             raise RuntimeError("No active ProjectX accounts found")
@@ -86,18 +86,13 @@ class ProjectXContracts(BrokerContracts):
         if instrument in self._contract_cache:
             return self._contract_cache[instrument]
 
-        resp = requests.post(
-            f"{BASE_URL}/api/Contract/available",
-            json={"live": False},
+        data = self._http.post_json(
+            "/api/Contract/available",
             headers=self.auth.headers(),
+            body={"live": False},
+            policy=READ_POLICY,
             timeout=10,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        # Validate application-level success (HTTP 200 is not enough)
-        if isinstance(data, dict) and data.get("success") is False:
-            raise RuntimeError(f"ProjectX contract query failed: {data.get('errorMessage', data)}")
-        # Response might be a list directly or have a "contracts" key
         contracts = data if isinstance(data, list) else data.get("contracts", [])
 
         search_terms = INSTRUMENT_SEARCH_TERMS.get(instrument, [instrument])

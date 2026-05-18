@@ -3,88 +3,55 @@
 Order types: 1=Limit, 2=Market, 4=Stop, 5=TrailingStop
 Sides: 0=Bid (buy), 1=Ask (sell)
 Bracket: stopLossBracket/takeProfitBracket fields on entry order (ticks from fill).
+
+Resilience (2026-05-18 baseline):
+- All HTTP flows through trading_app.live.http_client.BrokerHTTPClient.
+- Order-mutating calls carry a client_order_id (UUID4) sent as ProjectX
+  customTag — the broker's per-account uniqueness constraint is the
+  primary idempotency gate (resources/projectx_api_spec_2026_05_16.md
+  line 14: "customTag must be unique per account across all orders, ever").
+- On retry of a place call where the prior attempt may have succeeded,
+  _reconcile_post_place inspects /Order/searchOpen for a fingerprint match
+  (contract+size+side+type, created within reconcile_window_s). searchOpen
+  does NOT return customTag (API spec line 22), so the match is by
+  fingerprint, not by tag.
 """
 
+import json as _json
 import logging
-import random
 import time
-
-import requests
+import uuid
 
 from ..broker_base import BrokerAuth, BrokerRouter
+from ..http_client import (
+    ORDER_POLICY,
+    READ_POLICY,
+    BrokerHTTPClient,
+    BrokerHTTPError,
+    BrokerProtocolError,
+    BrokerRateLimitExhausted,
+)
 from .auth import BASE_URL
 
 log = logging.getLogger(__name__)
 
 
 _DEFAULT_PRICE_COLLAR_PCT = 0.005
-
-# Rate-limit retry configuration (matches Tradovate order_router).
-_429_MAX_RETRIES = 3
-_429_BACKOFF_BASE = 1.0  # seconds: 1, 2, 4
-_429_BACKOFF_MAX = 30.0
-_429_JITTER_FACTOR = 0.2  # ±20%
+_RECONCILE_WINDOW_S = 5.0  # search-window for fingerprint-based reconcile
 
 
-class RateLimitExhausted(Exception):
-    """Raised when 429 retries are exhausted on any ProjectX API call."""
-
-    pass
-
-
-def _backoff_wait(attempt: int) -> float:
-    """Exponential backoff with jitter for 429 retries."""
-    base_wait = min(_429_BACKOFF_BASE * (2**attempt), _429_BACKOFF_MAX)
-    jitter = base_wait * _429_JITTER_FACTOR * (2 * random.random() - 1)
-    return max(0.1, base_wait + jitter)
+# Backwards-compat re-export so callers `from .order_router import RateLimitExhausted`
+# still resolve to the unified exception type.
+RateLimitExhausted = BrokerRateLimitExhausted
 
 
-def _request_with_429_retry(
-    method: str,
-    url: str,
-    auth_headers: dict,
-    json_body: dict | None = None,
-    timeout: float = 5,
-) -> requests.Response:
-    """HTTP request with 429 rate-limit detection and exponential backoff.
+def generate_client_order_id() -> str:
+    """UUID4 hex — used as ProjectX customTag (idempotency key).
 
-    On non-429 errors, raises immediately (no retry).
-    On 429 after max retries, raises RateLimitExhausted.
+    Per ProjectX API spec, customTag must be unique per-account across ALL
+    orders, ever. UUID4 collision probability is negligible.
     """
-    func = requests.post if method == "POST" else requests.get
-    kwargs: dict = {"headers": auth_headers, "timeout": timeout}
-    if json_body is not None:
-        kwargs["json"] = json_body
-    for attempt in range(_429_MAX_RETRIES + 1):
-        resp = func(url, **kwargs)
-        if resp.status_code != 429:
-            return resp
-        if attempt < _429_MAX_RETRIES:
-            wait = _backoff_wait(attempt)
-            log.warning(
-                "HTTP 429 rate-limited on %s (attempt %d/%d) — retrying in %.1fs",
-                url.split("/")[-1],
-                attempt + 1,
-                _429_MAX_RETRIES + 1,
-                wait,
-            )
-            time.sleep(wait)
-    log.error(
-        "HTTP 429 rate limit EXHAUSTED after %d attempts on %s",
-        _429_MAX_RETRIES + 1,
-        url.split("/")[-1],
-    )
-    raise RateLimitExhausted(f"429 rate limit exhausted after {_429_MAX_RETRIES + 1} attempts on {url.split('/')[-1]}")
-
-
-def _submit_with_429_retry(
-    url: str,
-    auth_headers: dict,
-    json_body: dict,
-    timeout: float = 5,
-) -> requests.Response:
-    """HTTP POST with 429 retry. Legacy wrapper."""
-    return _request_with_429_retry("POST", url, auth_headers, json_body, timeout)
+    return uuid.uuid4().hex
 
 
 class ProjectXOrderRouter(BrokerRouter):
@@ -95,6 +62,20 @@ class ProjectXOrderRouter(BrokerRouter):
         self.tick_size = tick_size
         self._price_collar_pct: float = kwargs.get("price_collar_pct", _DEFAULT_PRICE_COLLAR_PCT)
         self._last_known_price: float | None = None
+        # ProjectX auth may be None in test harness scenarios; only construct
+        # the http client when we have a real auth (for refresh_token hook).
+        self._http: BrokerHTTPClient | None = None
+        if auth is not None:
+            self._http = BrokerHTTPClient(
+                base_url=BASE_URL,
+                refresh_token=auth.refresh_if_needed,
+                name="projectx-orders",
+            )
+
+    def _client(self) -> BrokerHTTPClient:
+        if self._http is None:
+            raise RuntimeError("No auth — order router HTTP client not initialized")
+        return self._http
 
     def update_market_price(self, price: float) -> None:
         if price > 0:
@@ -157,35 +138,70 @@ class ProjectXOrderRouter(BrokerRouter):
                 log.critical(msg)
                 raise ValueError(msg)
 
+        # Idempotency key — UUID4, unique-per-account-forever per ProjectX spec.
+        client_order_id = spec.get("customTag") or generate_client_order_id()
+
         # Strip internal routing fields before sending to ProjectX API
         wire_spec = {k: v for k, v in spec.items() if not k.startswith("_")}
+        wire_spec["customTag"] = client_order_id
 
-        # Full payload audit trail — logged BEFORE submission
-        import json as _json
+        # Full payload audit trail — logged BEFORE submission. Includes the
+        # client_order_id so a journal/log reconciliation can match a duplicate
+        # broker-side reject back to its origin attempt.
+        log.info("ORDER SUBMIT PAYLOAD (cid=%s): %s", client_order_id, _json.dumps(wire_spec, default=str))
 
-        log.info("ORDER SUBMIT PAYLOAD: %s", _json.dumps(wire_spec, default=str))
+        contract_id = spec.get("contractId")
+        side = spec.get("side")
+        size = spec.get("size")
+        order_type = spec.get("type")
+        place_started_at = time.monotonic()
 
         t0 = time.monotonic()
-        resp = _submit_with_429_retry(
-            f"{BASE_URL}/api/Order/place",
-            {**self.auth.headers(), "Content-Type": "application/json"},
-            json_body=wire_spec,
-            timeout=5,
-        )
+        try:
+            data = self._client().post_json(
+                "/api/Order/place",
+                headers={**self.auth.headers(), "Content-Type": "application/json"},
+                body=wire_spec,
+                policy=ORDER_POLICY,
+                timeout=5,
+            )
+        except BrokerHTTPError as exc:
+            # Transient/auth/protocol failure. The broker MAY have accepted the
+            # order on a prior attempt before the connection dropped. Try to
+            # reconcile via fingerprint match before bubbling the failure.
+            reconciled = self._reconcile_post_place(
+                contract_id=contract_id,
+                side=side,
+                size=size,
+                order_type=order_type,
+                window_started_at=place_started_at,
+            )
+            if reconciled is not None:
+                elapsed_ms = (time.monotonic() - t0) * 1000
+                log.warning(
+                    "ProjectX order RECONCILED after transient error (%s): orderId=%d cid=%s (%.0fms)",
+                    exc.error_class, reconciled, client_order_id, elapsed_ms,
+                )
+                return {
+                    "order_id": reconciled,
+                    "status": "submitted_reconciled",
+                    "fill_price": None,
+                    "client_order_id": client_order_id,
+                }
+            raise
+
         elapsed_ms = (time.monotonic() - t0) * 1000
-        resp.raise_for_status()
-        data = resp.json()
 
         # Full response audit trail
-        log.info("ORDER RESPONSE: %s", _json.dumps(data, default=str))
-
-        if not data.get("success"):
-            raise RuntimeError(f"ProjectX order failed: {data.get('errorMessage', data)}")
+        log.info("ORDER RESPONSE (cid=%s): %s", client_order_id, _json.dumps(data, default=str))
 
         order_id = data.get("orderId")
         if order_id is None or order_id <= 0:
             log.error("ProjectX order returned no valid orderId: %s", data)
-            raise RuntimeError(f"ProjectX order returned no valid orderId: {data}")
+            raise BrokerProtocolError(
+                f"ProjectX order returned no valid orderId: {data}",
+                error_class="G",
+            )
         # Spec says place response only has orderId/success/errorCode/errorMessage.
         # filledPrice may appear on immediate fills — try spec field name first.
         fill_price = data.get("filledPrice")
@@ -196,12 +212,13 @@ class ProjectXOrderRouter(BrokerRouter):
 
         has_bracket = "stopLossBracket" in spec or "takeProfitBracket" in spec
         log.info(
-            "ProjectX order placed: side=%d type=%d qty=%d bracket=%s -> orderId=%d (%.0fms)",
+            "ProjectX order placed: side=%d type=%d qty=%d bracket=%s -> orderId=%d cid=%s (%.0fms)",
             spec.get("side", -1),
             spec.get("type", -1),
             spec.get("size", 0),
             has_bracket,
             order_id,
+            client_order_id,
             elapsed_ms,
         )
         if elapsed_ms > 1000:
@@ -210,7 +227,56 @@ class ProjectXOrderRouter(BrokerRouter):
             "order_id": order_id,
             "status": "submitted",
             "fill_price": float(fill_price) if fill_price is not None else None,
+            "client_order_id": client_order_id,
         }
+
+    def _reconcile_post_place(
+        self,
+        *,
+        contract_id: str | None,
+        side: int | None,
+        size: int | None,
+        order_type: int | None,
+        window_started_at: float,
+    ) -> int | None:
+        """Fingerprint-based reconcile after a transient place failure.
+
+        ProjectX searchOpen does NOT return customTag (API spec line 22), so
+        post-fact tag-based matching is impossible. Instead we match by
+        (contract, side, size, type) and prefer the most recently-created
+        order. Window: time since the place attempt started, bounded by
+        _RECONCILE_WINDOW_S.
+
+        Returns the broker order_id if a unique fingerprint match exists,
+        else None (caller will surface the original failure).
+        """
+        elapsed = time.monotonic() - window_started_at
+        if elapsed > _RECONCILE_WINDOW_S:
+            log.warning("Reconcile skipped: window expired (%.1fs > %.1fs)", elapsed, _RECONCILE_WINDOW_S)
+            return None
+        if contract_id is None or side is None or size is None or order_type is None:
+            return None
+        try:
+            orders = self.query_open_orders()
+        except Exception as exc:
+            log.warning("Reconcile failed (cannot query open orders): %s", exc)
+            return None
+        candidates = [
+            o for o in orders
+            if o.get("contractId") == contract_id
+            and o.get("side") == side
+            and o.get("size") == size
+            and o.get("type") == order_type
+        ]
+        if len(candidates) == 1:
+            oid = candidates[0].get("id") or candidates[0].get("orderId")
+            return int(oid) if oid is not None else None
+        if len(candidates) > 1:
+            log.warning(
+                "Reconcile ambiguous: %d open orders match fingerprint contract=%s side=%s size=%s type=%s — refusing to adopt",
+                len(candidates), contract_id, side, size, order_type,
+            )
+        return None
 
     def build_exit_spec(self, direction: str, symbol: str, qty: int = 1) -> dict:
         side = 1 if direction == "long" else 0  # Reverse: close long=sell, close short=buy
@@ -225,17 +291,15 @@ class ProjectXOrderRouter(BrokerRouter):
     def cancel(self, order_id: int) -> None:
         if self.auth is None:
             raise RuntimeError(f"Cannot cancel order {order_id} — no auth configured")
-        resp = _request_with_429_retry(
-            "POST",
-            f"{BASE_URL}/api/Order/cancel",
-            self.auth.headers(),
-            json_body={"accountId": self.account_id, "orderId": order_id},
+        data = self._client().post_json(
+            "/api/Order/cancel",
+            headers=self.auth.headers(),
+            body={"accountId": self.account_id, "orderId": order_id},
+            policy=ORDER_POLICY,
+            timeout=10,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        if not data.get("success", True):
-            raise RuntimeError(f"ProjectX cancel failed for orderId={order_id}: {data.get('errorMessage', data)}")
-        log.info("ProjectX order cancelled: orderId=%d (account=%d)", order_id, self.account_id)
+        # post_json already raised on success=false / non-JSON.
+        log.info("ProjectX order cancelled: orderId=%d (account=%d) resp=%s", order_id, self.account_id, data)
 
     def supports_native_brackets(self) -> bool:
         return True
@@ -313,10 +377,13 @@ class ProjectXOrderRouter(BrokerRouter):
         """
         if self.auth is None:
             raise RuntimeError("No auth — cannot query order status")
-        resp = _request_with_429_retry(
+        # Need raw response (status_code) for non-JSON debugging; use request().
+        resp = self._client().request(
             "GET",
-            f"{BASE_URL}/api/Order/{order_id}",
-            self.auth.headers(),
+            f"/api/Order/{order_id}",
+            headers=self.auth.headers(),
+            policy=READ_POLICY,
+            timeout=10,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -347,19 +414,14 @@ class ProjectXOrderRouter(BrokerRouter):
         """
         if self.auth is None:
             return []
-        resp = _request_with_429_retry(
-            "POST",
-            f"{BASE_URL}/api/Order/searchOpen",
-            self.auth.headers(),
-            json_body={"accountId": self.account_id},
+        data = self._client().post_json(
+            "/api/Order/searchOpen",
+            headers=self.auth.headers(),
+            body={"accountId": self.account_id},
+            policy=READ_POLICY,
             timeout=10,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        # Validate application-level success — an empty list from a failed query
-        # looks identical to "no open orders" and will fool bracket verification.
-        if isinstance(data, dict) and data.get("success") is False:
-            raise RuntimeError(f"ProjectX searchOpen failed: {data.get('errorMessage', data)}")
+        # Response might be a dict with "orders" key or a bare list.
         orders = data.get("orders", []) if isinstance(data, dict) else data
         return orders
 
