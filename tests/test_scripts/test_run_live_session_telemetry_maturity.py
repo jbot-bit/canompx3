@@ -46,13 +46,19 @@ def synthetic_signals_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _ctx(instrument: str = "MNQ", signal_only: bool = True) -> PreflightContext:
+def _ctx(
+    instrument: str = "MNQ",
+    signal_only: bool = True,
+    demo: bool = False,
+    profile_id: str | None = None,
+) -> PreflightContext:
     return PreflightContext(
         instrument=instrument,
         broker_name="test",
-        demo=False,
+        demo=demo,
         portfolio=None,
         signal_only=signal_only,
+        profile_id=profile_id,
     )
 
 
@@ -105,3 +111,71 @@ def test_unrecognized_instrument_defaults_to_mnq(synthetic_signals_dir):
     result = _check_telemetry_maturity(_ctx(instrument="ALL", signal_only=True))
     assert result.passed is True
     assert "MNQ" in result.message, "fallback to MNQ when instrument sentinel is unrecognized"
+
+
+# ── 2026-05-18 FAIL→WARN doctrine-debt demotion ────────────────────────────
+# The 30-day live-uptime floor was never canonical doctrine. Below-floor
+# verdicts are advisory WARN for demo / Express-Funded prop live; only
+# real-capital live (is_express_funded=False, unknown profile, or no
+# profile) preserves the original FAIL. See telemetry_maturity.py module
+# docstring "DOCTRINE NOTE" for the full rationale.
+
+
+def test_below_floor_demo_returns_warn(synthetic_signals_dir):
+    """Demo mode below floor must surface as advisory WARN, never FAIL — no real capital at risk."""
+    _write_n_distinct_days(synthetic_signals_dir, n=MIN_TELEMETRY_TRADING_DAYS - 1)
+    result = _check_telemetry_maturity(_ctx(signal_only=False, demo=True))
+    assert result.passed is True, "demo must not block on advisory gate"
+    assert result.message.startswith("WARN:"), "must emit WARN status for dashboard parser"
+    assert "demo" in result.message
+    assert "29/30" in result.message
+
+
+def test_below_floor_live_xfa_profile_returns_warn(synthetic_signals_dir):
+    """--live + Express-Funded prop profile (is_express_funded=True) is advisory WARN, not FAIL."""
+    _write_n_distinct_days(synthetic_signals_dir, n=MIN_TELEMETRY_TRADING_DAYS - 1)
+    # topstep_50k_mnq_auto is the active deployment profile; per
+    # prop_profiles.AccountProfile default at line 107, is_express_funded=True.
+    result = _check_telemetry_maturity(
+        _ctx(signal_only=False, demo=False, profile_id="topstep_50k_mnq_auto")
+    )
+    assert result.passed is True, "Express-Funded prop must not block on advisory gate"
+    assert result.message.startswith("WARN:"), "must emit WARN status for dashboard parser"
+    assert "Express-Funded prop" in result.message
+    assert "29/30" in result.message
+
+
+def test_below_floor_live_unknown_profile_returns_failed(synthetic_signals_dir):
+    """--live + unknown profile_id stays FAIL (conservative default; can't verify XFA shape)."""
+    _write_n_distinct_days(synthetic_signals_dir, n=MIN_TELEMETRY_TRADING_DAYS - 1)
+    result = _check_telemetry_maturity(
+        _ctx(signal_only=False, demo=False, profile_id="not_a_real_profile_xyz")
+    )
+    assert result.passed is False, "unknown profile on live mode must FAIL conservatively"
+    assert "FAILED" in result.message
+    assert "UNVERIFIED_INSUFFICIENT_TELEMETRY" in result.message
+
+
+def test_below_floor_live_real_capital_profile_returns_failed(synthetic_signals_dir):
+    """--live + known profile with is_express_funded=False stays FAIL (real capital at risk)."""
+    # Build a synthetic real-capital profile inline to avoid coupling the test
+    # to a specific profile dict entry that may be edited.
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, AccountProfile
+
+    fake_id = "_test_real_capital_profile_below_floor"
+    ACCOUNT_PROFILES[fake_id] = AccountProfile(
+        profile_id=fake_id,
+        firm="self",
+        account_size=50_000,
+        is_express_funded=False,
+    )
+    try:
+        _write_n_distinct_days(synthetic_signals_dir, n=MIN_TELEMETRY_TRADING_DAYS - 1)
+        result = _check_telemetry_maturity(
+            _ctx(signal_only=False, demo=False, profile_id=fake_id)
+        )
+        assert result.passed is False, "real-capital live below floor must FAIL"
+        assert "FAILED" in result.message
+        assert "UNVERIFIED_INSUFFICIENT_TELEMETRY" in result.message
+    finally:
+        ACCOUNT_PROFILES.pop(fake_id, None)

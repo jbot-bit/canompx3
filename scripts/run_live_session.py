@@ -330,23 +330,28 @@ def _check_trade_journal(ctx: PreflightContext) -> CheckResult:
 
 
 def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
-    """Telemetry maturity (signal-log distinct trading_days >= 30).
+    """Telemetry maturity (signal-log distinct trading_days vs floor).
 
     Reads the canonical signal log files at repo root via
     trading_app.live.telemetry_maturity.evaluate_telemetry_maturity. The
     gate is orthogonal to the copy-trading gate (which checks broker-side
-    account topology); this one checks measurement adequacy of the
-    canonical signal-log telemetry per Criterion 8 + RULE 3.2/3.3.
+    account topology); this one counts distinct trading_days of bot
+    uptime per instrument.
 
-    Mode-dependent verdict:
-    - signal_only: passed=True with informational count/threshold message.
-      The whole point of a paper run is to ACCUMULATE distinct trading_days,
-      so blocking would prevent the gate from ever clearing.
-    - demo/live: passed=False until n>=30 for the instrument under test.
-      Capital-touching modes refuse to launch on under-powered telemetry.
-    - --all (no single instrument fixed): ctx.instrument may be a single
-      symbol or a sentinel like "ALL"; we evaluate against MNQ as the
-      primary canonical instrument when ctx.instrument is unrecognized.
+    Verdict matrix (see telemetry_maturity.py module docstring "DOCTRINE
+    NOTE" for why this is advisory rather than hard-gated):
+
+    - signal_only: OK (this is the path that accumulates the count).
+    - demo: WARN (no real capital at risk).
+    - live + Express-Funded prop profile (is_express_funded=True): WARN
+      (e.g. Topstep XFA — funded-account wrapper insulates real capital).
+    - live + real-capital broker (profile is_express_funded=False, unknown
+      profile, or no profile): FAIL — conservative default until the gate
+      is either promoted through proper doctrine or formally retired.
+
+    --all (no single instrument fixed): ctx.instrument may be a single
+    symbol or a sentinel like "ALL"; evaluated against MNQ as the primary
+    canonical instrument when ctx.instrument is unrecognized.
     """
     try:
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
@@ -365,16 +370,42 @@ def _check_telemetry_maturity(ctx: PreflightContext) -> CheckResult:
         if report.verdict == VERDICT_MATURE:
             return CheckResult(True, f"OK ({n}/{floor} distinct {target_instrument} trading_days; gate clear)")
 
-        # Below floor: branch on capital-risk mode.
+        # Below floor — branch on capital-at-risk classification.
         if ctx.signal_only:
             return CheckResult(
                 True,
                 f"OK (signal-only: {n}/{floor} distinct {target_instrument} trading_days; auto-clears at {floor})",
             )
+
+        # Resolve real-capital classification. Default conservative: anything
+        # that isn't explicitly identifiable as demo OR Express-Funded prop is
+        # treated as real-capital live and stays FAIL.
+        is_real_capital_live = False
+        if not ctx.demo:
+            if ctx.profile_id is None:
+                is_real_capital_live = True  # raw-baseline live = treat as real capital
+            else:
+                from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+                prof = ACCOUNT_PROFILES.get(ctx.profile_id)
+                if prof is None:
+                    is_real_capital_live = True  # unknown profile = treat as real capital
+                elif not prof.is_express_funded:
+                    is_real_capital_live = True  # real-capital live broker
+
+        if is_real_capital_live:
+            return CheckResult(
+                False,
+                f"FAILED: UNVERIFIED_INSUFFICIENT_TELEMETRY ({n}/{floor} distinct "
+                f"{target_instrument} trading_days; run --signal-only until {floor})",
+            )
+
+        # Demo OR Express-Funded prop live below-floor → advisory WARN.
+        mode_label = "demo" if ctx.demo else "Express-Funded prop"
         return CheckResult(
-            False,
-            f"FAILED: UNVERIFIED_INSUFFICIENT_TELEMETRY ({n}/{floor} distinct "
-            f"{target_instrument} trading_days; run --signal-only until {floor})",
+            True,
+            f"WARN: telemetry below floor ({n}/{floor} distinct {target_instrument} "
+            f"trading_days, {mode_label} — advisory; see telemetry_maturity.py module docstring)",
         )
     except Exception as e:
         return CheckResult(False, f"FAILED: {e}")

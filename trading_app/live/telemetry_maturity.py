@@ -1,28 +1,42 @@
-"""Live-telemetry maturity gate — fail-closed 30-trading-day floor.
+"""Live-telemetry maturity gate — 30-trading-day floor (advisory).
 
-Until at least ``MIN_TELEMETRY_TRADING_DAYS`` distinct trading_days of bot
-uptime (signal_only or live mode) are recorded in the canonical signal logs
-for a given instrument, any live-throughput triage MUST return
-``UNVERIFIED_INSUFFICIENT_TELEMETRY`` for that instrument's lanes. The gate
-refuses to produce per-lane verdicts on under-powered measurement windows.
+The gate counts distinct UTC dates with at least one qualifying uptime
+record (SESSION_START, SIGNAL_ENTRY, ORDER_ENTRY, exits, blocks, kill,
+circuit-breaker) in ``live_signals_*.jsonl`` for the requested instrument.
+At or above ``MIN_TELEMETRY_TRADING_DAYS``, ``verdict = VERDICT_MATURE``;
+otherwise ``VERDICT_UNVERIFIED_INSUFFICIENT_TELEMETRY``. The module is a
+pure read-and-count primitive — it does not decide blocking semantics.
 
-Grounding (canonical sources):
+DOCTRINE NOTE (2026-05-18 — preflight FAIL→WARN demotion):
 
-- ``docs/institutional/pre_registered_criteria.md`` Criterion 8 (Mode A, per
-  Amendment 2.7): OOS gates require N>=30 with power-floor enforcement;
-  below threshold, verdict is UNVERIFIED, never DEAD.
-- ``.claude/rules/backtesting-methodology.md`` RULE 3.2 + 3.3: N_on_OOS<30
-  floor for any binary OOS gate; below floor, statistical power is
-  insufficient to distinguish signal from noise.
-- ``trading_app.holdout_policy.HOLDOUT_SACRED_FROM`` is the policy precedent
-  for bright-line fail-closed enforcement (no soft warnings).
-- ``memory/feedback_n_unique_trading_days_floor_clustered_se.md``:
-  clustered-SE estimator degrades below the 30 cluster floor.
+The original module docstring framed the 30-day floor as the
+"operational analog of the C8 power floor" and cited
+``pre_registered_criteria.md`` Criterion 8 + ``backtesting-methodology.md``
+RULE 3.2/3.3. That framing was an author-asserted analogy, not canonical
+doctrine. The cited criteria govern OOS statistical validation on
+historical ``orb_outcomes`` data with ``--holdout-date 2026-01-01``; they
+do not mandate live-bot uptime accumulation before deployment.
 
-The 30-trading-day floor on telemetry is the **operational analog** of the C8
-power floor: until enough distinct trading_days of uptime exist, the
-diagnostic has no statistical basis for any verdict other than
-UNVERIFIED_INSUFFICIENT_TELEMETRY.
+No institutional document at the time of this note requires N>=30 distinct
+live trading_days as a deployment precondition. The preflight call-site
+(``scripts/run_live_session.py::_check_telemetry_maturity``) therefore
+treats this gate as advisory:
+
+- ``--signal-only``: OK / non-blocking (this is the path that accumulates).
+- ``--demo``: WARN (no real capital at risk).
+- ``--live`` + Express-Funded prop profile (``is_express_funded=True``):
+  WARN (Topstep/XFA — funded-account wrapper insulates real capital).
+- ``--live`` + real-capital broker (profile with ``is_express_funded=False``,
+  unknown profile, or no profile): FAIL — telemetry-maturity stays a hard
+  precondition for real-capital live deployment, as a precaution, until
+  this gate is either promoted through proper doctrine (authority, scope,
+  cadence, failure contract) or formally retired.
+
+This primitive is intentionally preserved so that a future promotion can
+re-cite ``evaluate_telemetry_maturity`` from a doctrine-grounded call-site
+without re-implementing the scan. Do NOT lower
+``MIN_TELEMETRY_TRADING_DAYS`` from this file; if the threshold needs to
+change, change it in the doctrine that establishes it.
 """
 
 from __future__ import annotations
