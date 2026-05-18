@@ -6,6 +6,27 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-19 — Stage 1 threshold-parity drift check #158 landed + pushed)
+- **Tool:** Claude Code (Opus 4.7)
+- **Date:** 2026-05-19
+- **Commits pushed to origin/main:** `d88a5465` fix(drift) Check #158 fast_lane_promote_threshold_parity + 11 injection tests; `4ebfcb49` close stage file. Tip is `4ebfcb49`. Origin clean (0/0).
+- **Files changed:** `pipeline/check_drift.py` (+ check function + register), `tests/test_pipeline/test_check_drift_fast_lane_promote_threshold_parity.py` (NEW, 11 tests), `docs/runtime/decision-ledger.md` (+1 entry). Stage file created and deleted in-session.
+- **Session summary:** Executed STAGE 1 from prior baton verbatim. Added `check_fast_lane_promote_threshold_parity` (Check #158) — asserts all six gated constants in `scripts/research/fast_lane_promote_queue.py:65-70` (T_KILL_FLOOR=2.5, T_PROMOTE_FLOOR=3.0, EXPR_FLOOR=0.0, N_FLOOR=50, FIRE_MIN=0.05, FIRE_MAX=0.95) match canonical YAML at `docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml` screen: block. Drift count 157→158. 4th confirmed instance of canonical-inline-copy-parity-bug-class. evidence-auditor pass returned CONDITIONAL with two real findings: (a) `_require()` only distinguished "key absent" not "key present, value null" — `float(None)` would crash rather than fail-closed; (b) EXPR_FLOOR had no dedicated sibling injection. Both closed in same landing: `_require()` now type-validates (rejects None/bool/non-numeric with structural violation), EXPR_FLOOR injection added, plus 2 regression tests for the fail-closed paths (null value, list value). 11/11 parity tests pass + 17/17 scanner + 3/3 orphan = 31/31 on touched surface. Full drift check: Check 158 PASSED [OK]; only red is pre-existing MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4 trade-window carry-over (orthogonal). Direct fast-forward push per project default (non-capital, non-broker change; institutional rigor still applied).
+- **Carry-overs:**
+
+  **STAGE 2 — Canonical-inline-copy meta-registry (Layer 2, DESIGN PROPOSAL surfaced ~1.5-2hr):** PARKED for fresh-context decision on 3 design questions presented in d88a5465 stage-2 proposal:
+  1. Seed registry with 4 known instances only, or grep-audit codebase for more first (~30 min audit) → recommended: BOTH (seed + audit).
+  2. Should meta-check ALSO enforce injection-test naming convention → recommended: YES (matches institutional rigor mutation-probe doctrine).
+  3. Registry location: inline in `pipeline/check_drift.py` or sibling `pipeline/canonical_inline_copies.py` → recommended: sibling file (cleanness).
+
+  Files in scope_lock when implementing: `pipeline/canonical_inline_copies.py` (NEW) OR `pipeline/check_drift.py` (add registry + meta-check), `tests/test_pipeline/test_check_drift_canonical_inline_copies_registry.py` (NEW), `docs/runtime/decision-ledger.md` (append entry), stage file. Drift count 158→159. Doctrine grounding: `feedback_n3_same_class_doctrine_threshold.md` (n=3+ class warrants mechanical enforcement) + `feedback_canonical_inline_copy_parity_bug_class.md` (the class itself).
+
+  **STAGE 3 — Edit-time PreToolUse hook (Layer 3, design first ~30-45 min):** PARKED (unchanged from prior baton). `.claude/hooks/canonical-inline-detector.py` scans Edit/Write diffs for new numeric-literal assignments near canonical-path comments; surfaces advisory: "looks like inline copy of canonical value, add to CANONICAL_INLINE_COPIES + parity check". Fail-open. Pattern follows `.claude/hooks/branch-flip-guard.py` PostToolUse double-guard precedent.
+
+  **PRIOR CARRY-OVERS still live:** (a) pre-existing drift `MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4 trade-window recompute mismatch`; (b) `chordia_audit_log.yaml` orphan for same MGC entry; (c) the QUEUED PROMOTE entry `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30` (UNVERIFIED_OOS_POWER, OOS power 10.9%, N=14, needs 191 for 80%). Heavyweight prereg authoring NOT authorized until either OOS N accrues or operator amends prereg per `harvey-liu-haircut-not-oos-validation-substitute`.
+
+  **PRE-EXISTING DIAGNOSTICS in `pipeline/check_drift.py` (not introduced this session):** Pyright reports ~10 `reportOptionalSubscript` warnings on unrelated `m.group(...)` lines (1914, 2488, 3032, 3897, 3905, 3913, 4944, 4948, 5179, 6183) plus 3 `"object" is not iterable` (8914, 9139, 9189). Each is a missing `if m is None` / cast on regex match. Pure annotation hygiene, no runtime impact (the code works because the match always succeeds on its inputs). Worth a separate "type-annotation hardening" stage if you want — DEFERRED (not in any current scope_lock; could be its own ~30-45 min trivial-ish stage).
+
 ## This Session (2026-05-18 late-late PM — PROMOTE-queue scanner shipped + /promote-queue slash + audit found MEDIUM threshold-parity gap)
 - **Tool:** Claude Code (Opus 4.7)
 - **Date:** 2026-05-18 (Sun BNE → Mon)
