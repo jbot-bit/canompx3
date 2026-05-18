@@ -6,7 +6,29 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## This Session (2026-05-19 — Stage 1 threshold-parity drift check #158 landed + pushed)
+## This Session (2026-05-19 — Cherry-pick research loop landed: ranker + bridge + journal, drift checks #160+#161)
+
+- **Tool:** Claude Code (Opus 4.7) — autonomous session per user "spin it up for a few hours ill brb"
+- **Date:** 2026-05-19
+- **Plan:** `C:/Users/joshd/.claude/plans/or-linknin-them-togehr-delegated-gizmo.md` ("cherry pick research iterate" — link fast-lane to heavyweight Chordia)
+- **Commits pushed:** `81da1099` Stage A ranker + Check #160; `b3bb9bdf` Stage B bridge + Check #161; Stage C pending commit at session end.
+- **Files created (Stage A):** `scripts/research/cherry_pick_ranker.py`, `tests/test_research/test_cherry_pick_ranker.py`, `tests/test_pipeline/test_check_drift_cherry_pick_ranker_threshold_parity.py`, stage file.
+- **Files created (Stage B):** `scripts/research/fast_lane_to_heavyweight_bridge.py`, `tests/test_research/test_fast_lane_to_heavyweight_bridge.py`, `tests/test_pipeline/test_check_drift_bridge_methodology_rules_parity.py`, stage file.
+- **Files created (Stage C):** `docs/runtime/cherry_pick_journal.md`, `.claude/commands/cherry-pick.md`, `docs/audit/hypotheses/drafts/2026-05-19-mnq-us-data-1000-e1-rr1-0-cb2-pd-clear-long-o30-chordia-heavyweight-v1.draft.yaml` (iteration 1 artifact), `docs/runtime/cherry_pick_ranking_2026-05-19.csv` (iteration 1 artifact), stage file.
+- **Files modified:** `pipeline/check_drift.py` (+ Check #160 + Check #161), `pipeline/canonical_inline_copies.py` (+ 2 new InlineCopyPair entries — 5th and 6th confirmed bug-class instances).
+- **Session summary:** User asked to "spin up fast lane thingo", then clarified "cherry pick research iterate" / "link them together with something improving research design and plan". Plan-mode designed a 3-stage cherry-pick research loop. Stage A: ranker scores fast-lane PROMOTE survivors by heavyweight-Chordia pass probability (deflation_headroom vs t=3.79, n_adequacy, oos_power_readiness via `research.oos_power`, dir_match, non_artifact). Stage B: bridge generates heavyweight Chordia prereg DRAFTs under `docs/audit/hypotheses/drafts/` from fast-lane source pairs, NEVER writing `theory_citation` per field-presence trap doctrine. Stage C: journal + `/cherry-pick` slash command + iteration 1 smoke. **Iteration 1 result:** sole QUEUED entry MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30 scored 0.250, skip_recommended=Y (deflation=0 since 3.06<3.79, OOS power=0 since N_OOS=14<floor, dir_match=N). Bridge wrote draft for the record; **draft NOT promoted to active hypotheses/** — loop correctly identifies "not ready yet". Journal records DEFERRED_NOT_RUN.
+- **Drift count:** 159 → 161. Both new checks parse canonical doctrine at runtime (Criterion 4 in `pre_registered_criteria.md`, `## RULE N:` headings in `backtesting-methodology.md`) — no inlined frozen values. Full drift: 140 PASSED, 20 advisory, 1 pre-existing violation (MGC_CME_REOPEN_E2 trade-window — orthogonal, carried over).
+- **Tests:** Stage A 39/39 PASS (33 unit + 6 injection); Stage B 35/35 PASS (24 unit + 11 injection). Total new tests: 74.
+- **Canonical-inline-copy meta-registry growth:** 2 → 4 InlineCopyPair entries. Check #159 Layer 2 meta-check verifies every entry has live parity_check + test_file + ≥1 test per gated_constant.
+- **Carry-overs:**
+
+  **PENDING — code-review pass (user requested):** User asked "yera get a code reviewer in there after too". Per `.claude/rules/adversarial-audit-gate.md`, audit NOT required (no capital-class change, no `trading_app/live/`, no truth-layer mutation beyond drift-check addition). User explicit request: fire `evidence-auditor` after Stage C commit lands.
+
+  **NEXT ITERATION TRIGGER:** Fast-lane PROMOTE queue has 1 QUEUED, all-deferred. Next iteration runs when (a) new fast-lane v5.1 run lands fresh PROMOTE, or (b) existing entry's OOS N accrues past 30 (currently 14). Invoke via `python scripts/research/cherry_pick_ranker.py` or the `/cherry-pick` slash command.
+
+  **PRIOR CARRY-OVERS still live:** Pre-existing drift MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4 trade-window mismatch + chordia_audit_log.yaml orphan for same MGC entry. Pyright `reportOptionalSubscript` warnings on pre-existing `pipeline/check_drift.py` lines (1914+) — DEFERRED per prior baton.
+
+## Prior Session (2026-05-19 — Stage 1 threshold-parity drift check #158 landed + pushed)
 - **Tool:** Claude Code (Opus 4.7)
 - **Date:** 2026-05-19
 - **Commits pushed to origin/main:** `d88a5465` fix(drift) Check #158 fast_lane_promote_threshold_parity + 11 injection tests; `4ebfcb49` close stage file. Tip is `4ebfcb49`. Origin clean (0/0).

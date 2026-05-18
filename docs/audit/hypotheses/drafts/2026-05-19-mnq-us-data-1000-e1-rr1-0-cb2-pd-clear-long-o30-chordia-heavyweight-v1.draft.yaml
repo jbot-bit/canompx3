@@ -1,0 +1,134 @@
+metadata:
+  theory_grant: false
+  name: mnq_us_data_1000_e1_rr1_0_cb2_pd_clear_long_o30_chordia_unlock_v1
+  purpose: 'Heavyweight Chordia strict unlock authored from fast-lane v5.1 PROMOTE
+    provenance (docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md).
+    Bridge-generated DRAFT: operator must review literature grounding, OOS power,
+    and era-stability before moving out of drafts/.'
+  date_locked: '2026-05-19T00:00:00+10:00'
+  holdout_date: '2026-01-01'
+  total_expected_trials: 1
+  testing_mode: individual
+  research_question_type: conditional_role
+  template_version: chordia_strict_v1
+  is_triage_screen: false
+  validation_status_explicit: DRAFT -- not yet preregistered. theory_grant=false applies
+    strict no-theory Chordia hurdle (t>=3.79). Move out of drafts/ only after literature/power/era
+    review.
+execution:
+  mode: bounded_runner
+  entrypoint: research/chordia_strict_unlock_v1.py
+authority:
+  primary:
+  - RESEARCH_RULES.md
+  - .claude/rules/backtesting-methodology.md
+  - .claude/rules/research-truth-protocol.md
+  - docs/institutional/pre_registered_criteria.md
+  - docs/runtime/chordia_audit_log.yaml
+  notes:
+  - Authored by scripts/research/fast_lane_to_heavyweight_bridge.py.
+  - 'Provenance: fast-lane v5.1 PROMOTE result at docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md.'
+  - 'Threshold basis: Criterion 4 no-theory strict threshold (t >= 3.79, Chordia 2018
+    verbatim Tier 1).'
+  - Mode A holdout remains sacred from 2026-01-01.
+scope:
+  instrument: MNQ
+  strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+  session: US_DATA_1000
+  orb_minutes: 30
+  entry_model: E1
+  confirm_bars: 2
+  rr_target: 1.0
+  direction: long
+  filter_type: PD_CLEAR_LONG
+  filter_source: trading_app.config.ALL_FILTERS['PD_CLEAR_LONG']
+  out_of_scope:
+  - PD_CLEAR_LONG siblings at other RR targets, sessions, apertures, entry models,
+    or confirm_bars
+  - theory-grant upgrade — no literature mechanism claimed here
+  - allocator, sizing, schema, or live-execution changes
+  - any write to validated_setups, chordia_audit_log.yaml, or lane_allocation.json
+data_policy:
+  is_window:
+    description: trading_day < HOLDOUT_SACRED_FROM
+    constant_source: trading_app.holdout_policy.HOLDOUT_SACRED_FROM
+    locked_boundary: '2026-01-01'
+  oos_window:
+    description: trading_day >= HOLDOUT_SACRED_FROM
+    policy: read-only descriptive; OOS power floor per RULE 3.3 must be respected
+      before any binary OOS gate fires
+  tuning_against_oos: false
+  canonical_layers_only: true
+  scratch_policy: realized-eod
+  scratch_handling: COALESCE(pnl_r, 0.0) -- never WHERE pnl_r IS NOT NULL
+grounding:
+  filter_grounding_status:
+    verdict: UNSUPPORTED
+    basis: Bridge cannot author literature citations. theory_grant=false applies strict
+      no-theory threshold. Operator may upgrade by adding theory_citation field and
+      flipping theory_grant=true (lowers t hurdle 3.79->3.00 per Criterion 4).
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  sources:
+  - docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
+  - docs/audit/hypotheses/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml
+  note: Fast-lane PROMOTE earns the right to heavyweight authoring but is NOT verdict
+    evidence. Fresh canonical replay against strict Chordia threshold (Criterion 4
+    no-theory strict threshold (t >= 3.79, Chordia 2018 verbatim Tier 1)) is the only
+    valid verdict source.
+primary_schema:
+  family_cells:
+  - id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    instrument: MNQ
+    session: US_DATA_1000
+    orb_minutes: 30
+    rr_target: 1.0
+    filter: PD_CLEAR_LONG
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  chordia_threshold_basis: Criterion 4 no-theory strict threshold (t >= 3.79, Chordia
+    2018 verbatim Tier 1)
+  promotion_gate: PASS_CHORDIA only; PASS_PROTOCOL_A not available without theory
+    grant upgrade
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound: MinBTL = 2*ln(1)/1 = 0.0 years; N=1 within Bailey 2013 cap
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: under budget
+methodology_rules_applied:
+  rule_1_temporal_alignment:
+    application: Inherited from fast-lane source; operator reviews look-ahead class
+      against backtesting-methodology.md section 1 for the heavyweight replay before
+      flipping execution_gate.allowed_now.
+  rule_3_is_oos_discipline:
+    application: HOLDOUT_SACRED_FROM=2026-01-01 enforced by canonical loader. OOS-power
+      floor must be respected per RULE 3.3 (see research/oos_power.py).
+  rule_4_multi_framing:
+    application: Pathway B K=1 heavyweight replay; K=1 own framing. Upstream fast-lane
+      PROMOTE is provenance-only, not verdict evidence.
+  rule_9_canonical_layers:
+    application: Reads only orb_outcomes JOIN daily_features per chordia_strict_unlock_v1.py
+      canonical layer discipline.
+  rule_10_pre_registration:
+    application: Operator must commit this prereg to docs/audit/hypotheses/ BEFORE
+      invoking the heavyweight runner. Drafts are not preregistered until moved out
+      of drafts/.
+execution_gate:
+  allowed_now: false
+  execution_surface: Windows PowerShell with .venv
+  operator_must_review_before_flip:
+  - literature grounding (or accept no-theory strict 3.79 hurdle)
+  - OOS power readiness via research/oos_power.py
+  - era-stability replay
+  - K-budget MinBTL re-verification (scripts/tools/estimate_k_budget.py)
+  forbidden_now:
+  - any deployment action
+  - writes to chordia_audit_log.yaml until result MD exists
