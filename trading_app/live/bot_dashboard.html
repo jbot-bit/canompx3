@@ -2116,6 +2116,7 @@
       <span class="chart-cockpit-title">Live Chart</span>
       <span id="chart-cockpit-instr" class="chart-cockpit-instr">—</span>
       <span id="chart-cockpit-orb" class="chart-cockpit-orb"></span>
+      <span id="chart-cockpit-orb-rel" class="chart-cockpit-orb"></span>
       <span class="chart-tf-group" role="group" aria-label="Timeframe">
         <button type="button" class="chart-tf-btn" data-tf="1m" onclick="ChartCockpit.setTimeframe('1m')">1m</button>
         <button type="button" class="chart-tf-btn active" data-tf="5m" onclick="ChartCockpit.setTimeframe('5m')">5m</button>
@@ -4517,10 +4518,54 @@ const ChartCockpit = (() => {
   const HOST_ID = "chart-host";
   const FALLBACK_PARENT = "chart-cockpit";
   const ORB_BOX_ID = "chart-orb-box";
+  const ORB_REL_ID = "chart-cockpit-orb-rel";
   const LOOKBACK_MIN = 90;
   // Timeframe interval (seconds). 60=1m raw, 300=5m, 900=15m. 5m default per ORB doctrine.
   const INTERVAL_SEC = { "1m": 60, "5m": 300, "15m": 900 };
   const DEFAULT_TF = "5m";
+  const BNE_TZ = "Australia/Brisbane";
+
+  // Lightweight Charts v5 Time = UTCTimestamp | BusinessDay | string. The cockpit
+  // only feeds UTCTimestamp (epoch seconds), but the formatters type-guard for
+  // the other shapes so a synthetic BusinessDay can never crash the chart.
+  // Intl.DateTimeFormat is OS-driven (no hardcoded UTC+10 offset) — if Queensland
+  // ever adopts DST the browser's ICU data updates without code changes.
+  const _intlAvailable = (typeof Intl !== "undefined" && typeof Intl.DateTimeFormat === "function");
+  function _safeFormatter(opts) {
+    if (!_intlAvailable) return null;
+    try { return new Intl.DateTimeFormat("en-AU", opts); } catch (_) { return null; }
+  }
+  const _fmtCrosshair = _safeFormatter({
+    timeZone: BNE_TZ, hour12: false,
+    year: "numeric", month: "short", day: "2-digit",
+    hour: "2-digit", minute: "2-digit",
+  });
+  const _fmtHHMM    = _safeFormatter({ timeZone: BNE_TZ, hour12: false, hour: "2-digit", minute: "2-digit" });
+  const _fmtDayMon  = _safeFormatter({ timeZone: BNE_TZ, day: "2-digit", month: "short" });
+  const _fmtMonYr   = _safeFormatter({ timeZone: BNE_TZ, month: "short", year: "2-digit" });
+  const _fmtYear    = _safeFormatter({ timeZone: BNE_TZ, year: "numeric" });
+  function _bneTimeFull(time) {
+    if (typeof time !== "number") return String(time);
+    if (!_fmtCrosshair) return new Date(time * 1000).toISOString();
+    return _fmtCrosshair.format(new Date(time * 1000));
+  }
+  // tickMarkFormatter: returns string ≤8 chars or null (per Lightweight Charts
+  // contract — longer strings overlap tick marks).
+  function _bneTickFormatter(time, tickMarkType /*, locale */) {
+    if (typeof time !== "number") return null;
+    const d = new Date(time * 1000);
+    const T = (window.LightweightCharts && window.LightweightCharts.TickMarkType) || {};
+    const f = (
+      tickMarkType === T.Year                ? _fmtYear   :
+      tickMarkType === T.Month               ? _fmtMonYr  :
+      tickMarkType === T.DayOfMonth          ? _fmtDayMon :
+      tickMarkType === T.Time                ? _fmtHHMM   :
+      tickMarkType === T.TimeWithSeconds     ? _fmtHHMM   :
+      _fmtHHMM
+    );
+    if (!f) return null;
+    try { return f.format(d); } catch (_) { return null; }
+  }
 
   let chart = null;
   let series = null;
@@ -4530,7 +4575,11 @@ const ChartCockpit = (() => {
   let currentInstrument = null;
   let currentTf = DEFAULT_TF;          // active timeframe label
   let rawBars = [];                    // canonical 1m bars (UTC epoch sec, sorted asc, dedup by time)
-  let orbState = { high: null, low: null, complete: false, minutes: null };
+  let orbState = {
+    high: null, low: null, complete: false, minutes: null,
+    windowStart: null, windowEnd: null,
+    sessionName: null, sessionTimeBne: null, breakDir: null,
+  };
   let initialized = false;
   let firstBarTime = null;  // for ORB-box x1 anchor when ORB straddles session
 
@@ -4592,7 +4641,10 @@ const ChartCockpit = (() => {
       chart = window.LightweightCharts.createChart(host, {
         layout: { background: { color: "transparent" }, textColor: "#b0c0d0", fontFamily: "JetBrains Mono, monospace" },
         grid:   { vertLines: { color: "rgba(30,42,56,0.6)" }, horzLines: { color: "rgba(30,42,56,0.6)" } },
-        timeScale: { timeVisible: true, secondsVisible: false, borderColor: "#1e2a38" },
+        // Brisbane TZ via Intl — no manual offset math. timeFormatter drives
+        // the crosshair tooltip; tickMarkFormatter drives the axis labels.
+        localization: { locale: "en-AU", timeFormatter: _bneTimeFull },
+        timeScale: { timeVisible: true, secondsVisible: false, borderColor: "#1e2a38", tickMarkFormatter: _bneTickFormatter },
         rightPriceScale: { borderColor: "#1e2a38" },
         crosshair: { mode: window.LightweightCharts.CrosshairMode.Normal },
         autoSize: true,
@@ -4642,7 +4694,15 @@ const ChartCockpit = (() => {
               showToast("Chart: stale data", `Last bar ${ageMin}m ago. Run Refresh + start a session for live bars.`, "warning");
             }
           }
-          _applyOrb({ high: d.orb_high, low: d.orb_low, complete: !!d.orb_complete, minutes: d.orb_minutes, session_name: d.session_name });
+          _applyOrb({
+            high: d.orb_high, low: d.orb_low,
+            complete: !!d.orb_complete, minutes: d.orb_minutes,
+            sessionName: d.session_name,
+            sessionTimeBne: d.session_time_brisbane,
+            breakDir: d.orb_break_direction,
+            windowStart: d.orb_window_start_utc,
+            windowEnd:   d.orb_window_end_utc,
+          });
           if (d.warning) console.warn("bars-recent warning:", d.warning);
           return;
         }
@@ -4694,6 +4754,7 @@ const ChartCockpit = (() => {
     if (agg.open !== null) {
       series.update({ time: agg.time, open: agg.open, high: agg.high, low: agg.low, close: agg.close });
     }
+    _renderOrbRelative();
   }
 
   function setTimeframe(tf) {
@@ -4709,13 +4770,24 @@ const ChartCockpit = (() => {
   }
 
   function _applyOrb(s) {
-    orbState = { high: s.high, low: s.low, complete: !!s.complete, minutes: s.minutes };
-    // Header label
+    orbState = {
+      high: s.high, low: s.low, complete: !!s.complete, minutes: s.minutes,
+      windowStart: (typeof s.windowStart === "number" ? s.windowStart : null),
+      windowEnd:   (typeof s.windowEnd   === "number" ? s.windowEnd   : null),
+      sessionName: s.sessionName || null,
+      sessionTimeBne: s.sessionTimeBne || null,
+      breakDir: s.breakDir || null,
+    };
+    // Header label — direction arrow + ORB H/L (range) + session annotation.
     const hdr = document.getElementById("chart-cockpit-orb");
     if (hdr) {
       if (s.high != null && s.low != null) {
         const range = (s.high - s.low).toFixed(2);
-        hdr.innerHTML = `ORB${s.minutes ? s.minutes : ""} <span class="${s.complete ? "complete" : "pending"}">${s.high.toFixed(2)} / ${s.low.toFixed(2)} (${range})</span>`;
+        const arrow = orbState.breakDir === "LONG"  ? "▲ "
+                    : orbState.breakDir === "SHORT" ? "▼ " : "";
+        const sessionTag = (orbState.sessionName && orbState.sessionTimeBne)
+          ? ` · ${orbState.sessionName} · ${orbState.sessionTimeBne} BNE` : "";
+        hdr.innerHTML = `${arrow}ORB${s.minutes ? s.minutes : ""} <span class="${s.complete ? "complete" : "pending"}">${s.high.toFixed(2)} / ${s.low.toFixed(2)} (${range})</span>${sessionTag}`;
       } else {
         hdr.innerHTML = `<span class="pending">ORB pending</span>`;
       }
@@ -4734,6 +4806,33 @@ const ChartCockpit = (() => {
       });
     }
     _renderOrbBox();
+    _renderOrbRelative();
+  }
+
+  // Live "where is price vs ORB" indicator. Pure derived — no backend calls.
+  // Reads the latest close from rawBars (already maintained by pushBar) and
+  // compares to orbState.high / orbState.low. Cheap O(1); called from
+  // _applyOrb (on ORB updates) and pushBar (on every live tick).
+  function _renderOrbRelative() {
+    const el = document.getElementById(ORB_REL_ID);
+    if (!el) return;
+    const last = rawBars.length ? rawBars[rawBars.length - 1] : null;
+    if (!last || orbState.high == null || orbState.low == null) {
+      el.textContent = "—";
+      el.style.color = "";
+      return;
+    }
+    const c = last.close;
+    if (c > orbState.high) {
+      el.textContent = `LAST ${c.toFixed(2)} · +${(c - orbState.high).toFixed(2)} ABOVE H`;
+      el.style.color = "#00d68f";
+    } else if (c < orbState.low) {
+      el.textContent = `LAST ${c.toFixed(2)} · -${(orbState.low - c).toFixed(2)} BELOW L`;
+      el.style.color = "#ff5c5c";
+    } else {
+      el.textContent = `LAST ${c.toFixed(2)} · INSIDE`;
+      el.style.color = "#00d4ff";
+    }
   }
 
   function _renderOrbBox() {
@@ -4749,13 +4848,27 @@ const ChartCockpit = (() => {
       if (yHi == null || yLo == null) { box.classList.add("hidden"); return; }
       const top    = Math.min(yHi, yLo);
       const height = Math.abs(yHi - yLo);
-      // X-extent: from the earliest visible bar through the right edge — the
-      // session ORB defines a level, not a time window the operator cares about
-      // visualizing precisely. Plan honesty section line 130: this is an
-      // approximation, not a pixel-perfect rect.
+      // X-extent: when the canonical ORB UTC window is known (pipeline.dst.
+      // orb_utc_window via /api/bars-recent), bound the rectangle to that
+      // exact span via timeScale.timeToCoordinate. Returns null when the
+      // window is offscreen — hide the box in that case (the H/L price-lines
+      // remain visible at all times). Falls back to full-width approximation
+      // only when the window is missing (legacy state / catalog rejection).
+      let xLeft = 0;
       const host = document.getElementById(HOST_ID);
-      const width = host ? host.clientWidth : 0;
-      box.style.left = "0px";
+      let width = host ? host.clientWidth : 0;
+      if (orbState.windowStart != null && orbState.windowEnd != null) {
+        const ts = chart.timeScale();
+        const xStart = ts.timeToCoordinate(orbState.windowStart);
+        const xEnd   = ts.timeToCoordinate(orbState.windowEnd);
+        if (xStart == null || xEnd == null) {
+          box.classList.add("hidden");
+          return;
+        }
+        xLeft = Math.min(xStart, xEnd);
+        width = Math.max(1, Math.abs(xEnd - xStart));
+      }
+      box.style.left = `${xLeft}px`;
       box.style.top = `${top}px`;
       box.style.width = `${width}px`;
       box.style.height = `${height}px`;
@@ -4813,7 +4926,19 @@ const ChartCockpit = (() => {
     const lanes = state.lanes || {};
     for (const lane of Object.values(lanes)) {
       if (lane && lane.instrument === currentInstrument && lane.orb_high != null && lane.orb_low != null) {
-        _applyOrb({ high: lane.orb_high, low: lane.orb_low, complete: !!lane.orb_complete, minutes: lane.orb_minutes });
+        // SSE state events don't carry orb_window_start/end_utc — preserve
+        // the last-known window so the time-bounded box stays anchored while
+        // SSE updates trickle in. The next /api/bars-recent poll refreshes
+        // the window. Levels/direction/session metadata refresh immediately.
+        _applyOrb({
+          high: lane.orb_high, low: lane.orb_low,
+          complete: !!lane.orb_complete, minutes: lane.orb_minutes,
+          sessionName: lane.session_name,
+          sessionTimeBne: lane.session_time_brisbane,
+          breakDir: lane.orb_break_direction,
+          windowStart: orbState.windowStart,
+          windowEnd:   orbState.windowEnd,
+        });
         return;
       }
     }

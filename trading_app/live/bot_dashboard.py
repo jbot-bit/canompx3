@@ -2954,34 +2954,102 @@ def _count_open_positions_from_state(state: dict[str, Any] | None) -> int | None
     return count
 
 
+_ORB_PAYLOAD_NULL_KEYS = (
+    "orb_high",
+    "orb_low",
+    "orb_complete",
+    "orb_minutes",
+    "session_name",
+    "session_time_brisbane",
+    "orb_break_direction",
+    "orb_window_start_utc",
+    "orb_window_end_utc",
+)
+
+
+def _empty_orb_payload() -> dict[str, Any]:
+    """Stable-shape null payload — frontend never sees missing keys."""
+    payload: dict[str, Any] = {k: None for k in _ORB_PAYLOAD_NULL_KEYS}
+    payload["orb_complete"] = False
+    return payload
+
+
 def _orb_levels_for_instrument(instrument: str) -> dict[str, Any]:
-    """Read ORB high/low/complete for ``instrument`` from bot_state.json.
+    """Read ORB high/low/window for ``instrument`` from bot_state.json.
 
     Reads through canonical ``read_state`` accessor — never re-derives ORB
-    levels (institutional-rigor.md § 4). Returns nulls if no lane has
-    computed ORB yet.
+    levels (institutional-rigor.md § 4). ORB UTC window is sourced from
+    ``pipeline.dst.orb_utc_window`` (the canonical resolver per
+    institutional-rigor.md § 10 + postmortem 2026-04-07) — never inlined.
+    Returns a stable-shape dict with null fields if no lane has computed
+    ORB yet, the trading_day is missing, or the canonical resolver
+    rejects the session/aperture combination.
     """
     from trading_app.live.bot_state import read_state
+    from pipeline.dst import orb_utc_window
 
+    payload = _empty_orb_payload()
     state = read_state() or {}
     lanes = state.get("lanes") or {}
     if not isinstance(lanes, dict):
-        return {"orb_high": None, "orb_low": None, "orb_complete": False}
+        return payload
+
+    trading_day_str = state.get("trading_day")
+    trading_day_obj: date | None = None
+    if isinstance(trading_day_str, str):
+        try:
+            trading_day_obj = date.fromisoformat(trading_day_str)
+        except ValueError:
+            log.warning(
+                "_orb_levels_for_instrument: bad trading_day %r — window fields null",
+                trading_day_str,
+            )
+
     for lane in lanes.values():
         if not isinstance(lane, dict):
             continue
         if lane.get("instrument") != instrument:
             continue
         oh, ol = lane.get("orb_high"), lane.get("orb_low")
-        if oh is not None and ol is not None:
-            return {
+        if oh is None or ol is None:
+            continue
+
+        session_name = lane.get("session_name")
+        orb_minutes = lane.get("orb_minutes")
+        payload.update(
+            {
                 "orb_high": oh,
                 "orb_low": ol,
                 "orb_complete": bool(lane.get("orb_complete")),
-                "orb_minutes": lane.get("orb_minutes"),
-                "session_name": lane.get("session_name"),
+                "orb_minutes": orb_minutes,
+                "session_name": session_name,
+                "session_time_brisbane": lane.get("session_time_brisbane"),
+                "orb_break_direction": lane.get("orb_break_direction"),
             }
-    return {"orb_high": None, "orb_low": None, "orb_complete": False}
+        )
+
+        if (
+            trading_day_obj is not None
+            and isinstance(session_name, str)
+            and isinstance(orb_minutes, int)
+        ):
+            try:
+                start_dt, end_dt = orb_utc_window(
+                    trading_day_obj, session_name, orb_minutes
+                )
+                payload["orb_window_start_utc"] = int(start_dt.timestamp())
+                payload["orb_window_end_utc"] = int(end_dt.timestamp())
+            except (ValueError, KeyError) as exc:
+                log.warning(
+                    "_orb_levels_for_instrument: orb_utc_window(%s, %s, %s) "
+                    "rejected (%s) — window fields null",
+                    trading_day_obj,
+                    session_name,
+                    orb_minutes,
+                    exc,
+                )
+        return payload
+    return payload
 
 
 @app.get("/api/bars-recent")

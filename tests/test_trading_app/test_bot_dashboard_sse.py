@@ -172,7 +172,14 @@ def test_orb_levels_for_instrument_returns_nulls_when_no_lane(monkeypatch):
 
     monkeypatch.setattr("trading_app.live.bot_state.read_state", lambda: {})
     out = bd._orb_levels_for_instrument("MNQ")
-    assert out == {"orb_high": None, "orb_low": None, "orb_complete": False}
+    # Payload shape is stable: levels null, complete False, plus the
+    # additional window/session/direction fields all null (added 2026-05-19
+    # for chart-cockpit ORB rectangle).
+    assert out["orb_high"] is None
+    assert out["orb_low"] is None
+    assert out["orb_complete"] is False
+    assert out["orb_window_start_utc"] is None
+    assert out["orb_window_end_utc"] is None
 
 
 def test_orb_levels_for_instrument_delegates_to_state(monkeypatch):
