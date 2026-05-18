@@ -650,9 +650,16 @@ def _cache_preflight_entry(profile: str, cache_entry: dict[str, object]) -> None
         _preflight_cache[profile] = cache_entry
 
 
-def _run_preflight_subprocess(profile: str) -> dict[str, object]:
+def _run_preflight_subprocess(profile: str, mode: str = "live") -> dict[str, object]:
+    cmd = [sys.executable, "-m", "scripts.run_live_session", "--profile", profile, "--preflight"]
+    # Match preflight mode to the requested session mode so signal-only's
+    # auto-pass on the telemetry-maturity gate (run_live_session.py:369-378)
+    # applies. Without this, Start Signal blocks at the very gate signal-only
+    # is meant to clear.
+    if mode == "signal":
+        cmd.append("--signal-only")
     result = subprocess.run(
-        [sys.executable, "-m", "scripts.run_live_session", "--profile", profile, "--preflight"],
+        cmd,
         capture_output=True,
         text=True,
         timeout=60,
@@ -709,7 +716,7 @@ def _combine_prepare_output(control: dict[str, object], preflight: dict[str, obj
     return "\n\n".join(parts).strip()
 
 
-async def _prepare_profile_for_start(profile: str) -> dict[str, object]:
+async def _prepare_profile_for_start(profile: str, mode: str = "live") -> dict[str, object]:
     import asyncio
 
     try:
@@ -739,7 +746,7 @@ async def _prepare_profile_for_start(profile: str) -> dict[str, object]:
         }
 
     try:
-        preflight = await asyncio.to_thread(_run_preflight_subprocess, profile)
+        preflight = await asyncio.to_thread(_run_preflight_subprocess, profile, mode)
     except subprocess.TimeoutExpired:
         cache_entry = {
             "status": "timeout",
@@ -2428,7 +2435,7 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
             "connection_readiness": connection,
         }
 
-    prepared = await _prepare_profile_for_start(profile)
+    prepared = await _prepare_profile_for_start(profile, mode)
     prep_status = str(prepared.get("status") or "error")
     if prep_status in {"fail", "error", "timeout"}:
         return {

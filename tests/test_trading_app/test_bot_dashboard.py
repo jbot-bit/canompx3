@@ -797,3 +797,93 @@ def test_preflight_helper_opens_no_duckdb_connection(monkeypatch):
     assert results["notifications"] is True
     assert results["brackets"] is True
     assert results["fill_poller"] is True
+
+
+def test_run_preflight_subprocess_omits_signal_only_in_live_mode(monkeypatch):
+    """Live preflight (default) must not pass --signal-only to the subprocess.
+
+    The dashboard's Start Live path and the ad-hoc Preflight button both rely
+    on live-mode preflight that exercises the full telemetry-maturity gate
+    (run_live_session.py:369-378). A regression that injects --signal-only
+    into live preflight would silently auto-pass that gate and break the
+    capital-class invariant the gate was added to enforce.
+    """
+    captured: dict[str, list[str]] = {}
+
+    def fake_run(cmd, **_kw):
+        captured["cmd"] = list(cmd)
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(bot_dashboard.subprocess, "run", fake_run)
+
+    result = bot_dashboard._run_preflight_subprocess("topstep_50k_mnq_auto")
+
+    assert result["returncode"] == 0
+    assert "--signal-only" not in captured["cmd"]
+    assert "--preflight" in captured["cmd"]
+    assert "topstep_50k_mnq_auto" in captured["cmd"]
+
+
+def test_run_preflight_subprocess_threads_signal_only_in_signal_mode(monkeypatch):
+    """Signal-mode preflight must pass --signal-only so telemetry-maturity gate
+    auto-passes per the documented signal-only accumulation path.
+
+    Without this flag the Start Signal button fails at the very gate
+    signal-only mode is meant to clear — blocking the path that would
+    otherwise feed the gate's maturity counter.
+    """
+    captured: dict[str, list[str]] = {}
+
+    def fake_run(cmd, **_kw):
+        captured["cmd"] = list(cmd)
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(bot_dashboard.subprocess, "run", fake_run)
+
+    result = bot_dashboard._run_preflight_subprocess(
+        "topstep_50k_mnq_auto", mode="signal"
+    )
+
+    assert result["returncode"] == 0
+    assert "--signal-only" in captured["cmd"]
+    assert "--preflight" in captured["cmd"]
+    # Ordering invariant: --signal-only appended after --preflight (not before
+    # the --profile arg) so it never shadows the profile binding.
+    assert captured["cmd"].index("--signal-only") > captured["cmd"].index(
+        "--preflight"
+    )
+
+
+def test_prepare_profile_for_start_propagates_mode_to_subprocess(monkeypatch):
+    """_prepare_profile_for_start must thread its `mode` arg to
+    _run_preflight_subprocess so the dashboard's mode-aware Start path stays
+    coherent end-to-end. Verified by spying on the subprocess helper.
+    """
+    captured: dict[str, object] = {}
+
+    def fake_subprocess(profile, mode="live"):
+        captured["profile"] = profile
+        captured["mode"] = mode
+        return {"status": "PASS", "returncode": 0, "output": "ok", "checks": []}
+
+    # _prepare_profile_for_start runs the subprocess helper via
+    # asyncio.to_thread; patching the helper directly captures the threaded
+    # call without needing a subprocess.run stub.
+    monkeypatch.setattr(
+        bot_dashboard, "_run_preflight_subprocess", fake_subprocess
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_run_control_refresh_subprocess",
+        lambda profile: {"status": "pass", "output": "ok"},
+    )
+
+    result = asyncio.run(
+        bot_dashboard._prepare_profile_for_start(
+            "topstep_50k_mnq_auto", mode="signal"
+        )
+    )
+
+    assert captured["profile"] == "topstep_50k_mnq_auto"
+    assert captured["mode"] == "signal"
+    assert result["status"] != "error"
