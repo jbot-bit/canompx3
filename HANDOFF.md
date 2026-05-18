@@ -6,6 +6,14 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-18 PM — dashboard Start-Signal preflight mode threading)
+- **Tool:** Claude Code (Opus 4.7)
+- **Date:** 2026-05-18 (Sun BNE — Monday-eve)
+- **Commits pushed this session:** `45c1ffb4` skills frontmatter migration (was unpushed locally — rode this push), `bd229c67` fix(dashboard): thread mode into Start preflight so signal-only path is not gated by live telemetry maturity. Tip is now `bd229c67`. Origin clean (0/0) at session end.
+- **Files changed:** `trading_app/live/bot_dashboard.py` (single-file scope, +12/-5), `tests/test_trading_app/test_bot_dashboard.py` (+90 lines, 3 new tests), `docs/runtime/stages/2026-05-18-dashboard-start-signal-preflight-mode.md` (new stage file, committed alongside).
+- **Session summary:** `/next` resumed the open IMPLEMENTATION stage. `_run_preflight_subprocess(profile)` now takes `mode="live"|"signal"` and appends `--signal-only` when mode=="signal"; `_prepare_profile_for_start` threads `mode` through; `action_start` (which already has `mode`) passes it; `action_preflight` (ad-hoc dashboard button) keeps live-mode default — **intentional asymmetry**. **Why:** `_check_telemetry_maturity` in `scripts/run_live_session.py:369-378` auto-passes when `ctx.signal_only=True` and fail-closes otherwise, so Start Signal was being blocked by the very gate signal-only mode is meant to clear. 3 new tests cover live-mode omission, signal-mode insertion (and arg ordering after `--preflight`), and helper-to-subprocess propagation. Pre-existing 2 `_derive_operator_state` failures + Check 101 drift verified on stashed baseline — not regressions of this commit.
+- **Stage NOT closed:** `docs/runtime/stages/2026-05-18-dashboard-start-signal-preflight-mode.md` remains open. Criteria 1-4 met with positive test coverage; criteria 5-6 show no regression vs baseline; criterion 7 (operator hits `POST /api/action/start?mode=signal&profile=topstep_50k_mnq_auto`, confirms non-blocked status + `logs/live/live_signals_2026-05-18.jsonl` appears within 30s) requires a live dashboard run.
+
 ## Last Session
 - **Tool:** Claude Code (Opus 4.7)
 - **Date:** 2026-05-18 (Sun BNE — Monday-eve)
@@ -49,6 +57,7 @@
 - Re-litigate the 78 ROUTABLE_DORMANT deployment-coverage decision before first live day.
 
 ### Open carry-overs (not actioned today)
+- **Open IMPLEMENTATION stage — `docs/runtime/stages/2026-05-18-dashboard-start-signal-preflight-mode.md`.** Commit `bd229c67` landed criteria 1-4 (mode-aware `_run_preflight_subprocess`, threaded `_prepare_profile_for_start`, `action_start` propagation, `action_preflight` live-mode default preserved) + 3 covering tests. **Criterion 7 outstanding:** restart dashboard, `POST /api/action/start?mode=signal&profile=topstep_50k_mnq_auto`, confirm non-blocked status, verify `logs/live/live_signals_2026-05-18.jsonl` appears within 30s. Delete stage file after operator verification.
 - **Amendment 3.0 loader collision blocking NYSE_CLOSE prereg authoring** — `docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml` fails to load at `trading_app/hypothesis_loader.py:291` (theory_citation × Amendment 3.0). All 10 NYSE_CLOSE lanes remain PARKED. Decision-ledger: `mnq-nyse-close-k1-prereg-blocked-by-loader-2026-05-17`.
 - **Dashboard `/api/bars-recent?instrument=MNQ` returns `"bars":[]`** — uncharacterized since 2026-05-16 debut. Needs ≥1 live run evidence (tick log + 3-min-later curl + last 5 aggregator log lines) before fix stage justified.
 - **HWM tracker `hwm_dollars=0.0` on account 21944866** — shell exists, never populated. Defer until ≥1 real Monday session; revisit only if still 0.0 after broker activity.
