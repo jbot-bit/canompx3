@@ -173,11 +173,20 @@ FIX FAILURES before starting a live session.
     assert check_map["Contract resolution"]["status"] == "warn"
 
 
+_CONNECTED_BROKER_SUMMARY: dict[str, object] = {
+    "status": "ok",
+    "connections": [{"id": "projectx", "enabled": True, "status": "connected"}],
+    "enabled_count": 1,
+    "connected_count": 1,
+    "error_count": 0,
+}
+
+
 def test_derive_operator_state_allows_start_without_cached_preflight():
     top_state, reason, action = _derive_operator_state(
         raw_mode="STOPPED",
         heartbeat_age_s=9999,
-        broker_summary={"enabled_count": 1, "connected_count": 1},
+        broker_summary=dict(_CONNECTED_BROKER_SUMMARY),
         data_summary={"any_stale": False},
         preflight_summary=None,
     )
@@ -191,7 +200,7 @@ def test_derive_operator_state_becomes_ready_after_passing_preflight():
     top_state, _reason, action = _derive_operator_state(
         raw_mode="STOPPED",
         heartbeat_age_s=9999,
-        broker_summary={"enabled_count": 1, "connected_count": 1},
+        broker_summary=dict(_CONNECTED_BROKER_SUMMARY),
         data_summary={"any_stale": False},
         preflight_summary={"status": "pass", "passed": 5, "total": 5},
     )
@@ -204,7 +213,7 @@ def test_derive_operator_state_marks_stale_running_session():
     top_state, reason, action = _derive_operator_state(
         raw_mode="LIVE",
         heartbeat_age_s=180,
-        broker_summary={"enabled_count": 1, "connected_count": 1},
+        broker_summary=dict(_CONNECTED_BROKER_SUMMARY),
         data_summary={"any_stale": False},
         preflight_summary={"status": "pass"},
     )
