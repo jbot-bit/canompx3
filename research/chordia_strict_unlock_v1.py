@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import datetime as _dt
 import math
 import sys
 from dataclasses import dataclass
@@ -73,12 +74,17 @@ class Cell:
     theory_mode: str
     result_md: Path
     result_csv: Path
+    result_summary_csv: Path
 
 
-def _resolve_output_paths(hypothesis_path: Path) -> tuple[Path, Path]:
+def _resolve_output_paths(hypothesis_path: Path) -> tuple[Path, Path, Path]:
     stem = hypothesis_path.stem
     results_dir = ROOT / "docs" / "audit" / "results"
-    return results_dir / f"{stem}.md", results_dir / f"{stem}.csv"
+    return (
+        results_dir / f"{stem}.md",
+        results_dir / f"{stem}.csv",
+        results_dir / f"{stem}.summary.csv",
+    )
 
 
 def _load_cell(hypothesis_path: Path) -> Cell:
@@ -120,7 +126,7 @@ def _load_cell(hypothesis_path: Path) -> Cell:
         raise SystemExit(2)
 
     filter_status = grounding.get("filter_grounding_status", {}) if isinstance(grounding, dict) else {}
-    result_md, result_csv = _resolve_output_paths(hypothesis_path)
+    result_md, result_csv, result_summary_csv = _resolve_output_paths(hypothesis_path)
     return Cell(
         hypothesis_file=hypothesis_path,
         hypothesis_name=str(hypotheses[0].get("name", meta["name"])),
@@ -136,6 +142,7 @@ def _load_cell(hypothesis_path: Path) -> Cell:
         theory_mode=str(filter_status.get("verdict", "UNSPECIFIED")),
         result_md=result_md,
         result_csv=result_csv,
+        result_summary_csv=result_summary_csv,
     )
 
 
@@ -360,6 +367,125 @@ def _verdict(is_result: dict[str, Any], oos_result: dict[str, Any], threshold: f
     )
 
 
+def _as_iso_day(value: Any) -> str:
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return ""
+    if isinstance(value, _dt.date):
+        return value.isoformat()
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _split_boundary_metadata(is_df: pd.DataFrame, oos_df: pd.DataFrame) -> dict[str, Any]:
+    """Compute holdout-boundary proof fields from the IS/OOS universe frames.
+
+    Returns the latest IS trading day, the earliest OOS trading day, and a
+    boolean proof that the realized split honored the canonical holdout
+    boundary (``trading_app.holdout_policy.HOLDOUT_SACRED_FROM``).
+
+    The proof requirement is ``max_IS_trading_day < HOLDOUT_SACRED_FROM <= min_OOS_trading_day``.
+    When a split has zero rows the bound on that side is absent — the proof
+    field reports ``True`` if the SQL boundary clause was the only thing
+    excluding rows on that side (i.e. ``True`` when one side is empty AND
+    the populated side respects its bound), ``False`` otherwise.
+    """
+
+    def _series_max(df: pd.DataFrame) -> Any:
+        if df.empty or "trading_day" not in df.columns:
+            return None
+        return df["trading_day"].max()
+
+    def _series_min(df: pd.DataFrame) -> Any:
+        if df.empty or "trading_day" not in df.columns:
+            return None
+        return df["trading_day"].min()
+
+    raw_max_is = _series_max(is_df)
+    raw_min_oos = _series_min(oos_df)
+    max_is = raw_max_is.date() if hasattr(raw_max_is, "date") else raw_max_is
+    min_oos = raw_min_oos.date() if hasattr(raw_min_oos, "date") else raw_min_oos
+
+    is_ok = (max_is is None) or (max_is < HOLDOUT_SACRED_FROM)
+    oos_ok = (min_oos is None) or (min_oos >= HOLDOUT_SACRED_FROM)
+    proof = bool(is_ok and oos_ok)
+
+    return {
+        "max_IS_trading_day": _as_iso_day(max_is),
+        "min_OOS_trading_day": _as_iso_day(min_oos),
+        "holdout_boundary_value": HOLDOUT_SACRED_FROM.isoformat(),
+        "holdout_boundary_proof": proof,
+    }
+
+
+_SUMMARY_CSV_COLUMNS: tuple[str, ...] = (
+    "sample",
+    "n_universe",
+    "n_fired",
+    "fire_rate",
+    "expr",
+    "policy_ev",
+    "sharpe",
+    "t",
+    "p_two_sided",
+    "long_n",
+    "long_expr",
+    "long_t",
+    "short_n",
+    "short_expr",
+    "short_t",
+    "max_IS_trading_day",
+    "min_OOS_trading_day",
+    "holdout_boundary_value",
+    "holdout_boundary_proof",
+)
+
+
+def _summary_csv_row(result: dict[str, Any], boundary: dict[str, Any]) -> list[Any]:
+    return [
+        result["sample"],
+        result["n_universe"],
+        result["n_fired"],
+        result["fire_rate"],
+        result["expr"],
+        result["policy_ev"],
+        result["sharpe"],
+        result["t"],
+        result["p_two_sided"],
+        result["long_n"],
+        result["long_expr"],
+        result["long_t"],
+        result["short_n"],
+        result["short_expr"],
+        result["short_t"],
+        boundary["max_IS_trading_day"],
+        boundary["min_OOS_trading_day"],
+        boundary["holdout_boundary_value"],
+        boundary["holdout_boundary_proof"],
+    ]
+
+
+def _write_summary_csv(
+    summary_csv_path: Path,
+    is_result: dict[str, Any],
+    oos_result: dict[str, Any],
+    boundary: dict[str, Any],
+) -> None:
+    """Emit a per-split summary CSV: two rows (IS, OOS), machine-readable.
+
+    Distinct from the per-trade CSV at ``cell.result_csv`` — this surface is
+    consumed by ``TEMPLATE-fast-lane-v5.yaml`` and any downstream calibration
+    runner that needs per-direction ExpR and holdout boundary fields without
+    parsing markdown.
+    """
+    summary_csv_path.parent.mkdir(parents=True, exist_ok=True)
+    with summary_csv_path.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.writer(fp)
+        writer.writerow(list(_SUMMARY_CSV_COLUMNS))
+        writer.writerow(_summary_csv_row(is_result, boundary))
+        writer.writerow(_summary_csv_row(oos_result, boundary))
+
+
 def _write_csv(csv_path: Path, fired_frames: list[tuple[str, pd.DataFrame]]) -> None:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     with csv_path.open("w", newline="", encoding="utf-8") as fp:
@@ -548,8 +674,10 @@ def main() -> int:
     is_result, _, is_fired = _evaluate_split(is_df, cell, sample_label="IS")
     oos_result, _, oos_fired = _evaluate_split(oos_df, cell, sample_label="OOS")
     verdict, verdict_reason = _verdict(is_result, oos_result, threshold, cell.has_theory)
+    boundary = _split_boundary_metadata(is_df, oos_df)
 
     _write_csv(cell.result_csv, [("IS", is_fired), ("OOS", oos_fired)])
+    _write_summary_csv(cell.result_summary_csv, is_result, oos_result, boundary)
     _write_markdown(cell, threshold, verdict, verdict_reason, is_result, oos_result)
 
     print(f"Strategy: {cell.strategy_id}")
@@ -558,6 +686,7 @@ def main() -> int:
     print(f"Reason: {verdict_reason}")
     print(f"Result MD: {cell.result_md.relative_to(ROOT)}")
     print(f"Result CSV: {cell.result_csv.relative_to(ROOT)}")
+    print(f"Result Summary CSV: {cell.result_summary_csv.relative_to(ROOT)}")
     return 0
 
 
