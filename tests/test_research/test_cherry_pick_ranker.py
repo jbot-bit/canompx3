@@ -370,6 +370,61 @@ def test_missing_queue_file(tmp_path):
     assert entries == []
 
 
+def test_pooled_t_zero_is_preserved_not_nan_coerced(tmp_path):
+    """Code-review A- residual: pooled_t=0 must not falsy-coerce to NaN.
+
+    Previously `float(entry.get("pooled_t") or float("nan"))` collapsed a
+    legitimate 0.0 into NaN. A degenerate t=0 fast-lane result is incoherent
+    but should not be silently coerced -- the early-return guard at
+    abs(pooled_t)<1e-9 in compute_oos_power_readiness already handles it
+    semantically. Preserve the input.
+    """
+    queue = tmp_path / "promote_queue.yaml"
+    results = tmp_path / "results"
+    results.mkdir()
+    rmd = results / "rstub.md"
+    rmd.write_text(
+        "## Split summary\n\n"
+        "| Split | N_universe | N_fired | Fire% | Scratch | Null | "
+        "ExpR | Policy EV/opp | Sharpe | t | p_two |\n"
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
+        "| IS | 500 | 100 | 20.00% | 0 | 0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.0 |\n"
+        "| OOS | 100 | 50 | 50.00% | 0 | 0 | 0.0 | 0.0 | 0.0 | 0.0 | 1.0 |\n",
+        encoding="utf-8",
+    )
+    queue.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "entries": [
+                    {
+                        "result_md": "results/rstub.md",
+                        "strategy_id": "STRAT_ZERO_T_E2_RR1",
+                        "direction": "long",
+                        "pooled_t": 0.0,
+                        "pooled_expr": 0.0,
+                        "pooled_n": 100,
+                        "pooling_artifact": False,
+                        "status": "QUEUED",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    entries = cpr._load_queue_entries(queue)
+    ranked = cpr.rank_queue_entries(entries, results_dir=results)
+    assert len(ranked) == 1
+    # pooled_t MUST be the literal 0.0, not NaN
+    assert ranked[0].pooled_t == 0.0, (
+        f"pooled_t=0.0 must be preserved, got {ranked[0].pooled_t!r}"
+    )
+    # And the score must still safely compute (early-return at t<1e-9 fires
+    # in oos_power; deflation_headroom is 0 below threshold; dir_match is 0)
+    assert ranked[0].total_score >= 0.0
+
+
 def test_csv_columns_match_contract(synthetic_queue, tmp_path):
     queue_path, results_dir = synthetic_queue
     entries = cpr._load_queue_entries(queue_path)

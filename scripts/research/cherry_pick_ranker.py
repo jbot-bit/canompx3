@@ -319,9 +319,32 @@ def rank_queue_entries(
         if not isinstance(strategy_id, str):
             continue
 
-        pooled_t = float(entry.get("pooled_t") or float("nan"))
-        pooled_n = int(entry.get("pooled_n") or 0)
-        pooled_expr = float(entry.get("pooled_expr") or float("nan"))
+        # Explicit defaults (not `or`-fallback) so a legitimate 0/0.0 value
+        # from the queue cache is preserved -- prior `or float("nan")` falsy-
+        # coerced a runtime 0 into NaN, which is harmless for current data
+        # but would silently mask a degenerate t=0 fast-lane result. Code-
+        # review A- residual close, 2026-05-19.
+        def _opt_float(key: str) -> float:
+            v = entry.get(key)
+            if v is None:
+                return float("nan")
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return float("nan")
+
+        def _opt_int(key: str) -> int:
+            v = entry.get(key)
+            if v is None:
+                return 0
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                return 0
+
+        pooled_t = _opt_float("pooled_t")
+        pooled_n = _opt_int("pooled_n")
+        pooled_expr = _opt_float("pooled_expr")
         pooling_artifact = bool(entry.get("pooling_artifact") or False)
         direction = str(entry.get("direction") or "pooled")
 
