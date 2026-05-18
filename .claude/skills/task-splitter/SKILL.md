@@ -1,7 +1,9 @@
+---
+name: task-splitter
+description: Split an oversized task into minimal safe stages — upstream-before-downstream seams, ≤4 stages, ≤5 files per stage, present Stage 1 only.
+when_to_use: stage-gate classifies TOO BROAD, user says "this is too much", "break this down", "split", "too broad", "decompose"
+---
 Split an oversized task into minimal safe stages: $ARGUMENTS
-
-Use when: stage-gate classifies TOO BROAD, or user says "this is too much", "break this down"
-Triggers: "split", "too broad", "break down", "decompose"
 
 ## STEP 1: WHY IS IT TOO BROAD?
 

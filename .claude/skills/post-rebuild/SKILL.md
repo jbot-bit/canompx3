@@ -1,11 +1,10 @@
 ---
 name: post-rebuild
 description: Run post-rebuild audit chain after outcome/discovery/validation completes
+when_to_use: [after any rebuild chain completes, "post-rebuild", "rebuild done", "sync up", "finish the rebuild", "audit after rebuild"]
 disable-model-invocation: true
 ---
 Run post-rebuild audit chain after outcome/discovery/validation completes: $ARGUMENTS
-
-Use when: after any rebuild chain completes, "post-rebuild", "rebuild done", "sync up", "finish the rebuild", "audit after rebuild"
 
 ## Post-Rebuild Chain
 

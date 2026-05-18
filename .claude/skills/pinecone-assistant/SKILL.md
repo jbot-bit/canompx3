@@ -2,9 +2,8 @@
 name: pinecone-assistant
 description: >
   Pinecone knowledge base routing for project history and research findings.
-  Use when asked: "what did we find about X", "why did we do Y", "research on",
-  "history of", "remind me", "what's the story", "NO-GOs", design decisions.
   Routes between Pinecone (project knowledge) and gold-db MCP (live data).
+when_to_use: ["what did we find about X", "why did we do Y", "research on", "history of", "remind me", "what's the story", "NO-GOs", design decisions]
 ---
 # Pinecone Assistant (orb-research)
 

@@ -1,8 +1,9 @@
+---
+name: resume-rebase
+description: Resume interrupted work safely by rebasing on current truth — gathers state, detects drift- and age-stale stages, flags cross-terminal conflicts, then continues or reclassifies.
+when_to_use: returning to unfinished work, new session on old task, stale STAGE_STATE, contradictory state between terminals, "resume", "rebase", "pick up", "continue", "where was I", "pick up where I left off", "what's the state"
+---
 Resume interrupted work safely by rebasing on current truth: $ARGUMENTS
-
-Use when: returning to unfinished work, new session on old task, stale STAGE_STATE,
-contradictory state between terminals, "where was I", "pick up where I left off"
-Triggers: "resume", "rebase", "pick up", "continue", "where was I", "what's the state"
 
 ## STEP 1: GATHER CURRENT TRUTH (mandatory, every resume)
 

@@ -1,10 +1,9 @@
 ---
 name: quant-debug
 description: Diagnose and fix a bug or unexpected behavior in the quant pipeline
+when_to_use: ["any bug", "test failure", "unexpected behavior", "why is this broken", "wrong numbers", "row count off", "test failing", "unexpected results", "data looks wrong", "something is off", "this doesn't look right", "what's wrong", "error in pipeline/ or trading_app/"]
 ---
 Diagnose and fix a bug or unexpected behavior in the quant pipeline: $ARGUMENTS
-
-Use when: ANY bug, test failure, unexpected behavior, "why is this broken", "wrong numbers", "row count off", "test failing", "unexpected results", "data looks wrong", "something is off", "this doesn't look right", "what's wrong", error in pipeline/ or trading_app/
 
 ## Quant-Aware Debugging Protocol
 

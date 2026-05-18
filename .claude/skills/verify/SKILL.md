@@ -3,8 +3,7 @@ name: verify
 description: >
   Run verification gates. Modes: quick (5 gates pre-commit), full (impact map + gates),
   done (stage acceptance + lint/types + gates). Default: quick.
-  Use when: "verify", "health check", "pre-commit", "is everything ok", "are we good",
-  "integrity check", "done?", "all green?", "run the gates".
+when_to_use: ["verify", "health check", "pre-commit", "is everything ok", "are we good", "integrity check", "done?", "all green?", "run the gates"]
 ---
 
 # Verify

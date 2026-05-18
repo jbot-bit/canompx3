@@ -1,11 +1,10 @@
 ---
 name: rebuild-outcomes
 description: Full rebuild chain for instrument (default MGC). Use after outcome_builder changes (e.g., new exit rules).
+when_to_use: ["rebuild", "rebuild outcomes", "full rebuild", "rebuild [instrument]", "outcome_builder changed", "re-run the chain"]
 disable-model-invocation: true
 ---
 Full rebuild chain for instrument $ARGUMENTS (default MGC). Use after outcome_builder changes (e.g., new exit rules).
-
-Use when: "rebuild", "rebuild outcomes", "full rebuild", "rebuild [instrument]", "outcome_builder changed", "re-run the chain"
 
 Run these steps sequentially from bash:
 

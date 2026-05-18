@@ -1,10 +1,8 @@
 ---
 name: capital-review
 description: >
-  Capital-at-risk review orchestration. Use when a review touches live trading,
-  deployment readiness, research validity, security boundaries, CI/supply chain,
-  or when the user asks for a thorough anti-bias review before real capital is
-  affected.
+  Capital-at-risk review orchestration.
+when_to_use: review touches live trading, deployment readiness, research validity, security boundaries, CI/supply chain, or when the user asks for a thorough anti-bias review before real capital is affected
 effort: high
 ---
 

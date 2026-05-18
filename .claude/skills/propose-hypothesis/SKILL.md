@@ -1,4 +1,5 @@
 ---
+name: propose-hypothesis
 description: Propose a literature-grounded pre-reg hypothesis YAML via LLM. The script refuses to fabricate citations; output is a .draft.yaml requiring human review before promotion.
 ---
 

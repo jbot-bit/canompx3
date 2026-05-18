@@ -3,8 +3,7 @@ name: design
 description: >
   Design-before-build. Modes: plan (4-turn structured, wait for approval),
   explore (ask questions first), auto (plan then proceed). Default: plan.
-  Use when: "design", "plan", "4t", "brainstorm", "how should we build",
-  "think through", "approach this", "feature planning".
+when_to_use: ["design", "plan", "4t", "brainstorm", "how should we build", "think through", "approach this", "feature planning"]
 effort: high
 ---
 

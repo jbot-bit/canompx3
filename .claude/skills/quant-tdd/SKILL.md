@@ -1,6 +1,7 @@
 ---
 name: quant-tdd
-description: Use when implementing any feature or bugfix in pipeline/ or trading_app/, before writing implementation code
+description: Test-driven development cycle for the quant pipeline — RED/GREEN/REFACTOR with canonical-source tripwires, JOIN correctness, idempotency, and fail-closed tests.
+when_to_use: implementing any feature or bugfix in pipeline/ or trading_app/, before writing implementation code
 ---
 
 # Quant Pipeline TDD

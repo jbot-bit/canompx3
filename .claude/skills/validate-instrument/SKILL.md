@@ -1,11 +1,10 @@
 ---
 name: validate-instrument
 description: Validate strategies for instrument (default MGC). Uses the correct flag combination.
+when_to_use: ["validate", "run validation", "validate [instrument]", "re-validate", "strategy validation"]
 disable-model-invocation: true
 ---
 Validate strategies for instrument $ARGUMENTS (default MGC). Uses the correct flag combination.
-
-Use when: "validate", "run validation", "validate [instrument]", "re-validate", "strategy validation"
 
 Run this exact command from bash (not PowerShell):
 

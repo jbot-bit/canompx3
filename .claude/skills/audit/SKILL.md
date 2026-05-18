@@ -4,8 +4,7 @@ description: >
   System audit and hypothesis validation. Modes: full (11 phases), quick
   (phases 0,1,3,6), phase N (single phase), hypothesis (T0-T8 test battery),
   prompts (guardian routing). Default: full.
-  Use when: "audit", "health check", "system check", "quant audit", "validate
-  finding", "falsify", "stress test", "guardian prompt", "spec check".
+when_to_use: ["audit", "health check", "system check", "quant audit", "validate finding", "falsify", "stress test", "guardian prompt", "spec check"]
 disable-model-invocation: true
 ---
 

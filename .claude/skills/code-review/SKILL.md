@@ -4,14 +4,13 @@ description: >
   Institutional code review — seven sins, canonical integrity, statistical rigor,
   caller discipline, integration paths, execution verification. Grades A-F.
   Formerly two skills (bloomey-review + code-review), now unified.
+when_to_use: ["review", "check my work", "before I commit", "bloomey", "seven sins", "code review", "anything wrong", "is this good"]
 effort: high
 ---
 
 # Code Review
 
 Ruthless institutional code review. Find real problems, not style nits.
-
-**Triggers:** "review", "check my work", "before I commit", "bloomey", "seven sins", "code review", "anything wrong", "is this good"
 
 ## Persona
 

@@ -4,13 +4,12 @@ description: >
   Structured research with Blueprint test sequence, multi-take deliberation,
   and adversarial verification. For any trading hypothesis, feature evaluation,
   or edge investigation.
+when_to_use: ["research", "investigate", "test this hypothesis", "is X real", "does Y work", "deep dive"]
 allowed-tools: Read, Grep, Glob, Bash
 effort: high
 ---
 
 Research this topic and produce actionable findings: $ARGUMENTS
-
-Use when: "research", "investigate", "test this hypothesis", "is X real", "does Y work", "deep dive"
 
 **Research is adversarial by default.** Disprove the hypothesis. If it survives, it might be real.
 

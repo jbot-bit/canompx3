@@ -1,12 +1,10 @@
 ---
 name: next
 description: Auto-determine and start the next concrete coding task from stage state, handoff, and action queue
+when_to_use: ["next", "what's next", "continue", "keep going", "auto", "pick up", "auto-implement", "what should I do", "session start with no explicit task"]
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write, Agent
 ---
 Determine the next concrete task and start executing it: $ARGUMENTS
-
-Use when: "next", "what's next", "continue", "keep going", "auto", "pick up", session start with no explicit task
-Triggers: "next", "auto-implement", "what should I do", "keep going"
 
 ## STEP 0: GATHER STATE (parallel)
 

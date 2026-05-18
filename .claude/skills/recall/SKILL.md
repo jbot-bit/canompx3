@@ -6,9 +6,8 @@ description: >
   MCP (hypothesis lineage + audit verdicts), docs/audit/results (verdict trail),
   gold-db MCP (current truth for the scope), and memory feedback files (lessons),
   then synthesize ONE brief: what was decided, on what evidence, what happened
-  after, and whether current state still matches the decision. Use when:
-  "recall", "what's the story on X", "why did we park/kill/promote X",
-  "decision history on Y", "is verdict on X still holding".
+  after, and whether current state still matches the decision.
+when_to_use: ["recall", "what's the story on X", "why did we park/kill/promote X", "decision history on Y", "is verdict on X still holding"]
 effort: high
 ---
 

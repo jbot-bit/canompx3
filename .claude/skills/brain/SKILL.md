@@ -3,9 +3,8 @@ name: brain
 description: >
   Master-brain orchestrator. Auto-classifies user intent, picks the right
   subagent or skill, applies the right ceremony tier (trivial vs institutional),
-  holds state across multi-step work. Use when: "brain", "team this",
-  "delegate", "master mode", "concierge", "handle it", "work it out", or any
-  ambiguous multi-step request that would benefit from intent routing.
+  holds state across multi-step work.
+when_to_use: ["brain", "team this", "delegate", "master mode", "concierge", "handle it", "work it out", "any ambiguous multi-step request that would benefit from intent routing"]
 effort: high
 ---
 

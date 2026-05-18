@@ -3,11 +3,10 @@ name: ralph
 description: >
   Run one Ralph Loop audit iteration. Finds Seven Sins violations, canonical
   integrity issues, and silent failures. Fixes highest-priority finding.
+when_to_use: ["ralph", "run ralph", "ralph loop", "ralph audit", "autonomous audit"]
 disable-model-invocation: true
 ---
 Run one Ralph Loop iteration as a dedicated subagent (token-optimized).
-
-Use when: "ralph", "run ralph", "ralph loop", "ralph audit", "autonomous audit"
 
 Scope: $ARGUMENTS (e.g. "live_config.py", "outcome_builder", "all deferred"). If empty, the agent reads Next Targets from docs/ralph-loop/ralph-loop-audit.md.
 

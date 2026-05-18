@@ -1,7 +1,9 @@
+---
+name: stage-gate
+description: Classify the current task into a mode (RESUME / TRUTH AUDIT / DESIGN / IMPLEMENTATION / VERIFICATION / TOO BROAD) and drive the stage lifecycle — trivial fast-path, scope_lock, preflight, checkpoint commits.
+when_to_use: starting non-trivial work, mode unclear, stage-gate-guard hook blocked an edit, "stage-gate", "classify", "what mode", "gate check", "what stage am I in"
+---
 Classify the current task and control stage execution: $ARGUMENTS
-
-Use when: starting non-trivial work, mode unclear, or stage-gate-guard hook blocked an edit.
-Triggers: "stage-gate", "classify", "what mode", "gate check", "what stage am I in"
 
 ## STAGE FILE CONVENTION
 

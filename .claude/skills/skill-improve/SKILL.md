@@ -2,8 +2,7 @@
 name: skill-improve
 description: >
   Autonomous Karpathy-style self-improvement loop for project skills.
-  Use when: "improve skill", "optimize skill", "skill loop", "auto-improve",
-  "run evals", "skill score", "test skill quality", "overnight improvement".
+when_to_use: ["improve skill", "optimize skill", "skill loop", "auto-improve", "run evals", "skill score", "test skill quality", "overnight improvement"]
 ---
 
 # Skill Self-Improvement Loop

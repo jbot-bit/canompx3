@@ -1,12 +1,10 @@
 ---
 name: discover
 description: Research edge discovery and idea triage — routes through the institutional discovery protocol before any scan or build work
+when_to_use: ["discover", "scan for edges", "research [idea]", "find strategies", "edge discovery", "new idea", "chart read", "hypothesis triage"]
 allowed-tools: Read, Grep, Glob, Bash
 ---
 Research edge discovery and hypothesis triage: $ARGUMENTS
-
-Use when: "discover", "scan for edges", "research [idea]", "find strategies",
-"edge discovery", "new idea", "chart read", "hypothesis triage"
 
 ## Step 0: Discovery Front Door (MANDATORY)
 

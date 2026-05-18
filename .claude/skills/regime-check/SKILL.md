@@ -1,11 +1,10 @@
 ---
 name: regime-check
 description: Check portfolio fitness and regime health across all instruments
+when_to_use: ["fitness", "regime", "decay", "how's the portfolio", "strategy health"]
 allowed-tools: Read, Grep, Glob, Bash
 ---
 Check portfolio fitness and regime health: $ARGUMENTS
-
-Use when: "fitness", "regime", "decay", "how's the portfolio", "strategy health"
 
 ## Step 1: Query Fitness
 
