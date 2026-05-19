@@ -4936,6 +4936,7 @@ const ChartCockpit = (() => {
     update() { /* state captured by closure; renderer pulls live values in draw() */ }
     renderer() { return this._renderer; }
   }
+  let _orbCoordWarned = false;
   class OrbRectangleRenderer {
     draw(target) {
       if (!chart || !series) return;
@@ -4947,7 +4948,20 @@ const ChartCockpit = (() => {
       const ts = chart.timeScale();
       const xStart = ts.timeToCoordinate(wStart);
       const xEnd   = ts.timeToCoordinate(wEnd);
-      if (yHi == null || yLo == null || xStart == null || xEnd == null) return;
+      if (yHi == null || yLo == null || xStart == null || xEnd == null) {
+        // Fail-explicit: ORB state is complete but the chart hasn't calibrated
+        // its scales yet (no bars rendered, or window epoch outside the visible
+        // time range). Warn once so the operator can tell "no rectangle"
+        // apart from "rectangle off-screen / scale uncalibrated".
+        if (!_orbCoordWarned) {
+          _orbCoordWarned = true;
+          console.warn("ORB rectangle skipped: chart scales not calibrated " +
+            "(yHi=" + yHi + ", yLo=" + yLo + ", xStart=" + xStart + ", xEnd=" + xEnd + "). " +
+            "Likely no bars rendered yet, or ORB window outside visible time range.");
+        }
+        return;
+      }
+      _orbCoordWarned = false;  // reset once we successfully paint
       target.useBitmapCoordinateSpace(scope => {
         const ctx = scope.context;
         // positionsBox — official HiDPI-correct rect dimension helper:
@@ -5217,9 +5231,16 @@ const ChartCockpit = (() => {
     const el = document.getElementById(ORB_REL_ID);
     if (!el) return;
     const last = rawBars.length ? rawBars[rawBars.length - 1] : null;
-    if (!last || orbState.high == null || orbState.low == null) {
+    if (orbState.high == null || orbState.low == null) {
       el.textContent = "—";
       el.style.color = "";
+      return;
+    }
+    if (!last) {
+      // ORB present but no bars yet — distinguish from "no ORB" so the
+      // operator can tell which side of the data path is empty.
+      el.textContent = "ORB " + orbState.high.toFixed(2) + "/" + orbState.low.toFixed(2) + " · awaiting bars";
+      el.style.color = "#b0c0d0";
       return;
     }
     const c = last.close;
