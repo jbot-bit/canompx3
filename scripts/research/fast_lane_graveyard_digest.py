@@ -62,9 +62,40 @@ DIGEST_PATH = PROJECT_ROOT / "docs" / "runtime" / "fast_lane_graveyard_digest.ya
 _GRAVEYARD_NON_ENTRY_HEADINGS = frozenset(
     {
         "Rule for re-opening",
+        "Status Token Doctrine",
         "What to DO when user proposes something similar",
     }
 )
+
+
+def _load_status_tokens(text: str) -> tuple[str, ...]:
+    """Parse the ``## Status Token Doctrine`` block from 06_RD_GRAVEYARD.md.
+
+    The doctrine block is the canonical source for the status-token
+    alternation; the parser reads it at parse time rather than inlining
+    the list. Drift between this list and the inline copy in the parity
+    check is caught by ``check_graveyard_status_tokens_parity``.
+
+    Returns an empty tuple if the doctrine block is missing or unparseable
+    — the parser then captures every heading with ``status="UNKNOWN"``,
+    which is the fail-loud degradation mode.
+    """
+    section = re.search(
+        r"(?ms)^##\s+Status Token Doctrine[^\n]*\n.*?```yaml\n(?P<yaml>.*?)\n```",
+        text,
+    )
+    if section is None:
+        return ()
+    try:
+        spec = yaml.safe_load(section.group("yaml"))
+    except yaml.YAMLError:
+        return ()
+    if not isinstance(spec, dict):
+        return ()
+    tokens = spec.get("status_tokens")
+    if not isinstance(tokens, list):
+        return ()
+    return tuple(t for t in tokens if isinstance(t, str))
 
 
 @dataclass(frozen=True)
@@ -125,18 +156,30 @@ def _parse_graveyard_md(path: Path) -> list[GraveyardEntry]:
     # "Architecture-level kills" itself) is captured with status="UNKNOWN"
     # rather than dropped, so Check #170 can still detect a hand-edited
     # digest that omits the parent.
-    status_pattern = re.compile(
-        r"\b(DEAD|NO-GO|PAUSED|KILL|PARK|DEPRECATED|BANNED|RESCINDED|"
-        r"EDGE_WITH_CAVEAT|HOT|WARM|DECAYING|CLOSED|HYPOTHESES DEAD|"
-        r"PROXY DEPLOYMENT DEAD|DELETED|REVERSED|PREMISE WRONG|NULL|"
-        r"RETIRED|SUPERSEDED|REVOKED)\b"
-    )
+    #
+    # Status tokens are loaded from the canonical ``## Status Token Doctrine``
+    # block in the same source file -- parser does NOT inline the alternation
+    # list. Parity between code and doctrine is enforced by
+    # ``check_graveyard_status_tokens_parity`` (canonical-inline-copy bug
+    # class, 9th confirmed instance).
+    status_tokens = _load_status_tokens(text)
+    if status_tokens:
+        # Order by length descending so longer phrases ("HYPOTHESES DEAD")
+        # are tried before their substrings ("DEAD").
+        sorted_tokens = sorted(status_tokens, key=len, reverse=True)
+        alternation = "|".join(re.escape(t) for t in sorted_tokens)
+        status_pattern = re.compile(rf"\b({alternation})\b")
+    else:
+        status_pattern = None
     for match in re.finditer(r"^(#{2,3})\s+(?P<title>[^\n]+?)\s*$", text, re.MULTILINE):
         title = match.group("title").strip()
         if title in _GRAVEYARD_NON_ENTRY_HEADINGS:
             continue
-        status_match = status_pattern.search(title)
-        status = status_match.group(1) if status_match else "UNKNOWN"
+        if status_pattern is not None:
+            status_match = status_pattern.search(title)
+            status = status_match.group(1) if status_match else "UNKNOWN"
+        else:
+            status = "UNKNOWN"
         entries.append(
             GraveyardEntry(
                 source_path=rel,

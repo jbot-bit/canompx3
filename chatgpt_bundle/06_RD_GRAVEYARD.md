@@ -10,6 +10,45 @@
 
 ---
 
+## Status Token Doctrine
+
+Canonical enumeration of status tokens used in `##` / `###` headings below.
+The graveyard digest parser (`scripts/research/fast_lane_graveyard_digest.py`)
+reads this block at parse time — adding a new status token requires
+amending this list, otherwise headings using the new token are captured
+with `status: UNKNOWN` (fail-loud, not fail-quiet).
+
+```yaml
+status_tokens:
+  - DEAD
+  - NO-GO
+  - PAUSED
+  - KILL
+  - PARK
+  - DEPRECATED
+  - BANNED
+  - RESCINDED
+  - EDGE_WITH_CAVEAT
+  - HOT
+  - WARM
+  - DECAYING
+  - CLOSED
+  - HYPOTHESES DEAD
+  - PROXY DEPLOYMENT DEAD
+  - DELETED
+  - REVERSED
+  - PREMISE WRONG
+  - NULL
+  - RETIRED
+  - SUPERSEDED
+  - REVOKED
+```
+
+Parity-enforced by `pipeline.check_drift.check_graveyard_status_tokens_parity`
+(canonical-inline-copy bug class, 9th confirmed instance).
+
+---
+
 ## Rule for re-opening
 
 Any entry here can be reopened ONLY with:

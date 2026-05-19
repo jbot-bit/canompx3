@@ -10777,6 +10777,178 @@ def check_fast_lane_structural_hash_schema_parity(
     return violations
 
 
+def check_graveyard_status_tokens_parity(
+    graveyard_path: Path | None = None,
+) -> list[str]:
+    """Parity check: every status token used in 06_RD_GRAVEYARD.md headings
+    must be declared in the canonical ``## Status Token Doctrine`` block of
+    the same file.
+
+    The graveyard-digest parser at
+    ``scripts/research/fast_lane_graveyard_digest.py`` reads the doctrine
+    block at parse time rather than inlining the status-token alternation.
+    Drift between the doctrine list and the tokens actually used in headings
+    would silently downgrade entries to ``status="UNKNOWN"`` (fail-loud,
+    but the semantic value of the status field would erode over time).
+
+    This is the 9th confirmed instance of the
+    [[canonical-inline-copy-parity-bug-class]] -- the doctrine block IS the
+    canonical source for the status-token enum; the parser reads it; any
+    new token appearing in a heading must be added to the doctrine.
+
+    Failure classes this check enforces:
+
+      1. Doctrine block missing or unparseable.
+      2. ``status_tokens`` list empty (would cause parser to capture every
+         heading as UNKNOWN; fail-loud but unhelpful).
+      3. A heading in the same file uses a status token NOT declared in
+         the doctrine (operator added a NO-GO entry with a new status
+         vocab but forgot to amend the doctrine).
+      4. Duplicate tokens in the doctrine list (cosmetic; flag so the
+         operator cleans it up).
+
+    Authority: ``chatgpt_bundle/06_RD_GRAVEYARD.md`` § Status Token Doctrine.
+    Parser reader: ``scripts.research.fast_lane_graveyard_digest._load_status_tokens``.
+
+    Returns
+    -------
+    list[str]
+        Empty when the doctrine is non-empty and covers every token used
+        in same-file headings. Fail-closed on missing file, unparseable
+        doctrine, or import failure.
+    """
+    try:
+        from scripts.research.fast_lane_graveyard_digest import (
+            _GRAVEYARD_NON_ENTRY_HEADINGS,
+            _load_status_tokens,
+        )
+    except Exception as exc:
+        return [
+            "check_graveyard_status_tokens_parity: digest module import "
+            f"failed: {type(exc).__name__}: {exc}"
+        ]
+
+    target = (
+        graveyard_path
+        if graveyard_path is not None
+        else PROJECT_ROOT / "chatgpt_bundle" / "06_RD_GRAVEYARD.md"
+    )
+
+    if not target.exists():
+        return [
+            "check_graveyard_status_tokens_parity: canonical graveyard "
+            f"source missing at {target} (fail-closed)."
+        ]
+
+    try:
+        text = target.read_text(encoding="utf-8")
+    except Exception as exc:
+        return [
+            "check_graveyard_status_tokens_parity: failed to read "
+            f"{target.name}: {type(exc).__name__}: {exc}"
+        ]
+
+    # Stable path label for violation messages. Use the repo-relative form
+    # when the target lives under PROJECT_ROOT (the canonical case); fall
+    # back to the absolute path for tmp-path injection seams used by tests.
+    try:
+        label = target.relative_to(PROJECT_ROOT).as_posix()
+    except ValueError:
+        label = str(target)
+
+    violations: list[str] = []
+
+    declared = _load_status_tokens(text)
+
+    # (1) + (2) Doctrine block parseable + non-empty.
+    if not declared:
+        violations.append(
+            "check_graveyard_status_tokens_parity: ``## Status Token "
+            f"Doctrine`` block in {label} is missing, unparseable, or "
+            "contains an empty ``status_tokens`` list. Parser will fall "
+            "back to capturing every heading as status=UNKNOWN; restore "
+            "the doctrine block. "
+            "[[canonical-inline-copy-parity-bug-class]] "
+            "(memory/feedback_canonical_inline_copy_parity_bug_class.md)."
+        )
+        return violations
+
+    # (4) Duplicate tokens in declared list.
+    seen: set[str] = set()
+    dups: list[str] = []
+    for tok in declared:
+        if tok in seen:
+            dups.append(tok)
+        else:
+            seen.add(tok)
+    if dups:
+        violations.append(
+            "check_graveyard_status_tokens_parity: doctrine list contains "
+            f"duplicate tokens {sorted(set(dups))!r} in {label}. Deduplicate."
+        )
+
+    # (3) Every status token surfaced by a real heading must be declared.
+    # Sort declared by length desc so multi-word tokens are tried before
+    # their substrings (matches parser behavior).
+    sorted_declared = sorted(declared, key=len, reverse=True)
+    alternation = "|".join(re.escape(t) for t in sorted_declared)
+    declared_pattern = re.compile(rf"\b({alternation})\b")
+
+    # Heuristic by POSITION, not vocabulary. Graveyard headings follow a
+    # consistent shape: ``## <title> — <STATUS>`` or ``## <title> <STATUS>
+    # (<date>)``. The status token sits in the trailing segment of the
+    # heading, separated from the descriptive title by an em-dash (—),
+    # double-dash (--), or a parenthesised date marker.
+    #
+    # Detect undeclared status tokens by extracting the *trailing segment*
+    # after the last em-dash / double-dash separator, then matching any
+    # uppercase alpha word of length >= 3 OR a hyphenated NO-GO-shape
+    # word. A heading whose trailing segment yields zero matches is
+    # status-token-free (e.g. a section header like
+    # "## Architecture-level kills"). This avoids the noun-blacklist
+    # treadmill: we only look at the part of the heading where a status
+    # token is structurally meant to appear.
+    used_tokens: set[str] = set()
+    separator_pattern = re.compile(r"\s+—\s+|\s+--\s+|\s+-\s+")
+    candidate_pattern = re.compile(r"\b([A-Z]{2,}(?:[ \-+][A-Z]{2,})*)\b")
+    for match in re.finditer(r"^(#{2,3})\s+(?P<title>[^\n]+?)\s*$", text, re.MULTILINE):
+        title = match.group("title").strip()
+        if title in _GRAVEYARD_NON_ENTRY_HEADINGS:
+            continue
+        if declared_pattern.search(title) is not None:
+            # Heading already covered by a declared token.
+            continue
+        # Trailing segment is everything after the LAST recognised separator.
+        # If no separator exists, the heading is a section header / index
+        # entry without a status — nothing to check.
+        parts = separator_pattern.split(title)
+        if len(parts) < 2:
+            continue
+        trailing = parts[-1].strip()
+        # Strip a trailing date parenthetical: "RETIRED (2026-06-01)" -> "RETIRED".
+        trailing = re.sub(r"\s*\([^)]*\)\s*$", "", trailing).strip()
+        if not trailing:
+            continue
+        for cand in candidate_pattern.findall(trailing):
+            # Normalise multi-word candidates by collapsing inner whitespace
+            # so "HYPOTHESES DEAD" matches the doctrine entry of the same
+            # spelling.
+            normalised = re.sub(r"\s+", " ", cand)
+            used_tokens.add(normalised)
+
+    undeclared = used_tokens - set(declared)
+    if undeclared:
+        violations.append(
+            f"check_graveyard_status_tokens_parity: heading(s) in {label} "
+            f"appear to use status token(s) {sorted(undeclared)!r} not "
+            "declared in the ``## Status Token Doctrine`` block. Either "
+            "add the new token to the doctrine list or rephrase the "
+            "heading. [[canonical-inline-copy-parity-bug-class]]."
+        )
+
+    return violations
+
+
 def check_holdout_sentinel_inline_copy_parity() -> list[str]:
     """Parity check: fast_lane_trial_ledger holdout sentinel vs canonical date.
 
@@ -13010,6 +13182,12 @@ CHECKS = [
         "Fast-lane trial ledger holdout sentinel parity: scripts/research/fast_lane_trial_ledger.py HOLDOUT_SACRED_FROM_SENTINEL must match trading_app.holdout_policy.HOLDOUT_SACRED_FROM.isoformat() (Stage 2A.2 follow-up Check #171, canonical-inline-copy parity 8th instance)",
         check_holdout_sentinel_inline_copy_parity,
         False,  # blocking — boundary drift silently corrupts universe-of-trials accounting per Bailey-Lopez de Prado 2014 sec 3
+        False,
+    ),
+    (
+        "Graveyard status tokens parity: chatgpt_bundle/06_RD_GRAVEYARD.md `## Status Token Doctrine` block is the canonical source; every status token used in headings must be declared (Stage 2A.2 follow-up Check #172, canonical-inline-copy parity 9th instance)",
+        check_graveyard_status_tokens_parity,
+        False,  # blocking — undeclared tokens silently degrade graveyard digest status semantics
         False,
     ),
 ]  # end CHECKS

@@ -275,6 +275,35 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         ),
     ),
     InlineCopyPair(
+        name="graveyard_status_tokens",
+        inline_site="scripts/research/fast_lane_graveyard_digest.py",
+        canonical_source=(
+            "chatgpt_bundle/06_RD_GRAVEYARD.md `## Status Token Doctrine` "
+            "block (YAML `status_tokens:` list)"
+        ),
+        gated_constants=("_load_status_tokens",),
+        parity_check="check_graveyard_status_tokens_parity",
+        test_file=(
+            "tests/test_pipeline/"
+            "test_check_drift_graveyard_status_tokens_parity.py"
+        ),
+        bug_class_anchor=(
+            "memory/feedback_canonical_inline_copy_parity_bug_class.md "
+            "(9th confirmed instance, 2026-05-20 — Stage 2A.2 follow-up)"
+        ),
+        notes=(
+            "The graveyard digest parser reads the status-token alternation "
+            "from a doctrine block in 06_RD_GRAVEYARD.md rather than "
+            "inlining the list. Parity check asserts the doctrine is "
+            "non-empty and that every status token surfaced by a real "
+            "heading is declared in the doctrine. Closes the MEDIUM finding "
+            "from the post-merge bloomey review of Stage 2A.2 (2026-05-20): "
+            "previously the alternation was hand-maintained in the parser, "
+            "so a future heading with a new status vocab would silently "
+            "downgrade to status=UNKNOWN."
+        ),
+    ),
+    InlineCopyPair(
         name="fast_lane_trial_ledger_holdout_sentinel",
         inline_site="scripts/research/fast_lane_trial_ledger.py",
         canonical_source=(
