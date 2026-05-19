@@ -103,11 +103,24 @@ def empty_action_queue(tmp_path):
     return tmp_path / "action-queue.yaml"
 
 
-def _scan(results_dir, hypotheses_dir, action_queue):
+def _scan(results_dir, hypotheses_dir, action_queue, *, oos_window_days=10_000):
+    """Scan helper for synthetic test fixtures.
+
+    ``oos_window_days=10_000`` (default) is deliberately large so the
+    pre-flight OOS-power gate (RULE 3.3) does not auto-REJECT synthetic
+    PROMOTE rows whose fire-rate would yield insufficient OOS power under
+    a realistic short window. Tests that exercise the gate itself live in
+    ``tests/test_research/test_fast_lane_oos_power_gate.py`` and pass
+    realistic windows directly. Tests in THIS module focus on
+    parse/classify/cache behavior orthogonal to the OOS-power gate; the
+    large window keeps those orthogonal behaviors deterministic.
+    """
     return flpq.scan(
         results_dir,
         hypotheses_dir=hypotheses_dir,
         action_queue=action_queue,
+        oos_window_days=oos_window_days,
+        oos_window_error=None,
     )
 
 
@@ -449,6 +462,9 @@ def test_cli_dry_run_default(tmp_path, empty_hypotheses, empty_action_queue, cap
             "--hypotheses-dir", str(empty_hypotheses),
             "--action-queue", str(empty_action_queue),
             "--cache-path", str(cache),
+            # Large OOS window so the pre-flight OOS-power gate (RULE 3.3)
+            # does not auto-REJECT this synthetic PROMOTE fixture.
+            "--oos-window-days", "10000",
         ]
     )
     assert rc == 0
@@ -472,6 +488,7 @@ def test_cli_write_creates_cache(tmp_path, empty_hypotheses, empty_action_queue)
             "--hypotheses-dir", str(empty_hypotheses),
             "--action-queue", str(empty_action_queue),
             "--cache-path", str(cache),
+            "--oos-window-days", "10000",
         ]
     )
     assert rc == 0
@@ -520,6 +537,7 @@ def test_cli_exit_code_2_on_error_entry(tmp_path, empty_hypotheses, empty_action
             "--hypotheses-dir", str(empty_hypotheses),
             "--action-queue", str(empty_action_queue),
             "--cache-path", str(tmp_path / "x.yaml"),
+            "--oos-window-days", "10000",
         ]
     )
     assert rc == 2

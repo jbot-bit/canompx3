@@ -10299,6 +10299,103 @@ def check_cherry_pick_ranker_threshold_parity(
     return []
 
 
+def check_fast_lane_oos_power_gate_constants_grounded() -> list[str]:
+    """Sanity gate on FAST_LANE pre-flight OOS-power gate constants.
+
+    Asserts that ``scripts/research/fast_lane_promote_queue.py`` continues to
+    expose:
+
+      - ``OOS_POWER_FLOOR`` as a finite float in (0.0, 1.0]
+      - ``OOS_COHEN_D_TARGET`` as a finite float > 0
+      - ``REJECTED_OOS_UNPOWERED`` listed in ``STATUS_VALUES``
+
+    These three together define the gate's behavior. Drift in any of them —
+    deleting the floor, flipping the Cohen's d sign, or dropping the status
+    enum value — would silently re-promote structurally-unbuildable cells
+    that the gate exists to catch. Mutation-probe per
+    ``feedback_regex_alternation_sibling_coverage.md``: every constant has
+    its own dedicated injection test in
+    ``tests/test_pipeline/test_check_drift_fast_lane_oos_power_gate.py``.
+
+    Literature grounding for the gate itself:
+      - ``research/oos_power.py::POWER_TIERS`` (0.50 DIRECTIONAL_ONLY floor —
+        the canonical source the gate constants mirror)
+      - ``backtesting-methodology.md`` RULE 3.3 (canonical OOS-power doctrine)
+      - ``docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md``
+        Thm 1 / Eq. 6 (MinBTL bound — trial-budget preservation)
+    """
+    import math as _math
+
+    try:
+        from scripts.research.fast_lane_promote_queue import (  # type: ignore[import-untyped]
+            OOS_COHEN_D_TARGET,
+            OOS_POWER_FLOOR,
+            STATUS_VALUES,
+        )
+    except Exception as exc:
+        return [
+            f"check_fast_lane_oos_power_gate_constants_grounded: scanner import "
+            f"failed: {exc}. The gate constants must remain importable from "
+            "scripts/research/fast_lane_promote_queue.py."
+        ]
+
+    errors: list[str] = []
+
+    if not isinstance(OOS_POWER_FLOOR, (int, float)) or isinstance(OOS_POWER_FLOOR, bool):
+        errors.append(
+            f"check_fast_lane_oos_power_gate_constants_grounded: "
+            f"OOS_POWER_FLOOR must be a numeric (not bool); got "
+            f"{type(OOS_POWER_FLOOR).__name__}={OOS_POWER_FLOOR!r}."
+        )
+    elif _math.isnan(float(OOS_POWER_FLOOR)) or _math.isinf(float(OOS_POWER_FLOOR)):
+        errors.append(
+            "check_fast_lane_oos_power_gate_constants_grounded: "
+            f"OOS_POWER_FLOOR must be finite; got {OOS_POWER_FLOOR!r}."
+        )
+    elif not (0.0 < float(OOS_POWER_FLOOR) <= 1.0):
+        errors.append(
+            "check_fast_lane_oos_power_gate_constants_grounded: "
+            f"OOS_POWER_FLOOR={OOS_POWER_FLOOR!r} out of valid range (0.0, 1.0]. "
+            "Power floor below 0 or above 1 has no statistical meaning; mirror "
+            "research/oos_power.py::POWER_TIERS (canonical 0.50)."
+        )
+
+    if not isinstance(OOS_COHEN_D_TARGET, (int, float)) or isinstance(
+        OOS_COHEN_D_TARGET, bool
+    ):
+        errors.append(
+            f"check_fast_lane_oos_power_gate_constants_grounded: "
+            f"OOS_COHEN_D_TARGET must be a numeric (not bool); got "
+            f"{type(OOS_COHEN_D_TARGET).__name__}={OOS_COHEN_D_TARGET!r}."
+        )
+    elif _math.isnan(float(OOS_COHEN_D_TARGET)) or _math.isinf(
+        float(OOS_COHEN_D_TARGET)
+    ):
+        errors.append(
+            "check_fast_lane_oos_power_gate_constants_grounded: "
+            f"OOS_COHEN_D_TARGET must be finite; got {OOS_COHEN_D_TARGET!r}."
+        )
+    elif float(OOS_COHEN_D_TARGET) <= 0.0:
+        errors.append(
+            "check_fast_lane_oos_power_gate_constants_grounded: "
+            f"OOS_COHEN_D_TARGET={OOS_COHEN_D_TARGET!r} must be > 0. Cohen's d "
+            "below zero inverts the power calc and zero would silently pass all "
+            "cells (one_sample_power returns 0 at d<=0). Cohen 1988 conventions: "
+            "0.2 small, 0.5 medium, 0.8 large; project default 0.3."
+        )
+
+    if "REJECTED_OOS_UNPOWERED" not in STATUS_VALUES:
+        errors.append(
+            "check_fast_lane_oos_power_gate_constants_grounded: STATUS_VALUES "
+            "does not list 'REJECTED_OOS_UNPOWERED' -- the gate emits this "
+            "status but the scanner's enum tuple would render no bucket for it, "
+            "silently dropping rejected entries from the queue report. "
+            f"Current STATUS_VALUES={STATUS_VALUES!r}."
+        )
+
+    return errors
+
+
 def check_bridge_methodology_rules_parity(
     rules_path: Path | None = None,
 ) -> list[str]:
@@ -11475,6 +11572,12 @@ CHECKS = [
         "Bridge METHODOLOGY_RULES_APPLIED slugs map to real RULE headings in backtesting-methodology.md (canonical-inline-copy parity)",
         check_bridge_methodology_rules_parity,
         False,  # blocking — stale rule citations in generated drafts would propagate into every heavyweight prereg the operator authors
+        False,
+    ),
+    (
+        "FAST_LANE pre-flight OOS-power gate constants are present, finite, and grounded in research/oos_power.py POWER_TIERS",
+        check_fast_lane_oos_power_gate_constants_grounded,
+        False,  # blocking — drift in the gate constants would silently re-promote structurally-unbuildable cells the gate exists to catch
         False,
     ),
     (

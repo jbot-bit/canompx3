@@ -69,8 +69,45 @@ N_FLOOR = 50
 FIRE_MIN = 0.05
 FIRE_MAX = 0.95
 
+# Pre-flight OOS-power gate (RULE 3.3 enforcement at classification time).
+#
+# Rejects PROMOTE results whose expected OOS sample size cannot deliver power
+# >= OOS_POWER_FLOOR to detect a Cohen's d = OOS_COHEN_D_TARGET effect via the
+# canonical one_sample_power helper. Mirrors the DIRECTIONAL_ONLY tier in
+# research/oos_power.py::POWER_TIERS (0.50); cells below 0.50 are
+# STATISTICALLY_USELESS and cannot inform a deployment decision regardless of
+# OOS sign.
+#
+# Literature grounding:
+#   - bailey_et_al_2013_pseudo_mathematics.md Thm 1 / Eq. 6 — MinBTL bound;
+#     gating cells with no usable OOS preserves trial-budget headroom.
+#   - harvey_liu_2015_backtesting.md p.17 — OOS testing is probabilistic; an
+#     underpowered OOS read cannot inform regardless of sign.
+#   - lopez_de_prado_2018_afml_ch_3_7_8.md § 12.4 — CPCV is the multi-path
+#     remedy for borderline-OOS cells this gate flags.
+#
+# Cohen's d = 0.3 (between Cohen 1988 "small" 0.2 and "medium" 0.5) is the
+# gate's design target — empirically matches the per-trade R-multiple effect
+# sizes observed across the validated ORB universe (pooled t / sqrt(N) ratios
+# on FAST_LANE PROMOTE results cluster in 0.2-0.3). d=0.2 was too strict for
+# the current 136-day OOS window (rejects every candidate including 50%+ fire
+# rates); d=0.5 too lenient (passes structurally unbuildable cells). d=0.3
+# splits the difference and matches realized effect sizes — a cell at d=0.3
+# needing N>~85 for 0.50 power gives the OOS window a real chance to deliver
+# a discriminating read while still rejecting cells that mathematically
+# cannot accumulate that N before the next holdout rotation.
+OOS_POWER_FLOOR = 0.50
+OOS_COHEN_D_TARGET = 0.3
 
-STATUS_VALUES = ("QUEUED", "ESCALATED", "REVOKED", "PARKED", "ERROR")
+
+STATUS_VALUES = (
+    "QUEUED",
+    "ESCALATED",
+    "REVOKED",
+    "PARKED",
+    "REJECTED_OOS_UNPOWERED",
+    "ERROR",
+)
 
 
 @dataclass
@@ -212,6 +249,72 @@ def per_direction_sanity_gate(stats: dict[str, Any], direction: str) -> tuple[st
     return lv, sv, False
 
 
+def _compute_expected_oos_power(
+    fire_rate: float,
+    oos_window_days: int,
+    *,
+    cohen_d: float = OOS_COHEN_D_TARGET,
+) -> tuple[float, int, str | None]:
+    """Return ``(expected_power, expected_n_oos, reason_if_unable)``.
+
+    Fail-closed: any unusable input returns ``(0.0, 0, reason)`` so the caller
+    treats the cell as REJECTED rather than silently passing.
+
+    ``fire_rate`` is the pooled fire-rate already parsed from the result MD.
+    ``oos_window_days`` is the count of calendar days between
+    ``trading_app.holdout_policy.HOLDOUT_SACRED_FROM`` and the latest
+    ``orb_outcomes.trading_day`` observed by the caller. The product
+    ``round(fire_rate * oos_window_days)`` is the expected OOS trade count;
+    one-sample power is then computed against ``cohen_d``.
+    """
+    if math.isnan(fire_rate) or fire_rate <= 0:
+        return 0.0, 0, "fire_rate unavailable or non-positive"
+    if oos_window_days <= 0:
+        return 0.0, 0, "OOS window not yet opened (oos_window_days <= 0)"
+    expected_n_oos = int(round(fire_rate * oos_window_days))
+    if expected_n_oos < 2:
+        # one_sample_power refuses n < 2; treat as zero-power for clarity.
+        return 0.0, expected_n_oos, "expected_n_oos < 2 (one_sample_power undefined)"
+    # Canonical delegation per institutional-rigor.md § 10 — never re-encode.
+    from research.oos_power import one_sample_power
+
+    power = float(one_sample_power(cohen_d, expected_n_oos))
+    return power, expected_n_oos, None
+
+
+def _resolve_oos_window_days(db_path: Path | None = None) -> tuple[int, str | None]:
+    """Compute ``(oos_window_days, error_reason)`` from canonical sources.
+
+    Reads the latest ``orb_outcomes.trading_day`` from the canonical DuckDB
+    and subtracts ``HOLDOUT_SACRED_FROM``. Fail-closed: returns ``(0, reason)``
+    on any DB error so the caller REJECTS dependent cells rather than passing.
+    """
+    try:
+        from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
+    except Exception as exc:  # pragma: no cover -- import guard
+        return 0, f"holdout_policy import failed: {exc}"
+    try:
+        import duckdb
+
+        from pipeline.paths import GOLD_DB_PATH
+
+        path = db_path if db_path is not None else GOLD_DB_PATH
+        con = duckdb.connect(str(path), read_only=True)
+        try:
+            row = con.execute(
+                "SELECT MAX(trading_day) FROM orb_outcomes"
+            ).fetchone()
+        finally:
+            con.close()
+        if row is None or row[0] is None:
+            return 0, "orb_outcomes empty (MAX(trading_day) is NULL)"
+        latest = row[0]
+        days = (latest - HOLDOUT_SACRED_FROM).days
+        return max(int(days), 0), None
+    except Exception as exc:
+        return 0, f"OOS window query failed: {exc}"
+
+
 def find_revocation_sidecar(result_md: Path) -> Path | None:
     sidecar = result_md.with_name(result_md.stem + ".revocation.md")
     return sidecar if sidecar.exists() else None
@@ -264,7 +367,12 @@ def find_park_entry(strategy_id: str, action_queue: Path = ACTION_QUEUE) -> str 
     return None
 
 
-def classify(entry: PromoteEntry) -> tuple[str, str | None]:
+def classify(
+    entry: PromoteEntry,
+    *,
+    oos_window_days: int | None = None,
+    oos_window_error: str | None = None,
+) -> tuple[str, str | None]:
     if entry.revocation_sidecar is not None:
         return "REVOKED", None
     if entry.heavyweight_prereg is not None:
@@ -277,6 +385,33 @@ def classify(entry: PromoteEntry) -> tuple[str, str | None]:
             "per-direction sanity gate flags pooling artifact "
             "(both directions KILL_AS_STANDALONE); revocation sidecar required",
         )
+
+    # Pre-flight OOS-power gate (RULE 3.3).
+    # If the caller could not resolve the OOS window, fail-closed to REJECTED
+    # so an unreadable DB never silently passes a structurally-unbuildable cell.
+    if oos_window_days is None or oos_window_error is not None:
+        reason = oos_window_error or "oos_window_days not supplied"
+        return "REJECTED_OOS_UNPOWERED", f"OOS pre-flight unresolved: {reason}"
+    power, expected_n_oos, why = _compute_expected_oos_power(
+        entry.pooled_fire, oos_window_days
+    )
+    if why is not None:
+        return (
+            "REJECTED_OOS_UNPOWERED",
+            f"OOS pre-flight: {why} (oos_window_days={oos_window_days})",
+        )
+    if power < OOS_POWER_FLOOR:
+        return (
+            "REJECTED_OOS_UNPOWERED",
+            (
+                f"expected_n_oos={expected_n_oos} (fire_rate={entry.pooled_fire:.4f} "
+                f"* oos_window_days={oos_window_days}) -> expected_power={power:.3f} "
+                f"< floor={OOS_POWER_FLOOR:.2f} at cohen_d={OOS_COHEN_D_TARGET}; "
+                "structurally underpowered OOS — pick CPCV / Harvey-Liu haircut / "
+                "pool with siblings / PARK per backtesting-methodology.md RULE 3.3"
+            ),
+        )
+
     return "QUEUED", None
 
 
@@ -285,6 +420,8 @@ def build_entry(
     *,
     hypotheses_dir: Path = HYPOTHESES_DIR,
     action_queue: Path = ACTION_QUEUE,
+    oos_window_days: int | None = None,
+    oos_window_error: str | None = None,
 ) -> PromoteEntry | None:
     parsed = parse_result_md(path)
     if parsed is None:
@@ -352,7 +489,11 @@ def build_entry(
         status="ERROR",
         error_reason=None,
     )
-    entry.status, entry.error_reason = classify(entry)
+    entry.status, entry.error_reason = classify(
+        entry,
+        oos_window_days=oos_window_days,
+        oos_window_error=oos_window_error,
+    )
     return entry
 
 
@@ -361,15 +502,31 @@ def scan(
     *,
     hypotheses_dir: Path | None = None,
     action_queue: Path | None = None,
+    oos_window_days: int | None = None,
+    oos_window_error: str | None = None,
+    db_path: Path | None = None,
 ) -> list[PromoteEntry]:
     # Resolve module-level defaults at call time so monkeypatching from tests
     # works against scripts.research.fast_lane_promote_queue.RESULTS_DIR etc.
     rd = results_dir if results_dir is not None else RESULTS_DIR
     hd = hypotheses_dir if hypotheses_dir is not None else HYPOTHESES_DIR
     aq = action_queue if action_queue is not None else ACTION_QUEUE
+
+    # Resolve the OOS window once per scan so each entry classification
+    # reuses the same (latest_trading_day - HOLDOUT_SACRED_FROM) result.
+    # Tests can inject by supplying oos_window_days directly.
+    if oos_window_days is None and oos_window_error is None:
+        oos_window_days, oos_window_error = _resolve_oos_window_days(db_path)
+
     entries: list[PromoteEntry] = []
     for path in sorted(rd.glob(FAST_LANE_RESULT_GLOB)):
-        entry = build_entry(path, hypotheses_dir=hd, action_queue=aq)
+        entry = build_entry(
+            path,
+            hypotheses_dir=hd,
+            action_queue=aq,
+            oos_window_days=oos_window_days,
+            oos_window_error=oos_window_error,
+        )
         if entry is not None:
             entries.append(entry)
     return entries
@@ -479,6 +636,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cache-path", default=str(QUEUE_CACHE))
     parser.add_argument("--hypotheses-dir", default=str(HYPOTHESES_DIR))
     parser.add_argument("--action-queue", default=str(ACTION_QUEUE))
+    parser.add_argument(
+        "--oos-window-days",
+        type=int,
+        default=None,
+        help=(
+            "Override the OOS window length used by the pre-flight OOS-power "
+            "gate (RULE 3.3). Default: derived from "
+            "MAX(orb_outcomes.trading_day) - HOLDOUT_SACRED_FROM via the "
+            "canonical DB. Tests and what-if analyses can supply an explicit "
+            "value (e.g., 365 for a one-year window)."
+        ),
+    )
+    parser.add_argument(
+        "--db-path",
+        default=None,
+        help=(
+            "Override the DuckDB path used to derive --oos-window-days. "
+            "Default: pipeline.paths.GOLD_DB_PATH."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if args.write and args.dry_run:
@@ -488,6 +665,9 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.results_dir),
         hypotheses_dir=Path(args.hypotheses_dir),
         action_queue=Path(args.action_queue),
+        oos_window_days=args.oos_window_days,
+        oos_window_error=None,
+        db_path=Path(args.db_path) if args.db_path else None,
     )
 
     if args.json:
