@@ -10920,7 +10920,7 @@ def check_am33_audit_log_theory_grant_parity(
     audit_log_path: Path | None = None,
     hypotheses_dir: Path | None = None,
 ) -> list[str]:
-    """Check #162: chordia_audit_log.yaml theory_grants must match prereg metadata.theory_grant.
+    """Check #165: chordia_audit_log.yaml theory_grants must match prereg metadata.theory_grant.
 
     Amendment 3.3 (2026-05-17) introduced ``metadata.theory_grant`` as the
     EXPLICIT bool governing the Chordia t-threshold gate in the hypothesis
@@ -11009,7 +11009,7 @@ def check_am33_audit_log_theory_grant_parity(
             "check_am33_audit_log_theory_grant_parity: chordia_audit_log.yaml "
             f"theory_grants is not a list (got {type(theory_grants_raw).__name__})"
         ]
-    for i, entry in enumerate(theory_grants_raw):
+    for entry in theory_grants_raw:
         if not isinstance(entry, dict):
             continue
         sid = entry.get("strategy_id")
