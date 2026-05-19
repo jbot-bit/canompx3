@@ -10535,6 +10535,100 @@ def check_canonical_inline_copies_have_parity_check() -> list[str]:
     return violations
 
 
+def check_triage_provenance_completeness(
+    drafts_dir: Path | None = None,
+) -> list[str]:
+    """Triage-draft provenance integrity (Improvement 3 / Stage C, 2026-05-19).
+
+    Every yaml under ``docs/audit/hypotheses/drafts/`` that contains a
+    ``triage_provenance:`` block MUST declare
+    ``triage_provenance.source_validated_setup_strategy_id``. Without that
+    field, an auditor cannot trace the draft back to its canonical source
+    row in ``validated_setups`` — the entire feedback loop the triage
+    script supplies becomes opaque.
+
+    Drafts hand-authored without a ``triage_provenance:`` block are not
+    affected — the check fires only when the marker is present (i.e. when
+    the operator OR the triage script asserts this is triage-provenance
+    data).
+
+    Fail-closed on YAML parse failure. Drafts directory missing is an
+    expected fresh-tree state and emits no violations.
+
+    Parameters
+    ----------
+    drafts_dir : Path | None
+        Override drafts dir (test seam).
+    """
+    target = (
+        drafts_dir
+        if drafts_dir is not None
+        else PROJECT_ROOT / "docs" / "audit" / "hypotheses" / "drafts"
+    )
+    if not target.exists():
+        return []
+
+    try:
+        import yaml as _yaml
+    except Exception as exc:
+        return [
+            "check_triage_provenance_completeness: pyyaml import failed: "
+            f"{type(exc).__name__}: {exc}"
+        ]
+
+    violations: list[str] = []
+    for path in sorted(target.glob("*.yaml")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            violations.append(
+                f"check_triage_provenance_completeness: cannot read {path.name}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            continue
+
+        # Fast skip: no triage_provenance marker -> not a triage draft.
+        if "triage_provenance:" not in text:
+            continue
+
+        try:
+            parsed = _yaml.safe_load(text)
+        except Exception as exc:
+            violations.append(
+                f"check_triage_provenance_completeness: {path.name} carries "
+                f"triage_provenance marker but failed to parse: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            continue
+
+        if not isinstance(parsed, dict):
+            violations.append(
+                f"check_triage_provenance_completeness: {path.name} root is not "
+                f"a YAML mapping (got {type(parsed).__name__})"
+            )
+            continue
+
+        block = parsed.get("triage_provenance")
+        if not isinstance(block, dict):
+            violations.append(
+                f"check_triage_provenance_completeness: {path.name} "
+                f"triage_provenance must be a mapping (got {type(block).__name__})"
+            )
+            continue
+
+        sid = block.get("source_validated_setup_strategy_id")
+        if not isinstance(sid, str) or not sid.strip():
+            violations.append(
+                f"check_triage_provenance_completeness: {path.name} "
+                "triage_provenance.source_validated_setup_strategy_id is "
+                "required and must be a non-empty string "
+                "(every triage draft must trace back to a canonical "
+                "validated_setups row; see Stage C / Improvement 3 plan)"
+            )
+
+    return violations
+
+
 def check_cherry_pick_journal_integrity(
     journal_path: Path | None = None,
     queue_path: Path | None = None,
@@ -11393,6 +11487,12 @@ CHECKS = [
         "Cherry-pick journal integrity: escalated promote_queue rows have journal entries; entries are append-only monotonic with allowed power tiers",
         check_cherry_pick_journal_integrity,
         False,  # blocking — silent journal gaps invalidate the era_stability_proxy substrate (Improvement 1 / Plan / Stage A)
+        False,
+    ),
+    (
+        "Triage-draft provenance: every drafts/*.yaml with a triage_provenance block declares source_validated_setup_strategy_id",
+        check_triage_provenance_completeness,
+        False,  # blocking — orphan triage drafts break the audit lineage back to canonical validated_setups (Improvement 3 / Stage C)
         False,
     ),
 ]  # end CHECKS

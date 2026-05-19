@@ -48,6 +48,24 @@
 #   - Not bias-free. Any operator who runs this on a self-curated lane list
 #     is the source of the bias, not the template.
 
+# OPTIONAL triage_provenance block (added 2026-05-19, Improvement 3):
+#   When this draft was produced by scripts/research/triage_validated_setups.py,
+#   the following block is REQUIRED and Check #165 enforces presence of
+#   source_validated_setup_strategy_id. Hand-authored preregs may omit this
+#   block entirely. Schema:
+#     triage_provenance:
+#       source: 'scripts/research/triage_validated_setups.py'
+#       source_validated_setup_strategy_id: '<canonical strategy_id from validated_setups>'  # REQUIRED
+#       rank_score: <float in [0.0, 1.0]>
+#       score_components:
+#         pooled_t_headroom: <float>
+#         n_adequacy: <float>
+#         oos_power_readiness: <float>
+#         era_stability: <float>
+#         non_artifact: <float>
+#       validated_setups_snapshot: { sample_size, expectancy_r, sharpe_ratio, years_tested, all_years_positive }
+#       canonical_oos_count: { n_oos, oos_power, holdout_floor }
+
 metadata:
   name: "<lane_slug>_fast_lane"
   purpose: "<one-line research question>"
