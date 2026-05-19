@@ -41,6 +41,7 @@ metadata:
   date_locked: "2026-04-23T00:00:00+10:00"
   holdout_date: "2026-01-01"
   total_expected_trials: 1
+  theory_grant: true
   research_question_type: "{research_question_type}"
 hypotheses:
   - id: 1
