@@ -13,12 +13,14 @@ Use this file for durable accepted decisions that should survive handoff churn.
   `screen:` block (lines 102-115). Closes Layer 1 of the 3-layer canonical-inline-copy
   hardening — this is the 4th confirmed instance of the
   `canonical-inline-copy-parity-bug-class` (see
-  `memory/feedback_canonical_inline_copy_parity_bug_class.md`). 8 mutation-probe
+  `memory/feedback_canonical_inline_copy_parity_bug_class.md`). 11 mutation-probe
   injection tests in `tests/test_pipeline/test_check_drift_fast_lane_promote_threshold_parity.py`
   cover: clean-state pass, missing-template fail-closed, per-constant drift for
-  T_KILL_FLOOR / T_PROMOTE_FLOOR / N_FLOOR / FIRE_MIN / FIRE_MAX (sibling
-  coverage per `regex-alternation-sibling-coverage`), and template-side amend
-  drift. Drift count 157 → 158. Layer 2 (`CANONICAL_INLINE_COPIES` meta-registry)
+  T_KILL_FLOOR / T_PROMOTE_FLOOR / EXPR_FLOOR / N_FLOOR / FIRE_MIN / FIRE_MAX
+  (sibling coverage per `regex-alternation-sibling-coverage`), template-side
+  amend drift, and null / non-numeric canonical-value fail-closed structural
+  probes. (Original count was 8; EXPR_FLOOR + null/non-numeric tests added in
+  the evidence-auditor follow-up.) Drift count 157 → 158. Layer 2 (`CANONICAL_INLINE_COPIES` meta-registry)
   + Layer 3 (PreToolUse hook flagging new inline literals) PARKED for fresh-context
   design proposal.
 

@@ -61,11 +61,12 @@ HEAVYWEIGHT_T_THRESHOLD_PROSE: str = (
     "Chordia 2018 verbatim Tier 1)"
 )
 
-# Allowlist of scope-block fields propagated into the heavyweight draft.
-# Explicit rather than dict(scope) wholesale: new fast-lane scope fields require
-# a conscious addition here, so theory_citation (field-presence-trap) cannot
-# silently leak into the heavyweight draft and flip the Chordia threshold.
-_ALLOWED_SCOPE_FIELDS: tuple[str, ...] = (
+# Required scope fields -- absence raises ValueError. Every field is consumed
+# downstream by ``primary_schema.family_cells`` or by the heavyweight Chordia
+# runner's strategy resolution. A typo in the source YAML ("filter_ttype" for
+# "filter_type") must FAIL LOUDLY, not silently drop and vanish into the
+# draft -- evidence-auditor 2026-05-19 finding.
+_REQUIRED_SCOPE_FIELDS: tuple[str, ...] = (
     "instrument",
     "strategy_id",
     "session",
@@ -75,8 +76,20 @@ _ALLOWED_SCOPE_FIELDS: tuple[str, ...] = (
     "rr_target",
     "direction",
     "filter_type",
+)
+
+# Optional scope fields -- propagated when present, silently absent when not.
+_OPTIONAL_SCOPE_FIELDS: tuple[str, ...] = (
     "filter_source",
     "out_of_scope",
+)
+
+# Full allowlist (required + optional). Unknown fields are silently dropped to
+# defend against the field-presence trap (theory_citation et al.). Required
+# fields raise on absence; unknown fields raise nothing -- the asymmetry is
+# deliberate and is the entire point of the fail-closed split.
+_ALLOWED_SCOPE_FIELDS: tuple[str, ...] = (
+    _REQUIRED_SCOPE_FIELDS + _OPTIONAL_SCOPE_FIELDS
 )
 
 # Methodology rules boilerplate. Each entry MUST correspond to a real RULE
@@ -178,6 +191,18 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
         flip after literature/power review.
     """
     scope = source.scope
+    missing_required = [
+        f for f in _REQUIRED_SCOPE_FIELDS if scope.get(f) in (None, "")
+    ]
+    if missing_required:
+        raise ValueError(
+            "fast-lane source scope is missing required field(s): "
+            f"{missing_required}. Source YAML: {source.source_yaml_rel}. "
+            "Every field is consumed downstream; a typo or omission must "
+            "fail loudly rather than vanish silently into the draft "
+            "(evidence-auditor 2026-05-19 finding; integrity-guardian "
+            "section 3 fail-closed)."
+        )
     strategy_id = scope["strategy_id"]
 
     methodology_application_defaults: dict[str, str] = {

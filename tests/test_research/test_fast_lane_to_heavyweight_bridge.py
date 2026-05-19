@@ -160,6 +160,50 @@ class TestBuildHeavyweightPrereg:
         assert scope["entry_model"] == "E1"
         assert scope["filter_type"] == "PD_CLEAR_LONG"
 
+    def test_missing_required_scope_field_raises(self, tmp_path):
+        """Fail-closed: missing required scope field MUST raise, not silently drop.
+
+        Evidence-auditor 2026-05-19 finding: prior implementation silently
+        dropped unlisted fields, including typos in required fields like
+        ``filter_ttype`` for ``filter_type``. A required-field omission must
+        fail loudly per integrity-guardian section 3.
+        """
+        import pytest
+
+        for required in (
+            "instrument",
+            "session",
+            "orb_minutes",
+            "entry_model",
+            "confirm_bars",
+            "rr_target",
+            "direction",
+            "filter_type",
+        ):
+            sub = tmp_path / required
+            sub.mkdir()
+            md, yml, hyp = _write_fast_lane_pair(sub)
+            payload = yaml.safe_load(yml.read_text(encoding="utf-8"))
+            del payload["scope"][required]
+            yml.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+            src = bridge.load_fast_lane_source(md, hypotheses_dir=hyp)
+            assert src is not None, f"source still loads with {required} absent"
+            with pytest.raises(ValueError, match=required):
+                bridge.build_heavyweight_prereg(src, today="2026-05-19")
+
+    def test_optional_scope_field_absence_does_not_raise(self, tmp_path):
+        """Optional fields (filter_source, out_of_scope) may be absent silently."""
+        md, yml, hyp = _write_fast_lane_pair(tmp_path)
+        payload = yaml.safe_load(yml.read_text(encoding="utf-8"))
+        payload["scope"].pop("filter_source", None)
+        payload["scope"].pop("out_of_scope", None)
+        yml.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+        src = bridge.load_fast_lane_source(md, hypotheses_dir=hyp)
+        assert src is not None
+        prereg = bridge.build_heavyweight_prereg(src, today="2026-05-19")
+        assert "filter_source" not in prereg["scope"]
+        assert "out_of_scope" not in prereg["scope"]
+
     def test_source_scope_theory_citation_does_NOT_leak(self, tmp_path):
         """Audit-fix regression: source scope theory_citation must not propagate.
 
