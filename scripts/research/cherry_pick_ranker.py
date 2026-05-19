@@ -74,6 +74,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PROMOTE_QUEUE = REPO_ROOT / "docs" / "runtime" / "promote_queue.yaml"
 RESULTS_DIR = REPO_ROOT / "docs" / "audit" / "results"
 RANKING_DIR = REPO_ROOT / "docs" / "runtime"
+JOURNAL_PATH = REPO_ROOT / "docs" / "runtime" / "cherry_pick_journal.yaml"
 
 # Canonical-inline-copy: HEAVYWEIGHT_T_THRESHOLD mirrors pre_registered_criteria.md
 # Criterion 4 no-theory threshold (Chordia 2018 verbatim Tier 1 at
@@ -449,6 +450,164 @@ def write_csv(ranked: list[RankedCandidate], out_path: Path) -> None:
             writer.writerow(_row_for(c, i))
 
 
+# ---------- Journal write path (Improvement 1) ----------
+
+
+def oos_power_tier_for(candidate: RankedCandidate) -> str:
+    """Categorical OOS power tier for journal storage.
+
+    Mirrors the OOS power floor doctrine in
+    ``.claude/rules/backtesting-methodology.md`` § RULE 3.3:
+
+    - ``NA_NO_OOS``           — no OOS row parsed from the result MD
+    - ``NA_N_BELOW_FLOOR``    — N_OOS < ``OOS_N_FLOOR`` (30)
+    - ``STATISTICALLY_USELESS`` — power < 0.50
+    - ``DIRECTIONAL_ONLY``      — 0.50 <= power < 0.80
+    - ``CAN_REFUTE``            — power >= 0.80
+
+    The power value is already in ``candidate.score.oos_power_readiness``;
+    this function only maps it back to the categorical tier so journal
+    consumers do not have to re-derive the cut points.
+    """
+    if candidate.oos_n == 0 and math.isnan(candidate.oos_expr):
+        return "NA_NO_OOS"
+    if candidate.oos_n < OOS_N_FLOOR:
+        return "NA_N_BELOW_FLOOR"
+    power = candidate.score.oos_power_readiness
+    if power >= 0.80:
+        return "CAN_REFUTE"
+    if power >= 0.50:
+        return "DIRECTIONAL_ONLY"
+    return "STATISTICALLY_USELESS"
+
+
+def _load_journal(journal_path: Path) -> dict[str, Any]:
+    """Load journal YAML. Returns minimal default doc if missing/empty.
+
+    Fail-closed on malformed YAML — append-only writers must not silently
+    drop history.
+    """
+    if not journal_path.exists():
+        return {"schema_version": 1, "entries": []}
+    text = journal_path.read_text(encoding="utf-8")
+    if not text.strip():
+        return {"schema_version": 1, "entries": []}
+    payload = yaml.safe_load(text)
+    if not isinstance(payload, dict):
+        raise ValueError(
+            f"Journal at {journal_path} is not a YAML mapping (got {type(payload).__name__})"
+        )
+    payload.setdefault("schema_version", 1)
+    entries = payload.get("entries")
+    if entries is None:
+        payload["entries"] = []
+    elif not isinstance(entries, list):
+        raise ValueError(
+            f"Journal entries field must be a list (got {type(entries).__name__})"
+        )
+    return payload
+
+
+def _next_iter(payload: dict[str, Any]) -> int:
+    """Next sequential iter number — max existing + 1, or 1 when empty."""
+    iters = [
+        int(e["iter"])
+        for e in payload.get("entries", [])
+        if isinstance(e, dict) and isinstance(e.get("iter"), int)
+    ]
+    return (max(iters) + 1) if iters else 1
+
+
+def build_journal_entry(
+    candidate: RankedCandidate,
+    *,
+    iter_num: int,
+    today: date,
+    bridge_draft_path: str | None = None,
+) -> dict[str, Any]:
+    """Construct one append-only journal entry from a ranked candidate.
+
+    Post-decision fields (heavyweight_verdict, t_observed_post_clustered_se,
+    lesson_label) are deliberately null — they get filled by
+    ``cherry_pick_journal_enricher.py`` when a matching heavyweight result MD
+    lands, or by hand-edit during a retrospective.
+    """
+    s = candidate.score
+    return {
+        "iter": iter_num,
+        "date": today.isoformat(),
+        "strategy_id": candidate.strategy_id,
+        "rank_score": round(candidate.total_score, 4),
+        "components": {
+            "deflation_headroom": round(s.deflation_headroom, 4),
+            "n_adequacy": round(s.n_adequacy, 4),
+            "oos_power_readiness": round(s.oos_power_readiness, 4),
+            "dir_match": round(s.dir_match, 4),
+            "non_artifact": round(s.non_artifact, 4),
+            "era_stability_proxy": round(s.era_stability_proxy, 4),
+        },
+        "pooled_t": (
+            None if math.isnan(candidate.pooled_t) else round(candidate.pooled_t, 4)
+        ),
+        "pooled_n": candidate.pooled_n,
+        "oos_n": candidate.oos_n,
+        "oos_power_tier": oos_power_tier_for(candidate),
+        "bridge_draft_path": bridge_draft_path,
+        "heavyweight_verdict": None,
+        "t_observed_post_clustered_se": None,
+        "lesson_label": None,
+    }
+
+
+def append_journal_entry(
+    journal_path: Path,
+    candidate: RankedCandidate,
+    *,
+    today: date | None = None,
+    bridge_draft_path: str | None = None,
+) -> dict[str, Any]:
+    """Append a single ranked-candidate entry to the journal YAML.
+
+    Duplicate-day guard: if the most recent entry already records this
+    ``strategy_id`` on ``today``, do NOT append (idempotent re-runs).
+    Returns the entry that landed (newly appended OR the existing duplicate).
+    """
+    t = today if today is not None else date.today()
+    payload = _load_journal(journal_path)
+    entries: list[dict[str, Any]] = payload["entries"]
+
+    # Idempotency: skip if same (strategy_id, date) already at tail.
+    # PyYAML auto-parses ISO dates into datetime.date; compare normalized.
+    t_iso = t.isoformat()
+    for e in reversed(entries):
+        if not isinstance(e, dict):
+            continue
+        if e.get("strategy_id") != candidate.strategy_id:
+            continue
+        existing_date = e.get("date")
+        existing_iso = (
+            existing_date.isoformat()
+            if isinstance(existing_date, date)
+            else str(existing_date)
+        )
+        if existing_iso == t_iso:
+            return e
+
+    new_entry = build_journal_entry(
+        candidate,
+        iter_num=_next_iter(payload),
+        today=t,
+        bridge_draft_path=bridge_draft_path,
+    )
+    entries.append(new_entry)
+    journal_path.parent.mkdir(parents=True, exist_ok=True)
+    journal_path.write_text(
+        yaml.safe_dump(payload, sort_keys=False, default_flow_style=False),
+        encoding="utf-8",
+    )
+    return new_entry
+
+
 def format_stdout_table(ranked: list[RankedCandidate], top_n: int) -> str:
     """Render a compact stdout table of top-N candidates."""
     if not ranked:
@@ -500,6 +659,31 @@ def _build_parser() -> argparse.ArgumentParser:
             "Default is dry-run (stdout only)."
         ),
     )
+    p.add_argument(
+        "--write-journal",
+        action="store_true",
+        help=(
+            "Append the top-ranked candidate to docs/runtime/cherry_pick_journal.yaml "
+            "(post-decision fields left null for the enricher to fill in). "
+            "Idempotent on (strategy_id, today) — re-running the same day is a no-op."
+        ),
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Force read-only mode — overrides --write / --write-journal. "
+            "Useful for smoke-testing the journal payload shape."
+        ),
+    )
+    p.add_argument(
+        "--journal",
+        type=Path,
+        default=JOURNAL_PATH,
+        help=(
+            "Path to cherry_pick_journal.yaml (default: docs/runtime/cherry_pick_journal.yaml)."
+        ),
+    )
     return p
 
 
@@ -508,11 +692,65 @@ def main(argv: list[str] | None = None) -> int:
     entries = _load_queue_entries(args.queue)
     ranked = rank_queue_entries(entries, results_dir=args.results_dir)
     print(format_stdout_table(ranked, args.top_n))
-    if args.write:
+    if args.write and not args.dry_run:
         out = RANKING_DIR / f"cherry_pick_ranking_{date.today().isoformat()}.csv"
         write_csv(ranked, out)
         rel = out.relative_to(REPO_ROOT) if out.is_relative_to(REPO_ROOT) else out
         print(f"\nWrote {rel}")
+    if args.write_journal:
+        if not ranked:
+            print("\nNo QUEUED candidates to journal.")
+        elif args.dry_run:
+            top = ranked[0]
+            today = date.today()
+            payload = _load_journal(args.journal)
+            # Honor the same idempotency rule the real append path enforces:
+            # if (strategy_id, today) is already at the tail, report as no-op.
+            today_iso = today.isoformat()
+
+            def _date_iso(e: dict[str, Any]) -> str:
+                d = e.get("date")
+                if isinstance(d, date):
+                    return d.isoformat()
+                return str(d)
+
+            tail_dup = next(
+                (
+                    e
+                    for e in reversed(payload.get("entries", []))
+                    if isinstance(e, dict)
+                    and e.get("strategy_id") == top.strategy_id
+                    and _date_iso(e) == today_iso
+                ),
+                None,
+            )
+            if tail_dup is not None:
+                print(
+                    f"\nDRY RUN — no-op: strategy_id={top.strategy_id} "
+                    f"already journalled today (iter={tail_dup.get('iter')})"
+                )
+            else:
+                preview = build_journal_entry(
+                    top, iter_num=_next_iter(payload), today=today
+                )
+                print(
+                    f"\nDRY RUN — would append iter={preview['iter']} "
+                    f"strategy_id={preview['strategy_id']} "
+                    f"rank_score={preview['rank_score']} "
+                    f"oos_power_tier={preview['oos_power_tier']}"
+                )
+        else:
+            top = ranked[0]
+            entry = append_journal_entry(args.journal, top)
+            rel = (
+                args.journal.relative_to(REPO_ROOT)
+                if args.journal.is_relative_to(REPO_ROOT)
+                else args.journal
+            )
+            print(
+                f"\nJournal append: iter={entry['iter']} "
+                f"strategy_id={entry['strategy_id']} -> {rel}"
+            )
     return 0
 
 

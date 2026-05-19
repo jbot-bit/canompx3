@@ -10535,6 +10535,196 @@ def check_canonical_inline_copies_have_parity_check() -> list[str]:
     return violations
 
 
+def check_cherry_pick_journal_integrity(
+    journal_path: Path | None = None,
+    queue_path: Path | None = None,
+) -> list[str]:
+    """Cherry-pick journal entry-integrity gate.
+
+    Every promote_queue.yaml entry that has been ESCALATED (``heavyweight_prereg``
+    is non-null, signalling the operator authored a heavyweight draft via the
+    fast_lane_to_heavyweight_bridge) MUST have a corresponding journal entry
+    for that ``strategy_id`` in ``docs/runtime/cherry_pick_journal.yaml``.
+
+    Rationale: the cherry-pick journal is the data substrate the ranker's
+    era_stability_proxy will eventually consume. If escalations land without
+    journal entries, the substrate develops silent gaps and the eventual
+    proxy-weight calibration is invalidated. Caught early via this check.
+
+    Additional structural assertions:
+      (a) Journal entries have monotonically-increasing ``iter`` starting at 1
+          (append-only contract — no insertions, no deletions).
+      (b) Required fields are present per entry (``iter``, ``date``,
+          ``strategy_id``, ``rank_score``, ``components``, ``pooled_t``,
+          ``pooled_n``, ``oos_n``, ``oos_power_tier``).
+      (c) ``oos_power_tier`` is one of the allowed categorical values.
+
+    Fail-closed when files are missing or malformed.
+
+    Parameters
+    ----------
+    journal_path : Path | None
+        Override the journal path (test seam).
+    queue_path : Path | None
+        Override the promote queue path (test seam).
+    """
+    j_path = (
+        journal_path
+        if journal_path is not None
+        else PROJECT_ROOT / "docs" / "runtime" / "cherry_pick_journal.yaml"
+    )
+    q_path = (
+        queue_path
+        if queue_path is not None
+        else PROJECT_ROOT / "docs" / "runtime" / "promote_queue.yaml"
+    )
+
+    if not j_path.exists():
+        return [
+            "check_cherry_pick_journal_integrity: journal missing at "
+            f"{j_path} (cherry_pick_journal.yaml is required substrate -- "
+            "create it via scripts/research/cherry_pick_ranker.py --write-journal "
+            "or seed an empty schema_version: 1, entries: [] file)"
+        ]
+
+    try:
+        import yaml as _yaml
+    except Exception as exc:
+        return [
+            "check_cherry_pick_journal_integrity: pyyaml import failed: "
+            f"{type(exc).__name__}: {exc}"
+        ]
+
+    try:
+        journal = _yaml.safe_load(j_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [
+            f"check_cherry_pick_journal_integrity: failed to parse {j_path.name}: "
+            f"{type(exc).__name__}: {exc}"
+        ]
+
+    if not isinstance(journal, dict):
+        return [
+            "check_cherry_pick_journal_integrity: journal payload is not a YAML "
+            f"mapping (got {type(journal).__name__})"
+        ]
+
+    entries = journal.get("entries")
+    if not isinstance(entries, list):
+        return [
+            "check_cherry_pick_journal_integrity: journal `entries` field must "
+            f"be a list (got {type(entries).__name__})"
+        ]
+
+    violations: list[str] = []
+
+    ALLOWED_TIERS = {
+        "CAN_REFUTE",
+        "DIRECTIONAL_ONLY",
+        "STATISTICALLY_USELESS",
+        "NA_NO_OOS",
+        "NA_N_BELOW_FLOOR",
+    }
+    REQUIRED_FIELDS = (
+        "iter",
+        "date",
+        "strategy_id",
+        "rank_score",
+        "components",
+        "pooled_n",
+        "oos_n",
+        "oos_power_tier",
+    )
+
+    prev_iter = 0
+    seen_strategy_ids: set[str] = set()
+    for idx, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            violations.append(
+                f"check_cherry_pick_journal_integrity: entry[{idx}] is not a "
+                f"YAML mapping (got {type(entry).__name__})"
+            )
+            continue
+
+        for field in REQUIRED_FIELDS:
+            if field not in entry:
+                violations.append(
+                    f"check_cherry_pick_journal_integrity: entry[{idx}] missing "
+                    f"required field {field!r}"
+                )
+
+        cur_iter = entry.get("iter")
+        if not isinstance(cur_iter, int):
+            violations.append(
+                f"check_cherry_pick_journal_integrity: entry[{idx}] iter is not "
+                f"an int (got {type(cur_iter).__name__})"
+            )
+        elif cur_iter != prev_iter + 1:
+            violations.append(
+                f"check_cherry_pick_journal_integrity: entry[{idx}] iter={cur_iter} "
+                f"breaks monotonic append-only contract (expected {prev_iter + 1})"
+            )
+        if isinstance(cur_iter, int):
+            prev_iter = cur_iter
+
+        tier = entry.get("oos_power_tier")
+        if isinstance(tier, str) and tier not in ALLOWED_TIERS:
+            violations.append(
+                f"check_cherry_pick_journal_integrity: entry[{idx}] "
+                f"oos_power_tier={tier!r} is not one of "
+                f"{sorted(ALLOWED_TIERS)} "
+                "(see backtesting-methodology.md § RULE 3.3 + ranker oos_power_tier_for)"
+            )
+
+        sid = entry.get("strategy_id")
+        if isinstance(sid, str):
+            seen_strategy_ids.add(sid)
+
+    if not q_path.exists():
+        # No promote_queue is acceptable on a fresh tree -- skip the escalation
+        # cross-check rather than fail. The integrity assertions above still apply.
+        return violations
+
+    try:
+        queue = _yaml.safe_load(q_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        violations.append(
+            f"check_cherry_pick_journal_integrity: failed to parse {q_path.name}: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return violations
+
+    if not isinstance(queue, dict):
+        return violations
+
+    queue_entries = queue.get("entries")
+    if not isinstance(queue_entries, list):
+        return violations
+
+    # Cross-check: escalated promote-queue rows (heavyweight_prereg set) must
+    # have a journal entry. REVOKED, PARKED, and plain-QUEUED rows are exempt
+    # -- they have not yet flowed through the ranker.
+    for idx, qe in enumerate(queue_entries):
+        if not isinstance(qe, dict):
+            continue
+        hp = qe.get("heavyweight_prereg")
+        if not hp:
+            continue
+        sid = qe.get("strategy_id")
+        if not isinstance(sid, str):
+            continue
+        if sid not in seen_strategy_ids:
+            violations.append(
+                f"check_cherry_pick_journal_integrity: promote_queue entry[{idx}] "
+                f"strategy_id={sid!r} has heavyweight_prereg={hp!r} but no matching "
+                "journal entry -- escalations must journal "
+                "(run scripts/research/cherry_pick_ranker.py --write-journal "
+                "before bridging to heavyweight, or backfill the entry by hand)"
+            )
+
+    return violations
+
+
 CHECKS = [
     (
         "Hardcoded 'MGC' SQL literals in generic pipeline code",
@@ -11197,6 +11387,12 @@ CHECKS = [
         "Canonical-inline-copy registry: every InlineCopyPair has a live parity check + sibling-coverage tests (Layer 2 meta-check)",
         check_canonical_inline_copies_have_parity_check,
         False,  # blocking — an orphan registry entry means a class-pattern fix has silently rotted
+        False,
+    ),
+    (
+        "Cherry-pick journal integrity: escalated promote_queue rows have journal entries; entries are append-only monotonic with allowed power tiers",
+        check_cherry_pick_journal_integrity,
+        False,  # blocking — silent journal gaps invalidate the era_stability_proxy substrate (Improvement 1 / Plan / Stage A)
         False,
     ),
 ]  # end CHECKS

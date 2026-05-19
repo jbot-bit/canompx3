@@ -1,0 +1,59 @@
+# Cherry-pick research loop — structured journal
+#
+# Machine-readable substrate companion to docs/runtime/cherry_pick_journal.md.
+# Schema:
+#   iter:                  sequential int, ascending, no gaps
+#   date:                  ISO date Brisbane the ranker scored the candidate
+#   strategy_id:           canonical strategy_id from promote_queue.yaml
+#   rank_score:            total score from cherry_pick_ranker (0.0-1.0)
+#   components:            full per-component breakdown for audit lineage
+#                          (deflation_headroom, n_adequacy, oos_power_readiness,
+#                          dir_match, non_artifact, era_stability_proxy)
+#   pooled_t:              pooled IS t-stat (pre-clustered-SE deflation)
+#   pooled_n:              pooled IS trade count
+#   oos_n:                 OOS trade count parsed from result MD (0 = NaN row)
+#   oos_power_tier:        CAN_REFUTE | DIRECTIONAL_ONLY | STATISTICALLY_USELESS
+#                          | NA_NO_OOS | NA_N_BELOW_FLOOR
+#   bridge_draft_path:     path under docs/audit/hypotheses/drafts/ when the
+#                          bridge generated a heavyweight draft; null otherwise
+#   heavyweight_verdict:   filled by cherry_pick_journal_enricher.py once a
+#                          heavyweight result MD matches the strategy_id;
+#                          one of PASS_CHORDIA | FAIL_STRICT | PARK |
+#                          DEFERRED_NOT_RUN | null
+#   t_observed_post_clustered_se: clustered-SE t-stat from heavyweight result
+#                          MD when verdict resolves; null otherwise
+#   lesson_label:          short categorical lesson (e.g. UNDERPOWERED_OOS,
+#                          T_DEFLATION_DROPPED, ARTIFACT_REVOKED) — populated
+#                          by enricher or by hand-edit during retrospectives
+#
+# This file is append-only by writers. Edits to existing entries are limited
+# to the four post-decision fields (heavyweight_verdict,
+# t_observed_post_clustered_se, lesson_label) and any explicit bridge_draft_path
+# backfill. Drift check #164 enforces basic integrity.
+#
+# Authority:
+#   - Ranker:   scripts/research/cherry_pick_ranker.py (--write-journal)
+#   - Enricher: scripts/research/cherry_pick_journal_enricher.py
+#   - Doctrine: .claude/rules/backtesting-methodology.md § RULE 3.3
+#   - Plan:     C:/Users/joshd/.claude/plans/or-linknin-them-togehr-delegated-gizmo.md
+schema_version: 1
+entries:
+  - iter: 1
+    date: 2026-05-19
+    strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    rank_score: 0.250
+    components:
+      deflation_headroom: 0.0
+      n_adequacy: 1.0
+      oos_power_readiness: 0.0
+      dir_match: 0.0
+      non_artifact: 1.0
+      era_stability_proxy: 0.0
+    pooled_t: 3.064
+    pooled_n: 226
+    oos_n: 14
+    oos_power_tier: NA_N_BELOW_FLOOR
+    bridge_draft_path: docs/audit/hypotheses/drafts/2026-05-19-mnq-us-data-1000-e1-rr1-0-cb2-pd-clear-long-o30-chordia-heavyweight-v1.draft.yaml
+    heavyweight_verdict: DEFERRED_NOT_RUN
+    t_observed_post_clustered_se: null
+    lesson_label: UNDERPOWERED_OOS_SIGN_FLIP
