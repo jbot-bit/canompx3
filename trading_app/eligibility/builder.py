@@ -716,7 +716,10 @@ def _derive_overall_status(
     has_pending = False
 
     for c in conditions:
-        if c.status == ConditionStatus.DATA_MISSING:
+        if c.status in (ConditionStatus.DATA_MISSING, ConditionStatus.RULES_NOT_LOADED):
+            # RULES_NOT_LOADED means the overlay system is unavailable — treat as
+            # DATA_MISSING so the report fails closed rather than silently ELIGIBLE.
+            # Fail-closed rule: integrity-guardian.md § 3, institutional-rigor.md § 6.
             has_data_missing = True
         elif c.status == ConditionStatus.FAIL and c.category in (
             ConditionCategory.PRE_SESSION,

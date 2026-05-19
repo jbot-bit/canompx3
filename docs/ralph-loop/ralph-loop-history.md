@@ -1994,3 +1994,16 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file (outcome_builder.py)
 - Verification: PASS — 36/36 test_outcome_builder.py; 122/122 drift checks; 341 pre-commit tests
 - Commit: 9e23de0c
+
+---
+
+## Iteration 186 — 2026-05-19
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/strategy_discovery.py:1155
+- Finding: run_discovery() had instrument='MGC' hardcoded default — silent wrong-instrument path for any future caller omitting the argument. Same class as OB-185 (iter 185). Violates integrity-guardian.md § 2 / institutional-rigor.md § 10.
+- Doctrine cited: integrity-guardian.md § 2 / institutional-rigor.md § 10 (canonical sources — instrument names must never be hardcoded as defaults)
+- Action: Replaced instrument='MGC' default with instrument: str | None = None + ValueError guard at function entry. All 8+ production call sites already pass instrument= explicitly; no behavior change for current callers. Also regenerated import_centrality.json (was 24 days stale).
+- Blast radius: 1 file (strategy_discovery.py)
+- Verification: PASS — 55/55 test_strategy_discovery.py non-Phase4 tests; 145 drift checks; 8 Phase4 tests pre-existing failures (Amendment 3.3 theory_grant fixture gap, orthogonal)
+- Commit: d6c6c3f6
