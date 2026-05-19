@@ -1152,7 +1152,7 @@ def _inject_hypothesis_filters(
 
 def run_discovery(
     db_path: Path | None = None,
-    instrument: str = "MGC",
+    instrument: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
     orb_minutes: int = 5,
@@ -1223,6 +1223,11 @@ def run_discovery(
 
     holdout_date = enforce_holdout_date(holdout_date, override_token=unlock_holdout)
 
+    if instrument is None:
+        raise ValueError(
+            "run_discovery: instrument must be specified explicitly (e.g. 'MNQ', 'MES', 'MGC'). "
+            "No default is provided to prevent silently running against the wrong instrument."
+        )
     if dst_regime not in (None, "winter", "summer"):
         raise ValueError(f"dst_regime must be 'winter', 'summer', or None; got {dst_regime!r}")
     if db_path is None:

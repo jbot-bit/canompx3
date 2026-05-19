@@ -1,5 +1,5 @@
 {
-  "generated": "2026-04-25",
+  "generated": "2026-05-19",
   "files": {
     "pipeline/__init__.py": {
       "importers": 2,
@@ -7,7 +7,7 @@
       "centrality": "medium"
     },
     "pipeline/asset_configs.py": {
-      "importers": 70,
+      "importers": 82,
       "imports": 3,
       "centrality": "critical"
     },
@@ -17,9 +17,14 @@
       "centrality": "low"
     },
     "pipeline/audit_log.py": {
-      "importers": 3,
+      "importers": 4,
       "imports": 7,
       "centrality": "medium"
+    },
+    "pipeline/backfill_pit_range_atr.py": {
+      "importers": 1,
+      "imports": 9,
+      "centrality": "low"
     },
     "pipeline/build_bars_5m.py": {
       "importers": 0,
@@ -36,6 +41,11 @@
       "imports": 1,
       "centrality": "medium"
     },
+    "pipeline/canonical_inline_copies.py": {
+      "importers": 1,
+      "imports": 2,
+      "centrality": "low"
+    },
     "pipeline/check_db.py": {
       "importers": 0,
       "imports": 4,
@@ -43,7 +53,12 @@
     },
     "pipeline/check_drift.py": {
       "importers": 0,
-      "imports": 4,
+      "imports": 7,
+      "centrality": "low"
+    },
+    "pipeline/check_drift_crg_helpers.py": {
+      "importers": 1,
+      "imports": 3,
       "centrality": "low"
     },
     "pipeline/cost_model.py": {
@@ -62,19 +77,19 @@
       "centrality": "low"
     },
     "pipeline/data_era.py": {
-      "importers": 1,
+      "importers": 2,
       "imports": 4,
-      "centrality": "low"
+      "centrality": "medium"
     },
     "pipeline/db_config.py": {
-      "importers": 41,
+      "importers": 44,
       "imports": 2,
       "centrality": "critical"
     },
     "pipeline/db_contracts.py": {
-      "importers": 4,
+      "importers": 6,
       "imports": 1,
-      "centrality": "medium"
+      "centrality": "high"
     },
     "pipeline/db_lock.py": {
       "importers": 1,
@@ -82,7 +97,7 @@
       "centrality": "low"
     },
     "pipeline/dst.py": {
-      "importers": 34,
+      "importers": 40,
       "imports": 2,
       "centrality": "critical"
     },
@@ -122,7 +137,7 @@
       "centrality": "critical"
     },
     "pipeline/log.py": {
-      "importers": 24,
+      "importers": 25,
       "imports": 2,
       "centrality": "critical"
     },
@@ -132,8 +147,8 @@
       "centrality": "medium"
     },
     "pipeline/paths.py": {
-      "importers": 192,
-      "imports": 3,
+      "importers": 220,
+      "imports": 5,
       "centrality": "critical"
     },
     "pipeline/run_full_pipeline.py": {
@@ -162,14 +177,14 @@
       "centrality": "medium"
     },
     "pipeline/system_brief.py": {
-      "importers": 4,
+      "importers": 6,
       "imports": 7,
-      "centrality": "medium"
+      "centrality": "high"
     },
     "pipeline/system_context.py": {
-      "importers": 8,
-      "imports": 15,
-      "centrality": "high"
+      "importers": 10,
+      "imports": 16,
+      "centrality": "critical"
     },
     "pipeline/trace.py": {
       "importers": 1,
@@ -276,14 +291,29 @@
       "imports": 8,
       "centrality": "low"
     },
+    "scripts/cron/__init__.py": {
+      "importers": 0,
+      "imports": 0,
+      "centrality": "low"
+    },
+    "scripts/cron/lhp_weekly.py": {
+      "importers": 0,
+      "imports": 7,
+      "centrality": "low"
+    },
     "scripts/databento_backfill.py": {
       "importers": 0,
       "imports": 10,
       "centrality": "low"
     },
     "scripts/databento_daily.py": {
-      "importers": 0,
+      "importers": 1,
       "imports": 11,
+      "centrality": "low"
+    },
+    "scripts/databento_l2_snapshot.py": {
+      "importers": 0,
+      "imports": 12,
       "centrality": "low"
     },
     "scripts/e2e_sim_test.py": {
@@ -306,9 +336,14 @@
       "imports": 3,
       "centrality": "low"
     },
+    "scripts/infra/codex_doctor.py": {
+      "importers": 0,
+      "imports": 7,
+      "centrality": "low"
+    },
     "scripts/infra/codex_local_env.py": {
       "importers": 0,
-      "imports": 6,
+      "imports": 8,
       "centrality": "low"
     },
     "scripts/infra/daily_paper_run.py": {
@@ -511,6 +546,21 @@
       "imports": 8,
       "centrality": "low"
     },
+    "scripts/research/cherry_pick_grounder.py": {
+      "importers": 0,
+      "imports": 9,
+      "centrality": "low"
+    },
+    "scripts/research/cherry_pick_journal_enricher.py": {
+      "importers": 0,
+      "imports": 8,
+      "centrality": "low"
+    },
+    "scripts/research/cherry_pick_ranker.py": {
+      "importers": 0,
+      "imports": 11,
+      "centrality": "low"
+    },
     "scripts/research/cross_session_context_audit.py": {
       "importers": 0,
       "imports": 10,
@@ -546,6 +596,16 @@
       "imports": 10,
       "centrality": "low"
     },
+    "scripts/research/fast_lane_promote_queue.py": {
+      "importers": 2,
+      "imports": 10,
+      "centrality": "medium"
+    },
+    "scripts/research/fast_lane_to_heavyweight_bridge.py": {
+      "importers": 0,
+      "imports": 8,
+      "centrality": "low"
+    },
     "scripts/research/gap_close_position_test.py": {
       "importers": 0,
       "imports": 8,
@@ -559,6 +619,51 @@
     "scripts/research/gc_to_mgc_cross_validation.py": {
       "importers": 0,
       "imports": 7,
+      "centrality": "low"
+    },
+    "scripts/research/lhp/__init__.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/research/lhp/adjacency.py": {
+      "importers": 2,
+      "imports": 3,
+      "centrality": "medium"
+    },
+    "scripts/research/lhp/graveyard.py": {
+      "importers": 2,
+      "imports": 6,
+      "centrality": "medium"
+    },
+    "scripts/research/lhp/literature_index.py": {
+      "importers": 3,
+      "imports": 5,
+      "centrality": "medium"
+    },
+    "scripts/research/lhp/llm_client.py": {
+      "importers": 2,
+      "imports": 4,
+      "centrality": "medium"
+    },
+    "scripts/research/lhp/neighbor_scan.py": {
+      "importers": 1,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "scripts/research/lhp/static_checks.py": {
+      "importers": 1,
+      "imports": 9,
+      "centrality": "low"
+    },
+    "scripts/research/lhp/yaml_emitter.py": {
+      "importers": 1,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "scripts/research/llm_hypothesis_proposer.py": {
+      "importers": 0,
+      "imports": 10,
       "centrality": "low"
     },
     "scripts/research/per_session_bear_short_test.py": {
@@ -601,6 +706,16 @@
       "imports": 10,
       "centrality": "low"
     },
+    "scripts/research/triage_validated_setups.py": {
+      "importers": 0,
+      "imports": 9,
+      "centrality": "low"
+    },
+    "scripts/research/verify_harris_quotes.py": {
+      "importers": 0,
+      "imports": 6,
+      "centrality": "low"
+    },
     "scripts/research/wave4_feature_audit.py": {
       "importers": 0,
       "imports": 6,
@@ -638,7 +753,7 @@
     },
     "scripts/run_live_session.py": {
       "importers": 0,
-      "imports": 7,
+      "imports": 11,
       "centrality": "low"
     },
     "scripts/run_webhook_server.py": {
@@ -717,8 +832,28 @@
       "centrality": "low"
     },
     "scripts/tools/__init__.py": {
-      "importers": 1,
+      "importers": 2,
       "imports": 0,
+      "centrality": "medium"
+    },
+    "scripts/tools/adversarial_stress_gate.py": {
+      "importers": 0,
+      "imports": 15,
+      "centrality": "low"
+    },
+    "scripts/tools/agent_control_plane_inventory.py": {
+      "importers": 0,
+      "imports": 8,
+      "centrality": "low"
+    },
+    "scripts/tools/allocator_gate_audit.py": {
+      "importers": 0,
+      "imports": 12,
+      "centrality": "low"
+    },
+    "scripts/tools/ask.py": {
+      "importers": 0,
+      "imports": 13,
       "centrality": "low"
     },
     "scripts/tools/assert_rebuild.py": {
@@ -751,6 +886,11 @@
       "imports": 4,
       "centrality": "low"
     },
+    "scripts/tools/backfill_deployability_evidence.py": {
+      "importers": 0,
+      "imports": 13,
+      "centrality": "low"
+    },
     "scripts/tools/backfill_dollar_columns.py": {
       "importers": 0,
       "imports": 6,
@@ -758,7 +898,7 @@
     },
     "scripts/tools/backfill_garch.py": {
       "importers": 0,
-      "imports": 6,
+      "imports": 7,
       "centrality": "low"
     },
     "scripts/tools/backtest_1100_early_exit.py": {
@@ -776,7 +916,12 @@
       "imports": 8,
       "centrality": "low"
     },
-    "scripts/tools/bias_grounding_guard.py": {
+    "scripts/tools/backup_gold_db.py": {
+      "importers": 0,
+      "imports": 8,
+      "centrality": "low"
+    },
+    "scripts/tools/broker_handshake_check.py": {
       "importers": 0,
       "imports": 6,
       "centrality": "low"
@@ -784,6 +929,11 @@
     "scripts/tools/build_edge_families.py": {
       "importers": 0,
       "imports": 10,
+      "centrality": "low"
+    },
+    "scripts/tools/build_evidence_pack.py": {
+      "importers": 0,
+      "imports": 11,
       "centrality": "low"
     },
     "scripts/tools/build_mes_outcomes_fast.py": {
@@ -814,6 +964,16 @@
     "scripts/tools/check_kill_criteria.py": {
       "importers": 0,
       "imports": 7,
+      "centrality": "low"
+    },
+    "scripts/tools/check_or_credits.py": {
+      "importers": 0,
+      "imports": 8,
+      "centrality": "low"
+    },
+    "scripts/tools/check_referenced_paths.py": {
+      "importers": 0,
+      "imports": 4,
       "centrality": "low"
     },
     "scripts/tools/check_regime.py": {
@@ -857,13 +1017,28 @@
       "centrality": "low"
     },
     "scripts/tools/context_views.py": {
-      "importers": 1,
+      "importers": 4,
       "imports": 14,
-      "centrality": "low"
+      "centrality": "medium"
     },
     "scripts/tools/convert_connections.py": {
       "importers": 0,
       "imports": 3,
+      "centrality": "low"
+    },
+    "scripts/tools/criterion_ladder_check.py": {
+      "importers": 0,
+      "imports": 6,
+      "centrality": "low"
+    },
+    "scripts/tools/deployable_shelf_gap.py": {
+      "importers": 0,
+      "imports": 18,
+      "centrality": "low"
+    },
+    "scripts/tools/deployment_coverage_audit.py": {
+      "importers": 0,
+      "imports": 10,
       "centrality": "low"
     },
     "scripts/tools/design_max_profiles.py": {
@@ -874,6 +1049,36 @@
     "scripts/tools/detect_volume_spikes.py": {
       "importers": 0,
       "imports": 10,
+      "centrality": "low"
+    },
+    "scripts/tools/estimate_k_budget.py": {
+      "importers": 2,
+      "imports": 9,
+      "centrality": "medium"
+    },
+    "scripts/tools/eval_openrouter_profiles.py": {
+      "importers": 0,
+      "imports": 13,
+      "centrality": "low"
+    },
+    "scripts/tools/evidence_pack/__init__.py": {
+      "importers": 0,
+      "imports": 1,
+      "centrality": "low"
+    },
+    "scripts/tools/evidence_pack/gates.py": {
+      "importers": 0,
+      "imports": 3,
+      "centrality": "low"
+    },
+    "scripts/tools/evidence_pack/manifest.py": {
+      "importers": 0,
+      "imports": 4,
+      "centrality": "low"
+    },
+    "scripts/tools/evidence_pack/renderers.py": {
+      "importers": 0,
+      "imports": 2,
       "centrality": "low"
     },
     "scripts/tools/explore.py": {
@@ -902,6 +1107,11 @@
       "centrality": "low"
     },
     "scripts/tools/freeze_q4_band_breakpoints.py": {
+      "importers": 0,
+      "imports": 8,
+      "centrality": "low"
+    },
+    "scripts/tools/full_shelf_deployability_audit.py": {
       "importers": 0,
       "imports": 8,
       "centrality": "low"
@@ -936,6 +1146,11 @@
       "imports": 17,
       "centrality": "low"
     },
+    "scripts/tools/go_portal.py": {
+      "importers": 0,
+      "imports": 12,
+      "centrality": "low"
+    },
     "scripts/tools/hypothesis_test.py": {
       "importers": 0,
       "imports": 5,
@@ -944,6 +1159,16 @@
     "scripts/tools/import_graph.py": {
       "importers": 0,
       "imports": 7,
+      "centrality": "low"
+    },
+    "scripts/tools/list_stale_active_docs.py": {
+      "importers": 0,
+      "imports": 5,
+      "centrality": "low"
+    },
+    "scripts/tools/live_readiness_report.py": {
+      "importers": 1,
+      "imports": 13,
       "centrality": "low"
     },
     "scripts/tools/m25_audit.py": {
@@ -994,6 +1219,11 @@
     "scripts/tools/migrate_session_names.py": {
       "importers": 0,
       "imports": 7,
+      "centrality": "low"
+    },
+    "scripts/tools/minbtl_retro_report.py": {
+      "importers": 1,
+      "imports": 5,
       "centrality": "low"
     },
     "scripts/tools/monitor_q4_band_shadow.py": {
@@ -1067,7 +1297,7 @@
       "centrality": "low"
     },
     "scripts/tools/project_pulse.py": {
-      "importers": 2,
+      "importers": 3,
       "imports": 14,
       "centrality": "medium"
     },
@@ -1111,6 +1341,11 @@
       "imports": 11,
       "centrality": "low"
     },
+    "scripts/tools/render_ai_research_packet.py": {
+      "importers": 0,
+      "imports": 10,
+      "centrality": "low"
+    },
     "scripts/tools/render_context_catalog.py": {
       "importers": 0,
       "imports": 6,
@@ -1120,6 +1355,16 @@
       "importers": 0,
       "imports": 3,
       "centrality": "low"
+    },
+    "scripts/tools/repo_state_mcp_server.py": {
+      "importers": 0,
+      "imports": 5,
+      "centrality": "low"
+    },
+    "scripts/tools/research_catalog_mcp_server.py": {
+      "importers": 2,
+      "imports": 6,
+      "centrality": "medium"
     },
     "scripts/tools/research_claim_validator.py": {
       "importers": 0,
@@ -1132,6 +1377,16 @@
       "centrality": "low"
     },
     "scripts/tools/rr_selection_analysis.py": {
+      "importers": 0,
+      "imports": 8,
+      "centrality": "low"
+    },
+    "scripts/tools/run_ai_research_task.py": {
+      "importers": 0,
+      "imports": 11,
+      "centrality": "low"
+    },
+    "scripts/tools/run_crg_eval.py": {
       "importers": 0,
       "imports": 8,
       "centrality": "low"
@@ -1161,6 +1416,11 @@
       "imports": 11,
       "centrality": "low"
     },
+    "scripts/tools/simple_mcp_stdio.py": {
+      "importers": 3,
+      "imports": 6,
+      "centrality": "medium"
+    },
     "scripts/tools/skill_scorer.py": {
       "importers": 0,
       "imports": 4,
@@ -1173,6 +1433,11 @@
     },
     "scripts/tools/stale_doc_scanner.py": {
       "importers": 0,
+      "imports": 7,
+      "centrality": "low"
+    },
+    "scripts/tools/strategy_lab_mcp_server.py": {
+      "importers": 1,
       "imports": 7,
       "centrality": "low"
     },
@@ -1204,6 +1469,11 @@
     "scripts/tools/task_route_packet.py": {
       "importers": 0,
       "imports": 9,
+      "centrality": "low"
+    },
+    "scripts/tools/token_hygiene_report.py": {
+      "importers": 0,
+      "imports": 5,
       "centrality": "low"
     },
     "scripts/tools/trade_matcher.py": {
@@ -1243,7 +1513,7 @@
     },
     "scripts/tools/wsl_mount_guard.py": {
       "importers": 0,
-      "imports": 7,
+      "imports": 8,
       "centrality": "low"
     },
     "scripts/tools/zero_context_audit.py": {
@@ -1287,9 +1557,9 @@
       "centrality": "medium"
     },
     "trading_app/account_hwm_tracker.py": {
-      "importers": 1,
-      "imports": 7,
-      "centrality": "low"
+      "importers": 3,
+      "imports": 9,
+      "centrality": "medium"
     },
     "trading_app/account_survival.py": {
       "importers": 2,
@@ -1302,9 +1572,9 @@
       "centrality": "low"
     },
     "trading_app/ai/claude_client.py": {
-      "importers": 3,
+      "importers": 5,
       "imports": 3,
-      "centrality": "medium"
+      "centrality": "high"
     },
     "trading_app/ai/cli.py": {
       "importers": 0,
@@ -1312,7 +1582,7 @@
       "centrality": "low"
     },
     "trading_app/ai/corpus.py": {
-      "importers": 2,
+      "importers": 4,
       "imports": 3,
       "centrality": "medium"
     },
@@ -1321,10 +1591,30 @@
       "imports": 6,
       "centrality": "low"
     },
+    "trading_app/ai/openrouter_runtime.py": {
+      "importers": 3,
+      "imports": 16,
+      "centrality": "medium"
+    },
+    "trading_app/ai/provider_registry.py": {
+      "importers": 6,
+      "imports": 5,
+      "centrality": "high"
+    },
     "trading_app/ai/query_agent.py": {
       "importers": 1,
       "imports": 9,
       "centrality": "low"
+    },
+    "trading_app/ai/research_packet.py": {
+      "importers": 3,
+      "imports": 12,
+      "centrality": "medium"
+    },
+    "trading_app/ai/schema_registry.py": {
+      "importers": 2,
+      "imports": 3,
+      "centrality": "medium"
     },
     "trading_app/ai/sql_adapter.py": {
       "importers": 5,
@@ -1334,6 +1624,11 @@
     "trading_app/ai/strategy_matcher.py": {
       "importers": 0,
       "imports": 6,
+      "centrality": "low"
+    },
+    "trading_app/allocation_promotion.py": {
+      "importers": 0,
+      "imports": 5,
       "centrality": "low"
     },
     "trading_app/analysis/__init__.py": {
@@ -1357,9 +1652,9 @@
       "centrality": "low"
     },
     "trading_app/chordia.py": {
-      "importers": 0,
-      "imports": 2,
-      "centrality": "low"
+      "importers": 4,
+      "imports": 7,
+      "centrality": "medium"
     },
     "trading_app/conditional_overlays.py": {
       "importers": 2,
@@ -1367,7 +1662,7 @@
       "centrality": "medium"
     },
     "trading_app/config.py": {
-      "importers": 63,
+      "importers": 65,
       "imports": 9,
       "centrality": "critical"
     },
@@ -1378,13 +1673,23 @@
     },
     "trading_app/db_manager.py": {
       "importers": 13,
-      "imports": 6,
+      "imports": 7,
       "centrality": "critical"
     },
-    "trading_app/derived_state.py": {
+    "trading_app/deployability.py": {
       "importers": 4,
+      "imports": 19,
+      "centrality": "medium"
+    },
+    "trading_app/deployability_state.py": {
+      "importers": 2,
       "imports": 10,
       "centrality": "medium"
+    },
+    "trading_app/derived_state.py": {
+      "importers": 5,
+      "imports": 10,
+      "centrality": "high"
     },
     "trading_app/dsr.py": {
       "importers": 1,
@@ -1402,9 +1707,9 @@
       "centrality": "low"
     },
     "trading_app/eligibility/builder.py": {
-      "importers": 3,
-      "imports": 7,
-      "centrality": "medium"
+      "importers": 6,
+      "imports": 8,
+      "centrality": "high"
     },
     "trading_app/eligibility/types.py": {
       "importers": 2,
@@ -1427,19 +1732,19 @@
       "centrality": "low"
     },
     "trading_app/holdout_policy.py": {
-      "importers": 10,
+      "importers": 14,
       "imports": 3,
       "centrality": "critical"
     },
     "trading_app/hypothesis_loader.py": {
-      "importers": 5,
+      "importers": 6,
       "imports": 8,
       "centrality": "high"
     },
     "trading_app/lane_allocator.py": {
-      "importers": 4,
-      "imports": 12,
-      "centrality": "medium"
+      "importers": 7,
+      "imports": 14,
+      "centrality": "high"
     },
     "trading_app/lane_correlation.py": {
       "importers": 2,
@@ -1447,13 +1752,13 @@
       "centrality": "medium"
     },
     "trading_app/lane_ctl.py": {
-      "importers": 3,
+      "importers": 4,
       "imports": 6,
       "centrality": "medium"
     },
     "trading_app/lifecycle_state.py": {
-      "importers": 5,
-      "imports": 12,
+      "importers": 7,
+      "imports": 13,
       "centrality": "high"
     },
     "trading_app/live/__init__.py": {
@@ -1478,7 +1783,7 @@
     },
     "trading_app/live/bot_dashboard.py": {
       "importers": 1,
-      "imports": 22,
+      "imports": 29,
       "centrality": "low"
     },
     "trading_app/live/bot_state.py": {
@@ -1492,19 +1797,14 @@
       "centrality": "low"
     },
     "trading_app/live/broker_connections.py": {
-      "importers": 1,
+      "importers": 3,
       "imports": 8,
-      "centrality": "low"
-    },
-    "trading_app/live/broker_dispatcher.py": {
-      "importers": 0,
-      "imports": 2,
-      "centrality": "low"
+      "centrality": "medium"
     },
     "trading_app/live/broker_factory.py": {
-      "importers": 4,
+      "importers": 5,
       "imports": 4,
-      "centrality": "medium"
+      "centrality": "high"
     },
     "trading_app/live/circuit_breaker.py": {
       "importers": 1,
@@ -1557,12 +1857,12 @@
       "centrality": "low"
     },
     "trading_app/live/projectx/auth.py": {
-      "importers": 5,
+      "importers": 6,
       "imports": 6,
       "centrality": "high"
     },
     "trading_app/live/projectx/contract_resolver.py": {
-      "importers": 2,
+      "importers": 4,
       "imports": 4,
       "centrality": "medium"
     },
@@ -1608,7 +1908,7 @@
     },
     "trading_app/live/session_orchestrator.py": {
       "importers": 2,
-      "imports": 22,
+      "imports": 23,
       "centrality": "medium"
     },
     "trading_app/live/session_safety_state.py": {
@@ -1616,13 +1916,23 @@
       "imports": 4,
       "centrality": "medium"
     },
+    "trading_app/live/signal_log_rotator.py": {
+      "importers": 3,
+      "imports": 5,
+      "centrality": "medium"
+    },
     "trading_app/live/sr_monitor.py": {
       "importers": 1,
       "imports": 5,
       "centrality": "low"
     },
+    "trading_app/live/telemetry_maturity.py": {
+      "importers": 1,
+      "imports": 7,
+      "centrality": "low"
+    },
     "trading_app/live/trade_journal.py": {
-      "importers": 2,
+      "importers": 3,
       "imports": 6,
       "centrality": "medium"
     },
@@ -1677,7 +1987,7 @@
       "centrality": "low"
     },
     "trading_app/mcp_server.py": {
-      "importers": 0,
+      "importers": 1,
       "imports": 9,
       "centrality": "low"
     },
@@ -1711,6 +2021,11 @@
       "imports": 8,
       "centrality": "low"
     },
+    "trading_app/opportunity_awareness.py": {
+      "importers": 5,
+      "imports": 9,
+      "centrality": "high"
+    },
     "trading_app/outcome_builder.py": {
       "importers": 11,
       "imports": 15,
@@ -1743,7 +2058,7 @@
     },
     "trading_app/pre_session_check.py": {
       "importers": 0,
-      "imports": 9,
+      "imports": 11,
       "centrality": "low"
     },
     "trading_app/prop_firm_policies.py": {
@@ -1757,7 +2072,7 @@
       "centrality": "medium"
     },
     "trading_app/prop_profiles.py": {
-      "importers": 37,
+      "importers": 43,
       "imports": 6,
       "centrality": "critical"
     },
@@ -1832,19 +2147,24 @@
       "centrality": "low"
     },
     "trading_app/strategy_discovery.py": {
-      "importers": 10,
+      "importers": 11,
       "imports": 15,
       "centrality": "critical"
     },
     "trading_app/strategy_fitness.py": {
-      "importers": 13,
+      "importers": 17,
       "imports": 14,
       "centrality": "critical"
     },
+    "trading_app/strategy_lineage_ast.py": {
+      "importers": 0,
+      "imports": 8,
+      "centrality": "low"
+    },
     "trading_app/strategy_validator.py": {
-      "importers": 3,
+      "importers": 6,
       "imports": 20,
-      "centrality": "medium"
+      "centrality": "high"
     },
     "trading_app/topstep_scaling_plan.py": {
       "importers": 4,
@@ -1852,7 +2172,7 @@
       "centrality": "medium"
     },
     "trading_app/validated_shelf.py": {
-      "importers": 26,
+      "importers": 28,
       "imports": 4,
       "centrality": "critical"
     },
