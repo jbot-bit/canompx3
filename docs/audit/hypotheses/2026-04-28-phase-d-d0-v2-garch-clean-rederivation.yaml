@@ -1,5 +1,5 @@
 metadata:
-  theory_grant: true
+  theory_grant: false  # Phase D overlay experiment; not a Chordia discovery candidate. Theory_grant=true was incorrect.
 
 version: 1
 status: PRE_REGISTERED_DRAFT

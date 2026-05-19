@@ -10916,6 +10916,221 @@ def check_cherry_pick_journal_integrity(
     return violations
 
 
+def check_am33_audit_log_theory_grant_parity(
+    audit_log_path: Path | None = None,
+    hypotheses_dir: Path | None = None,
+) -> list[str]:
+    """Check #162: chordia_audit_log.yaml theory_grants must match prereg metadata.theory_grant.
+
+    Amendment 3.3 (2026-05-17) introduced ``metadata.theory_grant`` as the
+    EXPLICIT bool governing the Chordia t-threshold gate in the hypothesis
+    loader.  The live allocator gate (``trading_app/chordia.py``) reads
+    ``has_theory`` from ``chordia_audit_log.yaml`` via ``ChordiaAuditLog`` --
+    an INDEPENDENT trust surface (documented deferred finding AM3.3-AUDIT-LOG-DRIFT,
+    evidence-auditor 2026-05-17).
+
+    If an operator manually writes ``has_theory: true`` in the audit log for a
+    strategy whose prereg declares ``theory_grant: false``, the allocator silently
+    applies t>=3.00 instead of the strict t>=3.79 declared by the prereg -- a
+    capital-class miscalculation.
+
+    This check asserts parity for every strategy_id that appears in BOTH surfaces:
+
+    (a) Audit-log side: every entry in ``theory_grants`` with ``has_theory: true``
+        (has_theory=false entries are the default and do not need a journal entry).
+    (b) Prereg side: every active prereg YAML under ``docs/audit/hypotheses/``
+        (NOT in the ``drafts/`` sub-directory -- drafts are quarantined and not
+        yet preregistered) whose ``scope.strategy_id`` OR any
+        ``primary_schema.family_cells[*].strategy_id`` matches a theory_grants entry.
+
+    Violation cases:
+    - Audit log has ``has_theory: true`` for SID, active prereg declares
+      ``theory_grant: false`` (or is missing the field) -> VIOLATION.
+    - Active prereg declares ``theory_grant: true`` for SID, audit log entry for
+      that SID has ``has_theory: false`` (explicit entry in ``theory_grants`` with
+      false, OR SID absent from ``theory_grants`` while prereg says true) -> VIOLATION.
+
+    Fail-closed: missing or unparseable audit log returns a violation rather than
+    silently passing.  Missing hypotheses dir returns a violation.  A prereg that
+    cannot be parsed is skipped with a warning (not a hard violation -- the YAML
+    validator catches broken syntax separately).
+
+    Parameters
+    ----------
+    audit_log_path : Path | None
+        Override the audit log path (test seam).
+    hypotheses_dir : Path | None
+        Override the hypotheses directory (test seam).
+    """
+    try:
+        import yaml as _yaml
+    except ImportError as exc:
+        return [f"check_am33_audit_log_theory_grant_parity: pyyaml import failed: {exc}"]
+
+    _audit_path = (
+        audit_log_path
+        if audit_log_path is not None
+        else PROJECT_ROOT / "docs" / "runtime" / "chordia_audit_log.yaml"
+    )
+    _hyp_dir = (
+        hypotheses_dir
+        if hypotheses_dir is not None
+        else PROJECT_ROOT / "docs" / "audit" / "hypotheses"
+    )
+
+    # --- Load and validate audit log ---
+    if not _audit_path.exists():
+        return [
+            f"check_am33_audit_log_theory_grant_parity: chordia_audit_log.yaml not found at "
+            f"{_audit_path} -- this file is required for the Chordia allocator gate "
+            "(trading_app/chordia.py::ChordiaAuditLog)"
+        ]
+    try:
+        audit_raw = _yaml.safe_load(_audit_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [
+            f"check_am33_audit_log_theory_grant_parity: failed to parse chordia_audit_log.yaml: "
+            f"{type(exc).__name__}: {exc}"
+        ]
+    if not isinstance(audit_raw, dict):
+        return [
+            "check_am33_audit_log_theory_grant_parity: chordia_audit_log.yaml payload is not "
+            f"a YAML mapping (got {type(audit_raw).__name__})"
+        ]
+
+    # Build the audit-log theory-grant map: {strategy_id: bool}
+    # Only entries explicitly listed in theory_grants[] are tracked; the default
+    # (default_has_theory, typically false) is not materialised here because the
+    # check only fires on strategy_ids that appear in BOTH surfaces.
+    audit_theory_map: dict[str, bool] = {}
+    theory_grants_raw = audit_raw.get("theory_grants") or []
+    if not isinstance(theory_grants_raw, list):
+        return [
+            "check_am33_audit_log_theory_grant_parity: chordia_audit_log.yaml "
+            f"theory_grants is not a list (got {type(theory_grants_raw).__name__})"
+        ]
+    for i, entry in enumerate(theory_grants_raw):
+        if not isinstance(entry, dict):
+            continue
+        sid = entry.get("strategy_id")
+        if not isinstance(sid, str) or not sid:
+            continue
+        has_theory = entry.get("has_theory")
+        if isinstance(has_theory, bool):
+            audit_theory_map[sid] = has_theory
+
+    # --- Scan active prereqs ---
+    if not _hyp_dir.exists():
+        return [
+            f"check_am33_audit_log_theory_grant_parity: hypotheses dir not found at {_hyp_dir}"
+        ]
+
+    # Active prereqs: docs/audit/hypotheses/*.yaml (NOT drafts/ sub-directory).
+    active_yamls = [
+        p for p in _hyp_dir.glob("*.yaml")
+        if p.is_file() and "drafts" not in str(p)
+    ]
+
+    violations: list[str] = []
+
+    for prereq_path in sorted(active_yamls):
+        try:
+            prereq_raw = _yaml.safe_load(prereq_path.read_text(encoding="utf-8"))
+        except Exception:
+            # Broken YAML is caught by the YAML-syntax validator; skip silently here.
+            continue
+        if not isinstance(prereq_raw, dict):
+            continue
+
+        meta = prereq_raw.get("metadata") or {}
+        if not isinstance(meta, dict):
+            continue
+        prereq_theory_grant = meta.get("theory_grant")
+        if not isinstance(prereq_theory_grant, bool):
+            # Missing theory_grant is caught by hypothesis_loader; skip here.
+            continue
+
+        # Skip multi-lane diagnostic/triage/diligence prereqs.
+        # These reference existing deployed lanes as objects of study but do not
+        # independently assert theory grants -- the audit log is the ground truth
+        # for deployed lanes.  Only single-SID (testing_mode: individual or family
+        # without multi-lane scope) prereqs make theory claims on specific SIDs.
+        rqt = meta.get("research_question_type", "")
+        if rqt in ("capital_diligence", "triage"):
+            continue
+
+        # Collect strategy_ids this prereg covers (scope.strategy_id + family_cells).
+        # NOTE: scope.lanes[] shape is intentionally NOT included here -- those are
+        # multi-lane audit/triage docs (see exclusion above).  The scope.lanes shape
+        # references lanes as objects of study, not theory-grant claims.
+        covered_sids: set[str] = set()
+        scope = prereq_raw.get("scope") or {}
+        if isinstance(scope, dict):
+            # Skip entirely if this prereg references multiple lanes in scope.lanes[].
+            # That shape is a multi-lane diagnostic even when rqt is not explicitly set.
+            lanes_list = scope.get("lanes")
+            if isinstance(lanes_list, list) and len(lanes_list) > 1:
+                continue
+            sid = scope.get("strategy_id")
+            if isinstance(sid, str) and sid:
+                covered_sids.add(sid)
+        primary = prereq_raw.get("primary_schema") or {}
+        if isinstance(primary, dict):
+            cells = primary.get("family_cells") or []
+            if isinstance(cells, list):
+                for cell in cells:
+                    if isinstance(cell, dict):
+                        csid = cell.get("strategy_id")
+                        if isinstance(csid, str) and csid:
+                            covered_sids.add(csid)
+
+        # For each covered SID that appears in the audit-log theory_grants map,
+        # assert parity.
+        for sid in sorted(covered_sids):
+            if sid not in audit_theory_map:
+                # SID not listed in theory_grants at all; audit log implicitly
+                # treats it as has_theory=default_has_theory (typically false).
+                # Only flag if the prereg claims true (that's the dangerous direction).
+                if prereq_theory_grant is True:
+                    default_ht = bool(audit_raw.get("default_has_theory", False))
+                    if not default_ht:
+                        violations.append(
+                            f"check_am33_audit_log_theory_grant_parity: PARITY MISMATCH "
+                            f"strategy_id={sid!r} -- prereg {prereq_path.name} declares "
+                            f"metadata.theory_grant=true but chordia_audit_log.yaml has NO "
+                            f"theory_grants entry for this strategy_id (implicit "
+                            f"has_theory={default_ht}). "
+                            f"Allocator applies t>={3.0 if default_ht else 3.79:.2f}; "
+                            f"prereg declares t>=3.00 hurdle. "
+                            f"Add strategy_id to chordia_audit_log.yaml theory_grants with "
+                            f"has_theory: true AND theory_ref, OR flip prereg to "
+                            f"theory_grant: false. "
+                            f"Doctrine: AM3.3-AUDIT-LOG-DRIFT deferred finding "
+                            f"(docs/ralph-loop/deferred-findings.md)."
+                        )
+                continue
+
+            audit_ht = audit_theory_map[sid]
+            if audit_ht != prereq_theory_grant:
+                allocator_t = 3.00 if audit_ht else 3.79
+                prereg_t = 3.00 if prereq_theory_grant else 3.79
+                violations.append(
+                    f"check_am33_audit_log_theory_grant_parity: PARITY MISMATCH "
+                    f"strategy_id={sid!r} -- "
+                    f"chordia_audit_log.yaml theory_grants has_theory={audit_ht} "
+                    f"(allocator threshold t>={allocator_t:.2f}) but "
+                    f"prereg {prereq_path.name} declares "
+                    f"metadata.theory_grant={prereq_theory_grant} "
+                    f"(loader threshold t>={prereg_t:.2f}). "
+                    f"Mismatch silently applies different t-hurdles on the two "
+                    f"independent trust surfaces (Amendment 3.3 evidence-auditor "
+                    f"finding, 2026-05-17). Fix by aligning both to the same bool. "
+                    f"Doctrine: AM3.3-AUDIT-LOG-DRIFT (docs/ralph-loop/deferred-findings.md)."
+                )
+
+    return violations
+
+
 CHECKS = [
     (
         "Hardcoded 'MGC' SQL literals in generic pipeline code",
@@ -11596,6 +11811,12 @@ CHECKS = [
         "Triage-draft provenance: every drafts/*.yaml with a triage_provenance block declares source_validated_setup_strategy_id",
         check_triage_provenance_completeness,
         False,  # blocking — orphan triage drafts break the audit lineage back to canonical validated_setups (Improvement 3 / Stage C)
+        False,
+    ),
+    (
+        "AM3.3 audit-log/prereg theory_grant parity: chordia_audit_log.yaml theory_grants must match active prereg metadata.theory_grant (Check #162)",
+        check_am33_audit_log_theory_grant_parity,
+        False,  # blocking — mismatch silently applies wrong Chordia t-threshold (3.00 vs 3.79) at allocator gate
         False,
     ),
 ]  # end CHECKS

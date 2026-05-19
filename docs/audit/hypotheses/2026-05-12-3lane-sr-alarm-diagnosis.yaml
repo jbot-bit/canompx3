@@ -1,5 +1,5 @@
 metadata:
-  theory_grant: true
+  theory_grant: false  # SR alarm diagnostic audit; not a Chordia discovery candidate.
   name: "3lane_sr_alarm_diagnosis_2026_05_12"
   purpose: >
     Documentary diagnosis of why all 3 deployed MNQ lanes are simultaneously on

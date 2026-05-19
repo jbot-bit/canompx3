@@ -1,5 +1,5 @@
 metadata:
-  theory_grant: true
+  theory_grant: false  # Chordia criteria repair audit; entry-theory-only (ENTRY_THEORY_ONLY verdict in grounding). No filter-class theory grant.
   name: "mgc_cmereopen_orbg4_chordia_criteria_repair_v1"
   purpose: >
     Bounded exact-lane MGC-first Chordia/criteria repair audit for

@@ -1,5 +1,5 @@
 metadata:
-  theory_grant: true
+  theory_grant: false  # Capital-diligence audit of deployed lane; not a Chordia discovery candidate.
   name: "capital_review_ovnrng100_v1"
   purpose: >
     Capital-class diligence on the deployed lane MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100,

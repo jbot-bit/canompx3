@@ -502,12 +502,12 @@ class TestCorrectedTierValues:
 class TestAccountProfileXfaFlag:
     """AccountProfile.is_express_funded (F-5)."""
 
-    def test_is_express_funded_default_true(self):
-        """New AccountProfiles default to XFA semantics (matches active deployment)."""
+    def test_is_express_funded_default_false(self):
+        """New AccountProfiles default to fail-closed (False) — not XFA until explicitly set."""
         from trading_app.prop_profiles import AccountProfile
 
         prof = AccountProfile(profile_id="test", firm="topstep", account_size=50_000)
-        assert prof.is_express_funded is True
+        assert prof.is_express_funded is False
 
     def test_active_topstep_profiles_are_xfa(self):
         """All currently active TopStep profiles in the repo are XFA-shaped."""
