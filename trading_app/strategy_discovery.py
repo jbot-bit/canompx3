@@ -59,7 +59,7 @@ from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
 from trading_app.phase_4_discovery_gates import check_git_cleanliness, check_single_use
 
 # Force unbuffered stdout
-sys.stdout.reconfigure(line_buffering=True)
+sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
 # Filter specificity ranking: higher = more specific = preferred as canonical
 _FILTER_SPECIFICITY_BASE = {
@@ -178,7 +178,7 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
                 f"loop for a three-way mismatch (Phase 4 Stage 4.1 SHA "
                 f"stamping guard)."
             )
-    batch_df = pd.DataFrame(insert_batch, columns=_BATCH_COLUMNS)  # noqa: F841
+    batch_df = pd.DataFrame(insert_batch, columns=_BATCH_COLUMNS)  # noqa: F841  # used by DuckDB FROM clause below
     con.execute("""
         INSERT OR REPLACE INTO experimental_strategies
         (strategy_id, instrument, orb_label, orb_minutes,
@@ -1228,6 +1228,8 @@ def run_discovery(
             "run_discovery: instrument must be specified explicitly (e.g. 'MNQ', 'MES', 'MGC'). "
             "No default is provided to prevent silently running against the wrong instrument."
         )
+    instrument_str: str = instrument  # narrow str | None → str for static checker
+    instrument = instrument_str
     if dst_regime not in (None, "winter", "summer"):
         raise ValueError(f"dst_regime must be 'winter', 'summer', or None; got {dst_regime!r}")
     if db_path is None:
