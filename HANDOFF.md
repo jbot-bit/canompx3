@@ -6,7 +6,18 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## This Session (2026-05-19 — Chart cockpit ORB rectangle as ISeriesPrimitive, terminal 2)
+## This Session (2026-05-19 — FAST_LANE v5.1 verification + idempotent bridge re-run)
+
+- **Tool:** Claude Code (Opus 4.7), explanatory mode
+- **Date:** 2026-05-19
+- **Commits:** none — bridge re-run produced byte-identical output to prior session's `b3bb9bdf`
+- **Files changed:** zero
+- **Session summary:** User asked "how to run our fast lane thingo" → plan-mode produced verification runbook → user said "do it". Ran the 4-step smoke test (K-budget on template = expected stub message; runner has FAST_LANE branch + only v5.1 supported with constants at L53-54 / L60; scanner showed 1 QUEUED + 1 REVOKED, cache up-to-date; all 4 drift checks active at L3241 / L3353 / L9943 / L10538). Then bridged the QUEUED `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30` → bridge is deterministic; output identical to existing committed draft at `docs/audit/hypotheses/drafts/2026-05-19-mnq-us-data-1000-e1-rr1-0-cb2-pd-clear-long-o30-chordia-heavyweight-v1.draft.yaml`. CLI plan typo caught: bridge takes a positional arg, not `--fast-lane-result` (runbook in original plan was slightly off).
+- **Drift:** 142 PASSED, 20 advisory, 1 pre-existing violation (MGC_CME_REOPEN_E2 trade-window — carry-over, orthogonal).
+- **Cross-session observation:** Two consecutive sessions on 2026-05-19 both produced the same FAST_LANE bridge draft — supports the "next iteration trigger" condition from prior baton: OOS N must accrue past 30 (currently 14) before this draft becomes promotable. Nothing else to do on the FAST_LANE surface today.
+- **Carry-overs:** All prior carry-overs unchanged. Same pre-existing MGC drift. Same OOS-power floor blocker on the QUEUED entry.
+
+## Prior Session (2026-05-19 — Chart cockpit ORB rectangle as ISeriesPrimitive, terminal 2)
 
 - **Tool:** Claude Code (Opus 4.7)
 - **Date:** 2026-05-19
