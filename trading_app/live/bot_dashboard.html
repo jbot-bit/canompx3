@@ -7,7 +7,7 @@
 <link id="favicon" rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23dc2626'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!--
   Lightweight Charts v5.2.0 (TradingView, Apache-2.0).
   SRI computed 2026-05-14 against unpkg's standalone production build (196203 bytes).
@@ -2003,6 +2003,332 @@
     .hm-val { font-size: 22px; }
     .hero-book { flex-direction: column; align-items: stretch; gap: 8px; }
   }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SLATE/BLUE-GREY PRO — full design overhaul
+     Replaces: cyan/teal palette, Inter+JetBrains, rounded generic boxes
+     With: slate-blue palette, DM Sans+IBM Plex Mono, sharp-edge panels
+     These rules WIN the cascade — injected last, intentionally additive.
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* ── token override ─────────────────────────────── */
+  :root {
+    --bg:          #080c12;
+    --surface:     #0d1117;
+    --surface-2:   #111620;
+    --surface-3:   #161d28;
+    --border:      rgba(148,163,184,0.09);
+    --border-hi:   rgba(148,163,184,0.18);
+    --hairline-top:rgba(255,255,255,0.03);
+
+    --text:        #e2e8f0;
+    --text-2:      #94a3b8;
+    --muted:       #64748b;
+    --dim:         #334155;
+    --accent:      #3b82f6;
+    --accent-soft: rgba(59,130,246,0.10);
+    --accent-strong:rgba(59,130,246,0.20);
+
+    /* keep cyan alias → accent so downstream selectors stay valid */
+    --cyan:      #3b82f6;
+    --cyan-soft: rgba(59,130,246,0.08);
+    --blue:      #60a5fa;
+    --blue-soft: rgba(96,165,250,0.10);
+    --green:     #22c55e;
+    --green-soft:rgba(34,197,94,0.10);
+    --red:       #ef4444;
+    --red-soft:  rgba(239,68,68,0.10);
+    --yellow:    #f59e0b;
+    --yellow-soft:rgba(245,158,11,0.08);
+
+    /* typography */
+    --font-sans: 'DM Sans', -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+
+    /* geometry — sharper, tighter */
+    --r:    4px;
+    --r-lg: 6px;
+    --r-xl: 8px;
+
+    /* bigger text globally */
+    --fs-body:  16px;
+    --fs-small: 13px;
+    --fs-title: 17px;
+  }
+
+  /* ── body ───────────────────────────────────────── */
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    font-size: 15px;
+    line-height: 1.5;
+    letter-spacing: 0.01em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* explicit overrides for key text nodes */
+  .operator-check-detail, .operator-reason { font-size: 13px; }
+  .operator-headline { font-size: 15px; font-weight: 600; }
+  .hm-lbl, .pnl-cell-lbl { font-size: 11px; }
+  .topbar-acct { font-size: 14px; }
+  .conn-name, .pf-firm { font-size: 15px; }
+  .operator-check-lbl { font-size: 13px; }
+  .m, code, pre, .metric-val, .live-m-val, .lane-time, .tl-time,
+  .hm-val, .pnl-cell-val, .conn-acct-bal, .acct-balance {
+    font-family: var(--font-mono);
+    font-feature-settings: 'tnum', 'zero';
+  }
+
+  /* ── topbar: tighter, left-border brand ─────────── */
+  .topbar-brand {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text);
+    border-left: 2px solid var(--accent);
+    padding: 0 0 0 10px;
+    border-radius: 0;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .drawer-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .drawer-handle.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+  /* ── cards: NO rounded corners, left-accent pattern ── */
+  .sec, .hero, .live-panel, .operator-shell, .alerts-shell,
+  .pf-card, .spec-item, .broker-acct-card, .conn-card,
+  .chart-cockpit, .pnl-strip, .signal-strip, .timeline,
+  .connection-summary {
+    border-radius: 0 !important;
+    border-left-width: 2px;
+    border-left-color: var(--border);
+  }
+
+  /* state-specific left-border emphasis */
+  .hero[data-state="running"]  { border-left-color: var(--green) !important; }
+  .hero[data-state="in_trade"] { border-left-color: var(--accent) !important; }
+  .hero[data-state="blocked"],
+  .hero[data-state="error"]    { border-left-color: var(--red) !important; }
+  .hero[data-state="warn"]     { border-left-color: var(--yellow) !important; }
+  .hero[data-state="ready"]    { border-left-color: var(--accent) !important; }
+  .pf-card.active-auto         { border-left-color: var(--green) !important; background: linear-gradient(90deg, rgba(34,197,94,0.04), transparent 60%), var(--surface-2); }
+  .sec:hover { border-left-color: var(--border-hi); }
+  .connection-summary.connected { border-left-color: var(--green) !important; }
+  .connection-summary.error,
+  .connection-summary.missing   { border-left-color: var(--red) !important; }
+  .connection-summary.connecting{ border-left-color: var(--yellow) !important; }
+
+  /* chip / badge radius: tighter */
+  .topbar-mode, .hero-state-badge, .operator-state-badge,
+  .sec-badge, .pf-chip, .book-chip, .alerts-pill,
+  .conn-acct-chip, .acct-status, .sig-dot,
+  .topbar-mode .dot {
+    border-radius: 3px !important;
+  }
+
+  /* ── hero metrics: denser ───────────────────────── */
+  .hm-val { font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
+  .hm-val.sm { font-size: 19px; }
+  .hm-lbl {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .hero-metrics { gap: 0; border-top: 1px solid var(--border); padding-top: 14px; margin-top: 12px; }
+  .hm { padding: 0 20px 0 0; border-right: 1px solid var(--border); margin-right: 20px; }
+  .hm:last-child { border-right: none; }
+
+  /* ── pnl strip: clean stat cells ─────────────────── */
+  .pnl-strip {
+    display: flex; gap: 0;
+    padding: 0;
+    background: var(--surface);
+    border-top: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .pnl-cell {
+    flex: 1; padding: 12px 16px;
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .pnl-cell:last-child { border-right: none; }
+  .pnl-cell-lbl {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--muted); white-space: nowrap;
+  }
+  .pnl-cell-val { font-size: 18px; font-weight: 600; line-height: 1.1; }
+  .pnl-cell-sub { font-size: 11px; color: var(--dim); }
+
+  /* ── tables: tighter headers ────────────────────── */
+  .blotter th, .pos-table th, .signal-table th {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--dim);
+    padding: 8px 12px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+  }
+  .blotter td, .pos-table td {
+    font-size: 12px;
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+  }
+  .tbl-wrap { border-radius: 0; }
+
+  /* ── buttons: uniform sharp ─────────────────────── */
+  .topbar-btn, .pf-btn, .operator-primary-btn, .toggle-btn,
+  .conn-btn, .connection-summary-action, .drawer-handle {
+    border-radius: var(--r) !important;
+  }
+  .topbar-btn { font-family: var(--font-sans); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; }
+  .topbar-btn.primary { color: var(--accent); border-color: var(--accent-strong); background: var(--accent-soft); }
+  .topbar-btn.primary:hover { background: var(--accent-strong); }
+
+  /* ── lane chips in book ─────────────────────────── */
+  .book-chip { border-radius: 3px !important; font-family: var(--font-mono); font-size: 11px; }
+  .book-chip.next { background: var(--accent-soft); border-color: var(--accent-strong); color: var(--accent); }
+  .book-chip.armed { background: rgba(34,197,94,0.10); border-color: rgba(34,197,94,0.26); color: var(--green); }
+
+  /* ── section headers: readable, not decorative ─── */
+  .sec-ttl, .operator-shell-title, .alerts-shell-title, .signal-strip-title, .chart-cockpit-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    color: var(--dim);
+    font-family: var(--font-sans);
+  }
+
+  /* ── topbar mode badge: MUST be readable at a glance */
+  .topbar-mode {
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    padding: 4px 10px !important;
+    letter-spacing: 0.03em;
+  }
+  .topbar-mode .dot { width: 7px !important; height: 7px !important; }
+
+  /* ── Kill All: move visual weight down so eye lands on status first */
+  #btn-kill { opacity: 0.7; }
+  #btn-kill:hover { opacity: 1; }
+
+  /* ── hero head: state badge is primary, profile is secondary */
+  .hero-state-badge { font-size: 13px !important; padding: 5px 12px !important; border-radius: 3px !important; }
+  .hero-profile { font-size: 13px !important; font-weight: 500 !important; color: var(--dim) !important; }
+
+  /* ── connection summary: bigger, more weight ─────── */
+  .connection-summary { padding: 10px 16px; }
+  .connection-summary-title { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
+  .connection-summary-message { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 3px; display: block; }
+
+  /* ── operator checks: each check line more readable ─ */
+  .operator-check { padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .operator-check:last-child { border-bottom: none; }
+  .operator-check-lbl { font-size: 13px; font-weight: 600; }
+  .operator-check-detail { font-size: 12px; color: var(--dim); margin-top: 1px; }
+
+  /* ── signal strip dots ──────────────────────────── */
+  .sig-dot.armed  { background: var(--accent); }
+  .sig-dot.signal { background: var(--green); }
+  .sig-dot.in-trade { background: var(--blue); }
+
+  /* ── chart tf buttons ───────────────────────────── */
+  .chart-tf-btn.active { background: var(--accent-soft); color: var(--accent); }
+  .chart-cockpit-instr { color: var(--accent); }
+  .chart-cockpit { border-radius: 0 !important; }
+
+  /* ── operator state badge ───────────────────────── */
+  .operator-state-badge.info { background: var(--accent-soft); color: var(--accent); }
+  .operator-state-badge.pass { background: var(--green-soft); color: var(--green); }
+
+  /* ── focus ring ─────────────────────────────────── */
+  button:focus-visible, select:focus-visible, input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--r);
+  }
+
+  /* ── cockpit grid: chart LEFT, status RIGHT ─────── */
+  @media (min-width: 1100px) {
+    #tab-dashboard { display: block; }
+
+    .cockpit-grid {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      grid-template-rows: auto;
+      gap: 0 1px;
+      background: var(--border);
+      margin-bottom: 10px;
+    }
+    .cockpit-grid-left  { background: var(--bg); display: flex; flex-direction: column; gap: 1px; }
+    .cockpit-grid-right { background: var(--bg); display: flex; flex-direction: column; gap: 1px; overflow: hidden; min-width: 0; }
+
+    /* chart fills left column */
+    .cockpit-grid-left #chart-cockpit { flex: 1; margin-bottom: 0; border-radius: 0 !important; }
+    .cockpit-grid-left .chart-cockpit-body { height: 340px; }
+
+    /* pnl strip under chart */
+    .cockpit-grid-left #pnl-strip { margin-bottom: 0; border-radius: 0 !important; }
+
+    /* right column: hero + operator panels stacked */
+    .cockpit-grid-right .hero { margin: 0; flex: 0 0 auto; border-radius: 0 !important; }
+    .cockpit-grid-right #operator-shell { flex: 1; margin-bottom: 0; border-radius: 0 !important; }
+    .cockpit-grid-right #connection-summary { flex: 0 0 auto; margin-bottom: 0; border-radius: 0 !important; }
+
+    /* hero metrics: 2×2 grid so values don't overflow narrow column */
+    .cockpit-grid-right .hero-metrics {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 0;
+      padding-top: 12px;
+      margin-top: 10px;
+    }
+    .cockpit-grid-right .hm {
+      padding: 0 12px 0 0;
+      border-right: none;
+      margin-right: 0;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+    }
+    .cockpit-grid-right .hm:nth-child(even) { padding-left: 12px; }
+    .cockpit-grid-right .hm-val { font-size: 22px; }
+    .cockpit-grid-right .hm-val.sm { font-size: 14px; line-height: 1.35; }
+    .cockpit-grid-right .hm-lbl { font-size: 10px; }
+
+    /* hero book row: allow wrapping */
+    .cockpit-grid-right .hero-book-lanes { flex-wrap: wrap; gap: 4px; }
+  }
+
+  /* ── misc ───────────────────────────────────────── */
+  .empty { border-radius: var(--r); border: 1px dashed var(--border-hi); }
+  pre { border-radius: var(--r); font-family: var(--font-mono); font-size: 11px; }
+  .toast { border-radius: var(--r); }
+  .kill-modal { border-radius: var(--r); }
+  .error-banner { border-radius: var(--r); }
+  .notif-banner { border-radius: var(--r); }
+
+  /* ── lane-time uses accent ──────────────────────── */
+  .lane-time { color: var(--accent); }
+  .conn-acct.selected { border-color: var(--accent); border-left-color: var(--accent); }
+  .broker-acct-card.selected { border-color: var(--accent); border-left-color: var(--accent) !important; }
+
+  /* scrollbar: match new surface */
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--surface-3); border: 2px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+
+  /* mobile: stack normally */
+  @media (max-width: 1099px) {
+    .cockpit-grid { display: contents; }
+    .cockpit-grid-left, .cockpit-grid-right { display: contents; }
+  }
 </style>
 </head>
 <body>
@@ -2038,6 +2364,60 @@
 
   <!-- ═══ DASHBOARD TAB ═══ -->
   <div id="tab-dashboard" class="tab-content active">
+
+  <!-- ═══ COCKPIT GRID ═══ -->
+  <div class="cockpit-grid">
+  <div class="cockpit-grid-left">
+
+  <!-- CHART COCKPIT — Stage 3.2 / 3.3 -->
+  <section id="chart-cockpit" class="chart-cockpit">
+    <div class="chart-cockpit-hd">
+      <span class="chart-cockpit-title">Live Chart</span>
+      <span id="chart-cockpit-instr" class="chart-cockpit-instr">—</span>
+      <span id="chart-cockpit-orb" class="chart-cockpit-orb"></span>
+      <span id="chart-cockpit-orb-rel" class="chart-cockpit-orb"></span>
+      <span class="chart-tf-group" role="group" aria-label="Timeframe">
+        <button type="button" class="chart-tf-btn" data-tf="1m" onclick="ChartCockpit.setTimeframe('1m')">1m</button>
+        <button type="button" class="chart-tf-btn active" data-tf="5m" onclick="ChartCockpit.setTimeframe('5m')">5m</button>
+        <button type="button" class="chart-tf-btn" data-tf="15m" onclick="ChartCockpit.setTimeframe('15m')">15m</button>
+      </span>
+    </div>
+    <div class="chart-cockpit-body">
+      <div id="chart-host"></div>
+      <div id="chart-cockpit-fallback" class="chart-cockpit-fallback">
+        Chart unavailable — Lightweight Charts failed to load.<br>
+        Verify CDN reachability (unpkg.com) or that the SRI hash matches the
+        upstream build. Dashboard continues to function via /api/* endpoints.
+      </div>
+    </div>
+  </section>
+
+  <!-- P&L STRIP -->
+  <section id="pnl-strip" class="pnl-strip">
+    <div class="pnl-cell">
+      <span class="pnl-cell-lbl">Day P&amp;L</span>
+      <span id="pnl-day" class="pnl-cell-val">—</span>
+      <span id="pnl-day-sub" class="pnl-cell-sub"></span>
+    </div>
+    <div class="pnl-cell">
+      <span class="pnl-cell-lbl">Open P&amp;L</span>
+      <span id="pnl-open" class="pnl-cell-val">—</span>
+      <span id="pnl-open-sub" class="pnl-cell-sub"></span>
+    </div>
+    <div class="pnl-cell">
+      <span class="pnl-cell-lbl">Trades Today</span>
+      <span id="pnl-trades" class="pnl-cell-val">—</span>
+      <span id="pnl-trades-sub" class="pnl-cell-sub"></span>
+    </div>
+    <div class="pnl-cell">
+      <span class="pnl-cell-lbl">SSE</span>
+      <span id="pnl-sse" class="pnl-cell-val"><span class="hb-dot"></span><span id="pnl-sse-lbl">—</span></span>
+      <span id="pnl-sse-sub" class="pnl-cell-sub"></span>
+    </div>
+  </section>
+
+  </div><!-- /.cockpit-grid-left -->
+  <div class="cockpit-grid-right">
 
   <!-- BROKER CONNECTION SUMMARY -->
   <section id="connection-summary" class="connection-summary">
@@ -2098,59 +2478,36 @@
     </div>
   </section>
 
+  <!-- OPERATOR STATE -->
+  <section id="operator-shell" class="operator-shell">
+    <div class="operator-shell-top">
+      <span class="operator-shell-title">Operator State</span>
+      <span id="operator-state-badge" class="operator-state-badge info">Loading</span>
+    </div>
+    <div class="operator-shell-body">
+      <div class="operator-summary">
+        <div>
+          <div id="operator-headline" class="operator-headline">Loading operator state...</div>
+          <div id="operator-reason" class="operator-reason"></div>
+          <div id="operator-profile" class="operator-profile"></div>
+        </div>
+        <button id="operator-primary-action" class="operator-primary-btn" type="button">Run Preflight</button>
+      </div>
+      <div id="operator-checks" class="operator-checks">
+        <div class="operator-check info"><div class="operator-check-detail">Loading readiness checks...</div></div>
+      </div>
+    </div>
+  </section>
+
+  </div><!-- /.cockpit-grid-right -->
+  </div><!-- /.cockpit-grid -->
+
   <!-- NOTIFICATION ENABLE BANNER — Stage 3.6 -->
   <div id="notif-banner" class="notif-banner">
     <span class="notif-banner-msg">Enable browser notifications for signal alerts when the tab is in the background.</span>
     <button id="notif-enable" class="notif-banner-enable" type="button">Enable</button>
     <button id="notif-dismiss" class="notif-banner-dismiss" type="button">Not now</button>
   </div>
-
-  <!-- CHART COCKPIT — Stage 3.2 / 3.3 -->
-  <section id="chart-cockpit" class="chart-cockpit">
-    <div class="chart-cockpit-hd">
-      <span class="chart-cockpit-title">Live Chart</span>
-      <span id="chart-cockpit-instr" class="chart-cockpit-instr">—</span>
-      <span id="chart-cockpit-orb" class="chart-cockpit-orb"></span>
-      <span id="chart-cockpit-orb-rel" class="chart-cockpit-orb"></span>
-      <span class="chart-tf-group" role="group" aria-label="Timeframe">
-        <button type="button" class="chart-tf-btn" data-tf="1m" onclick="ChartCockpit.setTimeframe('1m')">1m</button>
-        <button type="button" class="chart-tf-btn active" data-tf="5m" onclick="ChartCockpit.setTimeframe('5m')">5m</button>
-        <button type="button" class="chart-tf-btn" data-tf="15m" onclick="ChartCockpit.setTimeframe('15m')">15m</button>
-      </span>
-    </div>
-    <div class="chart-cockpit-body">
-      <div id="chart-host"></div>
-      <div id="chart-cockpit-fallback" class="chart-cockpit-fallback">
-        Chart unavailable — Lightweight Charts failed to load.<br>
-        Verify CDN reachability (unpkg.com) or that the SRI hash matches the
-        upstream build. Dashboard continues to function via /api/* endpoints.
-      </div>
-    </div>
-  </section>
-
-  <!-- P&L STRIP — Stage 3.2 (lives below chart; below-the-fold drawers absorb everything else) -->
-  <section id="pnl-strip" class="pnl-strip">
-    <div class="pnl-cell">
-      <span class="pnl-cell-lbl">Day P&amp;L</span>
-      <span id="pnl-day" class="pnl-cell-val">—</span>
-      <span id="pnl-day-sub" class="pnl-cell-sub"></span>
-    </div>
-    <div class="pnl-cell">
-      <span class="pnl-cell-lbl">Open P&amp;L</span>
-      <span id="pnl-open" class="pnl-cell-val">—</span>
-      <span id="pnl-open-sub" class="pnl-cell-sub"></span>
-    </div>
-    <div class="pnl-cell">
-      <span class="pnl-cell-lbl">Trades Today</span>
-      <span id="pnl-trades" class="pnl-cell-val">—</span>
-      <span id="pnl-trades-sub" class="pnl-cell-sub"></span>
-    </div>
-    <div class="pnl-cell">
-      <span class="pnl-cell-lbl">SSE</span>
-      <span id="pnl-sse" class="pnl-cell-val"><span class="hb-dot"></span><span id="pnl-sse-lbl">—</span></span>
-      <span id="pnl-sse-sub" class="pnl-cell-sub"></span>
-    </div>
-  </section>
 
   <!-- DRAWER HANDLE STRIP — Stage 4.1 quick-access pills (open drawer to specific tab) -->
   <div id="drawer-handle-strip" class="drawer-handle-strip">
@@ -2211,27 +2568,6 @@
 
   <!-- ERROR BANNER (equity/auth failures) -->
   <div id="equity-error" class="error-banner"></div>
-
-  <!-- OPERATOR STATE -->
-  <section id="operator-shell" class="operator-shell">
-    <div class="operator-shell-top">
-      <span class="operator-shell-title">Operator State</span>
-      <span id="operator-state-badge" class="operator-state-badge info">Loading</span>
-    </div>
-    <div class="operator-shell-body">
-      <div class="operator-summary">
-        <div>
-          <div id="operator-headline" class="operator-headline">Loading operator state...</div>
-          <div id="operator-reason" class="operator-reason"></div>
-          <div id="operator-profile" class="operator-profile"></div>
-        </div>
-        <button id="operator-primary-action" class="operator-primary-btn" type="button">Run Preflight</button>
-      </div>
-      <div id="operator-checks" class="operator-checks">
-        <div class="operator-check info"><div class="operator-check-detail">Loading readiness checks...</div></div>
-      </div>
-    </div>
-  </section>
 
   <!-- BROKER ACCOUNTS -->
   <section id="broker-accounts-section" class="sec collapsed">
