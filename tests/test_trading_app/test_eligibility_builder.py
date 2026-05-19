@@ -584,6 +584,26 @@ class TestCalendarOverlay:
                 ConditionStatus.DATA_MISSING,
             )
 
+    def test_rules_not_loaded_overall_status_is_data_missing(self, monkeypatch):
+        """RULES_NOT_LOADED calendar condition must drive overall_status to DATA_MISSING.
+
+        Regression guard for integrity-guardian.md § 3 (fail-closed): without
+        the fix, _derive_overall_status ignored RULES_NOT_LOADED and returned
+        ELIGIBLE when the calendar overlay system was unavailable.
+        """
+        from trading_app.eligibility import builder as _builder
+
+        # Force calendar rules to be absent regardless of actual file state.
+        monkeypatch.setattr(_builder, "_calendar_rules_loaded", lambda: False)
+        report = build_eligibility_report(
+            strategy_id="MNQ_NYSE_CLOSE_E2_RR2.0_CB1_NO_FILTER",
+            trading_day=date(2026, 4, 7),
+            feature_row=_fresh_row(symbol="MNQ"),
+        )
+        cal = [c for c in report.conditions if c.source_filter == "calendar"][0]
+        assert cal.status == ConditionStatus.RULES_NOT_LOADED
+        assert report.overall_status == OverallStatus.DATA_MISSING
+
     def test_halfsize_size_multiplier_type_contract(self):
         """Type contract: a calendar HALF_SIZE record passes the eligibility
         gate with size_multiplier=0.5 and is_blocking=False."""
@@ -737,9 +757,31 @@ class TestFreshness:
 
 
 class TestOverallStatus:
+    @pytest.fixture(autouse=True)
+    def _patch_calendar_rules(self, tmp_path, monkeypatch):
+        """Provide a minimal valid calendar_cascade_rules.json for every test
+        in this class so that RULES_NOT_LOADED never masks ELIGIBLE/NEEDS_LIVE_DATA.
+
+        Without this fixture the rules file is absent on developer machines and
+        in CI, making DATA_MISSING the only reachable outcome and the tests
+        structurally vacuous for the paths they claim to exercise.
+        """
+        import json
+        import trading_app.eligibility.builder as _builder
+
+        rules_file = tmp_path / "calendar_cascade_rules.json"
+        # Minimal structure: rules list present and non-empty so _calendar_rules_loaded()
+        # returns True.  A single no-op NEUTRAL rule covers all sessions/symbols.
+        rules_file.write_text(
+            json.dumps({"rules": [{"action": "NEUTRAL", "sessions": "*", "symbols": "*"}]}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(_builder, "_CALENDAR_RULES_PATH", rules_file)
+
     def test_eligible_when_no_filter_no_pending(self):
         """NO_FILTER strategy → no atoms from filter, only overlays.
-        If overlays don't FAIL, overall is ELIGIBLE or NEEDS_LIVE_DATA."""
+        With calendar rules loaded, overlays don't FAIL, so overall is ELIGIBLE
+        or NEEDS_LIVE_DATA (never DATA_MISSING via RULES_NOT_LOADED)."""
         report = build_eligibility_report(
             strategy_id="MNQ_NYSE_CLOSE_E2_RR2.0_CB1_NO_FILTER",
             trading_day=date(2026, 4, 7),
@@ -751,6 +793,8 @@ class TestOverallStatus:
         )
 
     def test_needs_live_data_when_intra_session_pending(self):
+        """Intra-session condition pending → NEEDS_LIVE_DATA (not DATA_MISSING).
+        With calendar rules loaded, RULES_NOT_LOADED cannot mask this outcome."""
         report = build_eligibility_report(
             strategy_id="MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
             trading_day=date(2026, 4, 7),

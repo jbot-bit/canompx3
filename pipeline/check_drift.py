@@ -11294,6 +11294,15 @@ def check_fast_lane_state_graph_node_parity(
     # --- Direction (b): ORPHAN-FILE — every derived-state file in known glob roots
     # must be named by an active spec node. ---
     # Glob roots that participate in the fast-lane chain (matches design § 3 Stage 3).
+    #
+    # ASSUMPTION: spec_path_pattern and disk_glob must be IDENTICAL strings so that
+    # the `spec_path_pattern not in active_paths` membership test works correctly.
+    # active_paths stores node['path'] verbatim from the spec YAML, so a node with
+    # path "docs/runtime/cherry_pick_ranking_*.csv" must use the exact same glob
+    # string here.  If spec authors vary the glob syntax (e.g. "cherry_pick_ranking_
+    # 2026-05-*.csv"), this literal-match will fire a false ORPHAN-FILE violation.
+    # To generalise, consider fnmatch-based set intersection instead of membership
+    # lookup — deferred until a concrete divergence is observed.
     known_globs: list[tuple[str, str]] = [
         ("docs/runtime/promote_queue.yaml", "docs/runtime/promote_queue.yaml"),
         ("docs/runtime/cherry_pick_journal.yaml", "docs/runtime/cherry_pick_journal.yaml"),
