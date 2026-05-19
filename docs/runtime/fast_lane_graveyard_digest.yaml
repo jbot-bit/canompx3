@@ -1,0 +1,350 @@
+do_not_hand_edit: true
+schema_version: 1
+built_at_utc: '2026-05-19T14:27:32Z'
+source_files:
+- chatgpt_bundle/06_RD_GRAVEYARD.md
+- docs/STRATEGY_BLUEPRINT.md
+- docs/runtime/action-queue.yaml
+entries:
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "ML \u2014 all three attempts dead"
+  status: UNKNOWN
+  hash_kind: class
+  structural_hash: a2b838e7267ad363
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: ML V3 DEAD + DELETED (2026-04-11)
+  status: DEAD
+  hash_kind: class
+  structural_hash: c9f4c50bc2ab34a6
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: ML V1 + V2 DEAD (prior)
+  status: DEAD
+  hash_kind: class
+  structural_hash: a13afe767265e20a
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "Portfolio Dedup Sprint \u2014 PREMISE WRONG (2026-04-14)"
+  status: PREMISE
+  hash_kind: class
+  structural_hash: 9487e7fffa8283c4
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "H2 book closed \u2014 Path C (2026-04-15)"
+  status: UNKNOWN
+  hash_kind: class
+  structural_hash: b479bee3e60bf8fe
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "GC \u2192 MGC cross-validation \u2014 PROXY DEPLOYMENT DEAD (2026-04-11)"
+  status: PROXY
+  hash_kind: class
+  structural_hash: 4c887f6ddacd4c68
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "IBS + NR7 filters \u2014 NO-GO (2026-04-13)"
+  status: NO-GO
+  hash_kind: class
+  structural_hash: 1cde779c0225dfb0
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "Gap-fill / vol-spike / narrow IB \u2014 HYPOTHESES DEAD (2026-04-13)"
+  status: HYPOTHESES
+  hash_kind: class
+  structural_hash: 803d5ea53a2ec781
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "Phase D Garch allocator \u2014 PAUSED (2026-04-18)"
+  status: PAUSED
+  hash_kind: class
+  structural_hash: 64e7fde37ee9c20c
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "Adversarial fade \u2014 DEAD (2026-04-15)"
+  status: DEAD
+  hash_kind: class
+  structural_hash: 661ed331467d07cd
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "Tier 2 \"framework-killed near-misses\" \u2014 ALL DECAYING (2026-04-09)"
+  status: DECAYING
+  hash_kind: class
+  structural_hash: 0bca347648cb3cc5
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "Batch T0-T8 \u2014 27 HOT/WARM cells (2026-04-15)"
+  status: HOT
+  hash_kind: class
+  structural_hash: 638ebecf521cf36e
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "Horizon T0-T8 non-volume \u2014 5 candidates (2026-04-15)"
+  status: UNKNOWN
+  hash_kind: class
+  structural_hash: 35f346778f215d2b
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "REL_VOL finding \u2014 EDGE_WITH_CAVEAT (2026-04-15, v2 stress tested)"
+  status: EDGE_WITH_CAVEAT
+  hash_kind: class
+  structural_hash: ab7db8e503c7b05a
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: Pre-Apr-15 kills (from STRATEGY_BLUEPRINT NO-GO registry)
+  status: NO-GO
+  hash_kind: class
+  structural_hash: 0314a1fbe69ba875
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "Scratch DB at `C:\\db\\gold.db` \u2014 DEPRECATED (2026-03)"
+  status: DEPRECATED
+  hash_kind: class
+  structural_hash: 37e5d7adcbef3d80
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "Parallel cost/session/instrument encodings \u2014 BANNED"
+  status: BANNED
+  hash_kind: class
+  structural_hash: e642e37af04fc597
+  lane_inputs: {}
+- source_path: chatgpt_bundle/06_RD_GRAVEYARD.md
+  title: "Mode B holdout \u2014 RESCINDED (2026-04-08)"
+  status: RESCINDED
+  hash_kind: class
+  structural_hash: 04ce15add7dfeaa6
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Path
+  status: VERDICT
+  hash_kind: class
+  structural_hash: f6bb991624273ca8
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: MGC/MES unfiltered ORB
+  status: DEAD
+  hash_kind: class
+  structural_hash: 417aa72e621d1eb5
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: E0 entry model
+  status: PURGED
+  hash_kind: class
+  structural_hash: 82071e90888c42a7
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: E3 entry model
+  status: RETIRED
+  hash_kind: class
+  structural_hash: 8892a53d7cb3620c
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: RR4.0 unfiltered baseline
+  status: DEAD
+  hash_kind: class
+  structural_hash: b58a5b2e126e5e8b
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: ML on PORTFOLIO-LEVEL negative baselines
+  status: DEAD
+  hash_kind: class
+  structural_hash: 89a51826dcc24783
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: ML on PER-SESSION negative baselines
+  status: DEAD
+  hash_kind: class
+  structural_hash: 4ce37e0c498c62b3
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: ML V2 meta-labeling (5 features)
+  status: DEAD
+  hash_kind: class
+  structural_hash: 8cb976e092ff96c1
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: '**ML V3 RR-stratified pooled meta-label (6 features)**'
+  status: '**DEAD'
+  hash_kind: class
+  structural_hash: ba66db5a5acda6e1
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Calendar blanket skip
+  status: DEAD
+  hash_kind: class
+  structural_hash: '9573520636977172'
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Non-ORB strategies
+  status: DEAD
+  hash_kind: class
+  structural_hash: 83f057edd283909d
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: MCL, SIL, M6E, MBT, M2K ORB
+  status: DEAD
+  hash_kind: class
+  structural_hash: a3c0d5aa15800975
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Quintile conviction
+  status: DEAD
+  hash_kind: class
+  structural_hash: a6cf208941876b77
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: RSI, MACD, Bollinger, MA cross
+  status: GUILTY
+  hash_kind: class
+  structural_hash: a5fbc1ad8262e128
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Pyramiding
+  status: DEAD
+  hash_kind: class
+  structural_hash: 16847687e9b7b0e1
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Breakeven trail stops
+  status: DEAD
+  hash_kind: class
+  structural_hash: 4c6230a7e625a2f2
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: O15/O30 ORB aperture (as portfolio)
+  status: ARITHMETIC_ONLY
+  hash_kind: class
+  structural_hash: 7e8784ca901c061d
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Break speed / break delay filter
+  status: DEAD
+  hash_kind: class
+  structural_hash: 2e36ba7c1476734e
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Late entry timing filter
+  status: DEAD
+  hash_kind: class
+  structural_hash: d0a346bc8d5471c2
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: New-on-new confluence stacking (Phase 3b pairs)
+  status: DEAD
+  hash_kind: class
+  structural_hash: 671521a1d52f41d0
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Regime-conditional discovery (rolling window)
+  status: INVESTIGATED
+  hash_kind: class
+  structural_hash: a1bc5a5121d8e528
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Vol-regime adaptive parameter switching
+  status: DEAD
+  hash_kind: class
+  structural_hash: d2dc65c7ebd49f7d
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: NR4/NR7 (Narrow Range) filter
+  status: DEAD
+  hash_kind: class
+  structural_hash: 38254b372dc3e3e6
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: IBS (Internal Bar Strength) filter
+  status: DEAD
+  hash_kind: class
+  structural_hash: 4bb958c91ae3796d
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Gap direction x break alignment filter
+  status: DEAD
+  hash_kind: class
+  structural_hash: 55a1449e4f44c3bd
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: ORB compression x overnight range interaction filter
+  status: DEAD
+  hash_kind: class
+  structural_hash: 0ff60dc36d4aa60c
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Crabel Stretch filter
+  status: DEAD
+  hash_kind: class
+  structural_hash: 5de7f084bdc486e0
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: EMA20 trend alignment filter
+  status: DEAD
+  hash_kind: class
+  structural_hash: 11657e7b869d1567
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Gap fill during ORB window = skip
+  status: DEAD
+  hash_kind: class
+  structural_hash: 6ea435f1794ed491
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Vol-spike avoidance (skip high atr_vel_ratio)
+  status: DEAD
+  hash_kind: class
+  structural_hash: 4bf6d676318c461b
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Pre-velocity edge (binary aligned-vs-opposed)
+  status: DEAD
+  hash_kind: class
+  structural_hash: 66fc7e0092dc964c
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: "Pre-velocity \xD7 atr_vel_regime interaction (Chan stop-cascade reframe)"
+  status: DEAD
+  hash_kind: class
+  structural_hash: 8a85da8aba095d40
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: Narrow relative IB width (compression-take)
+  status: DEAD
+  hash_kind: class
+  structural_hash: 52512ff13b7e5261
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: VWAP breakout direction gate
+  status: PROMISING
+  hash_kind: class
+  structural_hash: c633f07bb304698e
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: VWAP_BP_ALIGNED on MNQ CME_PRECLOSE O5 (specific cell)
+  status: DEAD
+  hash_kind: class
+  structural_hash: 02e6b87b1987f9a9
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: "MNQ WIDE_REL_1.0X_20D \xD7 ORB_G5 at O5"
+  status: 'NULL'
+  hash_kind: class
+  structural_hash: 6eb10ef3b20f6957
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: CROSS_NYSE_MOMENTUM on MNQ US_DATA_1000 + NYSE_CLOSE at O5
+  status: 'NULL'
+  hash_kind: class
+  structural_hash: db1ad707bf20bdd4
+  lane_inputs: {}
+- source_path: docs/STRATEGY_BLUEPRINT.md
+  title: OVNRNG_100 on MNQ NYSE_OPEN + US_DATA_1000 at O5
+  status: DEAD
+  hash_kind: class
+  structural_hash: f7a9ca1c18a20c8f
+  lane_inputs: {}
+- source_path: docs/runtime/action-queue.yaml
+  title: park_mnq_usdata1000_e1_pd_clear_long_o30_oos_unpowered_2026_05_19
+  status: PARK
+  hash_kind: class
+  structural_hash: e599265fce7dd75a
+  lane_inputs: {}
