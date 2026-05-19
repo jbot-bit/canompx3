@@ -11015,6 +11015,269 @@ def check_holdout_sentinel_inline_copy_parity() -> list[str]:
     return violations
 
 
+def check_fast_lane_promote_queue_provenance_present() -> list[str]:
+    """Stage 2A.3 Check #173: provenance fields present on every cache entry.
+
+    Three independent assertions, fail-closed:
+
+      (a) ``docs/runtime/promote_queue.yaml`` carries the
+          ``DERIVED STATE -- do not hand-edit`` banner verbatim (banner
+          scrub -- catches a wholesale rewrite).
+      (b) Every entry whose status is one of
+          ``QUEUED`` / ``ESCALATED`` / ``PARKED`` / ``SUPPRESSED_*`` carries
+          the 5 provenance fields with valid values:
+            - ``structural_hash`` is a 16-hex string
+            - ``k_lineage`` is a non-empty dict carrying
+              ``K_global`` / ``K_family`` / ``K_lane`` /
+              ``K_declared_in_prereg`` / ``K_effective_minBTL`` /
+              ``bh_fdr_passes`` / ``correlation_haircut_N_hat`` /
+              ``rho_hat_assumed``
+            - ``n_hat`` is a positive int
+            - ``rho_hat_assumed == 0.5`` (locked prior per stage file
+              § "K-Lineage Schema")
+          (REVOKED entries are allowed to carry empty/zero provenance --
+          the result MD was already revoked upstream; ERROR entries are
+          allowed to carry the zero-sentinel hash with full k_lineage
+          defaults.)
+      (c) Suppression-status enum parity:
+          ``scripts.research.fast_lane_promote_queue.STATUS_VALUES`` must
+          contain the 6 ``SUPPRESSED_*`` tokens (and the legacy tokens
+          like ``QUEUED`` / ``ESCALATED`` etc) declared in the Stage 2A.3
+          stage file's ``## Suppression Status Enum`` table.
+
+    Bug class: 10th instance of canonical-inline-copy parity (see
+    ``memory/feedback_canonical_inline_copy_parity_bug_class.md``). Two
+    canonical surfaces share these tokens by literal-byte copy:
+
+      - canonical: ``docs/runtime/stages/2026-05-20-fast-lane-anti-fp-2a3-
+        scanner-bridge-wiring.md`` § Suppression Status Enum (table's
+        first column)
+      - inline:   ``scripts/research/fast_lane_promote_queue.STATUS_VALUES``
+
+    Drift between them would silently let a renamed status token escape
+    the gate -- catastrophic for the universe-of-trials accounting.
+    """
+    import re
+
+    violations: list[str] = []
+
+    repo_root = Path(__file__).resolve().parents[1]
+    cache_path = repo_root / "docs" / "runtime" / "promote_queue.yaml"
+    stage_path = (
+        repo_root
+        / "docs"
+        / "runtime"
+        / "stages"
+        / "2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md"
+    )
+
+    # Required k_lineage keys per stage file § "K-Lineage Schema".
+    REQUIRED_K_LINEAGE_KEYS = (
+        "K_global",
+        "K_family",
+        "K_lane",
+        "K_declared_in_prereg",
+        "K_effective_minBTL",
+        "bh_fdr_passes",
+        "correlation_haircut_N_hat",
+        "rho_hat_assumed",
+    )
+
+    # Statuses that must carry full provenance. REVOKED + ERROR get
+    # latitude: revoked entries were already killed upstream, error
+    # entries get the zero-sentinel with default k_lineage.
+    GATED_STATUSES = (
+        "QUEUED",
+        "ESCALATED",
+        "PARKED",
+        "SUPPRESSED_BANNED_ENTRY_MODEL",
+        "SUPPRESSED_E2_LOOKAHEAD",
+        "SUPPRESSED_GRAVEYARD",
+        "SUPPRESSED_DUPLICATE_ACTIVE",
+        "SUPPRESSED_SIBLING_RETEST",
+        "SUPPRESSED_K_OVERRUN",
+        "REJECTED_OOS_UNPOWERED",
+    )
+
+    # ---- (a) banner scrub -----------------------------------------------
+    if not cache_path.exists():
+        # Empty repo / first run -- not a violation. Cache is rebuilt on
+        # demand by the scanner. Skip the rest of the check.
+        return []
+    try:
+        raw_cache_text = cache_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [
+            "check_fast_lane_promote_queue_provenance_present: "
+            f"could not read {cache_path}: {exc}"
+        ]
+    if "DERIVED STATE - do not hand-edit" not in raw_cache_text:
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: BANNER TAMPERED "
+            f"-- {cache_path.name} is missing the canonical 'DERIVED STATE - "
+            "do not hand-edit' banner; rerun "
+            "scripts/research/fast_lane_promote_queue.py --write."
+        )
+
+    # ---- (b) provenance fields on every gated entry --------------------
+    import yaml as _yaml
+
+    try:
+        cache_payload = _yaml.safe_load(raw_cache_text)
+    except _yaml.YAMLError as exc:
+        return violations + [
+            "check_fast_lane_promote_queue_provenance_present: "
+            f"failed to parse {cache_path.name}: {exc}"
+        ]
+    entries = (cache_payload or {}).get("entries") or []
+    if not isinstance(entries, list):
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: "
+            f"{cache_path.name} `entries` is not a list (got "
+            f"{type(entries).__name__})."
+        )
+        entries = []
+
+    for idx, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            violations.append(
+                "check_fast_lane_promote_queue_provenance_present: "
+                f"entry[{idx}] is not a dict."
+            )
+            continue
+        status = entry.get("status")
+        if status not in GATED_STATUSES:
+            continue
+        sid = entry.get("strategy_id", "<unknown>")
+
+        # structural_hash: 16-hex string
+        sh = entry.get("structural_hash")
+        if not isinstance(sh, str) or len(sh) != 16:
+            violations.append(
+                "check_fast_lane_promote_queue_provenance_present: "
+                f"entry[{idx}] strategy_id={sid!r} status={status!r} "
+                f"structural_hash={sh!r} (want 16-hex string)."
+            )
+        else:
+            try:
+                int(sh, 16)
+            except ValueError:
+                violations.append(
+                    "check_fast_lane_promote_queue_provenance_present: "
+                    f"entry[{idx}] strategy_id={sid!r} structural_hash="
+                    f"{sh!r} is not hex."
+                )
+
+        # k_lineage: non-empty dict with required keys + rho_hat_assumed=0.5
+        kl = entry.get("k_lineage")
+        if not isinstance(kl, dict) or not kl:
+            violations.append(
+                "check_fast_lane_promote_queue_provenance_present: "
+                f"entry[{idx}] strategy_id={sid!r} k_lineage="
+                f"{kl!r} (want non-empty dict)."
+            )
+        else:
+            missing_keys = [k for k in REQUIRED_K_LINEAGE_KEYS if k not in kl]
+            if missing_keys:
+                violations.append(
+                    "check_fast_lane_promote_queue_provenance_present: "
+                    f"entry[{idx}] strategy_id={sid!r} k_lineage missing "
+                    f"required keys: {missing_keys}."
+                )
+            rho = kl.get("rho_hat_assumed")
+            if rho != 0.5:
+                violations.append(
+                    "check_fast_lane_promote_queue_provenance_present: "
+                    f"entry[{idx}] strategy_id={sid!r} k_lineage."
+                    f"rho_hat_assumed={rho!r} (want 0.5; locked prior per "
+                    "stage file § K-Lineage Schema)."
+                )
+
+        # n_hat: positive int
+        n_hat = entry.get("n_hat")
+        if not isinstance(n_hat, int) or isinstance(n_hat, bool) or n_hat <= 0:
+            violations.append(
+                "check_fast_lane_promote_queue_provenance_present: "
+                f"entry[{idx}] strategy_id={sid!r} n_hat={n_hat!r} (want "
+                "positive int)."
+            )
+
+    # ---- (c) STATUS_VALUES parity against the stage file enum table ----
+    try:
+        from scripts.research.fast_lane_promote_queue import STATUS_VALUES
+    except Exception as exc:
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: scanner "
+            f"module import failed: {type(exc).__name__}: {exc}"
+        )
+        return violations
+
+    if not stage_path.exists():
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: stage file "
+            f"missing at {stage_path}; cannot enforce STATUS_VALUES parity."
+        )
+        return violations
+    try:
+        stage_text = stage_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: failed to "
+            f"read {stage_path.name}: {exc}"
+        )
+        return violations
+
+    # Parse the `## Suppression Status Enum` table. Rows look like:
+    #   | `SUPPRESSED_FOO` | trigger prose | bridge action |
+    section_match = re.search(
+        r"(?ms)^## Suppression Status Enum\b.*?^(?=## )",
+        stage_text,
+    )
+    if section_match is None:
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: stage file "
+            f"{stage_path.name} missing `## Suppression Status Enum` section."
+        )
+        return violations
+    enum_body = section_match.group(0)
+    # First-column cells in the table that look like `SUPPRESSED_*`.
+    # Token-name alphabet must include digits because tokens like
+    # SUPPRESSED_E2_LOOKAHEAD carry a digit in the middle. Restricting to
+    # [A-Z_]+ silently dropped that one row -- caught by self-review of the
+    # canonical-token enumeration during Check #173 first-run, 2026-05-20.
+    canonical_tokens = tuple(
+        sorted(set(re.findall(r"\|\s*`(SUPPRESSED_[A-Z0-9_]+)`\s*\|", enum_body)))
+    )
+    if not canonical_tokens:
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: parsed "
+            f"`## Suppression Status Enum` table in {stage_path.name} "
+            "yielded zero SUPPRESSED_* tokens; either the stage file lost "
+            "its table or the regex is mis-tuned. Investigate before "
+            "trusting STATUS_VALUES parity."
+        )
+        return violations
+
+    inline_tokens = tuple(
+        sorted(t for t in STATUS_VALUES if t.startswith("SUPPRESSED_"))
+    )
+    if canonical_tokens != inline_tokens:
+        only_canonical = sorted(set(canonical_tokens) - set(inline_tokens))
+        only_inline = sorted(set(inline_tokens) - set(canonical_tokens))
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: "
+            "STATUS_VALUES drift -- canonical SUPPRESSED_* tokens parsed "
+            f"from {stage_path.name} § Suppression Status Enum: "
+            f"{canonical_tokens!r}; inline tokens in scanner STATUS_VALUES: "
+            f"{inline_tokens!r}. Only in canonical: {only_canonical}; "
+            f"only in inline: {only_inline}. "
+            "[[canonical-inline-copy-parity-bug-class]] -- 10th instance, "
+            "Stage 2A.3 (memory/feedback_canonical_inline_copy_parity_bug_class.md)."
+        )
+
+    return violations
+
+
 def check_canonical_inline_copies_have_parity_check() -> list[str]:
     """Meta-check: every CANONICAL_INLINE_COPIES entry has a live parity guard.
 
@@ -13188,6 +13451,12 @@ CHECKS = [
         "Graveyard status tokens parity: chatgpt_bundle/06_RD_GRAVEYARD.md `## Status Token Doctrine` block is the canonical source; every status token used in headings must be declared (Stage 2A.2 follow-up Check #172, canonical-inline-copy parity 9th instance)",
         check_graveyard_status_tokens_parity,
         False,  # blocking — undeclared tokens silently degrade graveyard digest status semantics
+        False,
+    ),
+    (
+        "Fast-lane promote queue provenance present: docs/runtime/promote_queue.yaml gated entries must carry structural_hash + k_lineage + n_hat with rho_hat_assumed=0.5, and STATUS_VALUES suppression tokens must mirror the Stage 2A.3 stage file enum table (Stage 2A.3 Check #173, canonical-inline-copy parity 10th instance, Bailey-Lopez de Prado 2014 sec 3 + Stage 2A.3 design grounding)",
+        check_fast_lane_promote_queue_provenance_present,
+        False,  # blocking -- drift silently breaks universe-of-trials accounting + suppression chain
         False,
     ),
 ]  # end CHECKS

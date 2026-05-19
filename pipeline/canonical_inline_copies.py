@@ -304,6 +304,38 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         ),
     ),
     InlineCopyPair(
+        name="fast_lane_promote_suppression_status_values",
+        inline_site="scripts/research/fast_lane_promote_queue.py",
+        canonical_source=(
+            "docs/runtime/stages/"
+            "2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md "
+            "section `## Suppression Status Enum` (6 SUPPRESSED_* tokens "
+            "in the table's first column)"
+        ),
+        gated_constants=("STATUS_VALUES",),
+        parity_check="check_fast_lane_promote_queue_provenance_present",
+        test_file=(
+            "tests/test_pipeline/"
+            "test_check_drift_fast_lane_promote_queue_provenance_present.py"
+        ),
+        bug_class_anchor=(
+            "memory/feedback_canonical_inline_copy_parity_bug_class.md "
+            "(10th confirmed instance, 2026-05-20 — Stage 2A.3)"
+        ),
+        notes=(
+            "Six SUPPRESSED_* status tokens added to "
+            "fast_lane_promote_queue.STATUS_VALUES must mirror the "
+            "first-column entries in the Stage 2A.3 stage file's "
+            "`## Suppression Status Enum` table (parsed by the parity "
+            "check). The same check also asserts every PROMOTE / QUEUED "
+            "/ SUPPRESSED_* cache entry carries the 5 provenance fields "
+            "(structural_hash, k_lineage, N_hat, upstream_k_role, "
+            "upstream_k_value) with rho_hat_assumed == 0.5 — both "
+            "gates live in one check because the suppression tokens and "
+            "the provenance fields are written by the same scanner pass."
+        ),
+    ),
+    InlineCopyPair(
         name="fast_lane_trial_ledger_holdout_sentinel",
         inline_site="scripts/research/fast_lane_trial_ledger.py",
         canonical_source=(

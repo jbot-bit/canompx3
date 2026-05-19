@@ -270,7 +270,14 @@ def compute_non_artifact(pooling_artifact: bool) -> float:
 
 @dataclass(frozen=True)
 class RankedCandidate:
-    """A scored fast-lane PROMOTE survivor, ready for operator review."""
+    """A scored fast-lane PROMOTE survivor, ready for operator review.
+
+    Stage 2A.3 adds three provenance fields (``structural_hash``,
+    ``k_lineage``, ``n_hat``) propagated from the scanner cache. The
+    ranker refuses to score any QUEUED entry that lacks them -- this is
+    the fail-closed guard that keeps a provenance-less candidate from
+    silently being ranked + journalled + bridged.
+    """
 
     strategy_id: str
     direction: str
@@ -284,6 +291,9 @@ class RankedCandidate:
     score: ScoreBreakdown
     skip_recommended: bool
     result_md: str
+    structural_hash: str
+    k_lineage: dict[str, Any]
+    n_hat: int
 
     @property
     def total_score(self) -> float:
@@ -321,6 +331,47 @@ def rank_queue_entries(
         strategy_id = entry.get("strategy_id")
         if not isinstance(strategy_id, str):
             continue
+
+        # Stage 2A.3 fail-closed provenance guard. A QUEUED entry that
+        # somehow lacks structural_hash / k_lineage / N_hat means the
+        # scanner cache was hand-edited OR predates 2A.3 -- never let
+        # a provenance-less candidate flow through ranking / journal /
+        # bridge. Raising rather than skipping because the only valid
+        # remediation is "rerun the scanner", and silently dropping the
+        # entry would let an operator wonder where their candidate went.
+        structural_hash = entry.get("structural_hash")
+        k_lineage = entry.get("k_lineage")
+        n_hat_raw = entry.get("n_hat")
+        provenance_problems: list[str] = []
+        if not isinstance(structural_hash, str) or len(structural_hash) != 16:
+            provenance_problems.append(
+                f"structural_hash={structural_hash!r} (want 16-hex str)"
+            )
+        if not isinstance(k_lineage, dict) or not k_lineage:
+            provenance_problems.append(
+                f"k_lineage={k_lineage!r} (want non-empty dict)"
+            )
+        try:
+            n_hat_int = int(n_hat_raw) if n_hat_raw is not None else 0
+        except (TypeError, ValueError):
+            n_hat_int = -1
+        if n_hat_int <= 0:
+            provenance_problems.append(
+                f"n_hat={n_hat_raw!r} (want positive int)"
+            )
+        if provenance_problems:
+            raise ValueError(
+                "Ranker refusal: QUEUED entry "
+                f"{strategy_id} lacks provenance fields per Stage 2A.3 "
+                f"contract: {provenance_problems}. Rerun "
+                "scripts/research/fast_lane_promote_queue.py --write to "
+                "refresh the cache, or investigate hand-edit / cross-version "
+                "drift."
+            )
+        # Type-narrow for Pyright: the raise above guarantees these are
+        # non-None / well-formed past this point.
+        assert isinstance(structural_hash, str)
+        assert isinstance(k_lineage, dict)
 
         # Explicit defaults (not `or`-fallback) so a legitimate 0/0.0 value
         # from the queue cache is preserved -- prior `or float("nan")` falsy-
@@ -385,6 +436,9 @@ def rank_queue_entries(
                 score=breakdown,
                 skip_recommended=breakdown.total < SCORE_SKIP_FLOOR,
                 result_md=str(result_md_rel) if result_md_rel else "",
+                structural_hash=structural_hash,
+                k_lineage=dict(k_lineage),
+                n_hat=n_hat_int,
             )
         )
 
@@ -555,6 +609,12 @@ def build_journal_entry(
         "oos_n": candidate.oos_n,
         "oos_power_tier": oos_power_tier_for(candidate),
         "bridge_draft_path": bridge_draft_path,
+        # Stage 2A.3 provenance propagation -- so the journal carries the
+        # same de-dup criterion that gated ranking, and a future audit
+        # can replay K-lineage at this rank-time.
+        "structural_hash": candidate.structural_hash,
+        "k_lineage": dict(candidate.k_lineage),
+        "n_hat": candidate.n_hat,
         "heavyweight_verdict": None,
         "t_observed_post_clustered_se": None,
         "lesson_label": None,
