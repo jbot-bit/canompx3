@@ -33,7 +33,7 @@ from pipeline.db_config import configure_connection
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.live.alert_engine import read_operator_alerts, summarize_operator_alerts
-from trading_app.live.bot_state import read_state
+from trading_app.live.bot_state import read_live_health, read_state
 from trading_app.live.instance_lock import is_pid_alive
 
 log = logging.getLogger(__name__)
@@ -1326,6 +1326,10 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
         detail = f"Latest: {latest_message}" if latest_message else "No runtime alerts recorded yet"
         checks.append({"name": "Alerts", "status": alert_status, "detail": detail})
 
+    # Read-only broker-edge health snapshot written by SessionOrchestrator
+    # heartbeat. Reader is fail-closed: any failure surfaces broker_status="unknown".
+    live_health = read_live_health()
+
     return {
         "profile": operator_profile,
         "raw_mode": raw_mode,
@@ -1345,6 +1349,7 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
         "alert_summary": alert_summary,
         "conditional_overlays": overlay_summary,
         "opportunity_awareness": opportunity_summary,
+        "live_health": live_health,
     }
 
 

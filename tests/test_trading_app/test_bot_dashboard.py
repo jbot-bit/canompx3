@@ -886,3 +886,142 @@ def test_prepare_profile_for_start_propagates_mode_to_subprocess(monkeypatch):
     assert captured["profile"] == "topstep_50k_mnq_auto"
     assert captured["mode"] == "signal"
     assert result["status"] != "error"
+
+
+# --- live_health dashboard reader (Phase 2 read-only operator visibility) ---------------
+
+
+def _payload_monkey_baseline(monkeypatch):
+    """Shared monkeypatch baseline so live_health tests do not pull broker state."""
+    monkeypatch.setattr(
+        bot_dashboard,
+        "read_state",
+        lambda: {"mode": "SIGNAL", "heartbeat_age_s": 5, "account_name": "topstep_50k_mnq_auto"},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_broker_status",
+        lambda: {"enabled_count": 1, "connected_count": 1, "status": "ok"},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_data_status",
+        lambda: {"status": "ok", "any_stale": False, "instruments": {}},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_alert_summary",
+        lambda **_: {
+            "status": "ok",
+            "alerts": [],
+            "total": 0,
+            "counts": {"critical": 0, "warning": 0, "info": 0},
+            "recent_window_minutes": 30,
+            "recent_counts": {"critical": 0, "warning": 0, "info": 0},
+            "latest": None,
+        },
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_profile_session_ambiguity",
+        lambda profile_id: {"status": "pass", "detail": f"ok:{profile_id}"},
+    )
+
+
+def test_dashboard_payload_includes_live_health_when_snapshot_present(monkeypatch):
+    """Snapshot file present + fresh → payload surfaces broker_status verbatim."""
+    _payload_monkey_baseline(monkeypatch)
+    sample = {
+        "auth_healthy": True,
+        "brackets_probe": True,
+        "fill_poller_probe": True,
+        "broker_status": "ok",
+        "fill_polls_run": 17,
+        "fill_polls_confirmed": 3,
+        "fill_polls_failed": 0,
+        "snapshot_ts_utc": "2026-05-16T01:23:45+00:00",
+    }
+    monkeypatch.setattr(bot_dashboard, "read_live_health", lambda: sample)
+
+    payload = _build_operator_payload("topstep_50k_mnq_auto")
+
+    assert payload["live_health"] == sample
+    assert payload["live_health"]["broker_status"] == "ok"
+    assert payload["live_health"]["fill_polls_run"] == 17
+
+
+def test_dashboard_payload_live_health_unknown_when_snapshot_missing(monkeypatch):
+    """Snapshot missing → reader returns unknown; dashboard surfaces it as such (fail-closed)."""
+    _payload_monkey_baseline(monkeypatch)
+    monkeypatch.setattr(
+        bot_dashboard,
+        "read_live_health",
+        lambda: {"broker_status": "unknown", "reason": "snapshot_missing"},
+    )
+
+    payload = _build_operator_payload("topstep_50k_mnq_auto")
+
+    assert payload["live_health"]["broker_status"] == "unknown"
+    assert payload["live_health"]["reason"] == "snapshot_missing"
+
+
+def test_read_live_health_returns_unknown_when_file_corrupt(tmp_path, monkeypatch):
+    """End-to-end: corrupt JSON on disk → read_live_health returns unknown payload."""
+    from trading_app.live import bot_state
+
+    corrupt_file = tmp_path / "live_health.json"
+    corrupt_file.write_text("{not valid json", encoding="utf-8")
+    monkeypatch.setattr(bot_state, "LIVE_HEALTH_FILE", corrupt_file)
+
+    result = bot_state.read_live_health()
+
+    assert result["broker_status"] == "unknown"
+    assert "read_error" in result["reason"]
+
+
+def test_read_live_health_returns_unknown_when_snapshot_stale(tmp_path, monkeypatch):
+    """Snapshot older than LIVE_HEALTH_STALE_AFTER_SECS → broker_status forced to unknown."""
+    import json
+    from datetime import UTC, datetime, timedelta
+
+    from trading_app.live import bot_state
+
+    stale_ts = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+    stale_file = tmp_path / "live_health.json"
+    stale_file.write_text(
+        json.dumps({"broker_status": "ok", "auth_healthy": True, "snapshot_ts_utc": stale_ts}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(bot_state, "LIVE_HEALTH_FILE", stale_file)
+
+    result = bot_state.read_live_health()
+
+    assert result["broker_status"] == "unknown"
+    assert result["reason"].startswith("snapshot_stale:")
+
+
+def test_write_then_read_live_health_round_trips(tmp_path, monkeypatch):
+    """Atomic write + read round-trip preserves operator-visibility fields."""
+    from trading_app.live import bot_state
+
+    target = tmp_path / "live_health.json"
+    monkeypatch.setattr(bot_state, "LIVE_HEALTH_FILE", target)
+
+    bot_state.write_live_health(
+        {
+            "auth_healthy": True,
+            "brackets_probe": True,
+            "fill_poller_probe": False,
+            "broker_status": "degraded",
+            "fill_polls_run": 5,
+            "fill_polls_confirmed": 2,
+            "fill_polls_failed": 1,
+        }
+    )
+
+    result = bot_state.read_live_health()
+
+    assert result["broker_status"] == "degraded"
+    assert result["fill_poller_probe"] is False
+    assert result["fill_polls_failed"] == 1
+    assert "snapshot_ts_utc" in result  # writer stamps it

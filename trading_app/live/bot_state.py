@@ -24,6 +24,16 @@ from pipeline.dst import SESSION_CATALOG
 log = logging.getLogger(__name__)
 
 STATE_FILE = Path(__file__).parent.parent.parent / "data" / "bot_state.json"
+LIVE_HEALTH_FILE = Path(__file__).parent.parent.parent / "runtime" / "state" / "live_health.json"
+
+# Rationale: heartbeat writes the snapshot once per HEARTBEAT_INTERVAL
+# (1800 s / 30 min in production per session_orchestrator.HEARTBEAT_INTERVAL).
+# A snapshot older than 600 s while the bot is supposed to be running means
+# at least one heartbeat tick has been skipped — the operator dashboard
+# treats that as broker_status="unknown" (fail-closed). The tolerance is
+# deliberately below HEARTBEAT_INTERVAL so a stale snapshot is detected on
+# the very next heartbeat, not two heartbeats late.
+LIVE_HEALTH_STALE_AFTER_SECS = 600
 
 _MOCK_CLASS_NAMES = frozenset({"Mock", "MagicMock", "AsyncMock", "NonCallableMock", "NonCallableMagicMock"})
 
@@ -120,6 +130,53 @@ def read_state() -> dict[str, Any]:
 def clear_state() -> None:
     """Remove the state file (called on bot shutdown)."""
     STATE_FILE.unlink(missing_ok=True)
+
+
+def write_live_health(data: dict[str, Any]) -> None:
+    """Atomic snapshot write for broker-edge operator visibility.
+
+    Mirrors write_state's atomic-replace idiom. The trading loop calls this
+    best-effort from the heartbeat tick — failure is logged, never raised.
+    """
+    data["snapshot_ts_utc"] = datetime.now(UTC).isoformat()
+    tmp = LIVE_HEALTH_FILE.with_suffix(".json.tmp")
+    try:
+        LIVE_HEALTH_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(data, default=str, indent=2), encoding="utf-8")
+        os.replace(str(tmp), str(LIVE_HEALTH_FILE))
+    except OSError:
+        log.warning("live_health write failed — dashboard health card may be stale", exc_info=True)
+        tmp.unlink(missing_ok=True)
+
+
+def read_live_health() -> dict[str, Any]:
+    """Read broker-edge snapshot. Returns fail-closed unknown payload on any issue.
+
+    Surfaced verbatim into the dashboard operator payload; the dashboard
+    never derives its own broker health. Fail-closed: missing file, corrupt
+    JSON, or stale snapshot all return broker_status="unknown" with a reason.
+    """
+    if not LIVE_HEALTH_FILE.exists():
+        return {"broker_status": "unknown", "reason": "snapshot_missing"}
+    try:
+        raw = LIVE_HEALTH_FILE.read_text(encoding="utf-8")
+        payload = json.loads(raw)
+    except (json.JSONDecodeError, OSError) as e:
+        log.warning("live_health read failed — returning unknown", exc_info=True)
+        return {"broker_status": "unknown", "reason": f"read_error:{type(e).__name__}"}
+
+    ts = payload.get("snapshot_ts_utc")
+    if not isinstance(ts, str):
+        return {"broker_status": "unknown", "reason": "snapshot_ts_missing"}
+    try:
+        snapshot_ts = datetime.fromisoformat(ts)
+    except ValueError:
+        return {"broker_status": "unknown", "reason": "snapshot_ts_invalid"}
+    age = (datetime.now(UTC) - snapshot_ts).total_seconds()
+    if age > LIVE_HEALTH_STALE_AFTER_SECS:
+        payload["broker_status"] = "unknown"
+        payload["reason"] = f"snapshot_stale:{int(age)}s"
+    return payload
 
 
 def _get_session_time_brisbane(orb_label: str, trading_day: date | None = None) -> str:
