@@ -1,6 +1,8 @@
 """Cherry-pick grounder -- attach a literature-grounded theory_citation to a
 bridge-generated heavyweight Chordia DRAFT prereg.
 
+See ``docs/specs/fast_lane_state_graph.md`` for the canonical fast-lane chain definition.
+
 Closes the gap between fast_lane_to_heavyweight_bridge.py (which deliberately
 omits theory_citation per the field-presence trap, memory/feedback_chordia_
 theory_citation_field_presence_trap.md) and an active heavyweight prereg in

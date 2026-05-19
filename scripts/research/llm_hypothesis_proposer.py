@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """LLM Hypothesis Proposer CLI — Track A entry point.
 
+See ``docs/specs/fast_lane_state_graph.md`` for the canonical fast-lane chain definition.
+
 Produces a ``.draft.yaml`` candidate pre-registration at
 ``docs/audit/hypotheses/YYYY-MM-DD-llm-<slug>.draft.yaml``.
 

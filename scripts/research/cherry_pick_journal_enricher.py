@@ -1,5 +1,7 @@
 """Cherry-pick journal enricher — closes the feedback loop from heavyweight verdicts back to ranker entries.
 
+See ``docs/specs/fast_lane_state_graph.md`` for the canonical fast-lane chain definition.
+
 When the cherry-pick ranker writes a journal entry, ``heavyweight_verdict``,
 ``t_observed_post_clustered_se``, and ``lesson_label`` are deliberately null —
 no heavyweight Chordia replay has run yet. Once a strict-unlock result MD

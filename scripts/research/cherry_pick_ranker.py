@@ -1,5 +1,7 @@
 """Cherry-pick ranker — FAST_LANE PROMOTE survivors ranked by heavyweight-Chordia pass probability.
 
+See ``docs/specs/fast_lane_state_graph.md`` for the canonical fast-lane chain definition.
+
 Reads ``docs/runtime/promote_queue.yaml`` (derived state, rebuilt by
 ``scripts/research/fast_lane_promote_queue.py``), filters to QUEUED entries
 (PROMOTE survivors with no heavyweight pre-reg yet authored, no revocation,

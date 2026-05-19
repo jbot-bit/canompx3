@@ -1,5 +1,7 @@
 """Bounded exact-lane Chordia strict-unlock runner.
 
+See ``docs/specs/fast_lane_state_graph.md`` for the canonical fast-lane chain definition.
+
 Executes a single preregistered exact-lane replay from
 ``docs/audit/hypotheses/*.yaml`` and emits:
 

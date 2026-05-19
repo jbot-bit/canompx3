@@ -1,5 +1,7 @@
 """FAST_LANE result -> heavyweight Chordia prereg DRAFT generator.
 
+See ``docs/specs/fast_lane_state_graph.md`` for the canonical fast-lane chain definition.
+
 Translates a fast-lane v5.1 result MD + its source prereg YAML into a
 heavyweight Chordia strict-unlock prereg DRAFT under
 ``docs/audit/hypotheses/drafts/`` (NOT under ``docs/audit/hypotheses/``).

@@ -11131,6 +11131,197 @@ def check_am33_audit_log_theory_grant_parity(
     return violations
 
 
+def check_fast_lane_state_graph_node_parity(
+    spec_path: Path | None = None,
+    runtime_dir: Path | None = None,
+) -> list[str]:
+    """Check #166: fast-lane state-graph node list must match on-disk derived state.
+
+    Parses the ``## Node Inventory`` YAML block in
+    ``docs/specs/fast_lane_state_graph.md`` and verifies symmetric parity
+    with the on-disk derived-state files referenced by the fast-lane prereg
+    pipeline (Stage 1 of
+    ``docs/plans/2026-05-19-fast-lane-pipeline-connective-tissue-design.md``).
+
+    Two violation directions:
+
+    (a) ORPHAN-NODE: an ``active`` node (``proposed: true`` absent or false)
+        in the spec names a file/dir path that does not exist on disk.
+
+    (b) ORPHAN-FILE: a derived-state file under the known glob roots
+        (``docs/runtime/promote_queue.yaml``,
+        ``docs/runtime/cherry_pick_journal.yaml``,
+        ``docs/runtime/cherry_pick_ranking_*.csv``,
+        ``docs/audit/hypotheses/drafts/``) is not named by any spec node.
+
+    Reserved (``proposed: true``) nodes are excluded from BOTH directions —
+    Stage 2 and Stage 3 schemas live in the spec but are not yet shipped.
+
+    Fail-closed:
+    - Missing or unparseable spec returns a violation (no silent pass).
+    - Missing ``## Node Inventory`` heading returns a violation.
+    - YAML block that fails to parse returns a violation.
+
+    Parameters
+    ----------
+    spec_path : Path | None
+        Override spec doc path (test seam).
+    runtime_dir : Path | None
+        Override repo root for derived-state globs (test seam). Defaults to
+        ``PROJECT_ROOT`` so globs resolve against the live repo.
+    """
+    try:
+        import yaml as _yaml
+    except ImportError as exc:
+        return [f"check_fast_lane_state_graph_node_parity: pyyaml import failed: {exc}"]
+
+    _spec = (
+        spec_path
+        if spec_path is not None
+        else PROJECT_ROOT / "docs" / "specs" / "fast_lane_state_graph.md"
+    )
+    _root = runtime_dir if runtime_dir is not None else PROJECT_ROOT
+
+    if not _spec.exists():
+        return [
+            f"check_fast_lane_state_graph_node_parity: spec doc not found at {_spec} -- "
+            "this file is the single source of truth for the fast-lane chain "
+            "(Stage 1 of docs/plans/2026-05-19-fast-lane-pipeline-connective-tissue-design.md)."
+        ]
+
+    try:
+        raw = _spec.read_text(encoding="utf-8")
+    except Exception as exc:
+        return [
+            f"check_fast_lane_state_graph_node_parity: failed to read {_spec}: "
+            f"{type(exc).__name__}: {exc}"
+        ]
+
+    # Extract the YAML block under "## 2. Node Inventory". The block is
+    # delimited by triple-backtick yaml fences; we take the FIRST yaml fence
+    # appearing after the Node Inventory heading.
+    heading_match = re.search(r"^##\s+2\.\s+Node Inventory\s*$", raw, re.MULTILINE)
+    if not heading_match:
+        return [
+            f"check_fast_lane_state_graph_node_parity: spec doc {_spec} missing "
+            "'## 2. Node Inventory' heading -- parser cannot locate the canonical "
+            "node list. Restore the heading or update the parser."
+        ]
+
+    after_heading = raw[heading_match.end():]
+    fence_match = re.search(r"```yaml\s*\n(.*?)\n```", after_heading, re.DOTALL)
+    if not fence_match:
+        return [
+            f"check_fast_lane_state_graph_node_parity: spec doc {_spec} has no "
+            "```yaml fenced block after '## 2. Node Inventory' -- node list cannot "
+            "be parsed."
+        ]
+
+    yaml_body = fence_match.group(1)
+    try:
+        parsed = _yaml.safe_load(yaml_body)
+    except Exception as exc:
+        return [
+            f"check_fast_lane_state_graph_node_parity: failed to parse Node Inventory "
+            f"YAML block in {_spec}: {type(exc).__name__}: {exc}"
+        ]
+
+    if not isinstance(parsed, dict) or "nodes" not in parsed:
+        return [
+            f"check_fast_lane_state_graph_node_parity: Node Inventory YAML in {_spec} "
+            "is not a mapping with a top-level 'nodes:' key."
+        ]
+
+    nodes_raw = parsed.get("nodes")
+    if not isinstance(nodes_raw, list):
+        return [
+            f"check_fast_lane_state_graph_node_parity: 'nodes' in {_spec} is not a list "
+            f"(got {type(nodes_raw).__name__})."
+        ]
+
+    violations: list[str] = []
+    active_paths: set[str] = set()  # normalised repo-relative path strings
+
+    # --- Direction (a): ORPHAN-NODE — every active node path must resolve on disk ---
+    for idx, node in enumerate(nodes_raw):
+        if not isinstance(node, dict):
+            violations.append(
+                f"check_fast_lane_state_graph_node_parity: node[{idx}] in {_spec} "
+                f"is not a mapping (got {type(node).__name__})."
+            )
+            continue
+        node_id = node.get("id", f"<unnamed-node-{idx}>")
+        node_path = node.get("path")
+        if not isinstance(node_path, str) or not node_path:
+            violations.append(
+                f"check_fast_lane_state_graph_node_parity: node[{idx}] (id={node_id!r}) "
+                f"missing required 'path' string."
+            )
+            continue
+        is_proposed = bool(node.get("proposed", False))
+        if is_proposed:
+            continue  # Stage 2/3 reserved nodes — excluded from parity until they ship.
+
+        active_paths.add(node_path)
+        # Resolve path on disk. Treat trailing '/' as directory; '*' as glob.
+        target = _root / node_path
+        if "*" in node_path:
+            matches = list(_root.glob(node_path))
+            if not matches:
+                violations.append(
+                    f"check_fast_lane_state_graph_node_parity: ORPHAN-NODE -- spec node "
+                    f"id={node_id!r} declares glob path {node_path!r} but no file matches "
+                    f"on disk under {_root}. Either remove the node, mark it "
+                    "'proposed: true', or write a matching file."
+                )
+        elif node_path.endswith("/"):
+            if not target.is_dir():
+                violations.append(
+                    f"check_fast_lane_state_graph_node_parity: ORPHAN-NODE -- spec node "
+                    f"id={node_id!r} declares directory path {node_path!r} but the "
+                    f"directory does not exist at {target}. Either remove the node, "
+                    "mark it 'proposed: true', or create the directory."
+                )
+        else:
+            if not target.exists():
+                violations.append(
+                    f"check_fast_lane_state_graph_node_parity: ORPHAN-NODE -- spec node "
+                    f"id={node_id!r} declares path {node_path!r} but the file does not "
+                    f"exist at {target}. Either remove the node, mark it "
+                    "'proposed: true', or write the file."
+                )
+
+    # --- Direction (b): ORPHAN-FILE — every derived-state file in known glob roots
+    # must be named by an active spec node. ---
+    # Glob roots that participate in the fast-lane chain (matches design § 3 Stage 3).
+    known_globs: list[tuple[str, str]] = [
+        ("docs/runtime/promote_queue.yaml", "docs/runtime/promote_queue.yaml"),
+        ("docs/runtime/cherry_pick_journal.yaml", "docs/runtime/cherry_pick_journal.yaml"),
+        ("docs/runtime/cherry_pick_ranking_*.csv", "docs/runtime/cherry_pick_ranking_*.csv"),
+    ]
+    for spec_path_pattern, disk_glob in known_globs:
+        matches = list(_root.glob(disk_glob))
+        if not matches:
+            continue  # absent on disk: that's an ORPHAN-NODE concern, handled above
+        if spec_path_pattern not in active_paths:
+            violations.append(
+                f"check_fast_lane_state_graph_node_parity: ORPHAN-FILE -- on-disk "
+                f"derived-state matches {disk_glob!r} ({len(matches)} file(s)) but no "
+                f"spec node names {spec_path_pattern!r}. Add a node to "
+                "'## 2. Node Inventory' in docs/specs/fast_lane_state_graph.md."
+            )
+    # Drafts directory is a special case: directory presence, not glob.
+    drafts_dir = _root / "docs/audit/hypotheses/drafts"
+    if drafts_dir.is_dir() and "docs/audit/hypotheses/drafts/" not in active_paths:
+        violations.append(
+            "check_fast_lane_state_graph_node_parity: ORPHAN-FILE -- "
+            "docs/audit/hypotheses/drafts/ exists on disk but no spec node names "
+            "it. Add a node to '## 2. Node Inventory'."
+        )
+
+    return violations
+
+
 CHECKS = [
     (
         "Hardcoded 'MGC' SQL literals in generic pipeline code",
@@ -11817,6 +12008,12 @@ CHECKS = [
         "AM3.3 audit-log/prereg theory_grant parity: chordia_audit_log.yaml theory_grants must match active prereg metadata.theory_grant (Check #162)",
         check_am33_audit_log_theory_grant_parity,
         False,  # blocking — mismatch silently applies wrong Chordia t-threshold (3.00 vs 3.79) at allocator gate
+        False,
+    ),
+    (
+        "Fast-lane state-graph node parity: docs/specs/fast_lane_state_graph.md '## 2. Node Inventory' must match on-disk derived state (Stage 1 of fast-lane connective-tissue plan)",
+        check_fast_lane_state_graph_node_parity,
+        False,  # blocking — orphan nodes/files mean the canonical chain spec drifted from reality
         False,
     ),
 ]  # end CHECKS

@@ -1,5 +1,7 @@
 """FAST_LANE v5.1 PROMOTE queue scanner.
 
+See ``docs/specs/fast_lane_state_graph.md`` for the canonical fast-lane chain definition.
+
 Reconstructs the PROMOTE-queue state from on-disk artifacts:
   - PROMOTE result MDs under ``docs/audit/results/*fast-lane*.md``
   - revocation sidecars (``<base>.revocation.md`` next to the result MD)
