@@ -1,2 +1,1 @@
 rank,strategy_id,direction,pooled_t,pooled_n,pooled_expr,oos_n,oos_expr,dir_match,pooling_artifact,score,deflation_headroom,n_adequacy,oos_power_readiness,score_dir_match,non_artifact,era_stability_proxy,skip_recommended,result_md
-1,MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30,long,3.0640,226,0.1708,14,-0.0233,False,False,0.2500,0.0000,1.0000,0.0000,0.0000,1.0000,0.0000,True,docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md

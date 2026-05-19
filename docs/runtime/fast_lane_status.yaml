@@ -497,16 +497,16 @@ entries:
     grounded_path: null
     heavyweight_result_md: docs/audit/results/2026-05-15-01-mnq-singaporeopen-cost-lt12-o30-rr40-chordia-unlock.md
 - strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
-  current_stage: REJECTED_OOS_UNPOWERED
+  current_stage: PARKED
   age_days: 1
-  next_action_token: operator_pick_remedy_cpcv_haircut_pool_or_park
+  next_action_token: no_action_required
   upstream_artifact_path: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
   downstream_artifact_path: null
   observed_at:
     active_prereg: docs/audit/hypotheses/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml
-    promote_queue_status: REJECTED_OOS_UNPOWERED
+    promote_queue_status: PARKED
     journal_iter: 1
-    ranked_in_csv: true
+    ranked_in_csv: false
     draft_path: docs/audit/hypotheses/drafts/2026-05-19-mnq-us-data-1000-e1-rr1-0-cb2-pd-clear-long-o30-chordia-heavyweight-v1.draft.yaml
     grounded_path: null
     heavyweight_result_md: null
