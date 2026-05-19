@@ -41,10 +41,20 @@ HOLDOUT_POLICY_SENTINEL = "mode_A"
 HOLDOUT_SACRED_FROM_SENTINEL = "2026-01-01"
 
 # Capital-class path substrings (case-insensitive). Any ``prereg_path`` whose
-# normalised string contains one of these is refused at write time. The list
+# lower-cased string contains one of these is refused at write time. The list
 # mirrors CLAUDE.md § Database Location, § Source-of-Truth Chain Rule, and the
-# design grounding's § "Files NOT to TOUCH" boundary. Substring match (rather
-# than exact-path) catches both repo-root-relative and absolute-path inputs.
+# design grounding's § "Files NOT to TOUCH" boundary.
+#
+# Scope honesty: this is a *substring* check, not a full canonical-path
+# resolver. It catches the documented set of write-attempt vectors --
+# repo-root-relative POSIX paths, repo-root-relative Windows paths, absolute
+# paths that happen to traverse the canonical directory names. It does NOT
+# catch hypothetical bypasses such as a UNC path on Windows, a symlink under
+# a sibling name, or a typo like "validatedsetups" without the underscore.
+# Those are out of scope because the fast-lane runner is the only documented
+# call site -- there is no adversarial-input surface today. Future call sites
+# that accept operator-supplied paths must either (a) resolve to a canonical
+# absolute path first, or (b) extend this list with the new shape.
 _CAPITAL_CLASS_FORBIDDEN_SUBSTRINGS = (
     "validated_setups",
     "chordia_audit_log.yaml",

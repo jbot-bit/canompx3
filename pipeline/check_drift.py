@@ -10777,6 +10777,72 @@ def check_fast_lane_structural_hash_schema_parity(
     return violations
 
 
+def check_holdout_sentinel_inline_copy_parity() -> list[str]:
+    """Parity check: fast_lane_trial_ledger holdout sentinel vs canonical date.
+
+    The trial-ledger writer at ``scripts/research/fast_lane_trial_ledger.py``
+    inlines the canonical Mode A holdout boundary as a string sentinel
+    ``HOLDOUT_SACRED_FROM_SENTINEL = "2026-01-01"``. The canonical authority
+    is ``trading_app.holdout_policy.HOLDOUT_SACRED_FROM`` (a ``date`` object).
+    Drift between the two would silently corrupt the universe-of-trials
+    accounting: the ledger would keep stamping the old boundary on every
+    entry while the rest of the codebase has moved on, breaking
+    Bailey-Lopez de Prado 2014 § 3 effective-N reasoning at the audit-trail
+    level.
+
+    This is the 8th confirmed instance of the
+    [[canonical-inline-copy-parity-bug-class]] -- see
+    ``memory/feedback_canonical_inline_copy_parity_bug_class.md``.
+
+    The check asserts ``HOLDOUT_SACRED_FROM_SENTINEL`` equals
+    ``HOLDOUT_SACRED_FROM.isoformat()`` byte-for-byte. ``HOLDOUT_POLICY_SENTINEL``
+    is NOT checked against an upstream because the ledger module IS the
+    canonical home of that token (there is no separate constant named
+    ``mode_A`` anywhere else in the codebase).
+
+    Returns
+    -------
+    list[str]
+        Empty when the sentinel matches the canonical date. Fail-closed
+        on import failure or type mismatch.
+    """
+    try:
+        from scripts.research.fast_lane_trial_ledger import (
+            HOLDOUT_SACRED_FROM_SENTINEL,
+        )
+    except Exception as exc:
+        return [
+            "check_holdout_sentinel_inline_copy_parity: ledger module "
+            f"import failed: {type(exc).__name__}: {exc}"
+        ]
+
+    try:
+        from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
+    except Exception as exc:
+        return [
+            "check_holdout_sentinel_inline_copy_parity: canonical "
+            f"holdout_policy import failed: {type(exc).__name__}: {exc}"
+        ]
+
+    violations: list[str] = []
+
+    expected = HOLDOUT_SACRED_FROM.isoformat()
+    if HOLDOUT_SACRED_FROM_SENTINEL != expected:
+        violations.append(
+            "check_holdout_sentinel_inline_copy_parity: "
+            f"HOLDOUT_SACRED_FROM_SENTINEL={HOLDOUT_SACRED_FROM_SENTINEL!r} "
+            f"!= canonical HOLDOUT_SACRED_FROM.isoformat()={expected!r}. "
+            "The ledger inlines the Mode A sacred-window boundary as a "
+            "string; trading_app.holdout_policy is the canonical source. "
+            "Drift would silently break Bailey-Lopez de Prado 2014 sec 3 "
+            "universe-of-trials accounting -- "
+            "[[canonical-inline-copy-parity-bug-class]] "
+            "(memory/feedback_canonical_inline_copy_parity_bug_class.md)."
+        )
+
+    return violations
+
+
 def check_canonical_inline_copies_have_parity_check() -> list[str]:
     """Meta-check: every CANONICAL_INLINE_COPIES entry has a live parity guard.
 
@@ -12938,6 +13004,12 @@ CHECKS = [
         "Fast-lane graveyard digest parity: docs/runtime/fast_lane_graveyard_digest.yaml must match a fresh build from 06_RD_GRAVEYARD.md + STRATEGY_BLUEPRINT.md NO-GO + action-queue.yaml park/kill (Stage 2A.2 Check #170)",
         check_fast_lane_graveyard_digest_parity,
         False,  # blocking — orphan/missing graveyard entries break 2A.3 suppression
+        False,
+    ),
+    (
+        "Fast-lane trial ledger holdout sentinel parity: scripts/research/fast_lane_trial_ledger.py HOLDOUT_SACRED_FROM_SENTINEL must match trading_app.holdout_policy.HOLDOUT_SACRED_FROM.isoformat() (Stage 2A.2 follow-up Check #171, canonical-inline-copy parity 8th instance)",
+        check_holdout_sentinel_inline_copy_parity,
+        False,  # blocking — boundary drift silently corrupts universe-of-trials accounting per Bailey-Lopez de Prado 2014 sec 3
         False,
     ),
 ]  # end CHECKS

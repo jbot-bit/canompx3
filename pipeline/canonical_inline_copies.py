@@ -274,6 +274,35 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
             "Check #167 parses the doc YAML block and asserts parity."
         ),
     ),
+    InlineCopyPair(
+        name="fast_lane_trial_ledger_holdout_sentinel",
+        inline_site="scripts/research/fast_lane_trial_ledger.py",
+        canonical_source=(
+            "trading_app/holdout_policy.py::HOLDOUT_SACRED_FROM "
+            "(date(2026, 1, 1) — Amendment 2.7 Mode A sacred window)"
+        ),
+        gated_constants=("HOLDOUT_SACRED_FROM_SENTINEL",),
+        parity_check="check_holdout_sentinel_inline_copy_parity",
+        test_file=(
+            "tests/test_pipeline/"
+            "test_check_drift_holdout_sentinel_inline_copy_parity.py"
+        ),
+        bug_class_anchor=(
+            "memory/feedback_canonical_inline_copy_parity_bug_class.md "
+            "(8th confirmed instance, 2026-05-20 — Stage 2A.2 follow-up)"
+        ),
+        notes=(
+            "The trial-ledger writer inlines the Mode A holdout boundary as "
+            "a string sentinel `HOLDOUT_SACRED_FROM_SENTINEL = \"2026-01-01\"`. "
+            "Canonical authority is `trading_app.holdout_policy.HOLDOUT_SACRED_FROM` "
+            "(`date(2026, 1, 1)`). Drift would silently keep the ledger stamping "
+            "the old boundary on every entry while the rest of the codebase "
+            "advanced, corrupting Bailey-Lopez de Prado 2014 sec 3 effective-N "
+            "accounting. `HOLDOUT_POLICY_SENTINEL = \"mode_A\"` is NOT registered "
+            "because the ledger module is the canonical home of that token — "
+            "no upstream constant exists to mirror."
+        ),
+    ),
 ]
 
 

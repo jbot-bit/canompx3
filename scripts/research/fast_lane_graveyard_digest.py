@@ -107,46 +107,46 @@ def _content_hash(source_path: str, title: str) -> str:
 
 
 def _parse_graveyard_md(path: Path) -> list[GraveyardEntry]:
-    """Parse 06_RD_GRAVEYARD.md. One ``## Heading`` per entry; the heading
-    text encodes both title and status (e.g. ``## ML V3 DEAD + DELETED``)."""
+    """Parse 06_RD_GRAVEYARD.md. One ``## Heading`` (or ``### Heading``) per
+    entry; the heading text encodes both title and an optional status token
+    (e.g. ``## ML V3 DEAD + DELETED``). Headings without a recognised status
+    token are still captured with ``status="UNKNOWN"`` -- the digest must
+    never silently drop a graveyard entry merely because the operator used
+    a new status vocabulary."""
     if not path.exists():
         return []
     text = path.read_text(encoding="utf-8")
     entries: list[GraveyardEntry] = []
     rel = path.relative_to(PROJECT_ROOT).as_posix()
-    # ``^##\s+<title>$`` -- only level-2 headings; level-3 are sub-sections
-    # under a level-2 entry (e.g. ML V3 vs ML V1+V2) and would double-count.
-    # The 06_RD_GRAVEYARD does use ### for "Scratch DB" / "Mode B holdout"
-    # under "Architecture-level kills" -- we capture both ## and ### so the
-    # architectural sub-kills are not silently dropped.
+    # Capture both ## and ### so architectural sub-kills under a parent
+    # heading (e.g. ## Architecture-level kills > ### Scratch DB ... DEPRECATED)
+    # are not lost. The non-entry frozenset gates the file's preamble /
+    # rule documentation; the parent of a status-bearing subtree (e.g.
+    # "Architecture-level kills" itself) is captured with status="UNKNOWN"
+    # rather than dropped, so Check #170 can still detect a hand-edited
+    # digest that omits the parent.
+    status_pattern = re.compile(
+        r"\b(DEAD|NO-GO|PAUSED|KILL|PARK|DEPRECATED|BANNED|RESCINDED|"
+        r"EDGE_WITH_CAVEAT|HOT|WARM|DECAYING|CLOSED|HYPOTHESES DEAD|"
+        r"PROXY DEPLOYMENT DEAD|DELETED|REVERSED|PREMISE WRONG|NULL|"
+        r"RETIRED|SUPERSEDED|REVOKED)\b"
+    )
     for match in re.finditer(r"^(#{2,3})\s+(?P<title>[^\n]+?)\s*$", text, re.MULTILINE):
         title = match.group("title").strip()
         if title in _GRAVEYARD_NON_ENTRY_HEADINGS:
             continue
-        if title.lower().startswith("ml ") or " DEAD" in title or " NO-GO" in title \
-                or " PAUSED" in title or " KILL" in title or " PARK" in title \
-                or " DEPRECATED" in title or " BANNED" in title or " RESCINDED" in title \
-                or " EDGE_WITH_CAVEAT" in title or " HOT" in title or " WARM" in title \
-                or " — " in title or " - " in title:
-            # Status token = the first ALL-CAPS-ish marker in the title;
-            # default to "UNKNOWN" if we cannot parse one out.
-            status_match = re.search(
-                r"\b(DEAD|NO-GO|PAUSED|KILL|PARK|DEPRECATED|BANNED|RESCINDED|"
-                r"EDGE_WITH_CAVEAT|HOT|WARM|DECAYING|CLOSED|HYPOTHESES DEAD|"
-                r"PROXY DEPLOYMENT DEAD|DELETED|REVERSED|PREMISE WRONG|NULL)\b",
-                title,
+        status_match = status_pattern.search(title)
+        status = status_match.group(1) if status_match else "UNKNOWN"
+        entries.append(
+            GraveyardEntry(
+                source_path=rel,
+                title=title,
+                status=_normalise_status(status),
+                hash_kind="class",
+                structural_hash=_content_hash(rel, title),
+                lane_inputs={},
             )
-            status = status_match.group(1) if status_match else "UNKNOWN"
-            entries.append(
-                GraveyardEntry(
-                    source_path=rel,
-                    title=title,
-                    status=_normalise_status(status),
-                    hash_kind="class",
-                    structural_hash=_content_hash(rel, title),
-                    lane_inputs={},
-                )
-            )
+        )
     return entries
 
 
