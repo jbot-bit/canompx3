@@ -749,11 +749,13 @@ items:
   - id: lane_allocation_rebalance_2026_05_14_pending_capital_review_blockers
     title: Pending lane_allocation.json rebalance - 4 lanes total (3 swaps), HOLD on C8 + SR-warmup
     class: capital
-    status: open
+    status: closed
+    closure_verdict: RESOLVED_AS_APPLIED
+    closed_at: 2026-05-19
     priority: P2
     close_before_new_work: false
     owner_hint: user
-    last_verified_at: 2026-05-14
+    last_verified_at: 2026-05-19
     freshness_sla_days: 14
     next_action: |
       Dry-run rebalance of `topstep_50k_mnq_auto` profile (canonical
@@ -797,7 +799,8 @@ items:
       - docs/runtime/chordia_audit_log.yaml
       - docs/audit/results/2026-05-15-mnq-chordia-batch-k20.md
       - docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md
-    notes_ref: ""
+      - docs/audit/results/2026-05-19-lane-rebalance-blockers-bc-closure.md
+    notes_ref: docs/audit/results/2026-05-19-lane-rebalance-blockers-bc-closure.md
 
   - id: nq_mini_stage2_wiring_2026_05_15
     title: Wire NQ-mini symbol substitution (Stage 2 of 3) — session_orchestrator + webhook_server + populated profile

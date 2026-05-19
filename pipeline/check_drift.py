@@ -11824,6 +11824,404 @@ def check_fast_lane_status_rollup_reconstruction_parity(
     return violations
 
 
+def check_fast_lane_trial_ledger_append_only(
+    ledger_path: Path | None = None,
+) -> list[str]:
+    """Append-only invariant for docs/runtime/fast_lane_trial_ledger.yaml.
+
+    The fast-lane trial ledger is the universe-of-trials accounting layer
+    per Bailey-Lopez de Prado 2014 § 3. Once an entry lands it is immutable;
+    a runtime mutation (timestamp regression, dup run_id, field rewrite,
+    holdout-sentinel scrub, banner removal) signals that the false-positive
+    accounting has been tampered with -- 2A.3 suppression rules cannot be
+    trusted on a mutable ledger.
+
+    Failure classes this check enforces:
+
+      1. Banner / schema_version drift (do_not_hand_edit must be true;
+         schema_version must equal scripts.research.fast_lane_trial_ledger
+         .LEDGER_SCHEMA_VERSION).
+      2. Monotonic run_timestamp_utc -- entries[i+1] timestamp >= entries[i]
+         timestamp (clock-skew tolerant via >=, not >).
+      3. Unique run_id across the whole file (writer rejects dup run_id;
+         this check catches a manual edit that adds one).
+      4. Holdout-sentinel parity -- every entry must declare
+         holdout_policy == HOLDOUT_POLICY_SENTINEL and
+         holdout_sacred_from == HOLDOUT_SACRED_FROM_SENTINEL; either being
+         absent / mutated breaks the Mode A holdout boundary.
+      5. structural_hash format -- 16 hex chars; non-hex / wrong length is
+         fail-closed because the 2A.3 scanner indexes by this field.
+      6. Required-field presence -- run_id, prereg_path, structural_hash,
+         template_version, pathway, testing_mode, K_declared.
+
+    Authority: design grounding
+    ``docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md``
+    § "Trial Ledger Schema" + § "Acceptance Criteria" item 6 (holdout
+    sentinel) + Bailey-Lopez de Prado 2014 Eq. 1 (effective-N accounting).
+
+    Parameters
+    ----------
+    ledger_path : Path | None
+        Override path for the injection-test seam. Defaults to the canonical
+        ``docs/runtime/fast_lane_trial_ledger.yaml``.
+
+    Returns
+    -------
+    list[str]
+        Violation strings -- empty when the ledger satisfies all six failure
+        classes. Fail-closed on missing file, unparseable YAML, or import
+        failure of the writer module.
+    """
+    try:
+        import yaml as _yaml
+    except Exception as exc:  # pragma: no cover -- yaml is a hard dep
+        return [f"check_fast_lane_trial_ledger_append_only: PyYAML import failed: {exc}"]
+
+    try:
+        from scripts.research.fast_lane_trial_ledger import (
+            HOLDOUT_POLICY_SENTINEL,
+            HOLDOUT_SACRED_FROM_SENTINEL,
+            LEDGER_SCHEMA_VERSION,
+        )
+    except Exception as exc:
+        return [
+            "check_fast_lane_trial_ledger_append_only: writer module import "
+            f"failed: {type(exc).__name__}: {exc}"
+        ]
+
+    target = (
+        ledger_path
+        if ledger_path is not None
+        else PROJECT_ROOT / "docs" / "runtime" / "fast_lane_trial_ledger.yaml"
+    )
+
+    if not target.exists():
+        return [
+            "check_fast_lane_trial_ledger_append_only: ledger file missing at "
+            f"{target} (skeleton must be landed by Stage 2A.2; fail-closed)."
+        ]
+
+    try:
+        raw = target.read_text(encoding="utf-8")
+        data = _yaml.safe_load(raw)
+    except Exception as exc:
+        return [
+            "check_fast_lane_trial_ledger_append_only: failed to parse "
+            f"{target.name}: {type(exc).__name__}: {exc}"
+        ]
+
+    violations: list[str] = []
+
+    if not isinstance(data, dict):
+        return [
+            f"check_fast_lane_trial_ledger_append_only: {target.name} top-level "
+            "must be a YAML mapping (fail-closed)."
+        ]
+
+    # (1) Banner / schema_version.
+    if data.get("do_not_hand_edit") is not True:
+        violations.append(
+            "check_fast_lane_trial_ledger_append_only: BANNER TAMPERED -- "
+            f"`do_not_hand_edit: true` missing or mutated in {target.name}. "
+            "Ledger is derived state; rerun the writer rather than hand-editing."
+        )
+    if data.get("schema_version") != LEDGER_SCHEMA_VERSION:
+        violations.append(
+            "check_fast_lane_trial_ledger_append_only: schema_version "
+            f"{data.get('schema_version')!r} != expected "
+            f"{LEDGER_SCHEMA_VERSION} in {target.name}."
+        )
+
+    entries_raw = data.get("entries", [])
+    if not isinstance(entries_raw, list):
+        violations.append(
+            f"check_fast_lane_trial_ledger_append_only: `entries` in "
+            f"{target.name} must be a list, got {type(entries_raw).__name__}."
+        )
+        return violations
+
+    required_fields = (
+        "run_id",
+        "run_timestamp_utc",
+        "prereg_path",
+        "structural_hash",
+        "template_version",
+        "pathway",
+        "testing_mode",
+        "K_declared",
+        "holdout_policy",
+        "holdout_sacred_from",
+    )
+
+    seen_run_ids: set[str] = set()
+    last_ts: str | None = None
+
+    for idx, entry in enumerate(entries_raw):
+        if not isinstance(entry, dict):
+            violations.append(
+                f"check_fast_lane_trial_ledger_append_only: entry[{idx}] in "
+                f"{target.name} must be a mapping, got "
+                f"{type(entry).__name__}."
+            )
+            continue
+
+        # (6) Required-field presence.
+        for fld in required_fields:
+            if fld not in entry:
+                violations.append(
+                    f"check_fast_lane_trial_ledger_append_only: entry[{idx}] "
+                    f"missing required field {fld!r} in {target.name}."
+                )
+
+        # (3) run_id uniqueness.
+        run_id = entry.get("run_id")
+        if isinstance(run_id, str):
+            if run_id in seen_run_ids:
+                violations.append(
+                    "check_fast_lane_trial_ledger_append_only: DUPLICATE run_id "
+                    f"{run_id!r} at entry[{idx}] in {target.name}; ledger is "
+                    "append-only."
+                )
+            else:
+                seen_run_ids.add(run_id)
+
+        # (2) Monotonic timestamps.
+        ts = entry.get("run_timestamp_utc")
+        if isinstance(ts, str):
+            if last_ts is not None and ts < last_ts:
+                violations.append(
+                    "check_fast_lane_trial_ledger_append_only: "
+                    f"TIMESTAMP_REGRESSION -- entry[{idx}] run_timestamp_utc "
+                    f"{ts!r} < previous entry's {last_ts!r} in "
+                    f"{target.name}."
+                )
+            last_ts = ts
+
+        # (4) Holdout sentinels.
+        if entry.get("holdout_policy") != HOLDOUT_POLICY_SENTINEL:
+            violations.append(
+                "check_fast_lane_trial_ledger_append_only: HOLDOUT_SENTINEL "
+                f"-- entry[{idx}] holdout_policy "
+                f"{entry.get('holdout_policy')!r} != "
+                f"{HOLDOUT_POLICY_SENTINEL!r} in {target.name}."
+            )
+        if entry.get("holdout_sacred_from") != HOLDOUT_SACRED_FROM_SENTINEL:
+            violations.append(
+                "check_fast_lane_trial_ledger_append_only: HOLDOUT_SENTINEL "
+                f"-- entry[{idx}] holdout_sacred_from "
+                f"{entry.get('holdout_sacred_from')!r} != "
+                f"{HOLDOUT_SACRED_FROM_SENTINEL!r} in {target.name}."
+            )
+
+        # (5) structural_hash format.
+        sh = entry.get("structural_hash")
+        if isinstance(sh, str):
+            if len(sh) != 16:
+                violations.append(
+                    "check_fast_lane_trial_ledger_append_only: "
+                    f"STRUCTURAL_HASH_LENGTH -- entry[{idx}] structural_hash "
+                    f"{sh!r} is {len(sh)} chars, expected 16."
+                )
+            else:
+                try:
+                    int(sh, 16)
+                except ValueError:
+                    violations.append(
+                        "check_fast_lane_trial_ledger_append_only: "
+                        f"STRUCTURAL_HASH_NOT_HEX -- entry[{idx}] "
+                        f"structural_hash {sh!r} is not hex."
+                    )
+
+    return violations
+
+
+def check_fast_lane_graveyard_digest_parity(
+    digest_path: Path | None = None,
+) -> list[str]:
+    """Parity check for docs/runtime/fast_lane_graveyard_digest.yaml.
+
+    The graveyard digest is derived state: every NO-GO entry from
+    ``chatgpt_bundle/06_RD_GRAVEYARD.md`` + ``docs/STRATEGY_BLUEPRINT.md``
+    § 5 NO-GO Registry + ``docs/runtime/action-queue.yaml`` entries with
+    ``status: park`` or ``status: kill`` must appear in the digest, and
+    the digest must not carry orphan entries the sources no longer hold.
+
+    Failure classes this check enforces:
+
+      1. Banner -- ``do_not_hand_edit: true`` + ``schema_version == 1``.
+      2. MISSING_FROM_DIGEST -- structural_hash present in a fresh rebuild
+         but absent from the on-disk digest (digest is stale; source MD
+         was updated without rebuilding).
+      3. ORPHAN_IN_DIGEST -- structural_hash present in the on-disk digest
+         but absent from a fresh rebuild (digest carries a ghost entry,
+         likely hand-edited).
+      4. HASH_COLLISION -- two distinct (source_path, title) pairs share a
+         structural_hash. SHA-256[:16] collision is cryptographically
+         negligible, so this fires only on deliberate tampering or content
+         hash logic regression.
+
+    Authority: design grounding
+    ``docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md``
+    § "New Derived-State Files" + § "Suppression Rules" item 1.
+
+    Parameters
+    ----------
+    digest_path : Path | None
+        Override path for the injection-test seam. Defaults to the
+        canonical ``docs/runtime/fast_lane_graveyard_digest.yaml``.
+
+    Returns
+    -------
+    list[str]
+        Violation strings -- empty when on-disk == fresh-rebuild on the
+        structural_hash set.
+    """
+    try:
+        import yaml as _yaml
+    except Exception as exc:  # pragma: no cover -- yaml is a hard dep
+        return [
+            f"check_fast_lane_graveyard_digest_parity: PyYAML import failed: {exc}"
+        ]
+
+    try:
+        from scripts.research.fast_lane_graveyard_digest import (
+            DIGEST_SCHEMA_VERSION,
+            build_digest,
+        )
+    except Exception as exc:
+        return [
+            "check_fast_lane_graveyard_digest_parity: digest module import "
+            f"failed: {type(exc).__name__}: {exc}"
+        ]
+
+    target = (
+        digest_path
+        if digest_path is not None
+        else PROJECT_ROOT / "docs" / "runtime" / "fast_lane_graveyard_digest.yaml"
+    )
+
+    if not target.exists():
+        return [
+            "check_fast_lane_graveyard_digest_parity: digest file missing at "
+            f"{target} (run `python -m scripts.research.fast_lane_graveyard_digest "
+            "--build`; fail-closed)."
+        ]
+
+    try:
+        on_disk = _yaml.safe_load(target.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [
+            f"check_fast_lane_graveyard_digest_parity: failed to parse "
+            f"{target.name}: {type(exc).__name__}: {exc}"
+        ]
+
+    violations: list[str] = []
+
+    if not isinstance(on_disk, dict):
+        return [
+            f"check_fast_lane_graveyard_digest_parity: {target.name} top-level "
+            "must be a YAML mapping."
+        ]
+
+    # (1) Banner.
+    if on_disk.get("do_not_hand_edit") is not True:
+        violations.append(
+            "check_fast_lane_graveyard_digest_parity: BANNER TAMPERED -- "
+            f"`do_not_hand_edit: true` missing or mutated in {target.name}."
+        )
+    if on_disk.get("schema_version") != DIGEST_SCHEMA_VERSION:
+        violations.append(
+            "check_fast_lane_graveyard_digest_parity: schema_version "
+            f"{on_disk.get('schema_version')!r} != expected "
+            f"{DIGEST_SCHEMA_VERSION} in {target.name}."
+        )
+
+    on_disk_entries = on_disk.get("entries")
+    if not isinstance(on_disk_entries, list):
+        violations.append(
+            f"check_fast_lane_graveyard_digest_parity: `entries` in "
+            f"{target.name} must be a list, got "
+            f"{type(on_disk_entries).__name__}."
+        )
+        return violations
+
+    try:
+        fresh = build_digest()
+    except Exception as exc:
+        violations.append(
+            "check_fast_lane_graveyard_digest_parity: fresh rebuild failed: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return violations
+
+    fresh_entries = fresh.get("entries", [])
+    fresh_hashes = {
+        e["structural_hash"]
+        for e in fresh_entries
+        if isinstance(e, dict) and isinstance(e.get("structural_hash"), str)
+    }
+    on_disk_hashes_seen: dict[str, dict[str, object]] = {}
+
+    # (4) Hash collision in the on-disk file.
+    for entry in on_disk_entries:
+        if not isinstance(entry, dict):
+            violations.append(
+                "check_fast_lane_graveyard_digest_parity: non-mapping entry in "
+                f"{target.name}: {entry!r}."
+            )
+            continue
+        h = entry.get("structural_hash")
+        if not isinstance(h, str):
+            violations.append(
+                "check_fast_lane_graveyard_digest_parity: entry missing "
+                f"structural_hash in {target.name}: {entry!r}."
+            )
+            continue
+        if h in on_disk_hashes_seen:
+            prior = on_disk_hashes_seen[h]
+            if (entry.get("source_path"), entry.get("title")) != (
+                prior.get("source_path"),
+                prior.get("title"),
+            ):
+                violations.append(
+                    f"check_fast_lane_graveyard_digest_parity: HASH_COLLISION "
+                    f"-- structural_hash {h!r} appears for distinct "
+                    f"(source_path, title) pairs in {target.name}: "
+                    f"{(prior.get('source_path'), prior.get('title'))} vs "
+                    f"{(entry.get('source_path'), entry.get('title'))}."
+                )
+        else:
+            on_disk_hashes_seen[h] = entry
+
+    # (2) MISSING_FROM_DIGEST + (3) ORPHAN_IN_DIGEST.
+    on_disk_hashes = set(on_disk_hashes_seen)
+    missing = fresh_hashes - on_disk_hashes
+    orphan = on_disk_hashes - fresh_hashes
+    for h in sorted(missing):
+        fresh_entry = next(
+            (e for e in fresh_entries if isinstance(e, dict) and e.get("structural_hash") == h),
+            None,
+        )
+        title = fresh_entry.get("title") if isinstance(fresh_entry, dict) else "?"
+        violations.append(
+            f"check_fast_lane_graveyard_digest_parity: MISSING_FROM_DIGEST -- "
+            f"structural_hash {h!r} (title {title!r}) present in fresh "
+            f"rebuild but absent from {target.name}. Rerun "
+            "`python -m scripts.research.fast_lane_graveyard_digest --build`."
+        )
+    for h in sorted(orphan):
+        prior = on_disk_hashes_seen.get(h, {})
+        title = prior.get("title", "?")
+        violations.append(
+            f"check_fast_lane_graveyard_digest_parity: ORPHAN_IN_DIGEST -- "
+            f"structural_hash {h!r} (title {title!r}) present in "
+            f"{target.name} but absent from fresh rebuild. Likely "
+            "hand-edited; rerun the digest builder."
+        )
+
+    return violations
+
+
 CHECKS = [
     (
         "Hardcoded 'MGC' SQL literals in generic pipeline code",
@@ -12528,6 +12926,18 @@ CHECKS = [
         "Fast-lane status roll-up reconstruction parity: docs/runtime/fast_lane_status.yaml must match a fresh scripts/tools/fast_lane_status.py build (Stage 2A.2 connective-tissue)",
         check_fast_lane_status_rollup_reconstruction_parity,
         False,  # blocking — hand-edits + capital-class write attempts both fail the chain-awareness contract
+        False,
+    ),
+    (
+        "Fast-lane trial ledger append-only: docs/runtime/fast_lane_trial_ledger.yaml is the universe-of-trials accounting layer; entries are immutable + monotonic timestamps + holdout sentinel required (Stage 2A.2 Check #169, Bailey-Lopez de Prado 2014 sec 3)",
+        check_fast_lane_trial_ledger_append_only,
+        False,  # blocking — false-positive accounting silently corrupts on mutation
+        False,
+    ),
+    (
+        "Fast-lane graveyard digest parity: docs/runtime/fast_lane_graveyard_digest.yaml must match a fresh build from 06_RD_GRAVEYARD.md + STRATEGY_BLUEPRINT.md NO-GO + action-queue.yaml park/kill (Stage 2A.2 Check #170)",
+        check_fast_lane_graveyard_digest_parity,
+        False,  # blocking — orphan/missing graveyard entries break 2A.3 suppression
         False,
     ),
 ]  # end CHECKS

@@ -43,7 +43,14 @@ Stage 2A is SPLIT. Only Sub-stage 2A.1 is in active scope_lock above. Sub-stages
 
 ---
 
-## Sub-Stage 2A.2 — Trial Ledger + Graveyard Digest (QUEUED)
+## Sub-Stage 2A.2 — Trial Ledger + Graveyard Digest (CLOSED 2026-05-20)
+
+**Stage file:** `docs/runtime/stages/2026-05-20-fast-lane-anti-fp-2a2-ledger-digest.md`
+**Drift target hit:** 168 → 170 (+2 net). Final count: 149 passed + 20 advisory + 1 pre-existing MGC violation = 170 checks total.
+**Tests landed:** 24 (16 ledger + 8 digest) — all pass.
+**Numbering note:** the original split assigned #168 + #169, but #168 was claimed by `check_fast_lane_status_rollup_reconstruction_parity` (landed independently in another branch); 2A.2 renumbered to #169 + #170 to avoid collision. The check functions and tests carry the renumbered identifiers throughout.
+
+
 
 **Goal:** Append-only universe-of-trials ledger + NO-GO graveyard digest as derived state.
 
