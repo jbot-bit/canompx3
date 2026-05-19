@@ -242,6 +242,38 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
             "into operator-reviewed drafts."
         ),
     ),
+    InlineCopyPair(
+        name="fast_lane_structural_hash_schema",
+        inline_site="scripts/research/fast_lane_structural_hash.py",
+        canonical_source=(
+            "docs/runtime/stages/"
+            "2026-05-20-fast-lane-anti-fp-trial-provenance.md "
+            "section `## Hash Schema` (hash_schema_version + 9-field inputs)"
+        ),
+        gated_constants=(
+            "HASH_SCHEMA_VERSION",
+            "HASH_SCHEMA_INPUTS",
+        ),
+        parity_check="check_fast_lane_structural_hash_schema_parity",
+        test_file=(
+            "tests/test_pipeline/"
+            "test_check_drift_fast_lane_structural_hash_schema_parity.py"
+        ),
+        bug_class_anchor=(
+            "memory/feedback_canonical_inline_copy_parity_bug_class.md "
+            "(7th confirmed instance, 2026-05-20 — Stage 2A.1)"
+        ),
+        notes=(
+            "Foundational substrate for fast-lane anti-FP trial provenance. "
+            "The structural_hash function inlines `HASH_SCHEMA_VERSION = 1` "
+            "and the 9-field `HASH_SCHEMA_INPUTS` tuple with a docstring "
+            "cite to the canonical `## Hash Schema` block in the Stage 2A "
+            "design doc. Schema drift between code and doc would silently "
+            "change every hash going forward, breaking de-dup / suppression "
+            "rules consumed by 2A.2 (ledger) and 2A.3 (scanner/bridge). "
+            "Check #167 parses the doc YAML block and asserts parity."
+        ),
+    ),
 ]
 
 

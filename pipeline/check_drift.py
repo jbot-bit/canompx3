@@ -10500,6 +10500,283 @@ def check_bridge_methodology_rules_parity(
     return violations
 
 
+def check_fast_lane_structural_hash_schema_parity(
+    design_doc_path: Path | None = None,
+) -> list[str]:
+    """Parity check: fast_lane_structural_hash module vs Stage 2A design doc.
+
+    The structural-hash module at
+    ``scripts/research/fast_lane_structural_hash.py`` inlines two gated
+    constants:
+
+      - ``HASH_SCHEMA_VERSION`` (int) -- mirrors ``hash_schema_version: 1``
+        in the canonical design-doc YAML block.
+      - ``HASH_SCHEMA_INPUTS`` (tuple of 9 field names, order-preserving) --
+        mirrors the ``inputs:`` block field-name order in the same YAML.
+
+    Both must stay in lockstep with ``## Hash Schema`` in
+    ``docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md``
+    -- the design doc is the canonical authority for the 9-field input set
+    + version; the module is the inline copy. Drift between the two would
+    silently change every ``compute_structural_hash`` output, which in turn
+    breaks de-dup / suppression rules consumed by 2A.2 (trial ledger) and
+    2A.3 (scanner / bridge). 7th confirmed instance of the
+    [[canonical-inline-copy-parity-bug-class]] -- see
+    ``memory/feedback_canonical_inline_copy_parity_bug_class.md``.
+
+    This check parses the fenced YAML block under the ``## Hash Schema``
+    heading, then asserts:
+
+      1. ``HASH_SCHEMA_VERSION`` (module) == ``hash_schema_version`` (doc)
+      2. ``HASH_SCHEMA_INPUTS`` (module, order-preserving) == ``inputs.keys()``
+         in the doc YAML (order-preserving)
+      3. ``compute_structural_hash`` returns a 16-character lowercase-hex
+         string for a known-good fixture (output-length + format invariant).
+      4. ``compute_structural_hash`` is deterministic across two calls with
+         identical inputs (canonical-json normaliser intact). Catches a
+         malicious / accidental scrub of ``sort_keys=True`` or the
+         ``_NORMALISERS`` map.
+
+    Authority: design doc ``## Hash Schema`` block. Re-encoding either side
+    requires a synchronised edit to both files. The canonical-inline-copy
+    registry entry (``fast_lane_structural_hash_schema``) ensures this
+    parity check + its sibling-coverage test file exist; the meta-check
+    (#162) fails closed if either is missing.
+
+    Parameters
+    ----------
+    design_doc_path : Path | None
+        Override path to the Stage 2A design doc (test seam for the
+        missing-doc / malformed-block injection tests). Defaults to the
+        canonical project location.
+
+    Returns
+    -------
+    list[str]
+        Violation strings -- empty when the module's hash-schema constants
+        match the design doc. Fail-closed when the doc cannot be read,
+        the ``## Hash Schema`` heading is missing, the fenced YAML block
+        cannot be parsed, the module cannot be imported, or the hash
+        function's output does not satisfy the length/determinism
+        invariants.
+    """
+    try:
+        import yaml  # local import -- yaml is already a project dep
+    except Exception as exc:  # pragma: no cover -- yaml is a hard dep
+        return [
+            f"check_fast_lane_structural_hash_schema_parity: PyYAML import failed: {exc}"
+        ]
+
+    try:
+        from scripts.research import fast_lane_structural_hash as flsh
+    except Exception as exc:
+        return [
+            f"check_fast_lane_structural_hash_schema_parity: module import failed: {exc}"
+        ]
+
+    target = (
+        design_doc_path
+        if design_doc_path is not None
+        else PROJECT_ROOT
+        / "docs"
+        / "runtime"
+        / "stages"
+        / "2026-05-20-fast-lane-anti-fp-trial-provenance.md"
+    )
+
+    if not target.exists():
+        return [
+            f"check_fast_lane_structural_hash_schema_parity: canonical design doc "
+            f"missing at {target} (hash-schema parity cannot be verified -- "
+            "fail-closed)"
+        ]
+
+    try:
+        text = target.read_text(encoding="utf-8")
+    except Exception as exc:
+        return [
+            f"check_fast_lane_structural_hash_schema_parity: failed to read "
+            f"{target.name}: {type(exc).__name__}: {exc}"
+        ]
+
+    # Extract the fenced YAML block under ``## Hash Schema``. The block is
+    # introduced by a ``## Hash Schema`` heading and the first ```yaml fence
+    # that follows; we capture until the next ``` fence. Match newline-
+    # boundary so an inline mention of "## Hash Schema" elsewhere in prose
+    # would not false-trigger.
+    schema_section = re.search(
+        r"(?m)^##\s+Hash\s+Schema[^\n]*\n.*?```yaml\n(?P<yaml>.*?)\n```",
+        text,
+        re.DOTALL,
+    )
+    if schema_section is None:
+        return [
+            "check_fast_lane_structural_hash_schema_parity: canonical "
+            f"design doc {target.name} missing `## Hash Schema` section "
+            "with a ```yaml fenced block (doctrine structure drifted -- "
+            "investigate before promoting the check)"
+        ]
+
+    try:
+        spec = yaml.safe_load(schema_section.group("yaml"))
+    except Exception as exc:
+        return [
+            f"check_fast_lane_structural_hash_schema_parity: failed to parse "
+            f"YAML block under `## Hash Schema` in {target.name}: "
+            f"{type(exc).__name__}: {exc}"
+        ]
+
+    if not isinstance(spec, dict):
+        return [
+            "check_fast_lane_structural_hash_schema_parity: `## Hash Schema` "
+            f"YAML block in {target.name} did not parse to a mapping "
+            f"(got {type(spec).__name__}) -- doctrine structure drifted"
+        ]
+
+    violations: list[str] = []
+
+    # 1. Schema version parity.
+    doc_version = spec.get("hash_schema_version")
+    if not isinstance(doc_version, int) or isinstance(doc_version, bool):
+        violations.append(
+            "check_fast_lane_structural_hash_schema_parity: canonical "
+            f"`hash_schema_version` in {target.name} is "
+            f"{type(doc_version).__name__} ({doc_version!r}); expected int"
+        )
+    elif int(flsh.HASH_SCHEMA_VERSION) != int(doc_version):
+        violations.append(
+            f"check_fast_lane_structural_hash_schema_parity: module "
+            f"HASH_SCHEMA_VERSION={flsh.HASH_SCHEMA_VERSION!r} does not match "
+            f"canonical hash_schema_version={doc_version!r} "
+            f"(source: {target.name} `## Hash Schema`). "
+            "Inline-copy drift -- see "
+            "[[canonical-inline-copy-parity-bug-class]]; update "
+            "scripts/research/fast_lane_structural_hash.py or amend the "
+            "design doc."
+        )
+
+    # 2. Input-field name + order parity.
+    doc_inputs = spec.get("inputs")
+    if not isinstance(doc_inputs, dict):
+        violations.append(
+            "check_fast_lane_structural_hash_schema_parity: canonical "
+            f"`inputs` block in {target.name} `## Hash Schema` is "
+            f"{type(doc_inputs).__name__} ({doc_inputs!r}); expected mapping"
+        )
+    else:
+        # PyYAML preserves insertion order on python>=3.7 (CPython dict order).
+        doc_input_names = list(doc_inputs.keys())
+        module_input_names = list(flsh.HASH_SCHEMA_INPUTS)
+        if doc_input_names != module_input_names:
+            violations.append(
+                "check_fast_lane_structural_hash_schema_parity: module "
+                f"HASH_SCHEMA_INPUTS={module_input_names!r} does not match "
+                f"canonical `inputs` order={doc_input_names!r} "
+                f"(source: {target.name} `## Hash Schema`). "
+                "Field-order is load-bearing for canonical-json -- any "
+                "drift silently changes every hash. Inline-copy drift -- "
+                "see [[canonical-inline-copy-parity-bug-class]]; update "
+                "scripts/research/fast_lane_structural_hash.py "
+                "HASH_SCHEMA_INPUTS or amend the design doc."
+            )
+
+    # If structural parse already failed, stop -- the hash-output and
+    # determinism probes below would emit misleading secondary violations.
+    if violations:
+        return violations
+
+    # 3. Hash output length / format invariant. The fixture below is the
+    # smallest set of canonical-source-valid inputs sufficient to exercise
+    # the public API end-to-end. A scrubbed digest truncation (e.g. `[:8]`
+    # instead of `[:16]`) or a digest-format change (e.g. base64 instead
+    # of hex) will be caught here without coupling the check to the
+    # module's private constants.
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.dst import SESSION_CATALOG
+        from trading_app.config import ALL_FILTERS
+    except Exception as exc:  # pragma: no cover -- canonical sources are hard deps
+        return [
+            f"check_fast_lane_structural_hash_schema_parity: canonical "
+            f"source import failed: {type(exc).__name__}: {exc}"
+        ]
+
+    # Pick canonical-source-valid fixture values. Sorted() + next() makes the
+    # choice deterministic across runs and across canonical-source amendments
+    # (a future instrument/session/filter addition cannot break the check).
+    fixture_instrument = sorted(ACTIVE_ORB_INSTRUMENTS)[0]
+    fixture_orb_label = sorted(SESSION_CATALOG.keys())[0]
+    fixture_filter = sorted(ALL_FILTERS.keys())[0]
+    fixture_inputs = {
+        "instrument": fixture_instrument,
+        "orb_label": fixture_orb_label,
+        "orb_minutes": 5,
+        "rr_target": 1.0,
+        "entry_model": "E1",
+        "confirm_bars": 1,
+        "filter_type": fixture_filter,
+        "direction": "LONG",
+        "filter_threshold": "",
+    }
+
+    try:
+        hash_a = flsh.compute_structural_hash(fixture_inputs)
+    except Exception as exc:
+        return [
+            "check_fast_lane_structural_hash_schema_parity: "
+            f"compute_structural_hash raised on canonical-valid fixture "
+            f"({type(exc).__name__}: {exc}). Public API contract broken."
+        ]
+
+    if not isinstance(hash_a, str):
+        violations.append(
+            "check_fast_lane_structural_hash_schema_parity: "
+            f"compute_structural_hash returned {type(hash_a).__name__} "
+            f"({hash_a!r}); expected 16-character lowercase-hex str"
+        )
+    else:
+        if len(hash_a) != 16:
+            violations.append(
+                "check_fast_lane_structural_hash_schema_parity: "
+                f"compute_structural_hash returned len={len(hash_a)} "
+                f"({hash_a!r}); expected exactly 16. Doc formula = "
+                "`sha256(canonical_json(inputs))[:16]` -- truncation "
+                "length drift silently changes every hash."
+            )
+        if not re.fullmatch(r"[0-9a-f]{16}", hash_a or ""):
+            violations.append(
+                "check_fast_lane_structural_hash_schema_parity: "
+                f"compute_structural_hash output {hash_a!r} is not "
+                "lowercase hex. Doc formula = "
+                "`sha256(canonical_json(inputs))[:16]` -- hex format is "
+                "part of the canonical contract."
+            )
+
+    # 4. Determinism / canonical-json invariant. Same inputs -> same hash
+    # across calls. Catches a scrub of `sort_keys=True`, an
+    # insertion-order-dependent normaliser, or any non-determinism leak
+    # (e.g. someone adding a timestamp into the hashed payload).
+    try:
+        hash_b = flsh.compute_structural_hash(dict(fixture_inputs))
+    except Exception as exc:
+        return [
+            "check_fast_lane_structural_hash_schema_parity: "
+            f"compute_structural_hash raised on second call "
+            f"({type(exc).__name__}: {exc})"
+        ]
+    if hash_a != hash_b:
+        violations.append(
+            "check_fast_lane_structural_hash_schema_parity: "
+            f"compute_structural_hash non-deterministic: "
+            f"first={hash_a!r}, second={hash_b!r}. Canonical-json "
+            "normaliser scrubbed (sort_keys / separators / _NORMALISERS) "
+            "-- doc formula = `sha256(canonical_json(inputs))[:16]` "
+            "requires bytewise-stable input across runs."
+        )
+
+    return violations
+
+
 def check_canonical_inline_copies_have_parity_check() -> list[str]:
     """Meta-check: every CANONICAL_INLINE_COPIES entry has a live parity guard.
 
@@ -12023,6 +12300,12 @@ CHECKS = [
         "Fast-lane state-graph node parity: docs/specs/fast_lane_state_graph.md '## 2. Node Inventory' must match on-disk derived state (Stage 1 of fast-lane connective-tissue plan)",
         check_fast_lane_state_graph_node_parity,
         False,  # blocking — orphan nodes/files mean the canonical chain spec drifted from reality
+        False,
+    ),
+    (
+        "Fast-lane structural hash schema parity: scripts/research/fast_lane_structural_hash.py HASH_SCHEMA_VERSION + HASH_SCHEMA_INPUTS must match `## Hash Schema` YAML in 2026-05-20-fast-lane-anti-fp-trial-provenance.md (Stage 2A.1 canonical-inline-copy parity)",
+        check_fast_lane_structural_hash_schema_parity,
+        False,  # blocking — schema drift silently changes every structural_hash, breaking 2A.2 ledger de-dup + 2A.3 suppression
         False,
     ),
 ]  # end CHECKS
