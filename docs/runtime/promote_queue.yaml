@@ -49,8 +49,6 @@ entries:
   pooling_artifact: false
   revocation_sidecar: null
   heavyweight_prereg: null
-  park_entry: null
-  status: REJECTED_OOS_UNPOWERED
-  error_reason: expected_n_oos=20 (fire_rate=0.1468 * oos_window_days=136) -> expected_power=0.247
-    < floor=0.50 at cohen_d=0.3; structurally underpowered OOS — pick CPCV / Harvey-Liu
-    haircut / pool with siblings / PARK per backtesting-methodology.md RULE 3.3
+  park_entry: action-queue#20
+  status: PARKED
+  error_reason: null

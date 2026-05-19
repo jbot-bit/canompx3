@@ -855,3 +855,80 @@ items:
       - trading_app/prop_profiles.py
       - pipeline/check_drift.py
     notes_ref: docs/runtime/stages/code-review-catchup-batch4-resume.md
+
+  - id: park_mnq_usdata1000_e1_pd_clear_long_o30_oos_unpowered_2026_05_19
+    title: PARK MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30 -- OOS structurally underpowered
+    class: research
+    status: park
+    strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    priority: P3
+    close_before_new_work: false
+    owner_hint: claude
+    last_verified_at: 2026-05-19
+    freshness_sla_days: 90
+    next_action: |
+      PARK_OOS_STRUCTURALLY_UNPOWERED. FAST_LANE v5.1 result MD
+      (2026-05-18) emitted PROMOTE with pooled t=3.064, N_fired=226,
+      fire_rate=0.1468. Per the promote-queue scanner's pre-flight OOS
+      power gate (RULE 3.3, oos_window_days=136):
+
+        expected_N_OOS = 0.1468 * 136 = 20
+        expected_power = 0.247 at Cohen's d = 0.3
+        floor          = 0.50
+
+      Power is in the STATISTICALLY_USELESS tier per
+      `research/oos_power.py::POWER_TIERS`. Per memory rule
+      `feedback_oos_does_not_accrue_holdout_is_frozen.md`, this cell
+      was structurally unbuildable from day one: the holdout
+      boundary is frozen at HOLDOUT_SACRED_FROM=2026-01-01 and
+      calendar-waiting does NOT grow the usable OOS window
+      indefinitely. No fresh data fixes the structural rarity.
+
+      Direction breakdown also disqualifies any standalone short
+      branch (N=5, t=nan, fire=0.0032). Long-only IS t=3.065 is
+      genuine but cannot be validated under Mode A OOS at this
+      fire rate without an alternative gate.
+
+      Recovery options per backtesting-methodology.md RULE 3.3:
+        (a) CPCV (Combinatorial Purged Cross-Validation) per
+            AFML 2018 Ch 12 sect 12.4 -- designed for OOS < 20%
+        (b) Harvey-Liu Sharpe haircut -- treat OOS as discount
+            multiplier, not veto
+        (c) Pool with PD_CLEAR_LONG siblings (other sessions /
+            apertures / RRs) under pooled-finding-rule
+        (d) Indefinite PARK (this entry)
+
+      No live allocation, validated_setups, chordia_audit_log, or
+      schema state mutated. PROMOTE result MD remains in place
+      under docs/audit/results/; the scanner will route this to
+      PARKED instead of QUEUED on next run.
+    exit_criteria: |
+      Re-open requires ONE of:
+      - A pre-registered CPCV runner producing a multi-path verdict
+        for this exact strategy_id with >=8 paths
+      - A pooled-finding pre-reg combining PD_CLEAR_LONG siblings
+        with per-direction breakdown showing pooled long t >= 3.0
+        AND every sibling fires >= 5% AND power >= 0.50
+      - A Harvey-Liu haircut prereg explicitly framing OOS as
+        Sharpe discount with the haircut math reported in the
+        result MD
+      Otherwise this entry stays PARK indefinitely; the IS edge
+      claim is not refuted, only unvalidatable under current
+      Mode A OOS framing.
+    blocked_by: []
+    decision_refs:
+      - .claude/rules/backtesting-methodology.md
+      - docs/institutional/literature/lopez_de_prado_2018_afml_ch_3_7_8.md
+      - docs/institutional/literature/harvey_liu_2015_backtesting.md
+    evidence_refs:
+      - docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
+      - docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.csv
+      - docs/audit/hypotheses/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml
+      - research/oos_power.py
+      - scripts/research/fast_lane_promote_queue.py
+      - memory/feedback_oos_does_not_accrue_holdout_is_frozen.md
+    notes_ref: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
+    override_note: |
+      Routed to PARK by the promote-queue scanner's
+      REJECTED_OOS_UNPOWERED disposition. No revocation sidecar:
+      the IS edge is not refuted, the cell is unvalidatable.
