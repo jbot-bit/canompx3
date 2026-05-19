@@ -950,6 +950,14 @@ def build_allocation(
     deployable filter, so refused strategies cannot leak into the JSON.
     Callers may also call the gates upstream — running them twice is
     idempotent.
+
+    PROVENANCE WARNING — pre-ff1f13ee `displaced[]` records:
+        Any `rejection_gate == "hysteresis"` entry written by allocator
+        revisions BEFORE commit ff1f13ee (2026-05-17) may attribute
+        cross-aperture interference (O5↔O15↔O30) to hysteresis. The
+        pre-fix session_key was (instrument, orb_label) and omitted
+        orb_minutes; `displaced_by` on those records is not trustworthy
+        for audit. Records produced ff1f13ee or later are clean.
     """
     # Apply hard gates first — refuse FAIL_BOTH / FAIL_CHORDIA / MISSING /
     # stale-audit, c8 OOS-deployment failures, and deployment-unsafe E2
