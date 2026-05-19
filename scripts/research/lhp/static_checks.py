@@ -717,6 +717,86 @@ def check_citation_content(parsed: dict[str, Any], corpus: Sequence[LiteratureEn
     return failures
 
 
+def check_grounding_provenance_block(
+    parsed: dict[str, Any], corpus: Sequence[LiteratureEntry]
+) -> list[CheckFailure]:
+    """Non-fatal sanity check on optional ``grounding_provenance`` block.
+
+    When a draft carries a ``grounding_provenance`` block (produced by
+    ``llm_hypothesis_proposer.py --ground-via-mcp``), every slug listed under
+    ``retrieved_extracts`` must match a real corpus entry. Non-fatal because:
+
+    - The block is purely informational — it documents what the LLM SAW, not
+      what it cited. Citation correctness is enforced by ``check_citations_exist``
+      and ``check_citation_content``.
+    - A misspelled provenance slug is operator-detectable noise; we don't
+      want to block a draft over it.
+
+    Fatal failures would force a brittle re-emit cycle on what is supposed
+    to be transparent audit metadata. Per the Improvement 2 plan: the
+    static-checker stays as backstop; proactive grounding is the seam.
+    """
+    block = parsed.get("grounding_provenance")
+    if block is None:
+        return []
+    if not isinstance(block, dict):
+        return [
+            CheckFailure(
+                code="GROUNDING_PROVENANCE_SHAPE",
+                field="grounding_provenance",
+                detail=(
+                    f"grounding_provenance must be a mapping (got {type(block).__name__})"
+                ),
+                fatal=False,
+            )
+        ]
+    extracts = block.get("retrieved_extracts")
+    if extracts is None:
+        return []
+    if not isinstance(extracts, list):
+        return [
+            CheckFailure(
+                code="GROUNDING_PROVENANCE_SHAPE",
+                field="grounding_provenance.retrieved_extracts",
+                detail=(
+                    "retrieved_extracts must be a list (got "
+                    f"{type(extracts).__name__})"
+                ),
+                fatal=False,
+            )
+        ]
+    failures: list[CheckFailure] = []
+    known_slugs = {e.slug for e in corpus}
+    for idx, item in enumerate(extracts):
+        if not isinstance(item, dict):
+            continue
+        slug = item.get("slug")
+        if not isinstance(slug, str) or not slug.strip():
+            failures.append(
+                CheckFailure(
+                    code="GROUNDING_PROVENANCE_SLUG_MISSING",
+                    field=f"grounding_provenance.retrieved_extracts[{idx}].slug",
+                    detail="every retrieved extract must declare a slug",
+                    fatal=False,
+                )
+            )
+            continue
+        if slug not in known_slugs:
+            failures.append(
+                CheckFailure(
+                    code="GROUNDING_PROVENANCE_SLUG_UNKNOWN",
+                    field=f"grounding_provenance.retrieved_extracts[{idx}].slug",
+                    detail=(
+                        f"slug {slug!r} does not match any file in "
+                        "docs/institutional/literature/ -- provenance block "
+                        "has drifted from the corpus index"
+                    ),
+                    fatal=False,
+                )
+            )
+    return failures
+
+
 def run_all(yaml_text: str, corpus: Sequence[LiteratureEntry]) -> tuple[dict[str, Any] | None, list[CheckFailure]]:
     """Run every check. Schema-load runs first; on parse failure we stop.
 
@@ -749,6 +829,7 @@ def run_all(yaml_text: str, corpus: Sequence[LiteratureEntry]) -> tuple[dict[str
     failures.extend(check_oos_power_floor(parsed))
     failures.extend(check_sensitivity_test(parsed))
     failures.extend(check_prior_art_block(parsed))
+    failures.extend(check_grounding_provenance_block(parsed, corpus))
     return parsed, failures
 
 
@@ -757,6 +838,7 @@ __all__ = [
     "check_banned_features",
     "check_citation_content",
     "check_citations_exist",
+    "check_grounding_provenance_block",
     "check_holdout_date",
     "check_instruments_active",
     "check_minbtl_budget",

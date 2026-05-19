@@ -321,11 +321,102 @@ def verify_citation_content(
     }
 
 
+def search_corpus(
+    corpus: Sequence[LiteratureEntry],
+    query: str,
+    *,
+    top_k: int = 5,
+    min_overlap: int = 2,
+) -> list[dict[str, object]]:
+    """Targeted top-K extracts ranked by query-token overlap with each body.
+
+    Offline equivalent of ``mcp__research-catalog__search_research_catalog``
+    for the LHP proposer pipeline: tokenize ``query`` the same way
+    ``verify_citation_content`` tokenizes ``economic_basis``, score each entry
+    by intersection size with its body tokens, return the top-K sorted by
+    score desc (entries below ``min_overlap`` are excluded — better to return
+    fewer hits than to surface unrelated extracts as "the literature").
+
+    Used by ``llm_hypothesis_proposer.py --ground-via-mcp`` to pre-load the
+    LLM context with the most relevant on-disk extracts BEFORE drafting.
+    This converts the failure class from "LLM hallucinated a citation" to
+    "LLM paraphrased a real extract" (per the Improvement 2 plan, 2026-05-19).
+
+    Returns
+    -------
+    list of dicts with keys: ``slug``, ``title``, ``blurb``, ``overlap_count``,
+    ``overlap_terms`` (sorted, capped at 12), ``score`` (= overlap_count for
+    transparency). Empty list when query has no usable tokens or no entry
+    scores above ``min_overlap``.
+    """
+    query_tokens = set(_tokenize(query))
+    if not query_tokens:
+        return []
+    scored: list[tuple[int, LiteratureEntry, set[str]]] = []
+    for entry in corpus:
+        body_tokens = set(_tokenize(entry.text))
+        overlap = query_tokens & body_tokens
+        if len(overlap) < min_overlap:
+            continue
+        scored.append((len(overlap), entry, overlap))
+    scored.sort(key=lambda t: (-t[0], t[1].slug))
+    return [
+        {
+            "slug": entry.slug,
+            "title": entry.title,
+            "blurb": entry.blurb,
+            "overlap_count": score,
+            "overlap_terms": sorted(overlap)[:12],
+            "score": score,
+        }
+        for score, entry, overlap in scored[:top_k]
+    ]
+
+
+def format_search_results_for_llm(
+    results: Sequence[dict[str, object]], *, max_bytes: int = 4000
+) -> str:
+    """Render top-K search hits as a compact LLM-context block.
+
+    Format per hit:
+        - <slug> :: <title> [overlap=N: term1, term2, ...]
+          <blurb>
+
+    Truncates total output to ``max_bytes`` so the targeted block stays
+    bounded even on a hypothetically deeper corpus. Order is preserved
+    from ``search_corpus`` (rank-descending).
+    """
+    if not results:
+        return ""
+    lines = ["TARGETED LITERATURE SEARCH (top-K extracts ranked by overlap with query)"]
+    lines.append("=" * 80)
+    used = sum(len(line.encode("utf-8")) for line in lines) + 2
+    for r in results:
+        terms_val = r.get("overlap_terms") or []
+        if isinstance(terms_val, (list, tuple)):
+            terms = ", ".join(str(t) for t in terms_val)
+        else:
+            terms = str(terms_val)
+        block = (
+            f"- {r.get('slug')} :: {r.get('title')} "
+            f"[overlap={r.get('overlap_count')}: {terms}]\n"
+            f"  {r.get('blurb')}\n"
+        )
+        nbytes = len(block.encode("utf-8"))
+        if used + nbytes > max_bytes:
+            break
+        lines.append(block.rstrip())
+        used += nbytes
+    return "\n".join(lines)
+
+
 __all__ = [
     "LiteratureEntry",
     "citation_exists",
     "corpus_summary_for_llm",
     "find_citation_entries",
+    "format_search_results_for_llm",
     "load_corpus",
+    "search_corpus",
     "verify_citation_content",
 ]

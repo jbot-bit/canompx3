@@ -73,7 +73,9 @@ from scripts.research.lhp.adjacency import (  # noqa: E402
 )
 from scripts.research.lhp.literature_index import (  # noqa: E402
     corpus_summary_for_llm,
+    format_search_results_for_llm,
     load_corpus,
+    search_corpus,
 )
 from scripts.research.lhp.llm_client import (  # noqa: E402
     CostCeilingExceeded,
@@ -181,6 +183,24 @@ def _build_argparser() -> argparse.ArgumentParser:
             "--candidate-strategy-id (so the screen evidence is on file). "
             "Default OFF — operator must explicitly opt in."
         ),
+    )
+    p.add_argument(
+        "--ground-via-mcp",
+        action="store_true",
+        help=(
+            "Pre-load the LLM context with top-K targeted literature extracts "
+            "matching the user-instruction (offline equivalent of the "
+            "research-catalog MCP search). Reduces LLM-fabricated-citation "
+            "failures by surfacing the real text BEFORE the model drafts. "
+            "Writes a `grounding_provenance` block to the draft yaml so "
+            "future auditors can confirm which extracts the LLM saw."
+        ),
+    )
+    p.add_argument(
+        "--grounding-top-k",
+        type=int,
+        default=5,
+        help="Top-K targeted extracts when --ground-via-mcp is on (default 5).",
     )
     return p
 
@@ -342,6 +362,61 @@ def _build_prior_art_block(screen: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _build_grounding_query(
+    *,
+    user_instruction: str,
+    candidate: dict[str, object] | None,
+) -> str:
+    """Compose the search query for ``--ground-via-mcp``.
+
+    The query is whatever the operator's intent suggests + any candidate
+    spec keywords (filter_type, entry_model, etc.) so the literature search
+    surfaces extracts about the actual lane mechanism, not just the prose
+    of the instruction.
+    """
+    parts = [user_instruction]
+    if candidate:
+        for key in ("filter_type", "entry_model", "orb_label"):
+            v = candidate.get(key)
+            if isinstance(v, str) and v.strip():
+                parts.append(v)
+    return " ".join(parts)
+
+
+def _inject_grounding_provenance(
+    yaml_text: str, grounding_results: list[dict[str, object]], query: str
+) -> str:
+    """Add a ``grounding_provenance`` block to the YAML so audits can see what
+    extracts the LLM had access to before drafting.
+
+    Textual prepend (mirrors ``_inject_prior_art``) so the LLM's emitted
+    formatting is preserved byte-for-byte. The block holds the exact slugs
+    + overlap scores returned by ``search_corpus``, plus the query string
+    that produced them. Sized for readability (top-K is already bounded).
+    """
+    import yaml as _yaml
+
+    if "grounding_provenance:" in yaml_text.splitlines()[:80]:
+        return yaml_text
+    block_dict = {
+        "grounding_provenance": {
+            "source": "scripts/research/llm_hypothesis_proposer.py --ground-via-mcp",
+            "query": query,
+            "retrieved_extracts": [
+                {
+                    "slug": r.get("slug"),
+                    "title": r.get("title"),
+                    "overlap_count": r.get("overlap_count"),
+                    "overlap_terms": r.get("overlap_terms"),
+                }
+                for r in grounding_results
+            ],
+        }
+    }
+    block_text = _yaml.safe_dump(block_dict, sort_keys=False, allow_unicode=True)
+    return block_text + "\n" + yaml_text
+
+
 def _inject_prior_art(yaml_text: str, prior_art: dict[str, object]) -> str:
     """Add prior_art to the YAML if not already present.
 
@@ -403,6 +478,9 @@ def main(argv: list[str] | None = None) -> int:
     screen: dict[str, object] | None = None
     screen_context_block: str | None = None
     prior_art_block: dict[str, object] | None = None
+    grounding_results: list[dict[str, object]] = []
+    grounding_query: str = ""
+    grounding_context_block: str = ""
     if args.candidate_strategy_id:
         candidate = _lookup_candidate(args.candidate_strategy_id)
         if candidate is None:
@@ -439,6 +517,35 @@ def main(argv: list[str] | None = None) -> int:
                     file=sys.stderr,
                 )
                 return 1
+
+    # ------------------------------------------------------------------
+    # Improvement 2 grounding step: targeted top-K corpus search BEFORE the
+    # LLM call so the model sees the most relevant extracts up front.
+    # Equivalent to mcp__research-catalog__search_research_catalog but
+    # offline (the corpus is local). Reduces LLM-fabricated-citation failures
+    # per the Improvement 2 plan (2026-05-19).
+    # ------------------------------------------------------------------
+    if args.ground_via_mcp:
+        candidate_for_query = None
+        if screen is not None:
+            candidate_for_query = screen.get("candidate")  # type: ignore[assignment]
+        grounding_query = _build_grounding_query(
+            user_instruction=args.user_instruction,
+            candidate=candidate_for_query if isinstance(candidate_for_query, dict) else None,
+        )
+        grounding_results = search_corpus(
+            corpus, grounding_query, top_k=args.grounding_top_k
+        )
+        grounding_context_block = format_search_results_for_llm(grounding_results)
+        if grounding_context_block:
+            print(grounding_context_block, file=sys.stderr)
+            print("", file=sys.stderr)
+        else:
+            print(
+                "GROUNDING: no corpus entry scored above min_overlap=2 -- "
+                "LLM will fall back to the full-corpus summary",
+                file=sys.stderr,
+            )
 
     if args.dry_run:
         try:
@@ -477,6 +584,8 @@ def main(argv: list[str] | None = None) -> int:
         # with --no-require-screen-pass).
         if screen_context_block:
             adjacency_context = adjacency_context + "\n\n" + screen_context_block
+        if grounding_context_block:
+            adjacency_context = adjacency_context + "\n\n" + grounding_context_block
 
         try:
             result = propose_with_mock_support(
@@ -504,6 +613,14 @@ def main(argv: list[str] | None = None) -> int:
     # auditor can see what evidence informed the draft.
     if prior_art_block:
         yaml_text = _inject_prior_art(yaml_text, prior_art_block)
+
+    # Inject grounding_provenance so audits can confirm which extracts the
+    # LLM had access to before drafting. Improvement 2 contract: a draft
+    # produced with --ground-via-mcp MUST carry this block.
+    if args.ground_via_mcp and grounding_results:
+        yaml_text = _inject_grounding_provenance(
+            yaml_text, grounding_results, grounding_query
+        )
 
     parsed, failures = run_all(yaml_text, corpus)
     has_fatal = any(f.fatal for f in failures)
