@@ -88,8 +88,7 @@ nodes:
       Per-strategy_id status roll-up: current_stage, age_days, next_action_token,
       upstream_artifact_path, downstream_artifact_path. Rebuilt on every
       orchestrator run.
-    parity_drift_check: null  # to be added in Stage 2
-    proposed: true  # Stage 2 of fast-lane-pipeline-connective-tissue plan; not yet implemented
+    parity_drift_check: check_fast_lane_status_rollup_reconstruction_parity
 
   - id: fast_lane_age_staleness
     path: docs/runtime/fast_lane_age_staleness.yaml
@@ -182,12 +181,12 @@ Directory of `*.draft.yaml`, `*.grounded.yaml`, and `*.rejected.txt`. Loader ski
 
 ## 5. Reserved Schemas (proposed, not yet enforced)
 
-### 5.1 `fast_lane_status.yaml` — Stage 2 deliverable (PROPOSED)
+### 5.1 `fast_lane_status.yaml` — Stage 2 (SHIPPED 2026-05-19)
 
-Top-level keys: `schema_version: 1`, `generated_at`, `do_not_hand_edit: true`, `entries[]`.
-Entry fields: `strategy_id`, `current_stage` (one of: ACTIVE_PREREG, FAST_LANE_RUN, PROMOTE_QUEUED, RANKED, BRIDGED, GROUNDED, HEAVYWEIGHT_PENDING, HEAVYWEIGHT_COMPLETE, ENRICHED), `age_days`, `next_action_token`, `upstream_artifact_path`, `downstream_artifact_path`.
+Top-level keys: `schema_version: 1`, `generated_at`, `do_not_hand_edit: true`, `source`, `warning`, `entries[]`.
+Entry fields: `strategy_id`, `current_stage` (one of: ACTIVE_PREREG, FAST_LANE_RUN, PROMOTE_QUEUED, RANKED, BRIDGED, GROUNDED, HEAVYWEIGHT_PENDING, HEAVYWEIGHT_COMPLETE, ENRICHED, plus terminal stages REVOKED, PARKED, REJECTED_OOS_UNPOWERED, ERROR), `age_days`, `next_action_token`, `upstream_artifact_path`, `downstream_artifact_path`, `observed_at` (per-source provenance dict).
 
-NOT yet drift-checked. Will be enforced when Stage 2 lands.
+Drift-checked by `check_fast_lane_status_rollup_reconstruction_parity` (Check #168) — three failure classes: hand-edit drift, tampered banner (`schema_version` / `do_not_hand_edit` / `source`), and capital-class write attempt (greppable static check on writer source).
 
 ### 5.2 `fast_lane_age_staleness.yaml` — Stage 3 deliverable (PROPOSED)
 

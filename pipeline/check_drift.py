@@ -11584,6 +11584,7 @@ def check_fast_lane_state_graph_node_parity(
         ("docs/runtime/promote_queue.yaml", "docs/runtime/promote_queue.yaml"),
         ("docs/runtime/cherry_pick_journal.yaml", "docs/runtime/cherry_pick_journal.yaml"),
         ("docs/runtime/cherry_pick_ranking_*.csv", "docs/runtime/cherry_pick_ranking_*.csv"),
+        ("docs/runtime/fast_lane_status.yaml", "docs/runtime/fast_lane_status.yaml"),
     ]
     for spec_path_pattern, disk_glob in known_globs:
         matches = list(_root.glob(disk_glob))
@@ -11604,6 +11605,221 @@ def check_fast_lane_state_graph_node_parity(
             "docs/audit/hypotheses/drafts/ exists on disk but no spec node names "
             "it. Add a node to '## 2. Node Inventory'."
         )
+
+    return violations
+
+
+def check_fast_lane_status_rollup_reconstruction_parity(
+    rollup_path: Path | None = None,
+    writer_path: Path | None = None,
+) -> list[str]:
+    """Check #168: docs/runtime/fast_lane_status.yaml must match a fresh reconstruction.
+
+    Stage 2 of ``docs/plans/2026-05-19-fast-lane-pipeline-connective-tissue-design.md``.
+
+    Three failure classes caught:
+
+    1. Hand-edit drift: the on-disk roll-up disagrees with a fresh
+       ``build_status_entries()`` reconstruction (extra/missing strategy_id,
+       wrong current_stage, wrong next_action_token).
+    2. Tampered banner: ``do_not_hand_edit: true``, ``schema_version: 1``,
+       or ``source: scripts/tools/fast_lane_status.py`` removed.
+    3. Capital-class write attempt: the writer's source contains any
+       reference to ``chordia_audit_log.yaml``, ``lane_allocation.json``,
+       ``validated_setups``, or ``trading_app/live/`` paired with
+       ``write_text``/``open(...,'w')``/``shutil.copy``. The writer must
+       be read-only over capital-class state per design § 4.1.
+
+    Fail-closed:
+    - Missing roll-up returns a violation (run ``--write`` to bootstrap).
+    - Unreadable / unparseable roll-up returns a violation.
+    - Reconstruction failure returns a violation.
+
+    Parameters
+    ----------
+    rollup_path : Path | None
+        Override on-disk roll-up path (test seam).
+    writer_path : Path | None
+        Override writer source path for the capital-class greppable check.
+    """
+    try:
+        import yaml as _yaml
+    except ImportError as exc:
+        return [
+            f"check_fast_lane_status_rollup_reconstruction_parity: pyyaml import failed: {exc}"
+        ]
+
+    _rollup = (
+        rollup_path
+        if rollup_path is not None
+        else PROJECT_ROOT / "docs" / "runtime" / "fast_lane_status.yaml"
+    )
+    _writer = (
+        writer_path
+        if writer_path is not None
+        else PROJECT_ROOT / "scripts" / "tools" / "fast_lane_status.py"
+    )
+
+    violations: list[str] = []
+
+    # --- (3) Capital-class write-attempt static check (greppable, fast) ---
+    if _writer.exists():
+        try:
+            writer_src = _writer.read_text(encoding="utf-8")
+        except Exception as exc:
+            return [
+                f"check_fast_lane_status_rollup_reconstruction_parity: failed to "
+                f"read writer source {_writer}: {type(exc).__name__}: {exc}"
+            ]
+        capital_paths = (
+            "chordia_audit_log.yaml",
+            "lane_allocation.json",
+            "validated_setups",
+            "trading_app/live/",
+        )
+        write_markers = ("write_text", "open(", "shutil.copy", "shutil.move")
+        for cap in capital_paths:
+            if cap in writer_src:
+                # Adjacent-line co-occurrence with any write marker is the bug
+                # signature — pure mention in a docstring is fine.
+                lines = writer_src.splitlines()
+                for idx, line in enumerate(lines):
+                    if cap not in line:
+                        continue
+                    window = "\n".join(lines[max(0, idx - 2) : idx + 3])
+                    for marker in write_markers:
+                        if marker in window and not line.lstrip().startswith(("#", '"', "'")):
+                            violations.append(
+                                "check_fast_lane_status_rollup_reconstruction_parity: "
+                                "CAPITAL-CLASS WRITE ATTEMPT — writer source mentions "
+                                f"'{cap}' within 2 lines of '{marker}'. The status "
+                                "roll-up writer is read-only over capital-class files "
+                                "per design § 4.1; only docs/runtime/fast_lane_status.yaml "
+                                "may be written. Line ~"
+                                f"{idx + 1} of {_writer}."
+                            )
+                            break
+
+    # --- (1) + (2) On-disk vs fresh reconstruction ---
+    if not _rollup.exists():
+        violations.append(
+            f"check_fast_lane_status_rollup_reconstruction_parity: roll-up not found "
+            f"at {_rollup}. Run `python scripts/tools/fast_lane_status.py --write` "
+            "to bootstrap."
+        )
+        return violations
+
+    try:
+        on_disk = _yaml.safe_load(_rollup.read_text(encoding="utf-8"))
+    except Exception as exc:
+        violations.append(
+            f"check_fast_lane_status_rollup_reconstruction_parity: failed to parse "
+            f"{_rollup}: {type(exc).__name__}: {exc}"
+        )
+        return violations
+
+    if not isinstance(on_disk, dict):
+        violations.append(
+            f"check_fast_lane_status_rollup_reconstruction_parity: {_rollup} "
+            "is not a YAML mapping."
+        )
+        return violations
+
+    # Banner integrity (failure class 2).
+    if on_disk.get("schema_version") != 1:
+        violations.append(
+            "check_fast_lane_status_rollup_reconstruction_parity: BANNER TAMPERED — "
+            "schema_version must be 1 (got "
+            f"{on_disk.get('schema_version')!r}). Roll-up is derived state; do not "
+            "hand-edit."
+        )
+    if on_disk.get("do_not_hand_edit") is not True:
+        violations.append(
+            "check_fast_lane_status_rollup_reconstruction_parity: BANNER TAMPERED — "
+            "do_not_hand_edit must be true. Roll-up is derived state; rerun "
+            "`python scripts/tools/fast_lane_status.py --write`."
+        )
+    if on_disk.get("source") != "scripts/tools/fast_lane_status.py":
+        violations.append(
+            "check_fast_lane_status_rollup_reconstruction_parity: BANNER TAMPERED — "
+            "source field must name scripts/tools/fast_lane_status.py "
+            f"(got {on_disk.get('source')!r})."
+        )
+
+    # Fresh reconstruction (failure class 1).
+    try:
+        from scripts.tools.fast_lane_status import build_status_entries, serialize_rollup
+    except Exception as exc:
+        violations.append(
+            "check_fast_lane_status_rollup_reconstruction_parity: cannot import "
+            f"writer module: {type(exc).__name__}: {exc}"
+        )
+        return violations
+
+    try:
+        # Reconstruct using the on-disk generated_at date so the comparison is
+        # stable across midnight boundaries (the only field that legitimately
+        # drifts day-to-day is generated_at + age_days; age_days is a function
+        # of mtime which the parity check tolerates via the same date input).
+        from datetime import date as _date
+
+        gen_at = on_disk.get("generated_at")
+        if isinstance(gen_at, str):
+            try:
+                today = _date.fromisoformat(gen_at)
+            except ValueError:
+                today = None
+        elif isinstance(gen_at, _date):
+            today = gen_at
+        else:
+            today = None
+        fresh_entries = build_status_entries(today=today)
+        fresh_payload = _yaml.safe_load(serialize_rollup(fresh_entries, today=today))
+    except Exception as exc:
+        violations.append(
+            "check_fast_lane_status_rollup_reconstruction_parity: reconstruction "
+            f"failed: {type(exc).__name__}: {exc}"
+        )
+        return violations
+
+    on_disk_by_sid = {
+        e.get("strategy_id"): e
+        for e in (on_disk.get("entries") or [])
+        if isinstance(e, dict)
+    }
+    fresh_by_sid = {
+        e.get("strategy_id"): e
+        for e in (fresh_payload.get("entries") or [])
+        if isinstance(e, dict)
+    }
+
+    for sid in sorted(s for s in (set(on_disk_by_sid) | set(fresh_by_sid)) if s):
+        d = on_disk_by_sid.get(sid)
+        f = fresh_by_sid.get(sid)
+        if d is None:
+            violations.append(
+                f"check_fast_lane_status_rollup_reconstruction_parity: MISSING_FROM_ROLLUP "
+                f"— strategy_id {sid!r} present in reconstruction but absent from "
+                f"{_rollup}. Rerun `python scripts/tools/fast_lane_status.py --write`."
+            )
+            continue
+        if f is None:
+            violations.append(
+                f"check_fast_lane_status_rollup_reconstruction_parity: ORPHAN_IN_ROLLUP "
+                f"— strategy_id {sid!r} present in {_rollup} but absent from "
+                "reconstruction (likely hand-edited). Rerun "
+                "`python scripts/tools/fast_lane_status.py --write`."
+            )
+            continue
+        for field_name in ("current_stage", "next_action_token"):
+            if d.get(field_name) != f.get(field_name):
+                violations.append(
+                    f"check_fast_lane_status_rollup_reconstruction_parity: FIELD_DRIFT — "
+                    f"strategy_id {sid!r} field {field_name!r} on disk = "
+                    f"{d.get(field_name)!r} but reconstruction = {f.get(field_name)!r}. "
+                    "Either the roll-up is stale or hand-edited; rerun "
+                    "`python scripts/tools/fast_lane_status.py --write`."
+                )
 
     return violations
 
@@ -12306,6 +12522,12 @@ CHECKS = [
         "Fast-lane structural hash schema parity: scripts/research/fast_lane_structural_hash.py HASH_SCHEMA_VERSION + HASH_SCHEMA_INPUTS must match `## Hash Schema` YAML in 2026-05-20-fast-lane-anti-fp-trial-provenance.md (Stage 2A.1 canonical-inline-copy parity)",
         check_fast_lane_structural_hash_schema_parity,
         False,  # blocking — schema drift silently changes every structural_hash, breaking 2A.2 ledger de-dup + 2A.3 suppression
+        False,
+    ),
+    (
+        "Fast-lane status roll-up reconstruction parity: docs/runtime/fast_lane_status.yaml must match a fresh scripts/tools/fast_lane_status.py build (Stage 2A.2 connective-tissue)",
+        check_fast_lane_status_rollup_reconstruction_parity,
+        False,  # blocking — hand-edits + capital-class write attempts both fail the chain-awareness contract
         False,
     ),
 ]  # end CHECKS
