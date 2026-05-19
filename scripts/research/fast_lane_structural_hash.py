@@ -33,10 +33,13 @@ from typing import Any
 # any structural change to the hash recipe.
 HASH_SCHEMA_VERSION = 1
 
-# The 9 canonical inputs. Order is significant -- it determines key order in
-# the canonicalised JSON payload. Adding/removing entries here requires a
-# HASH_SCHEMA_VERSION bump and a corresponding update to the canonical-inline-
-# copy registry entry's gated_constants.
+# The 9 canonical inputs. The tuple order here is NOT the hash serialisation
+# order -- json.dumps(sort_keys=True) always serialises alphabetically, so the
+# actual hash is determined by alphabetical key order, not insertion order.
+# Tuple order here only affects documentation and the parity-check field
+# comparison in Check #167 (which also uses doc insertion order). Adding or
+# removing entries requires a HASH_SCHEMA_VERSION bump and a corresponding
+# update to the canonical-inline-copy registry entry's gated_constants.
 HASH_SCHEMA_INPUTS: tuple[str, ...] = (
     "instrument",
     "orb_label",

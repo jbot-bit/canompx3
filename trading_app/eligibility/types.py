@@ -265,6 +265,13 @@ class ConditionRecord:
 
         STALE_VALIDATION is a warning, not a block — the filter still applies
         but provenance is aging. Trader must decide whether to trust it.
+
+        RULES_NOT_LOADED is intentionally False here: the calendar overlay system
+        being unavailable is treated as an infrastructure gap, not a condition
+        failure. However, _derive_overall_status in builder.py treats
+        RULES_NOT_LOADED identically to DATA_MISSING, so overall_status will be
+        DATA_MISSING. This means a report can have overall_status=DATA_MISSING
+        with an empty blocking_conditions tuple — see EligibilityReport.blocking_conditions.
         """
         return self.status in (ConditionStatus.FAIL, ConditionStatus.DATA_MISSING)
 
@@ -323,7 +330,14 @@ class EligibilityReport:
 
     @property
     def blocking_conditions(self) -> tuple[ConditionRecord, ...]:
-        """Conditions that currently block trade execution (FAIL + DATA_MISSING)."""
+        """Conditions that currently block trade execution (FAIL + DATA_MISSING).
+
+        Note: RULES_NOT_LOADED conditions are NOT included here (is_blocking is
+        False for that status), but they do drive overall_status to DATA_MISSING
+        via _derive_overall_status. A report with overall_status=DATA_MISSING and
+        an empty blocking_conditions tuple means the calendar overlay system was
+        unavailable — check conditions for RULES_NOT_LOADED status entries.
+        """
         return tuple(c for c in self.conditions if c.is_blocking)
 
     @property
