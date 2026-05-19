@@ -1,0 +1,190 @@
+"""Tests for scripts/tools/go_portal.py.
+
+Coverage:
+  - render_portal returns HTML + JSON payload with 10 panels.
+  - Panel-level error isolation: one failing panel does not break the others.
+  - Empty-state messaging when underlying data sources are missing.
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from scripts.tools import go_portal
+
+
+@pytest.fixture
+def patched_freshness_drift(monkeypatch):
+    """Stub all slow / DB-bound helpers so unit tests are fast and offline."""
+    monkeypatch.setattr(
+        go_portal,
+        "_query_data_freshness",
+        lambda: {"MNQ": {"max_trading_day": "2026-05-19", "stale_days": 0, "is_stale": False}},
+    )
+    monkeypatch.setattr(
+        go_portal,
+        "_drift_status",
+        lambda: {"status": "PASS", "detail": "all checks passed"},
+    )
+    monkeypatch.setattr(go_portal, "_git_sha", lambda: "deadbeef")
+    # Stub every panel — the render-orchestrator behavior is the unit under test here.
+    monkeypatch.setattr(go_portal, "panel_deployed_lanes", lambda *a, **kw: "<p>stub-1</p>")
+    monkeypatch.setattr(go_portal, "panel_promotable", lambda *a, **kw: "<p>stub-2</p>")
+    monkeypatch.setattr(go_portal, "panel_promote_queue", lambda *a, **kw: ("<p>stub-3</p>", []))
+    monkeypatch.setattr(go_portal, "panel_oos_rejections", lambda *a, **kw: "<p>stub-4</p>")
+    monkeypatch.setattr(go_portal, "panel_cherry_pick_top5", lambda: "<p>stub-5</p>")
+    monkeypatch.setattr(go_portal, "panel_drafts", lambda: "<p>stub-6</p>")
+    monkeypatch.setattr(go_portal, "panel_journal_pending", lambda: "<p>stub-7</p>")
+    monkeypatch.setattr(go_portal, "panel_next_24h", lambda *a, **kw: "<p>stub-8</p>")
+    monkeypatch.setattr(go_portal, "panel_holdout", lambda *a, **kw: "<p>stub-9</p>")
+    monkeypatch.setattr(go_portal, "panel_freshness_drift", lambda *a, **kw: "<p>stub-10</p>")
+
+
+def test_render_portal_emits_all_panels(patched_freshness_drift):
+    html, payload = go_portal.render_portal()
+    # 10 panels declared in the payload.
+    assert payload["panels"] == {str(i): True for i in range(1, 11)}
+    # Banner choice respects any_stale flag.
+    assert payload["any_stale"] is False
+    assert "banner-ok" in html
+    # Every panel has a stable anchor target.
+    for i in range(1, 11):
+        assert f"id='p{i}'" in html
+    # Footer carries timestamp + sha.
+    assert "deadbeef" in html
+
+
+def test_render_portal_stale_banner_when_db_stale(monkeypatch):
+    monkeypatch.setattr(
+        go_portal,
+        "_query_data_freshness",
+        lambda: {"MNQ": {"max_trading_day": "2026-05-01", "stale_days": 18, "is_stale": True}},
+    )
+    monkeypatch.setattr(go_portal, "_drift_status", lambda: {"status": "PASS", "detail": ""})
+    monkeypatch.setattr(go_portal, "_git_sha", lambda: "abc")
+    monkeypatch.setattr(go_portal, "panel_deployed_lanes", lambda *a, **kw: "<p>stub-1</p>")
+    monkeypatch.setattr(go_portal, "panel_promotable", lambda *a, **kw: "<p>stub-2</p>")
+    monkeypatch.setattr(go_portal, "panel_promote_queue", lambda *a, **kw: ("<p>stub-3</p>", []))
+    monkeypatch.setattr(go_portal, "panel_oos_rejections", lambda *a, **kw: "<p>stub-4</p>")
+    monkeypatch.setattr(go_portal, "panel_cherry_pick_top5", lambda: "<p>stub-5</p>")
+    monkeypatch.setattr(go_portal, "panel_drafts", lambda: "<p>stub-6</p>")
+    monkeypatch.setattr(go_portal, "panel_journal_pending", lambda: "<p>stub-7</p>")
+    monkeypatch.setattr(go_portal, "panel_next_24h", lambda *a, **kw: "<p>stub-8</p>")
+    monkeypatch.setattr(go_portal, "panel_holdout", lambda *a, **kw: "<p>stub-9</p>")
+    monkeypatch.setattr(go_portal, "panel_freshness_drift", lambda *a, **kw: "<p>stub-10</p>")
+    html, payload = go_portal.render_portal()
+    assert payload["any_stale"] is True
+    assert "banner-stale" in html
+    assert "STALE DATA" in html
+
+
+def test_panel_error_isolation(monkeypatch, patched_freshness_drift):
+    """If panel 1 raises, panels 2-10 must still render and panel 1 emits an error block."""
+
+    def boom():
+        raise RuntimeError("synthetic failure for test")
+
+    # Patch panel_deployed_lanes to raise; everything else proceeds normally.
+    monkeypatch.setattr(go_portal, "panel_deployed_lanes", lambda *a, **kw: boom())
+    # Stub other DB / file-system bound helpers so the test is hermetic.
+    monkeypatch.setattr(go_portal, "panel_promotable", lambda *a, **kw: "<p>stub-2</p>")
+    monkeypatch.setattr(
+        go_portal, "panel_promote_queue", lambda *a, **kw: ("<p>stub-3</p>", [])
+    )
+    monkeypatch.setattr(go_portal, "panel_oos_rejections", lambda *a, **kw: "<p>stub-4</p>")
+    monkeypatch.setattr(go_portal, "panel_cherry_pick_top5", lambda: "<p>stub-5</p>")
+    monkeypatch.setattr(go_portal, "panel_drafts", lambda: "<p>stub-6</p>")
+    monkeypatch.setattr(go_portal, "panel_journal_pending", lambda: "<p>stub-7</p>")
+    monkeypatch.setattr(go_portal, "panel_next_24h", lambda *a, **kw: "<p>stub-8</p>")
+    monkeypatch.setattr(go_portal, "panel_holdout", lambda *a, **kw: "<p>stub-9</p>")
+    monkeypatch.setattr(go_portal, "panel_freshness_drift", lambda *a, **kw: "<p>stub-10</p>")
+
+    html, _ = go_portal.render_portal()
+    # Panel 1 error block rendered, others still present.
+    assert "Panel 1 unavailable" in html
+    for n in range(2, 11):
+        assert f"stub-{n}" in html
+
+
+def test_cherry_pick_empty_state(tmp_path, monkeypatch):
+    """If no cherry_pick_ranking_*.csv exists, panel 5 emits empty-state, not a crash."""
+    monkeypatch.setattr(go_portal, "RUNTIME_DIR", tmp_path)
+    body = go_portal.panel_cherry_pick_top5()
+    assert "No cherry_pick_ranking" in body
+
+
+def test_drafts_empty_state(tmp_path, monkeypatch):
+    """Missing drafts directory -> empty-state, no crash."""
+    monkeypatch.setattr(go_portal, "DRAFTS_DIR", tmp_path / "does_not_exist")
+    body = go_portal.panel_drafts()
+    assert "No drafts directory" in body
+
+
+def test_drafts_rejected_sidecar(tmp_path, monkeypatch):
+    """Drafts paired with .rejected.txt show REJECTED in the sidecar column."""
+    monkeypatch.setattr(go_portal, "DRAFTS_DIR", tmp_path)
+    draft = tmp_path / "2026-05-19-foo.draft.yaml"
+    draft.write_text(
+        "metadata:\n  theory_grant: false\n  total_expected_trials: 1\n"
+        "  purpose: 'test purpose string'\n",
+        encoding="utf-8",
+    )
+    rejection = tmp_path / "2026-05-19-foo.rejected.txt"
+    rejection.write_text("rejected\n", encoding="utf-8")
+    body = go_portal.panel_drafts()
+    assert "REJECTED" in body
+    assert "test purpose string" in body
+
+
+def test_journal_pending_no_entries(tmp_path, monkeypatch):
+    journal = tmp_path / "j.yaml"
+    journal.write_text(
+        "schema_version: 1\nentries:\n"
+        "  - iter: 1\n    strategy_id: X\n    heavyweight_verdict: PASS_CHORDIA\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(go_portal, "JOURNAL_PATH", journal)
+    body = go_portal.panel_journal_pending()
+    assert "All journal entries have resolved verdicts" in body
+
+
+def test_journal_pending_shows_null_and_deferred(tmp_path, monkeypatch):
+    journal = tmp_path / "j.yaml"
+    journal.write_text(
+        "schema_version: 1\nentries:\n"
+        "  - iter: 1\n    strategy_id: X_NULL\n"
+        "    heavyweight_verdict: null\n    oos_power_tier: NA_NO_OOS\n"
+        "  - iter: 2\n    strategy_id: Y_DEFERRED\n"
+        "    heavyweight_verdict: DEFERRED_NOT_RUN\n    oos_power_tier: STATISTICALLY_USELESS\n"
+        "  - iter: 3\n    strategy_id: Z_PASS\n"
+        "    heavyweight_verdict: PASS_CHORDIA\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(go_portal, "JOURNAL_PATH", journal)
+    body = go_portal.panel_journal_pending()
+    assert "X_NULL" in body
+    assert "Y_DEFERRED" in body
+    assert "Z_PASS" not in body
+
+
+def test_main_writes_html(tmp_path, monkeypatch, patched_freshness_drift, capsys):
+    out_path = tmp_path / "portal.html"
+    rc = go_portal.main(["--no-open", "--out", str(out_path)])
+    assert rc == 0
+    assert out_path.exists()
+    body = out_path.read_text(encoding="utf-8")
+    assert "OKAY GO portal" in body
+    # main() prints the output path so the operator can find it even if browser-open fails.
+    captured = capsys.readouterr()
+    assert str(out_path) in captured.out
+
+
+def test_main_json_mode(monkeypatch, patched_freshness_drift, capsys):
+    rc = go_portal.main(["--json"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["panels"] == {str(i): True for i in range(1, 11)}
+    assert payload["git_sha"] == "deadbeef"
