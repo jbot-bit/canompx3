@@ -104,6 +104,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/shared-state-commit-guard.py",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
