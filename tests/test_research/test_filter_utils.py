@@ -135,6 +135,98 @@ class TestFilterSignalEquivalence:
         )
         self._assert_equivalent(df, "ATR_P50", "COMEX_SETTLE")
 
+    def test_cost_lt12_matches_canonical_with_symbol(self):
+        # COST_LT12 needs `symbol` for per-instrument cost lookup. With
+        # symbol present, wrapper must equal canonical matches_df.
+        df = pd.DataFrame(
+            {
+                "orb_NYSE_OPEN_size": [10.0, 50.0, 100.0, 200.0, float("nan")],
+                "symbol": ["MNQ", "MNQ", "MNQ", "MNQ", "MNQ"],
+            }
+        )
+        self._assert_equivalent(df, "COST_LT12", "NYSE_OPEN")
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# filter_signal — required_columns contract & silent-fail-closed prevention
+# Origin: 2026-05-20 wrapper-parity bug. CostRatioFilter.matches_df silently
+# returned all-False on a DataFrame missing `symbol`, producing 0/1718 fires
+# vs the inline reference's 1695/1718. The wrapper now pre-validates and
+# raises ValueError instead of propagating the silent failure.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+class TestRequiredColumnsContract:
+    def test_cost_filter_raises_on_missing_symbol(self):
+        # The original CHECK 3 repro from the prior session — DataFrame has
+        # orb size but no `symbol` column. Must raise ValueError naming the
+        # missing column, not silently return [0, 0, 0].
+        df = pd.DataFrame(
+            {
+                "orb_NYSE_OPEN_size": [50.0, 100.0, 200.0],
+            }
+        )
+        with pytest.raises(ValueError, match="symbol"):
+            filter_signal(df, "COST_LT12", "NYSE_OPEN")
+
+    def test_cost_filter_raises_on_missing_orb_size(self):
+        # Equally a missing prerequisite — orb size column absent.
+        df = pd.DataFrame(
+            {
+                "symbol": ["MNQ", "MNQ", "MNQ"],
+            }
+        )
+        with pytest.raises(ValueError, match="orb_NYSE_OPEN_size"):
+            filter_signal(df, "COST_LT12", "NYSE_OPEN")
+
+    def test_cost_filter_error_message_mentions_silent_fail(self):
+        # The diagnostic must explain WHY this raises now (silent-fail
+        # context) so future readers don't loosen the guard.
+        df = pd.DataFrame({"orb_NYSE_OPEN_size": [50.0]})
+        with pytest.raises(ValueError, match="silent"):
+            filter_signal(df, "COST_LT12", "NYSE_OPEN")
+
+    def test_volume_filter_raises_on_missing_rel_vol(self):
+        # VolumeFilter needs rel_vol_{orb_label} injected at discovery time.
+        # Find a VOL_RV* key dynamically — registry may rename.
+        from trading_app.config import ALL_FILTERS
+
+        vol_keys = [k for k in ALL_FILTERS if k.startswith("VOL_RV")]
+        if not vol_keys:
+            pytest.skip("No VOL_RV* filter in registry — VolumeFilter retired?")
+        df = pd.DataFrame({"orb_NYSE_OPEN_size": [50.0, 100.0]})
+        with pytest.raises(ValueError, match="rel_vol_NYSE_OPEN"):
+            filter_signal(df, vol_keys[0], "NYSE_OPEN")
+
+    def test_cross_asset_atr_raises_on_missing_injection(self):
+        # CrossAssetATRFilter needs cross_atr_{source}_pct injected by
+        # _inject_cross_asset_atrs() at discovery/fitness time.
+        from trading_app.config import ALL_FILTERS
+
+        x_keys = [k for k in ALL_FILTERS if k.startswith("X_MES_ATR")]
+        if not x_keys:
+            pytest.skip("No X_MES_ATR* filter in registry")
+        df = pd.DataFrame({"orb_NYSE_OPEN_size": [50.0, 100.0]})
+        with pytest.raises(ValueError, match="cross_atr_MES_pct"):
+            filter_signal(df, x_keys[0], "NYSE_OPEN")
+
+    def test_default_filter_no_required_columns(self):
+        # Filters without explicit required_columns override (e.g.,
+        # VWAP_MID_ALIGNED, ORB_G5) must continue to accept lean DataFrames
+        # without raising — backward-compatibility for the 47 existing
+        # wrapper callers.
+        df = pd.DataFrame(
+            {
+                "orb_US_DATA_1000_high": [100.0],
+                "orb_US_DATA_1000_low": [99.0],
+                "orb_US_DATA_1000_vwap": [98.0],
+                "orb_US_DATA_1000_break_dir": ["long"],
+            }
+        )
+        # Must not raise.
+        sig = filter_signal(df, "VWAP_MID_ALIGNED", "US_DATA_1000")
+        assert sig.shape == (1,)
+
 
 # ─────────────────────────────────────────────────────────────────────────
 # filter_signal — VWAP_MID_ALIGNED behavioral correctness

@@ -23,8 +23,15 @@ Why not just call `ALL_FILTERS[key].matches_df(...).to_numpy().astype(int)`
 directly in every scan? That's the correct call — but it requires the scan
 to (a) know how to handle the key-not-in-registry case, (b) handle empty
 DataFrames uniformly, (c) know that `.fillna(False)` is needed because
-`matches_df` may return a Series with NaN for missing-data rows. This
-module centralizes those three concerns so the scan code is one line.
+`matches_df` may return a Series with NaN for missing-data rows, and
+(d) know which prerequisite columns each filter needs to avoid the
+silent-fail-closed bug (filters with cross-row dependencies — CostRatioFilter
+needs `symbol`, VolumeFilter needs `rel_vol_{orb_label}`,
+CrossAssetATRFilter needs `cross_atr_{source}_pct` — silently return
+all-False when those columns are absent, indistinguishable from a
+legitimate zero-fire result). This module centralizes those four concerns
+so the scan code is one line, with concern (d) raising ValueError instead
+of silently producing 0/N.
 
 Input contract
 --------------
@@ -83,6 +90,11 @@ def filter_signal(df: pd.DataFrame, filter_key: str, orb_label: str) -> np.ndarr
     ------
     KeyError
         If `filter_key` is not in `ALL_FILTERS`.
+    ValueError
+        If `df` is missing columns the canonical filter requires (per its
+        `required_columns(orb_label)` declaration). Replaces the legacy
+        silent-fail-closed `0/N` result with a loud failure naming the
+        missing columns. See module docstring concern (d).
     """
     if filter_key not in ALL_FILTERS:
         raise KeyError(
@@ -92,6 +104,20 @@ def filter_signal(df: pd.DataFrame, filter_key: str, orb_label: str) -> np.ndarr
             f"(total {len(ALL_FILTERS)})"
         )
     filt: StrategyFilter = ALL_FILTERS[filter_key]
+    required = filt.required_columns(orb_label)
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"filter_signal({filter_key!r}, orb_label={orb_label!r}): "
+            f"DataFrame missing required column(s) {sorted(missing)}. "
+            f"Without these, the canonical {type(filt).__name__}.matches_df "
+            f"would silently return all-False (0 fires) — a silent-fail-closed "
+            f"parity bug. Provide the missing columns via the canonical "
+            f"daily_features.* join (triple-key on trading_day, symbol, "
+            f"orb_minutes per daily-features-joins.md), or via the relevant "
+            f"discovery-time injection (e.g., _compute_relative_volumes for "
+            f"rel_vol_*, _inject_cross_asset_atrs for cross_atr_*)."
+        )
     if len(df) == 0:
         return np.zeros(0, dtype=int)
     series = filt.matches_df(df, orb_label).fillna(False)
