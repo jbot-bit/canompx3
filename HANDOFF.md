@@ -6,6 +6,30 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-20 PM — Stage A acceptance close + 22-stage residue sweep + runtime/ gitignore)
+
+- **Tool:** Claude Code (Opus 4.7), explanatory mode
+- **Date:** 2026-05-20 (BNE evening → 2026-05-21 transition)
+- **Commits pushed to origin/main:** `c836d846` close stage-a-ingest-idea (acceptance verified by sibling session before this conversation), `677837c1` sweep 22 stale stage files, `d3f68ff1` gitignore `runtime/` + delete stray `C:Tempdrift_full.txt`. Tip is `d3f68ff1`. Working tree clean.
+- **Files changed:** `.gitignore` (+1 line for `runtime/`); 22 stage-file deletions under `docs/runtime/stages/` (−1087 lines, no production code). Verified each had a confirmed ship commit on main (full list in `677837c1` commit body).
+- **Session summary:** User invoked `/next`. Stage A `ingest_idea.py` had all 6 acceptance criteria passing (`--help` works, 17/17 tests pass, drift 152 PASS + 1 pre-existing MGC carry-over, no dead-code refs outside scope) — close stage already landed sibling `c836d846`. Fell through to Case E: no concrete coding task on the live queue (Stage 3 PreToolUse hook = design-first, MGC trade-window drift = needs validator full-staging, OOS-power-floor blocker = calendar-wait). Picked TRIVIAL hygiene: delete the 22 stale-stage-file residue (Brief was reporting "Stages: +21 more"). **Important finding caught by drift fail-closed:** TWO stage files are LOAD-BEARING canonical sources for drift checks:
+  - `docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md` ← Check #167 hash-schema parity (canonical: `## Hash Schema` YAML)
+  - `docs/runtime/stages/2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md` ← Check #173 STATUS_VALUES enum parity (canonical: `## Suppression Status Enum` table)
+  Initial sweep including these two trips drift 1→3 violations. Restored both; sweep landed at exactly the 22 truly-orphan files. Then noticed stray `C:Tempdrift_full.txt` (Windows-shell artifact from `python ... > C:\Temp\drift_full.txt` running under bash that interpreted the backslash) and `runtime/` dir (legit generated state per `trading_app/live/bot_state.py:27` — `runtime/state/live_health.json`). Added `runtime/` to `.gitignore`, deleted the .txt. Drift unchanged at 152 PASS + 1 pre-existing MGC carry-over throughout.
+- **Drift:** 152 PASSED + 1 pre-existing `MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4` trade-window violation (UNCHANGED — orthogonal carry-over from prior 8+ sessions). Stage A's commit baseline (152 PASS) preserved across both sweeps.
+- **Carry-overs:**
+
+  **GOVERNANCE FOLLOW-UP — Stage-files-as-canonical-source ambiguity (DESIGN, ~30 min):** The two surviving stage files are no longer in-progress markers; they're load-bearing schema docs whose deletion silently breaks Checks #167 + #173. Stage-gate protocol assumes stage files are ephemeral and deletable on close. Two paths to disambiguate:
+  - **(A)** Relocate them to `docs/specs/fast_lane_hash_schema.md` + `docs/specs/fast_lane_status_enum.md`, update Checks #167 + #173 to read the new paths, drop the "stage file" framing.
+  - **(B)** Document in `stage-gate-protocol.md` that "load-bearing stages survive their work" and adopt a `canonical: true` frontmatter marker so future sweep tooling (and a future drift check) can preserve them.
+  Recommend (A) — separates "in-progress staging" from "schema doc" semantically; matches `feedback_canonical_inline_copy_parity_bug_class.md` n=3+ doctrine of "give canonical sources their own filenames." (B) keeps the colocation but adds a forcing-function. Pick on next session.
+
+  **PRIOR CARRY-OVERS still live (unchanged):**
+  - **MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4 trade-window drift** — stored `(2022-06-13, 2026-05-14, N=238)` vs canonical recompute `(2022-06-13, 2026-05-17, N=239)`. Same single violation flagged in every HANDOFF since 2026-05-12. Fix path: refresh `validated_setups` row via `trading_app/strategy_validator.py` writer. NEVER_TRIVIAL — needs full staging next session.
+  - **chordia_audit_log.yaml orphan** for the same MGC entry.
+  - **FAST_LANE PROMOTE queue:** 1 QUEUED `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30` at UNVERIFIED_OOS_POWER (N_OOS=14, needs 191 for 80% — calendar-wait per `feedback_oos_does_not_accrue_holdout_is_frozen.md`). Bridge draft already on disk at `docs/audit/hypotheses/drafts/2026-05-19-mnq-us-data-1000-e1-rr1-0-cb2-pd-clear-long-o30-chordia-heavyweight-v1.draft.yaml`.
+  - **Stage 3 PreToolUse `canonical-inline-detector.py` hook** — Layer 3 of the 3-layer canonical-inline-copy-parity hardening. PARKED design-first (~30-45 min). Pattern follows `.claude/hooks/branch-flip-guard.py` PostToolUse double-guard precedent. n=10+ documented instances of the bug class makes mechanical edit-time enforcement doctrine-supported.
+
 ## This Session (2026-05-19 — FAST_LANE v5.1 verification + idempotent bridge re-run)
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode
