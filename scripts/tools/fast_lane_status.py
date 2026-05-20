@@ -124,6 +124,23 @@ _NEXT_ACTION_BY_STAGE: dict[str, str] = {
     "ERROR": "operator_resolve_error",
 }
 
+# Override token for HEAVYWEIGHT_COMPLETE entries that lack fast-lane lineage.
+# Background: heavyweight Chordia preregs authored directly (predating the
+# 2026-05-19 cherry-pick loop landing) reach HEAVYWEIGHT_COMPLETE without ever
+# being scored by the ranker, so the cherry-pick journal has no row for the
+# enricher to update. The enricher (cherry_pick_journal_enricher.py) is
+# update-only against existing journal entries; it cannot create new entries.
+# Emitting the enricher token for these is a misclassification — the result MD
+# already carries the heavyweight verdict and the next operator action is the
+# deployment decision, identical to the ENRICHED stage's downstream gate.
+#
+# Lineage signal: a strategy_id has fast-lane lineage iff a journal entry
+# exists for it (ranker writes the entry at score-time, BEFORE the heavyweight
+# verdict lands). queue_entry presence is NOT a fast-lane lineage signal — a
+# heavyweight prereg can backfill into promote_queue.yaml via the PROMOTE/PARK
+# pathways without ever being ranked.
+_NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE: str = "operator_deployment_decision"
+
 
 @dataclass
 class StatusEntry:
@@ -377,6 +394,24 @@ def _classify_stage(
     return max(candidates, key=lambda s: STAGE_PRECEDENCE.index(s))
 
 
+def _next_action_for(
+    stage: str,
+    *,
+    journal_entry: dict[str, Any] | None,
+) -> str:
+    """Resolve the next-action token for a stage, with lineage-qualified override.
+
+    Special case: HEAVYWEIGHT_COMPLETE without a journal entry has no
+    fast-lane lineage — the enricher cannot create journal entries, only
+    update them. Emit the deployment-decision token instead so the operator
+    is pointed at the heavyweight result MD rather than at a stage script
+    that will silently no-op.
+    """
+    if stage == "HEAVYWEIGHT_COMPLETE" and journal_entry is None:
+        return _NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE
+    return _NEXT_ACTION_BY_STAGE.get(stage, "operator_resolve_error")
+
+
 def build_status_entries(
     *,
     hypotheses_dir: Path = HYPOTHESES_DIR,
@@ -460,7 +495,7 @@ def build_status_entries(
                 strategy_id=sid,
                 current_stage=stage,
                 age_days=age,
-                next_action_token=_NEXT_ACTION_BY_STAGE.get(stage, "operator_resolve_error"),
+                next_action_token=_next_action_for(stage, journal_entry=j_entry),
                 upstream_artifact_path=_rel(upstream) if upstream else None,
                 downstream_artifact_path=_rel(downstream) if downstream else None,
                 observed_at=observed,
