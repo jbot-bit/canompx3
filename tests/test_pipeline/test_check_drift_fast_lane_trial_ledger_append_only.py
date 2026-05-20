@@ -146,10 +146,7 @@ def test_prior_entry_structural_hash_mutation_is_caught(tmp_path: Path):
     target = _write_ledger(tmp_path, mutated)
     violations = check_fast_lane_trial_ledger_append_only(ledger_path=target)
     assert violations
-    assert any(
-        "STRUCTURAL_HASH_LENGTH" in v or "STRUCTURAL_HASH_NOT_HEX" in v
-        for v in violations
-    )
+    assert any("STRUCTURAL_HASH_LENGTH" in v or "STRUCTURAL_HASH_NOT_HEX" in v for v in violations)
 
 
 # ----------------------------------------------------------------------
@@ -189,17 +186,14 @@ def test_banner_scrub_is_caught(tmp_path: Path):
 def test_holdout_policy_stripped_is_caught(tmp_path: Path):
     # Drop holdout_policy from both entries (line-level removal); the check
     # must flag the missing required field on at least one entry.
-    mutated = "\n".join(
-        line for line in _VALID_LEDGER_TEXT.splitlines()
-        if not line.lstrip().startswith("holdout_policy:")
-    ) + "\n"
+    mutated = (
+        "\n".join(line for line in _VALID_LEDGER_TEXT.splitlines() if not line.lstrip().startswith("holdout_policy:"))
+        + "\n"
+    )
     target = _write_ledger(tmp_path, mutated)
     violations = check_fast_lane_trial_ledger_append_only(ledger_path=target)
     assert violations
-    assert any(
-        "HOLDOUT_SENTINEL" in v or "missing required field 'holdout_policy'" in v
-        for v in violations
-    )
+    assert any("HOLDOUT_SENTINEL" in v or "missing required field 'holdout_policy'" in v for v in violations)
 
 
 # ----------------------------------------------------------------------

@@ -385,9 +385,7 @@ def _build_grounding_query(
     return " ".join(parts)
 
 
-def _inject_grounding_provenance(
-    yaml_text: str, grounding_results: list[dict[str, object]], query: str
-) -> str:
+def _inject_grounding_provenance(yaml_text: str, grounding_results: list[dict[str, object]], query: str) -> str:
     """Add a ``grounding_provenance`` block to the YAML so audits can see what
     extracts the LLM had access to before drafting.
 
@@ -535,9 +533,7 @@ def main(argv: list[str] | None = None) -> int:
             user_instruction=args.user_instruction,
             candidate=candidate_for_query if isinstance(candidate_for_query, dict) else None,
         )
-        grounding_results = search_corpus(
-            corpus, grounding_query, top_k=args.grounding_top_k
-        )
+        grounding_results = search_corpus(corpus, grounding_query, top_k=args.grounding_top_k)
         grounding_context_block = format_search_results_for_llm(grounding_results)
         if grounding_context_block:
             print(grounding_context_block, file=sys.stderr)
@@ -620,9 +616,7 @@ def main(argv: list[str] | None = None) -> int:
     # LLM had access to before drafting. Improvement 2 contract: a draft
     # produced with --ground-via-mcp MUST carry this block.
     if args.ground_via_mcp and grounding_results:
-        yaml_text = _inject_grounding_provenance(
-            yaml_text, grounding_results, grounding_query
-        )
+        yaml_text = _inject_grounding_provenance(yaml_text, grounding_results, grounding_query)
 
     parsed, failures = run_all(yaml_text, corpus)
     has_fatal = any(f.fatal for f in failures)

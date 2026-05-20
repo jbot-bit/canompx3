@@ -314,9 +314,7 @@ def collect_heavyweight_results(
         return out
     import re
 
-    title_re = re.compile(
-        r"^#\s+Chordia strict unlock audit\s+\S\s+(?P<sid>\S+)\s*$", re.MULTILINE
-    )
+    title_re = re.compile(r"^#\s+Chordia strict unlock audit\s+\S\s+(?P<sid>\S+)\s*$", re.MULTILINE)
     for path in sorted(results_dir.glob("*.md")):
         if "fast-lane" in path.name:
             continue
@@ -397,9 +395,7 @@ def build_status_entries(
     ranked = collect_ranking_csvs(runtime_dir)
     heavy = collect_heavyweight_results(results_dir)
 
-    sids: set[str] = (
-        set(active) | set(drafts) | set(queue) | set(journal) | ranked | set(heavy)
-    )
+    sids: set[str] = set(active) | set(drafts) | set(queue) | set(journal) | ranked | set(heavy)
 
     entries: list[StatusEntry] = []
     for sid in sorted(sids):
@@ -425,11 +421,7 @@ def build_status_entries(
         if stage == "ACTIVE_PREREG":
             upstream, downstream = prereg, None
         elif stage in ("FAST_LANE_RUN", "PROMOTE_QUEUED", "RANKED"):
-            upstream = (
-                REPO_ROOT / (q_entry.get("result_md") or "")
-                if q_entry and q_entry.get("result_md")
-                else prereg
-            )
+            upstream = REPO_ROOT / (q_entry.get("result_md") or "") if q_entry and q_entry.get("result_md") else prereg
             downstream = None
         elif stage in ("BRIDGED", "GROUNDED"):
             upstream = (d_entry or {}).get("grounded") or (d_entry or {}).get("draft")
@@ -441,11 +433,7 @@ def build_status_entries(
             upstream = h_result
             downstream = None
         elif stage in _TERMINAL_STAGES:
-            upstream = (
-                REPO_ROOT / (q_entry.get("result_md") or "")
-                if q_entry and q_entry.get("result_md")
-                else None
-            )
+            upstream = REPO_ROOT / (q_entry.get("result_md") or "") if q_entry and q_entry.get("result_md") else None
             downstream = None
         else:  # ERROR
             upstream = None

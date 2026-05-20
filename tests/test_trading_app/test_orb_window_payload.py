@@ -63,15 +63,16 @@ def patched_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     def _setup(*, trading_day: str | None, session: str, orb_minutes: int = 5) -> None:
         path = _write_state(tmp_path, trading_day=trading_day, session=session, orb_minutes=orb_minutes)
         monkeypatch.setattr(bot_state, "STATE_FILE", path)
+
     return _setup
 
 
 @pytest.mark.parametrize(
     "session,trading_day,orb_minutes",
     [
-        ("NYSE_OPEN",     "2026-05-19", 5),
+        ("NYSE_OPEN", "2026-05-19", 5),
         ("LONDON_METALS", "2026-05-19", 5),
-        ("COMEX_SETTLE",  "2026-05-19", 15),
+        ("COMEX_SETTLE", "2026-05-19", 15),
     ],
 )
 def test_window_matches_canonical_resolver(patched_state, session, trading_day, orb_minutes):
@@ -79,7 +80,7 @@ def test_window_matches_canonical_resolver(patched_state, session, trading_day, 
     payload = dashboard._orb_levels_for_instrument("MNQ")
     expected_start, expected_end = orb_utc_window(date.fromisoformat(trading_day), session, orb_minutes)
     assert payload["orb_window_start_utc"] == int(expected_start.timestamp())
-    assert payload["orb_window_end_utc"]   == int(expected_end.timestamp())
+    assert payload["orb_window_end_utc"] == int(expected_end.timestamp())
     assert payload["orb_high"] == 18500.0
     assert payload["orb_low"] == 18490.0
     assert payload["orb_complete"] is True

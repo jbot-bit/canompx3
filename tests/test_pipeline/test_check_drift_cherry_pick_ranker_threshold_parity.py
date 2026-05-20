@@ -52,9 +52,7 @@ def test_passes_when_threshold_matches_canonical(tmp_path, doctrine_text):
     """Baseline: ranker default constant 3.79 matches canonical 3.79 -- empty violations."""
     p = _write_doctrine(tmp_path, doctrine_text)
     violations = check_drift.check_cherry_pick_ranker_threshold_parity(p)
-    assert violations == [], (
-        f"baseline parity must hold; got: {violations}"
-    )
+    assert violations == [], f"baseline parity must hold; got: {violations}"
 
 
 def test_catches_heavyweight_t_threshold_drift(tmp_path, doctrine_text, monkeypatch):
@@ -66,9 +64,7 @@ def test_catches_heavyweight_t_threshold_drift(tmp_path, doctrine_text, monkeypa
     assert any("HEAVYWEIGHT_T_THRESHOLD" in v for v in violations), (
         f"expected HEAVYWEIGHT_T_THRESHOLD drift violation; got: {violations}"
     )
-    assert any("3.8" in v for v in violations), (
-        "violation must surface the bad value 3.80"
-    )
+    assert any("3.8" in v for v in violations), "violation must surface the bad value 3.80"
 
 
 def test_fails_closed_when_doctrine_missing(tmp_path):
@@ -112,6 +108,4 @@ def test_runs_against_real_canonical_doctrine():
     """Smoke: against the actual project doctrine, parity holds at landing."""
     # No override -- uses PROJECT_ROOT / docs / institutional / pre_registered_criteria.md
     violations = check_drift.check_cherry_pick_ranker_threshold_parity()
-    assert violations == [], (
-        f"real-canonical parity must hold at landing; got: {violations}"
-    )
+    assert violations == [], f"real-canonical parity must hold at landing; got: {violations}"

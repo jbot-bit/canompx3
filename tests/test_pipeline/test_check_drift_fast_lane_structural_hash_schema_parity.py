@@ -41,9 +41,7 @@ from scripts.research import fast_lane_structural_hash as flsh
 def test_clean_state_passes():
     """Real module constants vs real design doc must match."""
     violations = check_fast_lane_structural_hash_schema_parity()
-    assert violations == [], (
-        f"unexpected parity violations on clean state: {violations}"
-    )
+    assert violations == [], f"unexpected parity violations on clean state: {violations}"
 
 
 # ----------------------------------------------------------------------
@@ -55,9 +53,7 @@ def test_missing_design_doc_fails_closed(tmp_path: Path):
     """If the canonical Stage 2A design doc is unreachable the check
     returns a single violation rather than silently passing."""
     forged = tmp_path / "does-not-exist.md"
-    violations = check_fast_lane_structural_hash_schema_parity(
-        design_doc_path=forged
-    )
+    violations = check_fast_lane_structural_hash_schema_parity(design_doc_path=forged)
     assert violations, "missing canonical design doc must NOT pass silently"
     assert len(violations) == 1
     assert "canonical design doc missing" in violations[0]
@@ -80,15 +76,9 @@ def test_drift_drop_schema_input_field_is_caught(monkeypatch: pytest.MonkeyPatch
 
     assert violations, "HASH_SCHEMA_INPUTS drop went undetected"
     relevant = [v for v in violations if "HASH_SCHEMA_INPUTS" in v]
-    assert relevant, (
-        f"no violation mentioned HASH_SCHEMA_INPUTS: {violations}"
-    )
-    assert "direction" in relevant[0], (
-        f"violation should cite the missing field by name: {relevant[0]}"
-    )
-    assert "canonical-inline-copy-parity-bug-class" in relevant[0], (
-        "violation must point to the bug-class anchor"
-    )
+    assert relevant, f"no violation mentioned HASH_SCHEMA_INPUTS: {violations}"
+    assert "direction" in relevant[0], f"violation should cite the missing field by name: {relevant[0]}"
+    assert "canonical-inline-copy-parity-bug-class" in relevant[0], "violation must point to the bug-class anchor"
 
 
 # ----------------------------------------------------------------------
@@ -106,9 +96,7 @@ def test_drift_mutate_schema_version_is_caught(monkeypatch: pytest.MonkeyPatch):
 
     assert violations, "HASH_SCHEMA_VERSION drift went undetected"
     relevant = [v for v in violations if "HASH_SCHEMA_VERSION" in v]
-    assert relevant, (
-        f"no violation mentioned HASH_SCHEMA_VERSION: {violations}"
-    )
+    assert relevant, f"no violation mentioned HASH_SCHEMA_VERSION: {violations}"
     assert "999" in relevant[0]
     assert "canonical hash_schema_version" in relevant[0]
 
@@ -138,9 +126,7 @@ def test_drift_hash_output_length_is_caught(monkeypatch: pytest.MonkeyPatch):
 
     assert violations, "hash-output length drift went undetected"
     relevant = [v for v in violations if "len=" in v or "16" in v]
-    assert relevant, (
-        f"no violation cited output length: {violations}"
-    )
+    assert relevant, f"no violation cited output length: {violations}"
     assert any("expected exactly 16" in v for v in violations), (
         f"violation should state the expected length: {violations}"
     )
@@ -181,9 +167,7 @@ def test_drift_canonical_json_normaliser_scrub_is_caught(
 
     assert violations, "canonical-json normaliser scrub went undetected"
     relevant = [v for v in violations if "non-deterministic" in v]
-    assert relevant, (
-        f"no violation cited non-determinism: {violations}"
-    )
+    assert relevant, f"no violation cited non-determinism: {violations}"
     assert "canonical-json" in relevant[0].lower() or "normaliser" in relevant[0].lower(), (
         f"violation should reference the canonical-json normaliser: {relevant[0]}"
     )

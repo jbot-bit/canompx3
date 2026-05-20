@@ -225,10 +225,7 @@ def panel_oos_rejections(promote_entries: list[Any]) -> str:
             "No PROMOTE results rejected by the OOS-power gate currently. "
             "(Pre-flight gate at fast_lane_promote_queue.scan; see commit 8ff55b98.)"
         )
-    rows = [
-        (e.strategy_id, e.direction, f"{e.pooled_t:.2f}", str(e.pooled_n), e.error_reason or "-")
-        for e in rejected
-    ]
+    rows = [(e.strategy_id, e.direction, f"{e.pooled_t:.2f}", str(e.pooled_n), e.error_reason or "-") for e in rejected]
     return _table(["strategy_id", "direction", "pooled_t", "N", "reason"], rows)
 
 
@@ -272,7 +269,11 @@ def panel_drafts() -> str:
     rows: list[tuple[str, ...]] = []
     for d in drafts:
         rejection = d.with_name(d.stem.replace(".draft", "") + ".rejected.txt")
-        sidecar = "REJECTED" if rejection.exists() else ("READY" if d.with_name(d.stem.replace(".draft", "") + ".grounded.yaml").exists() else "PENDING")
+        sidecar = (
+            "REJECTED"
+            if rejection.exists()
+            else ("READY" if d.with_name(d.stem.replace(".draft", "") + ".grounded.yaml").exists() else "PENDING")
+        )
         purpose = _peek_yaml_field(d, ["metadata", "purpose"]) or "-"
         theory = _peek_yaml_field(d, ["metadata", "theory_grant"]) or "-"
         trials = _peek_yaml_field(d, ["metadata", "total_expected_trials"]) or "-"
@@ -375,9 +376,7 @@ def panel_holdout(freshness: dict[str, Any]) -> str:
                 oos_days.append((inst, (td_d - HOLDOUT_SACRED_FROM).days))
             except ValueError:
                 continue
-    rows = [
-        (inst, f"{n} days") for inst, n in sorted(oos_days)
-    ]
+    rows = [(inst, f"{n} days") for inst, n in sorted(oos_days)]
     if not rows:
         rows = [("(no instrument data)", "-")]
     body = _table(["instrument", "OOS days accumulated"], rows)
@@ -440,9 +439,7 @@ def _table(header: list[str], rows: list[tuple[str, ...]]) -> str:
     if not rows:
         return _empty("(no rows)")
     thead = "".join(f"<th>{escape(h)}</th>" for h in header)
-    body_rows = "".join(
-        "<tr>" + "".join(f"<td>{escape(str(c))}</td>" for c in r) + "</tr>" for r in rows
-    )
+    body_rows = "".join("<tr>" + "".join(f"<td>{escape(str(c))}</td>" for c in r) + "</tr>" for r in rows)
     return f"<table><thead><tr>{thead}</tr></thead><tbody>{body_rows}</tbody></table>"
 
 
@@ -451,10 +448,7 @@ def _render_panel(num: int, title: str, fn) -> str:
         body = fn()
     except Exception:  # per-panel error isolation (institutional-rigor.md § 6)
         tb = traceback.format_exc().splitlines()[-3:]
-        body = (
-            f"<div class='panel-error'>Panel {num} unavailable: "
-            f"<pre>{escape(' | '.join(tb))}</pre></div>"
-        )
+        body = f"<div class='panel-error'>Panel {num} unavailable: <pre>{escape(' | '.join(tb))}</pre></div>"
     return (
         f"<details open id='p{num}'><summary><a href='#p{num}'>"
         f"{num}. {escape(title)}</a></summary><div class='panel-body'>{body}</div></details>"
@@ -548,9 +542,7 @@ def render_portal(
         if any_stale
         else "<div class='banner-ok'>Data freshness OK.</div>"
     )
-    toc = "<div class='toc'>" + " ".join(
-        f"<a href='#p{i}'>{i}</a>" for i in range(1, 11)
-    ) + "</div>"
+    toc = "<div class='toc'>" + " ".join(f"<a href='#p{i}'>{i}</a>" for i in range(1, 11)) + "</div>"
 
     rendered_ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
     sha = _git_sha()
@@ -559,11 +551,7 @@ def render_portal(
         filter_note.append(f"profile={profile_filter}")
     if instrument_filter:
         filter_note.append(f"instrument={instrument_filter}")
-    filter_html = (
-        f"<p class='subtitle'>Filters: {escape(', '.join(filter_note))}</p>"
-        if filter_note
-        else ""
-    )
+    filter_html = f"<p class='subtitle'>Filters: {escape(', '.join(filter_note))}</p>" if filter_note else ""
 
     html = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
@@ -575,7 +563,7 @@ def render_portal(
 {banner}
 {toc}
 <div class='panels'>
-{''.join(panels_html)}
+{"".join(panels_html)}
 </div>
 <footer>Rendered {rendered_ts} UTC | git {sha} | source: scripts/tools/go_portal.py</footer>
 </body></html>
@@ -608,11 +596,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(payload, indent=2, default=str))
         return 0
 
-    out_path = (
-        Path(args.out)
-        if args.out
-        else RUNTIME_DIR / f"go_portal_{date.today().isoformat()}.html"
-    )
+    out_path = Path(args.out) if args.out else RUNTIME_DIR / f"go_portal_{date.today().isoformat()}.html"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(html, encoding="utf-8")
     print(str(out_path))

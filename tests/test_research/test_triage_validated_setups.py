@@ -147,9 +147,7 @@ class TestCollectSeenStrategyIDs:
     def test_ignores_files_without_title(self, tmp_path: Path):
         d = tmp_path / "results"
         d.mkdir()
-        (d / "2026-05-18-unrelated.md").write_text(
-            "# Unrelated audit\n\nbody\n", encoding="utf-8"
-        )
+        (d / "2026-05-18-unrelated.md").write_text("# Unrelated audit\n\nbody\n", encoding="utf-8")
         assert triage.collect_seen_strategy_ids(d) == set()
 
 
@@ -163,10 +161,7 @@ class TestBuildDraftYAML:
         parsed = yaml.safe_load(text)
         assert parsed["metadata"]["template_version"] == "fast_lane_v5.1"
         assert parsed["metadata"]["n_trials"] == 1
-        assert (
-            parsed["triage_provenance"]["source_validated_setup_strategy_id"]
-            == c.strategy_id
-        )
+        assert parsed["triage_provenance"]["source_validated_setup_strategy_id"] == c.strategy_id
         assert parsed["scope"]["instrument"] == "MNQ"
         assert parsed["scope"]["session"] == "TOKYO_OPEN"
         assert parsed["scope"]["orb_minutes"] == 15
@@ -206,10 +201,7 @@ class TestWriteDraft:
         assert path.exists()
         assert path.name.endswith(".draft.yaml")
         parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
-        assert (
-            parsed["triage_provenance"]["source_validated_setup_strategy_id"]
-            == c.strategy_id
-        )
+        assert parsed["triage_provenance"]["source_validated_setup_strategy_id"] == c.strategy_id
 
     def test_refuses_overwrite_by_default(self, tmp_path: Path):
         c = triage.score_candidate(_make_row(), oos_n=80)
@@ -221,9 +213,7 @@ class TestWriteDraft:
         c = triage.score_candidate(_make_row(), oos_n=80)
         triage.write_draft(c, drafts_dir=tmp_path, today=date(2026, 5, 19))
         # Should not raise
-        triage.write_draft(
-            c, drafts_dir=tmp_path, today=date(2026, 5, 19), overwrite=True
-        )
+        triage.write_draft(c, drafts_dir=tmp_path, today=date(2026, 5, 19), overwrite=True)
 
 
 # ---------- Check #165 drift-check injection probes ----------
@@ -251,9 +241,7 @@ class TestCheck165Drift:
 
         d = tmp_path / "drafts"
         d.mkdir()
-        (d / "hand-authored.yaml").write_text(
-            "metadata:\n  name: hand_authored\n", encoding="utf-8"
-        )
+        (d / "hand-authored.yaml").write_text("metadata:\n  name: hand_authored\n", encoding="utf-8")
         violations = check_triage_provenance_completeness(drafts_dir=d)
         assert violations == []
 
@@ -281,11 +269,7 @@ class TestCheck165Drift:
             encoding="utf-8",
         )
         violations = check_triage_provenance_completeness(drafts_dir=d)
-        assert any(
-            "broken.draft.yaml" in v
-            and "source_validated_setup_strategy_id" in v
-            for v in violations
-        )
+        assert any("broken.draft.yaml" in v and "source_validated_setup_strategy_id" in v for v in violations)
 
     def test_triage_draft_with_empty_strategy_id_is_caught(self, tmp_path: Path):
         from pipeline.check_drift import check_triage_provenance_completeness
@@ -304,8 +288,6 @@ class TestCheck165Drift:
 
         d = tmp_path / "drafts"
         d.mkdir()
-        (d / "weird.draft.yaml").write_text(
-            "triage_provenance: 'not a mapping'\n", encoding="utf-8"
-        )
+        (d / "weird.draft.yaml").write_text("triage_provenance: 'not a mapping'\n", encoding="utf-8")
         violations = check_triage_provenance_completeness(drafts_dir=d)
         assert any("weird.draft.yaml" in v and "mapping" in v for v in violations)

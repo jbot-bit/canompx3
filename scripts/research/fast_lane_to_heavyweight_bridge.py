@@ -52,16 +52,32 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HYPOTHESES_DIR = REPO_ROOT / "docs" / "audit" / "hypotheses"
 DRAFTS_DIR = HYPOTHESES_DIR / "drafts"
+PROMOTE_QUEUE_CACHE = REPO_ROOT / "docs" / "runtime" / "promote_queue.yaml"
+GRAVEYARD_DIGEST_PATH = REPO_ROOT / "docs" / "runtime" / "fast_lane_graveyard_digest.yaml"
+
+
+class BridgeRefused(Exception):
+    """Raised when bridge pre-flight refuses to author a heavyweight draft.
+
+    Stage 2A.3 introduces four non-OOS refusal triggers:
+      - banned entry_model (E0 / E3)
+      - E2 + canonical lookahead-class filter
+      - structural_hash matches a lane-level graveyard digest entry
+      - K_lane >= 2 (sibling-retest already on the ledger)
+
+    The OOS-power gate (RULE 3.3) stays where it is in the scanner; this
+    bridge sees only QUEUED entries by construction (the scanner emits
+    REJECTED_OOS_UNPOWERED upstream), so OOS power is not re-checked here.
+    Refusal raises BridgeRefused with an operator-readable reason; main()
+    catches it and exits 3 with the reason on stderr. No draft is written.
+    """
 
 
 # Strict Chordia threshold prose. The numeric value lives in
 # ``cherry_pick_ranker.HEAVYWEIGHT_T_THRESHOLD`` (3.79) under Check #160
 # parity; here we emit prose only -- the runner resolves the numeric value
 # from doctrine at execution time.
-HEAVYWEIGHT_T_THRESHOLD_PROSE: str = (
-    "Criterion 4 no-theory strict threshold (t >= 3.79, "
-    "Chordia 2018 verbatim Tier 1)"
-)
+HEAVYWEIGHT_T_THRESHOLD_PROSE: str = "Criterion 4 no-theory strict threshold (t >= 3.79, Chordia 2018 verbatim Tier 1)"
 
 # Required scope fields -- absence raises ValueError. Every field is consumed
 # downstream by ``primary_schema.family_cells`` or by the heavyweight Chordia
@@ -90,9 +106,7 @@ _OPTIONAL_SCOPE_FIELDS: tuple[str, ...] = (
 # defend against the field-presence trap (theory_citation et al.). Required
 # fields raise on absence; unknown fields raise nothing -- the asymmetry is
 # deliberate and is the entire point of the fail-closed split.
-_ALLOWED_SCOPE_FIELDS: tuple[str, ...] = (
-    _REQUIRED_SCOPE_FIELDS + _OPTIONAL_SCOPE_FIELDS
-)
+_ALLOWED_SCOPE_FIELDS: tuple[str, ...] = _REQUIRED_SCOPE_FIELDS + _OPTIONAL_SCOPE_FIELDS
 
 # Methodology rules boilerplate. Each entry MUST correspond to a real RULE
 # block in ``.claude/rules/backtesting-methodology.md``. Parity enforced by
@@ -128,18 +142,14 @@ def _rel_to_repo(path: Path) -> str:
         return str(path).replace("\\", "/")
 
 
-def locate_source_yaml(
-    result_md: Path, *, hypotheses_dir: Path = HYPOTHESES_DIR
-) -> Path | None:
+def locate_source_yaml(result_md: Path, *, hypotheses_dir: Path = HYPOTHESES_DIR) -> Path | None:
     """Find the fast-lane source YAML matching a result MD by filename stem."""
     stem = result_md.stem
     candidate = hypotheses_dir / f"{stem}.yaml"
     return candidate if candidate.exists() else None
 
 
-def load_fast_lane_source(
-    result_md: Path, *, hypotheses_dir: Path = HYPOTHESES_DIR
-) -> FastLaneSource | None:
+def load_fast_lane_source(result_md: Path, *, hypotheses_dir: Path = HYPOTHESES_DIR) -> FastLaneSource | None:
     """Load and validate a fast-lane result + source pair.
 
     Returns None when either the result MD or matching YAML is missing,
@@ -173,6 +183,169 @@ def _draft_slug(strategy_id: str) -> str:
     return strategy_id.lower().replace("_", "-").replace(".", "-")
 
 
+def _lookup_promote_queue_entry(strategy_id: str, *, queue_path: Path = PROMOTE_QUEUE_CACHE) -> dict[str, Any] | None:
+    """Return the promote_queue.yaml entry for ``strategy_id``, or None.
+
+    The bridge needs ``structural_hash`` + ``k_lineage`` to enforce the
+    Stage 2A.3 suppression rules at draft-authoring time. The scanner is
+    the single source of truth for those values; the bridge never
+    re-computes them.
+    """
+    if not queue_path.exists():
+        return None
+    try:
+        payload = yaml.safe_load(queue_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    entries = payload.get("entries") or []
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("strategy_id") == strategy_id:
+            return entry
+    return None
+
+
+def _graveyard_has_lane_match(
+    structural_hash: str, *, digest_path: Path = GRAVEYARD_DIGEST_PATH
+) -> dict[str, Any] | None:
+    """Return the FIRST lane-level graveyard entry whose structural_hash
+    matches, or None.
+
+    Class-level entries (``hash_kind == "class"``) DO NOT refuse the
+    bridge -- they are informational matches the scanner already cited.
+    """
+    if not digest_path.exists():
+        return None
+    try:
+        data = yaml.safe_load(digest_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    for entry in data.get("entries") or []:
+        if (
+            isinstance(entry, dict)
+            and entry.get("structural_hash") == structural_hash
+            and entry.get("hash_kind") == "lane"
+        ):
+            return entry
+    return None
+
+
+def _bridge_preflight_refuse(
+    source: FastLaneSource,
+    *,
+    queue_path: Path = PROMOTE_QUEUE_CACHE,
+    digest_path: Path = GRAVEYARD_DIGEST_PATH,
+) -> None:
+    """Apply Stage 2A.3 4-trigger refusal chain. Raises BridgeRefused on
+    any hit; returns None when the source survives every gate.
+
+    Triggers (in order):
+      1. ``entry_model in {E0, E3}`` -- banned, fail-closed.
+      2. ``entry_model == E2`` AND filter matches
+         ``E2_EXCLUDED_FILTER_PREFIXES`` / ``E2_EXCLUDED_FILTER_SUBSTRINGS``
+         (canonical from ``trading_app.config`` -- NEVER re-encode here).
+      3. ``structural_hash`` matches a lane-level graveyard entry.
+      4. ``K_lane >= 2`` (ledger says the lane was already tested twice).
+    """
+    scope = source.scope
+    entry_model_raw = scope.get("entry_model")
+    entry_model = entry_model_raw.upper().strip() if isinstance(entry_model_raw, str) else ""
+    filter_type = scope.get("filter_type", "")
+    if not isinstance(filter_type, str):
+        filter_type = ""
+
+    # Trigger 1: banned entry_model.
+    if entry_model in {"E0", "E3"}:
+        raise BridgeRefused(
+            f"entry_model={entry_model!r} is graveyard-banned "
+            "(E0 purged; E3 soft-retired Feb 2026). See trading_app/config.py "
+            "ENTRY_MODELS + memory/feedback_e2_lookahead_drift_check_landed.md. "
+            f"Source YAML: {source.source_yaml_rel}."
+        )
+
+    # Trigger 2: E2 + lookahead-class filter (canonical delegation only).
+    if entry_model == "E2":
+        # Canonical source per institutional-rigor.md § 10 -- import here,
+        # never re-encode the prefixes/substrings tuples in this file.
+        from trading_app.config import (
+            E2_EXCLUDED_FILTER_PREFIXES,
+            E2_EXCLUDED_FILTER_SUBSTRINGS,
+        )
+
+        if any(filter_type.startswith(p) for p in E2_EXCLUDED_FILTER_PREFIXES):
+            raise BridgeRefused(
+                f"entry_model=E2 with filter_type={filter_type!r} matches "
+                f"trading_app.config.E2_EXCLUDED_FILTER_PREFIXES "
+                f"{E2_EXCLUDED_FILTER_PREFIXES!r}; this is the break-bar "
+                "lookahead class (E2 enters intra-bar; bar-close-derived "
+                "filter features are post-entry data). "
+                f"Source YAML: {source.source_yaml_rel}."
+            )
+        if any(s in filter_type for s in E2_EXCLUDED_FILTER_SUBSTRINGS):
+            raise BridgeRefused(
+                f"entry_model=E2 with filter_type={filter_type!r} contains "
+                f"trading_app.config.E2_EXCLUDED_FILTER_SUBSTRINGS "
+                f"{E2_EXCLUDED_FILTER_SUBSTRINGS!r}; this is the break-bar "
+                "lookahead class. "
+                f"Source YAML: {source.source_yaml_rel}."
+            )
+
+    # Triggers 3 + 4 both need the scanner cache entry.
+    cache_entry = _lookup_promote_queue_entry(scope["strategy_id"], queue_path=queue_path)
+    if cache_entry is None:
+        # No cache entry yet -- the scanner has not seen this result MD.
+        # Pre-flight cannot enforce the structural-hash gates here. Per
+        # Stage 2A.3 design, the bridge expects the scanner to have run
+        # first (it always does in the operational flow). Fail-closed
+        # rather than guess.
+        raise BridgeRefused(
+            f"no promote_queue.yaml cache entry for strategy_id "
+            f"{scope['strategy_id']!r}; rerun the scanner "
+            "(scripts/research/fast_lane_promote_queue.py --write) before "
+            "invoking the bridge so provenance gates can be enforced."
+        )
+
+    structural_hash = cache_entry.get("structural_hash")
+    if not isinstance(structural_hash, str) or len(structural_hash) != 16:
+        raise BridgeRefused(
+            f"promote_queue.yaml entry for {scope['strategy_id']!r} has "
+            f"malformed structural_hash={structural_hash!r}; rerun the "
+            "scanner with --write to refresh provenance fields."
+        )
+
+    # Trigger 3: graveyard lane match.
+    grave = _graveyard_has_lane_match(structural_hash, digest_path=digest_path)
+    if grave is not None:
+        raise BridgeRefused(
+            f"structural_hash={structural_hash!r} matches a lane-level "
+            "graveyard entry: "
+            f"title={grave.get('title')!r}, status={grave.get('status')!r}, "
+            f"source={grave.get('source_path')!r}. Bridge refuses to "
+            "author a draft for a graveyard lane."
+        )
+
+    # Trigger 4: K_lane >= 2 sibling-retest.
+    k_lineage = cache_entry.get("k_lineage") or {}
+    if isinstance(k_lineage, dict):
+        try:
+            k_lane = int(k_lineage.get("K_lane", 0))
+        except (TypeError, ValueError):
+            k_lane = 0
+        if k_lane >= 2:
+            raise BridgeRefused(
+                f"K_lane={k_lane} (>= 2) for structural_hash="
+                f"{structural_hash!r}; ledger shows >= 2 prior tests on "
+                "this lane (sibling-retest gate per stage file "
+                "§ Suppression Status Enum). PARK or pool with siblings "
+                "rather than authoring another heavyweight draft."
+            )
+
+
 def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str, Any]:
     """Build the heavyweight Chordia prereg dict from a fast-lane source.
 
@@ -191,11 +364,19 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
       - ``upstream_discovery_provenance`` -- points at the fast-lane source.
       - ``execution_gate.allowed_now: false`` -- operator must explicitly
         flip after literature/power review.
+
+    Pre-flight refusal:
+      Stage 2A.3 calls ``_bridge_preflight_refuse`` BEFORE missing-required-
+      field validation. Refusal raises ``BridgeRefused``; ``main()``
+      catches and exits 3 with the reason on stderr. No draft is written.
     """
+    # Stage 2A.3 pre-flight: refuse banned entry, E2 lookahead, graveyard
+    # lane, sibling-retest. Runs first because if we are going to refuse,
+    # there is no point validating the rest of the source.
+    _bridge_preflight_refuse(source)
+
     scope = source.scope
-    missing_required = [
-        f for f in _REQUIRED_SCOPE_FIELDS if scope.get(f) in (None, "")
-    ]
+    missing_required = [f for f in _REQUIRED_SCOPE_FIELDS if scope.get(f) in (None, "")]
     if missing_required:
         raise ValueError(
             "fast-lane source scope is missing required field(s): "
@@ -223,8 +404,7 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
             "fast-lane PROMOTE is provenance-only, not verdict evidence."
         ),
         "rule_9_canonical_layers": (
-            "Reads only orb_outcomes JOIN daily_features per "
-            "chordia_strict_unlock_v1.py canonical layer discipline."
+            "Reads only orb_outcomes JOIN daily_features per chordia_strict_unlock_v1.py canonical layer discipline."
         ),
         "rule_10_pre_registration": (
             "Operator must commit this prereg to docs/audit/hypotheses/ "
@@ -233,15 +413,13 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
         ),
     }
     methodology_block: dict[str, dict[str, str]] = {
-        rule: {"application": methodology_application_defaults[rule]}
-        for rule in METHODOLOGY_RULES_APPLIED
+        rule: {"application": methodology_application_defaults[rule]} for rule in METHODOLOGY_RULES_APPLIED
     }
 
     prereg: dict[str, Any] = {
         "metadata": {
             "theory_grant": False,
-            "name": _draft_slug(strategy_id).replace("-", "_")
-            + "_chordia_unlock_v1",
+            "name": _draft_slug(strategy_id).replace("-", "_") + "_chordia_unlock_v1",
             "purpose": (
                 "Heavyweight Chordia strict unlock authored from fast-lane "
                 f"v5.1 PROMOTE provenance ({source.result_md_rel}). "
@@ -276,17 +454,12 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
             ],
             "notes": [
                 "Authored by scripts/research/fast_lane_to_heavyweight_bridge.py.",
-                "Provenance: fast-lane v5.1 PROMOTE result at "
-                f"{source.result_md_rel}.",
+                f"Provenance: fast-lane v5.1 PROMOTE result at {source.result_md_rel}.",
                 f"Threshold basis: {HEAVYWEIGHT_T_THRESHOLD_PROSE}.",
                 "Mode A holdout remains sacred from 2026-01-01.",
             ],
         },
-        "scope": {
-            k: scope[k]
-            for k in _ALLOWED_SCOPE_FIELDS
-            if k in scope
-        },
+        "scope": {k: scope[k] for k in _ALLOWED_SCOPE_FIELDS if k in scope},
         "data_policy": {
             "is_window": {
                 "description": "trading_day < HOLDOUT_SACRED_FROM",
@@ -303,9 +476,7 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
             "tuning_against_oos": False,
             "canonical_layers_only": True,
             "scratch_policy": "realized-eod",
-            "scratch_handling": (
-                "COALESCE(pnl_r, 0.0) -- never WHERE pnl_r IS NOT NULL"
-            ),
+            "scratch_handling": ("COALESCE(pnl_r, 0.0) -- never WHERE pnl_r IS NOT NULL"),
         },
         "grounding": {
             "filter_grounding_status": {
@@ -346,17 +517,12 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
             "k_lane": 1,
             "k_session": 1,
             "chordia_threshold_basis": HEAVYWEIGHT_T_THRESHOLD_PROSE,
-            "promotion_gate": (
-                "PASS_CHORDIA only; PASS_PROTOCOL_A not available without "
-                "theory grant upgrade"
-            ),
+            "promotion_gate": ("PASS_CHORDIA only; PASS_PROTOCOL_A not available without theory grant upgrade"),
         },
         "trial_budget": {
             "primary_selection_trials": 1,
             "schema_locked_before_any_metric": True,
-            "minbtl_bound": (
-                "MinBTL = 2*ln(1)/1 = 0.0 years; N=1 within Bailey 2013 cap"
-            ),
+            "minbtl_bound": ("MinBTL = 2*ln(1)/1 = 0.0 years; N=1 within Bailey 2013 cap"),
         },
         "total_hypothesis_count": 1,
         "total_expected_trials": 1,
@@ -373,8 +539,7 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
                 "literature grounding (or accept no-theory strict 3.79 hurdle)",
                 "OOS power readiness via research/oos_power.py",
                 "era-stability replay",
-                "K-budget MinBTL re-verification "
-                "(scripts/tools/estimate_k_budget.py)",
+                "K-budget MinBTL re-verification (scripts/tools/estimate_k_budget.py)",
             ],
             "forbidden_now": [
                 "any deployment action",
@@ -425,8 +590,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="fast_lane_to_heavyweight_bridge",
         description=(
-            "Generate a heavyweight Chordia strict-unlock prereg DRAFT from a "
-            "fast-lane v5.1 PROMOTE result MD."
+            "Generate a heavyweight Chordia strict-unlock prereg DRAFT from a fast-lane v5.1 PROMOTE result MD."
         ),
     )
     p.add_argument(
@@ -460,7 +624,14 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-    prereg = build_heavyweight_prereg(source, today=today)
+    try:
+        prereg = build_heavyweight_prereg(source, today=today)
+    except BridgeRefused as exc:
+        print(
+            f"BRIDGE REFUSED: {exc}",
+            file=sys.stderr,
+        )
+        return 3
     if args.dry_run:
         print(yaml.safe_dump(prereg, sort_keys=False, allow_unicode=True, width=80))
         return 0

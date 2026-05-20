@@ -32,10 +32,7 @@ def _serialise_digest(payload: dict) -> str:
     """Mirror fast_lane_graveyard_digest._dump_digest_yaml output shape."""
     banner = "do_not_hand_edit: true\n"
     schema = f"schema_version: {payload['schema_version']}\n"
-    body_dict = {
-        k: v for k, v in payload.items()
-        if k not in {"do_not_hand_edit", "schema_version"}
-    }
+    body_dict = {k: v for k, v in payload.items() if k not in {"do_not_hand_edit", "schema_version"}}
     body = yaml.safe_dump(body_dict, sort_keys=False, default_flow_style=False)
     return banner + schema + body
 
@@ -148,9 +145,7 @@ def test_banner_stripped_is_caught(tmp_path: Path):
     target = _write_digest(tmp_path, fresh)
     # Strip the banner from the on-disk file directly.
     text = target.read_text(encoding="utf-8")
-    target.write_text(
-        text.replace("do_not_hand_edit: true\n", ""), encoding="utf-8"
-    )
+    target.write_text(text.replace("do_not_hand_edit: true\n", ""), encoding="utf-8")
     violations = check_fast_lane_graveyard_digest_parity(digest_path=target)
     assert violations
     assert any("BANNER TAMPERED" in v for v in violations)

@@ -270,7 +270,14 @@ def compute_non_artifact(pooling_artifact: bool) -> float:
 
 @dataclass(frozen=True)
 class RankedCandidate:
-    """A scored fast-lane PROMOTE survivor, ready for operator review."""
+    """A scored fast-lane PROMOTE survivor, ready for operator review.
+
+    Stage 2A.3 adds three provenance fields (``structural_hash``,
+    ``k_lineage``, ``n_hat``) propagated from the scanner cache. The
+    ranker refuses to score any QUEUED entry that lacks them -- this is
+    the fail-closed guard that keeps a provenance-less candidate from
+    silently being ranked + journalled + bridged.
+    """
 
     strategy_id: str
     direction: str
@@ -284,6 +291,9 @@ class RankedCandidate:
     score: ScoreBreakdown
     skip_recommended: bool
     result_md: str
+    structural_hash: str
+    k_lineage: dict[str, Any]
+    n_hat: int
 
     @property
     def total_score(self) -> float:
@@ -321,6 +331,41 @@ def rank_queue_entries(
         strategy_id = entry.get("strategy_id")
         if not isinstance(strategy_id, str):
             continue
+
+        # Stage 2A.3 fail-closed provenance guard. A QUEUED entry that
+        # somehow lacks structural_hash / k_lineage / N_hat means the
+        # scanner cache was hand-edited OR predates 2A.3 -- never let
+        # a provenance-less candidate flow through ranking / journal /
+        # bridge. Raising rather than skipping because the only valid
+        # remediation is "rerun the scanner", and silently dropping the
+        # entry would let an operator wonder where their candidate went.
+        structural_hash = entry.get("structural_hash")
+        k_lineage = entry.get("k_lineage")
+        n_hat_raw = entry.get("n_hat")
+        provenance_problems: list[str] = []
+        if not isinstance(structural_hash, str) or len(structural_hash) != 16:
+            provenance_problems.append(f"structural_hash={structural_hash!r} (want 16-hex str)")
+        if not isinstance(k_lineage, dict) or not k_lineage:
+            provenance_problems.append(f"k_lineage={k_lineage!r} (want non-empty dict)")
+        try:
+            n_hat_int = int(n_hat_raw) if n_hat_raw is not None else 0
+        except (TypeError, ValueError):
+            n_hat_int = -1
+        if n_hat_int <= 0:
+            provenance_problems.append(f"n_hat={n_hat_raw!r} (want positive int)")
+        if provenance_problems:
+            raise ValueError(
+                "Ranker refusal: QUEUED entry "
+                f"{strategy_id} lacks provenance fields per Stage 2A.3 "
+                f"contract: {provenance_problems}. Rerun "
+                "scripts/research/fast_lane_promote_queue.py --write to "
+                "refresh the cache, or investigate hand-edit / cross-version "
+                "drift."
+            )
+        # Type-narrow for Pyright: the raise above guarantees these are
+        # non-None / well-formed past this point.
+        assert isinstance(structural_hash, str)
+        assert isinstance(k_lineage, dict)
 
         # Explicit defaults (not `or`-fallback) so a legitimate 0/0.0 value
         # from the queue cache is preserved -- prior `or float("nan")` falsy-
@@ -364,9 +409,7 @@ def rank_queue_entries(
         breakdown = ScoreBreakdown(
             deflation_headroom=compute_deflation_headroom(pooled_t),
             n_adequacy=compute_n_adequacy(pooled_n),
-            oos_power_readiness=compute_oos_power_readiness(
-                pooled_expr, pooled_t, pooled_n, oos
-            ),
+            oos_power_readiness=compute_oos_power_readiness(pooled_expr, pooled_t, pooled_n, oos),
             dir_match=compute_dir_match(pooled_expr, oos),
             non_artifact=compute_non_artifact(pooling_artifact),
             era_stability_proxy=0.0,
@@ -385,6 +428,9 @@ def rank_queue_entries(
                 score=breakdown,
                 skip_recommended=breakdown.total < SCORE_SKIP_FLOOR,
                 result_md=str(result_md_rel) if result_md_rel else "",
+                structural_hash=structural_hash,
+                k_lineage=dict(k_lineage),
+                n_hat=n_hat_int,
             )
         )
 
@@ -425,9 +471,7 @@ def _row_for(candidate: RankedCandidate, rank: int) -> dict[str, str]:
         "pooled_n": str(candidate.pooled_n),
         "pooled_expr": f"{candidate.pooled_expr:.4f}",
         "oos_n": str(candidate.oos_n),
-        "oos_expr": (
-            "NaN" if math.isnan(candidate.oos_expr) else f"{candidate.oos_expr:.4f}"
-        ),
+        "oos_expr": ("NaN" if math.isnan(candidate.oos_expr) else f"{candidate.oos_expr:.4f}"),
         "dir_match": str(candidate.dir_match),
         "pooling_artifact": str(candidate.pooling_artifact),
         "score": f"{candidate.total_score:.4f}",
@@ -496,26 +540,20 @@ def _load_journal(journal_path: Path) -> dict[str, Any]:
         return {"schema_version": 1, "entries": []}
     payload = yaml.safe_load(text)
     if not isinstance(payload, dict):
-        raise ValueError(
-            f"Journal at {journal_path} is not a YAML mapping (got {type(payload).__name__})"
-        )
+        raise ValueError(f"Journal at {journal_path} is not a YAML mapping (got {type(payload).__name__})")
     payload.setdefault("schema_version", 1)
     entries = payload.get("entries")
     if entries is None:
         payload["entries"] = []
     elif not isinstance(entries, list):
-        raise ValueError(
-            f"Journal entries field must be a list (got {type(entries).__name__})"
-        )
+        raise ValueError(f"Journal entries field must be a list (got {type(entries).__name__})")
     return payload
 
 
 def _next_iter(payload: dict[str, Any]) -> int:
     """Next sequential iter number — max existing + 1, or 1 when empty."""
     iters = [
-        int(e["iter"])
-        for e in payload.get("entries", [])
-        if isinstance(e, dict) and isinstance(e.get("iter"), int)
+        int(e["iter"]) for e in payload.get("entries", []) if isinstance(e, dict) and isinstance(e.get("iter"), int)
     ]
     return (max(iters) + 1) if iters else 1
 
@@ -548,13 +586,17 @@ def build_journal_entry(
             "non_artifact": round(s.non_artifact, 4),
             "era_stability_proxy": round(s.era_stability_proxy, 4),
         },
-        "pooled_t": (
-            None if math.isnan(candidate.pooled_t) else round(candidate.pooled_t, 4)
-        ),
+        "pooled_t": (None if math.isnan(candidate.pooled_t) else round(candidate.pooled_t, 4)),
         "pooled_n": candidate.pooled_n,
         "oos_n": candidate.oos_n,
         "oos_power_tier": oos_power_tier_for(candidate),
         "bridge_draft_path": bridge_draft_path,
+        # Stage 2A.3 provenance propagation -- so the journal carries the
+        # same de-dup criterion that gated ranking, and a future audit
+        # can replay K-lineage at this rank-time.
+        "structural_hash": candidate.structural_hash,
+        "k_lineage": dict(candidate.k_lineage),
+        "n_hat": candidate.n_hat,
         "heavyweight_verdict": None,
         "t_observed_post_clustered_se": None,
         "lesson_label": None,
@@ -587,11 +629,7 @@ def append_journal_entry(
         if e.get("strategy_id") != candidate.strategy_id:
             continue
         existing_date = e.get("date")
-        existing_iso = (
-            existing_date.isoformat()
-            if isinstance(existing_date, date)
-            else str(existing_date)
-        )
+        existing_iso = existing_date.isoformat() if isinstance(existing_date, date) else str(existing_date)
         if existing_iso == t_iso:
             return e
 
@@ -614,10 +652,7 @@ def format_stdout_table(ranked: list[RankedCandidate], top_n: int) -> str:
     """Render a compact stdout table of top-N candidates."""
     if not ranked:
         return "No QUEUED candidates in promote_queue.yaml."
-    lines = [
-        f"{'rank':>4} {'score':>6} {'t':>6} {'n':>5} {'oos_n':>5} {'dir':>4} "
-        f"{'skip':>4}  strategy_id"
-    ]
+    lines = [f"{'rank':>4} {'score':>6} {'t':>6} {'n':>5} {'oos_n':>5} {'dir':>4} {'skip':>4}  strategy_id"]
     for i, c in enumerate(ranked[:top_n], start=1):
         lines.append(
             f"{i:>4} {c.total_score:>6.3f} {c.pooled_t:>6.2f} {c.pooled_n:>5} "
@@ -656,10 +691,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--write",
         action="store_true",
-        help=(
-            "Write CSV to docs/runtime/cherry_pick_ranking_<date>.csv. "
-            "Default is dry-run (stdout only)."
-        ),
+        help=("Write CSV to docs/runtime/cherry_pick_ranking_<date>.csv. Default is dry-run (stdout only)."),
     )
     p.add_argument(
         "--write-journal",
@@ -682,9 +714,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--journal",
         type=Path,
         default=JOURNAL_PATH,
-        help=(
-            "Path to cherry_pick_journal.yaml (default: docs/runtime/cherry_pick_journal.yaml)."
-        ),
+        help=("Path to cherry_pick_journal.yaml (default: docs/runtime/cherry_pick_journal.yaml)."),
     )
     return p
 
@@ -720,9 +750,7 @@ def main(argv: list[str] | None = None) -> int:
                 (
                     e
                     for e in reversed(payload.get("entries", []))
-                    if isinstance(e, dict)
-                    and e.get("strategy_id") == top.strategy_id
-                    and _date_iso(e) == today_iso
+                    if isinstance(e, dict) and e.get("strategy_id") == top.strategy_id and _date_iso(e) == today_iso
                 ),
                 None,
             )
@@ -732,9 +760,7 @@ def main(argv: list[str] | None = None) -> int:
                     f"already journalled today (iter={tail_dup.get('iter')})"
                 )
             else:
-                preview = build_journal_entry(
-                    top, iter_num=_next_iter(payload), today=today
-                )
+                preview = build_journal_entry(top, iter_num=_next_iter(payload), today=today)
                 print(
                     f"\nDRY RUN — would append iter={preview['iter']} "
                     f"strategy_id={preview['strategy_id']} "
@@ -744,15 +770,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             top = ranked[0]
             entry = append_journal_entry(args.journal, top)
-            rel = (
-                args.journal.relative_to(REPO_ROOT)
-                if args.journal.is_relative_to(REPO_ROOT)
-                else args.journal
-            )
-            print(
-                f"\nJournal append: iter={entry['iter']} "
-                f"strategy_id={entry['strategy_id']} -> {rel}"
-            )
+            rel = args.journal.relative_to(REPO_ROOT) if args.journal.is_relative_to(REPO_ROOT) else args.journal
+            print(f"\nJournal append: iter={entry['iter']} strategy_id={entry['strategy_id']} -> {rel}")
     return 0
 
 

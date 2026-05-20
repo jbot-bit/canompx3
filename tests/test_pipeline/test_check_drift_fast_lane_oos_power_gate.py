@@ -43,7 +43,6 @@ def _run_check() -> list[str]:
 
 
 class TestPowerFloorInjections:
-
     def test_baseline_passes(self):
         # Sanity: with constants at their committed values, check passes.
         assert _run_check() == []
@@ -76,7 +75,6 @@ class TestPowerFloorInjections:
 
 
 class TestCohenDInjections:
-
     def test_cohen_d_zero_rejected(self, restore_scanner_constants):
         scanner.OOS_COHEN_D_TARGET = 0.0
         errors = _run_check()
@@ -99,13 +97,7 @@ class TestCohenDInjections:
 
 
 class TestStatusValuesInjections:
-
     def test_rejected_status_removed_rejected(self, restore_scanner_constants):
-        scanner.STATUS_VALUES = tuple(
-            s for s in scanner.STATUS_VALUES if s != "REJECTED_OOS_UNPOWERED"
-        )
+        scanner.STATUS_VALUES = tuple(s for s in scanner.STATUS_VALUES if s != "REJECTED_OOS_UNPOWERED")
         errors = _run_check()
-        assert any(
-            "REJECTED_OOS_UNPOWERED" in e and "STATUS_VALUES" in e
-            for e in errors
-        )
+        assert any("REJECTED_OOS_UNPOWERED" in e and "STATUS_VALUES" in e for e in errors)

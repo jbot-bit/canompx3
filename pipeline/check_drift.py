@@ -6453,7 +6453,11 @@ def check_account_profiles_declare_is_express_funded() -> list[str]:
 
     profiles_dict: ast.Dict | None = None
     for node in ast.walk(tree):
-        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "ACCOUNT_PROFILES":
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "ACCOUNT_PROFILES"
+        ):
             if isinstance(node.value, ast.Dict):
                 profiles_dict = node.value
                 break
@@ -9938,6 +9942,7 @@ def check_intent_router_routing_parity() -> list[str]:
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
 
+
 # Tuple format: (description, callable, is_advisory, requires_db)
 # requires_db=True means check can return "SKIPPED" if DB unavailable
 def check_fast_lane_promote_orphans() -> list[str]:
@@ -9979,8 +9984,7 @@ def check_fast_lane_promote_orphans() -> list[str]:
     for e in entries:
         if e.status == "ERROR":
             violations.append(
-                f"FAST_LANE PROMOTE in ERROR state: {e.strategy_id} -> {e.error_reason} "
-                f"(file: {e.result_md})"
+                f"FAST_LANE PROMOTE in ERROR state: {e.strategy_id} -> {e.error_reason} (file: {e.result_md})"
             )
 
     if QUEUE_CACHE.exists():
@@ -10059,10 +10063,7 @@ def check_fast_lane_promote_threshold_parity(template_path: Path | None = None) 
     try:
         spec = yaml.safe_load(target.read_text(encoding="utf-8"))
     except Exception as exc:
-        return [
-            f"check_fast_lane_promote_threshold_parity: failed to parse {target.name}: "
-            f"{type(exc).__name__}: {exc}"
-        ]
+        return [f"check_fast_lane_promote_threshold_parity: failed to parse {target.name}: {type(exc).__name__}: {exc}"]
 
     if not isinstance(spec, dict) or "screen" not in spec:
         return [
@@ -10104,8 +10105,7 @@ def check_fast_lane_promote_threshold_parity(template_path: Path | None = None) 
     gate = screen.get("fire_rate_gate")
     if not isinstance(gate, dict) or "kill_if" not in gate:
         violations.append(
-            "check_fast_lane_promote_threshold_parity: canonical template missing "
-            "`screen.fire_rate_gate.kill_if`"
+            "check_fast_lane_promote_threshold_parity: canonical template missing `screen.fire_rate_gate.kill_if`"
         )
     else:
         kill_if = str(gate["kill_if"])
@@ -10219,17 +10219,12 @@ def check_cherry_pick_ranker_threshold_parity(
     try:
         from scripts.research import cherry_pick_ranker as cpr
     except Exception as exc:
-        return [
-            f"check_cherry_pick_ranker_threshold_parity: ranker import failed: {exc}"
-        ]
+        return [f"check_cherry_pick_ranker_threshold_parity: ranker import failed: {exc}"]
 
     target = (
         criteria_path
         if criteria_path is not None
-        else PROJECT_ROOT
-        / "docs"
-        / "institutional"
-        / "pre_registered_criteria.md"
+        else PROJECT_ROOT / "docs" / "institutional" / "pre_registered_criteria.md"
     )
 
     if not target.exists():
@@ -10241,10 +10236,7 @@ def check_cherry_pick_ranker_threshold_parity(
     try:
         text = target.read_text(encoding="utf-8")
     except Exception as exc:
-        return [
-            f"check_cherry_pick_ranker_threshold_parity: failed to read {target.name}: "
-            f"{type(exc).__name__}: {exc}"
-        ]
+        return [f"check_cherry_pick_ranker_threshold_parity: failed to read {target.name}: {type(exc).__name__}: {exc}"]
 
     # Locate the Criterion 4 section. Use the canonical heading exactly as
     # written in the doctrine; supersession-banner amendments do not move it
@@ -10360,17 +10352,13 @@ def check_fast_lane_oos_power_gate_constants_grounded() -> list[str]:
             "research/oos_power.py::POWER_TIERS (canonical 0.50)."
         )
 
-    if not isinstance(OOS_COHEN_D_TARGET, (int, float)) or isinstance(
-        OOS_COHEN_D_TARGET, bool
-    ):
+    if not isinstance(OOS_COHEN_D_TARGET, (int, float)) or isinstance(OOS_COHEN_D_TARGET, bool):
         errors.append(
             f"check_fast_lane_oos_power_gate_constants_grounded: "
             f"OOS_COHEN_D_TARGET must be a numeric (not bool); got "
             f"{type(OOS_COHEN_D_TARGET).__name__}={OOS_COHEN_D_TARGET!r}."
         )
-    elif _math.isnan(float(OOS_COHEN_D_TARGET)) or _math.isinf(
-        float(OOS_COHEN_D_TARGET)
-    ):
+    elif _math.isnan(float(OOS_COHEN_D_TARGET)) or _math.isinf(float(OOS_COHEN_D_TARGET)):
         errors.append(
             "check_fast_lane_oos_power_gate_constants_grounded: "
             f"OOS_COHEN_D_TARGET must be finite; got {OOS_COHEN_D_TARGET!r}."
@@ -10436,15 +10424,9 @@ def check_bridge_methodology_rules_parity(
     try:
         from scripts.research import fast_lane_to_heavyweight_bridge as bridge
     except Exception as exc:
-        return [
-            f"check_bridge_methodology_rules_parity: bridge import failed: {exc}"
-        ]
+        return [f"check_bridge_methodology_rules_parity: bridge import failed: {exc}"]
 
-    target = (
-        rules_path
-        if rules_path is not None
-        else PROJECT_ROOT / ".claude" / "rules" / "backtesting-methodology.md"
-    )
+    target = rules_path if rules_path is not None else PROJECT_ROOT / ".claude" / "rules" / "backtesting-methodology.md"
 
     if not target.exists():
         return [
@@ -10455,10 +10437,7 @@ def check_bridge_methodology_rules_parity(
     try:
         text = target.read_text(encoding="utf-8")
     except Exception as exc:
-        return [
-            f"check_bridge_methodology_rules_parity: failed to read {target.name}: "
-            f"{type(exc).__name__}: {exc}"
-        ]
+        return [f"check_bridge_methodology_rules_parity: failed to read {target.name}: {type(exc).__name__}: {exc}"]
 
     # Parse ``## RULE <N>:`` headings. Each match produces an integer rule
     # number; the canonical slug stem is ``rule_<N>_``.
@@ -10563,25 +10542,17 @@ def check_fast_lane_structural_hash_schema_parity(
     try:
         import yaml  # local import -- yaml is already a project dep
     except Exception as exc:  # pragma: no cover -- yaml is a hard dep
-        return [
-            f"check_fast_lane_structural_hash_schema_parity: PyYAML import failed: {exc}"
-        ]
+        return [f"check_fast_lane_structural_hash_schema_parity: PyYAML import failed: {exc}"]
 
     try:
         from scripts.research import fast_lane_structural_hash as flsh
     except Exception as exc:
-        return [
-            f"check_fast_lane_structural_hash_schema_parity: module import failed: {exc}"
-        ]
+        return [f"check_fast_lane_structural_hash_schema_parity: module import failed: {exc}"]
 
     target = (
         design_doc_path
         if design_doc_path is not None
-        else PROJECT_ROOT
-        / "docs"
-        / "runtime"
-        / "stages"
-        / "2026-05-20-fast-lane-anti-fp-trial-provenance.md"
+        else PROJECT_ROOT / "docs" / "runtime" / "stages" / "2026-05-20-fast-lane-anti-fp-trial-provenance.md"
     )
 
     if not target.exists():
@@ -10595,8 +10566,7 @@ def check_fast_lane_structural_hash_schema_parity(
         text = target.read_text(encoding="utf-8")
     except Exception as exc:
         return [
-            f"check_fast_lane_structural_hash_schema_parity: failed to read "
-            f"{target.name}: {type(exc).__name__}: {exc}"
+            f"check_fast_lane_structural_hash_schema_parity: failed to read {target.name}: {type(exc).__name__}: {exc}"
         ]
 
     # Extract the fenced YAML block under ``## Hash Schema``. The block is
@@ -10823,30 +10793,17 @@ def check_graveyard_status_tokens_parity(
             _load_status_tokens,
         )
     except Exception as exc:
-        return [
-            "check_graveyard_status_tokens_parity: digest module import "
-            f"failed: {type(exc).__name__}: {exc}"
-        ]
+        return [f"check_graveyard_status_tokens_parity: digest module import failed: {type(exc).__name__}: {exc}"]
 
-    target = (
-        graveyard_path
-        if graveyard_path is not None
-        else PROJECT_ROOT / "chatgpt_bundle" / "06_RD_GRAVEYARD.md"
-    )
+    target = graveyard_path if graveyard_path is not None else PROJECT_ROOT / "chatgpt_bundle" / "06_RD_GRAVEYARD.md"
 
     if not target.exists():
-        return [
-            "check_graveyard_status_tokens_parity: canonical graveyard "
-            f"source missing at {target} (fail-closed)."
-        ]
+        return [f"check_graveyard_status_tokens_parity: canonical graveyard source missing at {target} (fail-closed)."]
 
     try:
         text = target.read_text(encoding="utf-8")
     except Exception as exc:
-        return [
-            "check_graveyard_status_tokens_parity: failed to read "
-            f"{target.name}: {type(exc).__name__}: {exc}"
-        ]
+        return [f"check_graveyard_status_tokens_parity: failed to read {target.name}: {type(exc).__name__}: {exc}"]
 
     # Stable path label for violation messages. Use the repo-relative form
     # when the target lives under PROJECT_ROOT (the canonical case); fall
@@ -10983,10 +10940,7 @@ def check_holdout_sentinel_inline_copy_parity() -> list[str]:
             HOLDOUT_SACRED_FROM_SENTINEL,
         )
     except Exception as exc:
-        return [
-            "check_holdout_sentinel_inline_copy_parity: ledger module "
-            f"import failed: {type(exc).__name__}: {exc}"
-        ]
+        return [f"check_holdout_sentinel_inline_copy_parity: ledger module import failed: {type(exc).__name__}: {exc}"]
 
     try:
         from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
@@ -11010,6 +10964,249 @@ def check_holdout_sentinel_inline_copy_parity() -> list[str]:
             "universe-of-trials accounting -- "
             "[[canonical-inline-copy-parity-bug-class]] "
             "(memory/feedback_canonical_inline_copy_parity_bug_class.md)."
+        )
+
+    return violations
+
+
+def check_fast_lane_promote_queue_provenance_present() -> list[str]:
+    """Stage 2A.3 Check #173: provenance fields present on every cache entry.
+
+    Three independent assertions, fail-closed:
+
+      (a) ``docs/runtime/promote_queue.yaml`` carries the
+          ``DERIVED STATE -- do not hand-edit`` banner verbatim (banner
+          scrub -- catches a wholesale rewrite).
+      (b) Every entry whose status is one of
+          ``QUEUED`` / ``ESCALATED`` / ``PARKED`` / ``SUPPRESSED_*`` carries
+          the 5 provenance fields with valid values:
+            - ``structural_hash`` is a 16-hex string
+            - ``k_lineage`` is a non-empty dict carrying
+              ``K_global`` / ``K_family`` / ``K_lane`` /
+              ``K_declared_in_prereg`` / ``K_effective_minBTL`` /
+              ``bh_fdr_passes`` / ``correlation_haircut_N_hat`` /
+              ``rho_hat_assumed``
+            - ``n_hat`` is a positive int
+            - ``rho_hat_assumed == 0.5`` (locked prior per stage file
+              § "K-Lineage Schema")
+          (REVOKED entries are allowed to carry empty/zero provenance --
+          the result MD was already revoked upstream; ERROR entries are
+          allowed to carry the zero-sentinel hash with full k_lineage
+          defaults.)
+      (c) Suppression-status enum parity:
+          ``scripts.research.fast_lane_promote_queue.STATUS_VALUES`` must
+          contain the 6 ``SUPPRESSED_*`` tokens (and the legacy tokens
+          like ``QUEUED`` / ``ESCALATED`` etc) declared in the Stage 2A.3
+          stage file's ``## Suppression Status Enum`` table.
+
+    Bug class: 10th instance of canonical-inline-copy parity (see
+    ``memory/feedback_canonical_inline_copy_parity_bug_class.md``). Two
+    canonical surfaces share these tokens by literal-byte copy:
+
+      - canonical: ``docs/runtime/stages/2026-05-20-fast-lane-anti-fp-2a3-
+        scanner-bridge-wiring.md`` § Suppression Status Enum (table's
+        first column)
+      - inline:   ``scripts/research/fast_lane_promote_queue.STATUS_VALUES``
+
+    Drift between them would silently let a renamed status token escape
+    the gate -- catastrophic for the universe-of-trials accounting.
+    """
+    import re
+
+    violations: list[str] = []
+
+    repo_root = Path(__file__).resolve().parents[1]
+    cache_path = repo_root / "docs" / "runtime" / "promote_queue.yaml"
+    stage_path = repo_root / "docs" / "runtime" / "stages" / "2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md"
+
+    # Required k_lineage keys per stage file § "K-Lineage Schema".
+    REQUIRED_K_LINEAGE_KEYS = (
+        "K_global",
+        "K_family",
+        "K_lane",
+        "K_declared_in_prereg",
+        "K_effective_minBTL",
+        "bh_fdr_passes",
+        "correlation_haircut_N_hat",
+        "rho_hat_assumed",
+    )
+
+    # Statuses that must carry full provenance. REVOKED + ERROR get
+    # latitude: revoked entries were already killed upstream, error
+    # entries get the zero-sentinel with default k_lineage.
+    GATED_STATUSES = (
+        "QUEUED",
+        "ESCALATED",
+        "PARKED",
+        "SUPPRESSED_BANNED_ENTRY_MODEL",
+        "SUPPRESSED_E2_LOOKAHEAD",
+        "SUPPRESSED_GRAVEYARD",
+        "SUPPRESSED_DUPLICATE_ACTIVE",
+        "SUPPRESSED_SIBLING_RETEST",
+        "SUPPRESSED_K_OVERRUN",
+        "REJECTED_OOS_UNPOWERED",
+    )
+
+    # ---- (a) banner scrub -----------------------------------------------
+    if not cache_path.exists():
+        # Empty repo / first run -- not a violation. Cache is rebuilt on
+        # demand by the scanner. Skip the rest of the check.
+        return []
+    try:
+        raw_cache_text = cache_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [f"check_fast_lane_promote_queue_provenance_present: could not read {cache_path}: {exc}"]
+    if "DERIVED STATE - do not hand-edit" not in raw_cache_text:
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: BANNER TAMPERED "
+            f"-- {cache_path.name} is missing the canonical 'DERIVED STATE - "
+            "do not hand-edit' banner; rerun "
+            "scripts/research/fast_lane_promote_queue.py --write."
+        )
+
+    # ---- (b) provenance fields on every gated entry --------------------
+    import yaml as _yaml
+
+    try:
+        cache_payload = _yaml.safe_load(raw_cache_text)
+    except _yaml.YAMLError as exc:
+        return violations + [
+            f"check_fast_lane_promote_queue_provenance_present: failed to parse {cache_path.name}: {exc}"
+        ]
+    entries = (cache_payload or {}).get("entries") or []
+    if not isinstance(entries, list):
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: "
+            f"{cache_path.name} `entries` is not a list (got "
+            f"{type(entries).__name__})."
+        )
+        entries = []
+
+    for idx, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            violations.append(f"check_fast_lane_promote_queue_provenance_present: entry[{idx}] is not a dict.")
+            continue
+        status = entry.get("status")
+        if status not in GATED_STATUSES:
+            continue
+        sid = entry.get("strategy_id", "<unknown>")
+
+        # structural_hash: 16-hex string
+        sh = entry.get("structural_hash")
+        if not isinstance(sh, str) or len(sh) != 16:
+            violations.append(
+                "check_fast_lane_promote_queue_provenance_present: "
+                f"entry[{idx}] strategy_id={sid!r} status={status!r} "
+                f"structural_hash={sh!r} (want 16-hex string)."
+            )
+        else:
+            try:
+                int(sh, 16)
+            except ValueError:
+                violations.append(
+                    "check_fast_lane_promote_queue_provenance_present: "
+                    f"entry[{idx}] strategy_id={sid!r} structural_hash="
+                    f"{sh!r} is not hex."
+                )
+
+        # k_lineage: non-empty dict with required keys + rho_hat_assumed=0.5
+        kl = entry.get("k_lineage")
+        if not isinstance(kl, dict) or not kl:
+            violations.append(
+                "check_fast_lane_promote_queue_provenance_present: "
+                f"entry[{idx}] strategy_id={sid!r} k_lineage="
+                f"{kl!r} (want non-empty dict)."
+            )
+        else:
+            missing_keys = [k for k in REQUIRED_K_LINEAGE_KEYS if k not in kl]
+            if missing_keys:
+                violations.append(
+                    "check_fast_lane_promote_queue_provenance_present: "
+                    f"entry[{idx}] strategy_id={sid!r} k_lineage missing "
+                    f"required keys: {missing_keys}."
+                )
+            rho = kl.get("rho_hat_assumed")
+            if rho != 0.5:
+                violations.append(
+                    "check_fast_lane_promote_queue_provenance_present: "
+                    f"entry[{idx}] strategy_id={sid!r} k_lineage."
+                    f"rho_hat_assumed={rho!r} (want 0.5; locked prior per "
+                    "stage file § K-Lineage Schema)."
+                )
+
+        # n_hat: positive int
+        n_hat = entry.get("n_hat")
+        if not isinstance(n_hat, int) or isinstance(n_hat, bool) or n_hat <= 0:
+            violations.append(
+                "check_fast_lane_promote_queue_provenance_present: "
+                f"entry[{idx}] strategy_id={sid!r} n_hat={n_hat!r} (want "
+                "positive int)."
+            )
+
+    # ---- (c) STATUS_VALUES parity against the stage file enum table ----
+    try:
+        from scripts.research.fast_lane_promote_queue import STATUS_VALUES
+    except Exception as exc:
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: scanner "
+            f"module import failed: {type(exc).__name__}: {exc}"
+        )
+        return violations
+
+    if not stage_path.exists():
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: stage file "
+            f"missing at {stage_path}; cannot enforce STATUS_VALUES parity."
+        )
+        return violations
+    try:
+        stage_text = stage_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        violations.append(f"check_fast_lane_promote_queue_provenance_present: failed to read {stage_path.name}: {exc}")
+        return violations
+
+    # Parse the `## Suppression Status Enum` table. Rows look like:
+    #   | `SUPPRESSED_FOO` | trigger prose | bridge action |
+    section_match = re.search(
+        r"(?ms)^## Suppression Status Enum\b.*?^(?=## )",
+        stage_text,
+    )
+    if section_match is None:
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: stage file "
+            f"{stage_path.name} missing `## Suppression Status Enum` section."
+        )
+        return violations
+    enum_body = section_match.group(0)
+    # First-column cells in the table that look like `SUPPRESSED_*`.
+    # Token-name alphabet must include digits because tokens like
+    # SUPPRESSED_E2_LOOKAHEAD carry a digit in the middle. Restricting to
+    # [A-Z_]+ silently dropped that one row -- caught by self-review of the
+    # canonical-token enumeration during Check #173 first-run, 2026-05-20.
+    canonical_tokens = tuple(sorted(set(re.findall(r"\|\s*`(SUPPRESSED_[A-Z0-9_]+)`\s*\|", enum_body))))
+    if not canonical_tokens:
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: parsed "
+            f"`## Suppression Status Enum` table in {stage_path.name} "
+            "yielded zero SUPPRESSED_* tokens; either the stage file lost "
+            "its table or the regex is mis-tuned. Investigate before "
+            "trusting STATUS_VALUES parity."
+        )
+        return violations
+
+    inline_tokens = tuple(sorted(t for t in STATUS_VALUES if t.startswith("SUPPRESSED_")))
+    if canonical_tokens != inline_tokens:
+        only_canonical = sorted(set(canonical_tokens) - set(inline_tokens))
+        only_inline = sorted(set(inline_tokens) - set(canonical_tokens))
+        violations.append(
+            "check_fast_lane_promote_queue_provenance_present: "
+            "STATUS_VALUES drift -- canonical SUPPRESSED_* tokens parsed "
+            f"from {stage_path.name} § Suppression Status Enum: "
+            f"{canonical_tokens!r}; inline tokens in scanner STATUS_VALUES: "
+            f"{inline_tokens!r}. Only in canonical: {only_canonical}; "
+            f"only in inline: {only_inline}. "
+            "[[canonical-inline-copy-parity-bug-class]] -- 10th instance, "
+            "Stage 2A.3 (memory/feedback_canonical_inline_copy_parity_bug_class.md)."
         )
 
     return violations
@@ -11074,16 +11271,10 @@ def check_canonical_inline_copies_have_parity_check() -> list[str]:
         # Build prefix defensively — entry may not have `.name` if the
         # type check below fires (caller passed a dict by accident).
         entry_name = getattr(entry, "name", None)
-        prefix = (
-            f"check_canonical_inline_copies_have_parity_check: "
-            f"entry[{idx}] name={entry_name!r}"
-        )
+        prefix = f"check_canonical_inline_copies_have_parity_check: entry[{idx}] name={entry_name!r}"
 
         if not isinstance(entry, InlineCopyPair):
-            violations.append(
-                f"{prefix}: not an InlineCopyPair (got "
-                f"{type(entry).__name__})"
-            )
+            violations.append(f"{prefix}: not an InlineCopyPair (got {type(entry).__name__})")
             continue
 
         # (a) parity_check must exist in module globals and be callable.
@@ -11114,14 +11305,11 @@ def check_canonical_inline_copies_have_parity_check() -> list[str]:
             test_text = test_path.read_text(encoding="utf-8")
         except Exception as exc:
             violations.append(
-                f"{prefix}: could not read injection-test file "
-                f"{entry.test_file!r}: {type(exc).__name__}: {exc}"
+                f"{prefix}: could not read injection-test file {entry.test_file!r}: {type(exc).__name__}: {exc}"
             )
             continue
         if not test_text.strip():
-            violations.append(
-                f"{prefix}: injection-test file {entry.test_file!r} is empty"
-            )
+            violations.append(f"{prefix}: injection-test file {entry.test_file!r} is empty")
             continue
 
         # (c) sibling-coverage: >= one test function per gated constant.
@@ -11130,11 +11318,7 @@ def check_canonical_inline_copies_have_parity_check() -> list[str]:
         # We do NOT parse the AST here -- regex on stripped lines is
         # sufficient and matches the cheap-grep convention used by
         # neighbouring checks in this file.
-        test_fn_count = sum(
-            1
-            for line in test_text.splitlines()
-            if line.lstrip().startswith("def test_")
-        )
+        test_fn_count = sum(1 for line in test_text.splitlines() if line.lstrip().startswith("def test_"))
         if test_fn_count < expected_n:
             violations.append(
                 f"{prefix}: expected >= {expected_n} test functions "
@@ -11172,21 +11356,14 @@ def check_triage_provenance_completeness(
     drafts_dir : Path | None
         Override drafts dir (test seam).
     """
-    target = (
-        drafts_dir
-        if drafts_dir is not None
-        else PROJECT_ROOT / "docs" / "audit" / "hypotheses" / "drafts"
-    )
+    target = drafts_dir if drafts_dir is not None else PROJECT_ROOT / "docs" / "audit" / "hypotheses" / "drafts"
     if not target.exists():
         return []
 
     try:
         import yaml as _yaml
     except Exception as exc:
-        return [
-            "check_triage_provenance_completeness: pyyaml import failed: "
-            f"{type(exc).__name__}: {exc}"
-        ]
+        return [f"check_triage_provenance_completeness: pyyaml import failed: {type(exc).__name__}: {exc}"]
 
     violations: list[str] = []
     for path in sorted(target.glob("*.yaml")):
@@ -11194,8 +11371,7 @@ def check_triage_provenance_completeness(
             text = path.read_text(encoding="utf-8")
         except OSError as exc:
             violations.append(
-                f"check_triage_provenance_completeness: cannot read {path.name}: "
-                f"{type(exc).__name__}: {exc}"
+                f"check_triage_provenance_completeness: cannot read {path.name}: {type(exc).__name__}: {exc}"
             )
             continue
 
@@ -11275,15 +11451,9 @@ def check_cherry_pick_journal_integrity(
         Override the promote queue path (test seam).
     """
     j_path = (
-        journal_path
-        if journal_path is not None
-        else PROJECT_ROOT / "docs" / "runtime" / "cherry_pick_journal.yaml"
+        journal_path if journal_path is not None else PROJECT_ROOT / "docs" / "runtime" / "cherry_pick_journal.yaml"
     )
-    q_path = (
-        queue_path
-        if queue_path is not None
-        else PROJECT_ROOT / "docs" / "runtime" / "promote_queue.yaml"
-    )
+    q_path = queue_path if queue_path is not None else PROJECT_ROOT / "docs" / "runtime" / "promote_queue.yaml"
 
     if not j_path.exists():
         return [
@@ -11296,23 +11466,16 @@ def check_cherry_pick_journal_integrity(
     try:
         import yaml as _yaml
     except Exception as exc:
-        return [
-            "check_cherry_pick_journal_integrity: pyyaml import failed: "
-            f"{type(exc).__name__}: {exc}"
-        ]
+        return [f"check_cherry_pick_journal_integrity: pyyaml import failed: {type(exc).__name__}: {exc}"]
 
     try:
         journal = _yaml.safe_load(j_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        return [
-            f"check_cherry_pick_journal_integrity: failed to parse {j_path.name}: "
-            f"{type(exc).__name__}: {exc}"
-        ]
+        return [f"check_cherry_pick_journal_integrity: failed to parse {j_path.name}: {type(exc).__name__}: {exc}"]
 
     if not isinstance(journal, dict):
         return [
-            "check_cherry_pick_journal_integrity: journal payload is not a YAML "
-            f"mapping (got {type(journal).__name__})"
+            f"check_cherry_pick_journal_integrity: journal payload is not a YAML mapping (got {type(journal).__name__})"
         ]
 
     entries = journal.get("entries")
@@ -11347,23 +11510,18 @@ def check_cherry_pick_journal_integrity(
     for idx, entry in enumerate(entries):
         if not isinstance(entry, dict):
             violations.append(
-                f"check_cherry_pick_journal_integrity: entry[{idx}] is not a "
-                f"YAML mapping (got {type(entry).__name__})"
+                f"check_cherry_pick_journal_integrity: entry[{idx}] is not a YAML mapping (got {type(entry).__name__})"
             )
             continue
 
         for field in REQUIRED_FIELDS:
             if field not in entry:
-                violations.append(
-                    f"check_cherry_pick_journal_integrity: entry[{idx}] missing "
-                    f"required field {field!r}"
-                )
+                violations.append(f"check_cherry_pick_journal_integrity: entry[{idx}] missing required field {field!r}")
 
         cur_iter = entry.get("iter")
         if not isinstance(cur_iter, int):
             violations.append(
-                f"check_cherry_pick_journal_integrity: entry[{idx}] iter is not "
-                f"an int (got {type(cur_iter).__name__})"
+                f"check_cherry_pick_journal_integrity: entry[{idx}] iter is not an int (got {type(cur_iter).__name__})"
             )
         elif cur_iter != prev_iter + 1:
             violations.append(
@@ -11395,8 +11553,7 @@ def check_cherry_pick_journal_integrity(
         queue = _yaml.safe_load(q_path.read_text(encoding="utf-8"))
     except Exception as exc:
         violations.append(
-            f"check_cherry_pick_journal_integrity: failed to parse {q_path.name}: "
-            f"{type(exc).__name__}: {exc}"
+            f"check_cherry_pick_journal_integrity: failed to parse {q_path.name}: {type(exc).__name__}: {exc}"
         )
         return violations
 
@@ -11483,15 +11640,9 @@ def check_am33_audit_log_theory_grant_parity(
         return [f"check_am33_audit_log_theory_grant_parity: pyyaml import failed: {exc}"]
 
     _audit_path = (
-        audit_log_path
-        if audit_log_path is not None
-        else PROJECT_ROOT / "docs" / "runtime" / "chordia_audit_log.yaml"
+        audit_log_path if audit_log_path is not None else PROJECT_ROOT / "docs" / "runtime" / "chordia_audit_log.yaml"
     )
-    _hyp_dir = (
-        hypotheses_dir
-        if hypotheses_dir is not None
-        else PROJECT_ROOT / "docs" / "audit" / "hypotheses"
-    )
+    _hyp_dir = hypotheses_dir if hypotheses_dir is not None else PROJECT_ROOT / "docs" / "audit" / "hypotheses"
 
     # --- Load and validate audit log ---
     if not _audit_path.exists():
@@ -11536,15 +11687,10 @@ def check_am33_audit_log_theory_grant_parity(
 
     # --- Scan active prereqs ---
     if not _hyp_dir.exists():
-        return [
-            f"check_am33_audit_log_theory_grant_parity: hypotheses dir not found at {_hyp_dir}"
-        ]
+        return [f"check_am33_audit_log_theory_grant_parity: hypotheses dir not found at {_hyp_dir}"]
 
     # Active prereqs: docs/audit/hypotheses/*.yaml (NOT drafts/ sub-directory).
-    active_yamls = [
-        p for p in _hyp_dir.glob("*.yaml")
-        if p.is_file() and "drafts" not in str(p)
-    ]
+    active_yamls = [p for p in _hyp_dir.glob("*.yaml") if p.is_file() and "drafts" not in str(p)]
 
     violations: list[str] = []
 
@@ -11690,11 +11836,7 @@ def check_fast_lane_state_graph_node_parity(
     except ImportError as exc:
         return [f"check_fast_lane_state_graph_node_parity: pyyaml import failed: {exc}"]
 
-    _spec = (
-        spec_path
-        if spec_path is not None
-        else PROJECT_ROOT / "docs" / "specs" / "fast_lane_state_graph.md"
-    )
+    _spec = spec_path if spec_path is not None else PROJECT_ROOT / "docs" / "specs" / "fast_lane_state_graph.md"
     _root = runtime_dir if runtime_dir is not None else PROJECT_ROOT
 
     if not _spec.exists():
@@ -11707,10 +11849,7 @@ def check_fast_lane_state_graph_node_parity(
     try:
         raw = _spec.read_text(encoding="utf-8")
     except Exception as exc:
-        return [
-            f"check_fast_lane_state_graph_node_parity: failed to read {_spec}: "
-            f"{type(exc).__name__}: {exc}"
-        ]
+        return [f"check_fast_lane_state_graph_node_parity: failed to read {_spec}: {type(exc).__name__}: {exc}"]
 
     # Extract the YAML block under "## 2. Node Inventory". The block is
     # delimited by triple-backtick yaml fences; we take the FIRST yaml fence
@@ -11723,7 +11862,7 @@ def check_fast_lane_state_graph_node_parity(
             "node list. Restore the heading or update the parser."
         ]
 
-    after_heading = raw[heading_match.end():]
+    after_heading = raw[heading_match.end() :]
     fence_match = re.search(r"```yaml\s*\n(.*?)\n```", after_heading, re.DOTALL)
     if not fence_match:
         return [
@@ -11769,8 +11908,7 @@ def check_fast_lane_state_graph_node_parity(
         node_path = node.get("path")
         if not isinstance(node_path, str) or not node_path:
             violations.append(
-                f"check_fast_lane_state_graph_node_parity: node[{idx}] (id={node_id!r}) "
-                f"missing required 'path' string."
+                f"check_fast_lane_state_graph_node_parity: node[{idx}] (id={node_id!r}) missing required 'path' string."
             )
             continue
         is_proposed = bool(node.get("proposed", False))
@@ -11883,20 +12021,10 @@ def check_fast_lane_status_rollup_reconstruction_parity(
     try:
         import yaml as _yaml
     except ImportError as exc:
-        return [
-            f"check_fast_lane_status_rollup_reconstruction_parity: pyyaml import failed: {exc}"
-        ]
+        return [f"check_fast_lane_status_rollup_reconstruction_parity: pyyaml import failed: {exc}"]
 
-    _rollup = (
-        rollup_path
-        if rollup_path is not None
-        else PROJECT_ROOT / "docs" / "runtime" / "fast_lane_status.yaml"
-    )
-    _writer = (
-        writer_path
-        if writer_path is not None
-        else PROJECT_ROOT / "scripts" / "tools" / "fast_lane_status.py"
-    )
+    _rollup = rollup_path if rollup_path is not None else PROJECT_ROOT / "docs" / "runtime" / "fast_lane_status.yaml"
+    _writer = writer_path if writer_path is not None else PROJECT_ROOT / "scripts" / "tools" / "fast_lane_status.py"
 
     violations: list[str] = []
 
@@ -11957,10 +12085,7 @@ def check_fast_lane_status_rollup_reconstruction_parity(
         return violations
 
     if not isinstance(on_disk, dict):
-        violations.append(
-            f"check_fast_lane_status_rollup_reconstruction_parity: {_rollup} "
-            "is not a YAML mapping."
-        )
+        violations.append(f"check_fast_lane_status_rollup_reconstruction_parity: {_rollup} is not a YAML mapping.")
         return violations
 
     # Banner integrity (failure class 2).
@@ -12015,21 +12140,12 @@ def check_fast_lane_status_rollup_reconstruction_parity(
         fresh_payload = _yaml.safe_load(serialize_rollup(fresh_entries, today=today))
     except Exception as exc:
         violations.append(
-            "check_fast_lane_status_rollup_reconstruction_parity: reconstruction "
-            f"failed: {type(exc).__name__}: {exc}"
+            f"check_fast_lane_status_rollup_reconstruction_parity: reconstruction failed: {type(exc).__name__}: {exc}"
         )
         return violations
 
-    on_disk_by_sid = {
-        e.get("strategy_id"): e
-        for e in (on_disk.get("entries") or [])
-        if isinstance(e, dict)
-    }
-    fresh_by_sid = {
-        e.get("strategy_id"): e
-        for e in (fresh_payload.get("entries") or [])
-        if isinstance(e, dict)
-    }
+    on_disk_by_sid = {e.get("strategy_id"): e for e in (on_disk.get("entries") or []) if isinstance(e, dict)}
+    fresh_by_sid = {e.get("strategy_id"): e for e in (fresh_payload.get("entries") or []) if isinstance(e, dict)}
 
     for sid in sorted(s for s in (set(on_disk_by_sid) | set(fresh_by_sid)) if s):
         d = on_disk_by_sid.get(sid)
@@ -12122,15 +12238,10 @@ def check_fast_lane_trial_ledger_append_only(
             LEDGER_SCHEMA_VERSION,
         )
     except Exception as exc:
-        return [
-            "check_fast_lane_trial_ledger_append_only: writer module import "
-            f"failed: {type(exc).__name__}: {exc}"
-        ]
+        return [f"check_fast_lane_trial_ledger_append_only: writer module import failed: {type(exc).__name__}: {exc}"]
 
     target = (
-        ledger_path
-        if ledger_path is not None
-        else PROJECT_ROOT / "docs" / "runtime" / "fast_lane_trial_ledger.yaml"
+        ledger_path if ledger_path is not None else PROJECT_ROOT / "docs" / "runtime" / "fast_lane_trial_ledger.yaml"
     )
 
     if not target.exists():
@@ -12143,17 +12254,13 @@ def check_fast_lane_trial_ledger_append_only(
         raw = target.read_text(encoding="utf-8")
         data = _yaml.safe_load(raw)
     except Exception as exc:
-        return [
-            "check_fast_lane_trial_ledger_append_only: failed to parse "
-            f"{target.name}: {type(exc).__name__}: {exc}"
-        ]
+        return [f"check_fast_lane_trial_ledger_append_only: failed to parse {target.name}: {type(exc).__name__}: {exc}"]
 
     violations: list[str] = []
 
     if not isinstance(data, dict):
         return [
-            f"check_fast_lane_trial_ledger_append_only: {target.name} top-level "
-            "must be a YAML mapping (fail-closed)."
+            f"check_fast_lane_trial_ledger_append_only: {target.name} top-level must be a YAML mapping (fail-closed)."
         ]
 
     # (1) Banner / schema_version.
@@ -12317,9 +12424,7 @@ def check_fast_lane_graveyard_digest_parity(
     try:
         import yaml as _yaml
     except Exception as exc:  # pragma: no cover -- yaml is a hard dep
-        return [
-            f"check_fast_lane_graveyard_digest_parity: PyYAML import failed: {exc}"
-        ]
+        return [f"check_fast_lane_graveyard_digest_parity: PyYAML import failed: {exc}"]
 
     try:
         from scripts.research.fast_lane_graveyard_digest import (
@@ -12327,10 +12432,7 @@ def check_fast_lane_graveyard_digest_parity(
             build_digest,
         )
     except Exception as exc:
-        return [
-            "check_fast_lane_graveyard_digest_parity: digest module import "
-            f"failed: {type(exc).__name__}: {exc}"
-        ]
+        return [f"check_fast_lane_graveyard_digest_parity: digest module import failed: {type(exc).__name__}: {exc}"]
 
     target = (
         digest_path
@@ -12348,18 +12450,12 @@ def check_fast_lane_graveyard_digest_parity(
     try:
         on_disk = _yaml.safe_load(target.read_text(encoding="utf-8"))
     except Exception as exc:
-        return [
-            f"check_fast_lane_graveyard_digest_parity: failed to parse "
-            f"{target.name}: {type(exc).__name__}: {exc}"
-        ]
+        return [f"check_fast_lane_graveyard_digest_parity: failed to parse {target.name}: {type(exc).__name__}: {exc}"]
 
     violations: list[str] = []
 
     if not isinstance(on_disk, dict):
-        return [
-            f"check_fast_lane_graveyard_digest_parity: {target.name} top-level "
-            "must be a YAML mapping."
-        ]
+        return [f"check_fast_lane_graveyard_digest_parity: {target.name} top-level must be a YAML mapping."]
 
     # (1) Banner.
     if on_disk.get("do_not_hand_edit") is not True:
@@ -12386,17 +12482,12 @@ def check_fast_lane_graveyard_digest_parity(
     try:
         fresh = build_digest()
     except Exception as exc:
-        violations.append(
-            "check_fast_lane_graveyard_digest_parity: fresh rebuild failed: "
-            f"{type(exc).__name__}: {exc}"
-        )
+        violations.append(f"check_fast_lane_graveyard_digest_parity: fresh rebuild failed: {type(exc).__name__}: {exc}")
         return violations
 
     fresh_entries = fresh.get("entries", [])
     fresh_hashes = {
-        e["structural_hash"]
-        for e in fresh_entries
-        if isinstance(e, dict) and isinstance(e.get("structural_hash"), str)
+        e["structural_hash"] for e in fresh_entries if isinstance(e, dict) and isinstance(e.get("structural_hash"), str)
     }
     on_disk_hashes_seen: dict[str, dict[str, object]] = {}
 
@@ -12404,15 +12495,13 @@ def check_fast_lane_graveyard_digest_parity(
     for entry in on_disk_entries:
         if not isinstance(entry, dict):
             violations.append(
-                "check_fast_lane_graveyard_digest_parity: non-mapping entry in "
-                f"{target.name}: {entry!r}."
+                f"check_fast_lane_graveyard_digest_parity: non-mapping entry in {target.name}: {entry!r}."
             )
             continue
         h = entry.get("structural_hash")
         if not isinstance(h, str):
             violations.append(
-                "check_fast_lane_graveyard_digest_parity: entry missing "
-                f"structural_hash in {target.name}: {entry!r}."
+                f"check_fast_lane_graveyard_digest_parity: entry missing structural_hash in {target.name}: {entry!r}."
             )
             continue
         if h in on_disk_hashes_seen:
@@ -13188,6 +13277,12 @@ CHECKS = [
         "Graveyard status tokens parity: chatgpt_bundle/06_RD_GRAVEYARD.md `## Status Token Doctrine` block is the canonical source; every status token used in headings must be declared (Stage 2A.2 follow-up Check #172, canonical-inline-copy parity 9th instance)",
         check_graveyard_status_tokens_parity,
         False,  # blocking — undeclared tokens silently degrade graveyard digest status semantics
+        False,
+    ),
+    (
+        "Fast-lane promote queue provenance present: docs/runtime/promote_queue.yaml gated entries must carry structural_hash + k_lineage + n_hat with rho_hat_assumed=0.5, and STATUS_VALUES suppression tokens must mirror the Stage 2A.3 stage file enum table (Stage 2A.3 Check #173, canonical-inline-copy parity 10th instance, Bailey-Lopez de Prado 2014 sec 3 + Stage 2A.3 design grounding)",
+        check_fast_lane_promote_queue_provenance_present,
+        False,  # blocking -- drift silently breaks universe-of-trials accounting + suppression chain
         False,
     ),
 ]  # end CHECKS

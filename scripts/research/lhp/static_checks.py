@@ -717,9 +717,7 @@ def check_citation_content(parsed: dict[str, Any], corpus: Sequence[LiteratureEn
     return failures
 
 
-def check_grounding_provenance_block(
-    parsed: dict[str, Any], corpus: Sequence[LiteratureEntry]
-) -> list[CheckFailure]:
+def check_grounding_provenance_block(parsed: dict[str, Any], corpus: Sequence[LiteratureEntry]) -> list[CheckFailure]:
     """Non-fatal sanity check on optional ``grounding_provenance`` block.
 
     When a draft carries a ``grounding_provenance`` block (produced by
@@ -744,9 +742,7 @@ def check_grounding_provenance_block(
             CheckFailure(
                 code="GROUNDING_PROVENANCE_SHAPE",
                 field="grounding_provenance",
-                detail=(
-                    f"grounding_provenance must be a mapping (got {type(block).__name__})"
-                ),
+                detail=(f"grounding_provenance must be a mapping (got {type(block).__name__})"),
                 fatal=False,
             )
         ]
@@ -758,10 +754,7 @@ def check_grounding_provenance_block(
             CheckFailure(
                 code="GROUNDING_PROVENANCE_SHAPE",
                 field="grounding_provenance.retrieved_extracts",
-                detail=(
-                    "retrieved_extracts must be a list (got "
-                    f"{type(extracts).__name__})"
-                ),
+                detail=(f"retrieved_extracts must be a list (got {type(extracts).__name__})"),
                 fatal=False,
             )
         ]

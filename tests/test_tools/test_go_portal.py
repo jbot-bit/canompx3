@@ -90,9 +90,7 @@ def test_panel_error_isolation(monkeypatch, patched_freshness_drift):
     monkeypatch.setattr(go_portal, "panel_deployed_lanes", lambda *a, **kw: boom())
     # Stub other DB / file-system bound helpers so the test is hermetic.
     monkeypatch.setattr(go_portal, "panel_promotable", lambda *a, **kw: "<p>stub-2</p>")
-    monkeypatch.setattr(
-        go_portal, "panel_promote_queue", lambda *a, **kw: ("<p>stub-3</p>", [])
-    )
+    monkeypatch.setattr(go_portal, "panel_promote_queue", lambda *a, **kw: ("<p>stub-3</p>", []))
     monkeypatch.setattr(go_portal, "panel_oos_rejections", lambda *a, **kw: "<p>stub-4</p>")
     monkeypatch.setattr(go_portal, "panel_cherry_pick_top5", lambda: "<p>stub-5</p>")
     monkeypatch.setattr(go_portal, "panel_drafts", lambda: "<p>stub-6</p>")
@@ -127,8 +125,7 @@ def test_drafts_rejected_sidecar(tmp_path, monkeypatch):
     monkeypatch.setattr(go_portal, "DRAFTS_DIR", tmp_path)
     draft = tmp_path / "2026-05-19-foo.draft.yaml"
     draft.write_text(
-        "metadata:\n  theory_grant: false\n  total_expected_trials: 1\n"
-        "  purpose: 'test purpose string'\n",
+        "metadata:\n  theory_grant: false\n  total_expected_trials: 1\n  purpose: 'test purpose string'\n",
         encoding="utf-8",
     )
     rejection = tmp_path / "2026-05-19-foo.rejected.txt"
@@ -141,8 +138,7 @@ def test_drafts_rejected_sidecar(tmp_path, monkeypatch):
 def test_journal_pending_no_entries(tmp_path, monkeypatch):
     journal = tmp_path / "j.yaml"
     journal.write_text(
-        "schema_version: 1\nentries:\n"
-        "  - iter: 1\n    strategy_id: X\n    heavyweight_verdict: PASS_CHORDIA\n",
+        "schema_version: 1\nentries:\n  - iter: 1\n    strategy_id: X\n    heavyweight_verdict: PASS_CHORDIA\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(go_portal, "JOURNAL_PATH", journal)

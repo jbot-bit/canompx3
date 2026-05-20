@@ -27,8 +27,7 @@ def _write_fast_lane_pair(
     md = results / f"{stem}.md"
     yml = hypotheses / f"{stem}.yaml"
     md.write_text(
-        "# Chordia strict unlock audit ~ " + strategy_id + "\n\n"
-        "**FAST_LANE verdict:** `PROMOTE`\n\n",
+        "# Chordia strict unlock audit ~ " + strategy_id + "\n\n**FAST_LANE verdict:** `PROMOTE`\n\n",
         encoding="utf-8",
     )
     payload = {
@@ -58,18 +57,14 @@ class TestLoadFastLaneSource:
         md, yml, hyp = _write_fast_lane_pair(tmp_path)
         src = bridge.load_fast_lane_source(md, hypotheses_dir=hyp)
         assert src is not None
-        assert src.scope["strategy_id"] == (
-            "MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30"
-        )
+        assert src.scope["strategy_id"] == ("MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30")
         # Paths must be repo-relative-or-absolute, never raw Windows backslash
         assert "\\" not in src.result_md_rel
         assert "\\" not in src.source_yaml_rel
 
     def test_returns_none_when_md_missing(self, tmp_path):
         _, _, hyp = _write_fast_lane_pair(tmp_path)
-        src = bridge.load_fast_lane_source(
-            tmp_path / "missing.md", hypotheses_dir=hyp
-        )
+        src = bridge.load_fast_lane_source(tmp_path / "missing.md", hypotheses_dir=hyp)
         assert src is None
 
     def test_returns_none_when_yaml_missing(self, tmp_path):
@@ -129,10 +124,7 @@ class TestBuildHeavyweightPrereg:
         prereg = bridge.build_heavyweight_prereg(src, today="2026-05-19")
         text = yaml.safe_dump(prereg, sort_keys=False)
         key_line = re.search(r"^\s*theory_citation:", text, re.MULTILINE)
-        assert key_line is None, (
-            "found `theory_citation:` YAML key in serialized output -- "
-            "field-presence trap"
-        )
+        assert key_line is None, "found `theory_citation:` YAML key in serialized output -- field-presence trap"
 
     def test_is_triage_screen_is_false(self, tmp_path):
         md, _, hyp = _write_fast_lane_pair(tmp_path)
@@ -228,9 +220,7 @@ class TestBuildHeavyweightPrereg:
         prereg = bridge.build_heavyweight_prereg(src, today="2026-05-19")
 
         # Allowlist enforced: theory_citation absent from emitted scope
-        assert "theory_citation" not in prereg["scope"], (
-            "source-scope theory_citation MUST NOT leak into emitted draft"
-        )
+        assert "theory_citation" not in prereg["scope"], "source-scope theory_citation MUST NOT leak into emitted draft"
         # Allowlist enforced: unknown future fields absent too
         assert "unknown_future_field" not in prereg["scope"]
         # Round-trip through YAML serialization: theory_citation key absent
@@ -238,9 +228,7 @@ class TestBuildHeavyweightPrereg:
         assert re.search(r"^\s*theory_citation:", text, re.MULTILINE) is None
         # But canonical scope fields still inherited
         assert prereg["scope"]["instrument"] == "MNQ"
-        assert prereg["scope"]["strategy_id"] == (
-            "MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30"
-        )
+        assert prereg["scope"]["strategy_id"] == ("MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30")
 
     def test_execution_gate_starts_closed(self, tmp_path):
         md, _, hyp = _write_fast_lane_pair(tmp_path)
@@ -265,9 +253,7 @@ class TestBuildHeavyweightPrereg:
         src = bridge.load_fast_lane_source(md, hypotheses_dir=hyp)
         assert src is not None
         prereg = bridge.build_heavyweight_prereg(src, today="2026-05-19")
-        assert (
-            prereg["upstream_discovery_provenance"]["role"] == "PROVENANCE_ONLY"
-        )
+        assert prereg["upstream_discovery_provenance"]["role"] == "PROVENANCE_ONLY"
 
     def test_chordia_threshold_basis_cites_criterion_4(self, tmp_path):
         md, _, hyp = _write_fast_lane_pair(tmp_path)
@@ -283,10 +269,7 @@ class TestBuildHeavyweightPrereg:
         src = bridge.load_fast_lane_source(md, hypotheses_dir=hyp)
         assert src is not None
         prereg = bridge.build_heavyweight_prereg(src, today="2026-05-19")
-        assert (
-            prereg["grounding"]["filter_grounding_status"]["verdict"]
-            == "UNSUPPORTED"
-        )
+        assert prereg["grounding"]["filter_grounding_status"]["verdict"] == "UNSUPPORTED"
 
 
 class TestDraftPath:

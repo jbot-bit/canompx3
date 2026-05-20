@@ -64,21 +64,23 @@ def _make_runtime_tree(tmp_path):
 # Direction (a) — ORPHAN-NODE: spec names non-existent file
 # ---------------------------------------------------------------------------
 
+
 def test_orphan_node_missing_file(tmp_path):
     """Active node names a path that does not exist on disk → VIOLATION."""
     runtime = _make_runtime_tree(tmp_path)
     spec = tmp_path / "spec.md"
-    _write_spec(spec, textwrap.dedent("""\
+    _write_spec(
+        spec,
+        textwrap.dedent("""\
         nodes:
           - id: ghost_node
             path: docs/runtime/does_not_exist.yaml
             writer: scripts/nowhere.py
             schema_version: 1
-    """))
-
-    violations = check_fast_lane_state_graph_node_parity(
-        spec_path=spec, runtime_dir=runtime
+    """),
     )
+
+    violations = check_fast_lane_state_graph_node_parity(spec_path=spec, runtime_dir=runtime)
     assert violations, "Expected ORPHAN-NODE violation but got none"
     combined = "\n".join(violations)
     assert "ORPHAN-NODE" in combined
@@ -90,17 +92,18 @@ def test_orphan_node_glob_no_match(tmp_path):
     """Active node declares a glob with zero on-disk matches → VIOLATION."""
     runtime = _make_runtime_tree(tmp_path)
     spec = tmp_path / "spec.md"
-    _write_spec(spec, textwrap.dedent("""\
+    _write_spec(
+        spec,
+        textwrap.dedent("""\
         nodes:
           - id: ranking_csv_pattern
             path: docs/runtime/cherry_pick_ranking_*.csv
             writer: scripts/research/cherry_pick_ranker.py
             schema_version: 1
-    """))
-
-    violations = check_fast_lane_state_graph_node_parity(
-        spec_path=spec, runtime_dir=runtime
+    """),
     )
+
+    violations = check_fast_lane_state_graph_node_parity(spec_path=spec, runtime_dir=runtime)
     assert violations, "Expected ORPHAN-NODE violation for unmatched glob"
     combined = "\n".join(violations)
     assert "ORPHAN-NODE" in combined
@@ -110,6 +113,7 @@ def test_orphan_node_glob_no_match(tmp_path):
 # ---------------------------------------------------------------------------
 # Direction (b) — ORPHAN-FILE: file on disk, no spec node
 # ---------------------------------------------------------------------------
+
 
 def test_orphan_file_promote_queue_unnamed(tmp_path):
     """promote_queue.yaml exists on disk but no spec node names it → VIOLATION."""
@@ -122,9 +126,7 @@ def test_orphan_file_promote_queue_unnamed(tmp_path):
     # Spec is empty of nodes — every on-disk file is orphaned.
     _write_spec(spec, "nodes: []\n")
 
-    violations = check_fast_lane_state_graph_node_parity(
-        spec_path=spec, runtime_dir=runtime
-    )
+    violations = check_fast_lane_state_graph_node_parity(spec_path=spec, runtime_dir=runtime)
     assert violations, "Expected ORPHAN-FILE violation but got none"
     combined = "\n".join(violations)
     assert "ORPHAN-FILE" in combined
@@ -134,6 +136,7 @@ def test_orphan_file_promote_queue_unnamed(tmp_path):
 # ---------------------------------------------------------------------------
 # Malformed doc — fail-closed paths
 # ---------------------------------------------------------------------------
+
 
 def test_malformed_doc_missing_heading_fails_closed(tmp_path):
     """Spec missing '## 2. Node Inventory' heading → VIOLATION (no silent pass)."""
@@ -145,9 +148,7 @@ def test_malformed_doc_missing_heading_fails_closed(tmp_path):
         include_heading=False,  # heading replaced with '## something else'
     )
 
-    violations = check_fast_lane_state_graph_node_parity(
-        spec_path=spec, runtime_dir=runtime
-    )
+    violations = check_fast_lane_state_graph_node_parity(spec_path=spec, runtime_dir=runtime)
     assert violations, "Expected fail-closed violation on missing heading"
     combined = "\n".join(violations)
     assert "Node Inventory" in combined
@@ -163,19 +164,13 @@ def test_malformed_yaml_block_fails_closed(tmp_path):
         encoding="utf-8",
     )
 
-    violations = check_fast_lane_state_graph_node_parity(
-        spec_path=spec, runtime_dir=runtime
-    )
+    violations = check_fast_lane_state_graph_node_parity(spec_path=spec, runtime_dir=runtime)
     assert violations, "Expected fail-closed violation on unparseable YAML"
     combined = "\n".join(violations)
     # Either the YAML parse error or the structure-mismatch path may fire,
     # depending on which token the parser trips on first; both are valid
     # fail-closed messages from this check.
-    assert (
-        "failed to parse Node Inventory" in combined
-        or "is not a mapping" in combined
-        or "is not a list" in combined
-    )
+    assert "failed to parse Node Inventory" in combined or "is not a mapping" in combined or "is not a list" in combined
 
 
 def test_missing_spec_doc_fails_closed(tmp_path):
@@ -183,9 +178,7 @@ def test_missing_spec_doc_fails_closed(tmp_path):
     runtime = _make_runtime_tree(tmp_path)
     spec = tmp_path / "does_not_exist.md"
 
-    violations = check_fast_lane_state_graph_node_parity(
-        spec_path=spec, runtime_dir=runtime
-    )
+    violations = check_fast_lane_state_graph_node_parity(spec_path=spec, runtime_dir=runtime)
     assert violations, "Expected fail-closed violation when spec doc absent"
     combined = "\n".join(violations)
     assert "spec doc not found" in combined
@@ -195,20 +188,19 @@ def test_missing_spec_doc_fails_closed(tmp_path):
 # Clean cases — should produce zero violations
 # ---------------------------------------------------------------------------
 
+
 def test_clean_active_node_resolves(tmp_path):
     """Active node whose path resolves on disk produces no violation."""
     runtime = _make_runtime_tree(tmp_path)
-    (runtime / "docs" / "runtime" / "promote_queue.yaml").write_text(
-        "schema_version: 1\n", encoding="utf-8"
-    )
-    (runtime / "docs" / "runtime" / "cherry_pick_journal.yaml").write_text(
-        "schema_version: 1\n", encoding="utf-8"
-    )
+    (runtime / "docs" / "runtime" / "promote_queue.yaml").write_text("schema_version: 1\n", encoding="utf-8")
+    (runtime / "docs" / "runtime" / "cherry_pick_journal.yaml").write_text("schema_version: 1\n", encoding="utf-8")
     (runtime / "docs" / "runtime" / "cherry_pick_ranking_2026-01-01.csv").write_text(
         "strategy_id,score\n", encoding="utf-8"
     )
     spec = tmp_path / "spec.md"
-    _write_spec(spec, textwrap.dedent("""\
+    _write_spec(
+        spec,
+        textwrap.dedent("""\
         nodes:
           - id: promote_queue
             path: docs/runtime/promote_queue.yaml
@@ -226,11 +218,10 @@ def test_clean_active_node_resolves(tmp_path):
             path: docs/audit/hypotheses/drafts/
             writer: scripts/research/fast_lane_to_heavyweight_bridge.py
             schema_version: 1
-    """))
-
-    violations = check_fast_lane_state_graph_node_parity(
-        spec_path=spec, runtime_dir=runtime
+    """),
     )
+
+    violations = check_fast_lane_state_graph_node_parity(spec_path=spec, runtime_dir=runtime)
     assert violations == [], f"Expected clean pass, got: {violations}"
 
 
@@ -243,18 +234,17 @@ def test_proposed_node_with_absent_path_excluded(tmp_path):
     runtime = tmp_path
     (runtime / "docs" / "runtime").mkdir(parents=True)
     spec = tmp_path / "spec.md"
-    _write_spec(spec, textwrap.dedent("""\
+    _write_spec(
+        spec,
+        textwrap.dedent("""\
         nodes:
           - id: future_status_rollup
             path: docs/runtime/not_yet_implemented.yaml
             writer: scripts/tools/future_writer.py
             schema_version: 1
             proposed: true
-    """))
+    """),
+    )
 
-    violations = check_fast_lane_state_graph_node_parity(
-        spec_path=spec, runtime_dir=runtime
-    )
-    assert violations == [], (
-        f"Expected proposed-node to be excluded from parity, got: {violations}"
-    )
+    violations = check_fast_lane_state_graph_node_parity(spec_path=spec, runtime_dir=runtime)
+    assert violations == [], f"Expected proposed-node to be excluded from parity, got: {violations}"

@@ -34,9 +34,7 @@ def test_clean_state_passes() -> None:
     """Real graveyard doctrine block must cover every status token used
     by real headings in the same file."""
     violations = check_graveyard_status_tokens_parity()
-    assert violations == [], (
-        f"unexpected parity violations on clean state: {violations}"
-    )
+    assert violations == [], f"unexpected parity violations on clean state: {violations}"
 
 
 # ----------------------------------------------------------------------
@@ -64,9 +62,7 @@ def test_missing_doctrine_block_is_caught(tmp_path: Path) -> None:
     must produce a violation."""
     forged = tmp_path / "graveyard.md"
     forged.write_text(
-        "# R&D Graveyard\n\n"
-        "## ML attempt — DEAD\n\n"
-        "Some prose.\n",
+        "# R&D Graveyard\n\n## ML attempt — DEAD\n\nSome prose.\n",
         encoding="utf-8",
     )
     violations = check_graveyard_status_tokens_parity(graveyard_path=forged)
@@ -85,12 +81,7 @@ def test_empty_status_tokens_is_caught(tmp_path: Path) -> None:
     capture every heading as UNKNOWN."""
     forged = tmp_path / "graveyard.md"
     forged.write_text(
-        "# Graveyard\n\n"
-        "## Status Token Doctrine\n\n"
-        "```yaml\n"
-        "status_tokens: []\n"
-        "```\n\n"
-        "## ML — DEAD\n",
+        "# Graveyard\n\n## Status Token Doctrine\n\n```yaml\nstatus_tokens: []\n```\n\n## ML — DEAD\n",
         encoding="utf-8",
     )
     violations = check_graveyard_status_tokens_parity(graveyard_path=forged)
@@ -120,9 +111,7 @@ def test_undeclared_status_token_in_heading_is_caught(tmp_path: Path) -> None:
     )
     violations = check_graveyard_status_tokens_parity(graveyard_path=forged)
     assert violations
-    assert any("PURGED" in v for v in violations), (
-        f"violation should name the undeclared token PURGED: {violations}"
-    )
+    assert any("PURGED" in v for v in violations), f"violation should name the undeclared token PURGED: {violations}"
 
 
 # ----------------------------------------------------------------------
@@ -174,6 +163,4 @@ def test_declared_token_in_heading_passes(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     violations = check_graveyard_status_tokens_parity(graveyard_path=forged)
-    assert violations == [], (
-        f"unexpected violations on valid synthetic graveyard: {violations}"
-    )
+    assert violations == [], f"unexpected violations on valid synthetic graveyard: {violations}"

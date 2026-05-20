@@ -1,3 +1,493 @@
 do_not_hand_edit: true
 schema_version: 1
-entries: []
+entries:
+- run_id: scanner-1f726fa8f078c6e0-20260519T233439Z
+  run_timestamp_utc: '2026-05-19T23:34:39Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.yaml
+  prereg_sha: 1f726fa8f078c6e0
+  structural_hash: e27f8d59f8336d85
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: COMEX_SETTLE
+    orb_minutes: 5
+    K_global: 0
+    K_family: 0
+    K_lane: 0
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 0.00014733705612922634
+    bh_fdr_passes:
+      K_family: true
+      K_lane: true
+      K_global: true
+    correlation_haircut_N_hat: 97
+    rho_hat_assumed: 0.5
+  n_hat: 97.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.md
+    strategy_id: MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K
+    scanner_status: REVOKED
+  outcome:
+    pooled_t: 3.3
+    pooled_n: 97
+    pooled_fire: 0.0649
+- run_id: scanner-64156e75c55701b6-20260519T233439Z
+  run_timestamp_utc: '2026-05-19T23:34:39Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml
+  prereg_sha: 64156e75c55701b6
+  structural_hash: ed4cb1058cc25a58
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: US_DATA_1000
+    orb_minutes: 30
+    K_global: 0
+    K_family: 0
+    K_lane: 0
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 2.7141795777270942e-05
+    bh_fdr_passes:
+      K_family: true
+      K_lane: true
+      K_global: true
+    correlation_haircut_N_hat: 226
+    rho_hat_assumed: 0.5
+  n_hat: 226.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
+    strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    scanner_status: PARKED
+  outcome:
+    pooled_t: 3.064
+    pooled_n: 226
+    pooled_fire: 0.14679999999999999
+- run_id: scanner-1f726fa8f078c6e0-20260519T233647Z
+  run_timestamp_utc: '2026-05-19T23:36:47Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.yaml
+  prereg_sha: 1f726fa8f078c6e0
+  structural_hash: e27f8d59f8336d85
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: COMEX_SETTLE
+    orb_minutes: 5
+    K_global: 2
+    K_family: 1
+    K_lane: 1
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 0.00014733705612922634
+    bh_fdr_passes:
+      K_family: true
+      K_lane: true
+      K_global: true
+    correlation_haircut_N_hat: 97
+    rho_hat_assumed: 0.5
+  n_hat: 97.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.md
+    strategy_id: MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K
+    scanner_status: REVOKED
+  outcome:
+    pooled_t: 3.3
+    pooled_n: 97
+    pooled_fire: 0.0649
+- run_id: scanner-64156e75c55701b6-20260519T233647Z
+  run_timestamp_utc: '2026-05-19T23:36:47Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml
+  prereg_sha: 64156e75c55701b6
+  structural_hash: ed4cb1058cc25a58
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: US_DATA_1000
+    orb_minutes: 30
+    K_global: 2
+    K_family: 1
+    K_lane: 1
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 2.7141795777270942e-05
+    bh_fdr_passes:
+      K_family: true
+      K_lane: true
+      K_global: true
+    correlation_haircut_N_hat: 226
+    rho_hat_assumed: 0.5
+  n_hat: 226.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
+    strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    scanner_status: PARKED
+  outcome:
+    pooled_t: 3.064
+    pooled_n: 226
+    pooled_fire: 0.14679999999999999
+- run_id: scanner-1f726fa8f078c6e0-20260519T233856Z
+  run_timestamp_utc: '2026-05-19T23:38:56Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.yaml
+  prereg_sha: 1f726fa8f078c6e0
+  structural_hash: e27f8d59f8336d85
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: COMEX_SETTLE
+    orb_minutes: 5
+    K_global: 4
+    K_family: 2
+    K_lane: 2
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 0.0002946741122584527
+    bh_fdr_passes:
+      K_family: false
+      K_lane: false
+      K_global: true
+    correlation_haircut_N_hat: 146
+    rho_hat_assumed: 0.5
+  n_hat: 146.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.md
+    strategy_id: MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K
+    scanner_status: REVOKED
+  outcome:
+    pooled_t: 3.3
+    pooled_n: 97
+    pooled_fire: 0.0649
+- run_id: scanner-64156e75c55701b6-20260519T233856Z
+  run_timestamp_utc: '2026-05-19T23:38:56Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml
+  prereg_sha: 64156e75c55701b6
+  structural_hash: ed4cb1058cc25a58
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: US_DATA_1000
+    orb_minutes: 30
+    K_global: 4
+    K_family: 2
+    K_lane: 2
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 5.4283591554541885e-05
+    bh_fdr_passes:
+      K_family: false
+      K_lane: false
+      K_global: true
+    correlation_haircut_N_hat: 339
+    rho_hat_assumed: 0.5
+  n_hat: 339.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
+    strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    scanner_status: PARKED
+  outcome:
+    pooled_t: 3.064
+    pooled_n: 226
+    pooled_fire: 0.14679999999999999
+- run_id: scanner-1f726fa8f078c6e0-20260519T234049Z
+  run_timestamp_utc: '2026-05-19T23:40:49Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.yaml
+  prereg_sha: 1f726fa8f078c6e0
+  structural_hash: e27f8d59f8336d85
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: COMEX_SETTLE
+    orb_minutes: 5
+    K_global: 6
+    K_family: 3
+    K_lane: 3
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 0.00038086076506069823
+    bh_fdr_passes:
+      K_family: false
+      K_lane: false
+      K_global: true
+    correlation_haircut_N_hat: 194
+    rho_hat_assumed: 0.5
+  n_hat: 194.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.md
+    strategy_id: MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K
+    scanner_status: REVOKED
+  outcome:
+    pooled_t: 3.3
+    pooled_n: 97
+    pooled_fire: 0.0649
+- run_id: scanner-64156e75c55701b6-20260519T234049Z
+  run_timestamp_utc: '2026-05-19T23:40:49Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml
+  prereg_sha: 64156e75c55701b6
+  structural_hash: ed4cb1058cc25a58
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: US_DATA_1000
+    orb_minutes: 30
+    K_global: 6
+    K_family: 3
+    K_lane: 3
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 7.016052428647721e-05
+    bh_fdr_passes:
+      K_family: false
+      K_lane: false
+      K_global: true
+    correlation_haircut_N_hat: 452
+    rho_hat_assumed: 0.5
+  n_hat: 452.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
+    strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    scanner_status: PARKED
+  outcome:
+    pooled_t: 3.064
+    pooled_n: 226
+    pooled_fire: 0.14679999999999999
+- run_id: scanner-1f726fa8f078c6e0-20260519T234229Z
+  run_timestamp_utc: '2026-05-19T23:42:29Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.yaml
+  prereg_sha: 1f726fa8f078c6e0
+  structural_hash: e27f8d59f8336d85
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: COMEX_SETTLE
+    orb_minutes: 5
+    K_global: 8
+    K_family: 4
+    K_lane: 4
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 0.000442011168387679
+    bh_fdr_passes:
+      K_family: false
+      K_lane: false
+      K_global: true
+    correlation_haircut_N_hat: 242
+    rho_hat_assumed: 0.5
+  n_hat: 242.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.md
+    strategy_id: MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K
+    scanner_status: REVOKED
+  outcome:
+    pooled_t: 3.3
+    pooled_n: 97
+    pooled_fire: 0.0649
+- run_id: scanner-64156e75c55701b6-20260519T234229Z
+  run_timestamp_utc: '2026-05-19T23:42:29Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml
+  prereg_sha: 64156e75c55701b6
+  structural_hash: ed4cb1058cc25a58
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: US_DATA_1000
+    orb_minutes: 30
+    K_global: 8
+    K_family: 4
+    K_lane: 4
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 8.142538733181282e-05
+    bh_fdr_passes:
+      K_family: false
+      K_lane: false
+      K_global: true
+    correlation_haircut_N_hat: 565
+    rho_hat_assumed: 0.5
+  n_hat: 565.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
+    strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    scanner_status: PARKED
+  outcome:
+    pooled_t: 3.064
+    pooled_n: 226
+    pooled_fire: 0.14679999999999999
+- run_id: scanner-1f726fa8f078c6e0-20260519T234956Z
+  run_timestamp_utc: '2026-05-19T23:49:56Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.yaml
+  prereg_sha: 1f726fa8f078c6e0
+  structural_hash: e27f8d59f8336d85
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: COMEX_SETTLE
+    orb_minutes: 5
+    K_global: 10
+    K_family: 5
+    K_lane: 5
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 0.0004894431061736733
+    bh_fdr_passes:
+      K_family: false
+      K_lane: false
+      K_global: true
+    correlation_haircut_N_hat: 291
+    rho_hat_assumed: 0.5
+  n_hat: 291.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.md
+    strategy_id: MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K
+    scanner_status: REVOKED
+  outcome:
+    pooled_t: 3.3
+    pooled_n: 97
+    pooled_fire: 0.0649
+- run_id: scanner-64156e75c55701b6-20260519T234956Z
+  run_timestamp_utc: '2026-05-19T23:49:56Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml
+  prereg_sha: 64156e75c55701b6
+  structural_hash: ed4cb1058cc25a58
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: US_DATA_1000
+    orb_minutes: 30
+    K_global: 10
+    K_family: 5
+    K_lane: 5
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 9.016309393821152e-05
+    bh_fdr_passes:
+      K_family: false
+      K_lane: false
+      K_global: true
+    correlation_haircut_N_hat: 678
+    rho_hat_assumed: 0.5
+  n_hat: 678.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
+    strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    scanner_status: PARKED
+  outcome:
+    pooled_t: 3.064
+    pooled_n: 226
+    pooled_fire: 0.14679999999999999
+- run_id: scanner-1f726fa8f078c6e0-20260519T235711Z
+  run_timestamp_utc: '2026-05-19T23:57:11Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.yaml
+  prereg_sha: 1f726fa8f078c6e0
+  structural_hash: e27f8d59f8336d85
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: COMEX_SETTLE
+    orb_minutes: 5
+    K_global: 12
+    K_family: 6
+    K_lane: 6
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 0.0005281978211899247
+    bh_fdr_passes:
+      K_family: false
+      K_lane: false
+      K_global: true
+    correlation_haircut_N_hat: 340
+    rho_hat_assumed: 0.5
+  n_hat: 340.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.md
+    strategy_id: MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K
+    scanner_status: REVOKED
+  outcome:
+    pooled_t: 3.3
+    pooled_n: 97
+    pooled_fire: 0.0649
+- run_id: scanner-64156e75c55701b6-20260519T235711Z
+  run_timestamp_utc: '2026-05-19T23:57:11Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml
+  prereg_sha: 64156e75c55701b6
+  structural_hash: ed4cb1058cc25a58
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: US_DATA_1000
+    orb_minutes: 30
+    K_global: 12
+    K_family: 6
+    K_lane: 6
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 9.730232006374815e-05
+    bh_fdr_passes:
+      K_family: false
+      K_lane: false
+      K_global: true
+    correlation_haircut_N_hat: 791
+    rho_hat_assumed: 0.5
+  n_hat: 791.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
+    strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    scanner_status: PARKED
+  outcome:
+    pooled_t: 3.064
+    pooled_n: 226
+    pooled_fire: 0.14679999999999999

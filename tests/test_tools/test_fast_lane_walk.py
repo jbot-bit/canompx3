@@ -239,6 +239,7 @@ def test_main_two_back_to_back_dry_runs_match_modulo_date() -> None:
     """Acceptance #6: idempotency — back-to-back dry-runs produce identical
     Markdown modulo the date stamp.
     """
+
     def _run() -> str:
         buf = io.StringIO()
         with redirect_stdout(buf):

@@ -35,9 +35,7 @@ from trading_app import holdout_policy
 def test_clean_state_passes():
     """Real module constants must agree byte-for-byte today."""
     violations = check_holdout_sentinel_inline_copy_parity()
-    assert violations == [], (
-        f"unexpected parity violations on clean state: {violations}"
-    )
+    assert violations == [], f"unexpected parity violations on clean state: {violations}"
 
 
 # ----------------------------------------------------------------------
@@ -119,6 +117,4 @@ def test_violation_cites_bug_class_anchor(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(ledger, "HOLDOUT_SACRED_FROM_SENTINEL", "1999-01-01")
     violations = check_holdout_sentinel_inline_copy_parity()
     assert violations
-    assert (
-        "feedback_canonical_inline_copy_parity_bug_class.md" in violations[0]
-    )
+    assert "feedback_canonical_inline_copy_parity_bug_class.md" in violations[0]

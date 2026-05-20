@@ -39,12 +39,8 @@ def _reload_bridge():
 
 def test_passes_when_all_slugs_have_canonical_rule(doctrine_with_all_rules):
     """Baseline: real canonical doctrine has every RULE the bridge cites."""
-    violations = check_drift.check_bridge_methodology_rules_parity(
-        doctrine_with_all_rules
-    )
-    assert violations == [], (
-        f"baseline parity must hold against synthetic doctrine; got: {violations}"
-    )
+    violations = check_drift.check_bridge_methodology_rules_parity(doctrine_with_all_rules)
+    assert violations == [], f"baseline parity must hold against synthetic doctrine; got: {violations}"
 
 
 def test_catches_rule_1_temporal_alignment_drift(tmp_path, monkeypatch):
@@ -52,9 +48,7 @@ def test_catches_rule_1_temporal_alignment_drift(tmp_path, monkeypatch):
     p = tmp_path / "doctrine.md"
     p.write_text(_minimal_doctrine([3, 4, 9, 10]), encoding="utf-8")  # no RULE 1
     violations = check_drift.check_bridge_methodology_rules_parity(p)
-    assert any("rule_1_temporal_alignment" in v for v in violations), (
-        f"expected rule_1 violation; got: {violations}"
-    )
+    assert any("rule_1_temporal_alignment" in v for v in violations), f"expected rule_1 violation; got: {violations}"
 
 
 def test_catches_rule_3_is_oos_discipline_drift(tmp_path):
@@ -97,9 +91,7 @@ def test_catches_added_bogus_slug(doctrine_with_all_rules, monkeypatch):
         "METHODOLOGY_RULES_APPLIED",
         bridge.METHODOLOGY_RULES_APPLIED + ("rule_99_fabricated",),
     )
-    violations = check_drift.check_bridge_methodology_rules_parity(
-        doctrine_with_all_rules
-    )
+    violations = check_drift.check_bridge_methodology_rules_parity(doctrine_with_all_rules)
     assert any("rule_99" in v or "RULE 99" in v for v in violations)
 
 
@@ -111,9 +103,7 @@ def test_catches_malformed_slug(doctrine_with_all_rules, monkeypatch):
         "METHODOLOGY_RULES_APPLIED",
         bridge.METHODOLOGY_RULES_APPLIED + ("not_a_rule_slug",),
     )
-    violations = check_drift.check_bridge_methodology_rules_parity(
-        doctrine_with_all_rules
-    )
+    violations = check_drift.check_bridge_methodology_rules_parity(doctrine_with_all_rules)
     assert any("does not match the canonical rule_" in v for v in violations)
 
 
@@ -137,6 +127,4 @@ def test_fails_closed_when_no_rule_headings(tmp_path):
 def test_runs_against_real_canonical_doctrine():
     """Smoke: against the actual project methodology doc, parity holds at landing."""
     violations = check_drift.check_bridge_methodology_rules_parity()
-    assert violations == [], (
-        f"real-canonical parity must hold at landing; got: {violations}"
-    )
+    assert violations == [], f"real-canonical parity must hold at landing; got: {violations}"
