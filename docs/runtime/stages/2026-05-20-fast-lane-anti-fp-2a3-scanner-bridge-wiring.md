@@ -1,6 +1,16 @@
 ---
 task: Stage 2A.3 IMPLEMENTATION — Fast-Lane Anti-FP Scanner / Ranker / Bridge Wiring. Wires Stage 2A.1 (structural_hash) + Stage 2A.2 (trial ledger + graveyard digest) into the live fast-lane chain. After this stage the scanner emits 5 provenance fields per PROMOTE candidate, the ranker refuses to rank provenance-less entries, the bridge refuses to author drafts on suppression-rule matches, and `promote_queue.yaml` carries enforceable trial-accounting state. Closes Bailey-Lopez de Prado 2014 § 3 "universe of trials" gap on the live path. Parent split file: docs/runtime/stages/2026-05-20-fast-lane-anti-fp-implementation.md § "Sub-Stage 2A.3". Design grounding: docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md.
-mode: IMPLEMENTATION
+mode: CLOSED
+closed_commit: 9b13d0d1
+closed_date: 2026-05-20
+closed_note: |
+  Acceptance proven on live data (MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30 PARKED, ranker zero-QUEUED, bridge gate=false, Check #173 PASS).
+  This file is RETAINED (not deleted) because Check #173 (check_fast_lane_promote_queue_provenance_present)
+  parses STATUS_VALUES from this file as canonical source per the inline-copy parity rule.
+  Deletion would break the drift check. Treat as doctrine after close.
+  Bookkeeping precedent: any stage file whose body is referenced by a drift check must be archived
+  in place (mode: CLOSED), never `git rm`.
+original_mode: IMPLEMENTATION
 scope_lock:
   - scripts/research/fast_lane_promote_queue.py
   - scripts/research/cherry_pick_ranker.py

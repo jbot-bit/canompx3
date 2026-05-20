@@ -68,7 +68,16 @@ Stage 2A is SPLIT. Only Sub-stage 2A.1 is in active scope_lock above. Sub-stages
 
 ---
 
-## Sub-Stage 2A.3 — Scanner / Ranker / Bridge Wiring (QUEUED)
+## Sub-Stage 2A.3 — Scanner / Ranker / Bridge Wiring (CLOSED 9b13d0d1)
+
+**Stage file:** `docs/runtime/stages/2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md` (deleted on close)
+**Merge commit:** `9b13d0d1` (PR #302, format-pass follow-up `c84771fb`)
+**Acceptance proven on live data:**
+- `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30` correctly classified `status: PARKED` (action-queue#20).
+- `cherry_pick_ranker.py` correctly reports `No QUEUED candidates` (PARKED suppression honoured).
+- `fast_lane_to_heavyweight_bridge.py` emits draft with `execution_gate.allowed_now: false` + operator-review fields.
+- Check #173 PASSES on live `docs/runtime/promote_queue.yaml`.
+- Drift: 152/153 PASS (1 unrelated stale `validated_setups` row for `MGC_CME_REOPEN_E2`).
 
 **Goal:** Connect 2A.1+2A.2 substrate into the live chain. Suppression rules become enforceable.
 
