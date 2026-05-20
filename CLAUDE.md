@@ -15,7 +15,7 @@ Multi-instrument futures data pipeline — builds clean, replayable local datase
 ```bash
 python pipeline/check_drift.py                                         # all guardrails (must pass pre-commit)
 python scripts/tools/context_resolver.py --task "<x>" --format markdown  # task front-door
-python scripts/trade_book.py                                           # trade book HTML (opens in browser)
+python scripts/tools/generate_trade_sheet.py                           # trade book HTML (opens in browser)
 ```
 One-time setup: `git config core.hooksPath .githooks`
 
