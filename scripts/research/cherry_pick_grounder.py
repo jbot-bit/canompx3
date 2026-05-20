@@ -57,7 +57,6 @@ from typing import Any
 
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -77,7 +76,6 @@ from scripts.research.lhp.llm_client import (  # noqa: E402
     LLMRequestError,
     propose_with_mock_support,
 )
-
 
 # Verdict labels written to <slug>.grounded.yaml (or .rejected.txt) AND
 # appended to docs/runtime/cherry_pick_journal.md grounded_verdict column.

@@ -8,9 +8,9 @@ Coverage:
 """
 
 import json
-from datetime import date, datetime, timedelta, UTC
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -19,7 +19,6 @@ from trading_app.live.signal_log_rotator import (
     SignalLogRotator,
     signals_file_for_day,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

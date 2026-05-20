@@ -54,7 +54,6 @@ from trading_app.execution_engine import ExecutionEngine, TradeEvent
 from trading_app.outcome_builder import compute_single_outcome
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 
-
 # ============================================================================
 # Fixture corpus generator — deterministic synthetic days
 # ============================================================================

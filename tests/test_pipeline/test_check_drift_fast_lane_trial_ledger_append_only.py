@@ -31,14 +31,13 @@ import pytest
 
 from pipeline.check_drift import check_fast_lane_trial_ledger_append_only
 from scripts.research.fast_lane_trial_ledger import (
-    CapitalClassWriteRefused,
     HOLDOUT_POLICY_SENTINEL,
     HOLDOUT_SACRED_FROM_SENTINEL,
+    CapitalClassWriteRefused,
     LedgerAppendOnlyViolation,
     LedgerEntry,
     append_trial_ledger_entry,
 )
-
 
 # A canonical clean-state ledger fragment with two valid entries that share
 # the boundary sentinels. Every injection probe starts from this and mutates

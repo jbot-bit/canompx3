@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import pytest
 
-from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 from trading_app.lane_ctl import (
     _load_overrides,
     _save_overrides,
@@ -18,6 +17,7 @@ from trading_app.lane_ctl import (
     pause_strategy_id,
     resume_lane,
 )
+from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
 
 @pytest.fixture

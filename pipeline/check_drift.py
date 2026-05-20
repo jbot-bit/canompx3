@@ -10958,7 +10958,7 @@ def check_holdout_sentinel_inline_copy_parity() -> list[str]:
     violations: list[str] = []
 
     expected = HOLDOUT_SACRED_FROM.isoformat()
-    if HOLDOUT_SACRED_FROM_SENTINEL != expected:
+    if expected != HOLDOUT_SACRED_FROM_SENTINEL:
         violations.append(
             "check_holdout_sentinel_inline_copy_parity: "
             f"HOLDOUT_SACRED_FROM_SENTINEL={HOLDOUT_SACRED_FROM_SENTINEL!r} "

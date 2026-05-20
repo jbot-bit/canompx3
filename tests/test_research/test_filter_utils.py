@@ -15,7 +15,6 @@ import pytest
 from research.filter_utils import filter_signal, filter_signals
 from trading_app.config import ALL_FILTERS
 
-
 # ─────────────────────────────────────────────────────────────────────────
 # Test data — synthetic rows that exercise the filter branches without
 # needing a DuckDB fixture. Feature columns match the canonical

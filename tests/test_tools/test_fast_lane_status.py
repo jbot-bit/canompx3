@@ -8,13 +8,13 @@ from pathlib import Path
 import yaml
 
 from scripts.tools.fast_lane_status import (
+    _NEXT_ACTION_BY_STAGE,
+    _NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE,
     SCHEMA_VERSION,
     STAGE_PRECEDENCE,
     StatusEntry,
     _classify_stage,
     _next_action_for,
-    _NEXT_ACTION_BY_STAGE,
-    _NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE,
     build_status_entries,
     collect_active_preregs,
     collect_drafts,

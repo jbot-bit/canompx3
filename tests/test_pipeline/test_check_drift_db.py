@@ -975,6 +975,7 @@ class TestRoutedFilterColumnsPopulated:
         """Against the live DB after the 2026-04-20 backfill, the check
         must return no violations."""
         import duckdb
+
         from pipeline.paths import GOLD_DB_PATH
 
         if not GOLD_DB_PATH.exists():

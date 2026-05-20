@@ -27,6 +27,6 @@ def test_notify_never_raises_on_arbitrary_exception():
     with patch("scripts.infra.telegram_feed.send_telegram", side_effect=Exception("net dead")):
         try:
             result = notifications.notify("MES", "test")
-        except Exception:
-            raise AssertionError("notify() must never raise on Exception subclasses")
+        except Exception as err:
+            raise AssertionError("notify() must never raise on Exception subclasses") from err
     assert result is False

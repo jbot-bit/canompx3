@@ -33,7 +33,7 @@ import subprocess
 import sys
 import traceback
 import webbrowser
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -310,11 +310,11 @@ def panel_journal_pending() -> str:
 
 def panel_next_24h(instrument_filter: str | None) -> str:
     from datetime import timedelta
-
-    from pipeline.dst import SESSION_CATALOG, orb_utc_window
-    from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
-    from scripts.tools.strategy_lab_mcp_server import _allocation_index, _load_allocation_doc
     from zoneinfo import ZoneInfo
+
+    from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+    from pipeline.dst import SESSION_CATALOG, orb_utc_window
+    from scripts.tools.strategy_lab_mcp_server import _allocation_index, _load_allocation_doc
 
     today = date.today()
     days = [today, today + timedelta(days=1)]
@@ -334,10 +334,10 @@ def panel_next_24h(instrument_filter: str | None) -> str:
         instruments = [i for i in instruments if i == instrument_filter]
 
     rows: list[tuple[str, ...]] = []
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(UTC)
     horizon = now_utc + timedelta(hours=24)
     for trading_day in days:
-        for label in SESSION_CATALOG.keys():
+        for label in SESSION_CATALOG:
             try:
                 start_utc, _end_utc = orb_utc_window(trading_day, label, 5)
             except ValueError:
@@ -544,7 +544,7 @@ def render_portal(
     )
     toc = "<div class='toc'>" + " ".join(f"<a href='#p{i}'>{i}</a>" for i in range(1, 11)) + "</div>"
 
-    rendered_ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    rendered_ts = datetime.now(UTC).isoformat(timespec="seconds")
     sha = _git_sha()
     filter_note = []
     if profile_filter:

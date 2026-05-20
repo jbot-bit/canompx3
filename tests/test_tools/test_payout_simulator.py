@@ -10,7 +10,6 @@ import pytest
 
 from scripts.tools.payout_simulator import PayoutPolicy, PayoutSimulator, SimResult
 
-
 # ---------------------------------------------------------------------------
 # PayoutPolicy factory methods
 # ---------------------------------------------------------------------------
@@ -186,7 +185,7 @@ class TestPayoutLogic:
         # Build huge balance to test cap
         trades = [(d, 1000.0) for d in range(1, 21)]  # $20K profit
         sim = PayoutSimulator(p, trades=trades)
-        result = sim.run()
+        sim.run()
         # Each payout should have been ≤ $5000 gross
         # Can't check individual payouts from SimResult, but total should reflect caps
 
@@ -223,7 +222,7 @@ class TestPayoutLogic:
         # Safety reserve = $2600. Can't withdraw below $52,600.
         trades = [(d, 200.0) for d in range(1, 20)]  # $3800 profit
         sim = PayoutSimulator(p, trades=trades)
-        result = sim.run()
+        sim.run()
         # Balance should never go below 50000 + 2600 = 52600
         assert sim.balance >= 50_000 + p.safety_reserve
 

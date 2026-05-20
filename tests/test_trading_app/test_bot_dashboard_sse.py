@@ -57,7 +57,7 @@ def test_sse_broker_unsubscribe_drops_queue():
 
 
 def test_sse_broker_ring_buffer_capped():
-    from trading_app.live.bot_dashboard import _SSEBroker, _SSE_RING_SIZE
+    from trading_app.live.bot_dashboard import _SSE_RING_SIZE, _SSEBroker
 
     broker = _SSEBroker()
     for i in range(_SSE_RING_SIZE + 50):
@@ -80,7 +80,7 @@ def test_sse_broker_replay_since_filters_by_event_id():
 
 def test_sse_broker_full_queue_does_not_block_publish(caplog):
     """Slow consumer must not stall the publish path — institutional-rigor § 6."""
-    from trading_app.live.bot_dashboard import _SSEBroker, _SSE_QUEUE_MAXSIZE
+    from trading_app.live.bot_dashboard import _SSE_QUEUE_MAXSIZE, _SSEBroker
 
     broker = _SSEBroker()
     q = broker.subscribe()

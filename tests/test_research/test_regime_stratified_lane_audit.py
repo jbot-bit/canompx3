@@ -34,7 +34,6 @@ from research.regime_stratified_lane_audit_v1 import (
     _stratify,
 )
 
-
 PREREG_STRATEGY_IDS = {
     "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K",
     "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15",

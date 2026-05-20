@@ -74,7 +74,7 @@ class TestOutrightPatterns:
     def test_prefix_lengths_correct(self):
         """Prefix lengths match expected symbol structure."""
         for inst, pats in OUTRIGHT_PATTERNS.items():
-            for pat, plen in pats:
+            for _pat, plen in pats:
                 # Parent symbols have shorter prefix (2), micros have 3
                 assert plen in (2, 3), f"{inst} has unexpected prefix length {plen}"
 

@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Order Router tests
 # ---------------------------------------------------------------------------
@@ -480,9 +479,9 @@ class TestRithmicSubmitMocked:
     def test_order_submit_uses_higher_timeout(self):
         """Submit uses _ORDER_SUBMIT_TIMEOUT, not _BRIDGE_TIMEOUT."""
         from trading_app.live.rithmic.order_router import (
-            RithmicOrderRouter,
             _BRIDGE_TIMEOUT,
             _ORDER_SUBMIT_TIMEOUT,
+            RithmicOrderRouter,
         )
 
         assert _ORDER_SUBMIT_TIMEOUT > _BRIDGE_TIMEOUT

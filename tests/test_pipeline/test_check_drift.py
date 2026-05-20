@@ -15,6 +15,8 @@ from pipeline.check_drift import (
     _parse_stage_acceptance_commands,
     _stage_acceptance_all_pass,
     check_apply_iterrows,
+    check_checks_list_labels_are_ascii,
+    check_chordia_result_threshold_matches_prereg,
     check_config_filter_sync,
     check_daily_features_row_integrity,
     check_hardcoded_mgc_sql,
@@ -27,8 +29,6 @@ from pipeline.check_drift import (
     check_ruff_rules_minimum,
     check_trading_app_connection_leaks,
     check_trading_app_hardcoded_paths,
-    check_checks_list_labels_are_ascii,
-    check_chordia_result_threshold_matches_prereg,
     check_uv_lock_exists,
     check_verdict_vocabulary_md_matches_code,
 )
@@ -2776,7 +2776,7 @@ class TestCheckSrPausesHaveRecentEvidence:
                 {
                     "schema_version": 1,
                     "state_type": "sr_monitor",
-                    "canonical_inputs": {"profile_id": profile_id, "lane_ids": [l["strategy_id"] for l in lanes]},
+                    "canonical_inputs": {"profile_id": profile_id, "lane_ids": [ln["strategy_id"] for ln in lanes]},
                     "payload": {"results": lanes},
                 }
             ),
