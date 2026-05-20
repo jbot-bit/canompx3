@@ -3033,21 +3033,14 @@ def _orb_levels_for_instrument(instrument: str) -> dict[str, Any]:
             }
         )
 
-        if (
-            trading_day_obj is not None
-            and isinstance(session_name, str)
-            and isinstance(orb_minutes, int)
-        ):
+        if trading_day_obj is not None and isinstance(session_name, str) and isinstance(orb_minutes, int):
             try:
-                start_dt, end_dt = orb_utc_window(
-                    trading_day_obj, session_name, orb_minutes
-                )
+                start_dt, end_dt = orb_utc_window(trading_day_obj, session_name, orb_minutes)
                 payload["orb_window_start_utc"] = int(start_dt.timestamp())
                 payload["orb_window_end_utc"] = int(end_dt.timestamp())
             except (ValueError, KeyError) as exc:
                 log.warning(
-                    "_orb_levels_for_instrument: orb_utc_window(%s, %s, %s) "
-                    "rejected (%s) — window fields null",
+                    "_orb_levels_for_instrument: orb_utc_window(%s, %s, %s) rejected (%s) — window fields null",
                     trading_day_obj,
                     session_name,
                     orb_minutes,

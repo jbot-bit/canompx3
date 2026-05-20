@@ -265,11 +265,7 @@ def _parse_action_queue(path: Path) -> list[GraveyardEntry]:
         if status not in {"park", "kill"}:
             continue
         title = (
-            row.get("id")
-            or row.get("title")
-            or row.get("name")
-            or row.get("summary")
-            or "unnamed action-queue entry"
+            row.get("id") or row.get("title") or row.get("name") or row.get("summary") or "unnamed action-queue entry"
         )
         entries.append(
             GraveyardEntry(
@@ -346,9 +342,7 @@ def write_digest(out_path: Path = DIGEST_PATH) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description=(__doc__ or "").split("\n\n", 1)[0]
-    )
+    parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n", 1)[0])
     parser.add_argument(
         "--build",
         action="store_true",

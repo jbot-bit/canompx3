@@ -227,9 +227,7 @@ def test_scanner_detects_orphan_promote(tmp_path, empty_hypotheses, empty_action
     assert any("first run" in line for line in diff)
 
 
-def test_scanner_passes_when_revocation_sidecar_exists(
-    tmp_path, empty_hypotheses, empty_action_queue
-):
+def test_scanner_passes_when_revocation_sidecar_exists(tmp_path, empty_hypotheses, empty_action_queue):
     """PROMOTE MD + adjacent .revocation.md sidecar => REVOKED.
     Even when the per-direction gate ALSO flags pooling-artifact (lane #2's
     real case), the sidecar wins - REVOKED, not ERROR."""
@@ -285,9 +283,7 @@ def test_scanner_passes_when_heavyweight_prereg_referenced(tmp_path, empty_actio
     assert hp is not None and "heavy-prereg.yaml" in hp
 
 
-def test_scanner_ignores_self_referencing_v5_1_prereg_as_heavyweight(
-    tmp_path, empty_action_queue
-):
+def test_scanner_ignores_self_referencing_v5_1_prereg_as_heavyweight(tmp_path, empty_action_queue):
     """The fast_lane_v5.1 prereg that birthed the PROMOTE MD must NOT count
     as a heavyweight prereg. Otherwise every PROMOTE auto-flips ESCALATED."""
     d = tmp_path / "results"
@@ -320,13 +316,7 @@ def test_scanner_passes_when_park_entry_present(tmp_path, empty_hypotheses):
 
     aq = tmp_path / "action-queue.yaml"
     aq.write_text(
-        yaml.safe_dump(
-            {
-                "entries": [
-                    {"strategy_id": "MNQ_PARKED_E1_RR1.0_CB1_FOO_O5", "status": "park"}
-                ]
-            }
-        ),
+        yaml.safe_dump({"entries": [{"strategy_id": "MNQ_PARKED_E1_RR1.0_CB1_FOO_O5", "status": "park"}]}),
         encoding="utf-8",
     )
 
@@ -336,9 +326,7 @@ def test_scanner_passes_when_park_entry_present(tmp_path, empty_hypotheses):
     assert entries[0].park_entry is not None
 
 
-def test_scanner_emits_error_on_missing_directional_breakdown(
-    tmp_path, empty_hypotheses, empty_action_queue
-):
+def test_scanner_emits_error_on_missing_directional_breakdown(tmp_path, empty_hypotheses, empty_action_queue):
     """PROMOTE MD without `## Directional breakdown` => ERROR (no UNKNOWN)."""
     d = tmp_path / "results"
     d.mkdir()
@@ -370,12 +358,9 @@ def test_scanner_skips_non_promote_results(tmp_path, empty_hypotheses, empty_act
     """KILL and NEEDS-MORE result MDs are not in the PROMOTE queue at all."""
     d = tmp_path / "results"
     d.mkdir()
-    _write_md(d, sid="MNQ_KILL_E1_RR1.0_CB1_FOO_O5", verdict="KILL",
-              filename="2026-05-18-kill-fast-lane-v1.md")
-    _write_md(d, sid="MNQ_NM_E1_RR1.0_CB1_FOO_O5", verdict="NEEDS-MORE",
-              filename="2026-05-18-nm-fast-lane-v1.md")
-    _write_md(d, sid="MNQ_PROMOTE_E1_RR1.0_CB1_FOO_O5",
-              filename="2026-05-18-promote-fast-lane-v1.md")
+    _write_md(d, sid="MNQ_KILL_E1_RR1.0_CB1_FOO_O5", verdict="KILL", filename="2026-05-18-kill-fast-lane-v1.md")
+    _write_md(d, sid="MNQ_NM_E1_RR1.0_CB1_FOO_O5", verdict="NEEDS-MORE", filename="2026-05-18-nm-fast-lane-v1.md")
+    _write_md(d, sid="MNQ_PROMOTE_E1_RR1.0_CB1_FOO_O5", filename="2026-05-18-promote-fast-lane-v1.md")
 
     entries = _scan(d, empty_hypotheses, empty_action_queue)
     assert len(entries) == 1
@@ -388,9 +373,7 @@ def test_revoked_status_wins_over_escalated(tmp_path, empty_action_queue):
     d = tmp_path / "results"
     d.mkdir()
     md_path = _write_md(d, sid="MNQ_REVOKED_THEN_HEAVY_E1_RR1.0_CB1_FOO_O5")
-    md_path.with_name(md_path.stem + ".revocation.md").write_text(
-        "# revoked\n", encoding="utf-8"
-    )
+    md_path.with_name(md_path.stem + ".revocation.md").write_text("# revoked\n", encoding="utf-8")
 
     h = d.parent / "hypotheses"
     h.mkdir()
@@ -458,13 +441,18 @@ def test_cli_dry_run_default(tmp_path, empty_hypotheses, empty_action_queue, cap
 
     rc = flpq.main(
         [
-            "--results-dir", str(d),
-            "--hypotheses-dir", str(empty_hypotheses),
-            "--action-queue", str(empty_action_queue),
-            "--cache-path", str(cache),
+            "--results-dir",
+            str(d),
+            "--hypotheses-dir",
+            str(empty_hypotheses),
+            "--action-queue",
+            str(empty_action_queue),
+            "--cache-path",
+            str(cache),
             # Large OOS window so the pre-flight OOS-power gate (RULE 3.3)
             # does not auto-REJECT this synthetic PROMOTE fixture.
-            "--oos-window-days", "10000",
+            "--oos-window-days",
+            "10000",
         ]
     )
     assert rc == 0
@@ -484,11 +472,16 @@ def test_cli_write_creates_cache(tmp_path, empty_hypotheses, empty_action_queue)
     rc = flpq.main(
         [
             "--write",
-            "--results-dir", str(d),
-            "--hypotheses-dir", str(empty_hypotheses),
-            "--action-queue", str(empty_action_queue),
-            "--cache-path", str(cache),
-            "--oos-window-days", "10000",
+            "--results-dir",
+            str(d),
+            "--hypotheses-dir",
+            str(empty_hypotheses),
+            "--action-queue",
+            str(empty_action_queue),
+            "--cache-path",
+            str(cache),
+            "--oos-window-days",
+            "10000",
         ]
     )
     assert rc == 0
@@ -499,17 +492,18 @@ def test_cli_write_creates_cache(tmp_path, empty_hypotheses, empty_action_queue)
     assert data["entries"][0]["strategy_id"] == "MNQ_WRITE_E1_RR1.0_CB1_FOO_O5"
 
 
-def test_cli_write_and_dry_run_mutually_exclusive(
-    tmp_path, empty_hypotheses, empty_action_queue
-):
+def test_cli_write_and_dry_run_mutually_exclusive(tmp_path, empty_hypotheses, empty_action_queue):
     with pytest.raises(SystemExit):
         flpq.main(
             [
                 "--write",
                 "--dry-run",
-                "--results-dir", str(tmp_path),
-                "--hypotheses-dir", str(empty_hypotheses),
-                "--action-queue", str(empty_action_queue),
+                "--results-dir",
+                str(tmp_path),
+                "--hypotheses-dir",
+                str(empty_hypotheses),
+                "--action-queue",
+                str(empty_action_queue),
             ]
         )
 
@@ -533,11 +527,16 @@ def test_cli_exit_code_2_on_error_entry(tmp_path, empty_hypotheses, empty_action
 
     rc = flpq.main(
         [
-            "--results-dir", str(d),
-            "--hypotheses-dir", str(empty_hypotheses),
-            "--action-queue", str(empty_action_queue),
-            "--cache-path", str(tmp_path / "x.yaml"),
-            "--oos-window-days", "10000",
+            "--results-dir",
+            str(d),
+            "--hypotheses-dir",
+            str(empty_hypotheses),
+            "--action-queue",
+            str(empty_action_queue),
+            "--cache-path",
+            str(tmp_path / "x.yaml"),
+            "--oos-window-days",
+            "10000",
         ]
     )
     assert rc == 2

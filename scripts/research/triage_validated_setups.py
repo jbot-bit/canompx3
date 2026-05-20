@@ -122,11 +122,7 @@ class TriageCandidate:
 
     @property
     def total_score(self) -> float:
-        return sum(
-            SCORE_WEIGHTS[k] * self.score_components[k]
-            for k in SCORE_WEIGHTS
-            if k in self.score_components
-        )
+        return sum(SCORE_WEIGHTS[k] * self.score_components[k] for k in SCORE_WEIGHTS if k in self.score_components)
 
 
 # ---------- result-MD index ----------
@@ -258,9 +254,7 @@ def compute_n_adequacy(n: int) -> float:
     return min(1.0, n / N_ADEQUACY_TARGET)
 
 
-def compute_oos_power_readiness(
-    sharpe: float, is_n: int, oos_n: int
-) -> tuple[float, float]:
+def compute_oos_power_readiness(sharpe: float, is_n: int, oos_n: int) -> tuple[float, float]:
     """Return (power_score, raw_power). 0.0 below OOS_N_FLOOR; canonical helper above.
 
     Cohen's d = ``sharpe`` (one-sample d == Sharpe when std cancels — same
@@ -570,10 +564,7 @@ def main(argv: list[str] | None = None) -> int:
 
     candidates.sort(key=lambda c: c.total_score, reverse=True)
 
-    print(
-        f"{'rank':>4} {'score':>6} {'sharpe':>6} {'n_IS':>5} {'oos_n':>5} "
-        f"{'pow':>5} {'years':>5}  strategy_id"
-    )
+    print(f"{'rank':>4} {'score':>6} {'sharpe':>6} {'n_IS':>5} {'oos_n':>5} {'pow':>5} {'years':>5}  strategy_id")
     for i, c in enumerate(candidates[: args.top_k], start=1):
         print(
             f"{i:>4} {c.total_score:>6.3f} {c.sharpe_ratio:>6.2f} "
@@ -585,22 +576,13 @@ def main(argv: list[str] | None = None) -> int:
         today = date.today()
         for c in candidates[: args.top_k]:
             try:
-                path = write_draft(
-                    c, drafts_dir=args.drafts_dir, today=today, overwrite=args.overwrite
-                )
-                rel = (
-                    path.relative_to(REPO_ROOT)
-                    if path.is_relative_to(REPO_ROOT)
-                    else path
-                )
+                path = write_draft(c, drafts_dir=args.drafts_dir, today=today, overwrite=args.overwrite)
+                rel = path.relative_to(REPO_ROOT) if path.is_relative_to(REPO_ROOT) else path
                 print(f"DRAFT_WRITTEN: {rel}")
             except FileExistsError as exc:
                 print(f"SKIPPED: {exc}", file=sys.stderr)
     else:
-        print(
-            f"\nDRY RUN — {min(args.top_k, len(candidates))} draft(s) NOT written. "
-            "Pass --write to persist."
-        )
+        print(f"\nDRY RUN — {min(args.top_k, len(candidates))} draft(s) NOT written. Pass --write to persist.")
     return 0
 
 

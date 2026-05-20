@@ -156,15 +156,9 @@ class TestJournalAppend:
 
     def test_append_increments_iter_across_strategies(self, tmp_path: Path):
         j = tmp_path / "journal.yaml"
-        cpr.append_journal_entry(
-            j, _make_candidate(strategy_id="A"), today=date(2026, 5, 20)
-        )
-        cpr.append_journal_entry(
-            j, _make_candidate(strategy_id="B"), today=date(2026, 5, 20)
-        )
-        cpr.append_journal_entry(
-            j, _make_candidate(strategy_id="C"), today=date(2026, 5, 21)
-        )
+        cpr.append_journal_entry(j, _make_candidate(strategy_id="A"), today=date(2026, 5, 20))
+        cpr.append_journal_entry(j, _make_candidate(strategy_id="B"), today=date(2026, 5, 20))
+        cpr.append_journal_entry(j, _make_candidate(strategy_id="C"), today=date(2026, 5, 21))
         payload = yaml.safe_load(j.read_text(encoding="utf-8"))
         iters = [e["iter"] for e in payload["entries"]]
         assert iters == [1, 2, 3]

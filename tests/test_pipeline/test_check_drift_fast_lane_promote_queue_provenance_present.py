@@ -80,9 +80,7 @@ def _first_gated_entry_index(payload: dict[str, Any]) -> int:
 def test_baseline_cache_passes(restore_cache):
     """The live cache must pass Check #172 in its current state."""
     violations = check_fast_lane_promote_queue_provenance_present()
-    assert violations == [], (
-        "baseline cache fails Check #172: " f"{violations}"
-    )
+    assert violations == [], f"baseline cache fails Check #172: {violations}"
 
 
 def test_missing_structural_hash_caught(restore_cache):
@@ -95,10 +93,7 @@ def test_missing_structural_hash_caught(restore_cache):
     violations = check_fast_lane_promote_queue_provenance_present()
 
     matching = [v for v in violations if "structural_hash" in v]
-    assert matching, (
-        "Check #172 did not catch a stripped structural_hash; "
-        f"got violations: {violations}"
-    )
+    assert matching, f"Check #172 did not catch a stripped structural_hash; got violations: {violations}"
 
 
 def test_null_k_lineage_field_caught(restore_cache):
@@ -113,10 +108,7 @@ def test_null_k_lineage_field_caught(restore_cache):
     violations = check_fast_lane_promote_queue_provenance_present()
 
     matching = [v for v in violations if "K_lane" in v or "missing required keys" in v]
-    assert matching, (
-        "Check #172 did not catch a missing k_lineage.K_lane key; "
-        f"got violations: {violations}"
-    )
+    assert matching, f"Check #172 did not catch a missing k_lineage.K_lane key; got violations: {violations}"
 
 
 def test_missing_n_hat_caught(restore_cache):
@@ -129,10 +121,7 @@ def test_missing_n_hat_caught(restore_cache):
     violations = check_fast_lane_promote_queue_provenance_present()
 
     matching = [v for v in violations if "n_hat" in v]
-    assert matching, (
-        "Check #172 did not catch a stripped n_hat; "
-        f"got violations: {violations}"
-    )
+    assert matching, f"Check #172 did not catch a stripped n_hat; got violations: {violations}"
 
 
 def test_mutated_rho_hat_caught(restore_cache):
@@ -145,10 +134,7 @@ def test_mutated_rho_hat_caught(restore_cache):
     violations = check_fast_lane_promote_queue_provenance_present()
 
     matching = [v for v in violations if "rho_hat_assumed" in v]
-    assert matching, (
-        "Check #172 did not catch rho_hat_assumed=0.6; "
-        f"got violations: {violations}"
-    )
+    assert matching, f"Check #172 did not catch rho_hat_assumed=0.6; got violations: {violations}"
 
 
 def test_tampered_banner_caught(restore_cache):
@@ -162,10 +148,7 @@ def test_tampered_banner_caught(restore_cache):
     violations = check_fast_lane_promote_queue_provenance_present()
 
     matching = [v for v in violations if "BANNER TAMPERED" in v]
-    assert matching, (
-        "Check #172 did not catch a tampered DERIVED-STATE banner; "
-        f"got violations: {violations}"
-    )
+    assert matching, f"Check #172 did not catch a tampered DERIVED-STATE banner; got violations: {violations}"
 
 
 # ---- STATUS_VALUES sibling-coverage tests --------------------------------
@@ -201,24 +184,13 @@ def restore_status_values():
 
 
 @pytest.mark.parametrize("token_to_drop", SUPPRESSION_TOKENS)
-def test_dropped_inline_suppression_token_caught(
-    token_to_drop: str, restore_status_values
-):
+def test_dropped_inline_suppression_token_caught(token_to_drop: str, restore_status_values):
     """Dropping any of the 6 inline tokens fails the parity branch."""
     import scripts.research.fast_lane_promote_queue as scanner_mod
 
-    scanner_mod.STATUS_VALUES = tuple(
-        t for t in scanner_mod.STATUS_VALUES if t != token_to_drop
-    )
+    scanner_mod.STATUS_VALUES = tuple(t for t in scanner_mod.STATUS_VALUES if t != token_to_drop)
 
     violations = check_fast_lane_promote_queue_provenance_present()
 
-    matching = [
-        v
-        for v in violations
-        if "STATUS_VALUES drift" in v and token_to_drop in v
-    ]
-    assert matching, (
-        f"Check #172 did not catch a dropped inline token {token_to_drop!r}; "
-        f"got violations: {violations}"
-    )
+    matching = [v for v in violations if "STATUS_VALUES drift" in v and token_to_drop in v]
+    assert matching, f"Check #172 did not catch a dropped inline token {token_to_drop!r}; got violations: {violations}"

@@ -112,8 +112,7 @@ def _validate_capital_class_boundary(prereg_path: str) -> None:
     # because public API must not trust caller type-discipline.
     if not isinstance(prereg_path, str):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TypeError(  # pyright: ignore[reportUnreachable]
-            f"fast_lane_trial_ledger: prereg_path must be str, "
-            f"got {type(prereg_path).__name__}"
+            f"fast_lane_trial_ledger: prereg_path must be str, got {type(prereg_path).__name__}"
         )
     lowered = prereg_path.lower()
     for forbidden in _CAPITAL_CLASS_FORBIDDEN_SUBSTRINGS:
@@ -129,49 +128,37 @@ def _validate_capital_class_boundary(prereg_path: str) -> None:
 def _validate_structural_hash(value: str) -> None:
     if not isinstance(value, str):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TypeError(  # pyright: ignore[reportUnreachable]
-            f"fast_lane_trial_ledger: structural_hash must be str, "
-            f"got {type(value).__name__}"
+            f"fast_lane_trial_ledger: structural_hash must be str, got {type(value).__name__}"
         )
     if len(value) != 16:
-        raise ValueError(
-            f"fast_lane_trial_ledger: structural_hash must be 16 hex chars, "
-            f"got {len(value)} ({value!r})"
-        )
+        raise ValueError(f"fast_lane_trial_ledger: structural_hash must be 16 hex chars, got {len(value)} ({value!r})")
     try:
         int(value, 16)
     except ValueError as exc:
-        raise ValueError(
-            f"fast_lane_trial_ledger: structural_hash {value!r} is not hex"
-        ) from exc
+        raise ValueError(f"fast_lane_trial_ledger: structural_hash {value!r} is not hex") from exc
 
 
 def _validate_iso8601_utc(value: str) -> None:
     if not isinstance(value, str):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TypeError(  # pyright: ignore[reportUnreachable]
-            f"fast_lane_trial_ledger: run_timestamp_utc must be str, "
-            f"got {type(value).__name__}"
+            f"fast_lane_trial_ledger: run_timestamp_utc must be str, got {type(value).__name__}"
         )
     # Accept either Z-suffix or +00:00 offset; reject naive timestamps so the
     # append-only timestamp comparison in Check #169 is unambiguous.
     if not (value.endswith("Z") or value.endswith("+00:00")):
         raise ValueError(
-            f"fast_lane_trial_ledger: run_timestamp_utc must be UTC "
-            f"(end with 'Z' or '+00:00'); got {value!r}"
+            f"fast_lane_trial_ledger: run_timestamp_utc must be UTC (end with 'Z' or '+00:00'); got {value!r}"
         )
     try:
         _dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
-        raise ValueError(
-            f"fast_lane_trial_ledger: run_timestamp_utc {value!r} is not "
-            f"ISO 8601"
-        ) from exc
+        raise ValueError(f"fast_lane_trial_ledger: run_timestamp_utc {value!r} is not ISO 8601") from exc
 
 
 def _validate_holdout_sentinels(entry_holdout_policy: str, entry_sacred_from: str) -> None:
     if entry_holdout_policy != HOLDOUT_POLICY_SENTINEL:
         raise ValueError(
-            f"fast_lane_trial_ledger: holdout_policy must be "
-            f"{HOLDOUT_POLICY_SENTINEL!r}; got {entry_holdout_policy!r}"
+            f"fast_lane_trial_ledger: holdout_policy must be {HOLDOUT_POLICY_SENTINEL!r}; got {entry_holdout_policy!r}"
         )
     if entry_sacred_from != HOLDOUT_SACRED_FROM_SENTINEL:
         raise ValueError(
@@ -207,20 +194,13 @@ def read_ledger(ledger_path: Path) -> dict[str, Any]:
     Fails fast on missing banner, missing schema_version, or schema mismatch.
     """
     if not ledger_path.exists():
-        raise FileNotFoundError(
-            f"fast_lane_trial_ledger: ledger file {ledger_path} does not exist"
-        )
+        raise FileNotFoundError(f"fast_lane_trial_ledger: ledger file {ledger_path} does not exist")
     raw = ledger_path.read_text(encoding="utf-8")
     data = yaml.safe_load(raw)
     if not isinstance(data, dict):
-        raise ValueError(
-            f"fast_lane_trial_ledger: {ledger_path} top-level must be a dict"
-        )
+        raise ValueError(f"fast_lane_trial_ledger: {ledger_path} top-level must be a dict")
     if data.get("do_not_hand_edit") is not True:
-        raise ValueError(
-            f"fast_lane_trial_ledger: {ledger_path} missing "
-            f"`do_not_hand_edit: true` banner"
-        )
+        raise ValueError(f"fast_lane_trial_ledger: {ledger_path} missing `do_not_hand_edit: true` banner")
     if data.get("schema_version") != LEDGER_SCHEMA_VERSION:
         raise ValueError(
             f"fast_lane_trial_ledger: {ledger_path} schema_version "
@@ -229,9 +209,7 @@ def read_ledger(ledger_path: Path) -> dict[str, Any]:
         )
     entries = data.get("entries", [])
     if not isinstance(entries, list):
-        raise ValueError(
-            f"fast_lane_trial_ledger: {ledger_path} `entries` must be a list"
-        )
+        raise ValueError(f"fast_lane_trial_ledger: {ledger_path} `entries` must be a list")
     return data
 
 
@@ -256,30 +234,17 @@ def append_trial_ledger_entry(
     _validate_holdout_sentinels(entry.holdout_policy, entry.holdout_sacred_from)
 
     if not isinstance(entry.run_id, str) or not entry.run_id.strip():
-        raise ValueError(
-            f"fast_lane_trial_ledger: run_id must be non-empty str, "
-            f"got {entry.run_id!r}"
-        )
+        raise ValueError(f"fast_lane_trial_ledger: run_id must be non-empty str, got {entry.run_id!r}")
     if entry.pathway not in {"A", "B"}:
-        raise ValueError(
-            f"fast_lane_trial_ledger: pathway must be 'A' or 'B', "
-            f"got {entry.pathway!r}"
-        )
+        raise ValueError(f"fast_lane_trial_ledger: pathway must be 'A' or 'B', got {entry.pathway!r}")
     if entry.testing_mode not in {"family", "individual"}:
         raise ValueError(
-            f"fast_lane_trial_ledger: testing_mode must be 'family' or "
-            f"'individual', got {entry.testing_mode!r}"
+            f"fast_lane_trial_ledger: testing_mode must be 'family' or 'individual', got {entry.testing_mode!r}"
         )
     if not isinstance(entry.K_declared, int) or isinstance(entry.K_declared, bool):
-        raise TypeError(
-            f"fast_lane_trial_ledger: K_declared must be int, "
-            f"got {type(entry.K_declared).__name__}"
-        )
+        raise TypeError(f"fast_lane_trial_ledger: K_declared must be int, got {type(entry.K_declared).__name__}")
     if entry.K_declared < 1:
-        raise ValueError(
-            f"fast_lane_trial_ledger: K_declared must be >= 1, "
-            f"got {entry.K_declared}"
-        )
+        raise ValueError(f"fast_lane_trial_ledger: K_declared must be >= 1, got {entry.K_declared}")
 
     data = read_ledger(ledger_path)
     entries: list[dict[str, Any]] = list(data.get("entries", []))

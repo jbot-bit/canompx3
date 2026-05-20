@@ -77,10 +77,7 @@ class BridgeRefused(Exception):
 # ``cherry_pick_ranker.HEAVYWEIGHT_T_THRESHOLD`` (3.79) under Check #160
 # parity; here we emit prose only -- the runner resolves the numeric value
 # from doctrine at execution time.
-HEAVYWEIGHT_T_THRESHOLD_PROSE: str = (
-    "Criterion 4 no-theory strict threshold (t >= 3.79, "
-    "Chordia 2018 verbatim Tier 1)"
-)
+HEAVYWEIGHT_T_THRESHOLD_PROSE: str = "Criterion 4 no-theory strict threshold (t >= 3.79, Chordia 2018 verbatim Tier 1)"
 
 # Required scope fields -- absence raises ValueError. Every field is consumed
 # downstream by ``primary_schema.family_cells`` or by the heavyweight Chordia
@@ -109,9 +106,7 @@ _OPTIONAL_SCOPE_FIELDS: tuple[str, ...] = (
 # defend against the field-presence trap (theory_citation et al.). Required
 # fields raise on absence; unknown fields raise nothing -- the asymmetry is
 # deliberate and is the entire point of the fail-closed split.
-_ALLOWED_SCOPE_FIELDS: tuple[str, ...] = (
-    _REQUIRED_SCOPE_FIELDS + _OPTIONAL_SCOPE_FIELDS
-)
+_ALLOWED_SCOPE_FIELDS: tuple[str, ...] = _REQUIRED_SCOPE_FIELDS + _OPTIONAL_SCOPE_FIELDS
 
 # Methodology rules boilerplate. Each entry MUST correspond to a real RULE
 # block in ``.claude/rules/backtesting-methodology.md``. Parity enforced by
@@ -147,18 +142,14 @@ def _rel_to_repo(path: Path) -> str:
         return str(path).replace("\\", "/")
 
 
-def locate_source_yaml(
-    result_md: Path, *, hypotheses_dir: Path = HYPOTHESES_DIR
-) -> Path | None:
+def locate_source_yaml(result_md: Path, *, hypotheses_dir: Path = HYPOTHESES_DIR) -> Path | None:
     """Find the fast-lane source YAML matching a result MD by filename stem."""
     stem = result_md.stem
     candidate = hypotheses_dir / f"{stem}.yaml"
     return candidate if candidate.exists() else None
 
 
-def load_fast_lane_source(
-    result_md: Path, *, hypotheses_dir: Path = HYPOTHESES_DIR
-) -> FastLaneSource | None:
+def load_fast_lane_source(result_md: Path, *, hypotheses_dir: Path = HYPOTHESES_DIR) -> FastLaneSource | None:
     """Load and validate a fast-lane result + source pair.
 
     Returns None when either the result MD or matching YAML is missing,
@@ -192,9 +183,7 @@ def _draft_slug(strategy_id: str) -> str:
     return strategy_id.lower().replace("_", "-").replace(".", "-")
 
 
-def _lookup_promote_queue_entry(
-    strategy_id: str, *, queue_path: Path = PROMOTE_QUEUE_CACHE
-) -> dict[str, Any] | None:
+def _lookup_promote_queue_entry(strategy_id: str, *, queue_path: Path = PROMOTE_QUEUE_CACHE) -> dict[str, Any] | None:
     """Return the promote_queue.yaml entry for ``strategy_id``, or None.
 
     The bridge needs ``structural_hash`` + ``k_lineage`` to enforce the
@@ -265,11 +254,7 @@ def _bridge_preflight_refuse(
     """
     scope = source.scope
     entry_model_raw = scope.get("entry_model")
-    entry_model = (
-        entry_model_raw.upper().strip()
-        if isinstance(entry_model_raw, str)
-        else ""
-    )
+    entry_model = entry_model_raw.upper().strip() if isinstance(entry_model_raw, str) else ""
     filter_type = scope.get("filter_type", "")
     if not isinstance(filter_type, str):
         filter_type = ""
@@ -311,9 +296,7 @@ def _bridge_preflight_refuse(
             )
 
     # Triggers 3 + 4 both need the scanner cache entry.
-    cache_entry = _lookup_promote_queue_entry(
-        scope["strategy_id"], queue_path=queue_path
-    )
+    cache_entry = _lookup_promote_queue_entry(scope["strategy_id"], queue_path=queue_path)
     if cache_entry is None:
         # No cache entry yet -- the scanner has not seen this result MD.
         # Pre-flight cannot enforce the structural-hash gates here. Per
@@ -393,9 +376,7 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
     _bridge_preflight_refuse(source)
 
     scope = source.scope
-    missing_required = [
-        f for f in _REQUIRED_SCOPE_FIELDS if scope.get(f) in (None, "")
-    ]
+    missing_required = [f for f in _REQUIRED_SCOPE_FIELDS if scope.get(f) in (None, "")]
     if missing_required:
         raise ValueError(
             "fast-lane source scope is missing required field(s): "
@@ -423,8 +404,7 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
             "fast-lane PROMOTE is provenance-only, not verdict evidence."
         ),
         "rule_9_canonical_layers": (
-            "Reads only orb_outcomes JOIN daily_features per "
-            "chordia_strict_unlock_v1.py canonical layer discipline."
+            "Reads only orb_outcomes JOIN daily_features per chordia_strict_unlock_v1.py canonical layer discipline."
         ),
         "rule_10_pre_registration": (
             "Operator must commit this prereg to docs/audit/hypotheses/ "
@@ -433,15 +413,13 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
         ),
     }
     methodology_block: dict[str, dict[str, str]] = {
-        rule: {"application": methodology_application_defaults[rule]}
-        for rule in METHODOLOGY_RULES_APPLIED
+        rule: {"application": methodology_application_defaults[rule]} for rule in METHODOLOGY_RULES_APPLIED
     }
 
     prereg: dict[str, Any] = {
         "metadata": {
             "theory_grant": False,
-            "name": _draft_slug(strategy_id).replace("-", "_")
-            + "_chordia_unlock_v1",
+            "name": _draft_slug(strategy_id).replace("-", "_") + "_chordia_unlock_v1",
             "purpose": (
                 "Heavyweight Chordia strict unlock authored from fast-lane "
                 f"v5.1 PROMOTE provenance ({source.result_md_rel}). "
@@ -476,17 +454,12 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
             ],
             "notes": [
                 "Authored by scripts/research/fast_lane_to_heavyweight_bridge.py.",
-                "Provenance: fast-lane v5.1 PROMOTE result at "
-                f"{source.result_md_rel}.",
+                f"Provenance: fast-lane v5.1 PROMOTE result at {source.result_md_rel}.",
                 f"Threshold basis: {HEAVYWEIGHT_T_THRESHOLD_PROSE}.",
                 "Mode A holdout remains sacred from 2026-01-01.",
             ],
         },
-        "scope": {
-            k: scope[k]
-            for k in _ALLOWED_SCOPE_FIELDS
-            if k in scope
-        },
+        "scope": {k: scope[k] for k in _ALLOWED_SCOPE_FIELDS if k in scope},
         "data_policy": {
             "is_window": {
                 "description": "trading_day < HOLDOUT_SACRED_FROM",
@@ -503,9 +476,7 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
             "tuning_against_oos": False,
             "canonical_layers_only": True,
             "scratch_policy": "realized-eod",
-            "scratch_handling": (
-                "COALESCE(pnl_r, 0.0) -- never WHERE pnl_r IS NOT NULL"
-            ),
+            "scratch_handling": ("COALESCE(pnl_r, 0.0) -- never WHERE pnl_r IS NOT NULL"),
         },
         "grounding": {
             "filter_grounding_status": {
@@ -546,17 +517,12 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
             "k_lane": 1,
             "k_session": 1,
             "chordia_threshold_basis": HEAVYWEIGHT_T_THRESHOLD_PROSE,
-            "promotion_gate": (
-                "PASS_CHORDIA only; PASS_PROTOCOL_A not available without "
-                "theory grant upgrade"
-            ),
+            "promotion_gate": ("PASS_CHORDIA only; PASS_PROTOCOL_A not available without theory grant upgrade"),
         },
         "trial_budget": {
             "primary_selection_trials": 1,
             "schema_locked_before_any_metric": True,
-            "minbtl_bound": (
-                "MinBTL = 2*ln(1)/1 = 0.0 years; N=1 within Bailey 2013 cap"
-            ),
+            "minbtl_bound": ("MinBTL = 2*ln(1)/1 = 0.0 years; N=1 within Bailey 2013 cap"),
         },
         "total_hypothesis_count": 1,
         "total_expected_trials": 1,
@@ -573,8 +539,7 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
                 "literature grounding (or accept no-theory strict 3.79 hurdle)",
                 "OOS power readiness via research/oos_power.py",
                 "era-stability replay",
-                "K-budget MinBTL re-verification "
-                "(scripts/tools/estimate_k_budget.py)",
+                "K-budget MinBTL re-verification (scripts/tools/estimate_k_budget.py)",
             ],
             "forbidden_now": [
                 "any deployment action",
@@ -625,8 +590,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="fast_lane_to_heavyweight_bridge",
         description=(
-            "Generate a heavyweight Chordia strict-unlock prereg DRAFT from a "
-            "fast-lane v5.1 PROMOTE result MD."
+            "Generate a heavyweight Chordia strict-unlock prereg DRAFT from a fast-lane v5.1 PROMOTE result MD."
         ),
     )
     p.add_argument(

@@ -231,8 +231,7 @@ def render_report(
     lines.append("")
 
     if rollup is None or not isinstance(rollup, dict):
-        lines.append("**ERROR:** status roll-up missing or unparseable; "
-                     "no further surfaces rendered.")
+        lines.append("**ERROR:** status roll-up missing or unparseable; no further surfaces rendered.")
         return "\n".join(lines) + "\n"
 
     entries = rollup.get("entries") or []
@@ -271,10 +270,7 @@ def render_report(
         lines.append("| strategy_id | upstream_artifact |")
         lines.append("|---|---|")
         for e in errors:
-            lines.append(
-                f"| {e.get('strategy_id', '?')} "
-                f"| {e.get('upstream_artifact_path') or '?'} |"
-            )
+            lines.append(f"| {e.get('strategy_id', '?')} | {e.get('upstream_artifact_path') or '?'} |")
     else:
         lines.append("_zero ERROR entries — chain is internally consistent._")
     lines.append("")
@@ -314,8 +310,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help=(
-            "Strip --write flags from every composed writer; chain runs "
-            "in non-mutating mode. Caches are NOT refreshed."
+            "Strip --write flags from every composed writer; chain runs in non-mutating mode. Caches are NOT refreshed."
         ),
     )
     p.add_argument(

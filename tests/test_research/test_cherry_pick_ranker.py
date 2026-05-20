@@ -127,9 +127,7 @@ class TestOOSPowerReadiness:
         # IS pooled_t=3.06, N=500 -> cohen_d=3.06/sqrt(500)=0.137 (small effect).
         # One-sample power at d=0.137, n=35 is well below 0.50.
         val = cpr.compute_oos_power_readiness(0.17, 3.06, 500, oos)
-        assert val < 0.50, (
-            f"large-IS-N + small-OOS-N must not inflate power; got {val}"
-        )
+        assert val < 0.50, f"large-IS-N + small-OOS-N must not inflate power; got {val}"
 
     def test_pooled_expr_zero_with_nonzero_t_computes_power_from_t(self):
         """Audit second-pass open item: pooled_expr=0 AND pooled_t!=0 edge case.
@@ -149,9 +147,7 @@ class TestOOSPowerReadiness:
         # Same cohen_d as test_matches_canonical_one_sample_helper.
         from research.oos_power import one_sample_power
 
-        expected = float(
-            one_sample_power(abs(3.06) / (226**0.5), 100, alpha=0.05)
-        )
+        expected = float(one_sample_power(abs(3.06) / (226**0.5), 100, alpha=0.05))
         assert val == pytest.approx(expected, abs=1e-9)
 
 
@@ -357,9 +353,7 @@ def test_skip_recommended_below_floor(synthetic_queue):
 
 def test_empty_queue(tmp_path):
     queue = tmp_path / "promote_queue.yaml"
-    queue.write_text(
-        yaml.safe_dump({"schema_version": 1, "entries": []}), encoding="utf-8"
-    )
+    queue.write_text(yaml.safe_dump({"schema_version": 1, "entries": []}), encoding="utf-8")
     entries = cpr._load_queue_entries(queue)
     ranked = cpr.rank_queue_entries(entries, results_dir=tmp_path)
     assert ranked == []
@@ -417,9 +411,7 @@ def test_pooled_t_zero_is_preserved_not_nan_coerced(tmp_path):
     ranked = cpr.rank_queue_entries(entries, results_dir=results)
     assert len(ranked) == 1
     # pooled_t MUST be the literal 0.0, not NaN
-    assert ranked[0].pooled_t == 0.0, (
-        f"pooled_t=0.0 must be preserved, got {ranked[0].pooled_t!r}"
-    )
+    assert ranked[0].pooled_t == 0.0, f"pooled_t=0.0 must be preserved, got {ranked[0].pooled_t!r}"
     # And the score must still safely compute (early-return at t<1e-9 fires
     # in oos_power; deflation_headroom is 0 below threshold; dir_match is 0)
     assert ranked[0].total_score >= 0.0

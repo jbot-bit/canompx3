@@ -198,9 +198,7 @@ def format_spec_block(scope: dict[str, Any]) -> str:
         "filter_type",
         "direction",
     )
-    return "\n".join(
-        f"  {k}: {scope[k]}" for k in keys if k in scope and scope[k] is not None
-    )
+    return "\n".join(f"  {k}: {scope[k]}" for k in keys if k in scope and scope[k] is not None)
 
 
 def format_draft_excerpt(draft: dict[str, Any]) -> str:
@@ -311,8 +309,7 @@ def build_grounded_draft(
 
     primary = grounded.setdefault("primary_schema", {})
     primary["chordia_threshold_basis"] = (
-        "Criterion 4 with-theory threshold (t >= 3.00, Chordia 2018 Tier 2). "
-        f"Citation: {theory_citation}"
+        f"Criterion 4 with-theory threshold (t >= 3.00, Chordia 2018 Tier 2). Citation: {theory_citation}"
     )
     primary["promotion_gate"] = (
         "PASS_CHORDIA at t>=3.00 with-theory; literature_grounding "
@@ -325,10 +322,7 @@ def build_grounded_draft(
 def write_grounded(grounded: dict[str, Any], out_path: Path) -> Path:
     """Write the grounded.yaml. Refuses to overwrite by default."""
     if out_path.exists():
-        raise FileExistsError(
-            f"Grounded draft already exists: {out_path}. Delete or rename "
-            "before re-grounding."
-        )
+        raise FileExistsError(f"Grounded draft already exists: {out_path}. Delete or rename before re-grounding.")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     header = (
         "# LITERATURE-GROUNDED DRAFT -- not yet preregistered.\n"
@@ -462,8 +456,7 @@ def ground_bridge_draft(
         )
     except (CostCeilingExceeded, LLMRequestError) as exc:
         raise RuntimeError(
-            f"Grounder LLM call failed: {exc}. Bridge draft is untouched; "
-            "rerun after fixing the LLM access path."
+            f"Grounder LLM call failed: {exc}. Bridge draft is untouched; rerun after fixing the LLM access path."
         ) from exc
 
     parsed = parse_llm_grounding_output(result.yaml_text)
@@ -492,9 +485,7 @@ def ground_bridge_draft(
     theory_citation = parsed["theory_citation"]
     economic_basis = parsed["economic_basis"]
 
-    verification = verify_citation_content(
-        corpus, theory_citation, economic_basis
-    )
+    verification = verify_citation_content(corpus, theory_citation, economic_basis)
     cited_files_raw = verification.get("cited_files", [])
     cited_files: list[str] = []
     if isinstance(cited_files_raw, (list, tuple)):
@@ -589,10 +580,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "draft",
         type=Path,
-        help=(
-            "Path to a bridge draft, "
-            "docs/audit/hypotheses/drafts/*-chordia-heavyweight-v1.draft.yaml."
-        ),
+        help=("Path to a bridge draft, docs/audit/hypotheses/drafts/*-chordia-heavyweight-v1.draft.yaml."),
     )
     p.add_argument(
         "--top-k",

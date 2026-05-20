@@ -73,9 +73,7 @@ def _write_bridge_draft(
             },
         },
         "primary_schema": {
-            "chordia_threshold_basis": (
-                "Criterion 4 no-theory strict threshold (t >= 3.79)"
-            ),
+            "chordia_threshold_basis": ("Criterion 4 no-theory strict threshold (t >= 3.79)"),
         },
     }
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
@@ -192,29 +190,19 @@ class TestBuildSearchQuery:
 
 class TestParseLLMGroundingOutput:
     def test_parses_valid_yaml(self):
-        text = (
-            'theory_citation: "harris_2002_microstructure"\n'
-            'economic_basis: |\n  Stop cascade liquidity demand.\n'
-        )
+        text = 'theory_citation: "harris_2002_microstructure"\neconomic_basis: |\n  Stop cascade liquidity demand.\n'
         parsed = grounder.parse_llm_grounding_output(text)
         assert parsed is not None
         assert parsed["theory_citation"] == "harris_2002_microstructure"
         assert "Stop cascade" in parsed["economic_basis"]
 
     def test_strips_markdown_fences(self):
-        text = (
-            "```yaml\n"
-            'theory_citation: "x"\n'
-            'economic_basis: "y mechanism here"\n'
-            "```"
-        )
+        text = '```yaml\ntheory_citation: "x"\neconomic_basis: "y mechanism here"\n```'
         parsed = grounder.parse_llm_grounding_output(text)
         assert parsed is not None
 
     def test_returns_none_on_refusal(self):
-        assert grounder.parse_llm_grounding_output(
-            "REFUSE: no_literature_match"
-        ) is None
+        assert grounder.parse_llm_grounding_output("REFUSE: no_literature_match") is None
 
     def test_returns_none_on_empty_citation(self):
         """FIELD-PRESENCE TRAP DEFENSE: empty citation must never parse OK."""
@@ -235,9 +223,7 @@ class TestParseLLMGroundingOutput:
         assert grounder.parse_llm_grounding_output(text) is None
 
     def test_returns_none_on_invalid_yaml(self):
-        assert grounder.parse_llm_grounding_output(
-            "not: : yaml: : at all"
-        ) is None
+        assert grounder.parse_llm_grounding_output("not: : yaml: : at all") is None
 
     def test_returns_none_on_non_mapping(self):
         assert grounder.parse_llm_grounding_output("- list\n- form") is None
@@ -293,18 +279,18 @@ class TestGroundBridgeDraftHappyPath:
         # LLM returns a valid two-key YAML pointing at harris_2002_microstructure
         # with overlapping mechanism terms ("stop", "cascade", "liquidity",
         # "breakout", "momentum") so verify_citation_content passes.
-        set_mock_response(_llm_response(
-            'theory_citation: "harris_2002_microstructure"\n'
-            "economic_basis: |\n"
-            "  Stop cascade liquidity demand mechanism: momentum traders "
-            "push price through ORB breakout levels, triggering stop-order "
-            "ladder cascade as liquidity providers withdraw on directional "
-            "flow through ORB_G5 filtered breakouts.\n"
-        ))
-
-        result = grounder.ground_bridge_draft(
-            draft, literature_dir=lit_dir, top_k=3
+        set_mock_response(
+            _llm_response(
+                'theory_citation: "harris_2002_microstructure"\n'
+                "economic_basis: |\n"
+                "  Stop cascade liquidity demand mechanism: momentum traders "
+                "push price through ORB breakout levels, triggering stop-order "
+                "ladder cascade as liquidity providers withdraw on directional "
+                "flow through ORB_G5 filtered breakouts.\n"
+            )
         )
+
+        result = grounder.ground_bridge_draft(draft, literature_dir=lit_dir, top_k=3)
 
         assert result.verdict == grounder.VERDICT_GROUNDED
         assert result.out_path is not None
@@ -327,12 +313,14 @@ class TestGroundBridgeDraftHappyPath:
         draft = _write_bridge_draft(tmp_path)
         lit_dir = _write_lit_corpus(tmp_path)
         original_bytes = draft.read_bytes()
-        set_mock_response(_llm_response(
-            'theory_citation: "harris_2002_microstructure"\n'
-            "economic_basis: |\n"
-            "  Stop cascade liquidity demand momentum breakout mechanism "
-            "through ORB_G5 filtered directional flow cascade.\n"
-        ))
+        set_mock_response(
+            _llm_response(
+                'theory_citation: "harris_2002_microstructure"\n'
+                "economic_basis: |\n"
+                "  Stop cascade liquidity demand momentum breakout mechanism "
+                "through ORB_G5 filtered directional flow cascade.\n"
+            )
+        )
         grounder.ground_bridge_draft(draft, literature_dir=lit_dir)
         assert draft.read_bytes() == original_bytes
 
@@ -341,8 +329,7 @@ class TestGroundBridgeDraftRefusals:
     def test_no_local_lit_when_corpus_irrelevant(self, tmp_path):
         """Search returns zero results -> NO_LOCAL_LIT verdict, no LLM call."""
         draft = _write_bridge_draft(
-            tmp_path, filter_type="ZZZ_UNKNOWN_MECHANISM_TOKEN_ABCXYZ",
-            session="NONEXISTENT_SESSION_FOOBAR"
+            tmp_path, filter_type="ZZZ_UNKNOWN_MECHANISM_TOKEN_ABCXYZ", session="NONEXISTENT_SESSION_FOOBAR"
         )
         lit_dir = _write_lit_corpus(tmp_path)
         # Don't set a mock -- if the grounder calls the LLM despite zero
@@ -381,9 +368,7 @@ class TestGroundBridgeDraftRefusals:
         """FIELD-PRESENCE TRAP DEFENSE: empty theory_citation never written."""
         draft = _write_bridge_draft(tmp_path)
         lit_dir = _write_lit_corpus(tmp_path)
-        set_mock_response(_llm_response(
-            'theory_citation: ""\neconomic_basis: "anything"\n'
-        ))
+        set_mock_response(_llm_response('theory_citation: ""\neconomic_basis: "anything"\n'))
 
         result = grounder.ground_bridge_draft(draft, literature_dir=lit_dir)
 
@@ -396,12 +381,14 @@ class TestGroundBridgeDraftRefusals:
         """LLM cites a real file but economic_basis tokens don't overlap body."""
         draft = _write_bridge_draft(tmp_path)
         lit_dir = _write_lit_corpus(tmp_path)
-        set_mock_response(_llm_response(
-            'theory_citation: "unrelated_paper"\n'
-            "economic_basis: |\n"
-            "  Completely unrelated mechanism: superconductor lattice "
-            "phonon coupling drives quantum entanglement breakouts.\n"
-        ))
+        set_mock_response(
+            _llm_response(
+                'theory_citation: "unrelated_paper"\n'
+                "economic_basis: |\n"
+                "  Completely unrelated mechanism: superconductor lattice "
+                "phonon coupling drives quantum entanglement breakouts.\n"
+            )
+        )
 
         result = grounder.ground_bridge_draft(draft, literature_dir=lit_dir)
 
@@ -417,10 +404,7 @@ class TestVerdictLabels:
         If a new VERDICT_* constant is added, ALL_VERDICTS must include it.
         Documents the closed set the journal schema column accepts.
         """
-        verdict_names = {
-            n for n in dir(grounder)
-            if n.startswith("VERDICT_") and isinstance(getattr(grounder, n), str)
-        }
+        verdict_names = {n for n in dir(grounder) if n.startswith("VERDICT_") and isinstance(getattr(grounder, n), str)}
         verdict_values = {getattr(grounder, n) for n in verdict_names}
         assert verdict_values == set(grounder.ALL_VERDICTS)
 

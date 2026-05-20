@@ -58,9 +58,7 @@ def _normalise_instrument(value: Any) -> str:
     from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS  # local import: avoid cycle on cold start
 
     if not isinstance(value, str):
-        raise TypeError(
-            f"structural_hash.instrument: expected str, got {type(value).__name__}"
-        )
+        raise TypeError(f"structural_hash.instrument: expected str, got {type(value).__name__}")
     upper = value.strip().upper()
     if upper not in set(ACTIVE_ORB_INSTRUMENTS):
         raise ValueError(
@@ -75,9 +73,7 @@ def _normalise_orb_label(value: Any) -> str:
     from pipeline.dst import SESSION_CATALOG  # local import: avoid cycle on cold start
 
     if not isinstance(value, str):
-        raise TypeError(
-            f"structural_hash.orb_label: expected str, got {type(value).__name__}"
-        )
+        raise TypeError(f"structural_hash.orb_label: expected str, got {type(value).__name__}")
     upper = value.strip().upper()
     if upper not in SESSION_CATALOG:
         raise ValueError(
@@ -92,13 +88,9 @@ def _normalise_orb_minutes(value: Any) -> int:
     if isinstance(value, bool):  # bool is int subclass; reject explicitly
         raise TypeError("structural_hash.orb_minutes: bool not accepted; expected int")
     if not isinstance(value, int):
-        raise TypeError(
-            f"structural_hash.orb_minutes: expected int, got {type(value).__name__}"
-        )
+        raise TypeError(f"structural_hash.orb_minutes: expected int, got {type(value).__name__}")
     if value not in (5, 15, 30):
-        raise ValueError(
-            f"structural_hash.orb_minutes: {value!r} not in {{5, 15, 30}}"
-        )
+        raise ValueError(f"structural_hash.orb_minutes: {value!r} not in {{5, 15, 30}}")
     return value
 
 
@@ -107,9 +99,7 @@ def _normalise_rr_target(value: Any) -> float:
     if isinstance(value, bool):
         raise TypeError("structural_hash.rr_target: bool not accepted; expected number")
     if not isinstance(value, (int, float)):
-        raise TypeError(
-            f"structural_hash.rr_target: expected number, got {type(value).__name__}"
-        )
+        raise TypeError(f"structural_hash.rr_target: expected number, got {type(value).__name__}")
     f = float(value)
     if f != f or f in (float("inf"), float("-inf")):
         raise ValueError(f"structural_hash.rr_target: {value!r} is not finite")
@@ -120,31 +110,21 @@ def _normalise_entry_model(value: Any) -> str:
     """E1/E2 active; E0 purged; E3 graveyard-banned. Suppression rule fires
     downstream in the scanner on E0/E3 -- hash itself does not gate."""
     if not isinstance(value, str):
-        raise TypeError(
-            f"structural_hash.entry_model: expected str, got {type(value).__name__}"
-        )
+        raise TypeError(f"structural_hash.entry_model: expected str, got {type(value).__name__}")
     upper = value.strip().upper()
     if upper not in {"E0", "E1", "E2", "E3"}:
-        raise ValueError(
-            f"structural_hash.entry_model: {value!r} not in {{E0, E1, E2, E3}}"
-        )
+        raise ValueError(f"structural_hash.entry_model: {value!r} not in {{E0, E1, E2, E3}}")
     return upper
 
 
 def _normalise_confirm_bars(value: Any) -> int:
     """Accept 0, 1, or 2. Fail-closed on anything else."""
     if isinstance(value, bool):
-        raise TypeError(
-            "structural_hash.confirm_bars: bool not accepted; expected int"
-        )
+        raise TypeError("structural_hash.confirm_bars: bool not accepted; expected int")
     if not isinstance(value, int):
-        raise TypeError(
-            f"structural_hash.confirm_bars: expected int, got {type(value).__name__}"
-        )
+        raise TypeError(f"structural_hash.confirm_bars: expected int, got {type(value).__name__}")
     if value not in (0, 1, 2):
-        raise ValueError(
-            f"structural_hash.confirm_bars: {value!r} not in {{0, 1, 2}}"
-        )
+        raise ValueError(f"structural_hash.confirm_bars: {value!r} not in {{0, 1, 2}}")
     return value
 
 
@@ -154,9 +134,7 @@ def _normalise_filter_type(value: Any) -> str:
     from trading_app.config import ALL_FILTERS  # local import: heavy module
 
     if not isinstance(value, str):
-        raise TypeError(
-            f"structural_hash.filter_type: expected str, got {type(value).__name__}"
-        )
+        raise TypeError(f"structural_hash.filter_type: expected str, got {type(value).__name__}")
     stripped = value.strip()
     if stripped == "":
         return ""  # explicit no-filter
@@ -171,14 +149,10 @@ def _normalise_filter_type(value: Any) -> str:
 def _normalise_direction(value: Any) -> str:
     """Accept LONG, SHORT, or BOTH (case-normalised)."""
     if not isinstance(value, str):
-        raise TypeError(
-            f"structural_hash.direction: expected str, got {type(value).__name__}"
-        )
+        raise TypeError(f"structural_hash.direction: expected str, got {type(value).__name__}")
     upper = value.strip().upper()
     if upper not in {"LONG", "SHORT", "BOTH"}:
-        raise ValueError(
-            f"structural_hash.direction: {value!r} not in {{LONG, SHORT, BOTH}}"
-        )
+        raise ValueError(f"structural_hash.direction: {value!r} not in {{LONG, SHORT, BOTH}}")
     return upper
 
 
@@ -187,10 +161,7 @@ def _normalise_filter_threshold(value: Any) -> str:
     if value is None:
         return ""
     if not isinstance(value, str):
-        raise TypeError(
-            f"structural_hash.filter_threshold: expected str or None, "
-            f"got {type(value).__name__}"
-        )
+        raise TypeError(f"structural_hash.filter_threshold: expected str or None, got {type(value).__name__}")
     return value.strip()
 
 
@@ -246,8 +217,7 @@ def compute_structural_hash(inputs: dict[str, Any]) -> str:
     missing = [k for k in HASH_SCHEMA_INPUTS if k not in inputs]
     if missing:
         raise KeyError(
-            f"compute_structural_hash: missing required keys {missing}; "
-            f"expected exactly {list(HASH_SCHEMA_INPUTS)}"
+            f"compute_structural_hash: missing required keys {missing}; expected exactly {list(HASH_SCHEMA_INPUTS)}"
         )
 
     extras = [k for k in inputs if k not in _NORMALISERS]

@@ -1541,11 +1541,7 @@ class SessionOrchestrator:
             # returns MagicMock for any attr — these are truthy but not
             # comparable to int / castable to float. Only emit when both
             # values are real numbers and at least one trade has been seen.
-            if (
-                isinstance(trade_count, int)
-                and trade_count > 0
-                and isinstance(total_slip, (int, float))
-            ):
+            if isinstance(trade_count, int) and trade_count > 0 and isinstance(total_slip, (int, float)):
                 snapshot["realized_slippage_pts"] = float(total_slip)
 
         return snapshot

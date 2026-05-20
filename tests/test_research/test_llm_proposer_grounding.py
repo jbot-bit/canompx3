@@ -79,28 +79,19 @@ class TestSearchCorpus:
         corpus = [a, b, c]
         # Query overlaps heavily with A (stop, cascade, liquidity, breakout),
         # moderately with B (breakout), nothing with C.
-        results = search_corpus(
-            corpus, "stop cascade liquidity breakout signals", top_k=5
-        )
+        results = search_corpus(corpus, "stop cascade liquidity breakout signals", top_k=5)
         slugs = [r["slug"] for r in results]
         assert slugs[0] == "harris_microstructure"
         assert "carver_sizing" not in slugs
 
     def test_top_k_bound(self):
-        corpus = [
-            _make_entry(
-                f"entry_{i}", f"Title {i}", "breakout momentum trend follow signal"
-            )
-            for i in range(10)
-        ]
+        corpus = [_make_entry(f"entry_{i}", f"Title {i}", "breakout momentum trend follow signal") for i in range(10)]
         results = search_corpus(corpus, "breakout momentum trend signal", top_k=3)
         assert len(results) == 3
 
     def test_min_overlap_floor_excludes_weak_matches(self):
         corpus = [
-            _make_entry(
-                "weak", "Weak", "breakout"
-            ),  # only one query-token overlap
+            _make_entry("weak", "Weak", "breakout"),  # only one query-token overlap
             _make_entry(
                 "strong",
                 "Strong",
@@ -108,9 +99,7 @@ class TestSearchCorpus:
             ),
         ]
         # min_overlap defaults to 2 -> "weak" excluded
-        results = search_corpus(
-            corpus, "breakout momentum trend follow signal", top_k=5
-        )
+        results = search_corpus(corpus, "breakout momentum trend follow signal", top_k=5)
         slugs = [r["slug"] for r in results]
         assert slugs == ["strong"]
 
@@ -206,9 +195,7 @@ class TestCheckGroundingProvenanceBlock:
         assert failures[0].fatal is False
 
     def test_missing_slug_emits_nonfatal(self):
-        parsed = {
-            "grounding_provenance": {"retrieved_extracts": [{"slug": ""}]}
-        }
+        parsed = {"grounding_provenance": {"retrieved_extracts": [{"slug": ""}]}}
         failures = check_grounding_provenance_block(parsed, self._corpus())
         assert any(f.code == "GROUNDING_PROVENANCE_SLUG_MISSING" for f in failures)
         assert not any(f.fatal for f in failures)

@@ -133,9 +133,7 @@ class TestClassifyIntegration:
 
     def test_oos_window_error_propagated(self):
         entry = _entry(fire=0.50)
-        status, reason = classify(
-            entry, oos_window_days=None, oos_window_error="DB unreadable"
-        )
+        status, reason = classify(entry, oos_window_days=None, oos_window_error="DB unreadable")
         assert status == "REJECTED_OOS_UNPOWERED"
         assert "DB unreadable" in (reason or "")
 

@@ -60,27 +60,20 @@ def _two_canonical_instruments() -> tuple[str, str]:
     """Return two distinct canonical instruments, deterministically ordered."""
     sorted_instruments = sorted(ACTIVE_ORB_INSTRUMENTS)
     assert len(sorted_instruments) >= 2, (
-        "test fixture: ACTIVE_ORB_INSTRUMENTS must contain >= 2 instruments "
-        f"(got {sorted_instruments})"
+        f"test fixture: ACTIVE_ORB_INSTRUMENTS must contain >= 2 instruments (got {sorted_instruments})"
     )
     return sorted_instruments[0], sorted_instruments[1]
 
 
 def _two_canonical_orb_labels() -> tuple[str, str]:
     sorted_labels = sorted(SESSION_CATALOG.keys())
-    assert len(sorted_labels) >= 2, (
-        f"test fixture: SESSION_CATALOG must contain >= 2 labels "
-        f"(got {sorted_labels})"
-    )
+    assert len(sorted_labels) >= 2, f"test fixture: SESSION_CATALOG must contain >= 2 labels (got {sorted_labels})"
     return sorted_labels[0], sorted_labels[1]
 
 
 def _two_canonical_filters() -> tuple[str, str]:
     sorted_filters = sorted(ALL_FILTERS.keys())
-    assert len(sorted_filters) >= 2, (
-        f"test fixture: ALL_FILTERS must contain >= 2 entries "
-        f"(got {sorted_filters})"
-    )
+    assert len(sorted_filters) >= 2, f"test fixture: ALL_FILTERS must contain >= 2 entries (got {sorted_filters})"
     return sorted_filters[0], sorted_filters[1]
 
 
@@ -217,8 +210,7 @@ def test_numeric_axes_produce_distinct_hashes():
         variant[key] = alt
         h_alt = compute_structural_hash(variant)
         assert h_alt != h_base, (
-            f"{key} axis collapsed: base={base[key]!r} -> {h_base!r}, "
-            f"variant={alt!r} -> {h_alt!r} (must differ)"
+            f"{key} axis collapsed: base={base[key]!r} -> {h_base!r}, variant={alt!r} -> {h_alt!r} (must differ)"
         )
 
     # rr_target equivalence: 1.0 == 1 == 1.00 (rounded to 1dp).
@@ -229,8 +221,7 @@ def test_numeric_axes_produce_distinct_hashes():
     base["rr_target"] = 1.00
     h_pad = compute_structural_hash(base)
     assert h_int == h_float == h_pad, (
-        f"rr_target rounding broken: 1, 1.0, 1.00 must hash identically "
-        f"(got {h_int!r}, {h_float!r}, {h_pad!r})"
+        f"rr_target rounding broken: 1, 1.0, 1.00 must hash identically (got {h_int!r}, {h_float!r}, {h_pad!r})"
     )
 
 
@@ -253,18 +244,14 @@ def test_case_normalisation_on_entry_model_and_direction():
     h_lower = compute_structural_hash(base)
 
     assert h_canonical == h_lower, (
-        f"case normalisation broken on entry_model/direction: "
-        f"{h_canonical!r} (E1/LONG) != {h_lower!r} (e1/long)"
+        f"case normalisation broken on entry_model/direction: {h_canonical!r} (E1/LONG) != {h_lower!r} (e1/long)"
     )
 
     # Mixed-case + whitespace stripping
     base["entry_model"] = "  E1  "
     base["direction"] = "Long"
     h_mixed = compute_structural_hash(base)
-    assert h_canonical == h_mixed, (
-        f"whitespace + mixed-case normalisation broken: "
-        f"{h_canonical!r} != {h_mixed!r}"
-    )
+    assert h_canonical == h_mixed, f"whitespace + mixed-case normalisation broken: {h_canonical!r} != {h_mixed!r}"
 
 
 # ----------------------------------------------------------------------
@@ -337,21 +324,16 @@ def test_reproducibility_across_calls_and_format_invariants():
     h1 = compute_structural_hash(base)
     h2 = compute_structural_hash(dict(base))  # fresh dict, same contents
 
-    assert h1 == h2, (
-        f"hash is non-deterministic across calls: {h1!r} != {h2!r}"
-    )
+    assert h1 == h2, f"hash is non-deterministic across calls: {h1!r} != {h2!r}"
     assert isinstance(h1, str) and len(h1) == 16, (
         f"hash format drift: expected 16-char str, got "
         f"{type(h1).__name__} len={len(h1) if isinstance(h1, str) else 'n/a'}"
     )
-    assert re.fullmatch(r"[0-9a-f]{16}", h1), (
-        f"hash format drift: expected lowercase hex, got {h1!r}"
-    )
+    assert re.fullmatch(r"[0-9a-f]{16}", h1), f"hash format drift: expected lowercase hex, got {h1!r}"
 
     # Schema version sanity (cheap belt-and-braces; the parity check is
     # the real enforcement, but a wildly wrong version here would mean a
     # tester edited the wrong module).
     assert isinstance(HASH_SCHEMA_VERSION, int) and HASH_SCHEMA_VERSION >= 1, (
-        f"HASH_SCHEMA_VERSION must be a positive int, got "
-        f"{type(HASH_SCHEMA_VERSION).__name__}={HASH_SCHEMA_VERSION!r}"
+        f"HASH_SCHEMA_VERSION must be a positive int, got {type(HASH_SCHEMA_VERSION).__name__}={HASH_SCHEMA_VERSION!r}"
     )

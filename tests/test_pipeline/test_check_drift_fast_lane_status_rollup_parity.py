@@ -62,9 +62,7 @@ def test_check_fires_on_tampered_do_not_hand_edit(tmp_path: Path) -> None:
     rollup = tmp_path / "fast_lane_status.yaml"
     _write_rollup(rollup, payload)
     violations = check_fast_lane_status_rollup_reconstruction_parity(rollup_path=rollup)
-    assert any(
-        "BANNER TAMPERED" in v and "do_not_hand_edit" in v for v in violations
-    ), violations
+    assert any("BANNER TAMPERED" in v and "do_not_hand_edit" in v for v in violations), violations
 
 
 def test_check_fires_on_tampered_source(tmp_path: Path) -> None:
@@ -93,10 +91,7 @@ def test_check_fires_on_orphan_entry_in_rollup(tmp_path: Path) -> None:
     rollup = tmp_path / "fast_lane_status.yaml"
     _write_rollup(rollup, payload)
     violations = check_fast_lane_status_rollup_reconstruction_parity(rollup_path=rollup)
-    assert any(
-        "ORPHAN_IN_ROLLUP" in v and "GHOST_INSERTED_BY_HAND_2026_05_19" in v
-        for v in violations
-    ), violations
+    assert any("ORPHAN_IN_ROLLUP" in v and "GHOST_INSERTED_BY_HAND_2026_05_19" in v for v in violations), violations
 
 
 def test_check_fires_on_missing_entry(tmp_path: Path) -> None:
@@ -108,9 +103,7 @@ def test_check_fires_on_missing_entry(tmp_path: Path) -> None:
     rollup = tmp_path / "fast_lane_status.yaml"
     _write_rollup(rollup, payload)
     violations = check_fast_lane_status_rollup_reconstruction_parity(rollup_path=rollup)
-    assert any(
-        "MISSING_FROM_ROLLUP" in v and dropped["strategy_id"] in v for v in violations
-    ), violations
+    assert any("MISSING_FROM_ROLLUP" in v and dropped["strategy_id"] in v for v in violations), violations
 
 
 def test_check_fires_on_field_drift_current_stage(tmp_path: Path) -> None:
@@ -125,10 +118,9 @@ def test_check_fires_on_field_drift_current_stage(tmp_path: Path) -> None:
     rollup = tmp_path / "fast_lane_status.yaml"
     _write_rollup(rollup, payload)
     violations = check_fast_lane_status_rollup_reconstruction_parity(rollup_path=rollup)
-    assert any(
-        "FIELD_DRIFT" in v and target["strategy_id"] in v and "current_stage" in v
-        for v in violations
-    ), violations
+    assert any("FIELD_DRIFT" in v and target["strategy_id"] in v and "current_stage" in v for v in violations), (
+        violations
+    )
 
 
 def test_check_fires_on_capital_class_write_attempt(tmp_path: Path) -> None:
@@ -146,9 +138,7 @@ out.write_text("malicious")
     payload = _baseline_payload()
     rollup = tmp_path / "fast_lane_status.yaml"
     _write_rollup(rollup, payload)
-    violations = check_fast_lane_status_rollup_reconstruction_parity(
-        rollup_path=rollup, writer_path=fake_writer
-    )
+    violations = check_fast_lane_status_rollup_reconstruction_parity(rollup_path=rollup, writer_path=fake_writer)
     assert any("CAPITAL-CLASS WRITE ATTEMPT" in v for v in violations), violations
 
 
@@ -166,8 +156,6 @@ print("hello")
     payload = _baseline_payload()
     rollup = tmp_path / "fast_lane_status.yaml"
     _write_rollup(rollup, payload)
-    violations = check_fast_lane_status_rollup_reconstruction_parity(
-        rollup_path=rollup, writer_path=fake_writer
-    )
+    violations = check_fast_lane_status_rollup_reconstruction_parity(rollup_path=rollup, writer_path=fake_writer)
     capital_class_violations = [v for v in violations if "CAPITAL-CLASS" in v]
     assert capital_class_violations == [], capital_class_violations

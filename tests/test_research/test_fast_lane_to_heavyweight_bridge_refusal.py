@@ -45,9 +45,7 @@ def _make_source(
 ) -> FastLaneSource:
     return FastLaneSource(
         result_md_rel=f"docs/audit/results/synthetic-{strategy_id.lower()}.md",
-        source_yaml_rel=(
-            f"docs/audit/hypotheses/synthetic-{strategy_id.lower()}.yaml"
-        ),
+        source_yaml_rel=(f"docs/audit/hypotheses/synthetic-{strategy_id.lower()}.yaml"),
         scope={
             "instrument": instrument,
             "strategy_id": strategy_id,
@@ -149,9 +147,7 @@ def isolate_drafts(tmp_path, monkeypatch):
     under tmp_path/drafts, not the real repo drafts/."""
     import scripts.research.fast_lane_to_heavyweight_bridge as bridge_mod
 
-    monkeypatch.setattr(
-        bridge_mod, "DRAFTS_DIR", tmp_path / "drafts", raising=True
-    )
+    monkeypatch.setattr(bridge_mod, "DRAFTS_DIR", tmp_path / "drafts", raising=True)
     monkeypatch.setattr(
         bridge_mod,
         "HYPOTHESES_DIR",
@@ -172,9 +168,7 @@ def test_bridge_refuses_banned_entry_model(tmp_path, isolate_drafts):
         entry_model="E3",
         confirm_bars=1,
     )
-    expected_draft = (
-        tmp_path / "drafts" / draft_path_for(source.scope["strategy_id"], "2026-05-20").name
-    )
+    expected_draft = tmp_path / "drafts" / draft_path_for(source.scope["strategy_id"], "2026-05-20").name
 
     assert not expected_draft.exists()
 
@@ -195,20 +189,14 @@ def test_bridge_refuses_e2_lookahead(tmp_path, isolate_drafts):
     """E2 entry with a canonical excluded filter prefix refuses."""
     from trading_app.config import ALL_FILTERS, E2_EXCLUDED_FILTER_PREFIXES
 
-    filter_type = next(
-        f
-        for f in sorted(ALL_FILTERS)
-        if any(f.startswith(p) for p in E2_EXCLUDED_FILTER_PREFIXES)
-    )
+    filter_type = next(f for f in sorted(ALL_FILTERS) if any(f.startswith(p) for p in E2_EXCLUDED_FILTER_PREFIXES))
     source = _make_source(
         strategy_id=f"MGC_LONDON_METALS_E2_RR1.0_CB1_{filter_type}",
         entry_model="E2",
         confirm_bars=1,
         filter_type=filter_type,
     )
-    expected_draft = (
-        tmp_path / "drafts" / draft_path_for(source.scope["strategy_id"], "2026-05-20").name
-    )
+    expected_draft = tmp_path / "drafts" / draft_path_for(source.scope["strategy_id"], "2026-05-20").name
 
     assert not expected_draft.exists()
 
@@ -249,16 +237,12 @@ def test_bridge_refuses_graveyard_lane(tmp_path, isolate_drafts):
         structural_hash=structural_hash,
         k_lane=0,
     )
-    expected_draft = (
-        tmp_path / "drafts" / draft_path_for(source.scope["strategy_id"], "2026-05-20").name
-    )
+    expected_draft = tmp_path / "drafts" / draft_path_for(source.scope["strategy_id"], "2026-05-20").name
 
     assert not expected_draft.exists()
 
     with pytest.raises(BridgeRefused, match="graveyard"):
-        _bridge_preflight_refuse(
-            source, queue_path=queue_path, digest_path=digest_path
-        )
+        _bridge_preflight_refuse(source, queue_path=queue_path, digest_path=digest_path)
 
     assert not expected_draft.exists()
 
@@ -277,9 +261,7 @@ def test_bridge_refuses_k_lane_ge_2(tmp_path, isolate_drafts):
         structural_hash=structural_hash,
         k_lane=2,
     )
-    expected_draft = (
-        tmp_path / "drafts" / draft_path_for(source.scope["strategy_id"], "2026-05-20").name
-    )
+    expected_draft = tmp_path / "drafts" / draft_path_for(source.scope["strategy_id"], "2026-05-20").name
 
     assert not expected_draft.exists()
 

@@ -336,9 +336,7 @@ def _resolve_oos_window_days(db_path: Path | None = None) -> tuple[int, str | No
         path = db_path if db_path is not None else GOLD_DB_PATH
         con = duckdb.connect(str(path), read_only=True)
         try:
-            row = con.execute(
-                "SELECT MAX(trading_day) FROM orb_outcomes"
-            ).fetchone()
+            row = con.execute("SELECT MAX(trading_day) FROM orb_outcomes").fetchone()
         finally:
             con.close()
         if row is None or row[0] is None:
@@ -358,9 +356,7 @@ def find_revocation_sidecar(result_md: Path) -> Path | None:
 # ---------- Stage 2A.3 provenance + suppression helpers ----------
 
 
-def _load_source_yaml(
-    result_md: Path, hypotheses_dir: Path
-) -> dict[str, Any] | None:
+def _load_source_yaml(result_md: Path, hypotheses_dir: Path) -> dict[str, Any] | None:
     """Locate the source YAML for a result MD by filename stem.
 
     Mirrors ``fast_lane_to_heavyweight_bridge.locate_source_yaml`` -- the
@@ -566,21 +562,14 @@ def _compute_k_lineage(
     K_lane = 0, and the second scan reads K_lane = 1 from the row appended
     by the first scan.
     """
-    k_lane = sum(
-        1
-        for row in ledger_rows
-        if row.get("structural_hash") == structural_hash
-    )
+    k_lane = sum(1 for row in ledger_rows if row.get("structural_hash") == structural_hash)
     k_family = sum(
         1
         for row in ledger_rows
         if (
-            (row.get("k_lineage") or {}).get("instrument")
-            == hash_inputs.get("instrument")
-            and (row.get("k_lineage") or {}).get("orb_label")
-            == hash_inputs.get("orb_label")
-            and (row.get("k_lineage") or {}).get("orb_minutes")
-            == hash_inputs.get("orb_minutes")
+            (row.get("k_lineage") or {}).get("instrument") == hash_inputs.get("instrument")
+            and (row.get("k_lineage") or {}).get("orb_label") == hash_inputs.get("orb_label")
+            and (row.get("k_lineage") or {}).get("orb_minutes") == hash_inputs.get("orb_minutes")
         )
     )
     k_global = len(ledger_rows)
@@ -588,9 +577,7 @@ def _compute_k_lineage(
     # MinBTL effective-K per Bailey 2013 Thm 1 Eq. 6. The proxy for
     # E[max_N] is pooled_n; guard against div-by-zero with max(...,1).
     e_max_n = max(int(pooled_n), 1)
-    k_effective_minbtl = (
-        2.0 * math.log(max(k_global, 2)) / (e_max_n * e_max_n)
-    )
+    k_effective_minbtl = 2.0 * math.log(max(k_global, 2)) / (e_max_n * e_max_n)
 
     # Correlation-haircut N_hat per Bailey-Lopez de Prado 2014 Eq. 9 prose
     # adapted in the stage file: rho_hat + (1 - rho_hat) * M_correlated,
@@ -598,9 +585,7 @@ def _compute_k_lineage(
     # so their effective sample is shared). Rounded to nearest int because
     # n_hat downstream gates ("N_hat >= K_declared * 2") are integer.
     m_correlated = max(k_family, 1)
-    n_hat_float = pooled_n * (
-        RHO_HAT_ASSUMED + (1.0 - RHO_HAT_ASSUMED) * m_correlated
-    )
+    n_hat_float = pooled_n * (RHO_HAT_ASSUMED + (1.0 - RHO_HAT_ASSUMED) * m_correlated)
     n_hat = int(round(n_hat_float))
 
     # BH-FDR passes per backtesting-methodology RULE 4 (informational only
@@ -839,24 +824,14 @@ def classify(
         return (
             "REJECTED_OOS_UNPOWERED",
             f"OOS pre-flight unresolved: {reason}"
-            + (
-                f"; {informational_class_citation}"
-                if informational_class_citation
-                else ""
-            ),
+            + (f"; {informational_class_citation}" if informational_class_citation else ""),
         )
-    power, expected_n_oos, why = _compute_expected_oos_power(
-        entry.pooled_fire, oos_window_days
-    )
+    power, expected_n_oos, why = _compute_expected_oos_power(entry.pooled_fire, oos_window_days)
     if why is not None:
         return (
             "REJECTED_OOS_UNPOWERED",
             f"OOS pre-flight: {why} (oos_window_days={oos_window_days})"
-            + (
-                f"; {informational_class_citation}"
-                if informational_class_citation
-                else ""
-            ),
+            + (f"; {informational_class_citation}" if informational_class_citation else ""),
         )
     if power < OOS_POWER_FLOOR:
         return (
@@ -868,11 +843,7 @@ def classify(
                 "structurally underpowered OOS — pick CPCV / Harvey-Liu haircut / "
                 "pool with siblings / PARK per backtesting-methodology.md RULE 3.3"
             )
-            + (
-                f"; {informational_class_citation}"
-                if informational_class_citation
-                else ""
-            ),
+            + (f"; {informational_class_citation}" if informational_class_citation else ""),
         )
 
     return "QUEUED", informational_class_citation
@@ -1010,10 +981,7 @@ def build_entry(
                 structural_hash = "0" * 16
                 k_lineage = _default_k_lineage_for_error()
                 upstream_k_role = "hash_compute_failed"
-                extra_error = (
-                    f"compute_structural_hash failed: "
-                    f"{type(exc).__name__}: {exc}"
-                )
+                extra_error = f"compute_structural_hash failed: {type(exc).__name__}: {exc}"
 
             if extra_error is None:
                 k_declared = _resolve_k_declared(source_yaml)
@@ -1144,9 +1112,7 @@ def _append_entry_to_ledger(
         outcome={
             "pooled_t": entry.pooled_t if not math.isnan(entry.pooled_t) else None,
             "pooled_n": entry.pooled_n,
-            "pooled_fire": (
-                entry.pooled_fire if not math.isnan(entry.pooled_fire) else None
-            ),
+            "pooled_fire": (entry.pooled_fire if not math.isnan(entry.pooled_fire) else None),
         },
     )
     try:
@@ -1181,11 +1147,7 @@ def scan(
     hd = hypotheses_dir if hypotheses_dir is not None else HYPOTHESES_DIR
     aq = action_queue if action_queue is not None else ACTION_QUEUE
     lp = ledger_path if ledger_path is not None else TRIAL_LEDGER_PATH
-    gd = (
-        graveyard_digest_path
-        if graveyard_digest_path is not None
-        else GRAVEYARD_DIGEST_PATH
-    )
+    gd = graveyard_digest_path if graveyard_digest_path is not None else GRAVEYARD_DIGEST_PATH
 
     # Resolve the OOS window once per scan so each entry classification
     # reuses the same (latest_trading_day - HOLDOUT_SACRED_FROM) result.
@@ -1198,9 +1160,7 @@ def scan(
     # scan -- subsequent scans see whatever this scan appended.
     ledger_rows = _read_trial_ledger(lp)
     graveyard_index = _read_graveyard_digest(gd)
-    run_timestamp_utc = _dt.datetime.now(_dt.timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
+    run_timestamp_utc = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     entries: list[PromoteEntry] = []
     for path in sorted(rd.glob(FAST_LANE_RESULT_GLOB)):
@@ -1226,11 +1186,7 @@ def scan(
             if err is not None:
                 # Surface ledger failures on the entry's error_reason so the
                 # scanner does not silently lose append-failures.
-                entry.error_reason = (
-                    f"{entry.error_reason}; ledger: {err}"
-                    if entry.error_reason
-                    else f"ledger: {err}"
-                )
+                entry.error_reason = f"{entry.error_reason}; ledger: {err}" if entry.error_reason else f"ledger: {err}"
     return entries
 
 
@@ -1301,9 +1257,7 @@ def render_report(entries: list[PromoteEntry]) -> str:
                 f"      direction={e.direction} pooled_t={e.pooled_t:.3f} "
                 f"pooled_n={e.pooled_n} pooled_fire={e.pooled_fire:.4f}"
             )
-            lines.append(
-                f"      long: t={e.long_t!r} n={e.long_n} fire={e.long_fire:.4f} -> {e.long_side_verdict}"
-            )
+            lines.append(f"      long: t={e.long_t!r} n={e.long_n} fire={e.long_fire:.4f} -> {e.long_side_verdict}")
             lines.append(
                 f"      short: t={e.short_t!r} n={e.short_n} fire={e.short_fire:.4f} -> {e.short_side_verdict}"
             )
@@ -1355,10 +1309,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--db-path",
         default=None,
-        help=(
-            "Override the DuckDB path used to derive --oos-window-days. "
-            "Default: pipeline.paths.GOLD_DB_PATH."
-        ),
+        help=("Override the DuckDB path used to derive --oos-window-days. Default: pipeline.paths.GOLD_DB_PATH."),
     )
     parser.add_argument(
         "--ledger-path",

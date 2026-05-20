@@ -32,10 +32,7 @@ def test_account_profile_default_is_express_funded_is_false():
 def test_every_account_profile_declares_is_express_funded_explicitly():
     """No live profile may inherit the default — every entry must declare the field."""
     violations = check_account_profiles_declare_is_express_funded()
-    assert violations == [], (
-        "ACCOUNT_PROFILES entries omitting is_express_funded=: "
-        + "; ".join(violations)
-    )
+    assert violations == [], "ACCOUNT_PROFILES entries omitting is_express_funded=: " + "; ".join(violations)
 
 
 def test_drift_check_catches_omitted_field():
@@ -68,9 +65,7 @@ def test_drift_check_catches_omitted_field():
             continue
         if isinstance(key, ast.Constant):
             omitted.append(str(key.value))
-    assert omitted == ["bad_profile"], (
-        f"mutation-probe AST walk must find omitted-field profile; got {omitted!r}"
-    )
+    assert omitted == ["bad_profile"], f"mutation-probe AST walk must find omitted-field profile; got {omitted!r}"
 
 
 def test_real_account_profiles_module_resolves():

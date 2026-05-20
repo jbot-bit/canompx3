@@ -47,9 +47,7 @@ JOURNAL_PATH = REPO_ROOT / "docs" / "runtime" / "cherry_pick_journal.yaml"
 # and stamped with this name pattern. Capturing it as a constant keeps the
 # enricher's scope tight: not every result MD under docs/audit/results/ is a
 # heavyweight Chordia verdict candidate.
-HEAVYWEIGHT_FILENAME_PATTERN = re.compile(
-    r"^\d{4}-\d{2}-\d{2}-.*?-chordia-(?:unlock|heavyweight)-v\d+\.md$"
-)
+HEAVYWEIGHT_FILENAME_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}-.*?-chordia-(?:unlock|heavyweight)-v\d+\.md$")
 
 # Verdict line from the result MD header: ``**MEASURED verdict:** `PASS_CHORDIA```.
 # Tolerant of either backtick wrapping or bare token following the colon.
@@ -140,11 +138,7 @@ def parse_heavyweight_result(md_path: Path) -> HeavyweightOutcome | None:
     is_row = _IS_ROW_RE.search(text)
     t_clustered = _parse_float_or_none(is_row.group("t")) if is_row else None
 
-    rel = (
-        md_path.relative_to(REPO_ROOT)
-        if md_path.is_relative_to(REPO_ROOT)
-        else md_path
-    )
+    rel = md_path.relative_to(REPO_ROOT) if md_path.is_relative_to(REPO_ROOT) else md_path
     return HeavyweightOutcome(
         strategy_id=title.group("sid"),
         verdict=mapped,
@@ -174,9 +168,7 @@ def collect_heavyweight_outcomes(results_dir: Path) -> dict[str, HeavyweightOutc
     return outcomes
 
 
-def _derive_lesson_label(
-    entry: dict[str, Any], outcome: HeavyweightOutcome
-) -> str:
+def _derive_lesson_label(entry: dict[str, Any], outcome: HeavyweightOutcome) -> str:
     """Best-effort categorical lesson based on entry context + heavyweight verdict.
 
     Returns a short canonical token suitable for ``lesson_label`` when the
@@ -234,17 +226,12 @@ def enrich_entries(
         if outcome is None:
             continue
         # Don't downgrade an existing DEFERRED_NOT_RUN to itself.
-        if (
-            entry.get("heavyweight_verdict") == "DEFERRED_NOT_RUN"
-            and outcome.verdict == "DEFERRED_NOT_RUN"
-        ):
+        if entry.get("heavyweight_verdict") == "DEFERRED_NOT_RUN" and outcome.verdict == "DEFERRED_NOT_RUN":
             continue
 
         entry["heavyweight_verdict"] = outcome.verdict
         entry["t_observed_post_clustered_se"] = (
-            round(outcome.t_clustered, 4)
-            if outcome.t_clustered is not None
-            else None
+            round(outcome.t_clustered, 4) if outcome.t_clustered is not None else None
         )
         # Only auto-populate lesson_label when it's null — preserve hand-edits.
         if entry.get("lesson_label") in (None, ""):
@@ -320,11 +307,7 @@ def main(argv: list[str] | None = None) -> int:
             yaml.safe_dump(journal, sort_keys=False, default_flow_style=False),
             encoding="utf-8",
         )
-        rel = (
-            args.journal.relative_to(REPO_ROOT)
-            if args.journal.is_relative_to(REPO_ROOT)
-            else args.journal
-        )
+        rel = args.journal.relative_to(REPO_ROOT) if args.journal.is_relative_to(REPO_ROOT) else args.journal
         print(f"\nWrote {len(mutated)} update(s) to {rel}")
     else:
         print(f"\nDRY RUN — {len(mutated)} update(s) NOT persisted. Pass --write to apply.")

@@ -164,10 +164,7 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
     InlineCopyPair(
         name="fast_lane_promote_threshold",
         inline_site="scripts/research/fast_lane_promote_queue.py",
-        canonical_source=(
-            "docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml "
-            "(screen: block, lines ~102-145)"
-        ),
+        canonical_source=("docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml (screen: block, lines ~102-145)"),
         gated_constants=(
             "T_KILL_FLOOR",
             "T_PROMOTE_FLOOR",
@@ -177,13 +174,9 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
             "FIRE_MAX",
         ),
         parity_check="check_fast_lane_promote_threshold_parity",
-        test_file=(
-            "tests/test_pipeline/"
-            "test_check_drift_fast_lane_promote_threshold_parity.py"
-        ),
+        test_file=("tests/test_pipeline/test_check_drift_fast_lane_promote_threshold_parity.py"),
         bug_class_anchor=(
-            "memory/feedback_canonical_inline_copy_parity_bug_class.md "
-            "(4th confirmed instance, 2026-05-18)"
+            "memory/feedback_canonical_inline_copy_parity_bug_class.md (4th confirmed instance, 2026-05-18)"
         ),
         notes=(
             "Six FAST_LANE v5.1 promote-queue scanner thresholds inlined "
@@ -201,13 +194,9 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         ),
         gated_constants=("HEAVYWEIGHT_T_THRESHOLD",),
         parity_check="check_cherry_pick_ranker_threshold_parity",
-        test_file=(
-            "tests/test_pipeline/"
-            "test_check_drift_cherry_pick_ranker_threshold_parity.py"
-        ),
+        test_file=("tests/test_pipeline/test_check_drift_cherry_pick_ranker_threshold_parity.py"),
         bug_class_anchor=(
-            "memory/feedback_canonical_inline_copy_parity_bug_class.md "
-            "(5th confirmed instance, 2026-05-19)"
+            "memory/feedback_canonical_inline_copy_parity_bug_class.md (5th confirmed instance, 2026-05-19)"
         ),
         notes=(
             "Cherry-pick ranker inlines the Chordia strict no-theory "
@@ -221,18 +210,12 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
     InlineCopyPair(
         name="bridge_methodology_rules_applied",
         inline_site="scripts/research/fast_lane_to_heavyweight_bridge.py",
-        canonical_source=(
-            ".claude/rules/backtesting-methodology.md (`## RULE N:` headings)"
-        ),
+        canonical_source=(".claude/rules/backtesting-methodology.md (`## RULE N:` headings)"),
         gated_constants=("METHODOLOGY_RULES_APPLIED",),
         parity_check="check_bridge_methodology_rules_parity",
-        test_file=(
-            "tests/test_pipeline/"
-            "test_check_drift_bridge_methodology_rules_parity.py"
-        ),
+        test_file=("tests/test_pipeline/test_check_drift_bridge_methodology_rules_parity.py"),
         bug_class_anchor=(
-            "memory/feedback_canonical_inline_copy_parity_bug_class.md "
-            "(6th confirmed instance, 2026-05-19)"
+            "memory/feedback_canonical_inline_copy_parity_bug_class.md (6th confirmed instance, 2026-05-19)"
         ),
         notes=(
             "Bridge embeds methodology-rule slugs as boilerplate in every "
@@ -255,10 +238,7 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
             "HASH_SCHEMA_INPUTS",
         ),
         parity_check="check_fast_lane_structural_hash_schema_parity",
-        test_file=(
-            "tests/test_pipeline/"
-            "test_check_drift_fast_lane_structural_hash_schema_parity.py"
-        ),
+        test_file=("tests/test_pipeline/test_check_drift_fast_lane_structural_hash_schema_parity.py"),
         bug_class_anchor=(
             "memory/feedback_canonical_inline_copy_parity_bug_class.md "
             "(7th confirmed instance, 2026-05-20 — Stage 2A.1)"
@@ -278,15 +258,11 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         name="graveyard_status_tokens",
         inline_site="scripts/research/fast_lane_graveyard_digest.py",
         canonical_source=(
-            "chatgpt_bundle/06_RD_GRAVEYARD.md `## Status Token Doctrine` "
-            "block (YAML `status_tokens:` list)"
+            "chatgpt_bundle/06_RD_GRAVEYARD.md `## Status Token Doctrine` block (YAML `status_tokens:` list)"
         ),
         gated_constants=("_load_status_tokens",),
         parity_check="check_graveyard_status_tokens_parity",
-        test_file=(
-            "tests/test_pipeline/"
-            "test_check_drift_graveyard_status_tokens_parity.py"
-        ),
+        test_file=("tests/test_pipeline/test_check_drift_graveyard_status_tokens_parity.py"),
         bug_class_anchor=(
             "memory/feedback_canonical_inline_copy_parity_bug_class.md "
             "(9th confirmed instance, 2026-05-20 — Stage 2A.2 follow-up)"
@@ -314,10 +290,7 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         ),
         gated_constants=("STATUS_VALUES",),
         parity_check="check_fast_lane_promote_queue_provenance_present",
-        test_file=(
-            "tests/test_pipeline/"
-            "test_check_drift_fast_lane_promote_queue_provenance_present.py"
-        ),
+        test_file=("tests/test_pipeline/test_check_drift_fast_lane_promote_queue_provenance_present.py"),
         bug_class_anchor=(
             "memory/feedback_canonical_inline_copy_parity_bug_class.md "
             "(10th confirmed instance, 2026-05-20 — Stage 2A.3)"
@@ -339,27 +312,23 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         name="fast_lane_trial_ledger_holdout_sentinel",
         inline_site="scripts/research/fast_lane_trial_ledger.py",
         canonical_source=(
-            "trading_app/holdout_policy.py::HOLDOUT_SACRED_FROM "
-            "(date(2026, 1, 1) — Amendment 2.7 Mode A sacred window)"
+            "trading_app/holdout_policy.py::HOLDOUT_SACRED_FROM (date(2026, 1, 1) — Amendment 2.7 Mode A sacred window)"
         ),
         gated_constants=("HOLDOUT_SACRED_FROM_SENTINEL",),
         parity_check="check_holdout_sentinel_inline_copy_parity",
-        test_file=(
-            "tests/test_pipeline/"
-            "test_check_drift_holdout_sentinel_inline_copy_parity.py"
-        ),
+        test_file=("tests/test_pipeline/test_check_drift_holdout_sentinel_inline_copy_parity.py"),
         bug_class_anchor=(
             "memory/feedback_canonical_inline_copy_parity_bug_class.md "
             "(8th confirmed instance, 2026-05-20 — Stage 2A.2 follow-up)"
         ),
         notes=(
             "The trial-ledger writer inlines the Mode A holdout boundary as "
-            "a string sentinel `HOLDOUT_SACRED_FROM_SENTINEL = \"2026-01-01\"`. "
+            'a string sentinel `HOLDOUT_SACRED_FROM_SENTINEL = "2026-01-01"`. '
             "Canonical authority is `trading_app.holdout_policy.HOLDOUT_SACRED_FROM` "
             "(`date(2026, 1, 1)`). Drift would silently keep the ledger stamping "
             "the old boundary on every entry while the rest of the codebase "
             "advanced, corrupting Bailey-Lopez de Prado 2014 sec 3 effective-N "
-            "accounting. `HOLDOUT_POLICY_SENTINEL = \"mode_A\"` is NOT registered "
+            'accounting. `HOLDOUT_POLICY_SENTINEL = "mode_A"` is NOT registered '
             "because the ledger module is the canonical home of that token — "
             "no upstream constant exists to mirror."
         ),

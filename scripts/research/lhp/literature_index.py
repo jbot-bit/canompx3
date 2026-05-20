@@ -373,9 +373,7 @@ def search_corpus(
     ]
 
 
-def format_search_results_for_llm(
-    results: Sequence[dict[str, object]], *, max_bytes: int = 4000
-) -> str:
+def format_search_results_for_llm(results: Sequence[dict[str, object]], *, max_bytes: int = 4000) -> str:
     """Render top-K search hits as a compact LLM-context block.
 
     Format per hit:
@@ -398,9 +396,7 @@ def format_search_results_for_llm(
         else:
             terms = str(terms_val)
         block = (
-            f"- {r.get('slug')} :: {r.get('title')} "
-            f"[overlap={r.get('overlap_count')}: {terms}]\n"
-            f"  {r.get('blurb')}\n"
+            f"- {r.get('slug')} :: {r.get('title')} [overlap={r.get('overlap_count')}: {terms}]\n  {r.get('blurb')}\n"
         )
         nbytes = len(block.encode("utf-8"))
         if used + nbytes > max_bytes:

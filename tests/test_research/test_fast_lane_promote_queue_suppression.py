@@ -236,11 +236,7 @@ def test_suppressed_e2_lookahead(tmp_path):
     # Pick the first ALL_FILTERS member matching a canonical excluded
     # prefix; the scanner imports the same canonical tuple at runtime so
     # this test always exercises the live prefix set (never re-encoded).
-    filter_type = next(
-        f
-        for f in sorted(ALL_FILTERS)
-        if any(f.startswith(p) for p in E2_EXCLUDED_FILTER_PREFIXES)
-    )
+    filter_type = next(f for f in sorted(ALL_FILTERS) if any(f.startswith(p) for p in E2_EXCLUDED_FILTER_PREFIXES))
 
     results_dir = tmp_path / "results"
     results_dir.mkdir()

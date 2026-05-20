@@ -70,10 +70,7 @@ def reset_registry():
 def test_clean_registry_passes(reset_registry):
     """Baseline: on-disk registry produces zero violations."""
     violations = check_canonical_inline_copies_have_parity_check()
-    assert violations == [], (
-        "Clean registry should produce no violations. Got: "
-        + "\n".join(violations)
-    )
+    assert violations == [], "Clean registry should produce no violations. Got: " + "\n".join(violations)
 
 
 def test_empty_registry_violates(reset_registry):
@@ -95,18 +92,13 @@ def test_missing_parity_check_function_violates(reset_registry):
             canonical_source="docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml",
             gated_constants=("FOO",),
             parity_check="check_function_that_does_not_exist_xyz",
-            test_file=(
-                "tests/test_pipeline/"
-                "test_check_drift_fast_lane_promote_threshold_parity.py"
-            ),
+            test_file=("tests/test_pipeline/test_check_drift_fast_lane_promote_threshold_parity.py"),
             bug_class_anchor="memory/feedback_canonical_inline_copy_parity_bug_class.md",
         )
     )
     violations = check_canonical_inline_copies_have_parity_check()
     assert any(
-        "check_function_that_does_not_exist_xyz" in v
-        and "not found" in v
-        and "orphan_test_pair" in v
+        "check_function_that_does_not_exist_xyz" in v and "not found" in v and "orphan_test_pair" in v
         for v in violations
     ), f"Expected orphan-function violation, got: {violations}"
 
@@ -121,19 +113,14 @@ def test_missing_test_file_violates(reset_registry):
             canonical_source="docs/audit/hypotheses/TEMPLATE-fast-lane-v5.1.yaml",
             gated_constants=("FOO",),
             parity_check="check_fast_lane_promote_threshold_parity",
-            test_file=(
-                "tests/test_pipeline/"
-                "test_file_that_does_not_exist_xyz.py"
-            ),
+            test_file=("tests/test_pipeline/test_file_that_does_not_exist_xyz.py"),
             bug_class_anchor="memory/feedback_canonical_inline_copy_parity_bug_class.md",
         )
     )
     violations = check_canonical_inline_copies_have_parity_check()
-    assert any(
-        "test_file_that_does_not_exist_xyz.py" in v
-        and "not found" in v
-        for v in violations
-    ), f"Expected missing-test-file violation, got: {violations}"
+    assert any("test_file_that_does_not_exist_xyz.py" in v and "not found" in v for v in violations), (
+        f"Expected missing-test-file violation, got: {violations}"
+    )
 
 
 def test_insufficient_test_functions_violates(reset_registry, tmp_path: Path):
@@ -162,12 +149,9 @@ def test_insufficient_test_functions_violates(reset_registry, tmp_path: Path):
             )
         )
         violations = check_canonical_inline_copies_have_parity_check()
-        assert any(
-            "sibling-coverage" in v
-            and "expected >= 6" in v
-            and "found 1" in v
-            for v in violations
-        ), f"Expected sibling-coverage violation, got: {violations}"
+        assert any("sibling-coverage" in v and "expected >= 6" in v and "found 1" in v for v in violations), (
+            f"Expected sibling-coverage violation, got: {violations}"
+        )
     finally:
         if abs_test_file.exists():
             abs_test_file.unlink()
@@ -178,9 +162,7 @@ def test_non_inline_copy_pair_violates(reset_registry):
     CANONICAL_INLINE_COPIES.clear()
     CANONICAL_INLINE_COPIES.append({"name": "not_a_pair"})  # type: ignore[arg-type]
     violations = check_canonical_inline_copies_have_parity_check()
-    assert any("not an InlineCopyPair" in v for v in violations), (
-        f"Expected type violation, got: {violations}"
-    )
+    assert any("not an InlineCopyPair" in v for v in violations), f"Expected type violation, got: {violations}"
 
 
 def test_registry_import_failure_failopen(monkeypatch):
@@ -209,16 +191,13 @@ def test_registry_import_failure_failopen(monkeypatch):
             return None
 
     finder = _BlockingFinder()
-    monkeypatch.setattr(
-        sys, "meta_path", [finder, *sys.meta_path], raising=False
-    )
+    monkeypatch.setattr(sys, "meta_path", [finder, *sys.meta_path], raising=False)
 
     violations = check_canonical_inline_copies_have_parity_check()
     assert len(violations) >= 1
-    assert any(
-        "could not import pipeline.canonical_inline_copies" in v
-        for v in violations
-    ), f"Expected import-failure violation, got: {violations}"
+    assert any("could not import pipeline.canonical_inline_copies" in v for v in violations), (
+        f"Expected import-failure violation, got: {violations}"
+    )
 
 
 def test_seed_entry_is_fast_lane_promote_threshold():
