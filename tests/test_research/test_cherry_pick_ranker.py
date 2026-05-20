@@ -275,6 +275,9 @@ def synthetic_queue(tmp_path):
                 "pooled_n": 300,
                 "pooling_artifact": False,
                 "status": "QUEUED",
+                "structural_hash": "a" * 16,
+                "k_lineage": {"K_family": 13, "K_lane": 13, "K_global": 26},
+                "n_hat": 300,
             },
             {
                 "result_md": str(rmd_b.relative_to(tmp_path)).replace("\\", "/"),
@@ -285,6 +288,9 @@ def synthetic_queue(tmp_path):
                 "pooled_n": 226,
                 "pooling_artifact": False,
                 "status": "QUEUED",
+                "structural_hash": "b" * 16,
+                "k_lineage": {"K_family": 13, "K_lane": 13, "K_global": 26},
+                "n_hat": 226,
             },
             {
                 "result_md": str(rmd_c.relative_to(tmp_path)).replace("\\", "/"),
@@ -400,6 +406,9 @@ def test_pooled_t_zero_is_preserved_not_nan_coerced(tmp_path):
                         "pooled_n": 100,
                         "pooling_artifact": False,
                         "status": "QUEUED",
+                        "structural_hash": "0" * 16,
+                        "k_lineage": {"K_family": 1, "K_lane": 1, "K_global": 1},
+                        "n_hat": 100,
                     }
                 ],
             },
