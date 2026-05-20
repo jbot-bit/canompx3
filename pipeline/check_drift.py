@@ -12330,16 +12330,31 @@ def check_fast_lane_trial_ledger_append_only(
             else:
                 seen_run_ids.add(run_id)
 
-        # (2) Monotonic timestamps.
+        # (2) Monotonic timestamps — compare as aware datetimes so mixed
+        # Z / +00:00 suffix pairs sort correctly (raw string comparison
+        # gives wrong order for "2026-01-01T00:00:00+00:00" vs
+        # "2026-01-01T00:00:00Z" even though they represent the same instant).
         ts = entry.get("run_timestamp_utc")
         if isinstance(ts, str):
-            if last_ts is not None and ts < last_ts:
-                violations.append(
-                    "check_fast_lane_trial_ledger_append_only: "
-                    f"TIMESTAMP_REGRESSION -- entry[{idx}] run_timestamp_utc "
-                    f"{ts!r} < previous entry's {last_ts!r} in "
-                    f"{target.name}."
-                )
+            if last_ts is not None:
+                try:
+                    from scripts.research.fast_lane_trial_ledger import (
+                        _parse_utc_ts,
+                    )
+                    if _parse_utc_ts(ts) < _parse_utc_ts(last_ts):
+                        violations.append(
+                            "check_fast_lane_trial_ledger_append_only: "
+                            f"TIMESTAMP_REGRESSION -- entry[{idx}] run_timestamp_utc "
+                            f"{ts!r} < previous entry's {last_ts!r} in "
+                            f"{target.name}."
+                        )
+                except Exception:
+                    violations.append(
+                        "check_fast_lane_trial_ledger_append_only: "
+                        f"TIMESTAMP_PARSE_ERROR -- entry[{idx}] run_timestamp_utc "
+                        f"{ts!r} or previous {last_ts!r} could not be parsed in "
+                        f"{target.name}."
+                    )
             last_ts = ts
 
         # (4) Holdout sentinels.

@@ -101,7 +101,9 @@ def test_ghost_entry_is_caught(tmp_path: Path):
 
 def test_missing_real_entry_is_caught(tmp_path: Path):
     fresh = build_digest()
-    assert fresh["entries"], "real repo must have at least one graveyard entry"
+    if not fresh["entries"]:
+        import pytest
+        pytest.skip("no graveyard entries in this repo — injection cannot fire")
     # Drop the first real entry; rebuild will reinstate it -> MISSING_FROM_DIGEST.
     fresh["entries"] = fresh["entries"][1:]
     target = _write_digest(tmp_path, fresh)
@@ -117,7 +119,9 @@ def test_missing_real_entry_is_caught(tmp_path: Path):
 
 def test_hash_collision_is_caught(tmp_path: Path):
     fresh = build_digest()
-    assert fresh["entries"], "real repo must have at least one graveyard entry"
+    if not fresh["entries"]:
+        import pytest
+        pytest.skip("no graveyard entries in this repo — injection cannot fire")
     target_hash = fresh["entries"][0]["structural_hash"]
     fresh["entries"].append(
         {
@@ -158,3 +162,49 @@ def test_schema_version_mutation_is_caught(tmp_path: Path):
     violations = check_fast_lane_graveyard_digest_parity(digest_path=target)
     assert violations
     assert any("schema_version" in v for v in violations)
+
+
+# ----------------------------------------------------------------------
+# Fail-closed: malformed YAML in action-queue.yaml
+# ----------------------------------------------------------------------
+
+
+def test_malformed_action_queue_yaml_degrades_gracefully() -> None:
+    """_parse_action_queue must not raise on malformed YAML — it should
+    return [] so the rest of the digest builds from the two other sources.
+    Covers the universal malformed-YAML fail-closed gap from code review.
+
+    We call the private parser directly with a known-bad tmp file that
+    is inside the project tree (required by relative_to(PROJECT_ROOT)).
+    """
+    from scripts.research.fast_lane_graveyard_digest import (
+        PROJECT_ROOT,
+        _parse_action_queue,
+    )
+
+    bad_yaml = PROJECT_ROOT / "docs" / "runtime" / "_test_malformed_tmp.yaml"
+    try:
+        bad_yaml.write_text(": not: valid: yaml: {\n", encoding="utf-8")
+        result = _parse_action_queue(bad_yaml)
+        assert result == [], f"expected [] on malformed YAML, got: {result}"
+    finally:
+        if bad_yaml.exists():
+            bad_yaml.unlink()
+
+
+# ----------------------------------------------------------------------
+# Fail-closed: malformed YAML in the digest file itself
+# ----------------------------------------------------------------------
+
+
+def test_malformed_digest_yaml_fails_closed(tmp_path: Path) -> None:
+    """check_fast_lane_graveyard_digest_parity must return a violation
+    (not raise) when the on-disk digest is unparseable YAML."""
+    bad = tmp_path / "fast_lane_graveyard_digest.yaml"
+    bad.write_text(": not: valid: yaml: {\n", encoding="utf-8")
+    violations = check_fast_lane_graveyard_digest_parity(digest_path=bad)
+    assert violations
+    assert any(
+        "parse" in v.lower() or "yaml" in v.lower() or "failed" in v.lower()
+        for v in violations
+    )

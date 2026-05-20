@@ -138,6 +138,15 @@ def _validate_structural_hash(value: str) -> None:
         raise ValueError(f"fast_lane_trial_ledger: structural_hash {value!r} is not hex") from exc
 
 
+def _parse_utc_ts(value: str) -> _dt.datetime:
+    """Normalise a UTC ISO 8601 string (Z or +00:00 suffix) to an aware datetime.
+
+    Used for monotonicity comparisons so mixed-suffix pairs compare correctly.
+    Raises ValueError on malformed input — callers may propagate or wrap.
+    """
+    return _dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
 def _validate_iso8601_utc(value: str) -> None:
     if not isinstance(value, str):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise TypeError(  # pyright: ignore[reportUnreachable]
@@ -150,7 +159,7 @@ def _validate_iso8601_utc(value: str) -> None:
             f"fast_lane_trial_ledger: run_timestamp_utc must be UTC (end with 'Z' or '+00:00'); got {value!r}"
         )
     try:
-        _dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        _parse_utc_ts(value)
     except ValueError as exc:
         raise ValueError(f"fast_lane_trial_ledger: run_timestamp_utc {value!r} is not ISO 8601") from exc
 
@@ -262,13 +271,20 @@ def append_trial_ledger_entry(
         )
     if entries:
         last_ts = entries[-1].get("run_timestamp_utc")
-        if isinstance(last_ts, str) and last_ts > entry.run_timestamp_utc:
-            raise LedgerAppendOnlyViolation(
-                f"fast_lane_trial_ledger: incoming run_timestamp_utc "
-                f"{entry.run_timestamp_utc!r} is older than last entry's "
-                f"{last_ts!r}; ledger requires monotonic non-decreasing "
-                f"timestamps."
-            )
+        if isinstance(last_ts, str):
+            try:
+                if _parse_utc_ts(last_ts) > _parse_utc_ts(entry.run_timestamp_utc):
+                    raise LedgerAppendOnlyViolation(
+                        f"fast_lane_trial_ledger: incoming run_timestamp_utc "
+                        f"{entry.run_timestamp_utc!r} is older than last entry's "
+                        f"{last_ts!r}; ledger requires monotonic non-decreasing "
+                        f"timestamps."
+                    )
+            except ValueError:
+                # Malformed timestamp in an existing entry — writer already
+                # validates on write, so this should never happen on a clean
+                # ledger. Treat as non-comparable and let the check catch it.
+                pass
 
     entries.append(_entry_to_yaml_dict(entry))
     data["entries"] = entries
@@ -304,4 +320,5 @@ __all__ = [
     "LedgerEntry",
     "append_trial_ledger_entry",
     "read_ledger",
+    "_parse_utc_ts",
 ]

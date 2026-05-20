@@ -116,6 +116,125 @@ def test_missing_ledger_fails_closed(tmp_path: Path):
 
 
 # ----------------------------------------------------------------------
+# Fail-closed: malformed YAML in the ledger file
+# ----------------------------------------------------------------------
+
+
+def test_malformed_ledger_yaml_fails_closed(tmp_path: Path):
+    """check_fast_lane_trial_ledger_append_only must return a violation
+    (not raise) when the ledger file contains unparseable YAML.
+    Covers the universal malformed-YAML fail-closed gap from code review."""
+    bad = tmp_path / "fast_lane_trial_ledger.yaml"
+    bad.write_text(": not: valid: yaml: {\n", encoding="utf-8")
+    violations = check_fast_lane_trial_ledger_append_only(ledger_path=bad)
+    assert violations
+    assert any(
+        "parse" in v.lower() or "yaml" in v.lower() or "failed" in v.lower()
+        for v in violations
+    )
+
+
+# ----------------------------------------------------------------------
+# Timestamp normalisation: mixed Z / +00:00 suffix comparison
+# ----------------------------------------------------------------------
+
+
+def test_mixed_suffix_monotonic_passes(tmp_path: Path):
+    """A ledger with Z on the first entry and +00:00 on the second (same
+    instant expressed differently) must NOT trigger TIMESTAMP_REGRESSION.
+    This is the regression test for the raw-string comparison bug."""
+    mixed_ok = dedent(
+        """\
+        do_not_hand_edit: true
+        schema_version: 1
+        entries:
+          - run_id: run-A
+            run_timestamp_utc: '2026-05-20T01:00:00+00:00'
+            prereg_path: docs/audit/hypotheses/2026-05-20-foo.yaml
+            prereg_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            structural_hash: deadbeefcafebabe
+            template_version: fast_lane_v5.1
+            testing_mode: individual
+            pathway: A
+            K_declared: 1
+            holdout_policy: mode_A
+            holdout_sacred_from: '2026-01-01'
+            k_lineage: {}
+            n_hat: null
+            upstream_provenance: {}
+            outcome: {}
+          - run_id: run-B
+            run_timestamp_utc: '2026-05-20T02:00:00Z'
+            prereg_path: docs/audit/hypotheses/2026-05-20-bar.yaml
+            prereg_sha: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+            structural_hash: 0123456789abcdef
+            template_version: fast_lane_v5.1
+            testing_mode: family
+            pathway: A
+            K_declared: 4
+            holdout_policy: mode_A
+            holdout_sacred_from: '2026-01-01'
+            k_lineage: {}
+            n_hat: null
+            upstream_provenance: {}
+            outcome: {}
+        """
+    )
+    target = _write_ledger(tmp_path, mixed_ok)
+    violations = check_fast_lane_trial_ledger_append_only(ledger_path=target)
+    assert not any("TIMESTAMP_REGRESSION" in v for v in violations), (
+        f"false TIMESTAMP_REGRESSION on mixed suffix pair: {violations}"
+    )
+
+
+def test_mixed_suffix_regression_is_caught(tmp_path: Path):
+    """A ledger where the +00:00-suffix second entry is actually EARLIER
+    than the Z-suffix first entry must trigger TIMESTAMP_REGRESSION."""
+    mixed_bad = dedent(
+        """\
+        do_not_hand_edit: true
+        schema_version: 1
+        entries:
+          - run_id: run-A
+            run_timestamp_utc: '2026-05-20T03:00:00Z'
+            prereg_path: docs/audit/hypotheses/2026-05-20-foo.yaml
+            prereg_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            structural_hash: deadbeefcafebabe
+            template_version: fast_lane_v5.1
+            testing_mode: individual
+            pathway: A
+            K_declared: 1
+            holdout_policy: mode_A
+            holdout_sacred_from: '2026-01-01'
+            k_lineage: {}
+            n_hat: null
+            upstream_provenance: {}
+            outcome: {}
+          - run_id: run-B
+            run_timestamp_utc: '2026-05-20T01:00:00+00:00'
+            prereg_path: docs/audit/hypotheses/2026-05-20-bar.yaml
+            prereg_sha: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+            structural_hash: 0123456789abcdef
+            template_version: fast_lane_v5.1
+            testing_mode: family
+            pathway: A
+            K_declared: 4
+            holdout_policy: mode_A
+            holdout_sacred_from: '2026-01-01'
+            k_lineage: {}
+            n_hat: null
+            upstream_provenance: {}
+            outcome: {}
+        """
+    )
+    target = _write_ledger(tmp_path, mixed_bad)
+    violations = check_fast_lane_trial_ledger_append_only(ledger_path=target)
+    assert any("TIMESTAMP_REGRESSION" in v for v in violations), (
+        f"expected TIMESTAMP_REGRESSION not in: {violations}"
+    )
+
+
+# ----------------------------------------------------------------------
 # Injection 1: timestamp regression
 # ----------------------------------------------------------------------
 

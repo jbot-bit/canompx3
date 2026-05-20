@@ -244,7 +244,10 @@ def _parse_action_queue(path: Path) -> list[GraveyardEntry]:
     if not path.exists():
         return []
     rel = path.relative_to(PROJECT_ROOT).as_posix()
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return []
     if not isinstance(data, (list, dict)):
         return []
     rows: list[dict[str, Any]] = []

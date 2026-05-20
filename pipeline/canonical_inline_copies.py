@@ -260,7 +260,7 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         canonical_source=(
             "chatgpt_bundle/06_RD_GRAVEYARD.md `## Status Token Doctrine` block (YAML `status_tokens:` list)"
         ),
-        gated_constants=("_load_status_tokens",),
+        gated_constants=("STATUS_TOKEN_DOCTRINE_BLOCK",),
         parity_check="check_graveyard_status_tokens_parity",
         test_file=("tests/test_pipeline/test_check_drift_graveyard_status_tokens_parity.py"),
         bug_class_anchor=(
@@ -276,7 +276,13 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
             "from the post-merge bloomey review of Stage 2A.2 (2026-05-20): "
             "previously the alternation was hand-maintained in the parser, "
             "so a future heading with a new status vocab would silently "
-            "downgrade to status=UNKNOWN."
+            "downgrade to status=UNKNOWN. "
+            "REGISTRY NOTE: gated_constants entry here is the sentinel string "
+            "STATUS_TOKEN_DOCTRINE_BLOCK (not a Python constant name) because "
+            "this pair guards doc-block completeness, not a literal inline value. "
+            "The Check #159 sibling-coverage assertion counts def test_ functions "
+            "per registered constant; the paired test file covers the doctrine "
+            "block as its primary invariant."
         ),
     ),
     InlineCopyPair(
