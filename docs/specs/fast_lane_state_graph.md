@@ -188,6 +188,13 @@ Entry fields: `strategy_id`, `current_stage` (one of: ACTIVE_PREREG, FAST_LANE_R
 
 Drift-checked by `check_fast_lane_status_rollup_reconstruction_parity` (Check #168) — three failure classes: hand-edit drift, tampered banner (`schema_version` / `do_not_hand_edit` / `source`), and capital-class write attempt (greppable static check on writer source).
 
+**`next_action_token` for HEAVYWEIGHT_COMPLETE is lineage-qualified** (amended 2026-05-20):
+
+- HEAVYWEIGHT_COMPLETE WITH `observed_at.journal_iter` populated (fast-lane lineage present — the ranker scored the strategy and wrote a journal row before the heavyweight ran) → `run_cherry_pick_journal_enricher`. The enricher backfills `heavyweight_verdict + t_observed_post_clustered_se + lesson_label` on the existing journal row.
+- HEAVYWEIGHT_COMPLETE WITHOUT a journal entry (no fast-lane lineage — heavyweight Chordia prereg authored directly, predating the 2026-05-19 cherry-pick loop) → `operator_deployment_decision`. The enricher is structurally update-only and cannot create journal rows; the heavyweight result MD already carries the operator-actionable verdict.
+
+This qualifier is enforced by `scripts/tools/fast_lane_status._next_action_for()` and its companion tests in `tests/test_tools/test_fast_lane_status.py`. Without it, the rollup emits a stage script as the next action when running that script would silently no-op — a fail-quiet misclassification of 38 entries was caught and fixed 2026-05-20.
+
 ### 5.2 `fast_lane_age_staleness.yaml` — Stage 3 deliverable (PROPOSED)
 
 Top-level keys: `schema_version: 1`, `generated_at`, `entries[]`.

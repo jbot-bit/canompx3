@@ -1,5 +1,5 @@
 schema_version: 1
-generated_at: '2026-05-19'
+generated_at: '2026-05-20'
 source: scripts/tools/fast_lane_status.py
 do_not_hand_edit: true
 warning: DERIVED STATE — do not hand-edit. Rebuilt from every fast-lane chain artifact on every run. Drift
@@ -8,7 +8,7 @@ warning: DERIVED STATE — do not hand-edit. Rebuilt from every fast-lane chain 
 entries:
 - strategy_id: MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT15_O30
   current_stage: ACTIVE_PREREG
-  age_days: 1
+  age_days: 0
   next_action_token: run_fast_lane
   upstream_artifact_path: docs/audit/hypotheses/2026-05-18-mes-cmepreclose-e2-rr10-cb1-costlt15-pooled-o30-fast-lane-v1.yaml
   downstream_artifact_path: null
@@ -22,7 +22,7 @@ entries:
     heavyweight_result_md: null
 - strategy_id: MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5_O30
   current_stage: ACTIVE_PREREG
-  age_days: 1
+  age_days: 0
   next_action_token: run_fast_lane
   upstream_artifact_path: docs/audit/hypotheses/2026-05-18-mes-cmepreclose-e2-rr10-cb1-orbg5-pooled-o30-fast-lane-v1.yaml
   downstream_artifact_path: null
@@ -36,8 +36,8 @@ entries:
     heavyweight_result_md: null
 - strategy_id: MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 6
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-12-mgc-cmereopen-orbg4-chordia-criteria-repair-v1.md
   downstream_artifact_path: null
   observed_at:
@@ -50,8 +50,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-12-mgc-cmereopen-orbg4-chordia-criteria-repair-v1.md
 - strategy_id: MGC_LONDON_METALS_E1_RR1.5_CB1_ORB_VOL_8K_O30
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 7
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md
   downstream_artifact_path: null
   observed_at:
@@ -64,7 +64,7 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-12-mgc-london-metals-mode-a-k1-revalidation.md
 - strategy_id: MGC_LONDON_METALS_E2_RR2.0_CB1_ORB_VOL_8K_O30
   current_stage: ACTIVE_PREREG
-  age_days: 1
+  age_days: 0
   next_action_token: run_fast_lane
   upstream_artifact_path: docs/audit/hypotheses/2026-05-18-mgc-londonmetals-e2-rr20-cb1-orbvol8k-pooled-o30-fast-lane-v1.yaml
   downstream_artifact_path: null
@@ -78,7 +78,7 @@ entries:
     heavyweight_result_md: null
 - strategy_id: MNQ_CME_PRECLOSE_E1_RR1.0_CB2_VOL_RV20_N20_O15
   current_stage: ACTIVE_PREREG
-  age_days: 1
+  age_days: 0
   next_action_token: run_fast_lane
   upstream_artifact_path: docs/audit/hypotheses/2026-05-18-mnq-cmepreclose-e1-rr10-cb2-volrv20-pooled-o15-fast-lane-v1.yaml
   downstream_artifact_path: null
@@ -92,8 +92,8 @@ entries:
     heavyweight_result_md: null
 - strategy_id: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_NO_FILTER
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-05-mnq-cmepreclose-no-filter-rr10-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -106,8 +106,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-05-mnq-cmepreclose-no-filter-rr10-chordia-unlock.md
 - strategy_id: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G4
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-06-mnq-cmepreclose-orb-g4-rr10-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -120,8 +120,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-06-mnq-cmepreclose-orb-g4-rr10-chordia-unlock.md
 - strategy_id: MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 15
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-02-mnq-cmepreclose-xmesatr60-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
@@ -134,8 +134,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-02-mnq-cmepreclose-xmesatr60-chordia-unlock-v1.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR_P50
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 3
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-16-mnq-comex-settle-e2-rr10-atr-p50-chordia-unlock-v1.draft.md
   downstream_artifact_path: null
   observed_at:
@@ -148,8 +148,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-16-mnq-comex-settle-e2-rr10-atr-p50-chordia-unlock-v1.draft.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR_P70
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 2
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-16-mnq-comex-settle-e2-rr10-atr-p70-chordia-unlock-v1.draft.md
   downstream_artifact_path: null
   observed_at:
@@ -162,8 +162,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-16-mnq-comex-settle-e2-rr10-atr-p70-chordia-unlock-v1.draft.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 15
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-02-mnq-comex-costlt12-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
@@ -176,8 +176,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-02-mnq-comex-costlt12-chordia-unlock-v1.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G5
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 9
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-10-mnq-comexsettle-orbg5-rr10-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
@@ -190,8 +190,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-10-mnq-comexsettle-orbg5-rr10-chordia-unlock-v1.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 15
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
@@ -204,8 +204,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-02-mnq-comex-ovnrng100-chordia-unlock-v1.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_PD_CLEAR_LONG
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 9
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-10-mnq-comexsettle-pdclearlong-rr10-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
@@ -218,9 +218,9 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-10-mnq-comexsettle-pdclearlong-rr10-chordia-unlock-v1.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 15
-  next_action_token: run_cherry_pick_journal_enricher
-  upstream_artifact_path: docs/audit/results/2026-05-03-mnq-comex-settle-xmesatr60-rr10-chordia-unlock-v1.md
+  age_days: 0
+  next_action_token: operator_deployment_decision
+  upstream_artifact_path: docs/audit/results/2026-05-04-mnq-comexsettle-xmesatr60-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
     active_prereg: docs/audit/hypotheses/2026-05-03-mnq-comex-settle-xmesatr60-rr10-chordia-unlock-v1.yaml
@@ -229,11 +229,11 @@ entries:
     ranked_in_csv: false
     draft_path: null
     grounded_path: null
-    heavyweight_result_md: docs/audit/results/2026-05-03-mnq-comex-settle-xmesatr60-rr10-chordia-unlock-v1.md
+    heavyweight_result_md: docs/audit/results/2026-05-04-mnq-comexsettle-xmesatr60-chordia-unlock-v1.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_COST_LT15
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-09-mnq-comexsettle-cost-lt15-rr15-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -246,8 +246,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-09-mnq-comexsettle-cost-lt15-rr15-chordia-unlock.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-07-mnq-comexsettle-orb-vol-2k-rr15-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -260,8 +260,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-07-mnq-comexsettle-orb-vol-2k-rr15-chordia-unlock.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 15
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
@@ -274,8 +274,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-02-mnq-comex-ovnrng100-rr15-chordia-unlock-v1.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_X_MGC_ATR70_O15
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-20-mnq-comexsettle-x-mgc-atr70-o15-rr15-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -288,8 +288,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-20-mnq-comexsettle-x-mgc-atr70-o15-rr15-chordia-unlock.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR2.0_CB1_COST_LT12
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 1
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-19-mnq-comexsettle-cost-lt12-rr20-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -302,7 +302,7 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-19-mnq-comexsettle-cost-lt12-rr20-chordia-unlock.md
 - strategy_id: MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K
   current_stage: REVOKED
-  age_days: 1
+  age_days: 0
   next_action_token: no_action_required
   upstream_artifact_path: docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.md
   downstream_artifact_path: null
@@ -316,8 +316,8 @@ entries:
     heavyweight_result_md: null
 - strategy_id: MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G5
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-18-mnq-europeflow-orb-g5-rr20-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -330,8 +330,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-18-mnq-europeflow-orb-g5-rr20-chordia-unlock.md
 - strategy_id: MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G8
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-17-mnq-europeflow-orb-g8-rr20-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -345,7 +345,7 @@ entries:
 - strategy_id: MNQ_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G8
   current_stage: HEAVYWEIGHT_COMPLETE
   age_days: 0
-  next_action_token: run_cherry_pick_journal_enricher
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.md
   downstream_artifact_path: null
   observed_at:
@@ -358,8 +358,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.md
 - strategy_id: MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 9
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-10-mnq-nyseopen-xmesatr60-rr10-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
@@ -372,8 +372,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-10-mnq-nyseopen-xmesatr60-rr10-chordia-unlock-v1.md
 - strategy_id: MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 8
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-07-mnq-nyseopen-costlt12-rr15-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
@@ -386,8 +386,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-07-mnq-nyseopen-costlt12-rr15-chordia-unlock-v1.md
 - strategy_id: MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_G4
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-11-mnq-nyseopen-orb-g4-rr15-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -400,8 +400,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-11-mnq-nyseopen-orb-g4-rr15-chordia-unlock.md
 - strategy_id: MNQ_NYSE_OPEN_E2_RR1.5_CB1_OVNRNG_25
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-10-mnq-nyseopen-ovnrng-25-rr15-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -414,8 +414,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-10-mnq-nyseopen-ovnrng-25-rr15-chordia-unlock.md
 - strategy_id: MNQ_NYSE_OPEN_E2_RR2.0_CB1_X_MGC_ATR70
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-13-mnq-nyseopen-x-mgc-atr70-rr20-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -428,8 +428,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-13-mnq-nyseopen-x-mgc-atr70-rr20-chordia-unlock.md
 - strategy_id: MNQ_NYSE_OPEN_E2_RR2.5_CB1_X_MGC_ATR70
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-16-mnq-nyseopen-x-mgc-atr70-rr25-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -442,8 +442,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-16-mnq-nyseopen-x-mgc-atr70-rr25-chordia-unlock.md
 - strategy_id: MNQ_SINGAPORE_OPEN_E2_RR3.0_CB1_COST_LT12_O30
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-03-mnq-singaporeopen-cost-lt12-o30-rr30-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -456,8 +456,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-03-mnq-singaporeopen-cost-lt12-o30-rr30-chordia-unlock.md
 - strategy_id: MNQ_SINGAPORE_OPEN_E2_RR3.0_CB1_ORB_G8_O15
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-04-mnq-singaporeopen-orb-g8-o15-rr30-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -470,8 +470,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-04-mnq-singaporeopen-orb-g8-o15-rr30-chordia-unlock.md
 - strategy_id: MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_COST_LT12_O15
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-02-mnq-singaporeopen-cost-lt12-o15-rr40-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -484,8 +484,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-02-mnq-singaporeopen-cost-lt12-o15-rr40-chordia-unlock.md
 - strategy_id: MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_COST_LT12_O30
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-01-mnq-singaporeopen-cost-lt12-o30-rr40-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -498,7 +498,7 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-01-mnq-singaporeopen-cost-lt12-o30-rr40-chordia-unlock.md
 - strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
   current_stage: PARKED
-  age_days: 1
+  age_days: 0
   next_action_token: no_action_required
   upstream_artifact_path: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
   downstream_artifact_path: null
@@ -512,8 +512,8 @@ entries:
     heavyweight_result_md: null
 - strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-08-mnq-usdata1000-orb-vol-8k-rr10-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -526,8 +526,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-08-mnq-usdata1000-orb-vol-8k-rr10-chordia-unlock.md
 - strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-15-mnq-usdata1000-ovnrng-25-rr10-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -540,8 +540,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-15-mnq-usdata1000-ovnrng-25-rr10-chordia-unlock.md
 - strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_PD_GO_LONG
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 9
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-10-mnq-usdata1000-pdgolong-rr10-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
@@ -554,8 +554,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-10-mnq-usdata1000-pdgolong-rr10-chordia-unlock-v1.md
 - strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 15
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-02-mnq-usdata1000-vwapmid-o15-rr10-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
@@ -568,8 +568,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-02-mnq-usdata1000-vwapmid-o15-rr10-chordia-unlock-v1.md
 - strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 3
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
@@ -582,8 +582,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md
 - strategy_id: MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-14-mnq-usdata1000-cost-lt10-rr15-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -596,8 +596,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-14-mnq-usdata1000-cost-lt10-rr15-chordia-unlock.md
 - strategy_id: MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_VOL_8K
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 5
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-15-12-mnq-usdata1000-orb-vol-8k-rr15-chordia-unlock.md
   downstream_artifact_path: null
   observed_at:
@@ -610,8 +610,8 @@ entries:
     heavyweight_result_md: docs/audit/results/2026-05-15-12-mnq-usdata1000-orb-vol-8k-rr15-chordia-unlock.md
 - strategy_id: MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15
   current_stage: HEAVYWEIGHT_COMPLETE
-  age_days: 15
-  next_action_token: run_cherry_pick_journal_enricher
+  age_days: 0
+  next_action_token: operator_deployment_decision
   upstream_artifact_path: docs/audit/results/2026-05-02-mnq-usdata1000-vwapmid-o15-chordia-unlock-v1.md
   downstream_artifact_path: null
   observed_at:
