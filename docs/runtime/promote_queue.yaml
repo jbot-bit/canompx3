@@ -33,18 +33,18 @@ entries:
     instrument: MNQ
     orb_label: COMEX_SETTLE
     orb_minutes: 5
-    K_global: 20
-    K_family: 10
-    K_lane: 10
+    K_global: 26
+    K_family: 13
+    K_lane: 13
     K_declared_in_prereg: 1
-    K_effective_minBTL: 0.0006367801623028995
+    K_effective_minBTL: 0.0006925489505837989
     bh_fdr_passes:
       K_family: false
       K_lane: false
       K_global: true
-    correlation_haircut_N_hat: 534
+    correlation_haircut_N_hat: 679
     rho_hat_assumed: 0.5
-  n_hat: 534
+  n_hat: 679
   upstream_k_role: fast_lane_v5.1_K1_triage
   upstream_k_value: 1
 - result_md: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
@@ -76,17 +76,17 @@ entries:
     instrument: MNQ
     orb_label: US_DATA_1000
     orb_minutes: 30
-    K_global: 20
-    K_family: 10
-    K_lane: 10
+    K_global: 26
+    K_family: 13
+    K_lane: 13
     K_declared_in_prereg: 1
-    K_effective_minBTL: 0.00011730488971548245
+    K_effective_minBTL: 0.00012757837489315853
     bh_fdr_passes:
       K_family: false
       K_lane: false
       K_global: true
-    correlation_haircut_N_hat: 1243
+    correlation_haircut_N_hat: 1582
     rho_hat_assumed: 0.5
-  n_hat: 1243
+  n_hat: 1582
   upstream_k_role: fast_lane_v5.1_K1_triage
   upstream_k_value: 1

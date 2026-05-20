@@ -911,3 +911,73 @@ entries:
     pooled_t: 3.064
     pooled_n: 226
     pooled_fire: 0.14679999999999999
+- run_id: scanner-1f726fa8f078c6e0-20260520T013633Z
+  run_timestamp_utc: '2026-05-20T01:36:33Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.yaml
+  prereg_sha: 1f726fa8f078c6e0
+  structural_hash: e27f8d59f8336d85
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: COMEX_SETTLE
+    orb_minutes: 5
+    K_global: 26
+    K_family: 13
+    K_lane: 13
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 0.0006925489505837989
+    bh_fdr_passes:
+      K_family: false
+      K_lane: false
+      K_global: true
+    correlation_haircut_N_hat: 679
+    rho_hat_assumed: 0.5
+  n_hat: 679.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-comexsettle-e2-rr20-cb1-orbvol16k-pooled-o5-fast-lane-v1.md
+    strategy_id: MNQ_COMEX_SETTLE_E2_RR2.0_CB1_ORB_VOL_16K
+    scanner_status: REVOKED
+  outcome:
+    pooled_t: 3.3
+    pooled_n: 97
+    pooled_fire: 0.0649
+- run_id: scanner-64156e75c55701b6-20260520T013633Z
+  run_timestamp_utc: '2026-05-20T01:36:33Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.yaml
+  prereg_sha: 64156e75c55701b6
+  structural_hash: ed4cb1058cc25a58
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: US_DATA_1000
+    orb_minutes: 30
+    K_global: 26
+    K_family: 13
+    K_lane: 13
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 0.00012757837489315853
+    bh_fdr_passes:
+      K_family: false
+      K_lane: false
+      K_global: true
+    correlation_haircut_N_hat: 1582
+    rho_hat_assumed: 0.5
+  n_hat: 1582.0
+  upstream_provenance:
+    result_md: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
+    strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    scanner_status: PARKED
+  outcome:
+    pooled_t: 3.064
+    pooled_n: 226
+    pooled_fire: 0.14679999999999999
