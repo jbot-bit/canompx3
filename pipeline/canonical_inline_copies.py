@@ -229,9 +229,11 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         name="fast_lane_structural_hash_schema",
         inline_site="scripts/research/fast_lane_structural_hash.py",
         canonical_source=(
-            "docs/runtime/stages/"
-            "2026-05-20-fast-lane-anti-fp-trial-provenance.md "
-            "section `## Hash Schema` (hash_schema_version + 9-field inputs)"
+            "docs/specs/fast_lane_state_graph.md "
+            "section `## 9. Hash Schema` (hash_schema_version + 9-field inputs). "
+            "Relocated from "
+            "docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md "
+            "on 2026-05-21 per surface-taxonomy doctrine."
         ),
         gated_constants=(
             "HASH_SCHEMA_VERSION",
@@ -289,10 +291,11 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         name="fast_lane_promote_suppression_status_values",
         inline_site="scripts/research/fast_lane_promote_queue.py",
         canonical_source=(
-            "docs/runtime/stages/"
-            "2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md "
-            "section `## Suppression Status Enum` (6 SUPPRESSED_* tokens "
-            "in the table's first column)"
+            "docs/specs/fast_lane_state_graph.md "
+            "section `## 10. Suppression Status Enum` (6 SUPPRESSED_* "
+            "tokens in the table's first column). Relocated from "
+            "docs/runtime/stages/2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md "
+            "on 2026-05-21 per surface-taxonomy doctrine."
         ),
         gated_constants=("STATUS_VALUES",),
         parity_check="check_fast_lane_promote_queue_provenance_present",

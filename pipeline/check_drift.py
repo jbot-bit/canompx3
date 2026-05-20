@@ -10494,14 +10494,18 @@ def check_fast_lane_structural_hash_schema_parity(
         mirrors the ``inputs:`` block field-name order in the same YAML.
 
     Both must stay in lockstep with ``## Hash Schema`` in
-    ``docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md``
-    -- the design doc is the canonical authority for the 9-field input set
-    + version; the module is the inline copy. Drift between the two would
-    silently change every ``compute_structural_hash`` output, which in turn
-    breaks de-dup / suppression rules consumed by 2A.2 (trial ledger) and
-    2A.3 (scanner / bridge). 7th confirmed instance of the
+    ``docs/specs/fast_lane_state_graph.md`` § 9 -- the spec is the
+    canonical authority for the 9-field input set + version; the module is
+    the inline copy. Drift between the two would silently change every
+    ``compute_structural_hash`` output, which in turn breaks de-dup /
+    suppression rules consumed by 2A.2 (trial ledger) and 2A.3 (scanner /
+    bridge). 7th confirmed instance of the
     [[canonical-inline-copy-parity-bug-class]] -- see
-    ``memory/feedback_canonical_inline_copy_parity_bug_class.md``.
+    ``memory/feedback_canonical_inline_copy_parity_bug_class.md``. Source
+    block was relocated from
+    ``docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md``
+    on 2026-05-21 per surface-taxonomy doctrine (parser surface may not
+    live under ``docs/runtime/``).
 
     This check parses the fenced YAML block under the ``## Hash Schema``
     heading, then asserts:
@@ -10552,12 +10556,12 @@ def check_fast_lane_structural_hash_schema_parity(
     target = (
         design_doc_path
         if design_doc_path is not None
-        else PROJECT_ROOT / "docs" / "runtime" / "stages" / "2026-05-20-fast-lane-anti-fp-trial-provenance.md"
+        else PROJECT_ROOT / "docs" / "specs" / "fast_lane_state_graph.md"
     )
 
     if not target.exists():
         return [
-            f"check_fast_lane_structural_hash_schema_parity: canonical design doc "
+            f"check_fast_lane_structural_hash_schema_parity: canonical spec "
             f"missing at {target} (hash-schema parity cannot be verified -- "
             "fail-closed)"
         ]
@@ -10569,20 +10573,21 @@ def check_fast_lane_structural_hash_schema_parity(
             f"check_fast_lane_structural_hash_schema_parity: failed to read {target.name}: {type(exc).__name__}: {exc}"
         ]
 
-    # Extract the fenced YAML block under ``## Hash Schema``. The block is
-    # introduced by a ``## Hash Schema`` heading and the first ```yaml fence
-    # that follows; we capture until the next ``` fence. Match newline-
-    # boundary so an inline mention of "## Hash Schema" elsewhere in prose
-    # would not false-trigger.
+    # Extract the fenced YAML block under ``## [N.] Hash Schema``. The block
+    # is introduced by a ``## Hash Schema`` heading (tolerating an optional
+    # leading section number like ``## 9. Hash Schema``) and the first
+    # ```yaml fence that follows; we capture until the next ``` fence. Match
+    # newline-boundary so an inline mention elsewhere in prose would not
+    # false-trigger.
     schema_section = re.search(
-        r"(?m)^##\s+Hash\s+Schema[^\n]*\n.*?```yaml\n(?P<yaml>.*?)\n```",
+        r"(?m)^##\s+(?:\d+\.\s+)?Hash\s+Schema[^\n]*\n.*?```yaml\n(?P<yaml>.*?)\n```",
         text,
         re.DOTALL,
     )
     if schema_section is None:
         return [
             "check_fast_lane_structural_hash_schema_parity: canonical "
-            f"design doc {target.name} missing `## Hash Schema` section "
+            f"spec {target.name} missing `## Hash Schema` section "
             "with a ```yaml fenced block (doctrine structure drifted -- "
             "investigate before promoting the check)"
         ]
@@ -10996,16 +11001,19 @@ def check_fast_lane_promote_queue_provenance_present() -> list[str]:
       (c) Suppression-status enum parity:
           ``scripts.research.fast_lane_promote_queue.STATUS_VALUES`` must
           contain the 6 ``SUPPRESSED_*`` tokens (and the legacy tokens
-          like ``QUEUED`` / ``ESCALATED`` etc) declared in the Stage 2A.3
-          stage file's ``## Suppression Status Enum`` table.
+          like ``QUEUED`` / ``ESCALATED`` etc) declared in the canonical
+          spec's ``## Suppression Status Enum`` table.
 
     Bug class: 10th instance of canonical-inline-copy parity (see
     ``memory/feedback_canonical_inline_copy_parity_bug_class.md``). Two
     canonical surfaces share these tokens by literal-byte copy:
 
-      - canonical: ``docs/runtime/stages/2026-05-20-fast-lane-anti-fp-2a3-
-        scanner-bridge-wiring.md`` § Suppression Status Enum (table's
-        first column)
+      - canonical: ``docs/specs/fast_lane_state_graph.md`` § 10
+        Suppression Status Enum (table's first column). Block relocated
+        from
+        ``docs/runtime/stages/2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md``
+        on 2026-05-21 per surface-taxonomy doctrine (parser surface may
+        not live under ``docs/runtime/``).
       - inline:   ``scripts/research/fast_lane_promote_queue.STATUS_VALUES``
 
     Drift between them would silently let a renamed status token escape
@@ -11017,7 +11025,7 @@ def check_fast_lane_promote_queue_provenance_present() -> list[str]:
 
     repo_root = Path(__file__).resolve().parents[1]
     cache_path = repo_root / "docs" / "runtime" / "promote_queue.yaml"
-    stage_path = repo_root / "docs" / "runtime" / "stages" / "2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md"
+    stage_path = repo_root / "docs" / "specs" / "fast_lane_state_graph.md"
 
     # Required k_lineage keys per stage file § "K-Lineage Schema".
     REQUIRED_K_LINEAGE_KEYS = (
@@ -11155,8 +11163,8 @@ def check_fast_lane_promote_queue_provenance_present() -> list[str]:
 
     if not stage_path.exists():
         violations.append(
-            "check_fast_lane_promote_queue_provenance_present: stage file "
-            f"missing at {stage_path}; cannot enforce STATUS_VALUES parity."
+            "check_fast_lane_promote_queue_provenance_present: canonical "
+            f"spec missing at {stage_path}; cannot enforce STATUS_VALUES parity."
         )
         return violations
     try:
@@ -11165,16 +11173,23 @@ def check_fast_lane_promote_queue_provenance_present() -> list[str]:
         violations.append(f"check_fast_lane_promote_queue_provenance_present: failed to read {stage_path.name}: {exc}")
         return violations
 
-    # Parse the `## Suppression Status Enum` table. Rows look like:
+    # Parse the `## [N.] Suppression Status Enum` table. Rows look like:
     #   | `SUPPRESSED_FOO` | trigger prose | bridge action |
+    # The heading tolerates an optional leading section number (e.g.
+    # ``## 10. Suppression Status Enum``) to match the canonical spec's
+    # numbered-section style after the 2026-05-21 relocation. The section
+    # body terminator matches either the next ``## `` heading OR
+    # end-of-document — the canonical block may be the last section in
+    # the spec.
     section_match = re.search(
-        r"(?ms)^## Suppression Status Enum\b.*?^(?=## )",
+        r"(?ms)^##\s+(?:\d+\.\s+)?Suppression\s+Status\s+Enum\b.*?(?=^## |\Z)",
         stage_text,
     )
     if section_match is None:
         violations.append(
-            "check_fast_lane_promote_queue_provenance_present: stage file "
-            f"{stage_path.name} missing `## Suppression Status Enum` section."
+            "check_fast_lane_promote_queue_provenance_present: canonical "
+            f"spec {stage_path.name} missing `## Suppression Status Enum` "
+            "section."
         )
         return violations
     enum_body = section_match.group(0)
@@ -11225,7 +11240,16 @@ def check_canonical_inline_copies_have_parity_check() -> list[str]:
       (b) ``entry.test_file`` exists on disk and is non-empty.
       (c) The test file contains at least ``len(entry.gated_constants)``
           ``def test_`` functions (sibling-coverage doctrine per
-          ``feedback_regex_alternation_sibling_coverage.md``).
+          ``memory/feedback_regex_alternation_sibling_coverage.md``).
+      (d) ``entry.canonical_source`` does NOT start with ``docs/runtime/``.
+          Canonical parser-surface must live in a canonical-class
+          surface (``docs/specs/``, ``docs/institutional/``,
+          ``.claude/rules/``); ``docs/runtime/`` is the Plans / history /
+          baton class per
+          ``docs/governance/system_authority_map.md`` Surface Taxonomy.
+          Added 2026-05-21 after n=1 incident where commit ``ef4f0f29``
+          deleted a stage file that Check #167 parsed; see
+          ``memory/feedback_canonical_block_in_stage_file_anti_pattern_n1_2026_05_21.md``.
 
     Fail-closed: a missing ``pipeline.canonical_inline_copies`` module,
     an unreadable test file, or an entry whose ``parity_check`` is not
@@ -11326,6 +11350,32 @@ def check_canonical_inline_copies_have_parity_check() -> list[str]:
                 f"{', '.join(entry.gated_constants)}), found {test_fn_count} "
                 "-- sibling-coverage doctrine violation "
                 "(see memory/feedback_regex_alternation_sibling_coverage.md)"
+            )
+
+        # (d) canonical_source location class: canonical sources may not
+        # live under ``docs/runtime/`` -- that directory is the
+        # ``Plans / history / baton`` class per
+        # ``docs/governance/system_authority_map.md`` Surface Taxonomy
+        # ("Never cited as live runtime truth"). Parser surface must live
+        # in a canonical-class surface: ``docs/specs/``,
+        # ``docs/institutional/``, or ``.claude/rules/``. Added 2026-05-21
+        # in response to the n=1 incident where commit ``ef4f0f29``
+        # deleted a stage file that Check #167 parsed; restored as Bug 2
+        # of commit ``4bd288c4``. Background:
+        # ``memory/feedback_canonical_block_in_stage_file_anti_pattern_n1_2026_05_21.md``.
+        if entry.canonical_source.startswith("docs/runtime/"):
+            violations.append(
+                f"{prefix}: canonical_source path begins with 'docs/runtime/' "
+                f"(got {entry.canonical_source!r}). The ``docs/runtime/`` "
+                "directory is the Plans / history / baton class per "
+                "docs/governance/system_authority_map.md Surface Taxonomy "
+                "(\"Never cited as live runtime truth\"). Canonical "
+                "parser surface must live in a canonical-class surface: "
+                "docs/specs/, docs/institutional/, or .claude/rules/. "
+                "Relocate the canonical block (see the 2026-05-21 "
+                "fast_lane_state_graph.md §§ 9-10 relocation as the "
+                "precedent commit) and update this entry's "
+                "canonical_source string to the new location."
             )
 
     return violations

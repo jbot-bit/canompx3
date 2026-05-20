@@ -157,6 +157,94 @@ def test_insufficient_test_functions_violates(reset_registry, tmp_path: Path):
             abs_test_file.unlink()
 
 
+def test_canonical_source_under_docs_runtime_violates(reset_registry):
+    """Invariant (d): canonical_source path may NOT start with docs/runtime/.
+
+    The ``docs/runtime/`` directory is the Plans / history / baton class per
+    ``docs/governance/system_authority_map.md`` Surface Taxonomy
+    ("Never cited as live runtime truth"). Canonical parser-surface must
+    live in a canonical-class surface (``docs/specs/``,
+    ``docs/institutional/``, ``.claude/rules/``).
+
+    Added 2026-05-21 after n=1 incident where commit ``ef4f0f29`` deleted
+    a stage file that Check #167 parsed; restored as Bug 2 of commit
+    ``4bd288c4``. Background:
+    ``memory/feedback_canonical_block_in_stage_file_anti_pattern_n1_2026_05_21.md``.
+
+    The check must fire for ANY ``docs/runtime/`` prefix, not just the
+    specific ``docs/runtime/stages/`` subdirectory that triggered the
+    original incident, because the surface-taxonomy violation applies
+    to the entire runtime tree (ledgers, allocation JSON, audit logs).
+    """
+    PROJECT_ROOT = Path(__file__).resolve().parents[2]
+    rel_test_file = "tests/test_pipeline/_synthetic_runtime_canonical.py"
+    abs_test_file = PROJECT_ROOT / rel_test_file
+    abs_test_file.write_text(
+        "def test_only_one_function():\n    assert True\n",
+        encoding="utf-8",
+    )
+    try:
+        CANONICAL_INLINE_COPIES.clear()
+        CANONICAL_INLINE_COPIES.append(
+            InlineCopyPair(
+                name="runtime_canonical_anti_pattern",
+                inline_site="scripts/research/fast_lane_promote_queue.py",
+                # Sentinel: the rejected location class.
+                canonical_source="docs/runtime/foo.md section `## Bar`",
+                gated_constants=("FOO",),
+                parity_check="check_fast_lane_promote_threshold_parity",
+                test_file=rel_test_file,
+                bug_class_anchor="memory/feedback_canonical_inline_copy_parity_bug_class.md",
+            )
+        )
+        violations = check_canonical_inline_copies_have_parity_check()
+        assert any(
+            "canonical_source path begins with 'docs/runtime/'" in v
+            and "runtime_canonical_anti_pattern" in v
+            for v in violations
+        ), f"Expected invariant-(d) violation, got: {violations}"
+    finally:
+        if abs_test_file.exists():
+            abs_test_file.unlink()
+
+
+def test_canonical_source_under_docs_specs_passes_invariant_d(reset_registry):
+    """Invariant (d) acceptance: ``docs/specs/`` is a permitted canonical class.
+
+    Mutation-proof companion to ``test_canonical_source_under_docs_runtime_violates``:
+    if the prefix check is mis-tuned (e.g. typo'd to ``docs/r``), this
+    test catches the false positive on a legitimate spec path.
+    """
+    PROJECT_ROOT = Path(__file__).resolve().parents[2]
+    rel_test_file = "tests/test_pipeline/_synthetic_specs_canonical.py"
+    abs_test_file = PROJECT_ROOT / rel_test_file
+    abs_test_file.write_text(
+        "def test_only_one_function():\n    assert True\n",
+        encoding="utf-8",
+    )
+    try:
+        CANONICAL_INLINE_COPIES.clear()
+        CANONICAL_INLINE_COPIES.append(
+            InlineCopyPair(
+                name="specs_canonical_acceptance",
+                inline_site="scripts/research/fast_lane_promote_queue.py",
+                canonical_source="docs/specs/fast_lane_state_graph.md § 9 Hash Schema",
+                gated_constants=("FOO",),
+                parity_check="check_fast_lane_promote_threshold_parity",
+                test_file=rel_test_file,
+                bug_class_anchor="memory/feedback_canonical_inline_copy_parity_bug_class.md",
+            )
+        )
+        violations = check_canonical_inline_copies_have_parity_check()
+        invariant_d_hits = [v for v in violations if "canonical_source path begins with 'docs/runtime/'" in v]
+        assert invariant_d_hits == [], (
+            f"Invariant (d) false-positive on docs/specs/ path: {invariant_d_hits}"
+        )
+    finally:
+        if abs_test_file.exists():
+            abs_test_file.unlink()
+
+
 def test_non_inline_copy_pair_violates(reset_registry):
     """A non-InlineCopyPair object in the registry is a type violation."""
     CANONICAL_INLINE_COPIES.clear()

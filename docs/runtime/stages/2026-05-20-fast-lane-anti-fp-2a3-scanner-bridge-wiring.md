@@ -39,20 +39,9 @@ scope_lock:
 - **Stage 2A.2** (`cec5a8d5`): trial ledger + graveyard digest writers + Checks #169 + #170 + 24 tests. **Landed on main 2026-05-20 via merge commit `b8aba2f1`** (pushed to origin); drift count 147 PASSED on main → 149 PASSED post-merge (verified pre-stage); both new checks active and passing.
 - **Gate condition met** per parent split file § Stage-Gate Discipline ("2A.3 cannot open until 2A.2 is committed + pushed + drift check passes").
 
-## Suppression Status Enum (canonical — mirrored by `canonical_inline_copies.py`)
+## Suppression Status Enum
 
-Six new values added to `fast_lane_promote_queue.STATUS_VALUES`. Existing values (`QUEUED`, `ESCALATED`, `REVOKED`, `PARKED`, `REJECTED_OOS_UNPOWERED`, `ERROR`) preserved.
-
-| Status | Trigger | Bridge action |
-|---|---|---|
-| `SUPPRESSED_GRAVEYARD` | `structural_hash` matches an entry in `fast_lane_graveyard_digest.yaml` | refuse |
-| `SUPPRESSED_DUPLICATE_ACTIVE` | `structural_hash` matches an existing prereg under `docs/audit/hypotheses/` (NOT `drafts/`) that has not yet produced a result MD with the same hash | refuse |
-| `SUPPRESSED_SIBLING_RETEST` | `K_lane >= 2` (ledger contains >=2 entries sharing this structural_hash) | refuse |
-| `SUPPRESSED_BANNED_ENTRY_MODEL` | `entry_model in {E0, E3}` | refuse |
-| `SUPPRESSED_E2_LOOKAHEAD` | `entry_model == E2` AND `filter_type` matches `E2_EXCLUDED_FILTER_PREFIXES` / `E2_EXCLUDED_FILTER_SUBSTRINGS` (canonical from `trading_app.config`) | refuse |
-| `SUPPRESSED_K_OVERRUN` | `N_hat >= K_declared_in_prereg * 2` (effective-N exceeds budget per Bailey-Lopez de Prado 2014 Eq. 9) | refuse |
-
-OOS-power gate (Check #161) stays unchanged and remains upstream of these suppression statuses on the verdict-priority order. If a result MD already carries `REJECTED_OOS_UNPOWERED`, that wins; suppression statuses below only fire on results that would otherwise reach `QUEUED`.
+> **Canonical:** `docs/specs/fast_lane_state_graph.md` § 10 Suppression Status Enum. Relocated 2026-05-21 per surface-taxonomy doctrine in `docs/governance/system_authority_map.md` (parser-surface blocks may not live under `docs/runtime/`). This stage file is now design rationale only — the canonical table lives in the spec, parsed by `check_fast_lane_promote_queue_provenance_present` (Check #173) and mirrored by `fast_lane_promote_queue.STATUS_VALUES`.
 
 ## K-Lineage Schema (per PROMOTE/QUEUED entry)
 

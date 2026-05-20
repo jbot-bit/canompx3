@@ -132,25 +132,7 @@ Derived hash-set of all NO-GO / PARKED / KILL entries from `chatgpt_bundle/06_RD
 
 ## Hash Schema (`structural_hash`)
 
-```yaml
-# Canonical inputs to the hash — order-stable, normalised, version-tagged
-hash_schema_version: 1
-inputs:
-  instrument: str           # MNQ | MES | MGC (delegated from pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS)
-  orb_label: str            # session catalog key (delegated from pipeline.dst.SESSION_CATALOG)
-  orb_minutes: int          # 5 | 15 | 30
-  rr_target: float          # 1.0 | 1.5 | 2.0 (rounded to 1 dp)
-  entry_model: str          # E1 | E2 | E3  (E3 graveyard-banned — suppression rule fires)
-  confirm_bars: int         # 1 | 2
-  filter_type: str          # canonical key from ALL_FILTERS, normalised
-  direction: str            # LONG | SHORT | BOTH (normalised case)
-  filter_threshold: str     # canonical-form string of bound values, e.g. "ATR_P50_ge_0.50"
-formula: sha256(canonical_json(inputs))[:16]  # 16-hex-char structural id
-```
-
-Hash deliberately **excludes** data window, K framing, t-stat — those are test instances, not structural identity. Two preregs with the same hash test the same lane; that's the de-dup criterion.
-
-The hash is registered in `pipeline.canonical_inline_copies` so any future field addition triggers Check #159's meta-parity + a sibling injection test.
+> **Canonical:** `docs/specs/fast_lane_state_graph.md` § 9 Hash Schema. Relocated 2026-05-21 per surface-taxonomy doctrine in `docs/governance/system_authority_map.md` (parser-surface blocks may not live under `docs/runtime/`). This stage file is now design rationale only — the canonical YAML block lives in the spec, parsed by `check_fast_lane_structural_hash_schema_parity` (Check #167).
 
 ---
 

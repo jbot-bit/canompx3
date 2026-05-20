@@ -77,3 +77,6 @@ Adding files to scope_lock mid-implementation: (1) inform user why, (2) update b
 
 ## Stage Completion — "done" means PROVEN
 Before deleting your `stages/<slug>.md`: (1) tests pass (show output), (2) dead code swept (`grep -r`), (3) `python pipeline/check_drift.py` passes. All three required.
+
+## Canonical Parser-Surface Anti-Pattern (mechanically enforced)
+Stage files are *decision-class artifacts* (Plans / history / baton per `docs/governance/system_authority_map.md` Surface Taxonomy). NEVER embed parser surface — YAML or markdown table blocks that a drift check parses as canonical source — inside a stage file. Canonical blocks belong in `docs/specs/`, `docs/institutional/`, or `.claude/rules/`. Enforced by `check_canonical_inline_copies_have_parity_check` invariant (d) — any `InlineCopyPair` in the registry whose `canonical_source` path begins with `docs/runtime/` is a violation. Precedent: 2026-05-21 relocation of the fast-lane `## Hash Schema` and `## Suppression Status Enum` blocks from `docs/runtime/stages/*` into `docs/specs/fast_lane_state_graph.md` §§ 9-10 after the n=1 close-out-deletion incident (commits `ef4f0f29` → `4bd288c4`). See `memory/feedback_canonical_block_in_stage_file_anti_pattern_n1_2026_05_21.md`.

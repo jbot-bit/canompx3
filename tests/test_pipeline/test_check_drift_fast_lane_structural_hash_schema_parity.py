@@ -50,13 +50,20 @@ def test_clean_state_passes():
 
 
 def test_missing_design_doc_fails_closed(tmp_path: Path):
-    """If the canonical Stage 2A design doc is unreachable the check
-    returns a single violation rather than silently passing."""
+    """If the canonical spec is unreachable the check returns a single
+    violation rather than silently passing.
+
+    Note: the canonical block was relocated from a stage file under
+    ``docs/runtime/stages/`` to ``docs/specs/fast_lane_state_graph.md``
+    on 2026-05-21 (per Check #159 invariant (d)). The error message
+    now reads ``canonical spec missing`` rather than the prior
+    ``canonical design doc missing``.
+    """
     forged = tmp_path / "does-not-exist.md"
     violations = check_fast_lane_structural_hash_schema_parity(design_doc_path=forged)
-    assert violations, "missing canonical design doc must NOT pass silently"
+    assert violations, "missing canonical spec must NOT pass silently"
     assert len(violations) == 1
-    assert "canonical design doc missing" in violations[0]
+    assert "canonical spec missing" in violations[0]
     assert str(forged) in violations[0]
 
 
