@@ -755,12 +755,9 @@ class TestRefreshCollapsesOosWindow:
         assert row is not None
         first_day, last_day, n = row
         assert last_day < HOLDOUT_SACRED_FROM, (
-            f"refresher leaked OOS data: last_trade_day={last_day} "
-            f">= HOLDOUT_SACRED_FROM={HOLDOUT_SACRED_FROM}"
+            f"refresher leaked OOS data: last_trade_day={last_day} >= HOLDOUT_SACRED_FROM={HOLDOUT_SACRED_FROM}"
         )
-        assert last_day == pre_c_latest, (
-            f"expected strict-IS last_trade_day={pre_c_latest}, got {last_day}"
-        )
+        assert last_day == pre_c_latest, f"expected strict-IS last_trade_day={pre_c_latest}, got {last_day}"
         assert first_day == pre_a
         assert n == 3
 
