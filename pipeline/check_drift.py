@@ -9699,8 +9699,6 @@ _LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST: frozenset[Path] = frozenset({
 # "reader migrated" signal. When this set is empty, Stage 1b's grep-gate axis
 # is complete.
 _LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST: frozenset[Path] = frozenset({
-    # trading_app/ readers — Stage 1b-ii
-    Path("trading_app/live/session_orchestrator.py"),
     # scripts/tools/ readers — Stage 1b-iii
     Path("scripts/tools/allocation_intel.py"),
     Path("scripts/tools/allocator_gate_audit.py"),
