@@ -362,7 +362,7 @@ class TestEnrichTradesIntegration:
         # Build a trades list directly from prop_profiles deployed lanes
         # (avoiding collect_trades's DB roundtrips so this test stays scoped)
         trades = []
-        for pid, profile in ACCOUNT_PROFILES.items():
+        for _pid, profile in ACCOUNT_PROFILES.items():
             lanes = effective_daily_lanes(profile)
             if not profile.active or not lanes:
                 continue

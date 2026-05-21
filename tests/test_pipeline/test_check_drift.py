@@ -2776,7 +2776,7 @@ class TestCheckSrPausesHaveRecentEvidence:
                 {
                     "schema_version": 1,
                     "state_type": "sr_monitor",
-                    "canonical_inputs": {"profile_id": profile_id, "lane_ids": [l["strategy_id"] for l in lanes]},
+                    "canonical_inputs": {"profile_id": profile_id, "lane_ids": [lane["strategy_id"] for lane in lanes]},
                     "payload": {"results": lanes},
                 }
             ),

@@ -337,7 +337,7 @@ def panel_next_24h(instrument_filter: str | None) -> str:
     now_utc = datetime.now(UTC)
     horizon = now_utc + timedelta(hours=24)
     for trading_day in days:
-        for label in SESSION_CATALOG.keys():
+        for label in SESSION_CATALOG:
             try:
                 start_utc, _end_utc = orb_utc_window(trading_day, label, 5)
             except ValueError:

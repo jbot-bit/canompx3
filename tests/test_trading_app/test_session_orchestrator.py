@@ -3023,7 +3023,8 @@ class TestR1WallClockRollover:
         """
         from trading_app.live import session_orchestrator as so
 
-        src = open(so.__file__, encoding="utf-8").read()
+        with open(so.__file__, encoding="utf-8") as fh:
+            src = fh.read()
         assert "_wall_clock_rollover_loop" in src, "R1: _wall_clock_rollover_loop method missing from production code"
         assert "rollover_task = asyncio.create_task(self._wall_clock_rollover_loop())" in src, (
             "R1: rollover_task create_task call missing from run()"
@@ -3355,7 +3356,6 @@ class TestR3ReconnectCeiling:
         orch._feed_class = StableThenCrashFeed
 
         # Patch datetime.now(UTC) inside the loop to simulate 30min uptime on first run
-        original_datetime = __import__("datetime").datetime
         call_seq = [0]
 
         class PatchedDatetime:
@@ -4550,7 +4550,8 @@ class TestF4BracketNakedPosition:
         """
         from trading_app.live import session_orchestrator as so
 
-        src = open(so.__file__, encoding="utf-8").read()
+        with open(so.__file__, encoding="utf-8") as fh:
+            src = fh.read()
         assert "F4-1" in src, "F4-1 source marker missing — no-risk-points path reverted"
         assert "F4-2" in src, "F4-2 source marker missing — bracket-spec-None path reverted"
         assert "F4-3" in src, "F4-3 source marker missing — submit-raises path reverted"
