@@ -88,6 +88,20 @@ Schema:
 - [ ] `pipeline/check_drift.py` passes (all new + existing checks)
 - [ ] Commit + push + open PR on `session/joshd-multi-profile-lane-allocation`
 
+## Sub-stage progress (resume-state hygiene — update on every commit)
+
+Each entry is a landed commit on `session/joshd-multi-profile-lane-allocation`.
+A fresh `/clear`'d session should read this block FIRST to know the next
+concrete task. Tick boxes when commits land; keep the unticked entry at the
+top of the unfinished list short enough to be the "next session" target.
+
+- [x] 1b-i — drift-check bedrock (parity check + grep-gate + temp allowlist) — `6916dbd9`
+- [x] 1b-ii.a-1 — opportunity_awareness.py migrated to resolver; legacy_lane_allocation_path + new_lane_allocation_dir public helpers promoted — `871f0496`
+- [x] 1b-ii.a-2 — prop_portfolio.py docstring + pre_session_check.py real migration (check_lane_mismatch + check_allocation_staleness_gate reword) + deployability.py comment-only rewords; allowlist shrunk from 4 → 1 trading_app entries — `ba5d640b`
+- [ ] 1b-ii.b — `trading_app/live/session_orchestrator.py` migration. HIGH-severity (live-broker arming, kill-switch path). Per `.claude/rules/adversarial-audit-gate.md` this needs a fresh-context `evidence-auditor` dispatch on the diff before merge. Open the new session with: read the broker-arming path in `session_orchestrator.py`, plan the resolver swap, present design proposal, implement, then fire evidence-auditor on the diff.
+- [ ] 1b-iii — sweep the 11 `scripts/tools/*` readers in the temp allowlist. Mechanical resolver flip, but expect fixture-vs-contract drift per `feedback_fixture_vs_contract_drift_n1_2026_05_20.md`. Allowlist drops to zero `trading_app/` + zero `scripts/tools/` after this lands.
+- [ ] 1b-iv — open PR on `session/joshd-multi-profile-lane-allocation` once 1b-iii lands. Acceptance criteria below must all be ticked first.
+
 ## Out of scope (subsequent stages)
 
 - Research scripts under `scripts/research/` (Stage 1c)
