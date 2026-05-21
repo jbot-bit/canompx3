@@ -889,16 +889,17 @@ class TestMultiProfileLoaderFallback:
         import trading_app.prop_profiles as pp
 
         # Redirect both resolvers at tmp_path-rooted equivalents.
-        new_path = tmp_path / "lane_allocation" / "p1.json"
+        new_dir = tmp_path / "lane_allocation"
         legacy_path = tmp_path / "lane_allocation.json"
-        new_path.parent.mkdir(parents=True)
+        new_dir.mkdir(parents=True)
+        new_path = new_dir / "p1.json"
 
         new_payload = self._build_alloc_payload("p1", strategy_id="NEW_SID_MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER")
         legacy_payload = self._build_alloc_payload("p1", strategy_id="LEGACY_SID_MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER")
         new_path.write_text(json.dumps(new_payload))
         legacy_path.write_text(json.dumps(legacy_payload))
 
-        monkeypatch.setattr(pp, "_new_lane_allocation_path", lambda pid: tmp_path / "lane_allocation" / f"{pid}.json")
+        monkeypatch.setattr(pp, "_new_lane_allocation_dir", lambda: new_dir)
         monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: legacy_path)
 
         lanes = pp.load_allocation_lanes("p1")
@@ -917,8 +918,8 @@ class TestMultiProfileLoaderFallback:
         legacy_path = tmp_path / "lane_allocation.json"
         legacy_path.write_text(json.dumps(self._build_alloc_payload("p_legacy_only")))
 
-        # New-path resolver points at a nonexistent file.
-        monkeypatch.setattr(pp, "_new_lane_allocation_path", lambda pid: tmp_path / "missing" / f"{pid}.json")
+        # New-path dir does not exist; resolver falls through to legacy.
+        monkeypatch.setattr(pp, "_new_lane_allocation_dir", lambda: tmp_path / "missing")
         monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: legacy_path)
 
         lanes = pp.load_allocation_lanes("p_legacy_only")
@@ -934,7 +935,7 @@ class TestMultiProfileLoaderFallback:
         legacy_path = tmp_path / "lane_allocation.json"
         legacy_path.write_text(json.dumps(self._build_alloc_payload("other_profile")))
 
-        monkeypatch.setattr(pp, "_new_lane_allocation_path", lambda pid: tmp_path / "missing" / f"{pid}.json")
+        monkeypatch.setattr(pp, "_new_lane_allocation_dir", lambda: tmp_path / "missing")
         monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: legacy_path)
 
         assert pp.load_allocation_lanes("the_profile_we_want") == ()
@@ -943,7 +944,7 @@ class TestMultiProfileLoaderFallback:
         """Both new and legacy paths missing → empty tuple."""
         import trading_app.prop_profiles as pp
 
-        monkeypatch.setattr(pp, "_new_lane_allocation_path", lambda pid: tmp_path / "no_new" / f"{pid}.json")
+        monkeypatch.setattr(pp, "_new_lane_allocation_dir", lambda: tmp_path / "no_new")
         monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: tmp_path / "no_legacy.json")
 
         assert pp.load_allocation_lanes("anything") == ()
@@ -955,13 +956,13 @@ class TestMultiProfileLoaderFallback:
 
         import trading_app.prop_profiles as pp
 
-        new_path = tmp_path / "lane_allocation" / "p1.json"
+        new_dir = tmp_path / "lane_allocation"
         legacy_path = tmp_path / "lane_allocation.json"
-        new_path.parent.mkdir(parents=True)
-        new_path.write_text("this is not json {{{")
+        new_dir.mkdir(parents=True)
+        (new_dir / "p1.json").write_text("this is not json {{{")
         legacy_path.write_text(json.dumps(self._build_alloc_payload("p1")))
 
-        monkeypatch.setattr(pp, "_new_lane_allocation_path", lambda pid: tmp_path / "lane_allocation" / f"{pid}.json")
+        monkeypatch.setattr(pp, "_new_lane_allocation_dir", lambda: new_dir)
         monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: legacy_path)
 
         lanes = pp.load_allocation_lanes("p1")
@@ -974,11 +975,11 @@ class TestMultiProfileLoaderFallback:
 
         import trading_app.prop_profiles as pp
 
-        new_path = tmp_path / "lane_allocation" / "p1.json"
-        new_path.parent.mkdir(parents=True)
-        new_path.write_text(json.dumps(self._build_alloc_payload("p1")))
+        new_dir = tmp_path / "lane_allocation"
+        new_dir.mkdir(parents=True)
+        (new_dir / "p1.json").write_text(json.dumps(self._build_alloc_payload("p1")))
 
-        monkeypatch.setattr(pp, "_new_lane_allocation_path", lambda pid: tmp_path / "lane_allocation" / f"{pid}.json")
+        monkeypatch.setattr(pp, "_new_lane_allocation_dir", lambda: new_dir)
         monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: tmp_path / "nonexistent_legacy.json")
 
         blocked = pp.load_paused_strategy_ids(profile_id="p1")

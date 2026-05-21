@@ -25,6 +25,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal, NamedTuple
 
 # =========================================================================
 # Data structures
@@ -1132,34 +1133,51 @@ def _legacy_lane_allocation_path() -> Path:
     )
 
 
-def _new_lane_allocation_path(profile_id: str) -> Path:
+class AllocationRead(NamedTuple):
+    """Result of resolving a profile's lane-allocation JSON.
+
+    `source` carries provenance of where `data` came from. Stage 1d will
+    require zero `source="legacy"` reads in a stabilization window before
+    the legacy fallback is removed.
+    """
+
+    data: dict | None
+    source: Literal["new_path", "legacy", "override", "missing"]
+    path: Path | None
+
+
+def _new_lane_allocation_dir() -> Path:
     return _normalize_lane_alloc_path(
-        Path(__file__).resolve().parents[1]
-        / "docs"
-        / "runtime"
-        / "lane_allocation"
-        / f"{profile_id}.json"
+        Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation"
     )
 
 
-def _read_allocation_data(
+def resolve_allocation_json(
     profile_id: str,
-    allocation_path: str | Path | None,
-) -> dict | None:
-    """Read lane-allocation JSON for `profile_id` with new-then-legacy fallback.
+    allocation_path: str | Path | None = None,
+) -> AllocationRead:
+    """Canonical resolver for lane-allocation JSON reads (Stage 1b).
+
+    Single owner of: new-path preference, legacy fallback, profile-mismatch
+    fail-closed, multi-file ambiguity hard-fail, provenance. Every production
+    reader MUST use this resolver and MUST NOT re-implement path resolution
+    (institutional-rigor.md § 4: delegate to canonical sources, never re-encode).
 
     Resolution order (per docs/specs/lane_allocation_schema.md § 4):
-      1. If `allocation_path` is supplied, read that file directly with the
-         legacy profile-mismatch guard. No fallback.
-      2. Otherwise try the new per-profile path
-         (`docs/runtime/lane_allocation/<profile_id>.json`); accept any
-         well-formed JSON whose `profile_id` matches.
-      3. If new path missing/corrupt/mismatched, fall back to the legacy
-         single-profile file with the same profile-mismatch guard.
+      1. If `allocation_path` is supplied, read it directly with the legacy
+         profile-mismatch guard. No fallback. `source="override"`.
+      2. Otherwise enumerate `docs/runtime/lane_allocation/<profile_id>.json`.
+         If >1 file resolves for the same profile_id (case-fold collision,
+         duplicate, symlink), raise RuntimeError — this is a Stage-1a writer
+         invariant violation and capital-class trust is suspect.
+      3. If exactly one new-path file resolves with matching `profile_id`,
+         return it. `source="new_path"`.
+      4. Otherwise fall back to the legacy single-profile file with the
+         profile-mismatch guard. `source="legacy"`.
+      5. If both miss / corrupt / mismatched, return `source="missing"`.
 
-    Returns the parsed dict on success, or None for any fail-closed outcome
-    (missing both paths, corrupt JSON, profile mismatch). Callers translate
-    None into their own empty-collection return.
+    Returns `AllocationRead(data, source, path)`. `data is None` iff
+    `source == "missing"`.
     """
     import json
 
@@ -1177,12 +1195,49 @@ def _read_allocation_data(
         return data
 
     if allocation_path:
-        return _try_read(_normalize_lane_alloc_path(Path(allocation_path)))
+        explicit_path = _normalize_lane_alloc_path(Path(allocation_path))
+        data = _try_read(explicit_path)
+        if data is not None:
+            return AllocationRead(data=data, source="override", path=explicit_path)
+        return AllocationRead(data=None, source="missing", path=explicit_path)
 
-    new_data = _try_read(_new_lane_allocation_path(profile_id))
-    if new_data is not None:
-        return new_data
-    return _try_read(_legacy_lane_allocation_path())
+    new_dir = _new_lane_allocation_dir()
+    if new_dir.exists():
+        # Stage 1a writes exactly one file per profile. Multi-file ambiguity
+        # signals corruption: case-fold collision on Windows after a Linux
+        # copy, accidental duplicate from a botched rebalance, symlink trick.
+        # Hard-fail rather than silently pick one.
+        matches = sorted(p for p in new_dir.iterdir() if p.is_file() and p.stem == profile_id and p.suffix == ".json")
+        if len(matches) > 1:
+            raise RuntimeError(
+                "lane_allocation multi-file ambiguity for profile_id="
+                f"{profile_id!r}: {[str(p) for p in matches]}. "
+                "Stage 1a writer invariant violation; capital-class trust "
+                "suspect — investigate before any rebalance or live launch."
+            )
+        if matches:
+            new_path = matches[0]
+            data = _try_read(new_path)
+            if data is not None:
+                return AllocationRead(data=data, source="new_path", path=new_path)
+
+    legacy_path = _legacy_lane_allocation_path()
+    data = _try_read(legacy_path)
+    if data is not None:
+        return AllocationRead(data=data, source="legacy", path=legacy_path)
+    return AllocationRead(data=None, source="missing", path=None)
+
+
+def _read_allocation_data(
+    profile_id: str,
+    allocation_path: str | Path | None,
+) -> dict | None:
+    """Backward-compat shim — internal callers use the resolver.
+
+    Prefer `resolve_allocation_json(profile_id, allocation_path).data` in new
+    code so provenance is preserved.
+    """
+    return resolve_allocation_json(profile_id, allocation_path).data
 
 
 def load_allocation_lanes(
