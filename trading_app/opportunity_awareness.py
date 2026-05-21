@@ -78,7 +78,6 @@ def _lane_code_paths() -> list[Path]:
         Path(__file__).resolve(),
         PROJECT_ROOT / "trading_app" / "derived_state.py",
         PROJECT_ROOT / "trading_app" / "lifecycle_state.py",
-        LANE_ALLOCATION_PATH,
     ]
 
 

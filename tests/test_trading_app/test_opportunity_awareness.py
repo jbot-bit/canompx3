@@ -83,6 +83,13 @@ def test_refresh_opportunity_state_writes_shadow_envelope(monkeypatch, tmp_path)
     assert opportunity_awareness.get_opportunity_state_path("topstep_50k_mnq_auto").exists()
 
 
+def test_lane_code_paths_hash_only_source_files():
+    paths = opportunity_awareness._lane_code_paths()
+
+    assert opportunity_awareness.LANE_ALLOCATION_PATH not in paths
+    assert all(path.suffix == ".py" for path in paths)
+
+
 def test_describe_opportunity_awareness_names_relevant_lanes():
     state = {
         "available": True,
