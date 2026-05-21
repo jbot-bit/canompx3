@@ -56,6 +56,16 @@
   - **FAST_LANE PROMOTE queue:** 1 QUEUED `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30` at UNVERIFIED_OOS_POWER — calendar-wait per `feedback_oos_does_not_accrue_holdout_is_frozen.md`.
   - **Stage 3 PreToolUse `canonical-inline-detector.py` hook** — Layer 3 of the 3-layer canonical-inline-copy-parity hardening, parked design-first.
 
+## This Session (2026-05-22 — Codex Fast Lane V2 K-corrections)
+
+- **Tool:** Codex
+- **Status:** Implemented, verified, and committed locally in `bc605514` (`fix(fast-lane): correct v2 k-lineage semantics`). A follow-up closeout commit closed the stage.
+- **Stage:** `docs/runtime/stages/2026-05-22-fast-lane-v2-k-corrections.md` now `mode: CLOSED`.
+- **What changed:** Added `docs/runtime/fast_lane_trial_corrections.yaml` as correction-not-deletion evidence for historical `scanner-*` ledger rows. `scripts/research/fast_lane_trial_ledger.py` now validates and applies correction records; `scripts/research/fast_lane_promote_queue.py` filters corrected rows from V2 K-lineage counts and treats `SUPPRESSED_K_OVERRUN` as `K_lane > K_declared_in_prereg`, not `N_hat >= K_declared * 2`.
+- **Derived state rebuilt:** `docs/runtime/promote_queue.yaml` now reports `K_global: 0`, `K_family: 0`, `K_lane: 0` for both current fast-lane PROMOTE entries. `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30` moved from false `SUPPRESSED_SIBLING_RETEST` to the real current blocker `REJECTED_OOS_UNPOWERED` (`expected_power=0.247 < 0.50`). `docs/runtime/fast_lane_status.yaml` was rebuilt to match.
+- **Verification:** targeted pytest `tests/test_research/test_fast_lane_promote_queue_suppression.py tests/test_pipeline/test_check_drift_fast_lane_trial_ledger_append_only.py` => 39 passed. Targeted ruff on touched Python/test files => all checks passed. `git diff --check` clean. Full drift `./.venv-wsl/bin/python pipeline/check_drift.py` => 154 passed, 20 advisory, 0 blocking violations.
+- **No trading/runtime mutation:** no `gold.db`, `validated_setups`, `lane_allocation.json`, `chordia_audit_log.yaml`, broker state, or live runtime files touched.
+
 ## This Session (2026-05-22 — Codex canonical parser-surface stage closeout)
 
 - **Tool:** Codex
