@@ -4,6 +4,7 @@ Use this file for durable accepted decisions that should survive handoff churn.
 
 ## Current
 
+- `validated-setups-trade-window-refresh-2026-05-21` — Scheduled data refresh of `validated_setups` active native rows against canonical `orb_outcomes` through 2026-05-19. Stage file: `docs/runtime/stages/2026-05-21-validated-setups-refresh.md` (deleted on close). Pre-snapshot retained at `C:/Users/joshd/canompx3/gold.db.bak.pre-validated-setups-refresh-2026-05-21`. Before: 844 active rows (MNQ=783, MES=48, MGC=13) at max_last_trade_day ∈ {2026-05-14, 2026-05-15}. After: 844 active rows (unchanged), max_last_trade_day=2026-05-19 for all instruments. Row count unchanged; 0 inserted, 0 deleted. `docs/runtime/lane_allocation.json` byte-identical pre/post (last touch HEAD f1ece74f, refresh did not mutate). No live config / chordia_audit_log mutation. `gold.db` is in `.gitignore` so no git commit of the DB itself; this ledger entry is the durable record of the refresh. Open caveat: `sum(sample_size)` over the active cohort was identical pre/post (813614), which suggests the validator writer advanced `last_trade_day` but did not recompute `sample_size` from the 1-7 newly-available trading days — verify writer contract before next refresh.
 - `fast-lane-promote-threshold-parity-drift-check-landed-2026-05-19` —
   Added `check_fast_lane_promote_threshold_parity` (Check #158, registered in
   `CHECKS` list of `pipeline/check_drift.py`). Asserts the six gated constants
