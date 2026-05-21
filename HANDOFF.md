@@ -6,6 +6,26 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-21 PM — strict-IS doctrine reconciles MGC carry-over, PR #307 opened)
+
+- **Tool:** Claude Code (Opus 4.7), explanatory mode
+- **Date:** 2026-05-21
+- **Worktree:** `canompx3-wt-revalidation-guard` on branch `session/joshd-wt-revalidation-guard`
+- **Commits on branch (ahead of origin/main by 3, already pushed):** `0939843c` decision-ledger entry, `b71e7f2e` strict-IS resolver refactor + 844-row backfill, `7ca99486` 3 pinning tests. Working tree clean.
+- **PR opened:** [#307](https://github.com/jbot-bit/canompx3/pull/307) — strict-IS scope window-column resolver + tests.
+- **Session summary:** User asked to refresh the stale `MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4` validated_setups row. Investigation revealed the task is **structurally obsolete**: a prior session (this branch's 3 commits) already landed the strict-IS refactor that redefined `validated_setups.{first_trade_day, last_trade_day, trade_day_count}` as a strict-IS provenance shelf (`trading_day < HOLDOUT_SACRED_FROM=2026-01-01`), paired to the perf columns frozen at promotion. Migration `backfill_validated_trade_windows.py` healed 844/844 active VALIDATOR_NATIVE rows. Target row now reads `last_trade_day=2025-12-31, trade_day_count=168, sample_size=86` — canonically correct under new doctrine, not stale.
+- **Drift on main:** 844 false-positive Check 45 violations because main's resolver still uses full-window semantics while the canonical DB has already been migrated to strict-IS. **Merging PR #307 closes all 844.**
+- **Memory updated:** Both `project_mgc_cme_reopen_e2_orbg4_drift_is_data_staleness.md` and `feedback_validated_setups_partial_refresh_n1_2026_05_21.md` now lead with the reconciliation; original entries preserved as audit trail (supersession-banner pattern). `MEMORY.md` index entry rewritten.
+- **Carry-overs:**
+
+  **PR #307 review (next session):** await code-review on the PR per `feedback_explicit_user_direction_overrides_project_default.md`. Three test cases on the branch are mutation-probed per institutional-rigor §11 (drop kwarg → Test 1 fails; resolver ignores cutoff → Test 2 fails; Check 45 builds with None → Test 3 fails).
+
+  **PRIOR CARRY-OVERS still live (unchanged from 2026-05-20 PM):**
+  - **GOVERNANCE FOLLOW-UP — Stage-files-as-canonical-source ambiguity** — partially resolved by `ef4f0f29` (relocation of fast-lane canonical blocks into `docs/specs/`). Check #159 invariant (d) now forbids `docs/runtime/` canonical_source paths.
+  - **chordia_audit_log.yaml orphan** for the MGC entry — independent of PR #307; capital-class blast LOW per `feedback_validated_setups_partial_refresh_n1_2026_05_21.md`.
+  - **FAST_LANE PROMOTE queue:** 1 QUEUED `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30` at UNVERIFIED_OOS_POWER — calendar-wait per `feedback_oos_does_not_accrue_holdout_is_frozen.md`.
+  - **Stage 3 PreToolUse `canonical-inline-detector.py` hook** — Layer 3 of the 3-layer canonical-inline-copy-parity hardening, parked design-first.
+
 ## This Session (2026-05-20 PM — Stage A acceptance close + 22-stage residue sweep + runtime/ gitignore)
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode

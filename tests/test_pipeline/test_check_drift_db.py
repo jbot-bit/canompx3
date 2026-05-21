@@ -5,13 +5,15 @@ Covers checks 29, 35, 42, 43, 50, 54-58.
 Each test creates a temp DuckDB, injects data, and verifies the check.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import duckdb
 import pytest
 
 from pipeline import check_drift
+from scripts.migrations import backfill_validated_trade_windows as migration
+from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 
 
 def _create_db(tmp_path, tables_sql: str, inserts_sql: str = "") -> Path:
@@ -622,6 +624,142 @@ class TestActiveNativeTradeWindowProvenance:
         violations = check_drift.check_active_native_trade_windows_match_provenance()
         assert len(violations) == 1
         assert "missing native trade-window provenance columns" in violations[0]
+
+    def test_check_45_flags_stored_window_past_holdout(self, tmp_path, monkeypatch):
+        """Stored window straddling HOLDOUT_SACRED_FROM must be flagged.
+
+        Canonical strict-IS recompute drops trading_day >= HOLDOUT_SACRED_FROM,
+        so it lands strictly earlier than the stored last_trade_day.
+        """
+        pre_a = HOLDOUT_SACRED_FROM - timedelta(days=10)
+        pre_b = HOLDOUT_SACRED_FROM - timedelta(days=3)
+        post = HOLDOUT_SACRED_FROM + timedelta(days=5)
+        db_path = _create_db(
+            tmp_path,
+            self.TRADE_WINDOW_SCHEMA,
+            f"""
+            INSERT INTO validated_setups VALUES (
+                'sid1', 'MNQ', 'CME_REOPEN', 5, 'E1', 1, 'NO_FILTER', 1.0,
+                'active', 'VALIDATOR_NATIVE', '{pre_a}', '{post}', 3
+            );
+            INSERT INTO daily_features VALUES
+                ('{pre_a}', 'MNQ', 5, 'LONG'),
+                ('{pre_b}', 'MNQ', 5, 'LONG'),
+                ('{post}', 'MNQ', 5, 'LONG');
+            INSERT INTO orb_outcomes VALUES
+                ('{pre_a}', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0, 'win', 1.0, 0.2, 1.5, 100.0, 95.0),
+                ('{pre_b}', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0, 'win', 1.0, 0.2, 1.5, 100.0, 95.0),
+                ('{post}', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0, 'win', 1.0, 0.2, 1.5, 100.0, 95.0);
+            """,
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_native_trade_windows_match_provenance()
+        assert len(violations) == 1
+        v = violations[0]
+        assert str(pre_a) in v and str(post) in v, f"stored-window tuple missing in: {v}"
+        assert str(pre_b) in v, f"canonical strict-IS last_day missing in: {v}"
+        assert "N=3" in v and "N=2" in v, f"stored/canonical N pair missing in: {v}"
+        assert "strict-IS recompute (< HOLDOUT_SACRED_FROM)" in v
+
+
+class TestRefreshCollapsesOosWindow:
+    """End-to-end: refresher must collapse stored window to strict-IS even
+    when orb_outcomes contains post-holdout rows. Pins the resolver-internal
+    plumbing of `holdout_cutoff` into `_load_outcomes_bulk`."""
+
+    REFRESH_SCHEMA = """
+        CREATE TABLE validated_setups (
+            strategy_id VARCHAR PRIMARY KEY,
+            instrument VARCHAR,
+            orb_label VARCHAR,
+            orb_minutes INTEGER,
+            entry_model VARCHAR,
+            confirm_bars INTEGER,
+            filter_type VARCHAR,
+            rr_target DOUBLE,
+            status VARCHAR,
+            promotion_provenance VARCHAR,
+            first_trade_day DATE,
+            last_trade_day DATE,
+            trade_day_count INTEGER
+        );
+
+        CREATE TABLE daily_features (
+            trading_day DATE,
+            symbol VARCHAR,
+            orb_minutes INTEGER,
+            orb_CME_REOPEN_break_dir VARCHAR
+        );
+
+        CREATE TABLE orb_outcomes (
+            trading_day DATE,
+            symbol VARCHAR,
+            orb_minutes INTEGER,
+            orb_label VARCHAR,
+            entry_model VARCHAR,
+            confirm_bars INTEGER,
+            rr_target DOUBLE,
+            outcome VARCHAR,
+            pnl_r DOUBLE,
+            mae_r DOUBLE,
+            mfe_r DOUBLE,
+            entry_price DOUBLE,
+            stop_price DOUBLE
+        );
+    """
+
+    def test_refresh_collapses_oos_window(self, tmp_path):
+        pre_a = HOLDOUT_SACRED_FROM - timedelta(days=30)
+        pre_b = HOLDOUT_SACRED_FROM - timedelta(days=14)
+        pre_c_latest = HOLDOUT_SACRED_FROM - timedelta(days=1)
+        post_a = HOLDOUT_SACRED_FROM + timedelta(days=2)
+        post_b = HOLDOUT_SACRED_FROM + timedelta(days=20)
+
+        # Stored stale window: claims only 2 pre-holdout days (last=pre_b),
+        # missing pre_c_latest. Refresh must extend last_trade_day to
+        # pre_c_latest — NOT to post_a or post_b.
+        db_path = _create_db(
+            tmp_path,
+            self.REFRESH_SCHEMA,
+            f"""
+            INSERT INTO validated_setups VALUES (
+                'sid1', 'MNQ', 'CME_REOPEN', 5, 'E1', 1, 'NO_FILTER', 1.0,
+                'active', 'VALIDATOR_NATIVE', '{pre_a}', '{pre_b}', 2
+            );
+            INSERT INTO daily_features VALUES
+                ('{pre_a}', 'MNQ', 5, 'LONG'),
+                ('{pre_b}', 'MNQ', 5, 'LONG'),
+                ('{pre_c_latest}', 'MNQ', 5, 'LONG'),
+                ('{post_a}', 'MNQ', 5, 'LONG'),
+                ('{post_b}', 'MNQ', 5, 'LONG');
+            INSERT INTO orb_outcomes VALUES
+                ('{pre_a}', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0, 'win', 1.0, 0.2, 1.5, 100.0, 95.0),
+                ('{pre_b}', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0, 'win', 1.0, 0.2, 1.5, 100.0, 95.0),
+                ('{pre_c_latest}', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0, 'win', 1.0, 0.2, 1.5, 100.0, 95.0),
+                ('{post_a}', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0, 'win', 1.0, 0.2, 1.5, 100.0, 95.0),
+                ('{post_b}', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0, 'win', 1.0, 0.2, 1.5, 100.0, 95.0);
+            """,
+        )
+
+        report = migration.refresh_validated_trade_windows(db_path=db_path, dry_run=False)
+        assert report.updated == 1, f"expected one drifted row updated, got {report}"
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            row = con.execute(
+                "SELECT first_trade_day, last_trade_day, trade_day_count "
+                "FROM validated_setups WHERE strategy_id = 'sid1'"
+            ).fetchone()
+        finally:
+            con.close()
+        assert row is not None
+        first_day, last_day, n = row
+        assert last_day < HOLDOUT_SACRED_FROM, (
+            f"refresher leaked OOS data: last_trade_day={last_day} >= HOLDOUT_SACRED_FROM={HOLDOUT_SACRED_FROM}"
+        )
+        assert last_day == pre_c_latest, f"expected strict-IS last_trade_day={pre_c_latest}, got {last_day}"
+        assert first_day == pre_a
+        assert n == 3
 
 
 # ── Check 35: No E0 in DB ────────────────────────────────────────────

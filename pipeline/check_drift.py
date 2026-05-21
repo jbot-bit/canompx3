@@ -2764,6 +2764,12 @@ def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
         if not micro_rows:
             return violations
 
+        # Intentional full-window resolver (holdout_cutoff=None): this check
+        # asks "is the FIRST traded day on/after micro_launch_day(instrument)?"
+        # — earliest-day question is independent of the IS/OOS/holdout split.
+        # Do NOT switch to strict-IS here; Check 45 (at line ~2967) uses
+        # strict-IS because it pairs window-columns to perf-column population,
+        # which is a different question. See trading_app/chordia.py:158-170.
         resolver = StrategyTradeWindowResolver(con)
         for (
             strategy_id,
@@ -2901,10 +2907,17 @@ def check_active_native_promotion_provenance_populated(con=None) -> list[str]:
 
 
 def check_active_native_trade_windows_match_provenance(con=None) -> list[str]:
-    """Stored native trade-window provenance must match canonical recomputation."""
+    """Stored native trade-window provenance must match canonical strict-IS recomputation.
+
+    Strict-IS scope (2026-05-21): window columns must pair to the same population that
+    sample_size / expectancy_r / win_rate / sharpe_ratio were frozen on at promotion —
+    i.e., trading_day < HOLDOUT_SACRED_FROM. Refresher heals via
+    scripts/migrations/backfill_validated_trade_windows.py.
+    """
     violations = []
     _own_con = False
     try:
+        from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
         from trading_app.validation_provenance import StrategyTradeWindowResolver
 
         if con is None:
@@ -2957,7 +2970,7 @@ def check_active_native_trade_windows_match_provenance(con=None) -> list[str]:
         if not rows:
             return violations
 
-        resolver = StrategyTradeWindowResolver(con)
+        resolver = StrategyTradeWindowResolver(con, holdout_cutoff=HOLDOUT_SACRED_FROM)
         for (
             sid,
             instrument,
@@ -2989,9 +3002,10 @@ def check_active_native_trade_windows_match_provenance(con=None) -> list[str]:
                     "  validated_setups: active native row "
                     f"{sid} has stored trade window "
                     f"({first_day}, {last_day}, N={trade_day_count}) but "
-                    f"canonical recompute is "
+                    f"canonical strict-IS recompute (< HOLDOUT_SACRED_FROM) is "
                     f"({canonical.first_trade_day}, {canonical.last_trade_day}, "
-                    f"N={canonical.trade_day_count})"
+                    f"N={canonical.trade_day_count}). "
+                    f"Heal via scripts/migrations/backfill_validated_trade_windows.py."
                 )
     except (ImportError, OSError) as e:
         print(f"    SKIP check_active_native_trade_windows_match_provenance: {type(e).__name__}: {e}")
