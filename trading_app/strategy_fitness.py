@@ -310,6 +310,147 @@ def _enrich_cross_asset_atr(con, feat_dicts, source_instrument):
             row[col_name] = pct
 
 
+def _load_outcomes_rows(
+    con,
+    instrument: str,
+    orb_label: str,
+    orb_minutes: int,
+    entry_model: str,
+    rr_target: float,
+    confirm_bars: int,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> list[dict]:
+    """SQL-only outcome load for a single strategy spec.
+
+    Extracted so the canonical SELECT (with schema-flex aliasing for
+    entry_ts/exit_ts) lives in one place — both the single-strategy path
+    and the bulk pairwise-correlation cache use it.
+    """
+    params = [instrument, orb_minutes, orb_label, entry_model, rr_target, confirm_bars]
+    where = [
+        "symbol = ?",
+        "orb_minutes = ?",
+        "orb_label = ?",
+        "entry_model = ?",
+        "rr_target = ?",
+        "confirm_bars = ?",
+        "outcome IS NOT NULL",
+    ]
+    if start_date:
+        where.append("trading_day >= ?")
+        params.append(start_date)
+    if end_date:
+        where.append("trading_day <= ?")
+        params.append(end_date)
+
+    outcome_columns = {row[1] for row in con.execute("PRAGMA table_info('orb_outcomes')").fetchall()}
+    entry_ts_expr = "entry_ts" if "entry_ts" in outcome_columns else "NULL AS entry_ts"
+    if "exit_ts" in outcome_columns:
+        exit_ts_expr = "exit_ts"
+    elif "ts_exit_ts" in outcome_columns:
+        exit_ts_expr = "ts_exit_ts AS exit_ts"
+    else:
+        exit_ts_expr = "NULL AS exit_ts"
+
+    rows = con.execute(
+        f"""SELECT trading_day, outcome, pnl_r, mae_r, mfe_r,
+                   entry_price, stop_price, {entry_ts_expr}, {exit_ts_expr}
+            FROM orb_outcomes
+            WHERE {" AND ".join(where)}
+            ORDER BY trading_day""",
+        params,
+    ).fetchall()
+    cols = [desc[0] for desc in con.description]
+    return [dict(zip(cols, r, strict=False)) for r in rows]
+
+
+def _load_features_rows(
+    con,
+    instrument: str,
+    orb_minutes: int,
+) -> list[dict]:
+    """SQL-only daily_features load for one (instrument, orb_minutes).
+
+    F-10 invariant preserved (SELECT *) — any filter.matches_row() can
+    read the columns it needs without schema knowledge here.
+    """
+    feat_rows = con.execute(
+        "SELECT * FROM daily_features WHERE symbol = ? AND orb_minutes = ?",
+        [instrument, orb_minutes],
+    ).fetchall()
+    feat_cols = [desc[0] for desc in con.description]
+    return [dict(zip(feat_cols, r, strict=False)) for r in feat_rows]
+
+
+def _filter_outcomes_with_features(
+    con,
+    *,
+    instrument: str,
+    orb_label: str,
+    filter_type: str,
+    all_outcomes: list[dict],
+    feat_dicts: list[dict],
+    dst_regime: str | None = None,
+    applied_enrichments: set | None = None,
+) -> list[dict]:
+    """Apply filter eligibility + DST regime to pre-loaded outcomes/features.
+
+    No SQL on the hot path unless an enrichment is needed.
+    `applied_enrichments` is an optional set tracking which
+    (kind, instrument, …) enrichments have already mutated `feat_dicts`
+    — used by bulk callers so rel_vol / cross-asset-ATR enrichment runs
+    at most once per logical enrichment-key against a shared feature list.
+
+    Mutation safety: both enrichments are additive (write
+    `rel_vol_<orb_label>` / `cross_atr_<src>_pct`) and key-disjoint
+    across distinct orb_labels / source instruments. The applied-set
+    guard makes them idempotent for shared callers.
+    """
+
+    def _apply_dst(outcomes: list[dict]) -> list[dict]:
+        if dst_regime is None or orb_label not in DST_AFFECTED_SESSIONS:
+            return outcomes
+        want_winter = dst_regime == "winter"
+        return [o for o in outcomes if is_winter_for_session(o["trading_day"], orb_label) == want_winter]
+
+    if not all_outcomes:
+        return []
+
+    filt = ALL_FILTERS.get(filter_type)
+    if filt is None:
+        logger.warning("Unknown filter_type '%s' not in ALL_FILTERS — fail-closed, returning no outcomes", filter_type)
+        return []  # fail-closed: unknown filter = no outcomes
+
+    if filter_type == "NO_FILTER":
+        return _apply_dst(all_outcomes)
+
+    if orb_label not in _VALID_ORB_LABELS:
+        raise ValueError(f"Invalid orb_label '{orb_label}' for SQL column lookup")
+
+    applied = applied_enrichments if applied_enrichments is not None else set()
+
+    if isinstance(filt, VolumeFilter):
+        key = ("rel_vol", instrument, orb_label, filt.lookback_days)
+        if key not in applied:
+            _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, filt.lookback_days)
+            applied.add(key)
+
+    if isinstance(filt, CrossAssetATRFilter):
+        key = ("cross_atr", instrument, filt.source_instrument)
+        if key not in applied:
+            _enrich_cross_asset_atr(con, feat_dicts, filt.source_instrument)
+            applied.add(key)
+
+    eligible_days = set()
+    for row_dict in feat_dicts:
+        if filt.matches_row(row_dict, orb_label):
+            eligible_days.add(row_dict["trading_day"])
+
+    filtered = [o for o in all_outcomes if o["trading_day"] in eligible_days]
+    return _apply_dst(filtered)
+
+
 def _load_strategy_outcomes(
     con,
     instrument: str,
@@ -332,111 +473,69 @@ def _load_strategy_outcomes(
     Args:
         dst_regime: If 'winter' or 'summer', restrict DST-affected sessions to
             that regime only. Ignored for clean sessions (TOKYO_OPEN/SINGAPORE_OPEN etc.).
+
+    Implementation: delegates to `_load_outcomes_rows` + `_load_features_rows`
+    + `_filter_outcomes_with_features`. The same filter+enrichment path is
+    used by the bulk pairwise-correlation cache — single canonical
+    implementation per institutional-rigor § 4.
     """
-    # Load outcomes
-    params = [instrument, orb_minutes, orb_label, entry_model, rr_target, confirm_bars]
-    where = [
-        "symbol = ?",
-        "orb_minutes = ?",
-        "orb_label = ?",
-        "entry_model = ?",
-        "rr_target = ?",
-        "confirm_bars = ?",
-        "outcome IS NOT NULL",
-    ]
-    if start_date:
-        where.append("trading_day >= ?")
-        params.append(start_date)
-    if end_date:
-        where.append("trading_day <= ?")
-        params.append(end_date)
-
-    # Some lightweight test fixtures create a minimal orb_outcomes table that
-    # omits entry/exit timestamp columns. Read whatever is available and alias
-    # missing fields to NULL so the loader works across full and reduced schemas.
-    outcome_columns = {row[1] for row in con.execute("PRAGMA table_info('orb_outcomes')").fetchall()}
-    entry_ts_expr = "entry_ts" if "entry_ts" in outcome_columns else "NULL AS entry_ts"
-    if "exit_ts" in outcome_columns:
-        exit_ts_expr = "exit_ts"
-    elif "ts_exit_ts" in outcome_columns:
-        exit_ts_expr = "ts_exit_ts AS exit_ts"
-    else:
-        exit_ts_expr = "NULL AS exit_ts"
-
-    rows = con.execute(
-        f"""SELECT trading_day, outcome, pnl_r, mae_r, mfe_r,
-                   entry_price, stop_price, {entry_ts_expr}, {exit_ts_expr}
-            FROM orb_outcomes
-            WHERE {" AND ".join(where)}
-            ORDER BY trading_day""",
-        params,
-    ).fetchall()
-    cols = [desc[0] for desc in con.description]
-    all_outcomes = [dict(zip(cols, r, strict=False)) for r in rows]
+    all_outcomes = _load_outcomes_rows(
+        con,
+        instrument=instrument,
+        orb_label=orb_label,
+        orb_minutes=orb_minutes,
+        entry_model=entry_model,
+        rr_target=rr_target,
+        confirm_bars=confirm_bars,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
     if not all_outcomes:
         return []
 
-    def _apply_dst(outcomes: list[dict]) -> list[dict]:
-        """Apply DST regime filter if requested for a DST-affected session."""
-        if dst_regime is None or orb_label not in DST_AFFECTED_SESSIONS:
-            return outcomes
-        want_winter = dst_regime == "winter"
-        return [o for o in outcomes if is_winter_for_session(o["trading_day"], orb_label) == want_winter]
+    # Skip the daily_features load for NO_FILTER / unknown filter.
+    if filter_type == "NO_FILTER" or ALL_FILTERS.get(filter_type) is None:
+        return _filter_outcomes_with_features(
+            con,
+            instrument=instrument,
+            orb_label=orb_label,
+            filter_type=filter_type,
+            all_outcomes=all_outcomes,
+            feat_dicts=[],
+            dst_regime=dst_regime,
+        )
 
-    # Apply filter: load daily_features and check eligibility
-    filt = ALL_FILTERS.get(filter_type)
-    if filt is None:
-        logger.warning("Unknown filter_type '%s' not in ALL_FILTERS — fail-closed, returning no outcomes", filter_type)
-        return []  # fail-closed: unknown filter = no outcomes (not pass-through)
+    # F-10 invariant: SELECT * so any matches_row can read its needed columns.
+    if start_date is None and end_date is None:
+        feat_dicts = _load_features_rows(con, instrument, orb_minutes)
+    else:
+        feat_params = [instrument, orb_minutes]
+        feat_where = ["symbol = ?", "orb_minutes = ?"]
+        if start_date:
+            feat_where.append("trading_day >= ?")
+            feat_params.append(start_date)
+        if end_date:
+            feat_where.append("trading_day <= ?")
+            feat_params.append(end_date)
+        feat_rows = con.execute(
+            f"""SELECT *
+                FROM daily_features
+                WHERE {" AND ".join(feat_where)}""",
+            feat_params,
+        ).fetchall()
+        feat_cols = [desc[0] for desc in con.description]
+        feat_dicts = [dict(zip(feat_cols, r, strict=False)) for r in feat_rows]
 
-    # For NO_FILTER, skip the expensive daily_features check
-    if filter_type == "NO_FILTER":
-        return _apply_dst(all_outcomes)
-
-    # Validate orb_label before f-string SQL interpolation
-    if orb_label not in _VALID_ORB_LABELS:
-        raise ValueError(f"Invalid orb_label '{orb_label}' for SQL column lookup")
-
-    # Load daily features for the relevant date range.
-    # FIX (F-10): Select ALL columns that any filter.matches_row() may need,
-    # not just orb_size + day_of_week. Composite filters (DOW, break quality,
-    # ATR velocity) need break_delay_min, break_bar_continues, compression_tier,
-    # atr_vel_regime, break_dir etc. Using SELECT * is safe here — daily_features
-    # has a bounded column set and we're already loading the full date range.
-    feat_params = [instrument, orb_minutes]
-    feat_where = ["symbol = ?", "orb_minutes = ?"]
-    if start_date:
-        feat_where.append("trading_day >= ?")
-        feat_params.append(start_date)
-    if end_date:
-        feat_where.append("trading_day <= ?")
-        feat_params.append(end_date)
-
-    feat_rows = con.execute(
-        f"""SELECT *
-            FROM daily_features
-            WHERE {" AND ".join(feat_where)}""",
-        feat_params,
-    ).fetchall()
-    feat_cols = [desc[0] for desc in con.description]
-    feat_dicts = [dict(zip(feat_cols, r, strict=False)) for r in feat_rows]
-
-    # VolumeFilter needs rel_vol enrichment from bars_1m
-    if isinstance(filt, VolumeFilter):
-        _enrich_relative_volumes(con, feat_dicts, instrument, orb_label, filt.lookback_days)
-
-    # CrossAssetATRFilter needs source instrument's ATR percentile injected
-    if isinstance(filt, CrossAssetATRFilter):
-        _enrich_cross_asset_atr(con, feat_dicts, filt.source_instrument)
-
-    eligible_days = set()
-    for row_dict in feat_dicts:
-        if filt.matches_row(row_dict, orb_label):
-            eligible_days.add(row_dict["trading_day"])
-
-    filtered = [o for o in all_outcomes if o["trading_day"] in eligible_days]
-    return _apply_dst(filtered)
+    return _filter_outcomes_with_features(
+        con,
+        instrument=instrument,
+        orb_label=orb_label,
+        filter_type=filter_type,
+        all_outcomes=all_outcomes,
+        feat_dicts=feat_dicts,
+        dst_regime=dst_regime,
+    )
 
 
 # =========================================================================

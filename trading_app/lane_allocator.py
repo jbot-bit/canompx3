@@ -38,7 +38,11 @@ from trading_app.chordia import (
     load_chordia_audit_log,
 )
 from trading_app.config import ALL_FILTERS, e2_deployment_unsafe_reason, is_e2_deployment_unsafe_filter
-from trading_app.lane_correlation import RHO_REJECT_THRESHOLD, _load_lane_daily_pnl, _pearson
+from trading_app.lane_correlation import (
+    RHO_REJECT_THRESHOLD,
+    _load_lane_daily_pnl_cached,
+    _pearson,
+)
 from trading_app.strategy_discovery import _inject_cross_asset_atrs
 from trading_app.validated_shelf import deployable_validated_relation
 
@@ -641,12 +645,24 @@ def compute_pairwise_correlation(
 
     Uses the same trailing window as the allocator (all available data through
     rebalance_date). Returns {(sid_a, sid_b): rho} with canonical key ordering.
+
+    Performance: bulk-loads `daily_features` once per unique (instrument,
+    orb_minutes) pair across all candidates rather than once per candidate.
+    This collapses the 762 × 4K × 289-col dict materialization that caused
+    the 2026-05-21 SIGSEGV (exit 139) inside this function. Mirrors the
+    `_bulk_load_all_features` precedent at strategy_fitness.py:477.
     """
     db = db_path or GOLD_DB_PATH
     con = duckdb.connect(str(db), read_only=True)
     configure_connection(con)
 
     try:
+        # Per-loop caches shared across all candidates. Cleared when this
+        # function returns; never leaks to the caller.
+        outcomes_cache: dict = {}
+        features_cache: dict = {}
+        applied_enrichments: set = set()
+
         pnl_series: dict[str, dict] = {}
         for s in candidates:
             lane = {
@@ -658,7 +674,13 @@ def compute_pairwise_correlation(
                 "confirm_bars": s.confirm_bars,
                 "filter_type": s.filter_type,
             }
-            pnl_series[s.strategy_id] = _load_lane_daily_pnl(con, lane)
+            pnl_series[s.strategy_id] = _load_lane_daily_pnl_cached(
+                con,
+                lane,
+                outcomes_cache,
+                features_cache,
+                applied_enrichments,
+            )
 
         sids = [s.strategy_id for s in candidates]
         pairs: dict[tuple[str, str], float] = {}

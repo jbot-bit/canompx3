@@ -19,7 +19,12 @@ import duckdb
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.prop_profiles import get_profile_lane_definitions
-from trading_app.strategy_fitness import _load_strategy_outcomes
+from trading_app.strategy_fitness import (
+    _filter_outcomes_with_features,
+    _load_features_rows,
+    _load_outcomes_rows,
+    _load_strategy_outcomes,
+)
 
 RHO_REJECT_THRESHOLD = 0.70
 SUBSET_REJECT_THRESHOLD = 0.80
@@ -84,6 +89,79 @@ def _load_lane_daily_pnl(
         rr_target=lane["rr_target"],
         confirm_bars=lane["confirm_bars"],
         filter_type=lane["filter_type"],
+    )
+    return _daily_pnl(outcomes)
+
+
+def _load_lane_daily_pnl_cached(
+    con: duckdb.DuckDBPyConnection,
+    lane: dict,
+    outcomes_cache: dict,
+    features_cache: dict,
+    applied_enrichments: set,
+) -> dict[date, float]:
+    """Cache-aware variant of _load_lane_daily_pnl.
+
+    Used by `compute_pairwise_correlation` to avoid re-querying daily_features
+    (289 cols, ~4K rows) and orb_outcomes for every candidate. Caches must be
+    populated by the caller; missing cache entries are loaded once on demand
+    and stored.
+
+    Cache keys:
+      outcomes_cache: (instrument, orb_label, orb_minutes, entry_model,
+                       rr_target, confirm_bars) → list[dict]
+      features_cache: (instrument, orb_minutes) → list[dict]
+      applied_enrichments: set of (kind, ...) tuples — see
+        strategy_fitness._filter_outcomes_with_features for the contract.
+    """
+    instrument = lane["instrument"]
+    orb_label = lane["orb_label"]
+    orb_minutes = lane["orb_minutes"]
+    filter_type = lane["filter_type"]
+
+    outcome_key = (
+        instrument,
+        orb_label,
+        orb_minutes,
+        lane["entry_model"],
+        lane["rr_target"],
+        lane["confirm_bars"],
+    )
+    all_outcomes = outcomes_cache.get(outcome_key)
+    if all_outcomes is None:
+        all_outcomes = _load_outcomes_rows(
+            con,
+            instrument=instrument,
+            orb_label=orb_label,
+            orb_minutes=orb_minutes,
+            entry_model=lane["entry_model"],
+            rr_target=lane["rr_target"],
+            confirm_bars=lane["confirm_bars"],
+        )
+        outcomes_cache[outcome_key] = all_outcomes
+
+    if not all_outcomes:
+        return {}
+
+    # NO_FILTER / unknown filter — daily_features not needed.
+    feat_dicts: list[dict] = []
+    if filter_type != "NO_FILTER":
+        feat_key = (instrument, orb_minutes)
+        cached = features_cache.get(feat_key)
+        if cached is None:
+            feat_dicts = _load_features_rows(con, instrument, orb_minutes)
+            features_cache[feat_key] = feat_dicts
+        else:
+            feat_dicts = cached
+
+    outcomes = _filter_outcomes_with_features(
+        con,
+        instrument=instrument,
+        orb_label=orb_label,
+        filter_type=filter_type,
+        all_outcomes=all_outcomes,
+        feat_dicts=feat_dicts,
+        applied_enrichments=applied_enrichments,
     )
     return _daily_pnl(outcomes)
 
