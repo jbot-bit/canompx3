@@ -629,38 +629,38 @@ def check_allocation_staleness_gate() -> tuple[bool, str]:
     status, days_old = check_allocation_staleness()
     if status == "BLOCK":
         if days_old == -1:
-            return False, "BLOCKED: No lane_allocation.json. Run: python scripts/tools/rebalance_lanes.py"
+            return False, "BLOCKED: No lane allocation found. Run: python scripts/tools/rebalance_lanes.py"
         return False, f"BLOCKED: allocation {days_old}d old (>60d). Run: python scripts/tools/rebalance_lanes.py"
     if status == "WARNING":
         return True, f"WARN: allocation {days_old}d old (>35d). Rebalance soon."
     return True, f"Allocation {days_old}d old — fresh"
 
 
-def check_lane_mismatch(session: str, lane: dict) -> tuple[bool, str]:
+def check_lane_mismatch(session: str, lane: dict, profile_id: str) -> tuple[bool, str]:
     """Warn if deployed lane differs from allocator recommendation.
 
-    Reads lane_allocation.json and compares the deployed strategy_id
-    for this session+instrument to the allocator's recommended strategy_id.
+    Delegates to trading_app.prop_profiles.resolve_allocation_json (Stage 1b
+    authority inversion — the resolver is the single owner of path semantics:
+    new-path-first, legacy fallback, profile-mismatch fail-closed, multi-file
+    ambiguity hard-fail). Compares the deployed strategy_id for this
+    session+instrument to the allocator's recommended strategy_id.
     Non-blocking (warning only) — user decides whether to follow recommendation.
     """
+    from trading_app.prop_profiles import resolve_allocation_json
 
-    from trading_app.lane_allocator import DEFAULT_LANE_ALLOCATION_PATH
-
-    alloc_path = DEFAULT_LANE_ALLOCATION_PATH
-    if not alloc_path.exists():
+    result = resolve_allocation_json(profile_id)
+    if result.data is None:
         return True, "No allocation file — cannot compare"
 
     try:
-        import json as _json
-
-        data = _json.loads(alloc_path.read_text())
+        data = result.data
         # Key by (instrument, orb_label) to handle multi-instrument same-session
         recommended = {
             (entry["instrument"], entry["orb_label"]): entry["strategy_id"] for entry in data.get("lanes", [])
         }
         paused_ids = {entry["strategy_id"] for entry in data.get("paused", [])}
         stale_ids = {entry["strategy_id"] for entry in data.get("stale", [])}
-    except (KeyError, _json.JSONDecodeError):
+    except KeyError:
         return True, "Cannot parse allocation file"
 
     deployed_sid = lane.get("strategy_id", "")
@@ -766,7 +766,7 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
 
         # Lane mismatch: deployed vs allocator recommendation
         for lane in lanes:
-            ok, msg = check_lane_mismatch(session, lane)
+            ok, msg = check_lane_mismatch(session, lane, resolved_profile_id)
             results.append((f"Lane vs recommendation ({lane['instrument']})", ok, msg))
 
         # Account state

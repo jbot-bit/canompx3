@@ -71,10 +71,10 @@ class TestNoDirectLaneAllocationJsonLiterals:
         """A temporary-allowlist file with the literal — no violation."""
         from pipeline.check_drift import check_no_direct_lane_allocation_json_literals
 
-        # prop_portfolio.py is in the temporary allowlist.
+        # session_orchestrator.py is in the temporary allowlist.
         _write_py(
             tmp_path,
-            "trading_app/prop_portfolio.py",
+            "trading_app/live/session_orchestrator.py",
             'PATH = "docs/runtime/lane_allocation.json"\n',
         )
         _patch_root(monkeypatch, tmp_path)
@@ -183,12 +183,12 @@ class TestNoDirectLaneAllocationJsonLiterals:
         """
         from pipeline.check_drift import check_no_direct_lane_allocation_json_literals
 
-        # prop_portfolio.py is in temporary allowlist. Create the file
+        # session_orchestrator.py is in temporary allowlist. Create the file
         # but WITHOUT the literal — simulating a successful migration that
         # forgot to update the allowlist.
         _write_py(
             tmp_path,
-            "trading_app/prop_portfolio.py",
+            "trading_app/live/session_orchestrator.py",
             "# migrated to resolver\n"
             "from trading_app.prop_profiles import resolve_allocation_json\n",
         )
@@ -196,7 +196,7 @@ class TestNoDirectLaneAllocationJsonLiterals:
         violations = check_no_direct_lane_allocation_json_literals()
         assert len(violations) == 1
         assert "TEMPORARY allowlist entry" in violations[0]
-        assert "trading_app/prop_portfolio.py" in violations[0]
+        assert "trading_app/live/session_orchestrator.py" in violations[0]
         assert "shrink monotonically" in violations[0]
 
     def test_dead_temporary_allowlist_entry_skipped_when_file_absent(
@@ -223,11 +223,11 @@ class TestNoDirectLaneAllocationJsonLiterals:
         from pipeline import check_drift
         from pipeline.check_drift import check_no_direct_lane_allocation_json_literals
 
-        # prop_portfolio.py with the literal — should pass under
+        # session_orchestrator.py with the literal — should pass under
         # default allowlist (in temporary set), fail when we remove it.
         _write_py(
             tmp_path,
-            "trading_app/prop_portfolio.py",
+            "trading_app/live/session_orchestrator.py",
             'PATH = "docs/runtime/lane_allocation.json"\n',
         )
         _patch_root(monkeypatch, tmp_path)
@@ -239,14 +239,14 @@ class TestNoDirectLaneAllocationJsonLiterals:
         mutated = frozenset(
             p
             for p in check_drift._LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST
-            if p != Path("trading_app/prop_portfolio.py")
+            if p != Path("trading_app/live/session_orchestrator.py")
         )
         monkeypatch.setattr(
             check_drift, "_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST", mutated
         )
         violations = check_no_direct_lane_allocation_json_literals()
         assert len(violations) == 1
-        assert "trading_app/prop_portfolio.py:1" in violations[0]
+        assert "trading_app/live/session_orchestrator.py:1" in violations[0]
         assert "resolve_allocation_json" in violations[0]
 
     def test_nested_path_under_trading_app(self, tmp_path, monkeypatch):

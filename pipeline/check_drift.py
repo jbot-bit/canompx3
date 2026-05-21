@@ -9701,9 +9701,6 @@ _LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST: frozenset[Path] = frozenset({
 _LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST: frozenset[Path] = frozenset({
     # trading_app/ readers — Stage 1b-ii
     Path("trading_app/live/session_orchestrator.py"),
-    Path("trading_app/prop_portfolio.py"),
-    Path("trading_app/pre_session_check.py"),
-    Path("trading_app/deployability.py"),  # comment-only references
     # scripts/tools/ readers — Stage 1b-iii
     Path("scripts/tools/allocation_intel.py"),
     Path("scripts/tools/allocator_gate_audit.py"),
