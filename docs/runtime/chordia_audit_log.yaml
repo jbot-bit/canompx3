@@ -652,3 +652,56 @@ audits:
       No theory grant claimed; strict no-theory threshold t>=3.79 applies.
       IS gates clear strict: t=4.450 (clears 3.79 by 0.66), ExpR=0.1332, N=866. OOS sign matches IS at N_OOS=46 (both positive ExpR), descriptive corroboration only — OOS power=0.17 STATISTICALLY_USELESS tier per RULE 3.3, pre-committed UNVERIFIED_INSUFFICIENT_POWER for binary OOS gate. Long-short symmetry: IS Long t=3.34 (n=467), IS Short t=2.94 (n=399); both individually clear t>=2.9 audit floor (not directional artifact). Sibling-aperture variant of deployed `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15`. Allocator dry-run 2026-05-14 (canonical `scripts/tools/rebalance_lanes.py`) confirms O30 dropped at correlation/ranking gate vs same-session sibling — does not deploy with current 4-slot lineup; remains highest-EV in-bullpen replacement candidate for the US_DATA_1000 VWAP_MID_ALIGNED family.
       Result MD: `docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md`
+
+  # ---- 2026-05-21 MNQ Phase 2 Chordia K=3 diverse batch ----------------
+  # Pre-regs:
+  #   docs/audit/hypotheses/2026-05-21-mnq-tokyoopen-orbvol4k-o15-chordia-unlock-v1.yaml
+  #   docs/audit/hypotheses/2026-05-21-mnq-comexsettle-atrp50-chordia-unlock-v1.yaml
+  #   docs/audit/hypotheses/2026-05-21-mnq-usdata1000-ovnrng50-chordia-unlock-v1.yaml
+  # Stage: docs/runtime/stages/2026-05-21-mnq-chordia-k5-batch-phase2.md
+  # Selection rationale: greedy diversity from 55-cell eligible pool (MNQ active,
+  #   t_naive>=3.79, E2-safe per config.py:4045-4057, not-yet-audited, EXCLUDING
+  #   CME_PRECLOSE cluster after 3/3 PARK at NO_FILTER/ORB_G4/X_MES_ATR60). Original
+  #   Phase 2 K=5 design DROPPED — both surviving candidates (X_MES_ATR60_O15,
+  #   ORB_VOL_8K_O15) were O15 children of the PARKed CME_PRECLOSE parent and
+  #   inherit the OOS-power problem.
+  # K=3 verdict ratio: 2 PASS_CHORDIA / 1 PARK / 0 KILL.
+
+  - strategy_id: MNQ_TOKYO_OPEN_E2_RR1.0_CB1_ORB_VOL_4K_O15
+    audit_date: 2026-05-21
+    verdict: PARK
+    t_stat: 4.778
+    threshold: 3.79
+    sample_size: 706
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-21-mnq-tokyoopen-orbvol4k-o15-chordia-unlock-v1.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear strict: t=4.778, ExpR=0.1662, N=706 (fire-rate=0.456 on universe=1550). Long t=3.547 (n=347), Short t=3.210 (n=359) — balanced direction-mix, not directional artifact. BUT OOS sign opposes IS once N_OOS=71 >= 30: OOS ExpR=-0.0797 (Long ExpR=+0.010 n=38, Short ExpR=-0.183 n=33). Verdict PARK: IS-clean but no OOS confirmation. Allocator MUST refuse DEPLOY.
+      Result MD: `docs/audit/results/2026-05-21-mnq-tokyoopen-orbvol4k-o15-chordia-unlock-v1.md`
+
+  - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR_P50
+    audit_date: 2026-05-21
+    verdict: PASS_CHORDIA
+    t_stat: 4.652
+    threshold: 3.79
+    sample_size: 837
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-21-mnq-comexsettle-atrp50-chordia-unlock-v1.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear strict: t=4.652 (clears 3.79 by 0.86), ExpR=0.1451, N=837 (fire-rate=0.560 on universe=1494). Long t=3.628 (n=452), Short t=2.927 (n=385) — both clear t>=2.9 audit floor, balanced direction-mix. OOS sign matches IS at N_OOS=60 (OOS ExpR=+0.159, Long ExpR=+0.013 n=31, Short ExpR=+0.316 n=29). Descriptive corroboration only — OOS power per RULE 3.3 yet to be computed for binary OOS gate context. First MNQ COMEX_SETTLE ATR_P* (own-ATR percentile) family entry; distinct mechanism from prior X_MES_ATR60 cross-asset PASS_CHORDIA.
+      Result MD: `docs/audit/results/2026-05-21-mnq-comexsettle-atrp50-chordia-unlock-v1.md`
+
+  - strategy_id: MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_50
+    audit_date: 2026-05-21
+    verdict: PASS_CHORDIA
+    t_stat: 4.269
+    threshold: 3.79
+    sample_size: 1230
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-21-mnq-usdata1000-ovnrng50-chordia-unlock-v1.yaml`.
+      No theory grant claimed; strict no-theory threshold t>=3.79 applies.
+      IS gates clear strict: t=4.269 (clears 3.79 by 0.48), ExpR=0.1149, N=1230 (fire-rate=0.795 on universe=1547). Long t=1.676 (n=652), Short t=4.479 (n=578) — direction-mix asymmetric, Short carries the edge but Long ExpR=+0.062 still positive so not a directional artifact. OOS sign matches IS at N_OOS=79 (OOS ExpR=+0.035, Long ExpR=-0.049 n=40, Short ExpR=+0.121 n=39). Descriptive corroboration only — OOS power per RULE 3.3 yet to be computed for binary OOS gate context. First MNQ US_DATA_1000 OVNRNG_* (overnight-range) family entry; distinct mechanism from prior session PASS_CHORDIAs (VWAP_MID_ALIGNED, ORB_VOL_8K, OVNRNG_25).
+      Result MD: `docs/audit/results/2026-05-21-mnq-usdata1000-ovnrng50-chordia-unlock-v1.md`

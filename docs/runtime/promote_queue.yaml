@@ -33,18 +33,18 @@ entries:
     instrument: MNQ
     orb_label: COMEX_SETTLE
     orb_minutes: 5
-    K_global: 26
-    K_family: 13
-    K_lane: 13
+    K_global: 66
+    K_family: 33
+    K_lane: 33
     K_declared_in_prereg: 1
-    K_effective_minBTL: 0.0006925489505837989
+    K_effective_minBTL: 0.000890563235631082
     bh_fdr_passes:
       K_family: false
       K_lane: false
       K_global: true
-    correlation_haircut_N_hat: 679
+    correlation_haircut_N_hat: 1649
     rho_hat_assumed: 0.5
-  n_hat: 679
+  n_hat: 1649
   upstream_k_role: fast_lane_v5.1_K1_triage
   upstream_k_value: 1
 - result_md: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
@@ -68,25 +68,27 @@ entries:
   pooling_artifact: false
   revocation_sidecar: null
   heavyweight_prereg: null
-  park_entry: action-queue#20
-  status: PARKED
-  error_reason: null
+  park_entry: null
+  status: SUPPRESSED_SIBLING_RETEST
+  error_reason: K_lane=33 (>= 2) -- ledger shows >= 2 prior runs on this lane; sibling-retest
+    gate fires per stage file § Suppression Status Enum. PARK or pool with sibling
+    rather than re-running.
   structural_hash: ed4cb1058cc25a58
   k_lineage:
     instrument: MNQ
     orb_label: US_DATA_1000
     orb_minutes: 30
-    K_global: 26
-    K_family: 13
-    K_lane: 13
+    K_global: 66
+    K_family: 33
+    K_lane: 33
     K_declared_in_prereg: 1
-    K_effective_minBTL: 0.00012757837489315853
+    K_effective_minBTL: 0.00016405571078496458
     bh_fdr_passes:
       K_family: false
       K_lane: false
       K_global: true
-    correlation_haircut_N_hat: 1582
+    correlation_haircut_N_hat: 3842
     rho_hat_assumed: 0.5
-  n_hat: 1582
+  n_hat: 3842
   upstream_k_role: fast_lane_v5.1_K1_triage
   upstream_k_value: 1
