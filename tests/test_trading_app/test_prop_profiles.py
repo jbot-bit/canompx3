@@ -827,3 +827,175 @@ class TestParseStrategyIdDelegator:
 
         with pytest.raises(ValueError):
             parse_strategy_id(bad_sid)
+
+
+# =========================================================================
+# Stage 1a — Multi-profile lane_allocation reader fallback
+# Spec: docs/specs/lane_allocation_schema.md
+# =========================================================================
+
+
+class TestMultiProfileLoaderFallback:
+    """load_allocation_lanes() and load_paused_strategy_ids() prefer the
+    new per-profile path and fall back to the legacy single-profile file
+    during Stage 1a.
+    """
+
+    @staticmethod
+    def _build_alloc_payload(profile_id: str, strategy_id: str = "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER") -> dict:
+        return {
+            "rebalance_date": "2026-05-21",
+            "trailing_window_months": 12,
+            "profile_id": profile_id,
+            "lanes": [
+                {
+                    "strategy_id": strategy_id,
+                    "instrument": "MNQ",
+                    "orb_label": "COMEX_SETTLE",
+                    "orb_minutes": 5,
+                    "rr_target": 1.0,
+                    "filter_type": "NO_FILTER",
+                    "status": "DEPLOY",
+                    "p90_orb_pts": 50.0,
+                },
+            ],
+            "paused": [{"strategy_id": "PAUSED_SID", "status": "PAUSE", "reason": "test"}],
+            "stale": [{"strategy_id": "STALE_SID", "status": "STALE", "reason": "test"}],
+            "displaced": [],
+            "all_scores_count": 1,
+        }
+
+    def test_explicit_path_loads_directly(self, tmp_path):
+        """Caller-supplied allocation_path bypasses new/legacy fallback."""
+        import json
+
+        from trading_app.prop_profiles import load_allocation_lanes
+
+        explicit = tmp_path / "explicit.json"
+        explicit.write_text(json.dumps(self._build_alloc_payload("p_explicit")))
+
+        lanes = load_allocation_lanes("p_explicit", allocation_path=explicit)
+        assert len(lanes) == 1
+        assert lanes[0].instrument == "MNQ"
+
+        # Profile mismatch on explicit path → empty (fail-closed guard).
+        assert load_allocation_lanes("other_profile", allocation_path=explicit) == ()
+
+    def test_prefers_new_path_over_legacy(self, tmp_path, monkeypatch):
+        """When BOTH files exist with the matching profile_id, the new
+        per-profile file wins."""
+        import json
+
+        import trading_app.prop_profiles as pp
+
+        # Redirect both resolvers at tmp_path-rooted equivalents.
+        new_path = tmp_path / "lane_allocation" / "p1.json"
+        legacy_path = tmp_path / "lane_allocation.json"
+        new_path.parent.mkdir(parents=True)
+
+        new_payload = self._build_alloc_payload("p1", strategy_id="NEW_SID_MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER")
+        legacy_payload = self._build_alloc_payload("p1", strategy_id="LEGACY_SID_MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER")
+        new_path.write_text(json.dumps(new_payload))
+        legacy_path.write_text(json.dumps(legacy_payload))
+
+        monkeypatch.setattr(pp, "_new_lane_allocation_path", lambda pid: tmp_path / "lane_allocation" / f"{pid}.json")
+        monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: legacy_path)
+
+        lanes = pp.load_allocation_lanes("p1")
+        assert len(lanes) == 1
+        assert lanes[0].strategy_id.startswith("NEW_SID"), (
+            f"expected new-path priority, got legacy: {lanes[0].strategy_id}"
+        )
+
+    def test_falls_back_to_legacy_when_new_missing(self, tmp_path, monkeypatch):
+        """When the per-profile file is absent, the legacy file is read
+        with profile-mismatch guard preserved."""
+        import json
+
+        import trading_app.prop_profiles as pp
+
+        legacy_path = tmp_path / "lane_allocation.json"
+        legacy_path.write_text(json.dumps(self._build_alloc_payload("p_legacy_only")))
+
+        # New-path resolver points at a nonexistent file.
+        monkeypatch.setattr(pp, "_new_lane_allocation_path", lambda pid: tmp_path / "missing" / f"{pid}.json")
+        monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: legacy_path)
+
+        lanes = pp.load_allocation_lanes("p_legacy_only")
+        assert len(lanes) == 1
+
+    def test_legacy_profile_mismatch_is_fail_closed(self, tmp_path, monkeypatch):
+        """If new-path is missing AND legacy holds a DIFFERENT profile, the
+        loader returns empty (preserves Stage 0 fail-closed guard)."""
+        import json
+
+        import trading_app.prop_profiles as pp
+
+        legacy_path = tmp_path / "lane_allocation.json"
+        legacy_path.write_text(json.dumps(self._build_alloc_payload("other_profile")))
+
+        monkeypatch.setattr(pp, "_new_lane_allocation_path", lambda pid: tmp_path / "missing" / f"{pid}.json")
+        monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: legacy_path)
+
+        assert pp.load_allocation_lanes("the_profile_we_want") == ()
+
+    def test_both_missing_fail_closed(self, tmp_path, monkeypatch):
+        """Both new and legacy paths missing → empty tuple."""
+        import trading_app.prop_profiles as pp
+
+        monkeypatch.setattr(pp, "_new_lane_allocation_path", lambda pid: tmp_path / "no_new" / f"{pid}.json")
+        monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: tmp_path / "no_legacy.json")
+
+        assert pp.load_allocation_lanes("anything") == ()
+
+    def test_corrupt_new_json_falls_back_to_legacy(self, tmp_path, monkeypatch):
+        """A garbled per-profile file does NOT poison the read — the
+        loader silently falls through to the legacy file."""
+        import json
+
+        import trading_app.prop_profiles as pp
+
+        new_path = tmp_path / "lane_allocation" / "p1.json"
+        legacy_path = tmp_path / "lane_allocation.json"
+        new_path.parent.mkdir(parents=True)
+        new_path.write_text("this is not json {{{")
+        legacy_path.write_text(json.dumps(self._build_alloc_payload("p1")))
+
+        monkeypatch.setattr(pp, "_new_lane_allocation_path", lambda pid: tmp_path / "lane_allocation" / f"{pid}.json")
+        monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: legacy_path)
+
+        lanes = pp.load_allocation_lanes("p1")
+        assert len(lanes) == 1, "loader must fall through corrupt new file to valid legacy"
+
+    def test_load_paused_strategy_ids_with_profile_id_uses_new_path(self, tmp_path, monkeypatch):
+        """Supplying profile_id activates the new-then-legacy fallback for
+        the paused/stale extractor too."""
+        import json
+
+        import trading_app.prop_profiles as pp
+
+        new_path = tmp_path / "lane_allocation" / "p1.json"
+        new_path.parent.mkdir(parents=True)
+        new_path.write_text(json.dumps(self._build_alloc_payload("p1")))
+
+        monkeypatch.setattr(pp, "_new_lane_allocation_path", lambda pid: tmp_path / "lane_allocation" / f"{pid}.json")
+        monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: tmp_path / "nonexistent_legacy.json")
+
+        blocked = pp.load_paused_strategy_ids(profile_id="p1")
+        assert blocked == frozenset({"PAUSED_SID", "STALE_SID"})
+
+    def test_load_paused_strategy_ids_legacy_signature_preserved(self, tmp_path, monkeypatch):
+        """Calling load_paused_strategy_ids with NO profile_id (legacy
+        signature) reads the legacy file with NO profile guard."""
+        import json
+
+        import trading_app.prop_profiles as pp
+
+        legacy_path = tmp_path / "lane_allocation.json"
+        legacy_path.write_text(json.dumps(self._build_alloc_payload("any_profile_at_all")))
+
+        monkeypatch.setattr(pp, "_legacy_lane_allocation_path", lambda: legacy_path)
+
+        # No profile_id supplied → reads legacy, no guard.
+        blocked = pp.load_paused_strategy_ids()
+        assert blocked == frozenset({"PAUSED_SID", "STALE_SID"})

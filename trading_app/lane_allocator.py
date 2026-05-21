@@ -66,6 +66,24 @@ def normalize_writable_path(path: Path) -> Path:
 
 _REPO_ROOT = normalize_writable_path(Path(__file__).resolve().parents[1])
 DEFAULT_LANE_ALLOCATION_PATH = _REPO_ROOT / "docs" / "runtime" / "lane_allocation.json"
+# Stage 1a (2026-05-21): per-profile directory introduced alongside the legacy
+# single-profile file. Writer emits to BOTH paths; reader prefers new, falls
+# back to legacy. Stage 1d removes the legacy path. Schema spec:
+# docs/specs/lane_allocation_schema.md
+DEFAULT_LANE_ALLOCATION_DIR = _REPO_ROOT / "docs" / "runtime" / "lane_allocation"
+
+
+def lane_allocation_profile_path(
+    profile_id: str,
+    base_dir: str | Path | None = None,
+) -> Path:
+    """Return the canonical per-profile JSON path for the given profile.
+
+    Per docs/specs/lane_allocation_schema.md § 1. Used by both the writer
+    (`save_allocation`) and the reader (`prop_profiles.load_allocation_lanes`).
+    """
+    directory = Path(base_dir) if base_dir else DEFAULT_LANE_ALLOCATION_DIR
+    return normalize_writable_path(directory / f"{profile_id}.json")
 
 # ---------------------------------------------------------------------------
 # Literature-grounded constants (do NOT tune on backtest — see spec §Parameter Source)
@@ -1271,7 +1289,8 @@ def save_allocation(
     If None, ORB size fields are omitted from the output.
     """
     gated_scores = apply_c8_gate(apply_chordia_gate(scores))
-    path = Path(output_path) if output_path else DEFAULT_LANE_ALLOCATION_PATH
+    explicit_path = output_path is not None
+    path = Path(output_path) if explicit_path else DEFAULT_LANE_ALLOCATION_PATH
     path = normalize_writable_path(path)
 
     def _blocked_entry(s: LaneScore) -> dict[str, object]:
@@ -1336,8 +1355,22 @@ def save_allocation(
         "all_scores_count": len(gated_scores),
     }
 
+    payload = json.dumps(data, indent=2, default=str)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, default=str))
+    path.write_text(payload)
+
+    # Stage 1a dual-write: when using the default output path, ALSO emit the
+    # per-profile file at docs/runtime/lane_allocation/<profile_id>.json so
+    # the new shape exists alongside the legacy file. Explicit-path callers
+    # (tests, tools that pass output_path) keep single-file semantics.
+    # Both writes are mandatory — partial-write is fail-closed: any failure
+    # raises and the caller treats the rebalance as failed.
+    # Schema spec: docs/specs/lane_allocation_schema.md § 3.
+    if not explicit_path:
+        new_path = lane_allocation_profile_path(profile_id)
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        new_path.write_text(payload)
+
     return path
 
 
