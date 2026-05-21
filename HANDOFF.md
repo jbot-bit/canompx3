@@ -80,6 +80,15 @@
   - **FAST_LANE PROMOTE queue:** 1 QUEUED `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30` at UNVERIFIED_OOS_POWER (N_OOS=14, needs 191 for 80% — calendar-wait per `feedback_oos_does_not_accrue_holdout_is_frozen.md`). Bridge draft already on disk at `docs/audit/hypotheses/drafts/2026-05-19-mnq-us-data-1000-e1-rr1-0-cb2-pd-clear-long-o30-chordia-heavyweight-v1.draft.yaml`.
   - **Stage 3 PreToolUse `canonical-inline-detector.py` hook** — Layer 3 of the 3-layer canonical-inline-copy-parity hardening. PARKED design-first (~30-45 min). Pattern follows `.claude/hooks/branch-flip-guard.py` PostToolUse double-guard precedent. n=10+ documented instances of the bug class makes mechanical edit-time enforcement doctrine-supported.
 
+## This Session (2026-05-21 — Codex Fast Lane V2 institutional design)
+
+- **Tool:** Codex
+- **Commit:** `65c184cf` `docs(fast-lane): design v2 institutional provenance model`
+- **File added:** `docs/plans/2026-05-21-fast-lane-v2-institutional-design.md`
+- **Summary:** User asked to research/plan/design the new fast-lane automated trade finder/maker/verifier. Review found a research-validity bug in the current fast-lane scanner: `scripts/research/fast_lane_promote_queue.py` appends trial-ledger rows during scans, with timestamp-based `run_id`s, so repeated scans/status rebuilds inflate K-lineage. Measured state: `docs/runtime/promote_queue.yaml` showed `K_lane=33` for `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30`; a safe no-append dry-run recomputed `K_lane=36`. The design doc now defines Fast Lane V2 around the core invariant: **only real research execution creates trial history; derived scanners/status/rankers/reports never mutate K-lineage.**
+- **Design contents:** event-sourced trial model, stable `trial_id = hash(prereg_sha + runner_id + result_artifact_sha + canonical_data_fingerprint)`, derived trial index, scanner read-only boundary, bridge/verifier/deployment-recommendation boundaries, hardening requirements, fail-closed edge cases, atomic writes, concurrency locks, schema evolution, observability, correction-over-deletion policy, and phased implementation roadmap.
+- **Next implementation order:** Phase 0 first: make `fast_lane_promote_queue.py --dry-run` and `fast_lane_walk.py --dry-run` truly non-mutating; add byte-for-byte ledger unchanged tests; prevent scanners/status rebuilds from appending trial history. Then Phase 1: move append authority to actual research runners or a stable-content one-time importer and exclude polluted duplicate scanner rows via correction artifact rather than deleting history.
+
 ## This Session (2026-05-19 — FAST_LANE v5.1 verification + idempotent bridge re-run)
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode
