@@ -11,6 +11,12 @@ population that `sample_size` / `expectancy_r` / `win_rate` / `sharpe_ratio` wer
 frozen on at promotion time — `trading_day < HOLDOUT_SACRED_FROM`. Pairs columns to
 one consistent strict-IS population. See `trading_app/chordia.py:158-163` doctrine.
 
+Consumer expectation: healed rows are a strict-IS PROVENANCE SHELF, not a live
+trailing-performance view. `last_trade_day` after refresh is the last strict-IS
+traded day (frozen at HOLDOUT_SACRED_FROM), NOT the most recent live trade. Code
+needing recent fire rates must query `orb_outcomes` directly with the strategy's
+filter applied — do not read trailing windows from `validated_setups`.
+
 Does not touch `status`, `promotion_provenance`, `promotion_git_sha`, or any performance
 column. Those remain authoritative from the original validation run.
 

@@ -2764,6 +2764,12 @@ def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
         if not micro_rows:
             return violations
 
+        # Intentional full-window resolver (holdout_cutoff=None): this check
+        # asks "is the FIRST traded day on/after micro_launch_day(instrument)?"
+        # — earliest-day question is independent of the IS/OOS/holdout split.
+        # Do NOT switch to strict-IS here; Check 45 (at line ~2967) uses
+        # strict-IS because it pairs window-columns to perf-column population,
+        # which is a different question. See trading_app/chordia.py:158-170.
         resolver = StrategyTradeWindowResolver(con)
         for (
             strategy_id,
