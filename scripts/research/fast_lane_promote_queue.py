@@ -1138,7 +1138,7 @@ def scan(
     db_path: Path | None = None,
     ledger_path: Path | None = None,
     graveyard_digest_path: Path | None = None,
-    append_to_ledger: bool = True,
+    append_to_ledger: bool = False,
 ) -> list[PromoteEntry]:
     # Resolve module-level defaults at call time so monkeypatching from tests
     # works against scripts.research.fast_lane_promote_queue.RESULTS_DIR etc.
@@ -1330,8 +1330,8 @@ def main(argv: list[str] | None = None) -> int:
         "--no-ledger-append",
         action="store_true",
         help=(
-            "Read-only mode: do NOT append to the trial ledger. Useful "
-            "for dry-run smoke tests and Check #172 audit runs."
+            "Deprecated compatibility flag. Scanner CLI runs are read-only "
+            "for trial-ledger provenance in both --dry-run and --write modes."
         ),
     )
     args = parser.parse_args(argv)
@@ -1348,7 +1348,7 @@ def main(argv: list[str] | None = None) -> int:
         db_path=Path(args.db_path) if args.db_path else None,
         ledger_path=Path(args.ledger_path),
         graveyard_digest_path=Path(args.graveyard_digest_path),
-        append_to_ledger=not args.no_ledger_append,
+        append_to_ledger=False,
     )
 
     if args.json:

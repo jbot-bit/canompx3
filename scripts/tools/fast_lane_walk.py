@@ -86,6 +86,14 @@ def _default_step_table() -> list[tuple[str, Callable[[list[str]], int], list[st
     ]
 
 
+def _dry_run_argv(label: str, argv: list[str]) -> list[str]:
+    """Return the non-mutating argv for a composed dry-run step."""
+    effective_argv = [a for a in argv if not a.startswith("--write")]
+    if label == "promote_queue" and "--no-ledger-append" not in effective_argv:
+        effective_argv.append("--no-ledger-append")
+    return effective_argv
+
+
 def run_chain(
     steps: list[tuple[str, Callable[[list[str]], int], list[str]]] | None = None,
     *,
@@ -106,8 +114,7 @@ def run_chain(
     for label, fn, argv in steps:
         effective_argv = list(argv)
         if dry_run:
-            # Strip --write flags so the chain rebuild is non-mutating.
-            effective_argv = [a for a in effective_argv if not a.startswith("--write")]
+            effective_argv = _dry_run_argv(label, effective_argv)
         buf = io.StringIO()
         with redirect_stdout(buf):
             try:

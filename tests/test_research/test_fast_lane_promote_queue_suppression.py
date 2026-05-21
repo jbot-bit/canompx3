@@ -23,14 +23,16 @@ generate small fixtures that match the regexes in
 
 from __future__ import annotations
 
+import io
 import textwrap
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-from scripts.research.fast_lane_promote_queue import scan
+from scripts.research.fast_lane_promote_queue import main, scan
 from scripts.research.fast_lane_structural_hash import compute_structural_hash
 
 # Large OOS window so the OOS-power gate passes when stats are sane;
@@ -180,6 +182,127 @@ def _scope_to_inputs(scope: dict[str, Any]) -> dict[str, Any]:
         "direction": raw_dir,
         "filter_threshold": scope.get("filter_threshold", ""),
     }
+
+
+def test_main_dry_run_does_not_append_to_trial_ledger(tmp_path: Path) -> None:
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    stem = "2026-05-21-cli-dry-run-fast-lane-v1"
+    _make_result_md(
+        results_dir,
+        stem=stem,
+        strategy_id="MGC_LONDON_METALS_E1_RR1.0_CB2_ATR_P50_30",
+    )
+    _make_source_yaml(
+        tmp_path,
+        stem=stem,
+        strategy_id="MGC_LONDON_METALS_E1_RR1.0_CB2_ATR_P50_30",
+    )
+    ledger_path = _make_empty_ledger(tmp_path)
+    before = ledger_path.read_bytes()
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = main(
+            [
+                "--dry-run",
+                "--results-dir",
+                str(results_dir),
+                "--cache-path",
+                str(tmp_path / "promote_queue.yaml"),
+                "--hypotheses-dir",
+                str(tmp_path / "hypotheses"),
+                "--action-queue",
+                str(_make_action_queue(tmp_path)),
+                "--ledger-path",
+                str(ledger_path),
+                "--graveyard-digest-path",
+                str(_make_digest(tmp_path, [])),
+                "--oos-window-days",
+                str(LARGE_OOS_WINDOW_DAYS),
+            ]
+        )
+
+    assert rc == 0
+    assert "FAST_LANE v5.1 PROMOTE queue" in buf.getvalue()
+    assert ledger_path.read_bytes() == before
+
+
+def test_main_write_refreshes_cache_without_appending_trial_ledger(tmp_path: Path) -> None:
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    stem = "2026-05-21-cli-write-fast-lane-v1"
+    _make_result_md(
+        results_dir,
+        stem=stem,
+        strategy_id="MGC_LONDON_METALS_E1_RR1.0_CB2_ATR_P50_30",
+    )
+    _make_source_yaml(
+        tmp_path,
+        stem=stem,
+        strategy_id="MGC_LONDON_METALS_E1_RR1.0_CB2_ATR_P50_30",
+    )
+    ledger_path = _make_empty_ledger(tmp_path)
+    cache_path = tmp_path / "promote_queue.yaml"
+    before = ledger_path.read_bytes()
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = main(
+            [
+                "--write",
+                "--results-dir",
+                str(results_dir),
+                "--cache-path",
+                str(cache_path),
+                "--hypotheses-dir",
+                str(tmp_path / "hypotheses"),
+                "--action-queue",
+                str(_make_action_queue(tmp_path)),
+                "--ledger-path",
+                str(ledger_path),
+                "--graveyard-digest-path",
+                str(_make_digest(tmp_path, [])),
+                "--oos-window-days",
+                str(LARGE_OOS_WINDOW_DAYS),
+            ]
+        )
+
+    assert rc == 0
+    assert cache_path.exists()
+    assert "wrote cache:" in buf.getvalue()
+    assert ledger_path.read_bytes() == before
+
+
+def test_scan_default_is_read_only_for_trial_ledger(tmp_path: Path) -> None:
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    stem = "2026-05-21-scan-default-fast-lane-v1"
+    _make_result_md(
+        results_dir,
+        stem=stem,
+        strategy_id="MGC_LONDON_METALS_E1_RR1.0_CB2_ATR_P50_30",
+    )
+    _make_source_yaml(
+        tmp_path,
+        stem=stem,
+        strategy_id="MGC_LONDON_METALS_E1_RR1.0_CB2_ATR_P50_30",
+    )
+    ledger_path = _make_empty_ledger(tmp_path)
+    before = ledger_path.read_bytes()
+
+    entries = scan(
+        results_dir,
+        hypotheses_dir=tmp_path / "hypotheses",
+        action_queue=_make_action_queue(tmp_path),
+        ledger_path=ledger_path,
+        graveyard_digest_path=_make_digest(tmp_path, []),
+        oos_window_days=LARGE_OOS_WINDOW_DAYS,
+    )
+
+    assert len(entries) == 1
+    assert entries[0].status != "ERROR"
+    assert ledger_path.read_bytes() == before
 
 
 # ---- 1. SUPPRESSED_BANNED_ENTRY_MODEL ------------------------------------

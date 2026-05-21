@@ -203,6 +203,30 @@ def test_run_chain_dry_run_strips_write_flags() -> None:
     assert seen_argv == [[], ["--other"], []]
 
 
+def test_run_chain_dry_run_adds_no_ledger_append_to_promote_queue() -> None:
+    seen_argv: dict[str, list[str]] = {}
+
+    def capture(label: str) -> Callable[[list[str]], int]:
+        def _inner(argv: list[str]) -> int:
+            seen_argv[label] = list(argv)
+            return 0
+
+        return _inner
+
+    steps = [
+        ("promote_queue", capture("promote_queue"), ["--write"]),
+        ("cherry_pick_ranker", capture("ranker"), ["--write", "--write-journal"]),
+        ("status_rollup", capture("status"), ["--write"]),
+    ]
+
+    overall_rc, _ = run_chain(steps=steps, dry_run=True)
+
+    assert overall_rc == 0
+    assert seen_argv["promote_queue"] == ["--no-ledger-append"]
+    assert seen_argv["ranker"] == []
+    assert seen_argv["status"] == []
+
+
 def test_run_chain_zero_on_all_pass() -> None:
     pass_fn: Callable[[list[str]], int] = lambda argv: 0
     steps: list[tuple[str, Callable[[list[str]], int], list[str]]] = [

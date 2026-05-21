@@ -56,6 +56,18 @@
   - **FAST_LANE PROMOTE queue:** 1 QUEUED `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30` at UNVERIFIED_OOS_POWER — calendar-wait per `feedback_oos_does_not_accrue_holdout_is_frozen.md`.
   - **Stage 3 PreToolUse `canonical-inline-detector.py` hook** — Layer 3 of the 3-layer canonical-inline-copy-parity hardening, parked design-first.
 
+## This Session (2026-05-21 — Codex Fast Lane V2 Phase 0 non-mutating scanner hardening)
+
+- **Tool:** Codex
+- **Status:** Implemented locally; not yet committed at time of this baton update.
+- **Plan:** `docs/superpowers/plans/2026-05-21-fast-lane-v2-phase-0.md`
+- **Files changed:** `scripts/research/fast_lane_promote_queue.py`, `scripts/tools/fast_lane_walk.py`, `tests/test_research/test_fast_lane_promote_queue_suppression.py`, `tests/test_tools/test_fast_lane_walk.py`, plus this baton and the Phase 0 implementation plan.
+- **What changed:** `fast_lane_promote_queue.scan()` now defaults to `append_to_ledger=False`; the scanner CLI passes `append_to_ledger=False` in both `--dry-run` and `--write` modes; `--no-ledger-append` remains accepted as a deprecated compatibility flag. `fast_lane_walk.run_chain(dry_run=True)` now strips write flags and explicitly passes `--no-ledger-append` to the promote-queue step.
+- **Tests added:** byte-for-byte trial-ledger preservation for scanner `--dry-run`, scanner `--write`, direct `scan()` default, and walk dry-run argv propagation.
+- **Verification:** targeted suite `./.venv-wsl/bin/python -m pytest tests/test_research/test_fast_lane_promote_queue_suppression.py tests/test_scripts/test_fast_lane_promote_queue.py tests/test_tools/test_fast_lane_walk.py -q` => 44 passed. Ruff targeted touched files => all checks passed. `git diff --check` clean. `pipeline/check_drift.py --fast --quiet` still exits 1 on unrelated Check 52 (`Active native trade-window provenance matches canonical recomputation`, count=844), matching the concurrent lane-allocation terminal's baseline carry-over; fast-lane checks in that same run passed, including promote queue, status roll-up, trial-ledger append-only, graveyard digest, and provenance presence.
+- **Important incident/fix:** an earlier too-narrow fix allowed `pipeline/check_drift.py` / `--write` to append two scanner rows to `docs/runtime/fast_lane_trial_ledger.yaml`. Those generated rows were restored locally, and the final implementation now prevents scanner dry-run, scanner write-cache mode, and direct scan defaults from mutating the ledger. Current terminal status shows no `docs/runtime/fast_lane_trial_ledger.yaml` diff.
+- **Next:** Decide whether to commit this Phase 0 patch with the known Check 52 baseline failure documented, or first resolve/accept the validated_setups trade-window provenance baseline. Do not claim repo-wide green until Check 52 is clean or explicitly waived by operator policy.
+
 ## This Session (2026-05-20 PM — Stage A acceptance close + 22-stage residue sweep + runtime/ gitignore)
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode
