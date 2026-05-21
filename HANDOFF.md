@@ -6,19 +6,36 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## This Session (2026-05-21 PM — strict-IS doctrine reconciles MGC carry-over, PR #307 opened)
+## This Session (2026-05-21 PM — CI unblock: #309 + #307 merged, 844 drift carry-over dissolved)
+
+- **Tool:** Claude Code (Opus 4.7), explanatory mode
+- **PRs:** #304 closed (superseded), #309 MERGED (`56892d47` — 71-file ruff sweep clears CI lint debt), #307 MERGED (`94b00b89` — strict-IS validated_setups resolver). Both admin-merged through Windows-CI mutex-test hang (`enforce_admins: false`).
+- **Drift on main:** **154 PASSED, 0 violations.** Pre-existing 844 Check 45 false-positives dissolved by PR #307 strict-IS resolver as predicted.
+- **Worktrees removed:** `canompx3-pr304-lint`, `canompx3-wt-revalidation-guard`. `canompx3-ruff-lint-recovery` PRESERVED — holds peer Codex's dirty `fast_lane_trial_ledger.yaml`.
+- **Carry-overs:**
+  - **Windows-CI `test_session_start_mutex.py` hang** — separate from this work, pre-existing on main. All recent PRs hit it; admin-merge bypassed. Local 10/10 pass in 0.66s. Tracked in `feedback_ci_windows_runner_hang_test_work_capsule.md`. Worth a dedicated session.
+  - **Peer Codex worktree dirty state** in `canompx3-ruff-lint-recovery` — `docs/runtime/fast_lane_trial_ledger.yaml` left untouched per multi-terminal hygiene.
+
+## This Session (2026-05-21 PM — Codex launcher default restored to smart path)
+
+- **Tool:** Codex (GPT-5.5), fallback `/mnt/c/...` checkout.
+- **Files changed:** `codex.bat`, `tests/test_tools/test_windows_agent_launch.py`, `tests/test_tools/test_windows_agent_launch_light.py`.
+- **Session summary:** User reported `codex.bat` broken after reviewing the Microsoft WSL filesystem guidance PDF. Root cause found in launcher routing: the daily `codex.bat` entrypoint defaulted to hard `codex-project-linux` modes, bypassing the existing smart launcher modes that sync/check the WSL-home clone and preserve explicit fallback routes. Fixed default mappings: `codex.bat` → `codex-project-smart`, `power` → `codex-project-smart-power`, `gold-db` → `codex-project-smart-gold-db`, `search-gold-db` → `codex-project-smart-search-gold-db`. Explicit `windows`, `linux`, `linux-power`, and `linux-gold-db` modes remain unchanged.
+- **Verification:** TDD red check first failed on the stale hard-Linux assertions. After patch, targeted red/green tests passed, then broader launcher slice passed: `54 passed` for `tests/test_tools/test_windows_agent_launch_light.py`, `tests/test_tools/test_windows_agent_launch.py`, `tests/test_tools/test_codex_doctor.py`, and `tests/test_tools/test_codex_launcher_scripts.py`.
+- **Notes:** `codex.bat` normalized back to CRLF line endings. Pre-existing modified `docs/runtime/fast_lane_trial_ledger.yaml` was present and left untouched. Full drift not run; change is Windows launcher/test-only.
+
+## This Session (2026-05-21 PM — strict-IS doctrine reconciles MGC carry-over, PR #307 opened) [MERGED 14:48Z as `94b00b89`]
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode
 - **Date:** 2026-05-21
-- **Worktree:** `canompx3-wt-revalidation-guard` on branch `session/joshd-wt-revalidation-guard`
-- **Commits on branch (ahead of origin/main by 3, already pushed):** `0939843c` decision-ledger entry, `b71e7f2e` strict-IS resolver refactor + 844-row backfill, `7ca99486` 3 pinning tests. Working tree clean.
-- **PR opened:** [#307](https://github.com/jbot-bit/canompx3/pull/307) — strict-IS scope window-column resolver + tests.
+- **Worktree:** `canompx3-wt-revalidation-guard` on branch `session/joshd-wt-revalidation-guard` (now removed; branch deleted local + remote)
+- **PR opened:** [#307](https://github.com/jbot-bit/canompx3/pull/307) — strict-IS scope window-column resolver + tests. **MERGED via admin-override at `94b00b89` in 2026-05-21 PM CI-unblock session above.**
 - **Session summary:** User asked to refresh the stale `MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4` validated_setups row. Investigation revealed the task is **structurally obsolete**: a prior session (this branch's 3 commits) already landed the strict-IS refactor that redefined `validated_setups.{first_trade_day, last_trade_day, trade_day_count}` as a strict-IS provenance shelf (`trading_day < HOLDOUT_SACRED_FROM=2026-01-01`), paired to the perf columns frozen at promotion. Migration `backfill_validated_trade_windows.py` healed 844/844 active VALIDATOR_NATIVE rows. Target row now reads `last_trade_day=2025-12-31, trade_day_count=168, sample_size=86` — canonically correct under new doctrine, not stale.
-- **Drift on main:** 844 false-positive Check 45 violations because main's resolver still uses full-window semantics while the canonical DB has already been migrated to strict-IS. **Merging PR #307 closes all 844.**
+- **Drift on main:** 844 false-positive Check 45 violations because main's resolver still uses full-window semantics while the canonical DB has already been migrated to strict-IS. **PR #307 merged → all 844 dissolved (now 0 violations).**
 - **Memory updated:** Both `project_mgc_cme_reopen_e2_orbg4_drift_is_data_staleness.md` and `feedback_validated_setups_partial_refresh_n1_2026_05_21.md` now lead with the reconciliation; original entries preserved as audit trail (supersession-banner pattern). `MEMORY.md` index entry rewritten.
 - **Carry-overs:**
 
-  **PR #307 review (next session):** await code-review on the PR per `feedback_explicit_user_direction_overrides_project_default.md`. Three test cases on the branch are mutation-probed per institutional-rigor §11 (drop kwarg → Test 1 fails; resolver ignores cutoff → Test 2 fails; Check 45 builds with None → Test 3 fails).
+  **PR #307 review:** ~~await code-review on the PR~~ — admin-merged 2026-05-21 14:48Z. Three test cases were mutation-probed per institutional-rigor §11 (drop kwarg → Test 1 fails; resolver ignores cutoff → Test 2 fails; Check 45 builds with None → Test 3 fails).
 
   **PRIOR CARRY-OVERS still live (unchanged from 2026-05-20 PM):**
   - **GOVERNANCE FOLLOW-UP — Stage-files-as-canonical-source ambiguity** — partially resolved by `ef4f0f29` (relocation of fast-lane canonical blocks into `docs/specs/`). Check #159 invariant (d) now forbids `docs/runtime/` canonical_source paths.
