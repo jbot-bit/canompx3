@@ -132,8 +132,30 @@ Path-override args (`allocation_path` kwarg) continue to take precedence — the
 ## 5. Drift-check coverage
 
 - Existing drift checks (read legacy path) — UNCHANGED in Stage 1a; the legacy file is still authoritative.
-- Stage 1b adds parity check: for every profile present under the new path, contents MUST equal the legacy file when the legacy file's `profile_id` matches.
-- Stage 1d removes the legacy writer + parity check; new path becomes sole authority.
+- **Stage 1b-i landed (2026-05-21):** `check_lane_allocation_per_profile_legacy_parity` (`pipeline/check_drift.py`) — for every per-profile file under `docs/runtime/lane_allocation/`, the body MUST byte-equal the legacy `docs/runtime/lane_allocation.json` when the legacy file's `profile_id` matches the per-profile filename stem. Byte-equal (not dict-equal) so writer regressions like key-order or float-repr drift trip the check immediately. Skip modes: missing new-dir, missing legacy, profile_id mismatch (legacy currently holds a different profile under last-write-wins semantics).
+- Stage 1d removes the legacy writer + this parity check; new path becomes sole authority.
+
+---
+
+## 5a. Grep-gate (Stage 1b authority inversion — landed 2026-05-21)
+
+`check_no_direct_lane_allocation_json_literals` (`pipeline/check_drift.py`) — forcing function that prevents any new file under `trading_app/**/*.py` or `scripts/tools/**/*.py` from re-introducing direct `lane_allocation.json` path-literal resolution. The single owner of path resolution is `trading_app.prop_profiles.resolve_allocation_json`; any direct literal outside the allowlist is a violation.
+
+**Permanent allowlist** (allowed to carry the literal in perpetuity):
+
+- `trading_app/prop_profiles.py` — canonical resolver (`resolve_allocation_json` + `_legacy_lane_allocation_path` + `_new_lane_allocation_dir`)
+- `trading_app/lane_allocator.py` — canonical writer (`save_allocation`, `DEFAULT_LANE_ALLOCATION_PATH`, `lane_allocation_profile_path`)
+- `scripts/tools/rebalance_lanes.py` — `--output` argparse help text only
+
+**Temporary allowlist** (`_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST` in `pipeline/check_drift.py`) — Stage 1b transitional. Shrinks monotonically as each reader migrates to the resolver in Stage 1b-ii (`trading_app/`) and Stage 1b-iii (`scripts/tools/`). Removing an entry IS the "reader migrated" signal. When the set is empty, Stage 1b's grep-gate axis is complete.
+
+**Sub-check — dead-allowlist-entry detection:** any temporary-allowlist file that exists but no longer contains the literal is flagged as a violation. This prevents the allowlist from going silently broad if a reader is migrated without the corresponding allowlist entry being removed. The allowlist must shrink monotonically — never lag behind the migrations.
+
+**Out of scope (deferred):**
+
+- `scripts/research/**/*.py` — Stage 1c (research-script migration).
+- `pipeline/**/*.py` — excluded because `check_drift.py` itself necessarily contains the literal, and there are no allocation readers in `pipeline/`.
+- `tests/**/*.py` — Stage 1b-iii fixture sweep.
 
 ---
 

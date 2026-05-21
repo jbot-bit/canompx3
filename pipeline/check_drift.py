@@ -9584,6 +9584,248 @@ def check_lane_allocation_displaced_bucket() -> list[str]:
     return violations
 
 
+def check_lane_allocation_per_profile_legacy_parity() -> list[str]:
+    """Per-profile lane-allocation files must byte-equal the legacy single-profile
+    ``docs/runtime/lane_allocation.json`` when the legacy file's ``profile_id``
+    matches.
+
+    Origin: Stage 1a (commit ``a95b7a91``) introduced dual-write — the allocator
+    writes both ``docs/runtime/lane_allocation/<profile_id>.json`` (new canonical
+    path) and ``docs/runtime/lane_allocation.json`` (legacy, single-profile, last
+    write wins). The Stage 1a contract (``docs/specs/lane_allocation_schema.md``
+    § 3) is that the JSON body is built once and written verbatim to both paths;
+    Stage 1d will retire the legacy writer after Stage 1c's stabilization
+    window shows zero ``source="legacy"`` reads via the resolver provenance
+    surface.
+
+    This drift check is the second-layer defense for dual-write divergence: if
+    the writer ever drifts (key ordering, float repr, an accidental
+    post-process), the two files stop matching byte-for-byte, and any reader
+    that fell back to the legacy path would see a different payload than a
+    reader that hit the new path. The downstream symptom would be capital-class
+    silent divergence between the broker-arming code (live) and the dashboards
+    / drift checks (read legacy) until Stage 1d landed.
+
+    Byte-equal (not dict-equal) is the right contract here because the Stage 1a
+    writer's invariant is "build body once, write twice unchanged" — any
+    structural difference between the two files is a writer bug, not a benign
+    representational difference. Byte-equal also catches the specific
+    inline-copy-parity class bugs documented in
+    ``memory/feedback_canonical_inline_copy_parity_bug_class.md``.
+
+    Fail conditions:
+      - For each per-profile file under ``docs/runtime/lane_allocation/``:
+        - Legacy file exists AND its ``profile_id`` matches the per-profile
+          filename stem AND the two file bodies are not byte-identical.
+
+    Pass conditions:
+      - ``docs/runtime/lane_allocation/`` directory absent or empty (pre-Stage-1a state)
+      - Legacy file absent (fresh worktree / CI)
+      - Legacy file's ``profile_id`` does NOT match the per-profile filename
+        stem (the legacy file currently holds a different profile under last-
+        write-wins single-profile semantics; not a parity violation)
+      - Bodies are byte-identical
+
+    Skip mode: missing dir / missing legacy file / unparseable legacy JSON all
+    return ``[]``. The chordia / c8 / displaced checks already cover legacy-
+    file integrity; this check is strictly about cross-path consistency.
+
+    @canonical-source: trading_app/lane_allocator.save_allocation (dual-write)
+    @canonical-source: docs/specs/lane_allocation_schema.md § 3, § 5
+    """
+    import json
+
+    new_dir = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation"
+    legacy_path = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
+
+    if not new_dir.exists() or not new_dir.is_dir():
+        return []
+    if not legacy_path.exists():
+        return []
+
+    try:
+        legacy_bytes = legacy_path.read_bytes()
+    except OSError as exc:
+        return [f"  BAD legacy lane_allocation.json: {exc}"]
+
+    try:
+        legacy_data = json.loads(legacy_bytes)
+    except json.JSONDecodeError as exc:
+        return [f"  BAD legacy lane_allocation.json (parse): {exc}"]
+    if not isinstance(legacy_data, dict):
+        return [
+            f"  legacy lane_allocation.json: root must be object, got "
+            f"{type(legacy_data).__name__}"
+        ]
+    legacy_profile_id = legacy_data.get("profile_id")
+
+    violations: list[str] = []
+    for new_path in sorted(new_dir.iterdir()):
+        if not new_path.is_file() or new_path.suffix != ".json":
+            continue
+        per_profile_id = new_path.stem
+        # Only compare when legacy currently holds this profile. Under Stage
+        # 1a's last-write-wins legacy semantics, legacy holds exactly one
+        # profile at any time. A profile_id mismatch is NOT a parity
+        # violation — it just means the most recent legacy write was for a
+        # different profile.
+        if legacy_profile_id != per_profile_id:
+            continue
+        try:
+            new_bytes = new_path.read_bytes()
+        except OSError as exc:
+            violations.append(f"  BAD {new_path}: {exc}")
+            continue
+        if new_bytes != legacy_bytes:
+            violations.append(
+                f"  parity drift: {new_path.relative_to(PROJECT_ROOT).as_posix()} != "
+                f"{legacy_path.relative_to(PROJECT_ROOT).as_posix()} for profile_id="
+                f"{per_profile_id!r} (Stage 1a dual-write invariant broken — "
+                f"investigate trading_app/lane_allocator.save_allocation)"
+            )
+
+    return violations
+
+
+# Allowlists for check_no_direct_lane_allocation_json_literals.
+# Module-level so tests can introspect / mutate via monkeypatch.
+_LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST: frozenset[Path] = frozenset({
+    Path("trading_app/prop_profiles.py"),
+    Path("trading_app/lane_allocator.py"),
+    Path("scripts/tools/rebalance_lanes.py"),
+})
+
+# Shrinks monotonically across Stage 1b-ii / 1b-iii. Removing an entry is the
+# "reader migrated" signal. When this set is empty, Stage 1b's grep-gate axis
+# is complete.
+_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST: frozenset[Path] = frozenset({
+    # trading_app/ readers — Stage 1b-ii
+    Path("trading_app/opportunity_awareness.py"),
+    Path("trading_app/live/session_orchestrator.py"),
+    Path("trading_app/prop_portfolio.py"),
+    Path("trading_app/pre_session_check.py"),
+    Path("trading_app/deployability.py"),  # comment-only references
+    # scripts/tools/ readers — Stage 1b-iii
+    Path("scripts/tools/allocation_intel.py"),
+    Path("scripts/tools/allocator_gate_audit.py"),
+    Path("scripts/tools/deployable_shelf_gap.py"),
+    Path("scripts/tools/deployment_coverage_audit.py"),
+    Path("scripts/tools/fast_lane_status.py"),
+    Path("scripts/tools/fast_lane_walk.py"),
+    Path("scripts/tools/generate_trade_sheet.py"),
+    Path("scripts/tools/go_portal.py"),
+    Path("scripts/tools/live_readiness_report.py"),
+    Path("scripts/tools/monitor_q4_band_shadow.py"),
+    Path("scripts/tools/strategy_lab_mcp_server.py"),
+})
+
+
+def check_no_direct_lane_allocation_json_literals() -> list[str]:
+    """No file under ``trading_app/`` or ``scripts/tools/`` may contain the
+    literal ``lane_allocation.json`` outside the allocation-resolution
+    canonical-source allowlist.
+
+    Origin: Stage 1b authority-inversion (parent stage:
+    ``docs/runtime/stages/2026-05-21-multi-profile-lane-allocation-stage-1b.md``).
+    Stage 1a stood up the per-profile path; Stage 1b promotes
+    ``trading_app.prop_profiles.resolve_allocation_json`` as the single owner
+    of path resolution. This grep-gate is the forcing function that prevents a
+    new reader from re-introducing direct-literal path resolution after Stage
+    1b-iii completes the sweep. Without it, Stage 1d (legacy removal) would
+    have to re-grep the codebase to confirm safety — making 1d a stochastic
+    delete instead of the deterministic one we want.
+
+    Sweep scope: ``trading_app/**/*.py`` and ``scripts/tools/**/*.py``.
+    ``scripts/research/`` is deferred to Stage 1c per the parent-stage out-of-
+    scope section. ``pipeline/`` is excluded because this check itself
+    necessarily mentions the literal (and ``pipeline/`` does not contain
+    allocation readers).
+
+    Permanent allowlist (``_LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST``):
+      - ``trading_app/prop_profiles.py`` — canonical resolver
+      - ``trading_app/lane_allocator.py`` — canonical writer
+      - ``scripts/tools/rebalance_lanes.py`` — ``--output`` argparse help text
+
+    Temporary allowlist (``_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST``) — Stage
+    1b transitional, shrinks monotonically as readers migrate in 1b-ii / 1b-
+    iii.
+
+    Sub-check: dead-allowlist-entry detection. Every entry in the temporary
+    allowlist must still contain the literal — if a reader is removed without
+    updating the allowlist, the gate would go silently broad. Surfaced as
+    violations so the allowlist remains tight.
+
+    Detection: substring search on ``lane_allocation.json``. Matching on the
+    literal (rather than parsing string nodes) is intentional — comments and
+    docstrings that mention the legacy path will go stale after Stage 1d
+    removes it, so even non-code mentions are within scope.
+
+    @canonical-source: trading_app/prop_profiles.resolve_allocation_json
+    @canonical-source: docs/specs/lane_allocation_schema.md § 4, § 5a
+    """
+    needle = "lane_allocation.json"
+    allowed = (
+        _LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST
+        | _LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST
+    )
+    scan_roots = (
+        PROJECT_ROOT / "trading_app",
+        PROJECT_ROOT / "scripts" / "tools",
+    )
+
+    violations: list[str] = []
+    seen_with_literal: set[Path] = set()
+
+    for root in scan_roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*.py")):
+            try:
+                rel = path.relative_to(PROJECT_ROOT)
+            except ValueError:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if needle not in text:
+                continue
+            seen_with_literal.add(rel)
+            if rel in allowed:
+                continue
+            # Locate first line of literal occurrence for operator pointer.
+            first_line_no = 0
+            for i, line in enumerate(text.splitlines(), 1):
+                if needle in line:
+                    first_line_no = i
+                    break
+            violations.append(
+                f"  {rel.as_posix()}:{first_line_no}: direct "
+                f"'lane_allocation.json' literal — migrate to "
+                f"trading_app.prop_profiles.resolve_allocation_json "
+                f"(Stage 1b authority inversion; see "
+                f"docs/specs/lane_allocation_schema.md § 4)"
+            )
+
+    # Dead-allowlist-entry sub-check: prevent the temporary allowlist from
+    # going silently broad if a reader is removed without updating the list.
+    # Only the TEMPORARY set is checked — permanent entries are expected to
+    # always contain the literal by definition. Only flag entries whose file
+    # still exists; a deleted-file entry would be caught when the actual
+    # delete commit is staged.
+    for rel in sorted(_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST):
+        if (PROJECT_ROOT / rel).exists() and rel not in seen_with_literal:
+            violations.append(
+                f"  TEMPORARY allowlist entry {rel.as_posix()} no longer "
+                f"contains 'lane_allocation.json' literal — remove from "
+                f"_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST in "
+                f"pipeline/check_drift.py (reader migrated; allowlist must "
+                f"shrink monotonically per Stage 1b doctrine)"
+            )
+
+    return violations
+
+
 def check_strategy_lab_no_fitness_endpoint() -> list[str]:
     """`scripts/tools/strategy_lab_mcp_server.py` must NOT register a
     `get_recent_fitness` MCP endpoint.
@@ -13337,6 +13579,18 @@ CHECKS = [
         "lane_allocation.json displaced[] entries must have valid rejection_gate",
         check_lane_allocation_displaced_bucket,
         False,  # blocking — schema contract for soft-gate provenance bucket
+        False,
+    ),
+    (
+        "lane_allocation per-profile JSON must byte-equal legacy when profile_id matches (Stage 1a dual-write parity)",
+        check_lane_allocation_per_profile_legacy_parity,
+        False,  # blocking — silent dual-write divergence is capital-class risk
+        False,
+    ),
+    (
+        "No direct lane_allocation.json literals in trading_app/ or scripts/tools/ outside resolver allowlist (Stage 1b authority inversion)",
+        check_no_direct_lane_allocation_json_literals,
+        False,  # blocking — forcing function for Stage 1b reader migration + Stage 1d delete-only
         False,
     ),
     (
