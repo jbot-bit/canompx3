@@ -6,6 +6,19 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-22 — Stage 1b-ii.a-2 landed: prop_portfolio + pre_session_check + deployability migrated)
+
+- **Tool:** Claude Code (Opus 4.7), explanatory mode
+- **Worktree:** `C:/Users/joshd/canompx3-multi-profile-lane-allocation`, branch `session/joshd-multi-profile-lane-allocation`
+- **Commits pushed:** `7921a3c6..ba5d640b` (two — prior session's `871f0496` 1b-ii.a-1 had been committed but never pushed; pushed both in this turn). Tip is `ba5d640b`.
+- **Files changed:** `trading_app/pre_session_check.py` (real reader migration; `check_lane_mismatch` signature widened with `profile_id`; resolver delegation; `check_allocation_staleness_gate` operator-string reword), `trading_app/prop_portfolio.py` (docstring-only reword on `resolve_daily_lanes`), `trading_app/deployability.py` (two comment-only rewords on family_singleton Disposition C), `pipeline/check_drift.py` (allowlist shrunk 4→1), `tests/test_pipeline/test_check_drift_lane_allocation_grep_gate.py` (fixture swap prop_portfolio→session_orchestrator).
+- **Verification:** 269 passed + 1 skipped on touched-surface slice (grep-gate + parity + opportunity_awareness + prop_profiles + pre_session_check + prop_portfolio + deployability tests). Drift 155 PASSED [OK]. The 844 violations on Check 52 (active native trade-window provenance) are PRE-EXISTING strict-IS doctrine carry-over on this branch — verified via stash-and-recount baseline; not introduced.
+- **Stage progress doc:** parent stage file `docs/runtime/stages/2026-05-21-multi-profile-lane-allocation-stage-1b.md` now carries a `## Sub-stage progress` checklist (1b-i ✓, 1b-ii.a-1 ✓, 1b-ii.a-2 ✓, 1b-ii.b pending, 1b-iii pending, 1b-iv pending). The fresh-session entry point is that checklist — read it FIRST before guessing what's next.
+- **Next session:** Stage 1b-ii.b — migrate `trading_app/live/session_orchestrator.py` to the resolver. HIGH-severity (live-broker arming + kill-switch). Open new session in same worktree; per `adversarial-audit-gate.md` fire `evidence-auditor` on the diff before merge. Then Stage 1b-iii (11 `scripts/tools/*` readers, mechanical flip with fixture-vs-contract drift watch). Then 1b-iv open PR.
+- **Carry-overs (not mine, do not touch):**
+  - `docs/runtime/fast_lane_trial_ledger.yaml` dirty in worktree — peer-Codex append-only state per multi-terminal hygiene.
+  - 844 Check 52 violations on this branch will dissolve when this branch rebases on current main (PR #307 strict-IS resolver already merged per prior HANDOFF entry below).
+
 ## This Session (2026-05-21 PM — CI unblock: #309 + #307 merged, 844 drift carry-over dissolved)
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode
