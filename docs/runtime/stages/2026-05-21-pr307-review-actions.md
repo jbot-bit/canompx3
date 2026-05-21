@@ -1,6 +1,12 @@
 ---
 task: PR #307 code-review action items — add intentional-full-window doctrine comments at the two bare-ctor StrategyTradeWindowResolver callsites + extend backfill module docstring with the strict-IS-provenance-shelf sentence.
-mode: IMPLEMENTATION
+mode: CLOSED
+closed_commit: f6dc3d2f
+closed_date: 2026-05-22
+closed_note: |
+  Comment/docstring-only PR #307 review actions landed in `f6dc3d2f`.
+  `git show --stat f6dc3d2f` confirms the three scoped files plus this
+  stage file were touched, with no executable behavior change.
 scope_lock:
   - trading_app/strategy_validator.py
   - pipeline/check_drift.py

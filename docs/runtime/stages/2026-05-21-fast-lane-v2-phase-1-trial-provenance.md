@@ -1,3 +1,15 @@
+---
+task: Fast Lane V2 Phase 1 trial provenance hardening — content-addressed trial IDs and runner-owned ledger appends.
+mode: CLOSED
+closed_commit: 9697650b
+closed_date: 2026-05-22
+closed_note: |
+  Core content-addressed `trial_id` implementation landed in `78e383ff`.
+  Runner-owned FAST_LANE trial append landed in `9697650b`. Stage already
+  carried PROVEN acceptance and verification; this closeout adds parser-visible
+  CLOSED frontmatter so stage-awareness no longer treats it as open work.
+---
+
 # Fast Lane V2 Phase 1 Trial Provenance Stage
 
 **Date:** 2026-05-21
