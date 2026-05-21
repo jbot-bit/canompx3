@@ -25,12 +25,12 @@ class TestConstants:
 
     def test_sacred_from_is_2026_01_01(self):
         """Amendment 2.7 locks the sacred window start at 2026-01-01."""
-        assert HOLDOUT_SACRED_FROM == date(2026, 1, 1)
+        assert date(2026, 1, 1) == HOLDOUT_SACRED_FROM
 
     def test_grandfather_cutoff_is_2026_04_08_utc(self):
         """Amendment 2.7 commit moment, used to distinguish grandfathered
         pre-correction contamination from new violations."""
-        assert HOLDOUT_GRANDFATHER_CUTOFF == datetime(2026, 4, 8, 0, 0, 0, tzinfo=UTC)
+        assert datetime(2026, 4, 8, 0, 0, 0, tzinfo=UTC) == HOLDOUT_GRANDFATHER_CUTOFF
 
     def test_grandfather_cutoff_after_sacred_from(self):
         """Sanity: the grandfather moment must be strictly later than the

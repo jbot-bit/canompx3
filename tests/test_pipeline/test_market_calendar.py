@@ -6,11 +6,11 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from pipeline.market_calendar import (
+    effective_close_et,
     is_cme_holiday,
     is_early_close,
     is_market_open_at,
     session_close_utc,
-    effective_close_et,
 )
 
 UTC = ZoneInfo("UTC")

@@ -31,14 +31,13 @@ import pytest
 
 from pipeline.check_drift import check_fast_lane_trial_ledger_append_only
 from scripts.research.fast_lane_trial_ledger import (
-    CapitalClassWriteRefused,
     HOLDOUT_POLICY_SENTINEL,
     HOLDOUT_SACRED_FROM_SENTINEL,
+    CapitalClassWriteRefused,
     LedgerAppendOnlyViolation,
     LedgerEntry,
     append_trial_ledger_entry,
 )
-
 
 # A canonical clean-state ledger fragment with two valid entries that share
 # the boundary sentinels. Every injection probe starts from this and mutates
@@ -128,10 +127,7 @@ def test_malformed_ledger_yaml_fails_closed(tmp_path: Path):
     bad.write_text(": not: valid: yaml: {\n", encoding="utf-8")
     violations = check_fast_lane_trial_ledger_append_only(ledger_path=bad)
     assert violations
-    assert any(
-        "parse" in v.lower() or "yaml" in v.lower() or "failed" in v.lower()
-        for v in violations
-    )
+    assert any("parse" in v.lower() or "yaml" in v.lower() or "failed" in v.lower() for v in violations)
 
 
 # ----------------------------------------------------------------------
@@ -229,9 +225,7 @@ def test_mixed_suffix_regression_is_caught(tmp_path: Path):
     )
     target = _write_ledger(tmp_path, mixed_bad)
     violations = check_fast_lane_trial_ledger_append_only(ledger_path=target)
-    assert any("TIMESTAMP_REGRESSION" in v for v in violations), (
-        f"expected TIMESTAMP_REGRESSION not in: {violations}"
-    )
+    assert any("TIMESTAMP_REGRESSION" in v for v in violations), f"expected TIMESTAMP_REGRESSION not in: {violations}"
 
 
 # ----------------------------------------------------------------------

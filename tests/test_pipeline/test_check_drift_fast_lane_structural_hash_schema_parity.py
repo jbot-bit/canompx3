@@ -32,7 +32,6 @@ import pytest
 from pipeline.check_drift import check_fast_lane_structural_hash_schema_parity
 from scripts.research import fast_lane_structural_hash as flsh
 
-
 # ----------------------------------------------------------------------
 # Clean-state baseline
 # ----------------------------------------------------------------------

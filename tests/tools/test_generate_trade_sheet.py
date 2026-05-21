@@ -221,9 +221,9 @@ class TestEnrichTradesWithEligibility:
         """When build_eligibility_report succeeds, six elig_* keys are
         attached with values derived from the report's properties."""
         from trading_app.eligibility.types import (
+            ConditionCategory,
             ConditionRecord,
             ConditionStatus,
-            ConditionCategory,
             EligibilityReport,
             FreshnessStatus,
             OverallStatus,

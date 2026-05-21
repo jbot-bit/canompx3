@@ -22,13 +22,13 @@ from typing import Any
 import pytest
 import yaml
 
+from scripts.research.fast_lane_structural_hash import compute_structural_hash
 from scripts.research.fast_lane_to_heavyweight_bridge import (
     BridgeRefused,
     FastLaneSource,
     _bridge_preflight_refuse,
     draft_path_for,
 )
-from scripts.research.fast_lane_structural_hash import compute_structural_hash
 
 
 def _make_source(

@@ -1,8 +1,8 @@
 """Tests for pipeline.asset_configs — canonical instrument source."""
 
-import pytest
-
 from pathlib import Path
+
+import pytest
 
 from pipeline.asset_configs import (
     ACTIVE_ORB_INSTRUMENTS,

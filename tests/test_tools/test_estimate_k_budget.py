@@ -36,7 +36,6 @@ from scripts.tools.estimate_k_budget import (
 )
 from scripts.tools.minbtl_retro_report import strict_bailey_n
 
-
 # ---------------------------------------------------------------------------
 # 1. required_minbtl_years — pure math against Bailey worked example
 # ---------------------------------------------------------------------------

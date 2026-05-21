@@ -10,7 +10,6 @@ import pytest
 
 from scripts.tools.payout_simulator import PayoutPolicy, PayoutSimulator, SimResult
 
-
 # ---------------------------------------------------------------------------
 # PayoutPolicy factory methods
 # ---------------------------------------------------------------------------

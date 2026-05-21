@@ -2947,7 +2947,7 @@ class TestR1WallClockRollover:
         today = orch.trading_day  # e.g. date(2026, 3, 7)
         next_day = today + timedelta(days=1)
         # Past rollover_utc → sleep_secs <= 0 → fires immediately (no real sleep)
-        past_rollover = datetime(2026, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
+        past_rollover = datetime(2026, 1, 1, 23, 0, 0, tzinfo=UTC)
 
         rollover_calls: list[dict] = []
         task_ref: list = []
@@ -2971,7 +2971,7 @@ class TestR1WallClockRollover:
             task_ref.append(task)
             try:
                 await asyncio.wait_for(task, timeout=2.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (TimeoutError, asyncio.CancelledError):
                 pass
 
         # R1 invariant: rollover must have been called with override_trading_day = next_day
@@ -3084,8 +3084,8 @@ class TestR1WallClockRollover:
                 # After 3 catch-up rollovers, terminate cleanly.
                 raise asyncio.CancelledError("test: 3-day gap closed")
 
-        past = datetime(2026, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
-        future = datetime(2099, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
+        past = datetime(2026, 1, 1, 23, 0, 0, tzinfo=UTC)
+        future = datetime(2099, 1, 1, 23, 0, 0, tzinfo=UTC)
         call_count = [0]
 
         def mock_ctr(day):
@@ -3105,7 +3105,7 @@ class TestR1WallClockRollover:
             task = asyncio.create_task(orch._wall_clock_rollover_loop())
             try:
                 await asyncio.wait_for(task, timeout=2.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (TimeoutError, asyncio.CancelledError):
                 pass
 
         # Three catch-up rollovers fired, each advancing by exactly one day.
@@ -3332,7 +3332,7 @@ class TestR3ReconnectCeiling:
         # With counter reset after stable run, 2 post-stable crashes stay within ceiling.
         # Without reset, 2 pre-stable + 2 post-stable = 4 > ceiling of 2 → would halt.
 
-        stable_start = datetime(2026, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+        stable_start = datetime(2026, 1, 1, 9, 0, 0, tzinfo=UTC)
         stable_end = stable_start + timedelta(seconds=1900)  # >30min
 
         class StableThenCrashFeed:
@@ -3420,6 +3420,7 @@ class TestR3ReconnectCeiling:
         is removed, this test fails.
         """
         import inspect
+
         from trading_app.live.session_orchestrator import SessionOrchestrator
 
         src = inspect.getsource(SessionOrchestrator)
@@ -4742,7 +4743,7 @@ class TestC1KillSwitchEventLoopRace:
         with patch("pipeline.dst.compute_trading_day_utc_range") as mock_ctr:
             from datetime import timezone
 
-            past = datetime(2026, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
+            past = datetime(2026, 1, 1, 23, 0, 0, tzinfo=UTC)
             mock_ctr.return_value = (past, past + timedelta(hours=24))
             await orch._check_trading_day_rollover(None, override_trading_day=next_day)
 
@@ -4755,6 +4756,7 @@ class TestC1KillSwitchEventLoopRace:
     def test_c1_source_marker_present(self):
         """C1 guard string must be present in _handle_event source."""
         import inspect
+
         from trading_app.live.session_orchestrator import SessionOrchestrator
 
         src = inspect.getsource(SessionOrchestrator._handle_event)

@@ -199,8 +199,7 @@ def test_canonical_source_under_docs_runtime_violates(reset_registry):
         )
         violations = check_canonical_inline_copies_have_parity_check()
         assert any(
-            "canonical_source path begins with 'docs/runtime/'" in v
-            and "runtime_canonical_anti_pattern" in v
+            "canonical_source path begins with 'docs/runtime/'" in v and "runtime_canonical_anti_pattern" in v
             for v in violations
         ), f"Expected invariant-(d) violation, got: {violations}"
     finally:
@@ -237,9 +236,7 @@ def test_canonical_source_under_docs_specs_passes_invariant_d(reset_registry):
         )
         violations = check_canonical_inline_copies_have_parity_check()
         invariant_d_hits = [v for v in violations if "canonical_source path begins with 'docs/runtime/'" in v]
-        assert invariant_d_hits == [], (
-            f"Invariant (d) false-positive on docs/specs/ path: {invariant_d_hits}"
-        )
+        assert invariant_d_hits == [], f"Invariant (d) false-positive on docs/specs/ path: {invariant_d_hits}"
     finally:
         if abs_test_file.exists():
             abs_test_file.unlink()
