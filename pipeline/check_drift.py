@@ -12614,6 +12614,58 @@ def check_fast_lane_graveyard_digest_parity(
     return violations
 
 
+def check_action_queue_loads_cleanly() -> list[str]:
+    """Round-trip check: docs/runtime/action-queue.yaml validates against
+    the canonical `pipeline.work_queue.WorkQueue` strict schema.
+
+    The action-queue is the live registry consumed by `project_pulse.py`,
+    `next.py`, and lease tooling. `WorkQueueItem` is declared with
+    ``ConfigDict(extra="forbid")`` -- any drift (extra field, out-of-
+    taxonomy status value, missing required field) crashes `load_queue()`
+    and degrades `/orient` and `/next`. This check fails closed on any
+    `ValidationError` so the violation surfaces in pre-commit before
+    the working tree lands.
+
+    Origin: 2026-05-21 -- two action-queue entries drifted (one carried
+    `closure_verdict`/`closed_at` extra fields, another used
+    `status: park` outside the `QueueStatus` literal and a `strategy_id`
+    extra field). `project_pulse.py --fast --format json` crashed with
+    three `ValidationError`s. Per the n=2-same-class doctrine threshold
+    (`memory/feedback_n3_same_class_doctrine_threshold.md`), the second
+    occurrence promotes the per-instance feedback file to a mechanical
+    drift check.
+
+    Returns
+    -------
+    list[str]
+        Empty when `load_queue()` succeeds. Single descriptive violation
+        on any failure (import error, file missing, ValidationError, YAML
+        parse error).
+    """
+    try:
+        from pipeline.work_queue import load_queue
+    except Exception as exc:
+        return [
+            "check_action_queue_loads_cleanly: failed to import "
+            f"pipeline.work_queue.load_queue: {type(exc).__name__}: {exc}"
+        ]
+
+    try:
+        load_queue()
+    except Exception as exc:
+        return [
+            "check_action_queue_loads_cleanly: "
+            "docs/runtime/action-queue.yaml does NOT validate against the "
+            "canonical pipeline.work_queue.WorkQueue strict schema. "
+            f"{type(exc).__name__}: {exc}. "
+            "Fix the YAML to conform to QueueStatus / QueueClass / "
+            "WorkQueueItem fields, do NOT widen the schema. "
+            "See memory/feedback_n3_same_class_doctrine_threshold.md."
+        ]
+
+    return []
+
+
 CHECKS = [
     (
         "Hardcoded 'MGC' SQL literals in generic pipeline code",
@@ -13348,6 +13400,12 @@ CHECKS = [
         "Fast-lane promote queue provenance present: docs/runtime/promote_queue.yaml gated entries must carry structural_hash + k_lineage + n_hat with rho_hat_assumed=0.5, and STATUS_VALUES suppression tokens must mirror the Stage 2A.3 stage file enum table (Stage 2A.3 Check #173, canonical-inline-copy parity 10th instance, Bailey-Lopez de Prado 2014 sec 3 + Stage 2A.3 design grounding)",
         check_fast_lane_promote_queue_provenance_present,
         False,  # blocking -- drift silently breaks universe-of-trials accounting + suppression chain
+        False,
+    ),
+    (
+        "Action-queue YAML validates against canonical WorkQueue schema: docs/runtime/action-queue.yaml must load via pipeline.work_queue.load_queue() without ValidationError (project_pulse.py / next.py orient surfaces depend on this)",
+        check_action_queue_loads_cleanly,
+        False,  # blocking -- drift silently breaks /orient and /next
         False,
     ),
 ]  # end CHECKS

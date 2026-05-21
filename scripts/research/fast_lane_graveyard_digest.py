@@ -265,7 +265,11 @@ def _parse_action_queue(path: Path) -> list[GraveyardEntry]:
     entries: list[GraveyardEntry] = []
     for row in rows:
         status = str(row.get("status", "")).lower()
-        if status not in {"park", "kill"}:
+        # Accept both "park" (legacy free-text) and "parked" (canonical
+        # WorkQueue status per pipeline/work_queue.py::QueueStatus). The
+        # action-queue.yaml was normalized 2026-05-21 to the strict schema;
+        # both forms map to the same graveyard semantics.
+        if status not in {"park", "parked", "kill"}:
             continue
         title = (
             row.get("id") or row.get("title") or row.get("name") or row.get("summary") or "unnamed action-queue entry"

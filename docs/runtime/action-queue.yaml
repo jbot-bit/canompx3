@@ -750,8 +750,6 @@ items:
     title: Pending lane_allocation.json rebalance - 4 lanes total (3 swaps), HOLD on C8 + SR-warmup
     class: capital
     status: closed
-    closure_verdict: RESOLVED_AS_APPLIED
-    closed_at: 2026-05-19
     priority: P2
     close_before_new_work: false
     owner_hint: user
@@ -801,6 +799,7 @@ items:
       - docs/audit/results/2026-05-13-mnq-usdata1000-vwapmid-o30-rr10-chordia-unlock-v1.md
       - docs/audit/results/2026-05-19-lane-rebalance-blockers-bc-closure.md
     notes_ref: docs/audit/results/2026-05-19-lane-rebalance-blockers-bc-closure.md
+    override_note: Closure verdict RESOLVED_AS_APPLIED on 2026-05-19 (rebalance dry-run applied; blockers b+c closed via 2026-05-19-lane-rebalance-blockers-bc-closure.md).
 
   - id: nq_mini_stage2_wiring_2026_05_15
     title: Wire NQ-mini symbol substitution (Stage 2 of 3) — session_orchestrator + webhook_server + populated profile
@@ -862,8 +861,7 @@ items:
   - id: park_mnq_usdata1000_e1_pd_clear_long_o30_oos_unpowered_2026_05_19
     title: PARK MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30 -- OOS structurally underpowered
     class: research
-    status: park
-    strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
+    status: parked
     priority: P3
     close_before_new_work: false
     owner_hint: claude
@@ -932,6 +930,7 @@ items:
       - memory/feedback_oos_does_not_accrue_holdout_is_frozen.md
     notes_ref: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
     override_note: |
+      strategy_id: MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30
       Routed to PARK by the promote-queue scanner's
       REJECTED_OOS_UNPOWERED disposition. No revocation sidecar:
       the IS edge is not refuted, the cell is unvalidatable.
