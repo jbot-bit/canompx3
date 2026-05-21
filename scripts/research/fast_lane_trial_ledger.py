@@ -69,6 +69,7 @@ _CAPITAL_CLASS_FORBIDDEN_SUBSTRINGS = (
 # Schema version for the on-disk YAML file. Bump on any structural change to
 # LedgerEntry; older readers must fail-closed if they see a higher version.
 LEDGER_SCHEMA_VERSION = 1
+TRIAL_CORRECTIONS_SCHEMA_VERSION = 1
 
 
 class CapitalClassWriteRefused(Exception):
@@ -77,6 +78,103 @@ class CapitalClassWriteRefused(Exception):
 
 class LedgerAppendOnlyViolation(Exception):
     """Raised when an append would mutate or reorder existing entries."""
+
+
+def read_trial_corrections(corrections_path: Path | None) -> list[dict[str, Any]]:
+    """Load correction-not-deletion records for V2 K-lineage counting.
+
+    Corrections preserve historical ledger rows as audit evidence while
+    excluding explicitly selected derived rows from V2 trial-count semantics.
+    Missing path is treated as no corrections so temp fixtures and older
+    worktrees remain readable; canonical drift checks can require the file.
+    """
+    if corrections_path is None or not corrections_path.exists():
+        return []
+    raw = corrections_path.read_text(encoding="utf-8")
+    data = yaml.safe_load(raw)
+    if not isinstance(data, dict):
+        raise ValueError(f"fast_lane_trial_ledger: {corrections_path} top-level must be a dict")
+    if data.get("do_not_hand_edit") is not True:
+        raise ValueError(f"fast_lane_trial_ledger: {corrections_path} correction banner missing `do_not_hand_edit: true`")
+    if data.get("schema_version") != TRIAL_CORRECTIONS_SCHEMA_VERSION:
+        raise ValueError(
+            f"fast_lane_trial_ledger: {corrections_path} correction schema_version "
+            f"{data.get('schema_version')!r} != expected {TRIAL_CORRECTIONS_SCHEMA_VERSION}"
+        )
+    if data.get("correction_not_deletion") is not True:
+        raise ValueError(
+            f"fast_lane_trial_ledger: {corrections_path} must declare `correction_not_deletion: true`"
+        )
+    corrections = data.get("corrections", [])
+    if not isinstance(corrections, list):
+        raise ValueError(f"fast_lane_trial_ledger: {corrections_path} `corrections` must be a list")
+
+    validated: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for idx, correction in enumerate(corrections):
+        if not isinstance(correction, dict):
+            raise ValueError(
+                f"fast_lane_trial_ledger: correction[{idx}] in {corrections_path} must be a dict"
+            )
+        correction_id = correction.get("correction_id")
+        if not isinstance(correction_id, str) or not correction_id.strip():
+            raise ValueError(
+                f"fast_lane_trial_ledger: correction[{idx}] missing non-empty correction_id"
+            )
+        if correction_id in seen_ids:
+            raise ValueError(
+                f"fast_lane_trial_ledger: duplicate correction_id {correction_id!r} in {corrections_path}"
+            )
+        seen_ids.add(correction_id)
+
+        action = correction.get("action")
+        if action != "exclude_from_v2_k_counts":
+            raise ValueError(
+                f"fast_lane_trial_ledger: correction[{idx}] action {action!r} unsupported; "
+                "expected 'exclude_from_v2_k_counts'"
+            )
+        reason = correction.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError(
+                f"fast_lane_trial_ledger: correction[{idx}] missing non-empty reason"
+            )
+        selector = correction.get("selector")
+        if not isinstance(selector, dict):
+            raise ValueError(
+                f"fast_lane_trial_ledger: correction[{idx}] selector must be a dict"
+            )
+        run_id_prefix = selector.get("run_id_prefix")
+        if not isinstance(run_id_prefix, str) or not run_id_prefix:
+            raise ValueError(
+                f"fast_lane_trial_ledger: correction[{idx}] selector.run_id_prefix must be a non-empty str"
+            )
+        validated.append(correction)
+    return validated
+
+
+def is_excluded_from_v2_k_counts(row: dict[str, Any], corrections: list[dict[str, Any]]) -> bool:
+    """Return True when a ledger row is corrected out of V2 K counts."""
+    run_id = row.get("run_id")
+    if not isinstance(run_id, str):
+        return False
+    for correction in corrections:
+        if correction.get("action") != "exclude_from_v2_k_counts":
+            continue
+        selector = correction.get("selector") or {}
+        if not isinstance(selector, dict):
+            continue
+        run_id_prefix = selector.get("run_id_prefix")
+        if isinstance(run_id_prefix, str) and run_id.startswith(run_id_prefix):
+            return True
+    return False
+
+
+def filter_v2_k_count_rows(
+    rows: list[dict[str, Any]],
+    corrections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return ledger rows that remain eligible for V2 K-lineage counts."""
+    return [row for row in rows if not is_excluded_from_v2_k_counts(row, corrections)]
 
 
 def compute_trial_id(
@@ -378,11 +476,15 @@ __all__ = [
     "HOLDOUT_POLICY_SENTINEL",
     "HOLDOUT_SACRED_FROM_SENTINEL",
     "LEDGER_SCHEMA_VERSION",
+    "TRIAL_CORRECTIONS_SCHEMA_VERSION",
     "CapitalClassWriteRefused",
     "LedgerAppendOnlyViolation",
     "LedgerEntry",
     "append_trial_ledger_entry",
     "compute_trial_id",
+    "filter_v2_k_count_rows",
+    "is_excluded_from_v2_k_counts",
     "read_ledger",
+    "read_trial_corrections",
     "_parse_utc_ts",
 ]

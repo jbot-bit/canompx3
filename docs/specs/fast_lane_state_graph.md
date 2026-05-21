@@ -265,9 +265,9 @@ Six values added to `fast_lane_promote_queue.STATUS_VALUES`. Existing values (`Q
 |---|---|---|
 | `SUPPRESSED_GRAVEYARD` | `structural_hash` matches an entry in `fast_lane_graveyard_digest.yaml` | refuse |
 | `SUPPRESSED_DUPLICATE_ACTIVE` | `structural_hash` matches an existing prereg under `docs/audit/hypotheses/` (NOT `drafts/`) that has not yet produced a result MD with the same hash | refuse |
-| `SUPPRESSED_SIBLING_RETEST` | `K_lane >= 2` (ledger contains >=2 entries sharing this structural_hash) | refuse |
+| `SUPPRESSED_SIBLING_RETEST` | `K_declared_in_prereg <= 1` AND `K_lane >= 2` (legacy K=1 lane has repeated prior trials sharing this structural_hash) | refuse |
 | `SUPPRESSED_BANNED_ENTRY_MODEL` | `entry_model in {E0, E3}` | refuse |
 | `SUPPRESSED_E2_LOOKAHEAD` | `entry_model == E2` AND `filter_type` matches `E2_EXCLUDED_FILTER_PREFIXES` / `E2_EXCLUDED_FILTER_SUBSTRINGS` (canonical from `trading_app.config`) | refuse |
-| `SUPPRESSED_K_OVERRUN` | `N_hat >= K_declared_in_prereg * 2` (effective-N exceeds budget per Bailey-Lopez de Prado 2014 Eq. 9) | refuse |
+| `SUPPRESSED_K_OVERRUN` | `K_lane > K_declared_in_prereg` (observed trial count exceeds the preregistered lane-level trial budget; `N_hat` remains sample adequacy/DSR input, not the K-budget comparator) | refuse |
 
 OOS-power gate (Check #161) stays unchanged and remains upstream of these suppression statuses on the verdict-priority order. If a result MD already carries `REJECTED_OOS_UNPOWERED`, that wins; suppression statuses below only fire on results that would otherwise reach `QUEUED`.

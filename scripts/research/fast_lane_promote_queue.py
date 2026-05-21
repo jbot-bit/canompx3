@@ -59,6 +59,7 @@ HYPOTHESES_DIR = REPO_ROOT / "docs" / "audit" / "hypotheses"
 ACTION_QUEUE = REPO_ROOT / "docs" / "runtime" / "action-queue.yaml"
 QUEUE_CACHE = REPO_ROOT / "docs" / "runtime" / "promote_queue.yaml"
 TRIAL_LEDGER_PATH = REPO_ROOT / "docs" / "runtime" / "fast_lane_trial_ledger.yaml"
+TRIAL_CORRECTIONS_PATH = REPO_ROOT / "docs" / "runtime" / "fast_lane_trial_corrections.yaml"
 GRAVEYARD_DIGEST_PATH = REPO_ROOT / "docs" / "runtime" / "fast_lane_graveyard_digest.yaml"
 
 FAST_LANE_RESULT_GLOB = "*fast-lane*.md"
@@ -688,9 +689,9 @@ def classify(
                                            graveyard digest entry
       8. SUPPRESSED_DUPLICATE_ACTIVE    -- another active prereg shares this
                                            structural_hash with no result MD yet
-      9. SUPPRESSED_SIBLING_RETEST      -- K_lane >= 2 (ledger says we've
-                                           already tested this lane twice)
-     10. SUPPRESSED_K_OVERRUN           -- N_hat >= K_declared_in_prereg * 2
+      9. SUPPRESSED_SIBLING_RETEST      -- K_lane >= 2 on a K=1 lane (ledger
+                                           says we've already repeated it)
+     10. SUPPRESSED_K_OVERRUN           -- K_lane > K_declared_in_prereg
      11. REJECTED_OOS_UNPOWERED         -- OOS pre-flight power gate (RULE 3.3)
      12. QUEUED                         -- survives every gate
 
@@ -774,23 +775,23 @@ def classify(
         )
 
     k_lane = int((entry.k_lineage or {}).get("K_lane", 0))
-    if k_lane >= 2:
+    k_declared = int((entry.k_lineage or {}).get("K_declared_in_prereg", 1))
+    if k_declared <= 1 and k_lane >= 2:
         return (
             "SUPPRESSED_SIBLING_RETEST",
-            f"K_lane={k_lane} (>= 2) -- ledger shows >= 2 prior runs on "
-            "this lane; sibling-retest gate fires per stage file "
+            f"K_lane={k_lane} on K_declared_in_prereg={k_declared} -- "
+            "ledger shows repeated prior runs on this K=1 lane; "
+            "sibling-retest gate fires per stage file "
             "§ Suppression Status Enum. PARK or pool with sibling rather "
             "than re-running.",
         )
 
-    k_declared = int((entry.k_lineage or {}).get("K_declared_in_prereg", 1))
-    if entry.n_hat >= k_declared * 2:
+    if k_lane > k_declared:
         return (
             "SUPPRESSED_K_OVERRUN",
-            f"N_hat={entry.n_hat} >= K_declared_in_prereg * 2 "
-            f"({k_declared * 2}); correlation-haircut effective sample "
-            "exceeds the declared K budget per Bailey-Lopez de Prado "
-            "2014 Eq. 9. Re-declare K or PARK.",
+            f"K_lane={k_lane} > K_declared_in_prereg={k_declared}; "
+            "observed trial count exceeds the declared K budget. "
+            "Re-declare K or PARK.",
         )
 
     # --- Pre-flight OOS-power gate (RULE 3.3) ---------------------------
@@ -1042,6 +1043,7 @@ def scan(
     oos_window_error: str | None = None,
     db_path: Path | None = None,
     ledger_path: Path | None = None,
+    trial_corrections_path: Path | None = None,
     graveyard_digest_path: Path | None = None,
     append_to_ledger: bool = False,
 ) -> list[PromoteEntry]:
@@ -1051,6 +1053,7 @@ def scan(
     hd = hypotheses_dir if hypotheses_dir is not None else HYPOTHESES_DIR
     aq = action_queue if action_queue is not None else ACTION_QUEUE
     lp = ledger_path if ledger_path is not None else TRIAL_LEDGER_PATH
+    tc = trial_corrections_path if trial_corrections_path is not None else TRIAL_CORRECTIONS_PATH
     gd = graveyard_digest_path if graveyard_digest_path is not None else GRAVEYARD_DIGEST_PATH
     if append_to_ledger:
         # Deprecated Phase-0/Phase-1 compatibility seam. Scanners are derived
@@ -1067,7 +1070,12 @@ def scan(
     # Stage 2A.3: read ledger + digest ONCE per scan, before any entry
     # processing. The ledger snapshot is the same for every entry within a
     # scan -- subsequent scans see whatever this scan appended.
-    ledger_rows = _read_trial_ledger(lp)
+    from scripts.research.fast_lane_trial_ledger import (
+        filter_v2_k_count_rows,
+        read_trial_corrections,
+    )
+
+    ledger_rows = filter_v2_k_count_rows(_read_trial_ledger(lp), read_trial_corrections(tc))
     graveyard_index = _read_graveyard_digest(gd)
 
     entries: list[PromoteEntry] = []
@@ -1213,7 +1221,16 @@ def main(argv: list[str] | None = None) -> int:
         default=str(TRIAL_LEDGER_PATH),
         help=(
             "Path to docs/runtime/fast_lane_trial_ledger.yaml. Stage 2A.3 "
-            "appends one entry per non-ERROR PROMOTE result scanned."
+            "reads this append-only universe-of-trials ledger."
+        ),
+    )
+    parser.add_argument(
+        "--trial-corrections-path",
+        default=str(TRIAL_CORRECTIONS_PATH),
+        help=(
+            "Path to docs/runtime/fast_lane_trial_corrections.yaml. "
+            "Correction-not-deletion records exclude derived legacy rows "
+            "from V2 K-lineage counts while preserving audit history."
         ),
     )
     parser.add_argument(
@@ -1245,6 +1262,7 @@ def main(argv: list[str] | None = None) -> int:
         oos_window_error=None,
         db_path=Path(args.db_path) if args.db_path else None,
         ledger_path=Path(args.ledger_path),
+        trial_corrections_path=Path(args.trial_corrections_path),
         graveyard_digest_path=Path(args.graveyard_digest_path),
         append_to_ledger=False,
     )

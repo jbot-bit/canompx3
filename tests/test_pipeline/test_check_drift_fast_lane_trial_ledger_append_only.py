@@ -90,6 +90,27 @@ def _write_ledger(tmp_path: Path, text: str = _VALID_LEDGER_TEXT) -> Path:
     return p
 
 
+_VALID_CORRECTIONS_TEXT = dedent(
+    """\
+    do_not_hand_edit: true
+    schema_version: 1
+    correction_not_deletion: true
+    corrections:
+      - correction_id: exclude-historical-scanner-derived-rows-2026-05-22
+        action: exclude_from_v2_k_counts
+        selector:
+          run_id_prefix: scanner-
+        reason: Historical scanner rows are derived views, not real research executions.
+    """
+)
+
+
+def _write_corrections(tmp_path: Path, text: str = _VALID_CORRECTIONS_TEXT) -> Path:
+    p = tmp_path / "fast_lane_trial_corrections.yaml"
+    p.write_text(text, encoding="utf-8")
+    return p
+
+
 # ----------------------------------------------------------------------
 # Clean-state baseline
 # ----------------------------------------------------------------------
@@ -98,6 +119,12 @@ def _write_ledger(tmp_path: Path, text: str = _VALID_LEDGER_TEXT) -> Path:
 def test_clean_state_passes(tmp_path: Path):
     target = _write_ledger(tmp_path)
     assert check_fast_lane_trial_ledger_append_only(ledger_path=target) == []
+
+
+def test_clean_state_with_trial_corrections_passes(tmp_path: Path):
+    target = _write_ledger(tmp_path)
+    corrections = _write_corrections(tmp_path)
+    assert check_fast_lane_trial_ledger_append_only(ledger_path=target, corrections_path=corrections) == []
 
 
 def test_real_repo_ledger_passes():
@@ -131,6 +158,25 @@ def test_malformed_ledger_yaml_fails_closed(tmp_path: Path):
     violations = check_fast_lane_trial_ledger_append_only(ledger_path=bad)
     assert violations
     assert any("parse" in v.lower() or "yaml" in v.lower() or "failed" in v.lower() for v in violations)
+
+
+def test_trial_corrections_bad_action_fails_closed(tmp_path: Path):
+    target = _write_ledger(tmp_path)
+    corrections = _write_corrections(
+        tmp_path,
+        _VALID_CORRECTIONS_TEXT.replace("exclude_from_v2_k_counts", "delete_rows"),
+    )
+    violations = check_fast_lane_trial_ledger_append_only(ledger_path=target, corrections_path=corrections)
+    assert violations
+    assert any("correction" in v.lower() and "action" in v.lower() for v in violations)
+
+
+def test_trial_corrections_missing_banner_fails_closed(tmp_path: Path):
+    target = _write_ledger(tmp_path)
+    corrections = _write_corrections(tmp_path, _VALID_CORRECTIONS_TEXT.replace("do_not_hand_edit: true\n", ""))
+    violations = check_fast_lane_trial_ledger_append_only(ledger_path=target, corrections_path=corrections)
+    assert violations
+    assert any("correction" in v.lower() and "banner" in v.lower() for v in violations)
 
 
 # ----------------------------------------------------------------------

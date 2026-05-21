@@ -12242,6 +12242,7 @@ def check_fast_lane_status_rollup_reconstruction_parity(
 
 def check_fast_lane_trial_ledger_append_only(
     ledger_path: Path | None = None,
+    corrections_path: Path | None = None,
 ) -> list[str]:
     """Append-only invariant for docs/runtime/fast_lane_trial_ledger.yaml.
 
@@ -12299,6 +12300,7 @@ def check_fast_lane_trial_ledger_append_only(
             HOLDOUT_POLICY_SENTINEL,
             HOLDOUT_SACRED_FROM_SENTINEL,
             LEDGER_SCHEMA_VERSION,
+            read_trial_corrections,
         )
     except Exception as exc:
         return [f"check_fast_lane_trial_ledger_append_only: writer module import failed: {type(exc).__name__}: {exc}"]
@@ -12306,12 +12308,30 @@ def check_fast_lane_trial_ledger_append_only(
     target = (
         ledger_path if ledger_path is not None else PROJECT_ROOT / "docs" / "runtime" / "fast_lane_trial_ledger.yaml"
     )
+    corrections_target = corrections_path
+    if corrections_target is None and ledger_path is None:
+        corrections_target = PROJECT_ROOT / "docs" / "runtime" / "fast_lane_trial_corrections.yaml"
 
     if not target.exists():
         return [
             "check_fast_lane_trial_ledger_append_only: ledger file missing at "
             f"{target} (skeleton must be landed by Stage 2A.2; fail-closed)."
         ]
+
+    if corrections_target is not None:
+        if not corrections_target.exists():
+            return [
+                "check_fast_lane_trial_ledger_append_only: correction file missing at "
+                f"{corrections_target} (V2 correction-not-deletion file must preserve "
+                "historical scanner rows while excluding them from K counts; fail-closed)."
+            ]
+        try:
+            read_trial_corrections(corrections_target)
+        except Exception as exc:
+            return [
+                "check_fast_lane_trial_ledger_append_only: trial correction file invalid "
+                f"at {corrections_target.name}: {type(exc).__name__}: {exc}"
+            ]
 
     try:
         raw = target.read_text(encoding="utf-8")

@@ -153,6 +153,27 @@ def _make_empty_ledger(tmp_path: Path) -> Path:
     return lp
 
 
+def _make_corrections(tmp_path: Path) -> Path:
+    cp = tmp_path / "fast_lane_trial_corrections.yaml"
+    cp.write_text(
+        textwrap.dedent(
+            """\
+            do_not_hand_edit: true
+            schema_version: 1
+            correction_not_deletion: true
+            corrections:
+              - correction_id: exclude-historical-scanner-derived-rows-2026-05-22
+                action: exclude_from_v2_k_counts
+                selector:
+                  run_id_prefix: scanner-
+                reason: Historical scanner rows are derived views, not real research executions.
+            """
+        ),
+        encoding="utf-8",
+    )
+    return cp
+
+
 def _make_digest(tmp_path: Path, entries: list[dict[str, Any]]) -> Path:
     dp = tmp_path / "fast_lane_graveyard_digest.yaml"
     payload = {
@@ -593,33 +614,184 @@ def test_suppressed_sibling_retest_k_lane_ge_2(tmp_path):
     assert e.k_lineage["K_lane"] >= 2
 
 
-# ---- 6. SUPPRESSED_K_OVERRUN ---------------------------------------------
-
-
-def test_suppressed_k_overrun(tmp_path):
-    """N_hat >= K_declared * 2 triggers SUPPRESSED_K_OVERRUN.
-
-    The synthesis: large pooled_n -> large N_hat under rho_hat=0.5. With
-    K_declared=1, the threshold is 2; we need N_hat >= 2. Empty ledger
-    means K_family = 0 -> M_correlated = max(K_family, 1) = 1 ->
-    N_hat = pooled_n * (0.5 + 0.5*1) = pooled_n. So any pooled_n >= 2
-    will trip. Use pooled_n = 220 which trivially exceeds 2.
-    """
+def test_corrected_scanner_rows_do_not_inflate_k_lane(tmp_path):
+    """Historical scanner-derived rows stay in the ledger but do not count as V2 trials."""
     results_dir = tmp_path / "results"
     results_dir.mkdir()
-    stem = "2026-05-20-koverrun-fast-lane-v1"
+    stem = "2026-05-20-corrected-scanner-fast-lane-v1"
     sid = "MGC_LONDON_METALS_E1_RR1.0_CB2_ATR_P50"
-    _make_result_md(results_dir, stem=stem, strategy_id=sid, pooled_n=220)
-    _make_source_yaml(tmp_path, stem=stem, strategy_id=sid)
-    # The default _resolve_k_declared returns K_declared=1 because the
-    # synthetic source YAML's metadata.total_expected_trials=1. n_hat=220
-    # >> K_declared * 2 = 2 -> SUPPRESSED_K_OVERRUN fires.
+    _make_result_md(results_dir, stem=stem, strategy_id=sid)
+    source_yaml = _make_source_yaml(tmp_path, stem=stem, strategy_id=sid)
+
+    scope = yaml.safe_load(source_yaml.read_text(encoding="utf-8"))["scope"]
+    h = compute_structural_hash(_scope_to_inputs(scope))
+    scanner_entries = []
+    for idx in range(3):
+        scanner_entries.append(
+            {
+                "run_id": f"scanner-2026-05-20T0{idx}:00:00Z",
+                "run_timestamp_utc": f"2026-05-20T0{idx}:00:00Z",
+                "prereg_path": f"docs/audit/hypotheses/scanner-prior-{idx}.yaml",
+                "prereg_sha": f"{idx}" * 16,
+                "structural_hash": h,
+                "template_version": "fast_lane_v5.1",
+                "testing_mode": "individual",
+                "pathway": "A",
+                "K_declared": 1,
+                "holdout_policy": "mode_A",
+                "holdout_sacred_from": "2026-01-01",
+                "k_lineage": {
+                    "instrument": scope["instrument"],
+                    "orb_label": scope["session"],
+                    "orb_minutes": int(scope["orb_minutes"]),
+                },
+                "n_hat": 100.0,
+                "upstream_provenance": {},
+                "outcome": {},
+            }
+        )
+    ledger_path = tmp_path / "fast_lane_trial_ledger.yaml"
+    ledger_path.write_text(
+        "do_not_hand_edit: true\nschema_version: 1\n"
+        + yaml.safe_dump({"entries": scanner_entries}, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
 
     entries = scan(
         results_dir,
         hypotheses_dir=tmp_path / "hypotheses",
         action_queue=_make_action_queue(tmp_path),
-        ledger_path=_make_empty_ledger(tmp_path),
+        ledger_path=ledger_path,
+        trial_corrections_path=_make_corrections(tmp_path),
+        graveyard_digest_path=_make_digest(tmp_path, []),
+        oos_window_days=LARGE_OOS_WINDOW_DAYS,
+        append_to_ledger=False,
+    )
+
+    assert len(entries) == 1
+    e = entries[0]
+    assert e.status == "QUEUED", f"got {e.status} reason={e.error_reason}"
+    assert e.k_lineage["K_lane"] == 0
+    assert e.k_lineage["K_global"] == 0
+
+
+# ---- 6. SUPPRESSED_K_OVERRUN ---------------------------------------------
+
+
+def test_budgeted_k_lane_repeat_does_not_suppress(tmp_path):
+    """K_declared budgets trial count; a second prior trial is OK when K=3."""
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    stem = "2026-05-20-kbudget-fast-lane-v1"
+    sid = "MGC_LONDON_METALS_E1_RR1.0_CB2_ATR_P50"
+    _make_result_md(results_dir, stem=stem, strategy_id=sid, pooled_n=220)
+    source_yaml = _make_source_yaml(tmp_path, stem=stem, strategy_id=sid)
+    source_data = yaml.safe_load(source_yaml.read_text(encoding="utf-8"))
+    source_data["metadata"]["total_expected_trials"] = 3
+    source_yaml.write_text(yaml.safe_dump(source_data, sort_keys=False), encoding="utf-8")
+
+    scope = source_data["scope"]
+    h = compute_structural_hash(_scope_to_inputs(scope))
+    ledger_entries = [
+        {
+            "run_id": f"runner-prior-{idx}",
+            "run_timestamp_utc": f"2026-05-20T0{idx}:00:00Z",
+            "prereg_path": f"docs/audit/hypotheses/runner-prior-{idx}.yaml",
+            "prereg_sha": f"{idx}" * 16,
+            "structural_hash": h,
+            "template_version": "fast_lane_v5.1",
+            "testing_mode": "individual",
+            "pathway": "A",
+            "K_declared": 3,
+            "holdout_policy": "mode_A",
+            "holdout_sacred_from": "2026-01-01",
+            "k_lineage": {
+                "instrument": scope["instrument"],
+                "orb_label": scope["session"],
+                "orb_minutes": int(scope["orb_minutes"]),
+            },
+            "n_hat": 100.0,
+            "upstream_provenance": {},
+            "outcome": {},
+        }
+        for idx in range(2)
+    ]
+    ledger_path = tmp_path / "fast_lane_trial_ledger.yaml"
+    ledger_path.write_text(
+        "do_not_hand_edit: true\nschema_version: 1\n"
+        + yaml.safe_dump({"entries": ledger_entries}, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+    entries = scan(
+        results_dir,
+        hypotheses_dir=tmp_path / "hypotheses",
+        action_queue=_make_action_queue(tmp_path),
+        ledger_path=ledger_path,
+        trial_corrections_path=_make_corrections(tmp_path),
+        graveyard_digest_path=_make_digest(tmp_path, []),
+        oos_window_days=LARGE_OOS_WINDOW_DAYS,
+        append_to_ledger=False,
+    )
+
+    assert len(entries) == 1
+    e = entries[0]
+    assert e.status == "QUEUED", f"got {e.status} reason={e.error_reason}"
+    assert e.k_lineage["K_lane"] == 2
+    assert e.k_lineage["K_declared_in_prereg"] == 3
+
+
+def test_suppressed_k_overrun_uses_trial_count_not_n_hat(tmp_path):
+    """K overrun compares observed trial count to declared K, not trade-count N_hat."""
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    stem = "2026-05-20-koverrun-fast-lane-v1"
+    sid = "MGC_LONDON_METALS_E1_RR1.0_CB2_ATR_P50"
+    _make_result_md(results_dir, stem=stem, strategy_id=sid, pooled_n=220)
+    source_yaml = _make_source_yaml(tmp_path, stem=stem, strategy_id=sid)
+    source_data = yaml.safe_load(source_yaml.read_text(encoding="utf-8"))
+    source_data["metadata"]["total_expected_trials"] = 3
+    source_yaml.write_text(yaml.safe_dump(source_data, sort_keys=False), encoding="utf-8")
+
+    scope = source_data["scope"]
+    h = compute_structural_hash(_scope_to_inputs(scope))
+    ledger_entries = [
+        {
+            "run_id": f"runner-overrun-{idx}",
+            "run_timestamp_utc": f"2026-05-20T0{idx}:00:00Z",
+            "prereg_path": f"docs/audit/hypotheses/runner-overrun-{idx}.yaml",
+            "prereg_sha": f"{idx}" * 16,
+            "structural_hash": h,
+            "template_version": "fast_lane_v5.1",
+            "testing_mode": "individual",
+            "pathway": "A",
+            "K_declared": 3,
+            "holdout_policy": "mode_A",
+            "holdout_sacred_from": "2026-01-01",
+            "k_lineage": {
+                "instrument": scope["instrument"],
+                "orb_label": scope["session"],
+                "orb_minutes": int(scope["orb_minutes"]),
+            },
+            "n_hat": 100.0,
+            "upstream_provenance": {},
+            "outcome": {},
+        }
+        for idx in range(4)
+    ]
+    ledger_path = tmp_path / "fast_lane_trial_ledger.yaml"
+    ledger_path.write_text(
+        "do_not_hand_edit: true\nschema_version: 1\n"
+        + yaml.safe_dump({"entries": ledger_entries}, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+    entries = scan(
+        results_dir,
+        hypotheses_dir=tmp_path / "hypotheses",
+        action_queue=_make_action_queue(tmp_path),
+        ledger_path=ledger_path,
+        trial_corrections_path=_make_corrections(tmp_path),
         graveyard_digest_path=_make_digest(tmp_path, []),
         oos_window_days=LARGE_OOS_WINDOW_DAYS,
         append_to_ledger=False,
@@ -628,4 +800,5 @@ def test_suppressed_k_overrun(tmp_path):
     assert len(entries) == 1
     e = entries[0]
     assert e.status == "SUPPRESSED_K_OVERRUN", f"got {e.status} reason={e.error_reason}"
-    assert e.n_hat >= 2
+    assert e.k_lineage["K_lane"] == 4
+    assert e.k_lineage["K_declared_in_prereg"] == 3
