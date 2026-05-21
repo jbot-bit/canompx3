@@ -8,6 +8,7 @@ Usage:
 """
 
 import argparse
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -144,6 +145,23 @@ def main() -> None:
             displaced=displaced,
         )
         print(f"Allocation saved to: {out_path}")
+
+    # Post-run adjacency surface: encode the look-for-free-wins-in-side-output
+    # doctrine deterministically so the operator never has to remember to look.
+    # Fail-isolated: an intel failure must not affect the rebalance result above.
+    intel_script = Path(__file__).resolve().parent / "allocation_intel.py"
+    if intel_script.exists():
+        print(f"\n{'=' * 60}")
+        print("Adjacency surface (allocation_intel.py)")
+        print(f"{'=' * 60}")
+        try:
+            subprocess.run(
+                [sys.executable, str(intel_script)],
+                check=True,
+                timeout=60,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+            print(f"WARN: allocation_intel failed ({type(exc).__name__}: {exc}); rebalance result above is unaffected.")
 
 
 if __name__ == "__main__":
