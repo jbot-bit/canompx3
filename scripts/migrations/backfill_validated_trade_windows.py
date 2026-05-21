@@ -1,9 +1,15 @@
 """Refresh stale trade-window provenance on validated_setups.
 
 Canonical refresh for Check 45 (`check_active_native_trade_windows_match_provenance`).
-Re-runs `StrategyTradeWindowResolver.resolve()` against each VALIDATOR_NATIVE active row
-and updates stored `first_trade_day / last_trade_day / trade_day_count` if they've
-drifted from the canonical recompute. Idempotent: rows matching canonical are skipped.
+Re-runs `StrategyTradeWindowResolver.resolve(holdout_cutoff=HOLDOUT_SACRED_FROM)` against
+each VALIDATOR_NATIVE active row and updates stored `first_trade_day / last_trade_day /
+trade_day_count` if they've drifted from the canonical strict-IS recompute. Idempotent:
+rows matching canonical strict-IS are skipped.
+
+Strict-IS scope (added 2026-05-21): window columns are recomputed over the same
+population that `sample_size` / `expectancy_r` / `win_rate` / `sharpe_ratio` were
+frozen on at promotion time — `trading_day < HOLDOUT_SACRED_FROM`. Pairs columns to
+one consistent strict-IS population. See `trading_app/chordia.py:158-163` doctrine.
 
 Does not touch `status`, `promotion_provenance`, `promotion_git_sha`, or any performance
 column. Those remain authoritative from the original validation run.
@@ -24,6 +30,7 @@ from pathlib import Path
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.validation_provenance import StrategyTradeWindowResolver
 
 sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
@@ -66,7 +73,7 @@ def refresh_validated_trade_windows(
             params,
         ).fetchall()
 
-        resolver = StrategyTradeWindowResolver(con)
+        resolver = StrategyTradeWindowResolver(con, holdout_cutoff=HOLDOUT_SACRED_FROM)
         drifted: list[tuple] = []
         details: list[str] = []
         for (
