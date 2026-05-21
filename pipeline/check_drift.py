@@ -11163,7 +11163,7 @@ def check_fast_lane_promote_queue_provenance_present() -> list[str]:
                 "positive int)."
             )
 
-    # ---- (c) STATUS_VALUES parity against the stage file enum table ----
+    # ---- (c) STATUS_VALUES parity against the canonical spec enum table ----
     try:
         from scripts.research.fast_lane_promote_queue import STATUS_VALUES
     except Exception as exc:
@@ -13410,7 +13410,7 @@ CHECKS = [
         False,
     ),
     (
-        "Fast-lane structural hash schema parity: scripts/research/fast_lane_structural_hash.py HASH_SCHEMA_VERSION + HASH_SCHEMA_INPUTS must match `## Hash Schema` YAML in 2026-05-20-fast-lane-anti-fp-trial-provenance.md (Stage 2A.1 canonical-inline-copy parity)",
+        "Fast-lane structural hash schema parity: scripts/research/fast_lane_structural_hash.py HASH_SCHEMA_VERSION + HASH_SCHEMA_INPUTS must match `## 9. Hash Schema` YAML in docs/specs/fast_lane_state_graph.md (Stage 2A.1 canonical-inline-copy parity)",
         check_fast_lane_structural_hash_schema_parity,
         False,  # blocking — schema drift silently changes every structural_hash, breaking 2A.2 ledger de-dup + 2A.3 suppression
         False,
@@ -13446,7 +13446,7 @@ CHECKS = [
         False,
     ),
     (
-        "Fast-lane promote queue provenance present: docs/runtime/promote_queue.yaml gated entries must carry structural_hash + k_lineage + n_hat with rho_hat_assumed=0.5, and STATUS_VALUES suppression tokens must mirror the Stage 2A.3 stage file enum table (Stage 2A.3 Check #173, canonical-inline-copy parity 10th instance, Bailey-Lopez de Prado 2014 sec 3 + Stage 2A.3 design grounding)",
+        "Fast-lane promote queue provenance present: docs/runtime/promote_queue.yaml gated entries must carry structural_hash + k_lineage + n_hat with rho_hat_assumed=0.5, and STATUS_VALUES suppression tokens must mirror docs/specs/fast_lane_state_graph.md `## 10. Suppression Status Enum` (Stage 2A.3 Check #173, canonical-inline-copy parity 10th instance, Bailey-Lopez de Prado 2014 sec 3 + Stage 2A.3 design grounding)",
         check_fast_lane_promote_queue_provenance_present,
         False,  # blocking -- drift silently breaks universe-of-trials accounting + suppression chain
         False,

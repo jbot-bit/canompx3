@@ -56,6 +56,16 @@
   - **FAST_LANE PROMOTE queue:** 1 QUEUED `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30` at UNVERIFIED_OOS_POWER — calendar-wait per `feedback_oos_does_not_accrue_holdout_is_frozen.md`.
   - **Stage 3 PreToolUse `canonical-inline-detector.py` hook** — Layer 3 of the 3-layer canonical-inline-copy-parity hardening, parked design-first.
 
+## This Session (2026-05-22 — Codex canonical parser-surface stage closeout)
+
+- **Tool:** Codex
+- **Status:** Implemented and committed locally in the latest commit.
+- **Stage:** `docs/runtime/stages/2026-05-21-canonical-blocks-out-of-stage-files.md` now `mode: CLOSED`.
+- **Core implementation already landed:** `e030903b` `feat(governance): canonical parser-surface out of docs/runtime/stages/`.
+- **Follow-up cleanup in this pass:** removed stale "stage file as canonical source" wording from the two old Fast Lane stage notes, Check #167/#173 labels/comments, `pipeline/canonical_inline_copies.py` registry notes, and the two parity-test docstrings. Added local ignored memory note `memory/feedback_canonical_block_in_stage_file_anti_pattern_n1_2026_05_21.md` so the `.claude/rules/stage-gate-protocol.md` reference resolves in this workspace.
+- **Verification:** targeted pytest `tests/test_pipeline/test_canonical_inline_copies_registry.py tests/test_pipeline/test_check_drift_fast_lane_structural_hash_schema_parity.py tests/test_pipeline/test_check_drift_fast_lane_promote_queue_provenance_present.py -q` => 28 passed. Targeted ruff on touched Python with `--ignore SIM300` => all checks passed. Acceptance grep `grep -nE "canonical_source\s*=" pipeline/canonical_inline_copies.py | grep "docs/runtime/" || true` => no output. `git diff --check` clean. Full drift `./.venv-wsl/bin/python pipeline/check_drift.py` => 154 passed, 20 advisory, 0 blocking violations.
+- **No trading/runtime mutation:** no `gold.db`, `validated_setups`, `lane_allocation.json`, `chordia_audit_log.yaml`, broker state, or live runtime files touched.
+
 ## This Session (2026-05-21 — Codex Fast Lane V2 Phase 1 trial provenance hardening)
 
 - **Tool:** Codex

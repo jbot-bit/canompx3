@@ -1,11 +1,11 @@
-"""Injection tests for Check #172 (fast_lane_promote_queue_provenance_present).
+"""Injection tests for Check #173 (fast_lane_promote_queue_provenance_present).
 
 Stage 2A.3 canonical-inline-copy parity (10th instance):
-canonical = ``docs/runtime/stages/2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md`` § Suppression Status Enum;
+canonical = ``docs/specs/fast_lane_state_graph.md`` § 10 Suppression Status Enum;
 inline   = ``scripts.research.fast_lane_promote_queue.STATUS_VALUES``.
 
 Each test mutates exactly ONE input -- the on-disk cache OR the inline
-STATUS_VALUES tuple -- and asserts Check #172 catches it. Sibling-coverage
+STATUS_VALUES tuple -- and asserts Check #173 catches it. Sibling-coverage
 doctrine (per ``memory/feedback_regex_alternation_sibling_coverage.md``):
 one test per gated constant. The single gated constant here is
 ``STATUS_VALUES``; mutation tests for each of the 6 SUPPRESSED_* tokens
