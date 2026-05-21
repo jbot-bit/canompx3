@@ -18,7 +18,6 @@ from pipeline.check_drift import (
     check_dashboard_sse_single_worker,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 TRADING_APP_DIR = REPO_ROOT / "trading_app"
 

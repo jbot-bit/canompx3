@@ -10554,9 +10554,7 @@ def check_fast_lane_structural_hash_schema_parity(
         return [f"check_fast_lane_structural_hash_schema_parity: module import failed: {exc}"]
 
     target = (
-        design_doc_path
-        if design_doc_path is not None
-        else PROJECT_ROOT / "docs" / "specs" / "fast_lane_state_graph.md"
+        design_doc_path if design_doc_path is not None else PROJECT_ROOT / "docs" / "specs" / "fast_lane_state_graph.md"
     )
 
     if not target.exists():
@@ -10958,7 +10956,7 @@ def check_holdout_sentinel_inline_copy_parity() -> list[str]:
     violations: list[str] = []
 
     expected = HOLDOUT_SACRED_FROM.isoformat()
-    if HOLDOUT_SACRED_FROM_SENTINEL != expected:
+    if expected != HOLDOUT_SACRED_FROM_SENTINEL:
         violations.append(
             "check_holdout_sentinel_inline_copy_parity: "
             f"HOLDOUT_SACRED_FROM_SENTINEL={HOLDOUT_SACRED_FROM_SENTINEL!r} "
@@ -11369,7 +11367,7 @@ def check_canonical_inline_copies_have_parity_check() -> list[str]:
                 f"(got {entry.canonical_source!r}). The ``docs/runtime/`` "
                 "directory is the Plans / history / baton class per "
                 "docs/governance/system_authority_map.md Surface Taxonomy "
-                "(\"Never cited as live runtime truth\"). Canonical "
+                '("Never cited as live runtime truth"). Canonical '
                 "parser surface must live in a canonical-class surface: "
                 "docs/specs/, docs/institutional/, or .claude/rules/. "
                 "Relocate the canonical block (see the 2026-05-21 "
@@ -12391,6 +12389,7 @@ def check_fast_lane_trial_ledger_append_only(
                     from scripts.research.fast_lane_trial_ledger import (
                         _parse_utc_ts,
                     )
+
                     if _parse_utc_ts(ts) < _parse_utc_ts(last_ts):
                         violations.append(
                             "check_fast_lane_trial_ledger_append_only: "

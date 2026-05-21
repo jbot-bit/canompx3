@@ -24,7 +24,6 @@ from pipeline.check_drift import (
     check_fast_lane_promote_queue_provenance_present,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CACHE_PATH = REPO_ROOT / "docs" / "runtime" / "promote_queue.yaml"
 

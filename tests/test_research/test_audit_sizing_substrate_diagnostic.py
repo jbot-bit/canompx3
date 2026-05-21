@@ -13,19 +13,18 @@ import pytest
 from research.audit_sizing_substrate_diagnostic import (
     apply_bh_fdr,
     bootstrap_sized_vs_flat_ci,
-    derive_features,
-    feature_temporal_validity,
-    resolve_substrate_column,
-    stage2_eligible_flag,
     check_forecast_stability,
     classify_cell,
     compute_quintile_lift,
+    derive_features,
+    feature_temporal_validity,
     is_holdout_clean,
     null_coverage_mark,
     power_floor_mark,
+    resolve_substrate_column,
     sign_match_split_half,
+    stage2_eligible_flag,
 )
-
 
 # -- Holdout guard --------------------------------------------------------------
 

@@ -71,7 +71,6 @@ from typing import Any
 
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROMOTE_QUEUE = REPO_ROOT / "docs" / "runtime" / "promote_queue.yaml"
 RESULTS_DIR = REPO_ROOT / "docs" / "audit" / "results"
@@ -372,7 +371,7 @@ def rank_queue_entries(
         # coerced a runtime 0 into NaN, which is harmless for current data
         # but would silently mask a degenerate t=0 fast-lane result. Code-
         # review A- residual close, 2026-05-19.
-        def _opt_float(key: str) -> float:
+        def _opt_float(key: str, *, entry: dict = entry) -> float:
             v = entry.get(key)
             if v is None:
                 return float("nan")
@@ -381,7 +380,7 @@ def rank_queue_entries(
             except (TypeError, ValueError):
                 return float("nan")
 
-        def _opt_int(key: str) -> int:
+        def _opt_int(key: str, *, entry: dict = entry) -> int:
             v = entry.get(key)
             if v is None:
                 return 0

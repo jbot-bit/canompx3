@@ -221,9 +221,9 @@ class TestEnrichTradesWithEligibility:
         """When build_eligibility_report succeeds, six elig_* keys are
         attached with values derived from the report's properties."""
         from trading_app.eligibility.types import (
+            ConditionCategory,
             ConditionRecord,
             ConditionStatus,
-            ConditionCategory,
             EligibilityReport,
             FreshnessStatus,
             OverallStatus,
@@ -362,7 +362,7 @@ class TestEnrichTradesIntegration:
         # Build a trades list directly from prop_profiles deployed lanes
         # (avoiding collect_trades's DB roundtrips so this test stays scoped)
         trades = []
-        for pid, profile in ACCOUNT_PROFILES.items():
+        for _pid, profile in ACCOUNT_PROFILES.items():
             lanes = effective_daily_lanes(profile)
             if not profile.active or not lanes:
                 continue

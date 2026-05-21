@@ -317,7 +317,7 @@ def build_digest() -> dict[str, Any]:
     return {
         "schema_version": DIGEST_SCHEMA_VERSION,
         "do_not_hand_edit": True,
-        "built_at_utc": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "built_at_utc": _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "source_files": [
             GRAVEYARD_MD.relative_to(PROJECT_ROOT).as_posix(),
             STRATEGY_BLUEPRINT.relative_to(PROJECT_ROOT).as_posix(),

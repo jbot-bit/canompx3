@@ -45,13 +45,13 @@ from __future__ import annotations
 import argparse
 import io
 import sys
+from collections.abc import Callable
 from contextlib import redirect_stdout
 from datetime import date
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import yaml
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_DIR = REPO_ROOT / "docs" / "runtime"
@@ -219,7 +219,7 @@ def render_report(
     lines.append(f"# Fast-lane walk report — {today_d.isoformat()}")
     lines.append("")
     lines.append(f"schema_version: {SCHEMA_VERSION}")
-    lines.append(f"source: scripts/tools/fast_lane_walk.py")
+    lines.append("source: scripts/tools/fast_lane_walk.py")
     lines.append("")
 
     lines.append("## Chain steps")

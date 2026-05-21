@@ -33,7 +33,6 @@ import yaml
 from scripts.research.fast_lane_promote_queue import scan
 from scripts.research.fast_lane_structural_hash import compute_structural_hash
 
-
 # Large OOS window so the OOS-power gate passes when stats are sane;
 # tests that intentionally trip the pre-power suppression chain do not
 # care about this, but baseline-QUEUED tests do.

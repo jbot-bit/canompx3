@@ -48,7 +48,6 @@ from typing import Any
 
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HYPOTHESES_DIR = REPO_ROOT / "docs" / "audit" / "hypotheses"
 DRAFTS_DIR = HYPOTHESES_DIR / "drafts"

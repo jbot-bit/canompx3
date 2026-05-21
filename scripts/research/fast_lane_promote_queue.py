@@ -55,7 +55,6 @@ from typing import Any
 
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "docs" / "audit" / "results"
 HYPOTHESES_DIR = REPO_ROOT / "docs" / "audit" / "hypotheses"
@@ -1160,7 +1159,7 @@ def scan(
     # scan -- subsequent scans see whatever this scan appended.
     ledger_rows = _read_trial_ledger(lp)
     graveyard_index = _read_graveyard_digest(gd)
-    run_timestamp_utc = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    run_timestamp_utc = _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     entries: list[PromoteEntry] = []
     for path in sorted(rd.glob(FAST_LANE_RESULT_GLOB)):

@@ -31,11 +31,10 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HYPOTHESES_DIR = REPO_ROOT / "docs" / "audit" / "hypotheses"
@@ -76,8 +75,7 @@ def _check_session(session: str) -> None:
 
     if session not in SESSION_CATALOG:
         raise IngestRefused(
-            f"session={session!r} not in pipeline.dst.SESSION_CATALOG "
-            f"({sorted(SESSION_CATALOG.keys())})."
+            f"session={session!r} not in pipeline.dst.SESSION_CATALOG ({sorted(SESSION_CATALOG.keys())})."
         )
 
 
@@ -86,8 +84,7 @@ def _check_entry_model(entry_model: str) -> None:
 
     if entry_model not in ENTRY_MODELS:
         raise IngestRefused(
-            f"entry_model={entry_model!r} not in "
-            f"trading_app.config.ENTRY_MODELS ({sorted(ENTRY_MODELS)})."
+            f"entry_model={entry_model!r} not in trading_app.config.ENTRY_MODELS ({sorted(ENTRY_MODELS)})."
         )
     if entry_model not in _FASTLANE_ENTRY_MODELS:
         raise IngestRefused(
@@ -130,16 +127,12 @@ def _check_filter_and_e2_lookahead(entry_model: str, filter_type: str) -> None:
 
 def _check_direction(direction: str) -> None:
     if direction not in _VALID_DIRECTIONS:
-        raise IngestRefused(
-            f"direction={direction!r} not in {sorted(_VALID_DIRECTIONS)}."
-        )
+        raise IngestRefused(f"direction={direction!r} not in {sorted(_VALID_DIRECTIONS)}.")
 
 
 def _check_orb_minutes(orb_minutes: int) -> None:
     if orb_minutes not in _VALID_ORB_MINUTES:
-        raise IngestRefused(
-            f"orb_minutes={orb_minutes!r} not in {sorted(_VALID_ORB_MINUTES)}."
-        )
+        raise IngestRefused(f"orb_minutes={orb_minutes!r} not in {sorted(_VALID_ORB_MINUTES)}.")
 
 
 def _check_mechanism(mechanism: str) -> None:
@@ -309,8 +302,7 @@ def build_prereg(
                 f"docs/institutional/literature/{literature_slug}.md",
             ],
             "notes": [
-                "v5.1 triage screen — PROMOTE if t >= 3.0; "
-                "NEEDS-MORE 2.5-3.0; KILL < 2.5.",
+                "v5.1 triage screen — PROMOTE if t >= 3.0; NEEDS-MORE 2.5-3.0; KILL < 2.5.",
                 "PROMOTE authorizes heavyweight Chordia review only, NOT capital.",
             ],
         },
@@ -340,10 +332,7 @@ def build_prereg(
             },
             "oos_window": {
                 "description": "trading_day >= HOLDOUT_SACRED_FROM",
-                "policy": (
-                    "read-only descriptive; v5.1 holdout-boundary proof "
-                    "asserts max_IS < boundary <= min_OOS"
-                ),
+                "policy": ("read-only descriptive; v5.1 holdout-boundary proof asserts max_IS < boundary <= min_OOS"),
             },
             "tuning_against_oos": False,
             "canonical_layers_only": True,
@@ -380,10 +369,7 @@ def build_prereg(
         },
         "upstream_discovery_provenance": {
             "role": "PROVENANCE_ONLY",
-            "sources": [
-                "Ingested via scripts/research/ingest_idea.py "
-                "(no prior validated_setups row or scan result)."
-            ],
+            "sources": ["Ingested via scripts/research/ingest_idea.py (no prior validated_setups row or scan result)."],
             "note": (
                 "Ingestion is the front-door for the fast-lane chain. The "
                 "v5.1 .summary.csv emission downstream is the verdict "
@@ -407,8 +393,7 @@ def build_prereg(
             "k_lane": 1,
             "k_session": 1,
             "chordia_threshold_basis": (
-                "v5.1 triage screen: promote_threshold=2.5 + needs_more_band=0.5 "
-                "(PROMOTE iff t >= 3.0)."
+                "v5.1 triage screen: promote_threshold=2.5 + needs_more_band=0.5 (PROMOTE iff t >= 3.0)."
             ),
             "promotion_gate": "FAST_LANE PROMOTE only authorizes heavyweight Chordia review.",
         },
@@ -505,9 +490,7 @@ def build_prereg(
                 "(long_ExpR is null OR short_ExpR is null OR "
                 "sign(long_ExpR) != sign(short_ExpR)))"
             ),
-            "kill_if": (
-                "t_IS < 2.5 OR ExpR_IS <= 0 OR fire_rate outside [0.05, 0.95]"
-            ),
+            "kill_if": ("t_IS < 2.5 OR ExpR_IS <= 0 OR fire_rate outside [0.05, 0.95]"),
         },
         "methodology_rules_applied": {
             "rule_1_temporal_alignment": {
@@ -519,17 +502,10 @@ def build_prereg(
             "rule_3_is_oos_discipline": {
                 "application": "HOLDOUT_SACRED_FROM=2026-01-01 enforced; OOS descriptive only."
             },
-            "rule_4_multi_framing": {
-                "application": "Pathway B K=1 triage screen."
-            },
-            "rule_9_canonical_layers": {
-                "application": "Reads only orb_outcomes JOIN daily_features."
-            },
+            "rule_4_multi_framing": {"application": "Pathway B K=1 triage screen."},
+            "rule_9_canonical_layers": {"application": "Reads only orb_outcomes JOIN daily_features."},
             "rule_10_pre_registration": {
-                "application": (
-                    "This file IS the pre-reg, written by ingest_idea.py "
-                    "before any fast-lane run."
-                )
+                "application": ("This file IS the pre-reg, written by ingest_idea.py before any fast-lane run.")
             },
         },
         "outputs_required_after_run": [
@@ -619,10 +595,7 @@ def _build_argparser() -> argparse.ArgumentParser:
         "--literature",
         required=True,
         dest="literature_slug",
-        help=(
-            "Slug of an existing file under docs/institutional/literature/ "
-            "(without .md extension)."
-        ),
+        help=("Slug of an existing file under docs/institutional/literature/ (without .md extension)."),
     )
     parser.add_argument("--purpose", default=None)
     parser.add_argument(

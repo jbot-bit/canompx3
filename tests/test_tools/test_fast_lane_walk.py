@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import io
+from collections.abc import Callable
 from contextlib import redirect_stdout
 from datetime import date
 from pathlib import Path
 from typing import Any
-
-from typing import Callable
 
 from scripts.tools.fast_lane_walk import (
     SCHEMA_VERSION,
@@ -20,7 +19,6 @@ from scripts.tools.fast_lane_walk import (
     render_report,
     run_chain,
 )
-
 
 # ----------------------------------------------------------------------
 # Pure-function tests (Connector 4 surfaces)

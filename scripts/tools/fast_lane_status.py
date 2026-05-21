@@ -53,12 +53,11 @@ import argparse
 import csv
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HYPOTHESES_DIR = REPO_ROOT / "docs" / "audit" / "hypotheses"
@@ -173,7 +172,7 @@ def _file_age_days(path: Path, *, today: date | None = None) -> int:
         return 0
     today_d = today if today is not None else date.today()
     try:
-        mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).date()
+        mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).date()
     except OSError:
         return 0
     delta = (today_d - mtime).days

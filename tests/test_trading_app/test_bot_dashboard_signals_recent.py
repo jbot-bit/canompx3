@@ -17,7 +17,6 @@ from pathlib import Path
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
@@ -38,7 +37,6 @@ def test_read_recent_signals_returns_empty_when_no_file(monkeypatch, tmp_path):
 def test_read_recent_signals_returns_newest_first(monkeypatch, tmp_path):
     from trading_app.live import bot_dashboard as bd
 
-    today = datetime.now(UTC).date()
     rec_old = {"ts": "2026-01-01T00:00:00+00:00", "type": "A"}
     rec_new = {"ts": "2026-01-02T00:00:00+00:00", "type": "B"}
     _write_today_jsonl(tmp_path, [json.dumps(rec_old), json.dumps(rec_new)])

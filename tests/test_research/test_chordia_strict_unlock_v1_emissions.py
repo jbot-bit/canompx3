@@ -36,7 +36,6 @@ import pytest
 from research import chordia_strict_unlock_v1 as runner
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 
-
 # ----------------------------- helpers ----------------------------------------
 
 
@@ -149,7 +148,7 @@ def test_split_boundary_metadata_holdout_value_is_canonical_constant() -> None:
     meta = runner._split_boundary_metadata(is_df, oos_df)
 
     assert meta["holdout_boundary_value"] == HOLDOUT_SACRED_FROM.isoformat()
-    assert HOLDOUT_SACRED_FROM == dt.date(2026, 1, 1), (
+    assert dt.date(2026, 1, 1) == HOLDOUT_SACRED_FROM, (
         "Canonical holdout boundary moved — update the fast-lane template + this test in lockstep."
     )
 

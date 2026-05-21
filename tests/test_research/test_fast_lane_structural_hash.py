@@ -44,7 +44,6 @@ from scripts.research.fast_lane_structural_hash import (
 )
 from trading_app.config import ALL_FILTERS
 
-
 # ----------------------------------------------------------------------
 # Canonical-source-valid fixture builders
 # ----------------------------------------------------------------------

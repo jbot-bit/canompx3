@@ -1504,8 +1504,8 @@ class SessionOrchestrator:
 
         probes = self._probe_results
         # Preflight probes; None if run_self_tests has not yet executed in this session.
-        brackets_probe = probes["brackets"] if "brackets" in probes else None
-        fill_poller_probe = probes["fill_poller"] if "fill_poller" in probes else None
+        brackets_probe = probes.get("brackets")
+        fill_poller_probe = probes.get("fill_poller")
 
         # Counters on SessionStats (in-memory; reset per session).
         stats = self._stats
