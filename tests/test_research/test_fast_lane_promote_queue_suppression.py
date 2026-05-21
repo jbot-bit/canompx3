@@ -305,6 +305,38 @@ def test_scan_default_is_read_only_for_trial_ledger(tmp_path: Path) -> None:
     assert ledger_path.read_bytes() == before
 
 
+def test_scan_append_to_ledger_true_is_ignored_for_trial_provenance(tmp_path: Path) -> None:
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    stem = "2026-05-21-scan-legacy-append-fast-lane-v1"
+    _make_result_md(
+        results_dir,
+        stem=stem,
+        strategy_id="MGC_LONDON_METALS_E1_RR1.0_CB2_ATR_P50_30",
+    )
+    _make_source_yaml(
+        tmp_path,
+        stem=stem,
+        strategy_id="MGC_LONDON_METALS_E1_RR1.0_CB2_ATR_P50_30",
+    )
+    ledger_path = _make_empty_ledger(tmp_path)
+    before = ledger_path.read_bytes()
+
+    entries = scan(
+        results_dir,
+        hypotheses_dir=tmp_path / "hypotheses",
+        action_queue=_make_action_queue(tmp_path),
+        ledger_path=ledger_path,
+        graveyard_digest_path=_make_digest(tmp_path, []),
+        oos_window_days=LARGE_OOS_WINDOW_DAYS,
+        append_to_ledger=True,
+    )
+
+    assert len(entries) == 1
+    assert entries[0].status != "ERROR"
+    assert ledger_path.read_bytes() == before
+
+
 # ---- 1. SUPPRESSED_BANNED_ENTRY_MODEL ------------------------------------
 
 

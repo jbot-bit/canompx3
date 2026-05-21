@@ -43,8 +43,6 @@ ERROR forces operator attention - never silently lingers.
 from __future__ import annotations
 
 import argparse
-import datetime as _dt
-import hashlib
 import json
 import math
 import re
@@ -629,18 +627,6 @@ def _resolve_k_declared(source_yaml: dict[str, Any]) -> int:
     return 1
 
 
-def _file_sha16(path: Path) -> str:
-    """16-char hex SHA-256 of the on-disk file -- used as ledger
-    ``prereg_sha`` so re-running the same scan with no source edits keeps
-    appending under the SAME (sha, run_timestamp) key. The ledger writer's
-    own idempotency is keyed on ``run_id``, not sha; this just gives us a
-    stable identifier per source version."""
-    if not path.exists():
-        return "0" * 16
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    return digest[:16]
-
-
 _HEAVYWEIGHT_TEMPLATE_EXCLUDES = {"fast_lane_v5.1"}
 
 
@@ -1055,79 +1041,6 @@ def build_entry(
     return entry
 
 
-def _append_entry_to_ledger(
-    entry: PromoteEntry,
-    *,
-    source_yaml_path: Path,
-    ledger_path: Path,
-    run_timestamp_utc: str,
-) -> str | None:
-    """Append one ledger row for an emitted PROMOTE entry.
-
-    The ledger writer is idempotent on ``run_id``; we synthesise
-    ``run_id = scanner-<prereg_sha>-<timestamp>`` so re-running the scanner
-    in the same UTC second is a true no-op (the ledger writer raises
-    LedgerAppendOnlyViolation -- caught here and swallowed because the
-    second-attempt is by design idempotent).
-
-    Returns an error reason string if the append failed for a reason the
-    operator needs to see; None on success.
-    """
-    if not entry.structural_hash or set(entry.structural_hash) == {"0"}:
-        return "structural_hash unresolved; ledger append skipped"
-
-    try:
-        from scripts.research.fast_lane_trial_ledger import (
-            CapitalClassWriteRefused,
-            LedgerAppendOnlyViolation,
-            LedgerEntry,
-            append_trial_ledger_entry,
-        )
-    except Exception as exc:
-        return f"ledger module import failed: {type(exc).__name__}: {exc}"
-
-    prereg_sha = _file_sha16(source_yaml_path)
-    run_id = f"scanner-{prereg_sha}-{run_timestamp_utc.replace(':', '').replace('-', '')}"
-
-    k_declared = int(entry.k_lineage.get("K_declared_in_prereg", 1))
-
-    ledger_entry = LedgerEntry(
-        run_id=run_id,
-        run_timestamp_utc=run_timestamp_utc,
-        prereg_path=_rel_to_repo(source_yaml_path),
-        prereg_sha=prereg_sha,
-        structural_hash=entry.structural_hash,
-        template_version="fast_lane_v5.1",
-        testing_mode="individual",
-        pathway="A",
-        K_declared=k_declared,
-        k_lineage=dict(entry.k_lineage),
-        n_hat=float(entry.n_hat),
-        upstream_provenance={
-            "result_md": entry.result_md,
-            "strategy_id": entry.strategy_id,
-            "scanner_status": entry.status,
-        },
-        outcome={
-            "pooled_t": entry.pooled_t if not math.isnan(entry.pooled_t) else None,
-            "pooled_n": entry.pooled_n,
-            "pooled_fire": (entry.pooled_fire if not math.isnan(entry.pooled_fire) else None),
-        },
-    )
-    try:
-        append_trial_ledger_entry(ledger_path, ledger_entry)
-    except LedgerAppendOnlyViolation:
-        # Idempotent re-run; not an error
-        return None
-    except CapitalClassWriteRefused as exc:
-        return f"ledger refused capital-class path: {exc}"
-    except FileNotFoundError as exc:
-        return f"ledger skeleton missing at {ledger_path}: {exc}"
-    except Exception as exc:
-        return f"ledger append failed: {type(exc).__name__}: {exc}"
-    return None
-
-
 def scan(
     results_dir: Path | None = None,
     *,
@@ -1147,6 +1060,11 @@ def scan(
     aq = action_queue if action_queue is not None else ACTION_QUEUE
     lp = ledger_path if ledger_path is not None else TRIAL_LEDGER_PATH
     gd = graveyard_digest_path if graveyard_digest_path is not None else GRAVEYARD_DIGEST_PATH
+    if append_to_ledger:
+        # Deprecated Phase-0/Phase-1 compatibility seam. Scanners are derived
+        # views and may not create trial history; only real research runners
+        # can call fast_lane_trial_ledger.append_trial_ledger_entry.
+        append_to_ledger = False
 
     # Resolve the OOS window once per scan so each entry classification
     # reuses the same (latest_trading_day - HOLDOUT_SACRED_FROM) result.
@@ -1159,7 +1077,6 @@ def scan(
     # scan -- subsequent scans see whatever this scan appended.
     ledger_rows = _read_trial_ledger(lp)
     graveyard_index = _read_graveyard_digest(gd)
-    run_timestamp_utc = _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     entries: list[PromoteEntry] = []
     for path in sorted(rd.glob(FAST_LANE_RESULT_GLOB)):
@@ -1175,17 +1092,6 @@ def scan(
         if entry is None:
             continue
         entries.append(entry)
-        if append_to_ledger and entry.status not in {"ERROR"}:
-            err = _append_entry_to_ledger(
-                entry,
-                source_yaml_path=hd / f"{path.stem}.yaml",
-                ledger_path=lp,
-                run_timestamp_utc=run_timestamp_utc,
-            )
-            if err is not None:
-                # Surface ledger failures on the entry's error_reason so the
-                # scanner does not silently lose append-failures.
-                entry.error_reason = f"{entry.error_reason}; ledger: {err}" if entry.error_reason else f"ledger: {err}"
     return entries
 
 

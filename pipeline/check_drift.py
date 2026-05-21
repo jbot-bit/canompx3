@@ -12260,7 +12260,8 @@ def check_fast_lane_trial_ledger_append_only(
       2. Monotonic run_timestamp_utc -- entries[i+1] timestamp >= entries[i]
          timestamp (clock-skew tolerant via >=, not >).
       3. Unique run_id across the whole file (writer rejects dup run_id;
-         this check catches a manual edit that adds one).
+         this check catches a manual edit that adds one). Unique trial_id
+         when present; legacy rows without trial_id are tolerated.
       4. Holdout-sentinel parity -- every entry must declare
          holdout_policy == HOLDOUT_POLICY_SENTINEL and
          holdout_sacred_from == HOLDOUT_SACRED_FROM_SENTINEL; either being
@@ -12361,6 +12362,7 @@ def check_fast_lane_trial_ledger_append_only(
     )
 
     seen_run_ids: set[str] = set()
+    seen_trial_ids: set[str] = set()
     last_ts: str | None = None
 
     for idx, entry in enumerate(entries_raw):
@@ -12391,6 +12393,40 @@ def check_fast_lane_trial_ledger_append_only(
                 )
             else:
                 seen_run_ids.add(run_id)
+
+        # Phase 1 content-addressed replay guard. Legacy rows may not have
+        # trial_id yet; any new row that has one must be 16-hex and unique.
+        trial_id = entry.get("trial_id")
+        if trial_id is not None and not isinstance(trial_id, str):
+            violations.append(
+                "check_fast_lane_trial_ledger_append_only: "
+                f"TRIAL_ID_TYPE -- entry[{idx}] trial_id is "
+                f"{type(trial_id).__name__}, expected str."
+            )
+        elif isinstance(trial_id, str):
+            if len(trial_id) != 16:
+                violations.append(
+                    "check_fast_lane_trial_ledger_append_only: "
+                    f"TRIAL_ID_LENGTH -- entry[{idx}] trial_id "
+                    f"{trial_id!r} is {len(trial_id)} chars, expected 16."
+                )
+            else:
+                try:
+                    int(trial_id, 16)
+                except ValueError:
+                    violations.append(
+                        "check_fast_lane_trial_ledger_append_only: "
+                        f"TRIAL_ID_NOT_HEX -- entry[{idx}] trial_id "
+                        f"{trial_id!r} is not hex."
+                    )
+            if trial_id in seen_trial_ids:
+                violations.append(
+                    "check_fast_lane_trial_ledger_append_only: DUPLICATE trial_id "
+                    f"{trial_id!r} at entry[{idx}] in {target.name}; "
+                    "content-addressed trial history must not inflate K."
+                )
+            else:
+                seen_trial_ids.add(trial_id)
 
         # (2) Monotonic timestamps — compare as aware datetimes so mixed
         # Z / +00:00 suffix pairs sort correctly (raw string comparison

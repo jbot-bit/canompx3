@@ -27,6 +27,8 @@ populates the ledger. 2A.2 ships the writer + reader + capital-class refusal
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -76,6 +78,24 @@ class LedgerAppendOnlyViolation(Exception):
     """Raised when an append would mutate or reorder existing entries."""
 
 
+def compute_trial_id(
+    *,
+    prereg_sha: str,
+    runner_id: str,
+    result_artifact_sha: str,
+    canonical_data_fingerprint: str,
+) -> str:
+    """Return a stable 16-hex identity for one research execution."""
+    payload = [
+        str(prereg_sha),
+        str(runner_id),
+        str(result_artifact_sha),
+        str(canonical_data_fingerprint),
+    ]
+    encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
 @dataclass(frozen=True)
 class LedgerEntry:
     """One fast-lane prereg execution.
@@ -87,6 +107,7 @@ class LedgerEntry:
     """
 
     run_id: str
+    trial_id: str
     run_timestamp_utc: str  # ISO 8601 with explicit 'Z' (UTC)
     prereg_path: str
     prereg_sha: str
@@ -138,6 +159,19 @@ def _validate_structural_hash(value: str) -> None:
         raise ValueError(f"fast_lane_trial_ledger: structural_hash {value!r} is not hex") from exc
 
 
+def _validate_trial_id(value: str) -> None:
+    if not isinstance(value, str):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise TypeError(  # pyright: ignore[reportUnreachable]
+            f"fast_lane_trial_ledger: trial_id must be str, got {type(value).__name__}"
+        )
+    if len(value) != 16:
+        raise ValueError(f"fast_lane_trial_ledger: trial_id must be 16 hex chars, got {len(value)} ({value!r})")
+    try:
+        int(value, 16)
+    except ValueError as exc:
+        raise ValueError(f"fast_lane_trial_ledger: trial_id {value!r} is not hex") from exc
+
+
 def _parse_utc_ts(value: str) -> _dt.datetime:
     """Normalise a UTC ISO 8601 string (Z or +00:00 suffix) to an aware datetime.
 
@@ -180,6 +214,7 @@ def _entry_to_yaml_dict(entry: LedgerEntry) -> dict[str, Any]:
     """Render a LedgerEntry as a YAML-safe dict in canonical field order."""
     return {
         "run_id": entry.run_id,
+        "trial_id": entry.trial_id,
         "run_timestamp_utc": entry.run_timestamp_utc,
         "prereg_path": entry.prereg_path,
         "prereg_sha": entry.prereg_sha,
@@ -238,6 +273,7 @@ def append_trial_ledger_entry(
             skeleton first; 2A.2 stage ships the skeleton).
     """
     _validate_capital_class_boundary(entry.prereg_path)
+    _validate_trial_id(entry.trial_id)
     _validate_structural_hash(entry.structural_hash)
     _validate_iso8601_utc(entry.run_timestamp_utc)
     _validate_holdout_sentinels(entry.holdout_policy, entry.holdout_sacred_from)
@@ -257,11 +293,23 @@ def append_trial_ledger_entry(
 
     data = read_ledger(ledger_path)
     entries: list[dict[str, Any]] = list(data.get("entries", []))
+    incoming = _entry_to_yaml_dict(entry)
 
-    # Append-only invariants: dup run_id forbidden; new timestamp must be
-    # >= last entry's timestamp. Both also enforced by Check #169 across the
-    # whole file (timestamp monotonicity); the writer enforces them on the
-    # incoming entry so a runtime bypass cannot land a bad row.
+    # Append-only invariants: content-addressed trial_id replays are no-ops,
+    # conflicting trial_id rows are refused, dup run_id is forbidden, and new
+    # timestamps must be >= the last entry's timestamp. Check #169 also
+    # enforces these across the whole file for manual-edit protection.
+    for existing in entries:
+        if existing.get("trial_id") != entry.trial_id:
+            continue
+        if _trial_identity_payload(existing) == _trial_identity_payload(incoming):
+            return
+        raise LedgerAppendOnlyViolation(
+            f"fast_lane_trial_ledger: trial_id {entry.trial_id!r} already "
+            f"present in {ledger_path.name} with different content; refusing "
+            "to inflate or rewrite trial history."
+        )
+
     seen_run_ids = {row.get("run_id") for row in entries}
     if entry.run_id in seen_run_ids:
         raise LedgerAppendOnlyViolation(
@@ -286,13 +334,27 @@ def append_trial_ledger_entry(
                 # ledger. Treat as non-comparable and let the check catch it.
                 pass
 
-    entries.append(_entry_to_yaml_dict(entry))
+    entries.append(incoming)
     data["entries"] = entries
 
     ledger_path.write_text(
         _dump_ledger_yaml(data),
         encoding="utf-8",
     )
+
+
+def _trial_identity_payload(row: dict[str, Any]) -> dict[str, Any]:
+    """Stable replay comparison for a ledger row.
+
+    ``run_id`` and ``run_timestamp_utc`` are execution metadata; replaying the
+    same prereg/result/data on a different clock tick must not create a second
+    K-lineage event.
+    """
+    return {
+        key: value
+        for key, value in row.items()
+        if key not in {"run_id", "run_timestamp_utc"}
+    }
 
 
 def _dump_ledger_yaml(data: dict[str, Any]) -> str:
@@ -319,6 +381,7 @@ __all__ = [
     "LedgerAppendOnlyViolation",
     "LedgerEntry",
     "append_trial_ledger_entry",
+    "compute_trial_id",
     "read_ledger",
     "_parse_utc_ts",
 ]
