@@ -1152,6 +1152,31 @@ def _new_lane_allocation_dir() -> Path:
     )
 
 
+def legacy_lane_allocation_path() -> Path:
+    """Public alias for the legacy single-profile allocation path.
+
+    Use this in code-fingerprint anchors and other consumers that need to
+    reference the canonical legacy filesystem location WITHOUT inlining the
+    literal path string. Inlining triggers
+    ``check_no_direct_lane_allocation_json_literals`` (Stage 1b grep-gate).
+
+    Returns the same Path as the internal ``_legacy_lane_allocation_path()``
+    helper used by the resolver. The Stage 1d removal will retire both this
+    function and ``_legacy_lane_allocation_path`` together.
+    """
+    return _legacy_lane_allocation_path()
+
+
+def new_lane_allocation_dir() -> Path:
+    """Public alias for the per-profile allocation directory.
+
+    Mirrors ``legacy_lane_allocation_path`` — exposes the new-path location
+    for consumers that need the directory itself (e.g., directory-watching
+    code, code-fingerprint anchors) without inlining the literal.
+    """
+    return _new_lane_allocation_dir()
+
+
 def resolve_allocation_json(
     profile_id: str,
     allocation_path: str | Path | None = None,

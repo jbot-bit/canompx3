@@ -9700,7 +9700,6 @@ _LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST: frozenset[Path] = frozenset({
 # is complete.
 _LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST: frozenset[Path] = frozenset({
     # trading_app/ readers — Stage 1b-ii
-    Path("trading_app/opportunity_awareness.py"),
     Path("trading_app/live/session_orchestrator.py"),
     Path("trading_app/prop_portfolio.py"),
     Path("trading_app/pre_session_check.py"),
