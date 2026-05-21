@@ -548,16 +548,8 @@ def _compute_k_lineage(
 
     Counts are computed against the in-memory ledger snapshot taken at scan
     start. ``K_lane`` is the count of ledger rows already on disk sharing
-    this structural_hash (so the first ever scanner run on a lane gives
-    K_lane = 0 BEFORE the scanner appends; K_lane includes the appended
-    row only on the next scan).
-
-    Note: Stage 2A.3 self-review expects ``K_lane = 1`` for the live
-    PD_CLEAR_LONG entry after the first scan. The +1 happens on the second
-    scan -- before the first run the ledger is empty (verified
-    fast_lane_trial_ledger.yaml has entries: []), so the first scan emits
-    K_lane = 0, and the second scan reads K_lane = 1 from the row appended
-    by the first scan.
+    this structural_hash. Scanners are derived views and do not append trial
+    history; real research runners create the row that future scans observe.
     """
     k_lane = sum(1 for row in ledger_rows if row.get("structural_hash") == structural_hash)
     k_family = sum(

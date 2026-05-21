@@ -23,6 +23,8 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as _dt
+import hashlib
+import json
 import math
 import sys
 from dataclasses import dataclass
@@ -35,16 +37,22 @@ import yaml
 
 from pipeline.paths import GOLD_DB_PATH
 from research.filter_utils import filter_signal
-from trading_app.config import ALL_FILTERS, WF_START_OVERRIDE, CrossAssetATRFilter
+from scripts.research.fast_lane_structural_hash import compute_structural_hash
+from scripts.research.fast_lane_trial_ledger import (
+    LedgerEntry,
+    append_trial_ledger_entry,
+    compute_trial_id,
+    read_ledger,
+)
 from trading_app.chordia import (
     CHORDIA_T_WITHOUT_THEORY,
     chordia_threshold,
     compute_chordia_t,
 )
+from trading_app.config import ALL_FILTERS, WF_START_OVERRIDE, CrossAssetATRFilter
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.hypothesis_loader import check_mode_a_consistency, load_hypothesis_metadata
 from trading_app.strategy_discovery import parse_stop_multiplier
-
 
 OOS_DESCRIPTIVE_MIN_N = 30
 DEFAULT_STOP_MULTIPLIER = 1.0
@@ -70,6 +78,8 @@ def _normalize_writable_path(path: Path) -> Path:
 
 
 ROOT = _normalize_writable_path(Path(__file__).resolve().parents[1])
+FAST_LANE_TRIAL_LEDGER_PATH = ROOT / "docs" / "runtime" / "fast_lane_trial_ledger.yaml"
+FAST_LANE_RUNNER_ID = "research/chordia_strict_unlock_v1.py:fast_lane_v5.1"
 
 
 @dataclass(frozen=True)
@@ -936,6 +946,242 @@ def _write_markdown(
     cell.result_md.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _rel_to_root(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(ROOT)).replace("\\", "/")
+    except ValueError:
+        return str(path.resolve()).replace("\\", "/")
+
+
+def _file_sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fp:
+        for chunk in iter(lambda: fp.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _combined_artifact_sha(paths: tuple[Path, ...]) -> str:
+    h = hashlib.sha256()
+    for path in paths:
+        h.update(path.name.encode("utf-8"))
+        h.update(b"\0")
+        h.update(path.read_bytes())
+        h.update(b"\0")
+    return h.hexdigest()
+
+
+def _load_yaml_mapping(path: Path) -> dict[str, Any]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"FAST_LANE trial ledger append requires YAML mapping prereg, got {type(data).__name__}")
+    return data
+
+
+def _fast_lane_structural_hash_inputs(scope: dict[str, Any]) -> dict[str, Any]:
+    direction = str(scope.get("direction", "pooled")).strip().lower()
+    direction_for_hash = {
+        "pooled": "BOTH",
+        "both": "BOTH",
+        "long": "LONG",
+        "short": "SHORT",
+    }.get(direction)
+    if direction_for_hash is None:
+        raise ValueError(f"FAST_LANE trial ledger append: unsupported scope.direction {scope.get('direction')!r}")
+    return {
+        "instrument": scope["instrument"],
+        "orb_label": scope["session"],
+        "orb_minutes": int(scope["orb_minutes"]),
+        "rr_target": float(scope["rr_target"]),
+        "entry_model": scope["entry_model"],
+        "confirm_bars": int(scope["confirm_bars"]),
+        "filter_type": scope.get("filter_type", ""),
+        "direction": direction_for_hash,
+        "filter_threshold": scope.get("filter_threshold", ""),
+    }
+
+
+def _metadata_block(prereg: dict[str, Any]) -> dict[str, Any]:
+    meta = prereg.get("metadata")
+    return meta if isinstance(meta, dict) else {}
+
+
+def _ledger_pathway(raw: Any) -> str:
+    token = str(raw or "A").strip().upper()
+    return "B" if token.startswith("B") else "A"
+
+
+def _ledger_testing_mode(raw: Any) -> str:
+    token = str(raw or "individual").strip().lower()
+    if token not in {"family", "individual"}:
+        raise ValueError(f"FAST_LANE trial ledger append: testing_mode must be family|individual, got {raw!r}")
+    return token
+
+
+def _ledger_k_declared(raw: Any) -> int:
+    if isinstance(raw, bool):
+        raise TypeError("FAST_LANE trial ledger append: K_declared cannot be bool")
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"FAST_LANE trial ledger append: K_declared must be int-like, got {raw!r}") from exc
+    if value < 1:
+        raise ValueError(f"FAST_LANE trial ledger append: K_declared must be >= 1, got {value}")
+    return value
+
+
+def _canonical_data_fingerprint(boundary: dict[str, Any]) -> str:
+    payload = {
+        "gold_db_path": str(GOLD_DB_PATH),
+        "holdout_sacred_from": HOLDOUT_SACRED_FROM.isoformat(),
+        "max_IS_trading_day": boundary.get("max_IS_trading_day"),
+        "min_OOS_trading_day": boundary.get("min_OOS_trading_day"),
+        "holdout_boundary_value": boundary.get("holdout_boundary_value"),
+        "holdout_boundary_proof": boundary.get("holdout_boundary_proof"),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _compute_trial_k_lineage(
+    *,
+    structural_hash: str,
+    hash_inputs: dict[str, Any],
+    ledger_rows: list[dict[str, Any]],
+    k_declared: int,
+    pooled_n: int,
+) -> dict[str, Any]:
+    k_lane = sum(1 for row in ledger_rows if row.get("structural_hash") == structural_hash)
+    k_family = sum(
+        1
+        for row in ledger_rows
+        if (
+            (row.get("k_lineage") or {}).get("instrument") == hash_inputs.get("instrument")
+            and (row.get("k_lineage") or {}).get("orb_label") == hash_inputs.get("orb_label")
+            and (row.get("k_lineage") or {}).get("orb_minutes") == hash_inputs.get("orb_minutes")
+        )
+    )
+    k_global = len(ledger_rows)
+    e_max_n = max(int(pooled_n), 1)
+    k_effective_minbtl = 2.0 * math.log(max(k_global, 2)) / (e_max_n * e_max_n)
+    rho_hat_assumed = 0.5
+    m_correlated = max(k_family, 1)
+    n_hat = int(round(pooled_n * (rho_hat_assumed + (1.0 - rho_hat_assumed) * m_correlated)))
+    return {
+        "instrument": hash_inputs.get("instrument"),
+        "orb_label": hash_inputs.get("orb_label"),
+        "orb_minutes": hash_inputs.get("orb_minutes"),
+        "K_global": k_global,
+        "K_family": k_family,
+        "K_lane": k_lane,
+        "K_declared_in_prereg": int(k_declared),
+        "K_effective_minBTL": k_effective_minbtl,
+        "bh_fdr_passes": {
+            "K_family": k_family <= 1,
+            "K_lane": k_lane <= 1,
+            "K_global": True,
+        },
+        "correlation_haircut_N_hat": n_hat,
+        "rho_hat_assumed": rho_hat_assumed,
+    }
+
+
+def _append_fast_lane_trial_ledger_entry(
+    cell: Cell,
+    is_result: dict[str, Any],
+    oos_result: dict[str, Any],
+    boundary: dict[str, Any],
+    fast_lane: tuple[str, str, list[dict[str, Any]]] | None,
+    *,
+    verdict: str,
+    verdict_reason: str,
+) -> None:
+    if cell.template_version != "fast_lane_v5.1":
+        return
+    if fast_lane is None:
+        raise RuntimeError("FAST_LANE trial ledger append requested but fast_lane verdict block is missing")
+
+    prereg = _load_yaml_mapping(cell.hypothesis_file)
+    scope = prereg.get("scope")
+    if not isinstance(scope, dict):
+        raise ValueError("FAST_LANE trial ledger append requires prereg top-level scope mapping")
+    meta = _metadata_block(prereg)
+    hash_inputs = _fast_lane_structural_hash_inputs(scope)
+    structural_hash = compute_structural_hash(hash_inputs)
+
+    prereg_sha = _file_sha256(cell.hypothesis_file)
+    result_artifact_sha = _combined_artifact_sha((cell.result_md, cell.result_csv, cell.result_summary_csv))
+    data_fingerprint = _canonical_data_fingerprint(boundary)
+    trial_id = compute_trial_id(
+        prereg_sha=prereg_sha,
+        runner_id=FAST_LANE_RUNNER_ID,
+        result_artifact_sha=result_artifact_sha,
+        canonical_data_fingerprint=data_fingerprint,
+    )
+
+    ledger_rows = list(read_ledger(FAST_LANE_TRIAL_LEDGER_PATH).get("entries", []))
+    for row in ledger_rows:
+        if row.get("trial_id") != trial_id:
+            continue
+        provenance = row.get("upstream_provenance") or {}
+        if (
+            row.get("prereg_sha") == prereg_sha
+            and provenance.get("runner_id") == FAST_LANE_RUNNER_ID
+            and provenance.get("result_artifact_sha") == result_artifact_sha
+            and provenance.get("canonical_data_fingerprint") == data_fingerprint
+        ):
+            return
+        raise RuntimeError(
+            f"FAST_LANE trial ledger append refused: trial_id {trial_id!r} already exists with different provenance"
+        )
+
+    k_declared = _ledger_k_declared(meta.get("total_expected_trials", 1))
+    fl_verdict, fl_reason, _ = fast_lane
+    run_ts = _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    entry = LedgerEntry(
+        run_id=f"chordia_strict_unlock_v1:{run_ts}:{trial_id}",
+        trial_id=trial_id,
+        run_timestamp_utc=run_ts,
+        prereg_path=_rel_to_root(cell.hypothesis_file),
+        prereg_sha=prereg_sha,
+        structural_hash=structural_hash,
+        template_version=cell.template_version,
+        testing_mode=_ledger_testing_mode(meta.get("testing_mode", "individual")),
+        pathway=_ledger_pathway(meta.get("pathway", "A")),
+        K_declared=k_declared,
+        k_lineage=_compute_trial_k_lineage(
+            structural_hash=structural_hash,
+            hash_inputs=hash_inputs,
+            ledger_rows=ledger_rows,
+            k_declared=k_declared,
+            pooled_n=int(is_result.get("n_fired") or 0),
+        ),
+        n_hat=float(is_result.get("n_fired") or 0),
+        upstream_provenance={
+            "runner_id": FAST_LANE_RUNNER_ID,
+            "result_md": _rel_to_root(cell.result_md),
+            "result_csv": _rel_to_root(cell.result_csv),
+            "result_summary_csv": _rel_to_root(cell.result_summary_csv),
+            "result_artifact_sha": result_artifact_sha,
+            "canonical_data_fingerprint": data_fingerprint,
+        },
+        outcome={
+            "heavyweight_verdict": verdict,
+            "heavyweight_reason": verdict_reason,
+            "fast_lane_verdict": fl_verdict,
+            "fast_lane_reason": fl_reason,
+            "is_n_fired": int(is_result.get("n_fired") or 0),
+            "is_t": is_result.get("t"),
+            "is_expr": is_result.get("expr"),
+            "is_fire_rate": is_result.get("fire_rate"),
+            "oos_n_fired": int(oos_result.get("n_fired") or 0),
+            "oos_t": oos_result.get("t"),
+            "oos_expr": oos_result.get("expr"),
+        },
+    )
+    append_trial_ledger_entry(FAST_LANE_TRIAL_LEDGER_PATH, entry)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run one exact-lane Chordia strict-unlock prereg.")
     parser.add_argument("--hypothesis-file", required=True, help="Path to the prereg YAML file.")
@@ -976,6 +1222,15 @@ def main() -> int:
     _write_csv(cell.result_csv, [("IS", is_fired), ("OOS", oos_fired)])
     _write_summary_csv(cell.result_summary_csv, is_result, oos_result, boundary)
     _write_markdown(cell, threshold, verdict, verdict_reason, is_result, oos_result, fast_lane=fast_lane)
+    _append_fast_lane_trial_ledger_entry(
+        cell,
+        is_result,
+        oos_result,
+        boundary,
+        fast_lane,
+        verdict=verdict,
+        verdict_reason=verdict_reason,
+    )
 
     print(f"Strategy: {cell.strategy_id}")
     print(f"Prereg: {cell.hypothesis_file.relative_to(ROOT)}")

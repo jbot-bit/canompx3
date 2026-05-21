@@ -59,12 +59,14 @@
 ## This Session (2026-05-21 — Codex Fast Lane V2 Phase 1 trial provenance hardening)
 
 - **Tool:** Codex
-- **Status:** Implemented locally; commit follows this baton update.
+- **Status:** Implemented locally; follow-up runner append fix also implemented locally.
 - **Stage:** `docs/runtime/stages/2026-05-21-fast-lane-v2-phase-1-trial-provenance.md`
-- **Files changed:** `scripts/research/fast_lane_trial_ledger.py`, `scripts/research/fast_lane_promote_queue.py`, `pipeline/check_drift.py`, `tests/test_pipeline/test_check_drift_fast_lane_trial_ledger_append_only.py`, `tests/test_research/test_fast_lane_promote_queue_suppression.py`, plus this baton and the Phase 1 stage doc.
+- **Files changed:** `scripts/research/fast_lane_trial_ledger.py`, `scripts/research/fast_lane_promote_queue.py`, `pipeline/check_drift.py`, `research/chordia_strict_unlock_v1.py`, `tests/test_pipeline/test_check_drift_fast_lane_trial_ledger_append_only.py`, `tests/test_research/test_fast_lane_promote_queue_suppression.py`, `tests/test_research/test_chordia_strict_unlock_v1_emissions.py`, plus this baton and the Phase 1 stage doc.
 - **What changed:** trial ledger now has stable content-addressed `trial_id = sha256([prereg_sha, runner_id, result_artifact_sha, canonical_data_fingerprint])[:16]` for new writer entries. Exact duplicate `trial_id` replays are idempotent no-ops; conflicting duplicate `trial_id` rows fail closed. Check #169 now validates `trial_id` type/format/uniqueness when present while tolerating legacy rows without it.
 - **Scanner hardening:** `fast_lane_promote_queue.scan(..., append_to_ledger=True)` is now ignored. Scanners remain derived read-only views; only real research runner code may call `append_trial_ledger_entry`.
+- **Runner append fix:** `research/chordia_strict_unlock_v1.py` now appends a FAST_LANE v5.1 trial-ledger row after writing result MD/CSV/summary artifacts. The row uses canonical structural hash inputs from prereg scope, artifact sha, holdout split fingerprint, upstream provenance, K-lineage snapshot, heavyweight verdict, and FAST_LANE verdict. Legacy heavyweight-only preregs remain no-op for this ledger.
 - **Verification:** `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_check_drift_fast_lane_trial_ledger_append_only.py tests/test_research/test_fast_lane_promote_queue_suppression.py tests/test_tools/test_fast_lane_walk.py -q` => 52 passed. Targeted ruff with `--ignore SIM300` => all checks passed; `SIM300` is a pre-existing unrelated `pipeline/check_drift.py` Yoda-condition warning outside this stage. `git diff --check` clean.
+- **Follow-up verification:** `./.venv-wsl/bin/python -m pytest tests/test_research/test_chordia_strict_unlock_v1_emissions.py tests/test_research/test_chordia_strict_unlock_v1_fast_lane.py tests/test_pipeline/test_check_drift_fast_lane_trial_ledger_append_only.py tests/test_research/test_fast_lane_promote_queue_suppression.py -q` => 92 passed. Targeted ruff on touched runner/ledger/scanner/test surfaces with `--ignore SIM300` => all checks passed. `git diff --check` clean.
 - **No DB/live mutation:** did not touch `gold.db`, `validated_setups`, `lane_allocation.json`, `chordia_audit_log.yaml`, broker state, or live runtime files.
 
 ## This Session (2026-05-21 — Codex Fast Lane V2 Phase 0 non-mutating scanner hardening)

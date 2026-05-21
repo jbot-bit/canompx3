@@ -19,9 +19,10 @@ resolves to ``validated_setups`` / ``chordia_audit_log.yaml`` /
 ``lane_allocation.json`` / ``trading_app/live/``. The fast-lane ledger is for
 candidate triage only, never validation / deployment state.
 
-This module is pure (no ``__main__``); 2A.3's scanner is the call site that
-populates the ledger. 2A.2 ships the writer + reader + capital-class refusal
-+ the Check #169 invariant (append-only + holdout sentinel).
+This module is pure (no ``__main__``); real research runners are the ledger
+writers, while scanners/status rebuilds are derived read-only consumers. 2A.2
+ships the writer + reader + capital-class refusal + the Check #169 invariant
+(append-only + holdout sentinel).
 """
 
 from __future__ import annotations
@@ -261,7 +262,7 @@ def append_trial_ledger_entry(
     ledger_path: Path,
     entry: LedgerEntry,
 ) -> None:
-    """Append one entry to the on-disk ledger. Idempotent on run_id.
+    """Append one entry to the on-disk ledger. Idempotent on exact trial_id replay.
 
     Raises:
         CapitalClassWriteRefused: entry.prereg_path crosses capital-class
