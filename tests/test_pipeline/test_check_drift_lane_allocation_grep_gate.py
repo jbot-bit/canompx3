@@ -68,16 +68,26 @@ class TestNoDirectLaneAllocationJsonLiterals:
         assert check_no_direct_lane_allocation_json_literals() == []
 
     def test_allowlisted_temporary_site_passes(self, tmp_path, monkeypatch):
-        """A temporary-allowlist file with the literal — no violation."""
+        """A temporary-allowlist file with the literal — no violation.
+
+        After Stage 1b-iii, the temporary allowlist is empty by canonical
+        state, so this test injects a synthetic entry to verify the
+        allowlist mechanism still suppresses violations on listed files.
+        """
+        from pipeline import check_drift
         from pipeline.check_drift import check_no_direct_lane_allocation_json_literals
 
-        # generate_trade_sheet.py is in the temporary allowlist (Stage 1b-iii).
         _write_py(
             tmp_path,
-            "scripts/tools/generate_trade_sheet.py",
+            "scripts/tools/test_only_synthetic_reader.py",
             'PATH = "docs/runtime/lane_allocation.json"\n',
         )
         _patch_root(monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            check_drift,
+            "_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST",
+            frozenset({Path("scripts/tools/test_only_synthetic_reader.py")}),
+        )
         assert check_no_direct_lane_allocation_json_literals() == []
 
     def test_non_allowlisted_site_violates(self, tmp_path, monkeypatch):
@@ -181,22 +191,30 @@ class TestNoDirectLaneAllocationJsonLiterals:
         allowlist from going silently broad if a reader is migrated without
         removing the allowlist entry.
         """
+        from pipeline import check_drift
         from pipeline.check_drift import check_no_direct_lane_allocation_json_literals
 
-        # generate_trade_sheet.py is in temporary allowlist. Create the file
-        # but WITHOUT the literal — simulating a successful migration that
-        # forgot to update the allowlist.
+        # After Stage 1b-iii the live allowlist is empty by canonical state.
+        # Inject a synthetic entry pointing at a file that exists but does
+        # NOT contain the literal — simulates "reader migrated but allowlist
+        # not updated", which the sub-check must surface so the allowlist
+        # stays tight rather than going silently broad.
         _write_py(
             tmp_path,
-            "scripts/tools/generate_trade_sheet.py",
+            "scripts/tools/test_only_synthetic_reader.py",
             "# migrated to resolver\n"
             "from trading_app.prop_profiles import resolve_allocation_json\n",
         )
         _patch_root(monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            check_drift,
+            "_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST",
+            frozenset({Path("scripts/tools/test_only_synthetic_reader.py")}),
+        )
         violations = check_no_direct_lane_allocation_json_literals()
         assert len(violations) == 1
         assert "TEMPORARY allowlist entry" in violations[0]
-        assert "scripts/tools/generate_trade_sheet.py" in violations[0]
+        assert "scripts/tools/test_only_synthetic_reader.py" in violations[0]
         assert "shrink monotonically" in violations[0]
 
     def test_dead_temporary_allowlist_entry_skipped_when_file_absent(
@@ -223,30 +241,30 @@ class TestNoDirectLaneAllocationJsonLiterals:
         from pipeline import check_drift
         from pipeline.check_drift import check_no_direct_lane_allocation_json_literals
 
-        # generate_trade_sheet.py with the literal — should pass under
-        # default allowlist (in temporary set), fail when we remove it.
+        # After Stage 1b-iii the live allowlist is empty by canonical state,
+        # so this mutation-probe injects + removes a synthetic entry. The
+        # site with the literal should pass under the injected allowlist
+        # and fail when we strip the entry — proving the allowlist is
+        # actually consulted (not silently ignored).
+        synthetic = Path("scripts/tools/test_only_synthetic_reader.py")
         _write_py(
             tmp_path,
-            "scripts/tools/generate_trade_sheet.py",
+            str(synthetic),
             'PATH = "docs/runtime/lane_allocation.json"\n',
         )
         _patch_root(monkeypatch, tmp_path)
 
-        # Default: passes.
+        monkeypatch.setattr(
+            check_drift, "_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST", frozenset({synthetic})
+        )
         assert check_no_direct_lane_allocation_json_literals() == []
 
-        # Mutation: remove the allowlist entry. The site should now violate.
-        mutated = frozenset(
-            p
-            for p in check_drift._LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST
-            if p != Path("scripts/tools/generate_trade_sheet.py")
-        )
         monkeypatch.setattr(
-            check_drift, "_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST", mutated
+            check_drift, "_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST", frozenset()
         )
         violations = check_no_direct_lane_allocation_json_literals()
         assert len(violations) == 1
-        assert "scripts/tools/generate_trade_sheet.py:1" in violations[0]
+        assert "scripts/tools/test_only_synthetic_reader.py:1" in violations[0]
         assert "resolve_allocation_json" in violations[0]
 
     def test_nested_path_under_trading_app(self, tmp_path, monkeypatch):

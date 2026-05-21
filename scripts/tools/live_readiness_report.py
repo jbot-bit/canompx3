@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ALLOCATION_PATH = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
 
 
 def _preferred_repo_python() -> Path | None:
@@ -66,9 +65,15 @@ from pipeline.paths import GOLD_DB_PATH  # noqa: E402
 from trading_app.lifecycle_state import read_lifecycle_state  # noqa: E402
 from trading_app.prop_profiles import (  # noqa: E402
     get_profile_lane_definitions,
+    legacy_lane_allocation_path,
     resolve_profile_id,
 )
 from trading_app.validated_shelf import deployable_validated_relation  # noqa: E402
+
+# Defined after the bootstrap-deferred trading_app import so the resolver
+# helper is in scope (the canonical legacy path lives in prop_profiles per
+# Stage 1b authority inversion).
+DEFAULT_ALLOCATION_PATH = legacy_lane_allocation_path()
 
 
 def _git_head(root: Path) -> str | None:
@@ -477,7 +482,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--allocation-path",
         default=str(DEFAULT_ALLOCATION_PATH),
-        help="Path to lane_allocation.json.",
+        help="Path to lane allocation JSON file.",
     )
     return parser
 

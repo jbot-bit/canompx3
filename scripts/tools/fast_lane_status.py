@@ -25,7 +25,7 @@ Outputs
 Capital-class boundary
 ----------------------
 This writer NEVER opens ``docs/runtime/chordia_audit_log.yaml``,
-``docs/runtime/lane_allocation.json``, ``validated_setups``, or anything under
+the lane allocation file, ``validated_setups``, or anything under
 ``trading_app/live/`` for write. The capital-class read-only assertion is
 enforced by ``check_fast_lane_status_rollup_reconstruction_parity`` (Check #168)
 via a greppable static check on this file plus the test fixture's mock-fs run.

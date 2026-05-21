@@ -9698,20 +9698,12 @@ _LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST: frozenset[Path] = frozenset({
 # Shrinks monotonically across Stage 1b-ii / 1b-iii. Removing an entry is the
 # "reader migrated" signal. When this set is empty, Stage 1b's grep-gate axis
 # is complete.
-_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST: frozenset[Path] = frozenset({
-    # scripts/tools/ readers — Stage 1b-iii
-    Path("scripts/tools/allocation_intel.py"),
-    Path("scripts/tools/allocator_gate_audit.py"),
-    Path("scripts/tools/deployable_shelf_gap.py"),
-    Path("scripts/tools/deployment_coverage_audit.py"),
-    Path("scripts/tools/fast_lane_status.py"),
-    Path("scripts/tools/fast_lane_walk.py"),
-    Path("scripts/tools/generate_trade_sheet.py"),
-    Path("scripts/tools/go_portal.py"),
-    Path("scripts/tools/live_readiness_report.py"),
-    Path("scripts/tools/monitor_q4_band_shadow.py"),
-    Path("scripts/tools/strategy_lab_mcp_server.py"),
-})
+_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST: frozenset[Path] = frozenset()
+# Drained 2026-05-22 (Stage 1b-iii). All trading_app/ and scripts/tools/
+# readers now go through trading_app.prop_profiles.resolve_allocation_json
+# (or legacy_lane_allocation_path() for profile-agnostic sites). Stage 1d
+# will retire the legacy single-profile path entirely once a stabilization
+# window confirms zero source="legacy" reads in the wild.
 
 
 def check_no_direct_lane_allocation_json_literals() -> list[str]:
