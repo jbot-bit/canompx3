@@ -232,12 +232,7 @@ class TestClassifyStatus:
         status, reason = _classify_status(
             trailing_expr=-0.01,
             trailing_n=60,
-            actual_months=3,
-            months_neg=2,
-            months_pos_since=0,
-            annual_r=-2.0,
             session_regime_expr=0.05,  # HOT session
-            monthly=monthly,
         )
         assert status == "DEPLOY"
         assert "HOT" in reason
@@ -252,12 +247,7 @@ class TestClassifyStatus:
         status, reason = _classify_status(
             trailing_expr=0.10,
             trailing_n=60,
-            actual_months=3,
-            months_neg=0,
-            months_pos_since=3,
-            annual_r=20.0,
             session_regime_expr=-0.03,  # COLD session
-            monthly=monthly,
         )
         assert status == "PAUSE"
         assert "COLD" in reason
@@ -275,12 +265,7 @@ class TestClassifyStatus:
         status, reason = _classify_status(
             trailing_expr=-0.05,
             trailing_n=85,
-            actual_months=4,
-            months_neg=1,
-            months_pos_since=0,
-            annual_r=-15.0,
             session_regime_expr=0.05,  # HOT session overrides individual
-            monthly=monthly,
         )
         assert status == "DEPLOY"
         assert "HOT" in reason
@@ -290,12 +275,7 @@ class TestClassifyStatus:
         status, reason = _classify_status(
             trailing_expr=0.05,
             trailing_n=10,  # < MIN_TRAILING_N (20)
-            actual_months=2,
-            months_neg=0,
-            months_pos_since=0,
-            annual_r=3.0,
             session_regime_expr=0.05,  # positive → HOT
-            monthly=[("2025-06", 0.05, 10)],
         )
         assert status == "DEPLOY"
         assert "session regime HOT" in reason
@@ -305,12 +285,7 @@ class TestClassifyStatus:
         status, reason = _classify_status(
             trailing_expr=-0.02,
             trailing_n=10,  # < MIN_TRAILING_N
-            actual_months=2,
-            months_neg=0,
-            months_pos_since=0,
-            annual_r=-1.0,
             session_regime_expr=-0.03,  # negative → COLD
-            monthly=[("2025-06", -0.02, 10)],
         )
         assert status == "PAUSE"
         assert "COLD" in reason
@@ -320,12 +295,7 @@ class TestClassifyStatus:
         status, reason = _classify_status(
             trailing_expr=0.0,
             trailing_n=5,
-            actual_months=1,
-            months_neg=0,
-            months_pos_since=0,
-            annual_r=0.0,
             session_regime_expr=None,
-            monthly=[("2025-06", 0.0, 5)],
         )
         assert status == "STALE"
         assert "No regime data" in reason
@@ -335,16 +305,7 @@ class TestClassifyStatus:
         status, reason = _classify_status(
             trailing_expr=0.10,
             trailing_n=50,
-            actual_months=3,
-            months_neg=0,
-            months_pos_since=0,
-            annual_r=20.0,
             session_regime_expr=None,
-            monthly=[
-                ("2025-06", 0.10, 20),
-                ("2025-05", 0.12, 15),
-                ("2025-04", 0.08, 15),
-            ],
         )
         assert status == "DEPLOY"
         assert "trailing positive" in reason
@@ -362,12 +323,7 @@ class TestClassifyStatus:
         status, reason = _classify_status(
             trailing_expr=0.06,  # overall positive
             trailing_n=75,
-            actual_months=3,
-            months_neg=2,
-            months_pos_since=0,
-            annual_r=6.0,
             session_regime_expr=0.05,  # HOT
-            monthly=monthly,
         )
         assert status == "DEPLOY"
         assert "HOT" in reason

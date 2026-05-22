@@ -462,12 +462,7 @@ def compute_lane_scores(
             status, reason = _classify_status(
                 trailing_expr=trailing_expr,
                 trailing_n=all_trades_n,
-                actual_months=actual_months,
-                months_neg=months_neg,
-                months_pos_since=months_pos_since,
-                annual_r=annual_r,
                 session_regime_expr=session_regime,
-                monthly=monthly,
             )
 
             # Recent 3-month trailing ExpR (decay signal)
@@ -551,12 +546,7 @@ def _classify_status(
     *,
     trailing_expr: float,
     trailing_n: int,
-    actual_months: int,
-    months_neg: int,
-    months_pos_since: int,
-    annual_r: float,
     session_regime_expr: float | None,
-    monthly: list[tuple[str, float, int]],
 ) -> tuple[str, str]:
     """Classify strategy status — regime-only gating.
 

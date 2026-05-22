@@ -447,12 +447,7 @@ def _compute_scores(
         status, reason = _classify_status(
             trailing_expr=trailing_expr,
             trailing_n=all_trades_n,
-            actual_months=actual_months,
-            months_neg=months_neg,
-            months_pos_since=months_pos_since,
-            annual_r=annual_r,
             session_regime_expr=session_regime_expr,
-            monthly=monthly,
         )
 
         recent_3mo_expr = None
