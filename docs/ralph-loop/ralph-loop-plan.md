@@ -1,8 +1,8 @@
-## Iteration: 194
-## Target: trading_app/strategy_fitness.py:607,720,815
-## Finding: `min_rolling_trades=15` default duplicated at 3 function signatures instead of referencing `MIN_ROLLING_FIT` (canonical constant at line 95). If `MIN_ROLLING_FIT` is ever updated for research reasons (annotated @research-source @sensitivity-tested), the function defaults silently diverge.
+## Iteration: 195
+## Target: trading_app/prop_portfolio.py:291
+## Finding: Silent `except (ValueError, duckdb.Error): pass` on live fitness gate swallows compute_fitness exceptions; operator sees "Fitness: UNKNOWN" HOLD with zero diagnostic context.
 ## Classification: [mechanical]
-## Blast Radius: 1 file (strategy_fitness.py), 0 external callers pass min_rolling_trades (all rely on default)
-## Invariants: [1] classify_fitness() logic unchanged [2] default value remains 15 (same as MIN_ROLLING_FIT) [3] no callers broken (none pass the kwarg)
-## Diff estimate: 3 lines
-## Doctrine cited: integrity-guardian.md § 2 (canonical sources), institutional-rigor.md § 4 (delegate to canonical sources — never re-encode)
+## Blast Radius: 1 file (prop_portfolio.py), 0 behavior change (still HOLD on exception; only logger.warning added)
+## Invariants: [1] fitness_status remains "UNKNOWN" on exception [2] line 311 gate unchanged — UNKNOWN still causes HOLD [3] no callers broken
+## Diff estimate: 2 lines
+## Doctrine cited: integrity-guardian.md § 6 (No silent failures — every except must record the exception)
