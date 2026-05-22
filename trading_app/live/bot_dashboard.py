@@ -2773,9 +2773,7 @@ async def _bars_watcher() -> None:
                     hb_ts = datetime.fromisoformat(heartbeat_raw)
                     if hb_ts.tzinfo is None:
                         hb_ts = hb_ts.replace(tzinfo=UTC)
-                    heartbeat_stale = (
-                        (datetime.now(UTC) - hb_ts).total_seconds() > HEARTBEAT_STALE_AFTER_S
-                    )
+                    heartbeat_stale = (datetime.now(UTC) - hb_ts).total_seconds() > HEARTBEAT_STALE_AFTER_S
                 except ValueError:
                     pass
 
@@ -2787,11 +2785,7 @@ async def _bars_watcher() -> None:
                 # ring is a historical artifact, not live data. Falls
                 # through to the cross-stale branch below which defers to
                 # /api/bars-recent.
-                ring_is_live = (
-                    not snap.is_empty()
-                    and not bar_ring.is_stale(snap)
-                    and not heartbeat_stale
-                )
+                ring_is_live = not snap.is_empty() and not bar_ring.is_stale(snap) and not heartbeat_stale
                 if ring_is_live:
                     # Prefer ring during a live session.
                     since = last_seen.get(inst)
@@ -3022,9 +3016,7 @@ def _query_bars_recent(
     # If the ring already covers the lookback window from oldest to "now",
     # skip the DB. Otherwise pull the missing historical tail.
     now = datetime.now(UTC)
-    lookback_floor = (
-        since_dt if since_dt is not None else now - timedelta(minutes=max(0, lookback_minutes))
-    )
+    lookback_floor = since_dt if since_dt is not None else now - timedelta(minutes=max(0, lookback_minutes))
     need_db = ring_oldest is None or ring_oldest > lookback_floor
 
     db_bars: list[dict[str, Any]] = []

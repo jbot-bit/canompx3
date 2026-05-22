@@ -74,9 +74,7 @@ DEFAULT_STALE_AFTER_SECS = 90.0
 # ``bar_aggregator._BAD_BAR_ALERT_THRESHOLD``).
 _WRITE_FAIL_CRITICAL_THRESHOLD = 3
 
-_MOCK_CLASS_NAMES = frozenset(
-    {"Mock", "MagicMock", "AsyncMock", "NonCallableMock", "NonCallableMagicMock"}
-)
+_MOCK_CLASS_NAMES = frozenset({"Mock", "MagicMock", "AsyncMock", "NonCallableMock", "NonCallableMagicMock"})
 
 
 def _is_mock_object(value: Any) -> bool:
@@ -132,15 +130,11 @@ def _serialize_bar(bar: Bar) -> dict[str, Any]:
                 f"{type(v).__name__} (unittest.mock object); refuse to serialize"
             )
         if not isinstance(v, (int, float)):
-            raise TypeError(
-                f"bar_ring contamination: bar.{field_name} is "
-                f"{type(v).__name__}, expected int|float"
-            )
+            raise TypeError(f"bar_ring contamination: bar.{field_name} is {type(v).__name__}, expected int|float")
     ts = bar.ts_utc
     if _is_mock_object(ts):
         raise TypeError(
-            f"bar_ring contamination: bar.ts_utc = {type(ts).__name__} "
-            f"(unittest.mock object); refuse to serialize"
+            f"bar_ring contamination: bar.ts_utc = {type(ts).__name__} (unittest.mock object); refuse to serialize"
         )
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=UTC)
@@ -172,9 +166,7 @@ class _RingWriter:
         self._consecutive_write_failures = 0
         self._lock = threading.Lock()  # protects _bars / counters
         self._stop_event = threading.Event()
-        self._thread = threading.Thread(
-            target=self._run, name=f"bar-ring-{symbol}", daemon=True
-        )
+        self._thread = threading.Thread(target=self._run, name=f"bar-ring-{symbol}", daemon=True)
         self._thread.start()
 
     def enqueue(self, bar: Bar) -> WriteResult:
@@ -187,9 +179,7 @@ class _RingWriter:
             with self._lock:
                 self._invalid_rejected += 1
                 fails = self._consecutive_write_failures
-            return WriteResult(
-                enqueued=False, invalid_rejected=True, consecutive_write_failures=fails
-            )
+            return WriteResult(enqueued=False, invalid_rejected=True, consecutive_write_failures=fails)
         dropped = False
         try:
             self._q.put_nowait(bar)
@@ -210,9 +200,7 @@ class _RingWriter:
                 )
                 with self._lock:
                     fails = self._consecutive_write_failures
-                return WriteResult(
-                    enqueued=False, dropped_oldest=True, consecutive_write_failures=fails
-                )
+                return WriteResult(enqueued=False, dropped_oldest=True, consecutive_write_failures=fails)
             log.warning(
                 "bar_ring(%s): queue overflow at cap=%d; dropped oldest bar",
                 self.symbol,
@@ -220,9 +208,7 @@ class _RingWriter:
             )
         with self._lock:
             fails = self._consecutive_write_failures
-        return WriteResult(
-            enqueued=True, dropped_oldest=dropped, consecutive_write_failures=fails
-        )
+        return WriteResult(enqueued=True, dropped_oldest=dropped, consecutive_write_failures=fails)
 
     def drain_and_stop(self, timeout: float = 5.0) -> None:
         """Block until queue drains, then stop the writer thread.

@@ -11836,16 +11836,13 @@ def check_judgment_review_capital_paths_parity() -> list[str]:
 
     def _load(path: Path, alias: str):
         if not path.exists():
-            violations.append(
-                f"check_judgment_review_capital_paths_parity: hook file missing at {path}"
-            )
+            violations.append(f"check_judgment_review_capital_paths_parity: hook file missing at {path}")
             return None
         try:
             spec = _ilu.spec_from_file_location(alias, str(path))
             if spec is None or spec.loader is None:
                 violations.append(
-                    f"check_judgment_review_capital_paths_parity: "
-                    f"could not build importlib spec for {path}"
+                    f"check_judgment_review_capital_paths_parity: could not build importlib spec for {path}"
                 )
                 return None
             module = _ilu.module_from_spec(spec)
@@ -11853,8 +11850,7 @@ def check_judgment_review_capital_paths_parity() -> list[str]:
             return module
         except Exception as exc:
             violations.append(
-                f"check_judgment_review_capital_paths_parity: "
-                f"failed to load {path}: {type(exc).__name__}: {exc}"
+                f"check_judgment_review_capital_paths_parity: failed to load {path}: {type(exc).__name__}: {exc}"
             )
             return None
 
@@ -11926,17 +11922,13 @@ def check_stage_closed_review_nudge_capital_paths_parity() -> list[str]:
 
     def _load(path: Path, alias: str):
         if not path.exists():
-            violations.append(
-                f"check_stage_closed_review_nudge_capital_paths_parity: "
-                f"hook file missing at {path}"
-            )
+            violations.append(f"check_stage_closed_review_nudge_capital_paths_parity: hook file missing at {path}")
             return None
         try:
             spec = _ilu.spec_from_file_location(alias, str(path))
             if spec is None or spec.loader is None:
                 violations.append(
-                    f"check_stage_closed_review_nudge_capital_paths_parity: "
-                    f"could not build importlib spec for {path}"
+                    f"check_stage_closed_review_nudge_capital_paths_parity: could not build importlib spec for {path}"
                 )
                 return None
             module = _ilu.module_from_spec(spec)
