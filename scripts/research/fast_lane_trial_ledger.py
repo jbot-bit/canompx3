@@ -16,7 +16,7 @@ Implementation grounding:
 Capital-class boundary (CLAUDE.md § Source-of-Truth Chain Rule + design § Hard
 Constraints): the writer REFUSES to append any entry whose ``prereg_path``
 resolves to ``validated_setups`` / ``chordia_audit_log.yaml`` /
-``lane_allocation.json`` / ``trading_app/live/``. The fast-lane ledger is for
+``allocation file`` / ``trading_app/live/``. The fast-lane ledger is for
 candidate triage only, never validation / deployment state.
 
 This module is pure (no ``__main__``); real research runners are the ledger
@@ -61,7 +61,7 @@ HOLDOUT_SACRED_FROM_SENTINEL = "2026-01-01"
 _CAPITAL_CLASS_FORBIDDEN_SUBSTRINGS = (
     "validated_setups",
     "chordia_audit_log.yaml",
-    "lane_allocation.json",
+    "allocation file",
     "trading_app/live/",
     "trading_app\\live\\",
 )

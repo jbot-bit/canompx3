@@ -1,6 +1,6 @@
 """Per-lane 2026 OOS dir_match audit — mandate #4 (2026-04-20).
 
-For each of the 6 DEPLOY lanes in `docs/runtime/lane_allocation.json`:
+For each DEPLOY lane in the current profile allocation:
   1. Compute IS statistics (trading_day < HOLDOUT_SACRED_FROM).
   2. Compute 2026 OOS statistics.
   3. Check dir_match (sign(ExpR_IS) == sign(ExpR_OOS)).
@@ -30,7 +30,6 @@ Run:
 
 from __future__ import annotations
 
-import json
 import sys
 import warnings
 from dataclasses import dataclass
@@ -52,8 +51,9 @@ from pipeline.paths import GOLD_DB_PATH  # noqa: E402
 from research.filter_utils import filter_signal  # noqa: E402
 from research.oos_power import power_verdict  # noqa: E402
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM  # noqa: E402
+from trading_app.prop_profiles import resolve_allocation_json  # noqa: E402
 
-ALLOCATION_JSON = _ROOT / "docs" / "runtime" / "lane_allocation.json"
+PROFILE_ID = "topstep_50k_mnq_auto"
 RESULT_DOC = _ROOT / "docs" / "audit" / "results" / "2026-04-20-deploy-lane-oos-dir-match-audit.md"
 ALPHA = 0.05
 
@@ -287,8 +287,8 @@ def render_result_doc(audits: list[LaneAudit], lanes: list[LaneSpec]) -> str:
     lines.append("")
     lines.append(
         "Mandate #4 from `memory/next_session_mandates_2026_04_20.md`: "
-        "per-lane 2026 OOS dir_match audit on the 6 DEPLOY lanes in "
-        "`docs/runtime/lane_allocation.json` (`topstep_50k_mnq_auto` rebalance "
+        "per-lane 2026 OOS dir_match audit on the DEPLOY lanes in "
+        "the current profile allocation (`topstep_50k_mnq_auto` rebalance "
         "2026-04-18). Must use canonical `oos_power` helper per RULE 3.3; "
         "must provide per-lane breakdown per RULE 14 — no pooled p-value claim."
     )
@@ -398,14 +398,17 @@ def render_result_doc(audits: list[LaneAudit], lanes: list[LaneSpec]) -> str:
     lines.append("DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db python research/deploy_lane_oos_dir_match_audit.py")
     lines.append("```")
     lines.append("")
-    lines.append("No randomness. Read-only DB. No writes to `validated_setups` / `experimental_strategies` / `live_config` / `lane_allocation.json`.")
+    lines.append("No randomness. Read-only DB. No writes to `validated_setups` / `experimental_strategies` / `live_config` / allocation files.")
     return "\n".join(lines)
 
 
 def main() -> int:
-    alloc = json.loads(ALLOCATION_JSON.read_text())
+    resolved = resolve_allocation_json(PROFILE_ID)
+    if resolved.data is None:
+        raise SystemExit(f"profile allocation file missing for {PROFILE_ID!r}")
+    alloc = resolved.data
     lanes = [LaneSpec.from_allocation_row(row) for row in alloc["lanes"]]
-    print(f"Loaded {len(lanes)} DEPLOY lanes from {ALLOCATION_JSON.name}")
+    print(f"Loaded {len(lanes)} DEPLOY lanes from profile allocation")
     print(f"Mode A cutoff: trading_day < {HOLDOUT_SACRED_FROM.isoformat()}")
 
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)

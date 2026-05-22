@@ -321,7 +321,7 @@ def build_prereg(
                 f"{filter_type} siblings at other RR/sessions/apertures/entry models/confirm_bars",
                 "theory-grant upgrade — operator authors literature claim separately",
                 "allocator, sizing, schema, or live-execution changes",
-                "any write to validated_setups, chordia_audit_log.yaml, or lane_allocation.json",
+                "any write to validated_setups, chordia_audit_log.yaml, or allocation file",
             ],
         },
         "data_policy": {

@@ -11,7 +11,7 @@ Truth:
 - canonical feature/filter state: `daily_features`
 
 Comparison-only context:
-- `docs/runtime/lane_allocation.json`
+- `current profile allocation`
 - `validated_setups`
 - `trading_app/prop_profiles.py`
 
@@ -208,7 +208,7 @@ def render_doc(payload: dict[str, Any], decisions: dict[str, dict[str, Any]]) ->
         "",
         "Comparison-only deployment context:",
         "",
-        "- `docs/runtime/lane_allocation.json`",
+        "- `current profile allocation`",
         "- `validated_setups` for exact live-lane and candidate parameters",
         "- `trading_app/prop_profiles.py`",
         "",
@@ -398,7 +398,7 @@ def render_doc(payload: dict[str, Any], decisions: dict[str, dict[str, Any]]) ->
             "./.venv-wsl/bin/python research/prior_day_geometry_routing_audit.py",
             "```",
             "",
-            "No randomness. Read-only DB. No writes to `validated_setups` / `experimental_strategies` / `live_config` / `lane_allocation.json`.",
+            "No randomness. Read-only DB. No writes to `validated_setups` / `experimental_strategies` / `live_config` / `allocation file`.",
         ]
     )
     return "\n".join(parts) + "\n"

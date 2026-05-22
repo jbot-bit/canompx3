@@ -21,7 +21,7 @@ Decision rule (pre-committed in docs/runtime/stages/allocator_scored_tail_audit.
 
 Outputs:
   - Rank-ordered table of all 38 lanes (stdout + result markdown)
-  - DEPLOY replay cross-check vs docs/runtime/lane_allocation.json
+  - DEPLOY replay cross-check vs current profile allocation
   - Pre-committed verdict with numerical evidence
   - Classification stamp: VALID / CONDITIONAL / UNVERIFIED / WRONG
 
@@ -31,8 +31,8 @@ Run:
 
 from __future__ import annotations
 
-import json
 import sys
+import json
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -51,12 +51,11 @@ from trading_app.lane_allocator import (  # noqa: E402
     enrich_scores_with_liveness,
     _effective_annual_r,
 )
-from trading_app.prop_profiles import ACCOUNT_PROFILES, ACCOUNT_TIERS  # noqa: E402
+from trading_app.prop_profiles import ACCOUNT_PROFILES, ACCOUNT_TIERS, resolve_allocation_json  # noqa: E402
 from pipeline.cost_model import COST_SPECS  # noqa: E402
 
 REBALANCE_DATE = date(2026, 4, 18)
 PROFILE_ID = "topstep_50k_mnq_auto"
-PERSISTED_ALLOCATION = _ROOT / "docs" / "runtime" / "lane_allocation.json"
 RESULT_DOC = _ROOT / "docs" / "audit" / "results" / "2026-04-20-allocator-scored-tail-audit.md"
 
 
@@ -241,10 +240,11 @@ def build_rank_table(
 
 
 def verify_replay_matches_persisted(selected: list[LaneScore]) -> tuple[bool, str]:
-    if not PERSISTED_ALLOCATION.exists():
-        return False, f"persisted allocation not found at {PERSISTED_ALLOCATION}"
-    data = json.loads(PERSISTED_ALLOCATION.read_text())
-    persisted_sids = [l["strategy_id"] for l in data.get("lanes", [])]
+    resolved = resolve_allocation_json(PROFILE_ID)
+    if resolved.data is None:
+        return False, f"profile allocation file missing for {PROFILE_ID}"
+    data = resolved.data
+    persisted_sids = [lane["strategy_id"] for lane in data.get("lanes", [])]
     replay_sids = [s.strategy_id for s in selected]
     if persisted_sids == replay_sids:
         return True, f"EXACT MATCH ({len(replay_sids)} lanes, ordered)"
@@ -384,7 +384,7 @@ def render_result_doc(
     lines.append("")
     lines.append(
         "The replay above was run at current `data/state/sr_state.json` state. "
-        "If the replay set differs from `docs/runtime/lane_allocation.json`, "
+        "If the replay set differs from the current profile allocation, "
         "that difference is attributable to SR liveness state evolving between "
         "the rebalance commit (2026-04-18) and now. `_effective_annual_r` "
         "applies multiplicative discounts (ALARM×0.50, 3mo-decay×0.75) that "
@@ -502,7 +502,7 @@ def render_result_doc(
     lines.append(f"DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db python research/allocator_scored_tail_audit.py")
     lines.append("```")
     lines.append("")
-    lines.append("No randomness. Read-only DB. No writes to `validated_setups` / `experimental_strategies` / `live_config` / `lane_allocation.json`.")
+    lines.append("No randomness. Read-only DB. No writes to `validated_setups` / `experimental_strategies` / `live_config` / allocation files.")
     lines.append("")
     return "\n".join(lines)
 

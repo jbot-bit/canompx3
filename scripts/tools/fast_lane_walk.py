@@ -189,9 +189,7 @@ def _error_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _blocked_fast_lane_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     blocked = [
-        e
-        for e in entries
-        if e.get("lineage_class") == "FAST_LANE" and e.get("blocker_class") not in (None, "NONE")
+        e for e in entries if e.get("lineage_class") == "FAST_LANE" and e.get("blocker_class") not in (None, "NONE")
     ]
     blocked.sort(key=lambda e: (e.get("blocker_class") or "", e.get("strategy_id") or ""))
     return blocked

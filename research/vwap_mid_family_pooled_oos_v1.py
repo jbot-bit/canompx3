@@ -13,7 +13,7 @@ The pooled t-stat is descriptive_only and never enters the verdict.
 Route contract (per pre-reg ``not_done_by_this_pre_reg`` and Stage B2 plan):
 
 - No writes to validated_setups, experimental_strategies, edge_families.
-- No writes to lane_allocation.json, live_config.json, bot_state.json.
+- No writes to allocation file, live_config.json, bot_state.json.
 - No writes to docs/runtime/chordia_audit_log.yaml.
 - No modification of prior PASS_CHORDIA chordia_audit_log.yaml entries.
 
@@ -1239,7 +1239,7 @@ def _write_result_md(
         "`cov_type='cluster'`, `cov_kwds={'groups': trading_day}`.",
         "- Holm-Bonferroni ranking: cells sorted ascending on `p_clustered`, alpha'_i applied by rank index.",
         "- OOS power tier: per-cell and pooled via `research.oos_power.one_sample_power` (NCP = d * sqrt(n)); descriptive only (RULE 3.3).",
-        "- No writes to `validated_setups`, `experimental_strategies`, `lane_allocation.json`, "
+        "- No writes to `validated_setups`, `experimental_strategies`, `allocation file`, "
         "`chordia_audit_log.yaml`, `bot_state.json`, or `live_config.json`.",
         "",
         "## Harvey-Liu boundary statement (mandatory; pre-reg outputs_required_after_run)",

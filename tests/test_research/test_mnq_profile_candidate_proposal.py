@@ -9,6 +9,7 @@ from research.mnq_profile_candidate_proposal_2026_05_11 import (
     build_promotion_candidates,
     choose_dedupe_heads,
     classify_candidate,
+    write_promotion_patch,
 )
 
 
@@ -316,3 +317,25 @@ def test_build_promotion_candidates_requires_explicit_runtime_bootstrap(monkeypa
         runtime_bootstrap_checker=lambda _candidate: (False, "SR bootstrap status=ALARM"),
     )
     assert blocked == []
+
+
+def test_write_promotion_patch_refuses_direct_allocation_apply(tmp_path, monkeypatch) -> None:
+    """Research proposal emits patch artifacts only; direct allocation writes are blocked."""
+    allocation_path = tmp_path / "allocation.json"
+    allocation_path.write_text('{"profile_id": "topstep_50k_mnq_auto", "lanes": []}', encoding="utf-8")
+    patch_path = tmp_path / "patch.json"
+
+    monkeypatch.setattr(
+        "research.mnq_profile_candidate_proposal_2026_05_11.RESULT_PROMOTION_PATCH_JSON",
+        patch_path,
+    )
+
+    try:
+        write_promotion_patch([], apply_allocation=True)
+    except RuntimeError as exc:
+        assert "research proposal is patch-artifact only" in str(exc)
+    else:
+        raise AssertionError("write_promotion_patch should refuse direct allocation writes")
+
+    assert allocation_path.read_text(encoding="utf-8") == '{"profile_id": "topstep_50k_mnq_auto", "lanes": []}'
+    assert not patch_path.exists()

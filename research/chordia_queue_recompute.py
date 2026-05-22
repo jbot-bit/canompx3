@@ -23,7 +23,7 @@ Inputs (canonical only):
 - gold.db orb_outcomes JOIN daily_features -> Mode A IS + OOS recompute
 - docs/audit/results/2026-05-11-mnq-all-active-deployability.json -> MNQ
   family_status / hard_issues / verdict enrichment (786-row snapshot)
-- docs/runtime/lane_allocation.json -> allocator state per strategy_id
+- current profile allocation -> allocator state per strategy_id
 - docs/runtime/chordia_audit_log.yaml -> existing audit verdicts
 
 Outputs:
@@ -60,6 +60,7 @@ from research.filter_utils import filter_signal
 from trading_app.chordia import compute_chordia_t, CHORDIA_T_WITHOUT_THEORY
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.config import ALL_FILTERS, StrategyFilter
+from trading_app.prop_profiles import resolve_allocation_json
 from pipeline.paths import GOLD_DB_PATH
 
 
@@ -68,9 +69,9 @@ from pipeline.paths import GOLD_DB_PATH
 # ---------------------------------------------------------------------------
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 JSON_PATH = _REPO_ROOT / "docs" / "audit" / "results" / "2026-05-11-mnq-all-active-deployability.json"
-LANE_ALLOC_PATH = _REPO_ROOT / "docs" / "runtime" / "lane_allocation.json"
 CHORDIA_LOG_PATH = _REPO_ROOT / "docs" / "runtime" / "chordia_audit_log.yaml"
 OUTPUT_CSV = _REPO_ROOT / "docs" / "audit" / "results" / "2026-05-12-chordia-audit-queue-candidates.csv"
+PROFILE_ID = "topstep_50k_mnq_auto"
 
 
 # ---------------------------------------------------------------------------
@@ -256,7 +257,10 @@ def _load_json_enrichment() -> dict[str, dict[str, Any]]:
 
 def _load_lane_allocation() -> dict[str, str]:
     """strategy_id -> allocator status string (DEPLOY / PAUSE / etc)."""
-    data = json.loads(LANE_ALLOC_PATH.read_text())
+    resolved = resolve_allocation_json(PROFILE_ID)
+    if resolved.data is None:
+        raise RuntimeError(f"profile allocation file missing for {PROFILE_ID!r}")
+    data = resolved.data
     out: dict[str, str] = {}
     for lane in data.get("lanes", []):
         sid = lane.get("strategy_id")

@@ -55,7 +55,7 @@ class Lane:
 
 
 # Locked at pre-reg time -- the 4 deployed lanes per
-# docs/runtime/lane_allocation.json rebalance_date 2026-04-18.
+# current profile allocation rebalance_date 2026-04-18.
 #
 # has_theory FLAG -- AUDITED 2026-05-01 (v3 steel-man pass) against actual
 # local extracts in docs/institutional/literature/.

@@ -64,6 +64,9 @@ def _make_candidate(
         score=breakdown,
         skip_recommended=skip_recommended,
         result_md=result_md,
+        structural_hash="0123456789abcdef",
+        k_lineage={"K_lane": 1, "K_family": 1, "K_global": 1},
+        n_hat=pooled_n,
     )
 
 

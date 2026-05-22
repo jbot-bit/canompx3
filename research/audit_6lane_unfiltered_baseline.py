@@ -16,7 +16,7 @@
 
     Do not run this script for new analysis. Use v2.
 
-For each of the 6 currently-DEPLOYED lanes (per `docs/runtime/lane_allocation.json`),
+For each currently-DEPLOYED lane in the current profile allocation,
 decompose the lane's edge into UNFILTERED-baseline contribution and FILTER contribution.
 
 Motivation: PR #47 6-lane audit found that 5 of 6 deployed filters fire ≥75%
@@ -29,7 +29,7 @@ Reuses parse_strategy_id() and load_lane_universe() from the scale-stability
 audit so the two audits are directly comparable (same orb_minutes=5, same
 aperture-overlay handling).
 
-Canonical truth only: orb_outcomes JOIN daily_features + lane_allocation.json.
+Canonical truth only: orb_outcomes JOIN daily_features + current profile allocation.
 No production code touched. Read-only.
 """
 
@@ -48,10 +48,11 @@ from research.audit_6lane_scale_stability import (
     parse_strategy_id,
 )
 from research.filter_utils import filter_signal
+from trading_app.prop_profiles import resolve_allocation_json
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-LANE_ALLOCATION = Path("docs/runtime/lane_allocation.json")
+PROFILE_ID = "topstep_50k_mnq_auto"
 HOLDOUT = pd.Timestamp("2026-01-01")
 
 
@@ -229,9 +230,12 @@ def main() -> None:
     print(f"6-LANE UNFILTERED BASELINE STRESS-TEST  (ran {pd.Timestamp.now('UTC')})")
     print("=" * 80)
 
-    payload = json.loads(LANE_ALLOCATION.read_text(encoding="utf-8"))
+    resolved = resolve_allocation_json(PROFILE_ID)
+    if resolved.data is None:
+        raise RuntimeError(f"profile allocation file missing for {PROFILE_ID!r}")
+    payload = resolved.data
     deployed = [lane for lane in payload.get("lanes", []) if lane.get("status") == "DEPLOY"]
-    print(f"DEPLOY lanes from {LANE_ALLOCATION}: {len(deployed)}")
+    print(f"DEPLOY lanes from profile allocation: {len(deployed)}")
 
     results = [audit_lane(lane) for lane in deployed]
 

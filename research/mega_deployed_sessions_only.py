@@ -4,7 +4,7 @@ Narrows the 2026-04-15 mega (K=6252, cells on all 12 sessions × 3 instruments
 × all RRs × both directions × all apertures × 14 signals) down to the sessions
 and parameters actually traded live.
 
-Deployed lanes per docs/runtime/lane_allocation.json (2026-04-13):
+Deployed lanes per current profile allocation (2026-04-13):
   MNQ EUROPE_FLOW RR1.5 ORB_G5 (E2 O5)
   MNQ SINGAPORE_OPEN RR1.5 ATR_P50 (E2 O30)
   MNQ COMEX_SETTLE RR1.5 OVNRNG_100 (E2 O5)
@@ -48,7 +48,7 @@ from trading_app.holdout_policy import HOLDOUT_SACRED_FROM  # noqa: E402
 
 SEED = 20260415
 
-# Deployed config per lane_allocation.json
+# Deployed config per allocation file
 DEPLOYED_LANES = [
     # (session, rr, aperture)
     ("EUROPE_FLOW", 1.5, 5),

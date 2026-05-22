@@ -9700,15 +9700,16 @@ _LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST: frozenset[Path] = frozenset(
 _LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST: frozenset[Path] = frozenset()
 # Drained 2026-05-22 (Stage 1b-iii). All trading_app/ and scripts/tools/
 # readers now go through trading_app.prop_profiles.resolve_allocation_json
-# (or legacy_lane_allocation_path() for profile-agnostic sites). Stage 1d
+# (or legacy_lane_allocation_path() for profile-agnostic sites). Stage 1c
+# extends the same no-direct-literal guarantee to research scripts. Stage 1d
 # will retire the legacy single-profile path entirely once a stabilization
 # window confirms zero source="legacy" reads in the wild.
 
 
 def check_no_direct_lane_allocation_json_literals() -> list[str]:
-    """No file under ``trading_app/`` or ``scripts/tools/`` may contain the
-    literal ``lane_allocation.json`` outside the allocation-resolution
-    canonical-source allowlist.
+    """No file under allocation-consuming source roots may contain the literal
+    ``lane_allocation.json`` outside the allocation-resolution canonical-source
+    allowlist.
 
     Origin: Stage 1b authority-inversion (parent stage:
     ``docs/runtime/stages/2026-05-21-multi-profile-lane-allocation-stage-1b.md``).
@@ -9720,11 +9721,10 @@ def check_no_direct_lane_allocation_json_literals() -> list[str]:
     have to re-grep the codebase to confirm safety — making 1d a stochastic
     delete instead of the deterministic one we want.
 
-    Sweep scope: ``trading_app/**/*.py`` and ``scripts/tools/**/*.py``.
-    ``scripts/research/`` is deferred to Stage 1c per the parent-stage out-of-
-    scope section. ``pipeline/`` is excluded because this check itself
-    necessarily mentions the literal (and ``pipeline/`` does not contain
-    allocation readers).
+    Sweep scope: ``trading_app/**/*.py``, ``scripts/tools/**/*.py``,
+    ``scripts/research/**/*.py``, and ``research/**/*.py``. ``pipeline/`` is
+    excluded because this check itself necessarily mentions the literal (and
+    ``pipeline/`` does not contain allocation readers).
 
     Permanent allowlist (``_LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST``):
       - ``trading_app/prop_profiles.py`` — canonical resolver
@@ -9753,6 +9753,8 @@ def check_no_direct_lane_allocation_json_literals() -> list[str]:
     scan_roots = (
         PROJECT_ROOT / "trading_app",
         PROJECT_ROOT / "scripts" / "tools",
+        PROJECT_ROOT / "scripts" / "research",
+        PROJECT_ROOT / "research",
     )
 
     violations: list[str] = []
@@ -12487,28 +12489,32 @@ def check_fast_lane_phase5_capital_boundary(
         if report_script_path is not None
         else PROJECT_ROOT / "scripts" / "tools" / "fast_lane_research_review.py"
     )
-    scan_paths = paths if paths is not None else (
-        report_script,
-        PROJECT_ROOT / "scripts" / "tools" / "fast_lane_status.py",
-        PROJECT_ROOT / "scripts" / "tools" / "fast_lane_walk.py",
-        PROJECT_ROOT / "docs" / "specs" / "fast_lane_state_graph.md",
-        PROJECT_ROOT / "docs" / "plans" / "2026-05-21-fast-lane-v2-institutional-design.md",
-        PROJECT_ROOT / "docs" / "runtime" / "fast_lane_status.yaml",
+    scan_paths = (
+        paths
+        if paths is not None
+        else (
+            report_script,
+            PROJECT_ROOT / "scripts" / "tools" / "fast_lane_status.py",
+            PROJECT_ROOT / "scripts" / "tools" / "fast_lane_walk.py",
+            PROJECT_ROOT / "docs" / "specs" / "fast_lane_state_graph.md",
+            PROJECT_ROOT / "docs" / "plans" / "2026-05-21-fast-lane-v2-institutional-design.md",
+            PROJECT_ROOT / "docs" / "runtime" / "fast_lane_status.yaml",
+        )
     )
 
     violations: list[str] = []
     boundary_token = "REPORT_ONLY_NOT_DEPLOYMENT_AUTHORITY"
     banned_phrases = (
-        "DEPLOYMENT_" "CANDIDATE",
-        "DEPLOYMENT_" "RECOMMENDED",
-        "operator_" "deployment_decision",
-        "ready to " "deploy",
-        "go " "live",
-        "start " "trading",
-        "allocate " "capital",
-        "deployment_" "recommender",
-        "deployment " "recommendation",
-        "deployment " "decision",
+        "DEPLOYMENT_CANDIDATE",
+        "DEPLOYMENT_RECOMMENDED",
+        "operator_deployment_decision",
+        "ready to deploy",
+        "go live",
+        "start trading",
+        "allocate capital",
+        "deployment_recommender",
+        "deployment recommendation",
+        "deployment decision",
     )
     capital_paths = (
         "chordia_audit_log.yaml",
@@ -12534,8 +12540,7 @@ def check_fast_lane_phase5_capital_boundary(
             report_src = ""
         if boundary_token not in report_src:
             violations.append(
-                "check_fast_lane_phase5_capital_boundary: "
-                f"{report_script} must contain {boundary_token!r}."
+                f"check_fast_lane_phase5_capital_boundary: {report_script} must contain {boundary_token!r}."
             )
 
     for path in scan_paths:
@@ -13680,7 +13685,7 @@ CHECKS = [
         False,
     ),
     (
-        "No direct lane_allocation.json literals in trading_app/ or scripts/tools/ outside resolver allowlist (Stage 1b authority inversion)",
+        "No direct lane_allocation.json literals in allocation-consuming source roots outside resolver allowlist (Stage 1b/1c authority inversion)",
         check_no_direct_lane_allocation_json_literals,
         False,  # blocking — forcing function for Stage 1b reader migration + Stage 1d delete-only
         False,

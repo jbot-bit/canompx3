@@ -151,9 +151,13 @@ Path-override args (`allocation_path` kwarg) continue to take precedence — the
 
 **Sub-check — dead-allowlist-entry detection:** any temporary-allowlist file that exists but no longer contains the literal is flagged as a violation. This prevents the allowlist from going silently broad if a reader is migrated without the corresponding allowlist entry being removed. The allowlist must shrink monotonically — never lag behind the migrations.
 
-**Out of scope (deferred):**
+**Stage 1c scope:**
 
-- `scripts/research/**/*.py` — Stage 1c (research-script migration).
+- `scripts/research/**/*.py` and `research/**/*.py` — research-script migration
+  or explicit historical/report-only deferral. Real current-allocation readers
+  must use the canonical resolver; direct research-side allocation writes are
+  refused. Historical snapshot prose may remain historically accurate, but must
+  not retain the legacy filename literal.
 - `pipeline/**/*.py` — excluded because `check_drift.py` itself necessarily contains the literal, and there are no allocation readers in `pipeline/`.
 - `tests/**/*.py` — Stage 1b-iii fixture sweep.
 

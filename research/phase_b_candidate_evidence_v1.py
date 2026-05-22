@@ -356,7 +356,7 @@ def evaluate(con, c) -> dict:
     dsr_status = "DSR_PASS" if (not np.isnan(dsr) and dsr >= DSR_THRESHOLD) else "DSR_FAIL"
     c7_status = "C7_PASS" if n_is >= 100 else "C7_FAIL"
 
-    # Live deployed lanes per docs/runtime/lane_allocation.json (2026-04-18 rebalance)
+    # Live deployed lanes per current profile allocation (2026-04-18 rebalance)
     deployed_lanes = [
         ("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "EUROPE_FLOW ORB_G5"),
         ("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "SINGAPORE ATR_P50 15m"),

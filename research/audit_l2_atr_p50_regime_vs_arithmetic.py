@@ -212,7 +212,7 @@ def render_md(
     md.append("**Branch:** `research/l2-atr-p50-arithmetic-vs-regime-audit`")
     md.append("**Script:** `research/audit_l2_atr_p50_regime_vs_arithmetic.py`")
     md.append(
-        "**Parent claim:** `docs/runtime/lane_allocation.json` 2026-04-18 rebalance — "
+        "**Parent claim:** `current profile allocation` 2026-04-18 rebalance — "
         "lane deployed with annual_r=44.0, ExpR=+0.2407R, N=137, WR=53.3%, status HOT/DEPLOY."
     )
     md.append(

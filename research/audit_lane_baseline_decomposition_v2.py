@@ -34,12 +34,13 @@ from scipy import stats
 from pipeline.paths import GOLD_DB_PATH
 from research.filter_utils import filter_signal
 from trading_app.eligibility.builder import parse_strategy_id
+from trading_app.prop_profiles import resolve_allocation_json
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 DB = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 HOLDOUT = pd.Timestamp("2026-01-01")
-LANE_ALLOCATION = Path("docs/runtime/lane_allocation.json")
+PROFILE_ID = "topstep_50k_mnq_auto"
 rng = np.random.default_rng(42)
 
 
@@ -139,7 +140,10 @@ def audit_all_lanes() -> list[dict]:
     print("=" * 80)
     print("SECTION A — 6-LANE BASELINE vs FILTER DECOMPOSITION (APERTURE-CORRECT)")
     print("=" * 80)
-    payload = json.loads(LANE_ALLOCATION.read_text(encoding="utf-8"))
+    resolved = resolve_allocation_json(PROFILE_ID)
+    if resolved.data is None:
+        raise RuntimeError(f"profile allocation file missing for {PROFILE_ID!r}")
+    payload = resolved.data
     deployed = [lane for lane in payload.get("lanes", []) if lane.get("status") == "DEPLOY"]
 
     results = []

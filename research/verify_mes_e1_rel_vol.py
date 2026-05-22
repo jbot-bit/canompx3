@@ -349,7 +349,7 @@ def main() -> int:
     lines.append("./.venv-wsl/bin/python research/verify_mes_e1_rel_vol.py")
     lines.append("```")
     lines.append("")
-    lines.append("Read-only canonical run. No writes to `validated_setups`, `experimental_strategies`, `live_config`, or `lane_allocation.json`.")
+    lines.append("Read-only canonical run. No writes to `validated_setups`, `experimental_strategies`, `live_config`, or `allocation file`.")
     RESULT_DOC.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     print(f"VERDICT: {verdict}")

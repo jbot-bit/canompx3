@@ -7,8 +7,8 @@ Stage 4 of the MNQ era-stability audit. Implements the locked pre-reg at
 Behavioural contract (per stage file
 ``docs/runtime/stages/regime-stratified-lane-audit-runner.md``):
 
-- Reads the 4 deployed MNQ ``strategy_id`` values from
-  ``docs/runtime/lane_allocation.json`` at runtime — never hardcoded
+- Reads the deployed MNQ ``strategy_id`` values from the canonical profile
+  allocation resolver at runtime — never hardcoded
   (``feedback_allocator_orb_minutes_hardcode_2026_04_30.md`` class lesson).
 - H1 = ``scipy.stats.chi2_contingency`` on per-eligible-session
   (regime x fired/not_fired) 4x2 table + logistic GLM robustness check.
@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import math
 import sys
 from dataclasses import dataclass, field
@@ -47,10 +46,11 @@ from scipy import stats
 from research.filter_utils import filter_signal
 from trading_app.config import WF_START_OVERRIDE
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
+from trading_app.prop_profiles import resolve_allocation_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LANE_ALLOCATION_PATH = ROOT / "docs" / "runtime" / "lane_allocation.json"
+PROFILE_ID = "topstep_50k_mnq_auto"
 RESULTS_DIR = ROOT / "docs" / "audit" / "results"
 
 MIN_N_PER_CELL = 30
@@ -155,7 +155,7 @@ def _load_audit_spec(prereg_path: Path) -> AuditSpec:
         raise SystemExit("prereg missing scope.deployed_lanes")
     expected_strategy_ids = {str(d["strategy_id"]) for d in deployed}
 
-    lanes = _load_deployed_mnq_lanes(LANE_ALLOCATION_PATH, expected_strategy_ids)
+    lanes = _load_deployed_mnq_lanes(expected_strategy_ids)
 
     is_buckets = [b for b in buckets if b.role == "IS_TEST_INPUT" or b.role == "CURRENT_REGIME_DECISION_INPUT"]
     r6 = next((b for b in buckets if b.role == "FORWARD_MONITOR_ONLY_SACRED_HOLDOUT"), None)
@@ -178,24 +178,25 @@ def _load_audit_spec(prereg_path: Path) -> AuditSpec:
 
 
 def _load_deployed_mnq_lanes(
-    lane_alloc_path: Path,
     expected_strategy_ids: set[str],
+    allocation_path: Path | None = None,
 ) -> list[Lane]:
-    """Read the 4 currently-deployed MNQ lanes from lane_allocation.json.
+    """Read the currently-deployed MNQ lanes from the profile allocation file.
 
     Fails fast on count drift or strategy_id drift vs the prereg. Per
     ``feedback_allocator_orb_minutes_hardcode_2026_04_30.md`` the runner
     MUST source live deployment state from canonical JSON, not hardcode it.
     """
-    if not lane_alloc_path.exists():
-        raise SystemExit(f"lane_allocation.json missing at {lane_alloc_path}")
-    payload = json.loads(lane_alloc_path.read_text(encoding="utf-8"))
+    resolved = resolve_allocation_json(PROFILE_ID, allocation_path=allocation_path)
+    if resolved.data is None:
+        raise SystemExit(f"profile allocation file missing for {PROFILE_ID!r}")
+    payload = resolved.data
     raw_lanes = payload.get("lanes", [])
     mnq_lanes = [lane for lane in raw_lanes if lane.get("instrument") == "MNQ"]
     if len(mnq_lanes) != len(expected_strategy_ids):
         raise SystemExit(
             f"MNQ deployed-lane count drift: prereg expected "
-            f"{len(expected_strategy_ids)}, lane_allocation.json has "
+            f"{len(expected_strategy_ids)}, profile allocation has "
             f"{len(mnq_lanes)}. Expected ids: {sorted(expected_strategy_ids)}. "
             f"Got: {sorted(lane.get('strategy_id', '?') for lane in mnq_lanes)}."
         )
@@ -206,7 +207,7 @@ def _load_deployed_mnq_lanes(
     if missing or extra:
         raise SystemExit(
             f"MNQ deployed-lane strategy_id drift vs prereg. "
-            f"Missing in lane_allocation.json: {sorted(missing)}. "
+            f"Missing in profile allocation: {sorted(missing)}. "
             f"Extra (not in prereg): {sorted(extra)}."
         )
 
@@ -214,7 +215,7 @@ def _load_deployed_mnq_lanes(
     for raw in mnq_lanes:
         sid = str(raw["strategy_id"])
         # Parse entry_model / confirm_bars / rr_target from strategy_id since
-        # lane_allocation.json doesn't carry them as explicit fields.
+        # The allocation file doesn't carry them as explicit fields.
         from trading_app.eligibility.builder import parse_strategy_id
 
         dims = parse_strategy_id(sid)
@@ -789,7 +790,7 @@ def _write_markdown(spec: AuditSpec, results: dict[str, Any]) -> None:
     lines.append("")
     lines.append(
         "Per-lane regime-stability audit on the 4 currently-deployed MNQ lanes "
-        "from `docs/runtime/lane_allocation.json`. H1 = chi-square + logistic "
+        "from `current profile allocation`. H1 = chi-square + logistic "
         "GLM on per-eligible-session fire-rate across R2/R3/R4/R5. H2 = one-way "
         "ANOVA on per-trade `pnl_r_effective` across R2/R3/R4/R5. R0 and R6 are "
         "runtime-asserted excluded from hypothesis-test inputs. R6 is reported "

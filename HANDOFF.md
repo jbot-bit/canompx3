@@ -6,6 +6,16 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-22 — Codex Stage 1c lane-allocation research literal migration)
+
+- **Tool:** Codex
+- **Status:** Implemented locally; not committed. Stage 1c scope decision made explicitly: include both `scripts/research/**/*.py` and top-level `research/**/*.py`, because the latter had real direct `lane_allocation.json` literals outside the schema wording.
+- **What changed:** Expanded `pipeline/check_drift.py` literal gate to scan `trading_app/`, `scripts/tools/`, `scripts/research/`, and `research/`; updated `docs/specs/lane_allocation_schema.md` with the broader Stage 1c scope. Migrated active research readers to `trading_app.prop_profiles.resolve_allocation_json(PROFILE_ID)` and reworded historical/prose-only literals in research scripts.
+- **Apply boundary:** `research/mnq_profile_candidate_proposal_2026_05_11.py --apply-allocation` now fails closed; research proposals are patch artifacts only, with allocation application reserved for the canonical operator rebalance flow.
+- **Verification:** `rg -n "lane_allocation\\.json" scripts/research research --glob "*.py"` has no matches. `pytest tests/test_research tests/test_pipeline/test_check_drift_lane_allocation_grep_gate.py tests/test_pipeline/test_check_drift_lane_allocation_parity.py -q` => 613 passed, 8 skipped. Targeted ruff sanity on touched Python surfaces passed. `git diff --check` clean. Full `./.venv-wsl/bin/python pipeline/check_drift.py` => `NO DRIFT DETECTED: 157 checks passed [OK], 0 skipped (DB unavailable), 20 advisory`.
+- **No allocator/runtime mutation:** no `docs/runtime/lane_allocation.json`, `gold.db`, `validated_setups`, `chordia_audit_log.yaml`, broker state, account routing, or `trading_app/live/` runtime files touched.
+- **Next:** Keep Stage 1d delete-only until provenance confirms there are no legacy reads outside resolver allowlists.
+
 ## This Session (2026-05-22 — Codex Fast Lane V2 Phase 5 report-only research review)
 
 - **Tool:** Codex

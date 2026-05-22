@@ -2,8 +2,9 @@
 
 Companion to ``pipeline.check_drift.check_no_direct_lane_allocation_json_literals``.
 Pattern: monkeypatch PROJECT_ROOT to ``tmp_path`` and clone a minimal source-
-tree shape under ``tmp_path/{trading_app,scripts/tools}/`` containing files
-that either DO or DO NOT carry the ``lane_allocation.json`` literal.
+tree shape under ``tmp_path/{trading_app,scripts/tools,scripts/research,research}/``
+containing files that either DO or DO NOT carry the ``lane_allocation.json``
+literal.
 
 The test also covers:
   - Per-instance violation surfacing for non-allowlisted sites
@@ -122,8 +123,8 @@ class TestNoDirectLaneAllocationJsonLiterals:
         _patch_root(monkeypatch, tmp_path)
         assert check_no_direct_lane_allocation_json_literals() == []
 
-    def test_research_dir_not_scanned(self, tmp_path, monkeypatch):
-        """scripts/research/ is out of scope (Stage 1c)."""
+    def test_scripts_research_dir_is_scanned(self, tmp_path, monkeypatch):
+        """Stage 1c brings scripts/research/ into scope."""
         from pipeline.check_drift import check_no_direct_lane_allocation_json_literals
 
         _write_py(
@@ -132,7 +133,23 @@ class TestNoDirectLaneAllocationJsonLiterals:
             'PATH = "lane_allocation.json"\n',
         )
         _patch_root(monkeypatch, tmp_path)
-        assert check_no_direct_lane_allocation_json_literals() == []
+        violations = check_no_direct_lane_allocation_json_literals()
+        assert len(violations) == 1
+        assert "scripts/research/some_research.py:1" in violations[0]
+
+    def test_top_level_research_dir_is_scanned(self, tmp_path, monkeypatch):
+        """Stage 1c also covers top-level research/ scripts."""
+        from pipeline.check_drift import check_no_direct_lane_allocation_json_literals
+
+        _write_py(
+            tmp_path,
+            "research/current_allocation_reader.py",
+            'PATH = "docs/runtime/lane_allocation.json"\n',
+        )
+        _patch_root(monkeypatch, tmp_path)
+        violations = check_no_direct_lane_allocation_json_literals()
+        assert len(violations) == 1
+        assert "research/current_allocation_reader.py:1" in violations[0]
 
     def test_scripts_tools_violation(self, tmp_path, monkeypatch):
         """scripts/tools/ IS in scope. A non-allowlisted file there violates."""

@@ -3,7 +3,7 @@
 Purpose:
   Convert regime maps that already survived upstream research into discrete live
   actions on a selected execution profile using:
-    - exact live lane set from docs/runtime/lane_allocation.json
+    - exact live lane set from current profile allocation
     - canonical trade paths from account_survival.py
     - discrete contract actions (0 / 1 / 2)
     - profile-specific account rules and Criterion 11 survival logic
