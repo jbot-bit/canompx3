@@ -3,7 +3,7 @@
 Question: does garch_forecast_vol_pct add conditional ExpR edge on top of each
 of the 6 currently deployed lanes? (R5 sizer hypothesis per mechanism_priors.md.)
 
-Source: docs/runtime/lane_allocation.json (rebalance 2026-04-13).
+Source: current profile allocation (rebalance 2026-04-13).
 
 # e2-lookahead-policy: tainted
 # orb_{lane}_break_dir='long'/'short' used as WHERE predicates (lines ~130-133, ~157, ~182)
@@ -76,7 +76,7 @@ class Lane:
     filter_label: str
 
 
-# Per docs/runtime/lane_allocation.json 2026-04-13 rebalance
+# Per current profile allocation 2026-04-13 rebalance
 LANES = [
     Lane(
         name="L1_EUROPE_FLOW_ORB_G5_RR1.5",
@@ -386,7 +386,7 @@ def emit(lanes: list[Lane], results: list[dict], K: int) -> None:
         "# R5 Sizer Cross-Lane Replication — 6 Deployed Lanes",
         "",
         "**Date:** 2026-04-15",
-        "**Source deploy:** `docs/runtime/lane_allocation.json` rebalance 2026-04-13",
+        "**Source deploy:** `current profile allocation` rebalance 2026-04-13",
         "**Question:** Does `garch_forecast_vol_pct` add conditional ExpR edge on top of each deployed lane's filter? (R5 sizer hypothesis per `docs/institutional/mechanism_priors.md`.)",
         "**Design:** 6 lanes × 2 directions × 3 thresholds (60/70/80) = 36 primary hypotheses. Two-sided Welch t-test + bootstrap. BH-FDR correction at K=36. Per-year stability. IS-OOS split at 2026-01-01.",
         "",

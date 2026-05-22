@@ -6,7 +6,7 @@ Read-only stage for `topstep_50k_mnq_auto`.
 Inputs:
 - docs/audit/results/2026-05-11-mnq-all-active-deployability.json
 - canonical validated_setups metadata in gold.db
-- docs/runtime/lane_allocation.json / prop profile constraints
+- current profile allocation / prop profile constraints
 
 Outputs:
 - docs/audit/results/2026-05-11-mnq-profile-candidate-proposal.md
@@ -46,13 +46,12 @@ from trading_app.chordia import chordia_verdict_allows_deploy, load_chordia_audi
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.lane_correlation import RHO_REJECT_THRESHOLD, SUBSET_REJECT_THRESHOLD, _pearson
 from trading_app.prop_portfolio import profile_static_gate_reason
-from trading_app.prop_profiles import ACCOUNT_PROFILES, ACCOUNT_TIERS
+from trading_app.prop_profiles import ACCOUNT_PROFILES, ACCOUNT_TIERS, resolve_allocation_json
 from trading_app.strategy_fitness import _load_strategy_outcomes
 
 PROFILE_ID = "topstep_50k_mnq_auto"
 REPORT_DATE = date(2026, 5, 11)
 INPUT_JSON = Path("docs/audit/results/2026-05-11-mnq-all-active-deployability.json")
-ALLOCATION_JSON = Path("docs/runtime/lane_allocation.json")
 RESULT_MD = Path("docs/audit/results/2026-05-11-mnq-profile-candidate-proposal.md")
 RESULT_CSV = Path("docs/audit/results/2026-05-11-mnq-profile-candidate-proposal.csv")
 RESULT_PROMOTION_PATCH_JSON = Path("docs/audit/results/2026-05-11-mnq-profile-allocation-promotion-patch.json")
@@ -323,10 +322,10 @@ def classify_candidate(
 
 
 def _load_allocation() -> dict[str, Any]:
-    payload = json.loads(ALLOCATION_JSON.read_text(encoding="utf-8"))
-    if payload.get("profile_id") != PROFILE_ID:
-        raise RuntimeError(f"{ALLOCATION_JSON} profile mismatch: {payload.get('profile_id')!r}")
-    return payload
+    resolved = resolve_allocation_json(PROFILE_ID)
+    if resolved.data is None:
+        raise RuntimeError(f"profile allocation file missing for {PROFILE_ID!r}")
+    return resolved.data
 
 
 def _allocation_status_by_strategy(allocation: dict[str, Any]) -> dict[str, str]:
@@ -685,7 +684,7 @@ def _render(results: list[CandidateResult]) -> str:
         "",
         "**Date:** 2026-05-11",
         f"**Profile:** `{PROFILE_ID}`",
-        "**Live impact:** None. No DB, schema, broker, validated-setups, or `lane_allocation.json` mutation.",
+        "**Live impact:** None. No DB, schema, broker, validated-setups, or `allocation file` mutation.",
         "",
         "## Scope",
         "",
@@ -973,6 +972,10 @@ def write_promotion_patch(
     apply_allocation: bool = False,
     allow_runtime_bootstrap: bool = False,
 ) -> None:
+    if apply_allocation:
+        raise RuntimeError(
+            "research proposal is patch-artifact only; apply allocations with the canonical operator rebalance flow"
+        )
     promotions = build_promotion_candidates(
         results,
         allow_runtime_bootstrap=allow_runtime_bootstrap,
@@ -985,8 +988,6 @@ def write_promotion_patch(
     allocation = _load_allocation()
     patch = apply_promotions(allocation, promotions, rebalance_date=REPORT_DATE)
     RESULT_PROMOTION_PATCH_JSON.write_text(patch.to_json(), encoding="utf-8")
-    if apply_allocation:
-        ALLOCATION_JSON.write_text(patch.to_json(), encoding="utf-8")
 
 
 def main() -> int:
@@ -994,7 +995,7 @@ def main() -> int:
     parser.add_argument(
         "--apply-allocation",
         action="store_true",
-        help="Write the vetted promotion patch to docs/runtime/lane_allocation.json.",
+        help="Refused: research proposals emit patch artifacts only; use the canonical operator rebalance flow.",
     )
     parser.add_argument(
         "--bootstrap-runtime-control",
@@ -1018,8 +1019,6 @@ def main() -> int:
     print(f"Wrote {RESULT_CSV}")
     if RESULT_PROMOTION_PATCH_JSON.exists():
         print(f"Wrote {RESULT_PROMOTION_PATCH_JSON}")
-    if args.apply_allocation:
-        print(f"Applied promotion patch to {ALLOCATION_JSON}")
     print(dict(sorted(counts.items())))
     for result in results:
         if result.decision.decision in {"PASS_ADD", "PASS_REPLACE"}:

@@ -13,14 +13,13 @@ Truth sources:
 - canonical feature/filter state: `daily_features`
 
 Comparison-only deployment context:
-- `docs/runtime/lane_allocation.json`
+- current profile allocation file
 - `validated_setups`
 - `trading_app/prop_profiles.py`
 """
 
 from __future__ import annotations
 
-import json
 import sys
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -41,9 +40,7 @@ from research.comprehensive_deployed_lane_scan import compute_deployed_filter, l
 from research.research_portfolio_assembly import build_daily_equity, compute_drawdown, compute_honest_sharpe
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.prop_portfolio import profile_static_gate_reason
-from trading_app.prop_profiles import ACCOUNT_PROFILES, get_profile_lane_definitions
-
-ALLOCATION_PATH = PROJECT_ROOT / "docs/runtime/lane_allocation.json"
+from trading_app.prop_profiles import ACCOUNT_PROFILES, get_profile_lane_definitions, resolve_allocation_json
 
 
 @dataclass(frozen=True)
@@ -114,10 +111,10 @@ class CandidateAdditivityAudit:
 
 
 def _load_allocation_payload(profile_id: str) -> dict[str, Any]:
-    payload = json.loads(ALLOCATION_PATH.read_text(encoding="utf-8"))
-    if payload.get("profile_id") != profile_id:
-        raise RuntimeError(f"Expected profile_id={profile_id!r}, found {payload.get('profile_id')!r}")
-    return payload
+    resolved = resolve_allocation_json(profile_id)
+    if resolved.data is None:
+        raise RuntimeError(f"profile allocation file missing for {profile_id!r}")
+    return resolved.data
 
 
 def _rows_to_specs(rows: list[tuple[Any, ...]]) -> dict[str, LaneSpec]:
@@ -462,7 +459,6 @@ def run_additivity_audit(profile_id: str, candidate_ids: list[str]) -> dict[str,
 
 
 __all__ = [
-    "ALLOCATION_PATH",
     "CandidateAdditivityAudit",
     "CorrelationRow",
     "CorrelationSummary",

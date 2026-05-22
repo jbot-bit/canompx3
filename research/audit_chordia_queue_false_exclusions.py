@@ -31,7 +31,6 @@ Outputs:
 from __future__ import annotations
 
 import csv
-import json
 import random
 import sys
 from collections import Counter
@@ -57,11 +56,12 @@ from research.chordia_queue_recompute import (
     _FAMILY_MAP,
     _EXCLUDE_FAMILIES,
 )
+from trading_app.prop_profiles import resolve_allocation_json
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 QUEUE_CSV = _REPO_ROOT / "docs" / "audit" / "results" / "2026-05-12-chordia-audit-queue-candidates.csv"
-LANE_ALLOC_PATH = _REPO_ROOT / "docs" / "runtime" / "lane_allocation.json"
 CHORDIA_LOG_PATH = _REPO_ROOT / "docs" / "runtime" / "chordia_audit_log.yaml"
+PROFILE_ID = "topstep_50k_mnq_auto"
 
 OUT_PER_GATE_CSV = _REPO_ROOT / "docs" / "audit" / "results" / "2026-05-16-chordia-queue-false-exclusion-audit.csv"
 OUT_RESCUE_CSV = _REPO_ROOT / "docs" / "audit" / "results" / "2026-05-16-chordia-queue-rescued-quarantine.csv"
@@ -93,7 +93,10 @@ def _load_queue_csv() -> pd.DataFrame:
 
 
 def _load_lane_alloc() -> dict[str, str]:
-    data = json.loads(LANE_ALLOC_PATH.read_text())
+    resolved = resolve_allocation_json(PROFILE_ID)
+    if resolved.data is None:
+        raise RuntimeError(f"profile allocation file missing for {PROFILE_ID!r}")
+    data = resolved.data
     out: dict[str, str] = {}
     for lane in data.get("lanes", []):
         sid = lane.get("strategy_id")
@@ -509,7 +512,7 @@ def audit_g6_oos_power_tier(df: pd.DataFrame) -> GateAuditResult:
 
 
 def audit_g7_not_in_lane_alloc(df: pd.DataFrame, lane_alloc: dict[str, str]) -> GateAuditResult:
-    """G7: allocator_status column reflects lane_allocation.json membership."""
+    """G7: allocator_status column reflects profile allocation membership."""
     df = df.copy()
     df["allocator_status_recomputed"] = df["strategy_id"].map(
         lambda sid: lane_alloc.get(sid, "NOT_IN_LANE_ALLOC")
@@ -520,7 +523,7 @@ def audit_g7_not_in_lane_alloc(df: pd.DataFrame, lane_alloc: dict[str, str]) -> 
     rescued_ids = disagreement["strategy_id"].tolist()
     n_not_in_alloc_stored = int((stored == "NOT_IN_LANE_ALLOC").sum())
     n_not_in_alloc_recomp = int((recomp == "NOT_IN_LANE_ALLOC").sum())
-    # Disagreements here are temporal drift (queue ran 2026-05-12; lane_allocation.json
+    # Disagreements here are temporal drift (queue ran 2026-05-12; profile allocation
     # has since been updated). Not a funnel bug. Reclassify n_bug=0, n_drift=disagreement.
     notes = (
         f"allocator_status agreement: "
@@ -528,7 +531,7 @@ def audit_g7_not_in_lane_alloc(df: pd.DataFrame, lane_alloc: dict[str, str]) -> 
         f"Stored NOT_IN_LANE_ALLOC: {n_not_in_alloc_stored}. "
         f"Recomputed NOT_IN_LANE_ALLOC: {n_not_in_alloc_recomp}. "
         f"Disagreements ({len(rescued_ids)}) reflect temporal drift between "
-        f"queue snapshot (2026-05-12) and current lane_allocation.json — "
+        f"queue snapshot (2026-05-12) and current profile allocation — "
         f"NOT a false exclusion. allocator_status is metadata, never a blocker."
     )
     return GateAuditResult(
@@ -550,7 +553,6 @@ def audit_g8_family_purged_or_singleton(df: pd.DataFrame) -> GateAuditResult:
     """G8: family_status in {PURGED, SINGLETON} -> blocker."""
     has_purged = df["blockers"].fillna("").str.contains("family_purged")
     has_singleton = df["blockers"].fillna("").str.contains("family_singleton")
-    excluded = df[has_purged | has_singleton]
     n_excl = int((has_purged | has_singleton).sum())
     # CSV-internal recompute from family_status column.
     recomp_purged = df["family_status"].astype(str) == "PURGED"

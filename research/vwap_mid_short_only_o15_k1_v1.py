@@ -7,7 +7,7 @@ Re-executes the SHORT-only subset of the RR1.5 O15 cell under clustered standard
 errors at trading_day level, applies the Chordia 2018 no-theory strict t-hurdle
 (t_clustered >= 3.79), and computes the four-gate deployment chain (Chordia /
 Harvey-Liu IS-Sharpe haircut at K_effective=8 / cost-aware ExpR / pairwise
-correlation vs current lane_allocation.json) as an INDEPENDENT report.
+correlation vs current profile allocation) as an INDEPENDENT report.
 
 Audit verdict (PASS_K1_CHORDIA / FAIL_K1) is decided ON IS clustered-SE ALONE
 per the pre-reg. The deployment_gate_chain is reported adjacent to but separate
@@ -16,7 +16,7 @@ from the audit verdict; a PASS_K1_CHORDIA cell can still fail deployment gates.
 Route contract (per pre-reg ``not_done_by_this_pre_reg``):
 
 - No writes to validated_setups, experimental_strategies, edge_families.
-- No writes to lane_allocation.json, live_config.json, bot_state.json.
+- No writes to allocation files, live_config.json, bot_state.json.
 - No writes to docs/runtime/chordia_audit_log.yaml.
 - No modification of prior PASS_CHORDIA chordia_audit_log.yaml entries.
 
@@ -28,7 +28,7 @@ Writes (gated on execution_gate.allowed_now=true; refuse otherwise):
 Even though these artifacts read only canonical layers, the act of writing them
 under a quarantined (allowed_now=false) pre-reg produces an audit-evidence trail
 that has not passed human review. Use ``--dry-run`` for review-mode inspection.
-Canonical-layer writes (validated_setups / chordia_audit_log / lane_allocation)
+Canonical-layer writes (validated_setups / chordia_audit_log / allocation files)
 are never performed by this runner regardless of mode.
 
 Post-selection-inference contract (from pre-reg ``post_selection_disclosure``):
@@ -67,6 +67,7 @@ from trading_app.config import ALL_FILTERS, VWAPBreakDirectionFilter, WF_START_O
 from trading_app.eligibility.builder import parse_strategy_id
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.lane_correlation import RHO_REJECT_THRESHOLD, _pearson
+from trading_app.prop_profiles import resolve_allocation_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +84,7 @@ EXPECTED_K_EFFECTIVE = 8
 EXPECTED_N_TRIALS_DECLARED = 1
 EXPECTED_SCRATCH_POLICY = "realized-eod"
 EXPECTED_N_IS_REFERENCE = 354
+PROFILE_ID = "topstep_50k_mnq_auto"
 EXPECTED_EXPR_IS_REFERENCE = 0.2572
 RECONCILIATION_BLOCK_TOLERANCE_EXPR = 0.005
 RECONCILIATION_HALT_TOLERANCE_EXPR = 0.030
@@ -695,12 +697,10 @@ def _cost_aware_expr_gate(
     }
 
 
-def _load_lane_allocation_json() -> dict[str, Any]:
-    path = ROOT / "docs" / "runtime" / "lane_allocation.json"
-    _assert(path.exists(), f"lane_allocation.json missing at {path}")
-    import json
-
-    return json.loads(path.read_text(encoding="utf-8"))
+def _load_profile_allocation() -> dict[str, Any]:
+    resolved = resolve_allocation_json(PROFILE_ID)
+    _assert(resolved.data is not None, f"profile allocation file missing for {PROFILE_ID!r}")
+    return resolved.data
 
 
 def _correlation_gate(
@@ -708,8 +708,8 @@ def _correlation_gate(
     cell_eval: dict[str, Any],
     con: duckdb.DuckDBPyConnection,
 ) -> dict[str, Any]:
-    """Gate 4: pairwise Pearson correlation of daily-pnl vs every lane in lane_allocation.json::lanes[]."""
-    lane_alloc = _load_lane_allocation_json()
+    """Gate 4: pairwise Pearson correlation of daily-pnl vs profile allocation lanes."""
+    lane_alloc = _load_profile_allocation()
     lanes = lane_alloc.get("lanes", []) or []
     is_frame = cell_eval["is_fired_frame"]
     oos_frame = cell_eval["oos_fired_frame"]
@@ -839,7 +839,7 @@ def _deployment_gate_chain(
     cost_gate = _cost_aware_expr_gate(hyp.cell, is_metrics, con)
     gate_3_pass = bool(cost_gate["pass"])
 
-    # Gate 4: Pairwise correlation vs current lane_allocation.json.
+    # Gate 4: Pairwise correlation vs current profile allocation.
     corr_gate = _correlation_gate(hyp.cell, cell_eval, con)
     gate_4_pass = bool(corr_gate["pass"])
 
@@ -885,7 +885,7 @@ def _deployment_gate_chain(
         },
         {
             "gate_id": 4,
-            "gate_name": "Pairwise correlation vs lane_allocation.json (max |rho|)",
+            "gate_name": "Pairwise correlation vs profile allocation (max |rho|)",
             "measured_value": corr_gate["max_rho"],
             "threshold": corr_gate["threshold"],
             "direction": "<",
@@ -1069,8 +1069,8 @@ def _write_result_md(
         "substitute and NOT a correlation-gate substitute.\n"
         f"- Cost model: `pipeline.cost_model.COST_SPECS['{hyp.cell.instrument}']` queried at runtime.\n"
         f"- Correlation gate: `trading_app.lane_correlation.RHO_REJECT_THRESHOLD` queried at runtime "
-        f"({RHO_REJECT_THRESHOLD:.2f}); pairwise vs every lane in `docs/runtime/lane_allocation.json::lanes[]`.\n"
-        "- No writes to `validated_setups`, `experimental_strategies`, `lane_allocation.json`, "
+        f"({RHO_REJECT_THRESHOLD:.2f}); pairwise vs every lane in the current profile allocation.\n"
+        "- No writes to `validated_setups`, `experimental_strategies`, allocation files, "
         "`chordia_audit_log.yaml`, `bot_state.json`, or `live_config.json`.\n\n"
     )
 

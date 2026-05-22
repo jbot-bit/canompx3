@@ -26,7 +26,6 @@ One-shot lock: refuses to re-run if result MD exists.
 from __future__ import annotations
 
 import io
-import json
 import sys
 import time
 from pathlib import Path
@@ -52,7 +51,7 @@ from trading_app.lane_allocator import (  # noqa: E402
     compute_pairwise_correlation,
     enrich_scores_with_liveness,
 )
-from trading_app.prop_profiles import ACCOUNT_PROFILES, ACCOUNT_TIERS  # noqa: E402
+from trading_app.prop_profiles import ACCOUNT_PROFILES, ACCOUNT_TIERS, resolve_allocation_json  # noqa: E402
 
 # =============================================================================
 # One-shot lock + paths
@@ -62,7 +61,6 @@ REBALANCE_DATE = date(2026, 4, 18)
 PROFILE_ID = "topstep_50k_mnq_auto"
 RESULT_MD = Path("docs/audit/results/2026-04-18-allocator-rho-audit-excluded-lanes.md")
 RESULT_CSV = Path("docs/audit/results/2026-04-18-allocator-rho-matrix.csv")
-LANE_ALLOCATION_JSON = Path("docs/runtime/lane_allocation.json")
 
 def _refuse_rerun_if_result_exists() -> None:
     """One-shot audit discipline guard. Called from main(), NOT at module load.
@@ -253,15 +251,18 @@ def load_profile_state() -> dict:
 
 
 def assert_self_consistency(state: dict) -> dict:
-    """Reproduction of live-6 must match lane_allocation.json. HALT if not."""
+    """Reproduction of live set must match the profile allocation. HALT if not."""
     selected_ids = {s.strategy_id for s in state["selected"]}
-    with open(LANE_ALLOCATION_JSON, encoding="utf-8") as f:
-        alloc_json = json.load(f)
+    resolved = resolve_allocation_json(PROFILE_ID)
+    if resolved.data is None:
+        print(f"\nSELF-CONSISTENCY FAILURE — profile allocation missing for {PROFILE_ID}")
+        sys.exit(1)
+    alloc_json = resolved.data
     json_ids = {lane["strategy_id"] for lane in alloc_json.get("lanes", [])}
     if selected_ids != json_ids:
         missing = json_ids - selected_ids
         extra = selected_ids - json_ids
-        print("\nSELF-CONSISTENCY FAILURE — reproduction does not match lane_allocation.json:")
+        print("\nSELF-CONSISTENCY FAILURE — reproduction does not match profile allocation:")
         if missing:
             print(f"  JSON has, reproduction doesn't: {missing}")
         if extra:
@@ -417,7 +418,7 @@ def write_result_md(
         "",
         "- Reproduces the 2026-04-18 allocator rebalance end-to-end using canonical",
         "  `trading_app.lane_allocator.{compute_lane_scores, compute_pairwise_correlation, build_allocation}`.",
-        "- Self-consistency check: reproduction must match `docs/runtime/lane_allocation.json` selected set exactly.",
+        "- Self-consistency check: reproduction must match `current profile allocation` selected set exactly.",
         "- Gate-order classification: rank → rho → DD (first-failing wins).",
         "- Mode A/B labels: trailing_expr uses allocator's 12mo trailing window which INCLUDES post-2026-01-01 data (Mode A OOS already consumed by allocator rebalance; this audit re-reads that same window — no new OOS consumption).",
         '- Bootstrap CI + Fisher-z p-value + BH-FDR at q=0.05 applied to "rho<0.70" claims.',
@@ -425,7 +426,7 @@ def write_result_md(
         "",
         "## Self-consistency check",
         "",
-        f"**PASS.** Reproduction selected {len(selected_ids)} strategy_ids, matches live-6 in lane_allocation.json.",
+        f"**PASS.** Reproduction selected {len(selected_ids)} strategy_ids, matches live set in profile allocation.",
         "",
         "## Verdict breakdown",
         "",

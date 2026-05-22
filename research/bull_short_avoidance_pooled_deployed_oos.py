@@ -6,8 +6,8 @@ The lane-specific verify found IS was valid on `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_
 power to detect the IS effect — a RULE 3.3 STATISTICALLY_USELESS tier. Corrected
 verdict was CONDITIONAL — UNVERIFIED, not REJECTED.
 
-This script runs the highest-EV next test: pool 2026 Q1 shorts across ALL 6
-DEPLOY lanes (`docs/runtime/lane_allocation.json` rebalance 2026-04-18) under
+This script runs the highest-EV next test: pool 2026 Q1 shorts across all
+DEPLOY lanes from the current profile allocation under
 the same bull/bear prior-day partition. Same hypothesis, pooled scope →
 OOS per-group N climbs from ~20 to hopefully ≥100, which is where RULE 3.3
 flips to CAN_REFUTE.
@@ -23,7 +23,7 @@ Data discipline:
     - Canonical layers only: `orb_outcomes`, `daily_features`, `bars_1m`
     - Canonical filter delegation via `research.filter_utils.filter_signal`
       for EACH lane's individual filter
-    - Lane roster from `docs/runtime/lane_allocation.json` (live truth)
+    - Lane roster from the current profile allocation (live truth)
     - Mode A holdout per `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`
     - Per-lane shorts are KEPT SEPARATE by trading_day × orb_label —
       same day with TOKYO_OPEN and NYSE_OPEN shorts stays two rows (real
@@ -34,11 +34,9 @@ RULE 3.3 compliance: explicit OOS power report next to dir_match verdict.
 
 from __future__ import annotations
 
-import json
 import sys
 import warnings
 from datetime import date
-from pathlib import Path
 
 import duckdb
 import numpy as np
@@ -56,8 +54,9 @@ from research.oos_power import (  # noqa: E402
     power_verdict,
 )
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM  # noqa: E402
+from trading_app.prop_profiles import resolve_allocation_json  # noqa: E402
 
-LANE_ALLOCATION_PATH = Path("docs/runtime/lane_allocation.json")
+PROFILE_ID = "topstep_50k_mnq_auto"
 BLOCK_LEN = 5
 N_BOOT = 5000
 RNG_SEED = 20260420
@@ -104,8 +103,10 @@ def parse_strategy_id(sid: str) -> dict:
 
 def load_deploy_lanes() -> list[dict]:
     """Return parsed lane specs for every DEPLOY lane in the live allocator."""
-    with open(LANE_ALLOCATION_PATH) as f:
-        alloc = json.load(f)
+    resolved = resolve_allocation_json(PROFILE_ID)
+    if resolved.data is None:
+        raise RuntimeError(f"profile allocation file missing for {PROFILE_ID!r}")
+    alloc = resolved.data
     specs = []
     for lane in alloc["lanes"]:
         if lane.get("status") != "DEPLOY":
@@ -214,7 +215,7 @@ def main() -> None:
     print("=" * 90)
     print("BULL-DAY SHORT AVOIDANCE - POOLED DEPLOYED LANES OOS (Pathway B, K=1)")
     print("=" * 90)
-    print(f"Allocator snapshot: {LANE_ALLOCATION_PATH}")
+    print(f"Allocator snapshot: profile allocation for {PROFILE_ID}")
     print(f"Mode A holdout: {holdout}")
     print(f"Block len = {BLOCK_LEN}, n_boot = {N_BOOT}, seed = {RNG_SEED}")
     print()

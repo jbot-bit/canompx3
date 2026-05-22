@@ -22,7 +22,7 @@ Canonical machinery delegated (no re-encoding per
 
 Read-only against ``gold.db``. No writes to ``validated_setups``,
 ``experimental_strategies``, ``chordia_audit_log.yaml``, or
-``lane_allocation.json``.
+``allocation file``.
 
 Pre-reg:
     docs/audit/hypotheses/2026-05-05-oos-reconcile-ovnrng100.yaml

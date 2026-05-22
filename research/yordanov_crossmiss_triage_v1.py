@@ -48,7 +48,7 @@ from research.filter_utils import filter_signal
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 
 # ---------------------------------------------------------------------------
-# Lane scope — verbatim from docs/runtime/lane_allocation.json:7-65 (deployed
+# Lane scope — verbatim from current profile allocation:7-65 (deployed
 # MNQ lanes as of rebalance_date 2026-05-03). Mirrors pre-reg scope.lanes.
 # ---------------------------------------------------------------------------
 
@@ -78,7 +78,7 @@ LANES: list[dict] = [
         "filter_key": "COST_LT12",
     },
 ]
-# @canonical-source: docs/runtime/lane_allocation.json:7-65
+# @canonical-source: current profile allocation:7-65
 
 
 PRE_REG_PATH = Path("docs/audit/hypotheses/2026-05-07-mnq-yordanov-crossmiss-triage-v1.yaml")
@@ -685,7 +685,7 @@ Per-lane confirmations (gap_pp >= 25 AND not UNDERPOWERED): {sum(1 for d in per_
 - Bucket assignment: first-event-wins on (favourable_excursion >= 0.5×(orb_high−orb_low), bar.close re-cross of orb_mid). Side from entry_price vs orb_mid.
 - Hit metric: P(post-entry favourable excursion >= 0.5× deviation target before exit_ts).
 - scratch-policy: drop (`WHERE pnl_r IS NOT NULL`); matches deployed-lane convention.
-- No writes to `validated_setups`, `experimental_strategies`, `lane_allocation.json`, `paper_trades`.
+- No writes to `validated_setups`, `experimental_strategies`, `allocation file`, `paper_trades`.
 
 ## Reproduction
 

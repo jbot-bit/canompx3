@@ -19,7 +19,7 @@
     delegate via ``trading_app.eligibility.builder.parse_strategy_id`` and
     build SQL from the parsed ``orb_minutes``.
 
-For each of the 6 currently-deployed lanes (per lane_allocation.json),
+For each currently-deployed lane in the current profile allocation,
 compute fire-rate-by-year and lift-by-year to detect scale-artifact
 signatures like the one found at L4 OVNRNG_50_FAST10 (see correction
 file 2026-04-20-nyse-open-ovnrng-fast10-correction.md).
@@ -28,14 +28,12 @@ A scale-artifact signature is:
   (a) fire rate drifts monotonically >20pp across IS years, AND
   (b) lift over unfiltered baseline collapses toward zero in recent years.
 
-Canonical truth only: orb_outcomes JOIN daily_features + lane_allocation.json.
+Canonical truth only: orb_outcomes JOIN daily_features + current profile allocation.
 """
 
 from __future__ import annotations
 
-import json
 import sys
-from pathlib import Path
 
 import duckdb
 import numpy as np
@@ -43,12 +41,13 @@ import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
 from research.filter_utils import filter_signal
+from trading_app.prop_profiles import resolve_allocation_json
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 DB = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 HOLDOUT = pd.Timestamp("2026-01-01")
-LANE_ALLOCATION = Path("docs/runtime/lane_allocation.json")
+PROFILE_ID = "topstep_50k_mnq_auto"
 
 
 def parse_strategy_id(sid: str) -> dict:
@@ -185,9 +184,12 @@ def main() -> None:
     print("=" * 80)
     print(f"6-LANE SCALE-STABILITY AUDIT  (ran {pd.Timestamp.now('UTC')})")
     print("=" * 80)
-    payload = json.loads(LANE_ALLOCATION.read_text(encoding="utf-8"))
+    resolved = resolve_allocation_json(PROFILE_ID)
+    if resolved.data is None:
+        raise RuntimeError(f"profile allocation file missing for {PROFILE_ID!r}")
+    payload = resolved.data
     deployed = [lane for lane in payload.get("lanes", []) if lane.get("status") == "DEPLOY"]
-    print(f"DEPLOY lanes from {LANE_ALLOCATION}: {len(deployed)}")
+    print(f"DEPLOY lanes from profile allocation: {len(deployed)}")
     for lane in deployed:
         audit_lane(lane)
 

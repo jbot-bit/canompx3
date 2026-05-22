@@ -87,7 +87,7 @@ def test_load_deployed_mnq_lanes_count_4(tmp_path: Path) -> None:
         },
     ]
     path = _fixture_lane_allocation(tmp_path, raw_lanes)
-    lanes = _load_deployed_mnq_lanes(path, PREREG_STRATEGY_IDS)
+    lanes = _load_deployed_mnq_lanes(PREREG_STRATEGY_IDS, allocation_path=path)
     assert len(lanes) == 4
     assert {ln.strategy_id for ln in lanes} == PREREG_STRATEGY_IDS
 
@@ -115,7 +115,7 @@ def test_load_deployed_mnq_lanes_count_mismatch_raises(tmp_path: Path) -> None:
     ]  # 3 lanes, not 4
     path = _fixture_lane_allocation(tmp_path, raw_lanes)
     with pytest.raises(SystemExit, match="count drift"):
-        _load_deployed_mnq_lanes(path, PREREG_STRATEGY_IDS)
+        _load_deployed_mnq_lanes(PREREG_STRATEGY_IDS, allocation_path=path)
 
 
 def test_load_deployed_mnq_lanes_strategy_id_drift_raises(tmp_path: Path) -> None:
@@ -148,7 +148,7 @@ def test_load_deployed_mnq_lanes_strategy_id_drift_raises(tmp_path: Path) -> Non
     ]
     path = _fixture_lane_allocation(tmp_path, raw_lanes)
     with pytest.raises(SystemExit, match="strategy_id drift"):
-        _load_deployed_mnq_lanes(path, PREREG_STRATEGY_IDS)
+        _load_deployed_mnq_lanes(PREREG_STRATEGY_IDS, allocation_path=path)
 
 
 # ============================================================================

@@ -42,7 +42,7 @@ Doctrine grounding
 - Stage file: docs/runtime/stages/2026-05-19-cherry-pick-grounder.md
 
 This script does NOT write to chordia_audit_log.yaml, validated_setups,
-lane_allocation.json, or any file under trading_app/live/. It only writes to
+allocation file, or any file under trading_app/live/. It only writes to
 docs/audit/hypotheses/drafts/<slug>.grounded.yaml (PASS) or
 <slug>.grounded.rejected.txt (REFUSED). The original draft is never mutated.
 """

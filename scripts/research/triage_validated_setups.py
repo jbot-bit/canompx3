@@ -11,7 +11,7 @@ NEVER:
 
 - Writes to ``experimental_strategies``, ``validated_setups``, or any
   table in ``gold.db``.
-- Touches ``docs/runtime/lane_allocation.json``,
+- Touches ``current profile allocation``,
   ``docs/runtime/chordia_audit_log.yaml``, or files under
   ``trading_app/live/*``.
 - Promotes drafts out of ``drafts/`` into the active ``hypotheses/``

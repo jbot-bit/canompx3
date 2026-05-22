@@ -29,7 +29,7 @@ Literature grounding:
       independent of per-lane Sharpe ranking.
 
 Method:
-  1. Load 6 deployed lanes from docs/runtime/lane_allocation.json
+  1. Load deployed lanes from the current profile allocation
   2. For each lane, get trade days from strategy_trade_days table; join
      to orb_outcomes to get pnl_r per (lane, trading_day).
   3. Pivot to wide matrix: rows = trading_day, cols = strategy_id,
@@ -54,7 +54,6 @@ Idempotent / read-only: no DB writes, no memory writes.
 
 from __future__ import annotations
 
-import json
 import math
 import sys
 from pathlib import Path
@@ -68,9 +67,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.paths import GOLD_DB_PATH  # noqa: E402
+from trading_app.prop_profiles import resolve_allocation_json  # noqa: E402
 
-# Deployed-lane manifest path (canonical source for who is live)
-LANE_ALLOC_PATH = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
+PROFILE_ID = "topstep_50k_mnq_auto"
 
 SESSION_REGION = {
     "TOKYO_OPEN": "ASIA",
@@ -129,8 +128,10 @@ def parse_strategy_id(sid: str) -> dict:
 
 
 def load_lanes() -> list[dict]:
-    with open(LANE_ALLOC_PATH) as f:
-        data = json.load(f)
+    resolved = resolve_allocation_json(PROFILE_ID)
+    if resolved.data is None:
+        raise RuntimeError(f"profile allocation file missing for {PROFILE_ID!r}")
+    data = resolved.data
     raw = data.get("deployed_lanes") or data.get("lanes") or []
     return [parse_strategy_id(ln["strategy_id"]) for ln in raw]
 
@@ -243,7 +244,7 @@ def main() -> int:
     print("=" * 78)
     print()
     print(f"Canonical DB: {GOLD_DB_PATH}")
-    print(f"Lane manifest: {LANE_ALLOC_PATH}")
+    print(f"Lane manifest: profile allocation for {PROFILE_ID}")
     print()
 
     lanes = load_lanes()

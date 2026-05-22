@@ -20,7 +20,7 @@ filter. If flagged, the correct deployment class is "cost-gate", not
 "edge", and a behavioral overlay is built on a flawed premise.
 
 Scope is CROSS-LANE over all `topstep_50k_mnq_auto` deployed lanes that
-use `ORB_G5` (3 of 6 per `docs/runtime/lane_allocation.json`):
+use `ORB_G5` (3 of 6 per `current profile allocation`):
 
 - MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5            (O5)
 - MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5           (O5)
@@ -83,7 +83,7 @@ class LaneSpec:
 
 
 # The 3 ORB_G5 deployed lanes on topstep_50k_mnq_auto per
-# docs/runtime/lane_allocation.json (2026-04-18 rebalance)
+# current profile allocation (2026-04-18 rebalance)
 ORB_G5_DEPLOYED_LANES: tuple[LaneSpec, ...] = (
     LaneSpec(
         strategy_id="MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5",

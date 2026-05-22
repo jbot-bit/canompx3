@@ -37,12 +37,12 @@ RECOMMENDATIONS = (
 )
 
 BANNED_ACTIVE_SURFACE_PHRASES = (
-    "DEPLOYMENT_" "CANDIDATE",
-    "operator_" "deployment_decision",
-    "ready to " "deploy",
-    "go " "live",
-    "start " "trading",
-    "allocate " "capital",
+    "_".join(("DEPLOYMENT", "CANDIDATE")),
+    "_".join(("operator", "deployment_decision")),
+    " ".join(("ready", "to", "deploy")),
+    " ".join(("go", "live")),
+    " ".join(("start", "trading")),
+    " ".join(("allocate", "capital")),
 )
 
 PASS_HEAVYWEIGHT_VERDICTS = frozenset({"PASS_CHORDIA", "PASS_PROTOCOL_A", "PASS"})
@@ -254,8 +254,12 @@ def build_review_report(
                 "primary_blocker": status_entry.get("primary_blocker"),
                 "heavyweight_verdict": _heavyweight_verdict(journal_entry),
                 "oos_power_tier": (journal_entry or {}).get("oos_power_tier"),
-                "strategy_lab_verdict": strategy_lab_payload.get("verdict") if isinstance(strategy_lab_payload, dict) else None,
-                "strategy_lab_reason": strategy_lab_payload.get("reason") if isinstance(strategy_lab_payload, dict) else None,
+                "strategy_lab_verdict": strategy_lab_payload.get("verdict")
+                if isinstance(strategy_lab_payload, dict)
+                else None,
+                "strategy_lab_reason": strategy_lab_payload.get("reason")
+                if isinstance(strategy_lab_payload, dict)
+                else None,
                 **classification,
             }
         )

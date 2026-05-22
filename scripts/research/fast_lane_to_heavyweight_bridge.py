@@ -32,7 +32,7 @@ Doctrine grounding
 - OOS power doctrine: ``.claude/rules/backtesting-methodology.md`` RULE 3.3
 
 This script does NOT write to ``chordia_audit_log.yaml``,
-``validated_setups``, ``lane_allocation.json``, or any file under
+``validated_setups``, ``allocation file``, or any file under
 ``trading_app/live/``. The output is a draft YAML on disk plus an operator
 checklist printed to stdout.
 """
@@ -211,9 +211,7 @@ def _lookup_promote_queue_entry(strategy_id: str, *, queue_path: Path | None = N
     return None
 
 
-def _graveyard_has_lane_match(
-    structural_hash: str, *, digest_path: Path | None = None
-) -> dict[str, Any] | None:
+def _graveyard_has_lane_match(structural_hash: str, *, digest_path: Path | None = None) -> dict[str, Any] | None:
     """Return the FIRST lane-level graveyard entry whose structural_hash
     matches, or None.
 

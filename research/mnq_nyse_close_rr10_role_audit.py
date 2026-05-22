@@ -10,7 +10,7 @@ Truth sources:
 - canonical feature/filter state: `daily_features`
 
 Comparison-only deployment context:
-- `docs/runtime/lane_allocation.json`
+- current profile allocation file
 - `validated_setups` for the exact live-lane parameters
 - `trading_app/prop_profiles.py` for slot/session policy
 
@@ -22,12 +22,11 @@ Method:
   honest business-day Sharpe and drawdown on a common calendar.
 - Keep 2026 OOS as monitor-only; selection verdict is based on pre-2026 IS.
 
-No writes to validated_setups / live config / lane_allocation.
+No writes to validated_setups / live config / allocation files.
 """
 
 from __future__ import annotations
 
-import json
 import sys
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -46,10 +45,9 @@ from pipeline.paths import GOLD_DB_PATH
 from research.comprehensive_deployed_lane_scan import compute_deployed_filter, load_lane
 from research.research_portfolio_assembly import build_daily_equity, compute_drawdown, compute_honest_sharpe
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
-from trading_app.prop_profiles import ACCOUNT_PROFILES
+from trading_app.prop_profiles import ACCOUNT_PROFILES, resolve_allocation_json
 
 PROFILE_ID = "topstep_50k_mnq_auto"
-ALLOCATION_PATH = PROJECT_ROOT / "docs/runtime/lane_allocation.json"
 RESULT_PATH = PROJECT_ROOT / "docs/audit/results/2026-04-23-mnq-nyse-close-rr10-role-audit.md"
 HOLDOUT_DATE = HOLDOUT_SACRED_FROM
 
@@ -83,13 +81,14 @@ class PortfolioSnapshot:
 
 
 def load_live_lane_specs() -> list[LaneSpec]:
-    payload = json.loads(ALLOCATION_PATH.read_text(encoding="utf-8"))
-    if payload.get("profile_id") != PROFILE_ID:
-        raise RuntimeError(f"Expected profile_id={PROFILE_ID!r}, found {payload.get('profile_id')!r}")
+    resolved = resolve_allocation_json(PROFILE_ID)
+    if resolved.data is None:
+        raise RuntimeError(f"profile allocation file missing for {PROFILE_ID!r}")
+    payload = resolved.data
 
     strategy_ids = [lane["strategy_id"] for lane in payload.get("lanes", [])]
     if not strategy_ids:
-        raise RuntimeError(f"{ALLOCATION_PATH} contains no lanes")
+        raise RuntimeError("profile allocation contains no lanes")
 
     placeholders = ", ".join(["?"] * len(strategy_ids))
     query = f"""
@@ -367,7 +366,7 @@ def render_doc(
         "",
         "Comparison-only deployment context:",
         "",
-        "- `docs/runtime/lane_allocation.json`",
+        "- Current profile allocation file",
         "- `validated_setups` for exact live-lane parameters",
         "- `trading_app/prop_profiles.py`",
         "",
@@ -447,7 +446,7 @@ def render_doc(
             "./.venv-wsl/bin/python research/mnq_nyse_close_rr10_role_audit.py",
             "```",
             "",
-            "No randomness. Read-only DB. No writes to `validated_setups` / `experimental_strategies` / `live_config` / `lane_allocation.json`.",
+            "No randomness. Read-only DB. No writes to `validated_setups` / `experimental_strategies` / `live_config` / allocation files.",
         ]
     )
     return "\n".join(parts) + "\n"

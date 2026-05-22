@@ -197,7 +197,9 @@ def test_render_report_separates_direct_heavyweight_backlog() -> None:
             **_entry("OLD_DIRECT", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_capital_review"),
             "lineage_class": "DIRECT_HEAVYWEIGHT",
         },
-        _entry("REJECTED_FAST", "REJECTED_OOS_UNPOWERED", age=2, action="operator_pick_remedy_cpcv_haircut_pool_or_park"),
+        _entry(
+            "REJECTED_FAST", "REJECTED_OOS_UNPOWERED", age=2, action="operator_pick_remedy_cpcv_haircut_pool_or_park"
+        ),
     ]
     rollup = {"schema_version": 2, "entries": entries}
     chain_results = [{"step": "status_rollup", "rc": 0, "stdout": "", "argv": []}]

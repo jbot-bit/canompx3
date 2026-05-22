@@ -11,7 +11,7 @@ and fills in the post-decision fields.
 
 Read-only over ``docs/audit/results/`` and ``docs/runtime/promote_queue.yaml``;
 write-only to ``docs/runtime/cherry_pick_journal.yaml``. No mutation of any
-capital-class file (``chordia_audit_log.yaml``, ``lane_allocation.json``,
+capital-class file (``chordia_audit_log.yaml``, ``allocation file``,
 ``validated_setups``, ``trading_app/live/*``) — those are operator-only.
 
 Doctrine grounding

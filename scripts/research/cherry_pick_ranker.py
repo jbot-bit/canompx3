@@ -34,7 +34,7 @@ Output: CSV at ``docs/runtime/cherry_pick_ranking_<date>.csv`` (--write flag)
 plus stdout table of top-N. Read-only by default (--dry-run).
 
 This script does NOT mutate ``chordia_audit_log.yaml``, ``validated_setups``,
-``lane_allocation.json``, or any file under ``trading_app/live/``. The ranker
+``allocation file``, or any file under ``trading_app/live/``. The ranker
 is a descriptive surface; the operator decides whether to bridge a candidate
 into heavyweight via the companion ``fast_lane_to_heavyweight_bridge.py``.
 

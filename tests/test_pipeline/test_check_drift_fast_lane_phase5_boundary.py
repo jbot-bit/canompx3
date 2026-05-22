@@ -26,8 +26,7 @@ def test_phase5_boundary_check_accepts_report_only_surface(tmp_path: Path) -> No
 def test_phase5_boundary_check_rejects_deployment_candidate_wording(tmp_path: Path) -> None:
     script = _write(
         tmp_path / "fast_lane_research_review.py",
-        'CAPITAL_BOUNDARY = "REPORT_ONLY_NOT_DEPLOYMENT_AUTHORITY"\n'
-        'bad = "DEPLOYMENT_CANDIDATE"\n',
+        'CAPITAL_BOUNDARY = "REPORT_ONLY_NOT_DEPLOYMENT_AUTHORITY"\nbad = "DEPLOYMENT_CANDIDATE"\n',
     )
 
     violations = check_fast_lane_phase5_capital_boundary(paths=(script,), report_script_path=script)

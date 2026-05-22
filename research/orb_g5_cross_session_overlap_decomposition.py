@@ -69,7 +69,7 @@ from research.filter_utils import filter_signal
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 
 # =============================================================================
-# LANES UNDER TEST — 3 deployed ORB_G5 lanes per docs/runtime/lane_allocation.json
+# LANES UNDER TEST — 3 deployed ORB_G5 lanes per current profile allocation
 # =============================================================================
 
 LANES = [

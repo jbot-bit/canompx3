@@ -383,7 +383,7 @@ def _render(live_specs: list[LaneSpec], base_is: PortfolioSnapshot, base_oos: Po
         "",
         "- canonical `gold.db::orb_outcomes`",
         "- canonical `gold.db::daily_features`",
-        "- current profile lane definitions / `docs/runtime/lane_allocation.json` context",
+        "- current profile lane definitions / `current profile allocation` context",
         "- canonical filter application via `trading_app.strategy_fitness._load_strategy_outcomes`",
         "- canonical correlation gate algorithm/thresholds from `trading_app.lane_correlation`, applied on the same WF-eligible sample",
         "- instrument eligibility starts from `trading_app.config.WF_START_OVERRIDE`",
