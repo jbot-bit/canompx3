@@ -604,7 +604,7 @@ def _compute_fitness_from_cache(
     feature_cache: dict,
     as_of_date: date,
     rolling_months: int = 18,
-    min_rolling_trades: int = 15,
+    min_rolling_trades: int = MIN_ROLLING_FIT,
 ) -> FitnessScore:
     """Compute fitness using pre-loaded outcome and feature caches.
 
@@ -717,7 +717,7 @@ def _compute_fitness_with_con(
     strategy_id: str,
     as_of_date: date,
     rolling_months: int = 18,
-    min_rolling_trades: int = 15,
+    min_rolling_trades: int = MIN_ROLLING_FIT,
 ) -> FitnessScore:
     """Compute fitness for a single strategy using an existing connection."""
     rolling_start = _rolling_window_start(as_of_date, rolling_months)
@@ -812,7 +812,7 @@ def compute_fitness(
     db_path: Path | None = None,
     as_of_date: date | None = None,
     rolling_months: int = 18,
-    min_rolling_trades: int = 15,
+    min_rolling_trades: int = MIN_ROLLING_FIT,
 ) -> FitnessScore:
     """Compute fitness for a single strategy. Read-only DB access."""
     if db_path is None:
