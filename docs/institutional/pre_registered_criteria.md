@@ -1075,6 +1075,11 @@ A `theory_grant: true` prereg MAY cite a parent-mechanism extract as theory_gran
   - (a) Clear strict no-theory Chordia `t ≥ 3.79` (Pathway A or Pathway B with `theory_grant: false`), OR
   - (b) Cite a literature extract that names the specific filter / cell class as an alpha mechanism (i.e., satisfy a strict-Option-A reading of theory_grant attachment).
 - The three existing PASS_PROTOCOL_A entries under this construction (NYSE_OPEN RR1.0 COST_LT12 live; NYSE_OPEN RR1.5 COST_LT12 audit-log-only; TOKYO_OPEN RR1.5 COST_LT08 audit-log-only) remain valid for continuity, BUT they do NOT serve as precedent for new grants until Amendment 3.4 re-audit closes.
+- **Mechanized enforcement:** `pipeline/check_drift.py::check_amendment_3_4_provisional_gate` blocks any prereg dated `>= 2026-05-23` whose `metadata.theory_grant: true` is not accompanied by ONE of:
+  - `metadata.amendment_3_4_re_audit_closed: true` — set when the re-audit closes for that prereg (forward path).
+  - `metadata.amendment_3_4_continuity_grandfather: true` — set for the three continuity-grandfathered cells named above (NYSE_OPEN RR1.0 COST_LT12, NYSE_OPEN RR1.5 COST_LT12, TOKYO_OPEN RR1.5 COST_LT08). NOT precedent for new grants.
+
+  Tests at `tests/test_pipeline/test_check_drift_amendment_3_4.py`. Global close path: amend Amendment 3.4 to BINDING and flip the internal `_AMENDMENT_3_4_REAUDIT_CLOSED` constant in the same commit as the amendment text update.
 
 **Re-audit requirements (before Amendment 3.4 transitions to BINDING):**
 

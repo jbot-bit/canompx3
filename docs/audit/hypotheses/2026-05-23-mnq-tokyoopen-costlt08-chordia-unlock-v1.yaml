@@ -1,5 +1,11 @@
 metadata:
   theory_grant: true
+  # Continuity grandfather per Amendment 3.4 (PROVISIONAL) § "Capital
+  # protection while PROVISIONAL" — this prereg landed in the same commit
+  # cycle (bc858657) that triggered Amendment 3.4. The amendment text
+  # explicitly grandfathers this cell (one of three pre-existing
+  # PASS_PROTOCOL_A entries) for continuity. NOT precedent for new grants.
+  amendment_3_4_continuity_grandfather: true
   theory_ref: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
   theory_grant_basis: |
     Chan Ch 7 p.155-157 grants the session-entry mechanism class

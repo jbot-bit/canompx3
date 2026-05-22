@@ -3487,6 +3487,122 @@ def check_chordia_result_threshold_matches_prereg() -> list[str]:
     return violations
 
 
+def check_amendment_3_4_provisional_gate(
+    hypotheses_dir: Path | None = None,
+) -> list[str]:
+    """Amendment 3.4 PROVISIONAL gate — block new mechanism-class-transfer
+    ``theory_grant: true`` preregs until the re-audit closes.
+
+    Authority: ``docs/institutional/pre_registered_criteria.md`` Amendment 3.4
+    (PROVISIONAL, 2026-05-23). The amendment adopts provisional Option B for
+    live-continuity only and explicitly forbids new PASS_PROTOCOL_A grants
+    using the mechanism-class-transfer construction until an independent
+    re-audit closes.
+
+    Rule: every active prereg under ``docs/audit/hypotheses/*.yaml`` whose
+    filename date is ``>= 2026-05-23`` AND whose ``metadata.theory_grant``
+    is ``true`` MUST also carry ONE of:
+
+    - ``metadata.amendment_3_4_re_audit_closed: true`` — set when the
+      operator has confirmed the re-audit closed for this prereg (forward
+      path after re-audit completion).
+    - ``metadata.amendment_3_4_continuity_grandfather: true`` — set for
+      the three pre-existing PASS_PROTOCOL_A cells explicitly named in
+      Amendment 3.4 § "Capital protection while PROVISIONAL" (NYSE_OPEN
+      RR1.0 COST_LT12, NYSE_OPEN RR1.5 COST_LT12, TOKYO_OPEN RR1.5
+      COST_LT08). These three landed in the same commit cycle as
+      Amendment 3.4 and are explicitly grandfathered for live continuity;
+      the field documents that intent. NOT precedent for new grants.
+
+    Missing both -> BLOCK.
+
+    Grandfathering by date: prereg files dated ``< 2026-05-23`` are out of
+    scope (they were authored before the amendment landed and remain valid
+    under the doctrine in effect at their lock time).
+
+    Escape paths (after re-audit closes globally): amend Amendment 3.4 to
+    BINDING and flip the ``_AMENDMENT_3_4_REAUDIT_CLOSED`` constant below
+    to ``True`` in the same commit as the amendment text update.
+
+    Drafts directory (``docs/audit/hypotheses/drafts/``) is excluded —
+    drafts are author-owned and not yet committed prereg state.
+
+    Test seam: ``hypotheses_dir`` kwarg lets injection tests pass a tempdir
+    without monkeypatching ``PROJECT_ROOT``.
+    """
+    import re
+
+    # Sentinel — Amendment 3.4 PROVISIONAL adoption date. Prereg filename
+    # date prefix (YYYY-MM-DD) >= this string => gate applies.
+    sentinel = "2026-05-23"
+
+    # Re-audit closed? Flip to True only via an explicit Amendment 3.4
+    # transition from PROVISIONAL to BINDING, in the same commit as the
+    # amendment text update. Until then, the per-prereg escape fields are
+    # the only path through the gate.
+    _AMENDMENT_3_4_REAUDIT_CLOSED = False
+
+    if _AMENDMENT_3_4_REAUDIT_CLOSED:
+        return []
+
+    hyp_dir = hypotheses_dir if hypotheses_dir is not None else (
+        PROJECT_ROOT / "docs" / "audit" / "hypotheses"
+    )
+    if not hyp_dir.exists():
+        return []
+
+    # Match a bare-key boolean: ``theory_grant: true`` / escape fields.
+    # Tolerates surrounding whitespace and case-insensitive ``True`` / ``true``.
+    _RE_THEORY_GRANT_TRUE = re.compile(
+        r"^\s*theory_grant\s*:\s*true\s*(?:#.*)?$", re.IGNORECASE | re.MULTILINE
+    )
+    _RE_ESCAPE_REAUDIT_CLOSED = re.compile(
+        r"^\s*amendment_3_4_re_audit_closed\s*:\s*true\s*(?:#.*)?$",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    _RE_ESCAPE_CONTINUITY = re.compile(
+        r"^\s*amendment_3_4_continuity_grandfather\s*:\s*true\s*(?:#.*)?$",
+        re.IGNORECASE | re.MULTILINE,
+    )
+
+    violations: list[str] = []
+    for path in sorted(hyp_dir.glob("*.yaml")):
+        stem = path.stem
+        if stem[:10] < sentinel:
+            continue  # grandfathered by date
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception as exc:
+            violations.append(
+                f"  {path.name}: failed to read prereg "
+                f"({type(exc).__name__}: {exc})"
+            )
+            continue
+        if not _RE_THEORY_GRANT_TRUE.search(text):
+            continue  # theory_grant=false or absent — out of gate scope
+        if _RE_ESCAPE_REAUDIT_CLOSED.search(text):
+            continue  # operator explicitly closed the re-audit per-prereg
+        if _RE_ESCAPE_CONTINUITY.search(text):
+            continue  # continuity-grandfathered per Amendment 3.4
+        violations.append(
+            f"  {path.name}: declares theory_grant=true (post-2026-05-23) "
+            "without an Amendment 3.4 escape field. Amendment 3.4 "
+            "(PROVISIONAL) forbids new mechanism-class-transfer grants until "
+            "the re-audit closes. Resolutions: (a) flip to ``theory_grant: "
+            "false`` and clear strict t>=3.79, (b) cite a literature extract "
+            "that names the specific filter/cell class as alpha "
+            "(strict-Option-A attachment), (c) for continuity-grandfathered "
+            "cells named in Amendment 3.4, set "
+            "``amendment_3_4_continuity_grandfather: true``, or (d) after the "
+            "re-audit closes for this prereg, set "
+            "``amendment_3_4_re_audit_closed: true``. See "
+            "docs/institutional/pre_registered_criteria.md Amendment 3.4 and "
+            "docs/audit/doctrine-questions/2026-05-23-protocol-a-theory-grant-attachment-class.md."
+        )
+
+    return violations
+
+
 def check_verdict_vocabulary_md_matches_code(
     md_path: Path | None = None,
 ) -> list[str]:
@@ -13495,6 +13611,12 @@ CHECKS = [
     (
         "Chordia result MD threshold matches prereg chordia_threshold_basis (theory_citation field-presence trap)",
         check_chordia_result_threshold_matches_prereg,
+        False,
+        False,
+    ),
+    (
+        "Amendment 3.4 PROVISIONAL gate (no new mechanism-class-transfer theory_grant until re-audit closes)",
+        check_amendment_3_4_provisional_gate,
         False,
         False,
     ),
