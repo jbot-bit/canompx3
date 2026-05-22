@@ -1,29 +1,28 @@
 """One-shot displaced-rotation analyzer for PASS_CHORDIA candidates.
 
 Cross-references `docs/runtime/chordia_audit_log.yaml` (verdict=PASS_CHORDIA)
-with `docs/runtime/lane_allocation.json` (displaced[]), then re-runs the
-canonical trade-level correlation gate for each candidate. Reports which
-displaced PASS_CHORDIA edges sit close to the 0.70 rho gate and are worth
-operator review for rotation.
+with the canonical allocation file (displaced[]), then re-runs the canonical
+trade-level correlation gate for each candidate. Reports which displaced
+PASS_CHORDIA edges sit close to the 0.70 rho gate and are worth operator
+review for rotation.
 
-Read-only. No mutations to lane_allocation.json, chordia_audit_log.yaml, or
+Read-only. No mutations to the allocation file, chordia_audit_log.yaml, or
 gold.db. Stdout only.
 
 Canonical dependencies (NEVER re-encode):
+  - trading_app.prop_profiles.resolve_allocation_json (Stage 1b/1c resolver)
   - trading_app.lane_correlation.check_candidate_correlation
   - trading_app.lane_correlation.RHO_REJECT_THRESHOLD
   - trading_app.eligibility.builder.parse_strategy_id
   - pipeline.paths.GOLD_DB_PATH
 
 Usage:
-  python scripts/research/displaced_rotation_analyzer.py
   python scripts/research/displaced_rotation_analyzer.py --profile topstep_50k_mnq_auto
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -39,10 +38,10 @@ from trading_app.lane_correlation import (
     RHO_REJECT_THRESHOLD,
     check_candidate_correlation,
 )
+from trading_app.prop_profiles import resolve_allocation_json
 from trading_app.strategy_fitness import _load_strategy_outcomes
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ALLOC_PATH = REPO_ROOT / "docs" / "runtime" / "lane_allocation.json"
 CHORDIA_LOG = REPO_ROOT / "docs" / "runtime" / "chordia_audit_log.yaml"
 
 NEAR_GATE_BAND = 0.05
@@ -55,15 +54,14 @@ def _load_pass_chordia_ids() -> set[str]:
     return {e["strategy_id"] for e in audits if e.get("verdict") == "PASS_CHORDIA"}
 
 
-def _load_allocation(profile_id: str | None) -> dict:
-    with ALLOC_PATH.open() as f:
-        alloc = json.load(f)
-    if profile_id and alloc.get("profile_id") != profile_id:
-        raise ValueError(
-            f"lane_allocation.json profile_id={alloc.get('profile_id')!r} "
-            f"does not match requested {profile_id!r}"
+def _load_allocation(profile_id: str) -> dict:
+    read = resolve_allocation_json(profile_id)
+    if read.data is None:
+        raise FileNotFoundError(
+            f"No allocation data found for profile {profile_id!r} "
+            f"(resolver source={read.source}, path={read.path})"
         )
-    return alloc
+    return read.data
 
 
 def _strategy_id_to_lane(strategy_id: str) -> dict:
@@ -98,7 +96,7 @@ def _classify_rotation(
     return ("STAY", f"rho={worst_rho:.3f} clearly above gate{cached_note}")
 
 
-def analyze(profile_id: str | None) -> int:
+def analyze(profile_id: str) -> int:
     pass_chordia_ids = _load_pass_chordia_ids()
     if not pass_chordia_ids:
         print("No PASS_CHORDIA entries in chordia_audit_log.yaml; nothing to analyze.")
@@ -197,7 +195,7 @@ def analyze(profile_id: str | None) -> int:
         print(
             "Next step: review each ROTATE_CANDIDATE / NEAR_GATE_REVIEW row, then run "
             "`python scripts/tools/rebalance_lanes.py --date <today> --profile " + profile + "` "
-            "to materialize the rotation if confirmed. This tool does NOT mutate lane_allocation.json."
+            "to materialize the rotation if confirmed. This tool does NOT mutate the allocation file."
         )
 
     return 0
@@ -321,7 +319,7 @@ def _write_decision_report(
 | Metric | Value |
 |---|---|
 | Fresh trade-level Pearson ρ | {fresh_rho:.3f} |
-| Cached ρ in `lane_allocation.json` | {cached_rho if cached_rho is not None else 'n/a'} |
+| Cached ρ in allocation file | {cached_rho if cached_rho is not None else 'n/a'} |
 | Canonical gate threshold | {RHO_REJECT_THRESHOLD} |
 | Gate pass | {gate_pass} |
 
@@ -393,7 +391,7 @@ The lane correlation engine measures trade-level Pearson ρ on daily P&L summed 
 
 ## Files NOT modified by this report
 
-- `docs/runtime/lane_allocation.json`
+- The canonical lane allocation file (resolved via `trading_app.prop_profiles.resolve_allocation_json`)
 - `docs/runtime/chordia_audit_log.yaml`
 - `trading_app/prop_profiles.py`
 - `gold.db`
@@ -404,9 +402,9 @@ Operator must take explicit action via `rebalance_lanes.py` or a profile edit to
     return out_path
 
 
-def diagnose(strategy_id: str) -> int:
+def diagnose(strategy_id: str, profile_id: str) -> int:
     pass_chordia_ids = _load_pass_chordia_ids()
-    alloc = _load_allocation(profile_id=None)
+    alloc = _load_allocation(profile_id=profile_id)
     profile = alloc["profile_id"]
     rebalance_date = alloc.get("rebalance_date", "?")
 
@@ -420,7 +418,7 @@ def diagnose(strategy_id: str) -> int:
 
     displaced_entry = _find_displaced_entry(strategy_id, alloc)
     if displaced_entry is None:
-        print(f"ERROR: {strategy_id} is not in lane_allocation.json displaced[] for profile {profile}.")
+        print(f"ERROR: {strategy_id} is not in allocation displaced[] for profile {profile}.")
         return 2
 
     incumbent_id = _resolve_incumbent(displaced_entry)
@@ -522,8 +520,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument(
         "--profile",
-        default=None,
-        help="Restrict to a specific allocator profile; defaults to whatever lane_allocation.json currently holds.",
+        required=True,
+        help="Allocator profile to inspect (e.g. topstep_50k_mnq_auto). Required since Stage 1c routes path resolution through trading_app.prop_profiles.resolve_allocation_json.",
     )
     p.add_argument(
         "--diagnostic",
@@ -537,7 +535,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.diagnostic:
-        return diagnose(strategy_id=args.diagnostic)
+        return diagnose(strategy_id=args.diagnostic, profile_id=args.profile)
     return analyze(profile_id=args.profile)
 
 
