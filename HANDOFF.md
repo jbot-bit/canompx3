@@ -19,6 +19,16 @@
   - `docs/runtime/fast_lane_trial_ledger.yaml` dirty in worktree — peer-Codex append-only state per multi-terminal hygiene.
   - 844 Check 52 violations on this branch will dissolve when this branch rebases on current main (PR #307 strict-IS resolver already merged per prior HANDOFF entry below).
 
+## This Session (2026-05-22 — Codex Fast Lane V2 Phase 3+4 implemented, reviewed, stop before Phase 5)
+
+- **Tool:** Codex
+- **Commits pushed to origin/main:** `ac579e56` (`fix(fast-lane): expose v2 status blockers`), `e02d9059` (`fix(fast-lane): harden bridge provenance gates`), `aec72ef2` (`fix(fast-lane): mark active preregs as fast-lane lineage`). `aec72ef2` was rebased on top of `77c7ed43` from PR #310 before push.
+- **Phase 3:** `fast_lane_status.yaml` schema bumped to v2 with `lineage_class`, `blocker_class`, `primary_blocker`, and `blocker_evidence`. `SUPPRESSED_*` queue statuses now remain exact terminal stages. `fast_lane_walk.py --dry-run` now separates blocked Fast Lane candidates from direct heavyweight backlog and emits `NO_FAST_LANE_ACTIONABLE` when no queue/rank/bridge/pending/error Fast Lane action exists.
+- **Phase 4:** Added derived `scripts/research/fast_lane_trial_index.py` as the current V2 index over ledger rows plus corrections. Hardened `fast_lane_to_heavyweight_bridge.py` to refuse non-`QUEUED` promote rows, missing/malformed `structural_hash`, missing/malformed `k_lineage`, missing `n_hat`, and K overruns under corrected V2 semantics (`K_lane > K_declared_in_prereg`). Live probe against `MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30` now refuses with `REJECTED_OOS_UNPOWERED` instead of authoring a draft.
+- **Review correction:** Code-review pass caught active Fast Lane preregs being labeled `lineage_class: UNKNOWN`; fixed to classify Fast Lane active preregs by filename/template metadata and rebuilt `docs/runtime/fast_lane_status.yaml`.
+- **Verification:** Targeted Fast Lane status/walk/parity tests passed (`51 passed`). Phase 4 bridge/index/provenance tests passed earlier (`59 passed`). Ruff on touched Fast Lane surfaces passed. `git diff --check` clean. Full drift after rebase: `NO DRIFT DETECTED: 156 checks passed [OK], 0 skipped, 20 advisory`.
+- **Stop point:** Phase 5 readiness-report work was intentionally stopped. The uncommitted scaffold files were removed before push. Workspace should be clean. Resume Phase 5 only after a fresh context/design pass focused on report-only wording and capital-boundary safety.
+
 ## This Session (2026-05-21 PM — CI unblock: #309 + #307 merged, 844 drift carry-over dissolved)
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode
