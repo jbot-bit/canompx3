@@ -42,7 +42,11 @@ from trading_app.eligibility.builder import (
     build_eligibility_report,
     parse_strategy_id,
 )
-from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
+from trading_app.prop_profiles import (
+    ACCOUNT_PROFILES,
+    effective_daily_lanes,
+    legacy_lane_allocation_path,
+)
 from trading_app.strategy_fitness import compute_fitness
 from trading_app.validated_shelf import deployable_validated_relation
 
@@ -361,12 +365,16 @@ def _enrich_trades_with_eligibility(
 
 
 def _load_trailing_stats() -> dict[str, dict]:
-    """Load trailing stats from lane_allocation.json if it exists.
+    """Load trailing stats from the legacy allocation file if it exists.
 
     Returns dict keyed by strategy_id with trailing_expr, trailing_wr, trailing_n.
     Fail-open: returns empty dict if file missing or unreadable.
+
+    Trade-sheet generation is profile-agnostic (single trade book across
+    profiles), so this reads the legacy single-profile file directly via the
+    canonical helper rather than going through the per-profile resolver.
     """
-    alloc_path = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
+    alloc_path = legacy_lane_allocation_path()
     if not alloc_path.exists():
         return {}
     try:

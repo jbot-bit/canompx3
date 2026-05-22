@@ -11,7 +11,6 @@ from trading_app.live.tradovate.http import RateLimitExhausted, request_with_ret
 from trading_app.live.tradovate.order_router import TradovateOrderRouter
 from trading_app.live.tradovate.positions import TradovatePositions
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -584,6 +583,7 @@ class TestTokenRenewal:
     def test_renew_fails_falls_back_to_login(self, mock_post):
         """If renewal fails, falls back to full login."""
         import requests as req
+
         from trading_app.live.tradovate.auth import TradovateAuth
 
         login_resp = MagicMock()

@@ -17,7 +17,6 @@ import pytest
 
 from research import chordia_strict_unlock_v1 as runner
 
-
 # ----------------------------- helpers ----------------------------------------
 
 

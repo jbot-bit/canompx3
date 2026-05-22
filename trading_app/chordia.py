@@ -159,8 +159,15 @@ def chordia_gate(
 # The allocator MUST trust the YAML's verdict field for live deployment
 # decisions. Using `validated_setups.sharpe_ratio` + `sample_size` as a live
 # proxy would reintroduce the exact Mode B / derived-layer doctrine violation
-# that Phase 0 research truth protocol forbids. `validated_setups` remains
-# a parameter shelf and trailing-performance source, not Chordia gate truth.
+# that Phase 0 research truth protocol forbids. `validated_setups` is a
+# strict-IS provenance shelf for VALIDATOR_NATIVE rows: every column
+# (sample_size, win_rate, expectancy_r, sharpe_ratio, first_trade_day,
+# last_trade_day, trade_day_count) pairs to one consistent population —
+# trades on signal with trading_day < HOLDOUT_SACRED_FROM, frozen at
+# promotion-time. Refresh via backfill_validated_trade_windows.py heals
+# window-column drift back to the same strict-IS scope (2026-05-21). It is
+# NOT a live trailing-performance view; consumers needing recent fire rates
+# should query orb_outcomes directly with the strategy's filter applied.
 
 CHORDIA_AUDIT_LOG_PATH = Path(__file__).resolve().parents[1] / "docs" / "runtime" / "chordia_audit_log.yaml"
 CHORDIA_AUDIT_FRESHNESS_DAYS_DEFAULT = 90

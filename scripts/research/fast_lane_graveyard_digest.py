@@ -265,7 +265,11 @@ def _parse_action_queue(path: Path) -> list[GraveyardEntry]:
     entries: list[GraveyardEntry] = []
     for row in rows:
         status = str(row.get("status", "")).lower()
-        if status not in {"park", "kill"}:
+        # Accept both "park" (legacy free-text) and "parked" (canonical
+        # WorkQueue status per pipeline/work_queue.py::QueueStatus). The
+        # action-queue.yaml was normalized 2026-05-21 to the strict schema;
+        # both forms map to the same graveyard semantics.
+        if status not in {"park", "parked", "kill"}:
             continue
         title = (
             row.get("id") or row.get("title") or row.get("name") or row.get("summary") or "unnamed action-queue entry"
@@ -313,7 +317,7 @@ def build_digest() -> dict[str, Any]:
     return {
         "schema_version": DIGEST_SCHEMA_VERSION,
         "do_not_hand_edit": True,
-        "built_at_utc": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "built_at_utc": _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "source_files": [
             GRAVEYARD_MD.relative_to(PROJECT_ROOT).as_posix(),
             STRATEGY_BLUEPRINT.relative_to(PROJECT_ROOT).as_posix(),

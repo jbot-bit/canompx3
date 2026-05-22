@@ -2764,6 +2764,12 @@ def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
         if not micro_rows:
             return violations
 
+        # Intentional full-window resolver (holdout_cutoff=None): this check
+        # asks "is the FIRST traded day on/after micro_launch_day(instrument)?"
+        # — earliest-day question is independent of the IS/OOS/holdout split.
+        # Do NOT switch to strict-IS here; Check 45 (at line ~2967) uses
+        # strict-IS because it pairs window-columns to perf-column population,
+        # which is a different question. See trading_app/chordia.py:158-170.
         resolver = StrategyTradeWindowResolver(con)
         for (
             strategy_id,
@@ -2901,10 +2907,17 @@ def check_active_native_promotion_provenance_populated(con=None) -> list[str]:
 
 
 def check_active_native_trade_windows_match_provenance(con=None) -> list[str]:
-    """Stored native trade-window provenance must match canonical recomputation."""
+    """Stored native trade-window provenance must match canonical strict-IS recomputation.
+
+    Strict-IS scope (2026-05-21): window columns must pair to the same population that
+    sample_size / expectancy_r / win_rate / sharpe_ratio were frozen on at promotion —
+    i.e., trading_day < HOLDOUT_SACRED_FROM. Refresher heals via
+    scripts/migrations/backfill_validated_trade_windows.py.
+    """
     violations = []
     _own_con = False
     try:
+        from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
         from trading_app.validation_provenance import StrategyTradeWindowResolver
 
         if con is None:
@@ -2957,7 +2970,7 @@ def check_active_native_trade_windows_match_provenance(con=None) -> list[str]:
         if not rows:
             return violations
 
-        resolver = StrategyTradeWindowResolver(con)
+        resolver = StrategyTradeWindowResolver(con, holdout_cutoff=HOLDOUT_SACRED_FROM)
         for (
             sid,
             instrument,
@@ -2989,9 +3002,10 @@ def check_active_native_trade_windows_match_provenance(con=None) -> list[str]:
                     "  validated_setups: active native row "
                     f"{sid} has stored trade window "
                     f"({first_day}, {last_day}, N={trade_day_count}) but "
-                    f"canonical recompute is "
+                    f"canonical strict-IS recompute (< HOLDOUT_SACRED_FROM) is "
                     f"({canonical.first_trade_day}, {canonical.last_trade_day}, "
-                    f"N={canonical.trade_day_count})"
+                    f"N={canonical.trade_day_count}). "
+                    f"Heal via scripts/migrations/backfill_validated_trade_windows.py."
                 )
     except (ImportError, OSError) as e:
         print(f"    SKIP check_active_native_trade_windows_match_provenance: {type(e).__name__}: {e}")
@@ -9570,6 +9584,230 @@ def check_lane_allocation_displaced_bucket() -> list[str]:
     return violations
 
 
+def check_lane_allocation_per_profile_legacy_parity() -> list[str]:
+    """Per-profile lane-allocation files must byte-equal the legacy single-profile
+    ``docs/runtime/lane_allocation.json`` when the legacy file's ``profile_id``
+    matches.
+
+    Origin: Stage 1a (commit ``a95b7a91``) introduced dual-write — the allocator
+    writes both ``docs/runtime/lane_allocation/<profile_id>.json`` (new canonical
+    path) and ``docs/runtime/lane_allocation.json`` (legacy, single-profile, last
+    write wins). The Stage 1a contract (``docs/specs/lane_allocation_schema.md``
+    § 3) is that the JSON body is built once and written verbatim to both paths;
+    Stage 1d will retire the legacy writer after Stage 1c's stabilization
+    window shows zero ``source="legacy"`` reads via the resolver provenance
+    surface.
+
+    This drift check is the second-layer defense for dual-write divergence: if
+    the writer ever drifts (key ordering, float repr, an accidental
+    post-process), the two files stop matching byte-for-byte, and any reader
+    that fell back to the legacy path would see a different payload than a
+    reader that hit the new path. The downstream symptom would be capital-class
+    silent divergence between the broker-arming code (live) and the dashboards
+    / drift checks (read legacy) until Stage 1d landed.
+
+    Byte-equal (not dict-equal) is the right contract here because the Stage 1a
+    writer's invariant is "build body once, write twice unchanged" — any
+    structural difference between the two files is a writer bug, not a benign
+    representational difference. Byte-equal also catches the specific
+    inline-copy-parity class bugs documented in
+    ``memory/feedback_canonical_inline_copy_parity_bug_class.md``.
+
+    Fail conditions:
+      - For each per-profile file under ``docs/runtime/lane_allocation/``:
+        - Legacy file exists AND its ``profile_id`` matches the per-profile
+          filename stem AND the two file bodies are not byte-identical.
+
+    Pass conditions:
+      - ``docs/runtime/lane_allocation/`` directory absent or empty (pre-Stage-1a state)
+      - Legacy file absent (fresh worktree / CI)
+      - Legacy file's ``profile_id`` does NOT match the per-profile filename
+        stem (the legacy file currently holds a different profile under last-
+        write-wins single-profile semantics; not a parity violation)
+      - Bodies are byte-identical
+
+    Skip mode: missing dir / missing legacy file / unparseable legacy JSON all
+    return ``[]``. The chordia / c8 / displaced checks already cover legacy-
+    file integrity; this check is strictly about cross-path consistency.
+
+    @canonical-source: trading_app/lane_allocator.save_allocation (dual-write)
+    @canonical-source: docs/specs/lane_allocation_schema.md § 3, § 5
+    """
+    import json
+
+    new_dir = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation"
+    legacy_path = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
+
+    if not new_dir.exists() or not new_dir.is_dir():
+        return []
+    if not legacy_path.exists():
+        return []
+
+    try:
+        legacy_bytes = legacy_path.read_bytes()
+    except OSError as exc:
+        return [f"  BAD legacy lane_allocation.json: {exc}"]
+
+    try:
+        legacy_data = json.loads(legacy_bytes)
+    except json.JSONDecodeError as exc:
+        return [f"  BAD legacy lane_allocation.json (parse): {exc}"]
+    if not isinstance(legacy_data, dict):
+        return [f"  legacy lane_allocation.json: root must be object, got {type(legacy_data).__name__}"]
+    legacy_profile_id = legacy_data.get("profile_id")
+
+    violations: list[str] = []
+    for new_path in sorted(new_dir.iterdir()):
+        if not new_path.is_file() or new_path.suffix != ".json":
+            continue
+        per_profile_id = new_path.stem
+        # Only compare when legacy currently holds this profile. Under Stage
+        # 1a's last-write-wins legacy semantics, legacy holds exactly one
+        # profile at any time. A profile_id mismatch is NOT a parity
+        # violation — it just means the most recent legacy write was for a
+        # different profile.
+        if legacy_profile_id != per_profile_id:
+            continue
+        try:
+            new_bytes = new_path.read_bytes()
+        except OSError as exc:
+            violations.append(f"  BAD {new_path}: {exc}")
+            continue
+        if new_bytes != legacy_bytes:
+            violations.append(
+                f"  parity drift: {new_path.relative_to(PROJECT_ROOT).as_posix()} != "
+                f"{legacy_path.relative_to(PROJECT_ROOT).as_posix()} for profile_id="
+                f"{per_profile_id!r} (Stage 1a dual-write invariant broken — "
+                f"investigate trading_app/lane_allocator.save_allocation)"
+            )
+
+    return violations
+
+
+# Allowlists for check_no_direct_lane_allocation_json_literals.
+# Module-level so tests can introspect / mutate via monkeypatch.
+_LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST: frozenset[Path] = frozenset(
+    {
+        Path("trading_app/prop_profiles.py"),
+        Path("trading_app/lane_allocator.py"),
+        Path("scripts/tools/rebalance_lanes.py"),
+    }
+)
+
+# Shrinks monotonically across Stage 1b-ii / 1b-iii. Removing an entry is the
+# "reader migrated" signal. When this set is empty, Stage 1b's grep-gate axis
+# is complete.
+_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST: frozenset[Path] = frozenset()
+# Drained 2026-05-22 (Stage 1b-iii). All trading_app/ and scripts/tools/
+# readers now go through trading_app.prop_profiles.resolve_allocation_json
+# (or legacy_lane_allocation_path() for profile-agnostic sites). Stage 1d
+# will retire the legacy single-profile path entirely once a stabilization
+# window confirms zero source="legacy" reads in the wild.
+
+
+def check_no_direct_lane_allocation_json_literals() -> list[str]:
+    """No file under ``trading_app/`` or ``scripts/tools/`` may contain the
+    literal ``lane_allocation.json`` outside the allocation-resolution
+    canonical-source allowlist.
+
+    Origin: Stage 1b authority-inversion (parent stage:
+    ``docs/runtime/stages/2026-05-21-multi-profile-lane-allocation-stage-1b.md``).
+    Stage 1a stood up the per-profile path; Stage 1b promotes
+    ``trading_app.prop_profiles.resolve_allocation_json`` as the single owner
+    of path resolution. This grep-gate is the forcing function that prevents a
+    new reader from re-introducing direct-literal path resolution after Stage
+    1b-iii completes the sweep. Without it, Stage 1d (legacy removal) would
+    have to re-grep the codebase to confirm safety — making 1d a stochastic
+    delete instead of the deterministic one we want.
+
+    Sweep scope: ``trading_app/**/*.py`` and ``scripts/tools/**/*.py``.
+    ``scripts/research/`` is deferred to Stage 1c per the parent-stage out-of-
+    scope section. ``pipeline/`` is excluded because this check itself
+    necessarily mentions the literal (and ``pipeline/`` does not contain
+    allocation readers).
+
+    Permanent allowlist (``_LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST``):
+      - ``trading_app/prop_profiles.py`` — canonical resolver
+      - ``trading_app/lane_allocator.py`` — canonical writer
+      - ``scripts/tools/rebalance_lanes.py`` — ``--output`` argparse help text
+
+    Temporary allowlist (``_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST``) — Stage
+    1b transitional, shrinks monotonically as readers migrate in 1b-ii / 1b-
+    iii.
+
+    Sub-check: dead-allowlist-entry detection. Every entry in the temporary
+    allowlist must still contain the literal — if a reader is removed without
+    updating the allowlist, the gate would go silently broad. Surfaced as
+    violations so the allowlist remains tight.
+
+    Detection: substring search on ``lane_allocation.json``. Matching on the
+    literal (rather than parsing string nodes) is intentional — comments and
+    docstrings that mention the legacy path will go stale after Stage 1d
+    removes it, so even non-code mentions are within scope.
+
+    @canonical-source: trading_app/prop_profiles.resolve_allocation_json
+    @canonical-source: docs/specs/lane_allocation_schema.md § 4, § 5a
+    """
+    needle = "lane_allocation.json"
+    allowed = _LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST | _LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST
+    scan_roots = (
+        PROJECT_ROOT / "trading_app",
+        PROJECT_ROOT / "scripts" / "tools",
+    )
+
+    violations: list[str] = []
+    seen_with_literal: set[Path] = set()
+
+    for root in scan_roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*.py")):
+            try:
+                rel = path.relative_to(PROJECT_ROOT)
+            except ValueError:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if needle not in text:
+                continue
+            seen_with_literal.add(rel)
+            if rel in allowed:
+                continue
+            # Locate first line of literal occurrence for operator pointer.
+            first_line_no = 0
+            for i, line in enumerate(text.splitlines(), 1):
+                if needle in line:
+                    first_line_no = i
+                    break
+            violations.append(
+                f"  {rel.as_posix()}:{first_line_no}: direct "
+                f"'lane_allocation.json' literal — migrate to "
+                f"trading_app.prop_profiles.resolve_allocation_json "
+                f"(Stage 1b authority inversion; see "
+                f"docs/specs/lane_allocation_schema.md § 4)"
+            )
+
+    # Dead-allowlist-entry sub-check: prevent the temporary allowlist from
+    # going silently broad if a reader is removed without updating the list.
+    # Only the TEMPORARY set is checked — permanent entries are expected to
+    # always contain the literal by definition. Only flag entries whose file
+    # still exists; a deleted-file entry would be caught when the actual
+    # delete commit is staged.
+    for rel in sorted(_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST):
+        if (PROJECT_ROOT / rel).exists() and rel not in seen_with_literal:
+            violations.append(
+                f"  TEMPORARY allowlist entry {rel.as_posix()} no longer "
+                f"contains 'lane_allocation.json' literal — remove from "
+                f"_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST in "
+                f"pipeline/check_drift.py (reader migrated; allowlist must "
+                f"shrink monotonically per Stage 1b doctrine)"
+            )
+
+    return violations
+
+
 def check_strategy_lab_no_fitness_endpoint() -> list[str]:
     """`scripts/tools/strategy_lab_mcp_server.py` must NOT register a
     `get_recent_fitness` MCP endpoint.
@@ -10956,7 +11194,7 @@ def check_holdout_sentinel_inline_copy_parity() -> list[str]:
     violations: list[str] = []
 
     expected = HOLDOUT_SACRED_FROM.isoformat()
-    if HOLDOUT_SACRED_FROM_SENTINEL != expected:
+    if expected != HOLDOUT_SACRED_FROM_SENTINEL:
         violations.append(
             "check_holdout_sentinel_inline_copy_parity: "
             f"HOLDOUT_SACRED_FROM_SENTINEL={HOLDOUT_SACRED_FROM_SENTINEL!r} "
@@ -11149,7 +11387,7 @@ def check_fast_lane_promote_queue_provenance_present() -> list[str]:
                 "positive int)."
             )
 
-    # ---- (c) STATUS_VALUES parity against the stage file enum table ----
+    # ---- (c) STATUS_VALUES parity against the canonical spec enum table ----
     try:
         from scripts.research.fast_lane_promote_queue import STATUS_VALUES
     except Exception as exc:
@@ -12046,8 +12284,8 @@ def check_fast_lane_status_rollup_reconstruction_parity(
     1. Hand-edit drift: the on-disk roll-up disagrees with a fresh
        ``build_status_entries()`` reconstruction (extra/missing strategy_id,
        wrong current_stage, wrong next_action_token).
-    2. Tampered banner: ``do_not_hand_edit: true``, ``schema_version: 1``,
-       or ``source: scripts/tools/fast_lane_status.py`` removed.
+    2. Tampered banner: ``do_not_hand_edit: true``, writer
+       ``SCHEMA_VERSION``, or ``source: scripts/tools/fast_lane_status.py`` removed.
     3. Capital-class write attempt: the writer's source contains any
        reference to ``chordia_audit_log.yaml``, ``lane_allocation.json``,
        ``validated_setups``, or ``trading_app/live/`` paired with
@@ -12137,10 +12375,19 @@ def check_fast_lane_status_rollup_reconstruction_parity(
         return violations
 
     # Banner integrity (failure class 2).
-    if on_disk.get("schema_version") != 1:
+    try:
+        from scripts.tools.fast_lane_status import SCHEMA_VERSION as _STATUS_SCHEMA_VERSION
+    except Exception as exc:
+        violations.append(
+            "check_fast_lane_status_rollup_reconstruction_parity: cannot import "
+            f"status schema version: {type(exc).__name__}: {exc}"
+        )
+        return violations
+
+    if on_disk.get("schema_version") != _STATUS_SCHEMA_VERSION:
         violations.append(
             "check_fast_lane_status_rollup_reconstruction_parity: BANNER TAMPERED — "
-            "schema_version must be 1 (got "
+            f"schema_version must be {_STATUS_SCHEMA_VERSION} (got "
             f"{on_disk.get('schema_version')!r}). Roll-up is derived state; do not "
             "hand-edit."
         )
@@ -12226,8 +12473,110 @@ def check_fast_lane_status_rollup_reconstruction_parity(
     return violations
 
 
+def check_fast_lane_phase5_capital_boundary(
+    paths: tuple[Path, ...] | None = None,
+    report_script_path: Path | None = None,
+) -> list[str]:
+    """Phase 5 guard: report-only wording and no capital-class write surface.
+
+    This is intentionally scoped to active Fast Lane Phase 5 surfaces. It does
+    not police historical audit docs where old wording may be quoted as context.
+    """
+    report_script = (
+        report_script_path
+        if report_script_path is not None
+        else PROJECT_ROOT / "scripts" / "tools" / "fast_lane_research_review.py"
+    )
+    scan_paths = paths if paths is not None else (
+        report_script,
+        PROJECT_ROOT / "scripts" / "tools" / "fast_lane_status.py",
+        PROJECT_ROOT / "scripts" / "tools" / "fast_lane_walk.py",
+        PROJECT_ROOT / "docs" / "specs" / "fast_lane_state_graph.md",
+        PROJECT_ROOT / "docs" / "plans" / "2026-05-21-fast-lane-v2-institutional-design.md",
+        PROJECT_ROOT / "docs" / "runtime" / "fast_lane_status.yaml",
+    )
+
+    violations: list[str] = []
+    boundary_token = "REPORT_ONLY_NOT_DEPLOYMENT_AUTHORITY"
+    banned_phrases = (
+        "DEPLOYMENT_" "CANDIDATE",
+        "DEPLOYMENT_" "RECOMMENDED",
+        "operator_" "deployment_decision",
+        "ready to " "deploy",
+        "go " "live",
+        "start " "trading",
+        "allocate " "capital",
+        "deployment_" "recommender",
+        "deployment " "recommendation",
+        "deployment " "decision",
+    )
+    capital_paths = (
+        "chordia_audit_log.yaml",
+        "lane_allocation.json",
+        "validated_setups",
+        "trading_app/live/",
+    )
+    write_markers = ("write_text", "open(", "shutil.copy", "shutil.move")
+
+    if not report_script.exists():
+        violations.append(
+            "check_fast_lane_phase5_capital_boundary: report script missing at "
+            f"{report_script.relative_to(PROJECT_ROOT) if report_script.is_relative_to(PROJECT_ROOT) else report_script}."
+        )
+    else:
+        try:
+            report_src = report_script.read_text(encoding="utf-8")
+        except OSError as exc:
+            violations.append(
+                "check_fast_lane_phase5_capital_boundary: failed to read report script "
+                f"{report_script}: {type(exc).__name__}: {exc}"
+            )
+            report_src = ""
+        if boundary_token not in report_src:
+            violations.append(
+                "check_fast_lane_phase5_capital_boundary: "
+                f"{report_script} must contain {boundary_token!r}."
+            )
+
+    for path in scan_paths:
+        if not path.exists():
+            violations.append(f"check_fast_lane_phase5_capital_boundary: scan path missing at {path}.")
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            violations.append(
+                f"check_fast_lane_phase5_capital_boundary: failed to read {path}: {type(exc).__name__}: {exc}"
+            )
+            continue
+
+        for phrase in banned_phrases:
+            if phrase in text:
+                violations.append(
+                    "check_fast_lane_phase5_capital_boundary: banned active-surface wording "
+                    f"{phrase!r} found in {path}."
+                )
+
+        lines = text.splitlines()
+        for idx, line in enumerate(lines):
+            if not any(cap in line for cap in capital_paths):
+                continue
+            window = "\n".join(lines[max(0, idx - 2) : idx + 3])
+            marker = next((m for m in write_markers if m in window), None)
+            if marker is None:
+                continue
+            violations.append(
+                "check_fast_lane_phase5_capital_boundary: CAPITAL-CLASS WRITE ATTEMPT "
+                f"in {path} near line {idx + 1}; capital-class path appears within "
+                f"2 lines of {marker!r}."
+            )
+
+    return violations
+
+
 def check_fast_lane_trial_ledger_append_only(
     ledger_path: Path | None = None,
+    corrections_path: Path | None = None,
 ) -> list[str]:
     """Append-only invariant for docs/runtime/fast_lane_trial_ledger.yaml.
 
@@ -12246,7 +12595,8 @@ def check_fast_lane_trial_ledger_append_only(
       2. Monotonic run_timestamp_utc -- entries[i+1] timestamp >= entries[i]
          timestamp (clock-skew tolerant via >=, not >).
       3. Unique run_id across the whole file (writer rejects dup run_id;
-         this check catches a manual edit that adds one).
+         this check catches a manual edit that adds one). Unique trial_id
+         when present; legacy rows without trial_id are tolerated.
       4. Holdout-sentinel parity -- every entry must declare
          holdout_policy == HOLDOUT_POLICY_SENTINEL and
          holdout_sacred_from == HOLDOUT_SACRED_FROM_SENTINEL; either being
@@ -12284,6 +12634,7 @@ def check_fast_lane_trial_ledger_append_only(
             HOLDOUT_POLICY_SENTINEL,
             HOLDOUT_SACRED_FROM_SENTINEL,
             LEDGER_SCHEMA_VERSION,
+            read_trial_corrections,
         )
     except Exception as exc:
         return [f"check_fast_lane_trial_ledger_append_only: writer module import failed: {type(exc).__name__}: {exc}"]
@@ -12291,12 +12642,30 @@ def check_fast_lane_trial_ledger_append_only(
     target = (
         ledger_path if ledger_path is not None else PROJECT_ROOT / "docs" / "runtime" / "fast_lane_trial_ledger.yaml"
     )
+    corrections_target = corrections_path
+    if corrections_target is None and ledger_path is None:
+        corrections_target = PROJECT_ROOT / "docs" / "runtime" / "fast_lane_trial_corrections.yaml"
 
     if not target.exists():
         return [
             "check_fast_lane_trial_ledger_append_only: ledger file missing at "
             f"{target} (skeleton must be landed by Stage 2A.2; fail-closed)."
         ]
+
+    if corrections_target is not None:
+        if not corrections_target.exists():
+            return [
+                "check_fast_lane_trial_ledger_append_only: correction file missing at "
+                f"{corrections_target} (V2 correction-not-deletion file must preserve "
+                "historical scanner rows while excluding them from K counts; fail-closed)."
+            ]
+        try:
+            read_trial_corrections(corrections_target)
+        except Exception as exc:
+            return [
+                "check_fast_lane_trial_ledger_append_only: trial correction file invalid "
+                f"at {corrections_target.name}: {type(exc).__name__}: {exc}"
+            ]
 
     try:
         raw = target.read_text(encoding="utf-8")
@@ -12347,6 +12716,7 @@ def check_fast_lane_trial_ledger_append_only(
     )
 
     seen_run_ids: set[str] = set()
+    seen_trial_ids: set[str] = set()
     last_ts: str | None = None
 
     for idx, entry in enumerate(entries_raw):
@@ -12377,6 +12747,40 @@ def check_fast_lane_trial_ledger_append_only(
                 )
             else:
                 seen_run_ids.add(run_id)
+
+        # Phase 1 content-addressed replay guard. Legacy rows may not have
+        # trial_id yet; any new row that has one must be 16-hex and unique.
+        trial_id = entry.get("trial_id")
+        if trial_id is not None and not isinstance(trial_id, str):
+            violations.append(
+                "check_fast_lane_trial_ledger_append_only: "
+                f"TRIAL_ID_TYPE -- entry[{idx}] trial_id is "
+                f"{type(trial_id).__name__}, expected str."
+            )
+        elif isinstance(trial_id, str):
+            if len(trial_id) != 16:
+                violations.append(
+                    "check_fast_lane_trial_ledger_append_only: "
+                    f"TRIAL_ID_LENGTH -- entry[{idx}] trial_id "
+                    f"{trial_id!r} is {len(trial_id)} chars, expected 16."
+                )
+            else:
+                try:
+                    int(trial_id, 16)
+                except ValueError:
+                    violations.append(
+                        "check_fast_lane_trial_ledger_append_only: "
+                        f"TRIAL_ID_NOT_HEX -- entry[{idx}] trial_id "
+                        f"{trial_id!r} is not hex."
+                    )
+            if trial_id in seen_trial_ids:
+                violations.append(
+                    "check_fast_lane_trial_ledger_append_only: DUPLICATE trial_id "
+                    f"{trial_id!r} at entry[{idx}] in {target.name}; "
+                    "content-addressed trial history must not inflate K."
+                )
+            else:
+                seen_trial_ids.add(trial_id)
 
         # (2) Monotonic timestamps — compare as aware datetimes so mixed
         # Z / +00:00 suffix pairs sort correctly (raw string comparison
@@ -12611,6 +13015,58 @@ def check_fast_lane_graveyard_digest_parity(
         )
 
     return violations
+
+
+def check_action_queue_loads_cleanly() -> list[str]:
+    """Round-trip check: docs/runtime/action-queue.yaml validates against
+    the canonical `pipeline.work_queue.WorkQueue` strict schema.
+
+    The action-queue is the live registry consumed by `project_pulse.py`,
+    `next.py`, and lease tooling. `WorkQueueItem` is declared with
+    ``ConfigDict(extra="forbid")`` -- any drift (extra field, out-of-
+    taxonomy status value, missing required field) crashes `load_queue()`
+    and degrades `/orient` and `/next`. This check fails closed on any
+    `ValidationError` so the violation surfaces in pre-commit before
+    the working tree lands.
+
+    Origin: 2026-05-21 -- two action-queue entries drifted (one carried
+    `closure_verdict`/`closed_at` extra fields, another used
+    `status: park` outside the `QueueStatus` literal and a `strategy_id`
+    extra field). `project_pulse.py --fast --format json` crashed with
+    three `ValidationError`s. Per the n=2-same-class doctrine threshold
+    (`memory/feedback_n3_same_class_doctrine_threshold.md`), the second
+    occurrence promotes the per-instance feedback file to a mechanical
+    drift check.
+
+    Returns
+    -------
+    list[str]
+        Empty when `load_queue()` succeeds. Single descriptive violation
+        on any failure (import error, file missing, ValidationError, YAML
+        parse error).
+    """
+    try:
+        from pipeline.work_queue import load_queue
+    except Exception as exc:
+        return [
+            "check_action_queue_loads_cleanly: failed to import "
+            f"pipeline.work_queue.load_queue: {type(exc).__name__}: {exc}"
+        ]
+
+    try:
+        load_queue()
+    except Exception as exc:
+        return [
+            "check_action_queue_loads_cleanly: "
+            "docs/runtime/action-queue.yaml does NOT validate against the "
+            "canonical pipeline.work_queue.WorkQueue strict schema. "
+            f"{type(exc).__name__}: {exc}. "
+            "Fix the YAML to conform to QueueStatus / QueueClass / "
+            "WorkQueueItem fields, do NOT widen the schema. "
+            "See memory/feedback_n3_same_class_doctrine_threshold.md."
+        ]
+
+    return []
 
 
 CHECKS = [
@@ -13218,6 +13674,18 @@ CHECKS = [
         False,
     ),
     (
+        "lane_allocation per-profile JSON must byte-equal legacy when profile_id matches (Stage 1a dual-write parity)",
+        check_lane_allocation_per_profile_legacy_parity,
+        False,  # blocking — silent dual-write divergence is capital-class risk
+        False,
+    ),
+    (
+        "No direct lane_allocation.json literals in trading_app/ or scripts/tools/ outside resolver allowlist (Stage 1b authority inversion)",
+        check_no_direct_lane_allocation_json_literals,
+        False,  # blocking — forcing function for Stage 1b reader migration + Stage 1d delete-only
+        False,
+    ),
+    (
         "Literature extracts citing research/output/ carry Mode A/B framing",
         check_literature_extracts_mode_a_b_framing,
         False,  # blocking — composite-N / Mode A/B conflation class bug
@@ -13308,7 +13776,7 @@ CHECKS = [
         False,
     ),
     (
-        "Fast-lane structural hash schema parity: scripts/research/fast_lane_structural_hash.py HASH_SCHEMA_VERSION + HASH_SCHEMA_INPUTS must match `## Hash Schema` YAML in 2026-05-20-fast-lane-anti-fp-trial-provenance.md (Stage 2A.1 canonical-inline-copy parity)",
+        "Fast-lane structural hash schema parity: scripts/research/fast_lane_structural_hash.py HASH_SCHEMA_VERSION + HASH_SCHEMA_INPUTS must match `## 9. Hash Schema` YAML in docs/specs/fast_lane_state_graph.md (Stage 2A.1 canonical-inline-copy parity)",
         check_fast_lane_structural_hash_schema_parity,
         False,  # blocking — schema drift silently changes every structural_hash, breaking 2A.2 ledger de-dup + 2A.3 suppression
         False,
@@ -13317,6 +13785,12 @@ CHECKS = [
         "Fast-lane status roll-up reconstruction parity: docs/runtime/fast_lane_status.yaml must match a fresh scripts/tools/fast_lane_status.py build (Stage 2A.2 connective-tissue)",
         check_fast_lane_status_rollup_reconstruction_parity,
         False,  # blocking — hand-edits + capital-class write attempts both fail the chain-awareness contract
+        False,
+    ),
+    (
+        "Fast-lane Phase 5 report-only boundary: research review wording and capital-class writes stay blocked",
+        check_fast_lane_phase5_capital_boundary,
+        False,  # blocking — Phase 5 must not become a live/capital action surface
         False,
     ),
     (
@@ -13344,9 +13818,15 @@ CHECKS = [
         False,
     ),
     (
-        "Fast-lane promote queue provenance present: docs/runtime/promote_queue.yaml gated entries must carry structural_hash + k_lineage + n_hat with rho_hat_assumed=0.5, and STATUS_VALUES suppression tokens must mirror the Stage 2A.3 stage file enum table (Stage 2A.3 Check #173, canonical-inline-copy parity 10th instance, Bailey-Lopez de Prado 2014 sec 3 + Stage 2A.3 design grounding)",
+        "Fast-lane promote queue provenance present: docs/runtime/promote_queue.yaml gated entries must carry structural_hash + k_lineage + n_hat with rho_hat_assumed=0.5, and STATUS_VALUES suppression tokens must mirror docs/specs/fast_lane_state_graph.md `## 10. Suppression Status Enum` (Stage 2A.3 Check #173, canonical-inline-copy parity 10th instance, Bailey-Lopez de Prado 2014 sec 3 + Stage 2A.3 design grounding)",
         check_fast_lane_promote_queue_provenance_present,
         False,  # blocking -- drift silently breaks universe-of-trials accounting + suppression chain
+        False,
+    ),
+    (
+        "Action-queue YAML validates against canonical WorkQueue schema: docs/runtime/action-queue.yaml must load via pipeline.work_queue.load_queue() without ValidationError (project_pulse.py / next.py orient surfaces depend on this)",
+        check_action_queue_loads_cleanly,
+        False,  # blocking -- drift silently breaks /orient and /next
         False,
     ),
 ]  # end CHECKS

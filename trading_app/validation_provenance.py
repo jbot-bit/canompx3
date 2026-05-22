@@ -45,13 +45,21 @@ class StrategyTradeWindowResolver:
     Caches loaded `daily_features`, enriched feature views, and exact-lane
     outcomes within one DB connection so validator/drift can resolve multiple
     strategies without re-querying the same facts repeatedly.
+
+    holdout_cutoff: None  -> full canonical window (promotion-time semantics).
+    holdout_cutoff: date  -> strict population trading_day < cutoff. Use
+        HOLDOUT_SACRED_FROM at refresh/drift-audit time so the recomputed
+        window columns pair to the same strict-IS population that
+        sample_size / expectancy_r / win_rate / sharpe_ratio were frozen on
+        at promotion. See trading_app/chordia.py:158-163 doctrine.
     """
 
-    def __init__(self, con):
+    def __init__(self, con, *, holdout_cutoff: date | None = None):
         self.con = con
+        self.holdout_cutoff = holdout_cutoff
         self._features_cache: dict[tuple[str, int], list[dict]] = {}
         self._filter_day_cache: dict[tuple[str, int, str, str], set[date]] = {}
-        self._outcomes_cache: dict[tuple[str, int, str, str], dict] = {}
+        self._outcomes_cache: dict[tuple[str, int, str, str, date | None], dict] = {}
 
     def _get_features(self, instrument: str, orb_minutes: int) -> list[dict]:
         key = (instrument, orb_minutes)
@@ -111,7 +119,7 @@ class StrategyTradeWindowResolver:
         orb_label: str,
         entry_model: str,
     ) -> dict:
-        cache_key = (instrument, orb_minutes, orb_label, entry_model)
+        cache_key = (instrument, orb_minutes, orb_label, entry_model, self.holdout_cutoff)
         if cache_key not in self._outcomes_cache:
             self._outcomes_cache[cache_key] = _load_outcomes_bulk(
                 self.con,
@@ -119,7 +127,7 @@ class StrategyTradeWindowResolver:
                 orb_minutes,
                 [orb_label],
                 [entry_model],
-                holdout_date=None,
+                holdout_date=self.holdout_cutoff,
                 start_date=None,
             )
         return self._outcomes_cache[cache_key]

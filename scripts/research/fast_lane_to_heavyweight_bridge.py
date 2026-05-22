@@ -48,7 +48,6 @@ from typing import Any
 
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HYPOTHESES_DIR = REPO_ROOT / "docs" / "audit" / "hypotheses"
 DRAFTS_DIR = HYPOTHESES_DIR / "drafts"
@@ -59,14 +58,16 @@ GRAVEYARD_DIGEST_PATH = REPO_ROOT / "docs" / "runtime" / "fast_lane_graveyard_di
 class BridgeRefused(Exception):
     """Raised when bridge pre-flight refuses to author a heavyweight draft.
 
-    Stage 2A.3 introduces four non-OOS refusal triggers:
+    Stage 2A.3+V2 introduces non-OOS refusal triggers:
       - banned entry_model (E0 / E3)
       - E2 + canonical lookahead-class filter
       - structural_hash matches a lane-level graveyard digest entry
-      - K_lane >= 2 (sibling-retest already on the ledger)
+      - promote_queue status is not QUEUED
+      - missing/malformed V2 provenance (structural_hash, k_lineage, n_hat)
+      - K_lane > K_declared_in_prereg
 
     The OOS-power gate (RULE 3.3) stays where it is in the scanner; this
-    bridge sees only QUEUED entries by construction (the scanner emits
+    bridge refuses anything other than QUEUED (the scanner emits
     REJECTED_OOS_UNPOWERED upstream), so OOS power is not re-checked here.
     Refusal raises BridgeRefused with an operator-readable reason; main()
     catches it and exits 3 with the reason on stderr. No draft is written.
@@ -142,14 +143,15 @@ def _rel_to_repo(path: Path) -> str:
         return str(path).replace("\\", "/")
 
 
-def locate_source_yaml(result_md: Path, *, hypotheses_dir: Path = HYPOTHESES_DIR) -> Path | None:
+def locate_source_yaml(result_md: Path, *, hypotheses_dir: Path | None = None) -> Path | None:
     """Find the fast-lane source YAML matching a result MD by filename stem."""
+    hypotheses = hypotheses_dir if hypotheses_dir is not None else HYPOTHESES_DIR
     stem = result_md.stem
-    candidate = hypotheses_dir / f"{stem}.yaml"
+    candidate = hypotheses / f"{stem}.yaml"
     return candidate if candidate.exists() else None
 
 
-def load_fast_lane_source(result_md: Path, *, hypotheses_dir: Path = HYPOTHESES_DIR) -> FastLaneSource | None:
+def load_fast_lane_source(result_md: Path, *, hypotheses_dir: Path | None = None) -> FastLaneSource | None:
     """Load and validate a fast-lane result + source pair.
 
     Returns None when either the result MD or matching YAML is missing,
@@ -183,7 +185,7 @@ def _draft_slug(strategy_id: str) -> str:
     return strategy_id.lower().replace("_", "-").replace(".", "-")
 
 
-def _lookup_promote_queue_entry(strategy_id: str, *, queue_path: Path = PROMOTE_QUEUE_CACHE) -> dict[str, Any] | None:
+def _lookup_promote_queue_entry(strategy_id: str, *, queue_path: Path | None = None) -> dict[str, Any] | None:
     """Return the promote_queue.yaml entry for ``strategy_id``, or None.
 
     The bridge needs ``structural_hash`` + ``k_lineage`` to enforce the
@@ -191,10 +193,11 @@ def _lookup_promote_queue_entry(strategy_id: str, *, queue_path: Path = PROMOTE_
     the single source of truth for those values; the bridge never
     re-computes them.
     """
-    if not queue_path.exists():
+    target = queue_path if queue_path is not None else PROMOTE_QUEUE_CACHE
+    if not target.exists():
         return None
     try:
-        payload = yaml.safe_load(queue_path.read_text(encoding="utf-8"))
+        payload = yaml.safe_load(target.read_text(encoding="utf-8"))
     except yaml.YAMLError:
         return None
     if not isinstance(payload, dict):
@@ -209,7 +212,7 @@ def _lookup_promote_queue_entry(strategy_id: str, *, queue_path: Path = PROMOTE_
 
 
 def _graveyard_has_lane_match(
-    structural_hash: str, *, digest_path: Path = GRAVEYARD_DIGEST_PATH
+    structural_hash: str, *, digest_path: Path | None = None
 ) -> dict[str, Any] | None:
     """Return the FIRST lane-level graveyard entry whose structural_hash
     matches, or None.
@@ -217,10 +220,11 @@ def _graveyard_has_lane_match(
     Class-level entries (``hash_kind == "class"``) DO NOT refuse the
     bridge -- they are informational matches the scanner already cited.
     """
-    if not digest_path.exists():
+    target = digest_path if digest_path is not None else GRAVEYARD_DIGEST_PATH
+    if not target.exists():
         return None
     try:
-        data = yaml.safe_load(digest_path.read_text(encoding="utf-8"))
+        data = yaml.safe_load(target.read_text(encoding="utf-8"))
     except yaml.YAMLError:
         return None
     if not isinstance(data, dict):
@@ -238,10 +242,10 @@ def _graveyard_has_lane_match(
 def _bridge_preflight_refuse(
     source: FastLaneSource,
     *,
-    queue_path: Path = PROMOTE_QUEUE_CACHE,
-    digest_path: Path = GRAVEYARD_DIGEST_PATH,
+    queue_path: Path | None = None,
+    digest_path: Path | None = None,
 ) -> None:
-    """Apply Stage 2A.3 4-trigger refusal chain. Raises BridgeRefused on
+    """Apply Stage 2A.3+V2 refusal chain. Raises BridgeRefused on
     any hit; returns None when the source survives every gate.
 
     Triggers (in order):
@@ -250,7 +254,9 @@ def _bridge_preflight_refuse(
          ``E2_EXCLUDED_FILTER_PREFIXES`` / ``E2_EXCLUDED_FILTER_SUBSTRINGS``
          (canonical from ``trading_app.config`` -- NEVER re-encode here).
       3. ``structural_hash`` matches a lane-level graveyard entry.
-      4. ``K_lane >= 2`` (ledger says the lane was already tested twice).
+      4. promote_queue status is not ``QUEUED``.
+      5. V2 provenance is missing or malformed.
+      6. ``K_lane > K_declared_in_prereg``.
     """
     scope = source.scope
     entry_model_raw = scope.get("entry_model")
@@ -310,6 +316,15 @@ def _bridge_preflight_refuse(
             "invoking the bridge so provenance gates can be enforced."
         )
 
+    status = cache_entry.get("status")
+    if status != "QUEUED":
+        raise BridgeRefused(
+            f"promote_queue.yaml entry for {scope['strategy_id']!r} has "
+            f"status={status!r}; expected QUEUED. Bridge only authors drafts "
+            "from currently queued Fast Lane survivors. Resolve the upstream "
+            "blocker instead of bypassing promote_queue status."
+        )
+
     structural_hash = cache_entry.get("structural_hash")
     if not isinstance(structural_hash, str) or len(structural_hash) != 16:
         raise BridgeRefused(
@@ -317,6 +332,14 @@ def _bridge_preflight_refuse(
             f"malformed structural_hash={structural_hash!r}; rerun the "
             "scanner with --write to refresh provenance fields."
         )
+    try:
+        int(structural_hash, 16)
+    except ValueError as exc:
+        raise BridgeRefused(
+            f"promote_queue.yaml entry for {scope['strategy_id']!r} has "
+            f"non-hex structural_hash={structural_hash!r}; rerun the scanner "
+            "with --write to refresh provenance fields."
+        ) from exc
 
     # Trigger 3: graveyard lane match.
     grave = _graveyard_has_lane_match(structural_hash, digest_path=digest_path)
@@ -329,21 +352,35 @@ def _bridge_preflight_refuse(
             "author a draft for a graveyard lane."
         )
 
-    # Trigger 4: K_lane >= 2 sibling-retest.
     k_lineage = cache_entry.get("k_lineage") or {}
-    if isinstance(k_lineage, dict):
-        try:
-            k_lane = int(k_lineage.get("K_lane", 0))
-        except (TypeError, ValueError):
-            k_lane = 0
-        if k_lane >= 2:
-            raise BridgeRefused(
-                f"K_lane={k_lane} (>= 2) for structural_hash="
-                f"{structural_hash!r}; ledger shows >= 2 prior tests on "
-                "this lane (sibling-retest gate per stage file "
-                "§ Suppression Status Enum). PARK or pool with siblings "
-                "rather than authoring another heavyweight draft."
-            )
+    if not isinstance(k_lineage, dict) or not k_lineage:
+        raise BridgeRefused(
+            f"promote_queue.yaml entry for {scope['strategy_id']!r} is "
+            "missing k_lineage; rerun the scanner with --write so V2 trial "
+            "budget provenance is present before bridge authoring."
+        )
+    try:
+        k_lane = int(k_lineage["K_lane"])
+        k_declared = int(k_lineage["K_declared_in_prereg"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise BridgeRefused(
+            f"promote_queue.yaml entry for {scope['strategy_id']!r} has "
+            f"malformed k_lineage={k_lineage!r}; expected K_lane and "
+            "K_declared_in_prereg integers."
+        ) from exc
+    if k_lane > k_declared:
+        raise BridgeRefused(
+            f"K_lane={k_lane} > K_declared_in_prereg={k_declared} for "
+            f"structural_hash={structural_hash!r}; observed trial count "
+            "exceeds the preregistered V2 lane-level trial budget. PARK or "
+            "pool with siblings rather than authoring another heavyweight draft."
+        )
+    if cache_entry.get("n_hat") is None:
+        raise BridgeRefused(
+            f"promote_queue.yaml entry for {scope['strategy_id']!r} is "
+            "missing n_hat; rerun the scanner with --write so correlation "
+            "haircut provenance is present before bridge authoring."
+        )
 
 
 def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str, Any]:
@@ -370,9 +407,9 @@ def build_heavyweight_prereg(source: FastLaneSource, *, today: str) -> dict[str,
       field validation. Refusal raises ``BridgeRefused``; ``main()``
       catches and exits 3 with the reason on stderr. No draft is written.
     """
-    # Stage 2A.3 pre-flight: refuse banned entry, E2 lookahead, graveyard
-    # lane, sibling-retest. Runs first because if we are going to refuse,
-    # there is no point validating the rest of the source.
+    # Stage 2A.3+V2 pre-flight: refuse banned entry, E2 lookahead,
+    # graveyard lane, non-QUEUED status, malformed provenance, and K
+    # overrun before authoring any heavyweight draft.
     _bridge_preflight_refuse(source)
 
     scope = source.scope

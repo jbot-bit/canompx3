@@ -22,7 +22,6 @@ import yaml
 from scripts.research import cherry_pick_journal_enricher as enricher
 from scripts.research import cherry_pick_ranker as cpr
 
-
 # ---------- Fixtures ----------
 
 

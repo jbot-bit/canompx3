@@ -212,6 +212,18 @@ def test_get_strategy_readiness_for_unvalidated_skips_fitness(tmp_path: Path) ->
     assert fitness_calls == []
 
 
+def test_public_strategy_readiness_payload_delegates_to_existing_readiness() -> None:
+    with patch.object(
+        srv,
+        "_get_strategy_readiness",
+        return_value={"strategy_id": "MNQ_X", "verdict": "PROMOTABLE"},
+    ) as mocked:
+        payload = srv.get_strategy_readiness_payload("MNQ_X", rolling_months=12)
+
+    mocked.assert_called_once_with("MNQ_X", 12)
+    assert payload == {"strategy_id": "MNQ_X", "verdict": "PROMOTABLE"}
+
+
 # ---------------------------------------------------------------------------
 # get_lane_allocation_summary
 # ---------------------------------------------------------------------------

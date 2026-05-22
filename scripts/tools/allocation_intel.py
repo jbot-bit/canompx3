@@ -7,7 +7,7 @@ Run after every rebalance, or on session start, to surface:
   4. Session regime sweep with coverage gaps (HOT sessions undermapped)
   5. Allocation staleness (days since last rebalance)
 
-Read-only. Reads canonical: lane_allocation.json + validated_setups.
+Read-only. Reads canonical: lane allocation file + validated_setups.
 
 Usage:
     python scripts/tools/allocation_intel.py
@@ -30,7 +30,11 @@ import duckdb
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
-from trading_app.prop_profiles import ACCOUNT_PROFILES
+from trading_app.prop_profiles import (
+    ACCOUNT_PROFILES,
+    legacy_lane_allocation_path,
+    resolve_allocation_json,
+)
 
 
 def _tradeable_sessions() -> tuple[str, ...]:
@@ -46,13 +50,23 @@ def _tradeable_sessions() -> tuple[str, ...]:
     return tuple(sorted(sessions))
 
 
-ALLOCATION_JSON = Path(__file__).resolve().parent.parent.parent / "docs" / "runtime" / "lane_allocation.json"
+def _load_allocation(profile_id: str | None = None) -> dict:
+    """Load allocation data via the canonical resolver.
 
-
-def _load_allocation() -> dict:
-    if not ALLOCATION_JSON.exists():
-        raise FileNotFoundError(f"Allocation file missing: {ALLOCATION_JSON}")
-    return json.loads(ALLOCATION_JSON.read_text())
+    When ``profile_id`` is supplied, uses ``resolve_allocation_json`` for
+    new-path-first + profile-mismatch guard semantics. Otherwise falls back
+    to a direct read of the legacy single-profile file (no profile guard —
+    used by the informational-only main() path).
+    """
+    if profile_id:
+        result = resolve_allocation_json(profile_id)
+        if result.data is None:
+            raise FileNotFoundError(f"Allocation file missing or profile_id mismatch for {profile_id!r}")
+        return result.data
+    legacy_path = legacy_lane_allocation_path()
+    if not legacy_path.exists():
+        raise FileNotFoundError(f"Allocation file missing: {legacy_path}")
+    return json.loads(legacy_path.read_text())
 
 
 def _staleness_days(rebalance_date: str | None) -> int | None:
@@ -111,7 +125,7 @@ def _compute_session_regimes(con: duckdb.DuckDBPyConnection) -> list[dict]:
 
     Mirrors the rebalancer's session-regime sweep. Computed inline so this script
     is self-contained (the rebalancer prints regimes to stdout but does not
-    persist them to lane_allocation.json).
+    persist them to the lane allocation file).
 
     Filters to ACTIVE_ORB_INSTRUMENTS x _tradeable_sessions() -- ignores dead
     instruments (SIL/M2K/GC/MBT/MCL/M6E) and non-tradeable session labels
@@ -179,7 +193,7 @@ def main() -> None:
     parser.add_argument("--profile", type=str, default=None, help="Profile filter (informational only)")
     args = parser.parse_args()
 
-    alloc = _load_allocation()
+    alloc = _load_allocation(args.profile)
     rebal_date = alloc.get("rebalance_date")
     profile_id = alloc.get("profile_id", "unknown")
     if args.profile and args.profile != profile_id:

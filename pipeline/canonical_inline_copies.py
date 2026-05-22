@@ -229,11 +229,7 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         name="fast_lane_structural_hash_schema",
         inline_site="scripts/research/fast_lane_structural_hash.py",
         canonical_source=(
-            "docs/specs/fast_lane_state_graph.md "
-            "section `## 9. Hash Schema` (hash_schema_version + 9-field inputs). "
-            "Relocated from "
-            "docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md "
-            "on 2026-05-21 per surface-taxonomy doctrine."
+            "docs/specs/fast_lane_state_graph.md section `## 9. Hash Schema` (hash_schema_version + 9-field inputs)."
         ),
         gated_constants=(
             "HASH_SCHEMA_VERSION",
@@ -249,11 +245,13 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
             "Foundational substrate for fast-lane anti-FP trial provenance. "
             "The structural_hash function inlines `HASH_SCHEMA_VERSION = 1` "
             "and the 9-field `HASH_SCHEMA_INPUTS` tuple with a docstring "
-            "cite to the canonical `## Hash Schema` block in the Stage 2A "
-            "design doc. Schema drift between code and doc would silently "
+            "cite to the canonical `## 9. Hash Schema` block in "
+            "docs/specs/fast_lane_state_graph.md. Schema drift between code and doc would silently "
             "change every hash going forward, breaking de-dup / suppression "
             "rules consumed by 2A.2 (ledger) and 2A.3 (scanner/bridge). "
-            "Check #167 parses the doc YAML block and asserts parity."
+            "Check #167 parses the doc YAML block and asserts parity. "
+            "The block was relocated from the Stage 2A trial-provenance "
+            "stage file on 2026-05-21 per surface-taxonomy doctrine."
         ),
     ),
     InlineCopyPair(
@@ -293,9 +291,7 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         canonical_source=(
             "docs/specs/fast_lane_state_graph.md "
             "section `## 10. Suppression Status Enum` (6 SUPPRESSED_* "
-            "tokens in the table's first column). Relocated from "
-            "docs/runtime/stages/2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md "
-            "on 2026-05-21 per surface-taxonomy doctrine."
+            "tokens in the table's first column)."
         ),
         gated_constants=("STATUS_VALUES",),
         parity_check="check_fast_lane_promote_queue_provenance_present",
@@ -307,14 +303,16 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         notes=(
             "Six SUPPRESSED_* status tokens added to "
             "fast_lane_promote_queue.STATUS_VALUES must mirror the "
-            "first-column entries in the Stage 2A.3 stage file's "
-            "`## Suppression Status Enum` table (parsed by the parity "
+            "first-column entries in docs/specs/fast_lane_state_graph.md "
+            "`## 10. Suppression Status Enum` table (parsed by the parity "
             "check). The same check also asserts every PROMOTE / QUEUED "
             "/ SUPPRESSED_* cache entry carries the 5 provenance fields "
             "(structural_hash, k_lineage, N_hat, upstream_k_role, "
             "upstream_k_value) with rho_hat_assumed == 0.5 — both "
             "gates live in one check because the suppression tokens and "
-            "the provenance fields are written by the same scanner pass."
+            "the provenance fields are written by the same scanner pass. "
+            "The enum was relocated from the Stage 2A.3 scanner/bridge "
+            "stage file on 2026-05-21 per surface-taxonomy doctrine."
         ),
     ),
     InlineCopyPair(

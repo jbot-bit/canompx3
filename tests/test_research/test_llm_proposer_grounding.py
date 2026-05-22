@@ -23,7 +23,6 @@ from scripts.research.lhp.literature_index import (
 )
 from scripts.research.lhp.static_checks import check_grounding_provenance_block
 
-
 # ---------- search_corpus ----------
 
 

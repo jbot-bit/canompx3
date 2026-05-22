@@ -1735,6 +1735,13 @@ def run_validation(
                     "Cannot resolve git SHA for promotion provenance; "
                     "refusing to write native validated_setups rows fail-open."
                 )
+            # Intentional full-window resolver (holdout_cutoff=None): promotion
+            # path. Perf columns (sample_size/win_rate/expectancy_r/sharpe_ratio)
+            # come from row_dict frozen at discovery time, which already filtered
+            # at HOLDOUT_SACRED_FROM. Window columns derived here pair to the
+            # strict-IS population by construction. Do NOT switch to strict-IS
+            # here — refresh/audit paths use it; promotion does not.
+            # See trading_app/chordia.py:158-170 doctrine.
             provenance_resolver = StrategyTradeWindowResolver(con)
             promotion_written_at = datetime.now(UTC)
 

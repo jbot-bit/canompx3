@@ -18,7 +18,6 @@ from pathlib import Path
 
 import pytest
 
-
 ASK_SOURCE = Path.home() / ".canompx-ask" / "ask.py"
 INSTALL_SOURCE = Path.home() / ".canompx-ask" / "install_ask.py"
 

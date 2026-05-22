@@ -25,6 +25,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal, NamedTuple
 
 # =========================================================================
 # Data structures
@@ -1109,50 +1110,174 @@ def compute_profit_split_factor(firm_spec: PropFirmSpec, cumulative_profit: floa
 # =========================================================================
 
 
+# NOTE: canonical helpers (`normalize_writable_path` / `DEFAULT_LANE_ALLOCATION_PATH` /
+# `lane_allocation_profile_path` / `DEFAULT_LANE_ALLOCATION_DIR`) live in
+# `trading_app.lane_allocator` per institutional-rigor § 4. We cannot import
+# them here because `prop_profiles.py` runs `validate_dd_budget()` at module
+# load, which transitively reaches `load_allocation_lanes -> lane_allocator`
+# while `lane_allocator` is still partway through importing
+# `lane_correlation -> prop_profiles`. A function-level import does NOT break
+# the cycle because the function is invoked at module-load time.
+# Inlining the path expressions below is the documented exception.
+# Schema spec: docs/specs/lane_allocation_schema.md
+def _normalize_lane_alloc_path(path: Path) -> Path:
+    text = str(path)
+    if text.startswith("/mnt/c/Users/"):
+        return Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
+    return path
+
+
+def _legacy_lane_allocation_path() -> Path:
+    return _normalize_lane_alloc_path(Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json")
+
+
+class AllocationRead(NamedTuple):
+    """Result of resolving a profile's lane-allocation JSON.
+
+    `source` carries provenance of where `data` came from. Stage 1d will
+    require zero `source="legacy"` reads in a stabilization window before
+    the legacy fallback is removed.
+    """
+
+    data: dict | None
+    source: Literal["new_path", "legacy", "override", "missing"]
+    path: Path | None
+
+
+def _new_lane_allocation_dir() -> Path:
+    return _normalize_lane_alloc_path(Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation")
+
+
+def legacy_lane_allocation_path() -> Path:
+    """Public alias for the legacy single-profile allocation path.
+
+    Use this in code-fingerprint anchors and other consumers that need to
+    reference the canonical legacy filesystem location WITHOUT inlining the
+    literal path string. Inlining triggers
+    ``check_no_direct_lane_allocation_json_literals`` (Stage 1b grep-gate).
+
+    Returns the same Path as the internal ``_legacy_lane_allocation_path()``
+    helper used by the resolver. The Stage 1d removal will retire both this
+    function and ``_legacy_lane_allocation_path`` together.
+    """
+    return _legacy_lane_allocation_path()
+
+
+def new_lane_allocation_dir() -> Path:
+    """Public alias for the per-profile allocation directory.
+
+    Mirrors ``legacy_lane_allocation_path`` — exposes the new-path location
+    for consumers that need the directory itself (e.g., directory-watching
+    code, code-fingerprint anchors) without inlining the literal.
+    """
+    return _new_lane_allocation_dir()
+
+
+def resolve_allocation_json(
+    profile_id: str,
+    allocation_path: str | Path | None = None,
+) -> AllocationRead:
+    """Canonical resolver for lane-allocation JSON reads (Stage 1b).
+
+    Single owner of: new-path preference, legacy fallback, profile-mismatch
+    fail-closed, multi-file ambiguity hard-fail, provenance. Every production
+    reader MUST use this resolver and MUST NOT re-implement path resolution
+    (institutional-rigor.md § 4: delegate to canonical sources, never re-encode).
+
+    Resolution order (per docs/specs/lane_allocation_schema.md § 4):
+      1. If `allocation_path` is supplied, read it directly with the legacy
+         profile-mismatch guard. No fallback. `source="override"`.
+      2. Otherwise enumerate `docs/runtime/lane_allocation/<profile_id>.json`.
+         If >1 file resolves for the same profile_id (case-fold collision,
+         duplicate, symlink), raise RuntimeError — this is a Stage-1a writer
+         invariant violation and capital-class trust is suspect.
+      3. If exactly one new-path file resolves with matching `profile_id`,
+         return it. `source="new_path"`.
+      4. Otherwise fall back to the legacy single-profile file with the
+         profile-mismatch guard. `source="legacy"`.
+      5. If both miss / corrupt / mismatched, return `source="missing"`.
+
+    Returns `AllocationRead(data, source, path)`. `data is None` iff
+    `source == "missing"`.
+    """
+    import json
+
+    def _try_read(path: Path) -> dict | None:
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        if data.get("profile_id") != profile_id:
+            return None
+        return data
+
+    if allocation_path:
+        explicit_path = _normalize_lane_alloc_path(Path(allocation_path))
+        data = _try_read(explicit_path)
+        if data is not None:
+            return AllocationRead(data=data, source="override", path=explicit_path)
+        return AllocationRead(data=None, source="missing", path=explicit_path)
+
+    new_dir = _new_lane_allocation_dir()
+    if new_dir.exists():
+        # Stage 1a writes exactly one file per profile. Multi-file ambiguity
+        # signals corruption: case-fold collision on Windows after a Linux
+        # copy, accidental duplicate from a botched rebalance, symlink trick.
+        # Hard-fail rather than silently pick one.
+        matches = sorted(p for p in new_dir.iterdir() if p.is_file() and p.stem == profile_id and p.suffix == ".json")
+        if len(matches) > 1:
+            raise RuntimeError(
+                "lane_allocation multi-file ambiguity for profile_id="
+                f"{profile_id!r}: {[str(p) for p in matches]}. "
+                "Stage 1a writer invariant violation; capital-class trust "
+                "suspect — investigate before any rebalance or live launch."
+            )
+        if matches:
+            new_path = matches[0]
+            data = _try_read(new_path)
+            if data is not None:
+                return AllocationRead(data=data, source="new_path", path=new_path)
+
+    legacy_path = _legacy_lane_allocation_path()
+    data = _try_read(legacy_path)
+    if data is not None:
+        return AllocationRead(data=data, source="legacy", path=legacy_path)
+    return AllocationRead(data=None, source="missing", path=None)
+
+
+def _read_allocation_data(
+    profile_id: str,
+    allocation_path: str | Path | None,
+) -> dict | None:
+    """Backward-compat shim — internal callers use the resolver.
+
+    Prefer `resolve_allocation_json(profile_id, allocation_path).data` in new
+    code so provenance is preserved.
+    """
+    return resolve_allocation_json(profile_id, allocation_path).data
+
+
 def load_allocation_lanes(
     profile_id: str,
     allocation_path: str | Path | None = None,
 ) -> tuple[DailyLaneSpec, ...]:
-    """Load allocated lanes for a profile from lane_allocation.json.
+    """Load allocated lanes for a profile from the lane-allocation JSON.
+
+    Reads the per-profile file at `docs/runtime/lane_allocation/<profile_id>.json`
+    first, falling back to the legacy `docs/runtime/lane_allocation.json` on
+    miss (Stage 1a — dual-path transitional). Both paths enforce the
+    profile-mismatch guard.
 
     Fail-closed: returns empty tuple on missing file, profile mismatch,
     corrupt JSON, or any parse error. This ensures resolve_daily_lanes()
     returns an empty list, which check_allocation_staleness() then blocks.
     """
-    import json
-
-    # NOTE: canonical helper lives in trading_app.lane_allocator
-    # (normalize_writable_path / DEFAULT_LANE_ALLOCATION_PATH) per
-    # institutional-rigor § 4. We cannot import it here because
-    # prop_profiles.py runs validate_dd_budget() at module load (line 1254),
-    # which transitively reaches load_allocation_lanes -> lane_allocator
-    # while lane_allocator is still partway through importing
-    # lane_correlation -> prop_profiles. A function-level import does NOT
-    # break the cycle because the function is invoked at module-load time.
-    # Inlining the two lines below is the documented exception.
-    def _normalize_writable_path(path: Path) -> Path:
-        text = str(path)
-        if text.startswith("/mnt/c/Users/"):
-            return Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
-        return path
-
-    if allocation_path:
-        path = _normalize_writable_path(Path(allocation_path))
-    else:
-        path = _normalize_writable_path(
-            Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
-        )
-
-    if not path.exists():
-        return ()
-
-    try:
-        data = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return ()
-
-    # Profile must match — fail-closed on mismatch
-    if data.get("profile_id") != profile_id:
+    data = _read_allocation_data(profile_id, allocation_path)
+    if data is None:
         return ()
 
     lanes_data = data.get("lanes")
@@ -1191,12 +1316,19 @@ def load_allocation_lanes(
 
 def load_paused_strategy_ids(
     allocation_path: str | Path | None = None,
+    profile_id: str | None = None,
 ) -> frozenset[str]:
     """Load the set of strategy_ids the allocator has blocked (paused+stale).
 
     Canonical reader for the `paused[]` and `stale[]` arrays in
-    lane_allocation.json. SessionOrchestrator consumes this to gate live
-    entries by allocator regime decisions.
+    the lane-allocation JSON. SessionOrchestrator consumes this to gate
+    live entries by allocator regime decisions.
+
+    When `profile_id` is supplied, prefers the per-profile file
+    `docs/runtime/lane_allocation/<profile_id>.json` and applies the
+    profile-mismatch guard (Stage 1a — dual-path transitional). When
+    `profile_id` is None, reads the legacy single-profile file with no
+    guard (backward-compat for callers that have not been migrated yet).
 
     Fail-closed: returns empty frozenset on missing file, corrupt JSON, or
     any parse error. The caller decides whether empty = open or closed
@@ -1204,26 +1336,25 @@ def load_paused_strategy_ids(
     """
     import json
 
-    def _normalize_writable_path(path: Path) -> Path:
-        text = str(path)
-        if text.startswith("/mnt/c/Users/"):
-            return Path(text.replace("/mnt/c/Users/", "/mnt/c/users/", 1))
-        return path
-
-    if allocation_path:
-        path = _normalize_writable_path(Path(allocation_path))
+    if profile_id is not None:
+        data = _read_allocation_data(profile_id, allocation_path)
+        if data is None:
+            return frozenset()
     else:
-        path = _normalize_writable_path(
-            Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
-        )
-
-    if not path.exists():
-        return frozenset()
-
-    try:
-        data = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return frozenset()
+        # Legacy path: no profile guard, read whichever file the caller
+        # supplied or the default legacy single-profile file.
+        if allocation_path:
+            path = _normalize_lane_alloc_path(Path(allocation_path))
+        else:
+            path = _legacy_lane_allocation_path()
+        if not path.exists():
+            return frozenset()
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return frozenset()
+        if not isinstance(data, dict):
+            return frozenset()
 
     blocked: set[str] = set()
     for key in ("paused", "stale"):

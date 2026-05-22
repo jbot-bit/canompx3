@@ -1773,3 +1773,126 @@ class TestDisplacedOutCapture:
         assert {s.strategy_id for s in result} == {"A"}
         # Pre-existing tests rely on this contract. If this fails, the
         # signature changed in a backwards-incompatible way.
+
+
+# =========================================================================
+# Stage 1a — Multi-profile lane_allocation dual-write
+# Spec: docs/specs/lane_allocation_schema.md
+# =========================================================================
+
+
+class TestMultiProfileDualWrite:
+    """save_allocation writes both the new per-profile path AND the legacy
+    single-profile file when called with the default output path. Explicit
+    output_path callers retain single-file semantics.
+    """
+
+    def test_default_output_path_writes_both_files(self, tmp_path, monkeypatch):
+        """Calling save_allocation with no output_path emits BOTH:
+          (1) docs/runtime/lane_allocation/<profile_id>.json (new)
+          (2) docs/runtime/lane_allocation.json (legacy)
+        with byte-identical JSON content.
+        """
+        import json
+        from datetime import date as _date
+
+        from trading_app import lane_allocator as la
+
+        legacy = tmp_path / "lane_allocation.json"
+        new_dir = tmp_path / "lane_allocation"
+        monkeypatch.setattr(la, "DEFAULT_LANE_ALLOCATION_PATH", legacy)
+        monkeypatch.setattr(la, "DEFAULT_LANE_ALLOCATION_DIR", new_dir)
+
+        s = _make_score(
+            strategy_id="A",
+            chordia_verdict="PASS_PROTOCOL_A",
+            chordia_audit_age_days=5,
+        )
+        returned = la.save_allocation(
+            scores=[s],
+            allocation=[s],
+            rebalance_date=_date(2026, 5, 21),
+            profile_id="test_profile_dual",
+            # No output_path → default branch → dual-write
+        )
+
+        new_path = new_dir / "test_profile_dual.json"
+        assert legacy.exists(), "legacy single-profile file not written"
+        assert new_path.exists(), "new per-profile file not written"
+        # Content parity: both files MUST contain byte-identical JSON.
+        assert legacy.read_text() == new_path.read_text()
+        # Sanity-check JSON shape under both.
+        data = json.loads(new_path.read_text())
+        assert data["profile_id"] == "test_profile_dual"
+        assert len(data["lanes"]) == 1
+        # Backward-compat: returned path is still the legacy path.
+        assert returned == legacy
+
+    def test_explicit_output_path_skips_dual_write(self, tmp_path, monkeypatch):
+        """When the caller supplies output_path explicitly, save_allocation
+        writes ONLY that path. Defaults are not touched."""
+        from datetime import date as _date
+
+        from trading_app import lane_allocator as la
+
+        legacy = tmp_path / "should_not_exist_legacy.json"
+        new_dir = tmp_path / "should_not_exist_dir"
+        monkeypatch.setattr(la, "DEFAULT_LANE_ALLOCATION_PATH", legacy)
+        monkeypatch.setattr(la, "DEFAULT_LANE_ALLOCATION_DIR", new_dir)
+
+        explicit = tmp_path / "explicit_alloc.json"
+        s = _make_score(strategy_id="A")
+        returned = la.save_allocation(
+            scores=[s],
+            allocation=[s],
+            rebalance_date=_date(2026, 5, 21),
+            profile_id="test_profile_explicit",
+            output_path=explicit,
+        )
+
+        assert explicit.exists()
+        assert returned == explicit
+        # Default paths must NOT have been touched.
+        assert not legacy.exists()
+        assert not new_dir.exists()
+
+    def test_dual_write_creates_per_profile_directory(self, tmp_path, monkeypatch):
+        """Per-profile directory is created lazily by the writer.
+
+        Verifies the writer's mkdir(parents=True, exist_ok=True) path.
+        """
+        from datetime import date as _date
+
+        from trading_app import lane_allocator as la
+
+        # Point DEFAULT_LANE_ALLOCATION_DIR at a path that does NOT yet exist.
+        legacy = tmp_path / "lane_allocation.json"
+        new_dir = tmp_path / "deep" / "nested" / "lane_allocation"
+        monkeypatch.setattr(la, "DEFAULT_LANE_ALLOCATION_PATH", legacy)
+        monkeypatch.setattr(la, "DEFAULT_LANE_ALLOCATION_DIR", new_dir)
+        assert not new_dir.exists()
+
+        s = _make_score(strategy_id="A")
+        la.save_allocation(
+            scores=[s],
+            allocation=[s],
+            rebalance_date=_date(2026, 5, 21),
+            profile_id="p1",
+        )
+
+        assert new_dir.exists()
+        assert (new_dir / "p1.json").exists()
+
+    def test_lane_allocation_profile_path_helper(self, tmp_path):
+        """lane_allocation_profile_path() returns the canonical per-profile
+        path under either the default dir or a supplied base_dir."""
+        from trading_app.lane_allocator import (
+            DEFAULT_LANE_ALLOCATION_DIR,
+            lane_allocation_profile_path,
+        )
+
+        default = lane_allocation_profile_path("topstep_50k_mnq_auto")
+        assert default == DEFAULT_LANE_ALLOCATION_DIR / "topstep_50k_mnq_auto.json"
+
+        custom = lane_allocation_profile_path("topstep_50k_mnq_auto", base_dir=tmp_path)
+        assert custom == tmp_path / "topstep_50k_mnq_auto.json"

@@ -30,7 +30,6 @@ import pytest
 from pipeline.check_drift import check_fast_lane_promote_threshold_parity
 from scripts.research import fast_lane_promote_queue as flpq
 
-
 # ----------------------------- clean-state ------------------------------
 
 

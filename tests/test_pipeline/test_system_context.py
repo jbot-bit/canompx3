@@ -4,10 +4,10 @@ import json
 import os
 import subprocess
 import sys
-
-import pytest
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from pipeline import system_context
 from pipeline.system_context import (
