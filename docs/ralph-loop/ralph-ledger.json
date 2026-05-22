@@ -1,8 +1,8 @@
 {
-  "total_iterations": 192,
+  "total_iterations": 193,
   "last_updated": "2026-05-23",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 199,
+  "last_high_finding_iter": 200,
   "findings_by_type": {
     "canonical_violation": {
       "found": 64,
@@ -11,8 +11,8 @@
       "fix_rate": 0.8
     },
     "silent_failure": {
-      "found": 44,
-      "fixed": 40,
+      "found": 45,
+      "fixed": 41,
       "deferred": 2,
       "fix_rate": 0.91
     },
@@ -128,12 +128,12 @@
   "findings_by_severity": {
     "CRITICAL": 9,
     "HIGH": 14,
-    "MEDIUM": 50,
+    "MEDIUM": 51,
     "LOW": 119
   },
   "classifications": {
     "judgment": 85,
-    "mechanical": 74,
+    "mechanical": 75,
     "audit-only": 33
   },
   "files_audited": {
@@ -202,6 +202,11 @@
       "last_iter": 180,
       "findings": 2
     },
+    "trading_app/prop_portfolio.py": {
+      "audit_count": 4,
+      "last_iter": 200,
+      "findings": 4
+    },
     "trading_app/prop_profiles.py": {
       "audit_count": 4,
       "last_iter": 184,
@@ -241,11 +246,6 @@
       "audit_count": 3,
       "last_iter": 91,
       "findings": 2
-    },
-    "trading_app/prop_portfolio.py": {
-      "audit_count": 3,
-      "last_iter": 195,
-      "findings": 3
     },
     "pipeline/check_drift.py": {
       "audit_count": 3,
@@ -3300,6 +3300,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "009b7fce"
+    },
+    {
+      "iter": 200,
+      "date": "2026-05-23",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/prop_portfolio.py:436",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "9db13515"
     }
   ]
 }

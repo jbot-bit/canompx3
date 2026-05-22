@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 200 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/prop_portfolio.py:436
+- Finding: _query_paper_pnl logger.debug passed exc_info=True as positional format arg (%s), discarding exception traceback silently
+- Doctrine cited: integrity-guardian.md § 6 (no silent failures — every except Exception must record the exception)
+- Action: Fixed logger.debug call to pass exc_info as keyword; added 2 tests (DB error captures exc_info, missing-table returns None)
+- Blast radius: 2 files (prop_portfolio.py + test_prop_portfolio.py)
+- Verification: PASS — 48/48 tests, 160 drift checks
+- Commit: 9db13515
+
+---
+
 ## Iteration 199 — 2026-05-23
 - Phase: fix
 - Classification: [judgment]
