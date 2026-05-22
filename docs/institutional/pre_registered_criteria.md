@@ -1036,3 +1036,57 @@ No grandfather window. The migration script (`scripts/tools/migrate_preregs_amen
 **Why this exists:** Amendment 3.0 coupled the citation requirement to `testing_mode='individual'`, which created the doctrinal bug that an honest no-theory Pathway-B prereg could not exist. The field-presence inference at `hypothesis_loader.py:265-269` simultaneously created the trap that any truthy string in `theory_citation` silently flipped `has_theory=True`. Both bugs share one root cause: implicit inference from a string field. The fix is to make the semantic flag **explicit** (a boolean) and to fail closed on every ambiguous case.
 
 **Cross-reference:** Design proposal at `docs/plans/2026-05-17-hypothesis-loader-no-theory-pathway-b-amendment.md`. Memory anchors: `feedback_chordia_theory_citation_field_presence_trap.md`, `feedback_lhp_validator_vs_field_presence_trap_n1.md`.
+
+---
+
+## Amendment 3.4 — Theory-grant attachment class for mechanism-class-transfer grants (added 2026-05-23, **PROVISIONAL, RE-AUDIT OPEN**)
+
+**Status:** **PROVISIONAL**. Adopted 2026-05-23 for live-continuity only. NOT permanent doctrine. An independent audit of the mechanism-class-transfer construction is required before this amendment can transition from PROVISIONAL to BINDING. Until that audit closes, **no new PASS_PROTOCOL_A grants under this construction are permitted**.
+
+**Date:** 2026-05-23
+
+**Trigger:** `2026-05-23-mnq-tokyoopen-costlt08-chordia-unlock-v1` prereg granted `theory_grant: true` on Chan 2013 Ch 7 cash-session-open mechanism, with explicit caveat that "the theory grant covers the SESSION-ENTRY MECHANISM, not the COST_LT08 filter class." A 2026-05-23 closeout review verified the Chan Ch 7 extract grounds the parent session-entry stop-cascade mechanism but does NOT name cost-screen filters as alpha. Two sibling lanes use the identical construction:
+
+- `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` — PASS_PROTOCOL_A 2026-05-01, currently live-deployed via `topstep_50k_mnq_auto`.
+- `MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12` — PASS_PROTOCOL_A 2026-05-07, not allocated.
+
+The doctrine question (`docs/audit/doctrine-questions/2026-05-23-protocol-a-theory-grant-attachment-class.md`) presents two readings:
+
+- **Option A (strict):** theory_grant attaches to the exact tested (session × entry × RR × filter) cell. A parent-mechanism extract does not grant a cell whose filter is project-engineered (cost-screen, volume threshold, ATR percentile).
+- **Option B (permissive):** theory_grant attaches to the parent session-entry mechanism. A deployable filter sitting on top of a session-grounded edge does not require its own theory grant; it is treated as an operational deployment screen.
+
+Operator adopted **provisional Option B** because Option A would force immediate re-audit of a currently-deployed live lane and the project has been operating under Option B since 2026-05-01. However, the operator explicitly flagged that the existing sibling precedents may be **repeated error** rather than proof of doctrinal soundness, and that pre_registered_criteria's Pathway B language ("specific mechanism-session-instrument prediction") arguably requires Option A.
+
+**Provisional rule (binding pending re-audit):**
+
+A `theory_grant: true` prereg MAY cite a parent-mechanism extract as theory_grant_basis (e.g., Chan Ch 7 for cash-session-open stop-cascade), provided ALL of the following hold:
+
+1. **Parent mechanism is extract-grounded.** The theory_grant_basis cites a real on-disk literature extract in `docs/institutional/literature/` that names the parent mechanism class. Paraphrase, "in the spirit of," or training-memory citations are forbidden.
+2. **Filter is operationally non-adversarial to the parent mechanism.** The filter gates *when* the parent mechanism is taken, not *whether* the parent mechanism exists. A counter-trend filter on a momentum-grounded entry does NOT inherit the grant.
+3. **Filter is E2-deployment-safe.** No look-ahead. Filter must not appear in `E2_EXCLUDED_FILTER_PREFIXES` / `_SUBSTRINGS` / `_DEPLOYMENT_UNSAFE_PREFIXES`.
+4. **Cell-level t ≥ 3.00 hurdle still applies.** Theory grant lowers the strict-Chordia 3.79 ceiling to the Harvey-Liu 3.00 with-theory hurdle. A cell failing 3.00 fails Protocol A regardless of attachment class.
+5. **Explicit caveat in audit-log note.** The note MUST state "Grant covers parent session-entry mechanism, not filter class" verbatim (or semantically equivalent — automated parity check deferred to the audit). Without this caveat, the entry is ambiguous and triggers re-audit.
+6. **No sizing-up.** PASS_PROTOCOL_A under Option B yields 1-contract deployment eligibility only. Sizing-up requires PASS_CHORDIA (strict t ≥ 3.79), independent of attachment class.
+7. **Filter-class alpha claim requires its own extract.** A prereg claiming that a filter is *itself* a literature-grounded alpha mechanism (rather than a deployable screen on a parent mechanism) MUST cite a separate extract naming that filter class as alpha. Harris 2002 Ch 14 § 14.2 (adverse-selection-dominates-spread) is the closest candidate for COST_LT*; per the 2026-05-23 closeout review, Harris treats adverse-selection cost as a *deduction* from edge rather than a *predictor* of edge, so Harris does NOT extract-ground COST_LT* as filter-class alpha.
+
+**Gating rule until re-audit closes (binding while PROVISIONAL):**
+
+- **No new PASS_PROTOCOL_A grants using mechanism-class-transfer construction are permitted.** New preregs requiring `theory_grant: true` must either:
+  - (a) Clear strict no-theory Chordia `t ≥ 3.79` (Pathway A or Pathway B with `theory_grant: false`), OR
+  - (b) Cite a literature extract that names the specific filter / cell class as an alpha mechanism (i.e., satisfy a strict-Option-A reading of theory_grant attachment).
+- The three existing PASS_PROTOCOL_A entries under this construction (NYSE_OPEN RR1.0 COST_LT12 live; NYSE_OPEN RR1.5 COST_LT12 audit-log-only; TOKYO_OPEN RR1.5 COST_LT08 audit-log-only) remain valid for continuity, BUT they do NOT serve as precedent for new grants until Amendment 3.4 re-audit closes.
+
+**Re-audit requirements (before Amendment 3.4 transitions to BINDING):**
+
+1. Independent literature audit of whether Chan Ch 7 (and any other extract used for "parent session-entry mechanism" grants) actually supports attaching the theory_grant to cells whose filter classes are not named in the extract. Audit must explicitly engage with the "repeated error" possibility — the precedents may be incorrectly applied, not vindicated by their existence.
+2. Concrete written doctrine clarifying whether Pathway B's "specific mechanism-session-instrument prediction" language requires the filter class to be part of the cited theory, or whether session-entry mechanism alone suffices.
+3. If the audit favors Option A, a migration plan for the existing three PASS_PROTOCOL_A entries: re-audit each under strict no-theory t ≥ 3.79 OR revoke and re-test under no-theory threshold. The currently-deployed NYSE_OPEN RR1.0 COST_LT12 lane must be assessed for capital impact.
+4. If the audit confirms Option B is doctrinally sound, the seven provisional guardrails above are reviewed and tightened or relaxed as needed, and the amendment transitions to BINDING.
+
+**Capital protection while PROVISIONAL:**
+
+- Currently live `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` (status=DEPLOY) continues operating. No forced reversal.
+- Currently audit-log-only entries (`MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12`, `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08`) MAY proceed to allocator consideration in normal rebalance flow, BUT operators are aware that Amendment 3.4 re-audit may retroactively revoke their PASS status. No sizing-up under any circumstances.
+- Any new mechanism-class-transfer prereg drafts must be rejected pending re-audit closure.
+
+**Cross-reference:** Doctrine question note `docs/audit/doctrine-questions/2026-05-23-protocol-a-theory-grant-attachment-class.md`. Trigger result MD `docs/audit/results/2026-05-23-mnq-tokyoopen-costlt08-chordia-unlock-v1.md`. Affected audit-log entries at `docs/runtime/chordia_audit_log.yaml` lines 229 (NYSE_OPEN RR1.0), 257 (NYSE_OPEN RR1.5), 709 (TOKYO_OPEN).

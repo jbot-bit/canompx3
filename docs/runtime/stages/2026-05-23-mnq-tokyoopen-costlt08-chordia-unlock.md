@@ -7,7 +7,7 @@ task: |
   orb_outcomes x daily_features under Mode A IS, and propose the
   chordia_audit_log.yaml entry as a DRY-RUN YAML block for user approval.
   No allocator/profile mutation. No chordia_audit_log.yaml write.
-mode: IMPLEMENTATION
+mode: CLOSED
 scope_lock:
   - docs/audit/hypotheses/2026-05-23-mnq-tokyoopen-costlt08-chordia-unlock-v1.yaml
   - docs/audit/results/2026-05-23-mnq-tokyoopen-costlt08-chordia-unlock-v1.md
