@@ -434,7 +434,7 @@ def _query_paper_pnl(db_path: Path, strategy_id: str, lookback_days: int = 30) -
                 return None
             return {"wins": row[0], "losses": row[1], "cum_r": row[2], "last_trade": row[3]}
     except Exception:
-        logger.debug("_query_paper_pnl failed for %s: %s", strategy_id, exc_info=True)
+        logger.debug("_query_paper_pnl failed for %s", strategy_id, exc_info=True)
         return None
 
 

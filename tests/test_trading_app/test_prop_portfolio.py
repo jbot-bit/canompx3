@@ -12,6 +12,7 @@ from trading_app.prop_portfolio import (
     _compute_dd_per_contract,
     _deduplicate_sessions,
     _format_time_ampm,
+    _query_paper_pnl,
     _rank_strategies,
     _time_sort_key,
     check_daily_lanes_dd_budget,
@@ -336,6 +337,36 @@ class TestTimeSortKey:
 
     def test_unknown_sorts_last(self):
         assert _time_sort_key("unknown") == 9999
+
+
+class TestQueryPaperPnl:
+    """_query_paper_pnl — exception logging correctness (iter 200)."""
+
+    def test_db_error_returns_none_and_logs_with_exc_info(self, tmp_path, caplog):
+        """DB error must return None AND log exc_info (traceback captured, not silenced)."""
+        import logging
+
+        bad_db = tmp_path / "nonexistent.db"
+        with caplog.at_level(logging.DEBUG, logger="trading_app.prop_portfolio"):
+            result = _query_paper_pnl(bad_db, "SOME_STRAT")
+        assert result is None
+        # The log record must carry exc_info (exc_info=True keyword path)
+        records_with_exc = [r for r in caplog.records if r.exc_info is not None]
+        assert records_with_exc, "Expected logger.debug with exc_info — traceback was silently swallowed"
+
+    def test_missing_table_returns_none(self, tmp_path, caplog):
+        """Missing paper_trades table returns None without raising."""
+        import logging
+
+        import duckdb
+
+        db = tmp_path / "empty.db"
+        # Create a valid DB with no paper_trades table
+        con = duckdb.connect(str(db))
+        con.close()
+        with caplog.at_level(logging.DEBUG, logger="trading_app.prop_portfolio"):
+            result = _query_paper_pnl(db, "ANY_STRAT")
+        assert result is None
 
 
 class TestFormatTimeAmPm:
