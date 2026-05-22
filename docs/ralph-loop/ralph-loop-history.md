@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 193 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/deployability.py:24,299,303,629,631,845,850,958
+- Finding: Hardcoded WFE floor (0.50), CORE_MIN_SAMPLES (100), REGIME_MIN_SAMPLES (30) as magic literals on capital-decision path instead of importing from trading_app.config
+- Doctrine cited: integrity-guardian.md § 2 / institutional-rigor.md § 10 (canonical sources — never inline magic numbers)
+- Action: Added MIN_WFE, CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES to config import; replaced 7 inline literal uses
+- Blast radius: 1 file (trading_app/deployability.py), 0 callers affected (values numerically identical)
+- Verification: PASS — 160 drift checks, 44 deployability tests
+- Commit: 8dfb78e5
+
+---
+
 ## Iteration 192 — 2026-05-23
 - Phase: fix
 - Classification: [mechanical]

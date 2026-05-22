@@ -1,12 +1,12 @@
 {
-  "total_iterations": 185,
+  "total_iterations": 186,
   "last_updated": "2026-05-23",
-  "consecutive_low_only": 3,
+  "consecutive_low_only": 4,
   "last_high_finding_iter": 189,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 62,
-      "fixed": 49,
+      "found": 63,
+      "fixed": 50,
       "deferred": 4,
       "fix_rate": 0.79
     },
@@ -129,11 +129,11 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 48,
-    "LOW": 114
+    "LOW": 115
   },
   "classifications": {
     "judgment": 83,
-    "mechanical": 69,
+    "mechanical": 70,
     "audit-only": 33
   },
   "files_audited": {
@@ -1170,6 +1170,11 @@
     "scripts/tools/fast_lane_research_review.py": {
       "audit_count": 1,
       "last_iter": 190,
+      "findings": 1
+    },
+    "trading_app/deployability.py": {
+      "audit_count": 1,
+      "last_iter": 193,
       "findings": 1
     }
   },
@@ -3208,6 +3213,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "7332e5ca"
+    },
+    {
+      "iter": 193,
+      "date": "2026-05-23",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/deployability.py:24,299,303,629,631,845,850,958",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "8dfb78e5"
     }
   ]
 }

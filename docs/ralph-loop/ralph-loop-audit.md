@@ -3,91 +3,91 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 192
+## Last iteration: 193
 
-## RALPH AUDIT — Iteration 192 (COMPLETED)
+## RALPH AUDIT — Iteration 193 (COMPLETED)
 ## Date: 2026-05-23
-## Infrastructure Gates: 160 drift checks PASS; ruff clean; 7 AM3.3 tests pass
-## Scope: trading_app/chordia.py + pipeline/check_drift.py — hardcoded threshold literals in check_am33_audit_log_theory_grant_parity
+## Infrastructure Gates: 160 drift checks PASS; 44 deployability tests PASS
+## Scope: trading_app/deployability.py — hardcoded threshold literals on capital-decision path
 
 ---
 
-## Iteration 192 — trading_app/chordia.py (full scan) + pipeline/check_drift.py (fix)
+## Iteration 193 — trading_app/deployability.py (full scan)
 
 ### Auto-Targeting
-- Scope provided: `trading_app/chordia.py` — medium centrality, never scanned by Ralph.
+- Scope provided: `trading_app/deployability.py` — medium centrality, never scanned by Ralph.
 
 ---
 
-## Finding CANON-192 — LOW — FIXED
+## Finding CANON-193 — LOW — FIXED
 
-**PREMISE:** `pipeline/check_drift.py` lines 12303, 12315–12316 hardcoded `3.0` and `3.79` as literal floats inside `check_am33_audit_log_theory_grant_parity` violation message strings, rather than importing from the canonical `CHORDIA_T_WITH_THEORY` / `CHORDIA_T_WITHOUT_THEORY` constants in `trading_app/chordia.py`.
+**PREMISE:** `trading_app/deployability.py` hardcoded `0.50` (WFE floor), `100` (CORE_MIN_SAMPLES), and `30` (REGIME_MIN_SAMPLES) as inline magic numbers on the capital-decision path, instead of importing from `trading_app.config`.
 
-**TRACE:** `check_am33_audit_log_theory_grant_parity` (check_drift.py:12130) → lines 12303 `3.0 if default_ht else 3.79` and 12315 `3.00 if audit_ht else 3.79` / 12316 `3.00 if prereq_theory_grant else 3.79` — all inline floats, not imported from `trading_app.chordia`.
+**TRACE:**
+- `_singleton_clears_binding_criteria` (deployability.py:299,303) → `float(wfe) < 0.50` / `int(n) < 100`
+- `_trade_context` (deployability.py:629,631) → `int(sample_size) < 30` / `int(sample_size) < 100`
+- `_classify_strategy` (deployability.py:845,850) → `float(row["wfe"]) < 0.50` / `int(row["sample_size"]) < 100`
+- `_build_instrument_summary` (deployability.py:958) → `int(report.metrics["sample_size"]) < 100`
 
-**EVIDENCE:** `CHORDIA_T_WITH_THEORY = 3.00`, `CHORDIA_T_WITHOUT_THEORY = 3.79` are locked constants in `trading_app/chordia.py:49-50` annotated "modifying requires an amendment to pre_registered_criteria.md". If a future amendment changes either value, the drift-check violation messages would silently report stale thresholds, misleading operators diagnosing a parity mismatch.
+**EVIDENCE:** `trading_app.config` exports `MIN_WFE = 0.50`, `CORE_MIN_SAMPLES = 100`, `REGIME_MIN_SAMPLES = 30` — already imported by `deployability.py` (import line 24), just not referenced.
 
-**FIX:** `pipeline/check_drift.py:12180-12181` — added local imports of `CHORDIA_T_WITH_THEORY as _T_WITH` and `CHORDIA_T_WITHOUT_THEORY as _T_WITHOUT` inside the function; replaced 3 inline literal uses with the constants. 6 lines net change.
+**FIX:** `trading_app/deployability.py:24` — added `CORE_MIN_SAMPLES, MIN_WFE, REGIME_MIN_SAMPLES` to existing config import; replaced 7 inline literal uses with the canonical constants. 8 lines changed.
 
-**DOCTRINE:** `integrity-guardian.md § 2` (canonical sources — never hardcode magic numbers; canonical authority for Chordia thresholds is `trading_app.chordia`).
+**DOCTRINE:** `integrity-guardian.md § 2` / `institutional-rigor.md § 10` — import from canonical module, never inline magic numbers on capital-class decision paths.
 
-**VERDICT:** FIXED — commit `7332e5ca`
-
----
-
-## trading_app/chordia.py — Full Scan Summary
-
-**No production-code findings requiring fixes.** The file is well-structured:
-
-- `CHORDIA_T_WITH_THEORY` / `CHORDIA_T_WITHOUT_THEORY` constants are the canonical authority; no other files hardcode these values in production logic (checked via grep).
-- `load_chordia_audit_log` fails closed correctly: missing file → empty log (every strategy PAUSED); YAML parse error → logged WARNING + empty log.
-- No `except Exception` swallowing failures.
-- No hardcoded instrument or entry-model lists.
-- `chordia_verdict_label` / `chordia_verdict_allows_deploy` correctly gate deploy eligibility.
-- `chordia_gate` (deprecated) is retained only for boundary tests per its docstring — appropriate.
-- theory_grant gate and audit_log gate are independent trust surfaces per the AM3.3-AUDIT-LOG-DRIFT finding (already deferred + closed; drift check #165 enforces parity).
-- The only inline copies of the threshold values that could drift are in violation message strings — fixed by CANON-192.
-
-**Consecutive LOW-only iterations: 6** (iter 187-192 all LOW)
+**VERDICT:** FIXED — commit `8dfb78e5`
 
 ---
 
-## Iteration 192 — Overall Summary
+## Other Findings (No Fix Required)
 
-Files fully scanned: `trading_app/chordia.py` (clean), `pipeline/check_drift.py` (1 LOW finding, FIXED). 160 drift checks pass. ruff clean. 7 AM3.3 tests pass.
+### `except Exception` at line 322 — ACCEPTABLE
+`except Exception: failed.append("C10_micro_check_error")` — explicitly fail-closed (appends to `failed` list which gates deployment). Annotated `# noqa: BLE001 - fail closed`. Matches ACCEPTABLE pattern 1 (intentional fail-closed exception swallow).
 
-### Infrastructure Gate Results (post-fix)
-- check_drift.py: 160 PASS (0 violations)
-- ruff: clean
-- Tests: 7 passed (test_check_drift_am33_audit_log_drift.py)
+### `except Exception as exc` at line 461 — ACCEPTABLE
+`_replay_strategy` returns `{"ok": False, "error": str(exc)}` — fail-closed (replay error → `replay_mismatch` hard issue → `BLOCKED_REPLAY_MISMATCH` verdict). Exception is recorded in the `error` field. Correct pattern.
+
+### `< 0.05` FDR alpha (lines 274, 437) — ACCEPTABLE
+No named canonical constant for BH FDR alpha exists in this codebase (`strategy_validator.py` uses `alpha=0.05` as a function default, not an exported constant). Style difference with no correctness impact; would need a new constant added to config.py which is out of scope.
+
+### `< 0.95` DSR threshold (line 861) — ACCEPTABLE
+No canonical constant for the DSR cross-check threshold exists. `dsr_below_cross_check` is a warning only (not a hard gate), so no capital risk.
+
+### `< 7` years tested (line 853) — ACCEPTABLE
+`pipeline/check_drift.py` has a local `MIN_YEARS = 7` but it is not exported from any canonical module. Short-history issue is a warning only.
+
+---
+
+## Seven Sins Scan — trading_app/deployability.py
+
+- **Silent failure:** No unguarded silent failures. Both `except Exception` blocks are fail-closed.
+- **Fail-open:** No fail-open patterns detected. All hard-blocker paths route to BLOCKED verdicts.
+- **Canonical violation:** FIXED (WFE/sample thresholds now import from config).
+- **Impact awareness:** `_classify_strategy` correctly uses `HARD_BLOCKER_TO_VERDICT` to prevent verdict bypass.
+- **Chordia gate:** `chordia_verdict_allows_deploy` + `chordia_verdict_label` imported from canonical `trading_app.chordia`. No bypass detected.
+- **Theory_grant gate:** `has_theory=False` hardcoded for SINGLETON path — correct by design (docstring explicitly documents this and adversarial-audit 2026-05-11 verified it).
+- **Instrument lists:** No hardcoded instrument list. Uses `ACTIVE_ORB_INSTRUMENTS` from `pipeline.asset_configs` via `_active_in_sql()`.
+- **Entry model lists:** No hardcoded entry model list.
+- **Hardcoded status strings:** verdict strings (`DEPLOYABLE_CANDIDATE` etc.) are module-level constants, not duplicated inline.
 
 ---
 
 ## Files Fully Scanned
 
+- trading_app/deployability.py (iter 193)
 - trading_app/chordia.py (iter 192)
-- trading_app/strategy_validator.py (iter 191)
-- scripts/tools/fast_lane_research_review.py (iter 190)
-- pipeline/build_daily_features.py (iter 189)
-- trading_app/lane_allocator.py (iter 187)
-- trading_app/live/session_orchestrator.py (iter 188 audit)
-- trading_app/live/alert_engine.py (iter 188 audit — autouse fixture fix)
-- trading_app/prop_profiles.py (iter 184)
-- trading_app/outcome_builder.py (iter 185)
-- trading_app/strategy_discovery.py (iter 186)
-- pipeline/paths.py (iter 183)
-- trading_app/validated_shelf.py (iter 183)
-- trading_app/strategy_fitness.py (iter 183)
-
----
+- trading_app/live/session_orchestrator.py (iter A.6)
+- trading_app/pre_session_check.py (iter A.6)
+- trading_app/derived_state.py (iter A.6)
+- trading_app/live/alert_engine.py (iter ALERT-CONTAM-N2)
+- trading_app/live/tradovate/order_router.py (iter PR301)
+- trading_app/live/tradovate/http.py (iter PR301)
+- pipeline/check_drift.py (iter 192 — partial, check_am33 function)
+- scripts/run_live_session.py (iter A.6)
 
 ## Next Iteration Targets
 
-**DIMINISHING RETURNS CHECK:** consecutive_low_only = 6; no Priority 1 unscanned critical/high candidates except `trading_app/config.py` (no-touch zone). Consider DIMINISHING_RETURNS or targeting medium-tier unscanned files.
-
-**Priority 3 (unscanned medium):**
-- `trading_app/deployability.py` — imports chordia; medium centrality, not yet scanned
-- `trading_app/live/session_orchestrator.py` — re-audit candidate (modified since iter 188)
-- `pipeline/check_drift.py` — very large, partially audited; AM3.3 section was fixed this iter
-
-**Top candidate:** `trading_app/deployability.py` — medium centrality, not yet scanned, calls `chordia_verdict_allows_deploy` and `chordia_verdict_label` directly.
+**Priority 1 — Unscanned medium-centrality files:**
+- `trading_app/strategy_fitness.py` — used by deployability and chordia; never scanned
+- `trading_app/lifecycle_state.py` — called by deployability on every profile audit; never scanned
+- `trading_app/strategy_validator.py` — critical path for C3/C8 gates; partial scan only
