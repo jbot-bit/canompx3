@@ -576,7 +576,7 @@ def cleanup_codex_wsl_clone() -> int:
             'echo "Stashing WSL Codex repo changes so codex.bat can launch safely."',
             f'git stash push -u -m "{stash_name}"',
             'echo "Stash saved. Relaunch from PowerShell with: .\\codex.bat"',
-            'echo "To inspect later: wsl -e bash -lc \'cd ~/canompx3 && git stash list\'"',
+            "echo \"To inspect later: wsl -e bash -lc 'cd ~/canompx3 && git stash list'\"",
         ]
     )
     console.print(f"[bold]Cleaning WSL Codex clone via {root} front door[/]")

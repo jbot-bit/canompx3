@@ -72,7 +72,7 @@ def test_wsl_launcher_scripts_call_mount_guard() -> None:
     assert '"-File", $launcherPs1' in sticky
     assert "& powershell.exe @launcherArgs" in sticky
     assert "$interactiveHoldModes" in sticky
-    assert '$Mode -in $interactiveHoldModes' in sticky
+    assert "$Mode -in $interactiveHoldModes" in sticky
     assert "Codex session exited with code $exitCode." in sticky
 
 
