@@ -688,7 +688,7 @@ def compute_pairwise_correlation(
                 "instrument": s.instrument,
                 "orb_label": s.orb_label,
                 "orb_minutes": s.orb_minutes,
-                "entry_model": "E2",
+                "entry_model": s.entry_model,
                 "rr_target": s.rr_target,
                 "confirm_bars": s.confirm_bars,
                 "filter_type": s.filter_type,
