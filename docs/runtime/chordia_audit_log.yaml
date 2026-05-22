@@ -88,6 +88,22 @@ theory_grants:
       (MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12, verdict PASS_PROTOCOL_A 2026-05-01).
       Same Chan Ch 7 intraday-momentum mechanism: stop-triggered breakout cascade
       at market open (p.155), equity-index futures precedent FSTX Sharpe=1.4 (p.156).
+
+  - strategy_id: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08
+    has_theory: true
+    theory_ref: docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
+    rationale: |
+      Cash-session-open mechanism extension of the Chan Ch 7 grant already
+      held by MNQ_NYSE_OPEN_E2_RR1.x_CB1_COST_LT12 (PASS_PROTOCOL_A 2026-05-01
+      + consistency grant 2026-05-08) and MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5
+      (consistency grant). Chan Ch 7 p.155-157 mechanism is
+      session-name-agnostic — "an entry at the market open" with FSTX
+      (Eurex equity-index futures) Sharpe 1.4 precedent. TOKYO_OPEN is
+      Tokyo cash-session open (10:00 Brisbane = 09:00 Tokyo); MNQ is
+      Nasdaq-100 equity-index futures — both within the FSTX precedent
+      class. Grant covers the session-entry mechanism, not the COST_LT08
+      filter class. Strict Chordia t>=3.79 sizing-up hurdle NOT cleared
+      by theory grant; only the Harvey-Liu deployment hurdle (t>=3.00).
       COST_LT12 is a friction-floor gate, not a theory-grounded filter — the theory
       grant covers the session-entry mechanism, not the filter class.
 
@@ -705,3 +721,18 @@ audits:
       No theory grant claimed; strict no-theory threshold t>=3.79 applies.
       IS gates clear strict: t=4.269 (clears 3.79 by 0.48), ExpR=0.1149, N=1230 (fire-rate=0.795 on universe=1547). Long t=1.676 (n=652), Short t=4.479 (n=578) — direction-mix asymmetric, Short carries the edge but Long ExpR=+0.062 still positive so not a directional artifact. OOS sign matches IS at N_OOS=79 (OOS ExpR=+0.035, Long ExpR=-0.049 n=40, Short ExpR=+0.121 n=39). Descriptive corroboration only — OOS power per RULE 3.3 yet to be computed for binary OOS gate context. First MNQ US_DATA_1000 OVNRNG_* (overnight-range) family entry; distinct mechanism from prior session PASS_CHORDIAs (VWAP_MID_ALIGNED, ORB_VOL_8K, OVNRNG_25).
       Result MD: `docs/audit/results/2026-05-21-mnq-usdata1000-ovnrng50-chordia-unlock-v1.md`
+
+  - strategy_id: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08
+    audit_date: 2026-05-23
+    verdict: PASS_PROTOCOL_A
+    t_stat: 3.566
+    threshold: 3.00
+    sample_size: 427
+    note: |
+      Bounded exact-lane strict unlock replay via
+      `research/chordia_strict_unlock_v1.py` and prereg `docs/audit/hypotheses/2026-05-23-mnq-tokyoopen-costlt08-chordia-unlock-v1.yaml`.
+      Supersedes 2026-04-22-mnq-tokyo-costlt08-take-v1.yaml. Apr-22 cited Crabel ORB (no extract). This prereg uses Chan Ch 7 p.155-157 cash-session-open mechanism grant (extract exists, FSTX Sharpe 1.4 equity-index-futures precedent). Mechanism precedent established by sibling MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12 PASS_PROTOCOL_A (2026-05-01) and MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5 (consistency grant). Grant covers session-entry mechanism, not COST_LT08 filter class — same doctrine as NYSE_OPEN COST_LT12. Harvey-Liu with-theory hurdle t>=3.00 applies; strict Chordia t>=3.79 sizing-up hurdle NOT cleared.
+      Canonical replay (N_fired=427, 0 scratches, fire-rate=27.5% on universe=1551) on orb_outcomes JOIN daily_features with WF_START_OVERRIDE['MNQ']=2020-01-01. IS t=3.566 clears 3.00 by 0.566, ExpR=+0.2037, Sharpe=0.173. Direction breakdown: Long t=1.950 (n=203), Short t=3.065 (n=224) — short side carries the lift; not directional-rescuing this audit (out-of-scope per prereg).
+      OOS sign matched (+0.2767 vs IS +0.2037, N_OOS=69, OOS t=1.921) but OOS power=0.293 (STATISTICALLY_USELESS per research.oos_power one-sample framing, cohen_d=0.173). Power floor means OOS cannot kill the verdict; sign-match is mild Bayesian uplift, not confirmation. Criterion 9 era check: 2023 negative era ExpR=-0.273 but N=16 below kill floor (N>=50 required); not an era kill. 2025 ExpR=+0.131 (N=130) shows decay but still positive — flag for routine fitness monitoring post-deploy. Cohort exactly matches validated_setups.sample_size=427.
+      Allocator implication: clears DEPLOY hurdle (PASS_PROTOCOL_A), does NOT clear sizing-up hurdle. New lane eligible for 1-contract allocation in the next rebalance subject to correlation gate against incumbents and TOKYO_OPEN regime check.
+      Result MD: `docs/audit/results/2026-05-23-mnq-tokyoopen-costlt08-chordia-unlock-v1.md`

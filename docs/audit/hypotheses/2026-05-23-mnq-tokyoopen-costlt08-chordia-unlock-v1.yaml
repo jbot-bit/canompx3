@@ -1,0 +1,322 @@
+metadata:
+  theory_grant: true
+  theory_ref: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+  theory_grant_basis: |
+    Chan Ch 7 p.155-157 grants the session-entry mechanism class
+    "stop-triggered breakout cascade at cash-session open" with FSTX
+    (Dow Jones STOXX 50 Eurex equity-index futures) Sharpe 1.4 / 8yr as
+    equity-index futures precedent. TOKYO_OPEN (10:00 Brisbane = 09:00
+    Tokyo cash) is a cash-session open on MNQ (Nasdaq-100 equity-index
+    futures) — directly within the FSTX precedent class.
+    Audit-log precedent: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12 (PASS_PROTOCOL_A
+    2026-05-01) and MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12 (theory_grants
+    consistency grant 2026-05-08) and MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5
+    (theory_grants consistency grant) all cite this same Chan Ch 7 mechanism
+    for cash-session opens. EUROPE_FLOW is the London cash open; this prereg
+    extends the same logic to TOKYO_OPEN (Tokyo cash open). Mechanism is
+    session-name-agnostic — the grant covers the cash-session open class.
+    IMPORTANT CAVEAT (mirrors NYSE_OPEN COST_LT12 audit-log doctrine):
+    the theory grant covers the SESSION-ENTRY MECHANISM, not the COST_LT08
+    filter class. COST_LT08 is a friction-floor cost-screen, not a
+    literature-grounded alpha mechanism. Harvey-Liu t >= 3.00 with-theory
+    deployment hurdle applies; Chordia t >= 3.79 strict sizing-up hurdle
+    is NOT cleared with theory grant alone.
+  name: "mnq_tokyoopen_costlt08_chordia_unlock_v1"
+  purpose: >
+    Bounded exact-lane Chordia unlock audit for MNQ TOKYO_OPEN O5 E2 RR1.5 CB1
+    COST_LT08. Validated_setups row (status=active, 2026-05-23 canonical query):
+    sample_size=427, win_rate=0.5105, expectancy_r=0.2037, sharpe_ann=1.4708,
+    last_trade_day=2025-12-29, all_years_positive=False, years_tested=6.
+    Supersedes 2026-04-22-mnq-tokyo-costlt08-take-v1.yaml (pre-strict-unlock
+    schema). Apr-22 prereg cited Crabel ORB (no extract) as theory grant; this
+    prereg replaces with Chan Ch 7 session-open-mechanism grant (extract
+    exists, mechanism class established by NYSE_OPEN COST_LT12 precedent).
+  date_locked: "2026-05-23T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "family"
+  research_question_type: "conditional_role"
+  supersedes:
+    - "docs/audit/hypotheses/2026-04-22-mnq-tokyo-costlt08-take-v1.yaml"
+  nogo_check:
+    result: "NOT_FOUND"
+    method: >
+      Greped docs/runtime/chordia_audit_log.yaml::audits[] on 2026-05-23:
+      zero entries for MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08. Prior
+      TOKYO_OPEN audit on record is COST_LT12 -> FAIL_BOTH 2026-05-01;
+      tighter cost-ratio threshold (COST_LT08) is a distinct cell. No
+      NO-GO registry entry on MNQ_TOKYO_OPEN_COST_LT08.
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+  default_args:
+    - "--hypothesis-file"
+    - "docs/audit/hypotheses/2026-05-23-mnq-tokyoopen-costlt08-chordia-unlock-v1.yaml"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/hypothesis-prereg-discipline.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/conditional-edge-framework.md"
+    - "docs/runtime/chordia_audit_log.yaml"
+  notes:
+    - "Exact-lane replay of a pre-existing validated_setups survivor, not a discovery scan."
+    - "Theory grant: Chan Ch 7 session-open cash-cash-session-open mechanism (extract exists, mechanism precedent established by NYSE_OPEN COST_LT12 audit-log entry 2026-05-01)."
+    - "Harvey-Liu t >= 3.00 with-theory deployment hurdle applies. Chordia t >= 3.79 strict sizing-up hurdle does NOT apply for has_theory=True per pre_registered_criteria.md Amendment 3.0."
+    - "Mode A holdout remains sacred from 2026-01-01."
+    - "E2-safety: CostRatioFilter reads ORB-window pts at ORB end vs cost spec — knowable on E2 before any break bar. COST_LT08 is NOT in E2_EXCLUDED_FILTER_PREFIXES / _SUBSTRINGS / _DEPLOYMENT_UNSAFE_PREFIXES."
+    - "Known risk: validated_setups.all_years_positive=False (Criterion 9 era-stability flag). Strict-unlock runner must emit per-year breakdown; era_kill applies if any era ExpR < -0.05 at N>=50."
+
+scope:
+  instrument: MNQ
+  strategy_id: "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08"
+  session: TOKYO_OPEN
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.5
+  direction: pooled
+  filter_type: COST_LT08
+  filter_source: "trading_app.config.ALL_FILTERS['COST_LT08']"
+  baseline: "same geometry, exact canonical lane replay"
+  out_of_scope:
+    - "adjacent COST thresholds (LT10, LT12, LT15)"
+    - "adjacent apertures (15m, 30m)"
+    - "adjacent RR targets (1.0, 2.0)"
+    - "theory-grant attempt for COST_LT08"
+    - "allocator, sizing, or deployment changes"
+    - "writes to validated_setups before execution evidence exists"
+    - "chordia_audit_log.yaml mutation (separate user-gated stage)"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only descriptive corroboration only; never used to rescue or kill the IS verdict."
+  tuning_against_oos: false
+  canonical_layers_only: true
+  scratch_policy: "realized-eod"
+  scratch_handling: "COALESCE(pnl_r, 0.0) — never WHERE pnl_r IS NOT NULL"
+  lookahead_banned_always: [mae_r, mfe_r, outcome, pnl_r, double_break]
+
+feature_definition:
+  feature_name: COST_LT08
+  canonical_source_of_truth: "trading_app.config.CostRatioFilter (ALL_FILTERS['COST_LT08'])"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, 'COST_LT08', 'TOKYO_OPEN')"
+  trade_time_knowable: true
+  first_complete_time: "ORB end (TOKYO_OPEN O5 = 10:00–10:05 Brisbane). Cost ratio = friction (pipeline.cost_model.COST_SPECS) / ORB_size_in_pts, both knowable at ORB close."
+  temporal_alignment_note: >
+    CostRatioFilter compares static cost-spec friction (per-trade $) against
+    the ORB-window range converted to $. The denominator (ORB size in pts ×
+    tick_value × stop_multiplier) is fully known at ORB end on a 5m ORB. No
+    post-entry data enters the gate. Filter is NOT in
+    E2_EXCLUDED_FILTER_PREFIXES / _SUBSTRINGS / _DEPLOYMENT_UNSAFE_PREFIXES.
+  lookahead_check: "Required PASS before execution. COST_LT* is in the cost-screen feature class — bigger ORB ⇒ lower cost ratio ⇒ trade taken. backtesting-methodology.md § 8.2 flags ARITHMETIC_ONLY risk; surface |wr_spread| in result."
+
+grounding:
+  core_orb_premise:
+    - source_file: "resources/Building_Reliable_Trading_Systems.pdf"
+      extract_proxy: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "grounds intraday breakout continuation (CORE ORB premise, institutional-rigor.md § 7 inventory)"
+      with_theory_claim: false
+    - source_file: "resources/Algorithmic_Trading_Chan.pdf"
+      extract_proxy: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      use: "grounds stop-cascade / intraday momentum base for ORB breakout entries; canonical TOKYO_OPEN session-open mechanism analogue to NYSE_OPEN extension is not formally cited — would require extension audit before claim"
+      with_theory_claim: false
+  filter_grounding_status:
+    verdict: "THEORY_GRANT_ON_SESSION_MECHANISM_ONLY"
+    basis: >
+      Chan Ch 7 p.155-157 grants the SESSION-ENTRY MECHANISM ("stop-cascade
+      at cash-session open" + FSTX equity-index futures precedent). TOKYO_OPEN
+      is a cash-session open on an equity-index future — within the FSTX class.
+      COST_LT08 itself is a project-engineered friction-floor filter, not a
+      literature-grounded alpha mechanism. Per audit-log doctrine for the
+      sibling MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12 theory_grant (2026-05-08
+      consistency grant): "COST_LT12 is a friction-floor gate, not a
+      theory-grounded filter — the theory grant covers the session-entry
+      mechanism, not the filter class." Same logic applies here. Harvey-Liu
+      with-theory threshold t >= 3.00 applies; strict Chordia t >= 3.79
+      sizing-up hurdle is NOT cleared with theory grant alone — would still
+      require independent strict t evidence.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - >
+      validated_setups (status=active) canonical query 2026-05-23:
+      sample_size=427, win_rate=0.5105, expectancy_r=0.2037,
+      sharpe_ann=1.4708, last_trade_day=2025-12-29,
+      all_years_positive=False, years_tested=6.
+  note: >
+    The validated_setups row motivates the audit; its statistics are NOT
+    the verdict evidence. Fresh canonical-runner execution under strict
+    Mode A IS is the evidence. Note: validated_setups row may have been
+    written under Mode B (grandfathered) prior to Amendment 2.7 (2026-04-08);
+    strict Mode A replay N may differ from 427. Divergence > 5% is
+    reported, not penalized — it is a Mode A vs Mode B finding.
+
+primary_schema:
+  family_cells:
+    - id: "MNQ_TOKYO_OPEN_O5_RR1.5_COST_LT08"
+      strategy_id: "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08"
+      instrument: MNQ
+      session: TOKYO_OPEN
+      orb_minutes: 5
+      rr_target: 1.5
+      filter: COST_LT08
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  chordia_threshold_basis: "Criterion 4 with-theory Harvey-Liu hurdle (t >= 3.00). Chan Ch 7 grant on cash-session-open mechanism (theory_ref in metadata)."
+  promotion_gate: "PASS_PROTOCOL_A on t in [3.00, 3.79). PASS_CHORDIA on t >= 3.79 (strict sizing-up). FAIL_BOTH on t < 3.00."
+
+hypotheses:
+  - id: 1
+    name: "MNQ TOKYO_OPEN O5 RR1.5 COST_LT08 exact-lane strict unlock"
+    theory_citation: |
+      Chan, Ernest P. *Algorithmic Trading: Winning Strategies and Their
+      Rationale*, Wiley 2013, Chapter 7 "Intraday Momentum Strategies",
+      pp. 155-157. Extract:
+      `docs/institutional/literature/chan_2013_ch7_intraday_momentum.md`.
+      Mechanism: "the triggering of stops. Such triggers often lead to
+      the so-called breakout strategies. We'll see one example that
+      involves an entry at the market open" (p.155). Equity-index futures
+      precedent: FSTX (Dow Jones STOXX 50 Eurex) opening-gap-momentum
+      strategy Sharpe 1.4 / APR 13% (p.156, 2004-07-16 to 2012-05-17).
+      Mechanism explanation: "The execution of these stop orders often
+      leads to momentum because a cascading effect may trigger stop
+      orders placed further away from the open price as well" (p.157).
+      TOKYO_OPEN (10:00 Brisbane = 09:00 Tokyo cash) is a cash-session
+      open on MNQ (Nasdaq-100 equity-index futures), within the FSTX
+      precedent class. Sibling audit-log precedent on the same
+      cash-session-open mechanism class: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12
+      (PASS_PROTOCOL_A 2026-05-01), MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5
+      (consistency grant). Grant covers session-entry mechanism, not
+      COST_LT08 filter class itself.
+    economic_basis: >
+      Bounded exact-lane replay of a pre-existing validated family survivor.
+      The honest question is whether the lane still clears the strict
+      no-theory Chordia hurdle under canonical Mode A replay. The cost-ratio
+      filter is mechanically a friction screen, not a literature-grounded
+      alpha mechanism — it receives no theory grant.
+    role:
+      kind: "standalone"
+      parent: "Exact MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08 canonical lane replay on orb_outcomes x daily_features."
+      comparator: "Replay-selected trades versus the strict Chordia threshold and descriptive OOS sign monitor; no sibling rescue or parameter variation."
+      primary_metric: "selected_trade_mean_r"
+      promotion_target: "chordia_audit_unlock_only"
+    filter:
+      type: "COST_LT08"
+      column: "cost_ratio"
+      thresholds:
+        - "friction / ORB risk < 0.08"
+    scope:
+      instruments: [MNQ]
+      sessions: [TOKYO_OPEN]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [5]
+    expected_trial_count: 1
+    kill_criteria:
+      - "IS t-stat < 3.00 (Harvey-Liu with-theory floor; below this is FAIL_BOTH)"
+      - "IS ExpR <= 0.0"
+      - "N_IS_on < 100"
+      - "If OOS N >= 30, OOS sign opposes IS sign (subject to OOS power floor)"
+      - "Canonical filter delegation diverges from trading_app.config.ALL_FILTERS['COST_LT08']"
+      - "Scratch/null handling is not explicit in the measured trade stream"
+      - "Any era ExpR < -0.05 at N >= 50 (Criterion 9 era stability)"
+      - "ARITHMETIC_ONLY flag (|wr_spread| < 3% AND |delta_IS| > 0.10) per backtesting-methodology.md § 8.2"
+    statement: >
+      On the fixed MNQ TOKYO_OPEN O5 E2 CB1 RR1.5 lane using the canonical
+      COST_LT08 filter, the IS sample remains positive and strong enough
+      to clear the strict no-theory Chordia severity gate when recomputed
+      honestly on canonical Mode-A data with adversarial split reporting
+      and per-year era breakdown.
+    pass_metric:
+      metric: "t_IS"
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical IS fired trades after canonical filter delegation"
+      threshold_gte:
+        t_is: 3.00
+        n_is_on: 100
+        expr_is: 0.0
+      verdict_ladder:
+        - "t < 3.00 -> FAIL_BOTH"
+        - "3.00 <= t < 3.79 with has_theory=true -> PASS_PROTOCOL_A (deploy 1-contract eligible, NOT sizing-up)"
+        - "t >= 3.79 -> PASS_CHORDIA (deploy + sizing-up eligible)"
+      extra_gates:
+        - "dir_match_oos = true when OOS power tier >= DIRECTIONAL_ONLY (research.oos_power)"
+        - "adversarial split table emitted; no hidden subgroup collapse"
+        - "scratch-inclusive accounting required if scratch rows exist"
+        - "per-year ExpR with N reported; no era ExpR < -0.05 at N >= 50"
+        - "wr_spread reported; ARITHMETIC_ONLY flag honored"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+
+decision_rule:
+  continue_if: "H1 clears strict t >= 3.79 with positive IS ExpR, N >= 100, no era kill, no ARITHMETIC_ONLY flag, no harness failure"
+  park_if: "H1 clears strict IS gates but OOS directional corroboration is ambiguous OR ARITHMETIC_ONLY flag fires (defer to cost-class deployment, not edge claim)"
+  kill_if: "H1 fails t / ExpR / N gates, era kill, canonical-filter divergence, or execution integrity fails"
+
+methodology_rules_applied:
+  - rule: "RULE 1 feature temporal alignment"
+    application: "COST_LT08 cost_ratio uses pipeline.cost_model.COST_SPECS (static) / ORB-window pts (knowable at ORB end on 5m ORB). No post-entry data."
+  - rule: "RULE 3 sacred holdout"
+    application: "IS and OOS partitioned by HOLDOUT_SACRED_FROM=2026-01-01 only. OOS read-only."
+  - rule: "RULE 4 multiple testing"
+    application: "K_family = K_global = K_lane = K_session = 1 (exact-lane single-cell replay)."
+  - rule: "RULE 6 trade-time knowability"
+    application: "COST_LT* is in the cost-screen feature class. Filter denominator (ORB size in pts) is the orb_{s}_size column from § 6.1 safe-feature list."
+  - rule: "RULE 8 ARITHMETIC_ONLY guard"
+    application: "wr_spread and delta_IS must be reported. If |wr_spread| < 3% AND |delta_IS| > 0.10, flag and downgrade verdict to PARK (cost-class, not edge)."
+  - rule: "RULE 9 canonical data source"
+    application: "Reads only canonical layers (orb_outcomes JOIN daily_features); no derived-layer proof."
+  - rule: "RULE 10 pre-registration"
+    application: "This file IS the pre-reg, committed before the canonical runner execution. Supersedes 2026-04-22-mnq-tokyo-costlt08-take-v1.yaml (schema-stale, theory_grant claim does not survive)."
+  - rule: "research-truth-protocol canon filter delegation"
+    application: "Filter fire mask comes from research.filter_utils.filter_signal — never inline re-implementation."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-23-mnq-tokyoopen-costlt08-chordia-unlock-v1.md"
+  - "row-level CSV with IS/OOS split, raw/effective pnl_r, and scratch/null handling"
+  - "single-cell summary table with N_IS_on, ExpR_IS, Sharpe_IS, t_IS, OOS sign check, OOS power tier, and verdict"
+  - "per-year ExpR + N breakdown (Criterion 9 era-stability check)"
+  - "wr_spread + delta_IS table (RULE 8 ARITHMETIC_ONLY check)"
+  - "explicit statement that no theory grant was used"
+  - "explicit statement of N_canonical vs N_validated_setups=427 cohort match"
+
+execution_gate:
+  allowed_now: true
+  execution_surface: "Windows PowerShell with .venv (per CLAUDE.md project quick-commands)"
+  forbidden_now:
+    - "theory-grant upgrade without new resources/-backed citation (would require crabel_*.md extract first)"
+    - "threshold rescue (no relaxation of t >= 3.79, N >= 100, era kill)"
+    - "auto-writing PASS rows into chordia_audit_log.yaml without execution evidence and user approval"
+    - "sibling-cell rescue (COST_LT10, _LT12, _LT15) without their own preregs"
+    - "writes to validated_setups, lane_allocation.json, or live deployment surfaces"
+
+not_done_by_this_pre_reg:
+  - "Does not test adjacent COST thresholds (LT10, LT12, LT15)."
+  - "Does not settle the broader COST filter class on TOKYO_OPEN."
+  - "Does not test adjacent apertures (O15, O30) or RR targets (1.0, 2.0) on this lane."
+  - "Does not write to chordia_audit_log.yaml (user-gated next stage)."
+  - "Does not change live deployment or allocator state."
