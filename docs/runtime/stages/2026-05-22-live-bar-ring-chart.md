@@ -10,14 +10,17 @@ scope_lock:
   - tests/test_trading_app/test_bar_persister.py
 implementation_status: AUDIT_CLOSED_PENDING_LIVE_SMOKE
 closed_note: |
-  Implementation: 2 commits (a7d0e4c5 base, audit-fix follow-up). data/live_bars/
-  created via mkdir at runtime; project .gitignore already excludes data/.
+  Implementation: 2 commits — a7d0e4c5 base + 6d5c248b audit-fix follow-up.
+  Scope deviation: `data/live_bars/.gitignore` listed in scope_lock was NOT
+  added — project root `.gitignore:147` already ignores `data/` recursively,
+  so a per-dir file is redundant. `data/live_bars/` is mkdir'd at runtime by
+  the ring writer.
   Tests: 26 pass (15 in test_bar_ring incl. 3 audit-fix regression tests,
   11 in test_bar_persister incl. 2 ring-integration). Drift: 158 PASSED,
   0 violations.
 
   Adversarial-audit gate (evidence-auditor a29e02fb) verdict: CONDITIONAL.
-  Three findings, all addressed in the follow-up commit:
+  Three findings, all addressed in the 6d5c248b follow-up commit:
     (1) HIGH — Cross-stale AND gate produced ≤90s post-crash false-live
         window. Fix: bot_dashboard._bars_watcher now gates the ring-push
         branch on `not heartbeat_stale`; heartbeat-stale alone defers to
