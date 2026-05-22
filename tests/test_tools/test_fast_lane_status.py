@@ -187,6 +187,31 @@ def test_build_status_entries_idempotent_on_fixed_inputs(tmp_path: Path) -> None
     assert [e.current_stage for e in first] == [e.current_stage for e in second]
 
 
+def test_build_status_entries_active_fast_lane_prereg_has_fast_lane_lineage(tmp_path: Path) -> None:
+    paths = _fake_chain(tmp_path)
+    _write_yaml(
+        paths["hyp"] / "2026-05-18-mnq-example-fast-lane-v1.yaml",
+        {
+            "metadata": {"template_version": "fast_lane_v5.1"},
+            "scope": {"strategy_id": "MNQ_ACTIVE_FAST_LANE"},
+        },
+    )
+
+    entries = build_status_entries(
+        hypotheses_dir=paths["hyp"],
+        drafts_dir=paths["drafts"],
+        results_dir=paths["results"],
+        runtime_dir=paths["runtime"],
+        queue_cache=paths["runtime"] / "promote_queue.yaml",
+        journal_path=paths["runtime"] / "cherry_pick_journal.yaml",
+        today=date(2026, 5, 22),
+    )
+
+    assert len(entries) == 1
+    assert entries[0].current_stage == "ACTIVE_PREREG"
+    assert entries[0].lineage_class == "FAST_LANE"
+
+
 def test_build_status_entries_live_repo_smoke() -> None:
     """Stage acceptance criterion #4: the writer runs end-to-end on live repo."""
     entries = build_status_entries()

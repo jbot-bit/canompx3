@@ -159,11 +159,9 @@ _PRIMARY_BLOCKER_BY_STAGE: dict[str, str] = {
 # already carries the heavyweight verdict and the next operator action is the
 # deployment decision, identical to the ENRICHED stage's downstream gate.
 #
-# Lineage signal: a strategy_id has fast-lane lineage iff a journal entry
-# exists for it (ranker writes the entry at score-time, BEFORE the heavyweight
-# verdict lands). queue_entry presence is NOT a fast-lane lineage signal — a
-# heavyweight prereg can backfill into promote_queue.yaml via the PROMOTE/PARK
-# pathways without ever being ranked.
+# Legacy pre-ranker heavyweight results are the no-lineage special case. Active
+# fast-lane preregs, queue entries, ranking rows, journal entries, or draft
+# artifacts are all fast-lane lineage signals for the schema-v2 report.
 _NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE: str = "operator_deployment_decision"
 
 
@@ -425,6 +423,7 @@ def _classify_stage(
 
 def _lineage_class_for(
     *,
+    active_prereg: Path | None,
     queue_entry: dict[str, Any] | None,
     journal_entry: dict[str, Any] | None,
     is_ranked: bool,
@@ -432,11 +431,27 @@ def _lineage_class_for(
     heavyweight_result: Path | None,
 ) -> str:
     """Classify whether the observed chain evidence is fast-lane lineage."""
+    if active_prereg is not None and _active_prereg_is_fast_lane(active_prereg):
+        return "FAST_LANE"
     if queue_entry is not None or journal_entry is not None or is_ranked or bool(drafts):
         return "FAST_LANE"
     if heavyweight_result is not None:
         return "DIRECT_HEAVYWEIGHT"
     return "UNKNOWN"
+
+
+def _active_prereg_is_fast_lane(path: Path) -> bool:
+    """Return True for active preregs authored by the Fast Lane templates."""
+    if "fast-lane" in path.name:
+        return True
+    data = _safe_load_yaml(path)
+    if not isinstance(data, dict):
+        return False
+    metadata = data.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        return False
+    template = metadata.get("template_version")
+    return isinstance(template, str) and template.startswith("fast_lane")
 
 
 def _blocker_class_for(stage: str) -> str:
@@ -534,6 +549,7 @@ def build_status_entries(
             heavyweight_result=h_result,
         )
         lineage_class = _lineage_class_for(
+            active_prereg=prereg,
             queue_entry=q_entry,
             journal_entry=j_entry,
             is_ranked=sid in ranked,

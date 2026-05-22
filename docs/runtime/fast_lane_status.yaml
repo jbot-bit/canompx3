@@ -20,7 +20,7 @@ entries:
     draft_path: null
     grounded_path: null
     heavyweight_result_md: null
-  lineage_class: UNKNOWN
+  lineage_class: FAST_LANE
   blocker_class: NONE
   primary_blocker: null
   blocker_evidence: {}
@@ -38,7 +38,7 @@ entries:
     draft_path: null
     grounded_path: null
     heavyweight_result_md: null
-  lineage_class: UNKNOWN
+  lineage_class: FAST_LANE
   blocker_class: NONE
   primary_blocker: null
   blocker_evidence: {}
@@ -92,7 +92,7 @@ entries:
     draft_path: null
     grounded_path: null
     heavyweight_result_md: null
-  lineage_class: UNKNOWN
+  lineage_class: FAST_LANE
   blocker_class: NONE
   primary_blocker: null
   blocker_evidence: {}
@@ -110,7 +110,7 @@ entries:
     draft_path: null
     grounded_path: null
     heavyweight_result_md: null
-  lineage_class: UNKNOWN
+  lineage_class: FAST_LANE
   blocker_class: NONE
   primary_blocker: null
   blocker_evidence: {}
