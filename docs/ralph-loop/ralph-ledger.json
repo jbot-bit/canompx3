@@ -1,12 +1,12 @@
 {
-  "total_iterations": 178,
-  "last_updated": "2026-05-07",
-  "consecutive_low_only": 0,
-  "last_high_finding_iter": 185,
+  "total_iterations": 180,
+  "last_updated": "2026-05-23",
+  "consecutive_low_only": 1,
+  "last_high_finding_iter": 186,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 58,
-      "fixed": 45,
+      "found": 60,
+      "fixed": 47,
       "deferred": 4,
       "fix_rate": 0.78
     },
@@ -128,12 +128,12 @@
   "findings_by_severity": {
     "CRITICAL": 9,
     "HIGH": 14,
-    "MEDIUM": 46,
-    "LOW": 109
+    "MEDIUM": 47,
+    "LOW": 110
   },
   "classifications": {
     "judgment": 83,
-    "mechanical": 62,
+    "mechanical": 64,
     "audit-only": 33
   },
   "files_audited": {
@@ -182,6 +182,11 @@
       "last_iter": 119,
       "findings": 3
     },
+    "trading_app/strategy_discovery.py": {
+      "audit_count": 4,
+      "last_iter": 186,
+      "findings": 4
+    },
     "trading_app/db_manager.py": {
       "audit_count": 4,
       "last_iter": 180,
@@ -222,11 +227,6 @@
       "last_iter": 43,
       "findings": 3
     },
-    "trading_app/strategy_discovery.py": {
-      "audit_count": 3,
-      "last_iter": 116,
-      "findings": 3
-    },
     "trading_app/strategy_fitness.py": {
       "audit_count": 3,
       "last_iter": 183,
@@ -236,6 +236,11 @@
       "audit_count": 3,
       "last_iter": 91,
       "findings": 2
+    },
+    "trading_app/lane_allocator.py": {
+      "audit_count": 3,
+      "last_iter": 187,
+      "findings": 3
     },
     "tradovate/order_router.py": {
       "audit_count": 2,
@@ -371,11 +376,6 @@
       "audit_count": 2,
       "last_iter": 180,
       "findings": 1
-    },
-    "trading_app/lane_allocator.py": {
-      "audit_count": 2,
-      "last_iter": 171,
-      "findings": 2
     },
     "trading_app/live/multi_runner.py": {
       "audit_count": 2,
@@ -3121,6 +3121,28 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "9e23de0c"
+    },
+    {
+      "iter": 186,
+      "date": "2026-05-19",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/strategy_discovery.py:1155",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "d6c6c3f6"
+    },
+    {
+      "iter": 187,
+      "date": "2026-05-23",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/lane_allocator.py:691",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "052403aa"
     }
   ]
 }

@@ -1997,6 +1997,19 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 
 ---
 
+## Iteration 187 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/lane_allocator.py:691
+- Finding: compute_pairwise_correlation hardcoded "entry_model": "E2" in lane dict instead of s.entry_model; all other LaneScore usages in same file use s.entry_model (L804, L914, L954). Violates integrity-guardian.md § 2.
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources — hardcoded "E2" instead of LaneScore.entry_model field)
+- Action: Replaced "entry_model": "E2" with "entry_model": s.entry_model at L691. 1-line mechanical fix; no behavior change for current E2-only validated_setups rows.
+- Blast radius: 1 file (lane_allocator.py)
+- Verification: PASS — 82/82 test_lane_allocator.py tests; 160 drift checks; ruff clean
+- Commit: 052403aa
+
+---
+
 ## Iteration 186 — 2026-05-19
 - Phase: fix
 - Classification: [mechanical]

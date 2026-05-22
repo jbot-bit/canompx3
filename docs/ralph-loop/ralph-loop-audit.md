@@ -3,65 +3,64 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 186
+## Last iteration: 187
 
-## RALPH AUDIT — Iteration 186 (COMPLETED)
-## Date: 2026-05-19
-## Infrastructure Gates: 145 drift checks PASS (1 pre-existing stale validated_setups violation, orthogonal); behavioral audit 7/7 PASS; ruff 1 pre-existing issue in scripts/research/cherry_pick_grounder.py; 55 tests passed (non-Phase4 strategy_discovery suite; 8 Phase4 tests pre-existing failures due to theory_grant Amendment 3.3 fixture gap)
-## Scope: trading_app/strategy_discovery.py (critical, 11 importers, Priority 1)
+## RALPH AUDIT — Iteration 187 (COMPLETED)
+## Date: 2026-05-23
+## Infrastructure Gates: 160 drift checks PASS (0 violations); behavioral audit 7/7 PASS; ruff clean; 82/82 tests passed (test_lane_allocator.py)
+## Scope: trading_app/lane_allocator.py (high, 7 importers, Priority 1)
 
 ---
 
-## Iteration 186 — trading_app/strategy_discovery.py
+## Iteration 187 — trading_app/lane_allocator.py
 
 ### Auto-Targeting
-- Priority 1: `trading_app/strategy_discovery.py` — critical tier, 11 importers, never scanned
-- Priority 0 check: No unresolved CRIT/HIGH in deferred-findings.md or HANDOFF.md at time of targeting
-- Centrality index regenerated (was 24 days stale, >14-day threshold)
+- Priority 1: `trading_app/lane_allocator.py` — high tier, 7 importers, never scanned
+- Priority 0 check: No unresolved CRIT/HIGH in deferred-findings.md or HANDOFF.md
 
 ### Infrastructure Gates
-- `check_drift.py`: 145 PASS, 1 pre-existing violation (validated_setups stale row for MGC_CME_REOPEN — orthogonal, pipeline rebuild needed)
+- `check_drift.py`: 160 PASS, 0 violations
 - `audit_behavioral.py`: 7/7 PASS
-- `ruff`: 1 pre-existing issue in scripts/research/cherry_pick_grounder.py (import sort)
-- Tests: 55 passed (test_strategy_discovery.py non-Phase4); 8 Phase4 tests have pre-existing failures due to Amendment 3.3 theory_grant requirement not reflected in YAML fixtures
+- `ruff`: clean (no issues)
+- Tests: 82/82 passed (test_lane_allocator.py)
 
 ---
 
-## File: trading_app/strategy_discovery.py
+## File: trading_app/lane_allocator.py
 
-### Finding SD-186 — MEDIUM — FIXED
+### Finding LA-187 — LOW — FIXED
 
-**PREMISE:** `run_discovery(instrument: str = "MGC", ...)` hardcodes `"MGC"` as the default instrument parameter, violating `integrity-guardian.md § 2` / `institutional-rigor.md § 10` — canonical sources must never be inlined as defaults.
+**PREMISE:** `compute_pairwise_correlation` at `lane_allocator.py:691` builds the `lane` dict with `"entry_model": "E2"` hardcoded instead of `s.entry_model`. All other `LaneScore` usage in the same file correctly uses `s.entry_model` (L804, L914, L954). This violates `integrity-guardian.md § 2` — canonical field values must not be inlined.
 
-**TRACE:** `trading_app/strategy_discovery.py:1155` → `instrument: str = "MGC"` default → any future caller omitting the argument silently processes only MGC. Same class as OB-185 (iter 185, `outcome_builder.py`).
+**TRACE:** `lane_allocator.py:691` → `lane = {"entry_model": "E2", ...}` → `_load_lane_daily_pnl_cached(con, lane, ...)` at L696 → `lane_correlation.py:137` uses `lane["entry_model"]` for `_load_outcomes_rows` DB query — wrong entry model if `s.entry_model != "E2"`.
 
-**ACTION:** Replaced with `instrument: str | None = None` + `ValueError` guard at function entry. All 8+ production call sites already pass `instrument=` explicitly — no behavior change for current callers.
+**ACTION:** Replaced `"entry_model": "E2"` with `"entry_model": s.entry_model` at L691. 1-line fix.
 
-**VERDICT:** FIXED — commit `d6c6c3f6`
+**VERDICT:** FIXED — commit `052403aa`
 
-### Pre-existing Issues Noted (NOT introduced by this iteration)
+### Other Patterns Assessed (ACCEPTABLE)
 
-1. `TestPhase4DiscoveryEnforcement` — 3+ tests fail because YAML fixtures don't include `theory_grant` (required by Amendment 3.3, 2026-05-17). Pre-existing; orthogonal to this iteration's change. Gap: these test fixtures need `theory_grant: false` added.
-2. `check_drift.py` violation: `validated_setups` stale row for `MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G4` — needs `python -m trading_app.outcome_builder --instrument MGC` pipeline rebuild.
-3. CLI `--instrument default="MGC"` at L1784 — ACCEPTABLE (CLI defaults need a sensible starting value; this is UX, not a canonical-source violation).
+1. **L316 `assert audit_log is not None`** — Using `assert` for type narrowing. ACCEPTABLE: `load_chordia_audit_log()` return type is `-> ChordiaAuditLog` (never None), so the assert is cosmetic. No correctness impact.
+2. **L540, L1282 `entry_model = 'E2'`** in SQL regime/orb-size-stats queries — ACCEPTABLE: These are intentional fixed-reference regime signals (session health at E2 RR1.0 baseline), documented in the L520 docstring ("deliberate fixed reference aperture"). Not a canonical-source violation.
+3. **L617-618 broad except + fail-open** — ACCEPTABLE: `load_sr_state()` explicitly documented as fail-open. Per `institutional-rigor.md § 6`.
 
 ---
 
-## Iteration 186 — Overall Summary
+## Iteration 187 — Overall Summary
 
-1 file scanned. 1 MEDIUM finding (FIXED). 0 other findings.
+1 file scanned. 1 LOW finding (FIXED). 3 ACCEPTABLE patterns noted.
 
-**Consecutive LOW-only iterations: 0** (reset — MEDIUM finding this iteration)
+**Consecutive LOW-only iterations: 1**
 
 ### Infrastructure Gate Results
-- check_drift.py: 145 PASS (1 pre-existing stale validated_setups violation, orthogonal)
+- check_drift.py: 160 PASS (0 violations)
 - audit_behavioral.py: 7/7 PASS
-- ruff: 1 pre-existing issue (cherry_pick_grounder.py import sort)
-- Tests: 55 passed (non-Phase4); 8 pre-existing Phase4 failures
+- ruff: clean
+- Tests: 82 passed (test_lane_allocator.py)
 
 ### Action: fix
 ### Classification: [mechanical]
-### Commit: d6c6c3f6
+### Commit: 052403aa
 
 ---
 
@@ -89,10 +88,10 @@
 - trading_app/prop_profiles.py (iter 184)
 - trading_app/outcome_builder.py (iter 185)
 - trading_app/strategy_discovery.py (iter 186)
+- trading_app/lane_allocator.py (iter 187)
 
 ## Next Iteration Targets
 
-Priority 1 (unscanned critical, by importer count):
-1. `trading_app/strategy_validator.py` (6 importers, high — SQL no-touch zone for SQL logic, but non-SQL code auditable)
+Priority 1 (unscanned high, by importer count):
+1. `trading_app/strategy_validator.py` (6 importers, high — SQL no-touch for SQL logic, but non-SQL code auditable)
 2. `trading_app/eligibility/builder.py` (6 importers, high — canonical parse_strategy_id)
-3. `trading_app/lane_allocator.py` (7 importers, high — unscanned)
