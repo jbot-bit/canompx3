@@ -849,7 +849,7 @@ def compute_garch_forecast(daily_closes: list[float], min_obs: int = GARCH_MIN_P
         )
         return None
     except Exception as exc:
-        logger.debug("GARCH forecast failed: %s", exc)
+        logger.warning("GARCH forecast failed (returning None): %s", exc)
         return None
 
 
