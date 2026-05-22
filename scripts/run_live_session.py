@@ -160,7 +160,7 @@ class PreflightContext:
     broker_name: str
     demo: bool
     portfolio: Any  # Portfolio | None — typed loosely to avoid runtime import cycle
-    components: dict[str, Any] | None = None
+    components: Any = None  # BrokerComponents (TypedDict) | None — Any avoids import cycle
     components_all_pass: bool = True
     # Copy-trading dry-run inputs (A.6.5 — preflight gap fix 2026-05-16)
     profile_id: str | None = None
@@ -319,11 +319,18 @@ def _check_trade_journal(ctx: PreflightContext) -> CheckResult:
     # so operators see the failure before committing to a session launch.
     try:
         from pipeline.paths import LIVE_JOURNAL_DB_PATH
-        from trading_app.live.trade_journal import TradeJournal
+        from trading_app.live.trade_journal import TradeJournal, TradeJournalLockedError
 
         journal = TradeJournal(LIVE_JOURNAL_DB_PATH, mode="preflight")
         if journal.is_healthy:
             return CheckResult(True, f"OK ({LIVE_JOURNAL_DB_PATH.name})")
+        err = journal.last_error
+        if isinstance(err, TradeJournalLockedError):
+            pid_part = f"PID {err.holder_pid}" if err.holder_pid is not None else "another process"
+            return CheckResult(
+                False,
+                f"LOCKED by {pid_part}. Run: scripts/tools/stop_live.ps1 to clear, then retry.",
+            )
         return CheckResult(False, f"FAILED: TradeJournal could not open {LIVE_JOURNAL_DB_PATH}")
     except Exception as e:
         return CheckResult(False, f"FAILED: {e}")
@@ -511,7 +518,7 @@ def _run_preflight(
     # First check is auth — header includes broker name. Other checks use
     # the function's own __doc__ (first-line title). The original output
     # parenthesised the instrument on the portfolio line; keep that form.
-    titles = {
+    titles: dict[CheckFn, str] = {
         _check_auth: f"Auth check ({ctx.broker_name})",
         _check_portfolio: f"Portfolio check ({ctx.instrument})",
     }

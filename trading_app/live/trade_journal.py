@@ -8,6 +8,7 @@ Design: fail-open — journal write failures log CRITICAL but NEVER block tradin
 """
 
 import logging
+import re
 import uuid
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -17,6 +18,36 @@ import duckdb
 from pipeline.db_config import configure_connection
 
 log = logging.getLogger(__name__)
+
+_LOCK_HOLDER_PID_RE = re.compile(r"PID\s+(\d+)", re.IGNORECASE)
+
+
+class TradeJournalLockedError(RuntimeError):
+    """Another process holds the writer lock on the journal DB.
+
+    Carries the holder PID when DuckDB's error text names it (Windows does).
+    """
+
+    def __init__(self, db_path: Path, holder_pid: int | None, raw: str):
+        self.db_path = db_path
+        self.holder_pid = holder_pid
+        self.raw = raw
+        pid_part = f"PID {holder_pid}" if holder_pid is not None else "another process"
+        super().__init__(f"Journal {db_path.name} is locked by {pid_part}.")
+
+
+def _extract_lock_holder_pid(err_text: str) -> int | None:
+    """DuckDB's IO error message names the holding PID on Windows.
+
+    Returns the int PID if the error text matches; None otherwise.
+    """
+    m = _LOCK_HOLDER_PID_RE.search(err_text or "")
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except (TypeError, ValueError):
+        return None
 
 LIVE_TRADES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS live_trades (
@@ -62,12 +93,24 @@ class TradeJournal:
     def __init__(self, db_path: Path | str, mode: str = "live"):
         self._mode = mode
         self._db_path = Path(db_path)
+        self.last_error: Exception | None = None
         try:
             self._con = duckdb.connect(str(self._db_path))
             configure_connection(self._con, writing=True)
             self._con.execute(LIVE_TRADES_SCHEMA)
             log.info("TradeJournal opened: %s (mode=%s)", self._db_path, mode)
-        except Exception:
+        except duckdb.IOException as e:
+            holder_pid = _extract_lock_holder_pid(str(e))
+            self.last_error = TradeJournalLockedError(self._db_path, holder_pid, str(e))
+            log.warning(
+                "TradeJournal locked: %s held by %s (mode=%s)",
+                self._db_path,
+                f"PID {holder_pid}" if holder_pid is not None else "another process",
+                mode,
+            )
+            self._con = None
+        except Exception as e:
+            self.last_error = e
             log.critical("TradeJournal FAILED to open %s — trades will NOT be persisted", db_path, exc_info=True)
             self._con = None
 
