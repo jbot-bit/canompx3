@@ -309,3 +309,32 @@ class TestLoadChordiaAuditEntryAddendum:
         age = log.audit_age_days("TEST_DT", date(2026, 5, 5))
         assert age == 4
         assert isinstance(age, int)
+
+
+class TestLoadChordiaAuditLogIOError:
+    """Fail-closed contract: OSError on read must return empty log, not propagate.
+
+    integrity-guardian.md § 3: fail-closed mindset — a file that exists but
+    cannot be read (permissions, disk error, encoding corruption) must behave
+    identically to a malformed YAML file: operator-visible warning + empty log.
+    """
+
+    def test_oserror_on_read_returns_empty_log_and_warns(self, tmp_path, caplog):
+        from unittest.mock import patch
+
+        path = tmp_path / "chordia_audit_log.yaml"
+        path.write_text("version: 1\n", encoding="utf-8")
+
+        # Simulate a PermissionError mid-read (file exists, read_text raises).
+        with patch("pathlib.Path.read_text", side_effect=PermissionError("mocked permission denied")):
+            with caplog.at_level(logging.WARNING, logger="trading_app.chordia"):
+                log = load_chordia_audit_log(path)
+
+        # Must return the fail-closed empty log, not propagate.
+        assert log.entries == {}
+        assert log.default_has_theory is False
+        # Operator-visible: warning message must include the exception class name.
+        assert any(
+            "PermissionError" in rec.getMessage() and "fail-closed" in rec.getMessage()
+            for rec in caplog.records
+        ), f"expected WARNING with PermissionError; got {[r.getMessage() for r in caplog.records]}"

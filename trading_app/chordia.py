@@ -349,11 +349,12 @@ def load_chordia_audit_log(path: str | Path | None = None) -> ChordiaAuditLog:
 
     try:
         parsed = yaml.safe_load(p.read_text())
-    except yaml.YAMLError as exc:
+    except (yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
         _LOG.warning(
-            "chordia audit log %s could not be parsed (%s) — "
+            "chordia audit log %s could not be read or parsed (%s: %s) — "
             "fail-closed: every strategy will be PAUSED until the YAML is fixed",
             p,
+            type(exc).__name__,
             exc,
         )
         return ChordiaAuditLog(
