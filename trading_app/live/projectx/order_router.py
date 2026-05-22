@@ -393,7 +393,8 @@ class ProjectXOrderRouter(BrokerRouter):
         if self.auth is None:
             raise RuntimeError("No auth — cannot query order status")
         # Need raw response (status_code) for non-JSON debugging; use request().
-        resp = self._client().request(
+        client = self._client()
+        resp = client.request(
             "GET",
             f"/api/Order/{order_id}",
             headers=self.auth.headers(),
@@ -401,6 +402,9 @@ class ProjectXOrderRouter(BrokerRouter):
             timeout=10,
         )
         resp.raise_for_status()
+        # request() defers success-record to parse layer; record here since this
+        # call-site consumes resp.json() directly (no parse-layer wrapper).
+        client.record_response_success()
         data = resp.json()
         # Map integer status to string (spec returns int, callers expect string)
         raw_status = data.get("status", 0)

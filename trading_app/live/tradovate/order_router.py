@@ -128,7 +128,13 @@ class TradovateOrderRouter(BrokerRouter):
         endpoint = "order/placeOSO" if has_bracket else "order/placeorder"
 
         t0 = time.monotonic()
-        resp = request_with_retry("POST", self._url(endpoint), self.auth.headers(), json_body=wire_spec)
+        resp = request_with_retry(
+            "POST",
+            self._url(endpoint),
+            self.auth.headers(),
+            json_body=wire_spec,
+            failure_hook=getattr(self.auth, "failure_hook", None),
+        )
         elapsed_ms = (time.monotonic() - t0) * 1000
         resp.raise_for_status()
         data = resp.json()
@@ -179,6 +185,7 @@ class TradovateOrderRouter(BrokerRouter):
             self._url("order/cancelorder"),
             self.auth.headers(),
             json_body={"orderId": order_id},
+            failure_hook=getattr(self.auth, "failure_hook", None),
         )
         resp.raise_for_status()
         log.info("Tradovate order cancelled: orderId=%d", order_id)
@@ -309,7 +316,12 @@ class TradovateOrderRouter(BrokerRouter):
     def query_order_status(self, order_id: int) -> dict:
         if self.auth is None:
             raise RuntimeError("No auth — cannot query order status")
-        resp = request_with_retry("GET", self._url(f"order/item?id={order_id}"), self.auth.headers())
+        resp = request_with_retry(
+            "GET",
+            self._url(f"order/item?id={order_id}"),
+            self.auth.headers(),
+            failure_hook=getattr(self.auth, "failure_hook", None),
+        )
         resp.raise_for_status()
         data = resp.json()
         status = data.get("ordStatus", "Unknown")
@@ -328,6 +340,7 @@ class TradovateOrderRouter(BrokerRouter):
             self._url(f"order/ldeps?masterid={self.account_id}"),
             self.auth.headers(),
             timeout=10,
+            failure_hook=getattr(self.auth, "failure_hook", None),
         )
         resp.raise_for_status()
         data = resp.json()

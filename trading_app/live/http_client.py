@@ -286,7 +286,10 @@ class BrokerHTTPClient:
                         error_class="perm",
                         last_response=resp,
                     )
-                self.failure_hook.record_success()
+                # NOTE: success recording happens at the parse layer (post_json / get_json)
+                # so a 200 + {"success": false} body counts as failure not success. Raw
+                # callers (Tradovate request_with_retry, projectx order_router.cancel)
+                # record success themselves via _record_response_success() helper.
                 return resp
 
             if cls == "F":
@@ -360,7 +363,13 @@ class BrokerHTTPClient:
         non-JSON response or {"success": false} payload (success-field is
         ProjectX/Tradovate convention)."""
         resp = self.request("POST", path, headers=headers, json=body, timeout=timeout, policy=policy)
-        return _parse_json_or_protocol(self.name, path, resp)
+        try:
+            data = _parse_json_or_protocol(self.name, path, resp)
+        except BrokerProtocolError:
+            self.failure_hook.record_failure("G")
+            raise
+        self.failure_hook.record_success()
+        return data
 
     def get_json(
         self,
@@ -372,7 +381,19 @@ class BrokerHTTPClient:
         timeout: float = 10.0,
     ) -> dict:
         resp = self.request("GET", path, headers=headers, params=params, timeout=timeout, policy=policy)
-        return _parse_json_or_protocol(self.name, path, resp)
+        try:
+            data = _parse_json_or_protocol(self.name, path, resp)
+        except BrokerProtocolError:
+            self.failure_hook.record_failure("G")
+            raise
+        self.failure_hook.record_success()
+        return data
+
+    def record_response_success(self) -> None:
+        """Raw callers (Tradovate request_with_retry, projectx fast-path) call this
+        after a returned response has been validated at the caller's layer.
+        Mirrors what post_json/get_json do internally."""
+        self.failure_hook.record_success()
 
 
 def _parse_json_or_protocol(name: str, path: str, resp: requests.Response) -> dict:

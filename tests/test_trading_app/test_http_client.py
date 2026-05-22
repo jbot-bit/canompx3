@@ -342,3 +342,27 @@ def test_failure_hook_should_allow_request_blocks_call(fast_policy):
     assert "circuit breaker open" in str(excinfo.value).lower()
     # No HTTP attempted.
     assert session.calls == []
+
+
+def test_failure_hook_records_class_g_on_success_false(fast_policy):
+    """200 + success=false body → hook records class-G failure, not success."""
+    session = _ScriptedSession(
+        [_make_resp(200, {"success": False, "errorMessage": "bad payload"})]
+    )
+    hook = _RecordingHook()
+    client = BrokerHTTPClient(base_url="https://x.test", session=session, name="t", failure_hook=hook)
+    with pytest.raises(BrokerProtocolError):
+        client.post_json("/p", {}, {}, policy=fast_policy)
+    assert hook.failures == ["G"]
+    assert hook.successes == 0
+
+
+def test_failure_hook_records_class_g_on_non_json(fast_policy):
+    """200 with non-JSON body → hook records class-G failure, not success."""
+    session = _ScriptedSession([_make_resp(200)])  # json() raises ValueError
+    hook = _RecordingHook()
+    client = BrokerHTTPClient(base_url="https://x.test", session=session, name="t", failure_hook=hook)
+    with pytest.raises(BrokerProtocolError):
+        client.get_json("/p", {}, policy=fast_policy)
+    assert hook.failures == ["G"]
+    assert hook.successes == 0

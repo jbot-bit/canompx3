@@ -47,7 +47,7 @@ def request_with_retry(
     if failure_hook is not None:
         kwargs_for_client["failure_hook"] = failure_hook
     client = BrokerHTTPClient(**kwargs_for_client)
-    return client.request(
+    resp = client.request(
         method,
         url,
         headers=headers,
@@ -55,3 +55,9 @@ def request_with_retry(
         timeout=timeout,
         policy=READ_POLICY,
     )
+    # request() no longer records success at the HTTP layer (deferred to parse).
+    # Raw callers like this shim must record success themselves; the caller's
+    # resp.raise_for_status() + resp.json() happens after this returns and any
+    # protocol error there raises, never reaching the CB success path.
+    client.record_response_success()
+    return resp
