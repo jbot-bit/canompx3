@@ -2124,3 +2124,42 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file (strategy_discovery.py)
 - Verification: PASS — 55/55 test_strategy_discovery.py non-Phase4 tests; 145 drift checks; 8 Phase4 tests pre-existing failures (Amendment 3.3 theory_grant fixture gap, orthogonal)
 - Commit: d6c6c3f6
+
+---
+
+## Iteration 187 — 2026-05-20
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/tools/cherry_pick_grounder.py (ruff lint — pre-existing)
+- Finding: Ruff import-sort violation (E401/I001); pre-existing, not introduced in this iter.
+- Doctrine cited: N/A (pre-existing lint)
+- Action: Deferred — pre-existing known issue per task prompt.
+- Blast radius: N/A
+- Verification: N/A
+- Commit: NONE (deferred)
+
+---
+
+## Iteration 193 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/deployability.py:299,303,629,631,845,850,958
+- Finding: Hardcoded 0.50 (WFE floor), 100 (CORE_MIN_SAMPLES), 30 (REGIME_MIN_SAMPLES) as inline magic numbers on capital-decision path instead of importing from trading_app.config.
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources), institutional-rigor.md § 4 (delegate to canonical, never re-encode)
+- Action: Imported MIN_WFE, CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES from trading_app.config; replaced 7 inline literals.
+- Blast radius: 1 file (deployability.py)
+- Verification: PASS — 44/44 deployability tests; 160 drift checks
+- Commit: 8dfb78e5
+
+---
+
+## Iteration 194 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/strategy_fitness.py:607,720,815
+- Finding: CANON-194 — min_rolling_trades=15 magic-number default at 3 function signatures duplicates the research-annotated constant MIN_ROLLING_FIT=15. Silent drift risk if MIN_ROLLING_FIT is updated post-revalidation.
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources — never inline magic numbers), institutional-rigor.md § 4 (delegate to canonical sources)
+- Action: Changed all 3 function defaults from `int = 15` to `int = MIN_ROLLING_FIT`. Value unchanged (15); no callers pass this kwarg explicitly.
+- Blast radius: 1 file (strategy_fitness.py), 0 callers affected
+- Verification: PASS — 31/31 test_strategy_fitness.py; 160 drift checks
+- Commit: ed781e95

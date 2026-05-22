@@ -3,91 +3,74 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 193
+## Last iteration: 194
 
-## RALPH AUDIT — Iteration 193 (COMPLETED)
+## RALPH AUDIT — Iteration 194 (COMPLETED)
 ## Date: 2026-05-23
-## Infrastructure Gates: 160 drift checks PASS; 44 deployability tests PASS
-## Scope: trading_app/deployability.py — hardcoded threshold literals on capital-decision path
+## Infrastructure Gates: 160 drift checks PASS; 31 strategy_fitness tests PASS
+## Scope: trading_app/strategy_fitness.py — magic-number defaults duplicating MIN_ROLLING_FIT
 
 ---
 
-## Iteration 193 — trading_app/deployability.py (full scan)
+## Iteration 194 — trading_app/strategy_fitness.py (full scan)
 
 ### Auto-Targeting
-- Scope provided: `trading_app/deployability.py` — medium centrality, never scanned by Ralph.
+- Scope provided: `trading_app/strategy_fitness.py` — medium centrality, never scanned.
 
 ---
 
-## Finding CANON-193 — LOW — FIXED
+## Finding CANON-194 — LOW — FIXED
 
-**PREMISE:** `trading_app/deployability.py` hardcoded `0.50` (WFE floor), `100` (CORE_MIN_SAMPLES), and `30` (REGIME_MIN_SAMPLES) as inline magic numbers on the capital-decision path, instead of importing from `trading_app.config`.
+**PREMISE:** `_compute_fitness_from_cache`, `_compute_fitness_with_con`, and `compute_fitness` all declare `min_rolling_trades: int = 15` as a magic-number default. The canonical constant `MIN_ROLLING_FIT = 15` (annotated `@research-source @sensitivity-tested @revalidated-for`) lives at `strategy_fitness.py:95`. If a research re-validation updates `MIN_ROLLING_FIT`, the three defaults silently diverge.
 
 **TRACE:**
-- `_singleton_clears_binding_criteria` (deployability.py:299,303) → `float(wfe) < 0.50` / `int(n) < 100`
-- `_trade_context` (deployability.py:629,631) → `int(sample_size) < 30` / `int(sample_size) < 100`
-- `_classify_strategy` (deployability.py:845,850) → `float(row["wfe"]) < 0.50` / `int(row["sample_size"]) < 100`
-- `_build_instrument_summary` (deployability.py:958) → `int(report.metrics["sample_size"]) < 100`
+- `strategy_fitness.py:607` → `_compute_fitness_from_cache(... min_rolling_trades: int = 15 ...)`
+- `strategy_fitness.py:720` → `_compute_fitness_with_con(... min_rolling_trades: int = 15 ...)`
+- `strategy_fitness.py:815` → `compute_fitness(... min_rolling_trades: int = 15 ...)`
+- Canonical constant: `strategy_fitness.py:95` → `MIN_ROLLING_FIT = 15` (research-annotated)
 
-**EVIDENCE:** `trading_app.config` exports `MIN_WFE = 0.50`, `CORE_MIN_SAMPLES = 100`, `REGIME_MIN_SAMPLES = 30` — already imported by `deployability.py` (import line 24), just not referenced.
+**VERDICT:** SUPPORT — canonical violation per integrity-guardian.md § 2 / institutional-rigor.md § 4
 
-**FIX:** `trading_app/deployability.py:24` — added `CORE_MIN_SAMPLES, MIN_WFE, REGIME_MIN_SAMPLES` to existing config import; replaced 7 inline literal uses with the canonical constants. 8 lines changed.
+**Fix:** Changed all 3 defaults to `min_rolling_trades: int = MIN_ROLLING_FIT`.
+Diff: 3 lines. Behavior: identical (value unchanged). No callers pass this kwarg.
 
-**DOCTRINE:** `integrity-guardian.md § 2` / `institutional-rigor.md § 10` — import from canonical module, never inline magic numbers on capital-class decision paths.
-
-**VERDICT:** FIXED — commit `8dfb78e5`
-
----
-
-## Other Findings (No Fix Required)
-
-### `except Exception` at line 322 — ACCEPTABLE
-`except Exception: failed.append("C10_micro_check_error")` — explicitly fail-closed (appends to `failed` list which gates deployment). Annotated `# noqa: BLE001 - fail closed`. Matches ACCEPTABLE pattern 1 (intentional fail-closed exception swallow).
-
-### `except Exception as exc` at line 461 — ACCEPTABLE
-`_replay_strategy` returns `{"ok": False, "error": str(exc)}` — fail-closed (replay error → `replay_mismatch` hard issue → `BLOCKED_REPLAY_MISMATCH` verdict). Exception is recorded in the `error` field. Correct pattern.
-
-### `< 0.05` FDR alpha (lines 274, 437) — ACCEPTABLE
-No named canonical constant for BH FDR alpha exists in this codebase (`strategy_validator.py` uses `alpha=0.05` as a function default, not an exported constant). Style difference with no correctness impact; would need a new constant added to config.py which is out of scope.
-
-### `< 0.95` DSR threshold (line 861) — ACCEPTABLE
-No canonical constant for the DSR cross-check threshold exists. `dsr_below_cross_check` is a warning only (not a hard gate), so no capital risk.
-
-### `< 7` years tested (line 853) — ACCEPTABLE
-`pipeline/check_drift.py` has a local `MIN_YEARS = 7` but it is not exported from any canonical module. Short-history issue is a warning only.
+**Doctrine cited:** integrity-guardian.md § 2 (canonical sources — never inline magic numbers), institutional-rigor.md § 4 (delegate to canonical sources)
 
 ---
 
-## Seven Sins Scan — trading_app/deployability.py
+## Seven Sins Scan — strategy_fitness.py
 
-- **Silent failure:** No unguarded silent failures. Both `except Exception` blocks are fail-closed.
-- **Fail-open:** No fail-open patterns detected. All hard-blocker paths route to BLOCKED verdicts.
-- **Canonical violation:** FIXED (WFE/sample thresholds now import from config).
-- **Impact awareness:** `_classify_strategy` correctly uses `HARD_BLOCKER_TO_VERDICT` to prevent verdict bypass.
-- **Chordia gate:** `chordia_verdict_allows_deploy` + `chordia_verdict_label` imported from canonical `trading_app.chordia`. No bypass detected.
-- **Theory_grant gate:** `has_theory=False` hardcoded for SINGLETON path — correct by design (docstring explicitly documents this and adversarial-audit 2026-05-11 verified it).
-- **Instrument lists:** No hardcoded instrument list. Uses `ACTIVE_ORB_INSTRUMENTS` from `pipeline.asset_configs` via `_active_in_sql()`.
-- **Entry model lists:** No hardcoded entry model list.
-- **Hardcoded status strings:** verdict strings (`DEPLOYABLE_CANDIDATE` etc.) are module-level constants, not duplicated inline.
+- Sin 1 (Silent failure): Fail-closed pattern at `_filter_outcomes_with_features:421-423` (unknown filter → warning + empty list). ACCEPTABLE.
+- Sin 2 (Fail-open): `compute_portfolio_fitness:907` catches `(ValueError, duckdb.Error, KeyError)` and logs via `logger.exception` — not silent. ACCEPTABLE.
+- Sin 3 (Canonical violation): FIXED this iteration (CANON-194).
+- Sin 4 (Impact awareness): `fitness_status` literals "FIT"/"WATCH"/"DECAY"/"STALE" are string constants returned from a single function (`classify_fitness`) and consumed by callers. No enum currently exists; the pattern is consistent across the codebase. LOW risk — all callers compare against the same string literals returned from `classify_fitness`. Acceptable per pattern 1 (intentional per-session heuristic — monitoring only, not a canonical list).
+- Sin 5 (Evidence over assertion): N/A (audit mode).
+- Sin 6 (Spec compliance): No spec in docs/specs/ for this module.
+- Sin 7 (Metadata trust): Not applicable.
 
 ---
 
 ## Files Fully Scanned
 
+- pipeline/check_drift.py (iter 153)
+- pipeline/build_daily_features.py (iter 158)
+- pipeline/dst.py (no-touch, iter 160)
+- trading_app/strategy_discovery.py (iter 162)
+- trading_app/outcome_builder.py (iter 165)
+- trading_app/entry_rules.py (iter 168)
+- trading_app/strategy_validator.py (iter 171)
+- trading_app/live/session_orchestrator.py (iter 174)
+- trading_app/live/execution_engine.py (iter 177)
+- trading_app/live/alert_engine.py (iter 180)
+- trading_app/derived_state.py (iter 183)
 - trading_app/deployability.py (iter 193)
-- trading_app/chordia.py (iter 192)
-- trading_app/live/session_orchestrator.py (iter A.6)
-- trading_app/pre_session_check.py (iter A.6)
-- trading_app/derived_state.py (iter A.6)
-- trading_app/live/alert_engine.py (iter ALERT-CONTAM-N2)
-- trading_app/live/tradovate/order_router.py (iter PR301)
-- trading_app/live/tradovate/http.py (iter PR301)
-- pipeline/check_drift.py (iter 192 — partial, check_am33 function)
-- scripts/run_live_session.py (iter A.6)
+- trading_app/strategy_fitness.py (iter 194)
+
+---
 
 ## Next Iteration Targets
 
-**Priority 1 — Unscanned medium-centrality files:**
-- `trading_app/strategy_fitness.py` — used by deployability and chordia; never scanned
-- `trading_app/lifecycle_state.py` — called by deployability on every profile audit; never scanned
-- `trading_app/strategy_validator.py` — critical path for C3/C8 gates; partial scan only
+**Priority 1 — Unscanned high/medium centrality files:**
+- `trading_app/lane_correlation.py` — imports from strategy_fitness, medium centrality, never scanned
+- `trading_app/live_config.py` — capital-class, calls compute_fitness on regime gate path, never scanned
+- `trading_app/chordia.py` — medium centrality, never scanned
