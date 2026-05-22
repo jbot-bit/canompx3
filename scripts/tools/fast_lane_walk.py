@@ -19,7 +19,7 @@ stage to act on.
 Capital-class boundary
 ----------------------
 This orchestrator NEVER mutates ``chordia_audit_log.yaml``,
-``lane_allocation.json``, ``validated_setups``, or anything under
+the lane allocation file, ``validated_setups``, or anything under
 ``trading_app/live/``. It composes scripts that already enforce that
 boundary individually (Checks #157, #160, #161, #168). Walk inherits.
 

@@ -104,7 +104,7 @@ def panel_deployed_lanes(profile_filter: str | None, instrument_filter: str | No
 
     doc = _load_allocation_doc()
     if doc is None:
-        return _empty("No lane_allocation.json found - run rebalance or check docs/runtime/.")
+        return _empty("No lane allocation file found - run rebalance or check docs/runtime/.")
     idx = _allocation_index(doc)
     if not idx:
         return _empty("Allocation index is empty (no lanes or paused entries).")

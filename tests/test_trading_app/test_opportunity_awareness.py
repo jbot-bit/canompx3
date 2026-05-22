@@ -86,8 +86,8 @@ def test_refresh_opportunity_state_writes_shadow_envelope(monkeypatch, tmp_path)
 def test_lane_code_paths_hash_only_source_files():
     paths = opportunity_awareness._lane_code_paths()
 
-    assert opportunity_awareness.LANE_ALLOCATION_PATH not in paths
     assert all(path.suffix == ".py" for path in paths)
+    assert not any(path.name == "lane_allocation.json" for path in paths)
 
 
 def test_describe_opportunity_awareness_names_relevant_lanes():
@@ -147,7 +147,11 @@ def test_read_opportunity_state_refreshes_when_lifecycle_is_supplied(monkeypatch
     monkeypatch.setattr(opportunity_awareness, "build_db_identity", lambda _db_path: "db-identity")
     monkeypatch.setattr(opportunity_awareness, "build_code_fingerprint", lambda _paths: "code-identity")
     monkeypatch.setattr(opportunity_awareness, "get_git_head", lambda _root=None: "testsha")
-    monkeypatch.setattr(opportunity_awareness, "_load_allocation_payload", lambda: {"lanes": [lane], "paused": []})
+    monkeypatch.setattr(
+        opportunity_awareness,
+        "_load_allocation_payload",
+        lambda _profile_id: {"lanes": [lane], "paused": []},
+    )
 
     opportunity_awareness.refresh_opportunity_state(
         "topstep_50k_mnq_auto",

@@ -68,6 +68,7 @@ from trading_app.prop_profiles import (  # noqa: E402
     AccountProfile,
     effective_daily_lanes,
     get_profile,
+    resolve_allocation_json,
 )
 
 # Fixed firm→broker map. Mirrors the dispatch logic in
@@ -238,22 +239,16 @@ def load_profile_filter(profile_id: str) -> ProfileFilter:
 
 
 def load_allocation_state(profile_id: str) -> AllocationState:
-    """Read this profile's lane_allocation.json status sets.
+    """Read this profile's allocation status sets.
 
-    Reads the raw JSON (not just effective_daily_lanes) so we can
-    distinguish DEPLOY/PROVISIONAL from PAUSE/STALE/REMOVED.
+    Reads the raw JSON via ``resolve_allocation_json`` (Stage 1b authority
+    inversion) so we can distinguish DEPLOY/PROVISIONAL from
+    PAUSE/STALE/REMOVED — distinctions ``effective_daily_lanes`` collapses.
+    Fail-closed-as-empty on missing/corrupt/profile-mismatch.
     """
-    repo_root = Path(__file__).resolve().parents[2]
-    alloc_path = repo_root / "docs" / "runtime" / "lane_allocation.json"
-    if not alloc_path.exists():
-        return AllocationState(deployed=frozenset(), removed=frozenset())
-
-    try:
-        data = json.loads(alloc_path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return AllocationState(deployed=frozenset(), removed=frozenset())
-
-    if data.get("profile_id") != profile_id:
+    result = resolve_allocation_json(profile_id)
+    data = result.data
+    if data is None:
         return AllocationState(deployed=frozenset(), removed=frozenset())
 
     lanes = data.get("lanes")

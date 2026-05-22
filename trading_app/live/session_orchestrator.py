@@ -383,7 +383,7 @@ class SessionOrchestrator:
         # which today is internally fail-closed (catches JSON/OS errors and
         # returns ()). If that helper is ever refactored to propagate, this
         # block stays correct — Block 3 already carries the same tuple for the
-        # direct lane_allocation.json read.
+        # allocator-block gate's corruption probe.
         except (
             ImportError,
             KeyError,
@@ -421,36 +421,60 @@ class SessionOrchestrator:
         # Strategies blocked by the allocator (session regime COLD, stale, or
         # Chordia gate) are blocked at entry time. Fail-closed for profile
         # accounts, fail-open for paper/signal.
-        # Delegates to the canonical reader in trading_app.prop_profiles
-        # (institutional-rigor § 4 — single JSON parser for paused[]+stale[]).
-        # The loader is internally fail-closed-as-empty on JSON/OS errors.
-        # For profile_* accounts we require the file to actually exist; an
-        # empty result on a missing file would silently disable the gate.
-        from trading_app.prop_profiles import load_paused_strategy_ids
+        # Delegates to trading_app.prop_profiles.resolve_allocation_json (Stage
+        # 1b authority inversion — single owner of the allocation-path
+        # semantics: new-path-first, legacy fallback, profile-mismatch fail-
+        # closed, multi-file ambiguity hard-fail) and load_paused_strategy_ids
+        # (single JSON parser for paused[]+stale[]). The loader is internally
+        # fail-closed-as-empty on JSON/OS errors. For profile_* accounts we
+        # require the file to actually exist AND be parseable; an empty
+        # result on a missing or corrupt file would silently disable the gate.
+        from trading_app.prop_profiles import (
+            legacy_lane_allocation_path,
+            load_paused_strategy_ids,
+            resolve_allocation_json,
+        )
 
-        _alloc_path = Path(__file__).resolve().parents[2] / "docs" / "runtime" / "lane_allocation.json"
         if _is_profile:
-            # Fail-closed precondition: profile accounts require a present AND
-            # parseable allocation file. The canonical loader fail-closes-as-
-            # empty on JSON/OS errors (correct for paper accounts), so we must
-            # probe-parse here to surface corruption as a hard fail for
-            # profile_*. Probe is read-only and identical to the loader's own
-            # parse path; duplicate parser is not reintroduced because the
-            # probe discards its result.
-            if not _alloc_path.exists():
-                raise RuntimeError(f"FAIL-CLOSED: profile account requires lane_allocation.json at {_alloc_path}")
-            try:
-                json.loads(_alloc_path.read_text())
-            except (json.JSONDecodeError, OSError) as e:
-                raise RuntimeError(f"FAIL-CLOSED: profile account requires parseable lane_allocation.json: {e}") from e
-        self._regime_paused: set[str] = set(load_paused_strategy_ids(_alloc_path))
+            # profile_* accounts: use the resolver to honor new-path-first +
+            # profile-mismatch guard + multi-file ambiguity hard-fail. Then
+            # disambiguate missing-vs-corrupt to surface corruption as a hard
+            # fail. The corruption probe targets the legacy path (the
+            # operator-runbook anchor) since that's where the historical
+            # failure message points.
+            _alloc_read = resolve_allocation_json(profile_id or "")
+            if _alloc_read.data is None:
+                legacy_path = legacy_lane_allocation_path()
+                if legacy_path.exists():
+                    try:
+                        legacy_payload = json.loads(legacy_path.read_text())
+                    except (json.JSONDecodeError, OSError) as e:
+                        raise RuntimeError(
+                            f"FAIL-CLOSED: profile account requires parseable allocation file: {e}"
+                        ) from e
+                    # File parses but resolver rejected it — almost always a
+                    # profile_id mismatch (resolver guard at prop_profiles
+                    # _try_read). Surface the actual rejection class so the
+                    # operator sees what's wrong, not just that the file is
+                    # "missing" when it visibly exists.
+                    found_pid = legacy_payload.get("profile_id") if isinstance(legacy_payload, dict) else None
+                    raise RuntimeError(
+                        f"FAIL-CLOSED: allocation file profile_id mismatch — "
+                        f"{legacy_path} has profile_id={found_pid!r}, account expects {profile_id!r}"
+                    )
+                raise RuntimeError(f"FAIL-CLOSED: profile account requires allocation file at {legacy_path}")
+            self._regime_paused: set[str] = set(load_paused_strategy_ids(profile_id=profile_id))
+        else:
+            # paper/signal accounts: fail-open. Read the legacy path with no
+            # profile guard via the canonical loader; empty set is acceptable.
+            self._regime_paused = set(load_paused_strategy_ids())
         if self._regime_paused:
             log.warning(
                 "ALLOCATOR GATE: %d blocked strategies — entries will be blocked",
                 len(self._regime_paused),
             )
-        elif not _alloc_path.exists():
-            log.info("No lane_allocation.json — regime gate disabled")
+        elif not _is_profile and not legacy_lane_allocation_path().exists():
+            log.info("No allocation file — regime gate disabled")
 
         # Execution stack
         self.cost_spec: CostSpec = get_cost_spec(instrument)
@@ -2350,8 +2374,8 @@ class SessionOrchestrator:
                     return
 
             # Allocator block gate — block entries for strategies marked
-            # non-deployable by lane_allocation.json at init. Fail-open if the
-            # file is missing.
+            # non-deployable by the lane allocator at init. Fail-open if the
+            # allocation file is missing.
             if event.strategy_id in self._regime_paused:
                 log.info(
                     "ALLOCATOR_BLOCKED: %s — allocator marked strategy non-deployable. Entry blocked.",

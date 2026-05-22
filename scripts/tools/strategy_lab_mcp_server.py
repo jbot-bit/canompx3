@@ -2,14 +2,14 @@
 
 Exposes read-only tools via stdio (fastmcp):
   - get_strategy_readiness: one-call readiness verdict for a single strategy
-  - get_lane_allocation_summary: profile-scoped read of docs/runtime/lane_allocation.json
+  - get_lane_allocation_summary: profile-scoped read of the lane allocation file
   - get_recent_fitness: rolling regime fitness for a single strategy
   - list_promotable_candidates: validated FIT strategies that are NOT currently allocated
 
 Strict-truth boundary: this server reads canonical surfaces only —
 ``trading_app/strategy_validator.py`` outputs (``validated_setups``),
 ``trading_app/strategy_fitness.py`` (``compute_fitness``), and the
-``docs/runtime/lane_allocation.json`` rebalance file. It never re-derives
+``lane allocation`` rebalance file. It never re-derives
 those surfaces.
 
 Overlap with ``gold-db`` MCP is intentional: ``gold-db.get_strategy_fitness``
@@ -33,7 +33,9 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def _allocation_path() -> Path:
-    return PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
+    from trading_app.prop_profiles import legacy_lane_allocation_path
+
+    return legacy_lane_allocation_path()
 
 
 def _load_allocation_doc(allocation_path: Path | None = None) -> dict[str, Any] | None:
@@ -200,7 +202,7 @@ def _readiness_verdict(
         )
     elif fitness_status == "FIT":
         verdict = "PROMOTABLE"
-        reason = "Validated and currently FIT but not in lane_allocation.json."
+        reason = "Validated and currently FIT but not in the lane allocation file."
     elif fitness_status in ("WATCH", "STALE", "DECAY"):
         verdict = f"VALIDATED_BUT_{fitness_status}"
         reason = f"Validated, not allocated, current rolling fitness = {fitness_status}."
@@ -253,7 +255,7 @@ def _get_lane_allocation_summary(
     doc = _load_allocation_doc()
     if doc is None:
         return {
-            "error": "lane_allocation.json missing or unreadable.",
+            "error": "Lane allocation file missing or unreadable.",
             "path": str(_allocation_path()),
         }
 
@@ -347,7 +349,7 @@ def _build_server():
     instructions = (
         "Repo-local read-only strategy-validation, fitness, and lane-allocation MCP for canompx3. "
         "Use it to ask: is this strategy validated, currently fit, currently deployed, or promotable. "
-        "Reads validated_setups, compute_fitness, and docs/runtime/lane_allocation.json — does not "
+        "Reads validated_setups, compute_fitness, and the lane allocation file — does not "
         "re-derive any of them. Overlaps gold-db.get_strategy_fitness intentionally so deployment-"
         "readiness questions can be answered from one server."
     )
@@ -372,7 +374,7 @@ def _build_server():
             ),
             ToolSpec(
                 "get_lane_allocation_summary",
-                "Profile-scoped read of the latest lane_allocation.json rebalance.",
+                "Profile-scoped read of the latest lane allocation rebalance.",
                 {
                     "type": "object",
                     "properties": {

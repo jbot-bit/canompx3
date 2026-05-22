@@ -229,8 +229,7 @@ CANONICAL_INLINE_COPIES: list[InlineCopyPair] = [
         name="fast_lane_structural_hash_schema",
         inline_site="scripts/research/fast_lane_structural_hash.py",
         canonical_source=(
-            "docs/specs/fast_lane_state_graph.md "
-            "section `## 9. Hash Schema` (hash_schema_version + 9-field inputs)."
+            "docs/specs/fast_lane_state_graph.md section `## 9. Hash Schema` (hash_schema_version + 9-field inputs)."
         ),
         gated_constants=(
             "HASH_SCHEMA_VERSION",

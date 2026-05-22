@@ -187,7 +187,7 @@ EVIDENCE_GAP_ISSUES = {
 # - family_singleton: SINGLETON-status row that clears all binding
 #   pre_registered_criteria.md C-criteria (Disposition C, Stage 4,
 #   2026-05-11). No peer-evidence by construction, so route to pilot
-#   for manual sign-off before lane_allocation.json mutation.
+#   for manual sign-off before lane allocation mutation.
 CONTROLLED_PILOT_WARNINGS = {
     "slippage_event_tail_pending",
     "sr_alarm_watch_reviewed",
@@ -771,7 +771,7 @@ def _classify_strategy(
         # `pre_registered_criteria.md` § Enforcement summary, downgrade
         # the issue to a warning and let it route via
         # CONTROLLED_PILOT_WARNINGS to CONTROLLED_LIVE_PILOT_CANDIDATE
-        # (manual sign-off before lane_allocation.json mutation).
+        # (manual sign-off before lane allocation mutation).
         # Otherwise emit hard and let HARD_BLOCKER_TO_VERDICT route to
         # BLOCKED_FAMILY_FRAGILE.
         passes, failed_criteria, dsr_reported = _singleton_clears_binding_criteria(row)
