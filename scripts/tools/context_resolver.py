@@ -28,6 +28,8 @@ def _preferred_repo_prefix(expected_python: Path) -> Path:
 def _ensure_repo_python() -> None:
     if "pytest" in sys.modules:
         return  # imported as library by test runner — do not re-exec
+    if __name__ != "__main__":
+        return  # imported as library (e.g., from drift import-resolution check) — do not re-exec
     expected_python = _preferred_repo_python()
     if expected_python is None:
         return

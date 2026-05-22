@@ -1293,7 +1293,11 @@ def check_all_imports_resolve() -> list[str]:
                 continue
             try:
                 importlib.import_module(module)
-            except Exception as e:
+            except BaseException as e:
+                # BaseException, not Exception: some modules raise SystemExit at
+                # import time (e.g., bootstrap re-exec wrappers in scripts.tools)
+                # and a bare `except Exception` lets SystemExit crash the drift
+                # run with no violation reported.
                 err_type = type(e).__name__
                 violations.append(f"  {module}: {err_type}: {str(e)[:100]}")
 
