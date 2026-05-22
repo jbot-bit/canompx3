@@ -14,7 +14,6 @@ import yaml
 
 from scripts.research import cherry_pick_ranker as cpr
 
-
 # ----- Component-level tests -----
 
 

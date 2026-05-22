@@ -8,18 +8,11 @@ closed_note: |
   and 2A.3 (9b13d0d1 + bdb04ca6). All four downstream stages closed, all drift checks green
   on baseline run.
 
-  This file is RETAINED (not deleted) because Check #167
-  (check_fast_lane_structural_hash_schema_parity) parses the `## Hash Schema` YAML block
-  from this file as canonical source per the inline-copy parity rule (10th instance class).
-  Deletion would break the drift check (verified 2026-05-21 — file was deleted in commit
-  ef4f0f29 close-stage commit; drift went to 2 violations; restored from f6b65420 in same
-  shape that the 2A.3 sibling file (`2026-05-20-fast-lane-anti-fp-2a3-scanner-bridge-wiring.md`)
-  uses).
-
-  Bookkeeping precedent (mirrors 2A.3 sibling): any stage file whose body is referenced by
-  a drift check must be archived in place (mode: CLOSED), never `git rm`. The sweep tooling
-  that produced commit 677837c1 did not honor this precedent — see follow-up design work
-  for canonical relocation vs in-place marker decision.
+  Superseded 2026-05-21 by the canonical parser-surface relocation:
+  Check #167 now parses `docs/specs/fast_lane_state_graph.md` § 9 Hash Schema.
+  This stage file is retained only as design/audit history. Its old `## Hash Schema`
+  body is intentionally just a backlink so future close-out sweeps do not have to
+  preserve parser surface under `docs/runtime/stages/`.
 original_mode: DESIGN
 scope_lock:
   - docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md

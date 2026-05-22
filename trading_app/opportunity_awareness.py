@@ -21,11 +21,15 @@ from trading_app.derived_state import (
     get_git_head,
     validate_state_envelope,
 )
-from trading_app.prop_profiles import get_profile, get_profile_lane_definitions, resolve_profile_id
+from trading_app.prop_profiles import (
+    get_profile,
+    get_profile_lane_definitions,
+    resolve_allocation_json,
+    resolve_profile_id,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = PROJECT_ROOT / "data" / "state"
-LANE_ALLOCATION_PATH = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
 
 OPPORTUNITY_STATE_TYPE = "opportunity_awareness_shadow"
 OPPORTUNITY_STATE_SCHEMA_VERSION = 1
@@ -78,7 +82,6 @@ def _lane_code_paths() -> list[Path]:
         Path(__file__).resolve(),
         PROJECT_ROOT / "trading_app" / "derived_state.py",
         PROJECT_ROOT / "trading_app" / "lifecycle_state.py",
-        LANE_ALLOCATION_PATH,
     ]
 
 
@@ -97,13 +100,19 @@ def _as_lane_dict(lane: Any) -> dict[str, Any]:
     }
 
 
-def _load_allocation_payload(path: Path = LANE_ALLOCATION_PATH) -> dict[str, Any]:
-    if not path.exists():
+def _load_allocation_payload(profile_id: str) -> dict[str, Any]:
+    """Load allocation payload via the canonical resolver.
+
+    Stage 1b authority inversion: ``resolve_allocation_json`` is the single
+    owner of path resolution (new-path-first, legacy fallback,
+    profile-mismatch fail-closed, multi-file ambiguity hard-fail). The
+    "missing" / "error" envelope shape is preserved for the existing
+    ``allocation_problem`` surface in ``build_snapshot``.
+    """
+    result = resolve_allocation_json(profile_id)
+    if result.data is None:
         return {"lanes": [], "paused": [], "missing": True}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
-        return {"lanes": [], "paused": [], "error": str(exc)}
+    return result.data
 
 
 def _index_by_strategy(rows: list[dict[str, Any]] | tuple[dict[str, Any], ...]) -> dict[str, dict[str, Any]]:
@@ -319,15 +328,15 @@ def build_opportunity_snapshot(
     resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
     effective_day = trading_day or date.today()
     lane_defs = [_as_lane_dict(lane) for lane in get_profile_lane_definitions(resolved_profile_id)]
-    allocation = allocation_payload if allocation_payload is not None else _load_allocation_payload()
+    allocation = allocation_payload if allocation_payload is not None else _load_allocation_payload(resolved_profile_id)
     allocated_by_id = _index_by_strategy(allocation.get("lanes", []))
     paused_by_id = _index_by_strategy(allocation.get("paused", []))
 
     allocation_problem = None
     if allocation.get("missing"):
-        allocation_problem = "lane_allocation.json missing"
+        allocation_problem = "lane allocation missing"
     elif allocation.get("error"):
-        allocation_problem = f"lane_allocation.json unreadable: {allocation['error']}"
+        allocation_problem = f"lane allocation unreadable: {allocation['error']}"
 
     strategy_states = dict((lifecycle or {}).get("strategy_states", {}))
     lanes = tuple(

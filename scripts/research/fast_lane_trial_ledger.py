@@ -19,14 +19,17 @@ resolves to ``validated_setups`` / ``chordia_audit_log.yaml`` /
 ``lane_allocation.json`` / ``trading_app/live/``. The fast-lane ledger is for
 candidate triage only, never validation / deployment state.
 
-This module is pure (no ``__main__``); 2A.3's scanner is the call site that
-populates the ledger. 2A.2 ships the writer + reader + capital-class refusal
-+ the Check #169 invariant (append-only + holdout sentinel).
+This module is pure (no ``__main__``); real research runners are the ledger
+writers, while scanners/status rebuilds are derived read-only consumers. 2A.2
+ships the writer + reader + capital-class refusal + the Check #169 invariant
+(append-only + holdout sentinel).
 """
 
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -66,6 +69,7 @@ _CAPITAL_CLASS_FORBIDDEN_SUBSTRINGS = (
 # Schema version for the on-disk YAML file. Bump on any structural change to
 # LedgerEntry; older readers must fail-closed if they see a higher version.
 LEDGER_SCHEMA_VERSION = 1
+TRIAL_CORRECTIONS_SCHEMA_VERSION = 1
 
 
 class CapitalClassWriteRefused(Exception):
@@ -74,6 +78,111 @@ class CapitalClassWriteRefused(Exception):
 
 class LedgerAppendOnlyViolation(Exception):
     """Raised when an append would mutate or reorder existing entries."""
+
+
+def read_trial_corrections(corrections_path: Path | None) -> list[dict[str, Any]]:
+    """Load correction-not-deletion records for V2 K-lineage counting.
+
+    Corrections preserve historical ledger rows as audit evidence while
+    excluding explicitly selected derived rows from V2 trial-count semantics.
+    Missing path is treated as no corrections so temp fixtures and older
+    worktrees remain readable; canonical drift checks can require the file.
+    """
+    if corrections_path is None or not corrections_path.exists():
+        return []
+    raw = corrections_path.read_text(encoding="utf-8")
+    data = yaml.safe_load(raw)
+    if not isinstance(data, dict):
+        raise ValueError(f"fast_lane_trial_ledger: {corrections_path} top-level must be a dict")
+    if data.get("do_not_hand_edit") is not True:
+        raise ValueError(
+            f"fast_lane_trial_ledger: {corrections_path} correction banner missing `do_not_hand_edit: true`"
+        )
+    if data.get("schema_version") != TRIAL_CORRECTIONS_SCHEMA_VERSION:
+        raise ValueError(
+            f"fast_lane_trial_ledger: {corrections_path} correction schema_version "
+            f"{data.get('schema_version')!r} != expected {TRIAL_CORRECTIONS_SCHEMA_VERSION}"
+        )
+    if data.get("correction_not_deletion") is not True:
+        raise ValueError(f"fast_lane_trial_ledger: {corrections_path} must declare `correction_not_deletion: true`")
+    corrections = data.get("corrections", [])
+    if not isinstance(corrections, list):
+        raise ValueError(f"fast_lane_trial_ledger: {corrections_path} `corrections` must be a list")
+
+    validated: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for idx, correction in enumerate(corrections):
+        if not isinstance(correction, dict):
+            raise ValueError(f"fast_lane_trial_ledger: correction[{idx}] in {corrections_path} must be a dict")
+        correction_id = correction.get("correction_id")
+        if not isinstance(correction_id, str) or not correction_id.strip():
+            raise ValueError(f"fast_lane_trial_ledger: correction[{idx}] missing non-empty correction_id")
+        if correction_id in seen_ids:
+            raise ValueError(f"fast_lane_trial_ledger: duplicate correction_id {correction_id!r} in {corrections_path}")
+        seen_ids.add(correction_id)
+
+        action = correction.get("action")
+        if action != "exclude_from_v2_k_counts":
+            raise ValueError(
+                f"fast_lane_trial_ledger: correction[{idx}] action {action!r} unsupported; "
+                "expected 'exclude_from_v2_k_counts'"
+            )
+        reason = correction.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError(f"fast_lane_trial_ledger: correction[{idx}] missing non-empty reason")
+        selector = correction.get("selector")
+        if not isinstance(selector, dict):
+            raise ValueError(f"fast_lane_trial_ledger: correction[{idx}] selector must be a dict")
+        run_id_prefix = selector.get("run_id_prefix")
+        if not isinstance(run_id_prefix, str) or not run_id_prefix:
+            raise ValueError(
+                f"fast_lane_trial_ledger: correction[{idx}] selector.run_id_prefix must be a non-empty str"
+            )
+        validated.append(correction)
+    return validated
+
+
+def is_excluded_from_v2_k_counts(row: dict[str, Any], corrections: list[dict[str, Any]]) -> bool:
+    """Return True when a ledger row is corrected out of V2 K counts."""
+    run_id = row.get("run_id")
+    if not isinstance(run_id, str):
+        return False
+    for correction in corrections:
+        if correction.get("action") != "exclude_from_v2_k_counts":
+            continue
+        selector = correction.get("selector") or {}
+        if not isinstance(selector, dict):
+            continue
+        run_id_prefix = selector.get("run_id_prefix")
+        if isinstance(run_id_prefix, str) and run_id.startswith(run_id_prefix):
+            return True
+    return False
+
+
+def filter_v2_k_count_rows(
+    rows: list[dict[str, Any]],
+    corrections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return ledger rows that remain eligible for V2 K-lineage counts."""
+    return [row for row in rows if not is_excluded_from_v2_k_counts(row, corrections)]
+
+
+def compute_trial_id(
+    *,
+    prereg_sha: str,
+    runner_id: str,
+    result_artifact_sha: str,
+    canonical_data_fingerprint: str,
+) -> str:
+    """Return a stable 16-hex identity for one research execution."""
+    payload = [
+        str(prereg_sha),
+        str(runner_id),
+        str(result_artifact_sha),
+        str(canonical_data_fingerprint),
+    ]
+    encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass(frozen=True)
@@ -87,6 +196,7 @@ class LedgerEntry:
     """
 
     run_id: str
+    trial_id: str
     run_timestamp_utc: str  # ISO 8601 with explicit 'Z' (UTC)
     prereg_path: str
     prereg_sha: str
@@ -138,6 +248,19 @@ def _validate_structural_hash(value: str) -> None:
         raise ValueError(f"fast_lane_trial_ledger: structural_hash {value!r} is not hex") from exc
 
 
+def _validate_trial_id(value: str) -> None:
+    if not isinstance(value, str):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise TypeError(  # pyright: ignore[reportUnreachable]
+            f"fast_lane_trial_ledger: trial_id must be str, got {type(value).__name__}"
+        )
+    if len(value) != 16:
+        raise ValueError(f"fast_lane_trial_ledger: trial_id must be 16 hex chars, got {len(value)} ({value!r})")
+    try:
+        int(value, 16)
+    except ValueError as exc:
+        raise ValueError(f"fast_lane_trial_ledger: trial_id {value!r} is not hex") from exc
+
+
 def _parse_utc_ts(value: str) -> _dt.datetime:
     """Normalise a UTC ISO 8601 string (Z or +00:00 suffix) to an aware datetime.
 
@@ -180,6 +303,7 @@ def _entry_to_yaml_dict(entry: LedgerEntry) -> dict[str, Any]:
     """Render a LedgerEntry as a YAML-safe dict in canonical field order."""
     return {
         "run_id": entry.run_id,
+        "trial_id": entry.trial_id,
         "run_timestamp_utc": entry.run_timestamp_utc,
         "prereg_path": entry.prereg_path,
         "prereg_sha": entry.prereg_sha,
@@ -226,7 +350,7 @@ def append_trial_ledger_entry(
     ledger_path: Path,
     entry: LedgerEntry,
 ) -> None:
-    """Append one entry to the on-disk ledger. Idempotent on run_id.
+    """Append one entry to the on-disk ledger. Idempotent on exact trial_id replay.
 
     Raises:
         CapitalClassWriteRefused: entry.prereg_path crosses capital-class
@@ -238,6 +362,7 @@ def append_trial_ledger_entry(
             skeleton first; 2A.2 stage ships the skeleton).
     """
     _validate_capital_class_boundary(entry.prereg_path)
+    _validate_trial_id(entry.trial_id)
     _validate_structural_hash(entry.structural_hash)
     _validate_iso8601_utc(entry.run_timestamp_utc)
     _validate_holdout_sentinels(entry.holdout_policy, entry.holdout_sacred_from)
@@ -257,11 +382,23 @@ def append_trial_ledger_entry(
 
     data = read_ledger(ledger_path)
     entries: list[dict[str, Any]] = list(data.get("entries", []))
+    incoming = _entry_to_yaml_dict(entry)
 
-    # Append-only invariants: dup run_id forbidden; new timestamp must be
-    # >= last entry's timestamp. Both also enforced by Check #169 across the
-    # whole file (timestamp monotonicity); the writer enforces them on the
-    # incoming entry so a runtime bypass cannot land a bad row.
+    # Append-only invariants: content-addressed trial_id replays are no-ops,
+    # conflicting trial_id rows are refused, dup run_id is forbidden, and new
+    # timestamps must be >= the last entry's timestamp. Check #169 also
+    # enforces these across the whole file for manual-edit protection.
+    for existing in entries:
+        if existing.get("trial_id") != entry.trial_id:
+            continue
+        if _trial_identity_payload(existing) == _trial_identity_payload(incoming):
+            return
+        raise LedgerAppendOnlyViolation(
+            f"fast_lane_trial_ledger: trial_id {entry.trial_id!r} already "
+            f"present in {ledger_path.name} with different content; refusing "
+            "to inflate or rewrite trial history."
+        )
+
     seen_run_ids = {row.get("run_id") for row in entries}
     if entry.run_id in seen_run_ids:
         raise LedgerAppendOnlyViolation(
@@ -286,13 +423,23 @@ def append_trial_ledger_entry(
                 # ledger. Treat as non-comparable and let the check catch it.
                 pass
 
-    entries.append(_entry_to_yaml_dict(entry))
+    entries.append(incoming)
     data["entries"] = entries
 
     ledger_path.write_text(
         _dump_ledger_yaml(data),
         encoding="utf-8",
     )
+
+
+def _trial_identity_payload(row: dict[str, Any]) -> dict[str, Any]:
+    """Stable replay comparison for a ledger row.
+
+    ``run_id`` and ``run_timestamp_utc`` are execution metadata; replaying the
+    same prereg/result/data on a different clock tick must not create a second
+    K-lineage event.
+    """
+    return {key: value for key, value in row.items() if key not in {"run_id", "run_timestamp_utc"}}
 
 
 def _dump_ledger_yaml(data: dict[str, Any]) -> str:
@@ -315,10 +462,15 @@ __all__ = [
     "HOLDOUT_POLICY_SENTINEL",
     "HOLDOUT_SACRED_FROM_SENTINEL",
     "LEDGER_SCHEMA_VERSION",
+    "TRIAL_CORRECTIONS_SCHEMA_VERSION",
     "CapitalClassWriteRefused",
     "LedgerAppendOnlyViolation",
     "LedgerEntry",
     "append_trial_ledger_entry",
+    "compute_trial_id",
+    "filter_v2_k_count_rows",
+    "is_excluded_from_v2_k_counts",
     "read_ledger",
+    "read_trial_corrections",
     "_parse_utc_ts",
 ]

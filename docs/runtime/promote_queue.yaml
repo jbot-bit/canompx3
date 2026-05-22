@@ -33,18 +33,18 @@ entries:
     instrument: MNQ
     orb_label: COMEX_SETTLE
     orb_minutes: 5
-    K_global: 26
-    K_family: 13
-    K_lane: 13
+    K_global: 0
+    K_family: 0
+    K_lane: 0
     K_declared_in_prereg: 1
-    K_effective_minBTL: 0.0006925489505837989
+    K_effective_minBTL: 0.00014733705612922634
     bh_fdr_passes:
-      K_family: false
-      K_lane: false
+      K_family: true
+      K_lane: true
       K_global: true
-    correlation_haircut_N_hat: 679
+    correlation_haircut_N_hat: 97
     rho_hat_assumed: 0.5
-  n_hat: 679
+  n_hat: 97
   upstream_k_role: fast_lane_v5.1_K1_triage
   upstream_k_value: 1
 - result_md: docs/audit/results/2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1.md
@@ -68,25 +68,27 @@ entries:
   pooling_artifact: false
   revocation_sidecar: null
   heavyweight_prereg: null
-  park_entry: action-queue#20
-  status: PARKED
-  error_reason: null
+  park_entry: null
+  status: REJECTED_OOS_UNPOWERED
+  error_reason: expected_n_oos=20 (fire_rate=0.1468 * oos_window_days=138) -> expected_power=0.247
+    < floor=0.50 at cohen_d=0.3; structurally underpowered OOS — pick CPCV / Harvey-Liu
+    haircut / pool with siblings / PARK per backtesting-methodology.md RULE 3.3
   structural_hash: ed4cb1058cc25a58
   k_lineage:
     instrument: MNQ
     orb_label: US_DATA_1000
     orb_minutes: 30
-    K_global: 26
-    K_family: 13
-    K_lane: 13
+    K_global: 0
+    K_family: 0
+    K_lane: 0
     K_declared_in_prereg: 1
-    K_effective_minBTL: 0.00012757837489315853
+    K_effective_minBTL: 2.7141795777270942e-05
     bh_fdr_passes:
-      K_family: false
-      K_lane: false
+      K_family: true
+      K_lane: true
       K_global: true
-    correlation_haircut_N_hat: 1582
+    correlation_haircut_N_hat: 226
     rho_hat_assumed: 0.5
-  n_hat: 1582
+  n_hat: 226
   upstream_k_role: fast_lane_v5.1_K1_triage
   upstream_k_value: 1

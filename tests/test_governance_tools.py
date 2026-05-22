@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,6 @@ from scripts.tools.stale_doc_scanner import (
     check_instrument_status,
     check_strategy_counts,
 )
-
 
 # -----------------------------------------------------------------------
 # pipeline/trace.py tests
@@ -254,7 +254,7 @@ class TestCheckAsOfDates:
         # Use today's date — should not be flagged
         from datetime import datetime, timezone
 
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
         check_as_of_dates(f"As of {today}", 1, "test.md", result)
         assert len(result.claims) == 0
 

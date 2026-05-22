@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-import duckdb
 from datetime import date, timedelta
 
-from trading_app.live.sr_monitor import ShiryaevRobertsMonitor, calibrate_sr_threshold
+import duckdb
+
 from trading_app import sr_monitor
+from trading_app.live.sr_monitor import ShiryaevRobertsMonitor, calibrate_sr_threshold
 
 
 def test_sr_no_alarm_on_good_performance():

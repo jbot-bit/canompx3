@@ -5,11 +5,11 @@ closed_commit: 9b13d0d1
 closed_date: 2026-05-20
 closed_note: |
   Acceptance proven on live data (MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30 PARKED, ranker zero-QUEUED, bridge gate=false, Check #173 PASS).
-  This file is RETAINED (not deleted) because Check #173 (check_fast_lane_promote_queue_provenance_present)
-  parses STATUS_VALUES from this file as canonical source per the inline-copy parity rule.
-  Deletion would break the drift check. Treat as doctrine after close.
-  Bookkeeping precedent: any stage file whose body is referenced by a drift check must be archived
-  in place (mode: CLOSED), never `git rm`.
+  Superseded 2026-05-21 by the canonical parser-surface relocation:
+  Check #173 now parses `docs/specs/fast_lane_state_graph.md` § 10 Suppression Status Enum.
+  This stage file is retained only as design/audit history. Its old enum table body is
+  intentionally just a backlink so future close-out sweeps do not have to preserve
+  parser surface under `docs/runtime/stages/`.
 original_mode: IMPLEMENTATION
 scope_lock:
   - scripts/research/fast_lane_promote_queue.py

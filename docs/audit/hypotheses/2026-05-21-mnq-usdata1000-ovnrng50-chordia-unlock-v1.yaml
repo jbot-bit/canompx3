@@ -1,0 +1,246 @@
+metadata:
+  theory_grant: false
+  name: "mnq_usdata1000_ovnrng50_chordia_unlock_v1"
+  purpose: >
+    Bounded exact-lane Chordia unlock audit for MNQ US_DATA_1000 O5 E2 RR1.0 CB1
+    OVNRNG_50. Validated_setups row (status=active, 2026-05-21 snapshot):
+    sample_size=1221, sharpe_ratio≈0.1210 -> t_naive ≈ 4.23, deployable scope.
+    No theory grant claimed.
+  date_locked: "2026-05-21T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 1
+  testing_mode: "family"
+  research_question_type: "conditional_role"
+  nogo_check:
+    result: "NOT_FOUND"
+    method: >
+      Greped docs/runtime/chordia_audit_log.yaml::audits[] on 2026-05-21:
+      MNQ US_DATA_1000 has 5 PASS_CHORDIA + 2 FAIL_CHORDIA + 1 PARK on this
+      session, but ZERO OVNRNG_* (overnight-range) entries. The session is an
+      established producing zone (VWAP_MID_ALIGNED, ORB_VOL_8K, OVNRNG_25 all
+      PASS). No NO-GO registry entry on this session/filter combination.
+
+execution:
+  mode: "bounded_runner"
+  entrypoint: "research/chordia_strict_unlock_v1.py"
+  default_args:
+    - "--hypothesis-file"
+    - "docs/audit/hypotheses/2026-05-21-mnq-usdata1000-ovnrng50-chordia-unlock-v1.yaml"
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/hypothesis-prereg-discipline.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/conditional-edge-framework.md"
+    - "docs/runtime/chordia_audit_log.yaml"
+  notes:
+    - "Exact-lane replay of a pre-existing validated_setups survivor, not a discovery scan."
+    - "No theory grant claimed for OVNRNG_50 (overnight-range regime gate, not a literature mechanism)."
+    - "Criterion 4 strict threshold t >= 3.79 applies."
+    - "Mode A holdout remains sacred from 2026-01-01."
+    - "E2-safety: OVNRNG_50 reads overnight_range from daily_features (09:00–17:00 Brisbane window). US_DATA_1000 starts 01:00 Brisbane NEXT DAY, well after the 17:00 window close → no look-ahead per backtesting-methodology.md § 1.2 valid-domain gate. Not in E2_EXCLUDED_FILTER_PREFIXES / _SUBSTRINGS / _DEPLOYMENT_UNSAFE_PREFIXES."
+
+scope:
+  instrument: MNQ
+  strategy_id: "MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_50"
+  session: US_DATA_1000
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  direction: pooled
+  filter_type: OVNRNG_50
+  filter_source: "trading_app.config.ALL_FILTERS['OVNRNG_50']"
+  baseline: "same geometry, exact canonical lane replay"
+  out_of_scope:
+    - "adjacent OVNRNG thresholds (10, 25, 75, 100)"
+    - "adjacent apertures (15m, 30m)"
+    - "adjacent RR targets (1.5, 2.0)"
+    - "theory-grant attempt for OVNRNG_50"
+    - "allocator, sizing, or deployment changes"
+    - "writes to validated_setups before execution evidence exists"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only descriptive corroboration only; never used to rescue or kill the IS verdict."
+  tuning_against_oos: false
+  canonical_layers_only: true
+  scratch_policy: "realized-eod"
+  scratch_handling: "COALESCE(pnl_r, 0.0) — never WHERE pnl_r IS NOT NULL"
+  lookahead_banned_always: [mae_r, mfe_r, outcome, pnl_r, double_break]
+
+feature_definition:
+  feature_name: OVNRNG_50
+  canonical_source_of_truth: "trading_app.config.OvernightRangeAbsFilter (ALL_FILTERS['OVNRNG_50'])"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, 'OVNRNG_50', 'US_DATA_1000')"
+  trade_time_knowable: true
+  first_complete_time: "17:00 Brisbane (end of 09:00–17:00 Brisbane Asia-session range window). US_DATA_1000 starts 01:00 Brisbane next day — 8h after window close."
+  temporal_alignment_note: >
+    OvernightRangeAbsFilter (trading_app/config.py:1486-) reads overnight_range
+    from daily_features. Per backtesting-methodology.md § 1.2 valid-domain
+    table: overnight_* features are VALID ONLY for ORB starting >= 17:00
+    Brisbane (LONDON_METALS and later). US_DATA_1000 starts 01:00 Brisbane
+    next day → safe. Filter is NOT in E2_EXCLUDED_FILTER_PREFIXES / _SUBSTRINGS
+    / _DEPLOYMENT_UNSAFE_PREFIXES. Canonical guard in config.py:1493-1498
+    routes via get_filters_for_grid() to prevent mis-routing.
+  lookahead_check: "Required PASS before execution. US_DATA_1000 ORB start at 01:00 Brisbane is post-17:00 window close → safe."
+
+grounding:
+  core_orb_premise:
+    - source_file: "resources/Building_Reliable_Trading_Systems.pdf"
+      extract_proxy: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "grounds intraday breakout continuation"
+      with_theory_claim: false
+    - source_file: "resources/Algorithmic_Trading_Chan.pdf"
+      extract_proxy: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      use: "grounds stop-cascade / intraday momentum base for ORB breakout entries"
+      with_theory_claim: false
+  filter_grounding_status:
+    verdict: "NO_THEORY_GRANT"
+    basis: >
+      OVNRNG_50 is a project-engineered overnight-range regime gate (overnight
+      Asia-session range >=50 points). No literature citation grounds the
+      >=50pt cut as a causal alpha mechanism on the US_DATA_1000 session. It
+      is a volatility-environment gate, not a theory grant. Strict Chordia
+      threshold (t>=3.79) applies.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - >
+      validated_setups (status=active) snapshot 2026-05-21: sample_size=1221,
+      sharpe_ratio≈0.1210, t_naive = SR*sqrt(N) ≈ 4.23, deployment_scope=deployable,
+      fdr_significant=TRUE.
+  note: >
+    The validated_setups row motivates inclusion in the K=3 batch; its statistics
+    are NOT the verdict evidence. Fresh canonical-runner execution IS.
+
+primary_schema:
+  family_cells:
+    - id: "MNQ_US_DATA_1000_O5_RR1.0_OVNRNG_50"
+      strategy_id: "MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_50"
+      instrument: MNQ
+      session: US_DATA_1000
+      orb_minutes: 5
+      rr_target: 1.0
+      filter: OVNRNG_50
+  k_family: 1
+  k_global: 1
+  k_lane: 1
+  k_session: 1
+  chordia_threshold_basis: "Criterion 4 no-theory strict threshold (t >= 3.79)"
+  promotion_gate: "PASS_CHORDIA only; PASS_PROTOCOL_A is not available in this prereg (no theory claimed)"
+
+hypotheses:
+  - id: 1
+    name: "MNQ US_DATA_1000 O5 RR1.0 OVNRNG_50 exact-lane strict unlock"
+    economic_basis: >
+      Bounded exact-lane replay of a pre-existing validated family survivor.
+      The honest question is whether the complete configured lane still clears
+      the strict no-theory Chordia hurdle under canonical Mode A replay.
+      Overnight-range gating receives no theory grant here.
+    role:
+      kind: "standalone"
+      parent: "Exact MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_50 canonical lane replay on orb_outcomes x daily_features."
+      comparator: "Replay-selected trades versus the strict Chordia threshold and descriptive OOS sign monitor; no sibling rescue or parameter variation."
+      primary_metric: "selected_trade_mean_r"
+      promotion_target: "chordia_audit_unlock_only"
+    filter:
+      type: "OVNRNG_50"
+      column: "overnight_range"
+      thresholds:
+        - "fire_vs_off"
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [5]
+    expected_trial_count: 1
+    kill_criteria:
+      - "IS t-stat < 3.79"
+      - "IS ExpR <= 0.0"
+      - "N_IS_on < 100"
+      - "If OOS N >= 30, OOS sign opposes IS sign"
+      - "Canonical filter delegation diverges from trading_app.config.ALL_FILTERS['OVNRNG_50']"
+      - "Scratch/null handling is not explicit in the measured trade stream"
+    statement: >
+      On the fixed MNQ US_DATA_1000 O5 E2 CB1 RR1.0 lane using the canonical
+      OVNRNG_50 filter, the IS sample remains positive and strong enough to
+      clear the strict no-theory Chordia severity gate when recomputed honestly
+      on canonical Mode-A data with adversarial split reporting.
+    pass_metric:
+      metric: "t_IS"
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical IS fired trades after canonical filter delegation"
+      threshold_gte:
+        t_is: 3.79
+        n_is_on: 100
+        expr_is: 0.0
+      extra_gates:
+        - "dir_match_oos = true when OOS N is sufficient for a descriptive read"
+        - "adversarial split table emitted; no hidden subgroup collapse"
+        - "scratch-inclusive accounting required if scratch rows exist"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+
+decision_rule:
+  continue_if: "H1 clears strict t >= 3.79 with positive IS ExpR and no harness failure"
+  park_if: "H1 clears strict IS gates but OOS directional corroboration is ambiguous"
+  kill_if: "H1 fails t or ExpR gates, or execution integrity fails"
+
+methodology_rules_applied:
+  - rule: "RULE 1 feature temporal alignment"
+    application: "OVNRNG_50 reads overnight_range (09:00–17:00 Brisbane window). US_DATA_1000 starts 01:00 Brisbane next day → 8h post-window-close, safe per § 1.2 valid-domain gate."
+  - rule: "RULE 3 sacred holdout"
+    application: "IS and OOS partitioned by HOLDOUT_SACRED_FROM only. OOS read-only."
+  - rule: "RULE 4 multiple testing"
+    application: "Current family K is exactly 1. K=3 batch peer files each count their own K independently per Pathway B individual testing mode."
+  - rule: "RULE 6 trade-time knowability"
+    application: "OVNRNG_50 is in backtesting-methodology.md § 1.2 conditionally-valid class (overnight_*). Routing-gated to post-17:00 sessions via get_filters_for_grid()."
+  - rule: "RULE 9 canonical data source"
+    application: "Reads only canonical layers (orb_outcomes JOIN daily_features); no derived-layer proof."
+  - rule: "RULE 10 pre-registration"
+    application: "This file IS the pre-reg, committed before the canonical runner execution."
+  - rule: "research-truth-protocol canon filter delegation"
+    application: "Filter fire mask comes from research.filter_utils.filter_signal — never inline re-implementation."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-21-mnq-usdata1000-ovnrng50-chordia-unlock-v1.md"
+  - "row-level CSV with IS/OOS split, raw/effective pnl_r, and scratch/null handling"
+  - "single-cell summary table with N_IS_on, ExpR_IS, Sharpe_IS, t_IS, OOS sign check, and verdict"
+  - "explicit statement that no theory grant was used"
+
+execution_gate:
+  allowed_now: true
+  execution_surface: "Windows PowerShell with .venv (per CLAUDE.md project quick-commands)"
+  forbidden_now:
+    - "theory-grant upgrade without new /resources-backed citation"
+    - "threshold rescue"
+    - "auto-writing PASS rows into chordia_audit_log.yaml without execution evidence"
+    - "sibling-cell rescue (OVNRNG_10, _25, _75, _100) without their own preregs"
+
+not_done_by_this_pre_reg:
+  - "Does not test adjacent OVNRNG thresholds (10, 25, 75, 100)."
+  - "Does not settle the broader overnight-range filter class."
+  - "Does not test adjacent apertures (O15, O30) or RR targets (1.5, 2.0) on this lane."
+  - "Does not change live deployment or allocator state."

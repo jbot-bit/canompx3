@@ -7,7 +7,7 @@ Read-only audit. Joins three sources of truth:
 
 Emits a markdown report ranking every active validated strategy by its
 routability across the full profile space (active + inactive). Does not
-mutate prop_profiles.py, validated_setups, or lane_allocation.json.
+mutate prop_profiles.py, validated_setups, or the lane allocation file.
 
 Per CLAUDE.md "audit-first-default-for-research-layers" + Volatile Data Rule.
 """
@@ -139,7 +139,7 @@ def main() -> None:
         f"{sum(1 for p in profiles if not p.active)} inactive)"
     )
     lines.append("")
-    lines.append("Read-only audit. Does not mutate prop_profiles, validated_setups, or lane_allocation.json.")
+    lines.append("Read-only audit. Does not mutate prop_profiles, validated_setups, or the lane allocation file.")
     lines.append("annual_r computed via canonical `trading_app.lane_allocator.compute_lane_scores`.")
     lines.append("")
     lines.append("## Scope and limitations (read first)")

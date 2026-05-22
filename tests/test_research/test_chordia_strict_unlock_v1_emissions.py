@@ -26,16 +26,18 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import math
+import re
 from pathlib import Path
 from typing import Any
 
 import duckdb
 import pandas as pd
 import pytest
+import yaml
 
 from research import chordia_strict_unlock_v1 as runner
+from scripts.research.fast_lane_structural_hash import compute_structural_hash
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
-
 
 # ----------------------------- helpers ----------------------------------------
 
@@ -75,6 +77,99 @@ def _make_trade_row(
         "pnl_dollars": pnl_dollars,
         "mae_r": -0.1,
         "mfe_r": abs(pnl_r) + 0.1,
+    }
+
+
+def _write_ledger_skeleton(path: Path) -> None:
+    path.write_text("do_not_hand_edit: true\nschema_version: 1\nentries: []\n", encoding="utf-8")
+
+
+def _write_fast_lane_prereg(tmp_path: Path, *, template_version: str | None = "fast_lane_v5.1") -> Path:
+    prereg = tmp_path / "fast-lane-prereg.yaml"
+    body: dict[str, Any] = {
+        "metadata": {
+            "template_version": template_version,
+            "testing_mode": "individual",
+            "pathway": "B_individual",
+            "total_expected_trials": 1,
+        },
+        "scope": {
+            "strategy_id": "MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30",
+            "instrument": "MNQ",
+            "session": "US_DATA_1000",
+            "orb_minutes": 30,
+            "entry_model": "E1",
+            "confirm_bars": 2,
+            "rr_target": 1.0,
+            "filter_type": "PD_CLEAR_LONG",
+            "direction": "pooled",
+        },
+        "hypotheses": [{"name": "synthetic fast lane test"}],
+    }
+    if template_version is None:
+        body["metadata"].pop("template_version")
+    prereg.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+    return prereg
+
+
+def _cell_for_prereg(tmp_path: Path, prereg: Path, *, template_version: str | None = "fast_lane_v5.1") -> runner.Cell:
+    return runner.Cell(
+        hypothesis_file=prereg,
+        hypothesis_name="synthetic fast lane test",
+        strategy_id="MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30",
+        instrument="MNQ",
+        orb_label="US_DATA_1000",
+        orb_minutes=30,
+        entry_model="E1",
+        confirm_bars=2,
+        rr_target=1.0,
+        filter_key="PD_CLEAR_LONG",
+        has_theory=True,
+        theory_mode="PASS",
+        result_md=tmp_path / "result.md",
+        result_csv=tmp_path / "result.csv",
+        result_summary_csv=tmp_path / "result.summary.csv",
+        template_version=template_version,
+        direction="pooled" if template_version else None,
+    )
+
+
+def _write_result_artifacts(cell: runner.Cell) -> None:
+    cell.result_md.write_text("# result\n\n**FAST_LANE verdict:** `PROMOTE`\n", encoding="utf-8")
+    cell.result_csv.write_text("sample,pnl_r\nIS,1.0\n", encoding="utf-8")
+    cell.result_summary_csv.write_text("sample,n_fired,t\nIS,80,3.2\n", encoding="utf-8")
+
+
+def _is_result() -> dict[str, Any]:
+    return {
+        "sample": "IS",
+        "n_universe": 100,
+        "n_fired": 80,
+        "fire_rate": 0.8,
+        "expr": 0.12,
+        "policy_ev": 0.096,
+        "sharpe": 0.35,
+        "t": 3.2,
+        "p_two_sided": 0.001,
+        "long_n": 40,
+        "long_expr": 0.11,
+        "long_t": 2.7,
+        "short_n": 40,
+        "short_expr": 0.13,
+        "short_t": 2.8,
+    }
+
+
+def _oos_result() -> dict[str, Any]:
+    return {**_is_result(), "sample": "OOS", "n_fired": 14, "t": 1.1}
+
+
+def _boundary() -> dict[str, Any]:
+    return {
+        "max_IS_trading_day": "2025-12-31",
+        "min_OOS_trading_day": "2026-01-02",
+        "holdout_boundary_value": HOLDOUT_SACRED_FROM.isoformat(),
+        "holdout_boundary_proof": True,
     }
 
 
@@ -149,7 +244,7 @@ def test_split_boundary_metadata_holdout_value_is_canonical_constant() -> None:
     meta = runner._split_boundary_metadata(is_df, oos_df)
 
     assert meta["holdout_boundary_value"] == HOLDOUT_SACRED_FROM.isoformat()
-    assert HOLDOUT_SACRED_FROM == dt.date(2026, 1, 1), (
+    assert dt.date(2026, 1, 1) == HOLDOUT_SACRED_FROM, (
         "Canonical holdout boundary moved — update the fast-lane template + this test in lockstep."
     )
 
@@ -399,3 +494,107 @@ def test_resolve_output_paths_emits_three_paths_with_stem_prefix() -> None:
     # All three resolve under docs/audit/results.
     assert md.parent == csv_path.parent == summary_csv.parent
     assert md.parent.parts[-3:] == ("docs", "audit", "results")
+
+
+# ----------------------------- FAST_LANE trial ledger -------------------------
+
+
+def test_fast_lane_runner_appends_content_addressed_trial_ledger_entry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FAST_LANE v5.1 execution must append the real trial event from the runner.
+
+    Scanner/status rebuilds are derived views and no longer write K-lineage.
+    The production runner therefore owns the append after it emits all result
+    artifacts, using the artifact bytes in the trial identity.
+    """
+    ledger_path = tmp_path / "fast_lane_trial_ledger.yaml"
+    _write_ledger_skeleton(ledger_path)
+    monkeypatch.setattr(runner, "FAST_LANE_TRIAL_LEDGER_PATH", ledger_path, raising=False)
+
+    prereg = _write_fast_lane_prereg(tmp_path)
+    cell = _cell_for_prereg(tmp_path, prereg)
+    _write_result_artifacts(cell)
+    fast_lane = ("PROMOTE", "t=3.200 clears PROMOTE band; all gates pass.", [])
+
+    runner._append_fast_lane_trial_ledger_entry(
+        cell,
+        _is_result(),
+        _oos_result(),
+        _boundary(),
+        fast_lane,
+        verdict="FAIL_STRICT_CHORDIA",
+        verdict_reason="IS t=3.200 < 3.79.",
+    )
+
+    data = yaml.safe_load(ledger_path.read_text(encoding="utf-8"))
+    entries = data["entries"]
+    assert len(entries) == 1
+    entry = entries[0]
+    assert re.fullmatch(r"[0-9a-f]{16}", entry["trial_id"])
+    assert entry["run_id"].startswith("chordia_strict_unlock_v1:")
+    assert entry["template_version"] == "fast_lane_v5.1"
+    assert entry["testing_mode"] == "individual"
+    assert entry["pathway"] == "B"
+    assert entry["K_declared"] == 1
+    assert entry["structural_hash"] == compute_structural_hash(
+        {
+            "instrument": "MNQ",
+            "orb_label": "US_DATA_1000",
+            "orb_minutes": 30,
+            "rr_target": 1.0,
+            "entry_model": "E1",
+            "confirm_bars": 2,
+            "filter_type": "PD_CLEAR_LONG",
+            "direction": "BOTH",
+            "filter_threshold": "",
+        }
+    )
+    assert entry["k_lineage"]["K_lane"] == 0
+    assert entry["k_lineage"]["rho_hat_assumed"] == 0.5
+    assert entry["upstream_provenance"]["runner_id"] == runner.FAST_LANE_RUNNER_ID
+    assert re.fullmatch(r"[0-9a-f]{64}", entry["upstream_provenance"]["result_artifact_sha"])
+    assert re.fullmatch(r"[0-9a-f]{64}", entry["upstream_provenance"]["canonical_data_fingerprint"])
+    assert entry["outcome"]["fast_lane_verdict"] == "PROMOTE"
+    assert entry["outcome"]["heavyweight_verdict"] == "FAIL_STRICT_CHORDIA"
+
+    runner._append_fast_lane_trial_ledger_entry(
+        cell,
+        _is_result(),
+        _oos_result(),
+        _boundary(),
+        fast_lane,
+        verdict="FAIL_STRICT_CHORDIA",
+        verdict_reason="IS t=3.200 < 3.79.",
+    )
+
+    replay_data = yaml.safe_load(ledger_path.read_text(encoding="utf-8"))
+    assert len(replay_data["entries"]) == 1, "content-addressed replay must not inflate K"
+
+
+def test_non_fast_lane_runner_does_not_append_trial_ledger_entry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy heavyweight-only preregs are outside the fast-lane trial ledger."""
+    ledger_path = tmp_path / "fast_lane_trial_ledger.yaml"
+    _write_ledger_skeleton(ledger_path)
+    monkeypatch.setattr(runner, "FAST_LANE_TRIAL_LEDGER_PATH", ledger_path, raising=False)
+
+    prereg = _write_fast_lane_prereg(tmp_path, template_version=None)
+    cell = _cell_for_prereg(tmp_path, prereg, template_version=None)
+    _write_result_artifacts(cell)
+
+    runner._append_fast_lane_trial_ledger_entry(
+        cell,
+        _is_result(),
+        _oos_result(),
+        _boundary(),
+        None,
+        verdict="FAIL_STRICT_CHORDIA",
+        verdict_reason="IS t=3.200 < 3.79.",
+    )
+
+    data = yaml.safe_load(ledger_path.read_text(encoding="utf-8"))
+    assert data["entries"] == []

@@ -6,7 +6,7 @@ Lock SHA: aa9999a7
 Reads (all read-only):
   - gold.db (canonical orb_outcomes + daily_features)
   - docs/audit/shadow_ledgers/q4_band_frozen_breakpoints.json (frozen P60/P80)
-  - docs/runtime/lane_allocation.json (current DEPLOY set intersection)
+  - lane allocation file (current DEPLOY set intersection)
 
 Writes only:
   - docs/audit/shadow_ledgers/q4-band-shadow-ledger.csv (append-only, idempotent)
@@ -36,6 +36,7 @@ import duckdb
 import numpy as np
 
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.prop_profiles import legacy_lane_allocation_path
 
 PREREG_SHA = "aa9999a7"
 LEDGER_VERSION = 1
@@ -44,7 +45,7 @@ PHASE_NAME_DEFAULT = "SHADOW_ONLY"
 
 LEDGER_PATH = Path("docs/audit/shadow_ledgers/q4-band-shadow-ledger.csv")
 BREAKPOINTS_PATH = Path("docs/audit/shadow_ledgers/q4_band_frozen_breakpoints.json")
-LANE_ALLOCATION_PATH = Path("docs/runtime/lane_allocation.json")
+LANE_ALLOCATION_PATH = legacy_lane_allocation_path()
 PREREG_PATH = Path("docs/audit/hypotheses/2026-04-20-q4-band-deployment-shape-v1.yaml")
 
 CSV_COLUMNS = [

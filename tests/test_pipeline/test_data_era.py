@@ -29,7 +29,6 @@ from pipeline.data_era import (
     parent_for,
 )
 
-
 # =============================================================================
 # Coverage matrix — updated whenever ASSET_CONFIGS gains a new instrument
 # =============================================================================

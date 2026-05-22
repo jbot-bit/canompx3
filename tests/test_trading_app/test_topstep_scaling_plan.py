@@ -19,7 +19,6 @@ from trading_app.topstep_scaling_plan import (
     total_open_lots,
 )
 
-
 # ─── Ladder integrity ───────────────────────────────────────────────────
 
 
