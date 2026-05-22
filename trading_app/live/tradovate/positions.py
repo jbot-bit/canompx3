@@ -29,6 +29,7 @@ class TradovatePositions(BrokerPositions):
             "GET",
             f"{self._base}/position/list",
             self.auth.headers(),
+            failure_hook=getattr(self.auth, "failure_hook", None),
         )
         resp.raise_for_status()
         positions = resp.json()
@@ -57,6 +58,7 @@ class TradovatePositions(BrokerPositions):
                 "GET",
                 f"{self._base}/cashBalance/getCashBalanceSnapshot?accountId={account_id}",
                 self.auth.headers(),
+                failure_hook=getattr(self.auth, "failure_hook", None),
             )
             resp.raise_for_status()
             data = resp.json()

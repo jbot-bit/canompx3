@@ -48,6 +48,29 @@ Use this file for durable accepted decisions that should survive handoff churn.
   spent. Promote_queue.yaml is derived state — drift check reconstructs
   from on-disk artifacts on every run.
 
+- `live-broker-http-client-canonical-2026-05-18` — `trading_app/live/http_client.py`
+  (`BrokerHTTPClient`) is the **single sanctioned HTTP surface** for broker
+  endpoints. Every call into ProjectX or Tradovate REST APIs MUST route through
+  it. The client carries (a) the bounded retry budget, (b) idempotency keys for
+  POSTs that mutate broker state, and (c) the `failure_hook` that drives the
+  orchestrator's `CircuitBreaker` (wired Stage 4, commit `1bab44c7`). Direct
+  `requests.get` / `requests.post` / `requests.request` / `requests.put` /
+  `requests.delete` / `requests.patch` calls inside
+  `trading_app/live/projectx/` or `trading_app/live/tradovate/` are forbidden —
+  enforcement is **Check 156** `check_no_direct_requests_to_broker_endpoints`
+  in `pipeline/check_drift.py` (commit `f7c5189e`). The check is mutation-proof
+  (proven by injection probe Stage 5 partial: literal `requests.get(...)`
+  injected into `projectx/positions.py:25` → caught with file:line diagnostic →
+  reverted → returned to PASS) and is reinforced by the regression test in
+  `tests/test_pipeline/test_check_drift_broker_endpoints.py`. Allowlist scope:
+  the canonical client itself (`trading_app/live/http_client.py`) and any
+  module outside the two broker directories. Importing `requests` for type
+  hints / exception classes (`requests.RequestException`) is permitted; only
+  the call syntax is flagged. This decision closes the doctrine gap left at
+  the end of Stages 1-2 of `feat/live-broker-resilience` (broker HTTP
+  resilience baseline). Future broker adapters (Rithmic, etc.) inherit the
+  canonical client and the failure_hook for free.
+
 - `mnq-nyse-close-k1-prereg-blocked-by-loader-2026-05-17` —
   ⚠️ **SUPERSEDED → UNBLOCKED (Amendment 3.3, PR #292, commit `8ab4fe13`, 2026-05-17)**
   > Path (a) — the loader amendment recommended in the original entry —
@@ -70,6 +93,7 @@ Use this file for durable accepted decisions that should survive handoff churn.
   > updated this session).
 
   **Original entry (preserved for audit trail, 2026-05-17):**
+
   `docs/audit/hypotheses/2026-05-13-mnq-nyse-close-mode-a-k1-revalidation.yaml`
   (Stage 1 of the 3-stage NYSE_CLOSE triage in
   `docs/plans/2026-05-12-mnq-nyse-close-institutional-validation-pathway.md`) is

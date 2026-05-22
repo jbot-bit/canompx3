@@ -140,6 +140,14 @@ class FakePositions:
     def query_open(self, account_id: int) -> list[dict]:
         return self._orphans
 
+    def query_equity_with_age(self, account_id: int):
+        # Stage 5 typed contract: adapters without a real implementation return
+        # source="missing" (Rithmic / Tradovate today). Imported lazily to keep
+        # the fake module-import cost minimal.
+        from trading_app.live.http_client import EquityReading
+
+        return EquityReading(value=None, age_s=0.0, source="missing")
+
 
 class FakeRouter:
     def __init__(self, fill_price: float | None = None):
@@ -474,6 +482,11 @@ class TestOperatorStateExport:
             "signal_only": False,
             "demo": True,
             "account_name": "profile_test",
+            # Stage 4: circuit-breaker state surfaced to operator dashboard.
+            # Clean orchestrator → breaker closed, zero failures, no class.
+            "circuit_open": False,
+            "consecutive_failures": 0,
+            "last_error_class": None,
         }
 
     def test_publish_state_passes_operator_payloads(self, orch):

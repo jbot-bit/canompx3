@@ -34,6 +34,7 @@ class TradovateContracts(BrokerContracts):
             "GET",
             f"{self._base}/account/list",
             self.auth.headers(),
+            failure_hook=getattr(self.auth, "failure_hook", None),
         )
         resp.raise_for_status()
         accounts = resp.json()
@@ -52,6 +53,7 @@ class TradovateContracts(BrokerContracts):
             "GET",
             f"{self._base}/contract/suggest?t={instrument}&l=5",
             self.auth.headers(),
+            failure_hook=getattr(self.auth, "failure_hook", None),
         )
         resp.raise_for_status()
         contracts = resp.json()

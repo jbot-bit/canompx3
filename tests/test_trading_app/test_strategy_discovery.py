@@ -1310,6 +1310,7 @@ class TestPhase4DiscoveryEnforcement:
                 "date_locked": "2026-04-08",
                 "holdout_date": holdout,
                 "total_expected_trials": total_trials,
+                "theory_grant": True,
             },
             "hypotheses": [
                 {

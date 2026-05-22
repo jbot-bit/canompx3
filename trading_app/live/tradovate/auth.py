@@ -19,10 +19,10 @@ import os
 import time
 import uuid
 
-import requests
 from dotenv import load_dotenv
 
 from ..broker_base import BrokerAuth
+from ..http_client import AUTH_POLICY, BrokerHTTPClient, BrokerHTTPError
 
 load_dotenv()
 log = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class TradovateAuth(BrokerAuth):
     """Authenticate with Tradovate REST API."""
 
     def __init__(self):
+        super().__init__()
         self._access_token: str | None = None
         self._md_token: str | None = None
         self._user_id: int | None = None
@@ -49,6 +50,10 @@ class TradovateAuth(BrokerAuth):
         self._token_lifetime: float = 75 * 60  # refresh after 75min (tokens expire at 90min)
         self._auth_healthy = True
         self._base = _base_url()
+        # Auth bootstrap HTTP client — mirrors projectx/auth.py pattern.
+        # Auth's own client is intentionally NOT wired to the circuit breaker
+        # (login is fail-loud at startup before the breaker matters).
+        self._http = BrokerHTTPClient(base_url=self._base, name="tradovate-auth")
 
     def get_token(self) -> str:
         if self._access_token and time.time() < self._acquired_at + self._token_lifetime:
@@ -122,9 +127,13 @@ class TradovateAuth(BrokerAuth):
                 device_id,
             )
 
-        resp = requests.post(
-            f"{self._base}/auth/accesstokenrequest",
-            json={
+        # Stage 5: routed through canonical BrokerHTTPClient. Path is relative
+        # to self._base (already in the client's base_url). AUTH_POLICY caps the
+        # per-attempt wall clock + handles classified retry.
+        data = self._http.post_json(
+            "/auth/accesstokenrequest",
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            body={
                 "name": name,
                 "password": password,
                 "appId": "canompx3-bot",
@@ -133,10 +142,9 @@ class TradovateAuth(BrokerAuth):
                 "sec": sec,
                 "deviceId": device_id,
             },
+            policy=AUTH_POLICY,
             timeout=10,
         )
-        resp.raise_for_status()
-        data = resp.json()
 
         # Tradovate returns error as p-ticket challenge or errorText
         if "p-ticket" in data:
@@ -157,14 +165,16 @@ class TradovateAuth(BrokerAuth):
         if self._access_token is None:
             self._login_with_retry()
             return
+        # Stage 5: routed through canonical BrokerHTTPClient. BrokerHTTPError
+        # covers what requests.RequestException covered + classified retry.
         try:
-            resp = requests.post(
-                f"{self._base}/auth/renewaccesstoken",
+            data = self._http.post_json(
+                "/auth/renewaccesstoken",
                 headers={"Authorization": f"Bearer {self._access_token}"},
+                body={},
+                policy=AUTH_POLICY,
                 timeout=10,
             )
-            resp.raise_for_status()
-            data = resp.json()
             if data.get("accessToken"):
                 self._access_token = data["accessToken"]
                 self._md_token = data.get("mdAccessToken", self._md_token)
@@ -172,6 +182,6 @@ class TradovateAuth(BrokerAuth):
                 log.info("Tradovate auth: token renewed")
             else:
                 self._login_with_retry()
-        except requests.RequestException:
+        except BrokerHTTPError:
             log.warning("Tradovate token renewal failed, falling back to full login with retry")
             self._login_with_retry()

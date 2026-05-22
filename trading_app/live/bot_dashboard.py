@@ -2059,23 +2059,28 @@ def _fetch_accounts_for_connection(conn_id: str, broker_type: str, auth: object)
 
     Single API call per broker — balance included in response (no per-account loop).
     HWM tracking for correct trailing DD.
+
+    Uses BrokerHTTPClient with READ_POLICY (bounded retry, deadline) so a
+    transient read-timeout or TCP RST is recovered instead of surfacing as
+    `Balance —` to the operator (2026-05-18 resilience baseline).
     """
-    import requests as _requests
+    from trading_app.live.http_client import READ_POLICY, BrokerHTTPClient
 
     if broker_type == "projectx":
         from trading_app.live.projectx.auth import BASE_URL
 
-        resp = _requests.post(
-            f"{BASE_URL}/api/Account/search",
-            json={"onlyActiveAccounts": False},
+        client = BrokerHTTPClient(
+            base_url=BASE_URL,
+            refresh_token=auth.refresh_if_needed,  # type: ignore[union-attr]
+            name=f"dashboard-{broker_type}",
+        )
+        data = client.post_json(
+            "/api/Account/search",
             headers=auth.headers(),  # type: ignore[union-attr]
+            body={"onlyActiveAccounts": False},
+            policy=READ_POLICY,
             timeout=15,
         )
-        resp.raise_for_status()
-        data = resp.json()
-
-        if isinstance(data, dict) and data.get("success") is False:
-            raise RuntimeError(f"ProjectX Account/search failed: {data.get('errorMessage', data)}")
 
         raw_accounts = data if isinstance(data, list) else data.get("accounts") or []
         hwm = _load_hwm()

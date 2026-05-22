@@ -71,12 +71,17 @@ CREATE TABLE IF NOT EXISTS live_trades (
     broker          TEXT,
     order_id_entry  TEXT,
     order_id_exit   TEXT,
+    client_order_id TEXT,
     contracts       INTEGER DEFAULT 1,
     session_mode    TEXT NOT NULL,
     created_at      TIMESTAMPTZ DEFAULT now(),
     exited_at       TIMESTAMPTZ
 );
 """
+
+# Idempotent column-add migration — DuckDB ALTER TABLE ADD COLUMN IF NOT EXISTS.
+# Survives crash-resumes of existing journals (column added in 2026-05-18 baseline).
+_MIGRATION_ADD_CLIENT_ORDER_ID = "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS client_order_id TEXT;"
 
 
 def generate_trade_id() -> str:
@@ -99,6 +104,8 @@ class TradeJournal:
             self._con = duckdb.connect(str(self._db_path))
             configure_connection(self._con, writing=True)
             self._con.execute(LIVE_TRADES_SCHEMA)
+            # Idempotent migration for journals created before 2026-05-18 baseline.
+            self._con.execute(_MIGRATION_ADD_CLIENT_ORDER_ID)
             log.info("TradeJournal opened: %s (mode=%s)", self._db_path, mode)
         except duckdb.IOException as e:
             holder_pid = _extract_lock_holder_pid(str(e))
@@ -133,9 +140,16 @@ class TradeJournal:
         fill_entry: float | None = None,
         broker: str | None = None,
         order_id_entry: str | int | None = None,
+        client_order_id: str | None = None,
         contracts: int = 1,
     ) -> None:
-        """Insert a partial row when an entry order is submitted/filled."""
+        """Insert a partial row when an entry order is submitted/filled.
+
+        `client_order_id` is the broker idempotency key (ProjectX customTag).
+        Persist this BEFORE the HTTP place call so a retry / crash-recovery
+        path can match a broker-side duplicate-reject back to the originating
+        attempt. UUID4 — unique-per-account-forever per ProjectX API spec.
+        """
         if self._con is None:
             return
         try:
@@ -144,8 +158,8 @@ class TradeJournal:
                 INSERT INTO live_trades (
                     trade_id, trading_day, instrument, strategy_id, direction,
                     entry_model, engine_entry, fill_entry, broker,
-                    order_id_entry, contracts, session_mode
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    order_id_entry, client_order_id, contracts, session_mode
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     trade_id,
@@ -158,6 +172,7 @@ class TradeJournal:
                     fill_entry,
                     broker,
                     str(order_id_entry) if order_id_entry is not None else None,
+                    client_order_id,
                     contracts,
                     self._mode,
                 ],

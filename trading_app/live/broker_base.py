@@ -6,13 +6,29 @@ SessionOrchestrator depends ONLY on these interfaces, never on concrete classes.
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .bar_aggregator import Bar
 
+if TYPE_CHECKING:
+    from .http_client import EquityReading
+
 
 class BrokerAuth(ABC):
-    """Authenticate with a broker and manage session tokens."""
+    """Authenticate with a broker and manage session tokens.
+
+    ``failure_hook`` is the orchestrator's CircuitBreaker (or any object with
+    record_failure/record_success/should_allow_request). Set by SessionOrchestrator
+    immediately after auth construction and BEFORE any broker component is built,
+    so each component can wire its BrokerHTTPClient through the same breaker.
+    None when running outside an orchestrator (tests, ad-hoc scripts) — the
+    HTTP client falls back to its internal _NoopFailureHook.
+    """
+
+    failure_hook: Any = None
+
+    def __init__(self) -> None:
+        self.failure_hook = None
 
     @abstractmethod
     def get_token(self) -> str:
@@ -268,6 +284,29 @@ class BrokerPositions(ABC):
         Used by AccountHWMTracker for cross-session DD tracking.
         """
         return None
+
+    def query_equity_with_age(self, account_id: int) -> "EquityReading":
+        """Return equity reading with age-since-last-fetch.
+
+        Stage 5 base-class default closes the Stage 3 fail-open gap. Adapters
+        that do NOT override (e.g. Rithmic, Tradovate today) return a typed
+        ``source="missing"`` reading instead of being absent from the API.
+
+        The orchestrator's broker-state-unknown SLA gate treats ``source="missing"``
+        identically to "no method present" — no kill switch fires (institutionally
+        equivalent fail-open). Stage 3 watchdog behavior is preserved end-to-end;
+        the contract is now typed rather than ducktyped.
+
+        Concrete adapters that CAN read equity-with-age (ProjectXPositions)
+        override this with a real implementation that returns ``source="live"``
+        on success and a cached value with ``age_s > 0`` on transient failure.
+        """
+        # Local import to avoid a top-level circular dependency between
+        # broker_base.py and http_client.py (http_client imports nothing from
+        # broker_base today; the inverse is what this default needs).
+        from .http_client import EquityReading
+
+        return EquityReading(value=None, age_s=0.0, source="missing")
 
     def query_account_metadata(self, account_id: int) -> dict | None:
         """Return the broker's raw account metadata dict, or None if unavailable.

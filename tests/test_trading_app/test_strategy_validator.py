@@ -1162,6 +1162,7 @@ def _write_test_hypothesis(
         "date_locked": "2026-04-08",
         "holdout_date": "2026-01-01",
         "total_expected_trials": total_trials,
+        "theory_grant": with_theory,
     }
     if data_source_mode is not None:
         metadata_block["data_source_mode"] = data_source_mode
@@ -2510,6 +2511,7 @@ def _write_prereg_yaml(
             "date_locked": date_locked,
             "holdout_date": holdout_date,
             "total_expected_trials": expected_trial_count,
+            "theory_grant": True,
         },
         "hypotheses": [
             {
