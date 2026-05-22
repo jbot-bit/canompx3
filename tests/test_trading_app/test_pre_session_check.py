@@ -973,9 +973,6 @@ class TestDDBudgetFailClosed:
             lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("db unavailable")),
             raising=False,
         )
-        # Import after monkeypatch so the name is live
-        from trading_app.pre_session_check import resolve_daily_lanes  # noqa: F401
-
         # Build a minimal results list and run just the except-branch logic
         results: list = []
         try:
