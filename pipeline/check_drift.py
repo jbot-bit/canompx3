@@ -13443,6 +13443,72 @@ def check_action_queue_loads_cleanly() -> list[str]:
     return []
 
 
+def check_test_writes_to_production_runtime_paths(tests_root: Path | None = None) -> list[str]:
+    """ALERT-CONTAM-N2: forbid canonical production runtime-path literals in test code.
+
+    Test modules that reference live operator-surface paths as string literals
+    bypass the ``_redirect_alerts_path`` autouse fixture in
+    ``tests/test_trading_app/conftest.py`` and write directly to production
+    files. Two confirmed incidents (n=2 2026-05-19) promote this from per-instance
+    feedback to a mechanical drift check per the n=3-same-class doctrine
+    threshold (``memory/feedback_n3_same_class_doctrine_threshold.md``).
+
+    Forbidden literals (all canonical production runtime-state surfaces):
+      - ``data/runtime/operator_alerts.jsonl`` (alert_engine.ALERTS_PATH)
+      - ``data/bot_state.json``                (bot_state.STATE_FILE)
+      - ``runtime/state/live_health.json``     (bot_state.LIVE_HEALTH_FILE)
+
+    Tests must either monkeypatch the canonical module attribute (it is
+    read at call time, not import time) or use the autouse conftest fixture
+    that already redirects all three constants to ``tmp_path``.
+
+    Parameters
+    ----------
+    tests_root : Path | None
+        Tests directory to scan. Defaults to ``PROJECT_ROOT / "tests"``.
+        Passing a ``tmp_path`` lets injection tests verify the check
+        catches violations without contaminating the real test tree.
+
+    Returns
+    -------
+    list[str]
+        One violation per offending file, each carrying the file path,
+        the first matching forbidden literal, and the ``ALERT-CONTAM-N2``
+        class tag for grep-ability. Empty when the root does not exist
+        (fresh tree, never raises).
+    """
+    forbidden_literals = (
+        "data/runtime/operator_alerts.jsonl",
+        "data/bot_state.json",
+        "runtime/state/live_health.json",
+    )
+
+    root = tests_root if tests_root is not None else PROJECT_ROOT / "tests"
+    if not root.is_dir():
+        return []
+
+    violations: list[str] = []
+    for py_file in sorted(root.rglob("*.py")):
+        try:
+            source = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for literal in forbidden_literals:
+            if literal in source:
+                rel = py_file.relative_to(root) if py_file.is_relative_to(root) else py_file
+                violations.append(
+                    f"ALERT-CONTAM-N2: {rel} references canonical production "
+                    f"runtime path literal '{literal}'. Use the autouse "
+                    "_redirect_alerts_path fixture in "
+                    "tests/test_trading_app/conftest.py, or monkeypatch the "
+                    "canonical module attribute directly. See "
+                    "memory/feedback_n3_same_class_doctrine_threshold.md."
+                )
+                break
+
+    return violations
+
+
 CHECKS = [
     (
         "Hardcoded 'MGC' SQL literals in generic pipeline code",
@@ -14225,6 +14291,12 @@ CHECKS = [
         "Stage-closed code-review nudge: _CAPITAL_PATH_PREFIXES parity (nudge<->close-nudge canonical-source delegation)",
         check_stage_closed_review_nudge_capital_paths_parity,
         False,  # blocking -- capital-class forcing function depends on canonical-source delegation
+        False,
+    ),
+    (
+        "Tests forbid canonical production runtime-path literals (ALERT-CONTAM-N2, ralph iter 203)",
+        check_test_writes_to_production_runtime_paths,
+        False,  # blocking -- production-surface contamination class
         False,
     ),
 ]  # end CHECKS
