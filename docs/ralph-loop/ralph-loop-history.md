@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 202 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/prop_profiles.py:1395-1404 (_P90_ORB_PTS)
+- Finding: _P90_ORB_PTS table drives validate_dd_budget() capital gate but had no @research-source / @revalidated-for annotation. MES=30.0 labeled "Estimated" with zero empirical basis and no update trigger.
+- Doctrine cited: integrity-guardian.md § 8 (never inline research stats without annotation)
+- Action: Added @research-source, @revalidated-for, update trigger, and explicit "ESTIMATED — measure before adding MES profile" label to MES entry.
+- Blast radius: 1 file (prop_profiles.py, comment-only)
+- Verification: PASS — 96/96 prop_profiles tests, 160 drift checks
+- Commit: f746f5ec
+
+---
+
 ## Iteration 201 — 2026-05-23
 - Phase: fix
 - Classification: [judgment]

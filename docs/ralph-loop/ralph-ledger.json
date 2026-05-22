@@ -1,7 +1,7 @@
 {
-  "total_iterations": 194,
+  "total_iterations": 195,
   "last_updated": "2026-05-23",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 201,
   "findings_by_type": {
     "canonical_violation": {
@@ -29,10 +29,10 @@
       "fix_rate": 1.0
     },
     "annotation_debt": {
-      "found": 5,
-      "fixed": 4,
+      "found": 6,
+      "fixed": 5,
       "deferred": 1,
-      "fix_rate": 0.8
+      "fix_rate": 0.83
     },
     "stale_metadata": {
       "found": 5,
@@ -129,11 +129,11 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 52,
-    "LOW": 119
+    "LOW": 120
   },
   "classifications": {
     "judgment": 86,
-    "mechanical": 75,
+    "mechanical": 76,
     "audit-only": 33
   },
   "files_audited": {
@@ -166,6 +166,11 @@
       "audit_count": 5,
       "last_iter": 185,
       "findings": 5
+    },
+    "trading_app/prop_profiles.py": {
+      "audit_count": 5,
+      "last_iter": 202,
+      "findings": 4
     },
     "trading_app/lane_allocator.py": {
       "audit_count": 5,
@@ -206,11 +211,6 @@
       "audit_count": 4,
       "last_iter": 200,
       "findings": 4
-    },
-    "trading_app/prop_profiles.py": {
-      "audit_count": 4,
-      "last_iter": 184,
-      "findings": 3
     },
     "webhook_server.py": {
       "audit_count": 3,
@@ -3322,6 +3322,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "91fdce37"
+    },
+    {
+      "iter": 202,
+      "date": "2026-05-23",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/prop_profiles.py:1395-1404 (_P90_ORB_PTS)",
+      "finding_type": "annotation_debt",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "f746f5ec"
     }
   ]
 }
