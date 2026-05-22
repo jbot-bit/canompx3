@@ -5,7 +5,12 @@ from datetime import date
 import duckdb
 import pytest
 
-from trading_app.live.trade_journal import TradeJournal, generate_trade_id
+from trading_app.live.trade_journal import (
+    TradeJournal,
+    TradeJournalLockedError,
+    _extract_lock_holder_pid,
+    generate_trade_id,
+)
 
 
 @pytest.fixture
@@ -50,6 +55,67 @@ class TestTradeJournalInit:
         j = TradeJournal(bad_path, mode="live")
         assert j._con is None
         j.close()
+
+
+class TestExtractLockHolderPid:
+    def test_parses_windows_pid_line(self):
+        msg = 'IO Error: Cannot open file "x.db": ...\n\nFile is already open in \n... PID 6672'
+        assert _extract_lock_holder_pid(msg) == 6672
+
+    def test_returns_none_when_no_pid(self):
+        assert _extract_lock_holder_pid("some other IO error") is None
+
+    def test_returns_none_on_empty(self):
+        assert _extract_lock_holder_pid("") is None
+
+
+class TestTradeJournalLocked:
+    """DuckDB's writer-lock collision is cross-PROCESS only (same-process gets two
+    valid connections), so the regression for our handler is a strict unit test:
+    simulate the IOException duckdb.connect raises, and assert the handler maps
+    it to TradeJournalLockedError with the holder PID extracted.
+    """
+
+    def test_io_exception_maps_to_locked_error(self, journal_path, monkeypatch):
+        real_io = duckdb.IOException
+        windows_error_text = (
+            'IO Error: Cannot open file "live_journal.db": '
+            "The process cannot access the file because it is being used by another process.\n\n"
+            "File is already open in \npython.exe (PID 6672)"
+        )
+
+        def fake_connect(*_a, **_kw):
+            raise real_io(windows_error_text)
+
+        monkeypatch.setattr("trading_app.live.trade_journal.duckdb.connect", fake_connect)
+
+        j = TradeJournal(journal_path, mode="preflight")
+        assert not j.is_healthy
+        assert isinstance(j.last_error, TradeJournalLockedError)
+        assert j.last_error.holder_pid == 6672
+        j.close()
+
+    def test_io_exception_without_pid_still_locked(self, journal_path, monkeypatch):
+        real_io = duckdb.IOException
+
+        def fake_connect(*_a, **_kw):
+            raise real_io("IO Error: locked by another process (no PID in message)")
+
+        monkeypatch.setattr("trading_app.live.trade_journal.duckdb.connect", fake_connect)
+
+        j = TradeJournal(journal_path, mode="preflight")
+        assert not j.is_healthy
+        assert isinstance(j.last_error, TradeJournalLockedError)
+        assert j.last_error.holder_pid is None
+        j.close()
+
+    def test_healthy_journal_has_no_last_error(self, journal_path):
+        j = TradeJournal(journal_path, mode="live")
+        try:
+            assert j.is_healthy
+            assert j.last_error is None
+        finally:
+            j.close()
 
 
 class TestRecordEntry:
@@ -101,8 +167,9 @@ class TestRecordEntry:
             entry_model="E1",
             engine_entry=19500.0,
         )
+        assert j._con is not None
         row = j._con.execute("SELECT session_mode FROM live_trades WHERE trade_id = ?", [tid]).fetchone()
-        assert row[0] == "signal"
+        assert row is not None and row[0] == "signal"
         j.close()
 
 
