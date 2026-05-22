@@ -3817,10 +3817,16 @@ class SessionOrchestrator:
         # Close trade journal — flushes any pending writes
         self.journal.close()
 
-        # Persist captured bars to bars_1m (Databento-free daily pipeline)
+        # Persist captured bars to bars_1m (Databento-free daily pipeline).
+        # Order matters: drain the dashboard-ring writer first so any in-flight
+        # bars land in the snapshot, then flush gold.db, then clear the ring
+        # so the dashboard falls back to gold.db historical view.
+        from trading_app.live import bar_ring as _bar_ring
+        _bar_ring.drain_and_stop_writer(self.instrument)
         n_persisted = self._bar_persister.flush_to_db()
         if n_persisted > 0:
             log.info("Bar persister: %d bars written to bars_1m", n_persisted)
+        self._bar_persister.clear_ring()
 
         # Clear crash-recovery state on clean session end.
         # If blocked strategies or kill switch fired, leave state for next startup.

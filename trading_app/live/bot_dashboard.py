@@ -17,7 +17,7 @@ import tempfile
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -2732,16 +2732,21 @@ async def _alerts_watcher() -> None:
 
 
 async def _bars_watcher() -> None:
-    """Poll bars_1m for new closed minutes; publish bar event per new row.
+    """Poll the live-bars ring (and gold.db on bootstrap) and publish bar SSE events.
 
-    Tracks last-seen ts_utc per instrument; only emits rows strictly newer.
-    Read-only DuckDB connection per poll — opens are cheap, no need to hold
-    a long-lived handle that could race the bot's writer.
+    During an active session BarPersister writes ``data/live_bars/<SYMBOL>.json``
+    atomically on every closed bar. This watcher reads that ring file — no
+    DuckDB write-lock contention possible. When the ring is empty (no session
+    or post-shutdown) we fall back to gold.db so a stopped-bot dashboard still
+    shows the latest historical chart.
 
-    Instrument set is taken from bot_state.json's active lanes so the dashboard
-    only chart-pushes for instruments the operator is actually trading. If no
-    state file, defaults to MNQ (the v1 cockpit instrument).
+    Stale-gating: if BOTH the ring and bot_state.heartbeat are stale we skip
+    SSE pushes — prevents yesterday's ring (after a crash) showing as "live".
+
+    Tracks last-seen ts_utc per instrument; only emits strictly-newer rows.
+    Instrument set is taken from bot_state.json active lanes; defaults to MNQ.
     """
+    from trading_app.live import bar_ring
     from trading_app.live.bot_state import read_state
 
     last_seen: dict[str, datetime] = {}
@@ -2759,55 +2764,128 @@ async def _bars_watcher() -> None:
             if not instruments:
                 instruments = {"MNQ"}
 
-            if GOLD_DB_PATH.exists():
+            # Cross-stale gate: if both the bot_state heartbeat AND the ring
+            # are stale, don't push anything — the bot is dead.
+            heartbeat_raw = state.get("heartbeat_utc")
+            heartbeat_stale = True
+            if isinstance(heartbeat_raw, str):
+                try:
+                    hb_ts = datetime.fromisoformat(heartbeat_raw)
+                    if hb_ts.tzinfo is None:
+                        hb_ts = hb_ts.replace(tzinfo=UTC)
+                    heartbeat_stale = (
+                        (datetime.now(UTC) - hb_ts).total_seconds() > HEARTBEAT_STALE_AFTER_S
+                    )
+                except ValueError:
+                    pass
+
+            for inst in instruments:
+                snap = bar_ring.read_bar_ring(inst)
+                if not snap.is_empty() and not bar_ring.is_stale(snap):
+                    # Prefer ring during a live session.
+                    since = last_seen.get(inst)
+                    if since is None:
+                        # Bootstrap — record latest ts only; chart bulk-loads
+                        # via /api/bars-recent on browser connect.
+                        latest_ts: datetime | None = None
+                        for entry in snap.bars:
+                            ts_raw = entry.get("ts_utc")
+                            if isinstance(ts_raw, str):
+                                try:
+                                    ts = datetime.fromisoformat(ts_raw)
+                                    if ts.tzinfo is None:
+                                        ts = ts.replace(tzinfo=UTC)
+                                    if latest_ts is None or ts > latest_ts:
+                                        latest_ts = ts
+                                except ValueError:
+                                    continue
+                        if latest_ts is not None:
+                            last_seen[inst] = latest_ts
+                        continue
+                    for entry in snap.bars:
+                        ts_raw = entry.get("ts_utc")
+                        if not isinstance(ts_raw, str):
+                            continue
+                        try:
+                            ts_utc = datetime.fromisoformat(ts_raw)
+                        except ValueError:
+                            continue
+                        if ts_utc.tzinfo is None:
+                            ts_utc = ts_utc.replace(tzinfo=UTC)
+                        if ts_utc <= since:
+                            continue
+                        last_seen[inst] = ts_utc
+                        _sse_broker.publish(
+                            "bar",
+                            {
+                                "instrument": inst,
+                                "time": int(ts_utc.astimezone(UTC).timestamp()),
+                                "open": float(entry.get("open", 0.0)),
+                                "high": float(entry.get("high", 0.0)),
+                                "low": float(entry.get("low", 0.0)),
+                                "close": float(entry.get("close", 0.0)),
+                                "volume": int(entry.get("volume", 0)),
+                            },
+                        )
+                    continue
+
+                # Ring is empty or stale → fall back to gold.db for this inst.
+                # When both heartbeat and ring are stale we skip — yesterday's
+                # ring should not pose as "live".
+                if heartbeat_stale and bar_ring.is_stale(snap):
+                    if inst not in last_seen:
+                        log.info(
+                            "_bars_watcher(%s): no live ring + stale heartbeat — "
+                            "deferring to /api/bars-recent for historical view",
+                            inst,
+                        )
+                        # Mark so we don't repeat the log every poll.
+                        last_seen[inst] = datetime.now(UTC) - timedelta(days=365)
+                    continue
+
+                if not GOLD_DB_PATH.exists():
+                    continue
                 try:
                     with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
                         configure_connection(con)
-                        for inst in instruments:
-                            since = last_seen.get(inst)
-                            if since is None:
-                                # Bootstrap: skip backfill — chart fetches via
-                                # /api/bars-recent on connect. Just record the
-                                # current latest ts so we only push deltas.
-                                row = con.execute(
-                                    "SELECT max(ts_utc) FROM bars_1m WHERE symbol = ?",
-                                    [inst],
-                                ).fetchone()
-                                if row and row[0] is not None:
-                                    ts = row[0]
-                                    if ts.tzinfo is None:
-                                        ts = ts.replace(tzinfo=UTC)
-                                    last_seen[inst] = ts
-                                continue
-                            rows = con.execute(
-                                "SELECT ts_utc, open, high, low, close, volume "
-                                "FROM bars_1m WHERE symbol = ? AND ts_utc > ? "
-                                "ORDER BY ts_utc ASC",
-                                [inst, since],
-                            ).fetchall()
-                            for ts_utc, o, h, lo, c, v in rows:
-                                if ts_utc.tzinfo is None:
-                                    ts_utc = ts_utc.replace(tzinfo=UTC)
-                                last_seen[inst] = ts_utc
-                                _sse_broker.publish(
-                                    "bar",
-                                    {
-                                        "instrument": inst,
-                                        "time": int(ts_utc.astimezone(UTC).timestamp()),
-                                        "open": float(o),
-                                        "high": float(h),
-                                        "low": float(lo),
-                                        "close": float(c),
-                                        "volume": int(v),
-                                    },
-                                )
+                        since = last_seen.get(inst)
+                        if since is None:
+                            row = con.execute(
+                                "SELECT max(ts_utc) FROM bars_1m WHERE symbol = ?",
+                                [inst],
+                            ).fetchone()
+                            if row and row[0] is not None:
+                                ts = row[0]
+                                if ts.tzinfo is None:
+                                    ts = ts.replace(tzinfo=UTC)
+                                last_seen[inst] = ts
+                            continue
+                        rows = con.execute(
+                            "SELECT ts_utc, open, high, low, close, volume "
+                            "FROM bars_1m WHERE symbol = ? AND ts_utc > ? "
+                            "ORDER BY ts_utc ASC",
+                            [inst, since],
+                        ).fetchall()
+                        for ts_utc, o, h, lo, c, v in rows:
+                            if ts_utc.tzinfo is None:
+                                ts_utc = ts_utc.replace(tzinfo=UTC)
+                            last_seen[inst] = ts_utc
+                            _sse_broker.publish(
+                                "bar",
+                                {
+                                    "instrument": inst,
+                                    "time": int(ts_utc.astimezone(UTC).timestamp()),
+                                    "open": float(o),
+                                    "high": float(h),
+                                    "low": float(lo),
+                                    "close": float(c),
+                                    "volume": int(v),
+                                },
+                            )
                 except duckdb.IOException as exc:
-                    # gold.db transiently locked by another process — retry next tick.
                     log.warning("_bars_watcher: gold.db locked: %s", exc)
         except Exception as exc:
             log.warning("_bars_watcher tick failed: %s", exc)
-        # 2s cadence — bars close at minute boundaries; sub-second polling
-        # wastes CPU. _SSE_BAR_POLL_INTERVAL_S separate from _STATE for clarity.
         await asyncio.sleep(2.0)
 
 
@@ -2879,9 +2957,15 @@ DASHBOARD_HTML = Path(__file__).parent / "bot_dashboard.html"
 def _query_bars_recent(
     instrument: str, lookback_minutes: int, since_ts: str | None
 ) -> tuple[list[dict[str, Any]], str | None]:
-    """Read recent 1m bars from gold.db, shaped for Lightweight Charts."""
-    if not GOLD_DB_PATH.exists():
-        return [], f"gold.db not found at {GOLD_DB_PATH}"
+    """Read recent 1m bars, preferring the live-bars ring over gold.db.
+
+    Order: read the ring snapshot first (no DuckDB lock contention during a
+    live session). If the lookback window extends earlier than the ring's
+    oldest bar, also query gold.db for the historical tail and merge with
+    dedup on epoch-second ``time``. Ring takes precedence on overlap so the
+    operator sees current-session OHLCV even before flush_to_db lands.
+    """
+    from trading_app.live import bar_ring
 
     since_dt: datetime | None = None
     if since_ts:
@@ -2890,45 +2974,113 @@ def _query_bars_recent(
         except ValueError:
             log.warning("_query_bars_recent: bad since_ts %r — ignoring", since_ts)
 
-    try:
-        with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
-            configure_connection(con)
-            if since_dt is not None:
-                rows = con.execute(
-                    "SELECT ts_utc, open, high, low, close, volume FROM bars_1m "
-                    "WHERE symbol = ? AND ts_utc > ? ORDER BY ts_utc ASC",
-                    [instrument, since_dt],
-                ).fetchall()
-            else:
-                rows = con.execute(
-                    "SELECT ts_utc, open, high, low, close, volume FROM bars_1m "
-                    "WHERE symbol = ? AND ts_utc > now() - INTERVAL (? || ' minutes') "
-                    "ORDER BY ts_utc ASC",
-                    [instrument, str(lookback_minutes)],
-                ).fetchall()
-    except duckdb.IOException as exc:
-        return [], f"gold.db locked: {exc}"
-    except Exception as exc:
-        log.error("_query_bars_recent: query failed: %s", exc)
-        return [], f"query failed: {exc}"
-
-    bars: list[dict[str, Any]] = []
-    for ts_utc, o, h, lo, c, v in rows:
-        # DuckDB may return Brisbane-tz despite TIMESTAMPTZ column —
-        # normalize to UTC epoch seconds for Lightweight Charts.
-        if ts_utc.tzinfo is None:
-            ts_utc = ts_utc.replace(tzinfo=UTC)
-        bars.append(
+    # ── Ring read ───────────────────────────────────────────────────────────
+    snap = bar_ring.read_bar_ring(instrument)
+    ring_bars: list[dict[str, Any]] = []
+    ring_oldest: datetime | None = None
+    for entry in snap.bars:
+        ts_raw = entry.get("ts_utc")
+        if not isinstance(ts_raw, str):
+            continue
+        try:
+            ts = datetime.fromisoformat(ts_raw)
+        except ValueError:
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=UTC)
+        if since_dt is not None and ts <= since_dt:
+            continue
+        if ring_oldest is None or ts < ring_oldest:
+            ring_oldest = ts
+        ring_bars.append(
             {
-                "time": int(ts_utc.astimezone(UTC).timestamp()),
-                "open": float(o),
-                "high": float(h),
-                "low": float(lo),
-                "close": float(c),
-                "volume": int(v),
+                "time": int(ts.astimezone(UTC).timestamp()),
+                "open": float(entry.get("open", 0.0)),
+                "high": float(entry.get("high", 0.0)),
+                "low": float(entry.get("low", 0.0)),
+                "close": float(entry.get("close", 0.0)),
+                "volume": int(entry.get("volume", 0)),
             }
         )
-    return bars, None
+
+    # ── Decide whether to also query gold.db ────────────────────────────────
+    # If the ring already covers the lookback window from oldest to "now",
+    # skip the DB. Otherwise pull the missing historical tail.
+    now = datetime.now(UTC)
+    lookback_floor = (
+        since_dt if since_dt is not None else now - timedelta(minutes=max(0, lookback_minutes))
+    )
+    need_db = ring_oldest is None or ring_oldest > lookback_floor
+
+    db_bars: list[dict[str, Any]] = []
+    if need_db:
+        if not GOLD_DB_PATH.exists():
+            if not ring_bars:
+                return [], f"gold.db not found at {GOLD_DB_PATH}"
+        else:
+            db_upper = ring_oldest  # cap DB read at ring's oldest to avoid duplicate rows
+            try:
+                with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+                    configure_connection(con)
+                    if since_dt is not None and db_upper is not None:
+                        rows = con.execute(
+                            "SELECT ts_utc, open, high, low, close, volume FROM bars_1m "
+                            "WHERE symbol = ? AND ts_utc > ? AND ts_utc < ? "
+                            "ORDER BY ts_utc ASC",
+                            [instrument, since_dt, db_upper],
+                        ).fetchall()
+                    elif since_dt is not None:
+                        rows = con.execute(
+                            "SELECT ts_utc, open, high, low, close, volume FROM bars_1m "
+                            "WHERE symbol = ? AND ts_utc > ? ORDER BY ts_utc ASC",
+                            [instrument, since_dt],
+                        ).fetchall()
+                    elif db_upper is not None:
+                        rows = con.execute(
+                            "SELECT ts_utc, open, high, low, close, volume FROM bars_1m "
+                            "WHERE symbol = ? AND ts_utc > now() - INTERVAL (? || ' minutes') "
+                            "AND ts_utc < ? ORDER BY ts_utc ASC",
+                            [instrument, str(lookback_minutes), db_upper],
+                        ).fetchall()
+                    else:
+                        rows = con.execute(
+                            "SELECT ts_utc, open, high, low, close, volume FROM bars_1m "
+                            "WHERE symbol = ? AND ts_utc > now() - INTERVAL (? || ' minutes') "
+                            "ORDER BY ts_utc ASC",
+                            [instrument, str(lookback_minutes)],
+                        ).fetchall()
+            except duckdb.IOException as exc:
+                if not ring_bars:
+                    return [], f"gold.db locked: {exc}"
+                log.warning("_query_bars_recent: gold.db locked (ring-only): %s", exc)
+                rows = []
+            except Exception as exc:
+                if not ring_bars:
+                    log.error("_query_bars_recent: query failed: %s", exc)
+                    return [], f"query failed: {exc}"
+                log.warning("_query_bars_recent: query failed (ring-only): %s", exc)
+                rows = []
+
+            for ts_utc, o, h, lo, c, v in rows:
+                if ts_utc.tzinfo is None:
+                    ts_utc = ts_utc.replace(tzinfo=UTC)
+                db_bars.append(
+                    {
+                        "time": int(ts_utc.astimezone(UTC).timestamp()),
+                        "open": float(o),
+                        "high": float(h),
+                        "low": float(lo),
+                        "close": float(c),
+                        "volume": int(v),
+                    }
+                )
+
+    # ── Merge: DB tail + ring; dedup on epoch-second `time`; ring wins ──────
+    by_time: dict[int, dict[str, Any]] = {b["time"]: b for b in db_bars}
+    for b in ring_bars:
+        by_time[b["time"]] = b
+    merged = sorted(by_time.values(), key=lambda b: b["time"])
+    return merged, None
 
 
 def _count_open_positions_from_state(state: dict[str, Any] | None) -> int | None:

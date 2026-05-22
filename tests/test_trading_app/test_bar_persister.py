@@ -1,13 +1,37 @@
 """Tests for BarPersister — broker-feed bar capture to bars_1m."""
 
 import tempfile
+import time
 from datetime import UTC, datetime, timezone
 
 import duckdb
 import pytest
 
+from trading_app.live import bar_ring
 from trading_app.live.bar_aggregator import Bar
 from trading_app.live.bar_persister import BarPersister
+
+
+@pytest.fixture
+def isolated_ring_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(bar_ring, "RING_DIR", tmp_path / "live_bars")
+    with bar_ring._writers_lock:
+        leftover = list(bar_ring._writers.values())
+        bar_ring._writers.clear()
+    for w in leftover:
+        try:
+            w.drain_and_stop(timeout=2.0)
+        except Exception:
+            pass
+    yield tmp_path / "live_bars"
+    with bar_ring._writers_lock:
+        leftover = list(bar_ring._writers.values())
+        bar_ring._writers.clear()
+    for w in leftover:
+        try:
+            w.drain_and_stop(timeout=2.0)
+        except Exception:
+            pass
 
 
 @pytest.fixture
@@ -126,6 +150,28 @@ class TestBarPersister:
         # Should NOT raise — fail-open
         count = bp.flush_to_db()
         assert count == 0
+
+    def test_append_enqueues_to_ring(self, isolated_ring_dir):
+        bp = BarPersister("MNQ", session_id="sess-1")
+        bp.append(_bar(0))
+        # Wait for the ring writer thread to flush.
+        deadline = time.monotonic() + 3.0
+        snap = bar_ring.read_bar_ring("MNQ")
+        while time.monotonic() < deadline and not snap.bars:
+            time.sleep(0.02)
+            snap = bar_ring.read_bar_ring("MNQ")
+        assert len(snap.bars) == 1
+        assert snap.session_id == "sess-1"
+
+    def test_clear_ring_removes_file(self, isolated_ring_dir):
+        bp = BarPersister("MNQ")
+        bp.append(_bar(0))
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline and not (isolated_ring_dir / "MNQ.json").exists():
+            time.sleep(0.02)
+        assert (isolated_ring_dir / "MNQ.json").exists()
+        bp.clear_ring()
+        assert not (isolated_ring_dir / "MNQ.json").exists()
 
     def test_symbol_isolation(self, tmp_db):
         """Bars for different symbols don't interfere."""

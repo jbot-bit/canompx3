@@ -22,6 +22,7 @@ import threading
 import duckdb
 
 from pipeline.db_config import configure_connection
+from trading_app.live import bar_ring
 from trading_app.live.bar_aggregator import Bar
 
 log = logging.getLogger(__name__)
@@ -30,16 +31,43 @@ log = logging.getLogger(__name__)
 class BarPersister:
     """Collect live bars and batch-persist to bars_1m at session end."""
 
-    def __init__(self, symbol: str, db_path: str | None = None):
+    def __init__(self, symbol: str, db_path: str | None = None, session_id: str | None = None):
         self.symbol = symbol
         self._db_path = db_path
+        self._session_id = session_id
         self._bars: list[Bar] = []
         self._lock = threading.Lock()
 
-    def append(self, bar: Bar) -> None:
-        """Append a completed bar. Thread-safe. Called from _on_bar."""
+    def append(self, bar: Bar, enqueue_to_ring: bool = True) -> None:
+        """Append a completed bar. Thread-safe. Called from _on_bar.
+
+        Also enqueues the bar to the live-bars ring file for the dashboard
+        chart (atomic-file IPC; see trading_app.live.bar_ring). Trading hot
+        path adds one put_nowait; disk write happens off-path. Failures in
+        the ring writer are fail-open per institutional-rigor § 6.
+        """
         with self._lock:
             self._bars.append(bar)
+        if enqueue_to_ring:
+            try:
+                bar_ring.enqueue_bar(self.symbol, bar, session_id=self._session_id)
+            except TypeError:
+                # Mock-contamination guard — re-raise: tests must see this.
+                raise
+            except Exception:
+                log.warning(
+                    "BarPersister(%s): ring enqueue failed (trading unaffected)",
+                    self.symbol,
+                    exc_info=True,
+                )
+
+    def clear_ring(self) -> None:
+        """Stop the background ring writer and delete the ring file.
+
+        Called from session shutdown after flush_to_db() succeeds so the
+        dashboard sees the gold.db historical view rather than a stale ring.
+        """
+        bar_ring.clear_ring(self.symbol)
 
     @property
     def bar_count(self) -> int:
