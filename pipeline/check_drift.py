@@ -11682,6 +11682,103 @@ def check_canonical_inline_copies_have_parity_check() -> list[str]:
     return violations
 
 
+def check_judgment_review_capital_paths_parity() -> list[str]:
+    """Capital-class prefix parity between the judgment-review nudge and soft-block.
+
+    The PreToolUse soft-block (`.claude/hooks/judgment-review-soft-block.py`)
+    delegates canonical constants to the sibling PostToolUse nudge
+    (`.claude/hooks/judgment-review-nudge.py`) via an
+    ``importlib.util.spec_from_file_location`` shim. At the time of writing
+    the check is trivially true: the soft-block does not redefine the
+    prefix list. The check exists as a refactoring-safety guard so that any
+    future edit which accidentally inlines ``_CAPITAL_PATH_PREFIXES`` into
+    the soft-block is caught on the next drift run.
+
+    Note on registry decision: the existing
+    ``pipeline.canonical_inline_copies.CANONICAL_INLINE_COPIES`` registry
+    (per its inclusion criteria § 1) covers *literal-value-duplicate*
+    pairs only. Because the soft-block imports the prefix list rather
+    than duplicating it, this pair does NOT meet the registry's inclusion
+    criteria — this check is *structural* parity (canonical-source still
+    intact at the expected attribute name and value-equal between
+    re-imports), not literal-byte parity. Leaving the pair outside the
+    registry keeps the inclusion contract honest; the standalone check
+    catches the same failure mode.
+
+    Fail-closed: a missing or unreadable hook file is itself a violation
+    (institutional-rigor.md § 6 — no silent failures). The check cannot
+    return PASS without proving both modules loaded and exposed
+    ``_CAPITAL_PATH_PREFIXES`` with equal values.
+    """
+    import importlib.util as _ilu
+
+    hook_dir = PROJECT_ROOT / ".claude" / "hooks"
+    nudge_path = hook_dir / "judgment-review-nudge.py"
+    soft_path = hook_dir / "judgment-review-soft-block.py"
+
+    violations: list[str] = []
+
+    def _load(path: Path, alias: str):
+        if not path.exists():
+            violations.append(
+                f"check_judgment_review_capital_paths_parity: hook file missing at {path}"
+            )
+            return None
+        try:
+            spec = _ilu.spec_from_file_location(alias, str(path))
+            if spec is None or spec.loader is None:
+                violations.append(
+                    f"check_judgment_review_capital_paths_parity: "
+                    f"could not build importlib spec for {path}"
+                )
+                return None
+            module = _ilu.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+        except Exception as exc:
+            violations.append(
+                f"check_judgment_review_capital_paths_parity: "
+                f"failed to load {path}: {type(exc).__name__}: {exc}"
+            )
+            return None
+
+    nudge = _load(nudge_path, "judgment_review_nudge_drift_probe")
+    soft = _load(soft_path, "judgment_review_soft_block_drift_probe")
+    if nudge is None or soft is None:
+        return violations
+
+    nudge_prefixes = getattr(nudge, "_CAPITAL_PATH_PREFIXES", None)
+    soft_prefixes = getattr(soft, "_CAPITAL_PATH_PREFIXES", None)
+
+    if nudge_prefixes is None:
+        violations.append(
+            "check_judgment_review_capital_paths_parity: "
+            "judgment-review-nudge.py does not expose _CAPITAL_PATH_PREFIXES "
+            "(canonical source removed — restore or update this check)"
+        )
+        return violations
+
+    if soft_prefixes is None:
+        violations.append(
+            "check_judgment_review_capital_paths_parity: "
+            "judgment-review-soft-block.py does not expose _CAPITAL_PATH_PREFIXES "
+            "(importlib delegation broken — soft-block must import from nudge)"
+        )
+        return violations
+
+    if tuple(nudge_prefixes) != tuple(soft_prefixes):
+        violations.append(
+            "check_judgment_review_capital_paths_parity: "
+            f"capital-class prefix lists diverged. "
+            f"nudge={tuple(nudge_prefixes)!r}, soft-block={tuple(soft_prefixes)!r}. "
+            "The soft-block must delegate to the nudge via importlib shim, "
+            "not inline a copy. [[canonical-source-delegation]] "
+            "(institutional-rigor.md § 4)."
+        )
+
+    return violations
+
+
 def check_triage_provenance_completeness(
     drafts_dir: Path | None = None,
 ) -> list[str]:
@@ -13901,6 +13998,12 @@ CHECKS = [
         "Broker adapters route HTTP through canonical BrokerHTTPClient (no direct requests.*)",
         lambda: check_no_direct_requests_to_broker_endpoints(TRADING_APP_DIR),
         False,  # blocking — bypass surfaces lose retry+idempotency+circuit-breaker (capital-class)
+        False,
+    ),
+    (
+        "Judgment-review hooks: _CAPITAL_PATH_PREFIXES parity (nudge<->soft-block canonical-source delegation)",
+        check_judgment_review_capital_paths_parity,
+        False,  # blocking -- capital-class forcing function depends on canonical-source delegation
         False,
     ),
 ]  # end CHECKS
