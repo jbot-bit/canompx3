@@ -442,6 +442,32 @@ class StrategyFilter:
         """
         return False
 
+    def required_columns(self, orb_label: str) -> set[str]:
+        """Columns this filter needs on the DataFrame for matches_df to fire.
+
+        Default: empty — most filters branch only on `orb_{orb_label}_*`
+        columns and tolerate their absence via the canonical
+        `if col not in df.columns: return pd.Series(False, ...)` pattern.
+        That fail-closed default is correct at row-level matches_row
+        semantics but produces an indistinguishable "0 fires" signal at
+        the wrapper level (research.filter_utils.filter_signal).
+
+        Subclasses that depend on COLUMNS NOT IMPLIED BY filter_type alone
+        (e.g., CostRatioFilter needs `symbol`, VolumeFilter needs
+        `rel_vol_{orb_label}`, CrossAssetATRFilter needs
+        `cross_atr_{source_instrument}_pct`) MUST override to declare those
+        prerequisites. The research wrapper uses this to pre-validate
+        callers and raise ValueError on missing prerequisites, replacing
+        the silent all-False return with a loud failure.
+
+        Origin: 2026-05-20 wrapper-parity bug. `filter_signal(df,
+        'COST_LT12', 'NYSE_OPEN')` returned 0/1718 on a DataFrame missing
+        `symbol`, while inline reference returned 1695/1718. See stage
+        `docs/runtime/stages/2026-05-20-filter-utils-required-columns-contract.md`.
+        """
+        _ = orb_label
+        return set()
+
     def to_json(self) -> str:
         """Serialize filter params to JSON."""
         return json.dumps(asdict(self))
@@ -654,6 +680,10 @@ class CostRatioFilter(StrategyFilter):
             result.loc[inst_mask] = cost_ratio_pct < self.max_cost_ratio_pct
         return result
 
+    def required_columns(self, orb_label: str) -> set[str]:
+        """CostRatioFilter needs ORB size + `symbol` for per-instrument cost lookup."""
+        return {f"orb_{orb_label}_size", "symbol"}
+
     def describe(
         self,
         row: dict,
@@ -745,6 +775,10 @@ class VolumeFilter(StrategyFilter):
         if col not in df.columns:
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] >= self.min_rel_vol)
+
+    def required_columns(self, orb_label: str) -> set[str]:
+        """VolumeFilter needs `rel_vol_{orb_label}` injected at discovery/fitness time."""
+        return {f"rel_vol_{orb_label}"}
 
     def describe(
         self,
@@ -1047,6 +1081,11 @@ class CrossAssetATRFilter(StrategyFilter):
         if col not in df.columns:
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] >= self.min_pct)
+
+    def required_columns(self, orb_label: str) -> set[str]:
+        """CrossAssetATRFilter needs the injected `cross_atr_{source}_pct` column."""
+        _ = orb_label
+        return {f"cross_atr_{self.source_instrument}_pct"}
 
     def describe(
         self,
