@@ -6,6 +6,30 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-22 — Claude live-preflight journal-locked ergonomics, branch pushed not merged)
+
+- **Tool:** Claude Code (Opus 4.7), explanatory mode
+- **Worktree:** `C:/Users/joshd/canompx3-live-journal-locked`, branch `session/joshd-live-journal-locked`
+- **Commit pushed (NOT merged):** `53d25742` (origin/session/joshd-live-journal-locked). No PR opened yet — awaiting user direction.
+- **Why it matters:** User asked "why doesn't it go live + make it easier." Preflight `[6/8] Trade journal health` was the ONE concrete blocker (7/8 otherwise passing): duplicate `run_live_session --signal-only` (PIDs 6672 + 34624) + `bot_dashboard` (23992, 41636) stale from 17:00 today were holding the DuckDB writer lock on `live_journal.db` and dumping a 30-line CRITICAL traceback. Auth, portfolio (3 deployed MNQ lanes), daily features, contract resolution, broker probes, telemetry maturity all OK. So go-live is NOT doctrine-blocked — it's ergonomics-blocked.
+- **What changed (5 files, +239 / −6):**
+  - `trading_app/live/trade_journal.py` — narrowed `duckdb.IOException`, added `TradeJournalLockedError` sentinel + `last_error` attribute, extracts holder PID from DuckDB Windows error text. Fail-open contract preserved.
+  - `scripts/run_live_session.py` — preflight check 6 prints one-line `LOCKED by PID <n>. Run: scripts/tools/stop_live.ps1 to clear, then retry.` instead of 30-line traceback. Also fixed 3 pre-existing pyright errors (`BrokerComponents` annotation, `CheckFn` dict typing).
+  - `scripts/tools/stop_live.ps1` — NEW. Enumerates python processes matching `run_live_session|bot_dashboard|webhook_server`, prints table with start times, prompts y/N. Never auto-kills.
+  - `tests/test_trading_app/test_trade_journal.py` — 3 new tests (parses PID from error, no-PID case, healthy-journal-no-error) + fixed 2 pre-existing pyright errors.
+  - `docs/runtime/stages/2026-05-22-live-journal-locked-ergonomics.md` — stage marker (mode:CLOSED).
+- **Verification:** 31/31 trade_journal tests pass. Drift: 157 PASSED, 0 violations. Pyright on touched python files: 0 errors, 0 warnings.
+- **Lesson saved:** narrow-the-exception-for-fail-open pattern + DuckDB Windows lock is per-PROCESS not per-connection (caught wrong regression test). See `feedback_narrow_exception_for_fail_open_observability.md` + `feedback_duckdb_windows_lock_is_per_process.md`.
+- **NEXT-SESSION pickup (in priority order):**
+  1. **Decide PR vs admin-merge for `53d25742`.** Standard PR is fine; admin-merge if Windows-CI mutex hangs again (per the 2026-05-21 PM CI-unblock pattern). After merge: run `scripts/tools/stop_live.ps1` against the live PIDs above, re-run preflight, expect 8/8.
+  2. **Then `--live` debut.** 3 MNQ lanes deployed (COMEX_SETTLE ORB_VOL_2K, US_DATA_1000 VWAP_MID_ALIGNED_O15, NYSE_OPEN COST_LT12). Stop conditions in `docs/runtime/next-session-go-live-plan.md` § "Stop conditions" still apply.
+  3. **Deferred ergonomics carry-overs** (in stage file, NOT yet scoped — discuss before scoping):
+     - Real OS-level singleton on `run_live_session.py` (so you can't start it twice in the first place). Non-trivial on Windows+WSL+DuckDB; needs its own design pass.
+     - `logs/live/*.log` FileHandler (carry-over c-ii from 2026-05-16 live debut — was meant to be captured next live run; still open).
+     - `.env` parse-warnings (30+ WARNING lines on every script invocation, lines 237–296 fail `python-dotenv` parsing).
+     - Dashboard `/api/bars-recent` returns empty bars (carry-over c-i from 2026-05-16 live debut).
+- **No capital/runtime mutation:** no `gold.db`, `validated_setups`, `lane_allocation.json`, `chordia_audit_log.yaml`, broker state, or live runtime files touched. Branch is independent of the 16 other open worktrees.
+
 ## This Session (2026-05-22 — Codex Stage 1c lane-allocation research literal migration)
 
 - **Tool:** Codex
