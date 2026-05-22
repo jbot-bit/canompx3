@@ -1,7 +1,7 @@
 {
-  "total_iterations": 188,
+  "total_iterations": 189,
   "last_updated": "2026-05-23",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 195,
   "findings_by_type": {
     "canonical_violation": {
@@ -28,6 +28,12 @@
       "deferred": 0,
       "fix_rate": 1.0
     },
+    "annotation_debt": {
+      "found": 5,
+      "fixed": 4,
+      "deferred": 1,
+      "fix_rate": 0.8
+    },
     "stale_metadata": {
       "found": 5,
       "fixed": 5,
@@ -45,12 +51,6 @@
       "fixed": 4,
       "deferred": 0,
       "fix_rate": 1.0
-    },
-    "annotation_debt": {
-      "found": 4,
-      "fixed": 3,
-      "deferred": 1,
-      "fix_rate": 0.75
     },
     "falsy_zero": {
       "found": 3,
@@ -129,11 +129,11 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 49,
-    "LOW": 116
+    "LOW": 117
   },
   "classifications": {
     "judgment": 83,
-    "mechanical": 72,
+    "mechanical": 73,
     "audit-only": 33
   },
   "files_audited": {
@@ -1175,6 +1175,11 @@
     "trading_app/deployability.py": {
       "audit_count": 1,
       "last_iter": 193,
+      "findings": 1
+    },
+    "trading_app/lane_correlation.py": {
+      "audit_count": 1,
+      "last_iter": 196,
       "findings": 1
     }
   },
@@ -3246,6 +3251,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "e7f11851"
+    },
+    {
+      "iter": 196,
+      "date": "2026-05-23",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/lane_correlation.py:29-30",
+      "finding_type": "annotation_debt",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "4580b189"
     }
   ]
 }

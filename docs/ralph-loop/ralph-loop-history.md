@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 196 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/lane_correlation.py:29-30
+- Finding: RHO_REJECT_THRESHOLD (0.70) and SUBSET_REJECT_THRESHOLD (0.80) lack @research-source annotations on capital-gate constants
+- Doctrine cited: integrity-guardian.md § 8 (Never inline research stats without @research-source annotation)
+- Action: Added @research-source, @entry-models, @revalidated-for annotations citing backtesting-methodology.md RULE 7 and 2026-04-18 grounding audit; zero logic change
+- Blast radius: 1 file (lane_correlation.py), comment-only
+- Verification: PASS — 160 drift checks; 1278 tests pass (1 pre-existing float-equality failure in test_lane_correlation_cache unrelated to this change)
+- Commit: 4580b189
+
+---
+
 ## Iteration 195 — 2026-05-23
 - Phase: fix
 - Classification: [mechanical]

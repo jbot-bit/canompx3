@@ -1,8 +1,8 @@
-## Iteration: 195
-## Target: trading_app/prop_portfolio.py:291
-## Finding: Silent `except (ValueError, duckdb.Error): pass` on live fitness gate swallows compute_fitness exceptions; operator sees "Fitness: UNKNOWN" HOLD with zero diagnostic context.
+## Iteration: 196
+## Target: trading_app/lane_correlation.py:29-30
+## Finding: RHO_REJECT_THRESHOLD (0.70) and SUBSET_REJECT_THRESHOLD (0.80) lack @research-source annotations on capital-gate constants
 ## Classification: [mechanical]
-## Blast Radius: 1 file (prop_portfolio.py), 0 behavior change (still HOLD on exception; only logger.warning added)
-## Invariants: [1] fitness_status remains "UNKNOWN" on exception [2] line 311 gate unchanged — UNKNOWN still causes HOLD [3] no callers broken
-## Diff estimate: 2 lines
-## Doctrine cited: integrity-guardian.md § 6 (No silent failures — every except must record the exception)
+## Blast Radius: 1 file (lane_correlation.py:29-30 only — adding comments, no logic change)
+## Invariants: Threshold values 0.70 and 0.80 must NOT change; only annotations added; all callers unaffected
+## Diff estimate: 4 lines added (comments)
+## Doctrine cited: integrity-guardian.md § 8 (Never inline research stats without @research-source), research-truth-protocol.md

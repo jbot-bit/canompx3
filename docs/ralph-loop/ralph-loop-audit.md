@@ -3,55 +3,49 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 195
+## Last iteration: 196
 
-## RALPH AUDIT — Iteration 195 (COMPLETED)
+## RALPH AUDIT — Iteration 196 (COMPLETED)
 ## Date: 2026-05-23
-## Infrastructure Gates: 160 drift checks PASS; 46 prop_portfolio tests PASS
-## Scope: trading_app/live_config.py (primary scan) + trading_app/prop_portfolio.py (fix target — discovered via fitness gate chain)
+## Infrastructure Gates: 160 drift checks PASS; 1278 tests PASS (1 pre-existing float-equality failure in test_lane_correlation_cache unrelated to this change)
+## Scope: trading_app/lane_correlation.py
 
 ---
 
-## Iteration 195 — trading_app/live_config.py (full scan)
+## lane_correlation.py Audit Summary
 
-### Auto-Targeting
-- Scope provided: `trading_app/live_config.py` — capital-class, calls compute_fitness on regime gate path, never scanned.
+`check_candidate_correlation` computes pairwise Pearson rho between a candidate lane and all deployed lanes in a profile, returning a `CorrelationReport` with `gate_pass`. Used by `lane_allocator.py:1064` and `scripts/tools/rebalance_lanes.py:116`.
 
----
+### Seven Sins Scan — lane_correlation.py
 
-## live_config.py Audit Summary
-
-`build_live_portfolio()` is DEPRECATED (explicit DeprecationWarning + log.warning at lines 591-600). `session_orchestrator.py:341-346` raises if called without explicit portfolio injection. The LIVE_PORTFOLIO specs resolve to 0 strategies (filter types missing from validated_setups). The actual live fitness gate is `prop_portfolio.py:287-292` via `ACCOUNT_PROFILES`.
-
-### Seven Sins Scan — live_config.py
-
-- Sin 1 (Silent failure): `_check_noise_floor:529` fail-closed on NULL. `_check_dollar_gate:549` fail-closed on NULL median_risk_points with logger.warning. ACCEPTABLE.
-- Sin 2 (Fail-open): Regime gate `except (ValueError, duckdb.Error)` at line 888 sets weight=0.0 — fail-closed. Inside DEPRECATED `build_live_portfolio`. ACCEPTABLE.
-- Sin 3 (Canonical violation): `"FIT"` string literal at line 883 — consistent across codebase (no canonical constant exists). Assessed ACCEPTABLE in iter 28/194.
-- Sin 4 (Impact awareness): `import duckdb as _ddb` at line 617 is a redundant local import (module-level `import duckdb` at line 27). LOW, dormant DEPRECATED path. ACCEPTABLE per pattern 2.
+- Sin 1 (Silent failure): `check_candidate_correlation` has no `except` inside `try` — DB errors propagate uncaught to caller. This is **fail-closed** behavior (allocator cannot proceed if correlation is unknown) — ACCEPTABLE per integrity-guardian.md § 3.
+- Sin 2 (Fail-open): `n_shared < 5` → `rho = 0.0` (no rejection). Intentional heuristic: new strategies with no/little trade history should not be auto-rejected. ACCEPTABLE per pattern 1 (intentional per-session heuristic).
+- Sin 3 (Canonical violation): `RHO_REJECT_THRESHOLD = 0.70` and `SUBSET_REJECT_THRESHOLD = 0.80` were bare constants without `@research-source` annotation. **FIXED this iteration.**
+- Sin 4 (Impact awareness): Callers (`lane_allocator.py`, `rebalance_lanes.py`, `displaced_rotation_analyzer.py`) import the canonical constants — no re-encoding found. ACCEPTABLE.
 - Sin 5 (Evidence over assertion): N/A (audit mode).
-- Sin 6 (Spec compliance): No spec in docs/specs/ for this module.
-- Sin 7 (Metadata trust): LIVE_PORTFOLIO comment header correctly marks specs as DEPRECATED.
-
-**Overall live_config.py verdict: CLEAN** (all findings either ACCEPTABLE or already fixed in prior iterations).
+- Sin 6 (Spec compliance): No `docs/specs/` file for this module; no spec to violate.
+- Sin 7 (Metadata trust): Module docstring claims `@canonical-source trading_app/lane_correlation.py` — consistent with how callers import from it. ACCEPTABLE.
 
 ---
 
-## Finding SILENT-195 — LOW — FIXED (discovered via fitness gate chain from live_config.py)
+## Finding ANNOT-196 — LOW — FIXED
 
-**PREMISE:** `prop_portfolio.py:291` has `except (ValueError, duckdb.Error): pass` — silent swallow of compute_fitness exceptions on the real live fitness gate path. Operator sees "Fitness: UNKNOWN" HOLD with zero diagnostic context.
+**PREMISE:** `lane_correlation.py:29-30` defined `RHO_REJECT_THRESHOLD = 0.70` and `SUBSET_REJECT_THRESHOLD = 0.80` as bare numeric constants with no `@research-source` annotation. These drive capital-gate decisions (candidates above rho=0.70 are rejected from deployment). Per `integrity-guardian.md § 8`, research-derived thresholds require provenance annotations so stale values are detectable when entry models change.
 
 **TRACE:**
-- `prop_portfolio.py:287` → `fitness_status = "UNKNOWN"`
-- `prop_portfolio.py:289` → `compute_fitness(snap["strategy_id"], db_path=db_path)` → raises `ValueError` or `duckdb.Error`
-- `prop_portfolio.py:291` → `except ... pass` (silent)
-- `prop_portfolio.py:311` → `fitness_status not in lane.required_fitness` → HOLD (correctly fail-closed, but no operator-visible exception context)
+- `lane_correlation.py:29-30` → `check_candidate_correlation:173-174` → `lane_allocator.py:1064` → capital gate rejection
 
-**VERDICT:** SUPPORT — integrity-guardian.md § 6 (No silent failures — every except must record the exception)
+**EVIDENCE:** `docs/audit/2026-04-18-grounding-audit-master.md:92-100` confirms `rho=0.70` is "VERIFIED_CODE" and "consistent with Rule 7 tautology canon at `.claude/rules/backtesting-methodology.md:194`" (Carver-grounded hysteresis). No in-code annotation existed before this fix.
 
-**Fix:** Changed `pass` to `logger.warning("compute_fitness failed for %s — fitness_status=UNKNOWN (strategy held): %s", snap["strategy_id"], exc)`. Behavior unchanged.
+**Fix:** Added `@research-source`, `@entry-models`, `@revalidated-for` annotations citing backtesting-methodology.md RULE 7 and the 2026-04-18 grounding audit. Zero logic change.
 
-**Doctrine cited:** integrity-guardian.md § 6
+**Doctrine cited:** integrity-guardian.md § 8
+
+---
+
+## Additional Observations (no fix needed)
+
+- `test_lane_correlation_cache.py::test_compute_pairwise_correlation_matches_per_strategy_path` fails with a floating-point equality mismatch against live gold.db data. Pre-existing: the test uses `assert actual == ref` against live DB (data-sensitive). Not introduced by this iteration's comment-only change.
 
 ---
 
@@ -72,12 +66,13 @@
 - trading_app/strategy_fitness.py (iter 194)
 - trading_app/live_config.py (iter 195)
 - trading_app/prop_portfolio.py (iter 195, partial — fitness gate path)
+- trading_app/lane_correlation.py (iter 196)
 
 ---
 
 ## Next Iteration Targets
 
 **Priority 1 — Unscanned high/medium centrality files:**
-- `trading_app/lane_correlation.py` — imports from strategy_fitness, medium centrality, never scanned
-- `trading_app/chordia.py` — medium centrality, never scanned
-- `trading_app/prop_portfolio.py` — partially scanned this iteration (fitness gate only); remainder not audited
+- `trading_app/chordia.py` — medium centrality, never scanned; Chordia gate is capital-class
+- `trading_app/prop_portfolio.py` — partially scanned (iter 195, fitness gate only); remainder not audited
+- `trading_app/lane_allocator.py` — high centrality, never scanned; contains `compute_pairwise_correlation` and greedy selection logic
