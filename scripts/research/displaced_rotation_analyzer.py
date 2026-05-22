@@ -25,7 +25,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
@@ -302,7 +302,7 @@ def _write_decision_report(
 **Incumbent:** `{incumbent_id}`
 **Profile:** `{profile_id}`
 **Rebalance date:** {rebalance_date}
-**Generated:** {datetime.now(timezone.utc).isoformat(timespec="seconds")}
+**Generated:** {datetime.now(UTC).isoformat(timespec="seconds")}
 **Tool:** `scripts/research/displaced_rotation_analyzer.py --diagnostic`
 
 ---

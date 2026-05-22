@@ -70,6 +70,7 @@ def test_query_account_metadata_returns_none_on_http_error():
     session to keep raising ConnectionError on every attempt.
     """
     import requests as _requests
+
     from trading_app.live.projectx.positions import ProjectXPositions
 
     with patch("requests.Session.request", side_effect=_requests.ConnectionError("broker down")):
@@ -169,7 +170,9 @@ def test_query_equity_with_age_returns_live_reading():
 def test_query_equity_with_age_serves_cache_on_transient_failure():
     """First call succeeds → cached. Second call (transient failure) returns cache + age."""
     import time as _time
+
     import requests as _requests
+
     from trading_app.live.projectx.positions import ProjectXPositions
 
     ok_body = {"accounts": [{"id": 20859313, "balance": 44_587.30}]}

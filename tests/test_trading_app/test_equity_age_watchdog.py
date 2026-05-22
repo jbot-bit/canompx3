@@ -28,7 +28,7 @@ from tests.test_trading_app.test_session_orchestrator import (
 from trading_app.live.http_client import BrokerHTTPError, EquityReading
 
 
-def _orch_with_equity(positions: "_EquityFakePositions", *, signal_only: bool = False):
+def _orch_with_equity(positions: _EquityFakePositions, *, signal_only: bool = False):
     """Build an orchestrator whose `positions` adapter is the supplied stub.
 
     FakeBrokerComponents.__post_init__ overwrites positions unconditionally,
