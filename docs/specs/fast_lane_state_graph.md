@@ -195,7 +195,9 @@ Drift-checked by `check_fast_lane_status_rollup_reconstruction_parity` (Check #1
 **`next_action_token` for HEAVYWEIGHT_COMPLETE is lineage-qualified** (amended 2026-05-20):
 
 - HEAVYWEIGHT_COMPLETE WITH `observed_at.journal_iter` populated (fast-lane lineage present — the ranker scored the strategy and wrote a journal row before the heavyweight ran) → `run_cherry_pick_journal_enricher`. The enricher backfills `heavyweight_verdict + t_observed_post_clustered_se + lesson_label` on the existing journal row.
-- HEAVYWEIGHT_COMPLETE WITHOUT a journal entry (no fast-lane lineage — heavyweight Chordia prereg authored directly, predating the 2026-05-19 cherry-pick loop) → `operator_deployment_decision`. The enricher is structurally update-only and cannot create journal rows; the heavyweight result MD already carries the operator-actionable verdict.
+- HEAVYWEIGHT_COMPLETE WITHOUT a journal entry (no fast-lane lineage — heavyweight Chordia prereg authored directly, predating the 2026-05-19 cherry-pick loop) → `operator_capital_review`. The enricher is structurally update-only and cannot create journal rows; the heavyweight result MD already carries the operator-actionable research verdict.
+
+Phase 5 review output is report-only and must carry `REPORT_ONLY_NOT_DEPLOYMENT_AUTHORITY`; the highest Fast Lane recommendation is `ESCALATE_CAPITAL_REVIEW`, which opens a separate human review packet rather than authorizing runtime or allocator mutation.
 
 This qualifier is enforced by `scripts/tools/fast_lane_status._next_action_for()` and its companion tests in `tests/test_tools/test_fast_lane_status.py`. Without it, the rollup emits a stage script as the next action when running that script would silently no-op — a fail-quiet misclassification of 38 entries was caught and fixed 2026-05-20.
 

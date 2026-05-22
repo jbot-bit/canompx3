@@ -128,7 +128,7 @@ _NEXT_ACTION_BY_STAGE: dict[str, str] = {
     "GROUNDED": "operator_promote_draft_to_active",
     "HEAVYWEIGHT_PENDING": "run_chordia_strict_unlock_v1",
     "HEAVYWEIGHT_COMPLETE": "run_cherry_pick_journal_enricher",
-    "ENRICHED": "operator_deployment_decision",
+    "ENRICHED": "operator_capital_review",
     "REVOKED": "no_action_required",
     "PARKED": "no_action_required",
     "REJECTED_OOS_UNPOWERED": "operator_pick_remedy_cpcv_haircut_pool_or_park",
@@ -157,12 +157,12 @@ _PRIMARY_BLOCKER_BY_STAGE: dict[str, str] = {
 # update-only against existing journal entries; it cannot create new entries.
 # Emitting the enricher token for these is a misclassification — the result MD
 # already carries the heavyweight verdict and the next operator action is the
-# deployment decision, identical to the ENRICHED stage's downstream gate.
+# capital review, identical to the ENRICHED stage's downstream gate.
 #
 # Legacy pre-ranker heavyweight results are the no-lineage special case. Active
 # fast-lane preregs, queue entries, ranking rows, journal entries, or draft
 # artifacts are all fast-lane lineage signals for the schema-v2 report.
-_NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE: str = "operator_deployment_decision"
+_NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE: str = "operator_capital_review"
 
 
 @dataclass
@@ -503,7 +503,7 @@ def _next_action_for(
 
     Special case: HEAVYWEIGHT_COMPLETE without a journal entry has no
     fast-lane lineage — the enricher cannot create journal entries, only
-    update them. Emit the deployment-decision token instead so the operator
+    update them. Emit the capital-review token instead so the operator
     is pointed at the heavyweight result MD rather than at a stage script
     that will silently no-op.
     """

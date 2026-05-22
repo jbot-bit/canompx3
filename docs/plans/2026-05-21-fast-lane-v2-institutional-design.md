@@ -3,18 +3,18 @@
 **Date:** 2026-05-21  
 **Status:** DESIGN / PLAN — no code changes approved by this document alone  
 **Supersedes:** `docs/plans/2026-05-19-fast-lane-pipeline-connective-tissue-design.md` where this document is stricter about provenance and trial-ledger writes.  
-**Risk tier:** critical research-control surface, capital-adjacent. The terminal output may inform deployment decisions, but V2 must not mutate capital-class state.
+**Risk tier:** critical research-control surface, capital-adjacent. The terminal output may inform a separate human capital review, but V2 must not mutate capital-class state.
 
 ---
 
 ## 1. Purpose
 
-Fast Lane V2 is an institutional research-control loop for turning a candidate trading idea into an evidence-backed deployment recommendation without collapsing discovery, validation, and live deployment.
+Fast Lane V2 is an institutional research-control loop for turning a candidate trading idea into an evidence-backed research review without collapsing discovery, validation, and capital-control boundaries.
 
 The target operator experience is:
 
 ```text
-idea -> prereg -> fast-lane run -> triage verdict -> heavyweight verification -> deployment recommendation
+idea -> prereg -> fast-lane run -> triage verdict -> heavyweight verification -> research review packet
 ```
 
 The forbidden shortcut is:
@@ -41,7 +41,7 @@ A real research execution is a run that consumes a pre-registered hypothesis and
 
 ### Axiom 3 — no capital-class mutation
 
-Fast Lane V2 terminates at a deployment recommendation. It must not write:
+Fast Lane V2 terminates at a report-only research review. It must not write:
 
 - `docs/runtime/chordia_audit_log.yaml`
 - `docs/runtime/lane_allocation.json`
@@ -49,7 +49,7 @@ Fast Lane V2 terminates at a deployment recommendation. It must not write:
 - any `trading_app/live/` runtime-control file
 - broker state or account routing state
 
-Any downstream deployment remains an operator-controlled, separately reviewed action.
+Any downstream capital action remains operator-controlled and separately reviewed.
 
 ### Axiom 4 — role before score
 
@@ -203,15 +203,15 @@ Responsibilities:
 - produce result docs
 - enrich journal state from actual result docs
 
-#### `deployment_recommender`
+#### `research_review_reporter`
 
 A report-only surface.
 
 Responsibilities:
 
-- join heavyweight verdict, role, OOS power tier, current strategy readiness, lane allocation, and deployment constraints
-- emit `RECOMMEND_REVIEW`, `PARK`, `KILL`, `BULLPEN`, or `DEPLOYMENT_CANDIDATE`
-- never write deployment state
+- join heavyweight verdict, role, OOS power tier, current strategy-lab context, lane allocation context, and capital-boundary constraints
+- emit `KILL`, `PARK`, `BULLPEN`, `RECOMMEND_RESEARCH_REVIEW`, or `ESCALATE_CAPITAL_REVIEW`
+- never write capital-class state
 
 ---
 
@@ -233,7 +233,7 @@ Fast Lane V2 uses explicit event types:
 | `HEAVYWEIGHT_ACTIVATED` | operator | Draft was moved to active hypotheses. |
 | `HEAVYWEIGHT_EXECUTED` | research runner only | Heavyweight run produced result artifacts. |
 | `JOURNAL_ENRICHED` | enricher | Journal was updated from heavyweight result. |
-| `DEPLOYMENT_RECOMMENDED` | recommender | Report-only deployment recommendation was emitted. |
+| `CAPITAL_REVIEW_PACKET_EMITTED` | research review reporter | Report-only research review packet was emitted. |
 
 Only `TRIAL_EXECUTED` and `HEAVYWEIGHT_EXECUTED` count toward K lineage.
 
@@ -482,14 +482,14 @@ Acceptance:
 - Journal enrichment is update-only from result docs.
 - Theory grant remains explicit and locally grounded.
 
-### Phase 5 — deployment recommendation report
+### Phase 5 — report-only research review
 
-Goal: produce a useful final recommendation without mutating deployment state.
+Goal: produce a useful research review without mutating capital-class state.
 
 Acceptance:
 
-- Report joins heavyweight verdict, OOS power, role, current `strategy-lab` readiness, and allocation context.
-- Report emits one of: `KILL`, `PARK`, `BULLPEN`, `RECOMMEND_REVIEW`, `DEPLOYMENT_CANDIDATE`.
+- Report joins heavyweight verdict, OOS power, role, current `strategy-lab` context, and allocation context.
+- Report emits one of: `KILL`, `PARK`, `BULLPEN`, `RECOMMEND_RESEARCH_REVIEW`, `ESCALATE_CAPITAL_REVIEW`.
 - Report includes capital-boundary disclaimer and exact next operator action.
 - No writes to `chordia_audit_log.yaml`, `lane_allocation.json`, `validated_setups`, or live runtime paths.
 
@@ -514,7 +514,7 @@ Minimum tests before V2 can be trusted:
 - End-to-end fixture test:
 
 ```text
-draft prereg -> active prereg -> mocked result -> execution event -> queue -> rank -> bridge draft -> heavyweight result -> journal enrich -> deployment recommendation
+draft prereg -> active prereg -> mocked result -> execution event -> queue -> rank -> bridge draft -> heavyweight result -> journal enrich -> research review packet
 ```
 
 The end-to-end fixture must prove no capital-class file is touched.
@@ -715,7 +715,7 @@ V2 should not depend on any single LLM, plugin, or app connector. LLMs may propo
 - drift checks
 - operator review
 
-LONA, external backtest tools, or generic strategy generators may feed `IDEA_CAPTURED` only. They must not feed validation, K lineage, or deployment recommendations as proof.
+LONA, external backtest tools, or generic strategy generators may feed `IDEA_CAPTURED` only. They must not feed validation, K lineage, or capital-review recommendations as proof.
 
 ### 14.2 New data support
 

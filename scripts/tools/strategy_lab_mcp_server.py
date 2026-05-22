@@ -249,6 +249,18 @@ def _get_strategy_readiness(
     return payload
 
 
+def get_strategy_readiness_payload(
+    strategy_id: str,
+    rolling_months: int = 18,
+) -> dict[str, Any]:
+    """Public read-only helper for bounded local callers.
+
+    Keeps MCP transport wiring and direct Python callers on the same payload
+    shape without forcing Phase 5 reports to run a bulk promotable scan.
+    """
+    return _get_strategy_readiness(strategy_id, rolling_months)
+
+
 def _get_lane_allocation_summary(
     profile_name: str | None = None,
 ) -> dict[str, Any]:
@@ -370,7 +382,7 @@ def _build_server():
                     "required": ["strategy_id"],
                     "additionalProperties": False,
                 },
-                _get_strategy_readiness,
+                get_strategy_readiness_payload,
             ),
             ToolSpec(
                 "get_lane_allocation_summary",

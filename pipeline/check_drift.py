@@ -12473,6 +12473,107 @@ def check_fast_lane_status_rollup_reconstruction_parity(
     return violations
 
 
+def check_fast_lane_phase5_capital_boundary(
+    paths: tuple[Path, ...] | None = None,
+    report_script_path: Path | None = None,
+) -> list[str]:
+    """Phase 5 guard: report-only wording and no capital-class write surface.
+
+    This is intentionally scoped to active Fast Lane Phase 5 surfaces. It does
+    not police historical audit docs where old wording may be quoted as context.
+    """
+    report_script = (
+        report_script_path
+        if report_script_path is not None
+        else PROJECT_ROOT / "scripts" / "tools" / "fast_lane_research_review.py"
+    )
+    scan_paths = paths if paths is not None else (
+        report_script,
+        PROJECT_ROOT / "scripts" / "tools" / "fast_lane_status.py",
+        PROJECT_ROOT / "scripts" / "tools" / "fast_lane_walk.py",
+        PROJECT_ROOT / "docs" / "specs" / "fast_lane_state_graph.md",
+        PROJECT_ROOT / "docs" / "plans" / "2026-05-21-fast-lane-v2-institutional-design.md",
+        PROJECT_ROOT / "docs" / "runtime" / "fast_lane_status.yaml",
+    )
+
+    violations: list[str] = []
+    boundary_token = "REPORT_ONLY_NOT_DEPLOYMENT_AUTHORITY"
+    banned_phrases = (
+        "DEPLOYMENT_" "CANDIDATE",
+        "DEPLOYMENT_" "RECOMMENDED",
+        "operator_" "deployment_decision",
+        "ready to " "deploy",
+        "go " "live",
+        "start " "trading",
+        "allocate " "capital",
+        "deployment_" "recommender",
+        "deployment " "recommendation",
+        "deployment " "decision",
+    )
+    capital_paths = (
+        "chordia_audit_log.yaml",
+        "lane_allocation.json",
+        "validated_setups",
+        "trading_app/live/",
+    )
+    write_markers = ("write_text", "open(", "shutil.copy", "shutil.move")
+
+    if not report_script.exists():
+        violations.append(
+            "check_fast_lane_phase5_capital_boundary: report script missing at "
+            f"{report_script.relative_to(PROJECT_ROOT) if report_script.is_relative_to(PROJECT_ROOT) else report_script}."
+        )
+    else:
+        try:
+            report_src = report_script.read_text(encoding="utf-8")
+        except OSError as exc:
+            violations.append(
+                "check_fast_lane_phase5_capital_boundary: failed to read report script "
+                f"{report_script}: {type(exc).__name__}: {exc}"
+            )
+            report_src = ""
+        if boundary_token not in report_src:
+            violations.append(
+                "check_fast_lane_phase5_capital_boundary: "
+                f"{report_script} must contain {boundary_token!r}."
+            )
+
+    for path in scan_paths:
+        if not path.exists():
+            violations.append(f"check_fast_lane_phase5_capital_boundary: scan path missing at {path}.")
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            violations.append(
+                f"check_fast_lane_phase5_capital_boundary: failed to read {path}: {type(exc).__name__}: {exc}"
+            )
+            continue
+
+        for phrase in banned_phrases:
+            if phrase in text:
+                violations.append(
+                    "check_fast_lane_phase5_capital_boundary: banned active-surface wording "
+                    f"{phrase!r} found in {path}."
+                )
+
+        lines = text.splitlines()
+        for idx, line in enumerate(lines):
+            if not any(cap in line for cap in capital_paths):
+                continue
+            window = "\n".join(lines[max(0, idx - 2) : idx + 3])
+            marker = next((m for m in write_markers if m in window), None)
+            if marker is None:
+                continue
+            violations.append(
+                "check_fast_lane_phase5_capital_boundary: CAPITAL-CLASS WRITE ATTEMPT "
+                f"in {path} near line {idx + 1}; capital-class path appears within "
+                f"2 lines of {marker!r}."
+            )
+
+    return violations
+
+
 def check_fast_lane_trial_ledger_append_only(
     ledger_path: Path | None = None,
     corrections_path: Path | None = None,
@@ -13684,6 +13785,12 @@ CHECKS = [
         "Fast-lane status roll-up reconstruction parity: docs/runtime/fast_lane_status.yaml must match a fresh scripts/tools/fast_lane_status.py build (Stage 2A.2 connective-tissue)",
         check_fast_lane_status_rollup_reconstruction_parity,
         False,  # blocking — hand-edits + capital-class write attempts both fail the chain-awareness contract
+        False,
+    ),
+    (
+        "Fast-lane Phase 5 report-only boundary: research review wording and capital-class writes stay blocked",
+        check_fast_lane_phase5_capital_boundary,
+        False,  # blocking — Phase 5 must not become a live/capital action surface
         False,
     ),
     (

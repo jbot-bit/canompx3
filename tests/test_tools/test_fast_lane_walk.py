@@ -116,7 +116,7 @@ def test_next_operator_action_returns_none_when_only_terminal() -> None:
 def test_next_operator_action_error_outranks_direct_heavyweight_backlog() -> None:
     entries = [
         {
-            **_entry("OLD_DIRECT", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_deployment_decision"),
+            **_entry("OLD_DIRECT", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_capital_review"),
             "lineage_class": "DIRECT_HEAVYWEIGHT",
         },
         {
@@ -133,17 +133,15 @@ def test_next_operator_action_error_outranks_direct_heavyweight_backlog() -> Non
 def test_next_operator_action_ignores_direct_heavyweight_backlog() -> None:
     entries = [
         {
-            **_entry("OLD_DIRECT", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_deployment_decision"),
+            **_entry("OLD_DIRECT", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_capital_review"),
             "lineage_class": "DIRECT_HEAVYWEIGHT",
         }
     ]
     assert _next_operator_action(entries) is None
 
 
-def test_next_operator_action_ignores_deployment_decision_heavyweight_complete() -> None:
-    entries = [
-        _entry("FAST_LANE_DONE", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_deployment_decision")
-    ]
+def test_next_operator_action_ignores_capital_review_heavyweight_complete() -> None:
+    entries = [_entry("FAST_LANE_DONE", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_capital_review")]
     assert _next_operator_action(entries) is None
 
 
@@ -196,7 +194,7 @@ def test_render_report_zero_actionable_says_so() -> None:
 def test_render_report_separates_direct_heavyweight_backlog() -> None:
     entries = [
         {
-            **_entry("OLD_DIRECT", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_deployment_decision"),
+            **_entry("OLD_DIRECT", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_capital_review"),
             "lineage_class": "DIRECT_HEAVYWEIGHT",
         },
         _entry("REJECTED_FAST", "REJECTED_OOS_UNPOWERED", age=2, action="operator_pick_remedy_cpcv_haircut_pool_or_park"),

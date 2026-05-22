@@ -233,7 +233,7 @@ def test_build_status_entries_live_repo_smoke() -> None:
 # enricher is structurally update-only — it cannot create entries. Emitting
 # `run_cherry_pick_journal_enricher` for such entries silently no-ops on every
 # walk. The lineage-qualified action token routes the operator to the
-# heavyweight result MD (deployment decision) instead.
+# heavyweight result MD (capital review) instead.
 
 
 def test_next_action_heavyweight_complete_with_journal_lineage_uses_enricher() -> None:
@@ -248,11 +248,11 @@ def test_next_action_heavyweight_complete_with_journal_lineage_uses_enricher() -
     assert _NEXT_ACTION_BY_STAGE["HEAVYWEIGHT_COMPLETE"] == "run_cherry_pick_journal_enricher"
 
 
-def test_next_action_heavyweight_complete_without_journal_lineage_uses_deployment() -> None:
-    """No journal entry → no fast-lane lineage → operator deployment decision, not enricher."""
+def test_next_action_heavyweight_complete_without_journal_lineage_uses_capital_review() -> None:
+    """No journal entry → no fast-lane lineage → operator capital review, not enricher."""
     action = _next_action_for("HEAVYWEIGHT_COMPLETE", journal_entry=None)
     assert action == _NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE
-    assert action == "operator_deployment_decision"
+    assert action == "operator_capital_review"
     # Critical: never silently route to a stage script that will no-op.
     assert action != "run_cherry_pick_journal_enricher"
 
@@ -273,8 +273,8 @@ def test_next_action_for_unknown_stage_falls_back_to_error_token() -> None:
     assert action == "operator_resolve_error"
 
 
-def test_build_status_entries_pre_ranker_heavyweight_gets_deployment_action(tmp_path: Path) -> None:
-    """Integration: a heavyweight result MD with no journal entry routes to deployment, not enricher.
+def test_build_status_entries_pre_ranker_heavyweight_gets_capital_review_action(tmp_path: Path) -> None:
+    """Integration: a heavyweight result MD with no journal entry routes to capital review, not enricher.
 
     Mirrors the live-repo case for the 38 entries fixed by this stage.
     """
@@ -300,7 +300,7 @@ def test_build_status_entries_pre_ranker_heavyweight_gets_deployment_action(tmp_
     e = entries[0]
     assert e.strategy_id == "MNQ_FAKE_PRE_RANKER"
     assert e.current_stage == "HEAVYWEIGHT_COMPLETE"
-    assert e.next_action_token == "operator_deployment_decision"
+    assert e.next_action_token == "operator_capital_review"
     assert e.lineage_class == "DIRECT_HEAVYWEIGHT"
     assert e.blocker_class == "NONE"
     assert e.primary_blocker is None

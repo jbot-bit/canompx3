@@ -6,6 +6,16 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-22 — Codex Fast Lane V2 Phase 5 report-only research review)
+
+- **Tool:** Codex
+- **Status:** Implemented and verified. Stage marker `docs/runtime/stages/2026-05-22-fast-lane-v2-phase-5-research-review.md` is `mode: CLOSED`.
+- **What changed:** Added `scripts/tools/fast_lane_research_review.py`, a stdout-only Phase 5 research review reporter. It reads Fast Lane status, cherry-pick journal entries, and bounded per-strategy strategy-lab payloads; it emits only `KILL`, `PARK`, `BULLPEN`, `RECOMMEND_RESEARCH_REVIEW`, or `ESCALATE_CAPITAL_REVIEW`. The highest output means open a separate human capital review packet, not live/runtime/allocator authority.
+- **Boundary hardening:** Added public read-only `get_strategy_readiness_payload()` in `scripts/tools/strategy_lab_mcp_server.py`; renamed active Fast Lane downstream token from `operator_deployment_decision` to `operator_capital_review`; updated Phase 5 wording in the Fast Lane design/spec; rebuilt `docs/runtime/fast_lane_status.yaml`.
+- **Bias/gap guard:** Added `check_fast_lane_phase5_capital_boundary` to `pipeline/check_drift.py` and tests. It fails active Phase 5 surfaces on deployment-candidate wording, missing `REPORT_ONLY_NOT_DEPLOYMENT_AUTHORITY`, or capital-class write attempts.
+- **Verification:** related pytest slice `70 passed`; post-lint focused slice `9 passed`; targeted ruff on touched files passed; `fast_lane_status.py --write` rebuilt 46 entries; `fast_lane_research_review.py --strategy-id MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30` reports `PARK`; `fast_lane_walk.py --dry-run` has all four chain steps rc 0; full `pipeline/check_drift.py` => `NO DRIFT DETECTED: 157 checks passed [OK], 0 skipped, 20 advisory`.
+- **No capital/live mutation:** no `gold.db`, `validated_setups`, `lane_allocation.json`, `chordia_audit_log.yaml`, broker state, account routing, or `trading_app/live/` runtime files touched.
+
 ## This Session (2026-05-22 — Stage 1b-ii.a-2 landed: prop_portfolio + pre_session_check + deployability migrated)
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode
