@@ -43,6 +43,26 @@ from trading_app.live.instance_lock import acquire_instance_lock, release_instan
 from trading_app.live.session_orchestrator import SessionOrchestrator
 
 
+def _silence_pysignalr_negotiation_log() -> None:
+    """Drop pysignalr's full-negotiation-URL INFO log.
+
+    pysignalr.transport (`websocket.py:320`) logs the SignalR negotiation
+    URL at INFO via `_logger.info('Performing negotiation, URL: ...')`.
+    The URL carries the `?access_token=<JWT>` query parameter; the JWT
+    decodes to user identity + role + expiry. Local-only blast (logs land
+    in $TEMP or logs/live/) but credential-leak class — any log share or
+    screenshot would leak the JWT.
+
+    INFO -> WARNING removes the negotiation-URL line plus the "State
+    change" INFO trio (line 225) and the "Sending/Awaiting/Completed
+    handshake" lines. The orchestrator's own INFO ("Connected to ProjectX
+    Market Hub", "Subscribed to quotes: CON.F.US.MNQ.M26") still surfaces
+    feed connectivity. Reconnect failures still log at WARNING via
+    `_logger.warning('Connection closed: ...')` (websocket.py:211).
+    """
+    logging.getLogger("pysignalr.transport").setLevel(logging.WARNING)
+
+
 def _run_lightweight_component_self_tests(
     *,
     instrument: str,
@@ -628,6 +648,7 @@ def _print_mode_banner(mode: str, instrument: str) -> None:
 
 
 def main() -> None:
+    _silence_pysignalr_negotiation_log()
     parser = argparse.ArgumentParser(
         description="ORB live session",
         formatter_class=argparse.RawDescriptionHelpFormatter,

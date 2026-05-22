@@ -6,6 +6,17 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-23 — Codex WSL launcher dirty-clone hardening)
+
+- **Tool:** Codex, fallback `/mnt/c/...` checkout.
+- **User request:** Asked why `codex.bat` on Desktop does not work after reading Microsoft WSL filesystem guidance, then requested future-proofing/hardening using official fixes/docs.
+- **Measured root cause:** Windows `codex.bat` is routed to the smart WSL path, but the WSL-home clone `/home/joshd/canompx3` is dirty and ahead/changed, so `scripts/infra/codex-wsl-sync.sh` correctly fails closed instead of auto-syncing over unresolved Linux-side work. The current Codex session itself is also running from fallback `/mnt/c/Users/joshd/canompx3`, which `codex_local_env.py doctor --platform wsl` flags as non-native for WSL work.
+- **Official grounding:** Microsoft Learn WSL filesystem docs recommend Linux-command-line work live in the WSL filesystem (`/home/...`, not `/mnt/c/...`). OpenAI Codex Windows docs recommend WSL2 when Linux-native tooling/workflow is needed and explicitly say to keep repos under Linux home for faster I/O and fewer symlink/permission issues.
+- **Files changed:** `scripts/infra/codex-wsl-sync.sh` now prints a MEASURED dirty-clone diagnosis, explains it is a fail-closed guard not a Codex install failure, and gives exact recovery steps (`cd ~/canompx3`, `git status --short --branch`, preserve work, retry `codex.bat`, or use `codex.bat task <name>` for parallel work). `scripts/infra/codex_doctor.py` now prints the same dirty-clone recovery path. Docs updated in `docs/reference/codex-operator-handbook.md` and `docs/reference/codex-claude-operator-setup.md`; tests updated in `tests/test_tools/test_codex_doctor.py` and `tests/test_tools/test_codex_launcher_scripts.py`.
+- **Verification:** Red tests first failed on missing diagnostics/docs. After patch: `pytest tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_codex_doctor.py -q` => 11 passed; broader launcher slice `pytest tests/test_tools/test_windows_agent_launch_light.py tests/test_tools/test_windows_agent_launch.py tests/test_tools/test_codex_doctor.py tests/test_tools/test_codex_launcher_scripts.py -q` => 56 passed; targeted ruff on touched Python/tests passed; scoped `git diff --check -- <touched files>` passed.
+- **Blocked full check:** Full `git diff --check` is blocked by unrelated pre-existing workspace issues: `.claude/settings.json` trailing whitespace and `live_journal.db` permission/hash failure. Left unrelated dirty files untouched.
+- **Immediate operator fix:** Open WSL and run `cd ~/canompx3 && git status --short --branch`; preserve/commit/stash the dirty WSL-home work, then relaunch with `codex.bat`. Use `codex.bat doctor` for the human-readable smart-path report.
+
 ## This Session (2026-05-23 — Plan A shipped: judgment-review PreToolUse soft-block)
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode
