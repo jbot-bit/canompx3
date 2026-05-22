@@ -1392,12 +1392,16 @@ def effective_daily_lanes(profile: AccountProfile) -> tuple[DailyLaneSpec, ...]:
 # instrument (not DB-dependent — must be updated when ORB regimes shift).
 # =========================================================================
 
-# P90 ORB sizes in points (from adversarial audit 2026-03-29, gold.db, last 6 months).
-# These are empirical — update when ORB regime shifts materially.
+# P90 ORB sizes in points (flat per-instrument fallback when allocator JSON lacks p90_orb_pts).
+# Used only when load_allocation_lanes() reads an entry missing the per-session p90_orb_pts field.
+# Production JSON (lane_allocation.json) has p90_orb_pts on every lane — this fires as last resort.
+# @research-source adversarial audit 2026-03-29, gold.db last-6-months snapshot
+# @revalidated-for E2 (MNQ/MGC measured; MES estimated — no active MES lanes at audit time)
+# Update trigger: ORB regime shift (>20% change in rolling P90 vs these values).
 _P90_ORB_PTS: dict[str, float] = {
     "MNQ": 120.0,  # Across sessions: NYSE_CLOSE=66, SING=59, COMEX=52, NYSE_OPEN=212, US_DATA=101
-    "MGC": 20.0,  # TOKYO_OPEN=20.4
-    "MES": 30.0,  # Estimated (not in active lanes)
+    "MGC": 20.0,  # TOKYO_OPEN=20.4 (measured)
+    "MES": 30.0,  # ESTIMATED — no active MES lanes at 2026-03-29 audit; measure before adding MES profile
 }
 
 # Point values (must match pipeline.cost_model but inlined to avoid circular import)
