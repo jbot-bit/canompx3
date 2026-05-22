@@ -346,9 +346,7 @@ def test_failure_hook_should_allow_request_blocks_call(fast_policy):
 
 def test_failure_hook_records_class_g_on_success_false(fast_policy):
     """200 + success=false body → hook records class-G failure, not success."""
-    session = _ScriptedSession(
-        [_make_resp(200, {"success": False, "errorMessage": "bad payload"})]
-    )
+    session = _ScriptedSession([_make_resp(200, {"success": False, "errorMessage": "bad payload"})])
     hook = _RecordingHook()
     client = BrokerHTTPClient(base_url="https://x.test", session=session, name="t", failure_hook=hook)
     with pytest.raises(BrokerProtocolError):
