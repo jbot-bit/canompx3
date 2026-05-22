@@ -9691,6 +9691,14 @@ _LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST: frozenset[Path] = frozenset(
         Path("trading_app/prop_profiles.py"),
         Path("trading_app/lane_allocator.py"),
         Path("scripts/tools/rebalance_lanes.py"),
+        # Capital-class boundary guard, NOT an allocation reader. The literal
+        # appears in `_CAPITAL_CLASS_FORBIDDEN_SUBSTRINGS` so the writer can
+        # refuse to record an entry whose prereg_path points at lane_allocation.
+        # PR #311 originally replaced the literal with a placeholder string;
+        # that silently disabled the boundary (test caught it 2026-05-22).
+        # Resolver pattern does not apply — this is a defensive substring
+        # filter on operator-supplied paths, not a reader of the file.
+        Path("scripts/research/fast_lane_trial_ledger.py"),
     }
 )
 
