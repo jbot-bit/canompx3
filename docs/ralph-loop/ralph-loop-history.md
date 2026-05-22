@@ -2010,6 +2010,19 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 
 ---
 
+## Iteration 188 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: tests/test_trading_app/conftest.py (new file)
+- Finding: ALERT-CONTAM-N2 — test suite calls _notify() without monkeypatching alert_engine.ALERTS_PATH, causing real appends to production data/runtime/operator_alerts.jsonl on every test run
+- Doctrine cited: integrity-guardian.md § 3 (fail-closed; tests must not contaminate production runtime files)
+- Action: Added autouse fixture _redirect_alerts_path in tests/test_trading_app/conftest.py that monkeypatches trading_app.live.alert_engine.ALERTS_PATH to tmp_path per test
+- Blast radius: 1 file (new test conftest, zero production code touched)
+- Verification: PASS — 233/233 test_session_orchestrator.py tests; 160 drift checks
+- Commit: 1e4be59f
+
+---
+
 ## Iteration 186 — 2026-05-19
 - Phase: fix
 - Classification: [mechanical]

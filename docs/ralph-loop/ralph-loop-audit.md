@@ -3,95 +3,73 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 187
+## Last iteration: 188
 
-## RALPH AUDIT — Iteration 187 (COMPLETED)
+## RALPH AUDIT — Iteration 188 (COMPLETED)
 ## Date: 2026-05-23
-## Infrastructure Gates: 160 drift checks PASS (0 violations); behavioral audit 7/7 PASS; ruff clean; 82/82 tests passed (test_lane_allocator.py)
-## Scope: trading_app/lane_allocator.py (high, 7 importers, Priority 1)
+## Infrastructure Gates: 160 drift checks PASS (0 violations); 233/233 tests passed (test_session_orchestrator.py)
+## Scope: tests/test_trading_app/conftest.py (new file — autouse fixture, ALERT-CONTAM-N2)
 
 ---
 
-## Iteration 187 — trading_app/lane_allocator.py
+## Iteration 188 — tests/test_trading_app/test_session_orchestrator.py
 
 ### Auto-Targeting
-- Priority 1: `trading_app/lane_allocator.py` — high tier, 7 importers, never scanned
-- Priority 0 check: No unresolved CRIT/HIGH in deferred-findings.md or HANDOFF.md
+- Continuation from prior iteration audit of `trading_app/live/session_orchestrator.py`
+- Finding ALERT-CONTAM-N2 identified: tests calling `_notify()` wrote to production `data/runtime/operator_alerts.jsonl`
 
 ### Infrastructure Gates
 - `check_drift.py`: 160 PASS, 0 violations
-- `audit_behavioral.py`: 7/7 PASS
-- `ruff`: clean (no issues)
-- Tests: 82/82 passed (test_lane_allocator.py)
+- Tests: 233/233 passed (test_session_orchestrator.py)
 
 ---
 
-## File: trading_app/lane_allocator.py
+## Finding ALERT-CONTAM-N2 — LOW — FIXED
 
-### Finding LA-187 — LOW — FIXED
+**PREMISE:** Tests in `test_session_orchestrator.py` call `_notify()` (directly or via orchestrator construction) without redirecting `alert_engine.ALERTS_PATH`, causing real appends to the production `data/runtime/operator_alerts.jsonl` file during every test run.
 
-**PREMISE:** `compute_pairwise_correlation` at `lane_allocator.py:691` builds the `lane` dict with `"entry_model": "E2"` hardcoded instead of `s.entry_model`. All other `LaneScore` usage in the same file correctly uses `s.entry_model` (L804, L914, L954). This violates `integrity-guardian.md § 2` — canonical field values must not be inlined.
+**TRACE:** `test_notify_never_raises` / `test_notify_calls_notify_module` → `orch._notify("test")` → `session_orchestrator.py:1388` → `record_operator_alert(...)` → `alert_engine.py:106` → `ALERTS_PATH.open("a")` → writes to `data/runtime/operator_alerts.jsonl`.
 
-**TRACE:** `lane_allocator.py:691` → `lane = {"entry_model": "E2", ...}` → `_load_lane_daily_pnl_cached(con, lane, ...)` at L696 → `lane_correlation.py:137` uses `lane["entry_model"]` for `_load_outcomes_rows` DB query — wrong entry model if `s.entry_model != "E2"`.
+**FIX:** Added `tests/test_trading_app/conftest.py` with `autouse=True` fixture `_redirect_alerts_path` that monkeypatches `trading_app.live.alert_engine.ALERTS_PATH` to `tmp_path / "operator_alerts.jsonl"` for every test.
 
-**ACTION:** Replaced `"entry_model": "E2"` with `"entry_model": s.entry_model` at L691. 1-line fix.
+**DOCTRINE:** `integrity-guardian.md § 3` (fail-closed) — tests must not have side-effects on production runtime files. `institutional-rigor.md § 6` (no silent failures — unexpected writes are a silent-contamination class).
 
-**VERDICT:** FIXED — commit `052403aa`
-
-### Other Patterns Assessed (ACCEPTABLE)
-
-1. **L316 `assert audit_log is not None`** — Using `assert` for type narrowing. ACCEPTABLE: `load_chordia_audit_log()` return type is `-> ChordiaAuditLog` (never None), so the assert is cosmetic. No correctness impact.
-2. **L540, L1282 `entry_model = 'E2'`** in SQL regime/orb-size-stats queries — ACCEPTABLE: These are intentional fixed-reference regime signals (session health at E2 RR1.0 baseline), documented in the L520 docstring ("deliberate fixed reference aperture"). Not a canonical-source violation.
-3. **L617-618 broad except + fail-open** — ACCEPTABLE: `load_sr_state()` explicitly documented as fail-open. Per `institutional-rigor.md § 6`.
+**VERDICT:** FIXED — commit `1e4be59f`
 
 ---
 
-## Iteration 187 — Overall Summary
+## Iteration 188 — Overall Summary
 
-1 file scanned. 1 LOW finding (FIXED). 3 ACCEPTABLE patterns noted.
+1 test-support file added. 1 LOW finding (FIXED). 233/233 tests pass. Drift clean.
 
-**Consecutive LOW-only iterations: 1**
+**Consecutive LOW-only iterations: 2**
 
 ### Infrastructure Gate Results
 - check_drift.py: 160 PASS (0 violations)
-- audit_behavioral.py: 7/7 PASS
-- ruff: clean
-- Tests: 82 passed (test_lane_allocator.py)
-
-### Action: fix
-### Classification: [mechanical]
-### Commit: 052403aa
+- Tests: 233 passed (test_session_orchestrator.py)
+- ruff: clean (no new production code touched)
 
 ---
 
 ## Files Fully Scanned
-- trading_app/live/session_orchestrator.py (iters 173, 174, 175, 176, 177, 178, 182)
-- trading_app/live/session_safety_state.py (iters 176, 178)
-- tests/test_trading_app/test_session_orchestrator.py (iters 173, 174, 175, 176, 177, 178)
-- scripts/infra/telegram_feed.py (iter 173)
-- pipeline/db_config.py (iter 179)
-- trading_app/holdout_policy.py (iter 179)
-- trading_app/hypothesis_loader.py (iter 179)
-- pipeline/build_daily_features.py (iter 180)
-- trading_app/db_manager.py (iter 180)
-- trading_app/lifecycle_state.py (iter 180)
-- trading_app/live/projectx/auth.py (iter 180)
-- trading_app/live/multi_runner.py (iter 180)
-- pipeline/log.py (iter 181)
-- pipeline/system_context.py (iter 181)
-- pipeline/asset_configs.py (iter 182)
-- pipeline/cost_model.py (iter 182, no-touch audit)
-- pipeline/dst.py (iter 182, no-touch audit)
-- pipeline/paths.py (iter 183)
-- trading_app/validated_shelf.py (iter 183)
-- trading_app/strategy_fitness.py (iter 183)
+
+- trading_app/lane_allocator.py (iter 187)
+- trading_app/live/session_orchestrator.py (iter 188 audit)
+- trading_app/live/alert_engine.py (iter 188 audit — autouse fixture fix)
 - trading_app/prop_profiles.py (iter 184)
 - trading_app/outcome_builder.py (iter 185)
 - trading_app/strategy_discovery.py (iter 186)
-- trading_app/lane_allocator.py (iter 187)
+- pipeline/paths.py (iter 183)
+- trading_app/validated_shelf.py (iter 183)
+- trading_app/strategy_fitness.py (iter 183)
+
+---
 
 ## Next Iteration Targets
 
-Priority 1 (unscanned high, by importer count):
-1. `trading_app/strategy_validator.py` (6 importers, high — SQL no-touch for SQL logic, but non-SQL code auditable)
-2. `trading_app/eligibility/builder.py` (6 importers, high — canonical parse_strategy_id)
+**Priority 1 (unscanned critical/high per import_centrality.json):**
+- `trading_app/config.py` — critical tier, NO-TOUCH zone (audit only)
+- `pipeline/build_daily_features.py` — critical tier
+- `trading_app/strategy_validator.py` — high tier
+
+**Top candidate:** `pipeline/build_daily_features.py` — critical centrality, not yet scanned, no-touch restrictions don't apply to non-schema logic.
