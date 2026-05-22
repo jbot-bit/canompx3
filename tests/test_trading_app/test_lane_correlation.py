@@ -9,10 +9,10 @@ from unittest.mock import patch
 import pytest
 
 from trading_app.lane_correlation import (
-    CorrelationReport,
-    PairResult,
     RHO_REJECT_THRESHOLD,
     SUBSET_REJECT_THRESHOLD,
+    CorrelationReport,
+    PairResult,
     _daily_pnl,
     _pearson,
     check_candidate_correlation,

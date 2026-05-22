@@ -27,7 +27,6 @@ from scripts.research.ingest_idea import (
     run_gates,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_FASTLANE_PREREG = (
     REPO_ROOT

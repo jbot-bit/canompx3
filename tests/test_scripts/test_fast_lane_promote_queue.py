@@ -12,7 +12,6 @@ import yaml
 
 from scripts.research import fast_lane_promote_queue as flpq
 
-
 # Canonical v5.1 result MD template the runner emits. We slot the per-cell
 # numbers into the {placeholders}; everything else is the v5.1 contract.
 _TEMPLATE = """# Chordia strict unlock audit — {sid}

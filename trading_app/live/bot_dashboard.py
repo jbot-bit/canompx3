@@ -2990,8 +2990,8 @@ def _orb_levels_for_instrument(instrument: str) -> dict[str, Any]:
     ORB yet, the trading_day is missing, or the canonical resolver
     rejects the session/aperture combination.
     """
-    from trading_app.live.bot_state import read_state
     from pipeline.dst import orb_utc_window
+    from trading_app.live.bot_state import read_state
 
     payload = _empty_orb_payload()
     state = read_state() or {}

@@ -459,6 +459,7 @@
   /* CDN-load failure / SRI mismatch fallback. Visible to operator. */
   .chart-cockpit-fallback {
     position: absolute; inset: 0; display: none;
+    flex-direction: column;
     align-items: center; justify-content: center; padding: 24px;
     text-align: center; color: var(--yellow);
     background: var(--surface);
@@ -466,6 +467,38 @@
   }
   .chart-cockpit.fallback-active .chart-cockpit-fallback { display: flex; }
   .chart-cockpit.fallback-active #chart-host { display: none; }
+  @keyframes pulse-cyan {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0,212,255,0.6); }
+    50%      { box-shadow: 0 0 0 12px rgba(0,212,255,0); }
+  }
+  #chart-fb-start:hover { filter: brightness(1.1); }
+  #chart-fb-start:disabled { opacity: 0.5; cursor: not-allowed; animation: none; }
+
+  /* ── GO LIVE hold-to-confirm button ──── */
+  .go-live-wrap { position: relative; display: inline-block; margin-top: 8px; }
+  .go-live-btn {
+    position: relative; z-index: 1;
+    background: linear-gradient(180deg, #ff3838 0%, #c40000 100%);
+    color: #fff; border: 2px solid #ff5c5c;
+    border-radius: 8px; padding: 14px 32px;
+    font: 800 14px/1 var(--mono); letter-spacing: 0.12em;
+    cursor: pointer; text-transform: uppercase;
+    box-shadow: 0 2px 8px rgba(196,0,0,0.4);
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
+  }
+  .go-live-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .go-live-btn .lock { margin-right: 8px; }
+  .go-live-ring {
+    position: absolute; inset: -4px;
+    border-radius: 12px;
+    background: conic-gradient(#00d4ff calc(var(--p, 0) * 1%), transparent 0);
+    z-index: 0;
+    opacity: 0; transition: opacity 0.15s;
+    pointer-events: none;
+  }
+  .go-live-wrap.holding .go-live-ring { opacity: 1; }
+  .go-live-hint { display: block; font-size: 10px; color: var(--dim); margin-top: 6px; letter-spacing: 0.06em; text-align: center; }
 
   /* ── P&L STRIP ──────────────────────── */
   .pnl-strip {
@@ -2385,9 +2418,10 @@
     <div class="chart-cockpit-body">
       <div id="chart-host"></div>
       <div id="chart-cockpit-fallback" class="chart-cockpit-fallback">
-        Chart unavailable — Lightweight Charts failed to load.<br>
-        Verify CDN reachability (unpkg.com) or that the SRI hash matches the
-        upstream build. Dashboard continues to function via /api/* endpoints.
+        <div id="chart-fb-title" style="font-size:20px;font-weight:800;color:var(--red,#ff5c5c);letter-spacing:0.04em;margin-bottom:6px;">NO LIVE FEED</div>
+        <div id="chart-fb-detail" style="font-size:13px;color:var(--dim);margin-bottom:14px;text-align:center;max-width:420px;">No recent bars. Start the feed to begin streaming candles.</div>
+        <button id="chart-fb-start" type="button" style="background:var(--cyan,#00d4ff);color:#000;border:none;border-radius:6px;padding:12px 28px;font:700 14px/1 var(--mono);letter-spacing:0.08em;cursor:pointer;text-transform:uppercase;animation:pulse-cyan 1.6s ease-in-out infinite;">▶ START FEED</button>
+        <div style="font-size:11px;color:var(--dim);margin-top:10px;">Signal mode — bar feed only, no orders, zero risk.</div>
       </div>
     </div>
   </section>
@@ -2954,17 +2988,13 @@ function renderAccounts(accounts) {
           '</button>' +
           '<button class="pf-btn demo" title="Bot places PRACTICE orders on a separate ProjectX demo/sandbox account. No real money. Does NOT trade your Combine — use this only to rehearse the full order round-trip.">' +
             '<span class="btn-title">Paper</span><span class="btn-sub">Practice, no $$</span>' +
-          '</button>' +
-          '<button class="pf-btn live" disabled title="Bot places REAL orders on your TopStep Combine account. Every trade counts toward your Combine pass/fail metrics. Type LIVE in the box below to unlock this button.">' +
-            '<span class="btn-title">Live</span><span class="btn-sub">Real Combine $$</span>' +
           '</button>';
-        const [bs, bd, bl] = ar.querySelectorAll("button");
+        const [bs, bd] = ar.querySelectorAll("button");
         const signalBlocked = blockedActionReason("start_signal");
         const demoBlocked = blockedActionReason("start_demo");
         const liveBlocked = blockedActionReason("start_live");
         if (signalBlocked) { bs.disabled = true; bs.title = signalBlocked; }
         if (demoBlocked) { bd.disabled = true; bd.title = demoBlocked; }
-        if (liveBlocked) { bl.disabled = true; bl.title = liveBlocked; }
         bs.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "signal"));
         bd.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "demo"));
         card.appendChild(ar);
@@ -2973,15 +3003,22 @@ function renderAccounts(accounts) {
         legend.innerHTML =
           '<div><b class="lg-signal">Alerts</b> — Telegram only. You trade manually. <em>Zero risk.</em></div>' +
           '<div><b class="lg-demo">Paper</b> — fake orders on a practice account. Rehearses the bot without touching your Combine.</div>' +
-          '<div><b class="lg-live">Live</b> — real orders on your Combine. Counts toward pass/fail.</div>';
+          '<div><b class="lg-live">Live</b> — real orders on your Combine. <b>Hold the red button 2 seconds to fire.</b></div>';
         card.appendChild(legend);
 
-        const gate = document.createElement("div"); gate.className = "live-gate";
-        gate.innerHTML = '<label>To enable <b>Live</b>, type <b>LIVE</b> then click the Live button:</label><input type="text" placeholder="Type LIVE here to unlock real trading">';
-        const inp = gate.querySelector("input");
-        inp.addEventListener("input", () => { bl.disabled = !!liveBlocked || inp.value.trim() !== "LIVE"; });
-        bl.addEventListener("click", () => { if (inp.value.trim() !== "LIVE") return; launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "live"); inp.value = ""; bl.disabled = true; });
-        card.appendChild(gate);
+        // Hold-to-confirm GO LIVE button (replaces type-LIVE-then-click gate).
+        const wrap = document.createElement("div"); wrap.className = "go-live-wrap";
+        wrap.innerHTML =
+          '<div class="go-live-ring"></div>' +
+          '<button class="go-live-btn" type="button" title="Press and hold for 2 seconds to launch REAL orders on this Combine account.">' +
+            '<span class="lock">🔒</span>GO LIVE — HOLD 2s' +
+          '</button>' +
+          '<span class="go-live-hint">Real Combine $$ — press AND HOLD for 2 seconds</span>';
+        const goLiveBtn = wrap.querySelector("button");
+        const goLiveRing = wrap.querySelector(".go-live-ring");
+        if (liveBlocked) { goLiveBtn.disabled = true; goLiveBtn.title = liveBlocked; }
+        else { window.attachHoldToFireLive(goLiveBtn, goLiveRing, wrap, acct); }
+        card.appendChild(wrap);
       }
     } else if (!isActive) {
       const n = document.createElement("div"); n.className = "pf-meta"; n.style.cssText = "margin-top:8px;font-style:italic"; n.textContent = "Inactive"; card.appendChild(n);
@@ -4334,10 +4371,13 @@ async function fetchEquity() {
 }
 
 /* ── Actions ────────────────────────── */
-async function launchSession(pid, firm, instr, mode) {
+async function launchSession(pid, firm, instr, mode, opts) {
   const lbl = {signal: "SIGNAL-ONLY", demo: "DEMO", live: "LIVE"};
   const warn = mode === "live" ? "\n\nREAL MONEY." : mode === "demo" ? "\n\nPaper orders." : "\n\nSignals only.";
-  if (!confirm(`Start ${lbl[mode]}?\n\n${firm} | ${instr}\n${pid}${warn}`)) return;
+  // Skip the JS confirm() prompt when the caller has already done its own
+  // physical-gesture confirmation (e.g. hold-to-confirm on GO LIVE).
+  const skipConfirm = opts && opts.skipConfirm === true;
+  if (!skipConfirm && !confirm(`Start ${lbl[mode]}?\n\n${firm} | ${instr}\n${pid}${warn}`)) return;
   const toastTone = mode === "live" ? "error" : "busy";
   showToast(`${lbl[mode]} starting`, `Running readiness checks for ${pid}...`, toastTone, {id: "launch"});
   showActivity(`${lbl[mode]} Start`, `Auto-running readiness checks for ${pid} before launch...`, mode === "live" ? "error" : "info");
@@ -4356,6 +4396,64 @@ async function launchSession(pid, firm, instr, mode) {
     showToast(`${lbl[mode]} ERROR`, e.message, "error", {id: "launch"});
   }
 }
+
+// Used by the chart "START FEED" button. Resolves the currently-selected
+// account (localStorage key set by the Dashboard tab) and launches signal
+// mode — no orders, no money, no Combine impact.
+window.startSignalForSelected = function() {
+  const accts = Array.isArray(lastAccountsData) ? lastAccountsData : [];
+  // Prefer an active+auto account; fall back to any active account; final fallback = first.
+  let acct = accts.find(a => a.active && (a.auto_trading === "full" || a.auto_trading === "semi"))
+          || accts.find(a => a.active)
+          || accts[0]
+          || null;
+  if (!acct) {
+    showToast("No account", "Configure an account on the Connections tab first.", "warning");
+    return;
+  }
+  const instr = (acct.instruments || []).join("+") || "ALL";
+  launchSession(acct.profile_id, acct.firm, instr, "signal");
+};
+
+// Hold-to-confirm GO LIVE — pointer-based so it works on mouse AND touch.
+// 2-second hold fills the conic ring; release before fill = cancel.
+window.attachHoldToFireLive = function(button, ring, wrap, acct) {
+  const HOLD_MS = 2000;
+  let startTs = 0, raf = 0, fired = false;
+  function tick(now) {
+    if (!startTs) return;
+    const p = Math.min(100, ((now - startTs) / HOLD_MS) * 100);
+    ring.style.setProperty("--p", p);
+    if (p >= 100 && !fired) {
+      fired = true;
+      cancel();
+      const instr = (acct.instruments || []).join("+") || "ALL";
+      launchSession(acct.profile_id, acct.firm, instr, "live", {skipConfirm: true});
+      return;
+    }
+    raf = requestAnimationFrame(tick);
+  }
+  function start(e) {
+    if (button.disabled) return;
+    e.preventDefault();
+    fired = false;
+    startTs = performance.now();
+    wrap.classList.add("holding");
+    raf = requestAnimationFrame(tick);
+  }
+  function cancel() {
+    startTs = 0;
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+    wrap.classList.remove("holding");
+    ring.style.setProperty("--p", 0);
+  }
+  button.addEventListener("pointerdown", start);
+  button.addEventListener("pointerup", () => { if (!fired) cancel(); });
+  button.addEventListener("pointerleave", () => { if (!fired) cancel(); });
+  button.addEventListener("pointercancel", cancel);
+};
+
 $("btn-refresh").addEventListener("click", async () => {
   showToast("Refresh", "Starting data refresh...", "busy", {id: "refresh"});
   setBusy("btn-refresh", "Refreshing...");
@@ -5022,18 +5120,35 @@ const ChartCockpit = (() => {
     series.setData(agg.map(b => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close })));
   }
 
-  function _showFallback(msg) {
+  function _showFallback(msg, opts) {
     const host = document.getElementById(FALLBACK_PARENT);
     if (!host) return;
     host.classList.add("fallback-active");
-    const fallback = document.getElementById("chart-cockpit-fallback");
-    if (fallback && msg) fallback.textContent = msg;
+    const titleEl = document.getElementById("chart-fb-title");
+    const detailEl = document.getElementById("chart-fb-detail");
+    const btn = document.getElementById("chart-fb-start");
+    const o = opts || {};
+    if (titleEl) titleEl.textContent = o.title || "NO LIVE FEED";
+    if (detailEl) detailEl.textContent = msg || "No recent bars. Start the feed to begin streaming candles.";
+    if (btn) {
+      // Disable START FEED only when the failure is non-recoverable by starting a session
+      // (e.g. Lightweight Charts CDN failed to load). For data-empty cases, leave it active.
+      const recoverable = o.recoverable !== false;
+      btn.disabled = !recoverable;
+      btn.onclick = recoverable ? () => {
+        if (typeof window.startSignalForSelected === "function") {
+          window.startSignalForSelected();
+        } else {
+          showToast && showToast("Start feed", "Open the dashboard tab and pick an account first.", "warning");
+        }
+      } : null;
+    }
   }
 
   function init() {
     if (initialized) return true;
     if (typeof window.LightweightCharts === "undefined") {
-      _showFallback("Chart unavailable — Lightweight Charts failed to load (CDN unreachable or SRI mismatch). Dashboard continues via /api/* endpoints.");
+      _showFallback("Chart library failed to load (CDN unreachable). Restart the dashboard or check internet.", {title: "CHART UNAVAILABLE", recoverable: false});
       return false;
     }
     const host = document.getElementById(HOST_ID);
@@ -5110,16 +5225,19 @@ const ChartCockpit = (() => {
         }
       } catch (e) {
         console.error("ChartCockpit.loadInitial failed (window=" + win + ")", e);
-        _showFallback("Chart data unavailable: " + (e.message || "fetch failed"));
+        _showFallback("Could not reach bars API: " + (e.message || "fetch failed"), {title: "API ERROR", recoverable: false});
         return;
       }
     }
     if (!loaded) {
-      _showFallback(
-        "No recent bars for " + instrument + ".\n" +
-        "Last 24h is empty — start a Signal session or run Refresh to backfill.\n" +
-        (lastResp && lastResp.warning ? "Server: " + lastResp.warning : "")
-      );
+      // Compute a friendly bar-age line if we got bars in some prior fetch.
+      let ageLine = "No bars in the last 24h.";
+      if (lastResp && Array.isArray(lastResp.bars) && lastResp.bars.length) {
+        const ageMin = Math.round((Date.now() / 1000 - lastResp.bars[lastResp.bars.length - 1].time) / 60);
+        const ageStr = ageMin >= 60 ? (Math.round(ageMin / 60) + "h") : (ageMin + "m");
+        ageLine = "Last bar " + ageStr + " ago — feed is stopped.";
+      }
+      _showFallback(ageLine + " Press START FEED to begin streaming " + instrument + ".");
     }
   }
 

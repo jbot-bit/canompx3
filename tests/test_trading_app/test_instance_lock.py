@@ -6,9 +6,9 @@ from unittest.mock import patch
 import pytest
 
 from trading_app.live.instance_lock import (
-    is_pid_alive,
     _lock_file_for,
     acquire_instance_lock,
+    is_pid_alive,
     release_instance_lock,
 )
 

@@ -8,13 +8,13 @@ from pathlib import Path
 import yaml
 
 from scripts.tools.fast_lane_status import (
+    _NEXT_ACTION_BY_STAGE,
+    _NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE,
     SCHEMA_VERSION,
     STAGE_PRECEDENCE,
     StatusEntry,
     _classify_stage,
     _next_action_for,
-    _NEXT_ACTION_BY_STAGE,
-    _NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE,
     build_status_entries,
     collect_active_preregs,
     collect_drafts,
@@ -128,6 +128,12 @@ def test_stage_precedence_includes_all_terminal_and_pipeline_stages() -> None:
         "REVOKED",
         "PARKED",
         "REJECTED_OOS_UNPOWERED",
+        "SUPPRESSED_GRAVEYARD",
+        "SUPPRESSED_DUPLICATE_ACTIVE",
+        "SUPPRESSED_SIBLING_RETEST",
+        "SUPPRESSED_BANNED_ENTRY_MODEL",
+        "SUPPRESSED_E2_LOOKAHEAD",
+        "SUPPRESSED_K_OVERRUN",
         "ERROR",
     }
 
@@ -181,6 +187,31 @@ def test_build_status_entries_idempotent_on_fixed_inputs(tmp_path: Path) -> None
     assert [e.current_stage for e in first] == [e.current_stage for e in second]
 
 
+def test_build_status_entries_active_fast_lane_prereg_has_fast_lane_lineage(tmp_path: Path) -> None:
+    paths = _fake_chain(tmp_path)
+    _write_yaml(
+        paths["hyp"] / "2026-05-18-mnq-example-fast-lane-v1.yaml",
+        {
+            "metadata": {"template_version": "fast_lane_v5.1"},
+            "scope": {"strategy_id": "MNQ_ACTIVE_FAST_LANE"},
+        },
+    )
+
+    entries = build_status_entries(
+        hypotheses_dir=paths["hyp"],
+        drafts_dir=paths["drafts"],
+        results_dir=paths["results"],
+        runtime_dir=paths["runtime"],
+        queue_cache=paths["runtime"] / "promote_queue.yaml",
+        journal_path=paths["runtime"] / "cherry_pick_journal.yaml",
+        today=date(2026, 5, 22),
+    )
+
+    assert len(entries) == 1
+    assert entries[0].current_stage == "ACTIVE_PREREG"
+    assert entries[0].lineage_class == "FAST_LANE"
+
+
 def test_build_status_entries_live_repo_smoke() -> None:
     """Stage acceptance criterion #4: the writer runs end-to-end on live repo."""
     entries = build_status_entries()
@@ -202,7 +233,7 @@ def test_build_status_entries_live_repo_smoke() -> None:
 # enricher is structurally update-only — it cannot create entries. Emitting
 # `run_cherry_pick_journal_enricher` for such entries silently no-ops on every
 # walk. The lineage-qualified action token routes the operator to the
-# heavyweight result MD (deployment decision) instead.
+# heavyweight result MD (capital review) instead.
 
 
 def test_next_action_heavyweight_complete_with_journal_lineage_uses_enricher() -> None:
@@ -217,11 +248,11 @@ def test_next_action_heavyweight_complete_with_journal_lineage_uses_enricher() -
     assert _NEXT_ACTION_BY_STAGE["HEAVYWEIGHT_COMPLETE"] == "run_cherry_pick_journal_enricher"
 
 
-def test_next_action_heavyweight_complete_without_journal_lineage_uses_deployment() -> None:
-    """No journal entry → no fast-lane lineage → operator deployment decision, not enricher."""
+def test_next_action_heavyweight_complete_without_journal_lineage_uses_capital_review() -> None:
+    """No journal entry → no fast-lane lineage → operator capital review, not enricher."""
     action = _next_action_for("HEAVYWEIGHT_COMPLETE", journal_entry=None)
     assert action == _NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE
-    assert action == "operator_deployment_decision"
+    assert action == "operator_capital_review"
     # Critical: never silently route to a stage script that will no-op.
     assert action != "run_cherry_pick_journal_enricher"
 
@@ -242,8 +273,8 @@ def test_next_action_for_unknown_stage_falls_back_to_error_token() -> None:
     assert action == "operator_resolve_error"
 
 
-def test_build_status_entries_pre_ranker_heavyweight_gets_deployment_action(tmp_path: Path) -> None:
-    """Integration: a heavyweight result MD with no journal entry routes to deployment, not enricher.
+def test_build_status_entries_pre_ranker_heavyweight_gets_capital_review_action(tmp_path: Path) -> None:
+    """Integration: a heavyweight result MD with no journal entry routes to capital review, not enricher.
 
     Mirrors the live-repo case for the 38 entries fixed by this stage.
     """
@@ -269,7 +300,10 @@ def test_build_status_entries_pre_ranker_heavyweight_gets_deployment_action(tmp_
     e = entries[0]
     assert e.strategy_id == "MNQ_FAKE_PRE_RANKER"
     assert e.current_stage == "HEAVYWEIGHT_COMPLETE"
-    assert e.next_action_token == "operator_deployment_decision"
+    assert e.next_action_token == "operator_capital_review"
+    assert e.lineage_class == "DIRECT_HEAVYWEIGHT"
+    assert e.blocker_class == "NONE"
+    assert e.primary_blocker is None
 
 
 def test_build_status_entries_post_ranker_heavyweight_gets_enricher_action(tmp_path: Path) -> None:
@@ -313,3 +347,93 @@ def test_build_status_entries_post_ranker_heavyweight_gets_enricher_action(tmp_p
     assert e.strategy_id == "MNQ_REAL_POST_RANKER"
     assert e.current_stage == "HEAVYWEIGHT_COMPLETE"
     assert e.next_action_token == "run_cherry_pick_journal_enricher"
+    assert e.lineage_class == "FAST_LANE"
+
+
+def test_build_status_entries_suppressed_queue_status_is_exact_terminal_stage(tmp_path: Path) -> None:
+    """A SUPPRESSED_* promote row must not collapse into generic FAST_LANE_RUN."""
+    paths = _fake_chain(tmp_path)
+    queue = paths["runtime"] / "promote_queue.yaml"
+    _write_yaml(
+        queue,
+        {
+            "schema_version": 1,
+            "entries": [
+                {
+                    "strategy_id": "MNQ_SUPPRESSED_E2",
+                    "status": "SUPPRESSED_E2_LOOKAHEAD",
+                    "result_md": "docs/audit/results/suppressed-fast-lane.md",
+                    "error_reason": "entry_model=E2 with lookahead filter",
+                    "structural_hash": "abc123def4567890",
+                    "k_lineage": {
+                        "K_global": 0,
+                        "K_family": 0,
+                        "K_lane": 0,
+                        "K_declared_in_prereg": 1,
+                    },
+                    "n_hat": 50,
+                }
+            ],
+        },
+    )
+
+    entries = build_status_entries(
+        hypotheses_dir=paths["hyp"],
+        drafts_dir=paths["drafts"],
+        results_dir=paths["results"],
+        runtime_dir=paths["runtime"],
+        queue_cache=queue,
+        journal_path=paths["runtime"] / "cherry_pick_journal.yaml",
+        today=date(2026, 5, 22),
+    )
+
+    assert len(entries) == 1
+    e = entries[0]
+    assert e.current_stage == "SUPPRESSED_E2_LOOKAHEAD"
+    assert e.next_action_token == "operator_review_suppression_reason"
+    assert e.lineage_class == "FAST_LANE"
+    assert e.blocker_class == "PROVENANCE_SUPPRESSED"
+    assert e.primary_blocker == "suppressed_e2_lookahead"
+    assert e.blocker_evidence["promote_queue_status"] == "SUPPRESSED_E2_LOOKAHEAD"
+    assert e.blocker_evidence["error_reason"] == "entry_model=E2 with lookahead filter"
+    assert e.blocker_evidence["structural_hash"] == "abc123def4567890"
+    assert e.blocker_evidence["k_lineage"]["K_lane"] == 0
+
+
+def test_build_status_entries_underpowered_oos_carries_power_evidence(tmp_path: Path) -> None:
+    """RULE 3.3 blocker must remain visible as underpowered/inconclusive evidence."""
+    paths = _fake_chain(tmp_path)
+    queue = paths["runtime"] / "promote_queue.yaml"
+    _write_yaml(
+        queue,
+        {
+            "schema_version": 1,
+            "entries": [
+                {
+                    "strategy_id": "MNQ_UNPOWERED",
+                    "status": "REJECTED_OOS_UNPOWERED",
+                    "result_md": "docs/audit/results/unpowered-fast-lane.md",
+                    "error_reason": "expected_power=0.247 < floor=0.50",
+                    "structural_hash": "fedcba9876543210",
+                    "k_lineage": {"K_lane": 0, "K_declared_in_prereg": 1},
+                    "n_hat": 226,
+                }
+            ],
+        },
+    )
+
+    entries = build_status_entries(
+        hypotheses_dir=paths["hyp"],
+        drafts_dir=paths["drafts"],
+        results_dir=paths["results"],
+        runtime_dir=paths["runtime"],
+        queue_cache=queue,
+        journal_path=paths["runtime"] / "cherry_pick_journal.yaml",
+        today=date(2026, 5, 22),
+    )
+
+    e = entries[0]
+    assert e.current_stage == "REJECTED_OOS_UNPOWERED"
+    assert e.blocker_class == "UNDERPOWERED_OOS"
+    assert e.primary_blocker == "oos_power_below_floor"
+    assert e.blocker_evidence["error_reason"] == "expected_power=0.247 < floor=0.50"

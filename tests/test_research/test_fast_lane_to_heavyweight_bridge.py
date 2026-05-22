@@ -8,15 +8,51 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from scripts.research import fast_lane_to_heavyweight_bridge as bridge
+
+DEFAULT_STRATEGY_ID = "MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30"
+
+
+@pytest.fixture(autouse=True)
+def _queued_bridge_cache(tmp_path, monkeypatch):
+    """Most bridge unit tests exercise draft construction, not queue scanning."""
+    queue = tmp_path / "promote_queue.yaml"
+    queue.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "entries": [
+                    {
+                        "strategy_id": DEFAULT_STRATEGY_ID,
+                        "status": "QUEUED",
+                        "structural_hash": "abc123def4567890",
+                        "k_lineage": {
+                            "K_lane": 0,
+                            "K_family": 0,
+                            "K_global": 0,
+                            "K_declared_in_prereg": 1,
+                        },
+                        "n_hat": 226,
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    digest = tmp_path / "fast_lane_graveyard_digest.yaml"
+    digest.write_text("schema_version: 1\ndo_not_hand_edit: true\nentries: []\n", encoding="utf-8")
+    monkeypatch.setattr(bridge, "PROMOTE_QUEUE_CACHE", queue)
+    monkeypatch.setattr(bridge, "GRAVEYARD_DIGEST_PATH", digest)
 
 
 def _write_fast_lane_pair(
     tmp_path: Path,
     *,
-    strategy_id: str = "MNQ_US_DATA_1000_E1_RR1.0_CB2_PD_CLEAR_LONG_O30",
+    strategy_id: str = DEFAULT_STRATEGY_ID,
     stem: str = "2026-05-18-mnq-usdata1000-e1-rr10-pd-clear-long-o30-fast-lane-v1",
 ) -> tuple[Path, Path, Path]:
     """Create a tmp_path/(results|hypotheses) pair and a matched MD+YAML."""

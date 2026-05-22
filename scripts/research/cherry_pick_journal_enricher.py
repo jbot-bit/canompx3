@@ -38,7 +38,6 @@ from typing import Any
 
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "docs" / "audit" / "results"
 JOURNAL_PATH = REPO_ROOT / "docs" / "runtime" / "cherry_pick_journal.yaml"

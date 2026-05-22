@@ -4,7 +4,7 @@ Four mutation probes that flip a single invariant -- module schema-version,
 module input-field list, hash output length, hash determinism -- and assert
 the parity check returns a violation that names the broken constant.
 
-Per Stage 2A design doc acceptance criteria § Tests (Stage 2A.1 split
+Per Stage 2A design acceptance criteria § Tests (Stage 2A.1 split
 renumbered #168 -> #167):
 
   1. drop a hash-input field in code             -> module-side drift catch
@@ -19,7 +19,7 @@ the standard fail-closed surface every parity check exposes (mirrors
 Class anchor: [[canonical-inline-copy-parity-bug-class]] (7th confirmed
 instance, 2026-05-20).
 
-Design grounding: ``docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md``.
+Canonical grounding: ``docs/specs/fast_lane_state_graph.md`` § 9 Hash Schema.
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ import pytest
 
 from pipeline.check_drift import check_fast_lane_structural_hash_schema_parity
 from scripts.research import fast_lane_structural_hash as flsh
-
 
 # ----------------------------------------------------------------------
 # Clean-state baseline

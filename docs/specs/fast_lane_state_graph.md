@@ -83,11 +83,11 @@ nodes:
   - id: fast_lane_status_rollup
     path: docs/runtime/fast_lane_status.yaml
     writer: scripts/tools/fast_lane_status.py
-    schema_version: 1
+    schema_version: 2
     description: |
       Per-strategy_id status roll-up: current_stage, age_days, next_action_token,
-      upstream_artifact_path, downstream_artifact_path. Rebuilt on every
-      orchestrator run.
+      lineage_class, blocker_class, primary_blocker, blocker_evidence, and
+      artifact provenance. Rebuilt on every orchestrator run.
     parity_drift_check: check_fast_lane_status_rollup_reconstruction_parity
 
   - id: fast_lane_age_staleness
@@ -160,7 +160,7 @@ edges:
 ### 4.1 `promote_queue.yaml`
 
 Top-level keys: `schema_version: 1`, `generated_at`, `entries[]`.
-Entry fields: `strategy_id`, `status` (QUEUED | REVOKED | ERROR | PARKED), `pooled_t`, `pooled_n`, `oos_n`, `oos_power_tier`, `dir_match`, `pooling_artifact`, `result_md_path`, `revocation_md_path`.
+Entry fields: `strategy_id`, `status` (QUEUED | ESCALATED | REVOKED | PARKED | REJECTED_OOS_UNPOWERED | ERROR | the six `SUPPRESSED_*` statuses from §10), `pooled_t`, `pooled_n`, `oos_n`, `oos_power_tier`, `dir_match`, `pooling_artifact`, `result_md_path`, `revocation_md_path`, `structural_hash`, `k_lineage`, `n_hat`.
 Hand-edit detection: `check_fast_lane_promote_orphans` (Check #157) reconstructs independently and diffs.
 
 ### 4.2 `cherry_pick_journal.yaml`
@@ -181,26 +181,32 @@ Directory of `*.draft.yaml`, `*.grounded.yaml`, and `*.rejected.txt`. Loader ski
 
 ## 5. Reserved Schemas (proposed, not yet enforced)
 
-### 5.1 `fast_lane_status.yaml` — Stage 2 (SHIPPED 2026-05-19)
+### 5.1 `fast_lane_status.yaml` — Stage 2 / V2 report contract (SHIPPED 2026-05-19; amended 2026-05-22)
 
-Top-level keys: `schema_version: 1`, `generated_at`, `do_not_hand_edit: true`, `source`, `warning`, `entries[]`.
-Entry fields: `strategy_id`, `current_stage` (one of: ACTIVE_PREREG, FAST_LANE_RUN, PROMOTE_QUEUED, RANKED, BRIDGED, GROUNDED, HEAVYWEIGHT_PENDING, HEAVYWEIGHT_COMPLETE, ENRICHED, plus terminal stages REVOKED, PARKED, REJECTED_OOS_UNPOWERED, ERROR), `age_days`, `next_action_token`, `upstream_artifact_path`, `downstream_artifact_path`, `observed_at` (per-source provenance dict).
+Top-level keys: `schema_version: 2`, `generated_at`, `do_not_hand_edit: true`, `source`, `warning`, `entries[]`.
+Entry fields: `strategy_id`, `current_stage` (one of: ACTIVE_PREREG, FAST_LANE_RUN, PROMOTE_QUEUED, RANKED, BRIDGED, GROUNDED, HEAVYWEIGHT_PENDING, HEAVYWEIGHT_COMPLETE, ENRICHED, plus terminal stages REVOKED, PARKED, REJECTED_OOS_UNPOWERED, the six `SUPPRESSED_*` statuses from §10, ERROR), `age_days`, `next_action_token`, `upstream_artifact_path`, `downstream_artifact_path`, `observed_at` (per-source provenance dict), `lineage_class`, `blocker_class`, `primary_blocker`, `blocker_evidence`.
 
-Drift-checked by `check_fast_lane_status_rollup_reconstruction_parity` (Check #168) — three failure classes: hand-edit drift, tampered banner (`schema_version` / `do_not_hand_edit` / `source`), and capital-class write attempt (greppable static check on writer source).
+`lineage_class` is one of `FAST_LANE`, `DIRECT_HEAVYWEIGHT`, or `UNKNOWN`. Direct heavyweight rows are visible backlog, but they are not selected as Fast Lane next actions.
+
+`blocker_class` is one of `NONE`, `UNDERPOWERED_OOS`, `INVALID_ARTIFACT`, `PROVENANCE_SUPPRESSED`, `PARKED`, or `ERROR`. `primary_blocker` is a stable token such as `oos_power_below_floor`, `pooling_artifact_revoked`, or the lowercase suppression token. `blocker_evidence` carries compact source evidence from `promote_queue.yaml` including status, error reason, structural hash, K lineage, result path, revocation sidecar, or park entry when present.
+
+Drift-checked by `check_fast_lane_status_rollup_reconstruction_parity` (Check #168) — three failure classes: hand-edit drift, tampered banner (`schema_version` / `do_not_hand_edit` / `source`), and capital-class write attempt (greppable static check on writer source). The check imports `scripts.tools.fast_lane_status.SCHEMA_VERSION` rather than freezing the schema integer inline.
 
 **`next_action_token` for HEAVYWEIGHT_COMPLETE is lineage-qualified** (amended 2026-05-20):
 
 - HEAVYWEIGHT_COMPLETE WITH `observed_at.journal_iter` populated (fast-lane lineage present — the ranker scored the strategy and wrote a journal row before the heavyweight ran) → `run_cherry_pick_journal_enricher`. The enricher backfills `heavyweight_verdict + t_observed_post_clustered_se + lesson_label` on the existing journal row.
-- HEAVYWEIGHT_COMPLETE WITHOUT a journal entry (no fast-lane lineage — heavyweight Chordia prereg authored directly, predating the 2026-05-19 cherry-pick loop) → `operator_deployment_decision`. The enricher is structurally update-only and cannot create journal rows; the heavyweight result MD already carries the operator-actionable verdict.
+- HEAVYWEIGHT_COMPLETE WITHOUT a journal entry (no fast-lane lineage — heavyweight Chordia prereg authored directly, predating the 2026-05-19 cherry-pick loop) → `operator_capital_review`. The enricher is structurally update-only and cannot create journal rows; the heavyweight result MD already carries the operator-actionable research verdict.
+
+Phase 5 review output is report-only and must carry `REPORT_ONLY_NOT_DEPLOYMENT_AUTHORITY`; the highest Fast Lane recommendation is `ESCALATE_CAPITAL_REVIEW`, which opens a separate human review packet rather than authorizing runtime or allocator mutation.
 
 This qualifier is enforced by `scripts/tools/fast_lane_status._next_action_for()` and its companion tests in `tests/test_tools/test_fast_lane_status.py`. Without it, the rollup emits a stage script as the next action when running that script would silently no-op — a fail-quiet misclassification of 38 entries was caught and fixed 2026-05-20.
 
-### 5.2 `fast_lane_age_staleness.yaml` — Stage 3 deliverable (PROPOSED)
+### 5.2 `fast_lane_age_staleness.yaml` — Stage 3 deliverable (DEFERRED)
 
 Top-level keys: `schema_version: 1`, `generated_at`, `entries[]`.
 Entry fields: `strategy_id`, `age_at_queued_days`, `age_at_ranked_days`, `age_at_bridged_days`, `age_at_grounded_days`, `age_at_enriched_days` (each null if stage not reached).
 
-NOT yet drift-checked. Will be enforced when Stage 3 lands.
+NOT yet drift-checked. Deferred on 2026-05-22 because the schema-v2 roll-up and `fast_lane_walk.py` report now expose blocker evidence, lineage separation, and next-action routing directly. Do not add this artifact until there is a distinct operator consumer.
 
 ---
 
@@ -265,9 +271,9 @@ Six values added to `fast_lane_promote_queue.STATUS_VALUES`. Existing values (`Q
 |---|---|---|
 | `SUPPRESSED_GRAVEYARD` | `structural_hash` matches an entry in `fast_lane_graveyard_digest.yaml` | refuse |
 | `SUPPRESSED_DUPLICATE_ACTIVE` | `structural_hash` matches an existing prereg under `docs/audit/hypotheses/` (NOT `drafts/`) that has not yet produced a result MD with the same hash | refuse |
-| `SUPPRESSED_SIBLING_RETEST` | `K_lane >= 2` (ledger contains >=2 entries sharing this structural_hash) | refuse |
+| `SUPPRESSED_SIBLING_RETEST` | `K_declared_in_prereg <= 1` AND `K_lane >= 2` (legacy K=1 lane has repeated prior trials sharing this structural_hash) | refuse |
 | `SUPPRESSED_BANNED_ENTRY_MODEL` | `entry_model in {E0, E3}` | refuse |
 | `SUPPRESSED_E2_LOOKAHEAD` | `entry_model == E2` AND `filter_type` matches `E2_EXCLUDED_FILTER_PREFIXES` / `E2_EXCLUDED_FILTER_SUBSTRINGS` (canonical from `trading_app.config`) | refuse |
-| `SUPPRESSED_K_OVERRUN` | `N_hat >= K_declared_in_prereg * 2` (effective-N exceeds budget per Bailey-Lopez de Prado 2014 Eq. 9) | refuse |
+| `SUPPRESSED_K_OVERRUN` | `K_lane > K_declared_in_prereg` (observed trial count exceeds the preregistered lane-level trial budget; `N_hat` remains sample adequacy/DSR input, not the K-budget comparator) | refuse |
 
 OOS-power gate (Check #161) stays unchanged and remains upstream of these suppression statuses on the verdict-priority order. If a result MD already carries `REJECTED_OOS_UNPOWERED`, that wins; suppression statuses below only fire on results that would otherwise reach `QUEUED`.

@@ -17,7 +17,6 @@ from pathlib import Path
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNNER_PATH = REPO_ROOT / "research" / "2026-04-29-parked-pathway-b-additivity-audit.py"
 
