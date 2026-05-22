@@ -484,6 +484,53 @@ class TestBuildAllocation:
         assert incumbent_o5.strategy_id in selected_ids
         assert challenger_o15.strategy_id in selected_ids
 
+    def test_hysteresis_demoted_prior_falls_through(self):
+        """Hysteresis must not silently drop lane when best_prior was demoted.
+
+        Regression: pre-fix, when best_prior.status == 'PAUSE' the code hit
+        `if best_prior.status in (DEPLOY/RESUME/PROVISIONAL)` → False, then
+        fell to `continue` at the end of the `if improvement < HYSTERESIS_PCT:`
+        block, silently skipping `selected.append(lane)`. The deployable
+        candidate was neither selected nor recorded as displaced — the slot
+        was silently lost. Fix: remove the bare `continue`; only `continue`
+        when best_prior is itself deployable (integrity-guardian.md § 6).
+        """
+        # Prior lane was demoted (e.g. by Chordia/C8 gate after last rebalance)
+        prior = _make_score(
+            strategy_id="MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER",
+            orb_label="COMEX_SETTLE",
+            annual_r_estimate=30.0,
+            status="PAUSE",  # demoted — should not be re-selected
+            status_reason="chordia gate: missing strict replay audit verdict",
+        )
+        # New candidate: 10% better (below 20% hysteresis threshold)
+        challenger = _make_score(
+            strategy_id="MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G6",
+            orb_label="COMEX_SETTLE",
+            filter_type="ORB_G6",
+            rr_target=1.5,
+            annual_r_estimate=33.0,  # 10% better — hysteresis fires
+            status="DEPLOY",
+        )
+        displaced: list = []
+        result = build_allocation(
+            [prior, challenger],
+            max_slots=5,
+            max_dd=100000.0,
+            prior_allocation=[prior.strategy_id],
+            displaced_out=displaced,
+        )
+        selected_ids = {s.strategy_id for s in result}
+        # Challenger must be selected — prior is demoted, so hysteresis must
+        # not protect it at the expense of a deployable candidate.
+        assert challenger.strategy_id in selected_ids, (
+            f"Deployable challenger should be selected when prior is PAUSE; got {selected_ids}"
+        )
+        # Demoted prior must NOT appear in result
+        assert prior.strategy_id not in selected_ids, (
+            f"Demoted prior should not be re-added to allocation; got {selected_ids}"
+        )
+
     def test_annual_r_ranking(self):
         """Test 9: High-N medium-ExpR beats low-N high-ExpR via annual_r."""
         # Strategy A: lots of trades, moderate ExpR → high annual R

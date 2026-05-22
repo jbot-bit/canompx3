@@ -1136,7 +1136,10 @@ def build_allocation(
                         if best_prior.status in ("DEPLOY", "RESUME", "PROVISIONAL"):
                             selected.append(best_prior)
                             dd_used += lane_dd
-                        continue
+                            continue
+                        # best_prior was demoted by an upstream gate (Chordia/C8).
+                        # Hysteresis must not silently drop the deployable candidate —
+                        # fall through to select `lane` below (integrity-guardian § 6).
 
         selected.append(lane)
         dd_used += lane_dd
