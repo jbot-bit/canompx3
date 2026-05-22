@@ -41,6 +41,7 @@ dev = [
     "pytest>=8.3.4",
     "pytest-asyncio>=0.25.0",
     "pytest-cov>=6.1.1",
+    "pytest-timeout>=2.3.1",
     "httpx>=0.27.0",
     "ruff>=0.15.0",
     "pyright>=1.1.400",
@@ -58,6 +59,21 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
 norecursedirs = ["local_db", ".venv", "DB", "*.egg-info"]
+# pytest-timeout: convert silent SIGINT / hangs on GH-hosted Windows runners
+# into a per-test stack trace at the hang site. `thread` method is the
+# Windows-compatible choice (SIGALRM is POSIX-only); on hit, the watchdog
+# thread dumps all thread stacks then `os._exit(1)`.
+#
+# 120s default: chosen empirically to accommodate the slowest legitimate
+# test on Windows under coverage instrumentation (`test_integration_l1_l2.py`
+# multi-instrument fixtures run L1+L2 pipeline twice ≈ 60-110s on
+# GH-hosted runners). Sub-60s tests still benefit from the watchdog —
+# any genuine hang produces a stack trace at 120s instead of silent SIGINT.
+# Individual fast tests can override via `@pytest.mark.timeout(N)` if
+# tighter bounds are desired.
+# Reference: https://pypi.org/project/pytest-timeout/
+timeout = 120
+timeout_method = "thread"
 
 [dependency-groups]
 dev = [
