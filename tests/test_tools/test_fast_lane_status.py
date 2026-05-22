@@ -128,6 +128,12 @@ def test_stage_precedence_includes_all_terminal_and_pipeline_stages() -> None:
         "REVOKED",
         "PARKED",
         "REJECTED_OOS_UNPOWERED",
+        "SUPPRESSED_GRAVEYARD",
+        "SUPPRESSED_DUPLICATE_ACTIVE",
+        "SUPPRESSED_SIBLING_RETEST",
+        "SUPPRESSED_BANNED_ENTRY_MODEL",
+        "SUPPRESSED_E2_LOOKAHEAD",
+        "SUPPRESSED_K_OVERRUN",
         "ERROR",
     }
 
@@ -270,6 +276,9 @@ def test_build_status_entries_pre_ranker_heavyweight_gets_deployment_action(tmp_
     assert e.strategy_id == "MNQ_FAKE_PRE_RANKER"
     assert e.current_stage == "HEAVYWEIGHT_COMPLETE"
     assert e.next_action_token == "operator_deployment_decision"
+    assert e.lineage_class == "DIRECT_HEAVYWEIGHT"
+    assert e.blocker_class == "NONE"
+    assert e.primary_blocker is None
 
 
 def test_build_status_entries_post_ranker_heavyweight_gets_enricher_action(tmp_path: Path) -> None:
@@ -313,3 +322,93 @@ def test_build_status_entries_post_ranker_heavyweight_gets_enricher_action(tmp_p
     assert e.strategy_id == "MNQ_REAL_POST_RANKER"
     assert e.current_stage == "HEAVYWEIGHT_COMPLETE"
     assert e.next_action_token == "run_cherry_pick_journal_enricher"
+    assert e.lineage_class == "FAST_LANE"
+
+
+def test_build_status_entries_suppressed_queue_status_is_exact_terminal_stage(tmp_path: Path) -> None:
+    """A SUPPRESSED_* promote row must not collapse into generic FAST_LANE_RUN."""
+    paths = _fake_chain(tmp_path)
+    queue = paths["runtime"] / "promote_queue.yaml"
+    _write_yaml(
+        queue,
+        {
+            "schema_version": 1,
+            "entries": [
+                {
+                    "strategy_id": "MNQ_SUPPRESSED_E2",
+                    "status": "SUPPRESSED_E2_LOOKAHEAD",
+                    "result_md": "docs/audit/results/suppressed-fast-lane.md",
+                    "error_reason": "entry_model=E2 with lookahead filter",
+                    "structural_hash": "abc123def4567890",
+                    "k_lineage": {
+                        "K_global": 0,
+                        "K_family": 0,
+                        "K_lane": 0,
+                        "K_declared_in_prereg": 1,
+                    },
+                    "n_hat": 50,
+                }
+            ],
+        },
+    )
+
+    entries = build_status_entries(
+        hypotheses_dir=paths["hyp"],
+        drafts_dir=paths["drafts"],
+        results_dir=paths["results"],
+        runtime_dir=paths["runtime"],
+        queue_cache=queue,
+        journal_path=paths["runtime"] / "cherry_pick_journal.yaml",
+        today=date(2026, 5, 22),
+    )
+
+    assert len(entries) == 1
+    e = entries[0]
+    assert e.current_stage == "SUPPRESSED_E2_LOOKAHEAD"
+    assert e.next_action_token == "operator_review_suppression_reason"
+    assert e.lineage_class == "FAST_LANE"
+    assert e.blocker_class == "PROVENANCE_SUPPRESSED"
+    assert e.primary_blocker == "suppressed_e2_lookahead"
+    assert e.blocker_evidence["promote_queue_status"] == "SUPPRESSED_E2_LOOKAHEAD"
+    assert e.blocker_evidence["error_reason"] == "entry_model=E2 with lookahead filter"
+    assert e.blocker_evidence["structural_hash"] == "abc123def4567890"
+    assert e.blocker_evidence["k_lineage"]["K_lane"] == 0
+
+
+def test_build_status_entries_underpowered_oos_carries_power_evidence(tmp_path: Path) -> None:
+    """RULE 3.3 blocker must remain visible as underpowered/inconclusive evidence."""
+    paths = _fake_chain(tmp_path)
+    queue = paths["runtime"] / "promote_queue.yaml"
+    _write_yaml(
+        queue,
+        {
+            "schema_version": 1,
+            "entries": [
+                {
+                    "strategy_id": "MNQ_UNPOWERED",
+                    "status": "REJECTED_OOS_UNPOWERED",
+                    "result_md": "docs/audit/results/unpowered-fast-lane.md",
+                    "error_reason": "expected_power=0.247 < floor=0.50",
+                    "structural_hash": "fedcba9876543210",
+                    "k_lineage": {"K_lane": 0, "K_declared_in_prereg": 1},
+                    "n_hat": 226,
+                }
+            ],
+        },
+    )
+
+    entries = build_status_entries(
+        hypotheses_dir=paths["hyp"],
+        drafts_dir=paths["drafts"],
+        results_dir=paths["results"],
+        runtime_dir=paths["runtime"],
+        queue_cache=queue,
+        journal_path=paths["runtime"] / "cherry_pick_journal.yaml",
+        today=date(2026, 5, 22),
+    )
+
+    e = entries[0]
+    assert e.current_stage == "REJECTED_OOS_UNPOWERED"
+    assert e.blocker_class == "UNDERPOWERED_OOS"
+    assert e.primary_blocker == "oos_power_below_floor"
+    assert e.blocker_evidence["error_reason"] == "expected_power=0.247 < floor=0.50"

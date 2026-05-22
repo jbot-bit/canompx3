@@ -31,6 +31,10 @@ def _entry(sid: str, stage: str, age: int = 0, action: str = "noop") -> dict[str
         "current_stage": stage,
         "age_days": age,
         "next_action_token": action,
+        "lineage_class": "FAST_LANE",
+        "blocker_class": "NONE",
+        "primary_blocker": None,
+        "blocker_evidence": {},
         "upstream_artifact_path": None,
         "downstream_artifact_path": None,
         "observed_at": {},
@@ -109,6 +113,40 @@ def test_next_operator_action_returns_none_when_only_terminal() -> None:
     assert _next_operator_action(entries) is None
 
 
+def test_next_operator_action_error_outranks_direct_heavyweight_backlog() -> None:
+    entries = [
+        {
+            **_entry("OLD_DIRECT", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_deployment_decision"),
+            "lineage_class": "DIRECT_HEAVYWEIGHT",
+        },
+        {
+            **_entry("FAST_LANE_ERROR", "ERROR", age=1, action="operator_resolve_error"),
+            "blocker_class": "ERROR",
+            "primary_blocker": "state_error",
+        },
+    ]
+    nxt = _next_operator_action(entries)
+    assert nxt is not None
+    assert nxt["strategy_id"] == "FAST_LANE_ERROR"
+
+
+def test_next_operator_action_ignores_direct_heavyweight_backlog() -> None:
+    entries = [
+        {
+            **_entry("OLD_DIRECT", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_deployment_decision"),
+            "lineage_class": "DIRECT_HEAVYWEIGHT",
+        }
+    ]
+    assert _next_operator_action(entries) is None
+
+
+def test_next_operator_action_ignores_deployment_decision_heavyweight_complete() -> None:
+    entries = [
+        _entry("FAST_LANE_DONE", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_deployment_decision")
+    ]
+    assert _next_operator_action(entries) is None
+
+
 # ----------------------------------------------------------------------
 # render_report
 # ----------------------------------------------------------------------
@@ -152,7 +190,25 @@ def test_render_report_zero_actionable_says_so() -> None:
     rollup = {"entries": [_entry("A", "REVOKED")]}
     chain_results = [{"step": "status_rollup", "rc": 0, "stdout": "", "argv": []}]
     out = render_report(rollup, chain_results, today=date(2026, 5, 19))
-    assert "no actionable entry" in out
+    assert "NO_FAST_LANE_ACTIONABLE" in out
+
+
+def test_render_report_separates_direct_heavyweight_backlog() -> None:
+    entries = [
+        {
+            **_entry("OLD_DIRECT", "HEAVYWEIGHT_COMPLETE", age=99, action="operator_deployment_decision"),
+            "lineage_class": "DIRECT_HEAVYWEIGHT",
+        },
+        _entry("REJECTED_FAST", "REJECTED_OOS_UNPOWERED", age=2, action="operator_pick_remedy_cpcv_haircut_pool_or_park"),
+    ]
+    rollup = {"schema_version": 2, "entries": entries}
+    chain_results = [{"step": "status_rollup", "rc": 0, "stdout": "", "argv": []}]
+
+    out = render_report(rollup, chain_results, today=date(2026, 5, 22))
+
+    assert "## Direct heavyweight backlog" in out
+    assert "OLD_DIRECT" in out
+    assert "NO_FAST_LANE_ACTIONABLE" in out
 
 
 # ----------------------------------------------------------------------

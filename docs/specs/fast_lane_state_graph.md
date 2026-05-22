@@ -83,11 +83,11 @@ nodes:
   - id: fast_lane_status_rollup
     path: docs/runtime/fast_lane_status.yaml
     writer: scripts/tools/fast_lane_status.py
-    schema_version: 1
+    schema_version: 2
     description: |
       Per-strategy_id status roll-up: current_stage, age_days, next_action_token,
-      upstream_artifact_path, downstream_artifact_path. Rebuilt on every
-      orchestrator run.
+      lineage_class, blocker_class, primary_blocker, blocker_evidence, and
+      artifact provenance. Rebuilt on every orchestrator run.
     parity_drift_check: check_fast_lane_status_rollup_reconstruction_parity
 
   - id: fast_lane_age_staleness
@@ -181,12 +181,16 @@ Directory of `*.draft.yaml`, `*.grounded.yaml`, and `*.rejected.txt`. Loader ski
 
 ## 5. Reserved Schemas (proposed, not yet enforced)
 
-### 5.1 `fast_lane_status.yaml` — Stage 2 (SHIPPED 2026-05-19)
+### 5.1 `fast_lane_status.yaml` — Stage 2 / V2 report contract (SHIPPED 2026-05-19; amended 2026-05-22)
 
-Top-level keys: `schema_version: 1`, `generated_at`, `do_not_hand_edit: true`, `source`, `warning`, `entries[]`.
-Entry fields: `strategy_id`, `current_stage` (one of: ACTIVE_PREREG, FAST_LANE_RUN, PROMOTE_QUEUED, RANKED, BRIDGED, GROUNDED, HEAVYWEIGHT_PENDING, HEAVYWEIGHT_COMPLETE, ENRICHED, plus terminal stages REVOKED, PARKED, REJECTED_OOS_UNPOWERED, ERROR), `age_days`, `next_action_token`, `upstream_artifact_path`, `downstream_artifact_path`, `observed_at` (per-source provenance dict).
+Top-level keys: `schema_version: 2`, `generated_at`, `do_not_hand_edit: true`, `source`, `warning`, `entries[]`.
+Entry fields: `strategy_id`, `current_stage` (one of: ACTIVE_PREREG, FAST_LANE_RUN, PROMOTE_QUEUED, RANKED, BRIDGED, GROUNDED, HEAVYWEIGHT_PENDING, HEAVYWEIGHT_COMPLETE, ENRICHED, plus terminal stages REVOKED, PARKED, REJECTED_OOS_UNPOWERED, the six `SUPPRESSED_*` statuses from §10, ERROR), `age_days`, `next_action_token`, `upstream_artifact_path`, `downstream_artifact_path`, `observed_at` (per-source provenance dict), `lineage_class`, `blocker_class`, `primary_blocker`, `blocker_evidence`.
 
-Drift-checked by `check_fast_lane_status_rollup_reconstruction_parity` (Check #168) — three failure classes: hand-edit drift, tampered banner (`schema_version` / `do_not_hand_edit` / `source`), and capital-class write attempt (greppable static check on writer source).
+`lineage_class` is one of `FAST_LANE`, `DIRECT_HEAVYWEIGHT`, or `UNKNOWN`. Direct heavyweight rows are visible backlog, but they are not selected as Fast Lane next actions.
+
+`blocker_class` is one of `NONE`, `UNDERPOWERED_OOS`, `INVALID_ARTIFACT`, `PROVENANCE_SUPPRESSED`, `PARKED`, or `ERROR`. `primary_blocker` is a stable token such as `oos_power_below_floor`, `pooling_artifact_revoked`, or the lowercase suppression token. `blocker_evidence` carries compact source evidence from `promote_queue.yaml` including status, error reason, structural hash, K lineage, result path, revocation sidecar, or park entry when present.
+
+Drift-checked by `check_fast_lane_status_rollup_reconstruction_parity` (Check #168) — three failure classes: hand-edit drift, tampered banner (`schema_version` / `do_not_hand_edit` / `source`), and capital-class write attempt (greppable static check on writer source). The check imports `scripts.tools.fast_lane_status.SCHEMA_VERSION` rather than freezing the schema integer inline.
 
 **`next_action_token` for HEAVYWEIGHT_COMPLETE is lineage-qualified** (amended 2026-05-20):
 
@@ -195,12 +199,12 @@ Drift-checked by `check_fast_lane_status_rollup_reconstruction_parity` (Check #1
 
 This qualifier is enforced by `scripts/tools/fast_lane_status._next_action_for()` and its companion tests in `tests/test_tools/test_fast_lane_status.py`. Without it, the rollup emits a stage script as the next action when running that script would silently no-op — a fail-quiet misclassification of 38 entries was caught and fixed 2026-05-20.
 
-### 5.2 `fast_lane_age_staleness.yaml` — Stage 3 deliverable (PROPOSED)
+### 5.2 `fast_lane_age_staleness.yaml` — Stage 3 deliverable (DEFERRED)
 
 Top-level keys: `schema_version: 1`, `generated_at`, `entries[]`.
 Entry fields: `strategy_id`, `age_at_queued_days`, `age_at_ranked_days`, `age_at_bridged_days`, `age_at_grounded_days`, `age_at_enriched_days` (each null if stage not reached).
 
-NOT yet drift-checked. Will be enforced when Stage 3 lands.
+NOT yet drift-checked. Deferred on 2026-05-22 because the schema-v2 roll-up and `fast_lane_walk.py` report now expose blocker evidence, lineage separation, and next-action routing directly. Do not add this artifact until there is a distinct operator consumer.
 
 ---
 

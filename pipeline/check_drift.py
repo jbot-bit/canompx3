@@ -12060,8 +12060,8 @@ def check_fast_lane_status_rollup_reconstruction_parity(
     1. Hand-edit drift: the on-disk roll-up disagrees with a fresh
        ``build_status_entries()`` reconstruction (extra/missing strategy_id,
        wrong current_stage, wrong next_action_token).
-    2. Tampered banner: ``do_not_hand_edit: true``, ``schema_version: 1``,
-       or ``source: scripts/tools/fast_lane_status.py`` removed.
+    2. Tampered banner: ``do_not_hand_edit: true``, writer
+       ``SCHEMA_VERSION``, or ``source: scripts/tools/fast_lane_status.py`` removed.
     3. Capital-class write attempt: the writer's source contains any
        reference to ``chordia_audit_log.yaml``, ``lane_allocation.json``,
        ``validated_setups``, or ``trading_app/live/`` paired with
@@ -12151,10 +12151,19 @@ def check_fast_lane_status_rollup_reconstruction_parity(
         return violations
 
     # Banner integrity (failure class 2).
-    if on_disk.get("schema_version") != 1:
+    try:
+        from scripts.tools.fast_lane_status import SCHEMA_VERSION as _STATUS_SCHEMA_VERSION
+    except Exception as exc:
+        violations.append(
+            "check_fast_lane_status_rollup_reconstruction_parity: cannot import "
+            f"status schema version: {type(exc).__name__}: {exc}"
+        )
+        return violations
+
+    if on_disk.get("schema_version") != _STATUS_SCHEMA_VERSION:
         violations.append(
             "check_fast_lane_status_rollup_reconstruction_parity: BANNER TAMPERED — "
-            "schema_version must be 1 (got "
+            f"schema_version must be {_STATUS_SCHEMA_VERSION} (got "
             f"{on_disk.get('schema_version')!r}). Roll-up is derived state; do not "
             "hand-edit."
         )

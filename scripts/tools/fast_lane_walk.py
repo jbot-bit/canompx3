@@ -57,7 +57,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_DIR = REPO_ROOT / "docs" / "runtime"
 STATUS_ROLLUP_PATH = RUNTIME_DIR / "fast_lane_status.yaml"
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+SUPPRESSED_QUEUE_STATUSES = {
+    "SUPPRESSED_GRAVEYARD",
+    "SUPPRESSED_DUPLICATE_ACTIVE",
+    "SUPPRESSED_SIBLING_RETEST",
+    "SUPPRESSED_BANNED_ENTRY_MODEL",
+    "SUPPRESSED_E2_LOOKAHEAD",
+    "SUPPRESSED_K_OVERRUN",
+}
 
 
 # ----------------------------------------------------------------------
@@ -153,16 +162,45 @@ def _counts_per_stage(entries: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def _is_fast_lane_automation_actionable(entry: dict[str, Any]) -> bool:
+    stage = entry.get("current_stage")
+    if not isinstance(stage, str):
+        return False
+    if stage == "ERROR":
+        return True
+    if entry.get("lineage_class") == "DIRECT_HEAVYWEIGHT":
+        return False
+    if stage == "HEAVYWEIGHT_COMPLETE":
+        return entry.get("next_action_token") == "run_cherry_pick_journal_enricher"
+    terminal = {"REVOKED", "PARKED", "REJECTED_OOS_UNPOWERED", *SUPPRESSED_QUEUE_STATUSES}
+    return stage not in terminal
+
+
 def _top_stalled(entries: list[dict[str, Any]], k: int = 3) -> list[dict[str, Any]]:
-    """Top-K entries by age_days. Excludes terminal stages (no further action)."""
-    terminal = {"REVOKED", "PARKED", "REJECTED_OOS_UNPOWERED", "ERROR"}
-    actionable = [e for e in entries if e.get("current_stage") not in terminal]
+    """Top-K Fast Lane entries by age_days. Excludes terminal and direct-heavyweight rows."""
+    actionable = [e for e in entries if _is_fast_lane_automation_actionable(e) and e.get("current_stage") != "ERROR"]
     actionable.sort(key=lambda e: (-(e.get("age_days") or 0), e.get("strategy_id") or ""))
     return actionable[:k]
 
 
 def _error_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [e for e in entries if e.get("current_stage") == "ERROR"]
+
+
+def _blocked_fast_lane_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    blocked = [
+        e
+        for e in entries
+        if e.get("lineage_class") == "FAST_LANE" and e.get("blocker_class") not in (None, "NONE")
+    ]
+    blocked.sort(key=lambda e: (e.get("blocker_class") or "", e.get("strategy_id") or ""))
+    return blocked
+
+
+def _direct_heavyweight_backlog(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    backlog = [e for e in entries if e.get("lineage_class") == "DIRECT_HEAVYWEIGHT"]
+    backlog.sort(key=lambda e: (-(e.get("age_days") or 0), e.get("strategy_id") or ""))
+    return backlog
 
 
 def _next_operator_action(entries: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -183,6 +221,8 @@ def _next_operator_action(entries: list[dict[str, Any]]) -> dict[str, Any] | Non
         stage = e.get("current_stage")
         if not isinstance(stage, str):
             continue
+        if not _is_fast_lane_automation_actionable(e):
+            continue
         by_stage.setdefault(stage, []).append(e)
 
     def _oldest(stage: str) -> dict[str, Any] | None:
@@ -192,6 +232,7 @@ def _next_operator_action(entries: list[dict[str, Any]]) -> dict[str, Any] | Non
         return max(lst, key=lambda e: (e.get("age_days") or 0, e.get("strategy_id") or ""))
 
     for stage in (
+        "ERROR",
         "PROMOTE_QUEUED",
         "RANKED",
         "BRIDGED",
@@ -282,6 +323,42 @@ def render_report(
         lines.append("_zero ERROR entries — chain is internally consistent._")
     lines.append("")
 
+    blocked = _blocked_fast_lane_entries(entries)
+    lines.append("## Blocked Fast Lane candidates")
+    lines.append("")
+    if blocked:
+        lines.append("| strategy_id | stage | blocker_class | primary_blocker | evidence |")
+        lines.append("|---|---|---|---|---|")
+        for e in blocked:
+            evidence = e.get("blocker_evidence") or {}
+            if isinstance(evidence, dict):
+                evidence_bits = ", ".join(str(k) for k in sorted(evidence)[:4]) or "-"
+            else:
+                evidence_bits = "-"
+            lines.append(
+                f"| {e.get('strategy_id', '?')} | {e.get('current_stage', '?')} "
+                f"| {e.get('blocker_class', '?')} | {e.get('primary_blocker') or '-'} "
+                f"| {evidence_bits} |"
+            )
+    else:
+        lines.append("_zero blocked Fast Lane candidates._")
+    lines.append("")
+
+    direct_backlog = _direct_heavyweight_backlog(entries)
+    lines.append("## Direct heavyweight backlog")
+    lines.append("")
+    if direct_backlog:
+        lines.append("| strategy_id | stage | age_days | next_action |")
+        lines.append("|---|---|---|---|")
+        for e in direct_backlog[:10]:
+            lines.append(
+                f"| {e.get('strategy_id', '?')} | {e.get('current_stage', '?')} "
+                f"| {e.get('age_days', 0)} | {e.get('next_action_token', '?')} |"
+            )
+    else:
+        lines.append("_zero direct heavyweight backlog entries._")
+    lines.append("")
+
     nxt = _next_operator_action(entries)
     lines.append("## Next operator action")
     lines.append("")
@@ -293,7 +370,7 @@ def render_report(
             f"**age_days:** {nxt.get('age_days', 0)}"
         )
     else:
-        lines.append("_no actionable entry — every strategy_id is in a terminal stage._")
+        lines.append("`NO_FAST_LANE_ACTIONABLE` — no queued, ranked, bridged, pending, or error Fast Lane entry.")
     lines.append("")
 
     return "\n".join(lines) + "\n"

@@ -44,6 +44,7 @@ ENRICHED               journal entry's heavyweight_verdict field is populated
 REVOKED                queue status=REVOKED (pooling artifact, revocation sidecar)
 PARKED                 queue status=PARKED (action-queue.yaml park entry)
 REJECTED_OOS_UNPOWERED queue status=REJECTED_OOS_UNPOWERED (RULE 3.3 pre-flight)
+SUPPRESSED_*           exact promote-queue suppression status (bridge must refuse)
 ERROR                  any upstream parse failure or status=ERROR from queue scanner
 """
 
@@ -69,7 +70,16 @@ JOURNAL_PATH = RUNTIME_DIR / "cherry_pick_journal.yaml"
 RANKING_GLOB = "cherry_pick_ranking_*.csv"
 STATUS_ROLLUP_PATH = RUNTIME_DIR / "fast_lane_status.yaml"
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+SUPPRESSED_QUEUE_STATUSES: tuple[str, ...] = (
+    "SUPPRESSED_GRAVEYARD",
+    "SUPPRESSED_DUPLICATE_ACTIVE",
+    "SUPPRESSED_SIBLING_RETEST",
+    "SUPPRESSED_BANNED_ENTRY_MODEL",
+    "SUPPRESSED_E2_LOOKAHEAD",
+    "SUPPRESSED_K_OVERRUN",
+)
 
 # Canonical stage enum — mirrors docs/specs/fast_lane_state_graph.md § 5.1.
 # Order is precedence (later wins): if a strategy_id is observed at multiple
@@ -88,10 +98,11 @@ STAGE_PRECEDENCE: tuple[str, ...] = (
     "REVOKED",
     "PARKED",
     "REJECTED_OOS_UNPOWERED",
+    *SUPPRESSED_QUEUE_STATUSES,
     "ERROR",
 )
 
-_TERMINAL_STAGES = frozenset({"REVOKED", "PARKED", "REJECTED_OOS_UNPOWERED"})
+_TERMINAL_STAGES = frozenset({"REVOKED", "PARKED", "REJECTED_OOS_UNPOWERED", *SUPPRESSED_QUEUE_STATUSES})
 
 # Direct mapping of promote_queue.yaml entry.status → roll-up current_stage.
 # Anything that maps to PROMOTE_QUEUED here may be overridden later by RANKED /
@@ -103,6 +114,7 @@ _QUEUE_STATUS_TO_STAGE: dict[str, str] = {
     "PARKED": "PARKED",
     "REJECTED_OOS_UNPOWERED": "REJECTED_OOS_UNPOWERED",
     "ERROR": "ERROR",
+    **{status: status for status in SUPPRESSED_QUEUE_STATUSES},
 }
 
 # Next-action token per terminal-eligible stage. Mirrors design § 2.5
@@ -120,7 +132,21 @@ _NEXT_ACTION_BY_STAGE: dict[str, str] = {
     "REVOKED": "no_action_required",
     "PARKED": "no_action_required",
     "REJECTED_OOS_UNPOWERED": "operator_pick_remedy_cpcv_haircut_pool_or_park",
+    **{status: "operator_review_suppression_reason" for status in SUPPRESSED_QUEUE_STATUSES},
     "ERROR": "operator_resolve_error",
+}
+
+_PRIMARY_BLOCKER_BY_STAGE: dict[str, str] = {
+    "REVOKED": "pooling_artifact_revoked",
+    "PARKED": "operator_parked",
+    "REJECTED_OOS_UNPOWERED": "oos_power_below_floor",
+    "ERROR": "state_error",
+    "SUPPRESSED_GRAVEYARD": "suppressed_graveyard",
+    "SUPPRESSED_DUPLICATE_ACTIVE": "suppressed_duplicate_active",
+    "SUPPRESSED_SIBLING_RETEST": "suppressed_sibling_retest",
+    "SUPPRESSED_BANNED_ENTRY_MODEL": "suppressed_banned_entry_model",
+    "SUPPRESSED_E2_LOOKAHEAD": "suppressed_e2_lookahead",
+    "SUPPRESSED_K_OVERRUN": "suppressed_k_overrun",
 }
 
 # Override token for HEAVYWEIGHT_COMPLETE entries that lack fast-lane lineage.
@@ -151,7 +177,11 @@ class StatusEntry:
     next_action_token: str
     upstream_artifact_path: str | None
     downstream_artifact_path: str | None
-    observed_at: dict[str, str | None] = field(default_factory=dict)
+    observed_at: dict[str, Any] = field(default_factory=dict)
+    lineage_class: str = "UNKNOWN"
+    blocker_class: str = "NONE"
+    primary_blocker: str | None = None
+    blocker_evidence: dict[str, Any] = field(default_factory=dict)
 
 
 def _rel(path: Path, root: Path = REPO_ROOT) -> str:
@@ -393,6 +423,62 @@ def _classify_stage(
     return max(candidates, key=lambda s: STAGE_PRECEDENCE.index(s))
 
 
+def _lineage_class_for(
+    *,
+    queue_entry: dict[str, Any] | None,
+    journal_entry: dict[str, Any] | None,
+    is_ranked: bool,
+    drafts: dict[str, Path] | None,
+    heavyweight_result: Path | None,
+) -> str:
+    """Classify whether the observed chain evidence is fast-lane lineage."""
+    if queue_entry is not None or journal_entry is not None or is_ranked or bool(drafts):
+        return "FAST_LANE"
+    if heavyweight_result is not None:
+        return "DIRECT_HEAVYWEIGHT"
+    return "UNKNOWN"
+
+
+def _blocker_class_for(stage: str) -> str:
+    if stage in SUPPRESSED_QUEUE_STATUSES:
+        return "PROVENANCE_SUPPRESSED"
+    if stage == "REJECTED_OOS_UNPOWERED":
+        return "UNDERPOWERED_OOS"
+    if stage == "REVOKED":
+        return "INVALID_ARTIFACT"
+    if stage == "PARKED":
+        return "PARKED"
+    if stage == "ERROR":
+        return "ERROR"
+    return "NONE"
+
+
+def _blocker_evidence_for(
+    *,
+    stage: str,
+    queue_entry: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Return compact machine-readable evidence for terminal blockers."""
+    if _blocker_class_for(stage) == "NONE" or queue_entry is None:
+        return {}
+    evidence: dict[str, Any] = {}
+    for key in (
+        "status",
+        "error_reason",
+        "structural_hash",
+        "k_lineage",
+        "n_hat",
+        "result_md",
+        "revocation_sidecar",
+        "park_entry",
+    ):
+        value = queue_entry.get(key)
+        if value is not None:
+            out_key = "promote_queue_status" if key == "status" else key
+            evidence[out_key] = value
+    return evidence
+
+
 def _next_action_for(
     stage: str,
     *,
@@ -447,6 +533,14 @@ def build_status_entries(
             drafts=d_entry,
             heavyweight_result=h_result,
         )
+        lineage_class = _lineage_class_for(
+            queue_entry=q_entry,
+            journal_entry=j_entry,
+            is_ranked=sid in ranked,
+            drafts=d_entry,
+            heavyweight_result=h_result,
+        )
+        blocker_class = _blocker_class_for(stage)
 
         # Upstream artifact = whatever produced the current_stage advancement.
         # Downstream artifact = the artifact the next action will produce.
@@ -498,6 +592,10 @@ def build_status_entries(
                 upstream_artifact_path=_rel(upstream) if upstream else None,
                 downstream_artifact_path=_rel(downstream) if downstream else None,
                 observed_at=observed,
+                lineage_class=lineage_class,
+                blocker_class=blocker_class,
+                primary_blocker=_PRIMARY_BLOCKER_BY_STAGE.get(stage),
+                blocker_evidence=_blocker_evidence_for(stage=stage, queue_entry=q_entry),
             )
         )
     return entries
