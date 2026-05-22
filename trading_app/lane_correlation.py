@@ -26,7 +26,14 @@ from trading_app.strategy_fitness import (
     _load_strategy_outcomes,
 )
 
+# @research-source: docs/audit/2026-04-18-grounding-audit-master.md row rho_gate_constant
+# @research-source: .claude/rules/backtesting-methodology.md § RULE 7 (tautology check / Carver-grounded hysteresis)
+# @entry-models: E1, E2
+# @revalidated-for: E2 (confirmed VERIFIED_CODE in 2026-04-18 grounding audit)
 RHO_REJECT_THRESHOLD = 0.70
+# @research-source: docs/audit/2026-04-18-grounding-audit-master.md — subset gate consistent with rho gate hysteresis
+# @entry-models: E1, E2
+# @revalidated-for: E2
 SUBSET_REJECT_THRESHOLD = 0.80
 
 
