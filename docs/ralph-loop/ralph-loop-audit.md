@@ -3,56 +3,63 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 188
+## Last iteration: 189
 
-## RALPH AUDIT — Iteration 188 (COMPLETED)
+## RALPH AUDIT — Iteration 189 (COMPLETED)
 ## Date: 2026-05-23
-## Infrastructure Gates: 160 drift checks PASS (0 violations); 233/233 tests passed (test_session_orchestrator.py)
-## Scope: tests/test_trading_app/conftest.py (new file — autouse fixture, ALERT-CONTAM-N2)
+## Infrastructure Gates: 160 drift checks PASS (0 violations); 87/87 tests passed (test_build_daily_features + incremental_seed)
+## Scope: pipeline/build_daily_features.py — critical centrality, first scan by Ralph
 
 ---
 
-## Iteration 188 — tests/test_trading_app/test_session_orchestrator.py
+## Iteration 189 — pipeline/build_daily_features.py
 
 ### Auto-Targeting
-- Continuation from prior iteration audit of `trading_app/live/session_orchestrator.py`
-- Finding ALERT-CONTAM-N2 identified: tests calling `_notify()` wrote to production `data/runtime/operator_alerts.jsonl`
+- Priority 1: `pipeline/build_daily_features.py` — critical centrality, not yet scanned, no no-touch restrictions
 
-### Infrastructure Gates
+### Infrastructure Gates (pre-fix)
 - `check_drift.py`: 160 PASS, 0 violations
-- Tests: 233/233 passed (test_session_orchestrator.py)
+- `audit_behavioral.py`: 7/7 checks clean
+- ruff: clean
 
 ---
 
-## Finding ALERT-CONTAM-N2 — LOW — FIXED
+## Finding GARCH-SILENT-N1 — LOW — FIXED
 
-**PREMISE:** Tests in `test_session_orchestrator.py` call `_notify()` (directly or via orchestrator construction) without redirecting `alert_engine.ALERTS_PATH`, causing real appends to the production `data/runtime/operator_alerts.jsonl` file during every test run.
+**PREMISE:** `compute_garch_forecast` at `pipeline/build_daily_features.py:851-852` swallows all non-ImportError GARCH exceptions at `logger.debug()` level — model convergence failures, `LinAlgError`, numerical instability all produce NULL `garch_forecast_vol` with no operator-visible signal.
 
-**TRACE:** `test_notify_never_raises` / `test_notify_calls_notify_module` → `orch._notify("test")` → `session_orchestrator.py:1388` → `record_operator_alert(...)` → `alert_engine.py:106` → `ALERTS_PATH.open("a")` → writes to `data/runtime/operator_alerts.jsonl`.
+**TRACE:** `build_daily_features.py:1483` → `compute_garch_forecast(prior_closes)` → `arch_model.fit()` raises (e.g., `ValueError`, `LinAlgError`) → `except Exception as exc: logger.debug(...)` → returns `None` → `garch_forecast_vol` silently NULL. Only downstream drift Check 65 catches these NULLs after the fact.
 
-**FIX:** Added `tests/test_trading_app/conftest.py` with `autouse=True` fixture `_redirect_alerts_path` that monkeypatches `trading_app.live.alert_engine.ALERTS_PATH` to `tmp_path / "operator_alerts.jsonl"` for every test.
+**FIX:** `pipeline/build_daily_features.py:852` — `logger.debug` → `logger.warning`. Return value (None) unchanged. ImportError path was already at WARNING (correct). 1-line diff.
 
-**DOCTRINE:** `integrity-guardian.md § 3` (fail-closed) — tests must not have side-effects on production runtime files. `institutional-rigor.md § 6` (no silent failures — unexpected writes are a silent-contamination class).
+**DOCTRINE:** `integrity-guardian.md § 3` (fail-closed — never swallow exceptions silently); `institutional-rigor.md § 6` (no silent failures).
 
-**VERDICT:** FIXED — commit `1e4be59f`
+**VERDICT:** FIXED — commit `acdee5ab`
 
 ---
 
-## Iteration 188 — Overall Summary
+## Iteration 189 — Overall Summary
 
-1 test-support file added. 1 LOW finding (FIXED). 233/233 tests pass. Drift clean.
+File fully scanned: `pipeline/build_daily_features.py`. 1 LOW finding (FIXED). 87/87 tests pass. 160 drift checks pass.
 
-**Consecutive LOW-only iterations: 2**
+Other observations (not findings):
+- `SESSION_WINDOWS` dict (lines 93-97) uses fixed Brisbane-time approximations — intentional by design, documented with explicit WARNING comment. Already ACCEPTABLE per project pattern (WF-01 class).
+- `COMPRESSION_SESSIONS` hardcodes session names (line 109) — has `@research-source` and `@revalidated-for` annotations. ACCEPTABLE (§ 3 guarded annotation).
+- `insert_count = len(rows) - existing_count` (line 1733) — mathematically correct: existing_count counts rows matching (symbol, trading_day, orb_minutes) tuples in the batch; can never exceed len(rows) for a well-formed batch. ACCEPTABLE.
+- `except Exception as e: ROLLBACK; raise` in transaction handler (line 1764) — correct pattern: logs FATAL and re-raises, no swallowing. ACCEPTABLE.
 
-### Infrastructure Gate Results
+**Consecutive LOW-only iterations: 3**
+
+### Infrastructure Gate Results (post-fix)
 - check_drift.py: 160 PASS (0 violations)
-- Tests: 233 passed (test_session_orchestrator.py)
-- ruff: clean (no new production code touched)
+- Tests: 87 passed (test_build_daily_features + incremental_seed)
+- ruff: clean (1-line change, no style impact)
 
 ---
 
 ## Files Fully Scanned
 
+- pipeline/build_daily_features.py (iter 189)
 - trading_app/lane_allocator.py (iter 187)
 - trading_app/live/session_orchestrator.py (iter 188 audit)
 - trading_app/live/alert_engine.py (iter 188 audit — autouse fixture fix)
@@ -69,7 +76,7 @@
 
 **Priority 1 (unscanned critical/high per import_centrality.json):**
 - `trading_app/config.py` — critical tier, NO-TOUCH zone (audit only)
-- `pipeline/build_daily_features.py` — critical tier
-- `trading_app/strategy_validator.py` — high tier
+- `trading_app/strategy_validator.py` — high tier, not yet scanned
+- `pipeline/outcome_builder.py` — already scanned (iter 185)
 
-**Top candidate:** `pipeline/build_daily_features.py` — critical centrality, not yet scanned, no-touch restrictions don't apply to non-schema logic.
+**Top candidate:** `trading_app/strategy_validator.py` — high centrality, not yet scanned, no no-touch restrictions.

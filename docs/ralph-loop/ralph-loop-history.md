@@ -2023,6 +2023,19 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 
 ---
 
+## Iteration 189 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/build_daily_features.py:851-852
+- Finding: GARCH-SILENT-N1 — compute_garch_forecast swallows all non-ImportError model exceptions at logger.debug(), producing silent NULL garch_forecast_vol with no operator-visible signal. Only downstream drift Check 65 catches these NULLs after the fact.
+- Doctrine cited: integrity-guardian.md § 3 (fail-closed); institutional-rigor.md § 6 (no silent failures)
+- Action: Elevated logger.debug to logger.warning in except Exception block. Return value (None) unchanged. ImportError path already at WARNING. 1-line fix.
+- Blast radius: 1 file (build_daily_features.py), zero callers affected
+- Verification: PASS — 87/87 test_build_daily_features + incremental_seed tests; 160 drift checks
+- Commit: acdee5ab
+
+---
+
 ## Iteration 186 — 2026-05-19
 - Phase: fix
 - Classification: [mechanical]
