@@ -3,53 +3,69 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 191
+## Last iteration: 192
 
-## RALPH AUDIT — Iteration 191 (COMPLETED)
+## RALPH AUDIT — Iteration 192 (COMPLETED)
 ## Date: 2026-05-23
-## Infrastructure Gates: 160 drift checks PASS; ruff clean; tests passed
-## Scope: trading_app/strategy_validator.py — hardcoded entry-model list in V[SR] loop
+## Infrastructure Gates: 160 drift checks PASS; ruff clean; 7 AM3.3 tests pass
+## Scope: trading_app/chordia.py + pipeline/check_drift.py — hardcoded threshold literals in check_am33_audit_log_theory_grant_parity
 
 ---
 
-## Iteration 191 — trading_app/strategy_validator.py
+## Iteration 192 — trading_app/chordia.py (full scan) + pipeline/check_drift.py (fix)
 
 ### Auto-Targeting
-- Priority 1: `trading_app/strategy_validator.py` — high centrality, last scanned iter 117, unscanned in current Files Fully Scanned list
+- Scope provided: `trading_app/chordia.py` — medium centrality, never scanned by Ralph.
 
 ---
 
-## Finding CANON-191 — LOW — FIXED
+## Finding CANON-192 — LOW — FIXED
 
-**PREMISE:** `trading_app/strategy_validator.py:2307` iterated `["E1", "E2"]` as a literal when computing V[SR] partitioned by entry model. This is a canonical-source violation: the active entry model set is defined by `config.ENTRY_MODELS - config.SKIP_ENTRY_MODELS` and must never be hardcoded.
+**PREMISE:** `pipeline/check_drift.py` lines 12303, 12315–12316 hardcoded `3.0` and `3.79` as literal floats inside `check_am33_audit_log_theory_grant_parity` violation message strings, rather than importing from the canonical `CHORDIA_T_WITH_THEORY` / `CHORDIA_T_WITHOUT_THEORY` constants in `trading_app/chordia.py`.
 
-**TRACE:** `strategy_validator.py:2307` → `for em_query in ["E1", "E2"]` → hardcoded list instead of `[em for em in ENTRY_MODELS if em not in SKIP_ENTRY_MODELS]`
+**TRACE:** `check_am33_audit_log_theory_grant_parity` (check_drift.py:12130) → lines 12303 `3.0 if default_ht else 3.79` and 12315 `3.00 if audit_ht else 3.79` / 12316 `3.00 if prereq_theory_grant else 3.79` — all inline floats, not imported from `trading_app.chordia`.
 
-**EVIDENCE:** If E3 is ever removed from SKIP_ENTRY_MODELS, or a new entry model added to ENTRY_MODELS, the V[SR] computation silently omits it. The comment above the loop ("cross-model review finding: mixing E1+E2 inflates V[SR] due to structural cost gap") acknowledged per-model partitioning but the list itself was not derived canonically.
+**EVIDENCE:** `CHORDIA_T_WITH_THEORY = 3.00`, `CHORDIA_T_WITHOUT_THEORY = 3.79` are locked constants in `trading_app/chordia.py:49-50` annotated "modifying requires an amendment to pre_registered_criteria.md". If a future amendment changes either value, the drift-check violation messages would silently report stale thresholds, misleading operators diagnosing a parity mismatch.
 
-**FIX:** `trading_app/strategy_validator.py:2307` — Import `ENTRY_MODELS` and `SKIP_ENTRY_MODELS` from `trading_app.config`; replace `["E1", "E2"]` with `[em for em in ENTRY_MODELS if em not in SKIP_ENTRY_MODELS]`. 3-line change (2 new imports + 1 expression swap).
+**FIX:** `pipeline/check_drift.py:12180-12181` — added local imports of `CHORDIA_T_WITH_THEORY as _T_WITH` and `CHORDIA_T_WITHOUT_THEORY as _T_WITHOUT` inside the function; replaced 3 inline literal uses with the constants. 6 lines net change.
 
-**DOCTRINE:** `integrity-guardian.md § 2` (canonical sources — never hardcode entry-model list; canonical source is `config.ENTRY_MODELS` / `config.SKIP_ENTRY_MODELS`).
+**DOCTRINE:** `integrity-guardian.md § 2` (canonical sources — never hardcode magic numbers; canonical authority for Chordia thresholds is `trading_app.chordia`).
 
-**VERDICT:** FIXED — commit `98e05aed`
+**VERDICT:** FIXED — commit `7332e5ca`
 
 ---
 
-## Iteration 191 — Overall Summary
+## trading_app/chordia.py — Full Scan Summary
 
-File fully scanned: `trading_app/strategy_validator.py`. 1 LOW finding (FIXED). 160 drift checks pass. ruff clean.
+**No production-code findings requiring fixes.** The file is well-structured:
 
-**Consecutive LOW-only iterations: 5** (iter 187 = LOW, iter 188 = LOW+audit-only, iter 189 = LOW, iter 190 = LOW, iter 191 = LOW)
+- `CHORDIA_T_WITH_THEORY` / `CHORDIA_T_WITHOUT_THEORY` constants are the canonical authority; no other files hardcode these values in production logic (checked via grep).
+- `load_chordia_audit_log` fails closed correctly: missing file → empty log (every strategy PAUSED); YAML parse error → logged WARNING + empty log.
+- No `except Exception` swallowing failures.
+- No hardcoded instrument or entry-model lists.
+- `chordia_verdict_label` / `chordia_verdict_allows_deploy` correctly gate deploy eligibility.
+- `chordia_gate` (deprecated) is retained only for boundary tests per its docstring — appropriate.
+- theory_grant gate and audit_log gate are independent trust surfaces per the AM3.3-AUDIT-LOG-DRIFT finding (already deferred + closed; drift check #165 enforces parity).
+- The only inline copies of the threshold values that could drift are in violation message strings — fixed by CANON-192.
+
+**Consecutive LOW-only iterations: 6** (iter 187-192 all LOW)
+
+---
+
+## Iteration 192 — Overall Summary
+
+Files fully scanned: `trading_app/chordia.py` (clean), `pipeline/check_drift.py` (1 LOW finding, FIXED). 160 drift checks pass. ruff clean. 7 AM3.3 tests pass.
 
 ### Infrastructure Gate Results (post-fix)
 - check_drift.py: 160 PASS (0 violations)
 - ruff: clean
-- Tests: passed
+- Tests: 7 passed (test_check_drift_am33_audit_log_drift.py)
 
 ---
 
 ## Files Fully Scanned
 
+- trading_app/chordia.py (iter 192)
 - trading_app/strategy_validator.py (iter 191)
 - scripts/tools/fast_lane_research_review.py (iter 190)
 - pipeline/build_daily_features.py (iter 189)
@@ -67,13 +83,11 @@ File fully scanned: `trading_app/strategy_validator.py`. 1 LOW finding (FIXED). 
 
 ## Next Iteration Targets
 
-**DIMINISHING RETURNS CHECK:** consecutive_low_only = 5; no Priority 1 unscanned critical/high candidates except `trading_app/config.py` (no-touch zone, audit only). Consider triggering DIMINISHING_RETURNS or targeting medium-tier unscanned files.
-
-**Priority 1 (unscanned critical/high per import_centrality.json):**
-- `trading_app/config.py` — critical tier, NO-TOUCH zone (audit only)
+**DIMINISHING RETURNS CHECK:** consecutive_low_only = 6; no Priority 1 unscanned critical/high candidates except `trading_app/config.py` (no-touch zone). Consider DIMINISHING_RETURNS or targeting medium-tier unscanned files.
 
 **Priority 3 (unscanned medium):**
+- `trading_app/deployability.py` — imports chordia; medium centrality, not yet scanned
 - `trading_app/live/session_orchestrator.py` — re-audit candidate (modified since iter 188)
-- `trading_app/chordia.py` — medium tier, not yet scanned
+- `pipeline/check_drift.py` — very large, partially audited; AM3.3 section was fixed this iter
 
-**Top candidate:** `trading_app/chordia.py` — medium centrality, not yet scanned, no no-touch restrictions.
+**Top candidate:** `trading_app/deployability.py` — medium centrality, not yet scanned, calls `chordia_verdict_allows_deploy` and `chordia_verdict_label` directly.

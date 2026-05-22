@@ -1,12 +1,12 @@
 {
-  "total_iterations": 184,
+  "total_iterations": 185,
   "last_updated": "2026-05-23",
-  "consecutive_low_only": 2,
+  "consecutive_low_only": 3,
   "last_high_finding_iter": 189,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 61,
-      "fixed": 48,
+      "found": 62,
+      "fixed": 49,
       "deferred": 4,
       "fix_rate": 0.79
     },
@@ -129,11 +129,11 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 48,
-    "LOW": 113
+    "LOW": 114
   },
   "classifications": {
     "judgment": 83,
-    "mechanical": 68,
+    "mechanical": 69,
     "audit-only": 33
   },
   "files_audited": {
@@ -237,6 +237,11 @@
       "last_iter": 91,
       "findings": 2
     },
+    "pipeline/check_drift.py": {
+      "audit_count": 3,
+      "last_iter": 192,
+      "findings": 3
+    },
     "trading_app/lane_allocator.py": {
       "audit_count": 3,
       "last_iter": 187,
@@ -295,11 +300,6 @@
     "trading_app/prop_portfolio.py": {
       "audit_count": 2,
       "last_iter": 154,
-      "findings": 2
-    },
-    "pipeline/check_drift.py": {
-      "audit_count": 2,
-      "last_iter": 66,
       "findings": 2
     },
     "scripts/tools/audit_behavioral.py": {
@@ -3197,6 +3197,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "98e05aed"
+    },
+    {
+      "iter": 192,
+      "date": "2026-05-23",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "pipeline/check_drift.py:12303,12315-12316",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "7332e5ca"
     }
   ]
 }

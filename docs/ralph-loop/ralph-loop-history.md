@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 192 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/check_drift.py:12303,12315-12316
+- Finding: Hardcoded 3.00/3.79 literals in check_am33_audit_log_theory_grant_parity violation messages instead of importing CHORDIA_T_WITH_THEORY/CHORDIA_T_WITHOUT_THEORY from trading_app.chordia
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources — never hardcode magic numbers; threshold authority is trading_app.chordia constants)
+- Action: Added local imports of CHORDIA_T_WITH_THEORY/_T_WITH and CHORDIA_T_WITHOUT_THEORY/_T_WITHOUT inside function; replaced 3 inline float literals with constants
+- Blast radius: 1 file (pipeline/check_drift.py)
+- Verification: PASS (160 drift checks, ruff clean, 7 AM3.3 tests)
+- Commit: 7332e5ca
+
+---
+
 ## Iteration 191 — 2026-05-23
 - Phase: fix
 - Classification: [mechanical]
