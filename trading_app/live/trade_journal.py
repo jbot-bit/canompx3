@@ -49,6 +49,7 @@ def _extract_lock_holder_pid(err_text: str) -> int | None:
     except (TypeError, ValueError):
         return None
 
+
 LIVE_TRADES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS live_trades (
     trade_id        TEXT PRIMARY KEY,
