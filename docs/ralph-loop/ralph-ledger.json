@@ -1,14 +1,14 @@
 {
-  "total_iterations": 183,
+  "total_iterations": 184,
   "last_updated": "2026-05-23",
-  "consecutive_low_only": 1,
+  "consecutive_low_only": 2,
   "last_high_finding_iter": 189,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 60,
-      "fixed": 47,
+      "found": 61,
+      "fixed": 48,
       "deferred": 4,
-      "fix_rate": 0.78
+      "fix_rate": 0.79
     },
     "silent_failure": {
       "found": 42,
@@ -129,11 +129,11 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 48,
-    "LOW": 112
+    "LOW": 113
   },
   "classifications": {
     "judgment": 83,
-    "mechanical": 67,
+    "mechanical": 68,
     "audit-only": 33
   },
   "files_audited": {
@@ -152,6 +152,11 @@
       "last_iter": 189,
       "findings": 4
     },
+    "trading_app/strategy_validator.py": {
+      "audit_count": 5,
+      "last_iter": 191,
+      "findings": 5
+    },
     "trading_app/execution_engine.py": {
       "audit_count": 5,
       "last_iter": 164,
@@ -166,11 +171,6 @@
       "audit_count": 4,
       "last_iter": 10,
       "findings": 3
-    },
-    "trading_app/strategy_validator.py": {
-      "audit_count": 4,
-      "last_iter": 117,
-      "findings": 4
     },
     "portfolio.py": {
       "audit_count": 4,
@@ -3170,7 +3170,7 @@
       "date": "2026-05-23",
       "phase": "fix",
       "classification": "mechanical",
-      "target": "pipeline/build_daily_features.py:851-852",
+      "target": "pipeline/build_daily_features.py (GARCH silent exception)",
       "finding_type": "silent_failure",
       "severity": "MEDIUM",
       "verdict": "FIXED",
@@ -3186,6 +3186,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "46701207"
+    },
+    {
+      "iter": 191,
+      "date": "2026-05-23",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/strategy_validator.py:2307",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "98e05aed"
     }
   ]
 }

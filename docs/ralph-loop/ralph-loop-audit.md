@@ -3,59 +3,54 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 190
+## Last iteration: 191
 
-## RALPH AUDIT — Iteration 190 (COMPLETED)
+## RALPH AUDIT — Iteration 191 (COMPLETED)
 ## Date: 2026-05-23
-## Infrastructure Gates: 160 drift checks PASS (0 violations, was 1 pre-fix); 26 lane_alloc + 4 phase5 tests passed
-## Scope: scripts/tools/fast_lane_research_review.py — Check 153 drift violation (lane_allocation.json literal)
+## Infrastructure Gates: 160 drift checks PASS; ruff clean; tests passed
+## Scope: trading_app/strategy_validator.py — hardcoded entry-model list in V[SR] loop
 
 ---
 
-## Iteration 190 — scripts/tools/fast_lane_research_review.py
+## Iteration 191 — trading_app/strategy_validator.py
 
 ### Auto-Targeting
-- Priority 0: Check 153 drift violation (check_no_direct_lane_allocation_json_literals) — 1 blocking violation found by running `check_drift.py`
-- Stage 1b authority inversion: `fast_lane_research_review.py:30` had `LANE_ALLOCATION_PATH = RUNTIME_DIR / "lane_allocation.json"` literal outside the allowlist
-
-### Infrastructure Gates (pre-fix)
-- `check_drift.py`: 159 PASS, 1 violation (Check 153: lane_allocation.json literal in fast_lane_research_review.py:30)
-- Tests: N/A pre-fix
+- Priority 1: `trading_app/strategy_validator.py` — high centrality, last scanned iter 117, unscanned in current Files Fully Scanned list
 
 ---
 
-## Finding CHECK153-FLLRR — LOW — FIXED
+## Finding CANON-191 — LOW — FIXED
 
-**PREMISE:** `scripts/tools/fast_lane_research_review.py:30` contained a direct `"lane_allocation.json"` literal (`LANE_ALLOCATION_PATH = RUNTIME_DIR / "lane_allocation.json"`) in violation of Check 153 (Stage 1b authority inversion). This file is not in the permanent or temporary allowlists, so the literal is unauthorized.
+**PREMISE:** `trading_app/strategy_validator.py:2307` iterated `["E1", "E2"]` as a literal when computing V[SR] partitioned by entry model. This is a canonical-source violation: the active entry model set is defined by `config.ENTRY_MODELS - config.SKIP_ENTRY_MODELS` and must never be hardcoded.
 
-**TRACE:** `check_drift.py:check_no_direct_lane_allocation_json_literals()` scans `scripts/tools/**/*.py` → finds `lane_allocation.json` in `fast_lane_research_review.py:30` → reports FAILED.
+**TRACE:** `strategy_validator.py:2307` → `for em_query in ["E1", "E2"]` → hardcoded list instead of `[em for em in ENTRY_MODELS if em not in SKIP_ENTRY_MODELS]`
 
-**FIX:** `scripts/tools/fast_lane_research_review.py:26,30,639-641` — Import `legacy_lane_allocation_path` from `trading_app.prop_profiles`; remove `LANE_ALLOCATION_PATH` constant; update `load_current_lane_ids` default arg from `Path = LANE_ALLOCATION_PATH` to `Path | None = None` with `path = legacy_lane_allocation_path()` as the body fallback. Behavior identical (same filesystem path, same JSON read).
+**EVIDENCE:** If E3 is ever removed from SKIP_ENTRY_MODELS, or a new entry model added to ENTRY_MODELS, the V[SR] computation silently omits it. The comment above the loop ("cross-model review finding: mixing E1+E2 inflates V[SR] due to structural cost gap") acknowledged per-model partitioning but the list itself was not derived canonically.
 
-**DOCTRINE:** `integrity-guardian.md § 2` (canonical sources — never hardcode path literals); Check 153 comment cites Stage 1b authority inversion (`docs/specs/lane_allocation_schema.md § 4`).
+**FIX:** `trading_app/strategy_validator.py:2307` — Import `ENTRY_MODELS` and `SKIP_ENTRY_MODELS` from `trading_app.config`; replace `["E1", "E2"]` with `[em for em in ENTRY_MODELS if em not in SKIP_ENTRY_MODELS]`. 3-line change (2 new imports + 1 expression swap).
 
-**VERDICT:** FIXED — commit `46701207`
+**DOCTRINE:** `integrity-guardian.md § 2` (canonical sources — never hardcode entry-model list; canonical source is `config.ENTRY_MODELS` / `config.SKIP_ENTRY_MODELS`).
+
+**VERDICT:** FIXED — commit `98e05aed`
 
 ---
 
-## Iteration 190 — Overall Summary
+## Iteration 191 — Overall Summary
 
-File fully scanned: `scripts/tools/fast_lane_research_review.py`. 1 LOW finding (FIXED). 160 drift checks pass. 26 lane_alloc + 4 phase5 tests pass.
+File fully scanned: `trading_app/strategy_validator.py`. 1 LOW finding (FIXED). 160 drift checks pass. ruff clean.
 
-Other observations:
-- Pre-existing `SyntaxError` in `fast_lane_research_review.py:63` (`type StrategyLabProvider = ...`) — Python 3.12+ syntax not valid in Python 3.11. Pre-existing, out of scope for this iteration.
-
-**Consecutive LOW-only iterations: 4** (iter 187 = LOW, iter 188 = LOW+audit-only, iter 189 = LOW, iter 190 = LOW)
+**Consecutive LOW-only iterations: 5** (iter 187 = LOW, iter 188 = LOW+audit-only, iter 189 = LOW, iter 190 = LOW, iter 191 = LOW)
 
 ### Infrastructure Gate Results (post-fix)
 - check_drift.py: 160 PASS (0 violations)
-- Tests: 26 lane_alloc passed, 4 phase5 boundary passed
-- ruff: clean (import + constant + function signature only)
+- ruff: clean
+- Tests: passed
 
 ---
 
 ## Files Fully Scanned
 
+- trading_app/strategy_validator.py (iter 191)
 - scripts/tools/fast_lane_research_review.py (iter 190)
 - pipeline/build_daily_features.py (iter 189)
 - trading_app/lane_allocator.py (iter 187)
@@ -72,8 +67,13 @@ Other observations:
 
 ## Next Iteration Targets
 
+**DIMINISHING RETURNS CHECK:** consecutive_low_only = 5; no Priority 1 unscanned critical/high candidates except `trading_app/config.py` (no-touch zone, audit only). Consider triggering DIMINISHING_RETURNS or targeting medium-tier unscanned files.
+
 **Priority 1 (unscanned critical/high per import_centrality.json):**
 - `trading_app/config.py` — critical tier, NO-TOUCH zone (audit only)
-- `trading_app/strategy_validator.py` — high tier, not yet scanned
 
-**Top candidate:** `trading_app/strategy_validator.py` — high centrality, not yet scanned, no no-touch restrictions.
+**Priority 3 (unscanned medium):**
+- `trading_app/live/session_orchestrator.py` — re-audit candidate (modified since iter 188)
+- `trading_app/chordia.py` — medium tier, not yet scanned
+
+**Top candidate:** `trading_app/chordia.py` — medium centrality, not yet scanned, no no-touch restrictions.

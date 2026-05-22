@@ -5,6 +5,45 @@
 
 ---
 
+## Iteration 191 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/strategy_validator.py:2307
+- Finding: Hardcoded ["E1", "E2"] literal in V[SR]-by-entry-model loop — canonical source is ENTRY_MODELS minus SKIP_ENTRY_MODELS from trading_app.config
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources — entry-model set must never be hardcoded)
+- Action: Imported ENTRY_MODELS + SKIP_ENTRY_MODELS; replaced literal with [em for em in ENTRY_MODELS if em not in SKIP_ENTRY_MODELS]
+- Blast radius: 1 file (strategy_validator.py)
+- Verification: PASS (160 drift checks, ruff clean)
+- Commit: 98e05aed
+
+---
+
+## Iteration 190 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/tools/fast_lane_research_review.py:30
+- Finding: Direct lane_allocation.json literal outside allowlist — Check 153 violation (Stage 1b authority inversion)
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources — never hardcode path literals); Check 153 (lane_allocation.json authority)
+- Action: Imported legacy_lane_allocation_path() from trading_app.prop_profiles; removed LANE_ALLOCATION_PATH constant; updated load_current_lane_ids default arg to None with body fallback
+- Blast radius: 1 file (fast_lane_research_review.py)
+- Verification: PASS (160 drift checks, 26 lane_alloc + 4 phase5 tests)
+- Commit: 46701207
+
+---
+
+## Iteration 189 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/build_daily_features.py (GARCH silent exception)
+- Finding: GARCH computation exception swallowed at DEBUG level — silent failure for a regression-model step
+- Doctrine cited: integrity-guardian.md § 6 (silent failure)
+- Action: Elevated GARCH exception from DEBUG to WARNING with full traceback
+- Blast radius: 1 file (build_daily_features.py)
+- Verification: PASS
+- Commit: acdee5ab
+
+---
+
 ## Iteration 184 — 2026-05-07
 - Phase: fix
 - Classification: [judgment]
