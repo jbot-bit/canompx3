@@ -157,9 +157,7 @@ def test_cached_path_byte_identical_to_uncached_path():
         for day in uncached_pnl[sid]:
             ref_v = uncached_pnl[sid][day]
             test_v = cached_pnl[sid][day]
-            assert ref_v == test_v, (
-                f"{sid}@{day}: uncached={ref_v} != cached={test_v}"
-            )
+            assert ref_v == test_v, f"{sid}@{day}: uncached={ref_v} != cached={test_v}"
 
 
 @pytest.mark.skipif(
@@ -214,6 +212,4 @@ def test_compute_pairwise_correlation_matches_per_strategy_path():
 
     assert set(actual_pairs.keys()) == set(ref_pairs.keys())
     for key in ref_pairs:
-        assert actual_pairs[key] == ref_pairs[key], (
-            f"pair {key}: ref={ref_pairs[key]} != actual={actual_pairs[key]}"
-        )
+        assert actual_pairs[key] == ref_pairs[key], f"pair {key}: ref={ref_pairs[key]} != actual={actual_pairs[key]}"
