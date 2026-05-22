@@ -11779,6 +11779,97 @@ def check_judgment_review_capital_paths_parity() -> list[str]:
     return violations
 
 
+def check_stage_closed_review_nudge_capital_paths_parity() -> list[str]:
+    """Capital-class prefix parity between the judgment-review nudge and the
+    stage-closed code-review nudge (Stage B of the 2026-05-23 review-enforcement
+    plan).
+
+    Identical shape to ``check_judgment_review_capital_paths_parity``. The
+    nudge-on-close hook (``stage-closed-code-review-nudge.py``) delegates the
+    capital-class prefix list to the sibling ``judgment-review-nudge.py`` via
+    an ``importlib.util.spec_from_file_location`` shim. The check exists as
+    a refactoring guard so any future edit that accidentally inlines
+    ``_CAPITAL_PATH_PREFIXES`` into the close-nudge is caught on the next
+    drift run.
+
+    Same registry decision as Check 179: the canonical-inline-copies registry
+    covers literal-value-duplicate pairs only. Because the close-nudge
+    imports the prefix list rather than duplicating it, this pair is
+    structural parity, not literal-byte parity — kept outside the registry
+    and enforced by this standalone check.
+
+    Fail-closed: missing or unreadable hook file is itself a violation.
+    """
+    import importlib.util as _ilu
+
+    hook_dir = PROJECT_ROOT / ".claude" / "hooks"
+    nudge_path = hook_dir / "judgment-review-nudge.py"
+    close_path = hook_dir / "stage-closed-code-review-nudge.py"
+
+    violations: list[str] = []
+
+    def _load(path: Path, alias: str):
+        if not path.exists():
+            violations.append(
+                f"check_stage_closed_review_nudge_capital_paths_parity: "
+                f"hook file missing at {path}"
+            )
+            return None
+        try:
+            spec = _ilu.spec_from_file_location(alias, str(path))
+            if spec is None or spec.loader is None:
+                violations.append(
+                    f"check_stage_closed_review_nudge_capital_paths_parity: "
+                    f"could not build importlib spec for {path}"
+                )
+                return None
+            module = _ilu.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+        except Exception as exc:
+            violations.append(
+                f"check_stage_closed_review_nudge_capital_paths_parity: "
+                f"failed to load {path}: {type(exc).__name__}: {exc}"
+            )
+            return None
+
+    nudge = _load(nudge_path, "judgment_review_nudge_drift_probe_b")
+    close = _load(close_path, "stage_closed_code_review_nudge_drift_probe")
+    if nudge is None or close is None:
+        return violations
+
+    nudge_prefixes = getattr(nudge, "_CAPITAL_PATH_PREFIXES", None)
+    close_prefixes = getattr(close, "_CAPITAL_PATH_PREFIXES", None)
+
+    if nudge_prefixes is None:
+        violations.append(
+            "check_stage_closed_review_nudge_capital_paths_parity: "
+            "judgment-review-nudge.py does not expose _CAPITAL_PATH_PREFIXES "
+            "(canonical source removed -- restore or update this check)"
+        )
+        return violations
+
+    if close_prefixes is None:
+        violations.append(
+            "check_stage_closed_review_nudge_capital_paths_parity: "
+            "stage-closed-code-review-nudge.py does not expose _CAPITAL_PATH_PREFIXES "
+            "(importlib delegation broken -- close-nudge must import from nudge)"
+        )
+        return violations
+
+    if tuple(nudge_prefixes) != tuple(close_prefixes):
+        violations.append(
+            "check_stage_closed_review_nudge_capital_paths_parity: "
+            f"capital-class prefix lists diverged. "
+            f"nudge={tuple(nudge_prefixes)!r}, close-nudge={tuple(close_prefixes)!r}. "
+            "The close-nudge must delegate to the nudge via importlib shim, "
+            "not inline a copy. [[canonical-source-delegation]] "
+            "(institutional-rigor.md section 4)."
+        )
+
+    return violations
+
+
 def check_triage_provenance_completeness(
     drafts_dir: Path | None = None,
 ) -> list[str]:
@@ -14003,6 +14094,12 @@ CHECKS = [
     (
         "Judgment-review hooks: _CAPITAL_PATH_PREFIXES parity (nudge<->soft-block canonical-source delegation)",
         check_judgment_review_capital_paths_parity,
+        False,  # blocking -- capital-class forcing function depends on canonical-source delegation
+        False,
+    ),
+    (
+        "Stage-closed code-review nudge: _CAPITAL_PATH_PREFIXES parity (nudge<->close-nudge canonical-source delegation)",
+        check_stage_closed_review_nudge_capital_paths_parity,
         False,  # blocking -- capital-class forcing function depends on canonical-source delegation
         False,
     ),

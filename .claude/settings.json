@@ -178,6 +178,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/stage-closed-code-review-nudge.py",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
