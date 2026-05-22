@@ -61,6 +61,10 @@ _TITLE_RE = re.compile(r"^#\s+Chordia strict unlock audit\s+[—-]\s+(?P<strateg
 _MEASURED_RE = re.compile(r"\*\*MEASURED (?P<key>[^:*]+):\*\*\s*`?(?P<value>[^`\n]+)`?")
 
 type StrategyLabProvider = Callable[[str, int], dict[str, Any]]
+type CorrelationProvider = Callable[[list[dict[str, Any]]], dict[str, Any]]
+
+CANONICAL_C8_PASS_LABELS = frozenset({"PASSED"})
+SHADOW_ONLY_CHANGE_REASON = "shadow_only_packet_no_allocator_or_profile_mutation"
 
 
 def _safe_load_yaml(path: Path) -> Any:
@@ -553,9 +557,10 @@ def build_truth_ledger(
 
 def _ranking_eligible(row: dict[str, Any]) -> bool:
     verdict = row.get("verdict") or row.get("heavyweight_verdict")
+    c8_pass_label = "PASSED" if row.get("canonical_context_applied") else "OOS_SIGN_MATCH_N_GE_30"
     return (
         verdict == "PASS_CHORDIA"
-        and row.get("c8_oos_status") == "OOS_SIGN_MATCH_N_GE_30"
+        and row.get("c8_oos_status") == c8_pass_label
         and row.get("blocker") in (None, "")
     )
 
@@ -566,8 +571,10 @@ def _filter_reason(row: dict[str, Any]) -> str:
         return str(row["blocker"])
     if verdict != "PASS_CHORDIA":
         return f"verdict_{str(verdict or 'missing').lower()}"
-    if row.get("c8_oos_status") != "OOS_SIGN_MATCH_N_GE_30":
-        return f"c8_{str(row.get('c8_oos_status') or 'missing').lower()}"
+    c8_pass_label = "PASSED" if row.get("canonical_context_applied") else "OOS_SIGN_MATCH_N_GE_30"
+    if row.get("c8_oos_status") != c8_pass_label:
+        prefix = "canonical_c8" if row.get("canonical_context_applied") else "c8"
+        return f"{prefix}_{str(row.get('c8_oos_status') or 'missing').lower()}"
     return "included_for_ranking"
 
 
@@ -591,47 +598,598 @@ def _rank_key(row: dict[str, Any]) -> tuple[float, int, str]:
     )
 
 
+def _lane_score_from_row(row: dict[str, Any]) -> Any:
+    from trading_app.lane_allocator import LaneScore
+    from trading_app.prop_profiles import parse_strategy_id as parse_canonical_strategy_id
+
+    sid = str(row.get("strategy_id") or "")
+    spec = parse_canonical_strategy_id(sid)
+    return LaneScore(
+        strategy_id=sid,
+        instrument=str(spec["instrument"]),
+        orb_label=str(spec["orb_label"]),
+        orb_minutes=int(spec["orb_minutes"]),
+        rr_target=float(spec["rr_target"]),
+        filter_type=str(spec["filter_type"]),
+        confirm_bars=int(spec["confirm_bars"]),
+        stop_multiplier=1.0,
+        trailing_expr=float(row.get("is_expr") or 0.0),
+        trailing_n=int(row.get("n_unique_days") or 0),
+        trailing_months=0,
+        annual_r_estimate=float(row.get("is_t") or 0.0),
+        trailing_wr=0.0,
+        session_regime_expr=None,
+        months_negative=0,
+        months_positive_since_last_neg_streak=0,
+        status="DEPLOY",
+        status_reason="fast_lane_packet_correlation_probe",
+        entry_model=str(spec["entry_model"]),
+        chordia_verdict=str(row.get("verdict") or ""),
+        c8_oos_status=str(row.get("c8_oos_status") or ""),
+    )
+
+
+def _synthetic_current_lane_row(strategy_id: str) -> dict[str, Any]:
+    parsed = _parse_scope_from_strategy_id(strategy_id)
+    parsed["orb_minutes"] = parsed.get("orb_minutes") or 5
+    return {
+        "strategy_id": strategy_id,
+        "verdict": "CURRENT_LANE_CONTEXT",
+        "c8_oos_status": "CURRENT_LANE_CONTEXT",
+        **parsed,
+    }
+
+
+def _default_correlation_provider(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    from trading_app.lane_allocator import compute_pairwise_correlation
+    from trading_app.lane_correlation import RHO_REJECT_THRESHOLD
+
+    scores = []
+    skipped: dict[str, str] = {}
+    seen: set[str] = set()
+    for row in rows:
+        sid = str(row.get("strategy_id") or "")
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        try:
+            scores.append(_lane_score_from_row(row))
+        except Exception as exc:  # pragma: no cover - defensive parser boundary
+            skipped[sid] = f"{type(exc).__name__}: {exc}"
+
+    pairs: list[dict[str, Any]] = []
+    if len(scores) >= 2:
+        matrix = compute_pairwise_correlation(scores)
+        for (a, b), rho in sorted(matrix.items()):
+            pairs.append(
+                {
+                    "a": a,
+                    "b": b,
+                    "rho": round(float(rho), 6),
+                    "reject": float(rho) > RHO_REJECT_THRESHOLD,
+                }
+            )
+
+    return {
+        "status": "MEASURED",
+        "method": "trading_app.lane_allocator.compute_pairwise_correlation",
+        "threshold_source": "trading_app.lane_correlation.RHO_REJECT_THRESHOLD",
+        "rho_reject_threshold": RHO_REJECT_THRESHOLD,
+        "skipped": skipped,
+        "pairs": pairs,
+    }
+
+
+def _pair_key(a: str, b: str) -> tuple[str, str]:
+    return (a, b) if a < b else (b, a)
+
+
+def _correlation_lookup(correlation_summary: dict[str, Any]) -> dict[tuple[str, str], float]:
+    lookup: dict[tuple[str, str], float] = {}
+    for pair in correlation_summary.get("pairs") or []:
+        if not isinstance(pair, dict):
+            continue
+        a = pair.get("a")
+        b = pair.get("b")
+        rho = pair.get("rho")
+        if isinstance(a, str) and isinstance(b, str) and isinstance(rho, int | float):
+            lookup[_pair_key(a, b)] = float(rho)
+    return lookup
+
+
+def _build_correlation_plan(
+    ranked: list[dict[str, Any]],
+    correlation_summary: dict[str, Any],
+) -> tuple[list[str], dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    if correlation_summary.get("status") != "MEASURED":
+        return (
+            [],
+            {
+                str(row.get("strategy_id")): {
+                    "status": "NOT_MEASURED_FAIL_CLOSED",
+                    "reason": "correlation_provider_not_measured",
+                }
+                for row in ranked
+            },
+            [],
+        )
+
+    from trading_app.lane_correlation import RHO_REJECT_THRESHOLD
+
+    skipped = correlation_summary.get("skipped") if isinstance(correlation_summary.get("skipped"), dict) else {}
+    lookup = _correlation_lookup(correlation_summary)
+    approved: list[str] = []
+    decisions: dict[str, dict[str, Any]] = {}
+    clusters: list[dict[str, Any]] = []
+    cluster_by_head: dict[str, dict[str, Any]] = {}
+
+    for row in ranked:
+        sid = str(row.get("strategy_id") or "")
+        if sid in skipped:
+            decisions[sid] = {
+                "status": "NOT_MEASURED_FAIL_CLOSED",
+                "reason": "correlation_parse_or_load_failed",
+                "detail": skipped[sid],
+            }
+            continue
+        winner = None
+        winner_rho = 0.0
+        for head in approved:
+            rho = lookup.get(_pair_key(sid, head), 0.0)
+            if rho > RHO_REJECT_THRESHOLD:
+                winner = head
+                winner_rho = rho
+                break
+        if winner is not None:
+            decisions[sid] = {
+                "status": "REDUNDANT_WITH_HIGHER_RANKED",
+                "reason": "correlation_redundant_with_ranked_candidate",
+                "displaced_by": winner,
+                "rho": winner_rho,
+            }
+            cluster_by_head[winner]["members"].append({"strategy_id": sid, "rho_to_head": winner_rho})
+            continue
+        approved.append(sid)
+        decisions[sid] = {"status": "CLUSTER_HEAD", "reason": "correlation_gate_passed_dry_run"}
+        cluster = {
+            "head": sid,
+            "instrument": row.get("instrument"),
+            "session": row.get("session"),
+            "orb_minutes": row.get("orb_minutes") or 5,
+            "feature_family": row.get("feature_family"),
+            "members": [],
+        }
+        clusters.append(cluster)
+        cluster_by_head[sid] = cluster
+
+    return approved, decisions, clusters
+
+
+def _family_summary(rows: list[dict[str, Any]]) -> dict[str, list[str]]:
+    families: dict[str, list[str]] = {}
+    for row in rows:
+        family = str(row.get("feature_family") or "UNKNOWN")
+        sid = str(row.get("strategy_id") or "")
+        families.setdefault(family, []).append(sid)
+    return {key: sorted(value) for key, value in sorted(families.items())}
+
+
+def load_canonical_strategy_context(strategy_ids: Iterable[str]) -> dict[str, dict[str, Any]]:
+    """Load canonical validator/allocator labels without changing runtime state."""
+    ids = sorted({sid for sid in strategy_ids if sid})
+    if not ids:
+        return {}
+    try:
+        import duckdb
+        from pipeline.db_config import configure_connection
+        from pipeline.paths import GOLD_DB_PATH
+    except ImportError:
+        return {}
+
+    placeholders = ", ".join("?" for _ in ids)
+    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+    configure_connection(con)
+    try:
+        rows = con.execute(
+            f"""
+            SELECT strategy_id, c8_oos_status, trade_day_count, sample_size,
+                   expectancy_r, oos_exp_r, wfe, status, deployment_scope
+            FROM validated_setups
+            WHERE strategy_id IN ({placeholders})
+            """,
+            ids,
+        ).fetchall()
+    finally:
+        con.close()
+    out: dict[str, dict[str, Any]] = {}
+    for sid, c8_status, trade_day_count, sample_size, exp_r, oos_exp_r, wfe, status, scope in rows:
+        out[str(sid)] = {
+            "c8_oos_status": c8_status,
+            "trade_day_count": trade_day_count,
+            "sample_size": sample_size,
+            "expectancy_r": exp_r,
+            "oos_exp_r": oos_exp_r,
+            "wfe": wfe,
+            "status": status,
+            "deployment_scope": scope,
+        }
+    return out
+
+
+def _allocator_metric_from_score(score: Any) -> dict[str, Any]:
+    return {
+        "annual_r": getattr(score, "annual_r_estimate", None),
+        "trailing_expr": getattr(score, "trailing_expr", None),
+        "trailing_n": getattr(score, "trailing_n", None),
+        "status": getattr(score, "status", None),
+        "status_reason": getattr(score, "status_reason", None),
+        "chordia_verdict": getattr(score, "chordia_verdict", None),
+        "c8_oos_status": getattr(score, "c8_oos_status", None),
+    }
+
+
+def load_live_allocator_context(path: Path | None = None) -> dict[str, Any]:
+    """Read allocator state and compute live allocator scores in read-only mode."""
+    if path is None:
+        path = legacy_lane_allocation_path()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        payload = {}
+
+    lanes = payload.get("lanes") if isinstance(payload, dict) else None
+    paused = payload.get("paused") if isinstance(payload, dict) else None
+    displaced = payload.get("displaced") if isinstance(payload, dict) else None
+    context: dict[str, Any] = {
+        "rebalance_date": payload.get("rebalance_date") if isinstance(payload, dict) else None,
+        "current_lanes": {
+            lane["strategy_id"]: lane
+            for lane in (lanes or [])
+            if isinstance(lane, dict) and isinstance(lane.get("strategy_id"), str)
+        },
+        "paused": {
+            row["strategy_id"]: row
+            for row in (paused or [])
+            if isinstance(row, dict) and isinstance(row.get("strategy_id"), str)
+        },
+        "displaced": {
+            row["strategy_id"]: row
+            for row in (displaced or [])
+            if isinstance(row, dict) and isinstance(row.get("strategy_id"), str)
+        },
+        "metrics": {},
+    }
+    context["metrics"].update(context["current_lanes"])
+
+    rebalance_date_raw = context.get("rebalance_date")
+    if not isinstance(rebalance_date_raw, str):
+        return context
+    try:
+        from datetime import date
+
+        from trading_app.lane_allocator import apply_c8_gate, apply_chordia_gate, compute_lane_scores
+
+        scores = apply_c8_gate(apply_chordia_gate(compute_lane_scores(date.fromisoformat(rebalance_date_raw))))
+    except Exception as exc:  # pragma: no cover - defensive DB/tool boundary
+        context["metrics_error"] = f"{type(exc).__name__}: {exc}"
+        return context
+    for score in scores:
+        context["metrics"][score.strategy_id] = _allocator_metric_from_score(score)
+    return context
+
+
+def _enrich_with_canonical_context(
+    ledger: list[dict[str, Any]],
+    canonical_by_strategy: dict[str, dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    canonical = canonical_by_strategy or {}
+    out: list[dict[str, Any]] = []
+    for row in ledger:
+        enriched = dict(row)
+        sid = str(enriched.get("strategy_id") or "")
+        ctx = canonical.get(sid)
+        enriched["canonical_context_applied"] = True
+        enriched["md_c8_oos_status"] = row.get("c8_oos_status")
+        enriched["md_n_fired"] = row.get("is_n_fired", row.get("n_unique_days"))
+        if not ctx:
+            enriched["c8_oos_status"] = "CANONICAL_CONTEXT_MISSING"
+            enriched["canonical_c8_oos_status"] = None
+            enriched["n_unique_days_source"] = "missing_canonical_context"
+            out.append(enriched)
+            continue
+        canonical_c8 = ctx.get("c8_oos_status")
+        enriched["c8_oos_status"] = canonical_c8
+        enriched["canonical_c8_oos_status"] = canonical_c8
+        enriched["n_unique_days"] = ctx.get("trade_day_count")
+        enriched["n_unique_days_source"] = "validated_setups.trade_day_count"
+        enriched["canonical_metrics"] = {
+            key: ctx.get(key)
+            for key in (
+                "sample_size",
+                "expectancy_r",
+                "oos_exp_r",
+                "wfe",
+                "status",
+                "deployment_scope",
+                "trade_day_count",
+            )
+        }
+        out.append(enriched)
+    return out
+
+
+def _read_text_flags(path: Path | None) -> set[str]:
+    if path is None:
+        return set()
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    flags: set[str] = set()
+    if "UNVERIFIED_INSUFFICIENT_POWER" in text or "STATISTICALLY_USELESS" in text:
+        flags.add("insufficient_power")
+    if "NOT AVAILABLE" in text or "PARALLEL_DEPLOY_CANDIDATE" in text:
+        flags.add("not_auto_rotatable")
+    return flags
+
+
+def load_strategy_blockers(ledger: list[dict[str, Any]]) -> dict[str, list[str]]:
+    blockers: dict[str, set[str]] = {}
+    for row in ledger:
+        sid = str(row.get("strategy_id") or "")
+        if not sid:
+            continue
+        flags = _read_text_flags(_repo_path(row.get("md_path")))
+        for path in sorted(RUNTIME_DIR.glob(f"rotation_decision_{sid}_*.md")):
+            flags.update(_read_text_flags(path))
+        if flags:
+            blockers[sid] = flags
+    return {sid: sorted(values) for sid, values in blockers.items()}
+
+
+def _current_lane_maps(
+    current_lanes: set[str],
+    allocator_context: dict[str, Any] | None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    context = allocator_context or {}
+    current_raw = context.get("current_lanes") if isinstance(context.get("current_lanes"), dict) else {}
+    metrics_raw = context.get("metrics") if isinstance(context.get("metrics"), dict) else {}
+    displaced_raw = context.get("displaced") if isinstance(context.get("displaced"), dict) else {}
+    current: dict[str, dict[str, Any]] = {}
+    for sid in current_lanes:
+        current[sid] = dict(current_raw.get(sid) or metrics_raw.get(sid) or _synthetic_current_lane_row(sid))
+    metrics = {
+        str(sid): dict(value)
+        for sid, value in metrics_raw.items()
+        if isinstance(sid, str) and isinstance(value, dict)
+    }
+    displaced = {
+        str(sid): dict(value)
+        for sid, value in displaced_raw.items()
+        if isinstance(sid, str) and isinstance(value, dict)
+    }
+    return current, metrics, displaced
+
+
+def _find_incumbent_for_candidate(
+    row: dict[str, Any],
+    current: dict[str, dict[str, Any]],
+    displaced: dict[str, dict[str, Any]],
+) -> str | None:
+    sid = str(row.get("strategy_id") or "")
+    displaced_by = displaced.get(sid, {}).get("displaced_by")
+    if isinstance(displaced_by, str) and displaced_by in current:
+        return displaced_by
+    same_scope = [
+        current_sid
+        for current_sid, current_row in current.items()
+        if current_row.get("instrument") == row.get("instrument") and current_row.get("session", current_row.get("orb_label")) in {row.get("session"), row.get("orb_label")}
+    ]
+    if len(same_scope) == 1:
+        return same_scope[0]
+    if len(current) == 1:
+        return next(iter(current))
+    return None
+
+
+def _beats_incumbent_proof(
+    row: dict[str, Any],
+    current: dict[str, dict[str, Any]],
+    metrics: dict[str, dict[str, Any]],
+    displaced: dict[str, dict[str, Any]],
+) -> tuple[bool, str, dict[str, Any]]:
+    sid = str(row.get("strategy_id") or "")
+    incumbent_sid = _find_incumbent_for_candidate(row, current, displaced)
+    proof: dict[str, Any] = {
+        "candidate_strategy_id": sid,
+        "incumbent_strategy_id": incumbent_sid,
+        "beats_incumbent": False,
+    }
+    if incumbent_sid is None:
+        return False, "incumbent_comparison_missing", proof
+    if displaced.get(sid, {}).get("displaced_by") == incumbent_sid:
+        proof["live_allocator_displaced_record"] = displaced[sid]
+        return False, "live_allocator_displaced_by_incumbent", proof
+    candidate_metrics = metrics.get(sid)
+    incumbent_metrics = metrics.get(incumbent_sid) or current.get(incumbent_sid)
+    proof["candidate_metrics"] = candidate_metrics
+    proof["incumbent_metrics"] = incumbent_metrics
+    if not candidate_metrics or not incumbent_metrics:
+        return False, "live_allocator_metrics_missing", proof
+    if candidate_metrics.get("status") not in {"DEPLOY", "RESUME", "PROVISIONAL"}:
+        return False, "candidate_not_deployable_in_live_allocator_metrics", proof
+    c_annual = _floatish(candidate_metrics.get("annual_r"))
+    i_annual = _floatish(incumbent_metrics.get("annual_r"))
+    c_expr = _floatish(candidate_metrics.get("trailing_expr"))
+    i_expr = _floatish(incumbent_metrics.get("trailing_expr"))
+    if c_annual is None or i_annual is None or c_expr is None or i_expr is None:
+        return False, "live_allocator_metrics_incomplete", proof
+    beats = c_annual > i_annual and c_expr >= i_expr
+    proof["beats_incumbent"] = beats
+    reason = "beats_incumbent_live_allocator_metrics" if beats else "does_not_beat_incumbent_live_allocator_metrics"
+    return beats, reason, proof
+
+
+def _candidate_blocker_reason(row: dict[str, Any], blockers: dict[str, list[str]]) -> str | None:
+    sid = str(row.get("strategy_id") or "")
+    c8 = row.get("c8_oos_status")
+    if c8 not in CANONICAL_C8_PASS_LABELS:
+        return f"canonical_c8_{str(c8 or 'missing').lower()}"
+    row_blockers = blockers.get(sid) or []
+    if "insufficient_power" in row_blockers:
+        return "insufficient_power"
+    if "not_auto_rotatable" in row_blockers:
+        return "not_auto_rotatable"
+    return None
+
+
 def build_capital_packet(
     ledger: list[dict[str, Any]],
     *,
     current_lanes: list[str] | None = None,
+    correlation_provider: CorrelationProvider | None = None,
+    canonical_by_strategy: dict[str, dict[str, Any]] | None = None,
+    allocator_context: dict[str, Any] | None = None,
+    strategy_blockers: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     current = set(current_lanes or [])
-    ranked = sorted([row for row in ledger if _ranking_eligible(row)], key=_rank_key, reverse=True)
+    enriched_ledger = _enrich_with_canonical_context(ledger, canonical_by_strategy)
+    blockers = strategy_blockers if strategy_blockers is not None else load_strategy_blockers(enriched_ledger)
+    current_context, allocator_metrics, displaced_context = _current_lane_maps(current, allocator_context)
+    ranked = sorted([row for row in enriched_ledger if _ranking_eligible(row)], key=_rank_key, reverse=True)
+    correlation_rows = [
+        *ranked,
+        *[
+            _synthetic_current_lane_row(sid)
+            for sid in sorted(current)
+            if sid not in {str(r.get("strategy_id")) for r in ranked}
+        ],
+    ]
+    if correlation_provider is None:
+        correlation_summary = {
+            "status": "NOT_REQUESTED",
+            "method": None,
+            "rho_reject_threshold": None,
+            "skipped": {},
+            "pairs": [],
+        }
+        correlation_approved_ids = [str(row.get("strategy_id")) for row in ranked]
+        correlation_decisions = {
+            str(row.get("strategy_id")): {"status": "NOT_REQUESTED", "reason": "unit_or_report_context_only"}
+            for row in ranked
+        }
+        correlation_clusters: list[dict[str, Any]] = []
+    else:
+        try:
+            correlation_summary = correlation_provider(correlation_rows)
+        except Exception as exc:  # pragma: no cover - defensive DB/tool boundary
+            correlation_summary = {
+                "status": "ERROR_FAIL_CLOSED",
+                "method": "correlation_provider",
+                "error": f"{type(exc).__name__}: {exc}",
+                "skipped": {},
+                "pairs": [],
+            }
+        correlation_approved_ids, correlation_decisions, correlation_clusters = _build_correlation_plan(
+            ranked,
+            correlation_summary,
+        )
     decisions: dict[str, dict[str, Any]] = {}
-    for row in ledger:
+    for row in enriched_ledger:
         sid = str(row.get("strategy_id") or "")
         reason = _filter_reason(row)
         verdict = row.get("verdict") or row.get("heavyweight_verdict")
-        if _ranking_eligible(row):
-            bucket = "APPROVE_DRY_RUN"
-            reason = "pass_chordia_and_oos_sign_match"
+        if sid in current and row.get("c8_oos_status") in CANONICAL_C8_PASS_LABELS and row.get("blocker") in (None, ""):
+            bucket = "KEEP_CURRENT_SHADOW_ONLY"
+            reason = "current_lane_shadow_only_no_live_removal"
+            _, _, proof = _beats_incumbent_proof(row, current_context, allocator_metrics, displaced_context)
+        elif _ranking_eligible(row):
+            correlation_decision = correlation_decisions.get(sid, {})
+            blocker_reason = _candidate_blocker_reason(row, blockers)
+            beats, beat_reason, proof = _beats_incumbent_proof(row, current_context, allocator_metrics, displaced_context)
+            if blocker_reason is not None:
+                bucket = "WATCH"
+                reason = blocker_reason
+            elif sid not in correlation_approved_ids:
+                bucket = "WATCH"
+                reason = str(correlation_decision.get("reason") or "correlation_not_approved_fail_closed")
+            elif not beats:
+                bucket = "WATCH"
+                reason = beat_reason
+            else:
+                bucket = "APPROVE_SHADOW_ONLY"
+                reason = "pass_chordia_c8_correlation_and_beats_incumbent_live_allocator_metrics"
         elif verdict in FAIL_HEAVYWEIGHT_VERDICTS or row.get("blocker") == "heavyweight_failed":
             bucket = "REJECT"
+            proof = None
         else:
             bucket = "WATCH"
             if row.get("blocker") == "oos_sign_flip_or_incomplete_confirmation":
                 bucket = "REJECT"
-        decisions[sid] = {"bucket": bucket, "reason": reason, "md_path": row.get("md_path")}
+            proof = None
+        decisions[sid] = {
+            "bucket": bucket,
+            "reason": reason,
+            "md_path": row.get("md_path"),
+            "correlation": correlation_decisions.get(sid),
+        }
+        if _ranking_eligible(row):
+            decisions[sid]["incumbent_comparison"] = proof
+        if blockers.get(sid):
+            decisions[sid]["strategy_blockers"] = blockers[sid]
 
-    ranked_ids = [str(row.get("strategy_id")) for row in ranked]
+    for sid in sorted(current):
+        if sid not in decisions:
+            decisions[sid] = {
+                "bucket": "KEEP_CURRENT_SHADOW_ONLY",
+                "reason": "current_lane_absent_from_fast_lane_truth_ledger",
+                "md_path": None,
+                "correlation": None,
+                "incumbent_comparison": None,
+            }
+
+    approved_shadow_ids = [
+        sid for sid, decision in sorted(decisions.items()) if decision.get("bucket") == "APPROVE_SHADOW_ONLY"
+    ]
+    watch_ids = [sid for sid, decision in sorted(decisions.items()) if decision.get("bucket") == "WATCH"]
+    reject_ids = [sid for sid, decision in sorted(decisions.items()) if decision.get("bucket") == "REJECT"]
     return {
         "schema_version": SCHEMA_VERSION,
         "source": "scripts/tools/fast_lane_research_review.py",
         "generated_at": datetime.now(tz=UTC).date().isoformat(),
         "capital_boundary": CAPITAL_BOUNDARY,
+        "shadow_only": True,
         "methodology": {
-            "ranking_rule": "rank only PASS_CHORDIA rows with OOS_SIGN_MATCH_N_GE_30",
-            "allocator_action": "dry_run_only_no_profile_or_lane_allocation_write",
+            "ranking_rule": "rank only PASS_CHORDIA rows with canonical allocator c8_oos_status=PASSED",
+            "unique_day_rule": "n_unique_days comes from validated_setups.trade_day_count, not MD N_fired",
+            "correlation_rule": "reuse canonical pairwise lane correlation; fail closed on measurement errors",
+            "approval_rule": "APPROVE_SHADOW_ONLY requires live allocator metrics proving candidate beats incumbent",
+            "allocator_action": SHADOW_ONLY_CHANGE_REASON,
+            "literature_grounding": [
+                "docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md",
+                "docs/institutional/literature/carver_2015_ch11_portfolios.md",
+                "docs/institutional/pre_registered_criteria.md",
+            ],
         },
-        "filtered_out_summary": filtered_out_summary(ledger),
+        "filtered_out_summary": filtered_out_summary(enriched_ledger),
+        "feature_family_summary": _family_summary(ranked),
+        "correlation_summary": correlation_summary,
+        "correlation_clusters": correlation_clusters,
         "ranked_candidates": ranked,
+        "truth_ledger": enriched_ledger,
         "decisions": decisions,
+        "shadow_recommendations": {
+            "approve_shadow_only": approved_shadow_ids,
+            "watch": watch_ids,
+            "reject": reject_ids,
+            "keep_current": sorted(current),
+        },
         "rebalance_dry_run_diff": {
             "current_lanes": sorted(current),
-            "would_add": [sid for sid in ranked_ids if sid not in current],
-            "would_keep": [sid for sid in ranked_ids if sid in current],
-            "would_remove": [sid for sid in sorted(current) if sid not in ranked_ids],
+            "would_add": [],
+            "would_keep": sorted(current),
+            "would_remove": [],
+            "blocked_change_reason": SHADOW_ONLY_CHANGE_REASON,
         },
     }
 
@@ -845,7 +1403,16 @@ def main(argv: list[str] | None = None) -> int:
             include_direct_heavyweight=True,
         )
         ledger = build_truth_ledger(selected, journal_by_strategy=journal)
-        packet = build_capital_packet(ledger, current_lanes=load_current_lane_ids())
+        current_lanes = load_current_lane_ids()
+        strategy_ids_for_context = {str(row.get("strategy_id") or "") for row in ledger}
+        strategy_ids_for_context.update(current_lanes)
+        packet = build_capital_packet(
+            ledger,
+            current_lanes=current_lanes,
+            correlation_provider=_default_correlation_provider,
+            canonical_by_strategy=load_canonical_strategy_context(strategy_ids_for_context),
+            allocator_context=load_live_allocator_context(),
+        )
         write_truth_ledger_json(ledger)
         write_truth_ledger_csv(ledger)
         write_capital_packet_json(packet)
