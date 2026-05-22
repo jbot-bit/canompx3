@@ -1,7 +1,7 @@
 {
-  "total_iterations": 182,
+  "total_iterations": 183,
   "last_updated": "2026-05-23",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 189,
   "findings_by_type": {
     "canonical_violation": {
@@ -40,17 +40,17 @@
       "deferred": 0,
       "fix_rate": 1.0
     },
+    "security": {
+      "found": 4,
+      "fixed": 4,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
     "annotation_debt": {
       "found": 4,
       "fixed": 3,
       "deferred": 1,
       "fix_rate": 0.75
-    },
-    "security": {
-      "found": 3,
-      "fixed": 3,
-      "deferred": 0,
-      "fix_rate": 1.0
     },
     "falsy_zero": {
       "found": 3,
@@ -129,11 +129,11 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 48,
-    "LOW": 111
+    "LOW": 112
   },
   "classifications": {
     "judgment": 83,
-    "mechanical": 66,
+    "mechanical": 67,
     "audit-only": 33
   },
   "files_audited": {
@@ -1165,6 +1165,11 @@
     "tests/test_trading_app/conftest.py": {
       "audit_count": 1,
       "last_iter": 188,
+      "findings": 1
+    },
+    "scripts/tools/fast_lane_research_review.py": {
+      "audit_count": 1,
+      "last_iter": 190,
       "findings": 1
     }
   },
@@ -3170,6 +3175,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "acdee5ab"
+    },
+    {
+      "iter": 190,
+      "date": "2026-05-23",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "scripts/tools/fast_lane_research_review.py:30",
+      "finding_type": "security",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "46701207"
     }
   ]
 }

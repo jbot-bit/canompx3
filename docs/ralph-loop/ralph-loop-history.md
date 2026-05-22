@@ -2036,6 +2036,19 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 
 ---
 
+## Iteration 190 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: scripts/tools/fast_lane_research_review.py:30
+- Finding: CHECK153-FLLRR — Direct 'lane_allocation.json' literal (LANE_ALLOCATION_PATH = RUNTIME_DIR / "lane_allocation.json") triggered Check 153 drift violation (check_no_direct_lane_allocation_json_literals; Stage 1b authority inversion). File not in permanent or temporary allowlist.
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources — path literals must route through resolver); Check 153 Stage 1b: trading_app.prop_profiles.legacy_lane_allocation_path() is canonical for profile-agnostic readers.
+- Action: Imported legacy_lane_allocation_path from trading_app.prop_profiles; removed LANE_ALLOCATION_PATH constant; updated load_current_lane_ids default arg (Path = LANE_ALLOCATION_PATH → Path | None = None with fallback inside body). Behavior identical.
+- Blast radius: 1 file (fast_lane_research_review.py — scripts/tools only, no production trading code)
+- Verification: PASS — 160 drift checks (was 1 violation); 26 lane_alloc tests; 4 phase5 boundary tests
+- Commit: 46701207
+
+---
+
 ## Iteration 186 — 2026-05-19
 - Phase: fix
 - Classification: [mechanical]
