@@ -132,6 +132,7 @@ class AccountProfile:
             )
         if sym_map is None:
             return
+        assert qty_div is not None  # enforced by paired != check above
         # Lazy imports to avoid circulars at module-init time.
         from pipeline.asset_configs import ASSET_CONFIGS
         from pipeline.cost_model import COST_SPECS
