@@ -57,7 +57,10 @@ echo.
 :: This is the process that connects to the broker, watches bars, evaluates entries,
 :: and writes bot_state.json. Without it the dashboard reads stale state.
 echo [4/5] Launching orchestrator: profile=%ACTIVE_PROFILE% %BOT_MODE_FLAGS%
-start "ORB Orchestrator (%ACTIVE_PROFILE%)" /min cmd /k ".venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% %BOT_MODE_FLAGS%"
+:: Suppress the orchestrator's own dashboard spawn — this bat opens the dashboard
+:: directly on line 78. Without this env var, two dashboards + two browser tabs
+:: open and race for live_journal.db (fails preflight check 6).
+start "ORB Orchestrator (%ACTIVE_PROFILE%)" /min cmd /k "set CANOMPX3_DASHBOARD_ORIGIN=1 && .venv\Scripts\python.exe -m scripts.run_live_session --profile %ACTIVE_PROFILE% %BOT_MODE_FLAGS%"
 
 :: Step 5: Launch dashboard + open browser in this (main) console.
 :: Closing this window stops the dashboard; the orchestrator keeps running until
