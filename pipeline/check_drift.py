@@ -12177,6 +12177,8 @@ def check_am33_audit_log_theory_grant_parity(
         import yaml as _yaml
     except ImportError as exc:
         return [f"check_am33_audit_log_theory_grant_parity: pyyaml import failed: {exc}"]
+    from trading_app.chordia import CHORDIA_T_WITH_THEORY as _T_WITH
+    from trading_app.chordia import CHORDIA_T_WITHOUT_THEORY as _T_WITHOUT
 
     _audit_path = (
         audit_log_path if audit_log_path is not None else PROJECT_ROOT / "docs" / "runtime" / "chordia_audit_log.yaml"
@@ -12300,8 +12302,8 @@ def check_am33_audit_log_theory_grant_parity(
                             f"metadata.theory_grant=true but chordia_audit_log.yaml has NO "
                             f"theory_grants entry for this strategy_id (implicit "
                             f"has_theory={default_ht}). "
-                            f"Allocator applies t>={3.0 if default_ht else 3.79:.2f}; "
-                            f"prereg declares t>=3.00 hurdle. "
+                            f"Allocator applies t>={_T_WITH if default_ht else _T_WITHOUT:.2f}; "
+                            f"prereg declares t>={_T_WITH:.2f} hurdle. "
                             f"Add strategy_id to chordia_audit_log.yaml theory_grants with "
                             f"has_theory: true AND theory_ref, OR flip prereg to "
                             f"theory_grant: false. "
@@ -12312,8 +12314,8 @@ def check_am33_audit_log_theory_grant_parity(
 
             audit_ht = audit_theory_map[sid]
             if audit_ht != prereq_theory_grant:
-                allocator_t = 3.00 if audit_ht else 3.79
-                prereg_t = 3.00 if prereq_theory_grant else 3.79
+                allocator_t = _T_WITH if audit_ht else _T_WITHOUT
+                prereg_t = _T_WITH if prereq_theory_grant else _T_WITHOUT
                 violations.append(
                     f"check_am33_audit_log_theory_grant_parity: PARITY MISMATCH "
                     f"strategy_id={sid!r} -- "
