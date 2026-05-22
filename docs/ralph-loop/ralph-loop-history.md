@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 199 — 2026-05-23
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/lane_allocator.py:1136-1139
+- Finding: build_allocation hysteresis block silently drops deployable lane when best_prior was demoted by Chordia/C8 gate (status not in DEPLOY/RESUME/PROVISIONAL) — neither candidate nor prior selected, slot lost without displaced[] record
+- Doctrine cited: integrity-guardian.md § 6 (no silent failures in capital-class path)
+- Action: Move `continue` inside the `best_prior.status in (...)` True branch only; add comment + test for demoted-prior path
+- Blast radius: 1 production file, 1 test file
+- Verification: PASS — 83 tests passed, 160 drift checks passed
+- Commit: 009b7fce
+
+---
+
 ## Iteration 198 — 2026-05-23
 - Phase: fix
 - Classification: [judgment]

@@ -1,11 +1,8 @@
-## Iteration: 198
-## Target: trading_app/chordia.py:350-362
-## Finding: `load_chordia_audit_log` catches only `yaml.YAMLError` — `OSError` / `UnicodeDecodeError` from `p.read_text()` bypass the fail-closed contract, propagating to the capital-class allocator gate.
+## Iteration: 199
+## Target: trading_app/lane_allocator.py:1136-1139
+## Finding: Hysteresis block silently drops a deployable lane when best_prior was demoted by an upstream gate (status not in DEPLOY/RESUME/PROVISIONAL) — neither the new candidate nor the prior lane gets selected.
 ## Classification: [judgment]
-## Blast Radius: 1 production file (chordia.py), callers: lane_allocator.py:315 + lane_allocator.py:735 + check_drift.py:9372 (all benefit automatically)
-## Invariants:
-##   1. Fail-closed: missing/unreadable YAML → empty log with default_has_theory=False
-##   2. Operator-visible: all failure paths log at WARNING with the exception
-##   3. No change to the PASS path (well-formed YAML returns the full parsed log)
-## Diff estimate: 3 lines changed
-## Doctrine cited: integrity-guardian.md § 3 (fail-closed mindset) + § 6 (no silent failures — every except must log)
+## Blast Radius: 1 production file, 1 test file
+## Invariants: [gates apply before ranking; hysteresis never rescues a demoted prior; slot count must not silently decrease]
+## Diff estimate: 6 lines production + 25 lines test
+## Doctrine cited: integrity-guardian.md § 6 (no silent failures — silent slot drop in capital-class path)
