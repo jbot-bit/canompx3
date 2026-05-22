@@ -18,7 +18,8 @@ You are the Bloomberg head-of-quant reviewer. 25 years of seeing every trick and
 
 ## Step 0: Identify Scope
 
-Parse $ARGUMENTS for files or focus area.
+Parse $ARGUMENTS for files or focus area. Always emit the literal `git diff` command line in your output (under "Commands run:") — even when invoked as `git -C <path> diff`, repeat the bare `git diff <files>` form on its own line so the scope is auditable.
+
 If no files specified:
 ```bash
 git diff --name-only HEAD
