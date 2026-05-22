@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 198 — 2026-05-23
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/chordia.py:350-362
+- Finding: `load_chordia_audit_log` except clause only caught `yaml.YAMLError` — `OSError` / `UnicodeDecodeError` from `p.read_text()` bypassed the documented fail-closed contract, propagating to the capital-class allocator gate
+- Doctrine cited: integrity-guardian.md § 3 (fail-closed mindset) + § 6 (no silent failures — every except must log)
+- Action: Widened except to `(yaml.YAMLError, OSError, UnicodeDecodeError)`; added `type(exc).__name__` to warning message. New test `TestLoadChordiaAuditLogIOError` added.
+- Blast radius: 2 files (chordia.py, test_chordia.py)
+- Verification: PASS — 160 drift checks; 26 chordia tests pass
+- Commit: 4257c32e
+
+---
+
 ## Iteration 197 — 2026-05-23
 - Phase: fix
 - Classification: [mechanical]

@@ -3,80 +3,82 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 197
+## Last iteration: 198
 
-## RALPH AUDIT — Iteration 197 (COMPLETED)
+## RALPH AUDIT — Iteration 198 (COMPLETED)
 ## Date: 2026-05-23
-## Infrastructure Gates: 160 drift checks PASS; 82 lane_allocator tests PASS
-## Scope: trading_app/lane_allocator.py
+## Infrastructure Gates: 160 drift checks PASS; 26 chordia tests PASS
+## Scope: trading_app/chordia.py
 
 ---
 
-## lane_allocator.py Audit Summary
+## chordia.py Audit Summary
 
-`_classify_status` accepts 8 keyword-only parameters but the function body only
-reads 3 of them (`trailing_expr`, `trailing_n`, `session_regime_expr`). The five
-dead parameters (`actual_months`, `months_neg`, `months_pos_since`, `annual_r`,
-`monthly`) are remnants of individual-strategy pause/resume logic that was
-intentionally removed after backtest 2022-2025 proved regime-only gating (+630R)
-outperforms individual pause/resume (-799R). The values are still computed by the
-caller and stored on `LaneScore` for display/reporting purposes — they just no
-longer influence the classification decision.
+`chordia.py` implements the Chordia t-statistic gate (Criterion 4), the
+audit-log reader, and the verdict taxonomy (PASS_CHORDIA / PASS_PROTOCOL_A /
+FAIL_CHORDIA / FAIL_BOTH / MISSING). Capital-class: verdicts determine live
+deployment eligibility via `apply_chordia_gate` in `lane_allocator.py`.
 
-Pyright flagged lines 554-557 and 559 as "not accessed." This matched the
-institutional-rigor.md § 5 "No dead code" rule — dead parameters are dead
-parameters, not "future use."
+The file is well-structured with one finding:
 
 ---
 
-## Finding DEAD-197 — LOW — FIXED
+## Finding CHORDIA-IO-198 — MEDIUM — FIXED
 
-**PREMISE:** `_classify_status` signature declared 5 parameters that its body
-never read. Computed values with no effect on the decision path are a dead-code
-violation (institutional-rigor.md § 5).
+**PREMISE:** `load_chordia_audit_log` documents a fail-closed contract
+(missing OR malformed YAML → empty log with default_has_theory=False). But
+the try/except at line 350 only catches `yaml.YAMLError`. A call to
+`p.read_text()` on an existing file can raise `OSError` (PermissionError,
+disk error) or `UnicodeDecodeError` (corrupted encoding) — neither is
+`yaml.YAMLError`, so these bypass the fail-closed path and propagate to
+the capital-class allocator gate.
 
 **TRACE:**
-- `lane_allocator.py:550-559` — signature with 5 unused params
-- `lane_allocator.py:462-471` — caller passing the 5 dead params
-- `research/garch_a4b_binding_budget_replay.py:447-456` — second caller
+- `chordia.py:351` — `p.read_text()` inside `try/except yaml.YAMLError`
+- `lane_allocator.py:315` — `audit_log = load_chordia_audit_log()` inside
+  `try/finally:con.close()` (no except — OSError propagates out)
+- `lane_allocator.py:735` — same call in `apply_chordia_gate`, no guard
 
-**EVIDENCE:** Function body (lines 574-591) uses only `trailing_expr`,
-`trailing_n`, `session_regime_expr`. Pyright "not accessed" on lines 554-557, 559
-confirmed. The parameters are listed in the docstring as "backtest proved not
-needed."
+**EVIDENCE:** `chordia.py:350-362` shows only `yaml.YAMLError` caught.
+`compute_lane_scores` uses `try/finally` (no except) so any uncaught
+exception from `load_chordia_audit_log` exits the function with no scores.
 
-**Fix:** Removed 5 dead parameters from `_classify_status` signature and all
-3 production call sites. 8 test call sites also updated. Commit 03847687.
+**Fix:** Widened except to `(yaml.YAMLError, OSError, UnicodeDecodeError)`.
+Also added `type(exc).__name__` to the warning message for grep-ability.
+1 new test `TestLoadChordiaAuditLogIOError` added. Commit 4257c32e.
 
-**Doctrine cited:** institutional-rigor.md § 5 (No dead code)
+**Doctrine cited:** integrity-guardian.md § 3 (fail-closed mindset) + § 6
+(no silent failures — every except must log the exception)
 
 ---
 
-## Seven Sins Scan — lane_allocator.py (partial — entry/greedy path)
+## Seven Sins Scan — chordia.py
 
-- Sin 1 (Silent failure): Greedy selection in `build_allocation` uses plain
-  `for` iteration without try/except — correlation failures propagate to the
-  caller. Fail-closed behavior. ACCEPTABLE.
-- Sin 2 (Fail-open): `load_sr_state()` fails-open (returns `{}`) on stale/missing
-  SR state file. Documented in docstring. ACCEPTABLE (per integrity-guardian § 3,
-  fail-open documented at canonical source).
-- Sin 3 (Canonical violation): `_compute_session_regime` at line 540 hardcodes
-  `entry_model='E2'` AND `rr_target=1.0`, `confirm_bars=1`, `orb_minutes=5`.
-  These are the canonical regime-proxy parameters — unfiltered E2 RR1.0 CB1 O5
-  as defined in the module docstring ("Session regime (unfiltered E2 RR1.0 CB1,
-  6-month window)"). This is an intentional architectural choice (regime proxy,
-  not a lane-specific setting). Per iter 187, `compute_pairwise_correlation`
-  hardcoded E2 was FIXED (commit 052403aa). This remaining hardcode is in the
-  *regime proxy* function — different role. ACCEPTABLE per pattern 1 (intentional
-  per-session heuristic).
-- Sin 4 (Impact awareness): `LaneScore.months_negative` and
-  `months_positive_since_last_neg_streak` still appear on the dataclass and are
-  still computed by the caller — they are live reporting fields even though they
-  don't influence `_classify_status`. No action needed.
+- Sin 1 (Silent failure): `load_chordia_audit_log` now correctly catches all
+  IO errors and logs at WARNING. FIXED (this iteration).
+- Sin 2 (Fail-open): File-missing and YAML-parse error paths both return
+  `default_has_theory=False` and empty entries — strictly fail-closed.
+  ACCEPTABLE.
+- Sin 3 (Canonical violation): Thresholds `CHORDIA_T_WITH_THEORY=3.00` and
+  `CHORDIA_T_WITHOUT_THEORY=3.79` are module-level constants with literature
+  annotations. `chordia_verdict_label` body uses the constants (not literals).
+  Docstring at lines 447-450 contains the literal values `3.00` / `3.79` for
+  human readability — documentation-only, no correctness impact. ACCEPTABLE
+  per pattern 3 (style difference with no correctness impact).
+- Sin 4 (Impact awareness): No hardcoded instrument or entry-model lists found.
+  CLEAN.
 - Sin 5 (Evidence over assertion): N/A (audit mode).
-- Sin 6 (Spec compliance): No `docs/specs/` file for lane_allocator; no spec to violate.
-- Sin 7 (Metadata trust): Module docstring accurately describes the two-layer
-  architecture. ACCEPTABLE.
+- Sin 6 (Spec compliance): No `docs/specs/chordia.md`; module docstring is
+  the spec and matches behavior exactly. CLEAN.
+- Sin 7 (Metadata trust): `chordia_gate` is marked DEPRECATED in its docstring
+  and warns correctly. `chordia_verdict_label` is the production interface.
+  No stale metadata found.
+- Theory_grant vs audit_log independence: VERIFIED. The allocator reads
+  `audit_log.verdict(sid)` (the pre-recorded YAML field) at line 340, NOT a
+  recomputed value. The `has_theory` field in `theory_map` affects the
+  threshold only inside `chordia_verdict_label`, which the live allocator does
+  NOT call (it reads the YAML verdict directly). Two independent trust surfaces
+  confirmed per AM3.3 doctrine.
 
 ---
 
@@ -99,13 +101,17 @@ needed."
 - trading_app/prop_portfolio.py (iter 195, partial — fitness gate path)
 - trading_app/lane_correlation.py (iter 196)
 - trading_app/lane_allocator.py (iter 197, partial — _classify_status + greedy path)
+- trading_app/chordia.py (iter 198, full)
 
 ---
 
 ## Next Iteration Targets
 
 **Priority 1 — Unscanned high/medium centrality files:**
-- `trading_app/chordia.py` — medium centrality, never scanned; Chordia gate is capital-class
 - `trading_app/prop_portfolio.py` — partially scanned (iter 195); remainder not audited
-- `trading_app/lane_allocator.py` — continue remainder of file (greedy selection,
-  `apply_chordia_gate`, `build_allocation` silent-failure surface)
+- `trading_app/lane_allocator.py` — continue remainder of file (apply_c8_gate,
+  build_allocation, silent-failure surface in correlation path)
+
+**Priority 2 — Stale re-audits:**
+- `trading_app/lane_allocator.py` was modified (iter 197 fix) — re-audit the
+  `apply_chordia_gate` path to confirm no regression from the signature change
