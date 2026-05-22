@@ -44,6 +44,7 @@ from pipeline.log import get_logger
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
     CORE_MIN_SAMPLES,
+    ENTRY_MODELS,
     MIN_WFE,
     NOISE_FLOOR_BY_INSTRUMENT,
     REGIME_MIN_SAMPLES,
@@ -51,6 +52,7 @@ from trading_app.config import (
     REGIME_WF_MIN_TRAIN_TRADES,
     REGIME_WF_MIN_WINDOWS,
     REGIME_WF_TRADE_COUNT,
+    SKIP_ENTRY_MODELS,
     WF_MIN_TRAIN_TRADES,
     WF_START_OVERRIDE,
     WF_TRADE_COUNT_OVERRIDE,
@@ -2305,7 +2307,7 @@ def run_validation(
                 # V[SR] partitioned by entry model (cross-model review finding:
                 # mixing E1+E2 inflates V[SR] due to structural cost gap).
                 var_sr_by_em = {}
-                for em_query in ["E1", "E2"]:
+                for em_query in [em for em in ENTRY_MODELS if em not in SKIP_ENTRY_MODELS]:
                     vr = con.execute(
                         """SELECT VAR_SAMP(sharpe_ratio)
                            FROM experimental_strategies
