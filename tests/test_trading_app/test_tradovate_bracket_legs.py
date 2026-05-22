@@ -153,7 +153,10 @@ class TestVerifyBracketLegsPartialAndFiltering:
 
 class TestVerifyBracketLegsFailureModes:
     def test_rate_limit_propagates(self, router):
-        router.query_open_orders = MagicMock(side_effect=RateLimitExhausted("429 exhausted"))
+        # RateLimitExhausted now requires error_class kwarg (2026-05-18 baseline).
+        router.query_open_orders = MagicMock(
+            side_effect=RateLimitExhausted("429 exhausted", error_class="E"),
+        )
         with pytest.raises(RateLimitExhausted):
             router.verify_bracket_legs(entry_order_id=1000, contract_id="MNQM6")
 

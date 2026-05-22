@@ -2,16 +2,24 @@
 
 POST /api/Auth/loginKey with {userName, apiKey} -> JWT token (24h).
 Refresh via POST /api/Auth/validate before expiry.
+
+All HTTP traffic flows through trading_app.live.http_client.BrokerHTTPClient
+for classified retry + deadline propagation. Direct requests.* calls are
+forbidden in this subpackage (Stage 5 drift check).
 """
 
 import logging
 import os
 import time
 
-import requests
 from dotenv import load_dotenv
 
 from ..broker_base import BrokerAuth
+from ..http_client import (
+    AUTH_POLICY,
+    BrokerHTTPClient,
+    BrokerProtocolError,
+)
 
 load_dotenv()
 log = logging.getLogger(__name__)
@@ -25,16 +33,21 @@ MARKET_HUB_URL = BASE_URL.replace("://api.", "://rtc.") + "/hubs/market"
 USER_HUB_URL = BASE_URL.replace("://api.", "://rtc.") + "/hubs/user"
 
 
-_MAX_RETRIES = 3
-_BACKOFF_BASE = 1.0  # seconds: 1, 2, 4
-
-
 class ProjectXAuth(BrokerAuth):
     def __init__(self):
+        super().__init__()
         self._token: str | None = None
         self._acquired_at: float = 0
         self._token_lifetime: float = 23 * 3600  # refresh after 23h (token lasts 24h)
         self._auth_healthy = True
+        # Auth bootstrap has no refresh hook — login IS the refresh.
+        # Auth's own HTTP client is intentionally NOT wired to the circuit
+        # breaker (Stage 4 wiring): one-time login at startup happens before
+        # the orchestrator's breaker is constructed, and a login failure is
+        # already a fail-loud RuntimeError. Continuous broker reads
+        # (positions/contracts/orders) DO get the breaker — they read
+        # ``self.failure_hook`` (set by orchestrator) at their own __init__.
+        self._http = BrokerHTTPClient(base_url=BASE_URL, name="projectx-auth")
 
     def get_token(self) -> str:
         if self._token and time.time() < self._acquired_at + self._token_lifetime:
@@ -46,32 +59,17 @@ class ProjectXAuth(BrokerAuth):
         return self._auth_healthy
 
     def _login_with_retry(self) -> str:
-        last_error = None
-        for attempt in range(_MAX_RETRIES):
-            try:
-                token = self._login()
-                self._auth_healthy = True
-                return token
-            except Exception as e:
-                last_error = e
-                wait = _BACKOFF_BASE * (2**attempt)
-                log.warning(
-                    "Auth login attempt %d/%d failed: %s — retrying in %.0fs",
-                    attempt + 1,
-                    _MAX_RETRIES,
-                    e,
-                    wait,
-                )
-                if attempt < _MAX_RETRIES - 1:
-                    time.sleep(wait)
-
-        self._auth_healthy = False
-        log.critical(
-            "Auth login FAILED after %d attempts: %s — orders will fail until resolved",
-            _MAX_RETRIES,
-            last_error,
-        )
-        raise RuntimeError(f"Auth login failed after {_MAX_RETRIES} attempts: {last_error}") from last_error
+        try:
+            token = self._login()
+            self._auth_healthy = True
+            return token
+        except Exception as exc:
+            self._auth_healthy = False
+            log.critical(
+                "Auth login FAILED after retries (%s) — orders will fail until resolved",
+                exc,
+            )
+            raise
 
     def headers(self) -> dict:
         return {"Authorization": f"Bearer {self.get_token()}"}
@@ -84,17 +82,20 @@ class ProjectXAuth(BrokerAuth):
     def _login(self) -> str:
         user = os.environ.get("PROJECTX_USERNAME") or os.environ["PROJECTX_USER"]
         api_key = os.environ["PROJECTX_API_KEY"]
-        resp = requests.post(
-            f"{BASE_URL}/api/Auth/loginKey",
-            json={"userName": user, "apiKey": api_key},
+        data = self._http.post_json(
+            "/api/Auth/loginKey",
             headers={"Content-Type": "application/json", "Accept": "text/plain"},
+            body={"userName": user, "apiKey": api_key},
+            policy=AUTH_POLICY,
             timeout=10,
         )
-        resp.raise_for_status()
-        data = resp.json()
-        if not data.get("success"):
-            raise RuntimeError(f"ProjectX auth failed: {data.get('errorMessage', data)}")
-        self._token = data["token"]
+        token = data.get("token")
+        if not token:
+            raise BrokerProtocolError(
+                f"projectx-auth: login response missing token: {data}",
+                error_class="G",
+            )
+        self._token = str(token)
         self._acquired_at = time.time()
         log.info("ProjectX auth: token acquired")
         return self._token
@@ -105,20 +106,20 @@ class ProjectXAuth(BrokerAuth):
             self._login()
             return
         try:
-            resp = requests.post(
-                f"{BASE_URL}/api/Auth/validate",
+            data = self._http.post_json(
+                "/api/Auth/validate",
                 headers={"Authorization": f"Bearer {self._token}"},
+                body={},
+                policy=AUTH_POLICY,
                 timeout=10,
             )
-            resp.raise_for_status()
-            data = resp.json()
             new_token = data.get("token") or data.get("newToken")
-            if data.get("success") and new_token:
+            if new_token:
                 self._token = new_token
                 self._acquired_at = time.time()
                 log.info("ProjectX auth: token refreshed via validate")
             else:
                 self._login()
-        except requests.RequestException:
+        except Exception:
             log.warning("ProjectX token validate failed, falling back to full login")
             self._login()

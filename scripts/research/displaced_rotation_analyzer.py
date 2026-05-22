@@ -25,7 +25,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
@@ -58,8 +58,7 @@ def _load_allocation(profile_id: str) -> dict:
     read = resolve_allocation_json(profile_id)
     if read.data is None:
         raise FileNotFoundError(
-            f"No allocation data found for profile {profile_id!r} "
-            f"(resolver source={read.source}, path={read.path})"
+            f"No allocation data found for profile {profile_id!r} (resolver source={read.source}, path={read.path})"
         )
     return read.data
 
@@ -149,7 +148,9 @@ def analyze(profile_id: str) -> int:
 
         print()
         print(f"[{verdict}]  {sid}")
-        print(f"  cached_rho={cached_rho if cached_rho is not None else '-'}  cached_incumbent={cached_incumbent or '-'}")
+        print(
+            f"  cached_rho={cached_rho if cached_rho is not None else '-'}  cached_incumbent={cached_incumbent or '-'}"
+        )
         if worst_pair is not None:
             print(
                 f"  fresh_rho={worst_pair.pearson_rho:.3f}  vs={worst_pair.deployed_id}  "
@@ -261,11 +262,7 @@ def _find_displaced_entry(strategy_id: str, alloc: dict) -> dict | None:
 
 
 def _resolve_incumbent(displaced_entry: dict) -> str:
-    return (
-        displaced_entry.get("displaced_by")
-        or displaced_entry.get("incumbent")
-        or ""
-    )
+    return displaced_entry.get("displaced_by") or displaced_entry.get("incumbent") or ""
 
 
 def _write_decision_report(
@@ -289,9 +286,7 @@ def _write_decision_report(
     win_swap = decomp["inc_win_cand_loss"] + decomp["inc_loss_cand_win"]
 
     if gate_pass:
-        recommendation = (
-            "ROTATE — fresh ρ passes the canonical gate. Run `rebalance_lanes.py` to materialize."
-        )
+        recommendation = "ROTATE — fresh ρ passes the canonical gate. Run `rebalance_lanes.py` to materialize."
     elif disagree_pct >= 30.0:
         recommendation = (
             "PARALLEL_DEPLOY_CANDIDATE — gate-fail on ρ but outcomes diverge on "
@@ -299,9 +294,7 @@ def _write_decision_report(
             "via manual profile edit (bypasses auto-allocator). DD-budget impact must be hand-computed."
         )
     else:
-        recommendation = (
-            "STAY — fresh ρ above gate and outcomes track incumbent on most overlap days. No rotation."
-        )
+        recommendation = "STAY — fresh ρ above gate and outcomes track incumbent on most overlap days. No rotation."
 
     body = f"""# Rotation Decision Report
 
@@ -309,7 +302,7 @@ def _write_decision_report(
 **Incumbent:** `{incumbent_id}`
 **Profile:** `{profile_id}`
 **Rebalance date:** {rebalance_date}
-**Generated:** {datetime.now(timezone.utc).isoformat(timespec='seconds')}
+**Generated:** {datetime.now(UTC).isoformat(timespec="seconds")}
 **Tool:** `scripts/research/displaced_rotation_analyzer.py --diagnostic`
 
 ---
@@ -319,7 +312,7 @@ def _write_decision_report(
 | Metric | Value |
 |---|---|
 | Fresh trade-level Pearson ρ | {fresh_rho:.3f} |
-| Cached ρ in allocation file | {cached_rho if cached_rho is not None else 'n/a'} |
+| Cached ρ in allocation file | {cached_rho if cached_rho is not None else "n/a"} |
 | Canonical gate threshold | {RHO_REJECT_THRESHOLD} |
 | Gate pass | {gate_pass} |
 
@@ -330,7 +323,7 @@ Source: `trading_app.lane_correlation.check_candidate_correlation` (delegated, n
 | Field | Value |
 |---|---|
 | Chordia verdict | {chordia_verdict} |
-| Audit date | {chordia_date or 'n/a'} |
+| Audit date | {chordia_date or "n/a"} |
 
 Source: `docs/runtime/chordia_audit_log.yaml`.
 
@@ -338,18 +331,18 @@ Source: `docs/runtime/chordia_audit_log.yaml`.
 
 | Bucket | Count |
 |---|---|
-| Incumbent trading days (IS+OOS) | {decomp['inc_days']} |
-| Candidate trading days (IS+OOS) | {decomp['cand_days']} |
-| Overlap (both fire same day) | {decomp['overlap_days']} |
-| Incumbent-only days | {decomp['inc_only_days']} |
-| Candidate-only days | {decomp['cand_only_days']} |
-| Both win | {decomp['both_win']} |
-| Both loss | {decomp['both_loss']} |
-| Incumbent W / Candidate L | {decomp['inc_win_cand_loss']} |
-| Incumbent L / Candidate W | {decomp['inc_loss_cand_win']} |
-| Zero P&L either side | {decomp['zero_either']} |
-| Days with different pnl_r (>0.01) | {decomp['different_pnl_count']} ({disagree_pct:.1f}% of overlap) |
-| Outcome swaps (W↔L) | {win_swap} ({100*win_swap/max(decomp['overlap_days'],1):.1f}% of overlap) |
+| Incumbent trading days (IS+OOS) | {decomp["inc_days"]} |
+| Candidate trading days (IS+OOS) | {decomp["cand_days"]} |
+| Overlap (both fire same day) | {decomp["overlap_days"]} |
+| Incumbent-only days | {decomp["inc_only_days"]} |
+| Candidate-only days | {decomp["cand_only_days"]} |
+| Both win | {decomp["both_win"]} |
+| Both loss | {decomp["both_loss"]} |
+| Incumbent W / Candidate L | {decomp["inc_win_cand_loss"]} |
+| Incumbent L / Candidate W | {decomp["inc_loss_cand_win"]} |
+| Zero P&L either side | {decomp["zero_either"]} |
+| Days with different pnl_r (>0.01) | {decomp["different_pnl_count"]} ({disagree_pct:.1f}% of overlap) |
+| Outcome swaps (W↔L) | {win_swap} ({100 * win_swap / max(decomp["overlap_days"], 1):.1f}% of overlap) |
 
 ## Interpretation
 
@@ -510,7 +503,7 @@ def diagnose(strategy_id: str, profile_id: str) -> int:
         "different_pnl_count",
     ):
         print(f"  {k}: {decomp[k]}")
-    print(f"  different_pnl_pct: {decomp['different_pnl_pct']*100:.1f}%")
+    print(f"  different_pnl_pct: {decomp['different_pnl_pct'] * 100:.1f}%")
     print()
     print(f"Decision report written: {report_path.relative_to(REPO_ROOT)}")
     return 0

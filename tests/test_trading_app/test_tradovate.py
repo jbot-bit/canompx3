@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-import requests
 
 from trading_app.live.tradovate.auth import TradovateAuth
 from trading_app.live.tradovate.contracts import TradovateContracts
@@ -76,16 +75,13 @@ class TestTradovateAuth:
             "TRADOVATE_DEMO": "1",
         },
     )
-    @patch("trading_app.live.tradovate.auth.requests.post")
-    def test_login_success(self, mock_post):
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {
+    @patch("trading_app.live.tradovate.auth.BrokerHTTPClient.post_json")
+    def test_login_success(self, mock_post_json):
+        mock_post_json.return_value = {
             "accessToken": "tok123",
             "mdAccessToken": "md456",
             "userId": 42,
         }
-        mock_post.return_value = mock_resp
 
         auth = TradovateAuth()
         token = auth.get_token()
@@ -105,12 +101,9 @@ class TestTradovateAuth:
             "TRADOVATE_DEMO": "1",
         },
     )
-    @patch("trading_app.live.tradovate.auth.requests.post")
-    def test_login_pticket_raises(self, mock_post):
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {"p-ticket": "abc123"}
-        mock_post.return_value = mock_resp
+    @patch("trading_app.live.tradovate.auth.BrokerHTTPClient.post_json")
+    def test_login_pticket_raises(self, mock_post_json):
+        mock_post_json.return_value = {"p-ticket": "abc123"}
 
         auth = TradovateAuth()
         with pytest.raises(RuntimeError, match="2FA p-ticket"):
@@ -126,15 +119,15 @@ class TestTradovateAuth:
             "TRADOVATE_DEMO": "1",
         },
     )
-    @patch("trading_app.live.tradovate.auth.requests.post")
+    @patch("trading_app.live.tradovate.auth.BrokerHTTPClient.post_json")
     @patch("trading_app.live.tradovate.auth.time.sleep")
-    def test_login_retry_then_success(self, mock_sleep, mock_post):
-        fail_resp = MagicMock()
-        fail_resp.raise_for_status.side_effect = requests.HTTPError("503")
-        ok_resp = MagicMock()
-        ok_resp.raise_for_status = MagicMock()
-        ok_resp.json.return_value = {"accessToken": "tok", "userId": 1}
-        mock_post.side_effect = [fail_resp, ok_resp]
+    def test_login_retry_then_success(self, mock_sleep, mock_post_json):
+        from trading_app.live.http_client import BrokerHTTPError
+
+        mock_post_json.side_effect = [
+            BrokerHTTPError("503", "retryable"),
+            {"accessToken": "tok", "userId": 1},
+        ]
 
         auth = TradovateAuth()
         token = auth.get_token()
@@ -152,11 +145,11 @@ class TestTradovateAuth:
             "TRADOVATE_DEMO": "1",
         },
     )
-    @patch("trading_app.live.tradovate.auth.requests.post")
-    def test_login_all_retries_fail(self, mock_post):
-        fail_resp = MagicMock()
-        fail_resp.raise_for_status.side_effect = requests.HTTPError("503")
-        mock_post.return_value = fail_resp
+    @patch("trading_app.live.tradovate.auth.BrokerHTTPClient.post_json")
+    def test_login_all_retries_fail(self, mock_post_json):
+        from trading_app.live.http_client import BrokerHTTPError
+
+        mock_post_json.side_effect = BrokerHTTPError("503", "retryable")
 
         auth = TradovateAuth()
         with (
@@ -462,37 +455,54 @@ class TestTradovatePositions:
 
 
 class TestRequestWithRetry:
-    @patch("trading_app.live.tradovate.http.time.sleep")
-    @patch("trading_app.live.tradovate.http.requests.post")
-    def test_429_retry_then_success(self, mock_post, mock_sleep):
+    """Tradovate request_with_retry is a thin shim over BrokerHTTPClient (2026-05-18).
+
+    Behavior change: 5xx is now class-D and retried (per the failure-mode taxonomy).
+    Pre-2026-05-18 contract was "non-429 returns immediately" — that gap is what the
+    resilience baseline closes.
+    """
+
+    @patch("trading_app.live.http_client.time.sleep")
+    @patch("requests.Session.request")
+    def test_429_retry_then_success(self, mock_req, mock_sleep):
         resp_429 = MagicMock()
         resp_429.status_code = 429
+        resp_429.headers = {}
         resp_ok = MagicMock()
         resp_ok.status_code = 200
-        mock_post.side_effect = [resp_429, resp_ok]
+        resp_ok.headers = {}
+        mock_req.side_effect = [resp_429, resp_ok]
 
         result = request_with_retry("POST", "http://test/api", {})
         assert result.status_code == 200
-        mock_sleep.assert_called_once()
+        assert mock_sleep.call_count >= 1
 
-    @patch("trading_app.live.tradovate.http.requests.post")
-    def test_429_exhausted_raises(self, mock_post):
+    @patch("trading_app.live.http_client.time.sleep")
+    @patch("requests.Session.request")
+    def test_429_exhausted_raises(self, mock_req, mock_sleep):
         resp_429 = MagicMock()
         resp_429.status_code = 429
-        mock_post.return_value = resp_429
+        resp_429.headers = {}
+        mock_req.return_value = resp_429
 
-        with patch("trading_app.live.tradovate.http.time.sleep"), pytest.raises(RateLimitExhausted):
+        with pytest.raises(RateLimitExhausted):
             request_with_retry("POST", "http://test/api", {})
 
-    @patch("trading_app.live.tradovate.http.requests.get")
-    def test_non_429_returns_immediately(self, mock_get):
-        resp = MagicMock()
-        resp.status_code = 500
-        mock_get.return_value = resp
+    @patch("trading_app.live.http_client.time.sleep")
+    @patch("requests.Session.request")
+    def test_5xx_retries_per_resilience_baseline(self, mock_req, mock_sleep):
+        """5xx is class-D — the client retries (2026-05-18 baseline change)."""
+        resp_500 = MagicMock()
+        resp_500.status_code = 500
+        resp_500.headers = {}
+        resp_ok = MagicMock()
+        resp_ok.status_code = 200
+        resp_ok.headers = {}
+        mock_req.side_effect = [resp_500, resp_ok]
 
         result = request_with_retry("GET", "http://test/api", {})
-        assert result.status_code == 500
-        mock_get.assert_called_once()
+        assert result.status_code == 200
+        assert mock_req.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -543,22 +553,15 @@ class TestTokenRenewal:
             "TRADOVATE_DEMO": "1",
         },
     )
-    @patch("trading_app.live.tradovate.auth.requests.post")
-    def test_renew_success(self, mock_post):
+    @patch("trading_app.live.tradovate.auth.BrokerHTTPClient.post_json")
+    def test_renew_success(self, mock_post_json):
         """Renewal returns new token without full re-login."""
         from trading_app.live.tradovate.auth import TradovateAuth
 
-        # Initial login
-        login_resp = MagicMock()
-        login_resp.raise_for_status = MagicMock()
-        login_resp.json.return_value = {"accessToken": "old_tok", "userId": 1}
-
-        # Renewal response
-        renew_resp = MagicMock()
-        renew_resp.raise_for_status = MagicMock()
-        renew_resp.json.return_value = {"accessToken": "new_tok"}
-
-        mock_post.side_effect = [login_resp, renew_resp]
+        mock_post_json.side_effect = [
+            {"accessToken": "old_tok", "userId": 1},
+            {"accessToken": "new_tok"},
+        ]
 
         auth = TradovateAuth()
         auth.get_token()  # Initial login
@@ -579,25 +582,17 @@ class TestTokenRenewal:
             "TRADOVATE_DEMO": "1",
         },
     )
-    @patch("trading_app.live.tradovate.auth.requests.post")
-    def test_renew_fails_falls_back_to_login(self, mock_post):
+    @patch("trading_app.live.tradovate.auth.BrokerHTTPClient.post_json")
+    def test_renew_fails_falls_back_to_login(self, mock_post_json):
         """If renewal fails, falls back to full login."""
-        import requests as req
-
+        from trading_app.live.http_client import BrokerHTTPError
         from trading_app.live.tradovate.auth import TradovateAuth
 
-        login_resp = MagicMock()
-        login_resp.raise_for_status = MagicMock()
-        login_resp.json.return_value = {"accessToken": "tok1", "userId": 1}
-
-        renew_fail = MagicMock()
-        renew_fail.raise_for_status.side_effect = req.RequestException("renewal failed")
-
-        relogin_resp = MagicMock()
-        relogin_resp.raise_for_status = MagicMock()
-        relogin_resp.json.return_value = {"accessToken": "tok2", "userId": 1}
-
-        mock_post.side_effect = [login_resp, renew_fail, relogin_resp]
+        mock_post_json.side_effect = [
+            {"accessToken": "tok1", "userId": 1},
+            BrokerHTTPError("renewal failed", "retryable"),
+            {"accessToken": "tok2", "userId": 1},
+        ]
 
         auth = TradovateAuth()
         auth.get_token()

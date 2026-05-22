@@ -43,6 +43,7 @@ metadata:
   total_expected_trials: 1
   theory_grant: true
   research_question_type: "{research_question_type}"
+  theory_grant: true
 hypotheses:
   - id: 1
     name: "test"

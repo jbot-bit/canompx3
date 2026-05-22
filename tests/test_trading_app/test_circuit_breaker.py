@@ -85,3 +85,63 @@ def test_successful_probe_resets_breaker():
     breaker.record_success()
     assert breaker.is_open is False
     assert breaker.consecutive_failures == 0
+
+
+# ---------------------------------------------------------------------------
+# Stage 4: record_failure(error_class) back-compat + observability
+# ---------------------------------------------------------------------------
+
+
+def test_record_failure_accepts_no_arg_back_compat():
+    """Existing orchestrator-level callers pass no arg — must still work."""
+    breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=1.0)
+    # The two existing call sites in session_orchestrator (exit-submit and
+    # entry-submit retry exhaustion at :2111 and :2428) call this with no arg.
+    breaker.record_failure()
+    breaker.record_failure()
+    assert breaker.consecutive_failures == 2
+    assert breaker.is_open is False
+    # last_error_class remains None when no class is passed
+    assert breaker.last_error_class is None
+
+
+def test_record_failure_tracks_last_error_class():
+    """When error_class is provided (HTTP-client wiring), it surfaces on the dataclass."""
+    breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=1.0)
+    breaker.record_failure(error_class="B")  # read timeout
+    assert breaker.last_error_class == "B"
+    assert breaker.consecutive_failures == 1
+
+    breaker.record_failure(error_class="D")  # 5xx
+    assert breaker.last_error_class == "D"
+    assert breaker.consecutive_failures == 2
+
+
+def test_orchestrator_failure_does_not_overwrite_http_class():
+    """Orchestrator-layer record_failure() must not clobber the HTTP class.
+
+    Scenario: a 5xx storm at the HTTP layer drove the breaker partway open
+    (last_error_class="D"). Then the orchestrator's exit-retry exhausts and
+    calls record_failure() with no arg. The dashboard operator still needs
+    to see "D" to know what caused the failure, not "None".
+    """
+    breaker = CircuitBreaker(failure_threshold=10, recovery_timeout=1.0)
+    breaker.record_failure(error_class="D")
+    breaker.record_failure(error_class="D")
+    assert breaker.last_error_class == "D"
+
+    breaker.record_failure()  # orchestrator-layer, no arg
+    # The most-recent classified failure ("D") is preserved.
+    assert breaker.last_error_class == "D"
+    assert breaker.consecutive_failures == 3
+
+
+def test_record_success_clears_last_error_class():
+    """Successful read clears the last_error_class so the dashboard shows clean state."""
+    breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=1.0)
+    breaker.record_failure(error_class="E")  # 429
+    assert breaker.last_error_class == "E"
+
+    breaker.record_success()
+    assert breaker.last_error_class is None
+    assert breaker.consecutive_failures == 0
