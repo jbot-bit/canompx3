@@ -6,6 +6,36 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-23 — Plan A shipped: judgment-review PreToolUse soft-block)
+
+- **Tool:** Claude Code (Opus 4.7), explanatory mode
+- **Branch:** `main` (local, ahead by 1 — NOT yet pushed)
+- **Commit:** `c5c947e6` — "hooks: promote [judgment] review nudge to PreToolUse soft-block (Plan A)" (5 files, +714)
+- **Why:** Closes the n=3 "doctrine present, mechanism missing" gap from the 2026-05-23 review-enforcement gap audit. The existing PostToolUse `judgment-review-nudge.py` fires AFTER `[judgment]` capital-class commits land and never blocks — Plan (A) promotes it to a PreToolUse soft-block with the same four-predicate gate that exits 2 BEFORE the commit lands.
+- **What changed:**
+  - `.claude/hooks/judgment-review-soft-block.py` (NEW) — PreToolUse(Bash) guard, ~290 lines. Loads `_CAPITAL_PATH_PREFIXES`, `_REVIEW_MENTION_PATTERNS`, `_MARKER_PATH`, `_SUPPRESS_SECONDS` from the sibling nudge via `importlib.util.spec_from_file_location` (hyphenated filename forbids plain `from … import`). NO inline copy of the prefix list — canonical-source delegation per `institutional-rigor.md` § 4.
+  - `.claude/settings.json` — registered under `hooks.PreToolUse` matcher `Bash`. PostToolUse nudge registration UNCHANGED (catch-net for IDE-driven commits that bypass the Bash tool).
+  - `pipeline/check_drift.py` — added `check_judgment_review_capital_paths_parity` (#179). Structural parity probe; refactoring-safety guard against future hand-edit accidentally inlining the prefix list. Documented rejection rationale for `CANONICAL_INLINE_COPIES` registry (this is structural, not literal-byte parity — does not meet inclusion criteria § 1).
+  - `.claude/hooks/tests/test_judgment_review_soft_block.py` (NEW) — 12 tests. Test seam: `JUDGMENT_REVIEW_SCRATCH_DIR` env var for tempdir-scoped marker tests.
+  - `docs/runtime/stages/2026-05-23-judgment-review-soft-block.md` — scope_lock line reconciled `tests/test_hooks/` → `.claude/hooks/tests/` (actual repo convention; every existing hook test lives there).
+- **Override path:** `git commit -m "[judgment] HIGH: ..."  # --audit-acknowledged` — strips the trailing flag-marker before predicates (mirrors `shared-state-commit-guard.py` `# --shared-state-ack`).
+- **Verification:**
+  - `python -m pytest .claude/hooks/tests/test_judgment_review_soft_block.py -v` → 12 passed in 7.42s
+  - `python pipeline/check_drift.py` → 159 PASSED, 0 skipped, 20 advisory, check #179 enumerated with zero violations
+  - `grep judgment-review-soft-block .claude/settings.json` → 1 hit
+- **Known gaps (documented, not bugs):**
+  - IDE-driven commits (VSCode source-control, GitHub Desktop) bypass the Bash tool entirely — PostToolUse nudge catches them post-commit.
+  - `git commit --amend` skipped by `_looks_like_commit` (consistency with the nudge). Nudge still fires post-amend.
+  - Hook does not verify the review skill actually *ran*; body mentioning "code-review" suppresses the block regardless. Tightening to require a sigil written by the review skill itself overlaps with Plan (B) and is deferred.
+- **NEXT-SESSION pickup (in priority order):**
+  1. **Push `c5c947e6` to origin** when ready. No PR opened — user didn't ask. Hook-only change with zero live-trading or truth-layer mutation; direct push to main is consistent with prior hook-class commits.
+  2. **Plan (B): auto-fire `/code-review` PostToolUse on stage CLOSED.** Per the 2026-05-23 gap audit, Plan A is the first of four; B/C/D still open. Plan (B) closes the other half of the loop — `[judgment]` commits now BLOCK pre-commit (Plan A); next we want `/code-review` to be auto-triggered when a stage file flips to `mode: CLOSED`. Companion stage file does not yet exist.
+  3. **Plan (C): windows-runner mutex hang fix** — see prior session HANDOFF entry below; still masked by admin-merge.
+  4. **Plan (D): pyright diff-ratchet** — pyright is advisory-only today; ratchet to fail on NEW errors only (not pre-existing). Pre-existing pyright noise observed during this session in `check_drift.py` lines 1918/1952/etc. unrelated to this commit.
+- **Stage file status:** `docs/runtime/stages/2026-05-23-judgment-review-soft-block.md` still on disk with `mode: IMPLEMENTATION`. Per stage-gate doctrine, "done = proven" criteria met (tests ✓, drift ✓, no dead code ✓) — operator can delete or flip to `mode: CLOSED` next session.
+- **Adjacent (NOT part of this commit):** unstaged `live_journal.db` runtime mutation and untracked `.claude/skills/code-review/eval/transcripts/` directory in working tree — session noise, left alone. Carry-overs from the 2026-05-22 live-journal-locked branch (`/api/bars-recent`, `logs/live/*.log` FileHandler gap, real OS-level singleton, `.env` parse-warnings) remain open.
+- **Memory updated:** `MEMORY.md` Active project state index entry rewritten to reflect Plan (A) SHIPPED. New per-stage detail at `memory/project_judgment_review_soft_block_plan_a_shipped_2026_05_23.md`.
+
 ## This Session (2026-05-22 PM — baton cleanup: Stage 1b chain closeout)
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode
