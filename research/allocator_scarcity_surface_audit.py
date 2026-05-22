@@ -54,11 +54,11 @@ from research.garch_a4b_binding_budget_replay import (
     _pairwise_correlation_as_of,
 )
 from trading_app.lane_allocator import (
-    CORRELATION_REJECT_RHO,
     _effective_annual_r,
     build_allocation,
     compute_orb_size_stats,
 )
+from trading_app.lane_correlation import RHO_REJECT_THRESHOLD as CORRELATION_REJECT_RHO
 
 OUTPUT_MD = Path("docs/audit/results/2026-04-17-allocator-scarcity-surface-audit.md")
 

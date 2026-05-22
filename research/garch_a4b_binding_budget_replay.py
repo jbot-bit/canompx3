@@ -39,7 +39,6 @@ from pipeline.paths import GOLD_DB_PATH
 from trading_app.account_survival import _load_lane_trade_paths as _unused  # noqa: F401
 from trading_app.config import apply_tight_stop
 from trading_app.lane_allocator import (
-    CORRELATION_REJECT_RHO,
     HYSTERESIS_PCT,
     LaneScore,
     _classify_status,
@@ -48,7 +47,7 @@ from trading_app.lane_allocator import (
     build_allocation,
     compute_orb_size_stats,
 )
-from trading_app.lane_correlation import _pearson
+from trading_app.lane_correlation import RHO_REJECT_THRESHOLD as CORRELATION_REJECT_RHO, _pearson
 from trading_app.prop_profiles import ACCOUNT_PROFILES, ACCOUNT_TIERS
 from trading_app.strategy_fitness import _load_strategy_outcomes
 from trading_app.validated_shelf import deployable_validated_relation

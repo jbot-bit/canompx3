@@ -42,7 +42,6 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from trading_app.lane_allocator import (  # noqa: E402
-    CORRELATION_REJECT_RHO,
     LaneScore,
     build_allocation,
     compute_lane_scores,
@@ -51,6 +50,7 @@ from trading_app.lane_allocator import (  # noqa: E402
     enrich_scores_with_liveness,
     _effective_annual_r,
 )
+from trading_app.lane_correlation import RHO_REJECT_THRESHOLD as CORRELATION_REJECT_RHO  # noqa: E402
 from trading_app.prop_profiles import ACCOUNT_PROFILES, ACCOUNT_TIERS, resolve_allocation_json  # noqa: E402
 from pipeline.cost_model import COST_SPECS  # noqa: E402
 
