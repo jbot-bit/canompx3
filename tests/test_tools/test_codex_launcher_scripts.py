@@ -65,12 +65,15 @@ def test_wsl_launcher_scripts_call_mount_guard() -> None:
     assert '--related-root "$SOURCE_ROOT"' in sync_guard
     assert "--claim codex" in sync_guard
     assert "--mode mutating" in sync_guard
-    assert '$quickExitExemptModes = @("doctor")' in sticky
+    assert '$quickExitExemptModes = @("doctor", "cleanup")' in sticky
     assert "$Mode -notin $quickExitExemptModes" in sticky
     assert "suspiciousQuickExit" in sticky
     assert "Start-Process powershell.exe" in sticky
     assert '"-File", $launcherPs1' in sticky
     assert "& powershell.exe @launcherArgs" in sticky
+    assert "$interactiveHoldModes" in sticky
+    assert '$Mode -in $interactiveHoldModes' in sticky
+    assert "Codex session exited with code $exitCode." in sticky
 
 
 def test_wsl_sync_dirty_clone_error_is_operator_actionable() -> None:
@@ -91,7 +94,7 @@ def test_operator_docs_explain_wsl_home_launcher_recovery() -> None:
     handbook = (root / "docs" / "reference" / "codex-operator-handbook.md").read_text(encoding="utf-8")
     setup = (root / "docs" / "reference" / "codex-claude-operator-setup.md").read_text(encoding="utf-8")
 
-    assert "MEASURED failure today" in handbook
+    assert "Observed failure pattern" in handbook
     assert "cd ~/canompx3" in handbook
     assert "git status --short --branch" in handbook
     assert "codex.bat task <name>" in handbook

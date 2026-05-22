@@ -7,6 +7,7 @@ cd /d "%~dp0"
 
 set "ACTION=%~1"
 set "MODE=codex-project-smart"
+set "FORCE_INLINE="
 
 if /I "%ACTION%"=="power" (
     set "MODE=codex-project-smart-power"
@@ -28,6 +29,10 @@ if /I "%ACTION%"=="power" (
     set "MODE=green-codex"
 ) else if /I "%ACTION%"=="doctor" (
     set "MODE=doctor"
+    set "FORCE_INLINE=1"
+) else if /I "%ACTION%"=="cleanup" (
+    set "MODE=cleanup"
+    set "FORCE_INLINE=1"
 ) else if /I "%ACTION%"=="task" (
     shift
     call "ai-workstreams.bat" codex %*
@@ -44,6 +49,8 @@ if /I "%ACTION%"=="power" (
     echo   codex.bat search-gold-db
     echo   codex.bat search ^<name^>
     echo   codex.bat task ^<name^>
+    echo   codex.bat doctor
+    echo   codex.bat cleanup
     echo.
     echo Advanced compatibility modes:
     echo   codex.bat windows
@@ -52,17 +59,18 @@ if /I "%ACTION%"=="power" (
     echo   codex.bat linux-power
     echo   codex.bat linux-gold-db
     echo   codex.bat green
-    echo   codex.bat doctor
     exit /b 0
 )
 
-if not "%ACTION%"=="" if /I not "%ACTION%"=="power" if /I not "%ACTION%"=="gold-db" if /I not "%ACTION%"=="search-gold-db" if /I not "%ACTION%"=="windows" if /I not "%ACTION%"=="windows-power" if /I not "%ACTION%"=="linux" if /I not "%ACTION%"=="linux-power" if /I not "%ACTION%"=="linux-gold-db" if /I not "%ACTION%"=="green" if /I not "%ACTION%"=="doctor" if /I not "%ACTION%"=="task" if /I not "%ACTION%"=="search" if /I not "%ACTION%"=="help" (
+if not "%ACTION%"=="" if /I not "%ACTION%"=="power" if /I not "%ACTION%"=="gold-db" if /I not "%ACTION%"=="search-gold-db" if /I not "%ACTION%"=="windows" if /I not "%ACTION%"=="windows-power" if /I not "%ACTION%"=="linux" if /I not "%ACTION%"=="linux-power" if /I not "%ACTION%"=="linux-gold-db" if /I not "%ACTION%"=="green" if /I not "%ACTION%"=="doctor" if /I not "%ACTION%"=="cleanup" if /I not "%ACTION%"=="task" if /I not "%ACTION%"=="search" if /I not "%ACTION%"=="help" (
     echo Unknown codex mode: %ACTION%
     echo Run `codex.bat help` for usage.
     exit /b 2
 )
 
-if defined CANOMPX3_WINDOWS_LAUNCH_INLINE (
+if defined FORCE_INLINE (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\infra\windows-agent-launch.ps1" -Mode %MODE%
+) else if defined CANOMPX3_WINDOWS_LAUNCH_INLINE (
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\infra\windows-agent-launch.ps1" -Mode %MODE%
 ) else (
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\infra\windows-sticky-launch.ps1" -Mode %MODE% -Title "Codex"

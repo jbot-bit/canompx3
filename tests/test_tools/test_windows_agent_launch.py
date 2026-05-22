@@ -324,6 +324,7 @@ class TestWindowsBatchWrappers:
     def test_linux_search_gold_db_mode_is_supported(self) -> None:
         assert "codex-project-linux-search-gold-db" in windows_agent_launch.VALID_MODES
         assert "codex-project-smart-search-gold-db" in windows_agent_launch.VALID_MODES
+        assert "cleanup" in windows_agent_launch.VALID_MODES
 
     def test_windows_gui_script_supports_button_actions_and_dry_run(self) -> None:
         content = (windows_agent_launch.repo_root() / "scripts" / "infra" / "windows-workstreams-gui.ps1").read_text(

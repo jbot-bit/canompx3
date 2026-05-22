@@ -48,14 +48,34 @@ if ($Task) {
 $exitCode = $LASTEXITCODE
 $elapsedSeconds = ((Get-Date) - $start).TotalSeconds
 $quickExitThresholdSeconds = 2.0
-$quickExitExemptModes = @("doctor")
+$quickExitExemptModes = @("doctor", "cleanup")
+$interactiveHoldModes = @(
+    "claude",
+    "codex",
+    "codex-search",
+    "codex-project",
+    "codex-project-gold-db",
+    "codex-project-search-gold-db",
+    "codex-project-smart",
+    "codex-project-smart-gold-db",
+    "codex-project-smart-search-gold-db",
+    "codex-project-smart-power",
+    "codex-project-power",
+    "codex-project-linux",
+    "codex-project-linux-gold-db",
+    "codex-project-linux-search-gold-db",
+    "codex-project-linux-power",
+    "green-codex",
+    "green-claude"
+)
 $suspiciousQuickExit = (
     $exitCode -eq 0 -and
     $elapsedSeconds -lt $quickExitThresholdSeconds -and
     $Mode -notin $quickExitExemptModes
 )
+$holdAfterInteractiveExit = $Mode -in $interactiveHoldModes
 
-if ($exitCode -ne 0 -or $suspiciousQuickExit) {
+if ($exitCode -ne 0 -or $suspiciousQuickExit -or $holdAfterInteractiveExit) {
     Write-Host ""
     if ($suspiciousQuickExit) {
         Write-Host (
@@ -64,6 +84,9 @@ if ($exitCode -ne 0 -or $suspiciousQuickExit) {
         ) -ForegroundColor Yellow
         Write-Host "Run `codex.bat doctor` if the lines above did not make the cause obvious." -ForegroundColor Yellow
         $exitCode = 1
+    } elseif ($holdAfterInteractiveExit) {
+        Write-Host "Codex session exited with code $exitCode." -ForegroundColor Yellow
+        Write-Host "The window is staying open so the exit output is visible." -ForegroundColor Yellow
     } else {
         Write-Host "Codex launch failed with exit code $exitCode." -ForegroundColor Red
     }

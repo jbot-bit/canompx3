@@ -63,12 +63,20 @@ failed or suspiciously fast exit stays visible instead of flashing closed.
 
 ## WSL-Home Recovery
 
-MEASURED failure today: `codex.bat` was routed correctly, but the WSL-home
+Observed failure pattern: `codex.bat` was routed correctly, but the WSL-home
 clone at `~/canompx3` was dirty and ahead of `origin/main`, so the smart sync
 guard refused to open a mutating Codex session. That is intentional. It avoids
 silently overwriting or hiding work in the Linux-side repo.
 
 When `codex.bat` blocks on a dirty WSL clone:
+
+```bat
+codex.bat cleanup
+```
+
+This runs inline in the current PowerShell window and stashes dirty WSL-home
+clone changes with a timestamped `wsl-codex-dirty-before-launch-*` message.
+For manual inspection before stashing, use:
 
 ```bash
 cd ~/canompx3

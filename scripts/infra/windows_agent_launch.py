@@ -46,6 +46,7 @@ VALID_MODES = {
     "menu",
     "prune",
     "doctor",
+    "cleanup",
 }
 
 AGENT_STYLES = {
@@ -539,6 +540,47 @@ def open_codex_project_smart_power() -> int:
         return open_codex_project_linux_home_power_synced()
     _fallback_notice()
     return open_codex_project_power()
+
+
+def cleanup_codex_wsl_clone() -> int:
+    root = windows_to_wsl(repo_root())
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d-%H%M%S")
+    stash_name = f"wsl-codex-dirty-before-launch-{stamp}"
+    command = "\n".join(
+        [
+            "set -euo pipefail",
+            'ROOT_INPUT="${CANOMPX3_CODEX_WSL_ROOT:-}"',
+            'if [[ -z "$ROOT_INPUT" || "$ROOT_INPUT" == "." || "$ROOT_INPUT" == "./" ]]; then',
+            '  ROOT="$HOME/canompx3"',
+            'elif [[ "$ROOT_INPUT" == "~" ]]; then',
+            '  ROOT="$HOME"',
+            'elif [[ "$ROOT_INPUT" == "~/"* ]]; then',
+            '  ROOT="$HOME/${ROOT_INPUT#~/}"',
+            'elif [[ "$ROOT_INPUT" == /* ]]; then',
+            '  ROOT="$ROOT_INPUT"',
+            "else",
+            '  echo "ERROR: CANOMPX3_CODEX_WSL_ROOT must be empty, ~, ~/..., or absolute (/...)." >&2',
+            "  exit 2",
+            "fi",
+            'if [[ ! -d "$ROOT/.git" ]]; then',
+            '  echo "ERROR: WSL Codex repo not found: $ROOT" >&2',
+            "  exit 1",
+            "fi",
+            'cd "$ROOT"',
+            'echo "WSL Codex repo: $ROOT"',
+            "git status --short --branch",
+            'if [[ -z "$(git status --short)" ]]; then',
+            '  echo "WSL Codex repo is already clean."',
+            "  exit 0",
+            "fi",
+            'echo "Stashing WSL Codex repo changes so codex.bat can launch safely."',
+            f'git stash push -u -m "{stash_name}"',
+            'echo "Stash saved. Relaunch from PowerShell with: .\\codex.bat"',
+            'echo "To inspect later: wsl -e bash -lc \'cd ~/canompx3 && git stash list\'"',
+        ]
+    )
+    console.print(f"[bold]Cleaning WSL Codex clone via {root} front door[/]")
+    return run_wsl(command)
 
 
 def _green_baseline_worktree() -> Path:
@@ -1173,6 +1215,8 @@ def main() -> int:
         from codex_doctor import run as run_doctor
 
         return run_doctor()
+    if args.mode == "cleanup":
+        return cleanup_codex_wsl_clone()
     if args.mode == "prune":
         success, output = invoke_manager(["prune"])
         if not success:

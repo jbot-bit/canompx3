@@ -97,6 +97,10 @@ def test_codex_batch_defaults_to_smart_modes_with_explicit_linux_modes() -> None
     assert 'set "MODE=codex-project-linux-power"' in codex_bat
     assert 'if /I "%ACTION%"=="linux-gold-db" (' in codex_bat
     assert 'set "MODE=codex-project-linux-gold-db"' in codex_bat
+    assert 'if /I "%ACTION%"=="cleanup" (' in codex_bat
+    assert 'set "MODE=cleanup"' in codex_bat
+    assert 'set "FORCE_INLINE=1"' in codex_bat
+    assert 'if /I "%ACTION%"=="doctor" (' in codex_bat
 
 
 def test_valid_modes_include_smart_project_modes() -> None:
@@ -105,6 +109,7 @@ def test_valid_modes_include_smart_project_modes() -> None:
     assert "codex-project-smart" in module.VALID_MODES
     assert "codex-project-smart-power" in module.VALID_MODES
     assert "codex-project-smart-search-gold-db" in module.VALID_MODES
+    assert "cleanup" in module.VALID_MODES
 
 
 def test_run_wsl_preserves_launcher_exit_code() -> None:
@@ -124,6 +129,26 @@ def test_codex_bat_routes_task_shortcuts_to_ai_workstreams() -> None:
     assert "windows-sticky-launch.ps1" in codex_bat
     assert "Unknown codex mode: %ACTION%" in codex_bat
     assert "codex.bat help" in codex_bat
+    assert "codex.bat cleanup" in codex_bat
+
+
+def test_cleanup_codex_wsl_clone_stashes_wsl_home_repo() -> None:
+    module = _load_module()
+
+    with (
+        patch.object(module, "repo_root", return_value=Path(r"C:\repo")),
+        patch.object(module, "windows_to_wsl", return_value="/mnt/c/repo"),
+        patch.object(module, "run_wsl", return_value=0) as run_wsl_mock,
+    ):
+        exit_code = module.cleanup_codex_wsl_clone()
+
+    assert exit_code == 0
+    command = run_wsl_mock.call_args.args[0]
+    assert 'ROOT_INPUT="${CANOMPX3_CODEX_WSL_ROOT:-}"' in command
+    assert 'ROOT="$HOME/canompx3"' in command
+    assert 'cd "$ROOT"' in command
+    assert "git status --short --branch" in command
+    assert 'git stash push -u -m "wsl-codex-dirty-before-launch-' in command
 
 
 def test_claude_bat_is_simple_front_door() -> None:
