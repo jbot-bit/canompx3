@@ -61,6 +61,31 @@ silently reopening stale code.
 `codex.bat` now opens the real session inside a dedicated PowerShell host so a
 failed or suspiciously fast exit stays visible instead of flashing closed.
 
+## WSL-Home Recovery
+
+MEASURED failure today: `codex.bat` was routed correctly, but the WSL-home
+clone at `~/canompx3` was dirty and ahead of `origin/main`, so the smart sync
+guard refused to open a mutating Codex session. That is intentional. It avoids
+silently overwriting or hiding work in the Linux-side repo.
+
+When `codex.bat` blocks on a dirty WSL clone:
+
+```bash
+cd ~/canompx3
+git status --short --branch
+```
+
+Then preserve the work before relaunching. Commit it, stash it, or move it into
+an isolated workstream. For new parallel mutable work, prefer:
+
+```bat
+codex.bat task <name>
+```
+
+Keep the mental model simple: the Desktop shortcut is the Windows front door;
+the real Codex workspace is the WSL-home repo under `/home`, not the fallback
+`/mnt/c/...` checkout.
+
 ## Task Discipline
 
 - Use one thread per task, not one omnibus Codex thread for the whole project.

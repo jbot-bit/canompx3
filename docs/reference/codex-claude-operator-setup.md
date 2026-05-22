@@ -32,6 +32,13 @@ For crash and recovery handling, see `docs/reference/codex-wsl-crash-recovery.md
 
 ## Why this setup
 
+This setup follows the same direction as the official documentation:
+Microsoft's WSL file-system guide recommends keeping files in the WSL file
+system when working from a Linux command line, and the OpenAI Codex Windows
+guide recommends WSL2 when the workflow already lives in Linux. Both point to
+the same operational rule for this repo: the daily Codex workspace belongs
+under `/home`, while Windows launchers are only convenience entrypoints.
+
 OpenAI's Codex docs say:
 
 - use WSL2 when your workflow already lives in Linux
@@ -45,7 +52,10 @@ OpenAI's Codex docs say:
 
 Sources:
 
-- `https://developers.openai.com/codex/windows`
+- Microsoft Learn: Working across Windows and Linux file systems
+  - `https://learn.microsoft.com/en-us/windows/wsl/filesystems`
+- OpenAI Codex Windows guide
+  - `https://developers.openai.com/codex/windows`
 - `https://developers.openai.com/codex/config-reference`
 - `https://developers.openai.com/codex/app/local-environments`
 - `https://developers.openai.com/codex/hooks`

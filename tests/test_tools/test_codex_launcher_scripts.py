@@ -73,6 +73,32 @@ def test_wsl_launcher_scripts_call_mount_guard() -> None:
     assert "& powershell.exe @launcherArgs" in sticky
 
 
+def test_wsl_sync_dirty_clone_error_is_operator_actionable() -> None:
+    root = Path(__file__).resolve().parents[2]
+    sync_guard = (root / "scripts" / "infra" / "codex-wsl-sync.sh").read_text(encoding="utf-8")
+
+    assert "WSL Codex repo has uncommitted changes" in sync_guard
+    assert "MEASURED: dirty WSL Codex clone" in sync_guard
+    assert "This is a fail-closed guard, not a Codex install failure." in sync_guard
+    assert "cd ~/canompx3" in sync_guard
+    assert "git status --short --branch" in sync_guard
+    assert "codex.bat task <name>" in sync_guard
+    assert "Microsoft WSL and OpenAI Codex both recommend keeping Linux-tool repos under /home" in sync_guard
+
+
+def test_operator_docs_explain_wsl_home_launcher_recovery() -> None:
+    root = Path(__file__).resolve().parents[2]
+    handbook = (root / "docs" / "reference" / "codex-operator-handbook.md").read_text(encoding="utf-8")
+    setup = (root / "docs" / "reference" / "codex-claude-operator-setup.md").read_text(encoding="utf-8")
+
+    assert "MEASURED failure today" in handbook
+    assert "cd ~/canompx3" in handbook
+    assert "git status --short --branch" in handbook
+    assert "codex.bat task <name>" in handbook
+    assert "Microsoft Learn: Working across Windows and Linux file systems" in setup
+    assert "OpenAI Codex Windows guide" in setup
+
+
 def test_codex_bat_modes_are_supported_by_windows_launchers() -> None:
     root = Path(__file__).resolve().parents[2]
     codex_bat = (root / "codex.bat").read_text(encoding="utf-8")

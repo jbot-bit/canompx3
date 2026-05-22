@@ -278,6 +278,11 @@ def run() -> int:
     wsl_dirty = clone_present and rc == 0 and bool(wsl_status)
     if wsl_dirty:
         print("SMART_PATH=BLOCKED: WSL clone dirty (codex-wsl-sync.sh refuses to auto-sync a dirty target)")
+        print()
+        print("Manual remedy: inspect the WSL-home clone before relaunching.")
+        print("  cd ~/canompx3")
+        print("  git status --short --branch")
+        print("  Commit, stash, or move the changes into `codex.bat task <name>`, then retry `codex.bat`.")
         return 0
 
     relation, relation_detail = _resolve_sync_relation(

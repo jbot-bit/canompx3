@@ -130,4 +130,7 @@ def test_doctor_blocks_dirty_wsl_clone_before_relation_check(capsys) -> None:
 
     output = capsys.readouterr().out
     assert "SMART_PATH=BLOCKED: WSL clone dirty" in output
+    assert "Manual remedy: inspect the WSL-home clone before relaunching" in output
+    assert "cd ~/canompx3" in output
+    assert "git status --short --branch" in output
     relation_mock.assert_not_called()

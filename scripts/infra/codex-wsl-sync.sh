@@ -71,7 +71,22 @@ fi
 target_dirty="$(git -C "$TARGET_ROOT" status --short)"
 if [[ -n "$target_dirty" ]]; then
   echo "ERROR: WSL Codex repo has uncommitted changes and cannot be auto-synced safely." >&2
-  echo "Clean or archive the WSL Codex repo before launching from it again." >&2
+  echo "MEASURED: dirty WSL Codex clone at $TARGET_ROOT" >&2
+  echo "This is a fail-closed guard, not a Codex install failure." >&2
+  echo "" >&2
+  echo "Why this guard exists:" >&2
+  echo "  Microsoft WSL and OpenAI Codex both recommend keeping Linux-tool repos under /home." >&2
+  echo "  The Windows desktop launcher is only the front door; Codex work runs in the WSL-home clone." >&2
+  echo "" >&2
+  echo "Manual remedy:" >&2
+  echo "  1. In WSL: cd ~/canompx3" >&2
+  echo "  2. Inspect: git status --short --branch" >&2
+  echo "  3. Commit, stash, move to a named worktree, or otherwise preserve the changes." >&2
+  echo "  4. Retry: codex.bat" >&2
+  echo "" >&2
+  echo "For parallel mutable work, prefer: codex.bat task <name>" >&2
+  echo "" >&2
+  echo "Dirty files:" >&2
   git -C "$TARGET_ROOT" status --short >&2
   exit 1
 fi
