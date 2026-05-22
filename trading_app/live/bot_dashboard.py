@@ -2781,7 +2781,18 @@ async def _bars_watcher() -> None:
 
             for inst in instruments:
                 snap = bar_ring.read_bar_ring(inst)
-                if not snap.is_empty() and not bar_ring.is_stale(snap):
+                # Crash-detection gate: a stale heartbeat means the bot is
+                # dead; do NOT push ring bars to SSE even if the ring file
+                # is still within its 90s freshness window. The post-crash
+                # ring is a historical artifact, not live data. Falls
+                # through to the cross-stale branch below which defers to
+                # /api/bars-recent.
+                ring_is_live = (
+                    not snap.is_empty()
+                    and not bar_ring.is_stale(snap)
+                    and not heartbeat_stale
+                )
+                if ring_is_live:
                     # Prefer ring during a live session.
                     since = last_seen.get(inst)
                     if since is None:
@@ -2829,17 +2840,21 @@ async def _bars_watcher() -> None:
                         )
                     continue
 
-                # Ring is empty or stale → fall back to gold.db for this inst.
-                # When both heartbeat and ring are stale we skip — yesterday's
-                # ring should not pose as "live".
-                if heartbeat_stale and bar_ring.is_stale(snap):
+                # Bot dead (stale heartbeat) → suppress SSE pushes entirely
+                # for this instrument and defer chart loads to
+                # /api/bars-recent's gold.db historical view. Prevents
+                # post-crash false-live where the ring stays fresh for up
+                # to 90s after the heartbeat thread dies.
+                if heartbeat_stale:
                     if inst not in last_seen:
                         log.info(
-                            "_bars_watcher(%s): no live ring + stale heartbeat — "
-                            "deferring to /api/bars-recent for historical view",
+                            "_bars_watcher(%s): heartbeat stale — deferring to "
+                            "/api/bars-recent for historical view "
+                            "(ring_stale=%s, ring_empty=%s)",
                             inst,
+                            bar_ring.is_stale(snap),
+                            snap.is_empty(),
                         )
-                        # Mark so we don't repeat the log every poll.
                         last_seen[inst] = datetime.now(UTC) - timedelta(days=365)
                     continue
 

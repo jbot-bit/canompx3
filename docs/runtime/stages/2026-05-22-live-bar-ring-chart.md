@@ -8,14 +8,32 @@ scope_lock:
   - trading_app/live/session_orchestrator.py
   - tests/test_trading_app/test_bar_ring.py
   - tests/test_trading_app/test_bar_persister.py
-implementation_status: AUDIT_PENDING
+implementation_status: AUDIT_CLOSED_PENDING_LIVE_SMOKE
 closed_note: |
-  Implementation complete (1 commit). data/live_bars/ created via mkdir at
-  runtime; project .gitignore already excludes data/ so no per-dir .gitignore
-  needed. 23 unit tests pass (12 new in test_bar_ring, 2 new in test_bar_persister).
-  Drift: 158 PASSED, 0 violations. Adversarial-audit gate (evidence-auditor)
-  REQUIRED before CLOSED — touches trading_app/live/, severity HIGH.
-  Manual smoke (done-criterion 7) requires live session — operator-driven.
+  Implementation: 2 commits (a7d0e4c5 base, audit-fix follow-up). data/live_bars/
+  created via mkdir at runtime; project .gitignore already excludes data/.
+  Tests: 26 pass (15 in test_bar_ring incl. 3 audit-fix regression tests,
+  11 in test_bar_persister incl. 2 ring-integration). Drift: 158 PASSED,
+  0 violations.
+
+  Adversarial-audit gate (evidence-auditor a29e02fb) verdict: CONDITIONAL.
+  Three findings, all addressed in the follow-up commit:
+    (1) HIGH — Cross-stale AND gate produced ≤90s post-crash false-live
+        window. Fix: bot_dashboard._bars_watcher now gates the ring-push
+        branch on `not heartbeat_stale`; heartbeat-stale alone defers to
+        /api/bars-recent regardless of ring freshness.
+    (2) HIGH — flush_to_db failure path silently deleted the ring (data
+        loss). Fix: session_orchestrator now preserves the ring file +
+        emits CRITICAL when bars_captured > 0 but n_persisted == 0.
+    (3) MEDIUM — Nested-mock parity gap: real Bar with Mock OHLC fields
+        smuggled past top-level _is_mock_object check. Fix: per-field
+        type-+ Mock guard in _serialize_bar; writer thread catches and
+        logs CRITICAL instead of dying silently.
+
+  Manual smoke (done-criterion 7) requires a live session — operator-driven,
+  intentionally deferred. Will mark CLOSED after the next --live debut
+  confirms (a) fresh candle within 90s of session start, (b) ring file
+  deleted on clean shutdown, (c) chart falls back to gold.db post-session.
 ---
 
 ## Blast Radius

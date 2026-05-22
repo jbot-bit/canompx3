@@ -243,6 +243,49 @@ class TestBarRing:
         assert critical, "expected CRITICAL log after >=3 consecutive write failures"
         assert any("MNQFAIL" in r.getMessage() for r in critical)
 
+    # 13. AUDIT-FIX (defense-in-depth): Bar.is_valid() rejects a real Bar
+    #     with a Mock OHLC field at enqueue time (first line of defense).
+    def test_field_level_mock_rejected_at_enqueue(self, isolated_ring_dir):
+        b = _bar(0)
+        b.open = MagicMock()  # type: ignore[assignment]
+        result = bar_ring.enqueue_bar("MNQ", b)
+        # First-line defense: Bar.is_valid() checks isinstance(field, int|float),
+        # MagicMock fails that → invalid_rejected counter bumps.
+        assert result.enqueued is False
+        assert result.invalid_rejected is True
+
+    # 14. AUDIT-FIX: per-field guard in _serialize_bar is the SECOND-line
+    #     defense — fires if a Bar bypasses is_valid() (e.g. an object that
+    #     satisfies isinstance(x, int|float) via subclassing but is still a
+    #     Mock). Verified by calling _serialize_bar directly.
+    def test_serialize_bar_refuses_field_level_mock(self):
+        b = _bar(0)
+        b.open = MagicMock()  # type: ignore[assignment]
+        with pytest.raises(TypeError, match="bar_ring contamination"):
+            bar_ring._serialize_bar(b)
+
+    # 15. AUDIT-FIX: writer thread survives contamination — subsequent
+    #     valid bars still flow through (does not die silently on bad bar).
+    def test_writer_thread_survives_contamination(self, isolated_ring_dir):
+        # Construct a Bar that passes is_valid() but contains a mock that
+        # the writer thread's per-field guard must reject. Easiest path:
+        # subclass int so isinstance check passes but _is_mock_object also
+        # returns True. Simulate via direct queue injection.
+        symbol = "MNQSURVIVE"
+        writer = bar_ring._get_or_create_writer(symbol)
+
+        # Inject a Bar whose ts_utc is a MagicMock — bypasses is_valid()
+        # (which only checks OHLC numeric fields) but the serializer's
+        # ts_utc Mock check fires.
+        bad = _bar(0)
+        bad.ts_utc = MagicMock()  # type: ignore[assignment]
+        writer._q.put_nowait(bad)
+        # Follow with valid bars.
+        for i in range(1, 5):
+            bar_ring.enqueue_bar(symbol, _bar(i))
+        snap = _wait_for_bars(symbol, 4)
+        assert len(snap.bars) == 4  # writer survived, valid bars flowed through
+
     # 12. invalid_rejected count exposed through reader after a valid write
     def test_invalid_rejected_counter_exposed(self, isolated_ring_dir):
         # Two bad bars then a good one — counter persists in the ring payload.

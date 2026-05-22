@@ -3820,13 +3820,29 @@ class SessionOrchestrator:
         # Persist captured bars to bars_1m (Databento-free daily pipeline).
         # Order matters: drain the dashboard-ring writer first so any in-flight
         # bars land in the snapshot, then flush gold.db, then clear the ring
-        # so the dashboard falls back to gold.db historical view.
+        # only on success so the dashboard falls back to gold.db historical
+        # view without data-loss. If persist fails while bars were captured,
+        # surface CRITICAL and KEEP the ring file so the operator can recover
+        # the in-flight bars off-disk before next session overwrites them.
         from trading_app.live import bar_ring as _bar_ring
         _bar_ring.drain_and_stop_writer(self.instrument)
+        bars_captured = self._bar_persister.bar_count
         n_persisted = self._bar_persister.flush_to_db()
         if n_persisted > 0:
             log.info("Bar persister: %d bars written to bars_1m", n_persisted)
-        self._bar_persister.clear_ring()
+            self._bar_persister.clear_ring()
+        elif bars_captured == 0:
+            # Empty session — nothing to persist, safe to clear the ring.
+            self._bar_persister.clear_ring()
+        else:
+            log.critical(
+                "Bar persister: %d bars captured but flush_to_db returned 0 — "
+                "ring file at data/live_bars/%s.json PRESERVED for operator "
+                "recovery. Dashboard chart will continue showing the ring "
+                "until manually cleared.",
+                bars_captured,
+                self.instrument,
+            )
 
         # Clear crash-recovery state on clean session end.
         # If blocked strategies or kill switch fired, leave state for next startup.

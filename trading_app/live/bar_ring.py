@@ -116,8 +116,32 @@ class RingSnapshot:
 
 
 def _serialize_bar(bar: Bar) -> dict[str, Any]:
-    """Project a Bar to a JSON-safe dict mirroring the SSE bar event shape."""
+    """Project a Bar to a JSON-safe dict mirroring the SSE bar event shape.
+
+    Field-level mock-contamination guard: a real ``Bar`` instance whose OHLC
+    fields are mock objects (e.g. ``bar.open = MagicMock()``) bypasses the
+    top-level ``_is_mock_object`` check in ``enqueue_bar``. Catch the
+    smuggle here per-field — refusing keeps the ring snapshot free of mock
+    artefacts that ``float(MagicMock())`` would otherwise silently coerce.
+    """
+    for field_name in ("open", "high", "low", "close", "volume"):
+        v = getattr(bar, field_name)
+        if _is_mock_object(v):
+            raise TypeError(
+                f"bar_ring contamination: bar.{field_name} = "
+                f"{type(v).__name__} (unittest.mock object); refuse to serialize"
+            )
+        if not isinstance(v, (int, float)):
+            raise TypeError(
+                f"bar_ring contamination: bar.{field_name} is "
+                f"{type(v).__name__}, expected int|float"
+            )
     ts = bar.ts_utc
+    if _is_mock_object(ts):
+        raise TypeError(
+            f"bar_ring contamination: bar.ts_utc = {type(ts).__name__} "
+            f"(unittest.mock object); refuse to serialize"
+        )
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=UTC)
     return {
@@ -232,8 +256,23 @@ class _RingWriter:
             try:
                 if item is None:
                     return
+                try:
+                    serialized = _serialize_bar(item)
+                except TypeError as exc:
+                    # Mock-contamination or non-numeric field smuggled in.
+                    # Logged CRITICAL so it surfaces in server logs; the bad
+                    # bar is dropped, counter bumped. Writer thread MUST
+                    # survive — silent thread death would freeze the chart.
+                    log.critical(
+                        "bar_ring(%s): refused contaminated bar — %s",
+                        self.symbol,
+                        exc,
+                    )
+                    with self._lock:
+                        self._invalid_rejected += 1
+                    continue
                 with self._lock:
-                    self._bars.append(_serialize_bar(item))
+                    self._bars.append(serialized)
                     if len(self._bars) > RING_CAPACITY:
                         # Drop oldest from the in-memory ring.
                         overflow = len(self._bars) - RING_CAPACITY
