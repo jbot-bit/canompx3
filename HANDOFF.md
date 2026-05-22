@@ -6,6 +6,14 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-22 PM — baton cleanup: Stage 1b chain closeout)
+
+- **Tool:** Claude Code (Opus 4.7), explanatory mode
+- **What:** Reconciled stale baton state. Prior HANDOFF entry pointed to "Stage 1b-ii.b — migrate `session_orchestrator` (next)" but PR #310 had already merged the full 1b-ii.b → 1b-iii → 1b-iv chain at 2026-05-22 01:26Z. Branch `session/joshd-multi-profile-lane-allocation` (commits `f67fc9c6..25d169cc` — 12 commits) is on `main`.
+- **What's actually on main:** `trading_app/live/session_orchestrator.py` resolver-migrated (`76dc7bd0`), 11 `scripts/tools/*` readers swept (`40878a5c`), allowlist drained, ruff format applied (`23085b09`). Zero `lane_allocation.json` literals remain in `trading_app/` or `scripts/tools/` per HANDOFF Stage 1c entry.
+- **Cleanup actions:** Pulled local `main` (3 commits behind: #310, #311, #312). Deleted merged remote branch `session/joshd-multi-profile-lane-allocation`. Pruned origin refs. Local working-tree dirty files (`START_BOT.bat` dashboard-origin env-var fix, `live_journal.db` runtime) were preserved across the pull — they belong to the journal-locked carry-over below, not to Stage 1b.
+- **Next:** Per prior baton, `session/joshd-ehr-validation-mode` worktree is the remaining open work. Carry-overs from journal-locked session below remain live (`/api/bars-recent` empty bars, `logs/live/*.log` FileHandler gap, real OS-level singleton on live runner, `.env` parse-warning).
+
 ## This Session (2026-05-22 — Claude live-preflight journal-locked ergonomics, branch pushed not merged)
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode
