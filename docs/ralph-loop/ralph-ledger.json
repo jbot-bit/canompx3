@@ -1,7 +1,7 @@
 {
-  "total_iterations": 189,
+  "total_iterations": 190,
   "last_updated": "2026-05-23",
-  "consecutive_low_only": 1,
+  "consecutive_low_only": 2,
   "last_high_finding_iter": 195,
   "findings_by_type": {
     "canonical_violation": {
@@ -23,8 +23,8 @@
       "fix_rate": 0.5
     },
     "dead_code": {
-      "found": 16,
-      "fixed": 16,
+      "found": 17,
+      "fixed": 17,
       "deferred": 0,
       "fix_rate": 1.0
     },
@@ -129,11 +129,11 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 49,
-    "LOW": 117
+    "LOW": 118
   },
   "classifications": {
     "judgment": 83,
-    "mechanical": 73,
+    "mechanical": 74,
     "audit-only": 33
   },
   "files_audited": {
@@ -202,6 +202,11 @@
       "last_iter": 184,
       "findings": 3
     },
+    "trading_app/lane_allocator.py": {
+      "audit_count": 4,
+      "last_iter": 197,
+      "findings": 4
+    },
     "webhook_server.py": {
       "audit_count": 3,
       "last_iter": 9,
@@ -245,11 +250,6 @@
     "pipeline/check_drift.py": {
       "audit_count": 3,
       "last_iter": 192,
-      "findings": 3
-    },
-    "trading_app/lane_allocator.py": {
-      "audit_count": 3,
-      "last_iter": 187,
       "findings": 3
     },
     "tradovate/order_router.py": {
@@ -3262,6 +3262,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "4580b189"
+    },
+    {
+      "iter": 197,
+      "date": "2026-05-23",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/lane_allocator.py:550-559",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "03847687"
     }
   ]
 }

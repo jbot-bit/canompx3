@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 197 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/lane_allocator.py:550-559
+- Finding: `_classify_status` declared 5 dead parameters (actual_months, months_neg, months_pos_since, annual_r, monthly) that were never read by the function body — remnants of removed individual-strategy pause logic
+- Doctrine cited: institutional-rigor.md § 5 (No dead code — dead parameters are dead parameters, not "future use")
+- Action: Removed 5 dead parameters from _classify_status signature and all 3 call sites (lane_allocator.py, research/garch_a4b_binding_budget_replay.py); 8 test call sites also updated. Zero logic change.
+- Blast radius: 3 files (lane_allocator.py, garch_a4b_binding_budget_replay.py, test_lane_allocator.py)
+- Verification: PASS — 160 drift checks; 82 lane_allocator tests pass
+- Commit: 03847687
+
+---
+
 ## Iteration 196 — 2026-05-23
 - Phase: fix
 - Classification: [mechanical]

@@ -3,49 +3,80 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 196
+## Last iteration: 197
 
-## RALPH AUDIT — Iteration 196 (COMPLETED)
+## RALPH AUDIT — Iteration 197 (COMPLETED)
 ## Date: 2026-05-23
-## Infrastructure Gates: 160 drift checks PASS; 1278 tests PASS (1 pre-existing float-equality failure in test_lane_correlation_cache unrelated to this change)
-## Scope: trading_app/lane_correlation.py
+## Infrastructure Gates: 160 drift checks PASS; 82 lane_allocator tests PASS
+## Scope: trading_app/lane_allocator.py
 
 ---
 
-## lane_correlation.py Audit Summary
+## lane_allocator.py Audit Summary
 
-`check_candidate_correlation` computes pairwise Pearson rho between a candidate lane and all deployed lanes in a profile, returning a `CorrelationReport` with `gate_pass`. Used by `lane_allocator.py:1064` and `scripts/tools/rebalance_lanes.py:116`.
+`_classify_status` accepts 8 keyword-only parameters but the function body only
+reads 3 of them (`trailing_expr`, `trailing_n`, `session_regime_expr`). The five
+dead parameters (`actual_months`, `months_neg`, `months_pos_since`, `annual_r`,
+`monthly`) are remnants of individual-strategy pause/resume logic that was
+intentionally removed after backtest 2022-2025 proved regime-only gating (+630R)
+outperforms individual pause/resume (-799R). The values are still computed by the
+caller and stored on `LaneScore` for display/reporting purposes — they just no
+longer influence the classification decision.
 
-### Seven Sins Scan — lane_correlation.py
-
-- Sin 1 (Silent failure): `check_candidate_correlation` has no `except` inside `try` — DB errors propagate uncaught to caller. This is **fail-closed** behavior (allocator cannot proceed if correlation is unknown) — ACCEPTABLE per integrity-guardian.md § 3.
-- Sin 2 (Fail-open): `n_shared < 5` → `rho = 0.0` (no rejection). Intentional heuristic: new strategies with no/little trade history should not be auto-rejected. ACCEPTABLE per pattern 1 (intentional per-session heuristic).
-- Sin 3 (Canonical violation): `RHO_REJECT_THRESHOLD = 0.70` and `SUBSET_REJECT_THRESHOLD = 0.80` were bare constants without `@research-source` annotation. **FIXED this iteration.**
-- Sin 4 (Impact awareness): Callers (`lane_allocator.py`, `rebalance_lanes.py`, `displaced_rotation_analyzer.py`) import the canonical constants — no re-encoding found. ACCEPTABLE.
-- Sin 5 (Evidence over assertion): N/A (audit mode).
-- Sin 6 (Spec compliance): No `docs/specs/` file for this module; no spec to violate.
-- Sin 7 (Metadata trust): Module docstring claims `@canonical-source trading_app/lane_correlation.py` — consistent with how callers import from it. ACCEPTABLE.
+Pyright flagged lines 554-557 and 559 as "not accessed." This matched the
+institutional-rigor.md § 5 "No dead code" rule — dead parameters are dead
+parameters, not "future use."
 
 ---
 
-## Finding ANNOT-196 — LOW — FIXED
+## Finding DEAD-197 — LOW — FIXED
 
-**PREMISE:** `lane_correlation.py:29-30` defined `RHO_REJECT_THRESHOLD = 0.70` and `SUBSET_REJECT_THRESHOLD = 0.80` as bare numeric constants with no `@research-source` annotation. These drive capital-gate decisions (candidates above rho=0.70 are rejected from deployment). Per `integrity-guardian.md § 8`, research-derived thresholds require provenance annotations so stale values are detectable when entry models change.
+**PREMISE:** `_classify_status` signature declared 5 parameters that its body
+never read. Computed values with no effect on the decision path are a dead-code
+violation (institutional-rigor.md § 5).
 
 **TRACE:**
-- `lane_correlation.py:29-30` → `check_candidate_correlation:173-174` → `lane_allocator.py:1064` → capital gate rejection
+- `lane_allocator.py:550-559` — signature with 5 unused params
+- `lane_allocator.py:462-471` — caller passing the 5 dead params
+- `research/garch_a4b_binding_budget_replay.py:447-456` — second caller
 
-**EVIDENCE:** `docs/audit/2026-04-18-grounding-audit-master.md:92-100` confirms `rho=0.70` is "VERIFIED_CODE" and "consistent with Rule 7 tautology canon at `.claude/rules/backtesting-methodology.md:194`" (Carver-grounded hysteresis). No in-code annotation existed before this fix.
+**EVIDENCE:** Function body (lines 574-591) uses only `trailing_expr`,
+`trailing_n`, `session_regime_expr`. Pyright "not accessed" on lines 554-557, 559
+confirmed. The parameters are listed in the docstring as "backtest proved not
+needed."
 
-**Fix:** Added `@research-source`, `@entry-models`, `@revalidated-for` annotations citing backtesting-methodology.md RULE 7 and the 2026-04-18 grounding audit. Zero logic change.
+**Fix:** Removed 5 dead parameters from `_classify_status` signature and all
+3 production call sites. 8 test call sites also updated. Commit 03847687.
 
-**Doctrine cited:** integrity-guardian.md § 8
+**Doctrine cited:** institutional-rigor.md § 5 (No dead code)
 
 ---
 
-## Additional Observations (no fix needed)
+## Seven Sins Scan — lane_allocator.py (partial — entry/greedy path)
 
-- `test_lane_correlation_cache.py::test_compute_pairwise_correlation_matches_per_strategy_path` fails with a floating-point equality mismatch against live gold.db data. Pre-existing: the test uses `assert actual == ref` against live DB (data-sensitive). Not introduced by this iteration's comment-only change.
+- Sin 1 (Silent failure): Greedy selection in `build_allocation` uses plain
+  `for` iteration without try/except — correlation failures propagate to the
+  caller. Fail-closed behavior. ACCEPTABLE.
+- Sin 2 (Fail-open): `load_sr_state()` fails-open (returns `{}`) on stale/missing
+  SR state file. Documented in docstring. ACCEPTABLE (per integrity-guardian § 3,
+  fail-open documented at canonical source).
+- Sin 3 (Canonical violation): `_compute_session_regime` at line 540 hardcodes
+  `entry_model='E2'` AND `rr_target=1.0`, `confirm_bars=1`, `orb_minutes=5`.
+  These are the canonical regime-proxy parameters — unfiltered E2 RR1.0 CB1 O5
+  as defined in the module docstring ("Session regime (unfiltered E2 RR1.0 CB1,
+  6-month window)"). This is an intentional architectural choice (regime proxy,
+  not a lane-specific setting). Per iter 187, `compute_pairwise_correlation`
+  hardcoded E2 was FIXED (commit 052403aa). This remaining hardcode is in the
+  *regime proxy* function — different role. ACCEPTABLE per pattern 1 (intentional
+  per-session heuristic).
+- Sin 4 (Impact awareness): `LaneScore.months_negative` and
+  `months_positive_since_last_neg_streak` still appear on the dataclass and are
+  still computed by the caller — they are live reporting fields even though they
+  don't influence `_classify_status`. No action needed.
+- Sin 5 (Evidence over assertion): N/A (audit mode).
+- Sin 6 (Spec compliance): No `docs/specs/` file for lane_allocator; no spec to violate.
+- Sin 7 (Metadata trust): Module docstring accurately describes the two-layer
+  architecture. ACCEPTABLE.
 
 ---
 
@@ -67,6 +98,7 @@
 - trading_app/live_config.py (iter 195)
 - trading_app/prop_portfolio.py (iter 195, partial — fitness gate path)
 - trading_app/lane_correlation.py (iter 196)
+- trading_app/lane_allocator.py (iter 197, partial — _classify_status + greedy path)
 
 ---
 
@@ -74,5 +106,6 @@
 
 **Priority 1 — Unscanned high/medium centrality files:**
 - `trading_app/chordia.py` — medium centrality, never scanned; Chordia gate is capital-class
-- `trading_app/prop_portfolio.py` — partially scanned (iter 195, fitness gate only); remainder not audited
-- `trading_app/lane_allocator.py` — high centrality, never scanned; contains `compute_pairwise_correlation` and greedy selection logic
+- `trading_app/prop_portfolio.py` — partially scanned (iter 195); remainder not audited
+- `trading_app/lane_allocator.py` — continue remainder of file (greedy selection,
+  `apply_chordia_gate`, `build_allocation` silent-failure surface)
