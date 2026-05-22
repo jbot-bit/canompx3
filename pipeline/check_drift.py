@@ -12341,6 +12341,7 @@ def check_fast_lane_trial_ledger_append_only(
                     from scripts.research.fast_lane_trial_ledger import (
                         _parse_utc_ts,
                     )
+
                     if _parse_utc_ts(ts) < _parse_utc_ts(last_ts):
                         violations.append(
                             "check_fast_lane_trial_ledger_append_only: "

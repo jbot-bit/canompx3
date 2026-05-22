@@ -103,6 +103,7 @@ def test_missing_real_entry_is_caught(tmp_path: Path):
     fresh = build_digest()
     if not fresh["entries"]:
         import pytest
+
         pytest.skip("no graveyard entries in this repo — injection cannot fire")
     # Drop the first real entry; rebuild will reinstate it -> MISSING_FROM_DIGEST.
     fresh["entries"] = fresh["entries"][1:]
@@ -121,6 +122,7 @@ def test_hash_collision_is_caught(tmp_path: Path):
     fresh = build_digest()
     if not fresh["entries"]:
         import pytest
+
         pytest.skip("no graveyard entries in this repo — injection cannot fire")
     target_hash = fresh["entries"][0]["structural_hash"]
     fresh["entries"].append(
@@ -204,7 +206,4 @@ def test_malformed_digest_yaml_fails_closed(tmp_path: Path) -> None:
     bad.write_text(": not: valid: yaml: {\n", encoding="utf-8")
     violations = check_fast_lane_graveyard_digest_parity(digest_path=bad)
     assert violations
-    assert any(
-        "parse" in v.lower() or "yaml" in v.lower() or "failed" in v.lower()
-        for v in violations
-    )
+    assert any("parse" in v.lower() or "yaml" in v.lower() or "failed" in v.lower() for v in violations)
