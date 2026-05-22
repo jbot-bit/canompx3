@@ -252,8 +252,7 @@ def test_build_status_entries_pre_ranker_heavyweight_gets_deployment_action(tmp_
     # collect_heavyweight_results parses.
     md = paths["results"] / "2026-05-15-mnq-fake-chordia-unlock-v1.md"
     md.write_text(
-        "# Chordia strict unlock audit — MNQ_FAKE_PRE_RANKER\n\n"
-        "**MEASURED verdict:** `PASS_CHORDIA`\n",
+        "# Chordia strict unlock audit — MNQ_FAKE_PRE_RANKER\n\n**MEASURED verdict:** `PASS_CHORDIA`\n",
         encoding="utf-8",
     )
     # NO journal entry — the journal YAML is absent / empty by design.
@@ -282,8 +281,7 @@ def test_build_status_entries_post_ranker_heavyweight_gets_enricher_action(tmp_p
     paths = _fake_chain(tmp_path)
     md = paths["results"] / "2026-05-19-mnq-real-chordia-heavyweight-v1.md"
     md.write_text(
-        "# Chordia strict unlock audit — MNQ_REAL_POST_RANKER\n\n"
-        "**MEASURED verdict:** `PASS_CHORDIA`\n",
+        "# Chordia strict unlock audit — MNQ_REAL_POST_RANKER\n\n**MEASURED verdict:** `PASS_CHORDIA`\n",
         encoding="utf-8",
     )
     # Journal entry exists — pre-heavyweight (heavyweight_verdict=None).

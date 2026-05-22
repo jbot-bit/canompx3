@@ -45,6 +45,7 @@ def _tradeable_sessions() -> tuple[str, ...]:
             sessions.update(prof.allowed_sessions)
     return tuple(sorted(sessions))
 
+
 ALLOCATION_JSON = Path(__file__).resolve().parent.parent.parent / "docs" / "runtime" / "lane_allocation.json"
 
 
@@ -160,14 +161,16 @@ def _hot_session_coverage(con: duckdb.DuckDBPyConnection, regimes: list[dict]) -
         ).fetchone()
         if row is None:
             continue
-        out.append({
-            "instrument": r["instrument"],
-            "session": r["session"],
-            "avg_r": r["avg_r"],
-            "validated_n": int(row[0]),
-            "avg_expr": float(row[1]),
-            "strong": int(row[2]),
-        })
+        out.append(
+            {
+                "instrument": r["instrument"],
+                "session": r["session"],
+                "avg_r": r["avg_r"],
+                "validated_n": int(row[0]),
+                "avg_expr": float(row[1]),
+                "strong": int(row[2]),
+            }
+        )
     return sorted(out, key=lambda g: (g["validated_n"], -g["strong"]))
 
 
@@ -212,9 +215,7 @@ def main() -> None:
         for d in displaced:
             sid = d.get("strategy_id", "?")
             info = c8.get(sid, {})
-            print(
-                f"  {sid:60s}  ExpR={info.get('expr', '?')}  N={info.get('n', '?')}  C8={info.get('c8', '?')}"
-            )
+            print(f"  {sid:60s}  ExpR={info.get('expr', '?')}  N={info.get('n', '?')}  C8={info.get('c8', '?')}")
         con.close()
     print()
 
@@ -240,9 +241,7 @@ def main() -> None:
     print("## 5. Suggested next moves")
     if displaced:
         print(f"  - {len(displaced)} displaced lanes -> consider a 2nd correlation-orthogonal profile")
-    chordia_missing = sum(
-        c for r, c in _paused_histogram(paused) if "chordia" in r.lower() and "missing" in r.lower()
-    )
+    chordia_missing = sum(c for r, c in _paused_histogram(paused) if "chordia" in r.lower() and "missing" in r.lower())
     if chordia_missing >= 50:
         print(f"  - {chordia_missing} Chordia-MISSING lanes -> batch audit pass would unlock inventory")
     if stale is not None and stale >= 7:
