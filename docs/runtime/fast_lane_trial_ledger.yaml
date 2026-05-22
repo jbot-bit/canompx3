@@ -2521,3 +2521,193 @@ entries:
     pooled_t: 3.064
     pooled_n: 226
     pooled_fire: 0.14679999999999999
+- run_id: chordia_strict_unlock_v1:2026-05-22T17:19:38Z:24f6266d01a0e4c7
+  trial_id: 24f6266d01a0e4c7
+  run_timestamp_utc: '2026-05-22T17:19:38Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mes-cmepreclose-e2-rr10-cb1-costlt15-pooled-o30-fast-lane-v1.yaml
+  prereg_sha: ba45609627848b3c4d45c7576a9615f046cef3b400481c146dcdaf6ff6778b64
+  structural_hash: 85092b924bd149a2
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MES
+    orb_label: CME_PRECLOSE
+    orb_minutes: 30
+    K_global: 72
+    K_family: 0
+    K_lane: 0
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 3.519180180964378e-05
+    bh_fdr_passes:
+      K_family: true
+      K_lane: true
+      K_global: true
+    correlation_haircut_N_hat: 493
+    rho_hat_assumed: 0.5
+  n_hat: 493.0
+  upstream_provenance:
+    runner_id: research/chordia_strict_unlock_v1.py:fast_lane_v5.1
+    result_md: docs/audit/results/2026-05-18-mes-cmepreclose-e2-rr10-cb1-costlt15-pooled-o30-fast-lane-v1.md
+    result_csv: docs/audit/results/2026-05-18-mes-cmepreclose-e2-rr10-cb1-costlt15-pooled-o30-fast-lane-v1.csv
+    result_summary_csv: docs/audit/results/2026-05-18-mes-cmepreclose-e2-rr10-cb1-costlt15-pooled-o30-fast-lane-v1.summary.csv
+    result_artifact_sha: a14431a42d438432a137a0362002ce645efde5bd813b17eb090c445e58db1f2b
+    canonical_data_fingerprint: 32cf716dd2689e1de2f4796a375c7e63e355fa6b025ef01f8db47f3257cbe3fd
+  outcome:
+    heavyweight_verdict: FAIL_STRICT_CHORDIA
+    heavyweight_reason: IS t=0.020 < 3.79.
+    fast_lane_verdict: KILL
+    fast_lane_reason: "Fire-rate 0.9960 outside [0.05, 0.95] \u2014 degenerate filter,\
+      \ not a t-stat failure."
+    is_n_fired: 493
+    is_t: 0.01986751336222818
+    is_expr: 0.00034523326572008723
+    is_fire_rate: 0.9959595959595959
+    oos_n_fired: 31
+    oos_t: 2.1900970623778897
+    oos_expr: 0.15269354838709678
+- run_id: chordia_strict_unlock_v1:2026-05-22T17:19:52Z:6319d95d0c56bd30
+  trial_id: 6319d95d0c56bd30
+  run_timestamp_utc: '2026-05-22T17:19:52Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mes-cmepreclose-e2-rr10-cb1-orbg5-pooled-o30-fast-lane-v1.yaml
+  prereg_sha: f15f0ea9df60a647183ec2423302c8d8028d7669bc337686a188c1dedd2fdcfc
+  structural_hash: e891fa36a080b8c3
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MES
+    orb_label: CME_PRECLOSE
+    orb_minutes: 30
+    K_global: 73
+    K_family: 1
+    K_lane: 0
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 3.6180609111210915e-05
+    bh_fdr_passes:
+      K_family: true
+      K_lane: true
+      K_global: true
+    correlation_haircut_N_hat: 487
+    rho_hat_assumed: 0.5
+  n_hat: 487.0
+  upstream_provenance:
+    runner_id: research/chordia_strict_unlock_v1.py:fast_lane_v5.1
+    result_md: docs/audit/results/2026-05-18-mes-cmepreclose-e2-rr10-cb1-orbg5-pooled-o30-fast-lane-v1.md
+    result_csv: docs/audit/results/2026-05-18-mes-cmepreclose-e2-rr10-cb1-orbg5-pooled-o30-fast-lane-v1.csv
+    result_summary_csv: docs/audit/results/2026-05-18-mes-cmepreclose-e2-rr10-cb1-orbg5-pooled-o30-fast-lane-v1.summary.csv
+    result_artifact_sha: 172fb534f796de6c2bc72d04947ccc9bcf9fd9233912baa9d6fa1bd062f207c7
+    canonical_data_fingerprint: 32cf716dd2689e1de2f4796a375c7e63e355fa6b025ef01f8db47f3257cbe3fd
+  outcome:
+    heavyweight_verdict: FAIL_STRICT_CHORDIA
+    heavyweight_reason: IS t=0.121 < 3.79.
+    fast_lane_verdict: KILL
+    fast_lane_reason: "Fire-rate 0.9838 outside [0.05, 0.95] \u2014 degenerate filter,\
+      \ not a t-stat failure."
+    is_n_fired: 487
+    is_t: 0.12083847030868425
+    is_expr: 0.002109240246406572
+    is_fire_rate: 0.9838383838383838
+    oos_n_fired: 31
+    oos_t: 2.1900970623778897
+    oos_expr: 0.15269354838709678
+- run_id: chordia_strict_unlock_v1:2026-05-22T17:20:05Z:f1254fa05d1a46f4
+  trial_id: f1254fa05d1a46f4
+  run_timestamp_utc: '2026-05-22T17:20:05Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mgc-londonmetals-e2-rr20-cb1-orbvol8k-pooled-o30-fast-lane-v1.yaml
+  prereg_sha: 25295336ca3932b6ef9bbfe21da67ce2b20293b4ee3f1c1a45871f43ee2e9bf8
+  structural_hash: abb83726d0e57ac6
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MGC
+    orb_label: LONDON_METALS
+    orb_minutes: 30
+    K_global: 74
+    K_family: 0
+    K_lane: 0
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 0.003585227066392478
+    bh_fdr_passes:
+      K_family: true
+      K_lane: true
+      K_global: true
+    correlation_haircut_N_hat: 49
+    rho_hat_assumed: 0.5
+  n_hat: 49.0
+  upstream_provenance:
+    runner_id: research/chordia_strict_unlock_v1.py:fast_lane_v5.1
+    result_md: docs/audit/results/2026-05-18-mgc-londonmetals-e2-rr20-cb1-orbvol8k-pooled-o30-fast-lane-v1.md
+    result_csv: docs/audit/results/2026-05-18-mgc-londonmetals-e2-rr20-cb1-orbvol8k-pooled-o30-fast-lane-v1.csv
+    result_summary_csv: docs/audit/results/2026-05-18-mgc-londonmetals-e2-rr20-cb1-orbvol8k-pooled-o30-fast-lane-v1.summary.csv
+    result_artifact_sha: 6a3757ababb6389b6c3fd129d7813c3597ca7e2b05564297fedd8bfcdbb9330f
+    canonical_data_fingerprint: d033f9754bbf1e9f427bbca3733d55942f33a98751123c1eceed35e938dc1299
+  outcome:
+    heavyweight_verdict: FAIL_STRICT_CHORDIA
+    heavyweight_reason: IS t=3.592 < 3.79.
+    fast_lane_verdict: KILL
+    fast_lane_reason: N_IS_on=49 < 50.
+    is_n_fired: 49
+    is_t: 3.5916641675639642
+    is_expr: 0.7134469387755102
+    is_fire_rate: 0.05349344978165939
+    oos_n_fired: 34
+    oos_t: 0.283632656753631
+    oos_expr: 0.06868823529411767
+- run_id: chordia_strict_unlock_v1:2026-05-22T17:20:18Z:93965d9bc0de048c
+  trial_id: 93965d9bc0de048c
+  run_timestamp_utc: '2026-05-22T17:20:18Z'
+  prereg_path: docs/audit/hypotheses/2026-05-18-mnq-cmepreclose-e1-rr10-cb2-volrv20-pooled-o15-fast-lane-v1.yaml
+  prereg_sha: da9487e8fd679eb3ea6cab7632ae4c722838448aaaa187754d2b3aa9fc4f7f63
+  structural_hash: 980d6a3b20c34850
+  template_version: fast_lane_v5.1
+  testing_mode: individual
+  pathway: A
+  K_declared: 1
+  holdout_policy: mode_A
+  holdout_sacred_from: '2026-01-01'
+  k_lineage:
+    instrument: MNQ
+    orb_label: CME_PRECLOSE
+    orb_minutes: 15
+    K_global: 75
+    K_family: 0
+    K_lane: 0
+    K_declared_in_prereg: 1
+    K_effective_minBTL: 0.00010556721877686709
+    bh_fdr_passes:
+      K_family: true
+      K_lane: true
+      K_global: true
+    correlation_haircut_N_hat: 286
+    rho_hat_assumed: 0.5
+  n_hat: 286.0
+  upstream_provenance:
+    runner_id: research/chordia_strict_unlock_v1.py:fast_lane_v5.1
+    result_md: docs/audit/results/2026-05-18-mnq-cmepreclose-e1-rr10-cb2-volrv20-pooled-o15-fast-lane-v1.md
+    result_csv: docs/audit/results/2026-05-18-mnq-cmepreclose-e1-rr10-cb2-volrv20-pooled-o15-fast-lane-v1.csv
+    result_summary_csv: docs/audit/results/2026-05-18-mnq-cmepreclose-e1-rr10-cb2-volrv20-pooled-o15-fast-lane-v1.summary.csv
+    result_artifact_sha: 93640fe495f287e804ae477060cd23f4c223caab72d47be0a0e4b44cbcc9c41c
+    canonical_data_fingerprint: d033f9754bbf1e9f427bbca3733d55942f33a98751123c1eceed35e938dc1299
+  outcome:
+    heavyweight_verdict: FAIL_STRICT_CHORDIA
+    heavyweight_reason: IS t=2.550 < 3.79.
+    fast_lane_verdict: NEEDS-MORE
+    fast_lane_reason: t=2.550 in NEEDS-MORE band [2.5, 3.0).
+    is_n_fired: 286
+    is_t: 2.549917094446276
+    is_expr: 0.07342482517482517
+    is_fire_rate: 0.2857142857142857
+    oos_n_fired: 17
+    oos_t: -0.15921979968161798
+    oos_expr: -0.02170588235294116
