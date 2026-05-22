@@ -59,8 +59,7 @@ class CircuitBreaker:
         if self.is_open and self._opened_at is None:
             self._opened_at = time.monotonic()
             log.warning(
-                "Circuit breaker OPEN after %d consecutive failures (last_class=%s). "
-                "Blocking requests for %.0fs.",
+                "Circuit breaker OPEN after %d consecutive failures (last_class=%s). Blocking requests for %.0fs.",
                 self.consecutive_failures,
                 self.last_error_class,
                 self.recovery_timeout,
@@ -69,8 +68,7 @@ class CircuitBreaker:
             # Failed probe — restart the recovery timer so we don't flood
             self._opened_at = time.monotonic()
             log.warning(
-                "Circuit breaker: probe failed (%d consecutive, last_class=%s). "
-                "Re-blocking for %.0fs.",
+                "Circuit breaker: probe failed (%d consecutive, last_class=%s). Re-blocking for %.0fs.",
                 self.consecutive_failures,
                 self.last_error_class,
                 self.recovery_timeout,

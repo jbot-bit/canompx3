@@ -80,13 +80,13 @@ class BrokerPermanentError(BrokerHTTPError):
 class RetryPolicy:
     """Per-call retry budget. Keep deadline shorter than caller's SLA."""
 
-    max_attempts: int = 5            # includes first attempt
+    max_attempts: int = 5  # includes first attempt
     base_backoff_s: float = 0.5
     backoff_factor: float = 2.0
     backoff_max_s: float = 8.0
-    jitter_factor: float = 0.2       # ±20%
-    deadline_s: float = 12.0         # total wall-clock budget across attempts
-    max_429_attempts: int = 3        # tighter than general retries
+    jitter_factor: float = 0.2  # ±20%
+    deadline_s: float = 12.0  # total wall-clock budget across attempts
+    max_429_attempts: int = 3  # tighter than general retries
     retry_on_status: tuple[int, ...] = (500, 502, 503, 504)
 
 
@@ -264,7 +264,13 @@ class BrokerHTTPClient:
                 wait = _backoff_wait(attempt - 1, policy)
                 log.warning(
                     "%s: class=%s %s on %s (attempt %d/%d) — retrying in %.1fs",
-                    self.name, error_class, type(exc).__name__, path, attempt, policy.max_attempts, wait,
+                    self.name,
+                    error_class,
+                    type(exc).__name__,
+                    path,
+                    attempt,
+                    policy.max_attempts,
+                    wait,
                 )
                 _sleep_bounded(wait, deadline)
                 continue
@@ -331,7 +337,12 @@ class BrokerHTTPClient:
             wait = _backoff_wait(attempt - 1, policy)
             log.warning(
                 "%s: HTTP %d on %s (attempt %d/%d) — retrying in %.1fs",
-                self.name, resp.status_code, path, attempt, policy.max_attempts, wait,
+                self.name,
+                resp.status_code,
+                path,
+                attempt,
+                policy.max_attempts,
+                wait,
             )
             _sleep_bounded(wait, deadline)
             continue

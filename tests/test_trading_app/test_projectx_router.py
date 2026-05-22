@@ -22,12 +22,14 @@ def test_projectx_market_buy():
     mock_auth = MagicMock()
     mock_auth.headers.return_value = {"Authorization": "Bearer test"}
 
-    mock_resp = _ok_resp({
-        "orderId": 9056,
-        "success": True,
-        "errorCode": 0,
-        "errorMessage": None,
-    })
+    mock_resp = _ok_resp(
+        {
+            "orderId": 9056,
+            "success": True,
+            "errorCode": 0,
+            "errorMessage": None,
+        }
+    )
 
     with patch("requests.Session.request", return_value=mock_resp) as mock_req:
         from trading_app.live.projectx.order_router import ProjectXOrderRouter
@@ -162,7 +164,9 @@ def test_px_submit_fill_price_primary():
 
     router = ProjectXOrderRouter(account_id=1, auth=_px_auth())
     spec = {"accountId": 1, "contractId": "MGCM6", "type": 2, "side": 0, "size": 1}
-    with patch("requests.Session.request", return_value=_ok_resp({"success": True, "orderId": 99, "fillPrice": 2010.5})):
+    with patch(
+        "requests.Session.request", return_value=_ok_resp({"success": True, "orderId": 99, "fillPrice": 2010.5})
+    ):
         result = router.submit(spec)
     assert result["fill_price"] == 2010.5
 
@@ -172,7 +176,9 @@ def test_px_submit_fill_price_fallback():
 
     router = ProjectXOrderRouter(account_id=1, auth=_px_auth())
     spec = {"accountId": 1, "contractId": "MGCM6", "type": 2, "side": 0, "size": 1}
-    with patch("requests.Session.request", return_value=_ok_resp({"success": True, "orderId": 99, "averagePrice": 2010.5})):
+    with patch(
+        "requests.Session.request", return_value=_ok_resp({"success": True, "orderId": 99, "averagePrice": 2010.5})
+    ):
         result = router.submit(spec)
     assert result["fill_price"] == 2010.5
 

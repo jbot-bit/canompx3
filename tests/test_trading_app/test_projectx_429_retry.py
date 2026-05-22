@@ -172,6 +172,7 @@ def test_verify_bracket_legs_returns_none_on_non_429_error(mock_req, mock_sleep)
     contract.
     """
     import requests as _requests
+
     mock_req.side_effect = _requests.ConnectionError("network down")
     router = _router()
     sl, tp = router.verify_bracket_legs(entry_order_id=100, contract_id="TEST")

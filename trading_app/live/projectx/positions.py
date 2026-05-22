@@ -115,7 +115,8 @@ class ProjectXPositions(BrokerPositions):
                 age = time.monotonic() - ts
                 log.warning(
                     "ProjectX equity transient error (%s) — serving cache age=%.1fs",
-                    exc.error_class, age,
+                    exc.error_class,
+                    age,
                 )
                 return EquityReading(value=value, age_s=age, source="cache")
             raise

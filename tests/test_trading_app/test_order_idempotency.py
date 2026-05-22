@@ -12,6 +12,7 @@ Reference: ProjectX API spec (resources/projectx_api_spec_2026_05_16.md) —
 customTag unique-per-account-forever; searchOpen does NOT return customTag,
 so reconcile is fingerprint-based.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -88,9 +89,11 @@ def _spec_long_market(symbol="MGCZ5", qty=1):
 
 
 def test_place_succeeds_first_try():
-    router, session = _build_router([
-        _ok({"success": True, "orderId": 4242}),
-    ])
+    router, session = _build_router(
+        [
+            _ok({"success": True, "orderId": 4242}),
+        ]
+    )
     out = router.submit(_spec_long_market())
     assert out["order_id"] == 4242
     assert out["status"] == "submitted"
@@ -104,10 +107,12 @@ def test_place_succeeds_first_try():
 
 
 def test_place_429_then_success_uses_same_customtag():
-    router, session = _build_router([
-        _status(429, headers={"Retry-After": "0.01"}),
-        _ok({"success": True, "orderId": 4243}),
-    ])
+    router, session = _build_router(
+        [
+            _status(429, headers={"Retry-After": "0.01"}),
+            _ok({"success": True, "orderId": 4243}),
+        ]
+    )
     out = router.submit(_spec_long_market())
     assert out["order_id"] == 4243
     assert len(session.calls) == 2
@@ -129,17 +134,19 @@ def test_place_rst_after_accept_reconciles_via_fingerprint():
 
     # All 4 ORDER_POLICY attempts fail with RST, then the reconcile path runs
     # which calls searchOpen and finds the pre-existing order.
-    searchopen_resp = _ok({
-        "orders": [
-            {
-                "id": 9999,
-                "contractId": "MGCZ5",
-                "side": 0,
-                "size": 1,
-                "type": 2,
-            }
-        ]
-    })
+    searchopen_resp = _ok(
+        {
+            "orders": [
+                {
+                    "id": 9999,
+                    "contractId": "MGCZ5",
+                    "side": 0,
+                    "size": 1,
+                    "type": 2,
+                }
+            ]
+        }
+    )
     router, session = _build_router([rst, rst, rst, rst, searchopen_resp])
 
     out = router.submit(_spec_long_market())
@@ -175,12 +182,14 @@ def test_place_rst_ambiguous_fingerprint_refuses_to_adopt():
     refuse to adopt and surface the original transient error."""
     rst = requests.ConnectionError("rst")
     rst.__cause__ = ConnectionResetError(10054, "forcibly closed")
-    searchopen_resp = _ok({
-        "orders": [
-            {"id": 9999, "contractId": "MGCZ5", "side": 0, "size": 1, "type": 2},
-            {"id": 10000, "contractId": "MGCZ5", "side": 0, "size": 1, "type": 2},
-        ]
-    })
+    searchopen_resp = _ok(
+        {
+            "orders": [
+                {"id": 9999, "contractId": "MGCZ5", "side": 0, "size": 1, "type": 2},
+                {"id": 10000, "contractId": "MGCZ5", "side": 0, "size": 1, "type": 2},
+            ]
+        }
+    )
     router, session = _build_router([rst, rst, rst, rst, searchopen_resp])
 
     with pytest.raises(BrokerTransientError):
@@ -192,5 +201,6 @@ def test_place_rst_ambiguous_fingerprint_refuses_to_adopt():
 
 def test_client_order_ids_are_unique():
     from trading_app.live.projectx.order_router import generate_client_order_id
+
     ids = {generate_client_order_id() for _ in range(1000)}
     assert len(ids) == 1000

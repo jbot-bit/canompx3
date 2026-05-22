@@ -6,6 +6,7 @@ library required.
 
 Reference: docs/specs/live_execution_resilience.md § Failure-Mode Taxonomy
 """
+
 from __future__ import annotations
 
 import socket
@@ -77,10 +78,12 @@ def fast_policy():
 
 
 def test_class_a_dns_retries_then_success(fast_policy):
-    session = _ScriptedSession([
-        requests.ConnectionError("name resolution failed"),
-        _make_resp(200, {"ok": True}),
-    ])
+    session = _ScriptedSession(
+        [
+            requests.ConnectionError("name resolution failed"),
+            _make_resp(200, {"ok": True}),
+        ]
+    )
     client = BrokerHTTPClient(base_url="https://x.test", session=session, name="t")
     data = client.post_json("/p", {}, {}, policy=fast_policy)
     assert data == {"ok": True}
@@ -101,10 +104,12 @@ def test_class_a_dns_exhaustion_raises_transient(fast_policy):
 
 
 def test_class_b_timeout_retries(fast_policy):
-    session = _ScriptedSession([
-        requests.Timeout("read timeout"),
-        _make_resp(200, {"ok": True}),
-    ])
+    session = _ScriptedSession(
+        [
+            requests.Timeout("read timeout"),
+            _make_resp(200, {"ok": True}),
+        ]
+    )
     client = BrokerHTTPClient(base_url="https://x.test", session=session, name="t")
     data = client.post_json("/p", {}, {}, policy=fast_policy)
     assert data == {"ok": True}
@@ -154,10 +159,12 @@ def test_class_c_classification_is_c_on_exhaustion(fast_policy):
 
 
 def test_class_d_5xx_retries_then_success(fast_policy):
-    session = _ScriptedSession([
-        _make_resp(503),
-        _make_resp(200, {"ok": True}),
-    ])
+    session = _ScriptedSession(
+        [
+            _make_resp(503),
+            _make_resp(200, {"ok": True}),
+        ]
+    )
     client = BrokerHTTPClient(base_url="https://x.test", session=session, name="t")
     data = client.post_json("/p", {}, {}, policy=fast_policy)
     assert data == {"ok": True}
@@ -175,10 +182,12 @@ def test_class_d_5xx_exhaustion(fast_policy):
 
 
 def test_class_e_429_respects_retry_after_and_succeeds(fast_policy):
-    session = _ScriptedSession([
-        _make_resp(429, headers={"Retry-After": "0.01"}),
-        _make_resp(200, {"ok": True}),
-    ])
+    session = _ScriptedSession(
+        [
+            _make_resp(429, headers={"Retry-After": "0.01"}),
+            _make_resp(200, {"ok": True}),
+        ]
+    )
     client = BrokerHTTPClient(base_url="https://x.test", session=session, name="t")
     data = client.post_json("/p", {}, {}, policy=fast_policy)
     assert data == {"ok": True}
@@ -197,10 +206,12 @@ def test_class_e_429_exhaustion(fast_policy):
 
 def test_class_f_401_invokes_refresh_then_retries(fast_policy):
     refresh = MagicMock()
-    session = _ScriptedSession([
-        _make_resp(401),
-        _make_resp(200, {"ok": True}),
-    ])
+    session = _ScriptedSession(
+        [
+            _make_resp(401),
+            _make_resp(200, {"ok": True}),
+        ]
+    )
     client = BrokerHTTPClient(
         base_url="https://x.test",
         session=session,
@@ -245,9 +256,11 @@ def test_class_g_non_json_raises_protocol(fast_policy):
 
 
 def test_class_g_success_false_raises_protocol(fast_policy):
-    session = _ScriptedSession([
-        _make_resp(200, {"success": False, "errorMessage": "bad payload"}),
-    ])
+    session = _ScriptedSession(
+        [
+            _make_resp(200, {"success": False, "errorMessage": "bad payload"}),
+        ]
+    )
     client = BrokerHTTPClient(base_url="https://x.test", session=session, name="t")
     with pytest.raises(BrokerProtocolError):
         client.post_json("/p", {}, {}, policy=fast_policy)

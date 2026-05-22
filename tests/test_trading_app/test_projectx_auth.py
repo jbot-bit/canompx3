@@ -19,12 +19,14 @@ def _ok_resp(body):
 
 def test_projectx_auth_login():
     """Auth should POST to /api/Auth/loginKey and return JWT."""
-    mock_resp = _ok_resp({
-        "token": "test_jwt_token_123",
-        "success": True,
-        "errorCode": 0,
-        "errorMessage": None,
-    })
+    mock_resp = _ok_resp(
+        {
+            "token": "test_jwt_token_123",
+            "success": True,
+            "errorCode": 0,
+            "errorMessage": None,
+        }
+    )
 
     with patch.dict(
         "os.environ", {"PROJECTX_USERNAME": "testuser", "PROJECTX_USER": "testuser", "PROJECTX_API_KEY": "testkey"}
@@ -45,12 +47,14 @@ def test_projectx_auth_login():
 
 def test_projectx_auth_headers():
     """Headers should use Bearer scheme."""
-    mock_resp = _ok_resp({
-        "token": "jwt123",
-        "success": True,
-        "errorCode": 0,
-        "errorMessage": None,
-    })
+    mock_resp = _ok_resp(
+        {
+            "token": "jwt123",
+            "success": True,
+            "errorCode": 0,
+            "errorMessage": None,
+        }
+    )
 
     with patch.dict(
         "os.environ", {"PROJECTX_USERNAME": "testuser", "PROJECTX_USER": "testuser", "PROJECTX_API_KEY": "testkey"}

@@ -44,7 +44,9 @@ def test_query_account_metadata_returns_dict_when_found():
         assert meta["name"] == "50KTC-V2-451890-20372221"
         assert meta["simulated"] is True
         mock_req.assert_called_once()
-        called_url = mock_req.call_args.args[1] if len(mock_req.call_args.args) > 1 else mock_req.call_args.kwargs.get("url", "")
+        called_url = (
+            mock_req.call_args.args[1] if len(mock_req.call_args.args) > 1 else mock_req.call_args.kwargs.get("url", "")
+        )
         assert "/api/Account/search" in called_url
 
 

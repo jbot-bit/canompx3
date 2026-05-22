@@ -2952,8 +2952,7 @@ class SessionOrchestrator:
             return False, ""
         if reading.age_s > self.EQUITY_AGE_SLA_SECS:
             return True, (
-                f"equity_age={reading.age_s:.0f}s exceeds SLA "
-                f"{self.EQUITY_AGE_SLA_SECS:.0f}s (source={reading.source})"
+                f"equity_age={reading.age_s:.0f}s exceeds SLA {self.EQUITY_AGE_SLA_SECS:.0f}s (source={reading.source})"
             )
         return False, ""
 
@@ -2981,8 +2980,7 @@ class SessionOrchestrator:
                     gap = (datetime.now(UTC) - self._last_bar_at).total_seconds()
                     if gap > self.KILL_SWITCH_TIMEOUT and self._positions.active_positions():
                         log.critical(
-                            "Watchdog: feed silent %.0fs > %.0fs with %d open positions — "
-                            "firing kill switch.",
+                            "Watchdog: feed silent %.0fs > %.0fs with %d open positions — firing kill switch.",
                             gap,
                             self.KILL_SWITCH_TIMEOUT,
                             len(self._positions.active_positions()),

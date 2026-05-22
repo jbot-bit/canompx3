@@ -28,9 +28,7 @@ def fake_trading_app(tmp_path: Path) -> Path:
     (ta / "live" / "tradovate").mkdir()
     # http_client lives at trading_app/live/http_client.py — must remain allowlisted
     (ta / "live" / "http_client.py").write_text(
-        "import requests\n"
-        "def post_json(url, payload):\n"
-        "    return requests.post(url, json=payload)\n",
+        "import requests\ndef post_json(url, payload):\n    return requests.post(url, json=payload)\n",
         encoding="utf-8",
     )
     # __init__.py files are skipped by the check
@@ -98,9 +96,7 @@ def test_non_broker_files_are_allowlisted(fake_trading_app: Path) -> None:
     """Files outside projectx/ and tradovate/ may use ``requests`` directly."""
     other = fake_trading_app / "live" / "bot_dashboard.py"
     other.write_text(
-        "import requests\n"
-        "def health():\n"
-        "    return requests.get('http://localhost:8088/health')\n",
+        "import requests\ndef health():\n    return requests.get('http://localhost:8088/health')\n",
         encoding="utf-8",
     )
     violations = check_no_direct_requests_to_broker_endpoints(fake_trading_app)

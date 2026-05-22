@@ -187,7 +187,10 @@ class ProjectXOrderRouter(BrokerRouter):
                 elapsed_ms = (time.monotonic() - t0) * 1000
                 log.warning(
                     "ProjectX order RECONCILED after transient error (%s): orderId=%d cid=%s (%.0fms)",
-                    exc.error_class, reconciled, client_order_id, elapsed_ms,
+                    exc.error_class,
+                    reconciled,
+                    client_order_id,
+                    elapsed_ms,
                 )
                 return {
                     "order_id": reconciled,
@@ -269,7 +272,8 @@ class ProjectXOrderRouter(BrokerRouter):
             log.warning("Reconcile failed (cannot query open orders): %s", exc)
             return None
         candidates = [
-            o for o in orders
+            o
+            for o in orders
             if o.get("contractId") == contract_id
             and o.get("side") == side
             and o.get("size") == size
@@ -281,7 +285,11 @@ class ProjectXOrderRouter(BrokerRouter):
         if len(candidates) > 1:
             log.warning(
                 "Reconcile ambiguous: %d open orders match fingerprint contract=%s side=%s size=%s type=%s — refusing to adopt",
-                len(candidates), contract_id, side, size, order_type,
+                len(candidates),
+                contract_id,
+                side,
+                size,
+                order_type,
             )
         return None
 

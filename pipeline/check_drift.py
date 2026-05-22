@@ -10203,9 +10203,7 @@ def check_no_direct_requests_to_broker_endpoints(trading_app_dir: Path) -> list[
         trading_app_dir / "live" / "projectx",
         trading_app_dir / "live" / "tradovate",
     ]
-    forbidden_call_re = re.compile(
-        r"\brequests\.(get|post|request|put|delete|patch)\s*\("
-    )
+    forbidden_call_re = re.compile(r"\brequests\.(get|post|request|put|delete|patch)\s*\(")
 
     for broker_dir in broker_dirs:
         if not broker_dir.exists():

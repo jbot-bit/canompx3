@@ -10,6 +10,7 @@ We do NOT spin up a real SessionOrchestrator — too heavy and not what's
 being tested. We exercise the component-construction seam directly,
 verifying both wired-hook and no-hook paths.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock

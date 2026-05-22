@@ -49,9 +49,7 @@ CREATE TABLE IF NOT EXISTS live_trades (
 
 # Idempotent column-add migration — DuckDB ALTER TABLE ADD COLUMN IF NOT EXISTS.
 # Survives crash-resumes of existing journals (column added in 2026-05-18 baseline).
-_MIGRATION_ADD_CLIENT_ORDER_ID = (
-    "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS client_order_id TEXT;"
-)
+_MIGRATION_ADD_CLIENT_ORDER_ID = "ALTER TABLE live_trades ADD COLUMN IF NOT EXISTS client_order_id TEXT;"
 
 
 def generate_trade_id() -> str:
