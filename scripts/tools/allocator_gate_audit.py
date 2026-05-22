@@ -39,7 +39,12 @@ from trading_app.lane_allocator import (
     compute_pairwise_correlation,
     enrich_scores_with_liveness,
 )
-from trading_app.prop_profiles import ACCOUNT_PROFILES, ACCOUNT_TIERS
+from trading_app.prop_profiles import (
+    ACCOUNT_PROFILES,
+    ACCOUNT_TIERS,
+    legacy_lane_allocation_path,
+    resolve_allocation_json,
+)
 
 
 def gate_0_entry_count() -> tuple[int, dict[str, int]]:
@@ -206,30 +211,38 @@ def audit_profile(
 
 
 def cross_check_lane_allocation(profile_id: str, selected_ids: list[str]) -> dict:
-    """Compare against committed lane_allocation.json if it targets the same profile."""
-    path = Path(__file__).resolve().parent.parent.parent / "docs" / "runtime" / "lane_allocation.json"
-    if not path.exists():
-        return {"present": False}
-    try:
-        data = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
-        return {"present": True, "readable": False, "error": str(exc)}
-    if data.get("profile_id") != profile_id:
+    """Compare against committed allocation file if it targets the same profile.
+
+    Delegates to ``resolve_allocation_json`` (Stage 1b authority inversion):
+    honors new-path-first + profile-mismatch guard. On miss, residual probe
+    of the legacy file surfaces a profile_id-mismatch result distinct from
+    file-absent, preserving the original three-way response shape.
+    """
+    result = resolve_allocation_json(profile_id)
+    if result.data is not None:
+        data = result.data
+        committed = [lane.get("strategy_id") for lane in data.get("lanes", [])]
         return {
             "present": True,
             "readable": True,
-            "profile_id_in_file": data.get("profile_id"),
-            "matches_audit_profile": False,
+            "profile_id_in_file": profile_id,
+            "matches_audit_profile": True,
+            "committed_strategy_ids": committed,
+            "audit_strategy_ids": selected_ids,
+            "set_match": set(committed) == set(selected_ids),
         }
-    committed = [lane.get("strategy_id") for lane in data.get("lanes", [])]
+    legacy_path = legacy_lane_allocation_path()
+    if not legacy_path.exists():
+        return {"present": False}
+    try:
+        legacy_data = json.loads(legacy_path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        return {"present": True, "readable": False, "error": str(exc)}
     return {
         "present": True,
         "readable": True,
-        "profile_id_in_file": profile_id,
-        "matches_audit_profile": True,
-        "committed_strategy_ids": committed,
-        "audit_strategy_ids": selected_ids,
-        "set_match": set(committed) == set(selected_ids),
+        "profile_id_in_file": legacy_data.get("profile_id") if isinstance(legacy_data, dict) else None,
+        "matches_audit_profile": False,
     }
 
 
@@ -319,7 +332,7 @@ def print_profile_table(profile_audit: dict, gate_0: int, gate_counts: dict) -> 
         match = cross.get("set_match")
         tag = "MATCH" if match else "MISMATCH"
         print(
-            f"  lane_allocation.json: {tag} (committed={len(cross['committed_strategy_ids'])}, "
+            f"  allocation file: {tag} (committed={len(cross['committed_strategy_ids'])}, "
             f"audit={len(cross['audit_strategy_ids'])})"
         )
         if not match:

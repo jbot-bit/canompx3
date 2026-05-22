@@ -44,7 +44,6 @@ from trading_app.eligibility.types import (
     ResolvesAt,
 )
 
-
 # ==========================================================================
 # Fixtures
 # ==========================================================================
@@ -767,6 +766,7 @@ class TestOverallStatus:
         structurally vacuous for the paths they claim to exercise.
         """
         import json
+
         import trading_app.eligibility.builder as _builder
 
         rules_file = tmp_path / "calendar_cascade_rules.json"

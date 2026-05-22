@@ -104,6 +104,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/shared-state-commit-guard.py",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -113,6 +123,16 @@
           {
             "type": "command",
             "command": "python C:/Users/joshd/canompx3/.claude/hooks/branch-flip-guard.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/judgment-review-nudge.py",
             "timeout": 5
           }
         ]

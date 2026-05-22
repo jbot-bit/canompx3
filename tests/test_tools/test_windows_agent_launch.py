@@ -288,7 +288,10 @@ class TestWindowsBatchWrappers:
     def test_codex_batch_is_the_single_smart_codex_entrypoint(self) -> None:
         content = (windows_agent_launch.repo_root() / "codex.bat").read_text(encoding="utf-8")
 
-        assert 'set "MODE=codex-project-linux"' in content
+        assert 'set "MODE=codex-project-smart"' in content
+        assert 'set "MODE=codex-project-smart-power"' in content
+        assert 'set "MODE=codex-project-smart-gold-db"' in content
+        assert 'set "MODE=codex-project-smart-search-gold-db"' in content
         assert 'if /I "%ACTION%"=="gold-db" (' in content
         assert 'if /I "%ACTION%"=="search-gold-db" (' in content
         assert 'if /I "%ACTION%"=="windows" (' in content

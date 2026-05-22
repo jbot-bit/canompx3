@@ -1,7 +1,7 @@
 """Tests for BarPersister — broker-feed bar capture to bars_1m."""
 
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import duckdb
 import pytest
@@ -35,7 +35,7 @@ def tmp_db():
 
 def _bar(minute: int, price: float = 20000.0, volume: int = 100) -> Bar:
     return Bar(
-        ts_utc=datetime(2026, 4, 13, 10, minute, 0, tzinfo=timezone.utc),
+        ts_utc=datetime(2026, 4, 13, 10, minute, 0, tzinfo=UTC),
         open=price,
         high=price + 1,
         low=price - 1,
@@ -101,7 +101,7 @@ class TestBarPersister:
         bp = BarPersister("MNQ", db_path=tmp_db)
         good = _bar(0)
         bad = Bar(
-            ts_utc=datetime(2026, 4, 13, 10, 1, 0, tzinfo=timezone.utc),
+            ts_utc=datetime(2026, 4, 13, 10, 1, 0, tzinfo=UTC),
             open=-1.0,
             high=0.0,
             low=-2.0,

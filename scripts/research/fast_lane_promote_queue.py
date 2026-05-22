@@ -43,8 +43,6 @@ ERROR forces operator attention - never silently lingers.
 from __future__ import annotations
 
 import argparse
-import datetime as _dt
-import hashlib
 import json
 import math
 import re
@@ -55,13 +53,13 @@ from typing import Any
 
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = REPO_ROOT / "docs" / "audit" / "results"
 HYPOTHESES_DIR = REPO_ROOT / "docs" / "audit" / "hypotheses"
 ACTION_QUEUE = REPO_ROOT / "docs" / "runtime" / "action-queue.yaml"
 QUEUE_CACHE = REPO_ROOT / "docs" / "runtime" / "promote_queue.yaml"
 TRIAL_LEDGER_PATH = REPO_ROOT / "docs" / "runtime" / "fast_lane_trial_ledger.yaml"
+TRIAL_CORRECTIONS_PATH = REPO_ROOT / "docs" / "runtime" / "fast_lane_trial_corrections.yaml"
 GRAVEYARD_DIGEST_PATH = REPO_ROOT / "docs" / "runtime" / "fast_lane_graveyard_digest.yaml"
 
 FAST_LANE_RESULT_GLOB = "*fast-lane*.md"
@@ -551,16 +549,8 @@ def _compute_k_lineage(
 
     Counts are computed against the in-memory ledger snapshot taken at scan
     start. ``K_lane`` is the count of ledger rows already on disk sharing
-    this structural_hash (so the first ever scanner run on a lane gives
-    K_lane = 0 BEFORE the scanner appends; K_lane includes the appended
-    row only on the next scan).
-
-    Note: Stage 2A.3 self-review expects ``K_lane = 1`` for the live
-    PD_CLEAR_LONG entry after the first scan. The +1 happens on the second
-    scan -- before the first run the ledger is empty (verified
-    fast_lane_trial_ledger.yaml has entries: []), so the first scan emits
-    K_lane = 0, and the second scan reads K_lane = 1 from the row appended
-    by the first scan.
+    this structural_hash. Scanners are derived views and do not append trial
+    history; real research runners create the row that future scans observe.
     """
     k_lane = sum(1 for row in ledger_rows if row.get("structural_hash") == structural_hash)
     k_family = sum(
@@ -628,18 +618,6 @@ def _resolve_k_declared(source_yaml: dict[str, Any]) -> int:
     if isinstance(raw, int) and raw >= 1:
         return raw
     return 1
-
-
-def _file_sha16(path: Path) -> str:
-    """16-char hex SHA-256 of the on-disk file -- used as ledger
-    ``prereg_sha`` so re-running the same scan with no source edits keeps
-    appending under the SAME (sha, run_timestamp) key. The ledger writer's
-    own idempotency is keyed on ``run_id``, not sha; this just gives us a
-    stable identifier per source version."""
-    if not path.exists():
-        return "0" * 16
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    return digest[:16]
 
 
 _HEAVYWEIGHT_TEMPLATE_EXCLUDES = {"fast_lane_v5.1"}
@@ -711,9 +689,9 @@ def classify(
                                            graveyard digest entry
       8. SUPPRESSED_DUPLICATE_ACTIVE    -- another active prereg shares this
                                            structural_hash with no result MD yet
-      9. SUPPRESSED_SIBLING_RETEST      -- K_lane >= 2 (ledger says we've
-                                           already tested this lane twice)
-     10. SUPPRESSED_K_OVERRUN           -- N_hat >= K_declared_in_prereg * 2
+      9. SUPPRESSED_SIBLING_RETEST      -- K_lane >= 2 on a K=1 lane (ledger
+                                           says we've already repeated it)
+     10. SUPPRESSED_K_OVERRUN           -- K_lane > K_declared_in_prereg
      11. REJECTED_OOS_UNPOWERED         -- OOS pre-flight power gate (RULE 3.3)
      12. QUEUED                         -- survives every gate
 
@@ -797,23 +775,23 @@ def classify(
         )
 
     k_lane = int((entry.k_lineage or {}).get("K_lane", 0))
-    if k_lane >= 2:
+    k_declared = int((entry.k_lineage or {}).get("K_declared_in_prereg", 1))
+    if k_declared <= 1 and k_lane >= 2:
         return (
             "SUPPRESSED_SIBLING_RETEST",
-            f"K_lane={k_lane} (>= 2) -- ledger shows >= 2 prior runs on "
-            "this lane; sibling-retest gate fires per stage file "
+            f"K_lane={k_lane} on K_declared_in_prereg={k_declared} -- "
+            "ledger shows repeated prior runs on this K=1 lane; "
+            "sibling-retest gate fires per stage file "
             "§ Suppression Status Enum. PARK or pool with sibling rather "
             "than re-running.",
         )
 
-    k_declared = int((entry.k_lineage or {}).get("K_declared_in_prereg", 1))
-    if entry.n_hat >= k_declared * 2:
+    if k_lane > k_declared:
         return (
             "SUPPRESSED_K_OVERRUN",
-            f"N_hat={entry.n_hat} >= K_declared_in_prereg * 2 "
-            f"({k_declared * 2}); correlation-haircut effective sample "
-            "exceeds the declared K budget per Bailey-Lopez de Prado "
-            "2014 Eq. 9. Re-declare K or PARK.",
+            f"K_lane={k_lane} > K_declared_in_prereg={k_declared}; "
+            "observed trial count exceeds the declared K budget. "
+            "Re-declare K or PARK.",
         )
 
     # --- Pre-flight OOS-power gate (RULE 3.3) ---------------------------
@@ -1056,79 +1034,6 @@ def build_entry(
     return entry
 
 
-def _append_entry_to_ledger(
-    entry: PromoteEntry,
-    *,
-    source_yaml_path: Path,
-    ledger_path: Path,
-    run_timestamp_utc: str,
-) -> str | None:
-    """Append one ledger row for an emitted PROMOTE entry.
-
-    The ledger writer is idempotent on ``run_id``; we synthesise
-    ``run_id = scanner-<prereg_sha>-<timestamp>`` so re-running the scanner
-    in the same UTC second is a true no-op (the ledger writer raises
-    LedgerAppendOnlyViolation -- caught here and swallowed because the
-    second-attempt is by design idempotent).
-
-    Returns an error reason string if the append failed for a reason the
-    operator needs to see; None on success.
-    """
-    if not entry.structural_hash or set(entry.structural_hash) == {"0"}:
-        return "structural_hash unresolved; ledger append skipped"
-
-    try:
-        from scripts.research.fast_lane_trial_ledger import (
-            CapitalClassWriteRefused,
-            LedgerAppendOnlyViolation,
-            LedgerEntry,
-            append_trial_ledger_entry,
-        )
-    except Exception as exc:
-        return f"ledger module import failed: {type(exc).__name__}: {exc}"
-
-    prereg_sha = _file_sha16(source_yaml_path)
-    run_id = f"scanner-{prereg_sha}-{run_timestamp_utc.replace(':', '').replace('-', '')}"
-
-    k_declared = int(entry.k_lineage.get("K_declared_in_prereg", 1))
-
-    ledger_entry = LedgerEntry(
-        run_id=run_id,
-        run_timestamp_utc=run_timestamp_utc,
-        prereg_path=_rel_to_repo(source_yaml_path),
-        prereg_sha=prereg_sha,
-        structural_hash=entry.structural_hash,
-        template_version="fast_lane_v5.1",
-        testing_mode="individual",
-        pathway="A",
-        K_declared=k_declared,
-        k_lineage=dict(entry.k_lineage),
-        n_hat=float(entry.n_hat),
-        upstream_provenance={
-            "result_md": entry.result_md,
-            "strategy_id": entry.strategy_id,
-            "scanner_status": entry.status,
-        },
-        outcome={
-            "pooled_t": entry.pooled_t if not math.isnan(entry.pooled_t) else None,
-            "pooled_n": entry.pooled_n,
-            "pooled_fire": (entry.pooled_fire if not math.isnan(entry.pooled_fire) else None),
-        },
-    )
-    try:
-        append_trial_ledger_entry(ledger_path, ledger_entry)
-    except LedgerAppendOnlyViolation:
-        # Idempotent re-run; not an error
-        return None
-    except CapitalClassWriteRefused as exc:
-        return f"ledger refused capital-class path: {exc}"
-    except FileNotFoundError as exc:
-        return f"ledger skeleton missing at {ledger_path}: {exc}"
-    except Exception as exc:
-        return f"ledger append failed: {type(exc).__name__}: {exc}"
-    return None
-
-
 def scan(
     results_dir: Path | None = None,
     *,
@@ -1138,8 +1043,9 @@ def scan(
     oos_window_error: str | None = None,
     db_path: Path | None = None,
     ledger_path: Path | None = None,
+    trial_corrections_path: Path | None = None,
     graveyard_digest_path: Path | None = None,
-    append_to_ledger: bool = True,
+    append_to_ledger: bool = False,
 ) -> list[PromoteEntry]:
     # Resolve module-level defaults at call time so monkeypatching from tests
     # works against scripts.research.fast_lane_promote_queue.RESULTS_DIR etc.
@@ -1147,7 +1053,13 @@ def scan(
     hd = hypotheses_dir if hypotheses_dir is not None else HYPOTHESES_DIR
     aq = action_queue if action_queue is not None else ACTION_QUEUE
     lp = ledger_path if ledger_path is not None else TRIAL_LEDGER_PATH
+    tc = trial_corrections_path if trial_corrections_path is not None else TRIAL_CORRECTIONS_PATH
     gd = graveyard_digest_path if graveyard_digest_path is not None else GRAVEYARD_DIGEST_PATH
+    if append_to_ledger:
+        # Deprecated Phase-0/Phase-1 compatibility seam. Scanners are derived
+        # views and may not create trial history; only real research runners
+        # can call fast_lane_trial_ledger.append_trial_ledger_entry.
+        append_to_ledger = False
 
     # Resolve the OOS window once per scan so each entry classification
     # reuses the same (latest_trading_day - HOLDOUT_SACRED_FROM) result.
@@ -1158,9 +1070,13 @@ def scan(
     # Stage 2A.3: read ledger + digest ONCE per scan, before any entry
     # processing. The ledger snapshot is the same for every entry within a
     # scan -- subsequent scans see whatever this scan appended.
-    ledger_rows = _read_trial_ledger(lp)
+    from scripts.research.fast_lane_trial_ledger import (
+        filter_v2_k_count_rows,
+        read_trial_corrections,
+    )
+
+    ledger_rows = filter_v2_k_count_rows(_read_trial_ledger(lp), read_trial_corrections(tc))
     graveyard_index = _read_graveyard_digest(gd)
-    run_timestamp_utc = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     entries: list[PromoteEntry] = []
     for path in sorted(rd.glob(FAST_LANE_RESULT_GLOB)):
@@ -1176,17 +1092,6 @@ def scan(
         if entry is None:
             continue
         entries.append(entry)
-        if append_to_ledger and entry.status not in {"ERROR"}:
-            err = _append_entry_to_ledger(
-                entry,
-                source_yaml_path=hd / f"{path.stem}.yaml",
-                ledger_path=lp,
-                run_timestamp_utc=run_timestamp_utc,
-            )
-            if err is not None:
-                # Surface ledger failures on the entry's error_reason so the
-                # scanner does not silently lose append-failures.
-                entry.error_reason = f"{entry.error_reason}; ledger: {err}" if entry.error_reason else f"ledger: {err}"
     return entries
 
 
@@ -1316,7 +1221,16 @@ def main(argv: list[str] | None = None) -> int:
         default=str(TRIAL_LEDGER_PATH),
         help=(
             "Path to docs/runtime/fast_lane_trial_ledger.yaml. Stage 2A.3 "
-            "appends one entry per non-ERROR PROMOTE result scanned."
+            "reads this append-only universe-of-trials ledger."
+        ),
+    )
+    parser.add_argument(
+        "--trial-corrections-path",
+        default=str(TRIAL_CORRECTIONS_PATH),
+        help=(
+            "Path to docs/runtime/fast_lane_trial_corrections.yaml. "
+            "Correction-not-deletion records exclude derived legacy rows "
+            "from V2 K-lineage counts while preserving audit history."
         ),
     )
     parser.add_argument(
@@ -1331,8 +1245,8 @@ def main(argv: list[str] | None = None) -> int:
         "--no-ledger-append",
         action="store_true",
         help=(
-            "Read-only mode: do NOT append to the trial ledger. Useful "
-            "for dry-run smoke tests and Check #172 audit runs."
+            "Deprecated compatibility flag. Scanner CLI runs are read-only "
+            "for trial-ledger provenance in both --dry-run and --write modes."
         ),
     )
     args = parser.parse_args(argv)
@@ -1348,8 +1262,9 @@ def main(argv: list[str] | None = None) -> int:
         oos_window_error=None,
         db_path=Path(args.db_path) if args.db_path else None,
         ledger_path=Path(args.ledger_path),
+        trial_corrections_path=Path(args.trial_corrections_path),
         graveyard_digest_path=Path(args.graveyard_digest_path),
-        append_to_ledger=not args.no_ledger_append,
+        append_to_ledger=False,
     )
 
     if args.json:

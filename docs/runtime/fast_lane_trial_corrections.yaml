@@ -1,0 +1,9 @@
+do_not_hand_edit: true
+schema_version: 1
+correction_not_deletion: true
+corrections:
+  - correction_id: exclude-historical-scanner-derived-rows-2026-05-22
+    action: exclude_from_v2_k_counts
+    selector:
+      run_id_prefix: scanner-
+    reason: Historical scanner/status rebuild rows are derived views, not real research executions; preserve them as audit history but exclude them from Fast Lane V2 K-lineage counts.

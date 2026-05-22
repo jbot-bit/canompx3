@@ -482,6 +482,7 @@ def _session_lock_lines() -> tuple[list[str], bool]:
 
     lock_path = git_dir / ".claude.pid"
     _, current_branch = _git(["branch", "--show-current"])
+    _, head_sha = _git(["rev-parse", "HEAD"])
     payload = json.dumps(
         {
             "pid": os.getpid(),
@@ -489,6 +490,7 @@ def _session_lock_lines() -> tuple[list[str], bool]:
             "iso_started": datetime.now(UTC).isoformat(),
             "worktree": str(PROJECT_ROOT),
             "branch_at_start": current_branch.strip(),
+            "head_at_start": head_sha.strip(),
         },
         indent=2,
     ).encode("utf-8")

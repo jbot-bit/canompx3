@@ -24,7 +24,6 @@ from pathlib import Path
 
 from pipeline.check_drift import check_graveyard_status_tokens_parity
 
-
 # ----------------------------------------------------------------------
 # Clean-state baseline
 # ----------------------------------------------------------------------

@@ -1,6 +1,19 @@
 ---
 task: Stage 2A — Fast-Lane Anti-False-Positive Trial Provenance Layer (universe-of-trials ledger + structural hash + K-lineage + graveyard suppression). Reorders the connective-tissue plan: 2A ships BEFORE 2B (status roll-up) so awareness plumbing is not layered on top of an unvalidated false-positive surface.
-mode: DESIGN
+mode: CLOSED
+closed_commit: ef4f0f29
+closed_date: 2026-05-20
+closed_note: |
+  Stage 2A design grounding shipped across 2A.1 (b643bfc0 + 5c6040c3), 2A.2 (cec5a8d5),
+  and 2A.3 (9b13d0d1 + bdb04ca6). All four downstream stages closed, all drift checks green
+  on baseline run.
+
+  Superseded 2026-05-21 by the canonical parser-surface relocation:
+  Check #167 now parses `docs/specs/fast_lane_state_graph.md` § 9 Hash Schema.
+  This stage file is retained only as design/audit history. Its old `## Hash Schema`
+  body is intentionally just a backlink so future close-out sweeps do not have to
+  preserve parser surface under `docs/runtime/stages/`.
+original_mode: DESIGN
 scope_lock:
   - docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md
 ---
@@ -112,25 +125,7 @@ Derived hash-set of all NO-GO / PARKED / KILL entries from `chatgpt_bundle/06_RD
 
 ## Hash Schema (`structural_hash`)
 
-```yaml
-# Canonical inputs to the hash — order-stable, normalised, version-tagged
-hash_schema_version: 1
-inputs:
-  instrument: str           # MNQ | MES | MGC (delegated from pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS)
-  orb_label: str            # session catalog key (delegated from pipeline.dst.SESSION_CATALOG)
-  orb_minutes: int          # 5 | 15 | 30
-  rr_target: float          # 1.0 | 1.5 | 2.0 (rounded to 1 dp)
-  entry_model: str          # E1 | E2 | E3  (E3 graveyard-banned — suppression rule fires)
-  confirm_bars: int         # 1 | 2
-  filter_type: str          # canonical key from ALL_FILTERS, normalised
-  direction: str            # LONG | SHORT | BOTH (normalised case)
-  filter_threshold: str     # canonical-form string of bound values, e.g. "ATR_P50_ge_0.50"
-formula: sha256(canonical_json(inputs))[:16]  # 16-hex-char structural id
-```
-
-Hash deliberately **excludes** data window, K framing, t-stat — those are test instances, not structural identity. Two preregs with the same hash test the same lane; that's the de-dup criterion.
-
-The hash is registered in `pipeline.canonical_inline_copies` so any future field addition triggers Check #159's meta-parity + a sibling injection test.
+> **Canonical:** `docs/specs/fast_lane_state_graph.md` § 9 Hash Schema. Relocated 2026-05-21 per surface-taxonomy doctrine in `docs/governance/system_authority_map.md` (parser-surface blocks may not live under `docs/runtime/`). This stage file is now design rationale only — the canonical YAML block lives in the spec, parsed by `check_fast_lane_structural_hash_schema_parity` (Check #167).
 
 ---
 

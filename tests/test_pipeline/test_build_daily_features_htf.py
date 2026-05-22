@@ -31,7 +31,6 @@ from datetime import date
 import duckdb
 import pytest
 
-
 HTF_SCHEMA = """
 CREATE TABLE daily_features (
     symbol VARCHAR,

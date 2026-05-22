@@ -4,7 +4,7 @@ Four mutation probes that flip a single invariant -- module schema-version,
 module input-field list, hash output length, hash determinism -- and assert
 the parity check returns a violation that names the broken constant.
 
-Per Stage 2A design doc acceptance criteria § Tests (Stage 2A.1 split
+Per Stage 2A design acceptance criteria § Tests (Stage 2A.1 split
 renumbered #168 -> #167):
 
   1. drop a hash-input field in code             -> module-side drift catch
@@ -19,7 +19,7 @@ the standard fail-closed surface every parity check exposes (mirrors
 Class anchor: [[canonical-inline-copy-parity-bug-class]] (7th confirmed
 instance, 2026-05-20).
 
-Design grounding: ``docs/runtime/stages/2026-05-20-fast-lane-anti-fp-trial-provenance.md``.
+Canonical grounding: ``docs/specs/fast_lane_state_graph.md`` § 9 Hash Schema.
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ import pytest
 
 from pipeline.check_drift import check_fast_lane_structural_hash_schema_parity
 from scripts.research import fast_lane_structural_hash as flsh
-
 
 # ----------------------------------------------------------------------
 # Clean-state baseline
@@ -50,13 +49,20 @@ def test_clean_state_passes():
 
 
 def test_missing_design_doc_fails_closed(tmp_path: Path):
-    """If the canonical Stage 2A design doc is unreachable the check
-    returns a single violation rather than silently passing."""
+    """If the canonical spec is unreachable the check returns a single
+    violation rather than silently passing.
+
+    Note: the canonical block was relocated from a stage file under
+    ``docs/runtime/stages/`` to ``docs/specs/fast_lane_state_graph.md``
+    on 2026-05-21 (per Check #159 invariant (d)). The error message
+    now reads ``canonical spec missing`` rather than the prior
+    ``canonical design doc missing``.
+    """
     forged = tmp_path / "does-not-exist.md"
     violations = check_fast_lane_structural_hash_schema_parity(design_doc_path=forged)
-    assert violations, "missing canonical design doc must NOT pass silently"
+    assert violations, "missing canonical spec must NOT pass silently"
     assert len(violations) == 1
-    assert "canonical design doc missing" in violations[0]
+    assert "canonical spec missing" in violations[0]
     assert str(forged) in violations[0]
 
 

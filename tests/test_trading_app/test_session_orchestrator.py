@@ -2947,7 +2947,7 @@ class TestR1WallClockRollover:
         today = orch.trading_day  # e.g. date(2026, 3, 7)
         next_day = today + timedelta(days=1)
         # Past rollover_utc → sleep_secs <= 0 → fires immediately (no real sleep)
-        past_rollover = datetime(2026, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
+        past_rollover = datetime(2026, 1, 1, 23, 0, 0, tzinfo=UTC)
 
         rollover_calls: list[dict] = []
         task_ref: list = []
@@ -2971,7 +2971,7 @@ class TestR1WallClockRollover:
             task_ref.append(task)
             try:
                 await asyncio.wait_for(task, timeout=2.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (TimeoutError, asyncio.CancelledError):
                 pass
 
         # R1 invariant: rollover must have been called with override_trading_day = next_day
@@ -3023,7 +3023,8 @@ class TestR1WallClockRollover:
         """
         from trading_app.live import session_orchestrator as so
 
-        src = open(so.__file__, encoding="utf-8").read()
+        with open(so.__file__, encoding="utf-8") as fh:
+            src = fh.read()
         assert "_wall_clock_rollover_loop" in src, "R1: _wall_clock_rollover_loop method missing from production code"
         assert "rollover_task = asyncio.create_task(self._wall_clock_rollover_loop())" in src, (
             "R1: rollover_task create_task call missing from run()"
@@ -3084,8 +3085,8 @@ class TestR1WallClockRollover:
                 # After 3 catch-up rollovers, terminate cleanly.
                 raise asyncio.CancelledError("test: 3-day gap closed")
 
-        past = datetime(2026, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
-        future = datetime(2099, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
+        past = datetime(2026, 1, 1, 23, 0, 0, tzinfo=UTC)
+        future = datetime(2099, 1, 1, 23, 0, 0, tzinfo=UTC)
         call_count = [0]
 
         def mock_ctr(day):
@@ -3105,7 +3106,7 @@ class TestR1WallClockRollover:
             task = asyncio.create_task(orch._wall_clock_rollover_loop())
             try:
                 await asyncio.wait_for(task, timeout=2.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (TimeoutError, asyncio.CancelledError):
                 pass
 
         # Three catch-up rollovers fired, each advancing by exactly one day.
@@ -3332,7 +3333,7 @@ class TestR3ReconnectCeiling:
         # With counter reset after stable run, 2 post-stable crashes stay within ceiling.
         # Without reset, 2 pre-stable + 2 post-stable = 4 > ceiling of 2 → would halt.
 
-        stable_start = datetime(2026, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
+        stable_start = datetime(2026, 1, 1, 9, 0, 0, tzinfo=UTC)
         stable_end = stable_start + timedelta(seconds=1900)  # >30min
 
         class StableThenCrashFeed:
@@ -3355,7 +3356,6 @@ class TestR3ReconnectCeiling:
         orch._feed_class = StableThenCrashFeed
 
         # Patch datetime.now(UTC) inside the loop to simulate 30min uptime on first run
-        original_datetime = __import__("datetime").datetime
         call_seq = [0]
 
         class PatchedDatetime:
@@ -3420,6 +3420,7 @@ class TestR3ReconnectCeiling:
         is removed, this test fails.
         """
         import inspect
+
         from trading_app.live.session_orchestrator import SessionOrchestrator
 
         src = inspect.getsource(SessionOrchestrator)
@@ -4549,7 +4550,8 @@ class TestF4BracketNakedPosition:
         """
         from trading_app.live import session_orchestrator as so
 
-        src = open(so.__file__, encoding="utf-8").read()
+        with open(so.__file__, encoding="utf-8") as fh:
+            src = fh.read()
         assert "F4-1" in src, "F4-1 source marker missing — no-risk-points path reverted"
         assert "F4-2" in src, "F4-2 source marker missing — bracket-spec-None path reverted"
         assert "F4-3" in src, "F4-3 source marker missing — submit-raises path reverted"
@@ -4742,7 +4744,7 @@ class TestC1KillSwitchEventLoopRace:
         with patch("pipeline.dst.compute_trading_day_utc_range") as mock_ctr:
             from datetime import timezone
 
-            past = datetime(2026, 1, 1, 23, 0, 0, tzinfo=timezone.utc)
+            past = datetime(2026, 1, 1, 23, 0, 0, tzinfo=UTC)
             mock_ctr.return_value = (past, past + timedelta(hours=24))
             await orch._check_trading_day_rollover(None, override_trading_day=next_day)
 
@@ -4755,6 +4757,7 @@ class TestC1KillSwitchEventLoopRace:
     def test_c1_source_marker_present(self):
         """C1 guard string must be present in _handle_event source."""
         import inspect
+
         from trading_app.live.session_orchestrator import SessionOrchestrator
 
         src = inspect.getsource(SessionOrchestrator._handle_event)

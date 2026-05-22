@@ -9,6 +9,7 @@ import duckdb
 import pytest
 
 from scripts.migrations import backfill_validated_trade_windows as migration
+from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.validation_provenance import StrategyTradeWindow
 
 
@@ -76,8 +77,9 @@ class _StubResolver:
         ),
     }
 
-    def __init__(self, con):
+    def __init__(self, con, *, holdout_cutoff=None):
         self.con = con
+        self.holdout_cutoff = holdout_cutoff
         self.calls: list[tuple] = []
 
     def resolve(
@@ -155,6 +157,20 @@ class TestBackfillValidatedTradeWindows:
         migration.refresh_validated_trade_windows(db_path=db, dry_run=False)
         # LEGACY_E has promotion_provenance=LEGACY — excluded
         assert _read_row(db, "LEGACY_E") == (date(2020, 1, 2), date(2022, 4, 10), 100)
+
+    def test_refresh_uses_strict_is_window(self, tmp_path, monkeypatch):
+        captured: dict = {}
+
+        class _CapturingResolver(_StubResolver):
+            def __init__(self, con, *, holdout_cutoff=None):
+                super().__init__(con, holdout_cutoff=holdout_cutoff)
+                captured["holdout_cutoff"] = holdout_cutoff
+
+        monkeypatch.setattr(migration, "StrategyTradeWindowResolver", _CapturingResolver)
+        db = _make_db(tmp_path)
+        migration.refresh_validated_trade_windows(db_path=db, dry_run=True)
+        assert "holdout_cutoff" in captured, "resolver was never constructed"
+        assert captured["holdout_cutoff"] == HOLDOUT_SACRED_FROM
 
     def test_strategy_id_scopes_to_single_row(self, tmp_path):
         db = _make_db(tmp_path)

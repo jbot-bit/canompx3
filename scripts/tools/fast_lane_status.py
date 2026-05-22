@@ -25,7 +25,7 @@ Outputs
 Capital-class boundary
 ----------------------
 This writer NEVER opens ``docs/runtime/chordia_audit_log.yaml``,
-``docs/runtime/lane_allocation.json``, ``validated_setups``, or anything under
+the lane allocation file, ``validated_setups``, or anything under
 ``trading_app/live/`` for write. The capital-class read-only assertion is
 enforced by ``check_fast_lane_status_rollup_reconstruction_parity`` (Check #168)
 via a greppable static check on this file plus the test fixture's mock-fs run.
@@ -44,6 +44,7 @@ ENRICHED               journal entry's heavyweight_verdict field is populated
 REVOKED                queue status=REVOKED (pooling artifact, revocation sidecar)
 PARKED                 queue status=PARKED (action-queue.yaml park entry)
 REJECTED_OOS_UNPOWERED queue status=REJECTED_OOS_UNPOWERED (RULE 3.3 pre-flight)
+SUPPRESSED_*           exact promote-queue suppression status (bridge must refuse)
 ERROR                  any upstream parse failure or status=ERROR from queue scanner
 """
 
@@ -53,12 +54,11 @@ import argparse
 import csv
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HYPOTHESES_DIR = REPO_ROOT / "docs" / "audit" / "hypotheses"
@@ -70,7 +70,16 @@ JOURNAL_PATH = RUNTIME_DIR / "cherry_pick_journal.yaml"
 RANKING_GLOB = "cherry_pick_ranking_*.csv"
 STATUS_ROLLUP_PATH = RUNTIME_DIR / "fast_lane_status.yaml"
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+SUPPRESSED_QUEUE_STATUSES: tuple[str, ...] = (
+    "SUPPRESSED_GRAVEYARD",
+    "SUPPRESSED_DUPLICATE_ACTIVE",
+    "SUPPRESSED_SIBLING_RETEST",
+    "SUPPRESSED_BANNED_ENTRY_MODEL",
+    "SUPPRESSED_E2_LOOKAHEAD",
+    "SUPPRESSED_K_OVERRUN",
+)
 
 # Canonical stage enum — mirrors docs/specs/fast_lane_state_graph.md § 5.1.
 # Order is precedence (later wins): if a strategy_id is observed at multiple
@@ -89,10 +98,11 @@ STAGE_PRECEDENCE: tuple[str, ...] = (
     "REVOKED",
     "PARKED",
     "REJECTED_OOS_UNPOWERED",
+    *SUPPRESSED_QUEUE_STATUSES,
     "ERROR",
 )
 
-_TERMINAL_STAGES = frozenset({"REVOKED", "PARKED", "REJECTED_OOS_UNPOWERED"})
+_TERMINAL_STAGES = frozenset({"REVOKED", "PARKED", "REJECTED_OOS_UNPOWERED", *SUPPRESSED_QUEUE_STATUSES})
 
 # Direct mapping of promote_queue.yaml entry.status → roll-up current_stage.
 # Anything that maps to PROMOTE_QUEUED here may be overridden later by RANKED /
@@ -104,6 +114,7 @@ _QUEUE_STATUS_TO_STAGE: dict[str, str] = {
     "PARKED": "PARKED",
     "REJECTED_OOS_UNPOWERED": "REJECTED_OOS_UNPOWERED",
     "ERROR": "ERROR",
+    **{status: status for status in SUPPRESSED_QUEUE_STATUSES},
 }
 
 # Next-action token per terminal-eligible stage. Mirrors design § 2.5
@@ -117,11 +128,25 @@ _NEXT_ACTION_BY_STAGE: dict[str, str] = {
     "GROUNDED": "operator_promote_draft_to_active",
     "HEAVYWEIGHT_PENDING": "run_chordia_strict_unlock_v1",
     "HEAVYWEIGHT_COMPLETE": "run_cherry_pick_journal_enricher",
-    "ENRICHED": "operator_deployment_decision",
+    "ENRICHED": "operator_capital_review",
     "REVOKED": "no_action_required",
     "PARKED": "no_action_required",
     "REJECTED_OOS_UNPOWERED": "operator_pick_remedy_cpcv_haircut_pool_or_park",
+    **{status: "operator_review_suppression_reason" for status in SUPPRESSED_QUEUE_STATUSES},
     "ERROR": "operator_resolve_error",
+}
+
+_PRIMARY_BLOCKER_BY_STAGE: dict[str, str] = {
+    "REVOKED": "pooling_artifact_revoked",
+    "PARKED": "operator_parked",
+    "REJECTED_OOS_UNPOWERED": "oos_power_below_floor",
+    "ERROR": "state_error",
+    "SUPPRESSED_GRAVEYARD": "suppressed_graveyard",
+    "SUPPRESSED_DUPLICATE_ACTIVE": "suppressed_duplicate_active",
+    "SUPPRESSED_SIBLING_RETEST": "suppressed_sibling_retest",
+    "SUPPRESSED_BANNED_ENTRY_MODEL": "suppressed_banned_entry_model",
+    "SUPPRESSED_E2_LOOKAHEAD": "suppressed_e2_lookahead",
+    "SUPPRESSED_K_OVERRUN": "suppressed_k_overrun",
 }
 
 # Override token for HEAVYWEIGHT_COMPLETE entries that lack fast-lane lineage.
@@ -132,14 +157,12 @@ _NEXT_ACTION_BY_STAGE: dict[str, str] = {
 # update-only against existing journal entries; it cannot create new entries.
 # Emitting the enricher token for these is a misclassification — the result MD
 # already carries the heavyweight verdict and the next operator action is the
-# deployment decision, identical to the ENRICHED stage's downstream gate.
+# capital review, identical to the ENRICHED stage's downstream gate.
 #
-# Lineage signal: a strategy_id has fast-lane lineage iff a journal entry
-# exists for it (ranker writes the entry at score-time, BEFORE the heavyweight
-# verdict lands). queue_entry presence is NOT a fast-lane lineage signal — a
-# heavyweight prereg can backfill into promote_queue.yaml via the PROMOTE/PARK
-# pathways without ever being ranked.
-_NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE: str = "operator_deployment_decision"
+# Legacy pre-ranker heavyweight results are the no-lineage special case. Active
+# fast-lane preregs, queue entries, ranking rows, journal entries, or draft
+# artifacts are all fast-lane lineage signals for the schema-v2 report.
+_NEXT_ACTION_HEAVYWEIGHT_COMPLETE_NO_LINEAGE: str = "operator_capital_review"
 
 
 @dataclass
@@ -152,7 +175,11 @@ class StatusEntry:
     next_action_token: str
     upstream_artifact_path: str | None
     downstream_artifact_path: str | None
-    observed_at: dict[str, str | None] = field(default_factory=dict)
+    observed_at: dict[str, Any] = field(default_factory=dict)
+    lineage_class: str = "UNKNOWN"
+    blocker_class: str = "NONE"
+    primary_blocker: str | None = None
+    blocker_evidence: dict[str, Any] = field(default_factory=dict)
 
 
 def _rel(path: Path, root: Path = REPO_ROOT) -> str:
@@ -173,7 +200,7 @@ def _file_age_days(path: Path, *, today: date | None = None) -> int:
         return 0
     today_d = today if today is not None else date.today()
     try:
-        mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).date()
+        mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).date()
     except OSError:
         return 0
     delta = (today_d - mtime).days
@@ -394,6 +421,79 @@ def _classify_stage(
     return max(candidates, key=lambda s: STAGE_PRECEDENCE.index(s))
 
 
+def _lineage_class_for(
+    *,
+    active_prereg: Path | None,
+    queue_entry: dict[str, Any] | None,
+    journal_entry: dict[str, Any] | None,
+    is_ranked: bool,
+    drafts: dict[str, Path] | None,
+    heavyweight_result: Path | None,
+) -> str:
+    """Classify whether the observed chain evidence is fast-lane lineage."""
+    if active_prereg is not None and _active_prereg_is_fast_lane(active_prereg):
+        return "FAST_LANE"
+    if queue_entry is not None or journal_entry is not None or is_ranked or bool(drafts):
+        return "FAST_LANE"
+    if heavyweight_result is not None:
+        return "DIRECT_HEAVYWEIGHT"
+    return "UNKNOWN"
+
+
+def _active_prereg_is_fast_lane(path: Path) -> bool:
+    """Return True for active preregs authored by the Fast Lane templates."""
+    if "fast-lane" in path.name:
+        return True
+    data = _safe_load_yaml(path)
+    if not isinstance(data, dict):
+        return False
+    metadata = data.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        return False
+    template = metadata.get("template_version")
+    return isinstance(template, str) and template.startswith("fast_lane")
+
+
+def _blocker_class_for(stage: str) -> str:
+    if stage in SUPPRESSED_QUEUE_STATUSES:
+        return "PROVENANCE_SUPPRESSED"
+    if stage == "REJECTED_OOS_UNPOWERED":
+        return "UNDERPOWERED_OOS"
+    if stage == "REVOKED":
+        return "INVALID_ARTIFACT"
+    if stage == "PARKED":
+        return "PARKED"
+    if stage == "ERROR":
+        return "ERROR"
+    return "NONE"
+
+
+def _blocker_evidence_for(
+    *,
+    stage: str,
+    queue_entry: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Return compact machine-readable evidence for terminal blockers."""
+    if _blocker_class_for(stage) == "NONE" or queue_entry is None:
+        return {}
+    evidence: dict[str, Any] = {}
+    for key in (
+        "status",
+        "error_reason",
+        "structural_hash",
+        "k_lineage",
+        "n_hat",
+        "result_md",
+        "revocation_sidecar",
+        "park_entry",
+    ):
+        value = queue_entry.get(key)
+        if value is not None:
+            out_key = "promote_queue_status" if key == "status" else key
+            evidence[out_key] = value
+    return evidence
+
+
 def _next_action_for(
     stage: str,
     *,
@@ -403,7 +503,7 @@ def _next_action_for(
 
     Special case: HEAVYWEIGHT_COMPLETE without a journal entry has no
     fast-lane lineage — the enricher cannot create journal entries, only
-    update them. Emit the deployment-decision token instead so the operator
+    update them. Emit the capital-review token instead so the operator
     is pointed at the heavyweight result MD rather than at a stage script
     that will silently no-op.
     """
@@ -448,6 +548,15 @@ def build_status_entries(
             drafts=d_entry,
             heavyweight_result=h_result,
         )
+        lineage_class = _lineage_class_for(
+            active_prereg=prereg,
+            queue_entry=q_entry,
+            journal_entry=j_entry,
+            is_ranked=sid in ranked,
+            drafts=d_entry,
+            heavyweight_result=h_result,
+        )
+        blocker_class = _blocker_class_for(stage)
 
         # Upstream artifact = whatever produced the current_stage advancement.
         # Downstream artifact = the artifact the next action will produce.
@@ -499,6 +608,10 @@ def build_status_entries(
                 upstream_artifact_path=_rel(upstream) if upstream else None,
                 downstream_artifact_path=_rel(downstream) if downstream else None,
                 observed_at=observed,
+                lineage_class=lineage_class,
+                blocker_class=blocker_class,
+                primary_blocker=_PRIMARY_BLOCKER_BY_STAGE.get(stage),
+                blocker_evidence=_blocker_evidence_for(stage=stage, queue_entry=q_entry),
             )
         )
     return entries
