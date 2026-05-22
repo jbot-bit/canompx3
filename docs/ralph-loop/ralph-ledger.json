@@ -1,14 +1,14 @@
 {
-  "total_iterations": 187,
+  "total_iterations": 188,
   "last_updated": "2026-05-23",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 194,
+  "last_high_finding_iter": 195,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 63,
-      "fixed": 50,
+      "found": 64,
+      "fixed": 51,
       "deferred": 4,
-      "fix_rate": 0.79
+      "fix_rate": 0.8
     },
     "silent_failure": {
       "found": 43,
@@ -129,11 +129,11 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 49,
-    "LOW": 115
+    "LOW": 116
   },
   "classifications": {
     "judgment": 83,
-    "mechanical": 71,
+    "mechanical": 72,
     "audit-only": 33
   },
   "files_audited": {
@@ -237,6 +237,11 @@
       "last_iter": 91,
       "findings": 2
     },
+    "trading_app/prop_portfolio.py": {
+      "audit_count": 3,
+      "last_iter": 195,
+      "findings": 3
+    },
     "pipeline/check_drift.py": {
       "audit_count": 3,
       "last_iter": 192,
@@ -295,11 +300,6 @@
     "trading_app/portfolio.py": {
       "audit_count": 2,
       "last_iter": 118,
-      "findings": 2
-    },
-    "trading_app/prop_portfolio.py": {
-      "audit_count": 2,
-      "last_iter": 154,
       "findings": 2
     },
     "scripts/tools/audit_behavioral.py": {
@@ -3231,10 +3231,21 @@
       "phase": "fix",
       "classification": "mechanical",
       "target": "trading_app/strategy_fitness.py:607,720,815",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "ed781e95"
+    },
+    {
+      "iter": 195,
+      "date": "2026-05-23",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/prop_portfolio.py:291",
       "finding_type": "silent_failure",
       "severity": "MEDIUM",
       "verdict": "FIXED",
-      "commit": "ed781e95"
+      "commit": "e7f11851"
     }
   ]
 }

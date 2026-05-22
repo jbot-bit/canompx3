@@ -3,50 +3,55 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 194
+## Last iteration: 195
 
-## RALPH AUDIT — Iteration 194 (COMPLETED)
+## RALPH AUDIT — Iteration 195 (COMPLETED)
 ## Date: 2026-05-23
-## Infrastructure Gates: 160 drift checks PASS; 31 strategy_fitness tests PASS
-## Scope: trading_app/strategy_fitness.py — magic-number defaults duplicating MIN_ROLLING_FIT
+## Infrastructure Gates: 160 drift checks PASS; 46 prop_portfolio tests PASS
+## Scope: trading_app/live_config.py (primary scan) + trading_app/prop_portfolio.py (fix target — discovered via fitness gate chain)
 
 ---
 
-## Iteration 194 — trading_app/strategy_fitness.py (full scan)
+## Iteration 195 — trading_app/live_config.py (full scan)
 
 ### Auto-Targeting
-- Scope provided: `trading_app/strategy_fitness.py` — medium centrality, never scanned.
+- Scope provided: `trading_app/live_config.py` — capital-class, calls compute_fitness on regime gate path, never scanned.
 
 ---
 
-## Finding CANON-194 — LOW — FIXED
+## live_config.py Audit Summary
 
-**PREMISE:** `_compute_fitness_from_cache`, `_compute_fitness_with_con`, and `compute_fitness` all declare `min_rolling_trades: int = 15` as a magic-number default. The canonical constant `MIN_ROLLING_FIT = 15` (annotated `@research-source @sensitivity-tested @revalidated-for`) lives at `strategy_fitness.py:95`. If a research re-validation updates `MIN_ROLLING_FIT`, the three defaults silently diverge.
+`build_live_portfolio()` is DEPRECATED (explicit DeprecationWarning + log.warning at lines 591-600). `session_orchestrator.py:341-346` raises if called without explicit portfolio injection. The LIVE_PORTFOLIO specs resolve to 0 strategies (filter types missing from validated_setups). The actual live fitness gate is `prop_portfolio.py:287-292` via `ACCOUNT_PROFILES`.
 
-**TRACE:**
-- `strategy_fitness.py:607` → `_compute_fitness_from_cache(... min_rolling_trades: int = 15 ...)`
-- `strategy_fitness.py:720` → `_compute_fitness_with_con(... min_rolling_trades: int = 15 ...)`
-- `strategy_fitness.py:815` → `compute_fitness(... min_rolling_trades: int = 15 ...)`
-- Canonical constant: `strategy_fitness.py:95` → `MIN_ROLLING_FIT = 15` (research-annotated)
+### Seven Sins Scan — live_config.py
 
-**VERDICT:** SUPPORT — canonical violation per integrity-guardian.md § 2 / institutional-rigor.md § 4
-
-**Fix:** Changed all 3 defaults to `min_rolling_trades: int = MIN_ROLLING_FIT`.
-Diff: 3 lines. Behavior: identical (value unchanged). No callers pass this kwarg.
-
-**Doctrine cited:** integrity-guardian.md § 2 (canonical sources — never inline magic numbers), institutional-rigor.md § 4 (delegate to canonical sources)
-
----
-
-## Seven Sins Scan — strategy_fitness.py
-
-- Sin 1 (Silent failure): Fail-closed pattern at `_filter_outcomes_with_features:421-423` (unknown filter → warning + empty list). ACCEPTABLE.
-- Sin 2 (Fail-open): `compute_portfolio_fitness:907` catches `(ValueError, duckdb.Error, KeyError)` and logs via `logger.exception` — not silent. ACCEPTABLE.
-- Sin 3 (Canonical violation): FIXED this iteration (CANON-194).
-- Sin 4 (Impact awareness): `fitness_status` literals "FIT"/"WATCH"/"DECAY"/"STALE" are string constants returned from a single function (`classify_fitness`) and consumed by callers. No enum currently exists; the pattern is consistent across the codebase. LOW risk — all callers compare against the same string literals returned from `classify_fitness`. Acceptable per pattern 1 (intentional per-session heuristic — monitoring only, not a canonical list).
+- Sin 1 (Silent failure): `_check_noise_floor:529` fail-closed on NULL. `_check_dollar_gate:549` fail-closed on NULL median_risk_points with logger.warning. ACCEPTABLE.
+- Sin 2 (Fail-open): Regime gate `except (ValueError, duckdb.Error)` at line 888 sets weight=0.0 — fail-closed. Inside DEPRECATED `build_live_portfolio`. ACCEPTABLE.
+- Sin 3 (Canonical violation): `"FIT"` string literal at line 883 — consistent across codebase (no canonical constant exists). Assessed ACCEPTABLE in iter 28/194.
+- Sin 4 (Impact awareness): `import duckdb as _ddb` at line 617 is a redundant local import (module-level `import duckdb` at line 27). LOW, dormant DEPRECATED path. ACCEPTABLE per pattern 2.
 - Sin 5 (Evidence over assertion): N/A (audit mode).
 - Sin 6 (Spec compliance): No spec in docs/specs/ for this module.
-- Sin 7 (Metadata trust): Not applicable.
+- Sin 7 (Metadata trust): LIVE_PORTFOLIO comment header correctly marks specs as DEPRECATED.
+
+**Overall live_config.py verdict: CLEAN** (all findings either ACCEPTABLE or already fixed in prior iterations).
+
+---
+
+## Finding SILENT-195 — LOW — FIXED (discovered via fitness gate chain from live_config.py)
+
+**PREMISE:** `prop_portfolio.py:291` has `except (ValueError, duckdb.Error): pass` — silent swallow of compute_fitness exceptions on the real live fitness gate path. Operator sees "Fitness: UNKNOWN" HOLD with zero diagnostic context.
+
+**TRACE:**
+- `prop_portfolio.py:287` → `fitness_status = "UNKNOWN"`
+- `prop_portfolio.py:289` → `compute_fitness(snap["strategy_id"], db_path=db_path)` → raises `ValueError` or `duckdb.Error`
+- `prop_portfolio.py:291` → `except ... pass` (silent)
+- `prop_portfolio.py:311` → `fitness_status not in lane.required_fitness` → HOLD (correctly fail-closed, but no operator-visible exception context)
+
+**VERDICT:** SUPPORT — integrity-guardian.md § 6 (No silent failures — every except must record the exception)
+
+**Fix:** Changed `pass` to `logger.warning("compute_fitness failed for %s — fitness_status=UNKNOWN (strategy held): %s", snap["strategy_id"], exc)`. Behavior unchanged.
+
+**Doctrine cited:** integrity-guardian.md § 6
 
 ---
 
@@ -65,6 +70,8 @@ Diff: 3 lines. Behavior: identical (value unchanged). No callers pass this kwarg
 - trading_app/derived_state.py (iter 183)
 - trading_app/deployability.py (iter 193)
 - trading_app/strategy_fitness.py (iter 194)
+- trading_app/live_config.py (iter 195)
+- trading_app/prop_portfolio.py (iter 195, partial — fitness gate path)
 
 ---
 
@@ -72,5 +79,5 @@ Diff: 3 lines. Behavior: identical (value unchanged). No callers pass this kwarg
 
 **Priority 1 — Unscanned high/medium centrality files:**
 - `trading_app/lane_correlation.py` — imports from strategy_fitness, medium centrality, never scanned
-- `trading_app/live_config.py` — capital-class, calls compute_fitness on regime gate path, never scanned
 - `trading_app/chordia.py` — medium centrality, never scanned
+- `trading_app/prop_portfolio.py` — partially scanned this iteration (fitness gate only); remainder not audited

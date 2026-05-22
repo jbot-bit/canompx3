@@ -5,6 +5,32 @@
 
 ---
 
+## Iteration 195 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/prop_portfolio.py:291
+- Finding: Silent `except (ValueError, duckdb.Error): pass` on live fitness gate — compute_fitness exceptions swallowed silently; operator sees "Fitness: UNKNOWN" HOLD with zero diagnostic context
+- Doctrine cited: integrity-guardian.md § 6 (No silent failures — every except must record the exception)
+- Action: Changed `pass` to `logger.warning(...)` recording strategy_id and exception; behavior unchanged (fitness_status stays UNKNOWN, HOLD gate unchanged)
+- Blast radius: 1 file (prop_portfolio.py)
+- Verification: PASS — 46 prop_portfolio tests, 160 drift checks
+- Commit: e7f11851
+
+---
+
+## Iteration 194 — 2026-05-23
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/strategy_fitness.py:607,720,815
+- Finding: `min_rolling_trades=15` default duplicated at 3 function signatures instead of referencing MIN_ROLLING_FIT canonical constant
+- Doctrine cited: integrity-guardian.md § 2 (canonical sources), institutional-rigor.md § 4
+- Action: Replaced all 3 magic-number defaults with `min_rolling_trades: int = MIN_ROLLING_FIT`
+- Blast radius: 1 file (strategy_fitness.py)
+- Verification: PASS — 31 strategy_fitness tests, 160 drift checks
+- Commit: ed781e95
+
+---
+
 ## Iteration 193 — 2026-05-23
 - Phase: fix
 - Classification: [mechanical]
