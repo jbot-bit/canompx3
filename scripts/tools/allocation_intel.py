@@ -29,6 +29,7 @@ import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.prop_profiles import (
     ACCOUNT_PROFILES,
     legacy_lane_allocation_path,
@@ -112,6 +113,16 @@ def _c8_status_for(con: duckdb.DuckDBPyConnection, sids: list[str]) -> dict[str,
 def _compute_session_regimes(con: duckdb.DuckDBPyConnection) -> list[dict]:
     """6-month trailing avg_r for unfiltered E2 RR1.0 outcomes by instrument x session.
 
+    Window: strict IS-only, ending at HOLDOUT_SACRED_FROM (2026-01-01). Using
+    CURRENT_DATE here would let post-holdout trading days dominate the regime
+    read whenever the 6mo trailing window straddles HOLDOUT_SACRED_FROM, which
+    is exactly how 2026-05-21's MGC NYSE_OPEN + MGC SINGAPORE_OPEN false-HOT
+    flags were generated (see docs/audit/results/2026-05-21-mgc-adjacency-preflight-park.md
+    -- strict-IS naive t = +0.027 vs hurdle 3.00 across 30 (RR, ORB) cells;
+    +0.19R headline lived entirely in 5mo OOS slice). HOLDOUT_SACRED_FROM is
+    the canonical IS boundary per trading_app.holdout_policy and Mode A holdout
+    doctrine. Anchoring here makes this scan a true IS-only adjacency surface.
+
     Mirrors the rebalancer's session-regime sweep. Computed inline so this script
     is self-contained (the rebalancer prints regimes to stdout but does not
     persist them to the lane allocation file).
@@ -130,14 +141,15 @@ def _compute_session_regimes(con: duckdb.DuckDBPyConnection) -> list[dict]:
         FROM orb_outcomes
         WHERE entry_model = 'E2' AND rr_target = 1.0 AND confirm_bars = 1 AND orb_minutes = 5
           AND pnl_r IS NOT NULL
-          AND trading_day >= CURRENT_DATE - INTERVAL 180 DAY
+          AND trading_day >= ? - INTERVAL 180 DAY
+          AND trading_day < ?
           AND symbol IN ({placeholders_i})
           AND orb_label IN ({placeholders_s})
         GROUP BY symbol, orb_label
         HAVING COUNT(*) >= 20
         ORDER BY avg_r DESC
         """,
-        list(active_instruments) + list(tradeable_sessions),
+        [HOLDOUT_SACRED_FROM, HOLDOUT_SACRED_FROM] + list(active_instruments) + list(tradeable_sessions),
     ).fetchall()
     out: list[dict] = []
     for r in rows:
