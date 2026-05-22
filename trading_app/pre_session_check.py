@@ -822,7 +822,9 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
             else:
                 results.append(("DD budget", True, f"${total_dd:,.0f} / ${dd_limit:,.0f} — within budget"))
     except Exception as e:
-        results.append(("DD budget", True, f"Cannot check: {e}"))
+        # Fail-closed per integrity-guardian.md § 3 — never pass a capital gate on exception.
+        log.warning("DD budget check failed: %s", e, exc_info=True)
+        results.append(("DD budget", False, f"BLOCKED: DD budget check failed: {e}"))
 
     # Lane 2 enforcement
     for lane in lanes:
@@ -843,7 +845,7 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
     print(f"Lanes: {len(lanes)}")
     for lane in lanes:
         orb_cap = lane.get("max_orb_size_pts")
-        cap_str = f"{orb_cap:.0f} pts" if orb_cap else "NONE"
+        cap_str = f"{orb_cap:.0f} pts" if orb_cap is not None else "NONE"
         print(f"Strategy: {lane['strategy_id']}")
         print(
             f"  {lane['instrument']} | Filter: {lane['filter_type']} | RR: {lane['rr_target']} | "
