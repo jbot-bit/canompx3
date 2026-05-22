@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 201 — 2026-05-23
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/pre_session_check.py:824-825 (HIGH) + :846 (LOW, A6-GAP3)
+- Finding: DD budget except-Exception handler appended (True, ...) — fail-open on a capital gate. Also A6-GAP3: orb_cap truthy check misses 0.0.
+- Doctrine cited: integrity-guardian.md § 3 (never catch Exception and return success in health/audit paths)
+- Action: Changed except handler to (False, 'BLOCKED: ...') + log.warning(exc_info=True). Changed `if orb_cap` → `if orb_cap is not None`. 3 new tests.
+- Blast radius: 2 files (pre_session_check.py + test_pre_session_check.py)
+- Verification: PASS — 58/58 tests, 160 drift checks
+- Commit: 91fdce37
+
+---
+
 ## Iteration 200 — 2026-05-23
 - Phase: fix
 - Classification: [mechanical]

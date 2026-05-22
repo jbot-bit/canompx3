@@ -3,58 +3,64 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 200
+## Last iteration: 201
 
-## RALPH AUDIT — Iteration 200 (COMPLETED)
+## RALPH AUDIT — Iteration 201 (COMPLETED)
 ## Date: 2026-05-23
-## Infrastructure Gates: 160 drift checks PASS; 48/48 prop_portfolio tests PASS
-## Scope: trading_app/prop_portfolio.py (full file audit)
+## Infrastructure Gates: 160 drift checks PASS; 58/58 pre_session_check tests PASS
+## Scope: trading_app/pre_session_check.py (capital-class preflight — first full scan)
 
 ---
 
 ## Full-File Audit Results
 
-### Finding PAPER-PNL-200 — LOW — FIXED
+### Finding DD-BUDGET-FAIL-OPEN-201 — HIGH — FIXED
 
-**PREMISE:** `_query_paper_pnl` at line 436 (pre-fix) passed `exc_info=True` as
-a positional format argument to `logger.debug`, filling the `%s` placeholder with
-the string `"True"`. The exception traceback was discarded. Per integrity-guardian.md
-§ 6, every `except Exception` must record the exception.
+**PREMISE:** `pre_session_check.py:824-825` (pre-fix) caught any exception from the DD
+budget check (`resolve_daily_lanes` + `check_daily_lanes_dd_budget`) and appended
+`("DD budget", True, f"Cannot check: {e}")` — passing the capital gate on failure.
+Per integrity-guardian.md § 3: "Never catch `Exception` and return success in health/audit paths."
 
-**TRACE:** `prop_portfolio.py:436` → `except Exception:` (no `as exc`) →
-`logger.debug("..._query_paper_pnl failed for %s: %s", strategy_id, exc_info=True)` —
-`exc_info=True` fills the second `%s`, no `exc_info` keyword sent to the logging framework.
+**TRACE:** `run_session_check()` → `try: resolve_daily_lanes(...); check_daily_lanes_dd_budget(...)`
+→ `except Exception as e:` → `results.append(("DD budget", True, ...))` → `all_pass` stays `True`
+→ gate returns `True`.
 
-**Fix:** Removed the stray `: %s` from the format string; retained `exc_info=True`
-as a keyword argument only. Two new tests added: (1) verifies `caplog.records` carry
-`exc_info` on DB failure, (2) verifies missing `paper_trades` table returns None.
+**Fix:** `pre_session_check.py:824-827` — changed `True` → `False`, message → `"BLOCKED: DD budget check failed: ..."`, added `log.warning(..., exc_info=True)`. 3 new tests. 58/58 pass.
 
-**Doctrine cited:** integrity-guardian.md § 6
+**Doctrine cited:** integrity-guardian.md § 3
 
-**Commit:** 9db13515
+**Commit:** 91fdce37
 
 ---
 
-## Seven Sins Scan — prop_portfolio.py (full)
+### Finding A6-GAP3 — LOW — FIXED (deferred since iter A.6 2026-05-14)
 
-- Sin 1 (Silent failure): `_query_paper_pnl` silently swallowed traceback. FIXED this iteration.
-  `_resolve_daily_lane` at line 291 narrows to `(ValueError, duckdb.Error)` correctly (iter 195).
-  `resolve_daily_lanes` at line 411 catches `ImportError` for optional `lane_ctl` module.
-  That is an intentional fail-open for optional infrastructure — ACCEPTABLE (Pattern 2: dormant
-  infrastructure import, documented with comment `# lane_ctl not available — no overrides`).
-- Sin 2 (Fail-open): `_load_daily_snapshot` returns `None` when strategy missing from
-  `validated_setups`; caller `_resolve_daily_lane` surfaces this as `status="HOLD"`. Correct.
-- Sin 3 (Canonical violation): `DD_PER_CONTRACT_075X/10X` are module-level fallback constants,
-  used only when `median_risk_points is None`. The function docstring and comments document
-  this explicitly. All `max_dd` limits sourced from `tier.max_dd` via `get_account_tier()`.
-  No hardcoded dollar limits in capital-gate paths. CLEAN.
-- Sin 4 (Impact awareness): No hardcoded instrument or session lists. Instrument filtering
-  uses `firm_spec.banned_instruments` (from `get_firm_spec()`). Session filtering uses
-  `profile.allowed_sessions`. Both sourced from canonical `prop_profiles.py`. CLEAN.
+**PREMISE:** `pre_session_check.py:846` `if orb_cap` evaluates `0.0` as falsy, showing
+`"NONE"` instead of `"0 pts"`. Display-only; enforcement path uses `is not None` correctly.
+
+**Fix:** `pre_session_check.py:846` — changed `if orb_cap` to `if orb_cap is not None`.
+Closes deferred finding A6-GAP3. Same commit 91fdce37.
+
+**Doctrine cited:** integrity-guardian.md § 7 (never trust truthy coercion on numeric fields)
+
+---
+
+## Seven Sins Scan — pre_session_check.py (full)
+
+- Sin 1 (Silent failure / Fail-open): **FIXED this iteration** — DD budget exception was fail-open.
+  All other `except Exception` blocks in the file return `False` (fail-closed) — CLEAN.
+  Exception at line 191 (`check_daily_equity` DLL load): falls back to `$1000` fallback and prints
+  WARNING to stderr, but this is only the dollar-limit display; the core DD comparison still
+  runs with the fallback. ACCEPTABLE — documented with inline comment.
+- Sin 2 (Canonical violation): No hardcoded dollar limits in capital-gate enforcement paths.
+  `ACCOUNT_TIERS` sourced from `prop_profiles.py` canonical import. CLEAN.
+- Sin 3 (Fail-open on capital gate): DD-BUDGET-FAIL-OPEN-201 was the only instance. FIXED.
+- Sin 4 (Impact awareness): No hardcoded instrument lists. Session filtering uses profile
+  `allowed_sessions`. CLEAN.
 - Sin 5 (Evidence over assertion): N/A (audit mode).
-- Sin 6 (Spec compliance): No `docs/specs/prop_portfolio.md` exists. Module docstring is accurate.
-- Sin 7 (Metadata trust): `snap["status"]` is lowercased at query time (`LOWER(vs.status)`).
-  Comparison `snap["status"] != "active"` is safe. CLEAN.
+- Sin 6 (Spec compliance): No `docs/specs/pre_session_check.md` exists. Module docstring accurate.
+- Sin 7 (Metadata trust): Lifecycle state and HWM tracker state read via canonical helpers
+  (`read_lifecycle_state`, `read_state_file`). Not inline JSON loads. CLEAN.
 
 ---
 
@@ -76,20 +82,22 @@ as a keyword argument only. Two new tests added: (1) verifies `caplog.records` c
 - trading_app/live_config.py (iter 195)
 - trading_app/prop_portfolio.py (iter 200, FULL)
 - trading_app/lane_correlation.py (iter 196)
-- trading_app/lane_allocator.py (iter 199, full — apply_c8_gate + build_allocation + apply_chordia_gate)
+- trading_app/lane_allocator.py (iter 199, full)
 - trading_app/chordia.py (iter 198, full)
+- trading_app/pre_session_check.py (iter 201, FULL)
 
 ---
 
 ## Next Iteration Targets
 
 **Priority 1 — Unscanned high/medium centrality files:**
-- `trading_app/pre_session_check.py` — capital-class preflight; referenced in deferred finding
-  A6-GAP3 (truthy-falsy cap display); unscanned; high centrality (called from live session orchestrator)
+- `trading_app/prop_profiles.py` — canonical profile/tier/lane definitions; highest centrality
+  after pre_session_check; referenced by nearly every capital-class path.
+- `trading_app/account_hwm_tracker.py` — HWM persistence, referenced by session_orchestrator
+  and pre_session_check; state-persistence gap class is high-risk.
 
 **Priority 2 — Open deferred findings (MEDIUM):**
 - `ALERT-CONTAM-N2` — test writes to production `data/runtime/operator_alerts.jsonl`; n=2 class
-  incident requiring conftest monkeypatch + drift check. Next iteration touching alert_engine or
-  any test under tests/test_trading_app/ calling `record_operator_alert`.
+  incident requiring conftest monkeypatch + drift check.
 - `PR301-TRADO-IDEMPOTENCY` — Tradovate order_router has no idempotency token; retry policy
   risks duplicate orders. Re-check trigger: any Tradovate go-live decision.

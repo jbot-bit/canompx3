@@ -1,8 +1,8 @@
 {
-  "total_iterations": 193,
+  "total_iterations": 194,
   "last_updated": "2026-05-23",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 200,
+  "last_high_finding_iter": 201,
   "findings_by_type": {
     "canonical_violation": {
       "found": 64,
@@ -11,8 +11,8 @@
       "fix_rate": 0.8
     },
     "silent_failure": {
-      "found": 45,
-      "fixed": 41,
+      "found": 46,
+      "fixed": 42,
       "deferred": 2,
       "fix_rate": 0.91
     },
@@ -128,11 +128,11 @@
   "findings_by_severity": {
     "CRITICAL": 9,
     "HIGH": 14,
-    "MEDIUM": 51,
+    "MEDIUM": 52,
     "LOW": 119
   },
   "classifications": {
-    "judgment": 85,
+    "judgment": 86,
     "mechanical": 75,
     "audit-only": 33
   },
@@ -250,6 +250,11 @@
     "pipeline/check_drift.py": {
       "audit_count": 3,
       "last_iter": 192,
+      "findings": 3
+    },
+    "trading_app/pre_session_check.py": {
+      "audit_count": 3,
+      "last_iter": 201,
       "findings": 3
     },
     "tradovate/order_router.py": {
@@ -381,11 +386,6 @@
       "audit_count": 2,
       "last_iter": 180,
       "findings": 1
-    },
-    "trading_app/pre_session_check.py": {
-      "audit_count": 2,
-      "last_iter": 163,
-      "findings": 2
     },
     "trading_app/live/bot_dashboard.py": {
       "audit_count": 2,
@@ -3311,6 +3311,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "9db13515"
+    },
+    {
+      "iter": 201,
+      "date": "2026-05-23",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/pre_session_check.py:824-825 (HIGH) + :846 (LOW, A6-GAP3)",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "91fdce37"
     }
   ]
 }
