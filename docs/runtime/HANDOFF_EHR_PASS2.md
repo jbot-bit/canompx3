@@ -1,17 +1,17 @@
 # EHR PASS 2 — Handoff for Next Session
 
-**Last updated:** 2026-05-17, end of Stage 1.
+**Last updated:** 2026-05-22, end of Stage 2.
 **Worktree:** `C:/Users/joshd/canompx3/.worktrees/ehr-validation-mode`
 **Branch:** `session/joshd-ehr-validation-mode`
-**Head commit:** `d910d6f7 ehr(stage-1): add EARLY_HOLDOUT_BOUNDARY constant + EHR helpers`
+**Head commit:** `96d0137c ehr(stage-2): additive validated_setups schema for EHR validation mode`
 
 ## Where we are in the 8-stage plan
 
 | # | Stage | Status |
 |---|-------|--------|
-| 1 | Holdout constants + EHR helpers | **DONE** — committed `d910d6f7`, 30 tests green, drift baseline 296 unchanged |
-| 2 | `validated_setups` schema additive (5 columns) | **PENDING** — stage file written (`docs/runtime/stages/ehr-stage-2-validated-setups-schema.md`), implementation not started |
-| 3 | Validator hard-fail on EHR verdict | pending |
+| 1 | Holdout constants + EHR helpers | **DONE** — committed `d910d6f7`, 30 tests green, drift baseline 296 unchanged (at Stage 1 ship; main has since advanced) |
+| 2 | `validated_setups` schema additive (5 columns) | **DONE** — committed `96d0137c`, 34/34 pass (4 new + 30 Stage 1 regression), drift baseline 844 unchanged (worktree HEAD baseline, post main-advancement) |
+| 3 | Validator hard-fail on EHR verdict | **PENDING** — stage file not yet written; verdict ceiling enforcement in `trading_app/strategy_validator.py` reading `validated_setups.verdict_ceiling` column added in Stage 2 |
 | 4 | Discovery `--validation-mode` flag + anti-rescue | pending |
 | 5 | Allocator EHR isolation + trade_book RESEARCH_QUEUE | pending |
 | 6 | 7 drift checks + kill-threshold byte-equality + injection probes | pending |
