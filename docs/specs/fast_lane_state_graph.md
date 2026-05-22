@@ -160,7 +160,7 @@ edges:
 ### 4.1 `promote_queue.yaml`
 
 Top-level keys: `schema_version: 1`, `generated_at`, `entries[]`.
-Entry fields: `strategy_id`, `status` (QUEUED | REVOKED | ERROR | PARKED), `pooled_t`, `pooled_n`, `oos_n`, `oos_power_tier`, `dir_match`, `pooling_artifact`, `result_md_path`, `revocation_md_path`.
+Entry fields: `strategy_id`, `status` (QUEUED | ESCALATED | REVOKED | PARKED | REJECTED_OOS_UNPOWERED | ERROR | the six `SUPPRESSED_*` statuses from §10), `pooled_t`, `pooled_n`, `oos_n`, `oos_power_tier`, `dir_match`, `pooling_artifact`, `result_md_path`, `revocation_md_path`, `structural_hash`, `k_lineage`, `n_hat`.
 Hand-edit detection: `check_fast_lane_promote_orphans` (Check #157) reconstructs independently and diffs.
 
 ### 4.2 `cherry_pick_journal.yaml`

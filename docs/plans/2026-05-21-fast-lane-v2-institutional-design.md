@@ -129,7 +129,13 @@ Properties:
 
 #### `trial_index`
 
-A rebuildable derived index over `trial_event_log`.
+A rebuildable derived index over the append-only trial ledger plus correction records.
+Implementation note (2026-05-22): the current shipped surface is the pure
+module `scripts/research/fast_lane_trial_index.py`, derived from
+`docs/runtime/fast_lane_trial_ledger.yaml` and
+`docs/runtime/fast_lane_trial_corrections.yaml`. There is no authoritative
+tracked `fast_lane_trial_index.yaml` cache yet; if a cache is added later, it
+must remain rebuildable and drift-checked.
 
 Responsibilities:
 
@@ -392,28 +398,29 @@ events:
       pooled_fire: 0.1468
 ```
 
-### 9.2 `fast_lane_trial_index.yaml`
+### 9.2 `fast_lane_trial_index` derived view
 
-Derived from event log.
+Derived from the trial ledger after V2 corrections. The shipped contract is
+the in-memory payload returned by `scripts/research/fast_lane_trial_index.py`.
+Do not treat a future YAML cache as authoritative.
 
 ```yaml
-do_not_hand_edit: true
 schema_version: 1
-generated_at: "2026-05-21"
 source: "scripts/research/fast_lane_trial_index.py"
-entries:
-  - structural_hash: "16hex"
-    strategy_id: "MNQ_..."
+total_v2_trials: 28
+by_structural_hash:
+  "16hex":
+    K_structural: 1
+    trial_ids: ["16hex"]
+by_lane:
+  "MNQ|US_DATA_1000|30":
     K_lane: 1
-    K_family: 3
-    K_global: 28
-    trial_ids:
-      - "16hex"
+    trial_ids: ["16hex"]
 ```
 
 ### 9.3 `promote_queue.yaml`
 
-Derived from result artifacts and `fast_lane_trial_index.yaml`. It must not contain fresh trial events. Its K fields must cite the index source and trial IDs.
+Derived from result artifacts and the V2 trial-index view. It must not contain fresh trial events. Its K fields must cite ledger/index provenance and trial IDs once a persisted index cache exists.
 
 ---
 
