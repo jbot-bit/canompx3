@@ -1,0 +1,450 @@
+# Pre-registered hypothesis: ρ/subset gate specification audit
+#
+# Authority: docs/institutional/pre_registered_criteria.md
+# Doctrine: .claude/rules/research-truth-protocol.md § Phase 0
+# Author surface: docs/prompts/prereg-writer-prompt.md
+#
+# This is a SPECIFICATION audit, not a calibration audit. It does NOT tune
+# the 0.70 threshold. It tests whether Pearson ρ is the right METRIC for the
+# canompx3 capital-at-risk regime, where joint left-tail co-movement matters
+# more than average covariance.
+
+slug: 2026-05-21-rho-gate-falsification-v1
+title: "ρ-gate specification audit — does Pearson ρ over-penalize joint-tail-separable lane pairs?"
+date_authored: 2026-05-21
+status: AUTHORED
+commit_sha: TO_FILL_AFTER_COMMIT
+
+testing_mode: individual  # Pathway B: theory-driven, K=1 per pair, BH-FDR over K=8 pairs
+pathway: B
+pooled_t_role: DESCRIPTIVE_ONLY
+
+# ---------------------------------------------------------------------------
+# Motivation (one paragraph, no narrative inflation)
+# ---------------------------------------------------------------------------
+motivation: |
+  The canonical allocator gate (`trading_app/lane_correlation.py:24`:
+  RHO_REJECT_THRESHOLD=0.70, SUBSET_REJECT_THRESHOLD=0.80) uses symmetric
+  Pearson ρ on daily pnl_r to reject correlated candidate lanes. Pearson ρ
+  weights +R days and -R days identically. For prop-firm capital regimes,
+  account survival is dominated by joint left-tail behavior (concurrent
+  drawdowns), not by average covariance. The gate may therefore reject
+  candidates whose Pearson ρ is high but whose joint left-tail behavior is
+  independence-consistent — a specification error, distinct from a
+  calibration error. The 2026-05-21 diagnostic on a single near-gate
+  PASS_CHORDIA candidate (MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30,
+  ρ=0.728) showed 49.3% pnl_r divergence and 14.7% W↔L outcome swap on
+  overlap days. This single observation (n=1) is insufficient to indict the
+  gate; the present experiment tests the specification claim across all
+  N=8 displaced PASS_CHORDIA pairs in the current allocation as a class.
+
+# ---------------------------------------------------------------------------
+# Population under test
+# ---------------------------------------------------------------------------
+population:
+  source: docs/runtime/lane_allocation.json
+  filter:
+    bucket: displaced[]
+    intersect_with: docs/runtime/chordia_audit_log.yaml verdict==PASS_CHORDIA
+  snapshot_required:
+    rebalance_date: "2026-05-21"
+    profile_id: topstep_50k_mnq_auto
+  expected_pairs: 8
+  pair_ids_at_pre_reg_authoring:
+    - {candidate: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR_P50,            incumbent: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K}
+    - {candidate: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12,          incumbent: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K}
+    - {candidate: MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100,         incumbent: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K}
+    - {candidate: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_COST_LT15,          incumbent: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K}
+    - {candidate: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100,         incumbent: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K}
+    - {candidate: MNQ_NYSE_OPEN_E2_RR1.5_CB1_OVNRNG_25,             incumbent: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12}
+    - {candidate: MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30, incumbent: MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15}
+    - {candidate: MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15, incumbent: MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15}
+  drift_guard: |
+    The runner MUST re-read lane_allocation.json + chordia_audit_log.yaml at
+    execution time and refuse to run if the displaced ∩ PASS_CHORDIA set does
+    not match expected_pairs above. Manual-append ordering trap defense per
+    feedback_chordia_audit_log_manual_append_ordering_n1_2026_05_21.md.
+
+# ---------------------------------------------------------------------------
+# Data scope
+# ---------------------------------------------------------------------------
+data_scope:
+  source_tables_canonical:
+    - orb_outcomes
+    - daily_features
+  source_tables_banned_for_truth:
+    - validated_setups
+    - edge_families
+    - live_config
+  loader: trading_app.strategy_fitness._load_strategy_outcomes  # canonical, never re-encode
+  filter_application: research.filter_utils.filter_signal  # canonical wrapper, per research-truth-protocol § Canonical filter delegation
+  window:
+    mode: A  # strict-IS
+    is_end_exclusive: trading_app.holdout_policy.HOLDOUT_SACRED_FROM
+    oos: FORBIDDEN_IN_THIS_EXPERIMENT  # specification audit, not OOS validation
+    rationale: |
+      OOS would re-litigate calibration. The specification question (is
+      Pearson the right metric?) is answerable on IS data alone because
+      it tests whether two metrics agree on the SAME sample, not whether
+      a threshold generalizes.
+  cost_treatment: |
+    pnl_r is r-multiples net of friction per canonical orb_outcomes.outcome
+    computation. Joint-tail buckets defined on net pnl_r, not gross.
+
+# ---------------------------------------------------------------------------
+# Hypotheses
+# ---------------------------------------------------------------------------
+hypotheses:
+
+  - id: H1
+    statement: |
+      For each (candidate, incumbent) pair in the displaced ∩ PASS_CHORDIA
+      population, the joint left-tail conditional probability
+      P[candidate ∈ worst-decile day | incumbent ∈ worst-decile day]
+      does NOT deviate from the independence baseline (0.10) by more than 0.20
+      in absolute value, when computed on shared IS trading days.
+    null_hypothesis: |
+      ρ-gate specification is correct — Pearson ρ captures the diversification-
+      relevant information; left-tail conditional ρ does not provide material
+      additional signal.
+    alternative: |
+      ρ-gate specification is misspecified for capital-at-risk regime —
+      at least 3 of 8 pairs show |Δtail| > 0.20, indicating joint left-tail
+      behavior differs materially from what Pearson ρ implies.
+    theory_citation:
+      primary: docs/institutional/literature/carver_2015_ch11_portfolios.md  # forecast correlation in portfolio construction
+      secondary: docs/institutional/literature/harvey_liu_2015_backtesting.md  # haircut-not-veto doctrine
+      tertiary: docs/institutional/literature/lopez_de_prado_2018_afml_ch_3_7_8.md  # AFML Ch 8 feature importance / specification
+      microstructure_anchor: docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md  # tail-coincidence at adverse-selection turning points
+
+  - id: H2
+    statement: |
+      Pearson ρ on full-sample daily pnl_r and Pearson ρ on left-tail-only
+      daily pnl_r (incumbent worst-decile subset) agree to within ±0.10 on
+      every pair.
+    null_hypothesis: |
+      The two ρ values track each other — Pearson is a sufficient statistic
+      for the tail-correlation question on this population.
+    alternative: |
+      At least 3 of 8 pairs show |ρ_full - ρ_tail| > 0.10 — Pearson on the
+      full sample under-represents tail co-movement.
+    theory_citation:
+      primary: docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md  # § 1.4.2 sample-selection critique
+      secondary: docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md  # symmetric-statistics caveat
+
+  - id: H3
+    statement: |
+      Outcome-swap frequency (P[candidate W ∧ incumbent L] +
+      P[candidate L ∧ incumbent W] on shared IS days) is uncorrelated with
+      pair-level Pearson ρ across the N=8 population (Spearman rank ρ between
+      the two pair-level series satisfies |rs| < 0.30).
+    null_hypothesis: |
+      Outcome swaps and Pearson ρ measure different aspects of pair behavior;
+      Pearson alone is insufficient for the diversification-benefit question.
+    alternative: |
+      Outcome swaps and Pearson ρ are tightly rank-correlated (|rs| ≥ 0.30) —
+      Pearson already captures the swap behavior, no need to add a new metric.
+    role: TAUTOLOGY_CHECK
+    theory_citation:
+      primary: .claude/rules/quant-audit-protocol.md  # T0 tautology gate
+    note: |
+      H3 is the canonical tautology gate (quant-audit-protocol.md T0). If
+      outcome-swap and Pearson ρ are mechanically the same on this pool,
+      the entire experiment is uninformative and must be reported as
+      INCONCLUSIVE_TAUTOLOGY regardless of H1/H2 outcomes.
+
+# ---------------------------------------------------------------------------
+# Metrics
+# ---------------------------------------------------------------------------
+metrics:
+
+  per_pair_primary:
+    - name: rho_pearson_full
+      definition: |
+        Pearson ρ on daily pnl_r summed within each shared trading_day,
+        across all IS days where BOTH lanes have at least one trade.
+      source: trading_app.lane_correlation._pearson (delegated, not re-encoded)
+
+    - name: rho_pearson_left_tail
+      definition: |
+        Pearson ρ computed on the subset of shared IS days where the
+        incumbent's daily pnl_r is in its trailing 252-trading-day rolling
+        decile (worst 10% of the trailing window). Anchor decile to the
+        incumbent's own series at each day. Requires ≥30 worst-decile days
+        for the pair to be evaluable.
+
+    - name: tail_conditional_prob
+      definition: |
+        P[candidate_day_pnl_r ∈ candidate's trailing-252 worst decile
+          | incumbent_day_pnl_r ∈ incumbent's trailing-252 worst decile]
+        Computed only on shared IS days. Independence baseline = 0.10.
+        Δtail = abs(tail_conditional_prob - 0.10).
+
+    - name: outcome_swap_freq
+      definition: |
+        On shared IS days where both lanes have pnl_r,
+        (count[cand_W ∧ inc_L] + count[cand_L ∧ inc_W]) / shared_day_count
+        where W = pnl_r > 0, L = pnl_r < 0.
+
+  per_pair_secondary_descriptive:
+    - shared_day_count
+    - n_incumbent_worst_decile_shared_days
+    - subset_coverage  # delegated from PairResult
+    - rho_spearman_full  # robustness check vs Pearson
+
+  population_aggregate:
+    - count_pairs_delta_tail_gt_0_20  # H1 verdict driver
+    - count_pairs_rho_diverge_gt_0_10  # H2 verdict driver
+    - spearman_rho_outcome_swap_vs_pearson_rho  # H3 verdict driver
+    - bh_fdr_q_values_for_per_pair_z_tests  # multiple-testing correction
+
+# ---------------------------------------------------------------------------
+# Statistical methodology
+# ---------------------------------------------------------------------------
+methodology:
+  n_pairs: 8
+  k_global: 8
+  k_per_pair: 1  # each pair contributes one test per hypothesis
+  bh_fdr:
+    q_threshold: 0.05
+    framing: K_global  # justified because all 8 pairs are a single hypothesis family
+    citation: docs/institutional/literature/benjamini_hochberg_1995_fdr.md
+  per_test_significance: |
+    For H1, the per-pair test is: is observed tail_conditional_prob
+    significantly different from 0.10 under the conditional binomial null?
+    Use binomial exact test with n = n_incumbent_worst_decile_shared_days,
+    p_null = 0.10. Two-sided.
+  clustered_se: |
+    Not required at the pair level — each pair contributes one ratio, not a
+    pooled t. Population-level Spearman rank correlation in H3 uses exact
+    rank-permutation test (N=8 is small enough for exact).
+  power:
+    pre_run_estimate: |
+      With n_incumbent_worst_decile_shared_days ≥ 75 (estimated from
+      VWAP O30 diagnostic at N_shared=756, decile ≈ 75-76), a true
+      tail_conditional_prob of 0.30 (Δ=0.20) is detectable at α=0.05
+      with power ≈ 0.75 via binomial exact. Pairs with fewer than 30
+      worst-decile shared days are flagged UNDERPOWERED_PAIR and excluded
+      from H1 verdict accounting per
+      feedback_oos_does_not_accrue_holdout_is_frozen.md analogue.
+    floor: docs/institutional/literature/research-oos-power-floor  # see RULE 3.3 in backtesting-methodology.md
+  min_btl:
+    n_trials: 8  # one test per pair
+    minbtl_bound: |
+      Bailey 2013 MinBTL = 2·ln(8) / E[max_N]² is satisfied trivially
+      because N_trials = 8 is far below clean-data ceiling (≤300 per
+      Phase 0 doctrine).
+    citation: docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md
+  chordia_t:
+    not_applicable: true
+    rationale: |
+      Chordia t-stat (≥3.79) applies to discovery of new edges. This is a
+      specification audit on an existing gate, not a new-edge claim. The
+      per-pair binomial test is the relevant gate per Harvey-Liu 2015
+      framework (haircut framework's underlying significance test).
+
+# ---------------------------------------------------------------------------
+# Verdict labels (LOCKED BEFORE RUNNING — no post-hoc relabeling)
+# ---------------------------------------------------------------------------
+verdict_labels:
+
+  CONFIRM_NULL:
+    condition: |
+      H1 not rejected (fewer than 3 pairs have |Δtail| > 0.20 surviving
+      BH-FDR at q=0.05) AND H2 not rejected (fewer than 3 pairs have
+      |ρ_full - ρ_tail| > 0.10) AND H3 not rejected (Spearman rs ≥ 0.30
+      between outcome_swap and Pearson ρ).
+    interpretation: |
+      The ρ/subset gate specification is correct for the capital-at-risk
+      regime on this population. Pearson ρ captures the relevant
+      diversification information. Gate is doctrine-correct as-is. No
+      further specification work authorized; calibration work remains
+      independently forbidden absent a different pre-reg.
+
+  REJECT_NULL_ESCALATE:
+    condition: |
+      H1 rejected (≥3 pairs |Δtail| > 0.20 BH-FDR surviving) OR
+      H2 rejected (≥3 pairs |ρ_full - ρ_tail| > 0.10) AND
+      H3 not rejected (i.e., outcome_swap and Pearson ρ are NOT tautological).
+    interpretation: |
+      The gate is structurally misspecified for capital-at-risk. Authorize
+      design-stage proposal for portfolio-MC-aware allocator (option (c) in
+      audit). Does NOT authorize threshold change, candidate deployment, or
+      gate relaxation. Next stage is a DESIGN pre-reg, not an IMPLEMENTATION.
+
+  INCONCLUSIVE_TAUTOLOGY:
+    condition: |
+      H3 rejected (|Spearman rs| ≥ 0.30 between outcome_swap and Pearson ρ)
+      regardless of H1/H2 outcomes.
+    interpretation: |
+      Outcome-swap and Pearson ρ are mechanically the same on this pool.
+      The experiment cannot distinguish specification from calibration
+      errors. Report as INCONCLUSIVE; no doctrine change authorized.
+
+  INCONCLUSIVE_UNDERPOWERED:
+    condition: |
+      ≥3 of 8 pairs flagged UNDERPOWERED_PAIR (fewer than 30 incumbent
+      worst-decile shared IS days).
+    interpretation: |
+      Sample is too thin for the specification audit. Report as
+      INCONCLUSIVE; no doctrine change authorized. Do NOT extend OOS
+      window to gain power — holdout is sacred.
+
+  PAIR_DRIFT:
+    condition: |
+      Runner's live snapshot of (displaced ∩ PASS_CHORDIA) does not match
+      pair_ids_at_pre_reg_authoring above.
+    interpretation: |
+      Population changed between pre-reg authoring and experiment run.
+      Re-author pre-reg vN+1 with fresh population; do NOT silently
+      proceed against drifted population.
+
+# ---------------------------------------------------------------------------
+# Kill criteria (LOCKED BEFORE RUNNING)
+# ---------------------------------------------------------------------------
+kill_criteria:
+
+  - id: K1
+    trigger: |
+      Any pair fails canonical strategy_id parsing via
+      trading_app.eligibility.builder.parse_strategy_id at runner load time.
+    action: ABORT_RUN_NO_RESULT  # fail-closed per institutional-rigor § 6
+
+  - id: K2
+    trigger: |
+      Drift check: pipeline/check_drift.py reports any NEW violation (delta
+      from pre-run baseline > 0) attributable to files in this experiment's
+      scope_lock.
+    action: ABORT_RUN_NO_RESULT
+
+  - id: K3
+    trigger: |
+      Runner imports any non-canonical correlation implementation, re-encodes
+      Pearson, re-encodes daily-pnl loading, or re-encodes strategy_id
+      parsing.
+    action: ABORT_RUN_NO_RESULT
+    enforcement: pre-merge code review verifying delegated imports only
+    citation: .claude/rules/institutional-rigor.md § 4
+
+  - id: K4
+    trigger: |
+      Any data point read from validated_setups, edge_families, live_config,
+      or any docs file. Canonical-truth-only per research-truth-protocol.md.
+    action: ABORT_RUN_NO_RESULT
+
+  - id: K5
+    trigger: |
+      Any test computed on trading_day >= HOLDOUT_SACRED_FROM.
+    action: ABORT_RUN_NO_RESULT
+    enforcement: |
+      Runner MUST call trading_app.holdout_policy.enforce_holdout_date()
+      on every loaded row OR pre-filter via canonical loader's end_date
+      argument set to HOLDOUT_SACRED_FROM - 1 day.
+
+  - id: K6
+    trigger: |
+      Any post-hoc adjustment of metric definitions, thresholds, verdict
+      labels, or kill criteria after results are visible.
+    action: VOID_RESULT_REWRITE_PRE_REG  # versioned, not silent edit
+
+# ---------------------------------------------------------------------------
+# Forbidden actions (LOCKED)
+# ---------------------------------------------------------------------------
+forbidden:
+  - Tuning RHO_REJECT_THRESHOLD or SUBSET_REJECT_THRESHOLD based on results
+  - Deploying any candidate based on results (including VWAP O30)
+  - Extending the experiment to non-PASS_CHORDIA candidates
+  - Running the experiment on OOS data
+  - Pooling across pairs to inflate N (pooled-finding rule per feedback_pooled_t_verdict_role_disambiguation.md)
+  - Treating REJECT_NULL_ESCALATE as authorization to write allocator code
+  - Adding additional metrics post-hoc to "save" a CONFIRM_NULL result
+  - Adding additional pairs post-hoc to "save" an INCONCLUSIVE_UNDERPOWERED result
+  - Citing the result MD as evidence in any deployment decision until a separate downstream pre-reg is authored that consumes it as input
+
+# ---------------------------------------------------------------------------
+# Upstream discovery provenance
+# ---------------------------------------------------------------------------
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  source_diagnostic:
+    artifact: docs/runtime/rotation_decision_MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30_2026-05-21.md
+    framing: |
+      Single-candidate operator decision sheet. Cited as the n=1 OBSERVATION
+      that motivated the population-level specification audit. NOT part of
+      this experiment's K-budget. The n=1 observation does NOT enter the
+      H1/H2/H3 statistical accounting; it is excluded from the test
+      sample's verdict-driving aggregation to prevent selection bias on
+      its already-known outcome.
+  related_doctrine:
+    - feedback_high_r_inventory_comes_from_chordia_not_raw_expr.md
+    - feedback_max_profit_grow_chordia_inventory_not_force_slots.md
+    - feedback_canonical_inline_copy_parity_bug_class.md
+    - feedback_meta_tooling_n1_tunnel_2026_05_01.md
+    - feedback_n3_same_class_doctrine_threshold.md
+
+# ---------------------------------------------------------------------------
+# Acceptance for the EXPERIMENT (not the result)
+# ---------------------------------------------------------------------------
+experiment_acceptance:
+  pre_run:
+    - Pre-reg YAML committed to docs/audit/hypotheses/ on this slug.
+    - K_budget recorded above (K_global=8, K_per_pair=1).
+    - All theory_citation files exist in docs/institutional/literature/.
+    - Verdict labels and kill criteria are immutable post-commit.
+  during_run:
+    - Runner imports only canonical surfaces enumerated in data_scope.
+    - Runner refuses to write any DB table or any file under
+      lane_allocation.json, chordia_audit_log.yaml, validated_setups, or
+      live_config paths.
+    - Runner emits a single result MD at docs/audit/results/<slug>.md.
+  post_run:
+    - Result MD enumerates all 8 pairs with per-pair raw metrics.
+    - Result MD cites verdict label drawn ONLY from verdict_labels above.
+    - Result MD does NOT contain deployment recommendations.
+    - Adversarial audit by independent context required before any
+      downstream pre-reg cites this result.
+
+# ---------------------------------------------------------------------------
+# Self-review checklist (per docs/prompts/prereg-writer-prompt.md § FORBIDDEN)
+# ---------------------------------------------------------------------------
+self_review:
+  testing_mode_declared: true
+  pathway_set: true
+  theory_citation_per_hypothesis: true
+  upstream_K_separated_from_test_K: true
+  kill_criteria_numeric: true  # K1-K6 all numeric/binary, no "reconsider"
+  no_to_fill_other_than_sha: true
+  k_effective_accounting: |
+    None of the 8 pairs has a prior pass on this specific (specification
+    audit) test. K_effective = K_prior + K_declared = 0 + 8 = 8.
+  pooled_t_verdict_role_locked: |
+    pooled_t_role=DESCRIPTIVE_ONLY. The Spearman rs in H3 is a
+    population-level statistic but its verdict role is to gate the entire
+    experiment as INCONCLUSIVE_TAUTOLOGY, not to drive a per-pair
+    deployment decision.
+  clustered_se_required: false  # justified above
+  oos_size_at_design_time: |
+    N/A — OOS is FORBIDDEN_IN_THIS_EXPERIMENT.
+  holm_vs_bh_choice: |
+    BH-FDR. Capital-protection rationale is INVERTED for this experiment
+    — a false positive here means we ESCALATE to design, which costs
+    research time but does NOT touch capital. BH is appropriate for the
+    screening framing.
+
+# ---------------------------------------------------------------------------
+# Implementation pre-reg (deferred — DO NOT BUILD YET)
+# ---------------------------------------------------------------------------
+implementation_authorization:
+  status: NOT_YET_AUTHORIZED
+  prerequisites_to_authorize_implementation_pre_reg:
+    - This pre-reg committed at a real SHA.
+    - Operator confirms scope.
+    - Implementation pre-reg authored as a SEPARATE yaml under a different
+      slug, with its own scope_lock and acceptance criteria.
+  implementation_pre_reg_does_NOT_modify:
+    - trading_app/lane_correlation.py
+    - trading_app/lane_allocator.py
+    - trading_app/prop_profiles.py
+    - docs/runtime/lane_allocation.json
+    - docs/runtime/chordia_audit_log.yaml
+    - Any threshold constant anywhere in the codebase
