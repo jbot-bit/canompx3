@@ -1128,9 +1128,7 @@ def _normalize_lane_alloc_path(path: Path) -> Path:
 
 
 def _legacy_lane_allocation_path() -> Path:
-    return _normalize_lane_alloc_path(
-        Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
-    )
+    return _normalize_lane_alloc_path(Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json")
 
 
 class AllocationRead(NamedTuple):
@@ -1147,9 +1145,7 @@ class AllocationRead(NamedTuple):
 
 
 def _new_lane_allocation_dir() -> Path:
-    return _normalize_lane_alloc_path(
-        Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation"
-    )
+    return _normalize_lane_alloc_path(Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation")
 
 
 def legacy_lane_allocation_path() -> Path:

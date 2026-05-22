@@ -95,16 +95,16 @@ def read_trial_corrections(corrections_path: Path | None) -> list[dict[str, Any]
     if not isinstance(data, dict):
         raise ValueError(f"fast_lane_trial_ledger: {corrections_path} top-level must be a dict")
     if data.get("do_not_hand_edit") is not True:
-        raise ValueError(f"fast_lane_trial_ledger: {corrections_path} correction banner missing `do_not_hand_edit: true`")
+        raise ValueError(
+            f"fast_lane_trial_ledger: {corrections_path} correction banner missing `do_not_hand_edit: true`"
+        )
     if data.get("schema_version") != TRIAL_CORRECTIONS_SCHEMA_VERSION:
         raise ValueError(
             f"fast_lane_trial_ledger: {corrections_path} correction schema_version "
             f"{data.get('schema_version')!r} != expected {TRIAL_CORRECTIONS_SCHEMA_VERSION}"
         )
     if data.get("correction_not_deletion") is not True:
-        raise ValueError(
-            f"fast_lane_trial_ledger: {corrections_path} must declare `correction_not_deletion: true`"
-        )
+        raise ValueError(f"fast_lane_trial_ledger: {corrections_path} must declare `correction_not_deletion: true`")
     corrections = data.get("corrections", [])
     if not isinstance(corrections, list):
         raise ValueError(f"fast_lane_trial_ledger: {corrections_path} `corrections` must be a list")
@@ -113,18 +113,12 @@ def read_trial_corrections(corrections_path: Path | None) -> list[dict[str, Any]
     seen_ids: set[str] = set()
     for idx, correction in enumerate(corrections):
         if not isinstance(correction, dict):
-            raise ValueError(
-                f"fast_lane_trial_ledger: correction[{idx}] in {corrections_path} must be a dict"
-            )
+            raise ValueError(f"fast_lane_trial_ledger: correction[{idx}] in {corrections_path} must be a dict")
         correction_id = correction.get("correction_id")
         if not isinstance(correction_id, str) or not correction_id.strip():
-            raise ValueError(
-                f"fast_lane_trial_ledger: correction[{idx}] missing non-empty correction_id"
-            )
+            raise ValueError(f"fast_lane_trial_ledger: correction[{idx}] missing non-empty correction_id")
         if correction_id in seen_ids:
-            raise ValueError(
-                f"fast_lane_trial_ledger: duplicate correction_id {correction_id!r} in {corrections_path}"
-            )
+            raise ValueError(f"fast_lane_trial_ledger: duplicate correction_id {correction_id!r} in {corrections_path}")
         seen_ids.add(correction_id)
 
         action = correction.get("action")
@@ -135,14 +129,10 @@ def read_trial_corrections(corrections_path: Path | None) -> list[dict[str, Any]
             )
         reason = correction.get("reason")
         if not isinstance(reason, str) or not reason.strip():
-            raise ValueError(
-                f"fast_lane_trial_ledger: correction[{idx}] missing non-empty reason"
-            )
+            raise ValueError(f"fast_lane_trial_ledger: correction[{idx}] missing non-empty reason")
         selector = correction.get("selector")
         if not isinstance(selector, dict):
-            raise ValueError(
-                f"fast_lane_trial_ledger: correction[{idx}] selector must be a dict"
-            )
+            raise ValueError(f"fast_lane_trial_ledger: correction[{idx}] selector must be a dict")
         run_id_prefix = selector.get("run_id_prefix")
         if not isinstance(run_id_prefix, str) or not run_id_prefix:
             raise ValueError(
@@ -449,11 +439,7 @@ def _trial_identity_payload(row: dict[str, Any]) -> dict[str, Any]:
     same prereg/result/data on a different clock tick must not create a second
     K-lineage event.
     """
-    return {
-        key: value
-        for key, value in row.items()
-        if key not in {"run_id", "run_timestamp_utc"}
-    }
+    return {key: value for key, value in row.items() if key not in {"run_id", "run_timestamp_utc"}}
 
 
 def _dump_ledger_yaml(data: dict[str, Any]) -> str:

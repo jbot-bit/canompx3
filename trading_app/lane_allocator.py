@@ -85,6 +85,7 @@ def lane_allocation_profile_path(
     directory = Path(base_dir) if base_dir else DEFAULT_LANE_ALLOCATION_DIR
     return normalize_writable_path(directory / f"{profile_id}.json")
 
+
 # ---------------------------------------------------------------------------
 # Literature-grounded constants (do NOT tune on backtest — see spec §Parameter Source)
 # ---------------------------------------------------------------------------

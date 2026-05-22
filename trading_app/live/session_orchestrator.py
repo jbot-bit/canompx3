@@ -462,9 +462,7 @@ class SessionOrchestrator:
                         f"FAIL-CLOSED: allocation file profile_id mismatch — "
                         f"{legacy_path} has profile_id={found_pid!r}, account expects {profile_id!r}"
                     )
-                raise RuntimeError(
-                    f"FAIL-CLOSED: profile account requires allocation file at {legacy_path}"
-                )
+                raise RuntimeError(f"FAIL-CLOSED: profile account requires allocation file at {legacy_path}")
             self._regime_paused: set[str] = set(load_paused_strategy_ids(profile_id=profile_id))
         else:
             # paper/signal accounts: fail-open. Read the legacy path with no

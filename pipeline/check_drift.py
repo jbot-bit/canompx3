@@ -9653,10 +9653,7 @@ def check_lane_allocation_per_profile_legacy_parity() -> list[str]:
     except json.JSONDecodeError as exc:
         return [f"  BAD legacy lane_allocation.json (parse): {exc}"]
     if not isinstance(legacy_data, dict):
-        return [
-            f"  legacy lane_allocation.json: root must be object, got "
-            f"{type(legacy_data).__name__}"
-        ]
+        return [f"  legacy lane_allocation.json: root must be object, got {type(legacy_data).__name__}"]
     legacy_profile_id = legacy_data.get("profile_id")
 
     violations: list[str] = []
@@ -9689,11 +9686,13 @@ def check_lane_allocation_per_profile_legacy_parity() -> list[str]:
 
 # Allowlists for check_no_direct_lane_allocation_json_literals.
 # Module-level so tests can introspect / mutate via monkeypatch.
-_LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST: frozenset[Path] = frozenset({
-    Path("trading_app/prop_profiles.py"),
-    Path("trading_app/lane_allocator.py"),
-    Path("scripts/tools/rebalance_lanes.py"),
-})
+_LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST: frozenset[Path] = frozenset(
+    {
+        Path("trading_app/prop_profiles.py"),
+        Path("trading_app/lane_allocator.py"),
+        Path("scripts/tools/rebalance_lanes.py"),
+    }
+)
 
 # Shrinks monotonically across Stage 1b-ii / 1b-iii. Removing an entry is the
 # "reader migrated" signal. When this set is empty, Stage 1b's grep-gate axis
@@ -9750,10 +9749,7 @@ def check_no_direct_lane_allocation_json_literals() -> list[str]:
     @canonical-source: docs/specs/lane_allocation_schema.md § 4, § 5a
     """
     needle = "lane_allocation.json"
-    allowed = (
-        _LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST
-        | _LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST
-    )
+    allowed = _LANE_ALLOC_LITERAL_PERMANENT_ALLOWLIST | _LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST
     scan_roots = (
         PROJECT_ROOT / "trading_app",
         PROJECT_ROOT / "scripts" / "tools",

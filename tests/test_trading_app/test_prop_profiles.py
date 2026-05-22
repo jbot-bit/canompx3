@@ -895,7 +895,9 @@ class TestMultiProfileLoaderFallback:
         new_path = new_dir / "p1.json"
 
         new_payload = self._build_alloc_payload("p1", strategy_id="NEW_SID_MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER")
-        legacy_payload = self._build_alloc_payload("p1", strategy_id="LEGACY_SID_MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER")
+        legacy_payload = self._build_alloc_payload(
+            "p1", strategy_id="LEGACY_SID_MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER"
+        )
         new_path.write_text(json.dumps(new_payload))
         legacy_path.write_text(json.dumps(legacy_payload))
 

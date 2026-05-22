@@ -99,9 +99,7 @@ class TestNoDirectLaneAllocationJsonLiterals:
         _write_py(
             tmp_path,
             "trading_app/new_reader.py",
-            "# heading\n"
-            "import json\n"
-            'PATH = "docs/runtime/lane_allocation.json"\n',
+            '# heading\nimport json\nPATH = "docs/runtime/lane_allocation.json"\n',
         )
         _patch_root(monkeypatch, tmp_path)
         violations = check_no_direct_lane_allocation_json_literals()
@@ -177,8 +175,7 @@ class TestNoDirectLaneAllocationJsonLiterals:
         _write_py(
             tmp_path,
             "trading_app/commented.py",
-            "# this references lane_allocation.json in a comment\n"
-            "x = 1\n",
+            "# this references lane_allocation.json in a comment\nx = 1\n",
         )
         _patch_root(monkeypatch, tmp_path)
         violations = check_no_direct_lane_allocation_json_literals()
@@ -202,8 +199,7 @@ class TestNoDirectLaneAllocationJsonLiterals:
         _write_py(
             tmp_path,
             "scripts/tools/test_only_synthetic_reader.py",
-            "# migrated to resolver\n"
-            "from trading_app.prop_profiles import resolve_allocation_json\n",
+            "# migrated to resolver\nfrom trading_app.prop_profiles import resolve_allocation_json\n",
         )
         _patch_root(monkeypatch, tmp_path)
         monkeypatch.setattr(
@@ -217,9 +213,7 @@ class TestNoDirectLaneAllocationJsonLiterals:
         assert "scripts/tools/test_only_synthetic_reader.py" in violations[0]
         assert "shrink monotonically" in violations[0]
 
-    def test_dead_temporary_allowlist_entry_skipped_when_file_absent(
-        self, tmp_path, monkeypatch
-    ):
+    def test_dead_temporary_allowlist_entry_skipped_when_file_absent(self, tmp_path, monkeypatch):
         """If a temporary-allowlist file does not exist in the tree, do NOT
         flag it as dead. The deletion-of-the-actual-file commit will catch
         it via other surface (test removal, import errors, etc.).
@@ -230,9 +224,7 @@ class TestNoDirectLaneAllocationJsonLiterals:
         # No files written — all temporary-allowlist entries are absent.
         assert check_no_direct_lane_allocation_json_literals() == []
 
-    def test_mutation_probe_removing_allowlist_entry_surfaces_site(
-        self, tmp_path, monkeypatch
-    ):
+    def test_mutation_probe_removing_allowlist_entry_surfaces_site(self, tmp_path, monkeypatch):
         """Mutation-probe per feedback_injection_test_catches_float_repr_class_bug.md:
         temporarily shrink the allowlist and confirm a previously-allowed site
         now violates. This verifies the allowlist is actually consulted
@@ -254,14 +246,10 @@ class TestNoDirectLaneAllocationJsonLiterals:
         )
         _patch_root(monkeypatch, tmp_path)
 
-        monkeypatch.setattr(
-            check_drift, "_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST", frozenset({synthetic})
-        )
+        monkeypatch.setattr(check_drift, "_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST", frozenset({synthetic}))
         assert check_no_direct_lane_allocation_json_literals() == []
 
-        monkeypatch.setattr(
-            check_drift, "_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST", frozenset()
-        )
+        monkeypatch.setattr(check_drift, "_LANE_ALLOC_LITERAL_TEMPORARY_ALLOWLIST", frozenset())
         violations = check_no_direct_lane_allocation_json_literals()
         assert len(violations) == 1
         assert "scripts/tools/test_only_synthetic_reader.py:1" in violations[0]

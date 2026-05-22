@@ -328,11 +328,7 @@ def build_opportunity_snapshot(
     resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
     effective_day = trading_day or date.today()
     lane_defs = [_as_lane_dict(lane) for lane in get_profile_lane_definitions(resolved_profile_id)]
-    allocation = (
-        allocation_payload
-        if allocation_payload is not None
-        else _load_allocation_payload(resolved_profile_id)
-    )
+    allocation = allocation_payload if allocation_payload is not None else _load_allocation_payload(resolved_profile_id)
     allocated_by_id = _index_by_strategy(allocation.get("lanes", []))
     paused_by_id = _index_by_strategy(allocation.get("paused", []))
 

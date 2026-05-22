@@ -60,9 +60,7 @@ def _load_allocation(profile_id: str | None = None) -> dict:
     if profile_id:
         result = resolve_allocation_json(profile_id)
         if result.data is None:
-            raise FileNotFoundError(
-                f"Allocation file missing or profile_id mismatch for {profile_id!r}"
-            )
+            raise FileNotFoundError(f"Allocation file missing or profile_id mismatch for {profile_id!r}")
         return result.data
     legacy_path = legacy_lane_allocation_path()
     if not legacy_path.exists():
