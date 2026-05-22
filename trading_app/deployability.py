@@ -21,7 +21,7 @@ from pipeline.data_era import is_micro
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.chordia import chordia_verdict_allows_deploy, chordia_verdict_label
-from trading_app.config import ALL_FILTERS, is_e2_deployment_unsafe_filter
+from trading_app.config import ALL_FILTERS, CORE_MIN_SAMPLES, MIN_WFE, REGIME_MIN_SAMPLES, is_e2_deployment_unsafe_filter
 from trading_app.lifecycle_state import read_lifecycle_state
 from trading_app.opportunity_awareness import describe_opportunity_awareness
 from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
@@ -296,11 +296,11 @@ def _singleton_clears_binding_criteria(
 
     # C6 WFE >= 0.50
     wfe = row.get("wfe")
-    if wfe is None or float(wfe) < 0.50:
+    if wfe is None or float(wfe) < MIN_WFE:
         failed.append("C6_WFE")
 
     # C7 N >= 100
-    if n is None or int(n) < 100:
+    if n is None or int(n) < CORE_MIN_SAMPLES:
         failed.append("C7_N")
 
     # C9 era stability — era_dependent should be False
@@ -626,9 +626,9 @@ def _trade_context(row: dict[str, Any]) -> dict[str, Any]:
     sample_size = row.get("sample_size")
     if sample_size is None:
         sample_class = "UNKNOWN"
-    elif int(sample_size) < 30:
+    elif int(sample_size) < REGIME_MIN_SAMPLES:
         sample_class = "INVALID"
-    elif int(sample_size) < 100:
+    elif int(sample_size) < CORE_MIN_SAMPLES:
         sample_class = "REGIME_CONDITIONAL_ONLY"
     elif int(sample_size) < 200:
         sample_class = "PRELIMINARY"
@@ -842,12 +842,12 @@ def _classify_strategy(
 
     if row.get("wfe") is None:
         issues.append(_issue("wfe_missing", "warning", None))
-    elif float(row["wfe"]) < 0.50:
+    elif float(row["wfe"]) < MIN_WFE:
         issues.append(_issue("wfe_below_threshold", "hard", row["wfe"]))
     elif float(row["wfe"]) > 2.0:
         issues.append(_issue("wfe_over_amplified", "warning", row["wfe"]))
 
-    if row.get("sample_size") is None or int(row["sample_size"]) < 100:
+    if row.get("sample_size") is None or int(row["sample_size"]) < CORE_MIN_SAMPLES:
         issues.append(_issue("sample_size_below_deploy_threshold", "hard", row.get("sample_size")))
 
     if row.get("years_tested") is not None and float(row["years_tested"]) < 7:
@@ -955,7 +955,7 @@ def _build_instrument_summary(strategy_reports: list[StrategyDeployability]) -> 
             "sample_size_below_100": sum(
                 1
                 for report in reports
-                if report.metrics.get("sample_size") is None or int(report.metrics["sample_size"]) < 100
+                if report.metrics.get("sample_size") is None or int(report.metrics["sample_size"]) < CORE_MIN_SAMPLES
             ),
             "current_k_fdr_fail": sum(1 for row in current_fdr if row.get("current_pass") is False),
             "current_k_fdr_missing": sum(1 for row in current_fdr if row.get("current_pass") is None),
