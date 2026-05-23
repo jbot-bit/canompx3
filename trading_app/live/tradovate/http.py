@@ -11,7 +11,9 @@ import logging
 import requests
 
 from ..http_client import (
+    ORDER_POLICY,
     READ_POLICY,
+    RetryPolicy,
     BrokerHTTPClient,
     BrokerRateLimitExhausted,
 )
@@ -31,12 +33,16 @@ def request_with_retry(
     json_body: dict | None = None,
     timeout: float = 10,
     failure_hook: object | None = None,
+    policy: RetryPolicy = READ_POLICY,
 ) -> requests.Response:
     """HTTP request with classified retry. Compatibility wrapper.
 
-    Internally delegates to a per-call BrokerHTTPClient configured with
-    READ_POLICY. Callers should migrate to BrokerHTTPClient directly for
-    new code paths.
+    Internally delegates to a per-call BrokerHTTPClient configured with the
+    given ``policy`` (default READ_POLICY for backwards-compat).
+
+    Order-mutating callers (submit, cancel) must pass ORDER_POLICY explicitly
+    to cap retries at 4 attempts / 10 s and avoid duplicate-order risk on
+    transient failures. See PR301-TRADO-IDEMPOTENCY (ralph iter 205).
 
     ``failure_hook`` (Stage 4): orchestrator-wired CircuitBreaker. When the
     caller has access to ``auth.failure_hook`` (set by SessionOrchestrator),
@@ -53,7 +59,7 @@ def request_with_retry(
         headers=headers,
         json=json_body,
         timeout=timeout,
-        policy=READ_POLICY,
+        policy=policy,
     )
     # request() no longer records success at the HTTP layer (deferred to parse).
     # Raw callers like this shim must record success themselves; the caller's

@@ -8,10 +8,11 @@ isAutomated: MUST be true for all bot-placed orders (Tradovate requirement).
 
 import logging
 import time
+import uuid
 from typing import TYPE_CHECKING
 
 from ..broker_base import BrokerAuth, BrokerRouter
-from .http import request_with_retry
+from .http import ORDER_POLICY, request_with_retry
 
 if TYPE_CHECKING:
     from .auth import TradovateAuth
@@ -88,6 +89,13 @@ class TradovateOrderRouter(BrokerRouter):
         else:
             raise ValueError(f"Entry model '{entry_model}' not supported live. Use E1 or E2.")
 
+        # Idempotency key — clOrdId is Tradovate's client-assigned order ID
+        # (string <= 64 chars per API spec). UUID4 is 36 chars; unique-per-submit.
+        # Prevents duplicate orders if request_with_retry re-sends on transient
+        # failure. Broker deduplicates on clOrdId within a session.
+        # PR301-TRADO-IDEMPOTENCY (ralph iter 205).
+        base["clOrdId"] = str(uuid.uuid4())
+
         # Attach broker-agnostic intent for cross-broker routing
         base["_intent"] = {
             "direction": direction,
@@ -121,7 +129,8 @@ class TradovateOrderRouter(BrokerRouter):
         # Strip internal routing fields before sending to Tradovate API
         wire_spec = {k: v for k, v in spec.items() if not k.startswith("_")}
 
-        log.info("TRADOVATE ORDER SUBMIT: %s", _json.dumps(wire_spec, default=str))
+        cl_ord_id = wire_spec.get("clOrdId", "<none>")
+        log.info("TRADOVATE ORDER SUBMIT (cid=%s): %s", cl_ord_id, _json.dumps(wire_spec, default=str))
 
         # Use placeOSO if bracket fields present, otherwise placeorder
         has_bracket = "bracket1" in wire_spec or "bracket2" in wire_spec
@@ -134,6 +143,7 @@ class TradovateOrderRouter(BrokerRouter):
             self.auth.headers(),
             json_body=wire_spec,
             failure_hook=getattr(self.auth, "failure_hook", None),
+            policy=ORDER_POLICY,
         )
         elapsed_ms = (time.monotonic() - t0) * 1000
         resp.raise_for_status()

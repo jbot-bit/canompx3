@@ -329,6 +329,46 @@ class TestTradovateOrderRouter:
         with pytest.raises(RuntimeError, match="missing base_url"):
             router._url("/test")
 
+    # --- PR301-TRADO-IDEMPOTENCY (ralph iter 205) ----------------------------
+
+    def test_build_order_spec_has_cl_ord_id(self, router):
+        """build_order_spec must include a clOrdId UUID4 for broker-side dedup."""
+        import uuid as _uuid
+
+        spec = router.build_order_spec("long", "E2", 100.50, "MNQM6")
+        assert "clOrdId" in spec, "clOrdId must be present in build_order_spec output"
+        # Must be a valid UUID4 and <= 64 chars (Tradovate API limit)
+        parsed = _uuid.UUID(spec["clOrdId"], version=4)
+        assert str(parsed) == spec["clOrdId"], "clOrdId must be a canonical UUID4 string"
+        assert len(spec["clOrdId"]) <= 64
+
+    def test_build_order_spec_cl_ord_ids_are_unique(self, router):
+        """Each call to build_order_spec must generate a distinct clOrdId."""
+        spec1 = router.build_order_spec("long", "E1", 0, "MNQM6")
+        spec2 = router.build_order_spec("long", "E1", 0, "MNQM6")
+        assert spec1["clOrdId"] != spec2["clOrdId"], "clOrdId must be unique per build_order_spec call"
+
+    @patch("trading_app.live.tradovate.order_router.request_with_retry")
+    def test_submit_uses_order_policy(self, mock_req, router):
+        """submit() must pass ORDER_POLICY to request_with_retry (PR301-TRADO-IDEMPOTENCY)."""
+        from trading_app.live.tradovate.http import ORDER_POLICY
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"orderId": 99}
+        mock_req.return_value = mock_resp
+
+        spec = router.build_order_spec("long", "E1", 0, "MNQM6")
+        router.submit(spec)
+
+        call_kwargs = mock_req.call_args
+        passed_policy = call_kwargs.kwargs.get("policy") or (
+            call_kwargs[1].get("policy") if len(call_kwargs) > 1 else None
+        )
+        assert passed_policy is ORDER_POLICY, (
+            f"submit() must use ORDER_POLICY to limit retry count; got {passed_policy!r}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # TradovateContracts

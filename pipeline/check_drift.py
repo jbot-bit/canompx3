@@ -11986,6 +11986,99 @@ def check_stage_closed_review_nudge_capital_paths_parity() -> list[str]:
     return violations
 
 
+def check_worktree_guard_lease_path_parity() -> list[str]:
+    """Lease/lock-path parity between the worktree-guard CLI and PreToolUse hook.
+
+    The hook (``.claude/hooks/worktree_guard.py``) delegates all path
+    resolution and acquire/release/status semantics to the canonical CLI
+    module (``scripts/tools/worktree_guard.py``) via importlib. Inlining a
+    second copy of the lease/lock filename, staleness threshold, or path
+    resolution logic into the hook would silently desync the two layers
+    (institutional-rigor section 4 - no inline copies).
+
+    This check loads both modules and asserts:
+      1. Canonical exposes LOCK_FILENAME, LEASE_FILENAME, STALE_HEARTBEAT_SECONDS.
+      2. Hook does NOT redefine those module-level names.
+      3. Hook's CANONICAL_MODULE path resolves to the actual CLI file.
+
+    Same registry decision as the judgment-review parity checks: the hook
+    imports rather than duplicates, so this is structural parity, not
+    literal-byte parity - kept outside CANONICAL_INLINE_COPIES.
+    """
+    import importlib.util as _ilu
+
+    canonical_path = PROJECT_ROOT / "scripts" / "tools" / "worktree_guard.py"
+    hook_path = PROJECT_ROOT / ".claude" / "hooks" / "worktree_guard.py"
+
+    violations: list[str] = []
+
+    def _load(path: Path, alias: str):
+        if not path.exists():
+            violations.append(
+                f"check_worktree_guard_lease_path_parity: missing module at {path}"
+            )
+            return None
+        try:
+            spec = _ilu.spec_from_file_location(alias, str(path))
+            if spec is None or spec.loader is None:
+                violations.append(
+                    f"check_worktree_guard_lease_path_parity: "
+                    f"could not build importlib spec for {path}"
+                )
+                return None
+            module = _ilu.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+        except Exception as exc:
+            violations.append(
+                f"check_worktree_guard_lease_path_parity: "
+                f"failed to load {path}: {type(exc).__name__}: {exc}"
+            )
+            return None
+
+    canonical = _load(canonical_path, "worktree_guard_canonical_drift_probe")
+    hook = _load(hook_path, "worktree_guard_hook_drift_probe")
+    if canonical is None or hook is None:
+        return violations
+
+    # 1. Canonical attributes present
+    for attr in ("LOCK_FILENAME", "LEASE_FILENAME", "STALE_HEARTBEAT_SECONDS"):
+        if not hasattr(canonical, attr):
+            violations.append(
+                f"check_worktree_guard_lease_path_parity: "
+                f"canonical scripts/tools/worktree_guard.py missing required "
+                f"attribute {attr!r} - update or restore."
+            )
+
+    # 2. Hook does NOT redefine those names locally
+    for attr in ("LOCK_FILENAME", "LEASE_FILENAME", "STALE_HEARTBEAT_SECONDS"):
+        if hasattr(hook, attr):
+            violations.append(
+                f"check_worktree_guard_lease_path_parity: "
+                f"hook .claude/hooks/worktree_guard.py defines {attr!r} locally - "
+                "inline copy forbidden. Delegate via importlib to "
+                "scripts/tools/worktree_guard.py [[canonical-source-delegation]] "
+                "(institutional-rigor.md section 4)."
+            )
+
+    # 3. Hook's CANONICAL_MODULE attribute resolves to the actual CLI file
+    hook_canonical_attr = getattr(hook, "CANONICAL_MODULE", None)
+    if hook_canonical_attr is None:
+        violations.append(
+            "check_worktree_guard_lease_path_parity: "
+            "hook .claude/hooks/worktree_guard.py does not expose "
+            "CANONICAL_MODULE - canonical-source delegation invisible."
+        )
+    elif Path(hook_canonical_attr).resolve() != canonical_path.resolve():
+        violations.append(
+            "check_worktree_guard_lease_path_parity: "
+            f"hook CANONICAL_MODULE points at {hook_canonical_attr!r} but "
+            f"canonical is at {canonical_path!r}."
+        )
+
+    return violations
+
+
 def check_triage_provenance_completeness(
     drafts_dir: Path | None = None,
 ) -> list[str]:
@@ -14343,6 +14436,12 @@ CHECKS = [
         "Stage-closed code-review nudge: _CAPITAL_PATH_PREFIXES parity (nudge<->close-nudge canonical-source delegation)",
         check_stage_closed_review_nudge_capital_paths_parity,
         False,  # blocking -- capital-class forcing function depends on canonical-source delegation
+        False,
+    ),
+    (
+        "Worktree-guard: lease/lock path parity (CLI<->hook canonical-source delegation)",
+        check_worktree_guard_lease_path_parity,
+        False,  # blocking -- inline copy of lease path in the hook silently desyncs concurrency guard
         False,
     ),
     (
