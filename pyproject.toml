@@ -74,6 +74,13 @@ norecursedirs = ["local_db", ".venv", "DB", "*.egg-info"]
 # Reference: https://pypi.org/project/pytest-timeout/
 timeout = 120
 timeout_method = "thread"
+# Only time test-function execution, NOT setup/teardown/inter-module transitions.
+# Without this, pytest-timeout 2.4.0's watchdog can fire during pytest 9.0.2's
+# capture-manager teardown gap and crash on `_pytest/capture.py:802: assert
+# self._global_capturing is not None`. Observed on GH-hosted Windows runners
+# after test_session_start_mutex module completed cleanly (6 passed, then
+# KeyboardInterrupt from the timer thread). Ref: https://pypi.org/project/pytest-timeout/#timeout-func-only
+timeout_func_only = true
 
 [dependency-groups]
 dev = [
