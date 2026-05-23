@@ -1,8 +1,11 @@
-## Iteration: 199
-## Target: trading_app/lane_allocator.py:1136-1139
-## Finding: Hysteresis block silently drops a deployable lane when best_prior was demoted by an upstream gate (status not in DEPLOY/RESUME/PROVISIONAL) — neither the new candidate nor the prior lane gets selected.
+## Iteration: 204
+## Target: trading_app/live/bot_state.py:135-149 (write_live_health)
+## Finding: write_live_health uses json.dumps(default=str) without _sanitize_for_state, inconsistent with write_state's strict contamination guard
 ## Classification: [judgment]
-## Blast Radius: 1 production file, 1 test file
-## Invariants: [gates apply before ranking; hysteresis never rescues a demoted prior; slot count must not silently decrease]
-## Diff estimate: 6 lines production + 25 lines test
-## Doctrine cited: integrity-guardian.md § 6 (no silent failures — silent slot drop in capital-class path)
+## Blast Radius: 1 production file (bot_state.py), 1 test file (test_bot_state_strict_types.py), test_bot_dashboard.py verified to still pass
+## Invariants:
+##   1. write_live_health must remain fail-open for disk errors (operator surface only)
+##   2. Existing round-trip tests (test_bot_dashboard.py) must still pass
+##   3. snapshot_ts_utc added BEFORE sanitization must be included
+## Diff estimate: 8 lines
+## Doctrine cited: integrity-guardian.md § 3 (Fail-Closed), § 6 (No silent failures); ALERT-CONTAM-N2 class pattern (n=2 canonical fix applied to sibling function)

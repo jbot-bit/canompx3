@@ -13487,24 +13487,76 @@ def check_test_writes_to_production_runtime_paths(tests_root: Path | None = None
     if not root.is_dir():
         return []
 
+    # Files that legitimately reference the literals as part of the check's
+    # own machinery (injection-test mutation probes + conftest fixture
+    # docstring naming the redirected paths). Allow-listed by basename so
+    # the rule survives a path refactor.
+    allowlisted_basenames = frozenset(
+        {
+            "test_check_drift_alert_contam_n2.py",
+            "conftest.py",
+        }
+    )
+
     violations: list[str] = []
     for py_file in sorted(root.rglob("*.py")):
+        if py_file.name in allowlisted_basenames:
+            continue
         try:
             source = py_file.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        for literal in forbidden_literals:
-            if literal in source:
-                rel = py_file.relative_to(root) if py_file.is_relative_to(root) else py_file
-                violations.append(
-                    f"ALERT-CONTAM-N2: {rel} references canonical production "
-                    f"runtime path literal '{literal}'. Use the autouse "
-                    "_redirect_alerts_path fixture in "
-                    "tests/test_trading_app/conftest.py, or monkeypatch the "
-                    "canonical module attribute directly. See "
-                    "memory/feedback_n3_same_class_doctrine_threshold.md."
-                )
+
+        # Parse the file and exclude module / class / function docstrings
+        # (incident-history prose is permitted; live string literals are not).
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            # Fall back to whole-file scan — better to over-flag than miss.
+            for literal in forbidden_literals:
+                if literal in source:
+                    rel = py_file.relative_to(root) if py_file.is_relative_to(root) else py_file
+                    violations.append(
+                        f"ALERT-CONTAM-N2: {rel} references canonical production "
+                        f"runtime path literal '{literal}'. Use the autouse "
+                        "_redirect_alerts_path fixture in "
+                        "tests/test_trading_app/conftest.py, or monkeypatch the "
+                        "canonical module attribute directly. See "
+                        "memory/feedback_n3_same_class_doctrine_threshold.md."
+                    )
+                    break
+            continue
+
+        docstring_ids: set[int] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                body = getattr(node, "body", None)
+                if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+                    docstring_ids.add(id(body[0].value))
+
+        hit_literal: str | None = None
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
+                continue
+            if id(node) in docstring_ids:
+                continue
+            for literal in forbidden_literals:
+                if literal in node.value:
+                    hit_literal = literal
+                    break
+            if hit_literal is not None:
                 break
+
+        if hit_literal is not None:
+            rel = py_file.relative_to(root) if py_file.is_relative_to(root) else py_file
+            violations.append(
+                f"ALERT-CONTAM-N2: {rel} references canonical production "
+                f"runtime path literal '{hit_literal}'. Use the autouse "
+                "_redirect_alerts_path fixture in "
+                "tests/test_trading_app/conftest.py, or monkeypatch the "
+                "canonical module attribute directly. See "
+                "memory/feedback_n3_same_class_doctrine_threshold.md."
+            )
 
     return violations
 
