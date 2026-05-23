@@ -6,6 +6,17 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-23 - Slack control-room design)
+
+- **Tool:** Codex, detached fallback worktree `C:\Users\joshd\.codex\worktrees\0667\canompx3`.
+- **User request:** Decide whether Slack should become the canompx3 project control room with ChatGPT in Slack, Claude Code status hooks, and GitHub/CI updates; create a plan if it fits.
+- **Decision:** Adopt Slack as an observer/control-room layer, not as a source of truth. Canonical decisions remain in `docs/plans/`, `HANDOFF.md`, `docs/runtime/decision-ledger.md`, GitHub, code, DB, and generated runtime artifacts. Slack may announce/link/summarize only.
+- **Plan written:** `docs/plans/active/2026-05/2026-05-23-slack-control-room-design.md`.
+- **Audit/improvement pass:** Added explicit conflict handling, silence rules, ChatGPT summary-bias controls, scenario simulation matrix, stricter acceptance gates, and one-week rollback criteria.
+- **Official-doc/edge-case pass:** Added OpenAI/Claude/Slack/GitHub documentation constraints, explicit blast-radius table, edge-case simulations, plan-limit/access-scope caveats, webhook permanence/revocation risks, and proof that capital-class surfaces stay out of scope.
+- **Recommended rollout:** Phase 0 creates `#canompx3-control`, `#canompx3-claude-runs`, and `#canompx3-prs`; connects ChatGPT Slack app and GitHub Slack app; pins the non-authority/secrets rule. Phase 1 adds a local-only Claude `Notification`/`Stop` Slack notifier using env-only webhook config. Do not commit webhook URLs.
+- **No implementation yet:** No Slack webhook, `.claude/settings.json`, GitHub app, or ChatGPT app configuration was changed in this session.
+
 ## This Session (2026-05-23 — Codex WSL launcher dirty-clone hardening)
 
 - **Cleanup closeout (Codex, fallback `/mnt/...` session):** Finished the stale Codex checkout reconciliation. WSL-home clone `/home/joshd/canompx3` was clean but stale after fetch (`origin/main` already contained its earlier 19 local commits); it was fast-forwarded to `origin/main`, then the three committed fallback checkout changes were cherry-picked onto WSL-home as `9d93144b`, `3d4d7acf`, and `ee28e793`. Drift then exposed Check #182 failures from exact production runtime path literals in test docstrings/comments; fixed in `6054c3d8` (`[mechanical] fix tests: remove production runtime path literals`).
