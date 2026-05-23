@@ -371,6 +371,21 @@ class SessionOrchestrator:
         profile_id = None
         if portfolio is not None and portfolio.name.startswith("profile_"):
             profile_id = portfolio.name.removeprefix("profile_")
+
+        # A6-GAP2: detect predicate divergence early — both must agree on
+        # whether this is a profile-backed portfolio.  A mismatch means a
+        # portfolio was constructed with source="baseline" but named
+        # "profile_X", or vice-versa.  Either direction would silently
+        # skip fail-closed cap-load below.
+        _name_is_profile = portfolio is not None and portfolio.name.startswith("profile_")
+        if _is_profile != _name_is_profile:
+            _src = "profile" if _is_profile else "baseline"
+            _pname = portfolio.name if portfolio else None
+            raise RuntimeError(
+                f"Profile predicate mismatch: strategies[0].source={_src!r} "
+                f"but portfolio.name={_pname!r}. "
+                "Both must agree — check build_portfolio_from_profile caller."
+            )
         try:
             from trading_app.prop_profiles import get_lane_registry
 
