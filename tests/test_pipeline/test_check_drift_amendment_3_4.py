@@ -139,9 +139,7 @@ def test_pass_theory_grant_key_absent(tmp_path):
     hyp_dir = tmp_path / "hypotheses"
     hyp_dir.mkdir()
     # No theory_grant key at all (e.g. a template stub).
-    (hyp_dir / "2026-05-30-template-stub-v1.yaml").write_text(
-        "metadata:\n  name: stub\n", encoding="utf-8"
-    )
+    (hyp_dir / "2026-05-30-template-stub-v1.yaml").write_text("metadata:\n  name: stub\n", encoding="utf-8")
 
     violations = check_amendment_3_4_provisional_gate(hypotheses_dir=hyp_dir)
     assert not violations

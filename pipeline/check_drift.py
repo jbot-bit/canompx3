@@ -3545,17 +3545,13 @@ def check_amendment_3_4_provisional_gate(
     if _AMENDMENT_3_4_REAUDIT_CLOSED:
         return []
 
-    hyp_dir = hypotheses_dir if hypotheses_dir is not None else (
-        PROJECT_ROOT / "docs" / "audit" / "hypotheses"
-    )
+    hyp_dir = hypotheses_dir if hypotheses_dir is not None else (PROJECT_ROOT / "docs" / "audit" / "hypotheses")
     if not hyp_dir.exists():
         return []
 
     # Match a bare-key boolean: ``theory_grant: true`` / escape fields.
     # Tolerates surrounding whitespace and case-insensitive ``True`` / ``true``.
-    _RE_THEORY_GRANT_TRUE = re.compile(
-        r"^\s*theory_grant\s*:\s*true\s*(?:#.*)?$", re.IGNORECASE | re.MULTILINE
-    )
+    _RE_THEORY_GRANT_TRUE = re.compile(r"^\s*theory_grant\s*:\s*true\s*(?:#.*)?$", re.IGNORECASE | re.MULTILINE)
     _RE_ESCAPE_REAUDIT_CLOSED = re.compile(
         r"^\s*amendment_3_4_re_audit_closed\s*:\s*true\s*(?:#.*)?$",
         re.IGNORECASE | re.MULTILINE,
@@ -3573,10 +3569,7 @@ def check_amendment_3_4_provisional_gate(
         try:
             text = path.read_text(encoding="utf-8")
         except Exception as exc:
-            violations.append(
-                f"  {path.name}: failed to read prereg "
-                f"({type(exc).__name__}: {exc})"
-            )
+            violations.append(f"  {path.name}: failed to read prereg ({type(exc).__name__}: {exc})")
             continue
         if not _RE_THEORY_GRANT_TRUE.search(text):
             continue  # theory_grant=false or absent — out of gate scope
@@ -12006,25 +11999,19 @@ def check_worktree_guard_lease_path_parity() -> list[str]:
 
     def _load(path: Path, alias: str):
         if not path.exists():
-            violations.append(
-                f"check_worktree_guard_lease_path_parity: missing module at {path}"
-            )
+            violations.append(f"check_worktree_guard_lease_path_parity: missing module at {path}")
             return None
         try:
             spec = _ilu.spec_from_file_location(alias, str(path))
             if spec is None or spec.loader is None:
-                violations.append(
-                    f"check_worktree_guard_lease_path_parity: "
-                    f"could not build importlib spec for {path}"
-                )
+                violations.append(f"check_worktree_guard_lease_path_parity: could not build importlib spec for {path}")
                 return None
             module = _ilu.module_from_spec(spec)
             spec.loader.exec_module(module)
             return module
         except Exception as exc:
             violations.append(
-                f"check_worktree_guard_lease_path_parity: "
-                f"failed to load {path}: {type(exc).__name__}: {exc}"
+                f"check_worktree_guard_lease_path_parity: failed to load {path}: {type(exc).__name__}: {exc}"
             )
             return None
 
@@ -13616,7 +13603,12 @@ def check_test_writes_to_production_runtime_paths(tests_root: Path | None = None
         for node in ast.walk(tree):
             if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 body = getattr(node, "body", None)
-                if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+                if (
+                    body
+                    and isinstance(body[0], ast.Expr)
+                    and isinstance(body[0].value, ast.Constant)
+                    and isinstance(body[0].value.value, str)
+                ):
                     docstring_ids.add(id(body[0].value))
 
         hit_literal: str | None = None

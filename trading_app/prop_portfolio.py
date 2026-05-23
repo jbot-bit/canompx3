@@ -289,7 +289,9 @@ def _resolve_daily_lane(
         f = compute_fitness(snap["strategy_id"], db_path=db_path)
         fitness_status = f.fitness_status
     except (ValueError, duckdb.Error) as exc:
-        logger.warning("compute_fitness failed for %s — fitness_status=UNKNOWN (strategy held): %s", snap["strategy_id"], exc)
+        logger.warning(
+            "compute_fitness failed for %s — fitness_status=UNKNOWN (strategy held): %s", snap["strategy_id"], exc
+        )
     exp_dollars = None
     mrp = snap.get("median_risk_points")
     if snap["expectancy_r"] is not None and mrp is not None:

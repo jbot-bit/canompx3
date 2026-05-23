@@ -51,9 +51,7 @@ from pathlib import Path
 try:
     from filelock import BaseFileLock, FileLock, Timeout
 except ImportError as exc:  # pragma: no cover - guarded by drift check
-    raise SystemExit(
-        f"worktree_guard requires `filelock` (already a transitive dep): {exc}"
-    ) from exc
+    raise SystemExit(f"worktree_guard requires `filelock` (already a transitive dep): {exc}") from exc
 
 LOCK_FILENAME = ".claude.worktree.lock"
 LEASE_FILENAME = ".claude.worktree.lease.json"
@@ -72,9 +70,7 @@ EXIT_BLOCKED = 2
 EXIT_ERROR = 3
 
 
-def _build_payload_dict(
-    pid: int, worktree: str, iso_started: str, iso_heartbeat: str, branch: str
-) -> dict:
+def _build_payload_dict(pid: int, worktree: str, iso_started: str, iso_heartbeat: str, branch: str) -> dict:
     return {
         "pid": pid,
         "worktree": worktree,
@@ -210,9 +206,7 @@ def acquire(cwd: Path, pid: int | None = None) -> tuple[str, dict | None, str]:
     # the same PID still collides at the kernel level.
     existing = read_lease(cwd)
     already_held = str(lk) in _LIVE_LOCKS
-    if existing and existing.get("pid") == pid and existing.get("worktree") == str(
-        resolve_worktree_root(cwd) or cwd
-    ):
+    if existing and existing.get("pid") == pid and existing.get("worktree") == str(resolve_worktree_root(cwd) or cwd):
         existing["iso_heartbeat"] = _now_iso()
         try:
             _write_lease(ls, existing)
@@ -403,16 +397,11 @@ def _format_status_line(snap: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="worktree_guard",
-        description=(
-            "Per-worktree lease for concurrent-Claude-session detection. "
-            "Default: print status."
-        ),
+        description=("Per-worktree lease for concurrent-Claude-session detection. Default: print status."),
     )
     g = parser.add_mutually_exclusive_group()
     g.add_argument("--status", action="store_true", help="Print lease status (default)")
-    g.add_argument(
-        "--release", action="store_true", help="Release lease iff held by current PID"
-    )
+    g.add_argument("--release", action="store_true", help="Release lease iff held by current PID")
     g.add_argument(
         "--force-release",
         action="store_true",

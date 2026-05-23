@@ -42,9 +42,7 @@ def test_alerts_path_literal_fails(fake_tests_root: Path) -> None:
     """Mutation probe: literal operator_alerts.jsonl path in a test triggers the check."""
     bad = fake_tests_root / "test_bad_alerts.py"
     bad.write_text(
-        "from pathlib import Path\n"
-        "ALERTS = Path('data/runtime/operator_alerts.jsonl')\n"
-        "def test_something(): pass\n",
+        "from pathlib import Path\nALERTS = Path('data/runtime/operator_alerts.jsonl')\ndef test_something(): pass\n",
         encoding="utf-8",
     )
     violations = check_test_writes_to_production_runtime_paths(fake_tests_root)
@@ -58,8 +56,7 @@ def test_state_file_literal_fails(fake_tests_root: Path) -> None:
     """Mutation probe: literal data/bot_state.json path in a test triggers the check."""
     bad = fake_tests_root / "test_bad_state.py"
     bad.write_text(
-        "STATE = 'data/bot_state.json'\n"
-        "def test_something(): pass\n",
+        "STATE = 'data/bot_state.json'\ndef test_something(): pass\n",
         encoding="utf-8",
     )
     violations = check_test_writes_to_production_runtime_paths(fake_tests_root)
@@ -72,8 +69,7 @@ def test_live_health_literal_fails(fake_tests_root: Path) -> None:
     """Mutation probe: literal runtime/state/live_health.json path triggers the check."""
     bad = fake_tests_root / "test_bad_health.py"
     bad.write_text(
-        "HEALTH = 'runtime/state/live_health.json'\n"
-        "def test_something(): pass\n",
+        "HEALTH = 'runtime/state/live_health.json'\ndef test_something(): pass\n",
         encoding="utf-8",
     )
     violations = check_test_writes_to_production_runtime_paths(fake_tests_root)
@@ -84,12 +80,8 @@ def test_live_health_literal_fails(fake_tests_root: Path) -> None:
 
 def test_multiple_violations_reported(fake_tests_root: Path) -> None:
     """Multiple offending files each get one violation row."""
-    (fake_tests_root / "test_a.py").write_text(
-        "PATH = 'data/runtime/operator_alerts.jsonl'\n", encoding="utf-8"
-    )
-    (fake_tests_root / "test_b.py").write_text(
-        "PATH = 'data/bot_state.json'\n", encoding="utf-8"
-    )
+    (fake_tests_root / "test_a.py").write_text("PATH = 'data/runtime/operator_alerts.jsonl'\n", encoding="utf-8")
+    (fake_tests_root / "test_b.py").write_text("PATH = 'data/bot_state.json'\n", encoding="utf-8")
     violations = check_test_writes_to_production_runtime_paths(fake_tests_root)
     assert len(violations) == 2, violations
 
@@ -98,9 +90,7 @@ def test_only_one_violation_per_file(fake_tests_root: Path) -> None:
     """A file referencing multiple forbidden literals gets only one violation (break after first match)."""
     bad = fake_tests_root / "test_multi.py"
     bad.write_text(
-        "A = 'data/runtime/operator_alerts.jsonl'\n"
-        "B = 'data/bot_state.json'\n"
-        "C = 'runtime/state/live_health.json'\n",
+        "A = 'data/runtime/operator_alerts.jsonl'\nB = 'data/bot_state.json'\nC = 'runtime/state/live_health.json'\n",
         encoding="utf-8",
     )
     violations = check_test_writes_to_production_runtime_paths(fake_tests_root)
@@ -119,9 +109,7 @@ def test_nested_test_subdirectory_is_scanned(fake_tests_root: Path) -> None:
     subdir = fake_tests_root / "test_trading_app"
     subdir.mkdir()
     bad = subdir / "test_new_file.py"
-    bad.write_text(
-        "PATH = 'data/runtime/operator_alerts.jsonl'\n", encoding="utf-8"
-    )
+    bad.write_text("PATH = 'data/runtime/operator_alerts.jsonl'\n", encoding="utf-8")
     violations = check_test_writes_to_production_runtime_paths(fake_tests_root)
     assert len(violations) == 1, violations
     assert "test_new_file.py" in violations[0]
