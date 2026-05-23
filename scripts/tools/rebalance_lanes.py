@@ -104,7 +104,16 @@ def main() -> None:
 
         # DD limit from canonical ACCOUNT_TIERS (not hardcoded)
         tier = ACCOUNT_TIERS.get((profile.firm, profile.account_size))
-        max_dd = tier.max_dd if tier else 3000.0
+        if tier is None:
+            # Fail-closed: a profile referencing an unknown firm+size would silently
+            # use a wrong DD cap.  Raise loudly so the operator fixes the profile.
+            # integrity-guardian.md § 1 / institutional-rigor.md § 6 (no silent failures).
+            raise ValueError(
+                f"Profile '{pid}' has no ACCOUNT_TIERS entry for "
+                f"firm={profile.firm!r}, account_size={profile.account_size}. "
+                f"Add the tier to trading_app/prop_profiles.py ACCOUNT_TIERS."
+            )
+        max_dd = tier.max_dd
 
         # Compute pairwise correlation matrix for deployable candidates
         deployable = [s for s in scores if s.status in ("DEPLOY", "RESUME", "PROVISIONAL")]
