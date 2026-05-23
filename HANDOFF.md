@@ -470,10 +470,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-23
-- **Commit:** a810690b — improve bot dashboard focus layout
+- **Commit:** cafbc149 — docs(handoff): append SR-monitor session baton (2026-05-23)
 - **Files changed:** 2 files
-  - `docs/runtime/stages/2026-05-23-dashboard-ux-stage1-css-only.md`
-  - `trading_app/live/bot_dashboard.html`
+  - `HANDOFF.md`
+  - `docs/runtime/stages/2026-05-23-handoff-sr-monitor-baton-commit.md`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

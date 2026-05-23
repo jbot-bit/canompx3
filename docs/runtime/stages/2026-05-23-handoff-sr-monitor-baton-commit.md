@@ -1,9 +1,11 @@
 ---
 task: TRIVIAL — commit uncommitted HANDOFF.md SR-monitor session baton append (11 lines, append-only, no production code). Authored this session during the /orient C11/C12 audit — needs durable commit per CLAUDE.md baton-hygiene rule.
-mode: TRIVIAL
+mode: CLOSED
 slug: 2026-05-23-handoff-sr-monitor-baton-commit
 scope_lock:
   - HANDOFF.md
+closed_at: 2026-05-23
+closed_commit: cafbc149
 ---
 
 ## Blast Radius
