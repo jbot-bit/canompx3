@@ -297,3 +297,12 @@ live_signals_*.jsonl
 
 # CRG eval baseline output (Phase 1.5 M2 — regenerable via code-review-graph eval)
 evaluate/
+
+# Skill eval transcripts (local-only test artifacts)
+.claude/skills/*/eval/transcripts/
+
+# Fast-lane review + heavyweight-triage scratch outputs
+fl_review.json
+fl_review_all.json
+hw_complete_triage*.csv
+hw_complete_triage*.txt
