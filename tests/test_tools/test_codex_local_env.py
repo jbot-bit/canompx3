@@ -2,11 +2,25 @@ from __future__ import annotations
 
 import json
 import os
+import tomllib
 from pathlib import Path
 
 import pytest
 
 from scripts.infra import codex_local_env
+
+
+def test_uv_dependency_groups_include_pytest_timeout_for_pytest_config() -> None:
+    root = Path(__file__).resolve().parents[2]
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+
+    pytest_options = pyproject["tool"]["pytest"]["ini_options"]
+    test_group = pyproject["dependency-groups"]["test"]
+
+    assert "timeout" in pytest_options
+    assert "timeout_method" in pytest_options
+    assert "timeout_func_only" in pytest_options
+    assert "pytest-timeout>=2.3.1" in test_group
 
 
 def test_cleanup_paths_removes_caches_and_skips_envs(tmp_path: Path) -> None:
