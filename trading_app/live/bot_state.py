@@ -137,12 +137,24 @@ def write_live_health(data: dict[str, Any]) -> None:
 
     Mirrors write_state's atomic-replace idiom. The trading loop calls this
     best-effort from the heartbeat tick — failure is logged, never raised.
+
+    Strict-type guarded (BOT-204): applies the same _sanitize_for_state /
+    _json_default pipeline as write_state. Prevents MagicMock / non-JSON-safe
+    types from leaking into the live_health snapshot (ALERT-CONTAM-N2 class).
     """
     data["snapshot_ts_utc"] = datetime.now(UTC).isoformat()
+    try:
+        sanitized = _sanitize_for_state(data)
+    except TypeError as exc:
+        log.critical(
+            "live_health write REFUSED — contamination detected; not overwriting canonical state: %s",
+            exc,
+        )
+        return
     tmp = LIVE_HEALTH_FILE.with_suffix(".json.tmp")
     try:
         LIVE_HEALTH_FILE.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(json.dumps(data, default=str, indent=2), encoding="utf-8")
+        tmp.write_text(json.dumps(sanitized, default=_json_default, indent=2), encoding="utf-8")
         os.replace(str(tmp), str(LIVE_HEALTH_FILE))
     except OSError:
         log.warning("live_health write failed — dashboard health card may be stale", exc_info=True)

@@ -25,6 +25,14 @@ def isolated_state_file(tmp_path, monkeypatch):
     return target
 
 
+@pytest.fixture
+def isolated_health_file(tmp_path, monkeypatch):
+    """Redirect LIVE_HEALTH_FILE to a tempdir so tests cannot touch the canonical path."""
+    target = tmp_path / "live_health.json"
+    monkeypatch.setattr(bot_state, "LIVE_HEALTH_FILE", target)
+    return target
+
+
 def test_write_state_refuses_top_level_magicmock(isolated_state_file, caplog):
     """A MagicMock at the root payload must abort the write and leave no file."""
     payload = {
@@ -61,6 +69,22 @@ def test_write_state_refuses_nested_magicmock(isolated_state_file, caplog):
     msgs = " | ".join(r.message for r in caplog.records)
     assert "bot_state contamination" in msgs
     assert "lanes.TEST_STRAT_001.orb_break_direction" in msgs, f"dotted path must locate the nested mock; got: {msgs}"
+
+
+def test_write_live_health_refuses_mock(isolated_health_file, caplog):
+    """BOT-204: write_live_health must refuse mock objects like write_state does (ALERT-CONTAM-N2 class)."""
+    payload = {
+        "auth_healthy": True,
+        "broker_status": "ok",
+        "realized_slippage_pts": MagicMock(name="mock.slippage"),
+    }
+    with caplog.at_level(logging.CRITICAL, logger="trading_app.live.bot_state"):
+        bot_state.write_live_health(payload)
+
+    assert not isolated_health_file.exists(), "contaminated health file must not be created"
+    assert any("live_health write REFUSED" in r.message for r in caplog.records), (
+        "operator-visible CRITICAL log must be emitted on contamination"
+    )
 
 
 def test_write_state_accepts_clean_payload_with_datetime_date_path(isolated_state_file):
