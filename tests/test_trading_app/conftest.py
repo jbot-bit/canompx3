@@ -15,12 +15,9 @@ import pytest
 def _redirect_alerts_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # pyright: ignore[reportUnusedFunction]
     """Redirect operator alert + bot-state writes to a per-test tmpdir.
 
-    Prevents three production runtime files from being written during the test
-    suite (ALERT-CONTAM-N2 class — n=2 incident 2026-05-19):
-
-    - data/runtime/operator_alerts.jsonl  (via alert_engine.ALERTS_PATH)
-    - data/bot_state.json                 (via bot_state.STATE_FILE)
-    - runtime/state/live_health.json      (via bot_state.LIVE_HEALTH_FILE)
+    Prevents operator-alert, bot-state, and live-health runtime files from
+    being written during the test suite (ALERT-CONTAM-N2 class; n=2 incident
+    2026-05-19).
 
     All three module-level Path constants are read at call time, so
     monkeypatching the attribute is sufficient — no import-time capture.

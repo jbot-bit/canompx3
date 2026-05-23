@@ -1,9 +1,9 @@
 """Strict-type contamination guard for bot_state.write_state.
 
-Mutation proof for the 2026-05-17 live-throughput triage finding:
-data/bot_state.json was polluted with literal "<MagicMock name='...'>" strings
-because json.dumps(default=str, ...) silently coerced mock objects. The fix
-(_sanitize_for_state + _json_default) must refuse such writes.
+Mutation proof for the 2026-05-17 live-throughput triage finding: the canonical
+bot-state runtime file was polluted with literal "<MagicMock name='...'>"
+strings because json.dumps(default=str, ...) silently coerced mock objects. The
+fix (_sanitize_for_state + _json_default) must refuse such writes.
 """
 
 import json
