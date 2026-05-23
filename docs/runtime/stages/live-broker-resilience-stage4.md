@@ -1,6 +1,6 @@
 ---
 task: Live-broker resilience hardening — Stage 4 (circuit-breaker wiring + operator surface)
-mode: IMPLEMENTATION
+mode: CLOSED
 stage: 4
 total_stages: 5
 worktree: C:/Users/joshd/canompx3/.worktrees/live-broker-resilience
@@ -53,3 +53,9 @@ Wiring `BrokerHTTPClient.failure_hook → orchestrator._circuit_breaker` means t
 - `pipeline/check_drift.py` green.
 - Targeted pytest green: test_circuit_breaker, test_http_client, test_session_orchestrator, and the new test_orchestrator_circuit_wiring.
 - Self-review pass before commit.
+
+## Closeout
+
+- Shipped on main via `77b3feb1` (`feat(live): broker HTTP resilience + circuit breaker + kill-switch SLA (Stages 1-5) (#301)`).
+- 2026-05-23 audit found no Stage 4 auth-bootstrap rewrite was needed: startup auth remains fail-loud, and continuous broker HTTP paths remain wired through the orchestrator circuit breaker.
+- Fresh targeted evidence before closeout: `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_tradovate.py -q` => 55 passed.

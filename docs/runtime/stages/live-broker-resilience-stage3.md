@@ -1,6 +1,6 @@
 ---
 task: Live-broker resilience hardening — Stage 3 (broker-state-unknown kill-switch SLA)
-mode: IMPLEMENTATION
+mode: CLOSED
 stage: 3
 total_stages: 5
 worktree: C:/Users/joshd/canompx3/.worktrees/live-broker-resilience
@@ -37,3 +37,9 @@ The kill-switch already exists (`KILL_SWITCH_TIMEOUT = 300s` feed-dead branch). 
 - `pipeline/check_drift.py` green.
 - Targeted pytest green.
 - Self-review pass (code-review skill) before commit.
+
+## Closeout
+
+- Shipped on main via `77b3feb1` (`feat(live): broker HTTP resilience + circuit breaker + kill-switch SLA (Stages 1-5) (#301)`).
+- 2026-05-23 follow-up closed the measured Tradovate equity-age adapter gap: `TradovatePositions.query_equity_with_age()` now returns `live`, `cache`, or `missing` under the Stage 3 contract.
+- Fresh targeted evidence before closeout: `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_tradovate.py -q` => 55 passed.

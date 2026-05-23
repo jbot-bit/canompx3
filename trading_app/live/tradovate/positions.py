@@ -5,10 +5,12 @@ GET /cashBalance/getCashBalanceSnapshot?accountId=N → {totalCashValue}
 """
 
 import logging
+import time
 
 import requests
 
 from ..broker_base import BrokerAuth, BrokerPositions
+from ..http_client import BrokerHTTPError, EquityReading
 from .http import request_with_retry
 
 log = logging.getLogger(__name__)
@@ -22,6 +24,7 @@ class TradovatePositions(BrokerPositions):
         if not hasattr(auth, "base_url"):
             raise RuntimeError("Auth object missing base_url — cannot determine API endpoint")
         self._base: str = auth.base_url  # type: ignore[attr-defined]
+        self._last_good_equity: dict[int, tuple[float, float]] = {}
 
     def query_open(self, account_id: int) -> list[dict]:
         """Return open positions: [{contract_id, side, size, avg_price}]."""
@@ -53,6 +56,13 @@ class TradovatePositions(BrokerPositions):
 
     def query_equity(self, account_id: int) -> float | None:
         """Return current account equity (totalCashValue)."""
+        reading = self.query_equity_with_age(account_id)
+        if reading.source == "live":
+            return reading.value
+        return None
+
+    def query_equity_with_age(self, account_id: int) -> EquityReading:
+        """Return Tradovate account equity with age-since-last-successful-fetch."""
         try:
             resp = request_with_retry(
                 "GET",
@@ -62,7 +72,25 @@ class TradovatePositions(BrokerPositions):
             )
             resp.raise_for_status()
             data = resp.json()
-            return data.get("totalCashValue")
-        except requests.RequestException as e:
+        except (BrokerHTTPError, requests.RequestException) as e:
+            cached = self._last_good_equity.get(account_id)
+            if cached is not None:
+                value, ts = cached
+                age = time.monotonic() - ts
+                log.warning(
+                    "Tradovate equity query failed for account %d (%s) — serving cache age=%.1fs",
+                    account_id,
+                    e,
+                    age,
+                )
+                return EquityReading(value=value, age_s=age, source="cache")
             log.warning("Tradovate equity query failed for account %d: %s", account_id, e)
-            return None
+            return EquityReading(value=None, age_s=0.0, source="missing")
+
+        value = data.get("totalCashValue")
+        if value is None:
+            log.warning("Tradovate equity response missing totalCashValue for account %d", account_id)
+            return EquityReading(value=None, age_s=0.0, source="missing")
+        equity = float(value)
+        self._last_good_equity[account_id] = (equity, time.monotonic())
+        return EquityReading(value=equity, age_s=0.0, source="live")

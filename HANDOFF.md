@@ -6,27 +6,9 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
-## This Session (2026-05-23 — Claude memory/state-load audit, partial disarm)
-
-- **Tool:** Claude Code (Opus 4.7), explanatory mode, cwd `C:/Users/joshd/canompx3` on main.
-- **No repo edits except this HANDOFF note.** No commits, no pushes, no Codex/git config touches.
-- **Disarmed (two reversible renames, machine-local only, no repo touch):**
-  - **C1**: `~/.claude/projects/C--Users-joshd-OneDrive-Desktop-Canompx3` → `~/.claude/projects/_DISABLED_OneDrive-Desktop-Canompx3.2026-05-23`. Why: 11567-byte MEMORY.md (mtime 2026-02-16) cited the **deprecated `C:\db\gold.db` scratch workflow** as canonical; would load if Claude were ever launched with that cwd. CLAUDE.md § Database Workflow blocks the path in code (drift #62) but not at auto-memory level.
-  - **C2**: `C:/Users/joshd/Desktop/CHECK_BACKFILL.bat` → `_DEPRECATED_CHECK_BACKFILL.bat`. Why: last line was `cp C:\db\gold.db C:\Users\joshd\canompx3\gold.db` — the exact deprecated-DB copy operation CLAUDE.md warns against. Hardcoded PID 86260 from a long-finished process.
-- **Audited and confirmed CORRECT (no action needed):**
-  - **H2 git hooksPath**: `.git/config` literal value is `hooksPath = .githooks` (relative, portable, fires real 26139-byte pre-commit). Earlier "absolute path" finding was a transcript misattribution. `git rev-parse --git-path hooks/pre-commit` → `.githooks/pre-commit`, executable. Global `~/.gitconfig` has empty `core.hooksPath` (last-wins makes `.git/config` win).
-- **Carry-over audit board (DEFERRED — do not action without single-terminal isolation):**
-  - **H1**: `~/.codex/config.toml` has stale `trust_level = "trusted"` entries for OneDrive paths (`OneDrive\Desktop\Edge`, `OneDrive\VouchVault`, `onedrive\desktop\organisation`). Not canompx3-specific but worth Codex-side hygiene pass.
-  - **H3**: `~/.claude/CLAUDE.md` line 11 imports `@/mnt/c/Users/joshd/.claude/canompx3-personal.md` (WSL path); file exists at Windows path. Windows-native Claude sessions silently fail the import. Fix: rewrite to `@~/.claude/canompx3-personal.md` (works on both platforms per docs).
-  - **M1**: Auto-memory is per-cwd, not per-repo. 22 `~/.claude/projects/C--Users-joshd-canompx3*` dirs exist; only main has memory (362 files), 21 worktree dirs have session JSONLs but empty memory. Worktrees launched via `claude-worktree.sh` start memory-blind. Official Claude Code docs claim "shared across worktrees" but observed behavior contradicts. Design fix would use `@~/.claude/canompx3-shared-state.md` import from project CLAUDE.md.
-  - **M2**: Repo `MEMORY.md` (42 lines, in git) overlaps with auto-memory MEMORY.md (51112 bytes, machine-local). Official model is CLAUDE.md + auto-memory; repo MEMORY.md is third unofficial layer. Section "New Validated Signals (2026-02-24)" is 3 months stale — H3/R2/A0x verdicts may be superseded. Fold into CLAUDE.md / `.claude/rules/` / `TRADING_RULES.md` per content; delete from MEMORY.md.
-  - **M3**: 13 hardcoded `C:\Users\joshd\canompx3` paths in `~/.claude/settings.json` (all tool-allowlist entries for specific test commands). Not active danger, just maintenance debt if repo moves.
-- **Why audit stopped here:** read-only stabilisation check found **4 active `claude.exe` + 5 active codex processes**, and `.git/config` mtime was `14:17:45` during this session despite no `git config` write from this terminal. Cannot rule out concurrent writers from other sessions. Further audit unsafe until single-terminal isolation.
-- **Reference docs consulted:** https://code.claude.com/docs/en/memory (WebFetched verbatim) — confirmed auto-memory is official Claude Code feature v2.1.59+, `autoMemoryDirectory` setting is user-global only (rejects project/local settings for security), official model is CLAUDE.md (you write) + auto-memory (Claude writes).
-- **Memory updated:** none. This session's findings are baton-only; auto-memory not written.
-
 ## This Session (2026-05-23 — Codex WSL launcher dirty-clone hardening)
 
+- **Live-broker-resilience follow-up (Codex):** Audited Stages 3/4/5 from code/docs/tests, not stale stage modes. Stage 5 was already closed in substance; Stage 3/4 stage files were stale `mode: IMPLEMENTATION`. Implemented only the Tradovate equity-age adapter gap: `TradovatePositions.query_equity_with_age()` now returns `live`, `cache`, or `missing` with last-good caching, matching the Stage 3 contract. Added three focused tests in `tests/test_trading_app/test_tradovate.py`. Closed `docs/runtime/stages/live-broker-resilience-stage3.md` and `docs/runtime/stages/live-broker-resilience-stage4.md`.
 - **Codex WSL first-env hardening closeout:** Verified `/home/joshd/canompx3` as the WSL-native Codex checkout. `codex_local_env.py doctor --platform wsl` passes core checks (native root, `.venv-wsl`, Codex binary, writable mount, shared CODEX_HOME); residual warnings are pre-existing operator state: Codex home defaults to `gpt-5.5` while repo stable path says `gpt-5.4`, HANDOFF/action-queue render mismatch, and six active stage files.
 - **Fixed setup reproducibility gap:** `pytest-timeout` was configured in `pyproject.toml` and locked as an optional `dev` extra, but omitted from uv dependency groups, so repo-owned WSL setup did not install the plugin and pytest emitted unknown timeout-option warnings. Added `pytest-timeout>=2.3.1` to `[dependency-groups].test`, refreshed `uv.lock`, and added a guard in `tests/test_tools/test_codex_local_env.py`.
 - **PC/tooling hardening:** Installed `ripgrep 15.1.0` at `/home/joshd/.local/bin/rg`; configured local git hooks with `core.hooksPath=.githooks`; confirmed no accidental `.venv` remains in WSL checkout after an initial manual uv sync created one and it was moved out to `/tmp/canompx3-accidental-dotvenv-20260523`.
@@ -47,40 +29,6 @@
 - **Verification:** Red tests first failed on missing diagnostics/docs, later on missing baked-in cleanup mode, and later on missing hold-after-interactive-exit behavior. After patch: `pytest tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_codex_doctor.py -q` => 11 passed; broader launcher slice `pytest tests/test_tools/test_windows_agent_launch_light.py tests/test_tools/test_windows_agent_launch.py tests/test_tools/test_codex_doctor.py tests/test_tools/test_codex_launcher_scripts.py -q` => 56 passed; final broader launcher slice after cleanup/sticky modes => 57 passed; targeted ruff on touched Python/tests passed; scoped `git diff --check -- <touched files>` passed.
 - **Blocked full check:** Full `git diff --check` is blocked by unrelated pre-existing workspace issues: `.claude/settings.json` trailing whitespace and `live_journal.db` permission/hash failure. Left unrelated dirty files untouched.
 - **Immediate operator fix:** From PowerShell in `C:\Users\joshd\canompx3`, run `.\codex.bat cleanup`, then `.\codex.bat doctor`, then `.\codex.bat`. Manual equivalent: open WSL and run `cd ~/canompx3 && git status --short --branch`; preserve/commit/stash the dirty WSL-home work, then relaunch. Use `codex.bat doctor` for the human-readable smart-path report.
-
-## This Session (2026-05-23 — Codex Fast Lane fail-closed capital packet)
-
-- **Tool:** Codex, fallback `/mnt/c/...` checkout.
-- **User request:** Patch the Fast Lane capital packet generator fail-closed, commit only the review tool/test/derived packet files, push, and leave a handoff. No allocator/profile mutation.
-- **Commit pushed:** `7bfab0c9` — `[judgment] fast-lane: fail-closed capital packet generation`, pushed to `origin/main`.
-- **What changed:** `scripts/tools/fast_lane_research_review.py` now enriches packet rows from canonical `validated_setups` context, ranks with allocator `c8_oos_status == PASSED` instead of MD sign-match text, uses `validated_setups.trade_day_count` for `n_unique_days`, preserves MD-derived fields separately as `md_c8_oos_status` and `md_n_fired`, reads live allocator context read-only, and requires `APPROVE_SHADOW_ONLY` to prove it beats the incumbent using live allocator metrics. Insufficient-power / not-auto-rotatable evidence demotes to `WATCH`. Current lanes get explicit `KEEP_CURRENT_SHADOW_ONLY` decisions.
-- **Artifacts committed:** `docs/runtime/fast_lane_capital_packet.json`, `docs/runtime/fast_lane_truth_ledger.json`, and `docs/runtime/fast_lane_truth_ledger.csv`.
-- **Measured regenerated packet:** 41 truth-ledger rows, 9 included for ranking, 32 filtered out. `approve_shadow_only: []`; current lanes kept: `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_2K`, `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12`, `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15`. `rebalance_dry_run_diff.would_add=[]`, `would_remove=[]`, blocked reason `shadow_only_packet_no_allocator_or_profile_mutation`.
-- **Key corrections vs earlier dry-run packet:** `MNQ_US_DATA_1000_E2_RR1.0_CB1_ORB_VOL_8K` is `WATCH` because canonical C8 is `FAILED_RATIO`; `MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O30` is `WATCH` because the result/rotation docs mark insufficient power / not auto-rotatable; COMEX and NYSE overnight-range challengers remain `WATCH` because canonical allocator displaced them by current incumbents on correlation.
-- **Literature/method grounding:** Packet methodology cites `docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md`, `docs/institutional/literature/carver_2015_ch11_portfolios.md`, and `docs/institutional/pre_registered_criteria.md`.
-- **Verification:** Red tests first failed on missing canonical/allocator context. Final fresh post-commit targeted test: `./.venv-wsl/bin/python -m pytest tests/test_tools/test_fast_lane_research_review.py -q` => 17 passed. `./.venv-wsl/bin/python -m py_compile scripts/tools/fast_lane_research_review.py` passed. Full drift before commit on the same content: `./.venv-wsl/bin/python pipeline/check_drift.py` => `NO DRIFT DETECTED: 160 checks passed [OK], 0 skipped, 20 advisory`.
-- **Residual workspace state:** `live_journal.db` remains dirty and was not staged or committed. Other unrelated dirty/untracked files existed before this commit and were left untouched. This handoff update itself is local workspace state unless separately committed by the operator.
-
-## This Session (2026-05-23 — Codex Fast Lane guided decision cockpit)
-
-- **Tool:** Codex, fallback `/mnt/c/...` checkout.
-- **User request:** Fast Lane should not leave the operator blindly navigating CLI. It should cover prereg creation/refill, active prereg execution, bridge drafting, review stops, and two-month stale-decision simulation in one intuitive guided surface.
-- **What changed:** Added `scripts/tools/fast_lane_decision.py`, a guided controller over the existing Fast Lane state machine. Default `--status` is cache-only and fast. `--refresh` explicitly runs the Fast Lane dry-run chain first. `--auto-research` executes only safe research/draft actions and rechecks status between cycles. The report sections are: start/refill funnel (`ingest_idea.py`, `triage_validated_setups.py`, `prereg_front_door.py`), auto-run research, auto-draft only, needs your decision, blocked/done, errors, two-month simulation, next safest command.
-- **Boundary:** Preserves `REPORT_ONLY_NOT_DEPLOYMENT_AUTHORITY`. It never writes `lane_allocation.json`, `validated_setups`, `chordia_audit_log.yaml`, broker state, or live runtime state. Unknown stage/action becomes `ERROR`, not silent omission. Long manual-review lists are summarized with a count cap.
-- **Current live measured output:** 46 Fast Lane entries: 4 `AUTO_RESEARCH` active preregs, 41 `REVIEW_REQUIRED`, 1 `BLOCKED_OR_DONE`, 0 unclassified. Next safest command is the MES CME_PRECLOSE COST_LT15 Fast Lane prereg runner.
-- **Files changed:** `scripts/tools/fast_lane_decision.py`; `tests/test_tools/test_fast_lane_decision.py`; this `HANDOFF.md`.
-- **Verification:** Red test first failed on missing module. After implementation and format fix: `pytest tests/test_tools/test_fast_lane_decision.py -q` => 8 passed; adjacent Fast Lane tool slice `pytest tests/test_tools/test_fast_lane_decision.py tests/test_tools/test_fast_lane_walk.py tests/test_tools/test_fast_lane_status.py tests/test_tools/test_fast_lane_research_review.py -q` => 54 passed; `ruff check scripts/tools/fast_lane_decision.py tests/test_tools/test_fast_lane_decision.py` passed; `ruff format --check scripts/tools/fast_lane_decision.py tests/test_tools/test_fast_lane_decision.py` passed; `scripts/tools/audit_behavioral.py` passed; `scripts/tools/audit_integrity.py` passed; full `pipeline/check_drift.py` => `NO DRIFT DETECTED: 160 checks passed [OK], 0 skipped, 20 advisory`.
-- **Not run:** `--auto-research` was not executed in this session, so no research result MDs, trial-ledger entries, bridge drafts, allocator files, DB tables, broker state, or live files were intentionally mutated.
-
-## This Session (2026-05-23 — Codex dry-run allocator Chordia gate packet)
-
-- **Tool:** Codex, fallback `/mnt/c/...` checkout.
-- **User request:** Convert the 40 heavyweight-complete result MDs into a bias-resistant, dry-run allocator/capital decision packet. Hard limits: no new discovery, no threshold tuning, no live allocator/profile mutation, dry-run capital decisions only unless operator approves.
-- **What changed:** Extended `scripts/tools/fast_lane_research_review.py` so missing cherry-pick journal entries can fall back to parsing the actual Chordia result MD for direct-heavyweight rows. Fast Lane lineage rows with missing journal evidence now fail closed as `journal_missing_integrity_break`. Added truth-ledger extraction, `filtered_out_summary`, dry-run capital packet generation, measured pairwise correlation clustering via the canonical allocator correlation path, and `--write-audit-packet --packet-only`.
-- **Artifacts written:** `docs/runtime/fast_lane_truth_ledger.json`, `docs/runtime/fast_lane_truth_ledger.csv`, and `docs/runtime/fast_lane_capital_packet.json`. These are derived/report-only artifacts.
-- **Measured packet:** 40 heavyweight-complete MDs parsed. 13 rows entered dry-run ranking under `PASS_CHORDIA` + `OOS_SIGN_MATCH_N_GE_30` + no integrity blocker. 27 filtered out: 16 `heavyweight_failed`, 6 `oos_sign_flip_or_incomplete_confirmation`, 3 `journal_missing_integrity_break`, 1 `oos_n_below_confirmation_floor`, 1 `verdict_pass_protocol_a`. Canonical pairwise correlation measured 91 pairs with 0 skipped rows; correlation pruning left 4 dry-run cluster heads. Final dry-run buckets: 4 `APPROVE_DRY_RUN`, 14 `WATCH`, 22 `REJECT`. Dry-run diff would add 4 cluster heads and remove all 3 current lanes; this is report-only and not allocator authority.
-- **Routing baked in:** `docs/plans/2026-05-21-fast-lane-v2-institutional-design.md` now names the guided decision + dry-run capital packet route. `MEMORY.md` now records when to use it and the fail-closed allocator Chordia gate rule.
-- **Boundary:** No `lane_allocation.json`, prop profile, broker state, live-control file, `validated_setups`, or `chordia_audit_log.yaml` mutation. No `--auto-research` execution.
 
 ## This Session (2026-05-23 — Plan A shipped: judgment-review PreToolUse soft-block)
 
@@ -463,16 +411,15 @@
 - **Stage NOT closed:** `docs/runtime/stages/2026-05-18-dashboard-start-signal-preflight-mode.md` remains open. Criteria 1-4 met with positive test coverage; criteria 5-6 show no regression vs baseline; criterion 7 (operator hits `POST /api/action/start?mode=signal&profile=topstep_50k_mnq_auto`, confirms non-blocked status + `logs/live/live_signals_2026-05-18.jsonl` appears within 30s) requires a live dashboard run.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Codex (WSL)
 - **Date:** 2026-05-23
-- **Commit:** 9182331b — update MNQ dynamic lane allocation
-- **Files changed:** `docs/runtime/lane_allocation.json`, `docs/runtime/lane_allocation/topstep_50k_mnq_auto.json`, `HANDOFF.md`
-- **Session summary:** Ran canonical `scripts/tools/rebalance_lanes.py --date 2026-05-23 --profile topstep_50k_mnq_auto` after today's `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08` PASS_PROTOCOL_A audit (commit bc858657) was appended to `chordia_audit_log.yaml`. Profile moved 3 → 4 lanes (expected annual_R 77.4 → 108.3).
-  - **New lane added:** `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08` — ExpR +0.202, N=150, PASS_PROTOCOL_A, regime HOT (+0.0505).
-  - **COMEX_SETTLE upgrade:** `ORB_VOL_2K` (ExpR +0.143, AnnR 31.8) → `OVNRNG_100` (ExpR +0.224, AnnR 32.2). Same session, higher trailing edge, same Chordia/c8 status.
-  - **US_DATA_1000 upgrade:** `VWAP_MID_ALIGNED_O15` RR1.0 (ExpR +0.205) → RR1.5 (ExpR +0.242, AnnR 27.1).
-  - **NYSE_OPEN unchanged:** `COST_LT12` (PASS_PROTOCOL_A, ExpR +0.091).
-  - All 4 lanes Chordia-cleared + c8 PASSED + regime HOT. Displaced=9 (unchanged set). Pre-commit drift: 163 checks PASSED, 0 violations.
+- **Commit:** current live fix commit — fix(live): add Tradovate equity age readings
+- **Files changed:** 5 files
+  - `HANDOFF.md`
+  - `docs/runtime/stages/live-broker-resilience-stage3.md`
+  - `docs/runtime/stages/live-broker-resilience-stage4.md`
+  - `tests/test_trading_app/test_tradovate.py`
+  - `trading_app/live/tradovate/positions.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

@@ -488,6 +488,63 @@ class TestTradovatePositions:
         assert result[1]["side"] == "short"
         assert result[1]["size"] == 1
 
+    @patch("trading_app.live.tradovate.positions.request_with_retry")
+    def test_query_equity_with_age_returns_live_reading(self, mock_req, mock_auth):
+        from trading_app.live.http_client import EquityReading
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"totalCashValue": 47_500.25}
+        mock_req.return_value = mock_resp
+
+        positions = TradovatePositions(auth=mock_auth)
+        reading = positions.query_equity_with_age(100)
+
+        assert isinstance(reading, EquityReading)
+        assert reading.source == "live"
+        assert reading.value == 47_500.25
+        assert reading.age_s == 0.0
+
+    @patch("trading_app.live.tradovate.positions.time.monotonic", side_effect=[100.0, 130.0])
+    @patch("trading_app.live.tradovate.positions.request_with_retry")
+    def test_query_equity_with_age_returns_cached_stale_equity_on_broker_http_error(
+        self,
+        mock_req,
+        _mock_monotonic,
+        mock_auth,
+    ):
+        from trading_app.live.http_client import BrokerHTTPError
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"totalCashValue": 47_500.25}
+        mock_req.side_effect = [
+            mock_resp,
+            BrokerHTTPError("tradovate down", "D"),
+        ]
+
+        positions = TradovatePositions(auth=mock_auth)
+        first = positions.query_equity_with_age(100)
+        cached = positions.query_equity_with_age(100)
+
+        assert first.source == "live"
+        assert cached.source == "cache"
+        assert cached.value == 47_500.25
+        assert cached.age_s == 30.0
+
+    @patch("trading_app.live.tradovate.positions.request_with_retry")
+    def test_query_equity_with_age_no_prior_cache_returns_missing_on_broker_http_error(self, mock_req, mock_auth):
+        from trading_app.live.http_client import BrokerHTTPError
+
+        mock_req.side_effect = BrokerHTTPError("tradovate down", "D")
+
+        positions = TradovatePositions(auth=mock_auth)
+        reading = positions.query_equity_with_age(100)
+
+        assert reading.source == "missing"
+        assert reading.value is None
+        assert reading.age_s == 0.0
+
 
 # ---------------------------------------------------------------------------
 # HTTP retry
