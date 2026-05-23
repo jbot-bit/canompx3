@@ -6,6 +6,25 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-23 — Claude memory/state-load audit, partial disarm)
+
+- **Tool:** Claude Code (Opus 4.7), explanatory mode, cwd `C:/Users/joshd/canompx3` on main.
+- **No repo edits except this HANDOFF note.** No commits, no pushes, no Codex/git config touches.
+- **Disarmed (two reversible renames, machine-local only, no repo touch):**
+  - **C1**: `~/.claude/projects/C--Users-joshd-OneDrive-Desktop-Canompx3` → `~/.claude/projects/_DISABLED_OneDrive-Desktop-Canompx3.2026-05-23`. Why: 11567-byte MEMORY.md (mtime 2026-02-16) cited the **deprecated `C:\db\gold.db` scratch workflow** as canonical; would load if Claude were ever launched with that cwd. CLAUDE.md § Database Workflow blocks the path in code (drift #62) but not at auto-memory level.
+  - **C2**: `C:/Users/joshd/Desktop/CHECK_BACKFILL.bat` → `_DEPRECATED_CHECK_BACKFILL.bat`. Why: last line was `cp C:\db\gold.db C:\Users\joshd\canompx3\gold.db` — the exact deprecated-DB copy operation CLAUDE.md warns against. Hardcoded PID 86260 from a long-finished process.
+- **Audited and confirmed CORRECT (no action needed):**
+  - **H2 git hooksPath**: `.git/config` literal value is `hooksPath = .githooks` (relative, portable, fires real 26139-byte pre-commit). Earlier "absolute path" finding was a transcript misattribution. `git rev-parse --git-path hooks/pre-commit` → `.githooks/pre-commit`, executable. Global `~/.gitconfig` has empty `core.hooksPath` (last-wins makes `.git/config` win).
+- **Carry-over audit board (DEFERRED — do not action without single-terminal isolation):**
+  - **H1**: `~/.codex/config.toml` has stale `trust_level = "trusted"` entries for OneDrive paths (`OneDrive\Desktop\Edge`, `OneDrive\VouchVault`, `onedrive\desktop\organisation`). Not canompx3-specific but worth Codex-side hygiene pass.
+  - **H3**: `~/.claude/CLAUDE.md` line 11 imports `@/mnt/c/Users/joshd/.claude/canompx3-personal.md` (WSL path); file exists at Windows path. Windows-native Claude sessions silently fail the import. Fix: rewrite to `@~/.claude/canompx3-personal.md` (works on both platforms per docs).
+  - **M1**: Auto-memory is per-cwd, not per-repo. 22 `~/.claude/projects/C--Users-joshd-canompx3*` dirs exist; only main has memory (362 files), 21 worktree dirs have session JSONLs but empty memory. Worktrees launched via `claude-worktree.sh` start memory-blind. Official Claude Code docs claim "shared across worktrees" but observed behavior contradicts. Design fix would use `@~/.claude/canompx3-shared-state.md` import from project CLAUDE.md.
+  - **M2**: Repo `MEMORY.md` (42 lines, in git) overlaps with auto-memory MEMORY.md (51112 bytes, machine-local). Official model is CLAUDE.md + auto-memory; repo MEMORY.md is third unofficial layer. Section "New Validated Signals (2026-02-24)" is 3 months stale — H3/R2/A0x verdicts may be superseded. Fold into CLAUDE.md / `.claude/rules/` / `TRADING_RULES.md` per content; delete from MEMORY.md.
+  - **M3**: 13 hardcoded `C:\Users\joshd\canompx3` paths in `~/.claude/settings.json` (all tool-allowlist entries for specific test commands). Not active danger, just maintenance debt if repo moves.
+- **Why audit stopped here:** read-only stabilisation check found **4 active `claude.exe` + 5 active codex processes**, and `.git/config` mtime was `14:17:45` during this session despite no `git config` write from this terminal. Cannot rule out concurrent writers from other sessions. Further audit unsafe until single-terminal isolation.
+- **Reference docs consulted:** https://code.claude.com/docs/en/memory (WebFetched verbatim) — confirmed auto-memory is official Claude Code feature v2.1.59+, `autoMemoryDirectory` setting is user-global only (rejects project/local settings for security), official model is CLAUDE.md (you write) + auto-memory (Claude writes).
+- **Memory updated:** none. This session's findings are baton-only; auto-memory not written.
+
 ## This Session (2026-05-23 — Codex WSL launcher dirty-clone hardening)
 
 - **Cleanup closeout (Codex, fallback `/mnt/...` session):** Finished the stale Codex checkout reconciliation. WSL-home clone `/home/joshd/canompx3` was clean but stale after fetch (`origin/main` already contained its earlier 19 local commits); it was fast-forwarded to `origin/main`, then the three committed fallback checkout changes were cherry-picked onto WSL-home as `9d93144b`, `3d4d7acf`, and `ee28e793`. Drift then exposed Check #182 failures from exact production runtime path literals in test docstrings/comments; fixed in `6054c3d8` (`[mechanical] fix tests: remove production runtime path literals`).
@@ -438,12 +457,16 @@
 - **Stage NOT closed:** `docs/runtime/stages/2026-05-18-dashboard-start-signal-preflight-mode.md` remains open. Criteria 1-4 met with positive test coverage; criteria 5-6 show no regression vs baseline; criterion 7 (operator hits `POST /api/action/start?mode=signal&profile=topstep_50k_mnq_auto`, confirms non-blocked status + `logs/live/live_signals_2026-05-18.jsonl` appears within 30s) requires a live dashboard run.
 
 ## Last Session
-- **Tool:** Claude Code (Opus 4.7)
-- **Date:** 2026-05-18 (Sun BNE — Monday-eve)
-- **Commits:** `7877f47b` refresh lane_allocation.json (4→3 MNQ lanes, fresh rebalance), `ae3cee57` close stage file.
-- **Files changed:** `docs/runtime/lane_allocation.json` regenerated via canonical allocator script.
-- **Session summary:** User invoked `/next` asking for "more than 4 lanes for Monday". Investigation rejected three misframes (add sessions to profile, batch-chordia 715 paused lanes, lower MIN_TRAILING_N=20). Ran fresh canonical rebalance (rebalance_date 2026-05-14 → 2026-05-18). **Lane count went DOWN: 4 → 3.** Removed: ORB_VOL_2K, VWAP_MID_RR1.0_O15, COST_LT12, OVNRNG_25. Added: OVNRNG_100 (ExpR 0.2159), VWAP_MID_RR1.5_O15 (ExpR 0.2416), COST_LT12 (kept). **Criterion 8 OOS gate (drift check #149) caught a silent failure on `MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_25` that the stale 2026-05-14 file was masking** — would have routed real capital at an unsafe lane Monday. All 3 deployed lanes are PASS_CHORDIA/PASS_PROTOCOL_A, status_reason="Session HOT". 133/133 drift checks pass.
-- **Honest answer to "more lanes":** the allocator's truthful number today is 3, not 4. Going to 4+ requires either fresh chordia replays on selected paused MNQ lanes (slow doctrine path, hours per pre-reg) or gate relaxations (capital-class doctrine violation, refused). Per-lane EV × correctness > lane count.
+- **Tool:** Claude Code
+- **Date:** 2026-05-23
+- **Commit:** 9182331b — update MNQ dynamic lane allocation
+- **Files changed:** `docs/runtime/lane_allocation.json`, `docs/runtime/lane_allocation/topstep_50k_mnq_auto.json`, `HANDOFF.md`
+- **Session summary:** Ran canonical `scripts/tools/rebalance_lanes.py --date 2026-05-23 --profile topstep_50k_mnq_auto` after today's `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08` PASS_PROTOCOL_A audit (commit bc858657) was appended to `chordia_audit_log.yaml`. Profile moved 3 → 4 lanes (expected annual_R 77.4 → 108.3).
+  - **New lane added:** `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08` — ExpR +0.202, N=150, PASS_PROTOCOL_A, regime HOT (+0.0505).
+  - **COMEX_SETTLE upgrade:** `ORB_VOL_2K` (ExpR +0.143, AnnR 31.8) → `OVNRNG_100` (ExpR +0.224, AnnR 32.2). Same session, higher trailing edge, same Chordia/c8 status.
+  - **US_DATA_1000 upgrade:** `VWAP_MID_ALIGNED_O15` RR1.0 (ExpR +0.205) → RR1.5 (ExpR +0.242, AnnR 27.1).
+  - **NYSE_OPEN unchanged:** `COST_LT12` (PASS_PROTOCOL_A, ExpR +0.091).
+  - All 4 lanes Chordia-cleared + c8 PASSED + regime HOT. Displaced=9 (unchanged set). Pre-commit drift: 163 checks PASSED, 0 violations.
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
