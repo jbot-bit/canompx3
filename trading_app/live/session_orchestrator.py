@@ -3825,6 +3825,7 @@ class SessionOrchestrator:
         # surface CRITICAL and KEEP the ring file so the operator can recover
         # the in-flight bars off-disk before next session overwrites them.
         from trading_app.live import bar_ring as _bar_ring
+
         _bar_ring.drain_and_stop_writer(self.instrument)
         bars_captured = self._bar_persister.bar_count
         n_persisted = self._bar_persister.flush_to_db()

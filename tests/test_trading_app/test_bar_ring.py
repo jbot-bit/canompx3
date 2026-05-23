@@ -41,8 +41,7 @@ def isolated_ring_dir(tmp_path, monkeypatch):
 
 def _bar(minute: int, price: float = 20000.0, volume: int = 100) -> Bar:
     return Bar(
-        ts_utc=datetime(2026, 4, 13, 10, minute % 60, 0, tzinfo=UTC)
-        + timedelta(hours=minute // 60),
+        ts_utc=datetime(2026, 4, 13, 10, minute % 60, 0, tzinfo=UTC) + timedelta(hours=minute // 60),
         open=price,
         high=price + 1,
         low=price - 1,
@@ -145,9 +144,7 @@ class TestBarRing:
         assert bar_ring.is_stale(empty) is True
         fresh = bar_ring.RingSnapshot(symbol="MNQ", updated_utc=datetime.now(UTC))
         assert bar_ring.is_stale(fresh) is False
-        old = bar_ring.RingSnapshot(
-            symbol="MNQ", updated_utc=datetime.now(UTC) - timedelta(seconds=200)
-        )
+        old = bar_ring.RingSnapshot(symbol="MNQ", updated_utc=datetime.now(UTC) - timedelta(seconds=200))
         assert bar_ring.is_stale(old) is True
 
     # 6. PID round-trips and is readable
@@ -183,6 +180,7 @@ class TestBarRing:
         # Shrink queue to provoke overflow deterministically. Don't start the writer
         # thread so items accumulate in the queue.
         import queue as _queue
+
         symbol = "MNQOVF"
         writer = bar_ring._RingWriter.__new__(bar_ring._RingWriter)
         writer.symbol = symbol
@@ -198,6 +196,7 @@ class TestBarRing:
         with bar_ring._writers_lock:
             bar_ring._writers[symbol] = writer
         import logging
+
         with caplog.at_level(logging.WARNING, logger="trading_app.live.bar_ring"):
             for i in range(8):
                 result = bar_ring.enqueue_bar(symbol, _bar(i))
@@ -291,11 +290,21 @@ class TestBarRing:
         # Two bad bars then a good one — counter persists in the ring payload.
         bad1 = Bar(
             ts_utc=datetime(2026, 4, 13, 10, 0, 0, tzinfo=UTC),
-            open=float("nan"), high=1.0, low=1.0, close=1.0, volume=1, symbol="MNQ"
+            open=float("nan"),
+            high=1.0,
+            low=1.0,
+            close=1.0,
+            volume=1,
+            symbol="MNQ",
         )
         bad2 = Bar(
             ts_utc=datetime(2026, 4, 13, 10, 1, 0, tzinfo=UTC),
-            open=1.0, high=0.5, low=1.0, close=1.0, volume=1, symbol="MNQ"  # high < low
+            open=1.0,
+            high=0.5,
+            low=1.0,
+            close=1.0,
+            volume=1,
+            symbol="MNQ",  # high < low
         )
         bar_ring.enqueue_bar("MNQ", bad1)
         bar_ring.enqueue_bar("MNQ", bad2)

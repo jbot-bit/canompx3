@@ -558,11 +558,7 @@ def build_truth_ledger(
 def _ranking_eligible(row: dict[str, Any]) -> bool:
     verdict = row.get("verdict") or row.get("heavyweight_verdict")
     c8_pass_label = "PASSED" if row.get("canonical_context_applied") else "OOS_SIGN_MATCH_N_GE_30"
-    return (
-        verdict == "PASS_CHORDIA"
-        and row.get("c8_oos_status") == c8_pass_label
-        and row.get("blocker") in (None, "")
-    )
+    return verdict == "PASS_CHORDIA" and row.get("c8_oos_status") == c8_pass_label and row.get("blocker") in (None, "")
 
 
 def _filter_reason(row: dict[str, Any]) -> str:
@@ -781,6 +777,7 @@ def load_canonical_strategy_context(strategy_ids: Iterable[str]) -> dict[str, di
         return {}
     try:
         import duckdb
+
         from pipeline.db_config import configure_connection
         from pipeline.paths import GOLD_DB_PATH
     except ImportError:
@@ -959,9 +956,7 @@ def _current_lane_maps(
     for sid in current_lanes:
         current[sid] = dict(current_raw.get(sid) or metrics_raw.get(sid) or _synthetic_current_lane_row(sid))
     metrics = {
-        str(sid): dict(value)
-        for sid, value in metrics_raw.items()
-        if isinstance(sid, str) and isinstance(value, dict)
+        str(sid): dict(value) for sid, value in metrics_raw.items() if isinstance(sid, str) and isinstance(value, dict)
     }
     displaced = {
         str(sid): dict(value)
@@ -983,7 +978,8 @@ def _find_incumbent_for_candidate(
     same_scope = [
         current_sid
         for current_sid, current_row in current.items()
-        if current_row.get("instrument") == row.get("instrument") and current_row.get("session", current_row.get("orb_label")) in {row.get("session"), row.get("orb_label")}
+        if current_row.get("instrument") == row.get("instrument")
+        and current_row.get("session", current_row.get("orb_label")) in {row.get("session"), row.get("orb_label")}
     ]
     if len(same_scope) == 1:
         return same_scope[0]
@@ -1106,7 +1102,9 @@ def build_capital_packet(
         elif _ranking_eligible(row):
             correlation_decision = correlation_decisions.get(sid, {})
             blocker_reason = _candidate_blocker_reason(row, blockers)
-            beats, beat_reason, proof = _beats_incumbent_proof(row, current_context, allocator_metrics, displaced_context)
+            beats, beat_reason, proof = _beats_incumbent_proof(
+                row, current_context, allocator_metrics, displaced_context
+            )
             if blocker_reason is not None:
                 bucket = "WATCH"
                 reason = blocker_reason

@@ -6,6 +6,17 @@ Covers:
 
 Loads the hook via `importlib.util` because the file name uses a hyphen
 (`session-start.py`) and cannot be imported as a normal module.
+
+Subprocess-free by design: `_load_hook` monkeypatches the hook's `_git`
+seam so no test in this module spawns `git`. Earlier revisions called
+`subprocess.run(["git","init"])` once per test plus the hook's own
+`git rev-parse` calls (~20 total) — on a GH-hosted Windows runner under
+coverage instrumentation this reliably triggered a KeyboardInterrupt at
+`threading.py:359` at ~10s elapsed, mid-`test_oserror_on_write_warns_…`.
+Local Windows runs always passed. Eliminating the subprocess load removes
+the trigger without weakening contract coverage: the rev-parse code path
+is trivial subprocess plumbing already exercised by integration tests.
+See `memory/feedback_ci_keyboardinterrupt_test_session_start_mutex_external_kill.md`.
 """
 
 from __future__ import annotations
@@ -13,7 +24,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
-import subprocess
 from pathlib import Path
 from types import ModuleType
 
@@ -23,13 +33,23 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 HOOK_PATH = PROJECT_ROOT / ".claude" / "hooks" / "session-start.py"
 
 
-def _load_hook(monkeypatch: pytest.MonkeyPatch, fake_root: Path) -> ModuleType:
-    """Load session-start.py with PROJECT_ROOT pointed at `fake_root`.
+def _load_hook(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_root: Path,
+    *,
+    branch: str = "main",
+    head_sha: str = "0" * 40,
+) -> ModuleType:
+    """Load session-start.py with `PROJECT_ROOT` pointed at `fake_root` and
+    every git subprocess stubbed out.
 
-    The module's PROJECT_ROOT is computed at import time from `__file__`,
-    so we monkeypatch the constant after exec. Per blast-radius analysis,
-    the constant is consumed only via `subprocess.run(cwd=...)` calls
-    evaluated at call time, so this is safe.
+    The hook's `_git([...])` is the single seam used by `_git_dir`,
+    `_session_lock_lines` (branch + HEAD lookups), and several status
+    surfacers. Stubbing it here means tests run with zero `subprocess.run`
+    calls — see module docstring for the CI rationale.
+
+    The stub creates `fake_root/.git/` so `_git_dir`'s return value is a
+    real directory the test can write to.
     """
     spec = importlib.util.spec_from_file_location("session_start_hook", HOOK_PATH)
     assert spec is not None
@@ -37,17 +57,39 @@ def _load_hook(monkeypatch: pytest.MonkeyPatch, fake_root: Path) -> ModuleType:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     monkeypatch.setattr(mod, "PROJECT_ROOT", fake_root, raising=True)
+
+    # `.git/` is expected to exist (real worktrees always have it). Tests
+    # that pre-write the lock file MUST also pre-create the dir via
+    # `_setup_git_dir(tmp_path)` — see the helper below.
+    git_dir = fake_root / ".git"
+    git_dir.mkdir(exist_ok=True)
+
+    def _fake_git(args: list[str], timeout: int = 5) -> tuple[int, str]:
+        # Mirror the small subset of `git` calls the mutex code actually makes.
+        # Anything outside this set is a test bug — fail loudly so we don't
+        # silently regress contract coverage.
+        if args[:2] == ["rev-parse", "--git-dir"]:
+            return 0, str(git_dir)
+        if args[:2] == ["rev-parse", "--git-common-dir"]:
+            return 0, str(git_dir)
+        if args[:1] == ["branch"] and "--show-current" in args:
+            return 0, branch
+        if args[:1] == ["rev-parse"] and "HEAD" in args:
+            return 0, head_sha
+        return 1, ""
+
+    monkeypatch.setattr(mod, "_git", _fake_git, raising=True)
     return mod
 
 
-def _init_git(repo: Path) -> None:
-    subprocess.run(
-        ["git", "init", "-q"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        timeout=15,
-    )
+def _setup_git_dir(repo: Path) -> None:
+    """Create `repo/.git/` so tests pre-writing the lock file have a parent dir.
+
+    Tests that call `_load_hook(monkeypatch, tmp_path)` AFTER pre-writing
+    the lock must call this helper first; `_load_hook` is what otherwise
+    materialises the dir.
+    """
+    (repo / ".git").mkdir(exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +99,6 @@ def _init_git(repo: Path) -> None:
 
 class TestSessionLockMutex:
     def test_clean_creates_lock_and_does_not_block(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _init_git(tmp_path)
         hook = _load_hook(monkeypatch, tmp_path)
 
         lines, should_block = hook._session_lock_lines()
@@ -76,7 +117,7 @@ class TestSessionLockMutex:
         The branch-flip-guard would silently exit 0 — surface the warning so
         the user knows to rm the lock and restart.
         """
-        _init_git(tmp_path)
+        _setup_git_dir(tmp_path)
         lock = tmp_path / ".git" / ".claude.pid"
         # Pre-Phase-1 lock: no branch_at_start field, but THIS worktree.
         lock.write_text(
@@ -103,8 +144,8 @@ class TestSessionLockMutex:
         assert "12345" in lock.read_text(encoding="utf-8")
 
     def test_held_lock_blocks_with_diagnostic(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _init_git(tmp_path)
         # Pre-write a lock as if another live session held it.
+        _setup_git_dir(tmp_path)
         lock = tmp_path / ".git" / ".claude.pid"
         lock.write_text(
             json.dumps(
@@ -133,7 +174,7 @@ class TestSessionLockMutex:
     def test_corrupted_lock_still_blocks_and_degrades_gracefully(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _init_git(tmp_path)
+        _setup_git_dir(tmp_path)
         lock = tmp_path / ".git" / ".claude.pid"
         lock.write_text("this is not json {{{ broken", encoding="utf-8")
         hook = _load_hook(monkeypatch, tmp_path)
@@ -158,7 +199,7 @@ class TestSessionLockMutex:
         `_session_lock_lines()` had no liveness check; both sessions exited
         the function without re-acquiring the lock.
         """
-        _init_git(tmp_path)
+        _setup_git_dir(tmp_path)
         lock = tmp_path / ".git" / ".claude.pid"
         held_pid = 999_999_001  # arbitrary; we mock _pid_is_alive below
         lock.write_text(
@@ -209,7 +250,7 @@ class TestSessionLockMutex:
         only applies to dead PIDs. This guards against a too-aggressive
         reclaim that would clobber a real concurrent session.
         """
-        _init_git(tmp_path)
+        _setup_git_dir(tmp_path)
         lock = tmp_path / ".git" / ".claude.pid"
         # Use os.getpid() — guaranteed live (it's us). Different worktree.
         lock.write_text(
@@ -233,7 +274,6 @@ class TestSessionLockMutex:
         assert "BLOCKED" in joined
 
     def test_oserror_on_write_warns_but_does_not_block(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _init_git(tmp_path)
         hook = _load_hook(monkeypatch, tmp_path)
 
         def raise_enospc(_lock_path: Path) -> int:
@@ -263,7 +303,6 @@ class TestSessionLockMutex:
         not remain shadowed at the singleton level. Confirms the seam stays
         scoped to ``hook._acquire_lock_fd``.
         """
-        _init_git(tmp_path)
         hook = _load_hook(monkeypatch, tmp_path)
 
         # Sentinel: capture the unpatched os.open before the seam swap.

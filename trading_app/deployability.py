@@ -21,7 +21,13 @@ from pipeline.data_era import is_micro
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.chordia import chordia_verdict_allows_deploy, chordia_verdict_label
-from trading_app.config import ALL_FILTERS, CORE_MIN_SAMPLES, MIN_WFE, REGIME_MIN_SAMPLES, is_e2_deployment_unsafe_filter
+from trading_app.config import (
+    ALL_FILTERS,
+    CORE_MIN_SAMPLES,
+    MIN_WFE,
+    REGIME_MIN_SAMPLES,
+    is_e2_deployment_unsafe_filter,
+)
 from trading_app.lifecycle_state import read_lifecycle_state
 from trading_app.opportunity_awareness import describe_opportunity_awareness
 from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id

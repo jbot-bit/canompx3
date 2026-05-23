@@ -335,6 +335,5 @@ class TestLoadChordiaAuditLogIOError:
         assert log.default_has_theory is False
         # Operator-visible: warning message must include the exception class name.
         assert any(
-            "PermissionError" in rec.getMessage() and "fail-closed" in rec.getMessage()
-            for rec in caplog.records
+            "PermissionError" in rec.getMessage() and "fail-closed" in rec.getMessage() for rec in caplog.records
         ), f"expected WARNING with PermissionError; got {[r.getMessage() for r in caplog.records]}"
