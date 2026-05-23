@@ -919,6 +919,54 @@ def _crg_context_lines() -> list[str]:
         return []
 
 
+def _worktree_lease_lines() -> tuple[list[str], bool]:
+    """Acquire (or detect peer hold of) the worktree concurrency lease.
+
+    Delegates entirely to `scripts/tools/worktree_guard.py` — institutional-
+    rigor §4 (no inline copies). Returns (lines, should_block).
+
+    This is the SHORT-threshold (30 min heartbeat) lease enforced PreToolUse
+    by `.claude/hooks/worktree_guard.py`. The 12h `_session_lock_lines()`
+    mutex remains as a separate safety net for the longer-lived dead-lock
+    incident class. Both can coexist; they target different failure modes.
+    Fail-open on any error.
+    """
+    try:
+        import importlib.util as _ilu
+
+        spec = _ilu.spec_from_file_location(
+            "worktree_guard",
+            str(PROJECT_ROOT / "scripts" / "tools" / "worktree_guard.py"),
+        )
+        if spec is None or spec.loader is None:
+            return [], False
+        mod = _ilu.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        status_str, payload, msg = mod.acquire(PROJECT_ROOT)
+    except BaseException:
+        return [], False
+
+    if status_str == "blocked":
+        pl: dict = payload if isinstance(payload, dict) else {}
+        pid = pl.get("pid", "?")
+        wt = pl.get("worktree", "?")
+        lines = [
+            "",
+            "  ====================================================================",
+            "  BLOCKED: another Claude session holds the worktree concurrency lease.",
+            f"  Peer PID {pid} on worktree {wt}",
+            "  Recovery (after confirming peer is truly gone):",
+            "    python scripts/tools/worktree_guard.py --force-release",
+            "  Or spawn a fresh worktree: scripts/tools/new_session.sh",
+            "  ====================================================================",
+            "",
+        ]
+        return lines, True
+    if status_str in ("acquired", "refreshed"):
+        return [f"  Worktree lease: {status_str} ({msg})"], False
+    return [], False  # skipped / error -> fail-open silently
+
+
 def main() -> None:
     try:
         event = json.load(sys.stdin)
@@ -937,9 +985,18 @@ def main() -> None:
         if should_block:
             print("\n".join(block_lines), file=sys.stderr)
             sys.exit(2)
+        # Short-threshold (30 min) lease for PreToolUse enforcement. Separate
+        # from the 12h PID lock above. Acquires (or refreshes) for this PID
+        # so the PreToolUse hook recognises this session as the holder.
+        lease_lines, lease_block = _worktree_lease_lines()
+        if lease_block:
+            print("\n".join(lease_lines), file=sys.stderr)
+            sys.exit(2)
         lines = task_route_lines or _superpower_lines("session-start") or _legacy_startup_lines()
         if block_lines:  # warning lines (e.g., lock-write failure) — surface them
             lines.extend(block_lines)
+        if lease_lines:
+            lines.extend(lease_lines)
     elif session_type == "resume":
         if task_route_lines:
             lines = ["RESUMED SESSION — Task route restored:"]

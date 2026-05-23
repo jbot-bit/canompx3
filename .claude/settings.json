@@ -56,6 +56,16 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Edit|Write|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/worktree_guard.py",
+            "timeout": 3
+          }
+        ]
+      },
+      {
         "matcher": "Edit|Write",
         "hooks": [
           {
