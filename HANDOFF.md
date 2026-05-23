@@ -459,14 +459,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-23
-- **Commit:** 9182331b — update MNQ dynamic lane allocation
-- **Files changed:** `docs/runtime/lane_allocation.json`, `docs/runtime/lane_allocation/topstep_50k_mnq_auto.json`, `HANDOFF.md`
-- **Session summary:** Ran canonical `scripts/tools/rebalance_lanes.py --date 2026-05-23 --profile topstep_50k_mnq_auto` after today's `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08` PASS_PROTOCOL_A audit (commit bc858657) was appended to `chordia_audit_log.yaml`. Profile moved 3 → 4 lanes (expected annual_R 77.4 → 108.3).
-  - **New lane added:** `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08` — ExpR +0.202, N=150, PASS_PROTOCOL_A, regime HOT (+0.0505).
-  - **COMEX_SETTLE upgrade:** `ORB_VOL_2K` (ExpR +0.143, AnnR 31.8) → `OVNRNG_100` (ExpR +0.224, AnnR 32.2). Same session, higher trailing edge, same Chordia/c8 status.
-  - **US_DATA_1000 upgrade:** `VWAP_MID_ALIGNED_O15` RR1.0 (ExpR +0.205) → RR1.5 (ExpR +0.242, AnnR 27.1).
-  - **NYSE_OPEN unchanged:** `COST_LT12` (PASS_PROTOCOL_A, ExpR +0.091).
-  - All 4 lanes Chordia-cleared + c8 PASSED + regime HOT. Displaced=9 (unchanged set). Pre-commit drift: 163 checks PASSED, 0 violations.
+- **Commit:** a810690b — improve bot dashboard focus layout
+- **Files changed:** 2 files
+  - `docs/runtime/stages/2026-05-23-dashboard-ux-stage1-css-only.md`
+  - `trading_app/live/bot_dashboard.html`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

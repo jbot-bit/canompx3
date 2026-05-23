@@ -3143,7 +3143,7 @@ def _empty_orb_payload() -> dict[str, Any]:
     return payload
 
 
-def _orb_levels_for_instrument(instrument: str) -> dict[str, Any]:
+def _orb_levels_for_instrument(instrument: str, days: int = 1) -> dict[str, Any]:
     """Read ORB high/low/window for ``instrument`` from bot_state.json.
 
     Reads through canonical ``read_state`` accessor — never re-derives ORB
@@ -3153,11 +3153,19 @@ def _orb_levels_for_instrument(instrument: str) -> dict[str, Any]:
     Returns a stable-shape dict with null fields if no lane has computed
     ORB yet, the trading_day is missing, or the canonical resolver
     rejects the session/aperture combination.
+
+    Stage 2 (2026-05-23): adds ``daily_orb_windows`` — per-day ORB-aperture
+    windows for the last ``days`` trading days, each computed via the same
+    canonical ``orb_utc_window`` resolver. Width = literal ``orb_minutes``
+    aperture (5/15/30m). No fabricated display constant. Each entry has
+    schema ``{trading_day, session_name, orb_minutes, window_start_utc,
+    window_end_utc}``. ``days`` is server-clamped to 1..5.
     """
     from pipeline.dst import orb_utc_window
     from trading_app.live.bot_state import read_state
 
     payload = _empty_orb_payload()
+    payload["daily_orb_windows"] = []
     state = read_state() or {}
     lanes = state.get("lanes") or {}
     if not isinstance(lanes, dict):
@@ -3173,6 +3181,8 @@ def _orb_levels_for_instrument(instrument: str) -> dict[str, Any]:
                 "_orb_levels_for_instrument: bad trading_day %r — window fields null",
                 trading_day_str,
             )
+
+    clamped_days = max(1, min(int(days), 5))
 
     for lane in lanes.values():
         if not isinstance(lane, dict):
@@ -3210,6 +3220,32 @@ def _orb_levels_for_instrument(instrument: str) -> dict[str, Any]:
                     orb_minutes,
                     exc,
                 )
+
+            # Stage 2: per-day canonical aperture windows for the last N trading days.
+            # Each call delegates to the same canonical orb_utc_window — width is the
+            # literal orb_minutes aperture, never a fabricated display constant.
+            for i in range(clamped_days):
+                td = trading_day_obj - timedelta(days=i)
+                try:
+                    s, e = orb_utc_window(td, session_name, orb_minutes)
+                except (ValueError, KeyError) as exc:
+                    log.warning(
+                        "_orb_levels_for_instrument: per-day orb_utc_window(%s, %s, %s) rejected (%s) — entry skipped",
+                        td,
+                        session_name,
+                        orb_minutes,
+                        exc,
+                    )
+                    continue
+                payload["daily_orb_windows"].append(
+                    {
+                        "trading_day": td.isoformat(),
+                        "session_name": session_name,
+                        "orb_minutes": orb_minutes,
+                        "window_start_utc": int(s.timestamp()),
+                        "window_end_utc": int(e.timestamp()),
+                    }
+                )
         return payload
     return payload
 
@@ -3219,15 +3255,19 @@ async def api_bars_recent(
     instrument: str = "MNQ",
     lookback_minutes: int = 90,
     since: str | None = None,
+    days: int = 1,
 ):
     """Return recent 1m bars + ORB levels shaped for Lightweight Charts.
 
-    lookback_minutes capped at 1440 (24h). since= overrides lookback.
-    ORB levels delegated to canonical bot_state.json — never re-derived.
+    lookback_minutes capped at 7200 (5d). since= overrides lookback.
+    days capped at 5 — controls how many per-day ORB-aperture windows are
+    returned in `daily_orb_windows` (Stage 2 2026-05-23). ORB levels and
+    windows delegated to canonical bot_state.json + pipeline.dst.orb_utc_window
+    — never re-derived.
     """
-    capped_lookback = max(1, min(int(lookback_minutes), 1440))
+    capped_lookback = max(1, min(int(lookback_minutes), 7200))
     bars, err = _query_bars_recent(instrument, capped_lookback, since)
-    orb = _orb_levels_for_instrument(instrument)
+    orb = _orb_levels_for_instrument(instrument, days=days)
     payload: dict[str, Any] = {
         "instrument": instrument,
         "bars": bars,
