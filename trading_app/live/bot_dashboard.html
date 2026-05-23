@@ -2391,6 +2391,98 @@
     .cockpit-grid { display: contents; }
     .cockpit-grid-left, .cockpit-grid-right { display: contents; }
   }
+
+  /* 2026-05-23 operator scan cleanup: HTML-only, no route changes */
+  body.cockpit .connection-summary.primary-action {
+    border-left-width: 3px;
+    background: linear-gradient(90deg, rgba(239,68,68,0.08), rgba(13,17,23,0.98) 44%);
+  }
+  body.cockpit .connection-summary.primary-action.connecting {
+    background: linear-gradient(90deg, rgba(245,158,11,0.08), rgba(13,17,23,0.98) 44%);
+  }
+  body.cockpit .connection-summary.primary-action .connection-summary-title {
+    color: var(--text-2);
+  }
+  body.cockpit .connection-summary.primary-action .connection-summary-message {
+    max-width: 700px;
+  }
+  body.cockpit .connection-summary.primary-action .connection-summary-action {
+    color: var(--text);
+    border-color: var(--border-hi);
+    background: var(--surface-2);
+  }
+  body.cockpit #operator-shell.connection-blocked .operator-summary {
+    margin-bottom: 10px;
+  }
+  body.cockpit #operator-shell.connection-blocked #operator-primary-action {
+    display: none !important;
+  }
+  body.cockpit #operator-shell.connection-blocked .operator-reason {
+    color: var(--muted);
+  }
+  body.cockpit .drawer-handle-strip {
+    gap: 4px;
+    margin: 6px 0 8px;
+  }
+  body.cockpit .drawer-handle {
+    padding: 4px 9px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  body.cockpit .drawer-handle .drawer-handle-count {
+    margin-left: 4px;
+    padding: 0 4px;
+  }
+  body.cockpit .sec.collapsed .sec-hd,
+  body.cockpit .operator-shell:not(.open) .operator-shell-top,
+  body.cockpit .alerts-shell:not(.open) .alerts-shell-top {
+    min-height: 38px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+  body.cockpit .sec,
+  body.cockpit .operator-shell,
+  body.cockpit .alerts-shell,
+  body.cockpit #session-status-panel {
+    margin-bottom: 8px;
+  }
+  body.cockpit #btn-kill {
+    opacity: 0.55;
+  }
+  body.cockpit #btn-kill:hover,
+  body.cockpit #btn-kill.holding,
+  body.cockpit #btn-kill.kill-confirming {
+    opacity: 1;
+  }
+  @media (max-width: 820px) {
+    body.cockpit .topbar {
+      gap: 8px;
+    }
+    body.cockpit #btn-primary-cta {
+      min-height: 46px;
+    }
+    body.cockpit #btn-trade-book,
+    body.cockpit #btn-preflight,
+    body.cockpit #btn-refresh {
+      flex: 1 1 calc(33.333% - 6px);
+      padding: 8px 6px;
+    }
+    body.cockpit #btn-kill {
+      flex: 0 0 72px;
+      padding: 8px 6px;
+      font-size: 10px;
+    }
+    body.cockpit .drawer-handle-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    body.cockpit .drawer-handle {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
 </style>
 </head>
 <body>
@@ -3292,17 +3384,20 @@ function renderOperatorState(data) {
   try { renderConnectionReadiness(data?.connection_readiness); } catch (_) {}
   const topState = data?.top_state || "ERROR";
   const tone = operatorTone(topState);
+  const connectionBlocked = data?.recommended_action?.id === "open_connections"
+    || data?.connection_readiness?.action === "open_connections";
+  $("operator-shell")?.classList.toggle("connection-blocked", !!connectionBlocked);
   const badge = $("operator-state-badge");
   badge.className = `operator-state-badge ${tone}`;
   badge.textContent = topState.replace(/_/g, " ");
 
-  setText("operator-headline", topState === "READY" ? "Ready to start" : topState.replace(/_/g, " "));
+  setText("operator-headline", connectionBlocked ? "Broker connection required" : topState === "READY" ? "Ready to start" : topState.replace(/_/g, " "));
   setText("operator-reason", data?.reason || "No operator summary available.");
   setText("operator-profile", data?.profile ? `Profile: ${data.profile}` : "Profile: none");
 
   const btn = $("operator-primary-action");
   const action = data?.recommended_action || null;
-  if (action && action.id) {
+  if (action && action.id && !connectionBlocked) {
     btn.style.display = "";
     btn.textContent = action.label || "Continue";
     btn.className = `operator-primary-btn ${operatorButtonTone(action.id)}`.trim();
@@ -3339,7 +3434,7 @@ function renderConnectionReadiness(connection) {
   const shell = $("connection-summary");
   if (!shell) return;
   const status = String(connection?.status || "error");
-  const message = String(connection?.message || "Broker connection state unavailable.");
+  const rawMessage = String(connection?.message || "Broker connection state unavailable.");
   const labelMap = {
     connected: "Connected",
     missing: "Not connected",
@@ -3347,9 +3442,15 @@ function renderConnectionReadiness(connection) {
     connecting: "Connecting",
     error: "Connection error",
   };
+  const messageMap = {
+    missing: "Add a broker connection to unlock start controls.",
+    disabled: "Enable a broker connection to unlock start controls.",
+    connecting: "Broker connection is still coming online.",
+  };
+  const message = messageMap[status] || rawMessage;
   setText("connection-summary-title", labelMap[status] || "Connection");
   setText("connection-summary-message", message);
-  shell.className = status === "connected" ? "connection-summary" : `connection-summary on ${status}`;
+  shell.className = status === "connected" ? "connection-summary" : `connection-summary on primary-action ${status}`;
   const actionBtn = $("connection-summary-action");
   if (actionBtn) {
     if (connection?.action === "open_connections") {

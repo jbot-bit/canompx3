@@ -37,6 +37,11 @@ closed_note: |
   intentionally deferred. Will mark CLOSED after the next --live debut
   confirms (a) fresh candle within 90s of session start, (b) ring file
   deleted on clean shutdown, (c) chart falls back to gold.db post-session.
+
+  2026-05-23 Codex smoke attempt: NOT CLOSED. Signal-only preflight failed
+  before a smoke session could start because ProjectX auth was missing
+  (`PROJECTX_USER`), with `Preflight: 5/8 passed`. Required live evidence
+  remains absent; keep `implementation_status: AUDIT_CLOSED_PENDING_LIVE_SMOKE`.
 ---
 
 ## Blast Radius

@@ -8,6 +8,7 @@
 
 ## This Session (2026-05-23 — Codex WSL launcher dirty-clone hardening)
 
+- **start_bot dashboard UI/UX follow-up (Codex):** Attempted to close `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md` via the required signal/live smoke, but preflight failed before a smoke session could start: `PROJECTX_USER` missing, `[1/8] Auth check (projectx)` failed, `Preflight: 5/8 passed`. Stage remains `AUDIT_CLOSED_PENDING_LIVE_SMOKE` / `mode: IMPLEMENTATION`; do not close it until fresh-candle, ring-delete, and gold.db fallback are observed. Implemented only HTML/CSS/JS cleanup in `trading_app/live/bot_dashboard.html`: connection-blocked copy is consolidated into the connection panel, drawer handles and collapsed sections are tighter, mobile topbar controls are denser, and operator checks remain visible when expanded. `canompx3_reviewer` found one operator-visibility regression (hidden checks); fixed and re-reviewed as PASS for HTML-only signoff.
 - **Live-broker-resilience follow-up (Codex):** Audited Stages 3/4/5 from code/docs/tests, not stale stage modes. Stage 5 was already closed in substance; Stage 3/4 stage files were stale `mode: IMPLEMENTATION`. Implemented only the Tradovate equity-age adapter gap: `TradovatePositions.query_equity_with_age()` now returns `live`, `cache`, or `missing` with last-good caching, matching the Stage 3 contract. Added three focused tests in `tests/test_trading_app/test_tradovate.py`. Closed `docs/runtime/stages/live-broker-resilience-stage3.md` and `docs/runtime/stages/live-broker-resilience-stage4.md`.
 - **Codex WSL first-env hardening closeout:** Verified `/home/joshd/canompx3` as the WSL-native Codex checkout. `codex_local_env.py doctor --platform wsl` passes core checks (native root, `.venv-wsl`, Codex binary, writable mount, shared CODEX_HOME); residual warnings are pre-existing operator state: Codex home defaults to `gpt-5.5` while repo stable path says `gpt-5.4`, HANDOFF/action-queue render mismatch, and six active stage files.
 - **Fixed setup reproducibility gap:** `pytest-timeout` was configured in `pyproject.toml` and locked as an optional `dev` extra, but omitted from uv dependency groups, so repo-owned WSL setup did not install the plugin and pytest emitted unknown timeout-option warnings. Added `pytest-timeout>=2.3.1` to `[dependency-groups].test`, refreshed `uv.lock`, and added a guard in `tests/test_tools/test_codex_local_env.py`.
@@ -413,13 +414,11 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-23
-- **Commit:** current live fix commit — fix(live): add Tradovate equity age readings
-- **Files changed:** 5 files
+- **Commit:** latest pushed commit — fix(dashboard): tighten start bot blocked-state UI
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/live-broker-resilience-stage3.md`
-  - `docs/runtime/stages/live-broker-resilience-stage4.md`
-  - `tests/test_trading_app/test_tradovate.py`
-  - `trading_app/live/tradovate/positions.py`
+  - `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md`
+  - `trading_app/live/bot_dashboard.html`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
