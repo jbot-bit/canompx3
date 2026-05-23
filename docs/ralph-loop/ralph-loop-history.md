@@ -5,6 +5,19 @@
 
 ---
 
+## Iteration 206 — 2026-05-23
+- Phase: fix
+- Classification: [judgment]
+- Target: scripts/tools/rebalance_lanes.py:107
+- Finding: Silent tier fallback — ACCOUNT_TIERS.get() returning None for an unknown profile firm+size would silently use hardcoded $3,000 DD cap instead of failing.
+- Doctrine cited: integrity-guardian.md § 1 (fail-closed) + institutional-rigor.md § 6 (no silent failures)
+- Action: Replaced ternary with explicit None-check raising ValueError naming the missing firm+size. All current profiles verified safe (no RuntimeError expected at runtime).
+- Blast radius: 1 file (rebalance_lanes.py, CLI entry point; no production callers)
+- Verification: PASS — 83 lane_allocator tests pass; behavioral audit PASS; ruff PASS
+- Commit: ecb33f00
+
+---
+
 ## Iteration 202 — 2026-05-23
 - Phase: fix
 - Classification: [mechanical]

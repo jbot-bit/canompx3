@@ -1,12 +1,12 @@
 {
-  "total_iterations": 195,
+  "total_iterations": 196,
   "last_updated": "2026-05-23",
-  "consecutive_low_only": 1,
-  "last_high_finding_iter": 201,
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 206,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 64,
-      "fixed": 51,
+      "found": 65,
+      "fixed": 52,
       "deferred": 4,
       "fix_rate": 0.8
     },
@@ -128,11 +128,11 @@
   "findings_by_severity": {
     "CRITICAL": 9,
     "HIGH": 14,
-    "MEDIUM": 52,
+    "MEDIUM": 53,
     "LOW": 120
   },
   "classifications": {
-    "judgment": 86,
+    "judgment": 87,
     "mechanical": 76,
     "audit-only": 33
   },
@@ -1185,6 +1185,11 @@
     "trading_app/chordia.py": {
       "audit_count": 1,
       "last_iter": 198,
+      "findings": 1
+    },
+    "scripts/tools/rebalance_lanes.py": {
+      "audit_count": 1,
+      "last_iter": 206,
       "findings": 1
     }
   },
@@ -3333,6 +3338,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "f746f5ec"
+    },
+    {
+      "iter": 206,
+      "date": "2026-05-23",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "scripts/tools/rebalance_lanes.py:107",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "ecb33f00"
     }
   ]
 }
