@@ -6,6 +6,17 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-23 — SR-monitor refresh + override-vs-registry drift diagnosis)
+
+- **Tool:** Claude Code (Opus 4.7), explanatory mode, cwd `C:/Users/joshd/canompx3` on `main` @ `5e64a4fa`. No edits to production code. One memory feedback file + this HANDOFF append.
+- **Triggered by:** `/orient` pulse surfaced HIGH-severity item — Criterion 11 profile fingerprint mismatch on `topstep_50k_mnq_auto`. Ran `python scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto`. C11 cleared (operational 90.9%, 10000 paths). C12 surfaced 3 SR ALARMs across 4 deployed MNQ lanes.
+- **What the ALARMs are:** all three (`MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100` SR=35.39, `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15` SR=41.60, `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` SR=33.27) already have `outcome="watch"` entries in `trading_app/sr_review_registry.py` adjudicated 2026-04-12 / 2026-04-14 / 2026-05-17 against WFE and OOS/IS literature floors. Per `docs/runtime/sr_monitor_workflow.md` step-1 doctrine, this is correct adjudicated operational state, not a new fire.
+- **Real finding (n=1 silent disagreement):** `lifecycle_state.read_lifecycle_state` reports `blocked: True, block_source: pause` for `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` despite the registry `watch` outcome. Cause: `data/state/lane_overrides_topstep_50k_mnq_auto.json` carries a stale shadow pause entry (paused 2026-04-22, `expires: 2026-05-23`) that was not removed when the 2026-05-17 review was added — the workflow doc step 2 ("Remove the shadowing pause entry") was skipped. `lifecycle_state.py:233` short-circuits on `pause_info is not None` BEFORE consulting the registry, so the registry's `watch` is silently shadowed.
+- **Capital impact tonight:** zero. Brisbane is Saturday 2026-05-23 — no US sessions fire today. Override expires at midnight UTC+10 (Brisbane → Sunday 2026-05-24). Monday Brisbane evening's NYSE_OPEN will see `blocked: false` correctly because the override is gone and the registry `watch` takes effect.
+- **Other lanes:** `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08` is CONTINUE (no alarm) — that's the newly-promoted lane from commit `bc858657`. `MES_CME_PRECLOSE_*` PAUSED list is the standard pre-existing operational-pause set, unrelated.
+- **Memory written:** `memory/feedback_sr_review_registry_without_override_removal_n1_2026_05_23.md` — captures the n=1 step-1-without-step-2 incident class, with n=2/n=3 thresholds per established [[feedback-n3-same-class-doctrine-threshold]] doctrine.
+- **No action required tomorrow.** Override auto-expires. Suggested follow-up if pattern recurs: drift check that asserts "every `outcome='watch'` registry entry has no live (`active==false AND expires>=today`) entry in the corresponding overrides file" — defer until n=2.
+
 ## This Session (2026-05-23 — Claude memory/state-load audit, partial disarm)
 
 - **Tool:** Claude Code (Opus 4.7), explanatory mode, cwd `C:/Users/joshd/canompx3` on main.
