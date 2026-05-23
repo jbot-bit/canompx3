@@ -13,9 +13,9 @@ import requests
 from ..http_client import (
     ORDER_POLICY,
     READ_POLICY,
-    RetryPolicy,
     BrokerHTTPClient,
     BrokerRateLimitExhausted,
+    RetryPolicy,
 )
 
 log = logging.getLogger(__name__)
@@ -24,6 +24,15 @@ log = logging.getLogger(__name__)
 # Re-export under the legacy name so existing imports continue to work.
 # `isinstance(exc, RateLimitExhausted)` still resolves correctly for callers.
 RateLimitExhausted = BrokerRateLimitExhausted
+
+__all__ = [
+    "ORDER_POLICY",
+    "READ_POLICY",
+    "RetryPolicy",
+    "BrokerHTTPClient",
+    "RateLimitExhausted",
+    "request_with_retry",
+]
 
 
 def request_with_retry(

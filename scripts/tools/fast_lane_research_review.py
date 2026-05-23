@@ -777,6 +777,7 @@ def load_canonical_strategy_context(strategy_ids: Iterable[str]) -> dict[str, di
         return {}
     try:
         import duckdb
+
         from pipeline.db_config import configure_connection
         from pipeline.paths import GOLD_DB_PATH
     except ImportError:
