@@ -8,8 +8,17 @@ task: |
   is enforced PreToolUse (not only at session start). CLI tool exposes
   --status / --release / --force-release. Stale leases are auto-reclaimed when
   the holder PID is dead OR the heartbeat is older than 30 min.
-mode: IMPLEMENTATION
-updated: 2026-05-23T00:29Z
+mode: CLOSED
+updated: 2026-05-23T01:02Z
+closed_date: 2026-05-23
+closed_note: |
+  Shipped via commit 38d58faf (pushed to origin/main 4 ahead alongside Ralph
+  iter 204/205). 24/24 tests pass (17 CLI + 7 hook). Drift 162 PASSED
+  including check #182 (worktree-guard lease/lock path parity, added via
+  Ralph iter 205 commit 34dabeaf). Hook latency ~45ms incl. filelock import.
+  Filelock library (BSD, msvcrt.locking on Windows, fcntl on POSIX) per
+  official docs — not hand-rolled. Live_journal.db skip-worktree flag
+  cleared. Acceptance criteria all met.
 scope_lock:
   - scripts/tools/worktree_guard.py
   - .claude/hooks/worktree_guard.py
