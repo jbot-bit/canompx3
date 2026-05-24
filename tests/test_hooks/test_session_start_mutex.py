@@ -29,6 +29,18 @@ from types import ModuleType
 
 import pytest
 
+# Disable pytest-timeout for this module. Two prior fixes (subprocess elimination
+# in 2ea20ee9, `timeout_func_only=true` in 85ae67fa) reduced but did not
+# eliminate the GH-hosted-Windows-runner crash where pytest-timeout's
+# `thread` method fires `_thread.interrupt_main()` during the inter-test
+# teardown gap, raising KeyboardInterrupt at threading.py:359 and then
+# crashing in `_pytest/capture.py:802` on `assert self._global_capturing
+# is not None`. Observed again 2026-05-24 (run 26355837431) after the SHA
+# manifest fix unmasked it. These tests are subprocess-free and complete
+# in <1s collectively; the watchdog has no signal to detect here, only
+# false positives from the Windows thread-interrupt race.
+pytestmark = pytest.mark.timeout(0)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 HOOK_PATH = PROJECT_ROOT / ".claude" / "hooks" / "session-start.py"
 
