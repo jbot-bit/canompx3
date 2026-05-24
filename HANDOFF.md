@@ -463,11 +463,9 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-25
-- **Commit:** 59794397 — fix(dashboard): clear Ralph iter 210 pyright errors
-- **Files changed:** 3 files
+- **Commit:** 35c19a17 — docs(handoff): record Codex final closeout push
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/ralph_iter_210.md`
-  - `trading_app/live/bot_dashboard.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
