@@ -17,7 +17,7 @@ from pathlib import Path
 import duckdb
 
 from pipeline.db_config import configure_connection
-from trading_app.prop_profiles import AccountProfile, effective_daily_lanes, get_firm_spec
+from trading_app.prop_profiles import AccountProfile, effective_daily_lanes, get_firm_spec, parse_strategy_id
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,6 +38,7 @@ def build_profile_fingerprint(profile: AccountProfile) -> str:
                 "strategy_id": lane.strategy_id,
                 "instrument": lane.instrument,
                 "orb_label": lane.orb_label,
+                "orb_minutes": parse_strategy_id(lane.strategy_id)["orb_minutes"],
                 "planned_stop_multiplier": lane.planned_stop_multiplier,
                 "required_fitness": list(lane.required_fitness),
                 "max_orb_size_pts": lane.max_orb_size_pts,

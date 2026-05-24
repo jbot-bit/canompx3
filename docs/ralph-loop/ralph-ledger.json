@@ -1,7 +1,7 @@
 {
-  "total_iterations": 196,
-  "last_updated": "2026-05-23",
-  "consecutive_low_only": 0,
+  "total_iterations": 198,
+  "last_updated": "2026-05-24",
+  "consecutive_low_only": 2,
   "last_high_finding_iter": 206,
   "findings_by_type": {
     "canonical_violation": {
@@ -17,14 +17,14 @@
       "fix_rate": 0.91
     },
     "other": {
-      "found": 30,
+      "found": 31,
       "fixed": 15,
       "deferred": 4,
-      "fix_rate": 0.5
+      "fix_rate": 0.48
     },
     "dead_code": {
-      "found": 17,
-      "fixed": 17,
+      "found": 18,
+      "fixed": 18,
       "deferred": 0,
       "fix_rate": 1.0
     },
@@ -129,12 +129,12 @@
     "CRITICAL": 9,
     "HIGH": 14,
     "MEDIUM": 53,
-    "LOW": 120
+    "LOW": 122
   },
   "classifications": {
-    "judgment": 87,
+    "judgment": 88,
     "mechanical": 76,
-    "audit-only": 33
+    "audit-only": 34
   },
   "files_audited": {
     "trading_app/live/session_orchestrator.py": {
@@ -252,6 +252,11 @@
       "last_iter": 192,
       "findings": 3
     },
+    "pipeline/paths.py": {
+      "audit_count": 3,
+      "last_iter": 207,
+      "findings": 1
+    },
     "trading_app/pre_session_check.py": {
       "audit_count": 3,
       "last_iter": 201,
@@ -316,11 +321,6 @@
       "audit_count": 2,
       "last_iter": 140,
       "findings": 2
-    },
-    "pipeline/paths.py": {
-      "audit_count": 2,
-      "last_iter": 183,
-      "findings": 1
     },
     "scripts/tools/select_family_rr.py": {
       "audit_count": 2,
@@ -396,6 +396,11 @@
       "audit_count": 2,
       "last_iter": 178,
       "findings": 1
+    },
+    "pipeline/system_context.py": {
+      "audit_count": 2,
+      "last_iter": 208,
+      "findings": 2
     },
     "strategy_validator.py": {
       "audit_count": 1,
@@ -1142,11 +1147,6 @@
       "last_iter": 180,
       "findings": 0
     },
-    "pipeline/system_context.py": {
-      "audit_count": 1,
-      "last_iter": 181,
-      "findings": 1
-    },
     "pipeline/cost_model.py": {
       "audit_count": 1,
       "last_iter": 182,
@@ -1190,6 +1190,31 @@
     "scripts/tools/rebalance_lanes.py": {
       "audit_count": 1,
       "last_iter": 206,
+      "findings": 1
+    },
+    "trading_app/derived_state.py": {
+      "audit_count": 1,
+      "last_iter": 207,
+      "findings": 0
+    },
+    "pipeline/db_contracts.py": {
+      "audit_count": 1,
+      "last_iter": 207,
+      "findings": 0
+    },
+    "scripts/audits/__init__.py": {
+      "audit_count": 1,
+      "last_iter": 207,
+      "findings": 0
+    },
+    "tests/test_pipeline/test_system_context.py": {
+      "audit_count": 1,
+      "last_iter": 208,
+      "findings": 1
+    },
+    "start.py": {
+      "audit_count": 1,
+      "last_iter": 208,
       "findings": 1
     }
   },
@@ -3349,6 +3374,28 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "ecb33f00"
+    },
+    {
+      "iter": 207,
+      "date": "2026-05-24",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "pipeline/paths.py (re-audit) + trading_app/derived_state.py + pipeline/db_contracts.py + scripts/audits/__init__.py",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 208,
+      "date": "2026-05-24",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "pipeline/system_context.py + tests/test_pipeline/test_system_context.py + .claude/hooks/session-start.py",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "b3d1d6dd"
     }
   ]
 }

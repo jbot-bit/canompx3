@@ -3,50 +3,51 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 206
+## Last iteration: 208
 
-## RALPH AUDIT — Iteration 206 (COMPLETED)
-## Date: 2026-05-23
-## Infrastructure Gates: 162 checks (1 DB-data violation in Check 70: MGC daily_features 1 anomalous row — pre-existing data, not a code defect); behavioral audit PASS; ruff PASS
-## Scope: scripts/tools/rebalance_lanes.py
+## RALPH AUDIT — Iteration 208 (COMPLETED)
+## Date: 2026-05-24
+## Infrastructure Gates: 163 drift checks PASS; 20 tests PASS; ruff PASS
+## Scope: pipeline/system_context.py, tests/test_pipeline/test_system_context.py, .claude/hooks/session-start.py
 
 ---
 
 ## Full-File Audit Results
 
-### Finding REBAL-206 — LOW — FIXED
+### pipeline/system_context.py — 4 FINDINGS FIXED
 
-**PREMISE:** `rebalance_lanes.py:107` — `ACCOUNT_TIERS.get((profile.firm, profile.account_size))` can return `None` for an unknown firm+size combo, and the ternary `tier.max_dd if tier else 3000.0` silently uses a hardcoded `$3,000` DD cap instead of failing.
+1. **[MEDIUM] Parallel-claim blocker downgrade uses wrong code for read-only sessions** — `evaluate_system_policy` for `session_start_read_only`/`orientation` downgraded `parallel_mutating_claim` blockers to warnings but kept the original `parallel_mutating_claim` code. The corresponding test expected `parallel_session_present`. Fix: emit `parallel_session_present` code for downgraded warnings (consistent with the generic parallel-session signal). `pipeline/system_context.py:902-910`.
 
-**TRACE:** `rebalance_lanes.py:100 → profile = ACCOUNT_PROFILES[pid]` → `rebalance_lanes.py:106 → tier = ACCOUNT_TIERS.get(...)` → `rebalance_lanes.py:107 → max_dd = tier.max_dd if tier else 3000.0` → passed to `build_allocation(max_dd=3000.0)`.
+2. **[LOW] `_build_authority_context` has unused `db_path` parameter** — declared at `def _build_authority_context(db_path: Path)` but never accessed inside the function (body always uses `GOLD_DB_PATH` via canonical import). Pyright reported "db_path is not accessed" (line 578:30). Fix: removed parameter and updated call site at line 709.
 
-**Fix:** `rebalance_lanes.py:105-114` — Replaced silent ternary with explicit `None` check that raises `ValueError` naming the missing firm+size. All current profiles verified to have ACCOUNT_TIERS entries (no ValueError expected at runtime).
+3. **[LOW] `_current_runtime_tag` structurally unreachable code** — Pyright Windows platform narrowing made lines 266-268 unreachable because `os.name == "nt"` resolved as always-True. Fix: intermediate variable `platform = os.name` breaks constant narrowing.
 
-**Doctrine cited:** integrity-guardian.md § 1 (fail-closed) + institutional-rigor.md § 6 (no silent failures)
+4. **[LOW] `_pid_is_live` structurally unreachable code** — Same pattern. `if os.name == "nt":` resolved as always-True, making the POSIX `os.kill` path (line 317+) unreachable. Fix: intermediate variable `_platform = os.name`.
 
-**Commit:** ecb33f00
+### tests/test_pipeline/test_system_context.py — 1 FINDING FIXED
+
+5. **[LOW] Unused imports `ActiveStage` and `PolicyIssue`** — imported at lines 14 and 16 but never referenced in any test. Removed.
+
+### .claude/hooks/session-start.py — 1 FINDING FIXED
+
+6. **[LOW] `budget.get("within_budget")` Pyright type error** — `budget` was typed via `brief.get("orientation_cost_budget") or {}` which Pyright resolved as `object | dict`, making `.get()` inaccessible on the `object` branch. Fix: explicit `isinstance(budget, dict)` guard.
 
 ---
 
-## Seven Sins Scan — rebalance_lanes.py (full)
+## Seven Sins Scan — iteration 208
 
-- Sin 1 (Silent failure / Fail-open): FIXED (REBAL-206). One additional pass: `subprocess.run` on `allocation_intel.py` catches `(CalledProcessError, TimeoutExpired, OSError)` and prints WARN — ACCEPTABLE (explicit fail-open intent for advisory surface).
-- Sin 2 (Canonical violation): CLEAN. `ACCOUNT_PROFILES`, `ACCOUNT_TIERS` from canonical `trading_app.prop_profiles`. `compute_lane_scores`, `build_allocation`, `save_allocation` from canonical `trading_app.lane_allocator`.
-- Sin 3 (Fail-open on capital gate): FIXED (REBAL-206).
-- Sin 4 (Impact awareness): CLEAN — CLI entry point, no production callers.
-- Sin 5 (Evidence over assertion): CLEAN.
+- Sin 1 (Silent failure): No exception handling changed. CLEAN.
+- Sin 2 (Canonical violation): `_build_authority_context` still imports canonical sources correctly. Removing unused `db_path` param does not affect canonical source delegation. CLEAN.
+- Sin 3 (Fail-open on capital gate): No capital gate code in scope. N/A.
+- Sin 4 (Impact awareness): All callers of `_build_authority_context` patched in tests. Call site updated. CLEAN.
+- Sin 5 (Evidence over assertion): All fixes traced to exact file:line before applying. CLEAN.
 - Sin 6 (Spec compliance): CLEAN.
-- Sin 7 (Never trust metadata): CLEAN.
+- Sin 7 (Never trust metadata): N/A.
 
 **Ralph-specific extensions scan:**
-- Async safety: No async code. CLEAN.
-- State persistence gap: `save_allocation` writes atomically via `trading_app.lane_allocator` — not Ralph's scope. CLEAN.
-- Contract drift: No mismatched call signatures detected. CLEAN.
-
-**Note on iters 203-205 (previous session, not recorded in audit.md):**
-- Iter 203: Pyright cleanup + conftest autouse fixture (ALERT-CONTAM-N2 partial)
-- Iter 204: ALERT-CONTAM-N2 drift check #62 (AST-aware) + 8 injection tests + BOT-204 write_live_health fix
-- Iter 205: PR301-TRADO-IDEMPOTENCY partial — clOrdId UUID4 + ORDER_POLICY switch + worktree guard parity check
+- Async safety: No async code in scope. CLEAN.
+- State persistence gap: No state mutation. CLEAN.
+- Contract drift: `_build_authority_context` signature change is internal-only (private function, single call site). CLEAN.
 
 ---
 
@@ -71,16 +72,19 @@
 - trading_app/prop_profiles.py (iter 202)
 - trading_app/live/bot_state.py (iter 204)
 - scripts/tools/rebalance_lanes.py (iter 206)
+- pipeline/paths.py (iter 207, re-audit)
+- trading_app/derived_state.py (iter 207)
+- pipeline/db_contracts.py (iter 207)
+- scripts/audits/__init__.py (iter 207)
+- pipeline/system_context.py (iter 208)
 
 ---
 
 ## Next Iteration Targets
 
 **Priority 1 (unscanned critical/high files):**
-- `trading_app/live/bot_state.py` — already scanned iter 204; clean
-- `pipeline/paths.py` — 220 importers, critical; last audited iter 71 (2026-03-15), modified 2026-05-08 — STALE RE-AUDIT candidate
-- `trading_app/config.py` — no-touch zone; audit only
+- `pipeline/system_brief.py` — high tier, 6 importers, unscanned
+- `trading_app/filter_utils.py` — unscanned, modified 2026-05-20 per deferred-findings
 
-**Priority 2 (open deferred — see deferred-findings.md for current open list):**
-- PR301-TRADO-RAW-SUCCESS-EARLY (LOW) — pre-existing design trade-off
-- A6-GAP4 (LOW) — fingerprint missing orb_minutes, pre-existing
+**Priority 2 (open deferred):**
+- A6-GAP4 (LOW) — re-check trigger: any change to `DailyLaneSpec` fields or `strategy_id` naming

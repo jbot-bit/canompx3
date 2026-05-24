@@ -5,6 +5,32 @@
 
 ---
 
+## Iteration 208 — 2026-05-24
+- Phase: fix
+- Classification: [judgment]
+- Target: pipeline/system_context.py + tests/test_pipeline/test_system_context.py + .claude/hooks/session-start.py
+- Finding: (1) Read-only parallel-claim blocker downgrade used wrong code (parallel_mutating_claim vs expected parallel_session_present). (2) Unused db_path param on _build_authority_context. (3) Structurally unreachable code in _current_runtime_tag and _pid_is_live (os.name platform narrowing). (4) Unused ActiveStage/PolicyIssue imports in test file. (5) budget.get() Pyright type error in session-start.py.
+- Doctrine cited: integrity-guardian.md § 5 (Evidence over Assertion — TRACE verified for all 6 findings)
+- Action: Fixed all 6 findings. 20/20 system_context tests pass; 163 drift checks pass.
+- Blast radius: 3 files
+- Verification: PASS — 20 tests, 163 drift, ruff PASS
+- Commit: b3d1d6dd
+
+---
+
+## Iteration 207 — 2026-05-24
+- Phase: audit-only
+- Classification: audit-only
+- Target: pipeline/paths.py (re-audit) + trading_app/derived_state.py + pipeline/db_contracts.py + scripts/audits/__init__.py
+- Finding: All 4 targets clean. paths.py 2026-05-08 change verified mechanical (dotenv logger silencing). derived_state.py A6-GAP4 re-check: no DailyLaneSpec changes, still deferred. db_contracts.py first full scan: canonical constant use, correct fallback logic, re-export chain verified. scripts/audits/__init__.py first full scan: clean enum, canonical GOLD_DB_PATH, dynamic count in print_summary.
+- Doctrine cited: integrity-guardian.md § 5 (Evidence over Assertion — TRACE verified for each candidate before reporting)
+- Action: Audit-only. No fixes applied.
+- Blast radius: 0 files
+- Verification: 163 drift PASS, 7 behavioral PASS, ruff PASS
+- Commit: NONE
+
+---
+
 ## Iteration 206 — 2026-05-23
 - Phase: fix
 - Classification: [judgment]

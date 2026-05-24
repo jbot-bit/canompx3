@@ -1,8 +1,8 @@
-## Iteration: 205
-## Target: trading_app/live/tradovate/http.py + order_router.py:64-99,101-149
-## Finding: Tradovate submit() uses READ_POLICY (5 retries) for order mutations; build_order_spec has no clOrdId; combined risk of duplicate order on transient failure
-## Classification: [judgment]
-## Blast Radius: 2 production files (tradovate/http.py, tradovate/order_router.py), 1 test file
-## Invariants: [existing cancel/positions READ_POLICY calls must not change, backwards-compat default READ_POLICY in shim, clOrdId must be stripped from wire_spec internal field name if present]
-## Diff estimate: 8-10 lines
-## Doctrine cited: integrity-guardian.md § 3 (fail-closed — never report success after exception/timeout), integrity-guardian.md § 6 (no silent failures)
+## Iteration: 208
+## Target: pipeline/system_context.py:882-925
+## Finding: evaluate_system_policy read-only/orientation branch duplicates _parallel_claim_issues inline without the mutating-peer escalation logic, producing divergent warning text and missing blocker-vs-warning distinction for mutating peers
+## Classification: [mechanical]
+## Blast Radius: 10 importers all via session_preflight._evaluate_preflight_policy; no capital-class callers
+## Invariants: [1. read-only/orientation still only emits warnings (not blockers) for peer claims; 2. session_start_mutating path unchanged; 3. warning message text uses _parallel_claim_issues canonical text]
+## Diff estimate: -21 lines production (deletion) + 3 new lines = ~18 lines net change
+## Doctrine cited: integrity-guardian.md § 5 (contract drift — inline re-implementation diverges from extracted helper); institutional-rigor.md § 4 (delegate to canonical sources, never re-encode)
