@@ -506,18 +506,9 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-25
-- **Commit:** 66293768 — feat(tools): add external intake validity gates
-- **Files changed:** 10 files
+- **Commit:** acf1263a — docs(handoff): record Codex worktree cleanup
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/audit/intake/2026-05-11-autotrading-school-tv-ai-engine.yaml`
-  - `docs/audit/live_validity/2026-05-11-topstep-mnq-controlled-pilot.yaml`
-  - `docs/audit/results/2026-05-11-tradingview-ai-backtesting-engine-teardown.md`
-  - `docs/prompts/external_strategy_intake_prompt.md`
-  - `docs/prompts/live_trade_validity_prompt.md`
-  - `scripts/tools/external_strategy_intake_check.py`
-  - `scripts/tools/live_trade_validity_check.py`
-  - `tests/test_tools/test_external_strategy_intake_check.py`
-  - `tests/test_tools/test_live_trade_validity_check.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
