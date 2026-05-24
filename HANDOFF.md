@@ -492,9 +492,17 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-25
-- **Commit:** b0eca95a — docs(handoff): sync Track D footer
-- **Files changed:** 1 files
+- **Commit:** 6b5916a5 — chore(codex): close adapter backlog
+- **Files changed:** 9 files
+  - `.codex/CODEX_IMPROVEMENT_PLAN.md`
+  - `.codex/INTEGRATIONS.md`
+  - `.codex/WORKFLOWS.md`
   - `HANDOFF.md`
+  - `scripts/infra/codex-capital-review.sh`
+  - `scripts/infra/codex-review.sh`
+  - `scripts/infra/codex_local_env.py`
+  - `tests/test_tools/test_codex_launcher_scripts.py`
+  - `tests/test_tools/test_codex_local_env.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
