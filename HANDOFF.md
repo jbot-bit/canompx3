@@ -482,7 +482,7 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-25
-- **Commit:** 6c433a21 — docs(track-d): record gate0 design measurements
+- **Commit:** 684c7cc4 — docs(track-d): record gate0 design measurements
 - **Files changed:** 3 files
   - `HANDOFF.md`
   - `docs/runtime/action-queue.yaml`
