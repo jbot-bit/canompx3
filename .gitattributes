@@ -32,3 +32,15 @@
 docs/audit/hypotheses/2026-05-11-llm-cme-preclose-atr-p30-o15.yaml   text eol=lf
 docs/audit/hypotheses/2026-05-11-llm-cme-preclose-orb-vol-16k-o15.yaml text eol=lf
 docs/audit/hypotheses/2026-05-11-llm-tokyo-open-atr-vel-ge105.yaml   text eol=lf
+# Second batch: 9 MNQ Phase-2 hypothesis pre-regs (entries 23-31) surfaced via Check 109
+# CI failure on PR #316. All 9 files are LF in both index and disk; pinning prevents
+# Windows runners from CRLF-renormalizing on checkout. Origin: 2026-05-24.
+docs/audit/hypotheses/2026-04-22-mnq-comex-pd-clear-long-take-v1.yaml         text eol=lf
+docs/audit/hypotheses/2026-04-22-mnq-layered-candidate-board-v1.yaml          text eol=lf
+docs/audit/hypotheses/2026-04-22-mnq-tokyo-costlt08-take-v1.yaml              text eol=lf
+docs/audit/hypotheses/2026-04-22-mnq-usdata1000-clear-of-congestion-take-v1.yaml    text eol=lf
+docs/audit/hypotheses/2026-04-22-mnq-usdata1000-downside-displacement-take-v1.yaml  text eol=lf
+docs/audit/hypotheses/2026-04-22-mnq-usdata1000-near-pivot-50-avoid-v1.yaml   text eol=lf
+docs/audit/hypotheses/2026-04-22-mnq-usdata1000-positive-context-union-v1.yaml      text eol=lf
+docs/audit/hypotheses/2026-04-22-mnq-usdata1000-rr15-positive-context-union-v1.yaml text eol=lf
+docs/audit/hypotheses/2026-04-24-mnq-usdata1000-f5-below-pdl-rr15-v1.yaml     text eol=lf
