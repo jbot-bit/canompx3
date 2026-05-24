@@ -192,14 +192,34 @@ prior_art:
         NYSE_OPEN begins for all apertures {5, 15, 30}.
   catalog_blocker:
     condition: "NYSE_PREOPEN not present in pipeline.dst.SESSION_CATALOG"
-    consequence: "Static check `check_sessions_valid` correctly rejects this pre-reg until the session is added to the canonical catalog. Expected and accepted failure mode for a session-discovery prereg."
+    consequence: >-
+      No static prereg-side validator rejects this pre-reg.
+      trading_app.hypothesis_loader.parse_hypothesis_file (lines 812-814)
+      only requires scope.sessions to be a non-empty list; it does NOT
+      check session names against SESSION_CATALOG. Refusal is runtime,
+      fail-closed: pipeline.dst.orb_utc_window (line 594) raises
+      ValueError "Unknown ORB label 'NYSE_PREOPEN' — not in
+      DYNAMIC_ORB_RESOLVERS" on the FIRST runner call that tries to
+      compute an ORB window for this session. Every runner path
+      (strategy_discovery, strategy_validator, fast-lane, chordia)
+      transits orb_utc_window, so no runner can produce trades for this
+      session until pipeline.dst.SESSION_CATALOG is extended. Expected
+      and accepted failure mode for a session-discovery prereg, but the
+      gate is runtime + fail-closed, NOT a static "check_sessions_valid"
+      check (no such check exists).
   execution_stages_required_before_runner:
     - "Add `us_preopen_brisbane(trading_day)` resolver to pipeline.dst (returns 23:00 Bris in EDT, 00:00 Bris next-cal-day in EST)"
     - "Add NYSE_PREOPEN entry to pipeline.dst.SESSION_CATALOG with break_group='us' and event annotation"
     - "Add NYSE_PREOPEN to pipeline.dst.DST_CLEAN_SESSIONS (all dynamic sessions are clean by construction)"
     - "Add NYSE_PREOPEN to pipeline.dst.DOW_MISALIGNED_SESSIONS with offset=-1 (winter EST midnight-crossing parity with NYSE_OPEN)"
-    - "Update hardcoded expected_sessions sets in pipeline.check_drift.py (#32 ORB_LABELS sync + canonical_constant_drift expected_sessions list)"
-    - "Update pipeline.init_db.ORB_LABELS to mirror SESSION_CATALOG dynamic set (drift check #32 enforces parity)"
+    - >-
+      Add NYSE_PREOPEN to pipeline.init_db.ORB_LABELS so the
+      SESSION_CATALOG ↔ ORB_LABELS parity holds (Check #32 in
+      pipeline.check_drift.py enforces this mirror; the
+      canonical_constant_drift expected_sessions list updates
+      automatically once both sides agree). trading_app.portfolio.py
+      line 894 derives valid_sessions = set(SESSION_CATALOG.keys()) at
+      load time and auto-propagates with no manual edit required.
     - "Add NYSE_PREOPEN resolver tests in tests/test_pipeline/test_dst.py (EDT/EST Brisbane outputs, DOW misalignment, validate_catalog still passes)"
     - "Expand daily_features schema to include orb_NYSE_PREOPEN_{5,15,30}_* columns (per existing per-session column pattern)"
     - "Backfill daily_features for all historical MNQ trading_days against the new NYSE_PREOPEN columns (multi-hour rebuild)"
@@ -401,3 +421,13 @@ not_done_by_this_pre_reg:
   - "Does not extract or commit any new literature source for the pre-open-imbalance mechanism — synthesis acknowledged."
   - "Does not change live deployment or allocator state."
   - "Does not address correlation between the proposed session and any deployed lane (allocator's correlation gate handles that downstream)."
+  - >-
+    Does not implement an NYSE holiday calendar canonical source. No
+    is_nyse_holiday column exists in daily_features and no NYSE holiday
+    predicate exists in pipeline.calendar_filters (only is_nfp_day and
+    adjacent date-class predicates). The implementation stage gated
+    behind this pre-reg's verdict MUST either (a) ingest a canonical
+    NYSE-holiday source before any runner execution, or (b) the runner
+    MUST fail-closed with a missing-source error at ingestion. Silent
+    inclusion of NYSE-closed dates in the IS or OOS sample is a
+    holiday-bar contamination kill per hypotheses[0].kill_criteria.
