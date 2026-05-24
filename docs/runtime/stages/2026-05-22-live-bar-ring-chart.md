@@ -50,8 +50,11 @@ closed_note: |
   (exact account id omitted from tracked docs).
   Required live chart evidence is still absent because the signal-only session
   fail-closed immediately on `CME HOLIDAY (2026-05-23) — ALL SESSIONS BLOCKED`
-  before receiving bars. `data/live_bars/` was empty after shutdown. Retry after
-  CME reopen.
+  before receiving bars. `data/live_bars/` was empty after shutdown. A tmux
+  auto-retry was briefly scheduled, then cancelled at operator request because
+  the operator does not want background DB/runtime activity. Closeout status:
+  implementation/audit are closed; the stage remains parked on manual
+  market-session smoke only. Operator will start it tomorrow after CME reopen.
 ---
 
 ## Blast Radius
