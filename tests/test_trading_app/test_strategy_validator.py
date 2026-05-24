@@ -2777,3 +2777,149 @@ class TestPreregPresentContentAwareMatch:
 
         # Should NOT raise — fail-open on missing DB is the documented behavior.
         _check_prereg_present(None, "MNQ")
+
+
+class TestOpenWriterWithRetry:
+    # Covers _open_writer_with_retry (F1 fix, 2026-05-24): peer-process gold.db
+    # lock-race resilience. Three observable behaviors: first-try success,
+    # lock-class retry-then-succeed, non-lock-class immediate propagation,
+    # exhaustion raises the final lock exception. Mocks duckdb.connect so the
+    # race is deterministic.
+
+    def test_first_try_success_returns_connection(self, monkeypatch):
+        import duckdb as _duckdb
+
+        from trading_app import strategy_validator as sv
+
+        sentinel = object()
+        call_count = {"n": 0}
+
+        def fake_connect(path):
+            call_count["n"] += 1
+            return sentinel
+
+        monkeypatch.setattr(_duckdb, "connect", fake_connect)
+        conn = sv._open_writer_with_retry("ignored.db", attempts=6, base_delay=0.001, max_delay=0.01)
+        assert conn is sentinel
+        assert call_count["n"] == 1
+
+    def test_lock_class_retry_then_success(self, monkeypatch):
+        import duckdb as _duckdb
+
+        from trading_app import strategy_validator as sv
+
+        sentinel = object()
+        call_count = {"n": 0}
+
+        def fake_connect(path):
+            call_count["n"] += 1
+            if call_count["n"] < 3:
+                raise _duckdb.IOException("IO Error: gold.db being used by another process")
+            return sentinel
+
+        monkeypatch.setattr(_duckdb, "connect", fake_connect)
+        monkeypatch.setattr("time.sleep", lambda _s: None)  # fast-forward backoff
+        conn = sv._open_writer_with_retry("ignored.db", attempts=6, base_delay=0.001, max_delay=0.01)
+        assert conn is sentinel
+        assert call_count["n"] == 3
+
+    def test_lock_class_alternate_message_retries(self, monkeypatch):
+        # The other documented lock-class substring: "could not set lock"
+        # (POSIX flock variant). Must also trigger retry.
+        import duckdb as _duckdb
+
+        from trading_app import strategy_validator as sv
+
+        sentinel = object()
+        call_count = {"n": 0}
+
+        def fake_connect(path):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise _duckdb.IOException("could not set lock on file gold.db")
+            return sentinel
+
+        monkeypatch.setattr(_duckdb, "connect", fake_connect)
+        monkeypatch.setattr("time.sleep", lambda _s: None)
+        conn = sv._open_writer_with_retry("ignored.db", attempts=4, base_delay=0.001, max_delay=0.01)
+        assert conn is sentinel
+        assert call_count["n"] == 2
+
+    def test_non_lock_ioexception_propagates_immediately(self, monkeypatch):
+        # A non-lock IOException (corrupted file, disk full, permission denied)
+        # MUST NOT be retried — that would mask real errors behind a 60-second
+        # silent loop. Per institutional-rigor.md § 6 (no silent failures).
+        import duckdb as _duckdb
+
+        from trading_app import strategy_validator as sv
+
+        call_count = {"n": 0}
+
+        def fake_connect(path):
+            call_count["n"] += 1
+            raise _duckdb.IOException("IO Error: Permission denied on gold.db")
+
+        monkeypatch.setattr(_duckdb, "connect", fake_connect)
+        monkeypatch.setattr("time.sleep", lambda _s: None)
+        with pytest.raises(_duckdb.IOException, match="Permission denied"):
+            sv._open_writer_with_retry("ignored.db", attempts=6, base_delay=0.001, max_delay=0.01)
+        assert call_count["n"] == 1  # one attempt, immediate raise
+
+    def test_non_ioexception_propagates_immediately(self, monkeypatch):
+        # Anything that is not duckdb.IOException at all (e.g., a generic
+        # RuntimeError or KeyboardInterrupt) MUST propagate unchanged. The
+        # except clause is narrow on purpose.
+        import duckdb as _duckdb
+
+        from trading_app import strategy_validator as sv
+
+        call_count = {"n": 0}
+
+        def fake_connect(path):
+            call_count["n"] += 1
+            raise RuntimeError("unrelated")
+
+        monkeypatch.setattr(_duckdb, "connect", fake_connect)
+        monkeypatch.setattr("time.sleep", lambda _s: None)
+        with pytest.raises(RuntimeError, match="unrelated"):
+            sv._open_writer_with_retry("ignored.db", attempts=6, base_delay=0.001, max_delay=0.01)
+        assert call_count["n"] == 1
+
+    def test_exhausted_attempts_raises_last_lock_exception(self, monkeypatch):
+        # If every attempt hits a lock, the helper must raise the LAST
+        # IOException (not None, not a generic error). attempts=3 means
+        # exactly 3 connect() calls, then raise.
+        import duckdb as _duckdb
+
+        from trading_app import strategy_validator as sv
+
+        call_count = {"n": 0}
+
+        def fake_connect(path):
+            call_count["n"] += 1
+            raise _duckdb.IOException(f"IO Error: being used by another process (call {call_count['n']})")
+
+        monkeypatch.setattr(_duckdb, "connect", fake_connect)
+        monkeypatch.setattr("time.sleep", lambda _s: None)
+        with pytest.raises(_duckdb.IOException, match="call 3"):
+            sv._open_writer_with_retry("ignored.db", attempts=3, base_delay=0.001, max_delay=0.01)
+        assert call_count["n"] == 3
+
+    def test_path_converted_to_str(self, monkeypatch):
+        # The helper receives `db_path` which may be a Path or a str — it must
+        # always pass a str to duckdb.connect (matches the canonical
+        # duckdb.connect(str(db_path)) signature used elsewhere in the file).
+        import duckdb as _duckdb
+
+        from trading_app import strategy_validator as sv
+
+        received = {"arg": None}
+
+        def fake_connect(path):
+            received["arg"] = path
+            return object()
+
+        monkeypatch.setattr(_duckdb, "connect", fake_connect)
+        sv._open_writer_with_retry(Path("/some/gold.db"), attempts=1, base_delay=0.001, max_delay=0.01)
+        assert isinstance(received["arg"], str)
+        assert received["arg"] == str(Path("/some/gold.db"))

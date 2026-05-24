@@ -88,6 +88,34 @@ from trading_app.walkforward import append_walkforward_result
 
 logger = get_logger(__name__)
 
+
+def _open_writer_with_retry(db_path, *, attempts: int = 6, base_delay: float = 1.0, max_delay: float = 30.0):
+    # Peer process (sibling worktree, MCP read, IDE) can hold gold.db for
+    # milliseconds during validator's write-back; without retry the entire
+    # WF compute (~750s) is lost. Retries only on lock-class IOException;
+    # all other DuckDB errors propagate unchanged. Total wait <= ~61s.
+    import random
+
+    import duckdb as _duckdb
+
+    last_exc: Exception | None = None
+    for i in range(attempts):
+        try:
+            return _duckdb.connect(str(db_path))
+        except _duckdb.IOException as exc:
+            msg = str(exc)
+            if "being used by another process" not in msg and "could not set lock" not in msg:
+                raise
+            last_exc = exc
+            if i == attempts - 1:
+                break
+            delay = min(base_delay * (2**i), max_delay) * (0.75 + 0.5 * random.random())
+            logger.warning(f"[writer-retry] gold.db locked (attempt {i + 1}/{attempts}); sleeping {delay:.1f}s")
+            time.sleep(delay)
+    assert last_exc is not None
+    raise last_exc
+
+
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
@@ -1378,7 +1406,7 @@ def run_validation(
     import duckdb
 
     # ── Phase A: Load strategies + serial cull (phases 1-5) ──────────
-    with duckdb.connect(str(db_path)) as con:
+    with _open_writer_with_retry(db_path) as con:
         from pipeline.db_config import configure_connection
 
         configure_connection(con, writing=True)
@@ -1727,7 +1755,7 @@ def run_validation(
         import uuid
 
         validation_run_id = f"{instrument}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
-        with duckdb.connect(str(db_path)) as con:
+        with _open_writer_with_retry(db_path) as con:
             from pipeline.db_config import configure_connection
 
             configure_connection(con, writing=True)
@@ -2403,7 +2431,7 @@ def run_validation(
 
             validation_run_id = f"{instrument}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
 
-        with duckdb.connect(str(db_path)) as con:
+        with _open_writer_with_retry(db_path) as con:
             from pipeline.db_config import configure_connection
 
             configure_connection(con, writing=True)
