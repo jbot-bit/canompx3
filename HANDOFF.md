@@ -36,6 +36,16 @@
   passing outside sandbox in 0.19s. Pushed `main` to `origin/main`
   (`6ba30ec0..5316e62d`); GitHub reported the expected direct-main required-check
   bypass.
+- **2026-05-25 additional closeout:** Closed stale
+  `docs/runtime/stages/ralph-deferred-burndown-2026-05-23.md` after verifying
+  the named code fixes were already on main (`044a3ac0` A6-GAP2,
+  `5dbd6b29` A6-GAP4). Added focused regression coverage so the
+  session-orchestrator replay helper now tests A6-GAP2 predicate mismatch
+  fail-closed behavior. Verification: `pytest -q
+  tests/test_trading_app/test_session_orchestrator.py::TestSafeguardExceptNarrowing`
+  => 12 passed; `ruff check tests/test_trading_app/test_session_orchestrator.py`
+  => pass; `python pipeline/check_drift.py --quiet` => clean, 163 passed,
+  20 advisory.
 - **Follow-up closeout:** Picked up existing Codex work and closed stale shipped
   stage docs for pytest-timeout function-only mode, dashboard UX Stage 1, and
   the live-broker-resilience root stage. While verifying dashboard/ring tests,

@@ -1,6 +1,20 @@
 ---
 task: Close/fix all 8 open deferred-findings ledger items
-mode: IMPLEMENTATION
+mode: CLOSED
+closed_date: 2026-05-25
+closed_note: |
+  Closed after fresh Codex verification. The named code fixes were already on
+  main: A6-GAP2 predicate-divergence guard in `session_orchestrator.py` from
+  `044a3ac0`, and A6-GAP4 `orb_minutes` fingerprint field in
+  `derived_state.py` from `5dbd6b29`. `docs/ralph-loop/deferred-findings.md`
+  has no unstruck active rows from this stage.
+
+  Follow-up in this closeout added regression coverage to the
+  `TestSafeguardExceptNarrowing` replay helper so the A6-GAP2 guard is tested
+  rather than only present in production code. Evidence:
+  `pytest -q tests/test_trading_app/test_session_orchestrator.py::TestSafeguardExceptNarrowing`
+  => 12 passed.
+original_mode: IMPLEMENTATION
 scope_lock:
   - trading_app/live/session_orchestrator.py
   - trading_app/derived_state.py

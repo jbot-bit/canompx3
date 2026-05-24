@@ -5783,6 +5783,15 @@ class TestSafeguardExceptNarrowing:
         profile_id = None
         if portfolio is not None and portfolio.name.startswith("profile_"):
             profile_id = portfolio.name.removeprefix("profile_")
+        _name_is_profile = portfolio is not None and portfolio.name.startswith("profile_")
+        if _is_profile != _name_is_profile:
+            _src = "profile" if _is_profile else "baseline"
+            _pname = portfolio.name if portfolio else None
+            raise RuntimeError(
+                f"Profile predicate mismatch: strategies[0].source={_src!r} "
+                f"but portfolio.name={_pname!r}. "
+                "Both must agree — check build_portfolio_from_profile caller."
+            )
 
         orb_caps: dict[tuple[str, str, int], float] = {}
         try:
@@ -5796,6 +5805,39 @@ class TestSafeguardExceptNarrowing:
             # Non-profile fail-open: caps disabled.
             orb_caps = {}
         return orb_caps
+
+    def test_orb_cap_block_raises_on_profile_predicate_mismatch(self):
+        """A6-GAP2: profile source and profile_ name predicate must agree."""
+        strat = PortfolioStrategy(
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            instrument="MNQ",
+            orb_label="NYSE_OPEN",
+            entry_model="E2",
+            rr_target=1.0,
+            confirm_bars=1,
+            filter_type="COST_LT12",
+            expectancy_r=0.18,
+            win_rate=0.55,
+            sample_size=200,
+            sharpe_ratio=0.8,
+            max_drawdown_r=5.0,
+            median_risk_points=40.0,
+            stop_multiplier=0.75,
+            source="profile",
+            weight=1.0,
+            orb_minutes=5,
+        )
+        portfolio = Portfolio(
+            name="not_profile_predicate_mismatch",
+            instrument="MNQ",
+            strategies=[strat],
+            account_equity=50_000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=4,
+            max_daily_loss_r=5.0,
+        )
+        with pytest.raises(RuntimeError, match="Profile predicate mismatch"):
+            self._exercise_orb_cap_block(portfolio)
 
     def test_orb_cap_block_profile_account_raises_on_unknown_profile(self):
         """`get_lane_registry(profile_id="missing")` → `get_profile("missing")`
@@ -5837,11 +5879,8 @@ class TestSafeguardExceptNarrowing:
         with pytest.raises(KeyError):
             self._exercise_orb_cap_block(portfolio)
 
-    def test_orb_cap_block_non_profile_swallows_unknown_profile_keyerror(self):
-        """Non-profile path (source='test') with an unknown profile_id in the
-        portfolio name: the KeyError surfaces from get_lane_registry → get_profile
-        but is swallowed by the narrow tuple, leaving _orb_caps empty. Mirrors
-        the production fail-open branch for paper / signal-only sessions."""
+    def test_orb_cap_block_non_profile_name_mismatch_fails_closed(self):
+        """A6-GAP2: profile_ name with non-profile source fails closed."""
         strat = PortfolioStrategy(
             strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
             instrument="MNQ",
@@ -5870,8 +5909,8 @@ class TestSafeguardExceptNarrowing:
             max_concurrent_positions=4,
             max_daily_loss_r=5.0,
         )
-        caps = self._exercise_orb_cap_block(portfolio)
-        assert caps == {}, "non-profile path must fail-open on lane-registry KeyError"
+        with pytest.raises(RuntimeError, match="Profile predicate mismatch"):
+            self._exercise_orb_cap_block(portfolio)
 
     def test_orb_cap_block_does_not_swallow_keyboard_interrupt(self):
         """The narrowed catch must NOT absorb KeyboardInterrupt — a Ctrl-C
