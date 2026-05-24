@@ -84,6 +84,18 @@ jobs:
       - name: Clear coverage data
         run: uv run coverage erase
 
+      # --timeout=0 disables pytest-timeout's `thread` watchdog in CI only —
+      # the GH-hosted Windows runner + coverage instrumentation reliably
+      # races _thread.interrupt_main() against pluggy/_pytest capture-manager
+      # module-load gaps, raising KeyboardInterrupt mid-suite. Each fast
+      # module fix (mutex, integration routing) unmasked the next victim
+      # (mutex → integration_l1_l2 → llm_hypothesis_proposer → …) — the
+      # watchdog itself is the bug class, not any single module.
+      # Per-step `timeout-minutes: 10` already provides genuine hang
+      # protection at the GH-Actions layer. Local dev keeps the pyproject
+      # 120s default for faster feedback.
+      # 2026-05-24 fix after 3 single-module patches failed to close the class.
+
       - name: Tests with coverage (repo core)
         timeout-minutes: 10
         # `--ignore=tests/test_integration` matches the directory only; the
@@ -93,7 +105,7 @@ jobs:
         # the integration step. Same applies to test_trader_logic.py — the
         # file is already excluded explicitly. 2026-05-24 fix.
         run: >
-          uv run pytest tests/ -q
+          uv run pytest tests/ -q --timeout=0
           --ignore=tests/test_trader_logic.py
           --ignore=tests/test_pipeline
           --ignore=tests/test_trading_app
@@ -108,7 +120,7 @@ jobs:
       - name: Tests with coverage (tools and research)
         timeout-minutes: 10
         run: >
-          uv run pytest
+          uv run pytest --timeout=0
           tests/test_research
           tests/test_tools
           tests/tools
@@ -122,12 +134,12 @@ jobs:
         timeout-minutes: 10
         run: |
           $paths = Get-ChildItem tests/test_pipeline -File -Filter "test_check_drift*.py" | ForEach-Object { $_.FullName }
-          uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
+          uv run pytest @paths -q --timeout=0 --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (pipeline core)
         timeout-minutes: 10
         run: >
-          uv run pytest tests/test_pipeline -q
+          uv run pytest tests/test_pipeline -q --timeout=0
           --ignore=tests/test_pipeline/test_check_drift.py
           --ignore=tests/test_pipeline/test_check_drift_aperture.py
           --ignore=tests/test_pipeline/test_check_drift_context.py
@@ -150,7 +162,7 @@ jobs:
             $paths += Get-ChildItem tests/test_trading_app -File -Filter $pattern | ForEach-Object { $_.FullName }
           }
           $paths += "tests/test_trading_app/test_ai"
-          uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
+          uv run pytest @paths -q --timeout=0 --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (trading app M-P)
         timeout-minutes: 10
@@ -161,7 +173,7 @@ jobs:
             $paths += Get-ChildItem tests/test_trading_app -File -Filter $pattern | ForEach-Object { $_.FullName }
           }
           $paths += "tests/test_trading_app/test_nested"
-          uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
+          uv run pytest @paths -q --timeout=0 --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (trading app R-S)
         timeout-minutes: 10
@@ -173,7 +185,7 @@ jobs:
           }
           $paths += "tests/test_trading_app/test_regime"
           $paths += "tests/test_trading_app/test_strategy_validator"
-          uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
+          uv run pytest @paths -q --timeout=0 --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Tests with coverage (trading app T-Z)
         timeout-minutes: 10
@@ -183,7 +195,7 @@ jobs:
           foreach ($pattern in $patterns) {
             $paths += Get-ChildItem tests/test_trading_app -File -Filter $pattern | ForEach-Object { $_.FullName }
           }
-          uv run pytest @paths -q --cov=pipeline --cov=trading_app --cov-report= --cov-append
+          uv run pytest @paths -q --timeout=0 --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
       - name: Coverage threshold
         run: uv run coverage report --show-missing --fail-under=35
