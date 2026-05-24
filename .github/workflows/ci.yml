@@ -86,6 +86,12 @@ jobs:
 
       - name: Tests with coverage (repo core)
         timeout-minutes: 10
+        # `--ignore=tests/test_integration` matches the directory only; the
+        # sibling file `tests/test_integration_l1_l2.py` (multi-instrument
+        # L1+L2 fixtures, intended to run in the integration step below)
+        # was being collected here. Listed explicitly to ensure it stays in
+        # the integration step. Same applies to test_trader_logic.py — the
+        # file is already excluded explicitly. 2026-05-24 fix.
         run: >
           uv run pytest tests/ -q
           --ignore=tests/test_trader_logic.py
@@ -95,6 +101,7 @@ jobs:
           --ignore=tests/test_tools
           --ignore=tests/tools
           --ignore=tests/test_integration
+          --ignore=tests/test_integration_l1_l2.py
           --ignore=tests/test_mf_futures
           --cov=pipeline --cov=trading_app --cov-report= --cov-append
 
@@ -106,6 +113,7 @@ jobs:
           tests/test_tools
           tests/tools
           tests/test_integration
+          tests/test_integration_l1_l2.py
           tests/test_mf_futures
           -q
           --cov=pipeline --cov=trading_app --cov-report= --cov-append
