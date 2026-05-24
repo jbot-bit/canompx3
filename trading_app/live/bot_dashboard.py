@@ -15,10 +15,11 @@ import subprocess
 import sys
 import tempfile
 import threading
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 import duckdb
@@ -47,6 +48,30 @@ BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
 # Rationale: 2x the ~60s bar cadence (SessionOrchestrator._publish_state runs
 # once per 1m bar) — two consecutive missed writes flips the dashboard to STALE.
 HEARTBEAT_STALE_AFTER_S = 120
+
+
+def _as_mapping(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {str(k): v for k, v in value.items()}
+
+
+def _as_list(value: object) -> list[object]:
+    return list(value) if isinstance(value, list) else []
+
+
+def _as_int(value: object, default: int = 0) -> int:
+    try:
+        return int(cast(Any, value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(cast(Any, value))
+    except (TypeError, ValueError):
+        return default
 
 
 @asynccontextmanager
@@ -366,7 +391,7 @@ def _legacy_lanes_to_lane_cards(
 
     lane_cards.sort(
         key=lambda item: (
-            _sort_time_key(item.get("session_time_brisbane")),
+            _sort_time_key(str(item.get("session_time_brisbane") or "")),
             str(item.get("instrument") or ""),
             str(item.get("strategy_id") or ""),
         )
@@ -377,7 +402,7 @@ def _legacy_lanes_to_lane_cards(
 # Track background processes. Guarded by _bg_lock to prevent race conditions
 # (e.g., double-click spawning two concurrent DB writers — violates CLAUDE.md
 # "NEVER run two write processes against the same DuckDB file simultaneously").
-_bg_processes: dict[str, subprocess.Popen] = {}
+_bg_processes: dict[str, Any] = {}
 _bg_lock = threading.Lock()
 
 # _state_lock guards _preflight_cache + _handoff_state. Reentrant so helpers can
@@ -427,7 +452,7 @@ def _prune_bg_processes() -> None:
 
 
 def _heartbeat_age_s(state: dict[str, object]) -> float:
-    age = float(state.get("heartbeat_age_s") or 9999)
+    age = _as_float(state.get("heartbeat_age_s"), 9999.0)
     if state and "heartbeat_age_s" not in state:
         hb = state.get("heartbeat_utc")
         if hb:
@@ -892,10 +917,10 @@ def _connection_readiness(broker_summary: dict[str, object]) -> dict[str, object
     It deliberately stays above broker-specific account/order details: those
     remain in /api/broker/list and /api/equity.
     """
-    connections = list(broker_summary.get("connections") or [])
-    enabled_count = int(broker_summary.get("enabled_count", 0) or 0)
-    connected_count = int(broker_summary.get("connected_count", 0) or 0)
-    error_count = int(broker_summary.get("error_count", 0) or 0)
+    connections = _as_list(broker_summary.get("connections"))
+    enabled_count = _as_int(broker_summary.get("enabled_count"))
+    connected_count = _as_int(broker_summary.get("connected_count"))
+    error_count = _as_int(broker_summary.get("error_count"))
 
     if broker_summary.get("status") == "error":
         message = str(broker_summary.get("error") or "Broker connection state is unavailable.")
@@ -936,9 +961,9 @@ def _connection_readiness(broker_summary: dict[str, object]) -> dict[str, object
 
     if error_count > 0:
         errors = [
-            str(conn.get("last_error") or "").strip()
+            str(conn_info.get("last_error") or "").strip()
             for conn in connections
-            if conn.get("enabled", True) and conn.get("status") == "error"
+            if (conn_info := _as_mapping(conn)).get("enabled", True) and conn_info.get("status") == "error"
         ]
         detail = next((msg for msg in errors if msg), "Enabled broker connection failed.")
         return {
@@ -1040,7 +1065,7 @@ def _build_action_guard(
         "top_state": top_state,
         "reason": reason,
         "action": action,
-        "blocked_action_ids": sorted(set(blocked_action_ids)),
+        "blocked_action_ids": sorted({str(action_id) for action_id in blocked_action_ids}),
         "busy_reason": reason if top_state == "BLOCKED" else "",
         "resource_locks": {
             "journal": journal,
@@ -1066,7 +1091,7 @@ def _derive_operator_state(
     data_summary: dict[str, object],
     preflight_summary: dict[str, object] | None,
 ) -> tuple[str, str, dict[str, str]]:
-    connected_count = int(broker_summary.get("connected_count", 0) or 0)
+    connected_count = _as_int(broker_summary.get("connected_count"))
     any_stale = bool(data_summary.get("any_stale", True))
     connection = _connection_readiness(broker_summary)
 
@@ -1142,7 +1167,7 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
     state = read_state()
     session_snapshot = _session_snapshot()
     raw_mode = str(session_snapshot.get("raw_mode") or "STOPPED")
-    heartbeat_age_s = float(session_snapshot.get("heartbeat_age_s") or 9999)
+    heartbeat_age_s = _as_float(session_snapshot.get("heartbeat_age_s"), 9999.0)
 
     operator_profile = _choose_operator_profile(profile, state)
     overlay_summary = None
@@ -1175,7 +1200,7 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
         data_summary=data_summary,
         preflight_summary=preflight_summary,
     )
-    blocked_action_ids = list(guard["blocked_action_ids"])
+    blocked_action_ids = _as_list(guard["blocked_action_ids"])
     if raw_mode == "STOPPED" and connection_summary["status"] != "connected":
         blocked_action_ids.extend(["start_signal", "start_demo", "start_live"])
     if guard["top_state"]:
@@ -1185,7 +1210,7 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
 
     checks: list[dict[str, str]] = []
 
-    connected_count = int(broker_summary.get("connected_count", 0) or 0)
+    connected_count = _as_int(broker_summary.get("connected_count"))
     broker_detail = str(connection_summary["message"])
     broker_status = "pass" if connected_count > 0 else "fail"
     checks.append({"name": "Broker", "status": broker_status, "detail": broker_detail})
@@ -1209,7 +1234,7 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
     else:
         stale_instruments = [
             name
-            for name, info in dict(data_summary.get("instruments", {})).items()
+            for name, info in _as_mapping(data_summary.get("instruments")).items()
             if isinstance(info, dict) and info.get("stale")
         ]
         if stale_instruments:
@@ -1310,16 +1335,16 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
             }
         )
     else:
-        recent_counts = dict(alert_summary.get("recent_counts") or {})
+        recent_counts = _as_mapping(alert_summary.get("recent_counts"))
         latest = alert_summary.get("latest")
         latest_message = ""
         if isinstance(latest, dict):
             latest_message = str(latest.get("message") or "").strip()
-        if raw_mode != "STOPPED" and int(recent_counts.get("critical", 0) or 0) > 0:
+        if raw_mode != "STOPPED" and _as_int(recent_counts.get("critical")) > 0:
             alert_status = "fail"
-        elif raw_mode != "STOPPED" and int(recent_counts.get("warning", 0) or 0) > 0:
+        elif raw_mode != "STOPPED" and _as_int(recent_counts.get("warning")) > 0:
             alert_status = "warn"
-        elif int(alert_summary.get("total", 0) or 0) > 0:
+        elif _as_int(alert_summary.get("total")) > 0:
             alert_status = "info"
         else:
             alert_status = "pass"
@@ -1338,7 +1363,7 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
         "recommended_action": action,
         "checks": checks,
         "heartbeat_age_s": heartbeat_age_s,
-        "blocked_action_ids": sorted(set(blocked_action_ids)),
+        "blocked_action_ids": sorted({str(action_id) for action_id in blocked_action_ids}),
         "busy_reason": guard["busy_reason"],
         "resource_locks": guard["resource_locks"],
         "handoff": guard["handoff"],
@@ -1353,7 +1378,7 @@ def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
     }
 
 
-def _start_broker_connect_background(connection_manager: object) -> None:
+def _start_broker_connect_background(connection_manager: Any) -> None:
     def _worker() -> None:
         try:
             connection_manager.connect_all_enabled()
@@ -1647,7 +1672,8 @@ async def api_trade_book():
                 if len(rows) > PAPER_TRADES_LIMIT:
                     paper_truncated = True
                     rows = rows[:PAPER_TRADES_LIMIT]
-                    paper_total_count = con.execute("SELECT COUNT(*) FROM paper_trades").fetchone()[0]
+                    count_row = con.execute("SELECT COUNT(*) FROM paper_trades").fetchone()
+                    paper_total_count = int(count_row[0]) if count_row else len(rows)
                 else:
                     paper_total_count = len(rows)
                 cols = [
@@ -1870,7 +1896,9 @@ async def api_accounts():
                 session_time = _get_session_time_brisbane(lane.orb_label)
                 rr_target = meta.get("rr_target")
                 rr_label = f"RR{rr_target:g}" if isinstance(rr_target, float) else None
-                setup_parts = [part for part in (meta.get("entry_model"), rr_label, meta.get("filter_type")) if part]
+                setup_parts = [
+                    str(part) for part in (meta.get("entry_model"), rr_label, meta.get("filter_type")) if part
+                ]
                 lanes_summary.append(
                     {
                         "session": lane.orb_label,
@@ -2404,7 +2432,7 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
         return {"status": "blocked", "message": "Data refresh is running. Wait for it to finish."}
 
     if session["running"]:
-        same_mode = session["raw_mode"].lower() == mode
+        same_mode = str(session["raw_mode"]).lower() == mode
         same_profile = session["profile"] == profile
         if same_mode and same_profile:
             return {"status": "running", "message": "Requested session is already running"}
@@ -2524,7 +2552,6 @@ async def action_start(profile: str | None = None, mode: str = "signal"):
 import asyncio
 import json as _json
 from collections import deque
-from typing import Any
 
 _SSE_QUEUE_MAXSIZE: int = 256
 _SSE_MAX_SUBSCRIBERS: int = 4

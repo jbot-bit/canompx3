@@ -9,6 +9,25 @@
 ## This Session (2026-05-24 — Codex live-readiness verification hardening)
 
 - **Tool:** Codex WSL, branch `main`.
+- **2026-05-25 follow-on:** Picked up the highest-finishable active Codex/Ralph
+  stage (`docs/runtime/stages/ralph_iter_210.md`) rather than the live-bar ring
+  stage, because live-bar ring remains blocked on operator-run market-session
+  smoke after CME reopen. Closed Ralph iter 210 by reducing scoped Pyright for
+  `pipeline/check_drift.py trading_app/live/bot_dashboard.py
+  trading_app/derived_state.py` to `0 errors, 0 warnings`. Only
+  `trading_app/live/bot_dashboard.py` changed: JSON/dict coercion helpers,
+  accurate `_bg_processes` typing for subprocess/log-handle values, guarded
+  DuckDB `fetchone()` count read, and string coercion at sort/UI-label
+  boundaries. Stage file flipped to `mode: CLOSED`.
+- **2026-05-25 verification:** `uv run pyright pipeline/check_drift.py
+  trading_app/live/bot_dashboard.py trading_app/derived_state.py` => 0 errors;
+  `ruff check trading_app/live/bot_dashboard.py` => pass; `pytest -q
+  tests/test_trading_app/test_bot_dashboard.py` => 31 passed outside sandbox;
+  `python pipeline/check_drift.py --quiet` => clean, 163 passed, 20 advisory.
+  Note: the full dashboard test file hung only inside the Codex sandbox at the
+  existing `asyncio.to_thread` subprocess test; the exact focused test passed
+  outside sandbox in 0.17s, so this is recorded as sandbox noise, not a product
+  regression.
 - **Follow-up closeout:** Picked up existing Codex work and closed stale shipped
   stage docs for pytest-timeout function-only mode, dashboard UX Stage 1, and
   the live-broker-resilience root stage. While verifying dashboard/ring tests,
@@ -435,15 +454,12 @@
 
 ## Last Session
 - **Tool:** Codex (WSL)
-- **Date:** 2026-05-24
-- **Commit:** e51a82de — test(dashboard): avoid TestClient portal hang
-- **Files changed:** 6 files
+- **Date:** 2026-05-25
+- **Commit:** 2c0383c4 — fix(dashboard): clear Ralph iter 210 pyright errors
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-23-dashboard-ux-stage1-css-only.md`
-  - `docs/runtime/stages/2026-05-23-pytest-timeout-func-only.md`
-  - `docs/runtime/stages/live-broker-resilience.md`
-  - `tests/test_trading_app/test_bot_dashboard_routes.py`
-  - `tests/test_trading_app/test_bot_dashboard_sse.py`
+  - `docs/runtime/stages/ralph_iter_210.md`
+  - `trading_app/live/bot_dashboard.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
