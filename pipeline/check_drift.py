@@ -1915,7 +1915,7 @@ def check_no_e0_in_db(con=None) -> list[str]:
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
         for table in ["orb_outcomes", "experimental_strategies", "validated_setups"]:
-            count = con.execute(f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0'").fetchone()[0]
+            count = (con.execute(f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0'").fetchone() or (0,))[0]
             if count > 0:
                 violations.append(f"  {table}: {count} rows with entry_model='E0' (purged Feb 2026)")
     except (ImportError, OSError) as e:
@@ -1949,11 +1949,14 @@ def check_doc_stats_consistency(con=None) -> list[str]:
                 )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
-        validated_active = con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone()[0]
-        fdr_significant = con.execute(
-            "SELECT COUNT(*) FROM validated_setups WHERE status = 'active' AND fdr_significant"
-        ).fetchone()[0]
-        edge_families_count = con.execute("SELECT COUNT(*) FROM edge_families").fetchone()[0]
+        validated_active = (
+            con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone() or (0,)
+        )[0]
+        fdr_significant = (
+            con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active' AND fdr_significant").fetchone()
+            or (0,)
+        )[0]
+        edge_families_count = (con.execute("SELECT COUNT(*) FROM edge_families").fetchone() or (0,))[0]
         # Per-aperture validated counts
         aperture_rows = con.execute(
             "SELECT orb_minutes, COUNT(*) FROM validated_setups WHERE status = 'active' GROUP BY orb_minutes"
@@ -2489,9 +2492,12 @@ def check_no_active_e3(con=None) -> list[str]:
                 )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
-        count = con.execute(
-            "SELECT COUNT(*) FROM validated_setups WHERE entry_model = 'E3' AND status = 'active'"
-        ).fetchone()[0]
+        count = (
+            con.execute(
+                "SELECT COUNT(*) FROM validated_setups WHERE entry_model = 'E3' AND status = 'active'"
+            ).fetchone()
+            or (0,)
+        )[0]
         if count > 0:
             violations.append(f"  validated_setups: {count} active E3 strategies (soft-retired Feb 2026)")
     except (ImportError, OSError) as e:
@@ -3047,6 +3053,7 @@ def check_wf_coverage(con=None) -> list[str]:
                 "WHERE instrument = ? AND status = 'active'",
                 [inst],
             ).fetchone()
+            row = row or (0, 0)
             total, tested = row[0], row[1]
             if total > 0 and tested < total:
                 warnings.append(f"  {inst}: {total - tested}/{total} active strategies missing WF test (soft gate)")
@@ -4021,30 +4028,42 @@ def check_audit_columns_populated(con=None) -> list[str]:
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
         for inst in ACTIVE_ORB_INSTRUMENTS:
-            total = con.execute(
-                "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ?",
-                [inst],
-            ).fetchone()[0]
+            total = (
+                con.execute(
+                    "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ?",
+                    [inst],
+                ).fetchone()
+                or (0,)
+            )[0]
             if total == 0:
                 continue
             # At least some rows must have audit columns populated
             for col in ["n_trials_at_discovery", "fst_hurdle"]:
-                populated = con.execute(
-                    f"SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ? AND {col} IS NOT NULL",
-                    [inst],
-                ).fetchone()[0]
+                populated = (
+                    con.execute(
+                        f"SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ? AND {col} IS NOT NULL",
+                        [inst],
+                    ).fetchone()
+                    or (0,)
+                )[0]
                 if populated == 0:
                     violations.append(f"  {inst}: 0/{total} rows have {col} (re-run strategy_discovery)")
             # sharpe_haircut: at least some rows with sample_size>=30
             # should have DSR computed
-            eligible = con.execute(
-                "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ? AND sample_size >= 30",
-                [inst],
-            ).fetchone()[0]
-            populated_dsr = con.execute(
-                "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ? AND sharpe_haircut IS NOT NULL",
-                [inst],
-            ).fetchone()[0]
+            eligible = (
+                con.execute(
+                    "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ? AND sample_size >= 30",
+                    [inst],
+                ).fetchone()
+                or (0,)
+            )[0]
+            populated_dsr = (
+                con.execute(
+                    "SELECT COUNT(*) FROM experimental_strategies WHERE instrument = ? AND sharpe_haircut IS NOT NULL",
+                    [inst],
+                ).fetchone()
+                or (0,)
+            )[0]
             if eligible > 0 and populated_dsr == 0:
                 violations.append(
                     f"  {inst}: 0/{eligible} eligible rows have sharpe_haircut (re-run strategy_discovery)"
@@ -5068,14 +5087,20 @@ def check_pipeline_staleness(con=None) -> list[str]:
 
         stale_instruments = []
         for inst in sorted(ACTIVE_ORB_INSTRUMENTS):
-            df_max = con.execute(
-                "SELECT MAX(trading_day) FROM daily_features WHERE symbol = ? AND orb_minutes = 5",
-                [inst],
-            ).fetchone()[0]
-            oo_max = con.execute(
-                "SELECT MAX(trading_day) FROM orb_outcomes WHERE symbol = ?",
-                [inst],
-            ).fetchone()[0]
+            df_max = (
+                con.execute(
+                    "SELECT MAX(trading_day) FROM daily_features WHERE symbol = ? AND orb_minutes = 5",
+                    [inst],
+                ).fetchone()
+                or (None,)
+            )[0]
+            oo_max = (
+                con.execute(
+                    "SELECT MAX(trading_day) FROM orb_outcomes WHERE symbol = ?",
+                    [inst],
+                ).fetchone()
+                or (None,)
+            )[0]
 
             if df_max is None or oo_max is None:
                 continue  # No data yet — not a staleness issue
@@ -5303,14 +5328,17 @@ def check_holdout_contamination(con=None) -> list[str]:
         sacred_year_key = str(HOLDOUT_SACRED_FROM.year)
 
         for instrument in ACTIVE_ORB_INSTRUMENTS:
-            contaminated = con.execute(
-                """SELECT COUNT(*) FROM experimental_strategies
+            contaminated = (
+                con.execute(
+                    """SELECT COUNT(*) FROM experimental_strategies
                    WHERE instrument = ?
                    AND created_at > ?
                    AND yearly_results IS NOT NULL
                    AND json_extract_string(yearly_results, '$."' || ? || '"') IS NOT NULL""",
-                [instrument, HOLDOUT_GRANDFATHER_CUTOFF, sacred_year_key],
-            ).fetchone()[0]
+                    [instrument, HOLDOUT_GRANDFATHER_CUTOFF, sacred_year_key],
+                ).fetchone()
+                or (0,)
+            )[0]
             if contaminated > 0:
                 violations.append(
                     f"  HOLDOUT CONTAMINATION: {instrument} has {contaminated} experimental_strategies "
@@ -6307,11 +6335,14 @@ def check_phase_4_sha_integrity(con=None) -> list[str]:
                 # proves the manifest entry is evidence-grounded.
                 continue
             # Count rows affected for operator context.
-            row_count = con.execute(
-                """SELECT COUNT(*) FROM experimental_strategies
+            row_count = (
+                con.execute(
+                    """SELECT COUNT(*) FROM experimental_strategies
                    WHERE hypothesis_file_sha = ?""",
-                [sha],
-            ).fetchone()[0]
+                    [sha],
+                ).fetchone()
+                or (0,)
+            )[0]
             violations.append(
                 f"  PHASE 4 SHA INTEGRITY: orphaned SHA {sha[:12]}... "
                 f"({row_count} row(s)) — no file in "
@@ -9026,6 +9057,7 @@ def check_crg_cross_layer_surprising_connections() -> list[str]:
     if result is CRG_UNAVAILABLE:
         print("  ADVISORY: CRG query failed — cross-layer check skipped")
         return []
+    assert isinstance(result, list)
 
     # Canonical surfaces — when an edge passes through one of these, it's an
     # expected cross-layer link, not a Project Truth Protocol violation.
@@ -9264,6 +9296,7 @@ def check_crg_canonical_path_function_size() -> list[str]:
     if result is CRG_UNAVAILABLE:
         print("  ADVISORY: CRG query failed — function-size cap check skipped")
         return []
+    assert isinstance(result, list)
 
     canonical_prefixes = ("pipeline", "trading_app")
     flagged: list[dict] = []
@@ -9311,6 +9344,7 @@ def check_crg_bridge_node_test_coverage() -> list[str]:
     if raw_bridges is CRG_UNAVAILABLE:
         print("  ADVISORY: CRG query failed — bridge-node coverage check skipped")
         return []
+    assert isinstance(raw_bridges, list)
 
     # Filter to production-code bridges only.  ``file`` is absolute path on the
     # indexing host; we test for "pipeline/" / "trading_app/" substring after

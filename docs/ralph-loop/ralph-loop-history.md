@@ -5,6 +5,56 @@
 
 ---
 
+## Iteration 210 — 2026-05-24
+- Phase: audit-only
+- Classification: N/A (no code change)
+- Target: pipeline/check_drift.py + pipeline/check_drift_crg_helpers.py
+- Finding: Pyright errors described in task (reportOptionalSubscript lines 4024/4032/4040/4044/5071/5075/5306/6310; "object is not iterable" lines 9045/9270) already fixed in iter 208 commit b3d1d6dd. python -m pyright check_drift.py → 0 errors.
+- Doctrine cited: integrity-guardian.md § 5 (Evidence Over Assertion — verified by execution)
+- Action: audit-only; closed A6-GAP4 in deferred-findings (fixed iter 209 commit f0606b65)
+- Blast radius: 0 files changed
+- Verification: PASS (163 drift, 782 tests minus 1 pre-existing flaky)
+- Commit: NONE
+
+## Iteration 209 — 2026-05-24
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/derived_state.py:36-46
+- Finding: build_profile_fingerprint per-lane dict omitted explicit orb_minutes; strategy_id encodes it via _O suffix but fingerprint consumers could not inspect aperture without re-parsing. Deferred finding A6-GAP4.
+- Doctrine cited: integrity-guardian.md § 5 (Evidence over assertion — explicit encoding preferred over implicit); institutional-rigor.md § 4 (delegate to canonical source parse_strategy_id for orb_minutes extraction)
+- Action: Added parse_strategy_id import to derived_state.py; added orb_minutes key to per-lane fingerprint dict. No DailyLaneSpec dataclass change needed.
+- Blast radius: 1 file (derived_state.py). 5 callers store hash; cached state envelopes correctly invalidated.
+- Verification: PASS — 173 tests, 163 drift checks, ruff PASS
+- Commit: f0606b65
+
+---
+
+## Iteration 208 — 2026-05-24
+- Phase: fix
+- Classification: [judgment]
+- Target: pipeline/system_context.py + tests/test_pipeline/test_system_context.py + .claude/hooks/session-start.py
+- Finding: (1) Read-only parallel-claim blocker downgrade used wrong code (parallel_mutating_claim vs expected parallel_session_present). (2) Unused db_path param on _build_authority_context. (3) Structurally unreachable code in _current_runtime_tag and _pid_is_live (os.name platform narrowing). (4) Unused ActiveStage/PolicyIssue imports in test file. (5) budget.get() Pyright type error in session-start.py.
+- Doctrine cited: integrity-guardian.md § 5 (Evidence over Assertion — TRACE verified for all 6 findings)
+- Action: Fixed all 6 findings. 20/20 system_context tests pass; 163 drift checks pass.
+- Blast radius: 3 files
+- Verification: PASS — 20 tests, 163 drift, ruff PASS
+- Commit: b3d1d6dd
+
+---
+
+## Iteration 207 — 2026-05-24
+- Phase: audit-only
+- Classification: audit-only
+- Target: pipeline/paths.py (re-audit) + trading_app/derived_state.py + pipeline/db_contracts.py + scripts/audits/__init__.py
+- Finding: All 4 targets clean. paths.py 2026-05-08 change verified mechanical (dotenv logger silencing). derived_state.py A6-GAP4 re-check: no DailyLaneSpec changes, still deferred. db_contracts.py first full scan: canonical constant use, correct fallback logic, re-export chain verified. scripts/audits/__init__.py first full scan: clean enum, canonical GOLD_DB_PATH, dynamic count in print_summary.
+- Doctrine cited: integrity-guardian.md § 5 (Evidence over Assertion — TRACE verified for each candidate before reporting)
+- Action: Audit-only. No fixes applied.
+- Blast radius: 0 files
+- Verification: 163 drift PASS, 7 behavioral PASS, ruff PASS
+- Commit: NONE
+
+---
+
 ## Iteration 206 — 2026-05-23
 - Phase: fix
 - Classification: [judgment]

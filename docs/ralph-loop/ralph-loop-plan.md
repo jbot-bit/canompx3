@@ -1,8 +1,8 @@
-## Iteration: 205
-## Target: trading_app/live/tradovate/http.py + order_router.py:64-99,101-149
-## Finding: Tradovate submit() uses READ_POLICY (5 retries) for order mutations; build_order_spec has no clOrdId; combined risk of duplicate order on transient failure
-## Classification: [judgment]
-## Blast Radius: 2 production files (tradovate/http.py, tradovate/order_router.py), 1 test file
-## Invariants: [existing cancel/positions READ_POLICY calls must not change, backwards-compat default READ_POLICY in shim, clOrdId must be stripped from wire_spec internal field name if present]
-## Diff estimate: 8-10 lines
-## Doctrine cited: integrity-guardian.md § 3 (fail-closed — never report success after exception/timeout), integrity-guardian.md § 6 (no silent failures)
+## Iteration: 209
+## Target: trading_app/derived_state.py:36-46
+## Finding: build_profile_fingerprint per-lane dict omits explicit orb_minutes; strategy_id encodes it implicitly but fingerprint consumers cannot inspect aperture without re-parsing
+## Classification: [mechanical]
+## Blast Radius: 1 production file (derived_state.py). 5 callers store the hash; fingerprint change will invalidate cached state envelopes (correct behavior). No logic change.
+## Invariants: [1] strategy_id remains in fingerprint; [2] parse_strategy_id is the only source of orb_minutes; [3] fingerprint function signature unchanged
+## Diff estimate: 5 lines
+## Doctrine cited: integrity-guardian.md § 5 (Evidence over assertion — explicit encoding better than implicit); institutional-rigor.md § 4 (delegate to canonical sources — parse_strategy_id is canonical for orb_minutes extraction)

@@ -11,9 +11,7 @@ import pytest
 
 from pipeline import system_context
 from pipeline.system_context import (
-    ActiveStage,
     AuthorityContext,
-    PolicyIssue,
     SessionClaim,
     build_system_context,
     evaluate_system_policy,
@@ -369,6 +367,34 @@ class TestEvaluateSystemPolicy:
 
         assert snapshot.git.dirty is False
         assert any(issue.code == "git_status_unavailable" for issue in decision.warnings)
+
+    def test_read_only_session_warns_but_not_blocks_on_mutating_peer(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")
+        peer = SessionClaim(
+            tool="other-tool",
+            branch="main",
+            head_sha="abc123",
+            started_at="2026-04-12T00:00:00+00:00",
+            pid=1,
+            mode="mutating",
+            root=str(tmp_path),
+            fresh=True,
+        )
+
+        with (
+            patch.object(system_context, "_canonical_repo_root", return_value=(tmp_path, tmp_path / ".git")),
+            patch.object(system_context, "branch_name", return_value="main"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+            patch.object(system_context, "git_status_details", return_value=([], True, None)),
+            patch.object(system_context, "list_claims", return_value=[peer]),
+            patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
+        ):
+            snapshot = build_system_context(tmp_path, context_name="generic", active_tool="codex")
+            decision = evaluate_system_policy(snapshot, "session_start_read_only")
+
+        assert decision.allowed is True
+        assert not decision.blockers
+        assert any(issue.code == "parallel_session_present" for issue in decision.warnings)
 
 
 class TestVerifyClaim:

@@ -261,7 +261,8 @@ def active_claim_path(root: Path, tool: str, claim_dir: Path = ACTIVE_SESSION_DI
 
 
 def _current_runtime_tag() -> str:
-    if os.name == "nt":
+    platform = os.name  # evaluated at runtime; avoid Pyright platform-constant narrowing
+    if platform == "nt":
         return "windows"
     if os.environ.get("WSL_DISTRO_NAME"):
         return "wsl"
@@ -296,7 +297,8 @@ def _claim_owner_pid() -> int:
 def _pid_is_live(pid: int) -> bool:
     if pid <= 0:
         return False
-    if os.name == "nt":
+    _platform = os.name  # evaluated at runtime; avoid Pyright platform-constant narrowing
+    if _platform == "nt":
         # On Windows, os.kill(pid, 0) sends CTRL_C_EVENT instead of acting as a
         # POSIX-style liveness probe. Query the process handle directly.
         import ctypes
@@ -575,7 +577,7 @@ def _list_active_stages(root: Path) -> list[ActiveStage]:
     return stages
 
 
-def _build_authority_context(db_path: Path) -> AuthorityContext:
+def _build_authority_context() -> AuthorityContext:
     from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
     from pipeline.db_contracts import ACTIVE_VALIDATED_VIEW, DEPLOYABLE_VALIDATED_VIEW
     from pipeline.system_authority import (
@@ -704,7 +706,7 @@ def build_system_context(
             if _claim_matches_any_repo(claim, repo_anchors)
         ],
         active_stages=_list_active_stages(selected_root),
-        authority=_build_authority_context(selected_db),
+        authority=_build_authority_context(),
     )
 
 
@@ -899,30 +901,20 @@ def evaluate_system_policy(snapshot: SystemContext, action: PolicyAction) -> Pol
                 )
             )
 
-        branch = snapshot.git.branch
-        current_root = snapshot.git.selected_root
-        active_tool = snapshot.active_tool
-        peer_claims = [
-            claim
-            for claim in snapshot.claims
-            if claim.branch == branch
-            and not (
-                active_tool is not None
-                and claim.tool == active_tool
-                and claim.root
-                and _paths_same_location(claim.root, current_root)
-            )
-        ]
-        if peer_claims:
-            detail = ", ".join(f"{claim.tool}({claim.mode})@{claim.branch}" for claim in peer_claims)
+        # For read-only/orientation: downgrade any parallel-session blocker to a warning
+        # (a mutating peer is a safety concern for read-only sessions but not a hard block).
+        # Use the generic parallel_session_present code so callers see a consistent signal.
+        parallel_blockers, parallel_warnings = _parallel_claim_issues(snapshot)
+        for issue in parallel_blockers:
             warnings.append(
-                _issue(
-                    "warning",
-                    "parallel_session_present",
-                    "Parallel session present on this branch.",
-                    detail=detail,
+                PolicyIssue(
+                    level="warning",
+                    code="parallel_session_present",
+                    message=issue.message,
+                    detail=issue.detail,
                 )
             )
+        warnings.extend(parallel_warnings)
 
     if snapshot.git.in_linked_worktree:
         infos.append(
