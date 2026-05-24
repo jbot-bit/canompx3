@@ -28,6 +28,17 @@
   passed; `codex_local_env.py doctor --platform wsl` no longer reports primary
   model drift; full drift clean (`163 passed, 20 advisory`). No Claude-owned
   settings/hooks mutated.
+- **2026-05-25 Codex worktree audit/closeout:** Audited open managed worktrees.
+  `wt-codex-parallel-20260508-221751` was template debris with no unique
+  commits versus `origin/main`; decided remove. `wt-codex-paperclip-official-setup`
+  had one stale local Paperclip smoke commit, no PR, and an old pinned external
+  package setup; decided remove rather than ship. `wt-codex-tv-ai-backtester-teardown`
+  carried useful read-only safety gates; finished by recovering only its
+  standalone external-intake/live-validity scripts, prompts, audit packets, and
+  tests onto current `main` while excluding stale branch `HANDOFF.md` edits.
+  Trial-budget caps are grounded in `docs/institutional/pre_registered_criteria.md`
+  Criterion 2 and Bailey et al. 2013 MinBTL literature. Direct verification:
+  both packet validators pass, Ruff clean, and 36 targeted tests pass.
 - **2026-05-25 follow-on:** Picked up the highest-finishable active Codex/Ralph
   stage (`docs/runtime/stages/ralph_iter_210.md`) rather than the live-bar ring
   stage, because live-bar ring remains blocked on operator-run market-session

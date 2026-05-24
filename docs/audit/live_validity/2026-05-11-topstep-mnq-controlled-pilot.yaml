@@ -1,0 +1,43 @@
+trade_context:
+  instrument: "MNQ"
+  session: "COMEX_SETTLE"
+  strategy_id: "profile-scoped MNQ lane set; verify exact lane from prop_profiles.py before session"
+  direction: "runtime signal dependent"
+  date_reviewed: "2026-05-11"
+research_status:
+  classification: "validated_profile_candidate_with_controlled_pilot_warnings"
+  evidence_refs:
+    - "docs/audit/results/2026-05-11-mnq-all-active-deployability.json"
+    - "docs/audit/results/2026-05-11-topstep-50k-mnq-profile-deployability.json"
+profile_context:
+  profile_id: "topstep_50k_mnq_auto"
+  firm: "topstep"
+  account_type: "XFA"
+  allowed_lane: true
+  allowed_session: true
+  topstep_constraints:
+    scaling_stage_checked: true
+    daily_loss_limit_checked: true
+    max_loss_limit_checked: true
+    xfa_aggregate_cap_checked: true
+runtime_evidence:
+  pre_session:
+    status: "required_fresh_before_trade"
+    ref: "trading_app/pre_session_check.py --profile topstep_50k_mnq_auto --session <SESSION>"
+  live_readiness_ref: "scripts/tools/live_readiness_report.py --profile topstep_50k_mnq_auto"
+  adversarial_gate_ref: "scripts/tools/adversarial_stress_gate.py --profile topstep_50k_mnq_auto"
+  kill_flatten_available: true
+  monitoring_available: true
+risk_context:
+  size_contracts: 1
+  max_contracts: 1
+  dd_state_checked: true
+  pilot_constraints:
+    - "one micro contract"
+    - "no scaling"
+    - "fresh pre-session pass required immediately before order entry"
+    - "blocked if account/profile/runtime evidence is stale"
+decision: "CONTROLLED_LIVE_PILOT"
+blockers:
+  - "Not LIVE_VALID until fresh pre-session and current account state are attached for the exact session."
+next_action: "Run fresh pre-session and live-readiness checks before any real order; otherwise paper-only."

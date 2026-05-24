@@ -1,0 +1,48 @@
+source:
+  title: "AutoTrading School TradingView AI Backtesting Engine"
+  url_or_path: "https://www.youtube.com/watch?v=lcCaIHqeVBA"
+  source_type: "tradingview_pine"
+  reviewed_date: "2026-05-11"
+  authority_level: "low"
+mechanism_family: "LLM-assisted external strategy harvesting and bounded parameter exploration, not a distinct market edge."
+packaging_removed:
+  - "$99 source-code bundle positioning"
+  - "TradingView parity claim"
+  - "thousands of variants as proof of best strategy"
+  - "AI can avoid overfitting because the engine tells it to"
+repo_coverage: "covered_as_process_gap"
+best_role: "execution_aid"
+baseline_to_beat: "Existing canompx3 prereg, MinBTL, evidence-pack, and validation workflow."
+decision: "DOC_ONLY"
+bias_risks:
+  - "lookahead"
+  - "oos_leakage"
+  - "cherry_pick"
+  - "multiplicity"
+  - "transaction_cost_illusion"
+  - "pine_repaint"
+  - "data_vendor_mismatch"
+  - "false_novelty"
+source_claims:
+  optimizer_variants: 6713
+trial_budget:
+  max_trials: 0
+  mode: "not_applicable"
+  source_trial_count_disclosed: 6713
+negative_evidence:
+  - "The product offers workflow packaging around commodity backtesting and LLM iteration, not a proprietary edge."
+  - "TradingView parity is execution/visualization support, not proof of deployable edge."
+golden_nuggets:
+  - "Treat semantic external ideas as intake records before they reach prereg."
+  - "Force source trial-count disclosure when a source advertises optimizer variants."
+  - "Separate useful process nuggets from strategy claims."
+  - "Require Pine risk flags before trusting TradingView-derived scripts."
+next_action: "Keep as documentation and implement the external intake gate; do not build a TradingView clone."
+evidence_refs:
+  - "docs/audit/results/2026-05-11-tradingview-ai-backtesting-engine-teardown.md"
+pine_risk_flags:
+  - "request_security"
+  - "repaint"
+  - "broker_emulator"
+  - "bar_magnifier"
+  - "data_vendor_mismatch"
