@@ -28,6 +28,14 @@
   existing `asyncio.to_thread` subprocess test; the exact focused test passed
   outside sandbox in 0.17s, so this is recorded as sandbox noise, not a product
   regression.
+- **2026-05-25 final Codex closeout:** Re-fetched `origin/main`; the only
+  remaining local Codex stack was `59794397` + `5316e62d`. Fresh verification:
+  Pyright scoped gate clean with writable uv cache, Ruff clean, behavioral +
+  integrity audits clean, drift clean (163 passed, 20 advisory), dashboard suite
+  covered as 30/30 sandbox-safe tests plus the sandbox-sensitive subprocess test
+  passing outside sandbox in 0.19s. Pushed `main` to `origin/main`
+  (`6ba30ec0..5316e62d`); GitHub reported the expected direct-main required-check
+  bypass.
 - **Follow-up closeout:** Picked up existing Codex work and closed stale shipped
   stage docs for pytest-timeout function-only mode, dashboard UX Stage 1, and
   the live-broker-resilience root stage. While verifying dashboard/ring tests,
