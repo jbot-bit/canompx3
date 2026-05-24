@@ -473,9 +473,12 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-25
-- **Commit:** 35c19a17 — docs(handoff): record Codex final closeout push
-- **Files changed:** 1 files
+- **Commit:** fb550e0e — test(live): close Ralph deferred burndown coverage
+- **Files changed:** 4 files
   - `HANDOFF.md`
+  - `docs/ralph-loop/deferred-findings.md`
+  - `docs/runtime/stages/ralph-deferred-burndown-2026-05-23.md`
+  - `tests/test_trading_app/test_session_orchestrator.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
