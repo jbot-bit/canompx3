@@ -1,0 +1,403 @@
+metadata:
+  name: "mnq_nyse_preopen_e2_nfp_spillover_v1"
+  purpose: >-
+    NYSE_PREOPEN MNQ session-discovery pre-reg, NFP-spillover v1. Tests
+    whether a proposed NYSE_PREOPEN session anchored at 09:00 ET (NYSE
+    Order Imbalance initial publication, 30 minutes before 09:30 ET cash
+    open) carries an independent intraday ORB edge on MNQ. Splits by
+    NFP-day to probe whether the edge concentrates on NFP-release days
+    (data-spillover proxy) or non-NFP days (imbalance-only mechanism).
+  date_locked: "2026-05-25T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 27
+  testing_mode: "family"
+  research_question_type: "standalone_edge"
+  theory_grant: false
+
+authority:
+  primary:
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md"
+    - "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+    - "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+    - "docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/hypothesis-prereg-discipline.md"
+    - "pipeline/dst.py"
+    - "pipeline/calendar_filters.py"
+    - "trading_app/holdout_policy.py"
+  notes:
+    - >-
+      This pre-reg makes NO theory grant. theory_grant=false; strict
+      Chordia t>=3.79 threshold applies per pre_registered_criteria.md
+      Criterion 4 (no-theory bound) and Chordia et al 2018 empirical
+      2-million-strategies bound.
+    - >-
+      Hypothesis-only artifact. NYSE_PREOPEN is NOT present in
+      pipeline.dst.SESSION_CATALOG. No code changes are part of this
+      file. Implementation (adding the session resolver, the
+      DOW_MISALIGNED_SESSIONS entry, and a NYSE-holiday exclusion source)
+      is gated behind this pre-reg's verdict, not bundled with it.
+    - >-
+      Splits use the only canonical US-data calendar available in the
+      repo: pipeline.calendar_filters.is_nfp_day (first-Friday-of-month
+      NFP, ~12 days/year). The intended full US_DATA_830 calendar
+      (CPI/PPI/retail sales/jobless claims/ISM) is NOT available in
+      canonical layers; using NFP as the operationalizable subset is
+      honest scoping, not silent substitution. A v2 pre-reg with full
+      08:30 ET economic-calendar ingestion is deferred until a
+      canonical source exists.
+    - >-
+      Adjacency audit completed prior to authoring: zero ORB-window
+      collision between proposed NYSE_PREOPEN (09:00 ET = 23:00 Brisbane
+      EDT / 00:00 Brisbane EST next-cal-day) and any catalog session
+      across all apertures and DST regimes; zero currently-deployed or
+      validated MNQ setup fires at the proposed window. US_DATA_830 O30
+      ends exactly at the proposed PREOPEN start (sequential abutment,
+      not overlap, per orb_utc_window [start, end) end-exclusive
+      contract). NYSE_OPEN starts 30 minutes after the proposed PREOPEN.
+
+scope:
+  instrument: MNQ
+  proposed_session: NYSE_PREOPEN
+  proposed_session_event_anchor: "09:00 ET (NYSE Order Imbalance initial publication)"
+  proposed_session_brisbane_edt: "23:00 same-cal-day"
+  proposed_session_brisbane_est: "00:00 next-cal-day (orb_utc_window hour<9 cal_date bump)"
+  proposed_session_dow_misalignment: "EST only: Brisbane Fri 00:00 = US Thu 09:00 ET (offset -1 required in DOW_MISALIGNED_SESSIONS if implemented)"
+  entry_model: E2
+  confirm_bars: 1
+  rr_targets: [1.0, 1.5, 2.0]
+  orb_minutes: [5, 15, 30]
+  direction: pooled
+  splits:
+    - "all_days"
+    - "nfp_days_only"
+    - "non_nfp_days"
+  split_source_canonical: "pipeline.calendar_filters.is_nfp_day"
+  out_of_scope:
+    - "MGC (Bailey horizon 2.70yr -> N_max=3; cannot fit any meaningful trial budget at this scope)"
+    - "MES (pooled with MNQ exceeds the joint Bailey ceiling; v1 single-instrument)"
+    - "E1, E3 entry models (E2-only for parity with deployed MNQ NYSE_OPEN setups)"
+    - "Code changes to pipeline.dst.SESSION_CATALOG (hypothesis-only pre-reg)"
+    - "Code changes to pipeline.calendar_filters (no new US_DATA_830 calendar — that is v2)"
+    - "Allocator / sizing / deployment changes"
+    - "Writes to validated_setups before execution evidence"
+    - "Cross-asset filters (clean session-discovery first)"
+    - "Filter overlays (ATR_P50, VWAP_MID_ALIGNED, ORB_G5, etc) — baseline naked session-edge only"
+    - "Full US_DATA_830 calendar split (deferred to v2 pending economic-calendar ingestion)"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: >-
+      Descriptive corroboration only. Never tunes IS verdict, never
+      rescues, never kills without OOS power floor per
+      research.oos_power.POWER_TIERS. dir_match cannot kill an
+      underpowered OOS.
+  tuning_against_oos: false
+  canonical_layers_only: true
+  canonical_layers:
+    - "bars_1m"
+    - "daily_features"
+    - "orb_outcomes"
+  holiday_exclusion:
+    required: true
+    source_status: "NOT_YET_CANONICAL_IN_REPO"
+    note: >-
+      NYSE official holiday calendar must be excluded from IS and OOS
+      counts (today 2026-05-25 is Memorial Day = no normal pre-open).
+      No canonical NYSE-holiday column exists in daily_features.
+      Implementing this is a pre-reg-level requirement, NOT a
+      silent-substitution path. A bounded runner consuming this pre-reg
+      must either (a) import a canonical NYSE holiday source before
+      executing, or (b) fail-closed with a missing-source error.
+
+scratch_policy:
+  policy: "realized-eod"
+  justification: >-
+    Capital-routing-class research (verdict could motivate session-catalog
+    extension). Per pre_registered_criteria.md Criterion 13 (BINDING),
+    realized-eod is required to ensure scratch rows are not silently
+    dropped via WHERE pnl_r IS NOT NULL.
+
+calendar_and_dst:
+  dst_resolver: "pipeline.dst.is_us_dst(trading_day)"
+  edt_brisbane_start: "23:00 same-cal-day"
+  est_brisbane_start: "00:00 next-cal-day"
+  dst_split_reporting_required: true
+  dst_imbalance_kill: "If N_EST < 30 OR N_EDT < 30 on any cell, verdict is UNVERIFIED (not DEAD). Canonical DST-split rule."
+  orb_window_function: "pipeline.dst.orb_utc_window (would apply if NYSE_PREOPEN resolver added to DYNAMIC_ORB_RESOLVERS in implementation phase)"
+  dow_misalignment_offset_required_if_implemented: -1
+
+grounding:
+  filter_grounding_status:
+    verdict: "NO_THEORY_GRANT"
+    basis: >-
+      No /resources PDF directly anchors "pre-open imbalance publication
+      -> ORB-tradable price discovery on equity-index futures". The
+      candidate mechanism (09:00 ET imbalance publication acts as a
+      liquidity-discovery / auction price-discovery anchor that
+      produces tradable directional flow over the ensuing 5-30 minutes)
+      is plausible synthesis from adjacent literature, not extraction.
+      Therefore theory_grant=false and the strict Chordia threshold
+      t>=3.79 applies regardless of which adjacent paper is cited.
+  adjacent_literature_class_only:
+    - file: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "Grounds the ORB CLASS (intraday trend-follow / path of least resistance), NOT the proposed PREOPEN anchor specifically."
+    - file: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      use: "Grounds intraday momentum framing for the ORB class, NOT pre-open imbalance specifically."
+    - file: "docs/institutional/literature/harris_2002_trading_exchanges_microstructure.md"
+      use: "Ch 14 adverse selection at auction prints is adjacent (auction-print microstructure), NOT load-bearing for the PREOPEN edge claim."
+    - file: "docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md"
+      use: "Threshold-authority citation: t>=3.79 empirical bound from 2-million-strategies multiple-testing bound."
+  mechanism_status: "plausible_synthesis_not_locally_verified"
+
+prior_art:
+  overlap_check_verdict: "CLEAN_GAP"
+  overlap_check_method: >-
+    Mechanical comparison of proposed NYSE_PREOPEN start time (09:00 ET
+    = 23:00 Brisbane EDT same-cal-day / 00:00 Brisbane EST next-cal-day)
+    against every resolver in pipeline.dst.SESSION_CATALOG in both DST
+    regimes for all ORB apertures {5, 15, 30}. Plus query of
+    validated_setups and deployable_validated_setups for any
+    currently-deployed MNQ/MES/MGC setup whose orb_label resolves to
+    the proposed window.
+  current_session_duplicate: "NONE"
+  current_session_duplicate_evidence: >-
+    No catalog session resolves to 23:00 Brisbane EDT or 00:00 Brisbane
+    EST. No deployed or validated setup on MNQ/MES/MGC currently fires
+    at the proposed window across all instruments and DST regimes.
+  adjacent_sessions:
+    - label: "US_DATA_830"
+      relationship: "sequential abutment (NOT overlap)"
+      detail: >-
+        US_DATA_830 anchors at 08:30 ET (22:30 Brisbane EDT / 23:30
+        Brisbane EST). With orb_minutes=30 the window ends EXACTLY at
+        the proposed NYSE_PREOPEN start (23:00 Bris EDT / 00:00 Bris
+        EST). Per pipeline.dst.orb_utc_window contract the window is
+        [start, end) end-exclusive, so the two consume sequential bars
+        with no bar-level overlap. Same shoulder-relationship class as
+        existing US_DATA_830 -> NYSE_OPEN sequence.
+    - label: "NYSE_OPEN"
+      relationship: "30-minute sequential gap"
+      detail: >-
+        NYSE_OPEN anchors at 09:30 ET (23:30 Brisbane EDT / 00:30
+        Brisbane EST) = exactly 30 minutes AFTER the proposed
+        NYSE_PREOPEN start. Existing MNQ NYSE_OPEN E2 deployment is
+        unaffected; the proposed PREOPEN window closes before
+        NYSE_OPEN begins for all apertures {5, 15, 30}.
+  catalog_blocker:
+    condition: "NYSE_PREOPEN not present in pipeline.dst.SESSION_CATALOG"
+    consequence: "Static check `check_sessions_valid` correctly rejects this pre-reg until the session is added to the canonical catalog. Expected and accepted failure mode for a session-discovery prereg."
+  execution_stages_required_before_runner:
+    - "Add `us_preopen_brisbane(trading_day)` resolver to pipeline.dst (returns 23:00 Bris in EDT, 00:00 Bris next-cal-day in EST)"
+    - "Add NYSE_PREOPEN entry to pipeline.dst.SESSION_CATALOG with break_group='us' and event annotation"
+    - "Add NYSE_PREOPEN to pipeline.dst.DST_CLEAN_SESSIONS (all dynamic sessions are clean by construction)"
+    - "Add NYSE_PREOPEN to pipeline.dst.DOW_MISALIGNED_SESSIONS with offset=-1 (winter EST midnight-crossing parity with NYSE_OPEN)"
+    - "Update hardcoded expected_sessions sets in pipeline.check_drift.py (#32 ORB_LABELS sync + canonical_constant_drift expected_sessions list)"
+    - "Update pipeline.init_db.ORB_LABELS to mirror SESSION_CATALOG dynamic set (drift check #32 enforces parity)"
+    - "Add NYSE_PREOPEN resolver tests in tests/test_pipeline/test_dst.py (EDT/EST Brisbane outputs, DOW misalignment, validate_catalog still passes)"
+    - "Expand daily_features schema to include orb_NYSE_PREOPEN_{5,15,30}_* columns (per existing per-session column pattern)"
+    - "Backfill daily_features for all historical MNQ trading_days against the new NYSE_PREOPEN columns (multi-hour rebuild)"
+    - "Ingest canonical NYSE holiday calendar source (no canonical column currently in daily_features) and add `is_nyse_holiday` boolean OR equivalent exclusion mechanism"
+    - "Verify live-engine compatibility (no production strategy can be promoted to this session until execution_engine path is audited for the new resolver)"
+  family_health: "N/A — no prior validated setups exist at this session; family is bootstrapping from zero. K=27 family-internal BH FDR applies on this prereg alone."
+  siblings_killed: "NONE — no prior pre-reg or audit has targeted NYSE_PREOPEN on any instrument."
+  siblings_blocked_by_graveyard: "NONE — `/nogo NYSE_PREOPEN` returns no NO-GO/KILL/PARK verdicts (this is a previously-unexplored session)."
+  prior_audit_verdicts: "NONE — first pre-reg targeting NYSE_PREOPEN."
+  notes:
+    - >-
+      Adjacent NYSE_OPEN family on MNQ E2 is heavily occupied (126
+      deployable setups). A passing verdict on NYSE_PREOPEN would
+      require demonstrating that the 09:00 ET imbalance signal carries
+      information NOT already captured by the 30-minutes-later
+      NYSE_OPEN ORB. The allocator's correlation gate handles that
+      downstream; this pre-reg does NOT pre-judge it.
+    - >-
+      Adjacent US_DATA_830 on MNQ E2 is sparse (2 deployable setups).
+      The sequential-abutment relationship with US_DATA_830 O30 is the
+      mechanism the nfp_days_only / non_nfp_days split is designed to
+      probe (data-spillover vs imbalance-only).
+
+primary_schema:
+  k_global: 27
+  k_family: 27
+  k_lane: 9
+  k_split: 3
+  k_session: 27
+  k_decomposition: "3 ORB apertures x 3 RR targets x 3 splits x 1 instrument x 1 entry model = 27"
+  promotion_gate: "Strict Chordia t>=3.79 (theory_grant=false). PASS_PROTOCOL_A is NOT available."
+  budget_check:
+    instrument: MNQ
+    instrument_clean_horizon_years: 6.65
+    n_max_at_horizon_strict: 27
+    declared_n: 27
+    status: "PASS exactly at ceiling"
+    minbtl_note: >-
+      estimate_k_budget.py verified MNQ horizon 6.65yr allows N_max=27 at
+      E[max_N]=1.0 noise floor. Authority: pre_registered_criteria.md
+      Criterion 2 (Bailey 2013 loose-form 2*Ln[N]/E^2).
+
+hypotheses:
+  - id: 1
+    name: "MNQ NYSE_PREOPEN E2 CB1 session-discovery (NFP-spillover splits)"
+    economic_basis: >-
+      MECHANISM_STATUS: plausible_synthesis_not_locally_verified.
+      Hypothesised mechanism: NYSE publishes its initial Order Imbalance
+      data at 09:00 ET (30 minutes before the 09:30 ET cash open). This
+      publication is a discrete liquidity-discovery / auction
+      price-discovery event that, if it carries genuine directional
+      information about the impending cash-open auction, should produce
+      tradable post-publication flow in MNQ (E-mini Nasdaq futures, the
+      most-liquid intraday proxy for NDX). The ORB construction
+      (5/15/30 minute aperture starting at 23:00 Brisbane EDT or 00:00
+      Brisbane EST next-cal-day) measures the realized directional
+      breakout over the imbalance-absorption window before NYSE_OPEN
+      (09:30 ET = 23:30 Bris EDT / 00:30 Bris EST) consumes the flow.
+      No /resources PDF directly anchors this specific mechanism on
+      equity-index futures; the chain is synthesis from Fitschen 2013
+      Ch 3 (ORB premise), Chan 2013 Ch 7 (intraday momentum), and
+      Harris 2002 Ch 14 (auction-print adverse selection) combined
+      with the imbalance-publication event-anchor framing. Therefore
+      theory_grant=false and strict Chordia t>=3.79 applies. NFP-day
+      split tests whether the apparent edge (if any) is concentrated on
+      data-release days (data-spillover from 08:30 ET NFP release =
+      22:30 Bris EDT / 23:30 Bris EST, which abuts the proposed PREOPEN
+      window) or on non-NFP days (imbalance-only mechanism). If signal
+      lives only on NFP days, the mechanism is data-spillover, not
+      imbalance-publication. If signal lives on non-NFP days, the
+      imbalance-publication mechanism survives initial probing.
+    role:
+      kind: "standalone"
+      parent: "Single-cell exhaustive enumeration over (ORB aperture x RR target x split) on the proposed NYSE_PREOPEN session, MNQ E2 CB1."
+      comparator: "Each of the 27 cells is tested against the strict Chordia threshold independently; family-level BH FDR at K=27 applies."
+      primary_metric: "selected_trade_mean_r"
+      promotion_target: "session_catalog_extension_decision_only"
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_PREOPEN]
+      rr_targets: [1.0, 1.5, 2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [5, 15, 30]
+      splits: ["all_days", "nfp_days_only", "non_nfp_days"]
+    expected_trial_count: 27
+    pass_metric:
+      metric: "t_IS"
+      formula: "compute_chordia_t(sharpe_IS, N_IS) on canonical IS fired trades after canonical filter delegation"
+      threshold_gte:
+        t_is: 3.79
+        n_is_on: 100
+        expr_is: 0.0
+      extra_gates:
+        - "dir_match_oos = true when OOS N is sufficient AND OOS power tier >= DIRECTIONAL_ONLY per research.oos_power.POWER_TIERS"
+        - "adversarial split table emitted: per-year, per-DST-regime (EST/EDT), per-NFP-split"
+        - "scratch-inclusive accounting (realized-eod policy)"
+        - "BH FDR at K=27 family"
+    kill_criteria:
+      - "IS t-stat below 3.79 strict (Chordia no-theory bound)"
+      - "IS ExpR not greater than 0"
+      - "N_IS_on below 100"
+      - "OOS sign opposes IS sign AND OOS power tier at or above DIRECTIONAL_ONLY"
+      - "Any banned look-ahead column used per backtesting-methodology RULE 6.3 (orb_break_ts orb_break_delay_min orb_break_bar_ rel_vol_ double_break mae_r mfe_r pnl_r outcome)"
+      - "Holiday-bar contamination (IS sample includes any NYSE-closed date)"
+      - "DST regime imbalance (N_EST below 30 OR N_EDT below 30 forces UNVERIFIED not DEAD)"
+      - "Non-trade-time-knowable feature used"
+      - "BH FDR at K=27 family fails for the cell"
+      - "Holiday-exclusion source unavailable at runner-execution time (fail-closed)"
+    statement: >-
+      On the proposed MNQ NYSE_PREOPEN E2 CB1 session enumerated across
+      3 ORB apertures, 3 RR targets, and 3 NFP-spillover splits, at
+      least one cell clears the strict no-theory Chordia gate
+      (t_IS >= 3.79 with N_IS_on >= 100 and ExpR_IS > 0) AND survives
+      family-level BH FDR at K=27 AND survives adversarial DST-regime
+      and per-year splits without subgroup collapse, justifying a
+      separate downstream stage to extend pipeline.dst.SESSION_CATALOG
+      with a NYSE_PREOPEN resolver.
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 27
+  schema_locked_before_any_metric: true
+
+total_hypothesis_count: 1
+total_expected_trials: 27
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
+  minbtl_note: >-
+    K=27 family discovery. MNQ horizon 6.65yr at E=1.0 noise floor
+    allows N_max=27 exactly. estimate_k_budget.py PASS at ceiling.
+
+decision_rule:
+  continue_if: >-
+    At least one cell clears strict t>=3.79 with positive IS ExpR and
+    N_IS_on>=100, survives BH FDR at K=27 family, and shows no fatal
+    subgroup collapse (per-year, per-DST-regime, per-NFP-split). OOS
+    verdict labeled UNVERIFIED_INSUFFICIENT_POWER if OOS power tier
+    below DIRECTIONAL_ONLY.
+  park_if: >-
+    Cells clear strict IS gates but OOS directional corroboration is
+    ambiguous AND OOS power tier == STATISTICALLY_USELESS, OR the
+    signal concentrates entirely on nfp_days_only (data-spillover
+    verdict — would require v2 with full US_DATA_830 calendar to
+    cleanly disentangle).
+  kill_if: >-
+    All 27 cells fail strict t or ExpR gates, OR execution integrity
+    fails (banned look-ahead column, holiday contamination, non-canonical
+    data source), OR every cell with any signal fires only on NFP days
+    AND the OOS power is sufficient to refute the non_nfp_days
+    mechanism.
+
+methodology_rules_applied:
+  - rule: "RULE 1 feature temporal alignment"
+    application: "All features used must be trade-time-knowable at the proposed 09:00 ET ORB start. orb_*_size, orb_*_high, orb_*_low are computed at ORB end before E2 entry. is_nfp_day is calendar (prior-known)."
+  - rule: "RULE 3 sacred holdout"
+    application: "IS and OOS partitioned by HOLDOUT_SACRED_FROM = 2026-01-01 only. Mode A."
+  - rule: "RULE 3.3 OOS power floor"
+    application: "research.oos_power.oos_ttest_power or one_sample_power computed before any binary OOS kill. dir_match cannot kill underpowered OOS."
+  - rule: "RULE 4 multiple testing"
+    application: "K_family = 27. BH FDR at q=0.05 across all 27 cells. K_lane = 9 (per split). K_split = 3. K_session = 27 (single session)."
+  - rule: "RULE 6 trade-time knowability"
+    application: "No look-ahead columns. RULE 6.3 banned-list enforcement at runner level."
+  - rule: "RULE 9 canonical data source"
+    application: "bars_1m, daily_features, orb_outcomes only. is_nfp_day from pipeline.calendar_filters only. No validated_setups / edge_families / live_config reads."
+  - rule: "Criterion 13 (BINDING) scratch policy"
+    application: "scratch_policy: realized-eod."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-05-25-mnq-nyse-preopen-e2-nfp-spillover-v1.md"
+  - "row-level CSV with IS/OOS split, raw/effective pnl_r, scratch/null handling, NFP-split column, DST-regime column"
+  - "27-cell summary table: cell_id, ORB, RR, split, N_IS_on, ExpR_IS, Sharpe_IS, t_IS, BH_q_K27, OOS sign check, OOS power tier, DST_balance_verdict, verdict"
+  - "explicit statement: theory_grant=false applied throughout; strict t>=3.79 used"
+  - "adversarial sub-reports: per-year ExpR table, per-DST-regime (EST/EDT) ExpR table, per-NFP-split ExpR table"
+
+execution_gate:
+  allowed_now: false
+  blockers:
+    - "NYSE_PREOPEN session resolver NOT in pipeline.dst.DYNAMIC_ORB_RESOLVERS — runner cannot compute ORB windows without implementation. Implementation stage is gated behind this pre-reg's decision_rule.continue_if outcome on a sibling (proxy / shadow-evaluation) construction OR an explicit pre-reg-paired implementation commit that adds the resolver without altering this pre-reg's scope."
+    - "NYSE holiday exclusion source NOT canonical in repo — must be ingested or runner must fail-closed before any execution evidence is gathered."
+  execution_surface_when_unblocked: "WSL with .venv-wsl OR Windows with .venv (runner platform-agnostic)"
+  forbidden_now:
+    - "theory-grant upgrade without new /resources-backed citation directly asserting 09:00 ET NYSE imbalance publication -> ORB-tradable price discovery on equity-index futures"
+    - "RR widening, aperture widening, instrument expansion, or filter-overlay rescue without a paired follow-up pre-reg"
+    - "Auto-writing PASS rows into any audit log without separate post-verdict authorization"
+    - "Promotion out of drafts/ quarantine before runner produces verdict MD"
+    - "Silent substitution of NFP-day-only split for full US_DATA_830 calendar split (this pre-reg is explicitly labeled NFP-spillover v1, not US_DATA_830-spillover)"
+
+not_done_by_this_pre_reg:
+  - "Does not implement NYSE_PREOPEN in pipeline.dst.SESSION_CATALOG."
+  - "Does not implement DOW_MISALIGNED_SESSIONS entry for NYSE_PREOPEN."
+  - "Does not implement NYSE-holiday-exclusion canonical column in daily_features."
+  - "Does not implement US_DATA_830 full economic calendar (CPI/PPI/retail/jobless/ISM)."
+  - "Does not audit MGC or MES at the proposed session — separate pre-regs if v1 MNQ shows signal."
+  - "Does not audit E1 or E3 entry models at the proposed session."
+  - "Does not extract or commit any new literature source for the pre-open-imbalance mechanism — synthesis acknowledged."
+  - "Does not change live deployment or allocator state."
+  - "Does not address correlation between the proposed session and any deployed lane (allocator's correlation gate handles that downstream)."
