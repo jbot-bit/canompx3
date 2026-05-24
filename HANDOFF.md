@@ -9,6 +9,15 @@
 ## This Session (2026-05-24 — Codex live-readiness verification hardening)
 
 - **Tool:** Codex WSL, branch `main`.
+- **2026-05-25 autonomous routing:** User noted live ring remains blocked on
+  manual market smoke, Track D is design-stage, and MNQ rebuild is DB/Pinecone
+  mutating. Chose the lowest-risk autonomous action: Track D read-only design
+  measurement. Updated `docs/runtime/stages/2026-05-23-track-d-gate0-runner-design.md`
+  and `docs/runtime/action-queue.yaml` with canonical filtered query evidence:
+  `N=1,658` IS MNQ COMEX_SETTLE O5 E2 RR1.5 candidate windows from
+  `2019-05-06` through `2025-12-31`; all entry/break timestamps are
+  minute-resolution; `734/1,658` E2 entries occur before `break_ts`. No DB,
+  Pinecone, live-routing, broker, profile, or implementation-code mutation.
 - **2026-05-25 follow-on:** Picked up the highest-finishable active Codex/Ralph
   stage (`docs/runtime/stages/ralph_iter_210.md`) rather than the live-bar ring
   stage, because live-bar ring remains blocked on operator-run market-session
@@ -473,12 +482,11 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-25
-- **Commit:** fb550e0e — test(live): close Ralph deferred burndown coverage
-- **Files changed:** 4 files
+- **Commit:** 6c433a21 — docs(track-d): record gate0 design measurements
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/ralph-loop/deferred-findings.md`
-  - `docs/runtime/stages/ralph-deferred-burndown-2026-05-23.md`
-  - `tests/test_trading_app/test_session_orchestrator.py`
+  - `docs/runtime/action-queue.yaml`
+  - `docs/runtime/stages/2026-05-23-track-d-gate0-runner-design.md`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

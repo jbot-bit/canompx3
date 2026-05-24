@@ -10,7 +10,7 @@ task: |
     3. No 2026 OOS threshold tuning (holdout 2026-01-01 remains sacred)
   This stage is DESIGN ONLY — no code is written until design is approved.
 mode: DESIGN
-updated: 2026-05-23T14:00Z
+updated: 2026-05-25T07:45+10:00
 scope_lock:
   - pipeline/db_contracts.py
   - pipeline/migrations/add_microstructure_tables.sql
@@ -99,8 +99,14 @@ The pre-reg is locked (K=4, frozen family). It cannot run because:
 ### Open Questions Before Implementation
 
 A. **Cost envelope**: how many IS candidate windows exist for MNQ COMEX_SETTLE O5 E2 RR1.5?
-   This determines pull cost. Need to query `orb_outcomes` to get N before coding the runner.
-   (Can run `--estimate-cost` without any Databento API call.)
+   **MEASURED 2026-05-25:** filtered canonical `gold.db::orb_outcomes` joined to
+   `daily_features` on `(trading_day, symbol, orb_minutes)` gives `N=1,658`
+   IS entries / distinct trading days from `2019-05-06` through `2025-12-31`.
+   Filter: `symbol='MNQ'`, `orb_label='COMEX_SETTLE'`, `orb_minutes=5`,
+   `entry_model='E2'`, `confirm_bars=1`, `rr_target=1.5`,
+   `trading_day < DATE '2026-01-01'`.
+   Next implementation design should estimate Databento cost for 1,658
+   windows before any pull.
 
 B. **MBP-1 vs TBBO availability for MNQ**: The existing pilot only covers MGC/GC.
    Need to confirm Databento has MBP-1 for MNQ/NQ for the full IS window (2019-2025).
@@ -108,6 +114,15 @@ B. **MBP-1 vs TBBO availability for MNQ**: The existing pilot only covers MGC/GC
 C. **`touch_ts_utc` precision**: Does `orb_outcomes` have millisecond-level touch timestamps,
    or only bar-resolution (1-minute)? If bar-resolution only, the 60s lookback window may overlap
    with the break bar itself — need to define the window boundary precisely.
+   **MEASURED 2026-05-25:** `orb_outcomes.entry_ts` and
+   `daily_features.orb_COMEX_SETTLE_break_ts` are minute-resolution for this
+   slice (`1,658/1,658` entry timestamps have zero seconds and zero
+   milliseconds; `1,658/1,658` break timestamps have zero seconds). `734/1,658`
+   E2 entries occur before the daily `break_ts`, and `924/1,658` equal it.
+   Therefore Gate 0 cannot treat `break_ts` as the event-time touch. The
+   runner must use `entry_ts` as the canonical bar-level trigger anchor and
+   pull a conservative Databento window broad enough to resolve the exact
+   first touch inside that one-minute bar without reading or tuning on 2026 OOS.
 
 ## Acceptance (for implementation stage)
 

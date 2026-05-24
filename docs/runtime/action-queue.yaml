@@ -474,7 +474,7 @@ items:
     priority: P3
     close_before_new_work: false
     owner_hint: codex-or-claude
-    last_verified_at: 2026-05-17
+    last_verified_at: 2026-05-25
     freshness_sla_days: 7
     next_action: Design the Databento top-of-book table and bounded runner needed to execute the DESIGN_ONLY prereg.
     exit_criteria: The branch has an executable runner/table design or is explicitly deferred with a measured reason.
@@ -485,7 +485,7 @@ items:
       - docs/plans/archive/2026-04/2026-04-23-microstructure-gate0-design.md
       - docs/audit/hypotheses/2026-04-23-mnq-comex-settle-gate0-microstructure-v1.yaml
     notes_ref: docs/plans/archive/2026-04/2026-04-23-microstructure-gate0-design.md
-    override_note: "Re-verified 2026-05-10 during Codex repo-health pass: DESIGN_ONLY prereg and archived Gate 0 design exist; item remains blocked on Databento top-of-book runner/table design."
+    override_note: "Re-verified 2026-05-25 during Codex autonomous-route pass: DESIGN_ONLY prereg remains under K=4 and 2026 holdout; local read-only query measured 1,658 IS MNQ COMEX_SETTLE O5 E2 RR1.5 candidate windows and minute-resolution entry/break timestamps. Item remains blocked on Databento MBP-1/TBBO availability/cost confirmation and implementation approval."
 
   - id: mes_event_tail_slippage_realism
     title: MES event-tail slippage realism debt
