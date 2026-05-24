@@ -482,11 +482,9 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-25
-- **Commit:** 684c7cc4 — docs(track-d): record gate0 design measurements
-- **Files changed:** 3 files
+- **Commit:** b0eca95a — docs(handoff): sync Track D footer
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/runtime/action-queue.yaml`
-  - `docs/runtime/stages/2026-05-23-track-d-gate0-runner-design.md`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
