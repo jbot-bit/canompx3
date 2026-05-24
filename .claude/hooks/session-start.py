@@ -812,7 +812,8 @@ def _startup_packet_lines() -> list[str]:
     blocking = brief.get("blocking_issues") or []
     warnings = brief.get("warning_issues") or []
     latency_ms = brief.get("startup_latency_ms")
-    budget = brief.get("orientation_cost_budget") or {}
+    budget = brief.get("orientation_cost_budget")
+    budget = budget if isinstance(budget, dict) else {}
     within = budget.get("within_budget")
 
     parts = []
