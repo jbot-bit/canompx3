@@ -176,7 +176,7 @@ For large post-edit verification, use the shared logic indexed in:
   `scripts/infra/codex-capital-review.sh`
 - Interactive work: `scripts/infra/codex-project.sh`
 - Interactive with live web search: `scripts/infra/codex-project-search.sh`
-- Heavier coding / review profile: `canompx3_max`
+- Heavier coding / review profile: `canompx3_power`
 
 ## Codex CLI Surfaces Worth Using
 
@@ -201,4 +201,4 @@ For WSL launcher sessions, define these in user-level `~/.codex/config.toml`:
 
 - `canompx3`: default project profile
 - `canompx3_search`: live-search variant
-- `canompx3_max`: heavier coding/review profile using `gpt-5.3-codex`
+- `canompx3_power`: heavier coding/review profile

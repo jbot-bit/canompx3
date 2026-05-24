@@ -217,14 +217,18 @@ def test_detect_primary_model_drift_reads_effective_shared_home(
 ) -> None:
     shared_codex_home = tmp_path / ".codex"
     shared_codex_home.mkdir()
-    (shared_codex_home / "config.toml").write_text('model = "gpt-5.5"\n', encoding="utf-8")
+    (shared_codex_home / "config.toml").write_text('model = "gpt-5.4"\n', encoding="utf-8")
     monkeypatch.setenv("CODEX_HOME", str(shared_codex_home))
 
     warning = codex_local_env._detect_primary_model_drift()
 
     assert warning is not None
     assert str(shared_codex_home) in warning
-    assert "gpt-5.5" in warning
+    assert "gpt-5.4" in warning
+
+
+def test_primary_model_default_is_current_local_codex_default() -> None:
+    assert codex_local_env.EXPECTED_PRIMARY_MODEL == "gpt-5.5"
 
 
 def test_detect_auth_state_warning_reads_effective_shared_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

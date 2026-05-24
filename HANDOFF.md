@@ -18,6 +18,16 @@
   `2019-05-06` through `2025-12-31`; all entry/break timestamps are
   minute-resolution; `734/1,658` E2 entries occur before `break_ts`. No DB,
   Pinecone, live-routing, broker, profile, or implementation-code mutation.
+- **2026-05-25 Codex-specific closeout:** User clarified they meant Codex-owned
+  work and wanted all of it finished or closed. Closed the speculative Codex
+  improvement backlog in `.codex/CODEX_IMPROVEMENT_PLAN.md`; aligned Codex
+  review wrappers from stale `canompx3_max` to current `canompx3_power`;
+  updated Codex docs/doctor to treat local `gpt-5.5` as the measured primary
+  default after checking `codex-cli 0.133.0` and recent local logs. Verification:
+  Codex-focused Ruff clean; 36 Codex launcher/local-env/doctor/hook tests
+  passed; `codex_local_env.py doctor --platform wsl` no longer reports primary
+  model drift; full drift clean (`163 passed, 20 advisory`). No Claude-owned
+  settings/hooks mutated.
 - **2026-05-25 follow-on:** Picked up the highest-finishable active Codex/Ralph
   stage (`docs/runtime/stages/ralph_iter_210.md`) rather than the live-bar ring
   stage, because live-bar ring remains blocked on operator-run market-session

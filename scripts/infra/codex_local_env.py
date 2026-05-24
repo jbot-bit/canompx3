@@ -35,7 +35,7 @@ REMOVABLE_DIRS = {
 REMOVABLE_FILES = {
     ".coverage",
 }
-EXPECTED_PRIMARY_MODEL = "gpt-5.4"
+EXPECTED_PRIMARY_MODEL = "gpt-5.5"
 SHARED_CODEX_HOME_OVERRIDE_ENV = "CANOMPX3_SHARED_CODEX_HOME"
 
 
@@ -351,8 +351,8 @@ def _detect_primary_model_drift(env: dict[str, str] | None = None) -> str | None
     user_model = _read_toml_model(codex_home / "config.toml")
     if user_model and user_model != EXPECTED_PRIMARY_MODEL:
         return (
-            f"effective Codex home `{codex_home}` defaults to `{user_model}`; this repo's stable primary path is "
-            f"`{EXPECTED_PRIMARY_MODEL}` until a newer Codex build is verified"
+            f"effective Codex home `{codex_home}` defaults to `{user_model}`; "
+            f"this repo's current primary Codex path is `{EXPECTED_PRIMARY_MODEL}`"
         )
     return None
 

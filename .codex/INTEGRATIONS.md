@@ -67,7 +67,7 @@ Project-scoped Codex MCP declarations also exist in `.codex/config.toml`:
 
 - Codex binary: `/home/joshd/.nvm/versions/node/v24.14.0/bin/codex`
 - User config: `/home/joshd/.codex/config.toml`
-- Current default model: `gpt-5.4`
+- Current default model: `gpt-5.5`
 - Project trust is already set for this repo
 - `codex mcp list` now includes `openaiDeveloperDocs`
 - Enabled curated plugin in the current local config: `GitHub`

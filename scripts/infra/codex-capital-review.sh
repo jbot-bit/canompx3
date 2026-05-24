@@ -6,7 +6,7 @@ ROOT="${CANOMPX3_ROOT:-$DEFAULT_ROOT}"
 VENV="$ROOT/.venv-wsl"
 PREFLIGHT="$ROOT/scripts/tools/session_preflight.py"
 SHARED_CODEX_HOME_HELPER="$ROOT/scripts/infra/codex_shared_home.sh"
-PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3_max}"
+PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3_power}"
 
 if [[ ! -f "$VENV/bin/python" ]]; then
   echo "ERROR: .venv-wsl/bin/python not found." >&2

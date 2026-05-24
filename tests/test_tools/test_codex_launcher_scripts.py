@@ -37,6 +37,7 @@ def test_wsl_launcher_scripts_call_mount_guard() -> None:
     project = (root / "scripts" / "infra" / "codex-project.sh").read_text(encoding="utf-8")
     search = (root / "scripts" / "infra" / "codex-project-search.sh").read_text(encoding="utf-8")
     review = (root / "scripts" / "infra" / "codex-review.sh").read_text(encoding="utf-8")
+    capital_review = (root / "scripts" / "infra" / "codex-capital-review.sh").read_text(encoding="utf-8")
     worktree = (root / "scripts" / "infra" / "codex-worktree.sh").read_text(encoding="utf-8")
     sync_guard = (root / "scripts" / "infra" / "codex-wsl-sync.sh").read_text(encoding="utf-8")
 
@@ -59,6 +60,8 @@ def test_wsl_launcher_scripts_call_mount_guard() -> None:
     assert 'source "$SHARED_CODEX_HOME_HELPER"' in review
     assert "setup_shared_codex_home" in review
     assert 'append_codex_profile_arg "$PROFILE" CODEX_ARGS' in review
+    assert 'PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3_power}"' in review
+    assert 'PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3_power}"' in capital_review
     assert 'wsl_mount_guard.py" --root "$ROOT"' in review
     assert 'python3 "$ROOT/scripts/tools/wsl_mount_guard.py" --root "$ROOT"' in worktree
     assert "task_route_packet.py" in worktree
