@@ -1,8 +1,20 @@
 ---
 task: Dashboard UX Stage 1 — typography bump + demote legacy sections behind "Show all" toggle (CSS/HTML-only, no JS/API)
-mode: IMPLEMENTATION
+mode: CLOSED
 slug: 2026-05-23-dashboard-ux-stage1-css-only
 risk_tier: high
+closed_note: |
+  Shipped in `a810690b` (`improve bot dashboard focus layout`) with follow-up
+  blocked-state UI cleanup in `19861135` (`fix(dashboard): tighten start bot
+  blocked-state UI`). Current 2026-05-24 verification caught and fixed a test
+  harness hang caused by Starlette `TestClient`'s portal thread under pytest;
+  dashboard route tests now use `httpx.ASGITransport` and still exercise the
+  ASGI app. Evidence: `./.venv-wsl/bin/python -m pytest
+  tests/test_trading_app/test_bot_dashboard_sse.py
+  tests/test_trading_app/test_bot_dashboard_routes.py -q` => 29 passed;
+  `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_bar_ring.py
+  tests/test_trading_app/test_bar_persister.py
+  tests/test_trading_app/test_bot_dashboard_sse.py -q` => 47 passed.
 ---
 
 ## Scope Lock

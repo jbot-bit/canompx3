@@ -1,10 +1,23 @@
 ---
 task: Live-broker resilience hardening — institutional baseline (Stages 1+2 in this PR)
-mode: IMPLEMENTATION
+mode: CLOSED
 stage: 1
 total_stages: 5
 worktree: C:/Users/joshd/canompx3/.worktrees/live-broker-resilience
 branch: feat/live-broker-resilience
+closed_note: |
+  Full staged chain is on main via `77b3feb1` (`feat(live): broker HTTP
+  resilience + circuit breaker + kill-switch SLA (Stages 1-5) (#301)`), with
+  Stage 3/4 docs also closed after the 2026-05-23 Tradovate equity-age follow-up.
+  Current 2026-05-24 verification: `./.venv-wsl/bin/python -m pytest
+  tests/test_trading_app/test_http_client.py
+  tests/test_trading_app/test_order_idempotency.py
+  tests/test_trading_app/test_equity_age_watchdog.py
+  tests/test_trading_app/test_orchestrator_circuit_wiring.py
+  tests/test_trading_app/test_circuit_breaker.py
+  tests/test_trading_app/test_projectx_positions.py
+  tests/test_trading_app/test_tradovate.py -q` => 118 passed, 1 warning
+  (`asyncio` executor join warning in the stale-equity watchdog test).
 ---
 
 ## Scope Lock

@@ -1,8 +1,16 @@
 ---
 task: Fix pytest-timeout watchdog crashing pytest 9.0.2 on Windows during inter-module teardown — restrict to test-function runtime only
-mode: IMPLEMENTATION
+mode: CLOSED
 scope_lock:
   - pyproject.toml
+closed_note: |
+  Shipped in `85ae67fa` (`fix(ci): timeout_func_only=true — stop
+  pytest-timeout crashing in teardown`). Current verification on 2026-05-24:
+  `./.venv-wsl/bin/python -m pytest tests/test_tools/test_codex_local_env.py
+  tests/test_tools/test_codex_doctor.py tests/test_tools/test_codex_launcher_scripts.py
+  tests/test_tools/test_windows_agent_launch_light.py
+  tests/test_tools/test_windows_agent_launch.py -q` => 74 passed. Pytest
+  header confirms `timeout func_only: True`.
 ---
 
 ## Scope Lock

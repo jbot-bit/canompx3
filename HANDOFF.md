@@ -9,8 +9,20 @@
 ## This Session (2026-05-24 — Codex live-readiness verification hardening)
 
 - **Tool:** Codex WSL, branch `main`.
+- **Follow-up closeout:** Picked up existing Codex work and closed stale shipped
+  stage docs for pytest-timeout function-only mode, dashboard UX Stage 1, and
+  the live-broker-resilience root stage. While verifying dashboard/ring tests,
+  found a real pytest hang in Starlette `TestClient` portal-thread requests;
+  replaced the affected dashboard HTTP tests with `httpx.ASGITransport` so
+  tests still exercise the ASGI app without the portal deadlock.
 - **Scope:** Cleared verification blockers without DB mutation, broker logic changes, routing changes, NQ-mini work, multi-asset work, auth bootstrap, or allocation mutation.
 - **What changed:** Stabilized the full-suite mutex and bridge-refusal tests; documented current TopstepX/API access facts; recorded the live chart ring-buffer smoke attempt; appended evidence-backed Check 107 SHA migration-manifest entries instead of mutating canonical DB provenance. Follow-up review redacted exact API account IDs from the newly touched Topstep/stage docs; older historical docs/tests still contain legacy identifiers and need a separate deliberate cleanup if the repo privacy posture changes.
+- **Follow-up verification:** dashboard HTTP slices now pass:
+  `tests/test_trading_app/test_bot_dashboard_sse.py tests/test_trading_app/test_bot_dashboard_routes.py`
+  => 29 passed; ring/dashboard slice
+  `tests/test_trading_app/test_bar_ring.py tests/test_trading_app/test_bar_persister.py tests/test_trading_app/test_bot_dashboard_sse.py`
+  => 47 passed; launcher/setup slice => 74 passed; broker-resilience slice
+  => 118 passed, 1 warning.
 - **Verification:** `uv run python -m pytest -q` => 6828 passed, 41 skipped, 5 warnings. `uv run python pipeline/check_drift.py --quiet` => clean, 163 passed, 20 advisory. Check 107 direct probes and manifest test slice passed after the manifest repair.
 - **Residual blocker:** Do not call `LIVE_SAFE` yet. `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md` is closed out for this session but remains parked on the required manual market smoke after CME reopen because the 2026-05-24 attempt fail-closed on the CME holiday before fresh bars could be observed.
 - **Live ring smoke retry (2026-05-24):** `logs/smoke/live_ring_smoke_20260524_115147.log` is the exact evidence. Preflight reached `8/8`, but the actual signal-only session fail-closed before feed/bars on `CME HOLIDAY (2026-05-23) — ALL SESSIONS BLOCKED`; session stats show `bars_received=0`, `data/live_bars/` empty, and direct dashboard query returned `bars_recent_count 0`. Verdict: `BLOCKED`, not `PASS` or `FAIL`. Pre-existing stale ring files were archived under `logs/smoke/live_ring_preexisting_20260524_121344/`. A tmux auto-retry was briefly scheduled for next CME open, then cancelled at operator request; no retry/session/dashboard process remains running. Do not close the stage until a fresh market-session smoke proves ring lifecycle `absent -> fresh current-session file -> deleted` and post-shutdown DB fallback.
@@ -424,10 +436,14 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-24
-- **Commit:** 31ad7dde — docs: park live ring smoke for market reopen
-- **Files changed:** 2 files
+- **Commit:** e51a82de — test(dashboard): avoid TestClient portal hang
+- **Files changed:** 6 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md`
+  - `docs/runtime/stages/2026-05-23-dashboard-ux-stage1-css-only.md`
+  - `docs/runtime/stages/2026-05-23-pytest-timeout-func-only.md`
+  - `docs/runtime/stages/live-broker-resilience.md`
+  - `tests/test_trading_app/test_bot_dashboard_routes.py`
+  - `tests/test_trading_app/test_bot_dashboard_sse.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

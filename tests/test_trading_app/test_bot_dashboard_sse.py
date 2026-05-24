@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import httpx
 import pytest
 
 
@@ -101,13 +102,13 @@ def test_api_bars_recent_route_registered():
     assert "/api/events/stream" in paths
 
 
-def test_api_bars_recent_returns_charts_shape():
-    from fastapi.testclient import TestClient
-
+@pytest.mark.asyncio
+async def test_api_bars_recent_returns_charts_shape():
     from trading_app.live import bot_dashboard as bd
 
-    c = TestClient(bd.app)
-    r = c.get("/api/bars-recent?instrument=MNQ&lookback_minutes=10")
+    transport = httpx.ASGITransport(app=bd.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
+        r = await c.get("/api/bars-recent?instrument=MNQ&lookback_minutes=10")
     assert r.status_code == 200
     body = r.json()
     assert "bars" in body
@@ -119,28 +120,28 @@ def test_api_bars_recent_returns_charts_shape():
     assert "orb_complete" in body
 
 
-def test_api_bars_recent_caps_lookback_at_1440():
-    from fastapi.testclient import TestClient
-
+@pytest.mark.asyncio
+async def test_api_bars_recent_caps_lookback_at_1440():
     from trading_app.live import bot_dashboard as bd
 
-    c = TestClient(bd.app)
     # 99999 should not raise; should be silently capped to 1440
-    r = c.get("/api/bars-recent?lookback_minutes=99999")
+    transport = httpx.ASGITransport(app=bd.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
+        r = await c.get("/api/bars-recent?lookback_minutes=99999")
     assert r.status_code == 200
 
 
-def test_api_events_stream_returns_429_over_subscriber_cap():
-    from fastapi.testclient import TestClient
-
+@pytest.mark.asyncio
+async def test_api_events_stream_returns_429_over_subscriber_cap():
     from trading_app.live import bot_dashboard as bd
     from trading_app.live.bot_dashboard import _SSE_MAX_SUBSCRIBERS
 
     # Saturate the broker directly
     fake_queues = [bd._sse_broker.subscribe() for _ in range(_SSE_MAX_SUBSCRIBERS)]
     try:
-        c = TestClient(bd.app)
-        r = c.get("/api/events/stream")
+        transport = httpx.ASGITransport(app=bd.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
+            r = await c.get("/api/events/stream")
         assert r.status_code == 429
         assert r.headers.get("Retry-After") == "5"
         body = r.json()
@@ -334,7 +335,8 @@ def test_sse_start_watchers_recovers_after_done_tasks():
     loop2.close()
 
 
-def test_api_events_stream_429_cleans_up_subscriber_queue():
+@pytest.mark.asyncio
+async def test_api_events_stream_429_cleans_up_subscriber_queue():
     """TOCTOU-fix verification: rejected over-cap requests must unsubscribe.
 
     Previously the cap check was check-then-subscribe (racy). New pattern is
@@ -342,16 +344,15 @@ def test_api_events_stream_429_cleans_up_subscriber_queue():
     is: after a rejected request, subscriber_count returns to the saturated
     baseline rather than growing past the cap.
     """
-    from fastapi.testclient import TestClient
-
     from trading_app.live import bot_dashboard as bd
     from trading_app.live.bot_dashboard import _SSE_MAX_SUBSCRIBERS
 
     fake_queues = [bd._sse_broker.subscribe() for _ in range(_SSE_MAX_SUBSCRIBERS)]
     try:
         baseline = bd._sse_broker.subscriber_count()
-        c = TestClient(bd.app)
-        r = c.get("/api/events/stream")
+        transport = httpx.ASGITransport(app=bd.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
+            r = await c.get("/api/events/stream")
         assert r.status_code == 429
         # The TOCTOU fix subscribes then unsubscribes on overflow; after the
         # rejected response, count must equal the pre-request baseline.

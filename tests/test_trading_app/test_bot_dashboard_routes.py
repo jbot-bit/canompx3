@@ -9,16 +9,32 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import anyio
 import duckdb
+import httpx
 import pytest
-from fastapi.testclient import TestClient
 
 from trading_app.live import bot_dashboard
 
 
+class _ASGIClient:
+    """Tiny synchronous ASGI test client that avoids Starlette TestClient's portal thread."""
+
+    def __init__(self, app):
+        self._app = app
+
+    def get(self, url: str, **kwargs) -> httpx.Response:
+        async def _get() -> httpx.Response:
+            transport = httpx.ASGITransport(app=self._app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+                return await client.get(url, **kwargs)
+
+        return anyio.run(_get)
+
+
 @pytest.fixture
 def client():
-    return TestClient(bot_dashboard.app)
+    return _ASGIClient(bot_dashboard.app)
 
 
 def _seed_live_journal(path: Path) -> None:
