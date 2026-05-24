@@ -506,10 +506,16 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-25
-- **Commit:** ba53cdf0 — docs(stage): record 2026-05-26 smoke CONDITIONAL FAIL findings
-- **Files changed:** 2 files
+- **Commit:** 4cd55e99 — [judgment] live-bar-ring iter 2: shutdown_trace breadcrumb + recover_ring tool
+- **Files changed:** 8 files
   - `HANDOFF.md`
   - `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md`
+  - `docs/runtime/stages/2026-05-25-nyse-preopen-session-build.md`
+  - `scripts/tools/recover_ring.py`
+  - `tests/test_trading_app/test_bar_persister.py`
+  - `tests/test_trading_app/test_recover_ring.py`
+  - `trading_app/live/bar_ring.py`
+  - `trading_app/live/session_orchestrator.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

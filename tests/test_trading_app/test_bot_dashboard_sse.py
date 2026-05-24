@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -389,3 +389,139 @@ def test_orb_levels_for_instrument_filters_by_instrument(monkeypatch):
     out_mgc = bd._orb_levels_for_instrument("MGC")
     assert out_mnq["orb_high"] == 18420.5
     assert out_mgc["orb_high"] == 2050.0
+
+
+@pytest.mark.asyncio
+async def test_bars_source_changed_emits_once_on_ring_live_to_stale_transition(monkeypatch, tmp_path):
+    """Closes done-criterion 7c: dashboard auto-fallback to gold.db on shutdown.
+
+    Drives the _bars_watcher through a ring-live -> heartbeat-stale transition
+    and asserts exactly ONE bars_source_changed SSE event fires (idempotent,
+    not on every subsequent tick). On a fresh-start dashboard whose ring is
+    already stale, NO transition event fires.
+    """
+    from trading_app.live import bar_ring, bot_dashboard as bd
+
+    # Isolate ring dir so a real MNQ.json doesn't leak in.
+    monkeypatch.setattr(bar_ring, "RING_DIR", tmp_path / "live_bars")
+    with bar_ring._writers_lock:
+        bar_ring._writers.clear()
+
+    # Subscribe to capture SSE events.
+    q = bd._sse_broker.subscribe()
+
+    # State controllers — flipped between watcher ticks.
+    state_data = {
+        "heartbeat_utc": datetime.now(UTC).isoformat(),
+        "lanes": {"L0": {"instrument": "MNQ"}},
+    }
+    monkeypatch.setattr("trading_app.live.bot_state.read_state", lambda: dict(state_data))
+
+    # Stage 1: ring is live AND heartbeat is fresh — should mark ring_source_live=True.
+    fresh_snap = bar_ring.RingSnapshot(
+        symbol="MNQ",
+        bars=[
+            {
+                "ts_utc": datetime.now(UTC).isoformat(),
+                "open": 20000.0,
+                "high": 20001.0,
+                "low": 19999.0,
+                "close": 20000.5,
+                "volume": 100,
+            }
+        ],
+        updated_utc=datetime.now(UTC),
+    )
+    monkeypatch.setattr(bar_ring, "read_bar_ring", lambda inst: fresh_snap)
+
+    # Make the watcher's sleep instant so the test runs in <1s.
+    real_sleep = asyncio.sleep
+
+    async def fast_sleep(_secs):
+        await real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", fast_sleep, raising=True)
+
+    task = asyncio.create_task(bd._bars_watcher())
+    try:
+        # Let one fresh tick run.
+        await real_sleep(0.05)
+
+        # Flip to heartbeat_stale by aging the heartbeat far past the threshold.
+        from trading_app.live.bot_dashboard import HEARTBEAT_STALE_AFTER_S
+
+        stale_hb = datetime.now(UTC) - timedelta(seconds=HEARTBEAT_STALE_AFTER_S * 10)
+        state_data["heartbeat_utc"] = stale_hb.isoformat()
+
+        # Let multiple stale ticks run — only ONE bars_source_changed must fire.
+        await real_sleep(0.15)
+    finally:
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+        bd._sse_broker.unsubscribe(q)
+
+    # Drain the queue and count bars_source_changed.
+    events = []
+    while not q.empty():
+        try:
+            events.append(q.get_nowait())
+        except Exception:
+            break
+    transitions = [e for e in events if e["event"] == "bars_source_changed"]
+    assert len(transitions) == 1, (
+        f"expected exactly one bars_source_changed event on transition, got {len(transitions)}: {transitions}"
+    )
+    assert transitions[0]["data"]["instrument"] == "MNQ"
+    assert transitions[0]["data"]["source"] == "gold_db"
+
+
+@pytest.mark.asyncio
+async def test_bars_source_changed_does_not_emit_on_cold_start_stale(monkeypatch, tmp_path):
+    """Cold-start dashboard with already-stale heartbeat must NOT emit a
+    spurious transition event — initial state is None, not True."""
+    from trading_app.live import bar_ring, bot_dashboard as bd
+
+    monkeypatch.setattr(bar_ring, "RING_DIR", tmp_path / "live_bars")
+    with bar_ring._writers_lock:
+        bar_ring._writers.clear()
+
+    q = bd._sse_broker.subscribe()
+    # Heartbeat is already stale at watcher start.
+    from trading_app.live.bot_dashboard import HEARTBEAT_STALE_AFTER_S
+
+    stale_hb = (datetime.now(UTC) - timedelta(seconds=HEARTBEAT_STALE_AFTER_S * 10)).isoformat()
+    monkeypatch.setattr(
+        "trading_app.live.bot_state.read_state",
+        lambda: {"heartbeat_utc": stale_hb, "lanes": {"L0": {"instrument": "MNQ"}}},
+    )
+    monkeypatch.setattr(bar_ring, "read_bar_ring", lambda inst: bar_ring.RingSnapshot(symbol="MNQ"))
+
+    real_sleep = asyncio.sleep
+
+    async def fast_sleep(_secs):
+        await real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", fast_sleep, raising=True)
+
+    task = asyncio.create_task(bd._bars_watcher())
+    try:
+        await real_sleep(0.15)
+    finally:
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+        bd._sse_broker.unsubscribe(q)
+
+    events = []
+    while not q.empty():
+        try:
+            events.append(q.get_nowait())
+        except Exception:
+            break
+    transitions = [e for e in events if e["event"] == "bars_source_changed"]
+    assert transitions == [], f"cold-start must not emit transition, got {transitions}"

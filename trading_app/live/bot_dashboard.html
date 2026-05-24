@@ -5780,7 +5780,7 @@ const SseClient = (() => {
       let data; try { data = JSON.parse(ev.data); } catch (_) { return; }
       handle(type, data);
     };
-    ["heartbeat", "state", "signal", "alert", "bar"].forEach(t => es.addEventListener(t, onTyped(t)));
+    ["heartbeat", "state", "signal", "alert", "bar", "bars_source_changed"].forEach(t => es.addEventListener(t, onTyped(t)));
   }
 
   function handle(type, data) {
@@ -5811,6 +5811,16 @@ const SseClient = (() => {
         break;
       case "bar":
         ChartCockpit.pushBar(data);
+        break;
+      case "bars_source_changed":
+        // Server detected ring_is_live -> heartbeat_stale transition. Repaint
+        // from /api/bars-recent (gold.db historical) so the chart shows the
+        // post-shutdown view without a browser reload.
+        try {
+          if (data && data.instrument) {
+            ChartCockpit.loadInitial(data.instrument);
+          }
+        } catch (e) { console.warn("bars_source_changed reload failed", e); }
         break;
     }
   }

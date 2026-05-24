@@ -2777,6 +2777,13 @@ async def _bars_watcher() -> None:
     from trading_app.live.bot_state import read_state
 
     last_seen: dict[str, datetime] = {}
+    # Per-instrument "is the chart currently fed by the live ring?" tracker.
+    # On transition ring_is_live -> heartbeat_stale we publish a
+    # bars_source_changed SSE event so the client repaints from gold.db via
+    # /api/bars-recent without requiring a browser reload. Initial state is
+    # None (unknown) — only emit on actual True -> False transition so
+    # cold-start dashboards don't get a spurious fallback event.
+    ring_source_live: dict[str, bool | None] = {}
     while True:
         try:
             state = read_state() or {}
@@ -2814,6 +2821,7 @@ async def _bars_watcher() -> None:
                 # /api/bars-recent.
                 ring_is_live = not snap.is_empty() and not bar_ring.is_stale(snap) and not heartbeat_stale
                 if ring_is_live:
+                    ring_source_live[inst] = True
                     # Prefer ring during a live session.
                     since = last_seen.get(inst)
                     if since is None:
@@ -2867,6 +2875,22 @@ async def _bars_watcher() -> None:
                 # post-crash false-live where the ring stays fresh for up
                 # to 90s after the heartbeat thread dies.
                 if heartbeat_stale:
+                    # Transition emit: if the ring was previously live for
+                    # this instrument, tell the client to repaint from
+                    # /api/bars-recent (gold.db historical). Idempotent —
+                    # ring_source_live[inst] is reset to False so only one
+                    # event per transition.
+                    if ring_source_live.get(inst) is True:
+                        log.info(
+                            "_bars_watcher(%s): ring_is_live -> heartbeat_stale "
+                            "transition; publishing bars_source_changed",
+                            inst,
+                        )
+                        _sse_broker.publish(
+                            "bars_source_changed",
+                            {"instrument": inst, "source": "gold_db"},
+                        )
+                    ring_source_live[inst] = False
                     if inst not in last_seen:
                         log.info(
                             "_bars_watcher(%s): heartbeat stale — deferring to "
