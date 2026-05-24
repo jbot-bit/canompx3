@@ -1,8 +1,8 @@
-## Iteration: 208
-## Target: pipeline/system_context.py:882-925
-## Finding: evaluate_system_policy read-only/orientation branch duplicates _parallel_claim_issues inline without the mutating-peer escalation logic, producing divergent warning text and missing blocker-vs-warning distinction for mutating peers
+## Iteration: 209
+## Target: trading_app/derived_state.py:36-46
+## Finding: build_profile_fingerprint per-lane dict omits explicit orb_minutes; strategy_id encodes it implicitly but fingerprint consumers cannot inspect aperture without re-parsing
 ## Classification: [mechanical]
-## Blast Radius: 10 importers all via session_preflight._evaluate_preflight_policy; no capital-class callers
-## Invariants: [1. read-only/orientation still only emits warnings (not blockers) for peer claims; 2. session_start_mutating path unchanged; 3. warning message text uses _parallel_claim_issues canonical text]
-## Diff estimate: -21 lines production (deletion) + 3 new lines = ~18 lines net change
-## Doctrine cited: integrity-guardian.md § 5 (contract drift — inline re-implementation diverges from extracted helper); institutional-rigor.md § 4 (delegate to canonical sources, never re-encode)
+## Blast Radius: 1 production file (derived_state.py). 5 callers store the hash; fingerprint change will invalidate cached state envelopes (correct behavior). No logic change.
+## Invariants: [1] strategy_id remains in fingerprint; [2] parse_strategy_id is the only source of orb_minutes; [3] fingerprint function signature unchanged
+## Diff estimate: 5 lines
+## Doctrine cited: integrity-guardian.md § 5 (Evidence over assertion — explicit encoding better than implicit); institutional-rigor.md § 4 (delegate to canonical sources — parse_strategy_id is canonical for orb_minutes extraction)
