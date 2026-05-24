@@ -43,6 +43,23 @@ closed_note: |
   (`PROJECTX_USER`), with `Preflight: 5/8 passed`. Required live evidence
   remains absent; keep `implementation_status: AUDIT_CLOSED_PENDING_LIVE_SMOKE`.
 
+  2026-05-26 Brisbane Mon smoke attempt: CONDITIONAL FAIL — done-criteria 7a PASS
+  (ring file created at +90s, grew to 5458 bytes through CME reopen 08:00),
+  but 7b FAIL (ring NOT deleted on Ctrl+C orchestrator shutdown — MNQ.json
+  survived) and 7c PARTIAL (dashboard did NOT auto-fallback to gold.db on
+  shutdown; required manual browser refresh to show "chart unavailable" /
+  fall back). Two real findings for next stage iteration:
+    (1) Shutdown hook may not have fired (orchestrator Ctrl+C may bypass
+        the clear_ring() call in session_orchestrator path) OR audit-fix
+        #2 preserve-on-flush-failure fired (need flush_to_db log
+        evidence to disambiguate).
+    (2) Dashboard SSE pushes don't observe ring-disappearance promptly;
+        client doesn't auto-switch to /api/bars-recent on ring delete.
+        Audit-fix #1 gate (heartbeat_stale check) catches stale ring but
+        doesn't downgrade ALREADY-PUSHED state without a client reload.
+  Both blocked future close-out — implementation needs another pass before
+  this stage can move from AUDIT_CLOSED_PENDING_LIVE_SMOKE to CLOSED.
+
   2026-05-24 Codex smoke attempt: NOT CLOSED. Official TopstepX/API env was
   restored from `C:\Users\joshd\canompx3\.env`; broker handshake passed against
   `https://api.topstepx.com`; MNQ data was refreshed through 2026-05-22; and
