@@ -10,7 +10,7 @@
 
 - **Tool:** Codex WSL, branch `main`.
 - **Scope:** Cleared verification blockers without DB mutation, broker logic changes, routing changes, NQ-mini work, multi-asset work, auth bootstrap, or allocation mutation.
-- **What changed:** Stabilized the full-suite mutex and bridge-refusal tests; documented current TopstepX/API access facts; recorded the live chart ring-buffer smoke attempt; appended evidence-backed Check 107 SHA migration-manifest entries instead of mutating canonical DB provenance.
+- **What changed:** Stabilized the full-suite mutex and bridge-refusal tests; documented current TopstepX/API access facts; recorded the live chart ring-buffer smoke attempt; appended evidence-backed Check 107 SHA migration-manifest entries instead of mutating canonical DB provenance. Follow-up review redacted exact API account IDs from the newly touched Topstep/stage docs; older historical docs/tests still contain legacy identifiers and need a separate deliberate cleanup if the repo privacy posture changes.
 - **Verification:** `uv run python -m pytest -q` => 6828 passed, 41 skipped, 5 warnings. `uv run python pipeline/check_drift.py --quiet` => clean, 163 passed, 20 advisory. Check 107 direct probes and manifest test slice passed after the manifest repair.
 - **Residual blocker:** Do not call `LIVE_SAFE` yet. `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md` remains pending a real market smoke after CME reopen because the 2026-05-24 attempt fail-closed on the CME holiday before fresh bars could be observed.
 
@@ -422,7 +422,7 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-24
-- **Commit:** current session commit — chore: harden live-readiness verification state
+- **Commit:** current session commits — verification hardening plus account-id doc redaction
 - **Files changed:** 7 files
   - `HANDOFF.md`
   - `docs/audit/check_107_sha_migrations.yaml`

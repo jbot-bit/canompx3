@@ -46,7 +46,8 @@ closed_note: |
   2026-05-24 Codex smoke attempt: NOT CLOSED. Official TopstepX/API env was
   restored from `C:\Users\joshd\canompx3\.env`; broker handshake passed against
   `https://api.topstepx.com`; MNQ data was refreshed through 2026-05-22; and
-  signal-only preflight passed `8/8` for Express Funded API account `21944866`.
+  signal-only preflight passed `8/8` for the Express Funded API account
+  (exact account id omitted from tracked docs).
   Required live chart evidence is still absent because the signal-only session
   fail-closed immediately on `CME HOLIDAY (2026-05-23) — ALL SESSIONS BLOCKED`
   before receiving bars. `data/live_bars/` was empty after shutdown. Retry after

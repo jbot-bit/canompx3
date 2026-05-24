@@ -30,9 +30,9 @@ Truth class: OFFICIAL_DOC_EXTRACT + LOCAL_RUNTIME_MEASUREMENT
 On 2026-05-24, `scripts/tools/broker_handshake_check.py` against `PROJECTX_BASE_URL=https://api.topstepx.com` returned PASS:
 
 - Auth token acquired.
-- Two active accounts visible:
-  - Express Funded: `EXPRESS-V2-451890-53179846`, API account id `21944866`.
-  - Trading Combine: `50KTC-V2-451890-29512053`, API account id `23055112`.
+- Two active accounts visible: Express Funded and Trading Combine. Exact API
+  account IDs are intentionally kept in local operator env/handshake output,
+  not tracked docs.
 - MNQ front-month contract resolved to `CON.F.US.MNQ.M26`.
 
 ## Repo Configuration Implication
@@ -42,5 +42,7 @@ On 2026-05-24, `scripts/tools/broker_handshake_check.py` against `PROJECTX_BASE_
   - `PROJECTX_BASE_URL=https://api.topstepx.com`
   - `PROJECTX_USERNAME=<TopstepX API username>`
   - `PROJECTX_API_KEY=<TopstepX API key>`
-- Use API account id `21944866` when explicitly targeting the Express Funded account. Do not confuse this with the Topstep UI Sub ID.
+- Use the API account id from local env/broker-handshake output when explicitly
+  targeting the Express Funded account. Do not confuse this with the Topstep UI
+  Sub ID.
 - Do not treat a browser/dashboard login as API readiness. The bot needs a valid TopstepX API subscription, ProjectX-linked API account, and generated API key.
