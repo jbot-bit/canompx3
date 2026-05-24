@@ -1,0 +1,1 @@
+{"symbol": "MES", "writer_pid": 84604, "session_id": null, "updated_utc": "2026-05-24T01:08:24.762124+00:00", "invalid_rejected_count": 0, "bars": [{"ts_utc": "2026-04-13T10:00:00+00:00", "time": 1776074400, "open": 20000.0, "high": 20001.0, "low": 19999.0, "close": 20000.5, "volume": 100}]}

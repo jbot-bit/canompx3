@@ -1,0 +1,289 @@
+# live ring smoke preflight
+2026-05-24T11:51:47+10:00
+cwd=/home/joshd/canompx3
+git=f7711128
+status=## main...origin/main
+## preflight command
+error: Could not acquire lock
+  Caused by: Could not create temporary file
+  Caused by: Read-only file system (os error 30) at path "/home/joshd/.cache/uv/.tmpPp3QQD"
+
+# retry elevated after uv cache sandbox failure
+2026-05-24T12:13:16+10:00
+## preflight command
+warning: `VIRTUAL_ENV=.venv-wsl` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+2026-05-24 12:13:17,073 WARNING trading_app.calendar_overlay: Calendar rules file not found: /home/joshd/canompx3/research/output/calendar_cascade_rules.json — defaulting to NEUTRAL
+2026-05-24 12:13:17,673 INFO trading_app.portfolio: Profile lane: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 | COMEX_SETTLE OVNRNG_100 RR1.5 O5 | N=513 WR=52% ExpR=0.215 | stop=0.75x
+2026-05-24 12:13:17,675 INFO trading_app.portfolio: Profile lane: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08 | TOKYO_OPEN COST_LT08 RR1.5 O5 | N=427 WR=51% ExpR=0.204 | stop=0.75x
+2026-05-24 12:13:17,677 INFO trading_app.portfolio: Profile lane: MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15 | US_DATA_1000 VWAP_MID_ALIGNED RR1.5 O15 | N=701 WR=50% ExpR=0.210 | stop=0.75x
+2026-05-24 12:13:17,678 INFO trading_app.portfolio: Profile lane: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12 | NYSE_OPEN COST_LT12 RR1.0 O5 | N=1508 WR=56% ExpR=0.087 | stop=0.75x
+2026-05-24 12:13:17,709 INFO trading_app.portfolio: DD budget: $400 / $2000 (20%) — 4 lanes for topstep_50k_mnq_auto
+2026-05-24 12:13:17,709 INFO trading_app.portfolio: Profile portfolio 'topstep_50k_mnq_auto': 4 strategies for MNQ (stop=0.75x)
+2026-05-24 12:13:17,709 INFO __main__: Profile 'topstep_50k_mnq_auto': 4 strategies loaded for MNQ
+
+[1/8] Auth check (projectx)... 2026-05-24 12:13:17,712 INFO trading_app.live.broker_factory: Broker: ProjectX (TopstepX)
+2026-05-24 12:13:18,675 INFO trading_app.live.projectx.auth: ProjectX auth: token acquired
+OK (token: REDACTED)
+[2/8] Portfolio check (MNQ)... OK (4 strategies)
+    MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 | COMEX_SETTLE E2 RR1.5 O5 | WR=52% ExpR=0.215 N=513
+    MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08 | TOKYO_OPEN E2 RR1.5 O5 | WR=51% ExpR=0.204 N=427
+    MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15 | US_DATA_1000 E2 RR1.5 O15 | WR=50% ExpR=0.210 N=701
+    MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12 | NYSE_OPEN E2 RR1.0 O5 | WR=56% ExpR=0.087 N=1508
+    NOTE: Using injected portfolio (4 strategies)
+[3/8] Daily features freshness... 2026-05-24 12:13:18,866 INFO trading_app.live.session_orchestrator: Daily features row: atr_20=455.75, atr_vel=Expanding, nfp=False, opex=False, dow=6
+OK (atr_20=455.75, atr_vel=Expanding)
+[4/8] Contract resolution... 2026-05-24 12:13:19,821 INFO trading_app.live.projectx.contract_resolver: ProjectX contract: MNQ -> CON.F.US.MNQ.M26 (MNQM6)
+OK (CON.F.US.MNQ.M26)
+[5/8] Notifications + broker bracket/fill-poller probes.... 2026-05-24 12:13:20,783 INFO __main__: Bracket probe PASS
+2026-05-24 12:13:21,687 INFO __main__: Fill poller endpoint exists (sentinel call returned non-fatal: projectx-orders: HTTP 404 on /api/Order/0: )
+2026-05-24 12:13:21,687 INFO __main__: Fill poller probe PASS
+OK (notifications:PASS · brackets:PASS · fill_poller:PASS)
+[6/8] Trade journal health... 2026-05-24 12:13:21,700 INFO trading_app.live.trade_journal: TradeJournal opened: /home/joshd/canompx3/live_journal.db (mode=preflight)
+OK (live_journal.db)
+[7/8] Telemetry maturity (signal-log distinct trading_days vs floor).... OK (signal-only: 1/30 distinct MNQ trading_days; auto-clears at 30)
+[8/8] Copy-trading account resolution (dry run).... SKIPPED (signal-only — no account resolution needed)
+
+Preflight: 8/8 passed
+All clear — ready to trade.
+
+
+# stale ring pre-clean capture
+2026-05-24T12:13:44+10:00
+archive=logs/smoke/live_ring_preexisting_20260524_121344
+data/live_bars/MES.json 2026-05-24T11:08:24.7557160180 292 bytes
+data/live_bars/MNQ.json 2026-05-24T11:08:24.7557160180 436 bytes
+# ring dir after archive
+
+# market calendar disconfirming check
+2026-05-24T12:14:47+10:00
+warning: `VIRTUAL_ENV=.venv-wsl` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+utc_now 2026-05-24T02:14:48.487780+00:00
+us_date 2026-05-23
+is_cme_holiday True
+market_open_now False
+market_open_plus_2h False
+
+# actual signal-only ring smoke session
+2026-05-24T12:15:18+10:00
+## session command
+warning: `VIRTUAL_ENV=.venv-wsl` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+2026-05-24 12:15:18,402 WARNING trading_app.calendar_overlay: Calendar rules file not found: /home/joshd/canompx3/research/output/calendar_cascade_rules.json — defaulting to NEUTRAL
+2026-05-24 12:15:18,772 INFO trading_app.portfolio: Profile lane: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 | COMEX_SETTLE OVNRNG_100 RR1.5 O5 | N=513 WR=52% ExpR=0.215 | stop=0.75x
+2026-05-24 12:15:18,775 INFO trading_app.portfolio: Profile lane: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08 | TOKYO_OPEN COST_LT08 RR1.5 O5 | N=427 WR=51% ExpR=0.204 | stop=0.75x
+2026-05-24 12:15:18,780 INFO trading_app.portfolio: Profile lane: MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15 | US_DATA_1000 VWAP_MID_ALIGNED RR1.5 O15 | N=701 WR=50% ExpR=0.210 | stop=0.75x
+2026-05-24 12:15:18,781 INFO trading_app.portfolio: Profile lane: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12 | NYSE_OPEN COST_LT12 RR1.0 O5 | N=1508 WR=56% ExpR=0.087 | stop=0.75x
+2026-05-24 12:15:18,811 INFO trading_app.portfolio: DD budget: $400 / $2000 (20%) — 4 lanes for topstep_50k_mnq_auto
+2026-05-24 12:15:18,811 INFO trading_app.portfolio: Profile portfolio 'topstep_50k_mnq_auto': 4 strategies for MNQ (stop=0.75x)
+2026-05-24 12:15:18,811 INFO __main__: Profile 'topstep_50k_mnq_auto': 4 strategies loaded for MNQ
+2026-05-24 12:15:18,813 INFO trading_app.live.instance_lock: Instance lock acquired: /tmp/canompx3/bot_MNQ.lock (PID 163295)
+
+2026-05-24 12:15:18,814 INFO __main__: ╔══════════════════════════════════════════╗
+2026-05-24 12:15:18,814 INFO __main__: ║   MODE: SIGNAL ONLY — no orders placed   ║
+2026-05-24 12:15:18,814 INFO __main__: ║   Watch for ⚡ SIGNAL lines in the log   ║
+2026-05-24 12:15:18,814 INFO __main__: ║   Trade manually on your platform        ║
+2026-05-24 12:15:18,814 INFO __main__: ╚══════════════════════════════════════════╝
+2026-05-24 12:15:18,814 INFO __main__:    Instrument: MNQ
+
+2026-05-24 12:15:18,816 INFO trading_app.live.broker_factory: Broker: ProjectX (TopstepX)
+2026-05-24 12:15:18,817 INFO trading_app.live.session_orchestrator: Using injected portfolio: 4 strategies
+2026-05-24 12:15:18,822 INFO trading_app.live.session_orchestrator: ORB cap loaded: COMEX_SETTLE/MNQ/O5 max=49.3 pts risk
+2026-05-24 12:15:18,823 INFO trading_app.live.session_orchestrator: ORB cap loaded: TOKYO_OPEN/MNQ/O5 max=42.4 pts risk
+2026-05-24 12:15:18,823 INFO trading_app.live.session_orchestrator: ORB cap loaded: US_DATA_1000/MNQ/O15 max=142.3 pts risk
+2026-05-24 12:15:18,823 INFO trading_app.live.session_orchestrator: ORB cap loaded: NYSE_OPEN/MNQ/O5 max=115.7 pts risk
+2026-05-24 12:15:18,825 WARNING trading_app.live.session_orchestrator: ALLOCATOR GATE: 831 blocked strategies — entries will be blocked
+2026-05-24 12:15:18,825 INFO trading_app.live.session_orchestrator: Max DD tracking ENABLED: $2000 / $76.1 avg_risk = -26.3R
+2026-05-24 12:15:18,825 INFO trading_app.live.session_orchestrator: F-1 TopStep XFA Scaling Plan ACTIVE: account_size=$50000
+2026-05-24 12:15:18,825 INFO trading_app.live.session_orchestrator: F-1 XFA EOD balance seeded $0.00 (signal-only canonical day-1 default; max cap = bottom tier; live/demo seed via broker query)
+2026-05-24 12:15:18,825 INFO trading_app.live.session_orchestrator: Risk limits: daily_loss=-5.0R, max_DD=-26.3R
+2026-05-24 12:15:18,830 INFO trading_app.live.session_orchestrator: Conditional overlay RoleResolver enabled for profile=topstep_50k_mnq_auto
+2026-05-24 12:15:18,830 INFO trading_app.live.session_orchestrator: Signal-only mode: order router skipped
+2026-05-24 12:15:18,841 INFO trading_app.live.trade_journal: TradeJournal opened: /home/joshd/canompx3/live_journal.db (mode=signal)
+2026-05-24 12:15:18,842 INFO trading_app.live.session_orchestrator: Firm close time: 16:10 ET (16:10)
+2026-05-24 12:15:19,803 INFO trading_app.live.projectx.auth: ProjectX auth: token acquired
+2026-05-24 12:15:20,709 INFO trading_app.live.projectx.contract_resolver: ProjectX contract: MNQ -> CON.F.US.MNQ.M26 (MNQM6)
+2026-05-24 12:15:20,711 INFO trading_app.live.session_orchestrator: Session ready: MNQ → CON.F.US.MNQ.M26 (SIGNAL-ONLY)
+2026-05-24 12:15:20,865 INFO trading_app.live.session_orchestrator: Daily features row: atr_20=455.75, atr_vel=Expanding, nfp=False, opex=False, dow=6
+2026-05-24 12:15:20,992 INFO trading_app.live.session_orchestrator: Daily features row: atr_20=455.75, atr_vel=Expanding, nfp=False, opex=False, dow=6
+2026-05-24 12:15:21,609 WARNING trading_app.live.session_orchestrator: Session-start Opportunity awareness: 1 PRIME_SHADOW, 2 WATCH, 1 BLOCKED, 4 total; prime: TOKYO_OPEN/MNQ expr=0.202; watch: COMEX_SETTLE/MNQ (Criterion 12 SR status: ALARM), US_DATA_1000/MNQ (Criterion 12 SR status: ALARM); blocked: NYSE_OPEN/MNQ (Criterion 12 SR ALARM unresolved: stat=33.27 >= thr=31.96; baseline=paper_trades_first_50; stream=paper_trades; manual review required)
+2026-05-24 12:15:21,609 WARNING trading_app.live.session_orchestrator: Loaded 1 lifecycle lane blocks
+2026-05-24 12:15:22,763 CRITICAL trading_app.live.session_orchestrator: CME HOLIDAY (2026-05-23) — ALL SESSIONS BLOCKED. Refusing to trade. Check cmegroup.com/holiday-calendar.
+2026-05-24 12:15:22,765 ERROR asyncio: Exception in callback SessionOrchestrator._notify.<locals>._on_notify_done() at /home/joshd/canompx3/trading_app/live/session_orchestrator.py:1476
+handle: <Handle SessionOrchestrator._notify.<locals>._on_notify_done() at /home/joshd/canompx3/trading_app/live/session_orchestrator.py:1476>
+Traceback (most recent call last):
+  File "/home/joshd/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/joshd/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/joshd/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/joshd/canompx3/trading_app/live/session_orchestrator.py", line 3490, in run
+    raise RuntimeError(msg)
+RuntimeError: CME HOLIDAY (2026-05-23) — ALL SESSIONS BLOCKED. Refusing to trade. Check cmegroup.com/holiday-calendar.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/joshd/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/asyncio/events.py", line 89, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/joshd/canompx3/trading_app/live/session_orchestrator.py", line 1478, in _on_notify_done
+    ok = task.result()
+  File "/home/joshd/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+asyncio.exceptions.CancelledError
+2026-05-24 12:15:24,031 INFO trading_app.live.session_orchestrator: EOD summary: {'date': '2026-05-24', 'total_r': 0, 'by_strategy': {}, 'n_trades': 0, 'total_slippage_pts': 0, 'alarms': []}
+2026-05-24 12:15:24,031 INFO trading_app.live.session_orchestrator: SESSION STATS: SessionStats(notifications_sent=2, notifications_failed=0, brackets_submitted=0, brackets_failed=0, bracket_cancels_ok=0, bracket_cancels_failed=0, fill_polls_run=0, fill_polls_confirmed=0, fill_polls_failed=0, reconnect_attempts=0, bars_received=0, engine_errors=0, events_processed=0, orb_cap_skips=0)
+2026-05-24 12:15:24,966 INFO trading_app.live.trade_journal: TradeJournal closed: /home/joshd/canompx3/live_journal.db
+2026-05-24 12:15:24,966 INFO trading_app.live.bar_persister: BarPersister: no bars to flush
+2026-05-24 12:15:24,966 WARNING trading_app.live.session_orchestrator: Safety state NOT cleared — kill_switch=False, blocked=1. State preserved for crash recovery on next startup.
+▶ MNQ: backfilling 2026-05-23 → 2026-05-23
+
+▶ ingest_dbn MNQ
+[INFO] __main__: ======================================================================
+[INFO] __main__: MNQ DBN INGESTION (CANONICAL COMPLIANT)
+[INFO] __main__: ======================================================================
+[INFO] __main__: CONFIG SNAPSHOT:
+[INFO] __main__:   Instrument: MNQ
+[INFO] __main__:   DBN file: /home/joshd/canompx3/data/raw/databento/ohlcv-1m/MNQ
+[INFO] __main__:   Database: /home/joshd/canompx3/gold.db
+[INFO] __main__:   Checkpoint dir: /home/joshd/canompx3/pipeline/checkpoints
+[INFO] __main__:   Outright pattern: ^MNQ[FGHJKMNQUVXZ]\d{1,2}$
+[INFO] __main__:   Prefix len: 3
+[INFO] __main__:   Minimum start: 2019-05-06
+[INFO] __main__:   Start filter: 2026-05-23
+[INFO] __main__:   End filter: 2026-05-23
+[INFO] __main__:   Resume: False
+[INFO] __main__:   Retry failed: False
+[INFO] __main__:   Dry run: False
+[INFO] __main__:   Chunk days: 7
+[INFO] __main__:   Batch size: 50000
+[INFO] __main__: DBN directory: 1 files, 0.00 GB total
+[INFO] __main__: Verifying schema from first file...
+[INFO] __main__:   Schema: ohlcv-1m
+[INFO] __main__:   Dataset: GLBX.MDP3
+[INFO] __main__:   File date range: None to None
+[INFO] __main__:   Schema verified: ohlcv-1m [OK]
+[INFO] __main__: Checkpoint file: /home/joshd/canompx3/pipeline/checkpoints/checkpoint_MNQ_0f69ee7f.jsonl
+[INFO] __main__: Existing checkpoints: 3
+[INFO] __main__: Database opened: /home/joshd/canompx3/gold.db
+[INFO] __main__: EFFECTIVE DATE RANGE: 2026-05-23 to 2026-05-23
+[INFO] __main__: Processing DBN in chunks...
+[INFO] __main__: Directory mode: 1 .dbn.zst files
+[INFO] __main__:   FAST-FORWARD: Batch 1 ends at 2026-05-22, skipping (target: 2026-05-23)...
+[INFO] __main__: ======================================================================
+[INFO] __main__: FINAL HONESTY GATES
+[INFO] __main__: ======================================================================
+[INFO] __main__:   ts_utc type check: PASSED [OK]
+[INFO] __main__:   No duplicate (symbol, ts_utc): PASSED [OK]
+[INFO] __main__:   No NULL source_symbol: PASSED [OK]
+[INFO] __main__: ALL HONESTY GATES PASSED [OK]
+[INFO] __main__: ======================================================================
+[INFO] __main__: INGESTION SUMMARY
+[INFO] __main__: ======================================================================
+[INFO] __main__: Instrument: MNQ
+[INFO] __main__: Chunks done: 0
+[INFO] __main__: Chunks failed: 0
+[INFO] __main__: Chunks skipped: 0
+[INFO] __main__: Trading days processed: 0
+[INFO] __main__: Total rows written: 0
+[INFO] __main__: Unique contracts used: 0
+[INFO] __main__: Wall time: 0:00:00.686766
+[INFO] __main__: Database rows (MNQ): 2,472,492
+[INFO] __main__: Date range in DB: 2019-05-06 to 2026-05-23
+[INFO] __main__: SUCCESS: Backfill complete and validated.
+✓ ingest_dbn MNQ
+
+▶ build_bars_5m MNQ
+[INFO] __main__: ============================================================
+[INFO] __main__: BUILD BARS_5M (MNQ)
+[INFO] __main__: ============================================================
+[INFO] __main__: Instrument: MNQ
+[INFO] __main__: Date range: 2026-05-23 to 2026-05-23
+[INFO] __main__: Database: /home/joshd/canompx3/gold.db
+[INFO] __main__: Dry run: False
+[INFO] __main__: Building 5-minute bars...
+[INFO] __main__:   Source bars_1m rows: 0
+[INFO] __main__:   No source data found. Nothing to build.
+[INFO] __main__: Verifying integrity...
+[INFO] __main__:   No duplicates: PASSED [OK]
+[INFO] __main__:   5-minute alignment: PASSED [OK]
+[INFO] __main__:   OHLCV sanity: PASSED [OK]
+[INFO] __main__:   Volume non-negative: PASSED [OK]
+[INFO] __main__: ALL INTEGRITY CHECKS PASSED [OK]
+[INFO] __main__: ============================================================
+[INFO] __main__: SUMMARY: 0 bars_5m rows built
+[INFO] __main__: Wall time: 0:00:00.216061
+[INFO] __main__: ============================================================
+✓ build_bars_5m MNQ
+
+▶ build_daily_features MNQ
+[INFO] __main__: ============================================================
+[INFO] __main__: BUILD DAILY_FEATURES (MNQ)
+[INFO] __main__: ============================================================
+[INFO] __main__: Instrument: MNQ
+[INFO] __main__: Date range: 2026-05-23 to 2026-05-23
+[INFO] __main__: ORB duration: 5 minutes
+[INFO] __main__: Database: /home/joshd/canompx3/gold.db
+[INFO] __main__: Dry run: False
+[INFO] __main__: Building daily features...
+[INFO] __main__:   Cost model: MNQ (friction=2.92)
+[INFO] __main__:   Trading days with data: 0
+[INFO] __main__:   No trading days found. Nothing to build.
+[INFO] __main__: ============================================================
+[INFO] __main__: SUMMARY: 0 daily_features rows built
+[INFO] __main__: ORB duration: 5m
+[INFO] __main__: Wall time: 0:00:00.397719
+[INFO] __main__: ============================================================
+✓ build_daily_features MNQ
+
+▶ outcome_builder MNQ
+[INFO] trading_app.db_manager: Trading app schema initialized successfully
+[INFO] __main__:   Sessions: 12 enabled for MNQ
+✓ outcome_builder MNQ
+Traceback (most recent call last):
+  File "/home/joshd/canompx3/scripts/run_live_session.py", line 1021, in <module>
+    main()
+    ~~~~^^
+  File "/home/joshd/canompx3/scripts/run_live_session.py", line 995, in main
+    asyncio.run(session.run())
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/joshd/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/joshd/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/joshd/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/joshd/canompx3/trading_app/live/session_orchestrator.py", line 3490, in run
+    raise RuntimeError(msg)
+RuntimeError: CME HOLIDAY (2026-05-23) — ALL SESSIONS BLOCKED. Refusing to trade. Check cmegroup.com/holiday-calendar.
+session_exit=1
+## ring dir after session
+
+# next market-open scan
+2026-05-24T12:18:32+10:00
+warning: `VIRTUAL_ENV=.venv-wsl` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+now_utc 2026-05-24T02:18:33.476781+00:00
+now_bne 2026-05-24T12:18:33.476781+10:00
+today_us_holiday True
+next_open_utc 2026-05-24T22:00:33.476781+00:00
+next_open_bne 2026-05-25T08:00:33.476781+10:00
+minutes_until 1182
+
+# post-run evidence probes
+2026-05-24T12:19:16+10:00
+git_status=## main...origin/main  M live_journal.db ?? logs/smoke/
+ring_files:
+direct_api_probe:
+warning: `VIRTUAL_ENV=.venv-wsl` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+ring_empty True
+ring_count 0
+ring_updated_utc None
+bars_recent_count 0
+bars_recent_err None

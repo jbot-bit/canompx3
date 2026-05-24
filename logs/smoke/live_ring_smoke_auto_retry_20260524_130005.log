@@ -1,0 +1,9 @@
+VERDICT=RUNNING reason=scheduled
+# live ring smoke auto retry
+started_at=2026-05-24T03:00:05.489267+00:00
+root=/home/joshd/canompx3
+git=f7711128
+next_open_utc=2026-05-24T22:00:05.998521+00:00
+next_open_bne=2026-05-25T08:00:05.998521+10:00
+
+VERDICT=CANCELLED reason=operator requested no background retry after initial smoke was blocked

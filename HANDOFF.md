@@ -13,6 +13,7 @@
 - **What changed:** Stabilized the full-suite mutex and bridge-refusal tests; documented current TopstepX/API access facts; recorded the live chart ring-buffer smoke attempt; appended evidence-backed Check 107 SHA migration-manifest entries instead of mutating canonical DB provenance. Follow-up review redacted exact API account IDs from the newly touched Topstep/stage docs; older historical docs/tests still contain legacy identifiers and need a separate deliberate cleanup if the repo privacy posture changes.
 - **Verification:** `uv run python -m pytest -q` => 6828 passed, 41 skipped, 5 warnings. `uv run python pipeline/check_drift.py --quiet` => clean, 163 passed, 20 advisory. Check 107 direct probes and manifest test slice passed after the manifest repair.
 - **Residual blocker:** Do not call `LIVE_SAFE` yet. `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md` remains pending a real market smoke after CME reopen because the 2026-05-24 attempt fail-closed on the CME holiday before fresh bars could be observed.
+- **Live ring smoke retry (2026-05-24):** `logs/smoke/live_ring_smoke_20260524_115147.log` is the exact evidence. Preflight reached `8/8`, but the actual signal-only session fail-closed before feed/bars on `CME HOLIDAY (2026-05-23) — ALL SESSIONS BLOCKED`; session stats show `bars_received=0`, `data/live_bars/` empty, and direct dashboard query returned `bars_recent_count 0`. Verdict: `BLOCKED`, not `PASS` or `FAIL`. Pre-existing stale ring files were archived under `logs/smoke/live_ring_preexisting_20260524_121344/`. A tmux auto-retry was briefly scheduled for next CME open, then cancelled at operator request; no retry/session/dashboard process remains running. Do not close the stage until a fresh market-session smoke proves ring lifecycle `absent -> fresh current-session file -> deleted` and post-shutdown DB fallback.
 
 ## This Session (2026-05-23 — Codex WSL launcher dirty-clone hardening)
 
@@ -422,15 +423,15 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-24
-- **Commit:** current session commits — verification hardening plus account-id doc redaction
+- **Commit:** 55ad2d97 — docs: save live ring smoke blocked evidence
 - **Files changed:** 7 files
   - `HANDOFF.md`
-  - `docs/audit/check_107_sha_migrations.yaml`
-  - `docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md`
-  - `docs/research-input/topstep/topstepx_api_access_2026-05-24.md`
-  - `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md`
-  - `tests/test_hooks/test_session_start_mutex.py`
-  - `tests/test_research/test_fast_lane_to_heavyweight_bridge_refusal.py`
+  - `logs/smoke/live_ring_preexisting_20260524_121344/MES.json`
+  - `logs/smoke/live_ring_preexisting_20260524_121344/MNQ.json`
+  - `logs/smoke/live_ring_smoke_20260524_115147.log`
+  - `logs/smoke/live_ring_smoke_auto_latest.path`
+  - `logs/smoke/live_ring_smoke_auto_latest.status`
+  - `logs/smoke/live_ring_smoke_auto_retry_20260524_130005.log`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

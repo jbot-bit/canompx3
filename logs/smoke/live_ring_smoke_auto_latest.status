@@ -1,0 +1,6 @@
+{
+  "verdict": "CANCELLED",
+  "reason": "operator requested no background retry after initial smoke was blocked",
+  "log": "/home/joshd/canompx3/logs/smoke/live_ring_smoke_auto_retry_20260524_130005.log",
+  "updated_at": "2026-05-24T03:08:00+00:00"
+}
