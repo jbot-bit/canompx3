@@ -3415,9 +3415,14 @@ def launch_dashboard_background(port: int = PORT) -> subprocess.Popen | None:
     Returns the Popen handle so the caller can terminate it on exit.
     Using subprocess instead of threading avoids asyncio event loop
     conflicts between uvicorn and the main bot's event loop on Windows.
-    """
-    import webbrowser
 
+    Browser open is the caller's responsibility — START_BOT.bat opens the
+    browser explicitly (line 79) and the dashboard-button start path sets
+    CANOMPX3_DASHBOARD_ORIGIN=1 which skips this function entirely
+    (run_live_session.py:937). Auto-opening here was producing a redundant
+    second browser tab when the launcher path also opened one. See
+    docs/runtime/stages/2026-05-26-start-bot-double-dashboard-bug.md.
+    """
     try:
         proc = subprocess.Popen(
             [sys.executable, "-m", "trading_app.live.bot_dashboard", "--port", str(port)],
@@ -3429,10 +3434,6 @@ def launch_dashboard_background(port: int = PORT) -> subprocess.Popen | None:
     except Exception as e:
         log.warning("Dashboard subprocess launch failed: %s", e)
         return None
-    try:
-        webbrowser.open(f"http://localhost:{port}")
-    except Exception:
-        pass
     return proc
 
 

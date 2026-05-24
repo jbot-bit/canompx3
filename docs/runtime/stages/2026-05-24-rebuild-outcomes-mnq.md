@@ -2,7 +2,21 @@
 
 task: Run `bash scripts/tools/run_rebuild_with_sync.sh MNQ` end-to-end. Refresh orb_outcomes through 2026-05-20 (catching the 1-day lag vs daily_features), re-discover, re-validate, rebuild edge_families, run health_check, surface promotion candidates, sync to Pinecone. Capture pre/post diff of validated_setups (active count, row hash, promoted/demoted strategy_ids) and report allocator-impact risk. Do not run MES or MGC.
 
-mode: TRIVIAL
+mode: IMPLEMENTATION
+status: PARTIAL_FAILURE_2026_05_26
+status_note: |
+  Run 2026-05-26 (Brisbane Mon, pre-market-open). Wrapper exit code 0 reported
+  by harness but FAILED manifest written. Step 1 (outcome_builder all 3 apertures)
+  completed — orb_outcomes MNQ max trading_day remains 2026-05-19 across O5/O15/O30
+  (no new trading days available from bars upstream as of pre-CME-reopen).
+  Step 2 (strategy_discovery) completed O5 + O15 successfully, then segfaulted on
+  O30 at "Loading outcomes (bulk)" after 548,676 rows loaded. Native crash, not
+  Python exception. Steps 3-10 (validator, edge_families, health_check, Pinecone
+  sync) never executed because `set -e` aborted the wrapper.
+  DB state: validated_setups MNQ unchanged (787 active / 6 retired). Live lane
+  set unchanged — zero allocator-impact risk for tonight's live debut.
+  Investigate O30 discovery segfault AFTER tonight's live session, not before.
+  Log: logs/rebuild_mnq_20260526_*.log (background task b311zsyr0).
 
 agent: claude (opus 4.7)
 

@@ -504,11 +504,11 @@
 - **Stage NOT closed:** `docs/runtime/stages/2026-05-18-dashboard-start-signal-preflight-mode.md` remains open. Criteria 1-4 met with positive test coverage; criteria 5-6 show no regression vs baseline; criterion 7 (operator hits `POST /api/action/start?mode=signal&profile=topstep_50k_mnq_auto`, confirms non-blocked status + `logs/live/live_signals_2026-05-18.jsonl` appears within 30s) requires a live dashboard run.
 
 ## Last Session
-- **Tool:** Codex (WSL)
+- **Tool:** Claude Code
 - **Date:** 2026-05-25
-- **Commit:** acf1263a — docs(handoff): record Codex worktree cleanup
+- **Commit:** 0cf52ab5 — chore(action-queue): refresh last_verified on track-d gate-0 design item
 - **Files changed:** 1 files
-  - `HANDOFF.md`
+  - `docs/runtime/action-queue.yaml`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
