@@ -188,4 +188,69 @@ class TestBarPersister:
         mes = con.sql("SELECT COUNT(*) FROM bars_1m WHERE symbol = 'MES'").fetchone()[0]
         assert mnq == 2
         assert mes == 1
-        con.close()
+
+
+class TestShutdownTraceBreadcrumb:
+    """Forensics surface for post_session bar-persist branch decisions.
+
+    Verifies the bar_ring.write_shutdown_trace helper used by
+    session_orchestrator.post_session — every shutdown branch must leave a
+    breadcrumb so the next live smoke can disambiguate "hook never ran" from
+    "audit-fix #2 preserve-on-failure fired".
+    """
+
+    def test_reset_truncates_prior_session_trace(self, isolated_ring_dir):
+        bar_ring.write_shutdown_trace("MNQ", "prior_session:exit", reset=True)
+        bar_ring.write_shutdown_trace("MNQ", "prior_session:cleanup")
+        # New session: reset=True must wipe the prior file.
+        bar_ring.write_shutdown_trace("MNQ", "post_session:entry", reset=True)
+        contents = bar_ring.read_shutdown_trace("MNQ")
+        assert "prior_session:exit" not in contents
+        assert "prior_session:cleanup" not in contents
+        assert "post_session:entry" in contents
+        assert contents.count("\n") == 1
+
+    def test_append_mode_accumulates_branch_tags(self, isolated_ring_dir):
+        bar_ring.write_shutdown_trace("MNQ", "post_session:entry", reset=True)
+        bar_ring.write_shutdown_trace("MNQ", "drain_ok")
+        bar_ring.write_shutdown_trace("MNQ", "flush_attempt:bars_captured=61")
+        bar_ring.write_shutdown_trace("MNQ", "flush_returned:n_persisted=0")
+        bar_ring.write_shutdown_trace("MNQ", "ring_preserved:bars_captured=61,n_persisted=0")
+        contents = bar_ring.read_shutdown_trace("MNQ")
+        # All five branches present, in order.
+        lines = [ln for ln in contents.split("\n") if ln]
+        assert len(lines) == 5
+        assert "post_session:entry" in lines[0]
+        assert "drain_ok" in lines[1]
+        assert "flush_attempt:bars_captured=61" in lines[2]
+        assert "flush_returned:n_persisted=0" in lines[3]
+        assert "ring_preserved:bars_captured=61,n_persisted=0" in lines[4]
+
+    def test_fail_open_when_dir_unwritable(self, isolated_ring_dir, monkeypatch):
+        """OSError on disk must NOT propagate — fail-open per § 6.
+
+        Patches the path resolver so writes target a path that cannot be
+        created (a file masquerading as a parent directory).
+        """
+        from pathlib import Path
+
+        blocker = isolated_ring_dir / "blocker"
+        blocker.parent.mkdir(parents=True, exist_ok=True)
+        blocker.write_text("not a directory", encoding="utf-8")
+        # Force the trace path under the blocker file (which is not a dir).
+        monkeypatch.setattr(
+            bar_ring,
+            "_shutdown_trace_path",
+            lambda symbol: Path(blocker) / f"{symbol}.shutdown_trace.txt",
+        )
+        # Must not raise.
+        bar_ring.write_shutdown_trace("MNQ", "post_session:entry", reset=True)
+        # And read returns empty rather than raising.
+        assert bar_ring.read_shutdown_trace("MNQ") == ""
+
+    def test_timestamp_is_iso_utc(self, isolated_ring_dir):
+        bar_ring.write_shutdown_trace("MNQ", "post_session:entry", reset=True)
+        contents = bar_ring.read_shutdown_trace("MNQ")
+        ts_token = contents.split(" ", 1)[0]
+        parsed = datetime.fromisoformat(ts_token)
+        assert parsed.tzinfo is not None

@@ -506,16 +506,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-25
-- **Commit:** 82a7ee82 — fix(dashboard): remove redundant webbrowser.open + stage post-session work
-- **Files changed:** 8 files
+- **Commit:** ba53cdf0 — docs(stage): record 2026-05-26 smoke CONDITIONAL FAIL findings
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-24-rebuild-outcomes-mnq.md`
-  - `docs/runtime/stages/2026-05-26-dotenv-cleanup.md`
-  - `docs/runtime/stages/2026-05-26-gold-db-per-process-lock-retry.md`
-  - `docs/runtime/stages/2026-05-26-ring-orphan-startup-sweep.md`
-  - `docs/runtime/stages/2026-05-26-start-bot-double-dashboard-bug.md`
-  - `docs/runtime/stages/2026-05-26-stop-live-auto-on-startup.md`
-  - `trading_app/live/bot_dashboard.py`
+  - `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

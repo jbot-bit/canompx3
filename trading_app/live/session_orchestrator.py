@@ -3839,25 +3839,50 @@ class SessionOrchestrator:
         # view without data-loss. If persist fails while bars were captured,
         # surface CRITICAL and KEEP the ring file so the operator can recover
         # the in-flight bars off-disk before next session overwrites them.
+        #
+        # Forensics: every branch writes a one-line tag to
+        # data/live_bars/<SYMBOL>.shutdown_trace.txt BEFORE the dependent op
+        # so even an exception leaves evidence for the next live smoke.
         from trading_app.live import bar_ring as _bar_ring
 
-        _bar_ring.drain_and_stop_writer(self.instrument)
+        _bar_ring.write_shutdown_trace(self.instrument, "post_session:entry", reset=True)
+        try:
+            _bar_ring.drain_and_stop_writer(self.instrument)
+            _bar_ring.write_shutdown_trace(self.instrument, "drain_ok")
+        except Exception as exc:
+            _bar_ring.write_shutdown_trace(self.instrument, f"drain_exception:{type(exc).__name__}:{exc}")
+            log.error("Bar persister: ring drain failed: %s", exc, exc_info=True)
         bars_captured = self._bar_persister.bar_count
-        n_persisted = self._bar_persister.flush_to_db()
+        _bar_ring.write_shutdown_trace(self.instrument, f"flush_attempt:bars_captured={bars_captured}")
+        try:
+            n_persisted = self._bar_persister.flush_to_db()
+        except Exception as exc:
+            _bar_ring.write_shutdown_trace(self.instrument, f"flush_exception:{type(exc).__name__}:{exc}")
+            log.critical("Bar persister: flush_to_db raised: %s", exc, exc_info=True)
+            n_persisted = 0
+        _bar_ring.write_shutdown_trace(self.instrument, f"flush_returned:n_persisted={n_persisted}")
         if n_persisted > 0:
             log.info("Bar persister: %d bars written to bars_1m", n_persisted)
             self._bar_persister.clear_ring()
+            _bar_ring.write_shutdown_trace(self.instrument, "ring_cleared:flushed")
         elif bars_captured == 0:
             # Empty session — nothing to persist, safe to clear the ring.
             self._bar_persister.clear_ring()
+            _bar_ring.write_shutdown_trace(self.instrument, "ring_cleared:empty_session")
         else:
             log.critical(
                 "Bar persister: %d bars captured but flush_to_db returned 0 — "
                 "ring file at data/live_bars/%s.json PRESERVED for operator "
-                "recovery. Dashboard chart will continue showing the ring "
-                "until manually cleared.",
+                "recovery. Run `python scripts/tools/recover_ring.py %s` to "
+                "recover bars to gold.db. Dashboard chart will continue showing "
+                "the ring until manually cleared.",
                 bars_captured,
                 self.instrument,
+                self.instrument,
+            )
+            _bar_ring.write_shutdown_trace(
+                self.instrument,
+                f"ring_preserved:bars_captured={bars_captured},n_persisted=0",
             )
 
         # Clear crash-recovery state on clean session end.

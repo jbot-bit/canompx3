@@ -5,10 +5,14 @@ scope_lock:
   - trading_app/live/bar_ring.py
   - trading_app/live/bar_persister.py
   - trading_app/live/bot_dashboard.py
+  - trading_app/live/bot_dashboard.html
   - trading_app/live/session_orchestrator.py
+  - scripts/tools/recover_ring.py
   - tests/test_trading_app/test_bar_ring.py
   - tests/test_trading_app/test_bar_persister.py
-implementation_status: AUDIT_CLOSED_PENDING_LIVE_SMOKE
+  - tests/test_trading_app/test_bot_dashboard_sse.py
+  - tests/test_trading_app/test_recover_ring.py
+implementation_status: IMPLEMENTATION
 closed_note: |
   Implementation: 2 commits — a7d0e4c5 base + 6d5c248b audit-fix follow-up.
   Scope deviation: `data/live_bars/.gitignore` listed in scope_lock was NOT
@@ -72,6 +76,44 @@ closed_note: |
   the operator does not want background DB/runtime activity. Closeout status:
   implementation/audit are closed; the stage remains parked on manual
   market-session smoke only. Operator will start it tomorrow after CME reopen.
+
+  2026-05-25 Iteration 2 plan (mode: IMPLEMENTATION; not yet shipped):
+  Status flipped back to IMPLEMENTATION after 2026-05-26 smoke surfaced two
+  real findings (7b FAIL, 7c PARTIAL — see entry above). Evidence collected
+  before re-opening:
+    - data/live_bars/MNQ.json on disk: 61 bars, writer_pid 12008, range
+      2026-05-24 21:39 → 22:45 UTC.
+    - bars_1m has 0 rows for MNQ in that window (queried 2026-05-25).
+    - logs/live/ latest is 20260425; May 24 smoke produced no log to
+      disambiguate "post_session never ran" vs "audit-fix #2 preserved ring
+      after flush_to_db returned 0".
+  Three proper fixes (no band-aids; canonical delegation throughout):
+    (1) shutdown_trace breadcrumb file (forensics surface) — written by
+        session_orchestrator.py post_session block on every branch (entry,
+        drain, flush attempt, persist outcome). Fail-open per
+        institutional-rigor § 6. Lets next smoke definitively answer which
+        branch fired. Closes the diagnostic gap that prevents
+        disambiguating 7b sub-hypotheses.
+    (2) scripts/tools/recover_ring.py (operator escape valve for audit-fix #2
+        preserve-state) — reads ring, delegates to BarPersister.flush_to_db
+        (canonical, per § 4 — never re-encode bars_1m INSERT), clears ring
+        on success. Recovers the current MNQ.json's 61 bars off-disk.
+    (3) bars_source_changed SSE event in bot_dashboard._bars_watcher —
+        published on ring_is_live → heartbeat_stale transition. Client JS
+        listener re-issues /api/bars-recent to repaint from gold.db. Closes
+        7c (auto-fallback without browser refresh).
+  Scope expansion: scripts/tools/recover_ring.py + companion test added to
+  scope_lock with user ack. No new trading-path behavior. No DuckDB schema
+  change. No gold.db write path change.
+  Done-criteria for iteration 2:
+    - Existing 26 tests still pass.
+    - New tests pass: shutdown_trace breadcrumb (bar_persister), SSE
+      transition idempotency (bar_ring), recover_ring round-trip
+      (recover_ring).
+    - check_drift.py passes (count + 0 violations).
+    - Manual: recover_ring.py against current MNQ.json → 61 bars in
+      bars_1m, ring deleted.
+    - Next live smoke: shutdown_trace file exists with branch tag.
 ---
 
 ## Blast Radius

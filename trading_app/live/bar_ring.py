@@ -88,6 +88,43 @@ def _ring_path(symbol: str) -> Path:
     return RING_DIR / f"{symbol}.json"
 
 
+def _shutdown_trace_path(symbol: str) -> Path:
+    return RING_DIR / f"{symbol}.shutdown_trace.txt"
+
+
+def write_shutdown_trace(symbol: str, tag: str, *, reset: bool = False) -> None:
+    """Append a one-line breadcrumb to ``data/live_bars/<SYMBOL>.shutdown_trace.txt``.
+
+    Forensics surface for the post_session bar-persist block. Each branch
+    writes its tag (``entry``, ``drain_ok``, ``flush_attempt``, ``flushed:N``,
+    ``cleared``, ``preserved:bars_captured=N,n_persisted=M``, ``exception:...``).
+    Lets the next live smoke definitively answer which branch fired without
+    requiring a session log.
+
+    Fail-open per institutional-rigor § 6 — disk errors never propagate to
+    the shutdown path. ``reset=True`` truncates the file before writing (used
+    on first call per session so a prior session's trace doesn't accumulate).
+    """
+    line = f"{datetime.now(UTC).isoformat()} {tag}\n"
+    path = _shutdown_trace_path(symbol)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        mode = "w" if reset else "a"
+        with path.open(mode, encoding="utf-8") as fh:
+            fh.write(line)
+    except OSError:
+        log.warning("bar_ring(%s): shutdown_trace write failed for tag=%s", symbol, tag, exc_info=True)
+
+
+def read_shutdown_trace(symbol: str) -> str:
+    """Read the shutdown_trace file for forensics. Empty string if missing."""
+    path = _shutdown_trace_path(symbol)
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
 @dataclass
 class WriteResult:
     """Result of an enqueue call. Counter visible to caller for operator surfacing."""
