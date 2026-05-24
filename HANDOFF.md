@@ -38,7 +38,10 @@
   tests onto current `main` while excluding stale branch `HANDOFF.md` edits.
   Trial-budget caps are grounded in `docs/institutional/pre_registered_criteria.md`
   Criterion 2 and Bailey et al. 2013 MinBTL literature. Direct verification:
-  both packet validators pass, Ruff clean, and 36 targeted tests pass.
+  both packet validators pass, Ruff clean, and 36 targeted tests pass. Removed
+  all linked Codex/Paperclip worktrees and deleted leftover local branches.
+  Pruned stale remote refs; deleted remaining non-open `origin/codex/*` refs
+  (merged/closed PR heads plus the no-PR Slack-control-room design branch).
 - **2026-05-25 follow-on:** Picked up the highest-finishable active Codex/Ralph
   stage (`docs/runtime/stages/ralph_iter_210.md`) rather than the live-bar ring
   stage, because live-bar ring remains blocked on operator-run market-session
@@ -503,17 +506,18 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-25
-- **Commit:** 6b5916a5 — chore(codex): close adapter backlog
-- **Files changed:** 9 files
-  - `.codex/CODEX_IMPROVEMENT_PLAN.md`
-  - `.codex/INTEGRATIONS.md`
-  - `.codex/WORKFLOWS.md`
+- **Commit:** 66293768 — feat(tools): add external intake validity gates
+- **Files changed:** 10 files
   - `HANDOFF.md`
-  - `scripts/infra/codex-capital-review.sh`
-  - `scripts/infra/codex-review.sh`
-  - `scripts/infra/codex_local_env.py`
-  - `tests/test_tools/test_codex_launcher_scripts.py`
-  - `tests/test_tools/test_codex_local_env.py`
+  - `docs/audit/intake/2026-05-11-autotrading-school-tv-ai-engine.yaml`
+  - `docs/audit/live_validity/2026-05-11-topstep-mnq-controlled-pilot.yaml`
+  - `docs/audit/results/2026-05-11-tradingview-ai-backtesting-engine-teardown.md`
+  - `docs/prompts/external_strategy_intake_prompt.md`
+  - `docs/prompts/live_trade_validity_prompt.md`
+  - `scripts/tools/external_strategy_intake_check.py`
+  - `scripts/tools/live_trade_validity_check.py`
+  - `tests/test_tools/test_external_strategy_intake_check.py`
+  - `tests/test_tools/test_live_trade_validity_check.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
