@@ -6,6 +6,14 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-24 — Codex live-readiness verification hardening)
+
+- **Tool:** Codex WSL, branch `main`.
+- **Scope:** Cleared verification blockers without DB mutation, broker logic changes, routing changes, NQ-mini work, multi-asset work, auth bootstrap, or allocation mutation.
+- **What changed:** Stabilized the full-suite mutex and bridge-refusal tests; documented current TopstepX/API access facts; recorded the live chart ring-buffer smoke attempt; appended evidence-backed Check 107 SHA migration-manifest entries instead of mutating canonical DB provenance.
+- **Verification:** `uv run python -m pytest -q` => 6828 passed, 41 skipped, 5 warnings. `uv run python pipeline/check_drift.py --quiet` => clean, 163 passed, 20 advisory. Check 107 direct probes and manifest test slice passed after the manifest repair.
+- **Residual blocker:** Do not call `LIVE_SAFE` yet. `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md` remains pending a real market smoke after CME reopen because the 2026-05-24 attempt fail-closed on the CME holiday before fresh bars could be observed.
+
 ## This Session (2026-05-23 — Codex WSL launcher dirty-clone hardening)
 
 - **start_bot dashboard UI/UX follow-up (Codex):** Attempted to close `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md` via the required signal/live smoke, but preflight failed before a smoke session could start: `PROJECTX_USER` missing, `[1/8] Auth check (projectx)` failed, `Preflight: 5/8 passed`. Stage remains `AUDIT_CLOSED_PENDING_LIVE_SMOKE` / `mode: IMPLEMENTATION`; do not close it until fresh-candle, ring-delete, and gold.db fallback are observed. Implemented only HTML/CSS/JS cleanup in `trading_app/live/bot_dashboard.html`: connection-blocked copy is consolidated into the connection panel, drawer handles and collapsed sections are tighter, mobile topbar controls are denser, and operator checks remain visible when expanded. `canompx3_reviewer` found one operator-visibility regression (hidden checks); fixed and re-reviewed as PASS for HTML-only signoff.
@@ -413,12 +421,16 @@
 
 ## Last Session
 - **Tool:** Codex (WSL)
-- **Date:** 2026-05-23
-- **Commit:** latest pushed commit — fix(dashboard): tighten start bot blocked-state UI
-- **Files changed:** 3 files
+- **Date:** 2026-05-24
+- **Commit:** current session commit — chore: harden live-readiness verification state
+- **Files changed:** 7 files
   - `HANDOFF.md`
+  - `docs/audit/check_107_sha_migrations.yaml`
+  - `docs/audit/results/2026-05-17-check-107-orphan-sha-audit.md`
+  - `docs/research-input/topstep/topstepx_api_access_2026-05-24.md`
   - `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md`
-  - `trading_app/live/bot_dashboard.html`
+  - `tests/test_hooks/test_session_start_mutex.py`
+  - `tests/test_research/test_fast_lane_to_heavyweight_bridge_refusal.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

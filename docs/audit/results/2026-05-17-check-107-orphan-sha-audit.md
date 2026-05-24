@@ -117,7 +117,63 @@ A follow-up stage should:
 
 Estimated effort: ~30-45min implementation + tests.
 
-## Verification — drift count unchanged by this audit
+## 2026-05-24 Addendum — Local MNQ Orphan Set
+
+## Scope
+
+Codex re-ran Check 107 against the restored local `gold.db` in
+`/home/joshd/canompx3` after the TopstepX/live-readiness setup repair. That DB
+contained 21 additional orphaned `experimental_strategies.hypothesis_file_sha`
+values. The same root-cause class applies: the DB rows preserve discovery-time
+content SHAs, while the source YAML files were later edited in tracked commits.
+
+No DB rows were mutated. The repair path remains the evidence-preserving
+manifest approach: append entries to `docs/audit/check_107_sha_migrations.yaml`
+so Check 107 can accept the orphan SHAs only when the sibling manifest-integrity
+check proves:
+
+- the current file exists,
+- the current file SHA matches `current_sha`,
+- the introducing commit contains file content hashing to `orphan_sha`,
+- the migration commit exists and touched the file,
+- this audit file exists.
+
+## Outputs
+
+The 2026-05-24 set maps to these source files:
+
+| SHA prefix | Source file | Introducing commit |
+|---|---|---|
+| `c08e58cc6ddb` | `2026-04-09-mnq-rr10-individual.yaml` | `7aaf256c` |
+| `430b8bb8ea7e` | `2026-04-11-mnq-o15-expansion.yaml` | `7aaf256c` |
+| `fc5ab497b54c` | `2026-04-11-mnq-cost-gate.yaml` | `7aaf256c` |
+| `71659a9f9a6c` | `2026-04-11-mnq-overnight.yaml` | `7aaf256c` |
+| `75568f06196e` | `2026-04-11-mnq-cross-asset.yaml` | `7aaf256c` |
+| `f32c9738985f` | `2026-04-11-atr-vel-expansion.yaml` | `7aaf256c` |
+| `289360162082` | `2026-04-12-wave5-garch-nyse-open.yaml` | `7aaf256c` |
+| `0cfbc2e784cf` | `2026-04-13-mnq-wider-aperture-session-structure.yaml` | `7aaf256c` |
+| `b7cbb26c9e83` | `2026-04-13-mnq-wider-aperture-vol-regime-v2.yaml` | `7aaf256c` |
+| `2ffe496799e1` | `2026-04-13-mnq-vwap-us-data-1000.yaml` | `7aaf256c` |
+| `b91e21328ead` | `2026-04-13-cross-session-comex-cme-preclose.yaml` | `7aaf256c` |
+| `135ca453989f` | `2026-04-13-cross-session-sgp-europe-flow.yaml` | `7aaf256c` |
+| `b17a346adb37` | `2026-04-22-mnq-layered-candidate-board-v1.yaml` | `9a5e66e0` |
+| `9a754e6fd2a7` | `2026-04-22-mnq-usdata1000-near-pivot-50-avoid-v1.yaml` | `9a5e66e0` |
+| `7e3c4f5cdd89` | `2026-04-22-mnq-usdata1000-downside-displacement-take-v1.yaml` | `9a5e66e0` |
+| `e93af94608b6` | `2026-04-22-mnq-usdata1000-clear-of-congestion-take-v1.yaml` | `9a5e66e0` |
+| `87bb3d73f3cd` | `2026-04-22-mnq-usdata1000-positive-context-union-v1.yaml` | `9a5e66e0` |
+| `d5d3df102fe1` | `2026-04-22-mnq-usdata1000-rr15-positive-context-union-v1.yaml` | `9a5e66e0` |
+| `560459105e70` | `2026-04-22-mnq-comex-pd-clear-long-take-v1.yaml` | `9a5e66e0` |
+| `fdf262d36f55` | `2026-04-22-mnq-tokyo-costlt08-take-v1.yaml` | `9a5e66e0` |
+| `1fff43df8290` | `2026-04-24-mnq-usdata1000-f5-below-pdl-rr15-v1.yaml` | `6887632f` |
+
+## Caveats
+
+This addendum does not prove the historical trading conclusions again; it only
+proves that each orphan SHA maps to a tracked source-file state and that the
+manifest repair is evidence-grounded. It also does not close the live chart
+ring-buffer smoke stage; that still needs fresh market bars after CME reopen.
+
+## Verification — 2026-05-17 Audit-Only Pass
 
 ```
 $ python pipeline/check_drift.py 2>&1 | grep -c "PHASE 4 SHA INTEGRITY: orphaned SHA"
@@ -125,6 +181,10 @@ $ python pipeline/check_drift.py 2>&1 | grep -c "PHASE 4 SHA INTEGRITY: orphaned
 ```
 
 Before this audit: 11. After this audit: 11. The MD adds context for future operators; it changes no behavior.
+
+The 2026-05-24 addendum is different: it pairs the audit evidence with
+manifest entries in `docs/audit/check_107_sha_migrations.yaml`, so current
+verification must be read from the fresh Check 107 and sibling manifest checks.
 
 ## References
 

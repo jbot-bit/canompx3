@@ -30,6 +30,11 @@ from scripts.research.fast_lane_to_heavyweight_bridge import (
 )
 
 
+def _bridge_refused_type() -> type[BridgeRefused]:
+    """Return the current module exception class after any importlib.reload."""
+    return _bridge_preflight_refuse.__globals__["BridgeRefused"]
+
+
 def _make_source(
     *,
     strategy_id: str = "MGC_LONDON_METALS_E1_RR1.0_CB2_ATR_P50",
@@ -173,7 +178,7 @@ def test_bridge_refuses_banned_entry_model(tmp_path, isolate_drafts):
 
     assert not expected_draft.exists()
 
-    with pytest.raises(BridgeRefused, match="graveyard-banned"):
+    with pytest.raises(_bridge_refused_type(), match="graveyard-banned"):
         _bridge_preflight_refuse(
             source,
             queue_path=tmp_path / "nonexistent_queue.yaml",
@@ -201,7 +206,7 @@ def test_bridge_refuses_e2_lookahead(tmp_path, isolate_drafts):
 
     assert not expected_draft.exists()
 
-    with pytest.raises(BridgeRefused, match="E2_EXCLUDED_FILTER_PREFIXES"):
+    with pytest.raises(_bridge_refused_type(), match="E2_EXCLUDED_FILTER_PREFIXES"):
         _bridge_preflight_refuse(
             source,
             queue_path=tmp_path / "nonexistent_queue.yaml",
@@ -242,7 +247,7 @@ def test_bridge_refuses_graveyard_lane(tmp_path, isolate_drafts):
 
     assert not expected_draft.exists()
 
-    with pytest.raises(BridgeRefused, match="graveyard"):
+    with pytest.raises(_bridge_refused_type(), match="graveyard"):
         _bridge_preflight_refuse(source, queue_path=queue_path, digest_path=digest_path)
 
     assert not expected_draft.exists()
@@ -267,7 +272,7 @@ def test_bridge_refuses_non_queued_promote_status(tmp_path, isolate_drafts):
 
     assert not expected_draft.exists()
 
-    with pytest.raises(BridgeRefused, match="status='REJECTED_OOS_UNPOWERED'.*expected QUEUED"):
+    with pytest.raises(_bridge_refused_type(), match="status='REJECTED_OOS_UNPOWERED'.*expected QUEUED"):
         _bridge_preflight_refuse(
             source,
             queue_path=queue_path,
@@ -289,7 +294,7 @@ def test_bridge_refuses_missing_v2_k_lineage(tmp_path, isolate_drafts):
         include_k_lineage=False,
     )
 
-    with pytest.raises(BridgeRefused, match="missing k_lineage"):
+    with pytest.raises(_bridge_refused_type(), match="missing k_lineage"):
         _bridge_preflight_refuse(
             source,
             queue_path=queue_path,
@@ -328,7 +333,7 @@ def test_bridge_refuses_k_lane_over_declared_budget(tmp_path, isolate_drafts):
         k_declared=3,
     )
 
-    with pytest.raises(BridgeRefused, match="K_lane=4.*K_declared_in_prereg=3"):
+    with pytest.raises(_bridge_refused_type(), match="K_lane=4.*K_declared_in_prereg=3"):
         _bridge_preflight_refuse(
             source,
             queue_path=queue_path,

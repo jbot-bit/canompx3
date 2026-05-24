@@ -159,6 +159,7 @@ class TestSessionLockMutex:
             encoding="utf-8",
         )
         hook = _load_hook(monkeypatch, tmp_path)
+        monkeypatch.setattr(hook, "_pid_is_alive", lambda pid: True, raising=True)
 
         lines, should_block = hook._session_lock_lines()
 

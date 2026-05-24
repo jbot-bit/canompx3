@@ -42,6 +42,15 @@ closed_note: |
   before a smoke session could start because ProjectX auth was missing
   (`PROJECTX_USER`), with `Preflight: 5/8 passed`. Required live evidence
   remains absent; keep `implementation_status: AUDIT_CLOSED_PENDING_LIVE_SMOKE`.
+
+  2026-05-24 Codex smoke attempt: NOT CLOSED. Official TopstepX/API env was
+  restored from `C:\Users\joshd\canompx3\.env`; broker handshake passed against
+  `https://api.topstepx.com`; MNQ data was refreshed through 2026-05-22; and
+  signal-only preflight passed `8/8` for Express Funded API account `21944866`.
+  Required live chart evidence is still absent because the signal-only session
+  fail-closed immediately on `CME HOLIDAY (2026-05-23) — ALL SESSIONS BLOCKED`
+  before receiving bars. `data/live_bars/` was empty after shutdown. Retry after
+  CME reopen.
 ---
 
 ## Blast Radius
