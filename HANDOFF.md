@@ -546,15 +546,10 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-25
-- **Commit:** f1ec4cdf — fix(db): retry duckdb lock opens
-- **Files changed:** 7 files
+- **Commit:** 323955be — docs(stage): close db lock retry repro
+- **Files changed:** 2 files
   - `HANDOFF.md`
   - `docs/runtime/stages/2026-05-26-gold-db-per-process-lock-retry.md`
-  - `pipeline/check_drift.py`
-  - `pipeline/db_connect.py`
-  - `scripts/tools/refresh_data.py`
-  - `tests/test_pipeline/test_db_connect.py`
-  - `trading_app/strategy_validator.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
