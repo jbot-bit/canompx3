@@ -4,6 +4,8 @@ Mutation proofs:
 - 29 distinct trading_day SESSION_START records for MNQ -> UNVERIFIED.
 - 30 distinct trading_day SESSION_START records for MNQ -> MATURE.
 - Records for a different instrument do not count toward MNQ maturity.
+- Profile-scoped checks require matching profile_id records; legacy
+  instrument-only records do not count toward profile maturity.
 - Empty / missing signals dir -> fail-closed UNVERIFIED.
 - Malformed jsonl lines are skipped without raising.
 """
@@ -35,17 +37,26 @@ def _write_signals(signals_dir: Path, records_by_day: dict) -> None:
         path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
 
 
-def _session_start_record(instrument: str, day_offset: int, base_iso: str = "2026-05-01T20:00:00+00:00") -> dict:
+def _session_start_record(
+    instrument: str,
+    day_offset: int,
+    base_iso: str = "2026-05-01T20:00:00+00:00",
+    *,
+    profile_id: str | None = None,
+) -> dict:
     """Build a SESSION_START record offset N days from a base UTC date."""
     base = datetime.fromisoformat(base_iso)
     ts = (base + timedelta(days=day_offset)).isoformat()
-    return {
+    record = {
         "ts": ts,
         "instrument": instrument,
         "type": "SESSION_START",
         "contract": f"CON.F.US.{instrument}.M26",
         "mode": "signal_only",
     }
+    if profile_id is not None:
+        record["profile_id"] = profile_id
+    return record
 
 
 def test_floor_constant_is_30():
@@ -102,6 +113,49 @@ def test_other_instrument_records_do_not_count_for_mnq(tmp_path):
     report = evaluate_telemetry_maturity(tmp_path, instrument="MNQ")
     assert report.verdict == VERDICT_UNVERIFIED
     assert report.n_unique_trading_days == 5, "only MNQ-instrument records count"
+
+
+def test_profile_scoped_check_ignores_legacy_instrument_only_records(tmp_path):
+    """Profile maturity must not inherit old instrument-global telemetry."""
+    records_by_day = {}
+    for i in range(30):
+        day_iso = (datetime(2026, 5, 1, tzinfo=UTC) + timedelta(days=i)).date().isoformat()
+        records_by_day[day_iso] = [_session_start_record("MNQ", i)]
+    _write_signals(tmp_path, records_by_day)
+
+    report = evaluate_telemetry_maturity(
+        tmp_path,
+        instrument="MNQ",
+        profile_id="topstep_50k_mnq_auto",
+    )
+
+    assert report.profile_scoped is True
+    assert report.profile_id == "topstep_50k_mnq_auto"
+    assert report.verdict == VERDICT_UNVERIFIED
+    assert report.n_unique_trading_days == 0
+
+
+def test_profile_scoped_check_counts_only_matching_profile(tmp_path):
+    """Telemetry for another profile on the same symbol cannot satisfy this profile."""
+    records_by_day = {}
+    for i in range(30):
+        day_iso = (datetime(2026, 5, 1, tzinfo=UTC) + timedelta(days=i)).date().isoformat()
+        records_by_day[day_iso] = [
+            _session_start_record("MNQ", i, profile_id="other_profile"),
+            _session_start_record("MNQ", i, profile_id="topstep_50k_mnq_auto"),
+        ]
+    _write_signals(tmp_path, records_by_day)
+
+    report = evaluate_telemetry_maturity(
+        tmp_path,
+        instrument="MNQ",
+        profile_id="topstep_50k_mnq_auto",
+    )
+
+    assert report.profile_scoped is True
+    assert report.verdict == VERDICT_MATURE
+    assert report.n_unique_trading_days == 30
+    assert report.records_qualifying == 30
 
 
 def test_missing_dir_fails_closed(tmp_path):

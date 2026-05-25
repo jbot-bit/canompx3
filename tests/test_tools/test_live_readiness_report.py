@@ -1,9 +1,156 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
+import pytest
+
 from scripts.tools import live_readiness_report
+
+
+def _write_allocator(
+    path: Path,
+    *,
+    profile_id: str = "topstep_50k_mnq_auto",
+    lane_status: str = "DEPLOY",
+) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "profile_id": profile_id,
+                "rebalance_date": "2026-05-03T06:07:00+00:00",
+                "trailing_window_months": 3,
+                "all_scores_count": 42,
+                "lanes": [
+                    {
+                        "strategy_id": "SID_A",
+                        "instrument": "MNQ",
+                        "orb_label": "COMEX_SETTLE",
+                        "orb_minutes": 5,
+                        "rr_target": 1.0,
+                        "filter_type": "OVNRNG_100",
+                        "status": lane_status,
+                        "status_reason": "selected",
+                        "chordia_verdict": "PASS_CHORDIA",
+                    }
+                ],
+                "paused": [],
+                "stale": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _install_happy_path(
+    monkeypatch: pytest.MonkeyPatch,
+    allocation_path: Path,
+    *,
+    criterion11: dict[str, object] | None = None,
+    criterion12: dict[str, object] | None = None,
+    strategy_state: dict[str, object] | None = None,
+    telemetry: dict[str, object] | None = None,
+    stages: dict[str, object] | None = None,
+    validated_ids: list[str] | None = None,
+) -> None:
+    _write_allocator(allocation_path)
+    monkeypatch.setattr(
+        live_readiness_report,
+        "resolve_profile_id",
+        lambda *_args, **_kwargs: "topstep_50k_mnq_auto",
+    )
+    monkeypatch.setattr(
+        live_readiness_report,
+        "get_profile_lane_definitions",
+        lambda _profile_id: [
+            {
+                "strategy_id": "SID_A",
+                "instrument": "MNQ",
+                "orb_label": "COMEX_SETTLE",
+                "orb_minutes": 5,
+                "rr_target": 1.0,
+                "filter_type": "OVNRNG_100",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        live_readiness_report,
+        "_load_validated_strategy_ids",
+        lambda _db_path: validated_ids or ["SID_A"],
+    )
+    monkeypatch.setattr(
+        live_readiness_report,
+        "read_lifecycle_state",
+        lambda *_args, **_kwargs: {
+            "criterion11": criterion11 or {"gate_ok": True, "gate_msg": "pass", "report_age_days": 1},
+            "criterion12": criterion12 or {"valid": True, "counts": {"ALARM": 0}, "state_age_days": 0},
+            "pauses": {"paused_count": 0, "paused_strategy_ids": []},
+            "conditional_overlays": {"available": True, "overlays": []},
+            "blocked_strategy_ids": ["SID_A"] if (strategy_state or {}).get("blocked") else [],
+            "blocked_reason_by_strategy": (
+                {"SID_A": str((strategy_state or {}).get("block_reason"))}
+                if (strategy_state or {}).get("block_reason")
+                else {}
+            ),
+            "strategy_states": {
+                "SID_A": {
+                    "blocked": False,
+                    "block_source": None,
+                    "block_reason": None,
+                    "sr_status": "CONTINUE",
+                    "sr_review_outcome": "watch_review_pass",
+                    **(strategy_state or {}),
+                }
+            },
+        },
+    )
+    monkeypatch.setattr(live_readiness_report, "_git_branch", lambda _root: "test-branch")
+    monkeypatch.setattr(live_readiness_report, "_git_head", lambda _root: "deadbeef")
+    monkeypatch.setattr(
+        live_readiness_report,
+        "evaluate_telemetry_maturity",
+        lambda *_args, **_kwargs: (
+            telemetry
+            or {
+                "verdict": "TELEMETRY_MATURE",
+                "instrument": "MNQ",
+                "profile_id": "topstep_50k_mnq_auto",
+                "scope": "profile",
+                "profile_scoped": True,
+                "n_unique_trading_days": 30,
+                "min_required": 30,
+                "trading_days": ["2026-05-01"],
+                "signal_files_scanned": 3,
+                "records_scanned": 80,
+                "records_qualifying": 40,
+            }
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        live_readiness_report,
+        "_evaluate_live_stage_acceptance",
+        lambda: (
+            stages
+            or {
+                "stages": [
+                    {
+                        "path": "docs/runtime/stages/2026-05-22-live-bar-ring-chart.md",
+                        "green": True,
+                        "status_text": "CLOSED",
+                    },
+                    {
+                        "path": "docs/runtime/stages/2026-05-26-ring-orphan-startup-sweep.md",
+                        "green": True,
+                        "status_text": "CLOSED",
+                    },
+                ]
+            }
+        ),
+        raising=False,
+    )
 
 
 def test_build_live_readiness_report_merges_allocator_and_lifecycle(tmp_path: Path, monkeypatch) -> None:
@@ -343,3 +490,206 @@ def test_falls_back_to_profile_config_when_allocator_profile_mismatched(tmp_path
     assert report["active_lanes"][0]["allocator_bucket"] == "profile_config"
     wrong_ids = {lane["strategy_id"] for lane in report["active_lanes"]}
     assert "WRONG_PROFILE_LANE" not in wrong_ids
+
+
+def test_strict_zero_warn_blocks_when_telemetry_below_floor(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        telemetry={
+            "verdict": "UNVERIFIED_INSUFFICIENT_TELEMETRY",
+            "instrument": "MNQ",
+            "n_unique_trading_days": 8,
+            "min_required": 30,
+            "trading_days": ["2026-05-01", "2026-05-02"],
+            "signal_files_scanned": 2,
+            "records_scanned": 12,
+            "records_qualifying": 8,
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["telemetry_maturity"]["verdict"] == "UNVERIFIED_INSUFFICIENT_TELEMETRY"
+    assert report["strict_zero_warn"]["green"] is False
+    assert any("telemetry" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
+    markdown = live_readiness_report._render_markdown(report)
+    assert "Strict zero-warn" in markdown
+    assert "Telemetry" in markdown
+
+
+def test_strict_zero_warn_blocks_mature_instrument_global_telemetry(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        telemetry={
+            "verdict": "TELEMETRY_MATURE",
+            "instrument": "MNQ",
+            "n_unique_trading_days": 30,
+            "min_required": 30,
+            "trading_days": ["2026-05-01"],
+            "signal_files_scanned": 30,
+            "records_scanned": 120,
+            "records_qualifying": 30,
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["telemetry_maturity"]["verdict"] == "TELEMETRY_MATURE"
+    assert report["telemetry_maturity"]["scope"] == "instrument_global"
+    assert report["telemetry_maturity"]["profile_scoped"] is False
+    assert report["strict_zero_warn"]["green"] is False
+    assert any("not profile-scoped" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
+
+
+def test_strict_zero_warn_blocks_when_active_lane_blocked_and_sr_alarm(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        strategy_state={
+            "blocked": True,
+            "block_source": "lifecycle",
+            "block_reason": "manual hold",
+            "sr_status": "ALARM",
+            "sr_review_outcome": None,
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["active_lanes"][0]["lifecycle_blocked"] is True
+    assert report["active_lanes"][0]["sr_status"] == "ALARM"
+    assert report["strict_zero_warn"]["green"] is False
+    assert any("lifecycle" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
+    assert any("sr alarm" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
+
+
+def test_strict_zero_warn_blocks_any_active_sr_alarm_even_when_watch_reviewed(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        strategy_state={
+            "sr_status": "ALARM",
+            "sr_review_outcome": "watch",
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["active_lanes"][0]["lifecycle_blocked"] is False
+    assert report["active_lanes"][0]["sr_status"] == "ALARM"
+    assert report["active_lanes"][0]["sr_review_outcome"] == "watch"
+    assert report["strict_zero_warn"]["green"] is False
+    assert any("watch reviewed" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
+
+
+def test_strict_zero_warn_blocks_when_live_stage_pending(tmp_path: Path, monkeypatch) -> None:
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        stages={
+            "stages": [
+                {
+                    "path": "docs/runtime/stages/2026-05-22-live-bar-ring-chart.md",
+                    "green": False,
+                    "status_text": "IMPLEMENTATION",
+                },
+                {
+                    "path": "docs/runtime/stages/2026-05-26-ring-orphan-startup-sweep.md",
+                    "green": True,
+                    "status_text": "CLOSED",
+                },
+            ]
+        },
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    assert report["live_stage_acceptance"]["stages"][0]["green"] is False
+    assert report["strict_zero_warn"]["green"] is False
+    assert any("live stage" in blocker.lower() for blocker in report["strict_zero_warn"]["blockers"])
+
+
+def test_main_strict_zero_warn_exits_nonzero_when_not_green(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        live_readiness_report,
+        "build_live_readiness_report",
+        lambda **_kwargs: {
+            "profile_id": "topstep_50k_mnq_auto",
+            "git_head": "deadbeef",
+            "strict_zero_warn": {"green": False, "blockers": ["telemetry not mature"]},
+        },
+    )
+    monkeypatch.setattr(live_readiness_report, "_render_text", lambda _report: "Live Readiness")
+    monkeypatch.setattr("sys.argv", ["live_readiness_report.py", "--strict-zero-warn"])
+
+    with pytest.raises(SystemExit) as excinfo:
+        live_readiness_report.main()
+
+    assert excinfo.value.code == 1
+    assert "Live Readiness" in capsys.readouterr().out
+
+
+def test_main_strict_zero_warn_returns_zero_when_green(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        live_readiness_report,
+        "build_live_readiness_report",
+        lambda **_kwargs: {
+            "profile_id": "topstep_50k_mnq_auto",
+            "git_head": "deadbeef",
+            "strict_zero_warn": {"green": True, "blockers": []},
+        },
+    )
+    monkeypatch.setattr(live_readiness_report, "_render_text", lambda _report: "Live Readiness")
+    monkeypatch.setattr("sys.argv", ["live_readiness_report.py", "--strict-zero-warn"])
+
+    live_readiness_report.main()
+
+    assert "Live Readiness" in capsys.readouterr().out
+
+
+def test_json_cli_stdout_is_parseable_without_warning_preamble() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/tools/live_readiness_report.py",
+            "--profile",
+            "topstep_50k_mnq_auto",
+            "--format",
+            "json",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.lstrip().startswith("{")
+    parsed = json.loads(result.stdout)
+    assert parsed["profile_id"] == "topstep_50k_mnq_auto"

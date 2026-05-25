@@ -20,6 +20,29 @@ from trading_app.live.position_tracker import PositionState, PositionTracker
 from trading_app.live.session_orchestrator import SessionOrchestrator
 
 
+class _CaptureSignalRotator:
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+
+    def write(self, line: str) -> None:
+        self.lines.append(line)
+
+
+def test_write_signal_record_includes_profile_id_when_available() -> None:
+    orch = object.__new__(SessionOrchestrator)
+    orch.instrument = "MNQ"
+    orch._profile_id = "topstep_50k_mnq_auto"
+    rotator = _CaptureSignalRotator()
+    orch._signal_rotator = rotator
+
+    orch._write_signal_record({"type": "SESSION_START", "mode": "signal_only"})
+
+    record = json.loads(rotator.lines[0])
+    assert record["instrument"] == "MNQ"
+    assert record["profile_id"] == "topstep_50k_mnq_auto"
+    assert record["type"] == "SESSION_START"
+
+
 class _ImmediateExecutorLoop:
     """Test loop proxy that executes threadpool work inline.
 

@@ -9,6 +9,29 @@
 ## This Session (2026-05-24 — Codex live-readiness verification hardening)
 
 - **Tool:** Codex WSL, branch `main`.
+- **2026-05-25 strict live-readiness gate implementation:** Added an opt-in
+  strict zero-warn readiness gate to `scripts/tools/live_readiness_report.py`
+  (`--strict-zero-warn` exits nonzero when red). The report now surfaces
+  strict blockers for C11/C12, allocator/profile mismatch, deployed-not-
+  validated lanes, blocked active lanes, any active SR `ALARM` even if
+  watch-reviewed, profile-scoped telemetry maturity, and live-stage acceptance
+  for the live bar ring and ring orphan sweep stages. Fixed a review-found
+  false-green path by making telemetry profile-scoped: future live signal
+  records now carry `profile_id`, and `evaluate_telemetry_maturity(...,
+  profile_id=...)` ignores legacy instrument-only records. Removed the
+  side-effectful `SessionOrchestrator` import from the report so JSON output is
+  parseable without warning preamble. Current `topstep_50k_mnq_auto` strict
+  report is intentionally red: C12 has 3 alarms, three active lanes are SR
+  `ALARM`, one active lane is lifecycle blocked, profile telemetry is `0/30`
+  distinct days, and both live-stage files are not green. No broker, account,
+  allocation, lane override, SR registry, stage-status, or DB mutation.
+  Verification: focused live/readiness/session slice 69 passed; behavioral and
+  integrity audits passed; drift clean (`164 passed, 20 advisory`); Ruff
+  check/format clean; py_compile clean; scoped Pyright 0 errors; `git diff
+  --check` clean; JSON CLI output parsed as JSON. Full sandbox pytest hit the
+  pre-existing dashboard subprocess timeout at
+  `test_prepare_profile_for_start_propagates_mode_to_subprocess`; that exact
+  test passed outside sandbox in 0.20s.
 - **2026-05-25 Codex P2 orphan ring startup sweep:** Implemented the approved
   startup-side `data/live_bars/*.json` orphan sweep without starting a live
   session. Added new helper `scripts/tools/sweep_orphan_rings.py`; it deletes

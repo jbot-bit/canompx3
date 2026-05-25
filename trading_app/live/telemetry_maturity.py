@@ -89,6 +89,8 @@ class TelemetryMaturityReport:
     Attributes:
         verdict: VERDICT_UNVERIFIED or VERDICT_MATURE -- the bright-line gate.
         instrument: instrument symbol the report covers (e.g. "MNQ").
+        profile_id: optional profile id filter used by the scan.
+        profile_scoped: True when profile_id filtering was applied.
         n_unique_trading_days: count of distinct trading_days with at least
             one qualifying uptime record.
         min_required: floor used for the gate (MIN_TELEMETRY_TRADING_DAYS).
@@ -102,6 +104,8 @@ class TelemetryMaturityReport:
 
     verdict: str
     instrument: str
+    profile_id: str | None
+    profile_scoped: bool
     n_unique_trading_days: int
     min_required: int
     trading_days: tuple[date, ...]
@@ -150,7 +154,7 @@ def _trading_day_from_iso(ts_iso: str) -> date | None:
     return dt.astimezone(UTC).date()
 
 
-def _scan_signal_file(path: Path, instrument: str) -> tuple[set[date], int, int]:
+def _scan_signal_file(path: Path, instrument: str, profile_id: str | None) -> tuple[set[date], int, int]:
     """Read one signal log file. Return (distinct_dates, records_scanned, qualifying)."""
     dates: set[date] = set()
     n_scanned = 0
@@ -174,6 +178,8 @@ def _scan_signal_file(path: Path, instrument: str) -> tuple[set[date], int, int]
             continue
         if rec.get("instrument") != instrument:
             continue
+        if profile_id is not None and rec.get("profile_id") != profile_id:
+            continue
         if rec.get("type") not in _UPTIME_RECORD_TYPES:
             continue
         td = _trading_day_from_iso(rec.get("ts", ""))
@@ -188,6 +194,7 @@ def evaluate_telemetry_maturity(
     signals_dir: Path,
     instrument: str,
     min_trading_days: int = MIN_TELEMETRY_TRADING_DAYS,
+    profile_id: str | None = None,
 ) -> TelemetryMaturityReport:
     """Return whether enough distinct trading_days of uptime exist for ``instrument``.
 
@@ -198,6 +205,9 @@ def evaluate_telemetry_maturity(
             whose ``instrument`` field matches are counted.
         min_trading_days: floor for the gate. Default MIN_TELEMETRY_TRADING_DAYS.
             Override only for tests; production callers must use the constant.
+        profile_id: optional profile id. When provided, only records with an
+            exact matching ``profile_id`` qualify. Records written before this
+            field existed intentionally do not count toward profile maturity.
 
     Returns:
         TelemetryMaturityReport with verdict = VERDICT_MATURE iff the
@@ -220,7 +230,7 @@ def evaluate_telemetry_maturity(
     total_scanned = 0
     total_qualifying = 0
     for f in files:
-        dates, n_scanned, n_qualifying = _scan_signal_file(f, instrument)
+        dates, n_scanned, n_qualifying = _scan_signal_file(f, instrument, profile_id)
         all_dates.update(dates)
         total_scanned += n_scanned
         total_qualifying += n_qualifying
@@ -230,6 +240,8 @@ def evaluate_telemetry_maturity(
     return TelemetryMaturityReport(
         verdict=verdict,
         instrument=instrument,
+        profile_id=profile_id,
+        profile_scoped=profile_id is not None,
         n_unique_trading_days=n_unique,
         min_required=min_trading_days,
         trading_days=tuple(sorted(all_dates)),

@@ -371,6 +371,7 @@ class SessionOrchestrator:
         profile_id = None
         if portfolio is not None and portfolio.name.startswith("profile_"):
             profile_id = portfolio.name.removeprefix("profile_")
+        self._profile_id = profile_id
 
         # A6-GAP2: detect predicate divergence early — both must agree on
         # whether this is a profile-backed portfolio.  A mismatch means a
@@ -1644,6 +1645,8 @@ class SessionOrchestrator:
             "instrument": self.instrument,
             **extra,
         }
+        if self._profile_id is not None:
+            record["profile_id"] = self._profile_id
         line = json.dumps(record) + "\n"
         # _signal_rotator is initialized in __init__ before first _write_signal_record call.
         # Defensive guard for unit tests that mock _write_signal_record directly on a
