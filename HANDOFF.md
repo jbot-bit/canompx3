@@ -26,6 +26,15 @@
   sandbox because two dashboard/TestClient cases timed out; both passed outside
   sandbox (exact subprocess test 1 passed in 0.20s; CSRF file 10 passed in
   0.24s). No live allocation, broker, profile, lane, or gold.db data mutation.
+- **2026-05-25 follow-up lock repro closeout:** Closed
+  `docs/runtime/stages/2026-05-26-gold-db-per-process-lock-retry.md` via a
+  controlled two-process DuckDB lock repro instead of starting a live
+  orchestrator. One process opened `gold.db` in writer mode and slept; concurrent
+  `scripts/tools/refresh_data.py --instrument MNQ --dry-run` logged
+  `[duckdb-read-only-retry] gold.db locked` on attempts 1 and 2, then completed
+  with `MNQ OK` after `LOCK_RELEASED`. This proves the affected refresh path
+  waits and succeeds under the documented DuckDB file-lock class. No DB write,
+  broker, profile, lane, or live-session mutation.
 - **2026-05-25 project tidy/code-review cleanup:** Fixed a Ruff failure in
   `tests/test_trading_app/test_lane_allocator.py` by removing stale unused
   `_classify_status()` monthly fixtures left after the regime-only signature

@@ -45,8 +45,8 @@ task: |
     - pipeline/check_drift.py read paths
     - any scripts/tools/*.py that opens gold.db
 
-mode: IMPLEMENTATION
-status: IMPLEMENTED_PENDING_MANUAL_LOCK_REPRO
+mode: CLOSED
+status: CLOSED_CONTROLLED_LOCK_REPRO_2026_05_25
 priority: P1_CAPITAL_CLASS
 deferred_reason: |
   Filed during Brisbane Mon 2026-05-26 live-debut session (08:00 CME reopen
@@ -68,8 +68,10 @@ agent: claude (opus 4.7)
 
 ## Codex Implementation Pass
 
-Status: implementation complete; not marked CLOSED because acceptance item 2
-requires a manual live contention repro while the orchestrator holds `gold.db`.
+Status: CLOSED after controlled manual lock repro. The repro used a local
+writer-mode DuckDB process holding `gold.db` instead of starting the live
+orchestrator; this exercises the same documented DuckDB file-lock class while
+avoiding live-session/broker side effects.
 
 What landed:
 
@@ -103,11 +105,18 @@ Verification:
   deselected. Both affected dashboard checks passed outside the sandbox:
   exact subprocess test -> 1 passed in 0.20s; CSRF file -> 10 passed in 0.24s.
 
-Pending before CLOSED:
+Manual repro evidence:
 
-- Manual repro: start orchestrator so it holds `gold.db`, run
-  `python scripts/tools/refresh_data.py`, and verify lock contention waits and
-  succeeds instead of hard-failing.
+- Lock holder:
+  `./.venv-wsl/bin/python -c "import duckdb, time; con=duckdb.connect('gold.db'); print('LOCK_HELD', flush=True); time.sleep(8); con.close(); print('LOCK_RELEASED', flush=True)"`
+  -> printed `LOCK_HELD`, then `LOCK_RELEASED`.
+- A concurrent dry-run refresh:
+  `./.venv-wsl/bin/python scripts/tools/refresh_data.py --instrument MNQ --dry-run`
+  -> logged `[duckdb-read-only-retry] gold.db locked (attempt 1/6)` and
+  `attempt 2/6`, then completed the dry-run summary with `MNQ OK`.
+- The dry-run did not mutate `gold.db`; the only external-data warning was
+  Databento DNS resolution for range metadata, and the command correctly
+  proceeded without clamp in dry-run mode.
 
 ## Blast Radius
 
