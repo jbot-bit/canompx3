@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from typing import Any
 
 import duckdb
 import pytest
@@ -30,7 +31,7 @@ from trading_app.lane_correlation import RHO_REJECT_THRESHOLD
 # ── Factories ──────────────────────────────────────────────────────
 
 
-def _make_score(**overrides) -> LaneScore:
+def _make_score(**overrides: Any) -> LaneScore:
     """Build a LaneScore with sane defaults (DEPLOY-ready, chordia-clean).
 
     Chordia defaults: PASS_PROTOCOL_A verdict + audit_age 0d. This keeps
@@ -38,7 +39,7 @@ def _make_score(**overrides) -> LaneScore:
     forcing each call site to specify chordia kwargs. Tests that exercise
     the gate explicitly override these fields.
     """
-    defaults = dict(
+    defaults: dict[str, Any] = dict(
         strategy_id="MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER",
         instrument="MNQ",
         orb_label="COMEX_SETTLE",
@@ -224,11 +225,6 @@ class TestClassifyStatus:
         Regime-only gating: individual month streaks are noise.
         Backtest 2022-2025: regime gate +630R vs individual pause -799R.
         """
-        monthly = [
-            ("2025-06", -0.05, 20),
-            ("2025-05", -0.08, 18),
-            ("2025-04", 0.10, 22),
-        ]
         status, reason = _classify_status(
             trailing_expr=-0.01,
             trailing_n=60,
@@ -239,11 +235,6 @@ class TestClassifyStatus:
 
     def test_cold_session_pauses_despite_positive_trailing(self):
         """Test 3: Strategy pauses when session is COLD even if trailing is positive."""
-        monthly = [
-            ("2025-06", 0.12, 20),
-            ("2025-05", 0.08, 18),
-            ("2025-04", 0.10, 22),
-        ]
         status, reason = _classify_status(
             trailing_expr=0.10,
             trailing_n=60,
@@ -257,11 +248,6 @@ class TestClassifyStatus:
 
         The regime gate is the ONLY gate. Individual magnitude doesn't matter.
         """
-        monthly = [
-            ("2025-06", -0.15, 30),
-            ("2025-05", 0.02, 10),
-            ("2025-04", -0.20, 25),
-        ]
         status, reason = _classify_status(
             trailing_expr=-0.05,
             trailing_n=85,
@@ -315,11 +301,6 @@ class TestClassifyStatus:
 
         Regime-only: individual month streaks are noise. Session regime is structural.
         """
-        monthly = [
-            ("2025-06", -0.01, 25),  # barely negative
-            ("2025-05", -0.01, 25),  # barely negative
-            ("2025-04", 0.20, 25),  # positive
-        ]
         status, reason = _classify_status(
             trailing_expr=0.06,  # overall positive
             trailing_n=75,

@@ -400,7 +400,8 @@ async def test_bars_source_changed_emits_once_on_ring_live_to_stale_transition(m
     not on every subsequent tick). On a fresh-start dashboard whose ring is
     already stale, NO transition event fires.
     """
-    from trading_app.live import bar_ring, bot_dashboard as bd
+    from trading_app.live import bar_ring
+    from trading_app.live import bot_dashboard as bd
 
     # Isolate ring dir so a real MNQ.json doesn't leak in.
     monkeypatch.setattr(bar_ring, "RING_DIR", tmp_path / "live_bars")
@@ -482,7 +483,8 @@ async def test_bars_source_changed_emits_once_on_ring_live_to_stale_transition(m
 async def test_bars_source_changed_does_not_emit_on_cold_start_stale(monkeypatch, tmp_path):
     """Cold-start dashboard with already-stale heartbeat must NOT emit a
     spurious transition event — initial state is None, not True."""
-    from trading_app.live import bar_ring, bot_dashboard as bd
+    from trading_app.live import bar_ring
+    from trading_app.live import bot_dashboard as bd
 
     monkeypatch.setattr(bar_ring, "RING_DIR", tmp_path / "live_bars")
     with bar_ring._writers_lock:

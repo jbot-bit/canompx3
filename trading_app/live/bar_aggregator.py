@@ -85,11 +85,15 @@ class BarAggregator:
                 self._open_bar(price, volume, tick_minute)
                 return None
 
-            if tick_minute < self._bar_minute:
-                log.warning("Dropped out-of-order tick: %s < current bar %s", tick_minute, self._bar_minute)
+            bar_minute = self._bar_minute
+            if bar_minute is None:
+                raise RuntimeError("BarAggregator invariant violated: current bar has no minute")
+
+            if tick_minute < bar_minute:
+                log.warning("Dropped out-of-order tick: %s < current bar %s", tick_minute, bar_minute)
                 return None
 
-            if tick_minute == self._bar_minute:
+            if tick_minute == bar_minute:
                 self._current.high = max(self._current.high, price)
                 self._current.low = min(self._current.low, price)
                 self._current.close = price

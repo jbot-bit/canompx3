@@ -38,9 +38,15 @@ def test_record_read_and_summarize_operator_alerts(tmp_path, monkeypatch):
 
     summary = alert_engine.summarize_operator_alerts(alerts)
     assert summary["total"] == 2
-    assert summary["counts"]["warning"] == 1
-    assert summary["counts"]["info"] == 1
-    assert summary["latest"]["message"].startswith("FEED STALE")
+    counts = summary["counts"]
+    latest = summary["latest"]
+    assert isinstance(counts, dict)
+    assert isinstance(latest, dict)
+    assert counts["warning"] == 1
+    assert counts["info"] == 1
+    message = latest["message"]
+    assert isinstance(message, str)
+    assert message.startswith("FEED STALE")
 
 
 def test_read_operator_alerts_filters_by_normalized_profile(tmp_path, monkeypatch):

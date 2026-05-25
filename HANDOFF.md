@@ -9,6 +9,20 @@
 ## This Session (2026-05-24 — Codex live-readiness verification hardening)
 
 - **Tool:** Codex WSL, branch `main`.
+- **2026-05-25 project tidy/code-review cleanup:** Fixed a Ruff failure in
+  `tests/test_trading_app/test_lane_allocator.py` by removing stale unused
+  `_classify_status()` monthly fixtures left after the regime-only signature
+  change. Tightened two scoped live-path Pyright findings:
+  `trading_app/live/alert_engine.py` now carries an explicit `AlertLevel`
+  literal alias through alert classification, and
+  `trading_app/live/bar_aggregator.py` now fails closed if its current-bar
+  minute invariant is corrupted; added a focused regression test. Refreshed
+  derived control state with
+  `scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto`;
+  C11 fingerprint mismatch cleared and now reports operational pass 91.0%
+  as of 2026-05-25, while C12 remains report-only with 3 ALARM / 1 CONTINUE
+  and the existing NYSE_OPEN lane still blocked. No broker/profile/lane
+  allocation/gold.db mutation.
 - **2026-05-25 autonomous routing:** User noted live ring remains blocked on
   manual market smoke, Track D is design-stage, and MNQ rebuild is DB/Pinecone
   mutating. Chose the lowest-risk autonomous action: Track D read-only design

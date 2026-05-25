@@ -24,12 +24,13 @@ ALERTS_PATH = PROJECT_ROOT / "data" / "runtime" / "operator_alerts.jsonl"
 # data-feed stale chain firing every minute), short enough that a fresh
 # instance of the same condition after recovery still pages the operator.
 RECENT_ALERT_WINDOW_MINUTES = 30
+AlertLevel = Literal["critical", "warning", "info"]
 
 
 @dataclass(frozen=True)
 class OperatorAlert:
     timestamp_utc: str
-    level: Literal["critical", "warning", "info"]
+    level: AlertLevel
     category: str
     message: str
     instrument: str | None = None
@@ -39,7 +40,7 @@ class OperatorAlert:
     trading_day: str | None = None
 
 
-_ALERT_RULES: list[tuple[str, str, tuple[str, ...]]] = [
+_ALERT_RULES: list[tuple[str, AlertLevel, tuple[str, ...]]] = [
     ("feed_dead", "critical", ("FEED DEAD",)),
     ("kill_switch", "critical", ("KILL SWITCH",)),
     ("manual_close_required", "critical", ("MANUAL CLOSE REQUIRED",)),
@@ -70,7 +71,7 @@ def _normalize_profile_id(profile: str | None) -> str | None:
     return text or None
 
 
-def classify_operator_alert(message: str) -> tuple[str, str]:
+def classify_operator_alert(message: str) -> tuple[AlertLevel, str]:
     """Infer alert level/category from existing runtime messages."""
     upper = message.strip().upper()
     for category, level, markers in _ALERT_RULES:

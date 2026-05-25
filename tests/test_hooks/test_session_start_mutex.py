@@ -250,7 +250,6 @@ class TestSessionLockMutex:
         # New lock must reflect THIS session, not the stale one.
         new_payload = json.loads(lock.read_text(encoding="utf-8"))
         assert new_payload["pid"] == os.getpid()
-        assert new_payload["pid"] != 2
         assert new_payload["worktree"] == str(tmp_path)
         # Surface the recovery so the user knows a stale lock was cleaned.
         joined = "\n".join(lines)

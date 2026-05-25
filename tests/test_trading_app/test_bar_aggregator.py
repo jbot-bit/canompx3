@@ -2,6 +2,8 @@ import math
 import threading
 from datetime import UTC, datetime, timezone
 
+import pytest
+
 from trading_app.live.bar_aggregator import Bar, BarAggregator
 
 
@@ -32,6 +34,7 @@ def test_bar_ts_utc_is_minute_start():
     agg = BarAggregator()
     agg.on_tick(price=2000.0, volume=1, ts=_ts(5, 3))
     completed = agg.on_tick(price=2001.0, volume=1, ts=_ts(6, 0))
+    assert completed is not None
     assert completed.ts_utc.minute == 5
     assert completed.ts_utc.second == 0
 
@@ -41,6 +44,7 @@ def test_bar_as_dict_has_ts_utc_key():
     agg = BarAggregator()
     agg.on_tick(price=2000.0, volume=1, ts=_ts(0, 0))
     bar = agg.on_tick(price=2001.0, volume=1, ts=_ts(1, 0))
+    assert bar is not None
     d = bar.as_dict()
     assert "ts_utc" in d
     assert "ts_event" not in d  # wrong key name — engine reads ts_utc
@@ -64,6 +68,7 @@ def test_symbol_propagated_via_setter():
     agg = BarAggregator()
     agg.on_tick(price=2000.0, volume=1, ts=_ts(0, 0))
     bar = agg.on_tick(price=2001.0, volume=1, ts=_ts(1, 0))
+    assert bar is not None
     bar.symbol = "MGCM6"
     assert bar.symbol == "MGCM6"
 
@@ -76,7 +81,18 @@ def test_out_of_order_tick_dropped():
     # Send tick from minute 0 — out of order
     result = agg.on_tick(price=2900.0, volume=1, ts=_ts(0, 15))
     assert result is None  # no bar emitted
+    assert agg._current is not None
     assert agg._current.low == 3000.0  # 2900 NOT incorporated
+
+
+def test_current_bar_without_minute_fails_closed():
+    """Corrupt internal state must not silently compare against None."""
+    agg = BarAggregator()
+    agg.on_tick(price=3000.0, volume=1, ts=_ts(1, 0))
+    agg._bar_minute = None
+
+    with pytest.raises(RuntimeError, match="current bar has no minute"):
+        agg.on_tick(price=3001.0, volume=1, ts=_ts(1, 30))
 
 
 def test_concurrent_ticks_do_not_corrupt_bar():
@@ -160,6 +176,7 @@ def test_tick_spike_rejected():
     result = agg.on_tick(price=20000.0, volume=1, ts=_ts(0, 10))
     assert result is None
     # Current bar should only have the first tick
+    assert agg._current is not None
     assert agg._current.high == 2000.0
 
 
@@ -169,6 +186,7 @@ def test_normal_price_movement_accepted():
     agg.on_tick(price=2000.0, volume=1, ts=_ts(0, 5))
     result = agg.on_tick(price=4000.0, volume=1, ts=_ts(0, 10))
     assert result is None
+    assert agg._current is not None
     assert agg._current.high == 4000.0
 
 
@@ -205,6 +223,7 @@ def test_bad_bar_alert_fires():
     for i in range(4):
         agg.on_tick(price=2000.0, volume=1, ts=_ts(i, 5))
         # Corrupt the current bar
+        assert agg._current is not None
         agg._current.high = -1.0
         bar = agg.flush()
         assert bar is None  # rejected
