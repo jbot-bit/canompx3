@@ -562,10 +562,14 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-25
-- **Commit:** 323955be — docs(stage): close db lock retry repro
-- **Files changed:** 2 files
+- **Commit:** 9c52c4ef — fix(live): sweep orphan bar rings on startup
+- **Files changed:** 6 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-26-gold-db-per-process-lock-retry.md`
+  - `START_BOT.bat`
+  - `docs/runtime/stages/2026-05-26-ring-orphan-startup-sweep.md`
+  - `scripts/run_live_session.py`
+  - `scripts/tools/sweep_orphan_rings.py`
+  - `tests/test_scripts/test_sweep_orphan_rings.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
