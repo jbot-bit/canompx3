@@ -537,7 +537,7 @@
 ## Last Session
 - **Tool:** Codex (WSL)
 - **Date:** 2026-05-25
-- **Commit:** 89061b44 — fix(db): retry duckdb lock opens
+- **Commit:** f1ec4cdf — fix(db): retry duckdb lock opens
 - **Files changed:** 7 files
   - `HANDOFF.md`
   - `docs/runtime/stages/2026-05-26-gold-db-per-process-lock-retry.md`
