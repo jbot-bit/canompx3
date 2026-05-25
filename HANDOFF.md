@@ -584,11 +584,12 @@
 
 ## Last Session
 - **Tool:** Claude Code
-- **Date:** 2026-05-25
-- **Commit:** acc4a977 — fix(ci): seed temp DB for live_readiness subprocess test
-- **Files changed:** 2 files
-  - `docs/runtime/stages/2026-05-25-ci-live-readiness-db-seed.md`
-  - `tests/test_tools/test_live_readiness_report.py`
+- **Date:** 2026-05-26
+- **Commit:** 8b1a670c — fix(live): UTF-8 reconfigure guard so --live CONFIRM prompt survives cp1252 console
+- **Files changed:** 3 files
+  - `HANDOFF.md`
+  - `docs/runtime/stages/2026-05-26-live-launcher-cp1252-confirm-crash.md`
+  - `scripts/run_live_session.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
