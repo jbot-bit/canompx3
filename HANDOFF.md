@@ -9,6 +9,22 @@
 ## This Session (2026-05-24 — Codex live-readiness verification hardening)
 
 - **Tool:** Codex WSL, branch `main`.
+- **2026-05-25 Codex P2 orphan ring startup sweep:** Implemented the approved
+  startup-side `data/live_bars/*.json` orphan sweep without starting a live
+  session. Added new helper `scripts/tools/sweep_orphan_rings.py`; it deletes
+  only ring files whose `writer_pid` is a positive integer and provably dead,
+  and preserves live PID, corrupt JSON, missing PID, boolean/non-positive/non-int
+  PID, and unknown PID-status cases. Wired it into `START_BOT.bat` and
+  `scripts/run_live_session.py` before instance-lock acquisition; no
+  `trading_app/live/bar_ring.py` change was needed because `writer_pid`
+  metadata already existed. Verification: new test file RED first
+  (`ModuleNotFoundError`), then GREEN `10 passed`; broader run-live-session
+  script slice `57 passed`; launcher slice `6 passed`; scoped Ruff and
+  py_compile clean; controlled temp-dir PID repro deleted `DEAD.json` and
+  preserved `LIVE.json` without a broker/live session; full drift clean
+  (`164 passed, 20 advisory`). Operator Windows/live-session repro is still
+  pending because the bounded task explicitly forbade starting a broker/live
+  session. No `gold.db`, broker, allocation, profile, or live-session mutation.
 - **2026-05-25 Codex P1 gold.db lock-retry implementation:** Implemented the
   post-session `gold.db` per-process lock retry stage up to the manual repro
   boundary. Added canonical `pipeline/db_connect.py` helpers for read-only and

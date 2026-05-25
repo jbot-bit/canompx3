@@ -37,7 +37,7 @@ task: |
   both = canonical-source-delegation per `institutional-rigor.md` § 4.
 
 mode: IMPLEMENTATION
-status: DESIGN_LOCKED_PENDING_POST_SESSION_2026_05_26
+status: IMPLEMENTED_PENDING_OPERATOR_LIVE_REPRO_2026_05_25
 priority: P2
 deferred_reason: |
   Touches `trading_app/live/` and `scripts/run_live_session.py` — the
@@ -85,3 +85,68 @@ agent: claude (opus 4.7)
 - Windows PID-alive check: `tasklist /FI "PID eq <n>"` is the documented Windows API per Microsoft Learn (tasklist command reference).
 - POSIX equivalent: `os.kill(pid, 0)` documented per Python `os` module docs (signal 0 = existence-test only, no signal sent).
 - Cross-platform: `psutil.pid_exists(pid)` is the canonical Python wrapper if psutil is already a dependency — verify in `pyproject.toml` before adding.
+
+## Codex Implementation Pass
+
+Status: IMPLEMENTED_PENDING_OPERATOR_LIVE_REPRO. The startup-side sweep landed
+without starting a broker or live session. Automated verification is green,
+including a controlled temp-dir dead/live PID repro; the operator-only
+Windows/live-session repro remains pending because this bounded task explicitly
+forbade starting a live session.
+
+What landed:
+
+- Added [`scripts/tools/sweep_orphan_rings.py`](/home/joshd/canompx3/scripts/tools/sweep_orphan_rings.py)
+  with a conservative tri-state PID probe:
+  positive integer PID + provably dead => delete; live, corrupt JSON,
+  missing PID, boolean/non-positive/non-int PID, or unknown PID status =>
+  preserve.
+- Added focused coverage in
+  [`tests/test_scripts/test_sweep_orphan_rings.py`](/home/joshd/canompx3/tests/test_scripts/test_sweep_orphan_rings.py)
+  for empty-dir, dead-PID delete, live-PID preserve, corrupt JSON preserve,
+  missing PID preserve, ambiguous/non-positive PID preserve, and CLI
+  `--ring-dir --dry-run`.
+- Wired startup calls in [`START_BOT.bat`](/home/joshd/canompx3/START_BOT.bat)
+  and [`scripts/run_live_session.py`](/home/joshd/canompx3/scripts/run_live_session.py)
+  before instance-lock acquisition / normal live startup.
+- No change was needed in
+  [`trading_app/live/bar_ring.py`](/home/joshd/canompx3/trading_app/live/bar_ring.py);
+  existing `writer_pid` metadata was already sufficient.
+
+Verification:
+
+- RED proof:
+  `./.venv-wsl/bin/python -m pytest -q tests/test_scripts/test_sweep_orphan_rings.py`
+  -> 7 failed with `ModuleNotFoundError: No module named 'scripts.tools.sweep_orphan_rings'`.
+- GREEN:
+  `./.venv-wsl/bin/python -m pytest -q tests/test_scripts/test_sweep_orphan_rings.py`
+  -> 10 passed.
+- Regression slice:
+  `./.venv-wsl/bin/python -m pytest -q tests/test_scripts/test_sweep_orphan_rings.py tests/test_scripts/test_run_live_session_account_selection.py tests/test_scripts/test_run_live_session_account_id_sentinel.py tests/test_scripts/test_run_live_session_preflight.py tests/test_scripts/test_run_live_session_telemetry_maturity.py`
+  -> 57 passed.
+- Launcher slice:
+  `./.venv-wsl/bin/python -m pytest -q tests/test_tools/test_codex_launcher_scripts.py`
+  -> 6 passed.
+- Ruff:
+  `./.venv-wsl/bin/python -m ruff check scripts/tools/sweep_orphan_rings.py scripts/run_live_session.py tests/test_scripts/test_sweep_orphan_rings.py`
+  -> pass.
+- Py compile:
+  `./.venv-wsl/bin/python -m py_compile scripts/tools/sweep_orphan_rings.py scripts/run_live_session.py`
+  -> pass.
+- Controlled temp-dir PID repro:
+  actual POSIX PID probe deleted `DEAD.json` for pid `99999999` and preserved
+  `LIVE.json` for `os.getpid()` without starting a broker/live session.
+- Drift:
+  `./.venv-wsl/bin/python pipeline/check_drift.py --quiet`
+  -> clean, 164 passed, 20 advisory.
+
+Skipped manual acceptance:
+
+- SKIPPED — kill/restart orchestrator dead-PID repro — bounded task explicitly
+  said "Do not start a broker/live session." Residual risk narrowed by the
+  controlled POSIX dead/live PID repro; Windows `tasklist` branch still needs
+  operator confirmation on the real path.
+- SKIPPED — mid-session live-PID preserve smoke — same reason. Residual risk:
+  startup hook could still need a platform-specific manual confirmation on a
+  real Windows operator path, although the implementation preserves on any
+  non-dead or unprovable PID status.

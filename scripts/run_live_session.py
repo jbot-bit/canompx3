@@ -39,6 +39,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+from scripts.tools import sweep_orphan_rings
 from trading_app.live.instance_lock import acquire_instance_lock, release_instance_lock
 from trading_app.live.session_orchestrator import SessionOrchestrator
 
@@ -61,6 +62,16 @@ def _silence_pysignalr_negotiation_log() -> None:
     `_logger.warning('Connection closed: ...')` (websocket.py:211).
     """
     logging.getLogger("pysignalr.transport").setLevel(logging.WARNING)
+
+
+def _sweep_startup_orphan_rings() -> None:
+    try:
+        deleted = sweep_orphan_rings.sweep(sweep_orphan_rings.DEFAULT_RING_DIR)
+    except Exception:
+        log.warning("Startup ring sweep failed; continuing without deleting orphan rings", exc_info=True)
+        return
+    if deleted:
+        log.info("Startup ring sweep removed %d orphan ring file(s)", len(deleted))
 
 
 def _run_lightweight_component_self_tests(
@@ -884,6 +895,8 @@ def main() -> None:
 
     # Stop-file path — cleaned up after session ends (feeds no longer delete it)
     _stop_file = Path(__file__).parent.parent / "live_session.stop"
+
+    _sweep_startup_orphan_rings()
 
     # Multi-instrument mode: --all OR multi-instrument --profile
     if args.all or _is_multi_profile:

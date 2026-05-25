@@ -47,6 +47,7 @@ del /f /q "live_session.stop" >nul 2>&1
 :: Step 2: Clear stale bot state so dashboard shows clean STOPPED until orchestrator writes fresh data
 echo [2/5] Clearing stale state...
 del /f /q "data\bot_state.json" >nul 2>&1
+.venv\Scripts\python.exe scripts\tools\sweep_orphan_rings.py >nul 2>&1
 
 :: Step 3: Data freshness check
 echo [3/5] Checking data freshness...
