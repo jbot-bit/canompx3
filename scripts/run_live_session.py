@@ -25,6 +25,7 @@ Examples:
 
 import argparse
 import asyncio
+import io
 import logging
 import os
 import sys
@@ -32,6 +33,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+# Windows consoles default to cp1252, which cannot encode the CONFIRM prompt's
+# warning sign / em-dash and crashes input() before the operator can confirm.
+# Canonical guard mirrors research/allocator_scarcity_surface_audit.py.
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 logging.basicConfig(
     level=logging.INFO,

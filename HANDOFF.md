@@ -585,11 +585,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-25
-- **Commit:** f28f1f67 — [judgment] CI: cap pytest-cov<7 + utf-8 pip-audit (real green-up)
-- **Files changed:** 3 files
-  - `.github/workflows/ci.yml`
-  - `pyproject.toml`
-  - `uv.lock`
+- **Commit:** acc4a977 — fix(ci): seed temp DB for live_readiness subprocess test
+- **Files changed:** 2 files
+  - `docs/runtime/stages/2026-05-25-ci-live-readiness-db-seed.md`
+  - `tests/test_tools/test_live_readiness_report.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
