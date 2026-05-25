@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
+import duckdb
 import pytest
 
 from scripts.tools import live_readiness_report
@@ -675,7 +677,23 @@ def test_main_strict_zero_warn_returns_zero_when_green(monkeypatch, capsys) -> N
     assert "Live Readiness" in capsys.readouterr().out
 
 
-def test_json_cli_stdout_is_parseable_without_warning_preamble() -> None:
+def test_json_cli_stdout_is_parseable_without_warning_preamble(tmp_path: Path) -> None:
+    # CI has no gold.db by policy (CLAUDE.md "local disk, no cloud sync"), so
+    # the subprocess must run against a seeded temp DB rather than the dev's
+    # local gold.db. validated_setups is the only hard DB dependency in the
+    # report's build path (_load_validated_strategy_ids); seeding it with the
+    # two columns the deployable-shelf predicate reads is sufficient — all
+    # downstream lifecycle/survival/overlay readers fail-soft on missing tables.
+    # DUCKDB_PATH is honored only when the file exists (pipeline/paths.py).
+    seed_db = tmp_path / "gold.db"
+    seed_con = duckdb.connect(str(seed_db))
+    try:
+        seed_con.execute("CREATE TABLE validated_setups (strategy_id VARCHAR, status VARCHAR)")
+        seed_con.execute("INSERT INTO validated_setups VALUES ('MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100', 'active')")
+    finally:
+        seed_con.close()
+
+    env = {**os.environ, "DUCKDB_PATH": str(seed_db)}
     result = subprocess.run(
         [
             sys.executable,
@@ -688,6 +706,7 @@ def test_json_cli_stdout_is_parseable_without_warning_preamble() -> None:
         check=True,
         capture_output=True,
         text=True,
+        env=env,
     )
 
     assert result.stdout.lstrip().startswith("{")
