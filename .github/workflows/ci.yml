@@ -78,6 +78,12 @@ jobs:
           "
 
       - name: Security audit (advisory)
+        # PYTHONIOENCODING=utf-8 — pip-audit writes `→` (U+2192) in its
+        # description column; default Windows stdout cp1252 raises
+        # UnicodeEncodeError mid-flush and the step exits 1 (still advisory
+        # via continue-on-error, but the vuln list is lost). Force utf-8.
+        env:
+          PYTHONIOENCODING: utf-8
         run: uv run pip-audit --desc on
         continue-on-error: true
 

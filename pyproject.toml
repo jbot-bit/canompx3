@@ -40,7 +40,11 @@ dependencies = [
 dev = [
     "pytest>=8.3.4",
     "pytest-asyncio>=0.25.0",
-    "pytest-cov>=6.1.1",
+    # pytest-cov pinned <7 — 7.0.0 (2025-09-09) interacts with pluggy/_pytest
+    # capture-manager on GH-hosted Windows runner to produce KeyboardInterrupt
+    # mid-suite (n=20+ red runs 2026-05-22 → 2026-05-25). See
+    # `memory/feedback_ci_keyboardinterrupt_test_session_start_mutex_external_kill.md`.
+    "pytest-cov>=6.1.1,<7",
     "pytest-timeout>=2.3.1",
     "httpx>=0.27.0",
     "ruff>=0.15.0",
@@ -90,7 +94,7 @@ dev = [
 test = [
     "pytest>=8.3.4",
     "pytest-asyncio>=0.25.0",
-    "pytest-cov>=6.1.1",
+    "pytest-cov>=6.1.1,<7",
     "pytest-timeout>=2.3.1",
     "httpx>=0.27.0",
     "ruff>=0.15.0",
