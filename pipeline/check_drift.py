@@ -13672,6 +13672,73 @@ def check_test_writes_to_production_runtime_paths(tests_root: Path | None = None
     return violations
 
 
+def check_ci_pytest_no_timeout_plugin(workflows_dir: Path | None = None) -> list[str]:
+    """Forbid `--timeout=0` and require `-p no:timeout` on every `uv run pytest`
+    invocation in `.github/workflows/*.yml`.
+
+    Background: on the GH-hosted Windows runner with coverage instrumentation,
+    pytest-timeout 2.4.0's `thread` watchdog races pytest 9.0.2's capture-manager
+    teardown gap and fires `_thread.interrupt_main()` mid-suite, raising
+    KeyboardInterrupt and failing the job. Three earlier per-module patches
+    (mutex timeout override, integration-routing split, `--timeout=0` CLI)
+    failed to close the class because `--timeout=0` still loads the plugin
+    and arms the watchdog thread. The only stable fix is to unload the plugin
+    entirely with `-p no:timeout`; per-step `timeout-minutes` already provides
+    real hang protection at the GH-Actions layer.
+
+    Origin: 2026-05-25, n=4 same-class CI failure. Per the n=3+ same-class
+    doctrine threshold (`memory/feedback_n3_same_class_doctrine_threshold.md`),
+    the class is promoted to a mechanical drift check.
+
+    Returns
+    -------
+    list[str]
+        Empty when every `uv run pytest` line in every `.yml` under
+        `.github/workflows/` carries `-p no:timeout` and none carries
+        `--timeout=0`. One descriptive violation per offending file:line.
+    """
+    root = workflows_dir or (PROJECT_ROOT / ".github" / "workflows")
+    if not root.exists():
+        return []  # no workflows directory — nothing to enforce, fail-open
+
+    violations: list[str] = []
+    for yml in sorted(root.glob("*.yml")) + sorted(root.glob("*.yaml")):
+        try:
+            text = yml.read_text(encoding="utf-8")
+        except Exception as exc:
+            violations.append(
+                f"check_ci_pytest_no_timeout_plugin: could not read {yml.name}: {type(exc).__name__}: {exc}"
+            )
+            continue
+
+        rel = yml.relative_to(PROJECT_ROOT) if yml.is_relative_to(PROJECT_ROOT) else yml
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            # Skip comments — historical narration may reference the old flag.
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                continue
+            if "uv run pytest" not in line:
+                continue
+            if "--timeout=0" in line:
+                violations.append(
+                    f"{rel}:{lineno}: `--timeout=0` is forbidden in CI pytest "
+                    "invocations (the flag does not unload pytest-timeout; "
+                    "the watchdog thread still races capture-manager on Windows). "
+                    "Use `-p no:timeout` instead. See ci.yml comment + "
+                    "memory/feedback_n3_same_class_doctrine_threshold.md."
+                )
+            elif "-p no:timeout" not in line:
+                violations.append(
+                    f"{rel}:{lineno}: `uv run pytest` invocation must carry "
+                    "`-p no:timeout` to unload pytest-timeout entirely "
+                    "(prevents `_thread.interrupt_main()` race vs "
+                    "capture-manager on GH Windows runners). "
+                    "Per-step `timeout-minutes` already protects against real hangs."
+                )
+
+    return violations
+
+
 CHECKS = [
     (
         "Hardcoded 'MGC' SQL literals in generic pipeline code",
@@ -14466,6 +14533,12 @@ CHECKS = [
         "Tests forbid canonical production runtime-path literals (ALERT-CONTAM-N2, ralph iter 203)",
         check_test_writes_to_production_runtime_paths,
         False,  # blocking -- production-surface contamination class
+        False,
+    ),
+    (
+        "CI pytest invocations must unload pytest-timeout plugin (`-p no:timeout`); `--timeout=0` is forbidden (n=4 same-class watchdog-race close, 2026-05-25)",
+        check_ci_pytest_no_timeout_plugin,
+        False,  # blocking — class has failed CI 5+ times; further regression silently red-CIs main
         False,
     ),
 ]  # end CHECKS
