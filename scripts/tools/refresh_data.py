@@ -24,14 +24,13 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 # pipeline.paths import triggers .env loading via python-dotenv
-import duckdb  # noqa: E402
-
 from pipeline.asset_configs import (  # noqa: E402
     ACTIVE_ORB_INSTRUMENTS,
     ASSET_CONFIGS,
     get_outright_root,
 )
 from pipeline.build_daily_features import VALID_ORB_MINUTES  # noqa: E402
+from pipeline.db_connect import open_read_only_with_retry  # noqa: E402
 from pipeline.paths import GOLD_DB_PATH  # noqa: E402
 
 # Databento parent-symbol resolution is delegated to canonical
@@ -49,7 +48,7 @@ ORB_APERTURES = VALID_ORB_MINUTES  # daily_features needs ALL apertures for row 
 
 def get_last_bar_date(instrument: str) -> date | None:
     """Get the latest bar date for an instrument from gold.db."""
-    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+    con = open_read_only_with_retry(GOLD_DB_PATH)
     try:
         row = con.execute(
             "SELECT MAX(ts_utc)::DATE AS last_date FROM bars_1m WHERE symbol = $1",

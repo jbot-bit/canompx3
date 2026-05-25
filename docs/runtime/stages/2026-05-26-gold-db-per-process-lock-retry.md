@@ -46,7 +46,7 @@ task: |
     - any scripts/tools/*.py that opens gold.db
 
 mode: IMPLEMENTATION
-status: DESIGN_LOCKED_PENDING_POST_SESSION_2026_05_26
+status: IMPLEMENTED_PENDING_MANUAL_LOCK_REPRO
 priority: P1_CAPITAL_CLASS
 deferred_reason: |
   Filed during Brisbane Mon 2026-05-26 live-debut session (08:00 CME reopen
@@ -65,6 +65,49 @@ scope_lock:
 
 agent: claude (opus 4.7)
 ---
+
+## Codex Implementation Pass
+
+Status: implementation complete; not marked CLOSED because acceptance item 2
+requires a manual live contention repro while the orchestrator holds `gold.db`.
+
+What landed:
+
+- Added `pipeline/db_connect.py` with `open_read_only_with_retry()` and
+  `open_writer_with_retry()`.
+- Refactored `trading_app/strategy_validator.py` to delegate writer retry to
+  the canonical helper and use the read-only helper on validator DB readers.
+- Migrated `scripts/tools/refresh_data.py` and DB-dependent
+  `pipeline/check_drift.py` read-only opens to `open_read_only_with_retry()`.
+- Added `tests/test_pipeline/test_db_connect.py`.
+
+Verification:
+
+- `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_db_connect.py tests/test_trading_app/test_strategy_validator.py::TestOpenWriterWithRetry tests/test_tools/test_refresh_data.py -q`
+  -> 16 passed.
+- `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_check_drift.py tests/test_pipeline/test_check_drift_ws2.py tests/test_pipeline/test_check_drift_db.py -q`
+  -> 355 passed.
+- `./.venv-wsl/bin/python -m pyright pipeline/db_connect.py scripts/tools/refresh_data.py trading_app/strategy_validator.py pipeline/check_drift.py`
+  -> 0 errors, 0 warnings.
+- `./.venv-wsl/bin/python -m ruff check pipeline/ trading_app/ scripts/ tests/test_pipeline/test_db_connect.py --quiet`
+  -> pass.
+- `./.venv-wsl/bin/python scripts/tools/audit_behavioral.py` -> pass.
+- `./.venv-wsl/bin/python scripts/tools/audit_integrity.py` -> pass.
+- `./.venv-wsl/bin/python pipeline/check_drift.py --quiet` -> clean,
+  164 passed, 20 advisory.
+- `git diff --check` -> pass.
+- Full `./.venv-wsl/bin/python -m pytest -q` did not complete inside the
+  Codex sandbox: it timed out first on the known dashboard subprocess test
+  `test_prepare_profile_for_start_propagates_mode_to_subprocess`, then on a
+  Starlette `TestClient` portal-thread CSRF test when the first test was
+  deselected. Both affected dashboard checks passed outside the sandbox:
+  exact subprocess test -> 1 passed in 0.20s; CSRF file -> 10 passed in 0.24s.
+
+Pending before CLOSED:
+
+- Manual repro: start orchestrator so it holds `gold.db`, run
+  `python scripts/tools/refresh_data.py`, and verify lock contention waits and
+  succeeds instead of hard-failing.
 
 ## Blast Radius
 

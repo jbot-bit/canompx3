@@ -35,6 +35,8 @@ RESEARCH_DIR = PROJECT_ROOT / "research"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from pipeline.db_connect import open_read_only_with_retry
+
 # Module-level override for tests; production uses GOLD_DB_PATH from pipeline.paths
 GOLD_DB_PATH_FOR_CHECKS = None  # Set by tests; production uses GOLD_DB_PATH
 
@@ -518,7 +520,14 @@ def check_connection_leaks(pipeline_dir: Path) -> list[str]:
     violations = []
 
     for fpath in pipeline_dir.glob("*.py"):
-        if fpath.name in ("check_drift.py", "check_db.py", "dashboard.py", "health_check.py", "__init__.py"):
+        if fpath.name in (
+            "check_drift.py",
+            "check_db.py",
+            "dashboard.py",
+            "db_connect.py",
+            "health_check.py",
+            "__init__.py",
+        ):
             continue
 
         content = fpath.read_text(encoding="utf-8")
@@ -1697,6 +1706,7 @@ def check_db_config_usage() -> list[str]:
     EXEMPT = {
         "check_drift.py",
         "db_config.py",
+        "db_connect.py",
         "check_db.py",
         "init_db.py",
         "dashboard.py",
@@ -1825,12 +1835,10 @@ def check_validated_filters_registered(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return violations
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         rows = con.execute("SELECT DISTINCT filter_type FROM validated_setups ORDER BY filter_type").fetchall()
@@ -1907,12 +1915,10 @@ def check_no_e0_in_db(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return violations
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
         for table in ["orb_outcomes", "experimental_strategies", "validated_setups"]:
             count = (con.execute(f"SELECT COUNT(*) FROM {table} WHERE entry_model = 'E0'").fetchone() or (0,))[0]
@@ -1939,15 +1945,13 @@ def check_doc_stats_consistency(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci(
                     "  check_doc_stats_consistency SKIPPED: gold.db not found "
                     "— cannot verify validated/FDR-significant counts vs docs"
                 )
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
         validated_active = (
             con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone() or (0,)
@@ -2482,15 +2486,13 @@ def check_no_active_e3(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci(
                     "  check_no_active_e3 SKIPPED: gold.db not found "
                     "— cannot verify E3 entry-model deactivation on active shelf"
                 )
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
         count = (
             con.execute(
@@ -2525,15 +2527,13 @@ def check_no_active_e2_lookahead_filters(con=None) -> list[str]:
         from trading_app.config import is_e2_lookahead_filter
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci(
                     "  check_no_active_e2_lookahead_filters SKIPPED: gold.db not found "
                     "— cannot verify E2 look-ahead filter contamination on active shelf"
                 )
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         rows = con.execute(
@@ -2587,15 +2587,13 @@ def check_active_validated_filters_routable(con=None) -> list[str]:
         from trading_app.config import get_filters_for_grid
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci(
                     "  check_active_validated_filters_routable SKIPPED: gold.db not found "
                     "— cannot verify session-aware filter routing on active shelf"
                 )
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         rows = con.execute(
@@ -2659,15 +2657,13 @@ def check_active_micro_only_filters_on_real_micros(con=None) -> list[str]:
         from trading_app.config import ALL_FILTERS
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci(
                     "  check_active_micro_only_filters_on_real_micros SKIPPED: gold.db not found "
                     "— cannot verify MICRO-only filter routing"
                 )
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         rows = con.execute(
@@ -2737,15 +2733,13 @@ def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
         from trading_app.validation_provenance import StrategyTradeWindowResolver
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci(
                     "  check_active_micro_only_filters_after_micro_launch SKIPPED: gold.db not found "
                     "— cannot verify MICRO-only filters' validation windows"
                 )
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         rows = con.execute(
@@ -2832,12 +2826,10 @@ def check_active_native_promotion_provenance_populated(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return violations
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         missing_validated_cols = _missing_table_columns(
@@ -2931,12 +2923,10 @@ def check_active_native_trade_windows_match_provenance(con=None) -> list[str]:
         from trading_app.validation_provenance import StrategyTradeWindowResolver
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return violations
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         missing_validated_cols = _missing_table_columns(
@@ -3038,12 +3028,10 @@ def check_wf_coverage(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return []  # Skip if no DB (CI)
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
         for inst in sorted(WF_REQUIRED_INSTRUMENTS):
             row = con.execute(
@@ -3080,8 +3068,6 @@ def check_data_years_disclosure() -> list[str]:
     MIN_YEARS = 7
     warnings = []
     try:
-        import duckdb
-
         db_path = GOLD_DB_PATH_FOR_CHECKS
         if db_path is None:
             from pipeline.paths import GOLD_DB_PATH
@@ -3089,7 +3075,7 @@ def check_data_years_disclosure() -> list[str]:
             db_path = GOLD_DB_PATH
         if not Path(db_path).exists():
             return []
-        con = duckdb.connect(str(db_path), read_only=True)
+        con = open_read_only_with_retry(db_path)
         try:
             rows = con.execute(
                 """SELECT instrument, MIN(years_tested) as min_years,
@@ -3139,12 +3125,10 @@ def check_uncovered_fdr_strategies(con=None) -> list[str]:
         from trading_app.live_config import LIVE_MIN_EXPECTANCY_R, LIVE_PORTFOLIO
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return []
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         covered = {(spec.orb_label, spec.entry_model, spec.filter_type) for spec in LIVE_PORTFOLIO}
@@ -3842,15 +3826,13 @@ def check_orphaned_validated_strategies(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci(
                     "  check_orphaned_validated_strategies SKIPPED: gold.db not found "
                     "— cannot verify validated strategies have orb_outcomes coverage"
                 )
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
         rows = con.execute(
             """SELECT v.instrument, v.orb_minutes, COUNT(*) AS n_strategies
@@ -4020,12 +4002,10 @@ def check_audit_columns_populated(con=None) -> list[str]:
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return violations
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
         for inst in ACTIVE_ORB_INSTRUMENTS:
             total = (
@@ -4224,12 +4204,10 @@ def check_daily_features_row_integrity(con=None) -> list[str]:
         active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return violations
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
         # Find (trading_day, symbol) pairs with != expected_rows rows
         bad = con.execute(f"""
@@ -4281,12 +4259,10 @@ def check_htf_levels_integrity(con=None) -> list[str]:
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return violations
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
@@ -4445,12 +4421,10 @@ def check_htf_aperture_consistency(con=None) -> list[str]:
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return violations
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
@@ -4547,12 +4521,10 @@ def check_data_continuity(con=None) -> list[str]:
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return []
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
         for inst in sorted(ACTIVE_ORB_INSTRUMENTS):
             rows = con.execute(
@@ -4612,12 +4584,10 @@ def check_recent_garch_feature_coverage(con=None) -> list[str]:
         min_total_rows = GARCH_MIN_PRIOR_CLOSES + GARCH_PCT_MIN_PRIOR_VALUES + recent_rows
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return violations
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
@@ -4672,14 +4642,12 @@ def check_family_rr_locks_coverage(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci(
                     "  FAMILY RR LOCKS SKIPPED: gold.db not found — cannot verify lock coverage"
                 )
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
         # Check table exists
         tables = [
@@ -4947,12 +4915,10 @@ def check_stop_multiplier_consistency(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return violations
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         for table in ["experimental_strategies", "validated_setups"]:
@@ -5077,12 +5043,10 @@ def check_pipeline_staleness(con=None) -> list[str]:
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return []
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         stale_instruments = []
@@ -5304,14 +5268,12 @@ def check_holdout_contamination(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci(
                     "  HOLDOUT CHECK SKIPPED: gold.db not found — cannot verify holdout integrity"
                 )
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         # Canonical source for Mode A policy (Amendment 2.7).
@@ -5472,14 +5434,12 @@ def check_prereg_present_for_recent_runs(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci(
                     "  PREREG CHECK SKIPPED: gold.db not found -- cannot verify Criterion 1 compliance"
                 )
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
@@ -5545,12 +5505,10 @@ def check_validator_pool_freshness(con=None, drift_threshold: float = 0.10) -> l
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci("  POOL-FRESHNESS CHECK SKIPPED: gold.db not found")
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         # Recent promotions (last 7 days) with frozen discovery_k.
@@ -6285,14 +6243,12 @@ def check_phase_4_sha_integrity(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci(
                     "  PHASE 4 SHA INTEGRITY SKIPPED: gold.db not found — cannot verify hypothesis file SHA integrity"  # noqa: E501
                 )
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         from trading_app.holdout_policy import PHASE_4_1_SHIP_DATE
@@ -6508,15 +6464,13 @@ def check_prop_profiles_validated_alignment(con=None) -> list[str]:
     _own_con = False
     try:
         if con is None:
-            import duckdb
-
             db_path = _get_db_path()
             if not db_path.exists():
                 return _skip_db_check_for_ci(
                     "  PROP PROFILES ALIGNMENT SKIPPED: gold.db not found — "
                     "cannot verify deployed lane validation backing"
                 )
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = open_read_only_with_retry(db_path)
             _own_con = True
 
         from trading_app.prop_profiles import ACCOUNT_PROFILES
@@ -14645,13 +14599,13 @@ def main():
     skip_count = 0
 
     # Open shared read-only DB connection for all requires_db checks
-    duckdb = _import_duckdb_or_exit()
+    _import_duckdb_or_exit()
 
     _shared_con = None
     db_path = _get_db_path()
     if db_path.exists():
         try:
-            _shared_con = duckdb.connect(str(db_path), read_only=True)
+            _shared_con = open_read_only_with_retry(db_path)
         except Exception as exc:
             if not quiet_mode:
                 print(f"  WARNING: could not open DB ({exc}) — DB-dependent checks will skip")

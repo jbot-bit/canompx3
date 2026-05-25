@@ -28,6 +28,7 @@ import sys
 import time
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import cast
 
 # duckdb lazy-loaded inside the 4 functions that use it (PEP 8 — delayed
 # imports for performance; duckdb's own import is modest but deferring keeps
@@ -35,6 +36,8 @@ from pathlib import Path
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.audit_log import get_git_sha
 from pipeline.cost_model import get_cost_spec, stress_test_costs
+from pipeline.db_connect import open_read_only_with_retry
+from pipeline.db_connect import open_writer_with_retry as _open_writer_with_retry
 from pipeline.dst import (
     DST_AFFECTED_SESSIONS,
     classify_dst_verdict,
@@ -87,33 +90,6 @@ from trading_app.validation_provenance import StrategyTradeWindowResolver
 from trading_app.walkforward import append_walkforward_result
 
 logger = get_logger(__name__)
-
-
-def _open_writer_with_retry(db_path, *, attempts: int = 6, base_delay: float = 1.0, max_delay: float = 30.0):
-    # Peer process (sibling worktree, MCP read, IDE) can hold gold.db for
-    # milliseconds during validator's write-back; without retry the entire
-    # WF compute (~750s) is lost. Retries only on lock-class IOException;
-    # all other DuckDB errors propagate unchanged. Total wait <= ~61s.
-    import random
-
-    import duckdb as _duckdb
-
-    last_exc: Exception | None = None
-    for i in range(attempts):
-        try:
-            return _duckdb.connect(str(db_path))
-        except _duckdb.IOException as exc:
-            msg = str(exc)
-            if "being used by another process" not in msg and "could not set lock" not in msg:
-                raise
-            last_exc = exc
-            if i == attempts - 1:
-                break
-            delay = min(base_delay * (2**i), max_delay) * (0.75 + 0.5 * random.random())
-            logger.warning(f"[writer-retry] gold.db locked (attempt {i + 1}/{attempts}); sleeping {delay:.1f}s")
-            time.sleep(delay)
-    assert last_exc is not None
-    raise last_exc
 
 
 # Force unbuffered stdout
@@ -689,8 +665,6 @@ def _walkforward_worker(
     """
     t0 = time.monotonic()
 
-    import duckdb
-
     from pipeline.db_config import configure_connection
     from trading_app.walkforward import run_walkforward
 
@@ -703,7 +677,7 @@ def _walkforward_worker(
     }
 
     try:
-        with duckdb.connect(db_path_str, read_only=True) as con:
+        with open_read_only_with_retry(db_path_str) as con:
             configure_connection(con, writing=False)
 
             # Phase 4b: Walk-forward
@@ -953,7 +927,7 @@ def _check_criterion_8_oos(
     row_dict: dict, db_path: Path | None, *, strict_oos_n: bool = False
 ) -> tuple[str | None, str | None]:
     verdict = _evaluate_criterion_8_oos(row_dict, db_path, strict_oos_n=strict_oos_n)
-    return verdict["status"], verdict["reason"]
+    return cast("str | None", verdict["status"]), cast("str | None", verdict["reason"])
 
 
 def _evaluate_criterion_8_oos(row_dict: dict, db_path: Path | None, *, strict_oos_n: bool = False) -> dict[str, object]:
@@ -1031,11 +1005,9 @@ def _evaluate_criterion_8_oos(row_dict: dict, db_path: Path | None, *, strict_oo
     orb_label_str: str = str(orb_label)
     is_expr_f: float = float(is_expr)  # type: ignore[arg-type]
 
-    import duckdb
-
     effective_db = db_path if db_path is not None else GOLD_DB_PATH
     oos_pnl_r: list[float] = []
-    with duckdb.connect(str(effective_db), read_only=True) as oos_con:
+    with open_read_only_with_retry(effective_db) as oos_con:
         # Triple-join with orb_minutes prevents the 3x inflation trap.
         oos_rows = oos_con.execute(
             """
@@ -1256,7 +1228,7 @@ def _check_phase_4_pre_flight_gates(
         hypothesis_meta_cache,
         testing_mode=testing_mode,
     )
-    return verdict["status"], verdict["reason"]
+    return cast("str | None", verdict["status"]), cast("str | None", verdict["reason"])
 
 
 def _evaluate_phase_4_pre_flight_gates(
@@ -2522,10 +2494,8 @@ def _check_mode_a_holdout_integrity(db_path: Path | None, instrument: str) -> No
         # The discovery CLI gate would have caught contamination at entry.
         return
 
-    import duckdb
-
     sacred_year = str(HOLDOUT_SACRED_FROM.year)
-    with duckdb.connect(str(effective_path), read_only=True) as con:
+    with open_read_only_with_retry(effective_path) as con:
         row = con.execute(
             """SELECT COUNT(*) FROM experimental_strategies
                WHERE instrument = ?
@@ -2598,9 +2568,7 @@ def _check_prereg_present(
         # Fresh checkout / new repo: no prereg dir = no rows to gate.
         return
 
-    import duckdb
-
-    with duckdb.connect(str(effective_path), read_only=True) as con:
+    with open_read_only_with_retry(effective_path) as con:
         rows = con.execute(
             """SELECT DISTINCT CAST(created_at AS DATE) AS d
                FROM experimental_strategies

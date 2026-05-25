@@ -9,6 +9,23 @@
 ## This Session (2026-05-24 — Codex live-readiness verification hardening)
 
 - **Tool:** Codex WSL, branch `main`.
+- **2026-05-25 Codex P1 gold.db lock-retry implementation:** Implemented the
+  post-session `gold.db` per-process lock retry stage up to the manual repro
+  boundary. Added canonical `pipeline/db_connect.py` helpers for read-only and
+  writer opens; migrated `scripts/tools/refresh_data.py`,
+  `trading_app/strategy_validator.py`, and DB-dependent
+  `pipeline/check_drift.py` read-only opens to the helper. Existing validator
+  writer retry now delegates to the canonical helper. Stage file
+  `docs/runtime/stages/2026-05-26-gold-db-per-process-lock-retry.md` is
+  `IMPLEMENTED_PENDING_MANUAL_LOCK_REPRO`, not CLOSED, because acceptance still
+  requires a real orchestrator-held `gold.db` contention repro. Verification:
+  DB-connect/validator/refresh tests 16 passed; check-drift test slice 355
+  passed; scoped Pyright 0 errors; Ruff clean; behavioral audit clean;
+  integrity audit clean; full drift clean (164 passed, 20 advisory);
+  `git diff --check` clean. Full pytest did not complete inside the Codex
+  sandbox because two dashboard/TestClient cases timed out; both passed outside
+  sandbox (exact subprocess test 1 passed in 0.20s; CSRF file 10 passed in
+  0.24s). No live allocation, broker, profile, lane, or gold.db data mutation.
 - **2026-05-25 project tidy/code-review cleanup:** Fixed a Ruff failure in
   `tests/test_trading_app/test_lane_allocator.py` by removing stale unused
   `_classify_status()` monthly fixtures left after the regime-only signature
@@ -518,14 +535,17 @@
 - **Stage NOT closed:** `docs/runtime/stages/2026-05-18-dashboard-start-signal-preflight-mode.md` remains open. Criteria 1-4 met with positive test coverage; criteria 5-6 show no regression vs baseline; criterion 7 (operator hits `POST /api/action/start?mode=signal&profile=topstep_50k_mnq_auto`, confirms non-blocked status + `logs/live/live_signals_2026-05-18.jsonl` appears within 30s) requires a live dashboard run.
 
 ## Last Session
-- **Tool:** Claude Code
+- **Tool:** Codex (WSL)
 - **Date:** 2026-05-25
-- **Commit:** f19ae16e — [judgment] live-bar-ring iter 2: bars_source_changed SSE auto-fallback
-- **Files changed:** 4 files
+- **Commit:** 89061b44 — fix(db): retry duckdb lock opens
+- **Files changed:** 7 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_bot_dashboard_sse.py`
-  - `trading_app/live/bot_dashboard.html`
-  - `trading_app/live/bot_dashboard.py`
+  - `docs/runtime/stages/2026-05-26-gold-db-per-process-lock-retry.md`
+  - `pipeline/check_drift.py`
+  - `pipeline/db_connect.py`
+  - `scripts/tools/refresh_data.py`
+  - `tests/test_pipeline/test_db_connect.py`
+  - `trading_app/strategy_validator.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
