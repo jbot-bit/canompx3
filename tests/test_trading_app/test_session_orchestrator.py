@@ -16,8 +16,20 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from trading_app.live import bar_ring
 from trading_app.live.position_tracker import PositionState, PositionTracker
 from trading_app.live.session_orchestrator import SessionOrchestrator
+
+
+@pytest.fixture(autouse=True)
+def _isolate_ring_dir(tmp_path, monkeypatch):
+    """Redirect bar_ring.RING_DIR to a tmp dir for every test in this module.
+
+    post_session() writes shutdown_trace breadcrumbs via bar_ring; without this
+    isolation those writes land in the real data/live_bars/ and persist between
+    runs (the source of the leaked MagicMock-tagged MGC.shutdown_trace.txt).
+    """
+    monkeypatch.setattr(bar_ring, "RING_DIR", tmp_path / "live_bars")
 
 
 class _CaptureSignalRotator:
@@ -267,6 +279,11 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._bar_persister = MagicMock()
     orch._bar_persister.append.return_value = None
     orch._bar_persister.flush_to_db.return_value = 0
+    # bar_count is an `int` property on the real BarPersister (len(self._bars));
+    # a bare MagicMock returns a Mock here, which post_session() str-formats into
+    # the shutdown_trace file and mis-evaluates `bars_captured == 0`, driving the
+    # ring-preserved branch on an empty session. Honor the canonical int contract.
+    orch._bar_persister.bar_count = 0
     orch._positions = PositionTracker()
     orch._last_bar_at = None
     orch._kill_switch_fired = False

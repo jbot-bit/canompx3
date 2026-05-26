@@ -114,6 +114,36 @@ closed_note: |
     - Manual: recover_ring.py against current MNQ.json → 61 bars in
       bars_1m, ring deleted.
     - Next live smoke: shutdown_trace file exists with branch tag.
+
+  2026-05-26 Iteration 2 verification (go-live plan Stage 3) — code-clearable
+  parts COMPLETE; status -> AUDIT_CLOSED_PENDING_LIVE_SMOKE:
+    - All three iter-2 fixes confirmed shipped in commit 73b65747:
+      shutdown_trace breadcrumb (bar_ring.write_shutdown_trace +
+      session_orchestrator.py:3865-3903), recover_ring.py, bars_source_changed
+      SSE (bot_dashboard.py:2886-2890 + bot_dashboard.html:5783/5815).
+    - shutdown_trace breadcrumb already PROVEN by a real session: MNQ trace
+      showed post_session:entry -> drain_ok -> flush_attempt:bars_captured=0 ->
+      flush_returned:n_persisted=0 -> ring_cleared:empty_session. Definitively
+      answers the 7b "ring not deleted" sub-hypothesis for empty sessions: ring
+      IS cleared on clean shutdown.
+    - recover_ring.py PROVEN end-to-end (--dry-run against live MNQ.json: 2/2
+      bars pass is_valid(), no write). Canonical delegation verified (flush_to_db,
+      GOLD_DB_PATH, fail-closed exit codes 1/2/3).
+    - NEW FINDING (fixed this session): the MGC.shutdown_trace.txt on disk carried
+      `bars_captured=<MagicMock>` — test_session_orchestrator.py drove the real
+      post_session() shutdown block with a bare-MagicMock _bar_persister (bar_count
+      auto-Mock) and no RING_DIR isolation, leaking forensic files into the real
+      data/live_bars/ AND mis-evaluating `bars_captured == 0` (MagicMock != 0) into
+      the ring_preserved branch on empty sessions. Two-part test-only fix: (a) mock
+      persister now sets bar_count=0 to honor the canonical int contract; (b) autouse
+      _isolate_ring_dir fixture redirects RING_DIR to tmp_path. Production path
+      unchanged (real bar_count is len()->int, always correct). Stale leaked traces
+      deleted (local, gitignored — never tracked).
+    - Verification: 235/235 test_session_orchestrator pass + ZERO leaked
+      *.shutdown_trace.txt after run; 59/59 iter-2 companion tests; drift 165/0.
+    - Remaining for CLOSED: done-criterion 7 live-market smoke (7b ring-deleted on
+      Ctrl+C with NON-empty session; 7c SSE auto-fallback without browser refresh).
+      Operator/market-dependent — go-live plan Stage 4 (TOKYO_OPEN tonight).
 ---
 
 ## Blast Radius
