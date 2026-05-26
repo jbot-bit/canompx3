@@ -452,9 +452,16 @@ def _build_strict_zero_warn_summary(
         elif lane.get("lifecycle_blocked"):
             blockers.append(f"Active lane lifecycle blocked: {strategy_id}")
 
+    # Fail-closed residual: the per-lane loop covers alarms on the active set.
+    # The SR-file aggregate must still surface any alarm it counts that those
+    # entries do NOT account for. A POSITIVE delta = orphan alarms on strategies
+    # dropped from the active set. A mismatch in either direction (e.g. an active
+    # lane shows ALARM that the SR-file count omits) is a data-integrity problem
+    # that must block rather than be silently suppressed by subtraction. So fire
+    # whenever the counts disagree at all and at least one alarm exists.
     alarm_count = int((c12.get("counts") or {}).get("ALARM", 0) or 0)
-    uncovered_alarms = alarm_count - len(alarmed_active_ids)
-    if uncovered_alarms > 0:
+    if alarm_count != len(alarmed_active_ids) and (alarm_count > 0 or alarmed_active_ids):
+        uncovered_alarms = alarm_count - len(alarmed_active_ids)
         blockers.append(f"Criterion 12 alarm not on active lane ({uncovered_alarms})")
 
     if str(telemetry_maturity.get("verdict") or "") != VERDICT_MATURE:

@@ -667,6 +667,32 @@ def test_strict_zero_warn_flags_alarm_not_on_active_lane(tmp_path: Path, monkeyp
     assert "(2)" in aggregate[0]
 
 
+def test_strict_zero_warn_flags_alarm_count_mismatch_failclosed(tmp_path: Path, monkeypatch) -> None:
+    """Fail-closed integrity: an active lane in ALARM that the SR-file count
+    omits (count < active-lane alarms) must still surface the aggregate rather
+    than be silently suppressed by a negative subtraction."""
+    allocation_path = tmp_path / "lane_allocation.json"
+    _install_happy_path(
+        monkeypatch,
+        allocation_path,
+        # SR file reports 0 alarms, but the active lane shows ALARM — a divergence
+        # that must not be silently swallowed.
+        criterion12={"valid": True, "counts": {"ALARM": 0}, "state_age_days": 0},
+        strategy_state={"sr_status": "ALARM", "sr_review_outcome": "watch"},
+    )
+
+    report = live_readiness_report.build_live_readiness_report(
+        db_path=tmp_path / "gold.db",
+        allocation_path=allocation_path,
+    )
+
+    blockers = report["strict_zero_warn"]["blockers"]
+    assert report["strict_zero_warn"]["green"] is False
+    # The per-lane SR-alarm entry fires AND the mismatch aggregate fires.
+    assert any("sr alarm" in b.lower() and "SID_A" in b for b in blockers)
+    assert any("alarm not on active lane" in b.lower() for b in blockers)
+
+
 def test_strict_zero_warn_blocks_when_live_stage_pending(tmp_path: Path, monkeypatch) -> None:
     allocation_path = tmp_path / "lane_allocation.json"
     _install_happy_path(

@@ -610,12 +610,11 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-26
-- **Commit:** 5b2e00d9 — [judgment] MED fix(live-readiness): de-duplicate SR-alarm strict blockers (go-live Stage 2)
-- **Files changed:** 4 files
+- **Commit:** 58a9f9f5 — [judgment] MED fix(test): isolate bar-ring shutdown_trace + honor bar_count int contract (go-live Stage 3)
+- **Files changed:** 3 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-26-sr-alarm-strict-double-counting.md`
-  - `scripts/tools/live_readiness_report.py`
-  - `tests/test_tools/test_live_readiness_report.py`
+  - `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md`
+  - `tests/test_trading_app/test_session_orchestrator.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
