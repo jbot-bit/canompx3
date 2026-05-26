@@ -5708,7 +5708,11 @@ const ChartCockpit = (() => {
     }
   }
 
-  return { init, loadInitial, pushBar, markSignal, setInstrument, applyOrbFromState, setTimeframe, aggregateBars };
+  // Read-only accessor so SseClient can re-snapshot the focused instrument on
+  // tab-revisible / staleness recovery (it has no other handle on chart state).
+  function getInstrument() { return currentInstrument; }
+
+  return { init, loadInitial, pushBar, markSignal, setInstrument, applyOrbFromState, setTimeframe, aggregateBars, getInstrument };
 })();
 
 /* ── Hero state-machine extension (Stage 3.5) ─────────────────────── */
@@ -5783,6 +5787,17 @@ const SseClient = (() => {
   let pollersActive = true;  // pollers initialized at boot; SSE pauses them when OPEN
   let fallbackTimer = null;
   let backoff = 1000;
+  // Liveness recovery (idle / tab-switch / zombie-stall). Updated on EVERY inbound
+  // SSE event (heartbeats included — they prove the connection is alive even when no
+  // bars print). Watchdog + visibilitychange handler read this to decide a re-sync.
+  let lastInboundAt = Date.now();
+  let watchdogTimer = null;
+  // No bar/heartbeat for this long while the tab is VISIBLE => connection is a zombie
+  // (MDN: EventSource may not fire onerror when a backgrounded socket silently stalls).
+  // Server heartbeats every 1s (_SSE_HEARTBEAT_INTERVAL_S), so 20s of total silence is
+  // well past any normal gap and below the server's 120s HEARTBEAT_STALE_AFTER_S.
+  const STALE_RESYNC_MS = 20000;
+  const WATCHDOG_INTERVAL_MS = 5000;
 
   function _pausePollers() {
     // SSE OPEN: pause the always-on pollers AND tear down any fallback-only ones
@@ -5855,6 +5870,7 @@ const SseClient = (() => {
       }
     };
     const onTyped = (type) => (ev) => {
+      lastInboundAt = Date.now();  // any inbound event (incl. heartbeat) proves liveness
       if (ev.lastEventId) { const n = parseInt(ev.lastEventId, 10); if (!isNaN(n)) lastEventId = n; }
       let data; try { data = JSON.parse(ev.data); } catch (_) { return; }
       handle(type, data);
@@ -5904,7 +5920,61 @@ const SseClient = (() => {
     }
   }
 
-  return { connect };
+  // Recover the chart after the connection has been idle/stalled. Two layers,
+  // matching the server's own recovery surfaces:
+  //   1. Force EventSource reconnect when it isn't OPEN. Its onerror-driven retry
+  //      can miss a zombie background socket (MDN: error fires on failed-open/CLOSED,
+  //      not on a silently throttled connection), so we kick it explicitly.
+  //   2. Re-snapshot the chart from /api/bars-recent (canonical gold.db history).
+  //      Last-Event-ID replay only covers the last _SSE_RING_SIZE=100 events; a long
+  //      idle overflows the ring, so the snapshot is what actually fills the gap.
+  //      This is the exact path the server's bars_source_changed event already uses.
+  function _resync(reason) {
+    try {
+      if (!es || es.readyState !== EventSource.OPEN) {
+        backoff = 1000;            // reset backoff — this is a fresh user-driven attempt
+        if (es) { try { es.close(); } catch (_) {} }
+        connect();
+      }
+      const inst = (typeof ChartCockpit !== "undefined" && typeof ChartCockpit.getInstrument === "function")
+        ? ChartCockpit.getInstrument() : null;
+      if (inst) { ChartCockpit.loadInitial(inst); }
+      lastInboundAt = Date.now();  // grace period so the watchdog doesn't immediately re-fire
+      console.info("[SSE] resync (" + reason + ")");
+    } catch (e) {
+      console.warn("[SSE] resync failed", e);
+    }
+  }
+
+  function _startWatchdog() {
+    if (watchdogTimer) return;
+    watchdogTimer = setInterval(() => {
+      // Only act while the operator is actually looking. A hidden tab is EXPECTED to
+      // be throttled by the browser; resyncing it would burn fetches for no benefit
+      // and the visibilitychange handler covers the return-to-foreground case.
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastInboundAt > STALE_RESYNC_MS) {
+        _resync("watchdog-stale-" + Math.round((Date.now() - lastInboundAt) / 1000) + "s");
+      }
+    }, WATCHDOG_INTERVAL_MS);
+  }
+
+  // MDN Page Visibility API: on return-to-foreground re-sync immediately rather than
+  // waiting up to WATCHDOG_INTERVAL_MS for the watchdog tick.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      // A backgrounded EventSource may have silently stalled; if we've been away long
+      // enough that bars were likely missed, force the full recovery.
+      if (Date.now() - lastInboundAt > STALE_RESYNC_MS) {
+        _resync("tab-visible");
+      } else if (es && es.readyState !== EventSource.OPEN) {
+        // Short hide but socket isn't OPEN — just kick the reconnect, no snapshot needed.
+        _resync("tab-visible-reconnect");
+      }
+    }
+  });
+
+  return { connect, _startWatchdog };
 })();
 
 /* ── Notification API (Stage 3.6) ─────────────────────────────────── */
@@ -6065,6 +6135,7 @@ const HoldToKill = (() => {
     // v1 default (matches _bars_watcher fallback in bot_dashboard.py:2585).
     ChartCockpit.loadInitial("MNQ");
     SseClient.connect();
+    SseClient._startWatchdog();  // self-heal chart after idle / tab-switch / zombie-stall
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", go, { once: true });
