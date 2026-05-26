@@ -610,11 +610,11 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-26
-- **Commit:** db6565dd — [judgment] MED fix(live-readiness): fail-closed SR-alarm count mismatch (review of 5b2e00d9)
+- **Commit:** 9302b2ce — [judgment] LOW fix(recover_ring): map non-duckdb flush exception to fail-closed exit 3
 - **Files changed:** 3 files
   - `HANDOFF.md`
-  - `scripts/tools/live_readiness_report.py`
-  - `tests/test_tools/test_live_readiness_report.py`
+  - `scripts/tools/recover_ring.py`
+  - `tests/test_trading_app/test_recover_ring.py`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

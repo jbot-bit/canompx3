@@ -144,6 +144,23 @@ closed_note: |
     - Remaining for CLOSED: done-criterion 7 live-market smoke (7b ring-deleted on
       Ctrl+C with NON-empty session; 7c SSE auto-fallback without browser refresh).
       Operator/market-dependent — go-live plan Stage 4 (TOKYO_OPEN tonight).
+
+  2026-05-26 Iter-2 adversarial-audit gate (done-criterion 6) — COMPLETE:
+    - evidence-auditor (independent context) on commit 73b65747 delta only (base
+      6d5c248b already audited a29e02fb). Verdict: CONDITIONAL, no CRITICAL.
+    - ACCEPT: shutdown_trace breadcrumb-before-action on every post_session branch
+      + reset=True truncate (session_orchestrator.py:3865-3903); ordering
+      drain->flush->clear with clear_ring only inside n_persisted>0/bars_captured==0
+      (no base-audit-#2-class data-loss); SSE fire-once guarded on None/True/False
+      (bot_dashboard.py:2883-2893); recover_ring canonical flush + return-0 exit 3.
+    - One LOW finding closed (commit 9302b2ce): recover_ring.recover() bare
+      flush_to_db() — non-(duckdb.Error,OSError) exception escaped as traceback,
+      breaking the documented exit-3 fail-closed contract. Ring was still preserved
+      (no data loss). Wrapped in except Exception -> exit 3 + regression test.
+    - Deferred (auditor LOW): private _bars/_lock coupling in recover_ring —
+      structural follow-on, not in this scope.
+    - Gate now PASS for next phase: only done-criterion 7 live-market smoke
+      (Stage 4, operator/market-dependent) remains before CLOSED.
 ---
 
 ## Blast Radius
