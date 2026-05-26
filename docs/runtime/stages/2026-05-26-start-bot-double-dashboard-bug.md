@@ -1,8 +1,23 @@
 ---
 task: BUG — `START_BOT.bat` opens 2 dashboard HTML tabs / 2 dashboard processes despite line 62-63 setting `CANOMPX3_DASHBOARD_ORIGIN=1` to suppress the orchestrator's auto-dashboard spawn. Reproduced twice 2026-05-26 by operator. Comment in .bat explicitly warns "without this env var, two dashboards + two browser tabs open and race for live_journal.db (fails preflight check 6)" — the suppression mechanism is in place but not firing. Need to trace: (a) where the orchestrator side reads `CANOMPX3_DASHBOARD_ORIGIN`, (b) why setting it via `set X=1 && python ...` in the .bat is not propagating to the python process, (c) whether the var name drifted on the consumer side. Likely candidates: `scripts/run_live_session.py`, `trading_app/live/session_orchestrator.py`, `trading_app/live/bot_dashboard.py`.
-mode: IMPLEMENTATION
-status: DEFERRED_POST_SMOKE_2026_05_26
+mode: CLOSED
+status: CLOSED_NOT_A_BUG_2026_05_27
 priority: P2
+closed_note: |
+  ROOT CAUSE (2026-05-27, evidence via Win32_Process parent-child trace + sys._base_executable):
+  NOT A BUG. The "2 dashboard / 2 orchestrator processes" are venv-stub -> base-interpreter
+  PAIRS, not duplicates. `.venv\Scripts\python.exe` is a uv launcher STUB (uv 0.10.10);
+  `sys.executable` = the stub, `sys._base_executable` =
+  C:\Users\joshd\AppData\Roaming\uv\python\cpython-3.13.9-windows-x86_64-none\python.exe.
+  The stub immediately forwards verbatim argv to the base interpreter, so every launch shows
+  PID-pair (parent stub, child worker) sharing one command line. Proven: child PID's
+  ParentProcessId == the stub PID; only the child acquires the instance lock / runs threads.
+  The CANOMPX3_DASHBOARD_ORIGIN=1 suppression works correctly; reproduced the pairing even
+  with dashboard suppressed and with --signal-only, confirming it is launch-layer (pre-Python),
+  independent of mode / copies=2 / is_express_funded. `stop_live.ps1` lists both PIDs because
+  they share argv — killing both is correct (kills stub+worker). No code fix; no live-trading
+  safety issue (single logical orchestrator = single order router). Reconcile note: venv is
+  Python 3.13.9 (uv-managed), not 3.11.
 deferred_reason: |
   Filed during Brisbane Mon 2026-05-26 live debut window (markets opening,
   user prioritized smoke test execution over investigation). Operator

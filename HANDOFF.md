@@ -608,13 +608,12 @@ Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes 
 - **Stage NOT closed:** `docs/runtime/stages/2026-05-18-dashboard-start-signal-preflight-mode.md` remains open. Criteria 1-4 met with positive test coverage; criteria 5-6 show no regression vs baseline; criterion 7 (operator hits `POST /api/action/start?mode=signal&profile=topstep_50k_mnq_auto`, confirms non-blocked status + `logs/live/live_signals_2026-05-18.jsonl` appears within 30s) requires a live dashboard run.
 
 ## Last Session
-- **Tool:** Claude Code (Opus 4.7)
+- **Tool:** Claude Code
 - **Date:** 2026-05-26
-- **Tip:** 9f444f52 — docs(stage): record iter-2 adversarial-audit gate PASS (CONDITIONAL, 1 LOW closed 9302b2ce)
-- **Session summary (go-live Stage 3 — iter-2 adversarial-audit gate):** Ran the mandatory adversarial-audit gate (`.claude/rules/adversarial-audit-gate.md`) on the live-bar-ring iter-2 production code (commit `73b65747`) — the gate had NOT been run on iter-2 (only the base `6d5c248b` was audited via `a29e02fb`). Independent-context `evidence-auditor` verdict: **CONDITIONAL, no CRITICAL**. ACCEPT on shutdown_trace breadcrumb-before-action ordering, drain→flush→clear sequence (no base-audit-#2-class data-loss), SSE fire-once guard, and recover_ring canonical flush. One **LOW** finding fixed (`9302b2ce`): `recover_ring.recover()` called `flush_to_db()` bare — `flush_to_db` catches only `(duckdb.Error, OSError)`, so any other exception class escaped as an uncontrolled traceback, breaking the documented fail-closed exit-3 contract (ring was still preserved — exit-contract gap, not data-loss). Wrapped in `except Exception` → exit 3 + regression test. Verify: 7/7 test_recover_ring, 37/37 iter-2 companion suite, drift 165/0. Deferred (auditor LOW): private `_bars`/`_lock` coupling in recover_ring — structural follow-on.
-- **5 commits pushed this session:** `5b2e00d9` (Stage 2 SR-alarm strict de-dup), `58a9f9f5` (Stage 3 test isolation), `db6565dd` (Stage 2 review fix), `9302b2ce` (this session's audit-finding fix), `9f444f52` (stage-file gate record).
-- **NEXT — go-live Stage 3 CLOSED + Stage 4 (operator/market-dependent):** the iter-2 audit gate (done-criterion 6) is now PASS. Only done-criterion 7 live-market smoke remains before the bar-ring stage can move from `AUDIT_CLOSED_PENDING_LIVE_SMOKE` → `CLOSED`: **7b** ring deleted on Ctrl+C with a NON-empty session, **7c** SSE auto-fallback without browser refresh. Both need tonight's **TOKYO_OPEN (10:00 AEST)** signal-only session — operator-attended. After the smoke, re-run `python scripts/tools/live_readiness_report.py --strict-zero-warn` and confirm green (or document the only-remaining-advisory telemetry day count). Plan: `~/.claude/plans/get-live-trading-working-safe-secure.md` Stages 4-5. No code-clearable go-live work remains pre-market.
-- **No DB mutation. No allocator file mutation.** Audit + one code fix + tests + stage/handoff docs.
+- **Commit:** 9adbfce2 — feat(dashboard): session-trim chart default view to latest ORB window
+- **Files changed:** 2 files
+  - `docs/runtime/stages/2026-05-26-dashboard-focus-strip-bloomberg.md`
+  - `trading_app/live/bot_dashboard.html`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto

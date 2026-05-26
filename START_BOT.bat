@@ -35,7 +35,10 @@ set ACTIVE_PROFILE=topstep_50k_mnq_auto
 
 :: Default mode is SIGNAL (no broker orders). For demo/live, edit BOT_MODE_FLAGS.
 :: Multi-instrument profile + --demo/--live is rejected by run_live_session.py.
-set BOT_MODE_FLAGS=--signal-only
+:: 2026-05-27: --demo for TOKYO_OPEN order-path proving on the 50k demo account
+:: (routes orders to TopstepX practice endpoint, zero real capital). Revert to
+:: --signal-only to stop placing demo orders.
+set BOT_MODE_FLAGS=--demo
 
 :: Step 1: Clean up stale lock + stop files (don't kill python — other terminals may be running)
 ::   The .stop file triggers graceful-shutdown on the next feed scan; a stale one
