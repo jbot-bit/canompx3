@@ -223,6 +223,10 @@ class ExecutionEngine:
         self.active_trades: list[ActiveTrade] = []
         self.completed_trades: list[ActiveTrade] = []
         self.daily_pnl_r: float = 0.0
+        # Cumulative realized daily P&L in dollars (per-account). Mirrors
+        # daily_pnl_r for the dollar circuit breaker; computed from
+        # pnl_r × risk_points × point_value × contracts at each exit.
+        self.daily_pnl_dollars: float = 0.0
         self.daily_trade_count: int = 0
         self._bar_count: int = 0
         self._last_bar: dict | None = None  # Track last bar for scratch mark-to-market
@@ -425,6 +429,7 @@ class ExecutionEngine:
         self.active_trades = []
         self.completed_trades = []
         self.daily_pnl_r = 0.0
+        self.daily_pnl_dollars = 0.0
         self.daily_trade_count = 0
         self._bar_count = 0
         self._last_bar = None
@@ -592,6 +597,7 @@ class ExecutionEngine:
                 trade.exit_price = last_close
 
                 # Mark-to-market PnL for scratch (not 0.0)
+                pnl_dollars: float | None = None
                 if trade.entry_price is not None and trade.stop_price is not None:
                     risk_points = abs(trade.entry_price - trade.stop_price)
                     if risk_points > 0:
@@ -609,15 +615,21 @@ class ExecutionEngine:
                             to_r_multiple(cost, trade.entry_price, trade.stop_price, mtm_points),
                             4,
                         )
+                        # Realized dollars (per-account) for the dollar circuit
+                        # breaker: pnl_r × risk_points × point_value × contracts.
+                        # Mirrors session_orchestrator.py exit accounting.
+                        pnl_dollars = trade.pnl_r * risk_points * cost.point_value * trade.contracts
                     else:
                         trade.pnl_r = 0.0
                 else:
                     trade.pnl_r = 0.0
 
                 self.daily_pnl_r += trade.pnl_r
+                if pnl_dollars is not None:
+                    self.daily_pnl_dollars += pnl_dollars
                 self.completed_trades.append(trade)
                 if self.risk_manager is not None:
-                    self.risk_manager.on_trade_exit(trade.pnl_r)
+                    self.risk_manager.on_trade_exit(trade.pnl_r, pnl_dollars=pnl_dollars)
 
                 events.append(
                     TradeEvent(

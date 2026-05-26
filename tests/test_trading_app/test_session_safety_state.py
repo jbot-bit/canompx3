@@ -171,6 +171,36 @@ class TestSessionSafetyState:
         assert loaded.daily_pnl_r == -4.5
         assert loaded.trading_day == "2026-04-10"
 
+    def test_daily_pnl_dollars_round_trips(self, state_dir: Path) -> None:
+        """Dollar daily P&L persists symmetric to daily_pnl_r (crash recovery
+        for the dollar circuit breaker)."""
+        state = SessionSafetyState("profile_test", "MNQ")
+        state.daily_pnl_r = -3.2
+        state.daily_pnl_dollars = -441.5
+        state.trading_day = "2026-05-26"
+        state.save()
+
+        loaded = SessionSafetyState("profile_test", "MNQ")
+        assert loaded.daily_pnl_dollars == -441.5
+        assert loaded.daily_pnl_r == -3.2
+
+    def test_daily_pnl_dollars_defaults_zero_on_legacy_file(self, state_dir: Path) -> None:
+        """A safety-state file written before the dollar field existed loads
+        daily_pnl_dollars=0.0 (no crash, no false halt)."""
+        state = SessionSafetyState("profile_test", "MNQ")
+        state.daily_pnl_r = -1.0
+        state.trading_day = "2026-05-26"
+        state.save()
+        # Simulate legacy file: strip the dollar key.
+        import json
+
+        raw = json.loads(state._state_file.read_text())
+        raw.pop("daily_pnl_dollars", None)
+        state._state_file.write_text(json.dumps(raw))
+
+        loaded = SessionSafetyState("profile_test", "MNQ")
+        assert loaded.daily_pnl_dollars == 0.0
+
     def test_daily_pnl_r_stale_day_ignored_by_caller(self, state_dir: Path) -> None:
         """daily_pnl_r is loaded regardless — caller checks trading_day match."""
         state = SessionSafetyState("profile_test", "MNQ")

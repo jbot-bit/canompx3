@@ -100,6 +100,14 @@ class AccountProfile:
     # None = payout mechanics are not modeled for this profile.
     payout_policy_id: str | None = None
     max_risk_per_trade: float | None = None  # Dollar cap per trade. None = no limit.
+    # Self-imposed per-account daily-loss circuit breaker in dollars. None = no
+    # dollar cap (R cap only). The broker MLL (tier.max_dd, trailing) is the
+    # binding capital guard; this is a tighter discipline belt that halts the
+    # account for the rest of the trading day at -daily_loss_dollars realized.
+    # Per-account semantic (copies each protect their own MLL).
+    # @canonical-source docs/runtime/stages/2026-05-26-daily-loss-dollar-cap-wiring.md
+    # Must be < tier.max_dd (enforced by drift check).
+    daily_loss_dollars: float | None = None
     # @canonical-source docs/research-input/topstep/topstep_mll_article.md
     # @audit-finding F-5 (HWM freeze formula must differentiate XFA vs TC starting balance).
     # XFA accounts start at $0 broker equity; TC accounts start at account_size.
@@ -489,6 +497,11 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         firm="topstep",
         account_size=50_000,
         copies=2,  # Start with 1-2 Express, scale to 5 after proving loop
+        # Per-account daily-loss belt: $450 = 22.5% of the $2K MLL, under
+        # Carver Table 20's ≤25% ceiling, = the ~1% tail of the real 2026
+        # per-trade risk distribution (100k-day Monte Carlo). Halts a genuine
+        # tail day without strangling ordinary variance (avg losing day ~$156).
+        daily_loss_dollars=450.0,
         stop_multiplier=0.75,
         max_slots=7,
         active=True,

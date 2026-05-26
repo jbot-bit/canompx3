@@ -130,6 +130,69 @@ class TestCircuitBreaker:
 
 
 # ============================================================================
+# Dollar-denominated daily-loss circuit breaker (true $ cap, not R-approx).
+# Grounding: stage docs/runtime/stages/2026-05-26-daily-loss-dollar-cap-wiring.md
+# Carver Table 20 + real-2026 Monte Carlo. Per-account semantic.
+# ============================================================================
+
+
+class TestDollarCircuitBreaker:
+    def test_dollar_limit_defaults_none(self):
+        # Default: no dollar cap — pure R behaviour, no silent change.
+        limits = RiskLimits()
+        assert limits.max_daily_loss_dollars is None
+
+    def test_dollar_cap_halts_at_limit(self):
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        # R is nowhere near its -50R cap; the DOLLAR cap must bind.
+        rm.on_trade_exit(-1.0, pnl_dollars=-300.0)
+        assert not rm.is_halted()
+        rm.on_trade_exit(-1.0, pnl_dollars=-200.0)  # cum -$500 <= -$450
+        assert rm.is_halted()
+
+    def test_dollar_cap_can_enter_rejects(self):
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(-1.0, pnl_dollars=-460.0)
+        allowed, reason, _ = rm.can_enter("s1", "US_DATA_830", [], -1.0)
+        assert not allowed
+        assert "circuit_breaker" in reason and "$" in reason
+
+    def test_dollar_cap_allows_above_limit(self):
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(-1.0, pnl_dollars=-440.0)  # just above the -$450 cap
+        allowed, reason, _ = rm.can_enter("s1", "US_DATA_830", [], -1.0)
+        assert allowed
+
+    def test_dollar_cap_clears_on_daily_reset(self):
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-50.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(-1.0, pnl_dollars=-500.0)
+        assert rm.is_halted()
+        rm.daily_reset(date(2024, 1, 6))
+        assert not rm.is_halted()
+        assert rm.daily_pnl_dollars == 0.0
+
+    def test_none_dollar_pnl_does_not_crash_or_false_halt(self):
+        # Edge case: pnl_dollars unknown (risk_points None upstream) — must NOT
+        # silently halt and must NOT crash. R path still governs.
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-5.0, max_daily_loss_dollars=450.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(-1.0, pnl_dollars=None)
+        assert not rm.is_halted()
+        assert rm.daily_pnl_dollars == 0.0  # None contributes nothing
+
+    def test_r_and_dollar_caps_independent(self):
+        # Either cap can halt; R cap fires even when dollar cap set high.
+        rm = RiskManager(RiskLimits(max_daily_loss_r=-2.0, max_daily_loss_dollars=99999.0))
+        rm.daily_reset(date(2024, 1, 5))
+        rm.on_trade_exit(-2.0, pnl_dollars=-50.0)
+        assert rm.is_halted()  # R cap bound, dollar cap nowhere near
+
+
+# ============================================================================
 # Max Concurrent Tests
 # ============================================================================
 

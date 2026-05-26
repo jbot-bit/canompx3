@@ -22,6 +22,14 @@ class RiskLimits:
     """Immutable risk parameters for a trading session."""
 
     max_daily_loss_r: float = -5.0  # Circuit breaker threshold (R)
+    # True dollar-denominated daily-loss circuit breaker. None = disabled (R cap
+    # only). When set (positive dollars), the breaker halts when cumulative
+    # realized daily P&L <= -max_daily_loss_dollars, independent of R. Per-account
+    # semantic: the engine accrues ONE account's realized dollars; CopyOrderRouter
+    # mirrors to shadows, so each account protects its own broker MLL.
+    # @canonical-source docs/runtime/stages/2026-05-26-daily-loss-dollar-cap-wiring.md
+    # Sized from real-2026 risk distribution + Carver Table 20 (≤25% of MLL).
+    max_daily_loss_dollars: float | None = None
     max_concurrent_positions: int = 3  # Max open positions at once
     max_per_orb_positions: int = 1  # Max positions from same ORB (aperture-specific when orb_minutes provided)
     max_per_session_positions: int = 2  # Max positions from same session across ALL apertures
@@ -60,6 +68,11 @@ class RiskManager:
         self.limits = limits
         self._corr_lookup = corr_lookup or {}
         self.daily_pnl_r: float = 0.0
+        # Cumulative realized daily P&L in dollars (for the dollar circuit
+        # breaker). Only accrues when on_trade_exit receives a non-None
+        # pnl_dollars; unknown-dollar exits contribute nothing (fail-safe: the
+        # R cap still governs). Reset each daily_reset.
+        self.daily_pnl_dollars: float = 0.0
         self.daily_trade_count: int = 0
         self.trading_day: date | None = None
         self._halted: bool = False
@@ -114,6 +127,7 @@ class RiskManager:
         start a fresh simulation.
         """
         self.daily_pnl_r = 0.0
+        self.daily_pnl_dollars = 0.0
         self.daily_trade_count = 0
         self.trading_day = trading_day
         self._halted = False
@@ -141,9 +155,23 @@ class RiskManager:
                 0.0,
             )
 
-        # Check 1: Circuit breaker
-        if self._halted or daily_pnl_r <= self.limits.max_daily_loss_r:
+        # Check 1: Circuit breaker (R cap OR dollar cap — either binds).
+        # When halted, report whichever cap is actually breached so the operator
+        # sees the real cause (the dollar breaker can trip via on_trade_exit
+        # before can_enter is next called, setting _halted with no R breach).
+        dollar_breached = (
+            self.limits.max_daily_loss_dollars is not None
+            and self.daily_pnl_dollars <= -self.limits.max_daily_loss_dollars
+        )
+        if self._halted or daily_pnl_r <= self.limits.max_daily_loss_r or dollar_breached:
             self._halted = True
+            if dollar_breached and daily_pnl_r > self.limits.max_daily_loss_r:
+                return (
+                    False,
+                    f"circuit_breaker: daily PnL ${self.daily_pnl_dollars:.0f} "
+                    f"<= -${self.limits.max_daily_loss_dollars:.0f}",
+                    0.0,
+                )
             return False, f"circuit_breaker: daily PnL {daily_pnl_r:.2f}R <= {self.limits.max_daily_loss_r}R", 0.0
 
         # Check 1b: F-2 same-instrument opposite-direction guard.
@@ -370,11 +398,26 @@ class RiskManager:
         """Record a new trade entry."""
         self.daily_trade_count += 1
 
-    def on_trade_exit(self, pnl_r: float) -> None:
-        """Update daily PnL after a trade exits."""
+    def on_trade_exit(self, pnl_r: float, pnl_dollars: float | None = None) -> None:
+        """Update daily PnL after a trade exits.
+
+        pnl_dollars is the realized dollar P&L for THIS account's contracts
+        (computed by the engine from actual_r × risk_points × point_value ×
+        contracts). When None (risk_points unknown upstream), the dollar
+        accrual is skipped — fail-safe: the R cap still governs, and the dollar
+        breaker simply does not see this trade rather than guessing a value.
+        """
         self.daily_pnl_r += pnl_r
         if self.daily_pnl_r <= self.limits.max_daily_loss_r:
             self._halted = True
+        # Dollar circuit breaker accrual (per-account realized dollars).
+        if pnl_dollars is not None:
+            self.daily_pnl_dollars += pnl_dollars
+            if (
+                self.limits.max_daily_loss_dollars is not None
+                and self.daily_pnl_dollars <= -self.limits.max_daily_loss_dollars
+            ):
+                self._halted = True
         # Multi-day equity tracking
         self.cumulative_pnl_r += pnl_r
         if self.cumulative_pnl_r > self.equity_high_water_r:

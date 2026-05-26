@@ -6612,6 +6612,46 @@ def check_account_profiles_declare_is_express_funded() -> list[str]:
     return violations
 
 
+def check_daily_loss_dollars_below_mll() -> list[str]:
+    """Any profile declaring ``daily_loss_dollars`` must set it strictly below
+    that profile's broker Maximum Loss Limit (tier ``max_dd``).
+
+    Rationale: the dollar daily-loss circuit breaker is a self-imposed discipline
+    belt that must halt the account BEFORE the binding broker MLL (trailing DD)
+    would. A daily belt >= the MLL is meaningless (the broker halts first) and
+    signals a config error. Carver Table 20 prescribes worst daily loss << the
+    trailing DD; this check enforces the weaker but mandatory "< MLL" floor.
+
+    @canonical-source: trading_app/prop_profiles.py,
+    docs/runtime/stages/2026-05-26-daily-loss-dollar-cap-wiring.md
+    """
+    violations: list[str] = []
+    try:
+        from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier
+    except Exception as e:  # pragma: no cover - import guard
+        return [f"  cannot import prop_profiles: {type(e).__name__}: {e}"]
+
+    for pid, prof in ACCOUNT_PROFILES.items():
+        cap = getattr(prof, "daily_loss_dollars", None)
+        if cap is None:
+            continue
+        if cap <= 0:
+            violations.append(f"  ACCOUNT_PROFILES[{pid!r}]: daily_loss_dollars={cap} must be positive")
+            continue
+        try:
+            tier = get_account_tier(prof.firm, prof.account_size)
+        except Exception as e:
+            violations.append(f"  ACCOUNT_PROFILES[{pid!r}]: cannot resolve tier: {type(e).__name__}: {e}")
+            continue
+        if cap >= tier.max_dd:
+            violations.append(
+                f"  ACCOUNT_PROFILES[{pid!r}]: daily_loss_dollars=${cap:.0f} must be < broker MLL "
+                f"(tier.max_dd=${tier.max_dd:.0f}). A daily belt >= the MLL never binds — the broker "
+                f"trailing-DD guard halts first."
+            )
+    return violations
+
+
 def check_validated_setups_writer_allowlist() -> list[str]:
     """Only canonical validator/maintenance paths may mutate validated_setups."""
     violations: list[str] = []
@@ -14100,6 +14140,12 @@ CHECKS = [
     (
         "ACCOUNT_PROFILES entries must declare is_express_funded explicitly (fail-closed default)",
         check_account_profiles_declare_is_express_funded,
+        False,
+        False,
+    ),
+    (
+        "Profile daily_loss_dollars must be below the broker MLL (tier.max_dd)",
+        check_daily_loss_dollars_below_mll,
         False,
         False,
     ),

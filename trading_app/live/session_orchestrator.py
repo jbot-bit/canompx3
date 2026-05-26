@@ -567,8 +567,12 @@ class SessionOrchestrator:
         # every other profile. Raises fail-closed for unknown XFA tiers.
         topstep_xfa_account_size = _resolve_topstep_xfa_account_size(matched_prof)
 
+        # Per-account dollar daily-loss belt from the matched profile (None for
+        # profiles that don't declare one — pure R behaviour preserved).
+        daily_loss_dollars = matched_prof.daily_loss_dollars if matched_prof is not None else None
         risk_limits = RiskLimits(
             max_daily_loss_r=-abs(self.portfolio.max_daily_loss_r),
+            max_daily_loss_dollars=daily_loss_dollars,
             max_concurrent_positions=self.portfolio.max_concurrent_positions,
             max_equity_drawdown_r=max_equity_dd_r,
             topstep_xfa_account_size=topstep_xfa_account_size,
@@ -590,6 +594,8 @@ class SessionOrchestrator:
             log.info("Risk limits: daily_loss=%.1fR, max_DD=%.1fR", risk_limits.max_daily_loss_r, max_equity_dd_r)
         else:
             log.info("Risk limits: daily_loss=%.1fR, max_DD=DISABLED", risk_limits.max_daily_loss_r)
+        if daily_loss_dollars is not None:
+            log.info("Daily-loss dollar breaker ARMED: halt at -$%.0f/account realized", daily_loss_dollars)
         # ML subsystem removed 2026-04-11 (ML V3 sprint Stage 4). V1/V2/V3
         # all DEAD per docs/audit/hypotheses/2026-04-11-ml-v3-pooled-confluence-postmortem.md.
         # Blueprint NO-GO registry contains the permanent entry. The Layer 1
@@ -746,11 +752,18 @@ class SessionOrchestrator:
         # Crash recovery: restore daily P&L so RiskManager re-derives halt state.
         # Only restore if trading_day matches (daily PnL resets each day).
         _saved_day = self._safety_state.trading_day
-        if _saved_day == str(self.trading_day) and self._safety_state.daily_pnl_r != 0.0:
+        if _saved_day == str(self.trading_day) and (
+            self._safety_state.daily_pnl_r != 0.0 or self._safety_state.daily_pnl_dollars != 0.0
+        ):
             self.engine.daily_pnl_r = self._safety_state.daily_pnl_r
+            self.engine.daily_pnl_dollars = self._safety_state.daily_pnl_dollars
+            # Re-seed the RiskManager so the dollar/R breaker re-derives halt
+            # state from the restored P&L (symmetric to daily_pnl_r recovery).
+            self.risk_mgr.daily_pnl_dollars = self._safety_state.daily_pnl_dollars
             log.critical(
-                "CRASH RECOVERY: restored daily_pnl_r=%.2fR from %s",
+                "CRASH RECOVERY: restored daily_pnl_r=%.2fR daily_pnl_dollars=$%.0f from %s",
                 self._safety_state.daily_pnl_r,
+                self._safety_state.daily_pnl_dollars,
                 _saved_day,
             )
 
@@ -2070,6 +2083,7 @@ class SessionOrchestrator:
 
         # Persist daily P&L for crash recovery (daily loss circuit breaker)
         self._safety_state.daily_pnl_r = self.engine.daily_pnl_r
+        self._safety_state.daily_pnl_dollars = self.engine.daily_pnl_dollars
         self._safety_state.trading_day = str(self.trading_day)
         self._safety_state.save()
 

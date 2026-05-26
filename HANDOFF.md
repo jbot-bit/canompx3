@@ -585,10 +585,9 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-26
-- **Commit:** d0b4bc20 — chore(stage): close cp1252 live-launcher CONFIRM-crash stage (shipped 8b1a670c)
-- **Files changed:** 2 files
+- **Commit:** 3c7138be — docs(handoff): reconcile baton to d0b4bc20 cp1252 stage closeout
+- **Files changed:** 1 files
   - `HANDOFF.md`
-  - `docs/runtime/stages/2026-05-26-live-launcher-cp1252-confirm-crash.md`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
