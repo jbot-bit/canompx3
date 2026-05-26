@@ -6,6 +6,31 @@
 
 **Compact baton only:** Durable decisions live in `docs/runtime/decision-ledger.md`, design history lives in `docs/plans/`, and archived session detail lives in `docs/handoffs/archived/`.
 
+## This Session (2026-05-26 — Live-trading go-live: Stage 0+1 of 5 shipped)
+
+- **Tool:** Claude Code (Opus 4.7), explanatory mode. **Pushed to origin/main: `3c7138be..be4400d8`.**
+- **Goal:** Get `START_BOT.bat` → real-capital `--live` on `topstep_50k_mnq_auto`, current 4 MNQ lanes, FULL strict-zero-warn green before live. Operator-confirmed scope.
+- **5-stage plan** at `C:\Users\joshd\.claude\plans\get-live-trading-working-safe-secure.md`.
+
+### Stage 0 ✓ (commit 3c7138be + pushed 8b1a670c/d0b4bc20)
+Pushed the cp1252 `--live` CONFIRM-prompt crash fix. `--live` no longer crashes on Windows cp1252 console.
+
+### Stage 1 ✓ — $450/account dollar daily-loss circuit breaker (commits c9ba1b92 + 89f8e97b + be4400d8)
+- **GROUNDING (no ad-hoc):** Topstep XFA has NO mandatory broker DLL (opt-in, `docs/research-input/topstep/topstep_dll_article.md`). The binding guard is the **$2K trailing MLL — already wired fail-closed** via AccountHWMTracker (`session_orchestrator.py:805-826`, refuses to start a breached account). The 5.0R software daily stop was an uncalibrated belt that never bound.
+- **$450 = 22.5% of $2K MLL** (Carver Table 20 ≤25% ceiling, `carver_2015_volatility_targeting_position_sizing.md:72-83`) AND the ~1% tail of the REAL 2026 risk distribution. **OPERATOR CATCH (load-bearing): stored `validated_setups.median_risk_dollars` understates 2026 risk ~2x** (MNQ price ~doubled over 6yr backtest) — sized off 100k-day Monte Carlo on actual 2026 `orb_outcomes.risk_dollars`, NOT the median. Lesson: calibrate risk limits on live-year distribution, never historical median.
+- **True dollar breaker, end-to-end:** `RiskLimits.max_daily_loss_dollars`, `RiskManager.daily_pnl_dollars` (+reset), `can_enter` Check 1 dollar branch, `on_trade_exit(pnl_r, pnl_dollars=None)`; engine `_exit_trade` + scratch path compute `pnl_r×risk_points×point_value×contracts`; orchestrator wires from `matched_prof.daily_loss_dollars`; safety_state crash-recovery persists `daily_pnl_dollars`. Drift check (#new) asserts `daily_loss_dollars < tier.max_dd`. Per-account semantic (CopyRouter mirrors; each XFA protects own MLL).
+- **ADVERSARIAL AUDIT caught CRITICAL self-review missed:** first commit c9ba1b92 wired breaker ONLY into session-end SCRATCH path → DEAD for all live `_exit_trade` exits. My RED/GREEN tests called `on_trade_exit` directly, never exercised `_exit_trade`. Fixed 89f8e97b (regression test drives real stop-out). **RE-AUDIT: PASS — safe to go live.**
+- **Verification:** 224 unit + 235 orchestrator pass; drift 165/0; ruff clean.
+- **DEFERRED (audit CONDITIONAL, needs own stage):** daily-loss halt blocks new entries but does NOT auto-flatten open positions. Same as existing R-cap; broker bracket + $2K MLL HWM tracker are live guards. Flatten-on-daily-halt affects BOTH caps.
+- **Data heal (incidental):** rebuilt MGC 2026-05-25 missing 15m/30m daily_features apertures (recurring weekend gap, same as 2026-05-23) — was blocking pre-commit drift Check 70.
+
+### NEXT (Stages 2-5, not started)
+- **Stage 2:** SR-alarm strict double-counting — `live_readiness_report.py --strict-zero-warn` flags 3 watch-reviewed SR ALARMs (`MNQ_COMEX_SETTLE…OVNRNG_100`, `MNQ_US_DATA_1000…VWAP_MID_ALIGNED_O15`, `MNQ_NYSE_OPEN…COST_LT12`) as hard blockers. Decide (ground in `pepelyshev_polunchenko_2015_cusum_sr.md`) whether watch-reviewed should be advisory vs block. NO softening gates to force green. `lifecycle_state.py:237` lets `watch` lanes trade by design.
+- **Stage 3:** Ship live-bar-ring iteration 2 — 3 designed fixes in `docs/runtime/stages/2026-05-22-live-bar-ring-chart.md` (shutdown_trace, recover_ring.py, bars_source_changed SSE). Recover orphaned 61-bar MNQ.json. Adversarial-audit gate.
+- **Stage 4:** Live-market smoke at TOKYO_OPEN (~10:00 AEST) — signal-only: prove ring lifecycle, close orphan-sweep Windows repro, capture c-i/c-ii carry-overs, accrue 1 telemetry day. Re-run strict report.
+- **Stage 5:** Flip `START_BOT.bat:38` BOT_MODE_FLAGS → `--live` ONLY after strict-green + operator pre-commits stop conditions (`next-session-go-live-plan.md` §6).
+- **7 strict blockers total:** 3 SR alarms (Stage 2), telemetry 1/30 days + 2 live-stage files (Stages 3-4 + market time). Telemetry maturity is ADVISORY (not hard FAIL) for `--live` because profile `is_express_funded=True`.
+
 ## This Session (2026-05-24 — Codex live-readiness verification hardening)
 
 - **Tool:** Codex WSL, branch `main`.
@@ -585,11 +610,10 @@
 ## Last Session
 - **Tool:** Claude Code
 - **Date:** 2026-05-26
-- **Commit:** 89f8e97b — [judgment] HIGH fix(risk): wire dollar breaker into _exit_trade (adversarial-audit CRITICAL on c9ba1b92)
-- **Files changed:** 3 files
+- **Commit:** be4400d8 — chore(stage): close daily-loss-dollar-cap-wiring (shipped c9ba1b92 + audit-fix 89f8e97b, re-audit PASS)
+- **Files changed:** 2 files
   - `HANDOFF.md`
-  - `tests/test_trading_app/test_execution_engine.py`
-  - `trading_app/execution_engine.py`
+  - `docs/runtime/stages/2026-05-26-daily-loss-dollar-cap-wiring.md`
 
 ## Prior Session (2026-05-17 Codex — preventive allowlist)
 - **Commit:** `e37fce01` — chore(profile): preventive allowlist expansion (NYSE_CLOSE + LONDON_METALS) for topstep_50k_mnq_auto
