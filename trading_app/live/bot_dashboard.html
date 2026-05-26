@@ -1809,12 +1809,50 @@
   body:has(#focus-toggle:checked) .show-all-label { color: var(--cyan); border-color: rgba(0,212,255,0.30); }
   body:has(#focus-toggle:checked) .show-all-label::before { content: "SHOW ALL"; }
 
-  /* Default (focus mode ON) — hide demoted sections */
+  /* Default (focus mode ON) — strip hard to a glanceable cockpit.
+     Keepers: chart-cockpit, pnl-strip, hero-card (balance/PnL/DD/next-session).
+     Everything below is dev-telemetry — reachable via SHOW ALL + drawer.
+     Elements stay in the DOM (display:none) so dashboard pytests + JS bindings
+     are unaffected. See stages/2026-05-26-dashboard-focus-strip-bloomberg.md. */
   body:not(:has(#focus-toggle:checked)) #broker-accounts-section,
   body:not(:has(#focus-toggle:checked)) #specs-section,
   body:not(:has(#focus-toggle:checked)) #profiles-section,
   body:not(:has(#focus-toggle:checked)) #session-status-panel,
-  body:not(:has(#focus-toggle:checked)) #signal-strip { display: none; }
+  body:not(:has(#focus-toggle:checked)) #signal-strip,
+  body:not(:has(#focus-toggle:checked)) #operator-shell,
+  body:not(:has(#focus-toggle:checked)) #connection-summary,
+  body:not(:has(#focus-toggle:checked)) #alerts-shell,
+  body:not(:has(#focus-toggle:checked)) #activity-panel,
+  body:not(:has(#focus-toggle:checked)) #live-lanes-panel,
+  body:not(:has(#focus-toggle:checked)) #trades-section,
+  body:not(:has(#focus-toggle:checked)) #trade-book-section,
+  body:not(:has(#focus-toggle:checked)) .metrics,
+  body:not(:has(#focus-toggle:checked)) #notif-banner,
+  body:not(:has(#focus-toggle:checked)) #drawer-handle-strip { display: none; }
+
+  /* De-dupe status: the top-bar #header-mode-badge is the ONE authoritative
+     state word (also the JS source of truth — read by updateHero/favicon).
+     The hero badge is a derived second rendering; in FOCUS keep only its
+     colored dot, drop the redundant text so a human never reads "Stopped"
+     (top) and "Ready" (hero) at once. Operator: "ensure there isn't 2 of the
+     same indicator." */
+  body:not(:has(#focus-toggle:checked)) #hero-state-label,
+  body:not(:has(#focus-toggle:checked)) #hero-profile { display: none; }
+  body:not(:has(#focus-toggle:checked)) #hero-state-badge {
+    background: transparent !important; padding: 0 !important; min-width: 0;
+  }
+
+  /* Grow the chart to fill the screen — a trader stares at the chart, it
+     should dominate, not float above dead space. */
+  body:not(:has(#focus-toggle:checked)) #chart-host { min-height: 64vh; }
+
+  /* KILL ALL is the emergency control (research: one-click kill prevents
+     revenge trading). Make it unmistakable vs the quiet REFRESH/PREFLIGHT. */
+  #btn-kill {
+    background: var(--red) !important; color: #fff !important;
+    border-color: var(--red) !important; font-weight: 800; letter-spacing: 0.06em;
+  }
+  #btn-kill:hover { filter: brightness(1.12); }
 
   /* hero IN_TRADE row emphasis */
   .hero-now.in-trade {
@@ -2131,7 +2169,13 @@
   /* explicit overrides for key text nodes */
   .operator-check-detail, .operator-reason { font-size: 13px; }
   .operator-headline { font-size: 15px; font-weight: 600; }
-  .hm-lbl, .pnl-cell-lbl { font-size: 11px; }
+  .hm-lbl, .pnl-cell-lbl { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  /* Bloomberg-scale figures — quiet labels, loud numbers. The four that decide
+     a trade: balance, P&L today, DD-used headroom, next-session countdown. */
+  .hm-val { font-size: 38px; font-weight: 700; line-height: 1.05; letter-spacing: -0.01em; }
+  .hm-val.sm { font-size: 24px; }
+  .pnl-cell-val { font-size: 30px; font-weight: 700; line-height: 1.05; }
+  .hm-sub, .pnl-cell-sub { font-size: 12px; }
   .topbar-acct { font-size: 14px; }
   .conn-name, .pf-firm { font-size: 15px; }
   .operator-check-lbl { font-size: 13px; }
@@ -2567,7 +2611,7 @@
       <span id="pnl-trades-sub" class="pnl-cell-sub"></span>
     </div>
     <div class="pnl-cell">
-      <span class="pnl-cell-lbl">SSE</span>
+      <span class="pnl-cell-lbl">Feed</span>
       <span id="pnl-sse" class="pnl-cell-val"><span class="hb-dot"></span><span id="pnl-sse-lbl">—</span></span>
       <span id="pnl-sse-sub" class="pnl-cell-sub"></span>
     </div>
@@ -5285,6 +5329,38 @@ const ChartCockpit = (() => {
     series.setData(agg.map(b => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close })));
   }
 
+  // Session-trim: the cockpit loads 5 trading days (LOOKBACK_MIN) so the
+  // operator can pan back, but Lightweight Charts' default fitContent squashes
+  // all 5 days into the viewport — the live session becomes an unreadable
+  // sliver. Trim the DEFAULT visible range to the latest session window
+  // (anchored on the canonical ORB aperture from pipeline.dst.orb_utc_window,
+  // never a fabricated constant) padded by SESSION_TRIM_PAD_MIN on each side,
+  // extended to cover the newest bar. All 5 days stay loaded — the operator
+  // pans/zooms back freely; this only sets where the chart OPENS.
+  // setVisibleRange takes {from, to} in the series' Time units (UTC epoch sec).
+  const SESSION_TRIM_PAD_MIN = 30;
+  function _trimToLatestSession() {
+    if (!chart || !series) return;
+    const wins = Array.isArray(orbState.windows) ? orbState.windows : [];
+    // Latest window by start time. Fail-safe: no windows (weekend / old backend
+    // / unknown session) -> leave the library's default fit untouched.
+    let latest = null;
+    for (const w of wins) {
+      if (!w || typeof w.start !== "number" || typeof w.end !== "number") continue;
+      if (latest === null || w.start > latest.start) latest = w;
+    }
+    if (latest === null) return;
+    const padSec = SESSION_TRIM_PAD_MIN * 60;
+    const lastBarTime = rawBars.length ? rawBars[rawBars.length - 1].time : latest.end;
+    const from = latest.start - padSec;
+    // Extend to whichever is later — the session's ORB-window end or the newest
+    // bar (price keeps printing after the ORB aperture closes) — then pad.
+    const to = Math.max(latest.end, lastBarTime) + padSec;
+    if (!(to > from)) return;  // degenerate range guard
+    try { chart.timeScale().setVisibleRange({ from, to }); }
+    catch (e) { console.warn("session-trim setVisibleRange failed", e); }
+  }
+
   function _showFallback(msg, opts) {
     const host = document.getElementById(FALLBACK_PARENT);
     if (!host) return;
@@ -5388,6 +5464,9 @@ const ChartCockpit = (() => {
             // Each entry: {trading_day, session_name, orb_minutes, window_start_utc, window_end_utc}.
             dailyOrbWindows: Array.isArray(d.daily_orb_windows) ? d.daily_orb_windows : [],
           });
+          // Session-trim runs AFTER _applyOrb (which populates orbState.windows)
+          // so the chart opens focused on the live session, not all 5 days.
+          _trimToLatestSession();
           if (d.warning) console.warn("bars-recent warning:", d.warning);
           return;
         }
